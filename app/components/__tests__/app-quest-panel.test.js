@@ -1416,12 +1416,16 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       assert.equal(toast.hidden, false, 'the transition opens the completion toast');
       assert.equal(toast.classList.contains('is-visible'), true);
       assert.equal(
+        el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
+        'DAILY QUEST COMPLETE',
+      );
+      assert.equal(
         el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
         'Buy a Ticket or Luckbox',
       );
       assert.equal(
         el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-        'DAILY · +100 FLIP',
+        '+100 FLIP',
       );
 
       storeMod.update('connected.address', CONNECTED);
@@ -1476,7 +1480,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
-      '2 QUESTS COMPLETE',
+      'DAILY + LEVEL QUESTS COMPLETE',
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
@@ -1485,7 +1489,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      '2 QUESTS · +900 FLIP · +5 STREAK',
+      '+900 FLIP · +5 STREAK',
       'simultaneous daily and level rewards are folded into one visible notification',
     );
     el.disconnectedCallback();
@@ -1517,7 +1521,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
-      'QUEST COMPLETE',
+      'LEVEL QUEST COMPLETE',
       'the subscription-owned primary is not counted as a second paid quest',
     );
     assert.equal(
@@ -1526,7 +1530,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      'LEVEL · +800 FLIP · +5 STREAK',
+      '+800 FLIP · +5 STREAK',
     );
     assert.equal(
       el.querySelectorAll('.qst-slot')[0].querySelector('.qst-slot-status')?.textContent,
@@ -1579,11 +1583,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
-      '2 QUESTS COMPLETE',
+      'DAILY + LEVEL QUESTS COMPLETE',
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      '2 QUESTS · +900 FLIP · +5 STREAK',
+      '+900 FLIP · +5 STREAK',
       'the authoritative level completion adds 800 instead of being mistaken for another daily',
     );
     assert.ok(

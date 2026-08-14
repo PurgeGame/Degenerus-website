@@ -278,13 +278,34 @@ describe('record units are never interchangeable', () => {
     assert.equal(formatCompactBountyWei(999_999n * FLIP), '1M');
   });
 
-  test('compact leaders truncate long records without overstating the exact mark', () => {
+  test('compact leaders keep three significant figures without overstating the exact mark', () => {
+    assert.deepEqual(formatCompactRecordValue(
+      RECORD_KIND_SPIN,
+      (12_345n * (10n ** 15n)) / BigInt(ETH_DIVISOR),
+    ), {
+      amount: '12.3',
+      suffix: 'ETH',
+    });
+    assert.deepEqual(formatCompactRecordValue(
+      RECORD_KIND_LUCKBOX,
+      (12_345n * (10n ** 12n)) / BigInt(ETH_DIVISOR),
+    ), {
+      amount: '0.0123',
+      suffix: 'ETH',
+    });
+    assert.deepEqual(formatCompactRecordValue(
+      RECORD_KIND_SPIN,
+      (8_497_000n * FLIP) / BigInt(ETH_DIVISOR),
+    ), {
+      amount: '8.49M',
+      suffix: 'ETH',
+    });
     assert.deepEqual(formatCompactRecordValue(RECORD_KIND_BUY, 3_968n), {
-      amount: '3.9K',
+      amount: '3.96K',
       suffix: 'TIX',
     });
     assert.deepEqual(formatCompactRecordValue(RECORD_KIND_FLIP, 8_497_000n * FLIP), {
-      amount: '8.4M',
+      amount: '8.49M',
       suffix: 'FLIP',
     });
     assert.equal(formatRecordValue(RECORD_KIND_BUY, 3_968n).amount, '3,968',
@@ -691,48 +712,71 @@ describe('rail wiring', () => {
     assert.match(CSS, /records-rail__pot::before\s*\{[^}]*border:\s*1px solid/s,
       'a quiet inset rule completes the poster treatment');
     assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1rem/s);
-    for (const asset of [
-      'biggest-degenerette-card-v4.png',
-      'biggest-luckbox-card-v4.png',
-      'biggest-pack-ripped-card-v4.png',
-      'biggest-coinflip-card-v4.png',
-    ]) {
-      assert.ok(COMPONENT.includes(`/app/assets/${asset}`),
-        `${asset} must be mapped to its record kind`);
-    }
+    assert.match(COMPONENT, /RECORD_CARD_ART = '\/app\/assets\/biggest-bounty-card-v13\.png'/,
+      'one blank asymmetric frame keeps all four record cards visually uniform');
+    assert.doesNotMatch(COMPONENT, /\/app\/assets\/quests\/(?:degenerette-eth|buy-ticket-luckbox|foil-pack|coinflip)\.svg/,
+      'the former right-side game icons no longer compete with the title');
     assert.match(COMPONENT,
-      /<img class="records-rail__leader-card-art"[\s\S]*?alt="\$\{escapeHtml\(cardArt\.label\)\}"/,
-      'each BIGGEST X tile is one authored card with integrated data wells');
-    assert.match(COMPONENT, /label: 'BIGGEST COINFLIP'/,
+      /<img class="records-rail__leader-card-art"[\s\S]*?src="\$\{RECORD_CARD_ART\}"[\s\S]*?alt="" aria-hidden="true"/,
+      'the blank authored frame is decorative while live text supplies the title');
+    assert.match(COMPONENT, /\[RECORD_KIND_FLIP, 'COINFLIP'\]/,
       'the fourth record is presented as COINFLIP while its amount remains denominated in FLIP');
-    assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label/,
+    assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label|records-rail__leader-kind-icon/,
       'the prior watermark plus duplicate text interpretation is removed');
     assert.match(COMPONENT,
-      /records-rail__leader-card-art[\s\S]*?records-rail__leader-presentation[\s\S]*?records-rail__portrait[\s\S]*?records-rail__leader-holder[\s\S]*?records-rail__leader-strip[\s\S]*?records-rail__leader-value[\s\S]*?records-rail__bounty-sight/,
-      'the cohesive card receives avatar, identity, record, and bounty overlays in that order');
+      /records-rail__leader-card-art[\s\S]*?records-rail__leader-presentation[\s\S]*?records-rail__portrait[\s\S]*?records-rail__bounty-sight[\s\S]*?records-rail__leader-bounty-amount[\s\S]*?records-rail__leader-title[\s\S]*?THE BIGGEST[\s\S]*?cardTitle[\s\S]*?records-rail__leader-strip[\s\S]*?records-rail__leader-holder[\s\S]*?records-rail__leader-bet[\s\S]*?records-rail__leader-value/,
+      'the cohesive card orders the left avatar/bounty before one wide title, ID, and record field');
+    assert.doesNotMatch(COMPONENT, /records-rail__leader-bounty-separator/,
+      'the bounty has its own left-side well instead of sharing a colon-delimited line');
     assert.match(COMPONENT, /profile\?\.name \|\| holderAddress/,
       'the open center prefers a linked Discord name and falls back to the address');
     assert.match(COMPONENT, /`\$\{profile\.name\} · \$\{holderAddress\}`/,
       'the full holder tooltip keeps the linked name and address together');
     assert.match(CSS, /records-rail__leader-card-art\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*object-fit:\s*fill/s,
       'one illustrated card fills each leader button');
-    assert.match(CSS, /records-rail__leader-presentation\s*\{[^}]*position:\s*absolute[^}]*top:\s*43%[^}]*grid-template-columns:\s*12\.5% minmax\(0, 1fr\)/s,
-      'avatar and identity land in the card art identity wells');
-    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*clamp\(0\.74rem, 0\.94vw, 0\.84rem\)/s);
-    assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*"Inter"/s,
-      'TIX and other compact units retain the label font instead of inheriting numeric mono');
-    assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*ellipsis/s,
-      'a pathological value truncates before it can push its unit out of the bubble');
-    assert.match(CSS, /records-rail__leader\s*\{[^}]*aspect-ratio:\s*1200 \/ 331[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
+    assert.match(CSS, /records-rail__leader-presentation\s*\{[^}]*position:\s*absolute[^}]*top:\s*7%[^}]*right:\s*73\.2%[^}]*bottom:\s*7%[^}]*left:\s*2\.5%[^}]*display:\s*block[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
+      'the left column stacks one large portrait over its bounty well');
+    assert.match(CSS, /records-rail__leader \.records-rail__portrait\s*\{[^}]*position:\s*absolute[^}]*width:\s*min\(72%, 3rem\)[^}]*max-height:\s*72%/s,
+      'the portrait is intentionally the largest live element on the card');
+    assert.match(CSS, /records-rail__bounty-sight\s*\{[^}]*position:\s*absolute[^}]*right:\s*8%[^}]*bottom:\s*0[^}]*left:\s*7%[^}]*display:\s*flex[^}]*width:\s*auto[^}]*height:\s*20%[^}]*justify-content:\s*center[^}]*padding:\s*0 0\.5%[^}]*overflow:\s*hidden/s,
+      'the crosshair and bounty amount fill the lower well beneath the avatar');
+    assert.match(CSS, /records-rail__leader-bounty-amount\s*\{[^}]*clamp\(0\.4rem, 0\.64vw, 0\.62rem\)[^}]*text-overflow:\s*clip/s,
+      'the bounded compact bounty always fits its left well without an ellipsis');
+    assert.match(CSS, /records-rail__leader-title\s*\{[^}]*position:\s*absolute[^}]*top:\s*8%[^}]*right:\s*4\.2%[^}]*bottom:\s*44%[^}]*left:\s*29%[^}]*flex-direction:\s*column[^}]*padding:\s*0 2%[^}]*clamp\(0\.62rem, 0\.95vw, 0\.9rem\)\/1\.08/s,
+      'the flat live title has enough line box for the category without entering the name row');
+    assert.match(CSS, /records-rail__leader-title :is\(span, strong\)\s*\{[^}]*overflow:\s*visible/s,
+      'both title lines keep unclipped glyph metrics');
+    assert.match(CSS,
+      /records-rail__leader-title > span\s*\{[^}]*clamp\(0\.7rem, 1\.06vw, 1rem\)\/0\.9 "Arial Black"[^}]*-webkit-text-stroke:\s*0\.35px currentColor/s,
+      'THE BIGGEST uses the fat headline treatment from the main bounty sign');
+    assert.match(CSS,
+      /records-rail__leader-title > strong\s*\{[^}]*clamp\(0\.54rem, 0\.78vw, 0\.75rem\)\/1 "Rockwell"[^}]*letter-spacing:\s*0\.085em/s,
+      'the category contrasts with a narrower western sign face');
+    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*25%[^}]*bottom:\s*7%[^}]*left:\s*29%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*background:\s*transparent/s,
+      'the holder owns the complete lower black area without entering the amount box');
+    assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*right:\s*0[^}]*left:\s*0[^}]*height:\s*100%[^}]*clamp\(0\.42rem, 0\.65vw, 0\.62rem\)[^}]*overflow-wrap:\s*anywhere[^}]*text-overflow:\s*clip[^}]*white-space:\s*normal/s,
+      'long Discord names get two centered lines instead of being ellipsized');
+    assert.doesNotMatch(CSS, /records-rail__leader-holder\s*\{[^}]*text-overflow:\s*ellipsis/s);
+    assert.match(CSS, /records-rail__leader-bet\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*4\.2%[^}]*bottom:\s*7%[^}]*left:\s*75%[^}]*display:\s*block[^}]*overflow:\s*hidden/s,
+      'the record amount owns the complete far-right annotated area');
+    assert.match(CSS,
+      /records-rail__leader-bet\s*\{[^}]*border:\s*0[^}]*border-left:\s*1px solid rgba\(var\(--rec-gold\), 0\.34\)[^}]*background:\s*linear-gradient\(/s,
+      'the value is one integrated right-hand lane rather than a second inset plaque');
+    assert.match(CSS,
+      /records-rail__leader-value :is\(em, i\)\s*\{[^}]*clamp\(0\.32rem, 0\.48vw, 0\.44rem\)\/1/s,
+      'the currency remains readable beneath the compact amount');
+    assert.doesNotMatch(CSS, /records-rail__leader-kind-icon\s*\{/,
+      'the removed game icon has no leftover styling');
+    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*position:\s*absolute[^}]*top:\s*0[^}]*height:\s*100%[^}]*flex-direction:\s*column[^}]*gap:\s*0\.04rem[^}]*padding:\s*1% 1\.5%[^}]*clamp\(0\.56rem, 0\.85vw, 0\.78rem\)/s,
+      'the bet amount and its currency stack as two prominent centered lines');
+    assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*clamp\(0\.32rem, 0\.48vw, 0\.44rem\)[^}]*"Inter"/s,
+      'the currency gets its own smaller label line instead of sharing the numeric row');
+    assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*clip/s,
+      'compact record formatting avoids a visible ellipsis in the wide value well');
+    assert.match(CSS, /records-rail__leader\s*\{[^}]*aspect-ratio:\s*1200 \/ 400[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
       'the button follows the cohesive art canvas without adding a second rectangular frame');
     assert.doesNotMatch(CSS, /records-rail__leader::before/,
       'the record boxes carry no repeated logo watermark');
-    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*74%[^}]*grid-template-columns:\s*56\.5% 43\.5%[^}]*background:\s*transparent/s,
-      'record amount and bounty align with the two illustrated bottom wells');
-    assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
-      'long Discord names or address fallbacks cannot widen a tile');
-    assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.58rem/s,
-      'the strip bounty remains compact but legible');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-sight-copy/,
       'BIGGEST belongs with the record name, not inside its payout bubble');
     assert.match(COMPONENT, /M12 1v4M12 19v4M1 12h4M19 12h4/,
@@ -745,10 +789,8 @@ describe('rail wiring', () => {
     assert.doesNotMatch(COMPONENT, /records-rail__target/,
       'the old left-heavy target column is gone');
     assert.match(COMPONENT,
-      /records-rail__leader-strip[\s\S]*?records-rail__leader-value[\s\S]*?records-rail__bounty-sight/,
-      'the standing amount and poker-style bounty share the footer in that order');
-    assert.doesNotMatch(CSS, /records-rail__bounty-sight\s*\{[^}]*position:\s*absolute/s,
-      'the bounty sits in document flow inside the bottom strip');
+      /records-rail__leader-presentation[\s\S]*?records-rail__bounty-crosshair[\s\S]*?records-rail__leader-bounty-amount[\s\S]*?records-rail__leader-title[\s\S]*?records-rail__leader-strip[\s\S]*?records-rail__leader-holder[\s\S]*?records-rail__leader-bet[\s\S]*?records-rail__leader-value/,
+      'the card reads avatar/bounty, wide title and ID, then the standalone bet amount');
     assert.match(COMPONENT, /records-rail__expanded/);
     assert.match(COMPONENT, /records-bounty-dialog/);
     assert.match(COMPONENT, /THE BIGGEST BOUNTY/);

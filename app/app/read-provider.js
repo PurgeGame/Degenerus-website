@@ -77,6 +77,11 @@ const inflightCalls = new Map();
 const recentCalls = new Map();
 const pinnedCalls = new Map();
 
+// Mirrors api.js cacheGeneration: a read that was IN FLIGHT when the receipt
+// boundary invalidated must not repopulate the cache when it lands — its value
+// was computed against pre-confirmation state.
+let cacheGeneration = 0;
+
 let _shared = null;
 
 /**
@@ -156,10 +161,11 @@ export function attachReadCache(provider) {
 
     // A failed read is never cached — only the in-flight entry is cleared, so
     // the next caller retries against the chain.
+    const generation = cacheGeneration;
     const flight = perform(tx).then(
       (value) => {
         if (inflightCalls.get(key) === flight) inflightCalls.delete(key);
-        store(key, pinned, value);
+        if (generation === cacheGeneration) store(key, pinned, value);
         return value;
       },
       (error) => {
@@ -181,6 +187,7 @@ export function attachReadCache(provider) {
  * rewritten block cached.
  */
 export function invalidateReadCache() {
+  cacheGeneration += 1;
   recentCalls.clear();
   pinnedCalls.clear();
   inflightCalls.clear();

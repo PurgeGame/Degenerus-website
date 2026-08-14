@@ -14459,6 +14459,7 @@ body.layout-basic .rvl-ticket-batch-status { margin-top: 0.8rem; color: var(--te
 .rvl-dgn-fact.is-win .rvl-dgn-fact-value { color: #4ade80; }
 .rvl-dgn-fact.is-loss .rvl-dgn-fact-value { color: #fca5a5; }
 .rvl-dgn-fact.is-miss .rvl-dgn-fact-value { color: var(--text-secondary, #aaa); }
+.rvl-dgn-result-details { display: flex; width: min(100%, 760px); flex-direction: column; align-items: center; gap: 0.38rem; }
 .rvl-dgn-results { display: flex; width: min(100%, 760px); max-height: min(27vh, 240px); flex-direction: column; gap: 0.25rem; overflow-y: auto; padding: 0.15rem; scrollbar-width: thin; }
 .rvl-dgn-result-line { display: grid; width: 100%; grid-template-columns: 4.5rem 3rem minmax(0, 1fr) minmax(5.5rem, auto); align-items: center; gap: 0.45rem; padding: 0.38rem 0.5rem; border: 0; border-left: 3px solid rgba(107, 107, 141, 0.5); border-radius: 7px; background: rgba(255, 255, 255, 0.025); color: inherit; font: inherit; font-size: 0.66rem; text-align: left; cursor: pointer; }
 .rvl-dgn-result-line.is-win { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.07); }
@@ -17477,17 +17478,22 @@ body.layout-basic .deity-desk__actions button:disabled { opacity: 0.62; cursor: 
 body.layout-basic .deity-desk__actions button.is-used { border-style: dashed; opacity: 0.42; }
 body.layout-basic .deity-desk__actions button.is-used::before { background: rgba(var(--boon-rgb), 0.34); }
 body.layout-basic .deity-desk__actions button.is-used .deity-desk__boon-mark { filter: grayscale(1); opacity: 0.7; }
-body.layout-basic .deity-desk__actions .deity-desk__smite { --boon-rgb: 248, 113, 113; --boon-ink: #fecaca; --boon-amount: #ef4444; --boon-amount-rgb: 239, 68, 68; grid-template-columns: calc(var(--deity-action-arrow-size) + 0.08rem) minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; gap: 0.14rem 0.38rem; padding: 0.4rem 0.58rem 0.92rem; border-color: rgba(248, 113, 113, 0.32); background: linear-gradient(160deg, rgba(70, 17, 21, 0.58), rgba(13, 8, 9, 0.76)); }
+body.layout-basic .deity-desk__actions .deity-desk__smite { --boon-rgb: 248, 113, 113; --boon-ink: #fecaca; --boon-amount: #ef4444; --boon-amount-rgb: 239, 68, 68; grid-template-columns: 2.96rem minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; gap: 0.14rem 0.38rem; padding: 0.4rem 0.58rem 0.92rem; border-color: rgba(248, 113, 113, 0.32); background: linear-gradient(160deg, rgba(70, 17, 21, 0.58), rgba(13, 8, 9, 0.76)); }
 body.layout-basic .deity-desk__actions .deity-desk__smite-mark {
+  width: 2.86rem;
+  height: 2.86rem;
   pointer-events: none;
 }
+body.layout-basic .deity-desk__actions .deity-desk__smite-mark::before { display: none; }
 body.layout-basic .deity-desk__actions .deity-desk__smite :is(span, strong) { grid-column: 2; }
 body.layout-basic .deity-desk__actions button.deity-desk__smite .deity-desk__smite-icon {
-  top: auto;
-  bottom: 0.08rem;
-  width: 1.18rem;
-  height: 1.18rem;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.92));
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.92))
+    drop-shadow(0 0 5px rgba(239, 68, 68, 0.42));
+  translate: none;
 }
 body.layout-basic .deity-desk__actions .deity-desk__smite:hover:not(:disabled) { border-color: rgba(248, 113, 113, 0.7); background: linear-gradient(160deg, rgba(98, 23, 29, 0.66), rgba(17, 9, 10, 0.8)); }
 body.layout-basic .deity-desk__actions .deity-desk__smite::after { display: none; }
@@ -19165,8 +19171,8 @@ body.layout-basic .df-position-percentage {
   line-height: inherit;
 }
 body.layout-basic .df-position-percentage--low {
-  color: #f87171;
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  color: #fde047;
+  text-shadow: 0 0 8px rgba(250, 204, 21, 0.52);
 }
 body.layout-basic .df-position-percentage--high {
   color: #60a5fa;
@@ -22839,6 +22845,16 @@ body.layout-basic .df-coinflip-record__mark.is-win {
   border-color: rgba(134, 239, 172, 0.72);
   background: linear-gradient(180deg, #79ff9f, #16a34a 58%, #0a6e31);
   box-shadow: 0 0 4px rgba(34, 197, 94, 0.76), 0 0 8px rgba(34, 197, 94, 0.24);
+}
+body.layout-basic .df-coinflip-record__mark.is-win.is-roll-150 {
+  border-color: rgba(253, 224, 71, 0.86);
+  background: linear-gradient(180deg, #fff59d, #eab308 58%, #854d0e);
+  box-shadow: 0 0 4px rgba(250, 204, 21, 0.82), 0 0 8px rgba(234, 179, 8, 0.3);
+}
+body.layout-basic .df-coinflip-record__mark.is-win.is-roll-250 {
+  border-color: rgba(147, 197, 253, 0.88);
+  background: linear-gradient(180deg, #93c5fd, #3b82f6 58%, #1e3a8a);
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.86), 0 0 8px rgba(37, 99, 235, 0.3);
 }
 body.layout-basic .df-coinflip-record__mark.is-loss {
   border-color: rgba(253, 164, 175, 0.72);

@@ -121,7 +121,7 @@ class AppDeityDesk extends HTMLElement {
           <span class="deity-desk__identity-copy">
             <span class="deity-pass-lockup deity-desk__wordmark">
               <img class="deity-pass-lockup__symbol" data-bind="deity-desk-symbol" src="" alt="">
-              <img class="deity-pass-lockup__frame" src="/app/assets/deity-pass-lockup-v3.png"
+              <img class="deity-pass-lockup__frame" src="/app/assets/deity-pass-lockup-v3.webp"
                    width="1400" height="320" alt="Deity Pass">
             </span>
             <strong data-bind="deity-desk-title">God of —</strong>
@@ -147,7 +147,7 @@ class AppDeityDesk extends HTMLElement {
           </span>
         </div>
         <div class="deity-desk__actions" aria-label="Deity actions">
-          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" data-boon-direction="down" data-boon-strength="low" disabled title="Burn 200 FLIP to smite this player"><i class="deity-desk__boon-mark deity-desk__smite-mark" aria-hidden="true"><img class="deity-desk__boon-icon deity-desk__smite-icon" src="/app/assets/boons/smite-down-micro.svg" alt=""></i><span>SMITE</span><strong>-2 DEGEN RATING</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
+          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" data-boon-direction="down" data-boon-strength="low" disabled title="Burn 200 FLIP to smite this player"><i class="deity-desk__boon-mark deity-desk__smite-mark" aria-hidden="true"><img class="deity-desk__boon-icon deity-desk__smite-icon" src="/app/assets/boons/smite-crash-bolt-down.svg" alt=""></i><span>SMITE</span><strong>-2 DEGEN RATING</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
           ${[0, 1, 2].map((slot) => `<button type="button" data-write data-slot="${slot}" data-bind="deity-desk-boon-${slot}" disabled><i class="deity-desk__boon-mark" data-bind="deity-desk-boon-mark-${slot}" aria-hidden="true" hidden><img class="deity-desk__boon-icon" data-bind="deity-desk-boon-icon-${slot}" alt=""></i><span data-bind="deity-desk-boon-name-${slot}">BOON ${slot + 1}</span><strong data-bind="deity-desk-boon-effect-${slot}">RNG PENDING</strong></button>`).join('')}
         </div>
       </section>`;

@@ -16,6 +16,7 @@ import './chain-config.js';
 import { CONTRACTS } from './chain-config.js';
 import { start as startPolling, refreshForDayShift } from './polling.js';
 import { startDayRollover } from './day-rollover.js';
+import { warmBadgeStore } from './badge-sprite.js';
 import { initRouter, getViewedAddress } from './router.js';
 import { autoReconnect } from './wallet.js';
 import { subscribe, get, getActingAddress, update } from './store.js';
@@ -347,6 +348,16 @@ async function boot() {
   mountDaySelector();
   mountJackpotCountdown();
   console.log('[app] ready');
+
+  // Badge art: one bundled fetch on idle, AFTER the critical UI is up — every
+  // badge rendered from then on resolves to a local blob URL instead of its
+  // own /badges-circular/ or /symbols/ request (badge-sprite.js).
+  const warmBadges = () => { void warmBadgeStore(); };
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(warmBadges, { timeout: 4000 });
+  } else {
+    setTimeout(warmBadges, 1500);
+  }
 }
 
 if (document.readyState === 'loading') {

@@ -1,5 +1,7 @@
 // app/constants.js -- Contract addresses, chain config, badge paths
 
+import { resolveBadgeUrl } from './badge-sprite.js';
+
 export const CHAIN = {
   id: 31337,
   name: 'Anvil Local',
@@ -70,7 +72,7 @@ export function badgePath(category, symbolIdx, color) {
   const fileIdx = category === 'cards' ? CARD_IDX[symbolIdx] : symbolIdx;
   const items = BADGE_ITEMS[category];
   const name = items ? items[symbolIdx] : symbolIdx;
-  return `/badges-circular/${category}_${String(fileIdx).padStart(2, '0')}_${name}_${BADGE_COLORS[color]}.svg`;
+  return resolveBadgeUrl(`/badges-circular/${category}_${String(fileIdx).padStart(2, '0')}_${name}_${BADGE_COLORS[color]}.svg`);
 }
 
 export function badgeCircularPath(category, symbolIdx, color) {
@@ -78,7 +80,7 @@ export function badgeCircularPath(category, symbolIdx, color) {
   const items = BADGE_ITEMS[category];
   const name = items ? items[symbolIdx] : symbolIdx;
   const colorName = typeof color === 'number' ? BADGE_COLORS[color] : color;
-  return `/badges-circular/${category}_${String(fileIdx).padStart(2, '0')}_${name}_${colorName}.svg`;
+  return resolveBadgeUrl(`/badges-circular/${category}_${String(fileIdx).padStart(2, '0')}_${name}_${colorName}.svg`);
 }
 
 export const DEATH_CLOCK = {

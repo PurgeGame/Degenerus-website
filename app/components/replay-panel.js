@@ -28,6 +28,7 @@ import {
   truncateAddress,
 } from '../viewer/utils.js';
 import { BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
+import { warmBadgeStore } from '../app/badge-sprite.js';
 import { fetchJSON } from '../app/api.js';
 import { batch, update } from '../app/reactive-store.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
@@ -514,7 +515,7 @@ class ReplayPanel extends HTMLElement {
     });
     this.#syncSpinControlState();
     this.refreshDays();
-    this.#preloadBadges(); // warm browser cache for all badge SVGs in background
+    void this.#preloadBadges(); // decode-warm every badge in the background
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -1254,9 +1255,13 @@ class ReplayPanel extends HTMLElement {
     }
   }
 
-  // Preload all 256 badge SVGs into the browser cache so spin src-swaps render instantly.
-  // Fires-and-forgets in the background; does not block the UI.
-  #preloadBadges() {
+  // Decode-warm all 256 badges so spin src-swaps render instantly. Awaits the
+  // badge bundle FIRST — generating paths before it lands resolves them to
+  // /badges-circular/ file URLs and re-creates the 256-request cold-load storm
+  // this preloader used to be. Once the bundle is in, every path below is a
+  // local blob URL and the whole warm costs zero network.
+  async #preloadBadges() {
+    await warmBadgeStore();
     const BADGE_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
     let i = 0;
     const paths = [];

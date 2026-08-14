@@ -60,3 +60,43 @@
 
 /app/components/*
   Cache-Control: public, max-age=60, must-revalidate
+
+# The app's own entry document was the one HTML entry point with NO rule —
+# the same 4h-default trap as the modules above, but for the page itself.
+/app
+  Cache-Control: no-store
+
+/app/
+  Cache-Control: no-store
+
+/app/index.html
+  Cache-Control: no-store
+
+# Stylesheets and vendor modules ship in lockstep with the app modules above —
+# same 60s window, so a publish can never pair new JS with stale CSS or a
+# stale ethers. Repeat loads inside the window are cheap 304s on ETag.
+/app/styles/*
+  Cache-Control: public, max-age=60, must-revalidate
+
+/app/vendor/*
+  Cache-Control: public, max-age=60, must-revalidate
+
+# Media never change in place — the -vNN filename suffixes are the bust
+# mechanism (v9, v39, …), so a stale-art window is bounded by the next rename.
+# Without this rule every badge SVG and card PNG revalidated on every load:
+# a cold load was measured issuing ~274 SVG requests against 33 distinct files.
+/app/assets/*
+  Cache-Control: public, max-age=604800
+
+/app/sounds/*
+  Cache-Control: public, max-age=604800
+
+# Trait badge art is frozen by the contract's trait topology; the app also
+# ships every badge in one versioned bundle (/app/assets/badge-bundle-vN.json,
+# built by db/build-badge-bundle.mjs), so these per-file lanes mostly serve
+# first-paint badges and non-app pages.
+/badges-circular/*
+  Cache-Control: public, max-age=604800
+
+/symbols/*
+  Cache-Control: public, max-age=604800

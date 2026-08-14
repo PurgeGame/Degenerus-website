@@ -11,6 +11,8 @@
 // Matches contracts/modules/DegenerusGameDegeneretteModule.sol packing and the
 // indexer's box-spins handler (database/src/handlers/box-spins.ts).
 
+import { resolveBadgeUrl } from './badge-sprite.js';
+
 export const DGN_QUADRANTS = ['crypto', 'zodiac', 'cards', 'dice'];
 
 export const DGN_SYMBOLS = Object.freeze({
@@ -112,14 +114,14 @@ export const DGN_TICKET_COPY_EVENT = 'degenerette:copy-ticket';
 export function dgnBadgePath(q, sym, col) {
   const cat = DGN_QUADRANTS[q];
   const fileIdx = cat === 'cards' ? DGN_CARD_IDX[sym] : sym;
-  return `/badges-circular/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`;
+  return resolveBadgeUrl(`/badges-circular/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`);
 }
 
 /** Standalone trait mark without the ticket badge's color/black/white rings. */
 export function dgnSymbolPath(q, sym, col) {
   const cat = DGN_QUADRANTS[q];
   const fileIdx = cat === 'cards' ? DGN_CARD_IDX[sym] : sym;
-  return `/symbols/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`;
+  return resolveBadgeUrl(`/symbols/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`);
 }
 
 /**

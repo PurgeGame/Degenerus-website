@@ -283,10 +283,12 @@ export function goldTicketLabel(traitIds) {
     if (!trait || trait.col !== 7) return [];
     const raw = DGN_SYMBOLS[DGN_QUADRANTS[q]]?.[trait.sym];
     if (!raw) return [];
-    return [TRAIT_LABEL_OVERRIDES[raw] || String(raw).replace(/[_-]+/g, ' ').toUpperCase()];
+    if (raw === 'xrp') return ['GOLD WWXRP'];
+    const name = TRAIT_LABEL_OVERRIDES[raw] || String(raw).replace(/[_-]+/g, ' ').toUpperCase();
+    return [`GOLD ${name}`];
   });
   return names.length > 0
-    ? names.map((name) => `GOLD ${name}`).join(' · ')
+    ? names.join(' · ')
     : 'GOLD TICKET';
 }
 
@@ -4212,8 +4214,12 @@ class RevealOverlay extends HTMLElement {
   }
 
   #appendFullSpinResultDetails(rendered, board) {
-    if (board.boxSpin) return;
+    if (board.boxSpin) return null;
     const paid = board.rows.filter((row) => row.payout > 0n).length;
+
+    const details = document.createElement('div');
+    details.className = 'rvl-dgn-result-details';
+    details.setAttribute('aria-label', 'Detailed Degenerette results');
 
     const facts = document.createElement('div');
     facts.className = 'rvl-dgn-facts rvl-dgn-facts--result';
@@ -4240,7 +4246,7 @@ class RevealOverlay extends HTMLElement {
         net > 0n ? 'is-win' : net < 0n ? 'is-loss' : '',
       ));
     }
-    rendered.stage.appendChild(facts);
+    details.appendChild(facts);
 
     const results = document.createElement('div');
     results.className = 'rvl-dgn-results';
@@ -4270,7 +4276,8 @@ class RevealOverlay extends HTMLElement {
       this.#registerFullSpinSelector(rendered, line, row, board);
       results.appendChild(line);
     }
-    rendered.stage.appendChild(results);
+    details.appendChild(results);
+    return details;
   }
 
   async #appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
@@ -4557,7 +4564,7 @@ class RevealOverlay extends HTMLElement {
     if (board.survived == null) {
       this.#setRunningTotal(rendered, board, board.total, reducedMotion ? 0 : 600);
     }
-    this.#appendFullSpinResultDetails(rendered, board);
+    const resultDetails = this.#appendFullSpinResultDetails(rendered, board);
     this.#enableFullSpinSelection(rendered);
 
     const totalEl = document.createElement('div');
@@ -4650,6 +4657,10 @@ class RevealOverlay extends HTMLElement {
     }
     if (rendered.actions) rendered.stage.appendChild(rendered.actions);
     else rendered.stage.appendChild(rendered.cta);
+    // The verdict and exit must remain reachable before the potentially tall
+    // per-spin breakdown. Players who only want to leave never need to scroll
+    // through detailed results first.
+    if (resultDetails) rendered.stage.appendChild(resultDetails);
     await this.#waitTap();
     return won;
   }

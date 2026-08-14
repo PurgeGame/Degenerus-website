@@ -27,7 +27,8 @@ import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ethers, getProvider } from '../app/contracts.js';
-import { CHAIN, CONTRACTS } from '../app/chain-config.js';
+import { sharedReadProvider } from '../app/read-provider.js';
+import { CONTRACTS } from '../app/chain-config.js';
 import { scaledTicketPriceWei } from '../app/lootbox.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import {
@@ -70,7 +71,6 @@ const GAME_TRAIT_ENTRY_ABI = [
 ];
 
 let _deityEntryContractFactory = null;
-let _deityEntryReadProvider = null;
 
 /** Test seam for the read-only GAME projection below. */
 export function __setDeityEntryContractFactoryForTest(factory) {
@@ -79,20 +79,11 @@ export function __setDeityEntryContractFactoryForTest(factory) {
 
 export function __resetDeityEntryContractFactoryForTest() {
   _deityEntryContractFactory = null;
-  _deityEntryReadProvider = null;
 }
 
 function _deityEntryContract() {
   if (_deityEntryContractFactory) return _deityEntryContractFactory();
-  const walletProvider = getProvider();
-  if (!_deityEntryReadProvider && !walletProvider && CHAIN.rpcUrl) {
-    _deityEntryReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      { name: CHAIN.name, chainId: CHAIN.id },
-      { staticNetwork: true },
-    );
-  }
-  const provider = walletProvider || _deityEntryReadProvider;
+  const provider = getProvider() || sharedReadProvider();
   if (!provider || !CONTRACTS.GAME) return null;
   return new ethers.Contract(CONTRACTS.GAME, GAME_TRAIT_ENTRY_ABI, provider);
 }

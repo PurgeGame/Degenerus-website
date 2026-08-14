@@ -135,6 +135,26 @@ test('invalidateReadCache drops both the windowed and the pinned class', async (
   assert.equal(state.calls.length, 4, 'the receipt boundary forces both classes back to the chain');
 });
 
+test('a read in flight across the receipt boundary cannot repopulate the cache', async () => {
+  let release;
+  const { provider, state } = stubProvider((_tx, n) => (
+    n === 1 ? new Promise((resolve) => { release = () => resolve('0xstale'); }) : Promise.resolve('0xfresh')
+  ));
+
+  // The read starts pre-confirmation…
+  const preConfirmation = provider.call({ to: GAME, data: '0x7f84d03d' });
+  // …the receipt lands and invalidates while it is still in flight…
+  rp.invalidateReadCache();
+  // …then the pre-confirmation response arrives. It must not be stored.
+  release();
+  assert.equal(await preConfirmation, '0xstale');
+  assert.equal(rp._readCacheStatsForTests().recent, 0, 'the settling flight must not resurrect the cleared cache');
+
+  // The next caller goes back to the chain and sees post-confirmation state.
+  assert.equal(await provider.call({ to: GAME, data: '0x7f84d03d' }), '0xfresh');
+  assert.equal(state.calls.length, 2);
+});
+
 test('the same question from two callers is one key regardless of address case', async () => {
   const { provider, state } = stubProvider();
 

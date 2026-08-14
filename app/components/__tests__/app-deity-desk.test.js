@@ -211,8 +211,8 @@ describe('<app-deity-desk>', () => {
     assert.match(DESK_SRC, /deity-desk__boon-icon/,
       'each daily boon choice carries its product-specific icon');
     assert.match(DESK_SRC,
-      /deity-desk__boon-mark deity-desk__smite-mark[\s\S]*?deity-desk__boon-icon deity-desk__smite-icon[\s\S]*?smite-down-micro\.svg/,
-      'Smite reuses the shared arrow silhouette with only a lightning badge inside');
+      /deity-desk__boon-mark deity-desk__smite-mark[\s\S]*?deity-desk__boon-icon deity-desk__smite-icon[\s\S]*?smite-crash-bolt-down\.svg/,
+      'Smite uses a dedicated lightning-bolt-shaped crash arrow without a character');
     assert.match(APP_CSS,
       /\.deity-desk__actions\s*\{[^}]*--deity-action-arrow-size:\s*2\.42rem/s,
       'the roomy action row defines one larger arrow size');
@@ -223,8 +223,14 @@ describe('<app-deity-desk>', () => {
       /deity-desk__smite"[^>]*data-boon-direction="down"[^>]*data-boon-strength="low"/,
       'Smite enters the same direction and tier pipeline as every other arrow');
     assert.match(APP_CSS,
-      /button\.deity-desk__smite \.deity-desk__smite-icon\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*0\.08rem;[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
-      'the larger bolt sits inside the lower arrowhead instead of above the arrow');
+      /\.deity-desk__smite-mark\s*\{[^}]*width:\s*2\.86rem;[^}]*height:\s*2\.86rem/s,
+      'the crash-arrow character gets enough room to remain legible at button scale');
+    assert.match(APP_CSS,
+      /\.deity-desk__smite-mark::before\s*\{[^}]*display:\s*none/s,
+      'the generic boon arrow does not sit behind the dedicated Smite artwork');
+    assert.match(APP_CSS,
+      /button\.deity-desk__smite \.deity-desk__smite-icon\s*\{[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*translate:\s*none/s,
+      'the lightning crash arrow fills the complete Smite mark');
     assert.match(DESK_SRC, /data-boon-strength/,
       'each daily boon choice carries its relative amount tier');
     assert.match(APP_CSS, /\.deity-desk__actions button\s*\{[^}]*min-height:\s*3\.05rem/s,

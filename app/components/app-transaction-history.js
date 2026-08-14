@@ -6,6 +6,7 @@
 import { fetchJSON } from '../app/api.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from '../app/chain-config.js';
 import { ethers, getProvider } from '../app/contracts.js';
+import { sharedReadProvider } from '../app/read-provider.js';
 import { dgnPartitionTicketEntries } from '../app/dgn-traits.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, subscribe } from '../app/store.js';
@@ -74,8 +75,6 @@ const AFKING_HISTORY_ABI = Object.freeze([
   'event DeityPassPurchased(address indexed buyer,uint8 symbolId,uint256 price,uint24 level)',
 ]);
 
-let _afkingHistoryProvider = null;
-
 function _lower(value) {
   return String(value || '').toLowerCase();
 }
@@ -104,14 +103,9 @@ function _chronology(blockNumber, logIndex = 0) {
 function _historyReadProvider() {
   const connected = getProvider();
   if (connected && typeof connected.getLogs === 'function') return connected;
-  if (!_afkingHistoryProvider && CHAIN?.rpcUrl) {
-    _afkingHistoryProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      { name: CHAIN.name, chainId: CHAIN.id },
-      { staticNetwork: true },
-    );
-  }
-  return _afkingHistoryProvider;
+  // getLogs passes straight through the shared provider (the read cache only
+  // wraps .call), so history fetches stay live while joining its batches.
+  return sharedReadProvider();
 }
 
 function _eventItem(log, parsed) {

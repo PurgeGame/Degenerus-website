@@ -167,6 +167,8 @@ const RESULT_TRUTH_WINDOW_MS = 15_000;
 // remains the exact 18-decimal source of truth. One thousand stops gives the
 // slider useful precision without converting a token balance through Number.
 const SDGNRS_BURN_SLIDER_STEPS = 1_000n;
+const ADD_BET_SLIDER_FINE_STEP = 100n;
+const ADD_BET_SLIDER_COARSE_STEP = 1_000n;
 const COINFLIP_REUSE_BONUS_BPS = 75n;
 const BPS_DENOMINATOR = 10_000n;
 const MODIFIER_MIN_PERCENT = 50;
@@ -416,10 +418,16 @@ export function normalizeProtocolCoinflipStats(payload, recentLimit = COINFLIP_R
     return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
   };
   const recent = (Array.isArray(payload?.recent) ? payload.recent : [])
-    .map((row) => ({
-      day: whole(row?.day),
-      win: row?.win === true,
-    }))
+    .map((row) => {
+      const rewardPercent = Number(row?.rewardPercent);
+      return {
+        day: whole(row?.day),
+        win: row?.win === true,
+        ...(row?.rewardPercent != null && Number.isFinite(rewardPercent) && rewardPercent >= 0
+          ? { rewardPercent: Math.trunc(rewardPercent) }
+          : {}),
+      };
+    })
     .filter((row) => row.day > 0)
     .sort((a, b) => b.day - a.day)
     .slice(0, Math.max(COINFLIP_RECENT_WINDOW, Math.trunc(Number(recentLimit) || 0)));
@@ -442,6 +450,54 @@ function protocolOutcomeCache(fetcher) {
   return outcomes;
 }
 
+function protocolCoinflipOutcome(day, result) {
+  if (typeof result?.win !== 'boolean') return null;
+  const reportedDay = Number(result?.day);
+  if (result?.day != null
+    && (!Number.isFinite(reportedDay) || Math.trunc(reportedDay) !== day)) return null;
+  const rewardPercent = Number(result?.rewardPercent);
+  return {
+    day,
+    win: result.win,
+    ...(result?.rewardPercent != null && Number.isFinite(rewardPercent) && rewardPercent >= 0
+      ? { rewardPercent: Math.trunc(rewardPercent) }
+      : {}),
+  };
+}
+
+async function hydrateProtocolCoinflipRewards(stats, fetcher) {
+  const outcomeByDay = protocolOutcomeCache(fetcher);
+  for (const row of stats.recent) {
+    const cached = outcomeByDay.get(row.day);
+    outcomeByDay.set(row.day, { ...cached, ...row });
+  }
+  const missingWinDays = stats.recent
+    .filter((row) => row.win && !Number.isFinite(outcomeByDay.get(row.day)?.rewardPercent))
+    .map((row) => row.day);
+  for (let offset = 0; offset < missingWinDays.length; offset += COINFLIP_STATS_FALLBACK_BATCH) {
+    const batch = missingWinDays.slice(offset, offset + COINFLIP_STATS_FALLBACK_BATCH);
+    const outcomes = await Promise.all(batch.map(async (day) => {
+      try {
+        return protocolCoinflipOutcome(day, await fetcher(`/game/coinflip/day/${day}`));
+      } catch (_error) {
+        // Special marker colors are an enhancement. A delayed exact-day row
+        // must not make the all-time score or ordinary win/loss bank disappear.
+        return null;
+      }
+    }));
+    for (const outcome of outcomes) {
+      if (outcome) outcomeByDay.set(outcome.day, outcome);
+    }
+  }
+  return {
+    ...stats,
+    recent: stats.recent.map((row) => {
+      const rewardPercent = outcomeByDay.get(row.day)?.rewardPercent;
+      return Number.isFinite(rewardPercent) ? { ...row, rewardPercent } : row;
+    }),
+  };
+}
+
 /**
  * Load the protocol-wide W–L record. There is one global CoinflipDayResolved per
  * settled game day, so the fallback walks those immutable day rows directly;
@@ -449,10 +505,11 @@ function protocolOutcomeCache(fetcher) {
  */
 export async function loadProtocolCoinflipStats(latestDay, fetcher = fetchJSON) {
   try {
-    return normalizeProtocolCoinflipStats(
+    const stats = normalizeProtocolCoinflipStats(
       await fetcher('/game/coinflip/stats'),
       COINFLIP_RECENT_BUFFER,
     );
+    return hydrateProtocolCoinflipRewards(stats, fetcher);
   } catch (error) {
     if (Number(error?.status) !== 404) throw error;
   }
@@ -467,7 +524,7 @@ export async function loadProtocolCoinflipStats(latestDay, fetcher = fetchJSON) 
     const outcomes = await Promise.all(batch.map(async (day) => {
       try {
         const result = await fetcher(`/game/coinflip/day/${day}`);
-        return typeof result?.win === 'boolean' ? { day, win: result.win } : null;
+        return protocolCoinflipOutcome(day, result);
       } catch (error) {
         // Today's row may still be unresolved. It is retried next refresh;
         // immutable settled outcomes remain cached for the deployment.
@@ -505,8 +562,21 @@ export function protocolCoinflipStatsForReveal(stats, {
   const recentIndex = normalized.recent.findIndex((row) => row.day === targetDay);
   const indexedResult = recentIndex >= 0 ? normalized.recent[recentIndex] : null;
   const resolvedWin = typeof result?.win === 'boolean' ? result.win : indexedResult?.win;
+  const exactRewardPercent = Number(result?.rewardPercent);
+  const resolvedRewardPercent = result?.rewardPercent != null
+    && Number.isFinite(exactRewardPercent)
+    && exactRewardPercent >= 0
+    ? Math.trunc(exactRewardPercent)
+    : indexedResult?.rewardPercent;
+  const withResolvedReward = (rows) => (
+    targetDay > 0 && Number.isFinite(resolvedRewardPercent)
+      ? rows.map((row) => (row.day === targetDay
+        ? { ...row, rewardPercent: resolvedRewardPercent }
+        : row))
+      : rows
+  );
   if (!gateCurrentDay || targetDay <= 0 || typeof resolvedWin !== 'boolean') {
-    return { ...normalized, recent: visibleRecent(normalized.recent) };
+    return { ...normalized, recent: visibleRecent(withResolvedReward(normalized.recent)) };
   }
 
   const included = recentIndex >= 0;
@@ -521,12 +591,16 @@ export function protocolCoinflipStatsForReveal(stats, {
     return {
       wins: normalized.wins + (resolvedWin ? 1 : 0),
       losses: normalized.losses + (resolvedWin ? 0 : 1),
-      recent: [{ day: targetDay, win: resolvedWin }, ...normalized.recent]
+      recent: [{
+        day: targetDay,
+        win: resolvedWin,
+        ...(Number.isFinite(resolvedRewardPercent) ? { rewardPercent: resolvedRewardPercent } : {}),
+      }, ...normalized.recent]
         .sort((a, b) => b.day - a.day)
         .slice(0, COINFLIP_RECENT_WINDOW),
     };
   }
-  return { ...normalized, recent: visibleRecent(normalized.recent) };
+  return { ...normalized, recent: visibleRecent(withResolvedReward(normalized.recent)) };
 }
 
 function parseTokenAmount(value) {
@@ -2272,13 +2346,15 @@ class AppDailyFlip extends HTMLElement {
             </header>
             <label class="df-add-bet-dialog__value">
               <input type="number" name="df-amount" data-bind="df-add-bet-number"
-                     min="100" step="1" value="1000" inputmode="numeric" autocomplete="off"
+                     min="100" step="100" value="1000" inputmode="numeric" autocomplete="off"
                      aria-label="FLIP to add to tomorrow's bet">
               <b aria-hidden="true">FLIP</b>
             </label>
             <input type="range" data-bind="df-add-bet-slider"
-                   min="100" max="1000" step="1" value="1000"
-                   aria-label="FLIP to add to tomorrow's bet">
+                   min="100" max="1000" step="100" value="1000"
+                   aria-label="FLIP to add to tomorrow's bet"
+                   aria-description="Drag in 1,000 FLIP steps. Use arrow keys or Shift-drag for 100 FLIP adjustments."
+                   title="Drag: 1,000 FLIP · arrows or Shift-drag: 100 FLIP">
             <div class="df-add-bet-dialog__range" aria-hidden="true">
               <span>100</span><span data-bind="df-add-bet-available">AVAILABLE —</span>
             </div>
@@ -2545,12 +2621,6 @@ class AppDailyFlip extends HTMLElement {
     return protocolFlipTotalWei(this.#asWei(walletRaw), this.#visibleClaimableWei());
   }
 
-  #addBetSliderStep(maxWhole) {
-    if (maxWhole >= 100_000n) return 100n;
-    if (maxWhole >= 10_000n) return 10n;
-    return 1n;
-  }
-
   #snapAddBetSliderWhole(value, minWhole, maxWhole, step) {
     let raw;
     try { raw = BigInt(String(value || '0')); }
@@ -2559,6 +2629,21 @@ class AppDailyFlip extends HTMLElement {
     const offset = raw > minWhole ? raw - minWhole : 0n;
     const snapped = minWhole + (((offset + (step / 2n)) / step) * step);
     return snapped < minWhole ? minWhole : snapped > upper ? upper : snapped;
+  }
+
+  #snapAddBetSliderCoarseWhole(value, minWhole, maxWhole) {
+    const fine = this.#snapAddBetSliderWhole(
+      value,
+      minWhole,
+      maxWhole,
+      ADD_BET_SLIDER_FINE_STEP,
+    );
+    if (maxWhole < ADD_BET_SLIDER_COARSE_STEP) return fine;
+    const coarse = ((fine + (ADD_BET_SLIDER_COARSE_STEP / 2n))
+      / ADD_BET_SLIDER_COARSE_STEP) * ADD_BET_SLIDER_COARSE_STEP;
+    const upper = minWhole + (((maxWhole - minWhole) / ADD_BET_SLIDER_FINE_STEP)
+      * ADD_BET_SLIDER_FINE_STEP);
+    return coarse < minWhole ? minWhole : coarse > upper ? upper : coarse;
   }
 
   #renderAddBetDialog({ reset = false } = {}) {
@@ -2579,13 +2664,13 @@ class AppDailyFlip extends HTMLElement {
     const available = this.#addBetAvailableWei();
     const maxWhole = available == null ? 0n : available / unit;
     const validRange = maxWhole >= minWhole;
-    const sliderStep = validRange ? this.#addBetSliderStep(maxWhole) : 1n;
+    const sliderStep = ADD_BET_SLIDER_FINE_STEP;
     slider.min = String(minWhole);
     slider.max = validRange ? String(maxWhole) : String(minWhole);
     slider.step = String(sliderStep);
     number.min = String(minWhole);
     number.max = validRange ? String(maxWhole) : String(minWhole);
-    number.step = '1';
+    number.step = String(ADD_BET_SLIDER_FINE_STEP);
     if (reset) {
       number.value = validRange ? String(maxWhole < 1_000n ? maxWhole : 1_000n) : '';
     }
@@ -2799,10 +2884,19 @@ class AppDailyFlip extends HTMLElement {
     const ordered = [...recent];
     for (let index = 0; index < COINFLIP_RECENT_WINDOW; index += 1) {
       const result = ordered[index] || null;
+      const rewardPercent = Number(result?.rewardPercent);
+      const markerTone = result?.win
+        && result?.rewardPercent != null
+        && Number.isFinite(rewardPercent)
+        ? dailyFlipMultiplierTone(100 + Math.max(0, Math.trunc(rewardPercent)))
+        : null;
+      const markerToneClass = markerTone === 'low'
+        ? ' is-roll-150'
+        : (markerTone === 'high' ? ' is-roll-250' : '');
       const marker = document.createElement('span');
       marker.className = result == null
         ? 'df-coinflip-record__mark is-empty'
-        : `df-coinflip-record__mark ${result.win ? 'is-win' : 'is-loss'}${
+        : `df-coinflip-record__mark ${result.win ? 'is-win' : 'is-loss'}${markerToneClass}${
           result.day === Number(this.#day) && (winsTicked || lossesTicked) ? ' is-new' : ''
         }`;
       marker.setAttribute('aria-hidden', 'true');
@@ -4824,23 +4918,39 @@ class AppDailyFlip extends HTMLElement {
     const amountSlider = this.querySelector('[data-bind="df-add-bet-slider"]');
     const amountNumber = this.querySelector('[data-bind="df-add-bet-number"]');
     if (amountSlider) {
+      const finishPointerAdjust = () => {
+        delete amountSlider.dataset.pointerAdjust;
+        delete amountSlider.dataset.fineAdjust;
+      };
+      amountSlider.addEventListener('pointerdown', (event) => {
+        amountSlider.dataset.pointerAdjust = 'true';
+        amountSlider.dataset.fineAdjust = event?.shiftKey ? 'true' : 'false';
+      });
+      amountSlider.addEventListener('pointerup', finishPointerAdjust);
+      amountSlider.addEventListener('pointercancel', finishPointerAdjust);
+      amountSlider.addEventListener('lostpointercapture', finishPointerAdjust);
+      amountSlider.addEventListener('change', finishPointerAdjust);
       amountSlider.addEventListener('input', () => {
         this.#addBetError = '';
         const minWhole = BigInt(amountSlider.min || 100);
         const maxWhole = BigInt(amountSlider.max || minWhole);
         const step = BigInt(amountSlider.step || 1);
-        amountSlider.value = String(this.#snapAddBetSliderWhole(
-          amountSlider.value,
-          minWhole,
-          maxWhole,
-          step,
-        ));
+        const coarsePointerAdjust = amountSlider.dataset.pointerAdjust === 'true'
+          && amountSlider.dataset.fineAdjust !== 'true';
+        amountSlider.value = String(coarsePointerAdjust
+          ? this.#snapAddBetSliderCoarseWhole(amountSlider.value, minWhole, maxWhole)
+          : this.#snapAddBetSliderWhole(amountSlider.value, minWhole, maxWhole, step));
         if (amountNumber) amountNumber.value = amountSlider.value;
         this.#renderAddBetDialog();
       });
       amountSlider.addEventListener('keydown', (event) => {
+        if (event?.key === 'Shift') amountSlider.dataset.fineAdjust = 'true';
         if (event?.key === 'Enter') this.#runAction('flip');
       });
+      amountSlider.addEventListener('keyup', (event) => {
+        if (event?.key === 'Shift') delete amountSlider.dataset.fineAdjust;
+      });
+      amountSlider.addEventListener('blur', finishPointerAdjust);
     }
     if (amountNumber) {
       amountNumber.addEventListener('input', () => {

@@ -631,8 +631,8 @@ describe('normalizeSequence', () => {
   });
 
   test('gold-ticket hero names its actual gold symbol and rebuilds the whole ticket at full size', () => {
-    assert.equal(goldTicketLabel([56, 65, 130, 195]), 'GOLD XRP');
-    assert.equal(goldTicketLabel([56, 65, 189, 195]), 'GOLD XRP · GOLD CASH SACK');
+    assert.equal(goldTicketLabel([56, 65, 130, 195]), 'GOLD WWXRP');
+    assert.equal(goldTicketLabel([56, 65, 189, 195]), 'GOLD WWXRP · GOLD CASH SACK');
     assert.match(
       REVEAL_SRC,
       /const heroTicket = this\.#buildPaperTicket\(traitIds, foil\)[\s\S]*?rvl-gold-hit__ticket[\s\S]*?hit\.appendChild\(heroTicket\)/,
@@ -3561,8 +3561,15 @@ describe('reveal-overlay element', () => {
       );
       assert.equal(stage.querySelectorAll('.rvl-dgn-result-line').length, 2,
         'the final board spells out every spin result');
-      assert.match(stage.querySelector('.rvl-dgn-facts--result').textContent, /PAYOUT/);
-      assert.match(stage.querySelector('.rvl-dgn-facts--result').textContent, /NET/);
+      const resultDetails = stage.querySelector('.rvl-dgn-result-details');
+      assert.ok(resultDetails, 'the per-spin breakdown is grouped as optional detail');
+      assert.match(resultDetails.querySelector('.rvl-dgn-facts--result').textContent, /PAYOUT/);
+      assert.match(resultDetails.querySelector('.rvl-dgn-facts--result').textContent, /NET/);
+      assert.ok(
+        stage.children.lastIndexOf(stage.querySelector('.rvl-dgn-actions'))
+          < stage.children.indexOf(resultDetails),
+        'BACK TO GAME appears before the detailed results, so leaving never requires scrolling them',
+      );
       assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true,
         'the large result never collapses into the old mini summary');
 

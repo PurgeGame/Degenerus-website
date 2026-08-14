@@ -542,7 +542,7 @@ class AppPassSection extends HTMLElement {
                     <img class="deity-pass-lockup__symbol" data-bind="pass-deity-brand-symbol"
                          src="" alt="" aria-hidden="true" hidden>
                     <img class="deity-pass-lockup__frame"
-                         src="/app/assets/deity-pass-lockup-v3.png"
+                         src="/app/assets/deity-pass-lockup-v3.webp"
                          width="1400" height="320" alt="Deity Pass">
                   </span>
                 </span>
@@ -573,7 +573,7 @@ class AppPassSection extends HTMLElement {
                     <img class="deity-pass-lockup__symbol" data-bind="pass-deity-brand-symbol"
                          src="" alt="" hidden>
                     <img class="deity-pass-lockup__frame"
-                         src="/app/assets/deity-pass-lockup-v3.png"
+                         src="/app/assets/deity-pass-lockup-v3.webp"
                          width="1400" height="320" alt="">
                   </span>
                   <strong id="pass-deity-dialog-title">CHOOSE YOUR DEITY</strong>

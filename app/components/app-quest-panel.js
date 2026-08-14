@@ -538,7 +538,7 @@ class AppQuestPanel extends HTMLElement {
           <img src="/whitepaper/flame-logo-split.svg" alt="">
         </span>
         <span class="qst-complete-toast__copy">
-          <small data-bind="qst-complete-toast-kicker">QUEST COMPLETE</small>
+          <small data-bind="qst-complete-toast-kicker">DAILY QUEST COMPLETE</small>
           <strong data-bind="qst-complete-toast-title"></strong>
           <span data-bind="qst-complete-toast-detail"></span>
         </span>
@@ -1476,6 +1476,9 @@ class AppQuestPanel extends HTMLElement {
 
   #summarizeQuestCompletionToasts(items) {
     const titleSet = new Set(items.map((item) => String(item.title || '').trim()).filter(Boolean));
+    const scopes = new Set(items
+      .map((item) => String(item.scope || '').toLowerCase())
+      .filter((scope) => scope === 'daily' || scope === 'level'));
     // A luckbox can finish both the shared ticket-or-luckbox objective and the
     // narrower luckbox-only objective in one transaction. Name the concrete
     // action the player just took instead of letting the broader fallback
@@ -1486,11 +1489,16 @@ class AppQuestPanel extends HTMLElement {
     const titles = [...titleSet];
     const flipReward = items.reduce((sum, item) => sum + (Number(item.flipReward) || 0), 0);
     const streakReward = items.reduce((sum, item) => sum + (Number(item.streakReward) || 0), 0);
+    const kicker = scopes.size > 1
+      ? 'DAILY + LEVEL QUESTS COMPLETE'
+      : scopes.has('level')
+        ? (items.length > 1 ? `${items.length} LEVEL QUESTS COMPLETE` : 'LEVEL QUEST COMPLETE')
+        : (items.length > 1 ? `${items.length} DAILY QUESTS COMPLETE` : 'DAILY QUEST COMPLETE');
     if (items.length === 1) {
       return {
         ...items[0],
         items: [...items],
-        kicker: 'QUEST COMPLETE',
+        kicker,
       };
     }
     const title = titles.length <= 2
@@ -1498,9 +1506,12 @@ class AppQuestPanel extends HTMLElement {
       : `${titles[0]} +${titles.length - 1} MORE`;
     return {
       items: [...items],
-      kicker: `${items.length} QUESTS COMPLETE`,
+      kicker,
       title: title || 'Quest rewards unlocked',
-      detail: `${items.length} QUESTS${flipReward > 0 ? ` · +${flipReward} FLIP` : ''}${streakReward > 0 ? ` · +${streakReward} STREAK` : ''}`,
+      detail: [
+        flipReward > 0 ? `+${flipReward} FLIP` : '',
+        streakReward > 0 ? `+${streakReward} STREAK` : '',
+      ].filter(Boolean).join(' · '),
     };
   }
 
@@ -1510,7 +1521,7 @@ class AppQuestPanel extends HTMLElement {
     const title = this.querySelector('[data-bind="qst-complete-toast-title"]');
     const detail = this.querySelector('[data-bind="qst-complete-toast-detail"]');
     if (!toast || !kicker || !title || !detail || !item) return null;
-    kicker.textContent = item.kicker || 'QUEST COMPLETE';
+    kicker.textContent = item.kicker || 'DAILY QUEST COMPLETE';
     title.textContent = item.title;
     detail.textContent = item.detail || '';
     toast.hidden = false;
@@ -1622,7 +1633,7 @@ class AppQuestPanel extends HTMLElement {
       // An active afKing owns slot 0. Its automatic fulfillment can still
       // surface as QuestCompleted in the projection, but it is not a fresh
       // paid player quest and must not inflate a simultaneous lootbox toast
-      // from "QUEST COMPLETE" to "2 QUESTS COMPLETE". Record it as complete
+      // from "LEVEL QUEST COMPLETE" to a mixed daily + level banner. Record it as complete
       // so the observer stays monotonic, while suppressing the celebration.
       const handledByAfking = this.#afkingActive && slot === 0;
       observe(key, handledByAfking || Boolean(quest?.completed), !handledByAfking);
@@ -1829,8 +1840,9 @@ class AppQuestPanel extends HTMLElement {
       const questType = Number(quest?.questType ?? 0);
       completionToasts.push({
         key: completion.dailyKeys.get(slot),
+        scope: 'daily',
         title: QUEST_TYPE_LABELS[questType] || 'Quest',
-        detail: `${slot === 0 ? 'DAILY' : 'BONUS'} · +100 FLIP`,
+        detail: '+100 FLIP',
         flipReward: 100,
         streakReward: 0,
       });
@@ -1839,8 +1851,9 @@ class AppQuestPanel extends HTMLElement {
       const questType = Number(this.#levelQuest?.questType ?? 0);
       completionToasts.push({
         key: completion.levelKey,
+        scope: 'level',
         title: QUEST_TYPE_LABELS[questType] || 'Level quest',
-        detail: 'LEVEL · +800 FLIP · +5 STREAK',
+        detail: '+800 FLIP · +5 STREAK',
         flipReward: 800,
         streakReward: 5,
       });

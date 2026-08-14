@@ -7,7 +7,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const REPLAY_CSS = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
@@ -304,6 +304,22 @@ test('the host does not add a day-wide winner effect over a losing scratch phase
   assert.doesNotMatch(handler, /celebrateProtocol|#celebrate/);
   assert.doesNotMatch(src, /celebrateProtocol/,
     'the replay board is the sole, phase-aware owner of the jackpot winner effect');
+});
+
+test('only live scratch covers show the custom coin cursor', () => {
+  assert.match(
+    REPLAY_CSS,
+    /\.replay-center-canvas\s*\{[^}]*cursor:\s*url\('\/app\/assets\/scratch-coin-cursor\.svg'\) 20 20, crosshair/s,
+  );
+  assert.match(
+    REPLAY_CSS,
+    /\.replay-scratch-canvas\s*\{[^}]*cursor:\s*url\('\/app\/assets\/scratch-coin-cursor\.svg'\) 20 20, crosshair/s,
+  );
+  assert.equal(
+    existsSync(new URL('../../assets/scratch-coin-cursor.svg', import.meta.url)),
+    true,
+    'the cursor asset ships with the scratch board',
+  );
 });
 
 describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {

@@ -260,7 +260,7 @@
   width: 100%; height: 100%;
   z-index: 5;
   display: none;
-  cursor: pointer;
+  cursor: url('/app/assets/scratch-coin-cursor.svg') 20 20, crosshair;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   touch-action: none;
 }
@@ -401,7 +401,7 @@
   width: 100%;
   height: 100%;
   z-index: 2;
-  cursor: crosshair;
+  cursor: url('/app/assets/scratch-coin-cursor.svg') 20 20, crosshair;
   touch-action: none;
 }
 

@@ -59,23 +59,13 @@ const DISPLAY_KIND_ORDER = new Map([
   [RECORD_KIND_FLIP, 3],
 ]);
 
-const RECORD_KIND_CARD_ART = new Map([
-  [RECORD_KIND_SPIN, {
-    src: '/app/assets/biggest-degenerette-card-v4.png',
-    label: 'BIGGEST DEGENERETTE',
-  }],
-  [RECORD_KIND_LUCKBOX, {
-    src: '/app/assets/biggest-luckbox-card-v4.png',
-    label: 'BIGGEST LUCKBOX',
-  }],
-  [RECORD_KIND_BUY, {
-    src: '/app/assets/biggest-pack-ripped-card-v4.png',
-    label: 'BIGGEST PACK RIPPED',
-  }],
-  [RECORD_KIND_FLIP, {
-    src: '/app/assets/biggest-coinflip-card-v4.png',
-    label: 'BIGGEST COINFLIP',
-  }],
+const RECORD_CARD_ART = '/app/assets/biggest-bounty-card-v13.webp';
+
+const RECORD_KIND_CARD_TITLE = new Map([
+  [RECORD_KIND_SPIN, 'DEGENERETTE'],
+  [RECORD_KIND_LUCKBOX, 'LUCKBOX'],
+  [RECORD_KIND_BUY, 'PACK RIPPED'],
+  [RECORD_KIND_FLIP, 'COINFLIP'],
 ]);
 
 let _fetchRecords = fetchRecords;
@@ -124,7 +114,7 @@ function formatCompactWholeDown(value) {
   if (whole < 0n) whole = -whole;
   if (whole < 1_000n) return group(whole.toString());
   const digits = whole.toString().length;
-  const quantum = 10n ** BigInt(Math.max(0, digits - 2));
+  const quantum = 10n ** BigInt(Math.max(0, digits - 3));
   const truncated = (whole / quantum) * quantum;
   const units = [
     [10n ** 15n, 'Q'],
@@ -135,10 +125,32 @@ function formatCompactWholeDown(value) {
   ];
   const [divisor, suffix] = units.find(([threshold]) => truncated >= threshold)
     || [1n, ''];
-  const tenths = (truncated * 10n) / divisor;
-  return tenths < 100n && tenths % 10n !== 0n
-    ? `${tenths / 10n}.${tenths % 10n}${suffix}`
-    : `${truncated / divisor}${suffix}`;
+  const hundredths = (truncated * 100n) / divisor;
+  const scaledWhole = hundredths / 100n;
+  const fraction = (hundredths % 100n).toString().padStart(2, '0').replace(/0+$/, '');
+  return fraction ? `${scaledWhole}.${fraction}${suffix}` : `${scaledWhole}${suffix}`;
+}
+
+function formatCompactEthRecord(value) {
+  let raw;
+  try { raw = BigInt(value ?? 0); } catch (_e) { return '—'; }
+  if (raw < 0n) raw = -raw;
+  const unit = 10n ** 18n;
+  const displayWei = raw * BigInt(ETH_DIVISOR);
+  const whole = displayWei / unit;
+  if (whole >= 1_000n) return formatCompactWholeDown(whole);
+
+  const wholeText = whole.toString();
+  const fractionText = (displayWei % unit).toString().padStart(18, '0');
+  if (whole > 0n) {
+    const fractionDigits = Math.max(0, 3 - wholeText.length);
+    const fraction = fractionText.slice(0, fractionDigits).replace(/0+$/, '');
+    return fraction ? `${wholeText}.${fraction}` : wholeText;
+  }
+  const firstSignificant = fractionText.search(/[1-9]/);
+  if (firstSignificant < 0) return '0';
+  const fraction = fractionText.slice(0, firstSignificant + 3).replace(/0+$/, '');
+  return `0.${fraction}`;
 }
 
 /** Short display-only record amount; the title and expanded card stay exact. */
@@ -150,6 +162,9 @@ export function formatCompactRecordValue(kind, raw) {
     let whole = 0n;
     try { whole = BigInt(raw ?? 0) / (10n ** 18n); } catch (_e) { /* use zero */ }
     return { amount: formatCompactWholeDown(whole), suffix: 'FLIP' };
+  }
+  if ([RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX].includes(Number(kind))) {
+    return { amount: formatCompactEthRecord(raw), suffix: 'ETH' };
   }
   return formatRecordValue(kind, raw);
 }
@@ -452,8 +467,8 @@ class AppRecordsRail extends HTMLElement {
           <span class="records-rail__identity">
             <span class="records-rail__wordmark" id="records-rail-title" role="heading"
                   aria-level="2" aria-label="The Biggest Bounties">
-              <img src="/app/assets/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood.png"
-                   alt="" aria-hidden="true">
+              <img src="/app/assets/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood.webp"
+                   alt="" aria-hidden="true" loading="lazy" decoding="async">
             </span>
           </span>
 
@@ -495,7 +510,7 @@ class AppRecordsRail extends HTMLElement {
                   data-bind="records-bounty-close" aria-label="Close bounty transaction">×</button>
           <header class="records-bounty-dialog__hero">
             <span class="records-bounty-dialog__sigil" aria-hidden="true">
-              <img src="/app/assets/biggest-bounty-emblem.png" alt="">
+              <img src="/app/assets/biggest-bounty-emblem.webp" alt="" loading="lazy" decoding="async">
             </span>
             <span class="records-bounty-dialog__heading">
               <span class="records-bounty-dialog__eyebrow">THE BIGGEST BOUNTY</span>
@@ -1065,10 +1080,7 @@ class AppRecordsRail extends HTMLElement {
       : holder;
     const payoutWei = this.#recordPayoutWei(record);
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
-    const cardArt = RECORD_KIND_CARD_ART.get(Number(record.kind)) || {
-      src: '',
-      label: `BIGGEST ${record.meta.short}`,
-    };
+    const cardTitle = RECORD_KIND_CARD_TITLE.get(Number(record.kind)) || record.meta.short;
     const interactive = readBiggestBountiesModePreference() === 'on';
     item.classList.toggle('is-view-only', !interactive);
     if (interactive) {
@@ -1088,20 +1100,32 @@ class AppRecordsRail extends HTMLElement {
     item.setAttribute('aria-label', item.title);
     item.innerHTML = `
       <img class="records-rail__leader-card-art"
-           src="${escapeHtml(cardArt.src)}"
-           alt="${escapeHtml(cardArt.label)}"
-           decoding="async">
+           src="${RECORD_CARD_ART}"
+           alt="" aria-hidden="true" loading="lazy" decoding="async">
       <span class="records-rail__leader-presentation">
         ${record.held
           ? this.#portrait(record.player, profile)
           : '<span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>'}
-        <span class="records-rail__leader-holder"
-              title="${escapeHtml(holderDetail)}"
-              aria-label="${record.held ? `Held by ${escapeHtml(holderDetail)}` : 'Open record'}">
-          ${escapeHtml(holder)}
+        <span class="records-rail__bounty-sight"
+              aria-label="${record.held ? `Held by ${escapeHtml(holderDetail)}; ` : 'Open record; '}current bounty ${escapeHtml(compactPayout)} FLIP"
+              title="${escapeHtml(holderDetail)} · bounty ${escapeHtml(compactPayout)} FLIP">
+          <svg class="records-rail__bounty-crosshair" viewBox="0 0 24 24"
+               focusable="false" aria-hidden="true">
+            <path d="M12 1v4M12 19v4M1 12h4M19 12h4"></path>
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2.25"></circle>
+          </svg>
+          <b class="records-rail__leader-bounty-amount" aria-hidden="true">${escapeHtml(compactPayout)}</b>
         </span>
       </span>
+      <span class="records-rail__leader-title" aria-hidden="true">
+        <span>THE BIGGEST</span>
+        <strong>${escapeHtml(cardTitle)}</strong>
+      </span>
       <span class="records-rail__leader-strip">
+        <span class="records-rail__leader-holder" aria-hidden="true">${escapeHtml(holder)}</span>
+      </span>
+      <span class="records-rail__leader-bet">
         <strong class="records-rail__leader-value"
                 aria-label="Current record ${escapeHtml(compactValue.amount)} ${escapeHtml(compactValue.suffix)}">
           <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>
@@ -1109,17 +1133,6 @@ class AppRecordsRail extends HTMLElement {
             ? `<em>${escapeHtml(compactValue.suffix)}</em>`
             : ''}
         </strong>
-        <span class="records-rail__bounty-sight"
-              aria-label="Current bounty ${escapeHtml(compactPayout)} FLIP"
-              title="Current payout for breaking this record">
-          <svg class="records-rail__bounty-crosshair" viewBox="0 0 24 24"
-               focusable="false" aria-hidden="true">
-            <path d="M12 1v4M12 19v4M1 12h4M19 12h4"></path>
-            <circle cx="12" cy="12" r="7"></circle>
-            <circle cx="12" cy="12" r="2.25"></circle>
-          </svg>
-          <b aria-hidden="true">${escapeHtml(compactPayout)}</b>
-        </span>
       </span>
     `;
     item.addEventListener('click', (event) => {

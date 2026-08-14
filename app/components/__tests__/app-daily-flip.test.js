@@ -322,7 +322,12 @@ describe('day-wide reveal planning', () => {
       wins: '27',
       losses: 19.9,
       recent: [
-        ...Array.from({ length: 16 }, (_, index) => ({ day: 50 - index, win: index % 2 === 0 })),
+        ...Array.from({ length: 16 }, (_, index) => ({
+          day: 50 - index,
+          win: index % 2 === 0,
+          ...(index === 0 ? { rewardPercent: 150 } : {}),
+          ...(index === 3 ? { rewardPercent: 50 } : {}),
+        })),
         { day: 0, win: true },
       ],
     }), {
@@ -331,6 +336,8 @@ describe('day-wide reveal planning', () => {
       recent: Array.from({ length: 15 }, (_, index) => ({
         day: 50 - index,
         win: index % 2 === 0,
+        ...(index === 0 ? { rewardPercent: 150 } : {}),
+        ...(index === 3 ? { rewardPercent: 50 } : {}),
       })),
     });
   });
@@ -342,7 +349,7 @@ describe('day-wide reveal planning', () => {
       if (path === '/game/coinflip/stats') {
         throw Object.assign(new Error('missing route'), { status: 404 });
       }
-      if (path.endsWith('/4')) return { day: 4, win: true };
+      if (path.endsWith('/4')) return { day: 4, win: true, rewardPercent: 150 };
       if (path.endsWith('/3')) return { day: 3, win: true };
       if (path.endsWith('/2')) return { day: 2, win: false };
       if (path.endsWith('/1')) throw Object.assign(new Error('unresolved'), { status: 404 });
@@ -352,7 +359,11 @@ describe('day-wide reveal planning', () => {
     assert.deepEqual(await revealPlanning.loadProtocolCoinflipStats(4, fetcher), {
       wins: 2,
       losses: 1,
-      recent: [{ day: 4, win: true }, { day: 3, win: true }, { day: 2, win: false }],
+      recent: [
+        { day: 4, win: true, rewardPercent: 150 },
+        { day: 3, win: true },
+        { day: 2, win: false },
+      ],
     });
     assert.deepEqual(paths, [
       '/game/coinflip/stats',
@@ -368,6 +379,48 @@ describe('day-wide reveal planning', () => {
       '/game/coinflip/stats',
       '/game/coinflip/day/1',
     ], 'settled global outcomes are immutable and reused; only the unresolved day retries');
+  });
+
+  test('hydrates winning Last 15 rolls from immutable day rows and caches them', async () => {
+    const paths = [];
+    const fetcher = async (path) => {
+      paths.push(path);
+      if (path === '/game/coinflip/stats') {
+        return {
+          wins: 2,
+          losses: 1,
+          recent: [
+            { day: 7, win: true },
+            { day: 6, win: false },
+            { day: 5, win: true },
+          ],
+        };
+      }
+      if (path.endsWith('/7')) return { day: 7, win: true, rewardPercent: 150 };
+      if (path.endsWith('/5')) return { day: 5, win: true, rewardPercent: 50 };
+      throw new Error(`Unexpected path ${path}`);
+    };
+
+    const expected = {
+      wins: 2,
+      losses: 1,
+      recent: [
+        { day: 7, win: true, rewardPercent: 150 },
+        { day: 6, win: false },
+        { day: 5, win: true, rewardPercent: 50 },
+      ],
+    };
+    assert.deepEqual(await revealPlanning.loadProtocolCoinflipStats(7, fetcher), expected);
+    assert.deepEqual(paths, [
+      '/game/coinflip/stats',
+      '/game/coinflip/day/7',
+      '/game/coinflip/day/5',
+    ], 'loss rows need no payout lookup');
+
+    paths.length = 0;
+    assert.deepEqual(await revealPlanning.loadProtocolCoinflipStats(7, fetcher), expected);
+    assert.deepEqual(paths, ['/game/coinflip/stats'],
+      'immutable payout percentages are reused on later refreshes');
   });
 
   test('holds the newest global result outside the board until that reveal lands', () => {
@@ -413,15 +466,37 @@ describe('day-wide reveal planning', () => {
       losses: 19,
       recent: [{ day: 66, win: false }],
     }, 'the indexed recent row hides its own outcome even before the day-result request catches up');
+    assert.deepEqual(revealPlanning.protocolCoinflipStatsForReveal({
+      wins: 27,
+      losses: 19,
+      recent: [{ day: 66, win: false }],
+    }, {
+      day: 67,
+      result: { win: true, rewardPercent: 150 },
+      revealComplete: true,
+    }), {
+      wins: 28,
+      losses: 19,
+      recent: [
+        { day: 67, win: true, rewardPercent: 150 },
+        { day: 66, win: false },
+      ],
+    }, 'the exact payout survives insertion so the new Last 15 marker can use its roll color');
   });
 
-  test('the multiplier number uses red at 150 and blue from 250 upward', () => {
+  test('the multiplier number uses yellow at 150 and blue from 250 upward', () => {
     assert.equal(revealPlanning.dailyFlipMultiplierTone(149), 'low');
     assert.equal(revealPlanning.dailyFlipMultiplierTone(150), 'low');
     assert.equal(revealPlanning.dailyFlipMultiplierTone(151), null);
     assert.equal(revealPlanning.dailyFlipMultiplierTone(249), null);
     assert.equal(revealPlanning.dailyFlipMultiplierTone(250), 'high');
     assert.equal(revealPlanning.dailyFlipMultiplierTone(300), 'high');
+    assert.match(APP_CSS,
+      /\.df-position-percentage--low\s*\{[^}]*color:\s*#fde047[^}]*rgba\(250, 204, 21,/s,
+      'the 150% multiplier is yellow rather than red');
+    assert.match(APP_CSS,
+      /\.df-position-percentage--high\s*\{[^}]*color:\s*#60a5fa[^}]*rgba\(59, 130, 246,/s,
+      '250% and larger multipliers remain blue');
   });
 
   test('sDGNRS stays within three significant figures and promotes suffix carries', () => {
@@ -2701,7 +2776,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +405 FLIP',
       'the reuse bonus follows the exact typed amount');
     const slider = el.querySelector('[data-bind="df-add-bet-slider"]');
-    assert.equal(slider.step, '100', 'large totals make the slider use round 100-FLIP stops');
+    assert.equal(slider.step, '100', 'the slider never resolves below round 100-FLIP stops');
     assert.equal(slider.value, '54000', 'the number field keeps the slider synchronized');
     amount.value = '54123';
     amount.dispatchEvent({ type: 'input' });
@@ -2711,6 +2786,20 @@ describe('app-daily-flip — coin reveal + actions', () => {
     slider.dispatchEvent({ type: 'input' });
     assert.equal(slider.value, '54100', 'a large-total slider selection snaps to its nearest round stop');
     assert.equal(amount.value, '54100', 'a snapped slider selection updates the exact number field');
+    slider.dispatchEvent({ type: 'pointerdown', shiftKey: false });
+    slider.value = '54700';
+    slider.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '55000', 'ordinary dragging magnetizes the slider to 1,000-FLIP stops');
+    assert.equal(amount.value, '55000', 'the coarse drag value remains synchronized');
+    slider.dispatchEvent({ type: 'pointerup' });
+    slider.dispatchEvent({ type: 'pointerdown', shiftKey: true });
+    slider.value = '54700';
+    slider.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '54700', 'Shift-drag retains 100-FLIP precision');
+    assert.equal(amount.value, '54700', 'the fine drag value remains synchronized');
+    slider.dispatchEvent({ type: 'pointerup' });
+    assert.match(el.innerHTML, /aria-description="Drag in 1,000 FLIP steps\.[^"]*100 FLIP adjustments\."/,
+      'assistive copy explains coarse and fine manipulation');
     assert.equal(el.querySelector('[data-bind="df-bet-up"]'), null);
     assert.equal(el.querySelector('[data-bind="df-bet-down"]'), null);
     assert.ok(
@@ -2924,6 +3013,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
         recent: Array.from({ length: 15 }, (_, index) => ({
           day: 68 - index,
           win: [true, false, false, true, false, false, true, false, false, false, true, false, false, true, false][index],
+          ...(index === 0 ? { rewardPercent: 150 } : {}),
+          ...(index === 3 ? { rewardPercent: 50 } : {}),
         })),
       },
     };
@@ -2939,6 +3030,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(marks.length, 15);
     assert.equal(marks[0].title, 'Win · Day 68', 'newest visible result starts at the left');
     assert.equal(marks[14].title, 'Loss · Day 54', 'oldest visible result ends at the right');
+    assert.match(marks[0].className, /is-win is-roll-250/,
+      'a 250% roll receives the blue Last 15 marker');
+    assert.match(marks[3].className, /is-win is-roll-150/,
+      'a 150% roll receives the yellow Last 15 marker');
+    assert.doesNotMatch(marks[6].className, /is-roll-(?:150|250)/,
+      'ordinary wins keep the standard green marker');
     assert.equal(
       el.querySelector('.df-coinflip-record__group--score').getAttribute('data-majority'),
       'win',
@@ -2963,6 +3060,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.df-coinflip-record__mark\s*\{[^}]*height:\s*0\.52rem[^}]*border-radius:\s*1px/s,
       'the last fifteen results render as a compact square LED bank');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__mark\.is-win\.is-roll-150\s*\{[^}]*#fff59d[^}]*#eab308/s,
+      'the 150% Last 15 marker is yellow');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__mark\.is-win\.is-roll-250\s*\{[^}]*#93c5fd[^}]*#3b82f6/s,
+      'the 250% Last 15 marker is blue');
     assert.match(APP_CSS,
       /\.df-coinflip-record__recent\s*\{[^}]*grid-template-columns:\s*repeat\(15, 0\.38rem\)/s,
       'the recent bank reserves the requested fifteen-result window');
