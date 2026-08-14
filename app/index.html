@@ -27,14 +27,26 @@
   <link rel="stylesheet" href="/app/styles/baf-resolution.css">
   <link rel="stylesheet" href="/app/styles/jackpot-processing.css">
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
+  <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
+       They used to load from esm.sh, a free public CDN, which put a third party
+       on the critical path of every page load and cost 46 requests for ethers'
+       dependency graph alone. The vendored files are esm.sh `?bundle` builds —
+       each one self-contained with zero external imports — so this is still a
+       no-build site: static files plus an import map, no bundler.
+       Versions are pinned in db/vendor-modules.sh; MANIFEST.txt records the
+       sha256 and source URL of every file. `./db/vendor-modules.sh --check`
+       verifies the tree matches the manifest.
+       @walletconnect stays on esm.sh: its bundle still fans out into @msgpack
+       sub-modules, and it is lazy-loaded (connect click only), so it is off the
+       cold-load path. Revisit when a real WalletConnect project id lands. -->
   <script type="importmap">
   {
     "imports": {
-      "ethers": "https://esm.sh/ethers@6.16.0",
-      "gsap": "https://esm.sh/gsap@3.14",
-      "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
-      "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
-      "lean-qr": "https://esm.sh/lean-qr@2.5",
+      "ethers": "/app/vendor/ethers.mjs",
+      "gsap": "/app/vendor/gsap.mjs",
+      "gsap/Flip": "/app/vendor/gsap-flip.mjs",
+      "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
+      "lean-qr": "/app/vendor/lean-qr.mjs",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
   }

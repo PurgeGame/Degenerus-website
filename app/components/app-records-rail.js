@@ -59,6 +59,25 @@ const DISPLAY_KIND_ORDER = new Map([
   [RECORD_KIND_FLIP, 3],
 ]);
 
+const RECORD_KIND_FRAME = new Map([
+  [RECORD_KIND_SPIN, {
+    src: '/app/assets/biggest-degenerette-frame-v2.png',
+    label: 'BIGGEST DEGENERETTE',
+  }],
+  [RECORD_KIND_LUCKBOX, {
+    src: '/app/assets/biggest-luckbox-frame-v2.png',
+    label: 'BIGGEST LUCKBOX',
+  }],
+  [RECORD_KIND_BUY, {
+    src: '/app/assets/biggest-pack-ripped-frame-v2.png',
+    label: 'BIGGEST PACK RIPPED',
+  }],
+  [RECORD_KIND_FLIP, {
+    src: '/app/assets/biggest-coinflip-frame-v2.png',
+    label: 'BIGGEST COINFLIP',
+  }],
+]);
+
 let _fetchRecords = fetchRecords;
 let _fetchProfiles = fetchProfiles;
 let _readLiveRecordMark = readLiveRecordMark;
@@ -1039,9 +1058,17 @@ class AppRecordsRail extends HTMLElement {
       record.held ? record.value : record.meta.floorValue,
     );
     const profile = record.player ? this.#profiles.get(record.player) : null;
-    const holder = profile?.name || shortAddress(record.player);
+    const holderAddress = shortAddress(record.player);
+    const holder = record.held ? (profile?.name || holderAddress) : 'OPEN RECORD';
+    const holderDetail = record.held && profile?.name
+      ? `${profile.name} · ${holderAddress}`
+      : holder;
     const payoutWei = this.#recordPayoutWei(record);
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
+    const frame = RECORD_KIND_FRAME.get(Number(record.kind)) || {
+      src: '',
+      label: `BIGGEST ${record.meta.short}`,
+    };
     const interactive = readBiggestBountiesModePreference() === 'on';
     item.classList.toggle('is-view-only', !interactive);
     if (interactive) {
@@ -1060,7 +1087,28 @@ class AppRecordsRail extends HTMLElement {
       : `${record.meta.label}: unhit; bounty ${compactPayout} FLIP.${instruction}`;
     item.setAttribute('aria-label', item.title);
     item.innerHTML = `
-      <span class="records-rail__target">
+      <img class="records-rail__leader-frame"
+           src="${escapeHtml(frame.src)}"
+           alt="${escapeHtml(frame.label)}"
+           decoding="async">
+      <span class="records-rail__leader-presentation">
+        ${record.held
+          ? this.#portrait(record.player, profile)
+          : '<span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>'}
+        <span class="records-rail__leader-holder"
+              title="${escapeHtml(holderDetail)}"
+              aria-label="${record.held ? `Held by ${escapeHtml(holderDetail)}` : 'Open record'}">
+          ${escapeHtml(holder)}
+        </span>
+      </span>
+      <span class="records-rail__leader-strip">
+        <strong class="records-rail__leader-value"
+                aria-label="Current record ${escapeHtml(compactValue.amount)} ${escapeHtml(compactValue.suffix)}">
+          <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>
+          ${compactValue.suffix
+            ? `<em>${escapeHtml(compactValue.suffix)}</em>`
+            : ''}
+        </strong>
         <span class="records-rail__bounty-sight"
               aria-label="Current bounty ${escapeHtml(compactPayout)} FLIP"
               title="Current payout for breaking this record">
@@ -1072,22 +1120,6 @@ class AppRecordsRail extends HTMLElement {
           </svg>
           <b aria-hidden="true">${escapeHtml(compactPayout)}</b>
         </span>
-        ${record.held
-          ? this.#portrait(record.player, profile)
-          : '<span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>'}
-      </span>
-      <span class="records-rail__leader-copy">
-        <span class="records-rail__leader-label"
-              aria-label="Bounty on biggest ${escapeHtml(record.meta.short)}">
-          <span class="records-rail__leader-biggest-mark" aria-hidden="true">BIGGEST</span>
-          <b aria-hidden="true">${escapeHtml(record.meta.short)}</b>
-        </span>
-        <strong class="records-rail__leader-value">
-          <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>
-          ${compactValue.suffix
-            ? `<em>${escapeHtml(compactValue.suffix)}</em>`
-            : ''}
-        </strong>
       </span>
     `;
     item.addEventListener('click', (event) => {

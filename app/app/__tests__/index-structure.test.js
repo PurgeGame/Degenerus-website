@@ -245,4 +245,27 @@ describe('index.html basic-mode skeleton', () => {
       );
     }
   });
+
+  // Import-map targets are BARE specifiers at the call site (`from 'ethers'`),
+  // so the publish runbook's module-resolution check — which only follows
+  // relative imports — cannot see them. Combined with this site having no 404
+  // (an unpublished path serves the root HTML at 200), a missing vendored file
+  // means the browser rejects an HTML response as a module and every component
+  // importing it silently never upgrades: the 14-hour dead-coin-flip bug class.
+  test('every same-origin import-map target exists on disk', () => {
+    const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+    assert.ok(mapMatch, 'index.html carries an import map');
+    const map = JSON.parse(mapMatch[1]);
+    const targets = Object.entries(map.imports ?? {});
+    assert.ok(targets.length > 0, 'import map declares at least one module');
+
+    const local = targets.filter(([, url]) => url.startsWith('/'));
+    assert.ok(local.length >= 5, 'the vendored modules are served same-origin');
+    for (const [name, url] of local) {
+      assert.ok(
+        existsSync(resolvePath(__dirname, '../..', url.replace(/^\/app\//, ''))),
+        `import-map target exists on disk: ${name} -> ${url}`,
+      );
+    }
+  });
 });
