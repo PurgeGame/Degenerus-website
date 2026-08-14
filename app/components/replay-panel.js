@@ -50,6 +50,60 @@ const BONUS_SPIN_LOCKED_LABEL = 'SCRATCH TO UNLOCK BONUS';
 const SPIN_AGAIN_LABEL = 'SPIN AGAIN';
 let replayApiRetryAfterUntil = 0;
 
+/** Keep the tiny center-diamond FLIP prize to three significant figures. */
+export function formatCenterBonusFlip(weiValue) {
+  let raw;
+  try { raw = BigInt(weiValue ?? 0); }
+  catch (_error) { return '0'; }
+  if (raw < 0n) raw = -raw;
+
+  const whole = raw / (10n ** 18n);
+  if (whole < 1_000n) return whole.toLocaleString('en-US');
+
+  const scientific = () => {
+    const source = whole.toString();
+    let exponent = source.length - 1;
+    let leading = BigInt(source.slice(0, 3));
+    if (Number(source[3] || 0) >= 5) leading += 1n;
+    if (leading >= 1_000n) {
+      leading = 100n;
+      exponent += 1;
+    }
+    const digits = leading.toString().padStart(3, '0');
+    const fraction = digits.slice(1).replace(/0+$/, '');
+    return `${digits[0]}${fraction ? `.${fraction}` : ''}e${exponent}`;
+  };
+
+  const tiers = [
+    [10n ** 15n, 'Q'],
+    [10n ** 12n, 'T'],
+    [10n ** 9n, 'B'],
+    [10n ** 6n, 'M'],
+    [10n ** 3n, 'K'],
+  ];
+  let tierIndex = tiers.findIndex(([scale]) => whole >= scale);
+  if (tierIndex < 0) tierIndex = tiers.length - 1;
+
+  for (;;) {
+    const [scale, suffix] = tiers[tierIndex];
+    const units = whole / scale;
+    const decimals = units >= 100n ? 0 : units >= 10n ? 1 : 2;
+    const factor = 10n ** BigInt(decimals);
+    const rounded = ((whole * factor) + (scale / 2n)) / scale;
+    if (rounded >= (1_000n * factor)) {
+      if (tierIndex === 0) return scientific();
+      tierIndex -= 1;
+      continue;
+    }
+
+    const integer = rounded / factor;
+    const fraction = decimals === 0
+      ? ''
+      : (rounded % factor).toString().padStart(decimals, '0').replace(/0+$/, '');
+    return `${integer}${fraction ? `.${fraction}` : ''}${suffix}`;
+  }
+}
+
 function noteReplayApiResponse(response, now = Date.now()) {
   if (Number(response?.status) !== 429) return;
   const raw = response?.headers?.get?.('retry-after');
@@ -3740,11 +3794,13 @@ class ReplayPanel extends HTMLElement {
     if (prize) {
       const totalFlip = this.#centerWins.reduce((s, d) => s + BigInt(d.amount || '0'), 0n);
       const amountStr = formatFlip(totalFlip.toString());
+      const compactAmountStr = formatCenterBonusFlip(totalFlip);
       prize.innerHTML = `
         <img class="ff-logo" src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
-        <span class="ff-amount">${amountStr}</span>
+        <span class="ff-amount">${compactAmountStr}</span>
         <span class="ff-label">BONUS</span>`;
       prize.setAttribute('aria-label', `${amountStr} FLIP bonus`);
+      prize.setAttribute('title', `${amountStr} FLIP bonus`);
       prize.style.display = 'flex';
       prize.classList.remove('visible');
       if (instant) prize.classList.add('visible');

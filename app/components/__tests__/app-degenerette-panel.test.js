@@ -556,6 +556,21 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       APP_CSS,
+      /body\.layout-basic \.deg-header\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s,
+      'Degenerette uses equal side columns so its heading stays centered on phones',
+    );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.deg-heading\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;[^}]*text-align:\s*center;/s,
+      'the Degenerette wordmark owns the true center column',
+    );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.deg-header__info\s*\{[^}]*position:\s*absolute;[^}]*left:\s*calc\(100% \+ 0\.42rem\);/s,
+      'the info control sits beside the title without shifting the wordmark',
+    );
+    assert.match(
+      APP_CSS,
       /\.play-grid \.qst-header,\s*body\.layout-basic \.play-grid \.deg-header,\s*body\.layout-basic \.play-grid \.app-parimutuel > \.panel-header\s*\{[^}]*min-height:\s*2\.55rem;[^}]*align-items:\s*center;/s,
       'Quests, Degenerette, and Side Bets share one vertical label rail',
     );

@@ -283,7 +283,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.08rem;
-  width: 72%;
+  box-sizing: border-box;
+  width: 80%;
+  min-width: 0;
+  padding-inline: 0.08rem;
 }
 
 .replay-center-prize.visible {
@@ -299,6 +302,7 @@
 }
 
 .replay-center-prize .ff-amount {
+  width: 100%;
   font-size: clamp(0.64rem, 2.35vw, 0.78rem);
   display: block;
   max-width: 100%;

@@ -27,7 +27,7 @@ const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), '
 describe('<app-deity-desk>', () => {
   test('active holders retain the Deity Pass wordmark beside their chosen symbol', () => {
     assert.match(DESK_SRC,
-      /class="deity-pass-lockup deity-desk__wordmark"[\s\S]*?data-bind="deity-desk-symbol"[\s\S]*?deity-pass-lockup-v3\.png/);
+      /class="deity-pass-lockup deity-desk__wordmark"[\s\S]*?data-bind="deity-desk-symbol"[\s\S]*?deity-pass-lockup-v3\.webp/);
     assert.match(APP_CSS, /\.deity-desk__wordmark\s*\{[^}]*width:\s*min\(11\.2rem, 100%\)/s);
   });
 

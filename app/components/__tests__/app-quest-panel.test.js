@@ -427,6 +427,21 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       /<a class="qst-learn-link" href="\/learn\/quests\/">QUESTS<\/a>/,
       'the Quests heading links directly to its Learn page',
     );
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-header h2\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;[^}]*text-align:\s*center;/s,
+      'the Quests title owns the true center column at every viewport width',
+    );
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-streak-chip\s*\{[^}]*grid-column:\s*1;[^}]*justify-self:\s*start;/s,
+      'the streak stays in the left column',
+    );
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-score-control\s*\{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s,
+      'Degen Rating stays in the right column',
+    );
     assert.doesNotMatch(el.innerHTML, /DAILY RUN/, 'removed daily-run kicker stays absent');
     assert.doesNotMatch(el.innerHTML, /qst-blurb/, 'explanatory subtitle removed');
     assert.doesNotMatch(el.innerHTML, /Daily quests progress automatically/, 'old verbose intro removed');
@@ -474,12 +489,30 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       new URL('../../assets/quests/luckbox.svg', import.meta.url),
       'utf8',
     );
+    const coinflip = readFileSync(
+      new URL('../../assets/quests/coinflip.svg', import.meta.url),
+      'utf8',
+    );
+    const degeneretteFlip = readFileSync(
+      new URL('../../assets/quests/degenerette-flip.svg', import.meta.url),
+      'utf8',
+    );
+    const redeemFlip = readFileSync(
+      new URL('../../assets/quests/redeem-flip.svg', import.meta.url),
+      'utf8',
+    );
     assert.match(combined, /<rect x="5" y="11" width="37" height="42"/,
       'the combined quest uses an unmistakably square ticket silhouette');
     assert.match(combined, /<circle cx="45" cy="40" r="6" fill="#ed0e11"/,
       'the combined quest identifies its Luckbox leg with the red circle');
     assert.match(luckbox, /<circle cx="32" cy="39" r="8" fill="#ed0e11"/,
       'the standalone Luckbox icon uses the same red-circle language');
+    assert.match(coinflip, /M12\.2 51\.8A28 28 0 0 1 51\.8 12\.2Z[\s\S]*M12\.2 51\.8A28 28 0 0 0 51\.8 12\.2Z/,
+      'the fallback FLIP icon follows the canonical bottom-left to top-right split');
+    assert.doesNotMatch(`${degeneretteFlip}${redeemFlip}`, /#30d100|#ed0e11/,
+      'composite pictograms do not contain another approximate FLIP redraw');
+    assert.match(PANEL_SRC, /qst-painted-icon__flip-mark[\s\S]*?src = '\/whitepaper\/flame-logo-split\.svg'/,
+      'composite quest icons layer the real FLIP mark');
   });
 
   test('quest action sheets have themed completion hierarchy and motion-safe polish', () => {
@@ -1054,8 +1087,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const el = instantiate();
     await settle(40);
 
-    assert.match(el.querySelectorAll('.qst-slot')[1].textContent, /Redeem FLIP/);
+    const redeemSlot = el.querySelectorAll('.qst-slot')[1];
+    assert.match(redeemSlot.textContent, /Redeem FLIP/);
     assert.doesNotMatch(el.textContent, /Mint with FLIP/i);
+    assert.deepEqual(
+      redeemSlot.querySelector('.qst-slot-icon').querySelectorAll('img').map((img) => img.src),
+      ['/app/assets/quests/redeem-flip.svg', '/whitepaper/flame-logo-split.svg'],
+      'Redeem FLIP keeps its ticket pictogram but uses the canonical FLIP mark inside it',
+    );
     el.disconnectedCallback();
   });
 

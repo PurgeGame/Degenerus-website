@@ -502,7 +502,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelectorAll('.pass-product-sigil').length, 3,
       'Whale, Lazy, and AFKing retain compact code-native sigils');
     assert.match(el.innerHTML,
-      /class="deity-pass-lockup pass-deity-wordmark"[\s\S]*?data-bind="pass-deity-brand-symbol"[\s\S]*?deity-pass-lockup-v3\.png/,
+      /class="deity-pass-lockup pass-deity-wordmark"[\s\S]*?data-bind="pass-deity-brand-symbol"[\s\S]*?deity-pass-lockup-v3\.webp/,
       'Deity uses its dedicated art-directed title instead of a generic infinity tile');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -620,7 +620,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     });
     assert.match(INDEX_HTML, /data-bind="pass-summary-deity-badge"/);
     assert.match(INDEX_HTML,
-      /class="deity-pass-lockup more-ways__deity-lockup"[\s\S]*?data-bind="pass-summary-deity-badge"[\s\S]*?deity-pass-lockup-v3\.png/,
+      /class="deity-pass-lockup more-ways__deity-lockup"[\s\S]*?data-bind="pass-summary-deity-badge"[\s\S]*?deity-pass-lockup-v3\.webp/,
       'the owned-pass chip places the real selected symbol inside the shared identity art');
     assert.match(STATUS_CSS,
       /\.more-ways__deity-lockup\s*\{[^}]*width:\s*7\.2rem/s,

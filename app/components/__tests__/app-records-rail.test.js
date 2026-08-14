@@ -649,7 +649,7 @@ describe('holder identity', () => {
 describe('rail wiring', () => {
   test('presents the board with the plural Biggest Bounties wordmark and explicit data labels', () => {
     assert.match(COMPONENT, /records-rail__wordmark[^>]*id="records-rail-title"[^>]*aria-label="The Biggest Bounties"/);
-    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood\.png"/);
+    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood\.webp"/);
     assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
       'the generated wordmark replaces the old duplicate text treatment');
     assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 11rem\)/s,
@@ -712,7 +712,7 @@ describe('rail wiring', () => {
     assert.match(CSS, /records-rail__pot::before\s*\{[^}]*border:\s*1px solid/s,
       'a quiet inset rule completes the poster treatment');
     assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1rem/s);
-    assert.match(COMPONENT, /RECORD_CARD_ART = '\/app\/assets\/biggest-bounty-card-v13\.png'/,
+    assert.match(COMPONENT, /RECORD_CARD_ART = '\/app\/assets\/biggest-bounty-card-v13\.webp'/,
       'one blank asymmetric frame keeps all four record cards visually uniform');
     assert.doesNotMatch(COMPONENT, /\/app\/assets\/quests\/(?:degenerette-eth|buy-ticket-luckbox|foil-pack|coinflip)\.svg/,
       'the former right-side game icons no longer compete with the title');

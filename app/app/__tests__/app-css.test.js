@@ -298,6 +298,12 @@ describe('app.css LOC budget', () => {
     // 22700 → 22800 covers the deity desk restyle: the daily boon budget line,
     // the shared gold plate behind the four action keys, and the lockup's
     // choose-your-symbol placeholder. Refinements to one existing surface.
-    assert.ok(cssLines.length <= 22800, `total <=22800, got ${cssLines.length}`);
+    // 22800 → 23600 covers the Biggest Bounties records-rail rework published
+    // f15da88: the bounty transaction dialog, the four leader cards with the
+    // shared card art and portrait presentation, the wordmark identity block,
+    // and the level/resolution panel polish that shipped alongside it. One
+    // deliberate new surface (the dialog) plus its phone stacks; the ~170-line
+    // margin keeps the next bump honest.
+    assert.ok(cssLines.length <= 23600, `total <=23600, got ${cssLines.length}`);
   });
 });

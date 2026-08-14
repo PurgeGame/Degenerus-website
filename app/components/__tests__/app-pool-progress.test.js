@@ -398,8 +398,8 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
     assert.match(html.slice(drawStart, drawEnd),
       /<h2 class="jackpot-hero__draw-title">DAILY JACKPOT<\/h2>/);
-    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*color:\s*var\(--text-primary[^}]*font-size:\s*1\.05rem[^}]*letter-spacing:\s*0\.13em[^}]*text-align:\s*left/s,
-      'Daily Jackpot uses the shared fixed-height heading baseline and typography');
+    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*color:\s*var\(--text-primary[^}]*font-size:\s*1\.05rem[^}]*letter-spacing:\s*0\.13em[^}]*text-align:\s*center/s,
+      'Daily Jackpot uses the shared centered heading baseline and typography');
     assert.match(css, /\.jackpot-hero last-day-jackpot \.panel\s*\{[^}]*padding:\s*0/s,
       'the headless jackpot bridge contributes no blank band below the label');
   });

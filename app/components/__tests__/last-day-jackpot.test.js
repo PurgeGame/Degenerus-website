@@ -674,12 +674,33 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.match(REPLAY_PANEL_SRC, /setAttribute\('aria-label', `\$\{amountStr\} FLIP bonus`\)/,
       'the logo-only currency treatment keeps its full accessible meaning');
     assert.match(
+      REPLAY_PANEL_SRC,
+      /const compactAmountStr = formatCenterBonusFlip\(totalFlip\)[\s\S]*?class="ff-amount">\$\{compactAmountStr\}/,
+      'the visible amount is compacted before it enters the narrow diamond',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-center-prize\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*80%;[^}]*min-width:\s*0;/s,
+      'the prize stack stays inside a deliberate diamond-safe inset',
+    );
+    assert.match(
       REPLAY_CSS,
       /\.replay-ticket-center\.revealed::before\s*\{[\s\S]*?#071a2c[\s\S]*?#172554[\s\S]*?#2e1065[\s\S]*?border-color:\s*#67e8f9/,
       'the far-future prize uses the indigo and teal reward palette',
     );
     assert.match(REPLAY_CSS, /\.replay-center-prize \.ff-logo\s*\{[^}]*drop-shadow/s,
       'the FLIP mark remains readable at center-diamond scale');
+  });
+
+  test('center FLIP bonus amounts stay within three significant figures', async () => {
+    const { formatCenterBonusFlip } = await import('../replay-panel.js');
+    const flip = 10n ** 18n;
+    assert.equal(formatCenterBonusFlip(999n * flip), '999');
+    assert.equal(formatCenterBonusFlip(1_234n * flip), '1.23K');
+    assert.equal(formatCenterBonusFlip(12_345n * flip), '12.3K');
+    assert.equal(formatCenterBonusFlip(123_456n * flip), '123K');
+    assert.equal(formatCenterBonusFlip(999_999n * flip), '1M');
+    assert.equal(formatCenterBonusFlip(5_360_000n * flip), '5.36M');
   });
 
   test('an actual solo ETH winner gets its own reveal cue', () => {

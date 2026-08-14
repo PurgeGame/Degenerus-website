@@ -823,8 +823,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.match(
       APP_CSS,
-      /\.df-section-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*font-size:\s*1\.05rem[^}]*font-weight:\s*950[^}]*letter-spacing:\s*0\.13em/s,
-      'Daily Coinflip uses the shared fixed-height heading baseline and typography',
+      /\.df-section-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*font-size:\s*1\.05rem[^}]*font-weight:\s*950[^}]*letter-spacing:\s*0\.13em[^}]*text-align:\s*center/s,
+      'Daily Coinflip uses the shared centered heading baseline and typography',
     );
     assert.match(APP_CSS,
       /\.app-daily-flip\s*\{[^}]*padding-top:\s*0/s,
@@ -2973,6 +2973,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.app-daily-flip:has\(\.df-funds__toggle\[aria-expanded="true"\]\)[\s\S]*?\.df-coinflip-record-rail\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;/s,
       'expanded Protocol Coins puts the scoreboard in flow instead of over the flip');
+    assert.match(APP_CSS,
+      /@media\s*\(max-width:\s*520px\)[\s\S]*?\.df-coinflip-record-rail\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;[^}]*width:\s*100%;/s,
+      'phone layouts put the scoreboard in flow so it cannot cover the coin');
     assert.match(APP_CSS,
       /\.df-auto-rebuy-cta\s*\{[^}]*position:\s*relative[^}]*width:\s*1\.62rem[^}]*height:\s*1\.62rem/s,
       'Auto Rebuy fills the right balancing slot');

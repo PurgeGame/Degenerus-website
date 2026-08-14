@@ -170,10 +170,19 @@ const QUEST_TYPE_ICONS = Object.freeze({
   9: '/app/assets/quests/redeem-flip.svg',
 });
 
+// These two pictograms add product context around FLIP. Keep that context as
+// the base art, but layer the canonical currency mark instead of redrawing its
+// diagonal split and flame approximately inside another SVG.
+const QUEST_FLIP_MARK_POSITIONS = Object.freeze({
+  '/app/assets/quests/degenerette-flip.svg': 'center',
+  '/app/assets/quests/redeem-flip.svg': 'left',
+});
+
 function _paintQuestIcon(host, icon) {
   if (!host) return;
   const source = String(icon || '');
   host.textContent = '';
+  host.classList?.remove('qst-painted-icon--flip-center', 'qst-painted-icon--flip-left');
   if (!source.startsWith('/')) {
     host.textContent = source || '?';
     return;
@@ -183,6 +192,16 @@ function _paintQuestIcon(host, icon) {
   image.alt = '';
   image.setAttribute('aria-hidden', 'true');
   host.appendChild(image);
+  const flipPosition = QUEST_FLIP_MARK_POSITIONS[source];
+  if (flipPosition) {
+    host.classList?.add(`qst-painted-icon--flip-${flipPosition}`);
+    const flipMark = document.createElement('img');
+    flipMark.className = 'qst-painted-icon__flip-mark';
+    flipMark.src = '/whitepaper/flame-logo-split.svg';
+    flipMark.alt = '';
+    flipMark.setAttribute('aria-hidden', 'true');
+    host.appendChild(flipMark);
+  }
 }
 
 // Every setup-oriented quest has a matching form listener. Affiliate rewards

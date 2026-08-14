@@ -3974,7 +3974,7 @@ body.layout-basic .df-section-title {
   display: flex;
   height: 2.55rem;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   margin: 0;
   padding: 0;
   border: 0;
@@ -3984,18 +3984,11 @@ body.layout-basic .df-section-title {
   font-weight: 950;
   letter-spacing: 0.13em;
   line-height: 1.2;
-  text-align: left;
+  text-align: center;
 }
 
 body.layout-basic .df-coin-stage {
   position: relative;
-}
-
-@media (min-width: 1100px) {
-  body.layout-basic .df-section-title {
-    justify-content: center;
-    text-align: center;
-  }
 }
 
 body.layout-basic .df-coin-zone {
@@ -4952,7 +4945,7 @@ body.layout-basic .jackpot-hero__draw-title {
   display: flex;
   height: 2.55rem;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   margin: 0;
   padding: 0 0.8rem;
   border: 0;
@@ -4962,7 +4955,7 @@ body.layout-basic .jackpot-hero__draw-title {
   font-weight: 950;
   letter-spacing: 0.13em;
   line-height: 1.2;
-  text-align: left;
+  text-align: center;
 }
 
 /* last-day-jackpot is a headless state bridge in this layout. Its hidden
@@ -4970,13 +4963,6 @@ body.layout-basic .jackpot-hero__draw-title {
    blank 24px band between the shared title and the actual draw. */
 body.layout-basic .jackpot-hero last-day-jackpot .panel {
   padding: 0;
-}
-
-@media (min-width: 1100px) {
-  body.layout-basic .jackpot-hero__draw-title {
-    justify-content: center;
-    text-align: center;
-  }
 }
 
 body.layout-basic .jackpot-hero__summary-slot {
@@ -14921,7 +14907,9 @@ body.layout-basic .play-grid .qst-header {
   margin: 0;
 }
 body.layout-basic .play-grid .qst-header h2 {
-  justify-self: start;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
   margin: 0;
   padding: 0;
   border: 0;
@@ -14929,6 +14917,7 @@ body.layout-basic .play-grid .qst-header h2 {
   font-size: 1.05rem;
   font-weight: 950;
   letter-spacing: 0.13em;
+  text-align: center;
 }
 body.layout-basic .play-grid .qst-learn-link {
   color: inherit;
@@ -14948,13 +14937,15 @@ body.layout-basic .play-grid .qst-streak-chip {
   display: grid;
   position: relative;
   flex: 0 0 auto;
+  grid-column: 1;
+  grid-row: 1;
   grid-template-areas:
     "gem value"
     "gem label";
   grid-template-columns: auto auto;
   align-items: center;
   column-gap: 0.38rem;
-  justify-self: center;
+  justify-self: start;
   padding: 0.42rem 0.58rem;
   border: 1px solid rgba(var(--qst-streak-rgb), 0.58);
   border-radius: 9px;
@@ -15038,6 +15029,8 @@ body.layout-basic .play-grid .qst-streak-chip--increased .qst-streak-gain {
 body.layout-basic .play-grid .qst-score-control {
   position: relative;
   display: grid;
+  grid-column: 3;
+  grid-row: 1;
   justify-self: end;
   gap: 0.08rem;
   min-width: 4.9rem;
@@ -15313,6 +15306,7 @@ body.layout-basic .play-grid .qst-slot-core {
   gap: 0.55rem;
 }
 body.layout-basic .play-grid .qst-slot-icon {
+  position: relative;
   display: grid;
   flex: 0 0 2.65rem;
   width: 2.65rem;
@@ -15335,6 +15329,26 @@ body.layout-basic .play-grid .qst-slot-icon img {
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.88))
     drop-shadow(0 0 5px rgba(var(--qst-rgb), 0.38));
+}
+body.layout-basic :is(.play-grid .qst-slot-icon, .qst-action-dialog__sigil > [data-bind="qst-action-icon"]).qst-painted-icon--flip-center {
+  --qst-flip-mark-left: 50%;
+  --qst-flip-mark-size: 40%;
+}
+body.layout-basic :is(.play-grid .qst-slot-icon, .qst-action-dialog__sigil > [data-bind="qst-action-icon"]).qst-painted-icon--flip-left {
+  --qst-flip-mark-left: 31%;
+  --qst-flip-mark-size: 36%;
+}
+body.layout-basic .play-grid .qst-slot-icon img.qst-painted-icon__flip-mark,
+body.layout-basic .qst-action-dialog__sigil img.qst-painted-icon__flip-mark {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: var(--qst-flip-mark-left, 50%);
+  width: var(--qst-flip-mark-size, 40%);
+  height: var(--qst-flip-mark-size, 40%);
+  object-fit: contain;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 body.layout-basic .play-grid .qst-slot-copy {
   display: grid;
@@ -16134,19 +16148,22 @@ body.layout-basic .play-grid .app-degenerette-panel {
   padding: 0.7rem 0.8rem;
 }
 body.layout-basic .deg-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: 0.75rem;
   margin: 0;
   padding: 0;
   border: 0;
 }
 body.layout-basic .deg-heading {
-  display: inline-flex;
+  position: relative;
+  display: block;
   min-width: 0;
-  align-items: center;
-  gap: 0.42rem;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  text-align: center;
 }
 body.layout-basic .deg-heading h2 {
   margin: 0;
@@ -16172,6 +16189,9 @@ body.layout-basic .deg-learn-link:focus-visible {
   outline-offset: 3px;
 }
 body.layout-basic .deg-header__info {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.42rem);
   display: grid;
   width: 1.28rem;
   height: 1.28rem;
@@ -16186,6 +16206,7 @@ body.layout-basic .deg-header__info {
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
+  transform: translateY(-50%);
 }
 body.layout-basic .deg-header__info:hover,
 body.layout-basic .deg-header__info:focus-visible {
@@ -16196,6 +16217,9 @@ body.layout-basic .deg-header__info:focus-visible {
 }
 body.layout-basic .deg-header .deg-state {
   flex: 0 0 auto;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   min-height: 0;
   margin: 0;
   padding: 0.24rem 0.48rem;
@@ -17191,37 +17215,6 @@ body.layout-basic .df-add-bet-dialog__card.has-active-boon {
     min-height: 2.55rem;
   }
 
-  body.layout-basic .play-grid .qst-header h2 {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: center;
-    text-align: center;
-  }
-  body.layout-basic .play-grid .qst-streak-chip {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: start;
-  }
-  body.layout-basic .play-grid .qst-score-control {
-    grid-column: 3;
-    grid-row: 1;
-    justify-self: end;
-  }
-
-  body.layout-basic .play-grid .deg-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-  }
-  body.layout-basic .play-grid .deg-heading {
-    grid-column: 2;
-    justify-self: center;
-    text-align: center;
-  }
-  body.layout-basic .play-grid .deg-header .deg-state {
-    grid-column: 3;
-    justify-self: end;
-  }
   body.layout-basic .deg-setup {
     height: 23.54rem;
     align-items: stretch;
@@ -23204,7 +23197,11 @@ body.layout-basic .df-auto-rebuy-dialog__actions button {
 
 @media (max-width: 520px) {
   body.layout-basic .df-coinflip-record-rail {
-    top: -1.85rem;
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 100%;
     height: 1.55rem;
     grid-template-columns: 1.55rem minmax(0, 1fr) 1.55rem;
     gap: 0.24rem;

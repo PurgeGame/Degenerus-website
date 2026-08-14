@@ -1,3 +1,23 @@
+# Site-wide security baseline (2026-08-14 launch-readiness round). Additive
+# header names only — these never collide with the Cache-Control rules below.
+# HSTS starts conservative: 30 days, no includeSubDomains (api.degener.us is a
+# separate host), no preload. Lengthen after it has soaked.
+/*
+  Strict-Transport-Security: max-age=2592000
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+
+# CSP in REPORT-ONLY mode: violations log to the browser console and block
+# nothing. Flip to enforcing (rename to Content-Security-Policy) only after a
+# session exercised wallet connect + all panels with a clean console.
+# Origins: publicnode/base.org = chain RPC (MAINNET CUTOVER: add the mainnet
+# RPC hosts here); fly.dev = DB API; api.degener.us = session server; esm.sh =
+# lazy WalletConnect SDK; walletconnect/web3modal = WC relay, config, verify
+# iframe, wallet icons; discord CDN = avatars; blob: = the badge bundle store.
+/app/*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; connect-src 'self' https://degenerus-db.fly.dev https://api.degener.us https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org wss://relay.walletconnect.com wss://relay.walletconnect.org; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
+
 /index.html
   Cache-Control: no-store
 
