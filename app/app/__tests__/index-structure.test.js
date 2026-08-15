@@ -239,6 +239,8 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-tickets-inventory.js',
       '/app/components/app-reveal-tray.js',
       '/app/components/app-box-strip.js',
+      // Telemetry client (2026-08-15): zero-importer, idle by design.
+      '/app/app/telemetry.js',
     ];
     for (const src of lazyModules) {
       assert.ok(!html.includes(`src="${src}"`), `lazy module must not load eagerly: ${src}`);

@@ -9,6 +9,33 @@
        can be reserved before it mounts (wallet.js sets/clears lastWalletRdns
        on every connect/disconnect path). Must run before the stylesheets. -->
   <script>try{if(!localStorage.getItem('lastWalletRdns'))document.documentElement.classList.add('no-wallet-session');}catch(e){}</script>
+  <!-- Telemetry capture hook: queue errors, unhandled rejections, dead
+       resource loads (this no-404 site serves HTML for missing modules — the
+       browser then fires exactly this error event), and CSP violations from
+       the very first parse. app/telemetry.js (IDLE_MODULES) drains the queue
+       and beacons it to the database API. Capture-phase listener is required
+       for resource errors; the queue caps itself so a storm cannot grow it. -->
+  <script>
+  (function () {
+    var q = window.__telemetryQ = [];
+    function push(kind, data) { if (q.length < 100) q.push({ kind: kind, t: Date.now(), data: data }); }
+    addEventListener('error', function (e) {
+      var t = e && e.target;
+      if (t && t !== window && (t.src || t.href)) {
+        push('resource', { u: String(t.src || t.href).slice(0, 200), tag: t.tagName });
+      } else if (e && e.message !== undefined) {
+        push('error', { m: String(e.message || '').slice(0, 300), src: String(e.filename || '').slice(0, 200), l: e.lineno || 0 });
+      }
+    }, true);
+    addEventListener('unhandledrejection', function (e) {
+      var r = e && e.reason;
+      push('rejection', { m: String((r && r.message) || r || '').slice(0, 300) });
+    });
+    document.addEventListener('securitypolicyviolation', function (e) {
+      push('csp', { d: e.effectiveDirective, b: String(e.blockedURI || '').slice(0, 200) });
+    });
+  })();
+  </script>
   <!-- The jackpot hero art is referenced from app.css background rules, so the
        browser only discovers it after CSS parses AND the custom elements mount
        — it was the LCP element arriving last. Preload starts both fetches at
@@ -32,6 +59,7 @@
   <link rel="stylesheet" href="/app/styles/replay.css">
   <link rel="stylesheet" href="/app/styles/boons.css">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/daily-drawing.css">
   <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css">
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
   <link rel="stylesheet" href="/app/styles/afking-funding-warning.css">
@@ -175,7 +203,9 @@
                can grow when another column opens a disclosure without
                stretching this backplate or moving its four foil modules. -->
           <div class="jackpot-hero__machine">
-            <h2 class="jackpot-hero__draw-title">
+            <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
+              <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/daily-drawing-mark.svg"
+                   width="100" height="100" alt="" aria-hidden="true">
               <span>DEGENERUS</span>
               <strong>DAILY DRAWING</strong>
             </h2>
@@ -383,6 +413,10 @@
       '/app/components/app-all-in-dialog.js',
       '/app/components/app-player-funds-dialog.js',
       '/app/components/app-afking-funding-warning.js',
+      // Telemetry client (2026-08-15): drains the head hook's queue and
+      // beacons errors + Web Vitals to the database API. Deliberately idle —
+      // it must never compete with the panels it measures.
+      '/app/app/telemetry.js',
     ];
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     for (const [detailsId, src] of LAZY_PANELS) {
