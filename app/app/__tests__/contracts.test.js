@@ -245,7 +245,7 @@ describe('sendTx re-derives signer EVERY invocation', () => {
 });
 
 describe('sendTx gas estimate headroom', () => {
-  test('pads an ordinary signer estimate by 20% before sending', async () => {
+  test('pads an ordinary signer estimate by 20% plus the branch cushion before sending', async () => {
     const sent = [];
     const signer = {
       getAddress: async () => '0xabcdef0000000000000000000000000000000000',
@@ -265,12 +265,12 @@ describe('sendTx gas estimate headroom', () => {
     await sendTx((fresh) => fresh.sendTransaction({ to: '0x1' }), 'gas-safe');
 
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].gasLimit, 60_000n);
+    assert.equal(sent[0].gasLimit, 190_000n);
   });
 
   test('respects an explicit gasLimit and exposes deterministic rounding', async () => {
-    assert.equal(gasEstimateWithHeadroom(42_000n), 50_400n);
-    assert.equal(gasEstimateWithHeadroom(42_001n), 50_402n);
+    assert.equal(gasEstimateWithHeadroom(42_000n), 180_400n);
+    assert.equal(gasEstimateWithHeadroom(42_001n), 180_402n);
 
     const sent = [];
     const signer = {

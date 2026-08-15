@@ -29,9 +29,16 @@ let _provider = null;
 // eth_estimateGas is a snapshot. A purchase or resolver can cross a storage
 // boundary between simulation and mining (for example, another player moves a
 // queue cursor), so using the estimate as an exact hard cap is unnecessarily
-// brittle. Keep the cushion modest: enough for the next branch, without the
-// wallet presenting a wildly inflated limit. Unused gas is not charged.
+// brittle. Two terms: a proportional pad for ordinary drift, plus an absolute
+// cushion for the discrete lazy-init branches whose cost is flat regardless of
+// tx size — first stake rows of a new staking day, first affiliate accounting
+// of a new level, RNG-threshold crossing. Observed live (run #38 tx
+// 0xb21e2897…): purchase estimated 280k, needed 361k fourteen seconds later
+// (day tick +34k, then a mineFlip-driven level advance +81k); 20% of a small
+// estimate can never cover those. Unused gas is not charged, so the cushion
+// only raises the wallet's displayed max fee and the sender's balance bar.
 export const GAS_ESTIMATE_HEADROOM_BPS = 12_000n;
+export const GAS_ESTIMATE_BRANCH_CUSHION = 130_000n;
 const RECEIPT_RECOVERY_POLL_MS = 300;
 const RECEIPT_RECOVERY_ATTEMPTS = 11;
 export const TX_CONFIRMED_EVENT = 'degenerus:tx-confirmed';
@@ -39,7 +46,8 @@ export const TX_CONFIRMED_EVENT = 'degenerus:tx-confirmed';
 export function gasEstimateWithHeadroom(estimate) {
   const gas = BigInt(estimate ?? 0);
   if (gas <= 0n) return gas;
-  return (gas * GAS_ESTIMATE_HEADROOM_BPS + 9_999n) / 10_000n;
+  return (gas * GAS_ESTIMATE_HEADROOM_BPS + 9_999n) / 10_000n
+    + GAS_ESTIMATE_BRANCH_CUSHION;
 }
 
 function _wait(ms) {

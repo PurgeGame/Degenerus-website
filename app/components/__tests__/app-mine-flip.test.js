@@ -241,7 +241,7 @@ describe('single-surface mounting', () => {
   });
 
   test('keeps the lifecycle refresh and teardown guards', () => {
-    assert.match(src, /_setIntervalUnref/);
+    assert.match(src, /registerComponentPoll/);
     assert.match(src, /visibilitychange/);
     assert.match(src, /if \(seq !== this\.#loadSeq\) return/);
     assert.match(src, /clearPendingActions\(RESOLVER_SOURCE\)/);

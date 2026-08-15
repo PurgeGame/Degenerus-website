@@ -33,6 +33,7 @@
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { questStreakScorePoints } from '../app/activity-score.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -47,14 +48,6 @@ const COMPONENTS = [
   { key: 'mintCountPoints', label: 'Mint count' },
   { key: 'affiliatePoints', label: 'Affiliate' },
 ];
-
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 function num(v) {
   const n = Number(v);
@@ -79,14 +72,15 @@ class AppActivityChip extends HTMLElement {
     // Repaint on quest status without refetching the score.
     this.#unsubs.push(subscribe('ui.primaryQuest', () => this.#paint()));
 
-    this.#pollHandle = _setIntervalUnref(() => this.#refresh(), POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_INTERVAL_MS);
     this.#refresh();
   }
 
   disconnectedCallback() {
     this.#unsubs.forEach((fn) => { try { fn(); } catch (_) { /* defensive */ } });
     this.#unsubs = [];
-    if (this.#pollHandle) clearInterval(this.#pollHandle);
+    if (typeof this.#pollHandle === 'function') this.#pollHandle();
+    this.#pollHandle = null;
     this.#initialized = false;
   }
 

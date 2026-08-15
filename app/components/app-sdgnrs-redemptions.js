@@ -9,6 +9,7 @@
 import { CHAIN } from '../app/chain-config.js';
 import { getProvider } from '../app/contracts.js';
 import { subscribe } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import {
   claimSdgnrsRedemption,
   discoverSdgnrsRedemptions,
@@ -143,15 +144,14 @@ class AppSdgnrsRedemptions extends HTMLElement {
       this.#publish();
       if (this.#address) void this.#refresh();
     });
-    this.#poll = setInterval(() => void this.#refresh(), POLL_MS);
-    if (this.#poll && typeof this.#poll.unref === 'function') this.#poll.unref();
+    this.#poll = registerComponentPoll(() => void this.#refresh(), POLL_MS);
   }
 
   disconnectedCallback() {
     this.#initialized = false;
     this.#address = null;
     this.#rows = [];
-    if (this.#poll != null) clearInterval(this.#poll);
+    if (typeof this.#poll === 'function') this.#poll();
     this.#poll = null;
     try { this.#unsubscribe?.(); } catch (_e) { /* defensive */ }
     this.#unsubscribe = null;

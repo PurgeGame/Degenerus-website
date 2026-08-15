@@ -34,16 +34,9 @@ import { fetchJSON } from '../app/api.js';
 // Inline ETH-winnings claim (user call: the big claims banner is gone; the
 // Winnings tile carries the claim instead).
 import { claimEth } from '../app/claims.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const ENTRIES_PER_TICKET = 4;
-
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 class AppBalancesStrip extends HTMLElement {
   #unsubs = [];
@@ -131,9 +124,7 @@ class AppBalancesStrip extends HTMLElement {
       window.addEventListener('storage', this.#storageListener);
     }
 
-    if (typeof setInterval === 'function') {
-      this.#pollHandle = _setIntervalUnref(() => this.#refresh(), 30_000);
-    }
+    this.#pollHandle = registerComponentPoll(() => this.#refresh(), 30_000);
     this.#refresh();
   }
 
@@ -142,8 +133,8 @@ class AppBalancesStrip extends HTMLElement {
       try { u(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#revealListener

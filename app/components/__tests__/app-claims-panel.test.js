@@ -1414,8 +1414,10 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     const storageListenersAfter = (_winListeners.get('storage') || []).length;
     assert.equal(visListenersAfter, visListenersBefore - 1, 'visibilitychange listener removed');
     assert.equal(storageListenersAfter, storageListenersBefore - 1, 'storage listener removed');
-    // Source-level: clearInterval + .abort() are called in disconnectedCallback.
-    assert.match(PANEL_SRC, /clearInterval\(/, 'panel calls clearInterval in disconnectedCallback');
+    // Source-level: the component-poll unregister fn + .abort() are called in
+    // disconnectedCallback (poll teardown migrated from clearInterval to the
+    // shared scheduler's returned unregister function).
+    assert.match(PANEL_SRC, /this\.#pollHandle\(\)/, 'panel unregisters its component-poll in disconnectedCallback');
     assert.match(PANEL_SRC, /removeEventListener\(['"]visibilitychange['"]/, 'visibilitychange removeEventListener present');
     assert.match(PANEL_SRC, /removeEventListener\(['"]storage['"]/, 'storage removeEventListener present');
     assert.match(PANEL_SRC, /removeEventListener\(['"]app-claims:tx-confirmed['"]/, 'tx-confirmed removeEventListener present');

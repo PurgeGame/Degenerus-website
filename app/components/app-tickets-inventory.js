@@ -38,6 +38,7 @@ import {
 } from '../app/salvage.js';
 import { compactUiError } from '../app/ui-error.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import {
   applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
@@ -364,14 +365,6 @@ function invEntryLabel(traitId) {
   return `${symbol.replace(/[_-]+/g, ' ')} ${color}`;
 }
 
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
-
 class AppTicketsInventory extends HTMLElement {
   #unsubs = [];
   #initialized = false;
@@ -479,13 +472,11 @@ class AppTicketsInventory extends HTMLElement {
       this.#combined = payload;
       if (get('ui.mode') === 'combined') this.#render();
     }));
-    if (typeof setInterval === 'function') {
-      this.#pollHandle = _setIntervalUnref(() => {
-        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-          this.#refresh();
-        }
-      }, POLL_INTERVAL_MS);
-    }
+    this.#pollHandle = registerComponentPoll(() => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+        this.#refresh();
+      }
+    }, POLL_INTERVAL_MS);
     this.#refresh();
   }
 
@@ -511,8 +502,8 @@ class AppTicketsInventory extends HTMLElement {
       try { u(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#expandRenderTimer != null) {

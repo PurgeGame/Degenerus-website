@@ -9,6 +9,7 @@ import { readBafFinalPurchaseDay } from '../app/coinflip.js';
 import { formatBafDrawPercent, normalizeBafDraw } from '../app/baf-draw.js';
 import { displayEthCompact, displayToken } from '../app/scaling.js';
 import { getActingAddress, getViewedAddress, subscribe, update } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const POLL_MS = 15_000;
 const FLIP = 10n ** 18n;
@@ -247,8 +248,7 @@ class AppBafEve extends HTMLElement {
       this.#player = position;
       this.#render();
     }));
-    this.#timer = setInterval(() => { void this.#refresh(); }, POLL_MS);
-    try { this.#timer?.unref?.(); } catch (_e) { /* browser timer */ }
+    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
     void this.#refresh();
   }
 
@@ -257,7 +257,7 @@ class AppBafEve extends HTMLElement {
       try { unsubscribe(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#timer != null) clearInterval(this.#timer);
+    if (typeof this.#timer === 'function') this.#timer();
     this.#timer = null;
     this.#seq += 1;
     this.#initialized = false;

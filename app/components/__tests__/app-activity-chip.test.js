@@ -482,9 +482,9 @@ describe('source gates', () => {
     assert.match(src, /label\.textContent = v\.label/);
   });
 
-  test('the poll timer is unref-ed so node:test never hangs on it', () => {
-    assert.match(src, /_setIntervalUnref/);
-    assert.match(src, /typeof h\.unref === 'function'/);
+  test('the poll timer runs through the shared component-poll scheduler (which owns unref, so node:test never hangs on it)', () => {
+    assert.match(src, /import \{ registerComponentPoll \} from '\.\.\/app\/component-poll\.js';/);
+    assert.match(src, /registerComponentPoll\(\(\) => this\.#refresh\(\), POLL_INTERVAL_MS\)/);
   });
 
   test('the score fetch is sequence-guarded against out-of-order responses', () => {
@@ -494,7 +494,7 @@ describe('source gates', () => {
 
   test('disconnect drops every subscription and the poll timer', () => {
     const teardown = src.slice(src.indexOf('disconnectedCallback'), src.indexOf('#renderShell() {'));
-    assert.match(teardown, /clearInterval\(this\.#pollHandle\)/);
+    assert.match(teardown, /this\.#pollHandle\(\)/);
     assert.match(teardown, /this\.#unsubs\.forEach/);
   });
 });

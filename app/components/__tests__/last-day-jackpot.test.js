@@ -333,8 +333,8 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.doesNotMatch(REPLAY_PANEL_SRC, /textContent = '(?:Reveal Draw|Revealing\.\.\.|Bonus Roll|Replay)'/);
     assert.doesNotMatch(LAST_DAY_SRC, /SPIN AVAILABLE SOON/);
     assert.doesNotMatch(INDEX_SRC, /SPIN AVAILABLE SOON|jackpot-load-status/);
-    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(135deg, #9a4300, #f7931a 52%, #a84a00\)[^}]*letter-spacing:\s*0\.12em/s,
-      'the first/main Spin uses Bitcoin orange while bonus and processing keep their own states');
+    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(180deg, #721317 0%, #430709 52%, #260203 100%\)[^}]*letter-spacing:\s*0\.12em/s,
+      'the first/main Spin uses the protocol oxblood-and-gold control treatment');
     assert.match(APP_CSS, /\.replay-reveal-btn\.is-processing\s*\{[^}]*cursor:\s*wait[^}]*opacity:\s*1/s);
     assert.match(PROCESSING_CSS, /crypto_05_chainlink_blue\.svg/,
       'the two RNG beats carry a small Chainlink mark');
@@ -1469,8 +1469,8 @@ describe('new-day auto-follow', () => {
 //
 // The widget fetches /player/:addr/foil?level=N when a resolved day renders.
 // Cards show regardless of spin state (the player's own tickets); MATCH
-// lighting (face rings, T-chips, claimable pulse) applies only once the pinned
-// day's spun_day key exists (or right after #finishReveal writes it).
+// lighting (face rings, T-chips, claimable pulse) is gated independently by
+// the main and bonus scratches that expose those exact winning sets.
 // ===========================================================================
 
 describe('foil match pending action', () => {
@@ -1481,7 +1481,7 @@ describe('foil match pending action', () => {
     await import('../last-day-jackpot.js');
   });
 
-  test('the old foreground strip is gone and the cabinet keeps four background sockets', () => {
+  test('the old foreground strip is gone and the machine keeps four live foil modules', () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
@@ -1492,11 +1492,21 @@ describe('foil match pending action', () => {
     }
     assert.ok(el.querySelector('[data-bind="ldj-foil-machine-bank"]'));
     assert.equal(el.querySelectorAll('.ldj-foil-machine-slot').length, 4,
-      'one subdued cabinet socket is reserved for each foil ticket');
+      'one subdued machine module is reserved for each foil ticket');
     assert.equal(
-      existsSync(new URL('../../assets/jackpot/daily-drawing-cabinet-v1.webp', import.meta.url)),
+      existsSync(new URL('../../assets/jackpot/daily-drawing-backplate-v4.webp', import.meta.url)),
       true,
-      'the drawing cabinet art ships with the app',
+      'the compact drawing backplate ships with the app',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*inset 0 3px 9px rgba\(0, 0, 0, 0\.92\)/s,
+      'an unfilled foil socket is a recessed indent rather than a placeholder card',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ldj-foil-machine-ticket\s*\{[^}]*filter:\s*grayscale\(0\.35\) saturate\(0\.52\) brightness\(0\.68\)[^}]*opacity:\s*0\.48[^}]*animation:\s*none/s,
+      'unlocked foils use subdued, non-shimmering ticket artwork',
     );
     el.disconnectedCallback();
   });
@@ -1581,6 +1591,13 @@ describe('foil match pending action', () => {
         'a covered jackpot cannot leak its foil match through the background');
       assert.equal(slots[0].querySelectorAll('.ldj-foil-machine-cell').length, 4,
         'the socket uses the actual four foil traits');
+      const ticket = slots[0].querySelector('.ticket-card--foil');
+      assert.ok(ticket, 'the cabinet reuses the real foil ticket card');
+      assert.ok(ticket.getAttribute('data-ticket-accent'),
+        'the real ticket outline is derived from its traits');
+      assert.ok(ticket.querySelector('.ticket-card-center'),
+        'the real foil center diamond remains part of the card');
+      assert.equal(ticket.querySelectorAll('.trait-quadrant').length, 4);
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'Pending remains behind the same spoiler gate');
 
@@ -1613,6 +1630,135 @@ describe('foil match pending action', () => {
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'detaching the owner cannot leave a stale foil reminder');
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('the bonus foil set stays dim until the bonus scratch itself completes', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const bonusTraits = [1, 70, 130, 200];
+    const mainTraits = [2, 69, 131, 201];
+    const pack = (traits) => traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        address: player, level: 12, present: true,
+        lines: [bonusTraits, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
+        claims: [],
+      }),
+    });
+    try {
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      storeMod.update('app.lastDay', {
+        day: 45, level: 12,
+        summary: {
+          rollOne: { mainTraitsPacked: pack(mainTraits) },
+          rollTwo: { bonusTraitsPacked: pack(bonusTraits) },
+        },
+        winners: [],
+        roll1: { day: 45, level: 12, purchaseLevel: 12, wins: [] },
+        roll2: { day: 45, level: 12, purchaseLevel: 12, wins: [] },
+        status: 'resolved',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      const slot = el.querySelectorAll('.ldj-foil-machine-slot')[0];
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 45, player, bonusPhase: false, bonusAvailable: true },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(slot.classList.contains('is-match'), false,
+        'revealing Roll 1 does not leak a match from the packed bonus result');
+      assert.equal(slot.getAttribute('data-draw-kind'), null);
+      assert.equal(pendingActionsMod.getPendingActions().length, 0);
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 45, player, bonusPhase: true, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(slot.classList.contains('is-match'), true,
+        'the ticket powers up as soon as the bonus result is actually uncovered');
+      assert.equal(slot.getAttribute('data-draw-kind'), '1');
+      assert.equal(pendingActionsMod.getPendingActions()[0]?.drawKind, 1);
+      el.disconnectedCallback();
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('level 38 purchase phase displays level 39 foils, never resolved level 38 foils', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const traits = [1, 70, 130, 200];
+    const packed = traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    const requestedLevels = [];
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      if (!parsedUrl.pathname.endsWith('/foil')) {
+        return { ok: true, json: async () => null };
+      }
+      requestedLevels.push(Number(parsedUrl.searchParams.get('level')));
+      return {
+        ok: true,
+        json: async () => ({
+          address: player, level: 39, present: true,
+          lines: [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]],
+          claims: [],
+        }),
+      };
+    };
+    try {
+      storeMod.update('connected.address', player);
+      storeMod.update('app.gameState', {
+        level: 38,
+        phase: 'PURCHASE',
+        jackpotPhaseFlag: false,
+      });
+      storeMod.update('app.lastDay', {
+        day: 190, level: 38,
+        summary: {
+          rollOne: { mainTraitsPacked: packed },
+          rollTwo: { bonusTraitsPacked: null },
+        },
+        winners: [],
+        roll1: { day: 190, level: 38, purchaseLevel: 38, wins: [] },
+        roll2: { day: 190, level: 38, purchaseLevel: 38, wins: [] },
+        status: 'resolved',
+      });
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      assert.ok(requestedLevels.length > 0);
+      assert.deepEqual([...new Set(requestedLevels)], [39],
+        'every cabinet request follows the active purchase destination');
+      const slot = el.querySelectorAll('.ldj-foil-machine-slot')[0];
+      assert.equal(slot.classList.contains('is-loaded'), true,
+        'the level 39 pack is visible beside the level 38 result');
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 190, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(slot.classList.contains('is-match'), false,
+        'a level 39 foil is never graded against the level 38 draw behind it');
+      assert.equal(pendingActionsMod.getPendingActions().length, 0);
+      el.disconnectedCallback();
     } finally {
       globalThis.fetch = priorFetch;
     }

@@ -31,6 +31,7 @@ import {
   unpackWinSet,
 } from '../app/foil-match.js';
 import { traitToBadge } from '../app/jackpot-data.js';
+import { applyDgnTicketAccent } from '../app/dgn-traits.js';
 import { fetchJSON } from '../app/api.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
@@ -46,6 +47,7 @@ import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 import { normalizeLastDayPayload } from '../app/last-day-state.js';
+import { activeTicketLevel } from '../app/active-level.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 
@@ -119,6 +121,7 @@ class LastDayJackpot extends HTMLElement {
   #lastPayload = null;
   #daySync = null;       // direct GAME day; jackpot and coinflip expose independent lanes
   #gameState = null;     // /game/state exposes the ticket-drain phase between those lanes
+  #poolBenchmarks = null; // direct contract phase closes the final sealed-window gap
   #hasNewDayAvailable = false; // Legacy banner fallback; normal flow auto-follows.
   #winners = [];
   // Phase 64 — foil strip state + panel bridge state.
@@ -131,6 +134,8 @@ class LastDayJackpot extends HTMLElement {
   #decimatorOpenedListener = null;
   #foilClaimBusy = false; // one in-flight foil claim at a time
   #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
+  #foilMainActivated = false;  // this tab has uncovered Roll 1 for the pinned day
+  #foilBonusActivated = false; // this tab has uncovered Roll 2 for the pinned day
   // --- "Whole board played out" gates for the results CTA (user call: the
   //     main UI — every scratch roll AND the coin flip — plays out first;
   //     the full-reveal popup sits behind a button, never auto-pops). ---
@@ -189,8 +194,16 @@ class LastDayJackpot extends HTMLElement {
   }
 
   #onGameState(state) {
+    const priorFoilLevel = this.#foilTargetLevel();
     this.#gameState = state && typeof state === 'object' ? state : null;
     this.#syncReplayProcessingState();
+    if (this.#foilTargetLevel() !== priorFoilLevel) void this.#refreshFoil();
+  }
+
+  #onPoolBenchmarks(benchmarks) {
+    const priorFoilLevel = this.#foilTargetLevel();
+    this.#poolBenchmarks = benchmarks && typeof benchmarks === 'object' ? benchmarks : null;
+    if (this.#foilTargetLevel() !== priorFoilLevel) void this.#refreshFoil();
   }
 
   #replayShowsPinnedDay(panel = this.#panel()) {
@@ -331,6 +344,44 @@ class LastDayJackpot extends HTMLElement {
       if (pending) localStorage.setItem(this.#bonusPendingKey(day), '1');
       else localStorage.removeItem(this.#bonusPendingKey(day));
     } catch { /* same-tab event still carries the authoritative final state */ }
+  }
+
+  #resolvedFoilLevel() {
+    const level = Number(
+      this.#lastPayload?.roll1?.purchaseLevel
+      ?? this.#lastPayload?.level
+      ?? this.#pinnedLevel,
+    );
+    return Number.isInteger(level) && level > 0 ? level : null;
+  }
+
+  #foilTargetLevel() {
+    // A shell can reconnect after polling has already populated the store.
+    // Read that snapshot until the initial subscription callbacks hydrate the
+    // instance, so the first paint cannot flash the resolved level's old pack.
+    const gameState = this.#gameState ?? get('app.gameState');
+    const benchmarks = this.#poolBenchmarks ?? get('app.poolBenchmarks');
+    const active = activeTicketLevel(
+      gameState,
+      benchmarks?.contractPhase,
+    );
+    return Number.isInteger(active) && active > 0 ? active : this.#resolvedFoilLevel();
+  }
+
+  #activatedFoilSets() {
+    const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
+    const mainActive = this.#foilMainActivated
+      || (!replayFresh && this.#hasSpunPinnedDay());
+    const bonusActive = this.#foilBonusActivated
+      || (!replayFresh && this.#hasCompletedPinnedDay());
+    const summary = this.#lastPayload?.summary;
+    const foilLevel = Number(this.#foilData?.level ?? this.#foilTargetLevel());
+    const resolvedLevel = this.#resolvedFoilLevel();
+    const levelLocked = resolvedLevel != null && foilLevel === resolvedLevel;
+    return {
+      mainSet: mainActive && levelLocked ? (summary?.rollOne?.mainTraitsPacked ?? null) : null,
+      bonusSet: bonusActive && levelLocked ? (summary?.rollTwo?.bonusTraitsPacked ?? null) : null,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -834,7 +885,10 @@ class LastDayJackpot extends HTMLElement {
     this.#markSpunPinnedDay(eventDay);
     if (appliesToPinnedDay) {
       this.#sawScratchEvent = true;
-      // The spoiler gate is open, so a claimable foil match can surface now.
+      // Roll 1 must never activate a better bonus-set foil match. Each draw
+      // powers its own bank lane only after that exact scratch completes.
+      this.#foilMainActivated = true;
+      if (d?.bonusPhase === true) this.#foilBonusActivated = true;
       this.#renderFoil();
     }
     // The replay board itself knows whether THIS scratch phase contained an
@@ -899,6 +953,8 @@ class LastDayJackpot extends HTMLElement {
     } catch { /* private browsing: the in-memory reset still repairs this tab */ }
     this.#boardDone = false;
     this.#sawScratchEvent = false;
+    this.#foilMainActivated = false;
+    this.#foilBonusActivated = false;
     this.#manualReplayDay = null;
     this.#setResultsCtaVisible(this.#resultsCta(), false);
 
@@ -926,6 +982,8 @@ class LastDayJackpot extends HTMLElement {
   #resetDayGates() {
     this.#boardDone = false;
     this.#sawScratchEvent = false;
+    this.#foilMainActivated = false;
+    this.#foilBonusActivated = false;
     this.#flipResult = undefined;
     this.#flipFetchedDay = null;
     const cta = this.#resultsCta();
@@ -1277,12 +1335,9 @@ class LastDayJackpot extends HTMLElement {
       return;
     }
     const addr = getViewedAddress();
-    // Foil packs key on the day's PURCHASE level (roll1.purchaseLevel) — the
-    // aggregate payload.level is the count-weighted winner level and reads
-    // one high (same wrong-level class as the inventory/scratch-gate fixes).
-    const level = this.#lastPayload?.roll1?.purchaseLevel
-      ?? this.#lastPayload?.level
-      ?? this.#pinnedLevel;
+    // Show the pack a buy reaches NOW. During L38 purchase phase that is L39,
+    // not the already-resolved L38 pack still represented by the main board.
+    const level = this.#foilTargetLevel();
     if (!addr || level == null || typeof fetch !== 'function') {
       this.#foilData = null;
       this.#foilDataKey = null;
@@ -1319,23 +1374,22 @@ class LastDayJackpot extends HTMLElement {
     return [String(player || '').toLowerCase(), Number(day), Number(ticketIndex), Number(drawKind)].join(':');
   }
 
-  // The cabinet keeps four quiet foil sockets around the draw. Owning a pack
-  // fills them immediately, but grading remains behind the same durable
-  // scratch gate as Pending so the background cannot spoil a covered result.
+  // The machine keeps four quiet foil indents around the draw. Owned lines use
+  // the same real ticket-card artwork as inventory, but remain faded until a
+  // claimable match locks against a draw the player has actually uncovered.
   #renderFoilBackdrop() {
     const slots = [...this.querySelectorAll('.ldj-foil-machine-slot')];
     if (slots.length === 0) return;
     const lines = this.#foilData?.present && Array.isArray(this.#foilData?.lines)
       ? this.#foilData.lines.slice(0, slots.length)
       : [];
-    const revealed = this.#hasSpunPinnedDay();
-    const mainSet = this.#lastPayload?.summary?.rollOne?.mainTraitsPacked ?? null;
-    const bonusSet = this.#lastPayload?.summary?.rollTwo?.bonusTraitsPacked ?? null;
+    const { mainSet, bonusSet } = this.#activatedFoilSets();
 
     slots.forEach((slot, index) => {
       slot.textContent = '';
       slot.classList.remove('is-loaded', 'is-graded', 'is-match');
       slot.removeAttribute('data-score');
+      slot.removeAttribute('data-draw-kind');
       const parsedLine = Array.isArray(lines[index]) && lines[index].length === 4
         ? lines[index].map(Number)
         : null;
@@ -1344,27 +1398,31 @@ class LastDayJackpot extends HTMLElement {
       )) ? parsedLine : null;
       if (!line) return;
 
-      const grade = revealed ? bestGrade(line, mainSet, bonusSet) : null;
+      const grade = bestGrade(line, mainSet, bonusSet);
+      const locked = Boolean(grade && grade.score >= FOIL_CLAIM_THRESHOLD);
       slot.classList.add('is-loaded');
-      if (grade) {
-        slot.classList.add('is-graded');
+      if (locked) {
+        slot.classList.add('is-graded', 'is-match');
         slot.setAttribute('data-score', `T${grade.score}`);
-        if (grade.score >= FOIL_CLAIM_THRESHOLD) slot.classList.add('is-match');
+        slot.setAttribute('data-draw-kind', String(grade.drawKind));
       }
 
       const ticket = document.createElement('span');
-      ticket.className = 'ldj-foil-machine-ticket';
+      ticket.className = 'ldj-foil-machine-ticket ticket-card tc-small ticket-card--foil';
+      applyDgnTicketAccent(ticket, line);
       line.forEach((traitId, quadrant) => {
         const badge = traitToBadge(traitId);
         const cell = document.createElement('span');
-        cell.className = 'ldj-foil-machine-cell';
+        cell.className = 'ldj-foil-machine-cell trait-quadrant';
+        if (badge?.color) cell.setAttribute('data-trait-color', badge.color);
+        if (badge?.color === 'gold') cell.classList.add('trait-quadrant--gold');
         const face = Number(grade?.faces?.[quadrant] || 0);
-        if (face === 1) cell.classList.add('is-symbol-match');
-        if (face === 2) cell.classList.add('is-color-match');
+        if (locked && face === 1) cell.classList.add('is-symbol-match');
+        if (locked && face === 2) cell.classList.add('is-color-match');
         if (badge) {
           const image = document.createElement('img');
           image.src = badge.path;
-          image.alt = '';
+          image.alt = badge.label;
           image.loading = 'lazy';
           image.decoding = 'async';
           cell.appendChild(image);
@@ -1372,7 +1430,7 @@ class LastDayJackpot extends HTMLElement {
         ticket.appendChild(cell);
       });
       const center = document.createElement('span');
-      center.className = 'ldj-foil-machine-center';
+      center.className = 'ldj-foil-machine-center ticket-card-center';
       const flame = document.createElement('img');
       flame.src = '/whitepaper/flame-center.svg';
       flame.alt = '';
@@ -1393,23 +1451,17 @@ class LastDayJackpot extends HTMLElement {
       publishEmpty();
       return;
     }
-    // Grading remains spoiler-gated: a pending row must not reveal that one of
-    // the covered jackpot traits matched before the player scratches the draw.
-    if (!this.#hasSpunPinnedDay()) {
+    // Each draw is independently spoiler-gated. In particular, Roll 1 cannot
+    // publish a bonus match merely because the bonus packed set already exists.
+    const { mainSet, bonusSet } = this.#activatedFoilSets();
+    if (mainSet == null && bonusSet == null) {
       publishEmpty();
       return;
     }
 
-    const summary = this.#lastPayload?.summary || null;
-    const mainSet = summary?.rollOne?.mainTraitsPacked ?? null;
-    const bonusSet = summary?.rollTwo?.bonusTraitsPacked ?? null;
     const claims = Array.isArray(d.claims) ? d.claims : [];
     const day = Number(this.#pinnedDay);
-    const level = Number(
-      this.#lastPayload?.roll1?.purchaseLevel
-      ?? this.#lastPayload?.level
-      ?? this.#pinnedLevel,
-    );
+    const level = Number(this.#foilTargetLevel());
 
     const candidates = [];
     d.lines.forEach((line, i) => {
@@ -1619,6 +1671,9 @@ class LastDayJackpot extends HTMLElement {
     );
     this.#unsubs.push(
       subscribe('app.gameState', (state) => this.#onGameState(state))
+    );
+    this.#unsubs.push(
+      subscribe('app.poolBenchmarks', (benchmarks) => this.#onPoolBenchmarks(benchmarks))
     );
     this.#unsubs.push(
       subscribe('app.deploymentMismatch', (payload) => this.#renderDeploymentMismatch(payload))

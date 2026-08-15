@@ -1,4 +1,5 @@
 import { get, subscribe, getActingAddress, deriveCanSign } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import {
   readDeityPassCatalog,
   readDeityBoonSlots,
@@ -87,13 +88,12 @@ class AppDeityDesk extends HTMLElement {
     if (typeof document !== 'undefined') {
       document.addEventListener?.('app-pass:tx-confirmed', this.#passEvent);
     }
-    this.#poll = setInterval(() => this.#refresh(), POLL_MS);
-    this.#poll?.unref?.();
+    this.#poll = registerComponentPoll(() => this.#refresh(), POLL_MS);
     this.#refresh();
   }
 
   disconnectedCallback() {
-    if (this.#poll != null) clearInterval(this.#poll);
+    if (typeof this.#poll === 'function') this.#poll();
     this.#poll = null;
     if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
     this.#errorTimer = null;

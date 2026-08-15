@@ -94,6 +94,7 @@ import {
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   LOOTBOX_REVEAL_QUEUED_EVENT,
 } from './reveal-overlay.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 
@@ -324,14 +325,6 @@ function reverseCardDelayMs(revealPlan, index) {
     + revealPlan.openingMs
     + REVERSE_CARD_ENTRY_WAIT_MS
     + ((index - 1) * REVERSE_CARD_STAGGER_MS);
-}
-
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
 }
 
 function _settleWithin(promise, ms) {
@@ -1047,9 +1040,7 @@ class AppDailyFlip extends HTMLElement {
       if (ballot && !ballot.hidden) this.#loadCharityVote();
     }));
 
-    if (typeof setInterval === 'function') {
-      this.#pollHandle = _setIntervalUnref(() => this.#scheduleRefresh(), POLL_INTERVAL_MS);
-    }
+    this.#pollHandle = registerComponentPoll(() => this.#scheduleRefresh(), POLL_INTERVAL_MS);
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       this.#daySelectionListener = (event) => {
         const detail = event?.detail;
@@ -1155,8 +1146,8 @@ class AppDailyFlip extends HTMLElement {
     this.#daySelectionListener = null;
     this.#activeLootboxRevealIds.clear();
     this.#pendingLootboxCount = 0;
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#resultRetryHandle != null) {

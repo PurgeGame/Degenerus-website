@@ -37,6 +37,7 @@ describe('index.html basic-mode skeleton', () => {
       'class="chain-chip-row"',
       'class="jackpot-hero"',
       'class="jackpot-hero__draw"',
+      'class="jackpot-hero__machine"',
       '<last-day-jackpot>',
       '<replay-panel',
       '<app-daily-flip>',
@@ -70,6 +71,9 @@ describe('index.html basic-mode skeleton', () => {
     const draw = html.slice(drawStart, drawEnd);
     assert.match(draw, /<last-day-jackpot>/);
     assert.match(draw, /<replay-panel/);
+    assert.match(draw,
+      /<div class="jackpot-hero__machine">[\s\S]*?<replay-panel single-button><\/replay-panel>[\s\S]*?<\/div>\s*<nav class="jackpot-day-history"/,
+      'the art-backed machine closes before controls that may expand the draw column');
     assert.match(draw, /data-bind="day-summary-slot" hidden/,
       'the landing slot consumes no height until the summary unlocks');
     assert.match(draw, /class="jackpot-day-history"[^>]*hidden/,

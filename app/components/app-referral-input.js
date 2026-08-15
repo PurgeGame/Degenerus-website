@@ -13,6 +13,7 @@ import {
 } from '../app/affiliate.js';
 import { compactUiError } from '../app/ui-error.js';
 import { fetchJSON } from '../app/api.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const MOUNT_RETRY_MS = 100;
 const MOUNT_RETRIES = 30;
@@ -136,12 +137,7 @@ function _install(host) {
     if (event?.key === 'affiliate-ref') _syncCode();
   });
   window.addEventListener?.('focus', _syncVisibility);
-  if (typeof setInterval === 'function') {
-    _visibilityPoll = setInterval(() => { void _syncVisibility(); }, VISIBILITY_POLL_MS);
-    if (_visibilityPoll && typeof _visibilityPoll.unref === 'function') {
-      try { _visibilityPoll.unref(); } catch (_e) { /* defensive */ }
-    }
-  }
+  _visibilityPoll = registerComponentPoll(() => { void _syncVisibility(); }, VISIBILITY_POLL_MS);
   _unsub = subscribe('connected.address', () => {
     _syncCode();
     void _syncVisibility();
@@ -171,8 +167,8 @@ export function __resetForTest() {
   _busy = false;
   _visibilitySeq += 1;
   _visibilityPlayer = null;
-  if (_visibilityPoll != null) {
-    try { clearInterval(_visibilityPoll); } catch (_e) { /* defensive */ }
+  if (typeof _visibilityPoll === 'function') {
+    try { _visibilityPoll(); } catch (_e) { /* defensive */ }
     _visibilityPoll = null;
   }
 }

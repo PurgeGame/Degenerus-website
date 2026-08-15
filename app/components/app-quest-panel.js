@@ -40,6 +40,7 @@
 // its title/aria-label retains the complete next-flip win/burn condition.
 
 import { get, update, subscribe, getViewedAddress } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import { ETH_DIVISOR } from '../app/chain-config.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
@@ -56,17 +57,6 @@ import { readLiveQuestBoard } from '../app/quests.js';
 import { questStreakScorePoints, degenScoreLootTier } from '../app/activity-score.js';
 import { sfxQuestComplete } from '../app/jackpot-sfx.js';
 import './boon-product-indicator.js';
-
-// Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
-// 30s poll tick so node:test processes exit cleanly when no other open handles
-// remain. Verbatim port of app-decimator-panel.js _setIntervalUnref.
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 function _setTimeoutUnref(fn, ms) {
   const h = setTimeout(fn, ms);
@@ -167,7 +157,10 @@ const QUEST_TYPE_ICONS = Object.freeze({
   6: '/app/assets/quests/luckbox.svg',
   7: '/app/assets/quests/degenerette-eth.svg',
   8: '/app/assets/quests/degenerette-flip.svg',
-  9: '/app/assets/quests/redeem-flip.svg',
+  // Redeem is already named by the card. At icon scale the old mark → arrow →
+  // ticket composite crushed FLIP into a misleading vertical two-color speck;
+  // let the canonical protocol mark occupy the whole tile instead.
+  9: '/whitepaper/flame-logo-split.svg',
 });
 
 // These two pictograms add product context around FLIP. Keep that context as
@@ -175,7 +168,6 @@ const QUEST_TYPE_ICONS = Object.freeze({
 // diagonal split and flame approximately inside another SVG.
 const QUEST_FLIP_MARK_POSITIONS = Object.freeze({
   '/app/assets/quests/degenerette-flip.svg': 'center',
-  '/app/assets/quests/redeem-flip.svg': 'left',
 });
 
 function _paintQuestIcon(host, icon) {
@@ -495,8 +487,8 @@ class AppQuestPanel extends HTMLElement {
     }
     this.#questShortcutListener = null;
     this.#questCards = [];
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#pollController) {
@@ -1264,11 +1256,8 @@ class AppQuestPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
-    }
-    if (typeof setInterval !== 'function') return;
-    this.#pollHandle = _setIntervalUnref(() => this.#runMountFetch(), POLL_INTERVAL_MS);
+    if (typeof this.#pollHandle === 'function') this.#pollHandle();
+    this.#pollHandle = registerComponentPoll(() => this.#runMountFetch(), POLL_INTERVAL_MS);
   }
 
   async #runMountFetch() {

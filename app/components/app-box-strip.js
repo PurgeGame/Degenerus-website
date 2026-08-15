@@ -52,18 +52,11 @@ import {
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   LOOTBOX_REVEAL_ABORT_EVENT,
 } from './reveal-overlay.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const PENDING_SOURCE = 'lootboxes';
-
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 /** chainId+address-scoped storage key. */
 export function pendingBoxesKey(chainId, address) {
@@ -454,8 +447,8 @@ class AppBoxStrip extends HTMLElement {
     this.#activeRevealKeys.clear();
     this.#purchaseReceipts.clear();
     this.#resolvedLegCache.clear();
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#errorTimer != null) {
@@ -753,8 +746,7 @@ class AppBoxStrip extends HTMLElement {
   // -------------------------------------------------------------------------
 
   #startPolling() {
-    if (typeof setInterval !== 'function') return;
-    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), RNG_POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), RNG_POLL_INTERVAL_MS);
   }
 
   async #readPurchaseKinds(box, owner) {

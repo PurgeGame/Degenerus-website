@@ -396,12 +396,18 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
   test('center draw has the requested Degenerus Daily Drawing machine marquee', () => {
     const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
     const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
-    assert.match(html.slice(drawStart, drawEnd),
+    const draw = html.slice(drawStart, drawEnd);
+    assert.match(draw,
+      /<div class="jackpot-hero__machine">[\s\S]*?<last-day-jackpot>[\s\S]*?<replay-panel single-button>[\s\S]*?<\/div>[\s\S]*?<nav class="jackpot-day-history"/,
+      'the fixed drawing instrument closes before expandable history content');
+    assert.match(draw,
       /<h2 class="jackpot-hero__draw-title">[\s\S]*?<span>DEGENERUS<\/span>[\s\S]*?<strong>DAILY DRAWING<\/strong>[\s\S]*?<\/h2>/);
-    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*3\.2rem[^}]*flex-direction:\s*column[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*text-align:\s*center/s,
+    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*3\.05rem[^}]*flex-direction:\s*column[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*text-align:\s*center/s,
       'the two-line machine marquee remains centered inside its compact recess');
-    assert.match(css, /\.jackpot-hero__draw::before\s*\{[^}]*daily-drawing-cabinet-v1\.webp[^}]*100% 100% no-repeat/s,
-      'the drawing column owns its purpose-built cabinet artwork');
+    assert.match(css, /\.jackpot-hero__machine\s*\{[^}]*daily-drawing-backplate-v4\.webp[^}]*100% 100% no-repeat/s,
+      'only the compact machine owns its purpose-built backplate artwork');
+    assert.match(css, /\.jackpot-hero__machine\s*\{[^}]*container-type:\s*inline-size/s,
+      'board and foil modules share the machine container instead of the expandable hero row');
     assert.match(css, /\.jackpot-hero last-day-jackpot \.panel\s*\{[^}]*padding:\s*0/s,
       'the headless jackpot bridge contributes no blank band below the label');
   });

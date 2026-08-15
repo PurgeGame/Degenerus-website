@@ -37,6 +37,7 @@ import { fetchJSON } from '../app/api.js';
 // handlers below. `import` triggers reason-map registrations as a side-effect
 // (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).
 import { claimEth, claimFlip, claimDecimatorLevels, claimAffiliateDgnrs } from '../app/claims.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 // v4.6 render whitelist (D-01 LOCKED, extended by Plan 62-06 / AFF-03).
 // The 4 hidden keys (tickets, vault, farFutureCoin, terminal) are read from
@@ -45,18 +46,6 @@ import { claimEth, claimFlip, claimDecimatorLevels, claimAffiliateDgnrs } from '
 // — Phase 61 D-01 LOCKED forward-compat hook.
 const VISIBLE_PRIZE_KEYS = ['eth', 'flip', 'decimator', 'affiliate'];
 
-// Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for
-// the Plan 61-03 30s polling tick so node:test processes exit cleanly when
-// no other open handles remain — avoids tests hanging on a 30s pending
-// interval. Verbatim port of the app-packs-panel.js _setTimeoutUnref helper
-// (lines 97-103) — same shape applied to setInterval here.
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 // Friendly per-prize labels (textContent only). Decimator label is dynamic
 // based on row.levels.length — see #renderRows.
@@ -85,7 +74,7 @@ class AppClaimsPanel extends HTMLElement {
   // --- Plan 61-03 polling lifecycle fields ---
   // Panel-owned 30s tick (NOT polling.js's fictional generic API per RESEARCH
   // Pitfall 9). Mirrors app-packs-panel.js:512-555 RNG poll lifecycle shape.
-  #pollHandle = null;          // setInterval handle — cleared in disconnect
+  #pollHandle = null;          // component-poll unregister fn — cleared in disconnect
   #pollController = null;      // AbortController — aborted on cycle restart + disconnect
   #lastPollAt = 0;             // ms timestamp of last cycle start (visibility-return ≥5min logic)
   #visibilityListener = null;  // document 'visibilitychange' handler reference
@@ -116,9 +105,9 @@ class AppClaimsPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // --- Plan 61-03 cleanup: clearInterval + abort + removeEventListener × 3 ---
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    // --- Plan 61-03 cleanup: unregister poll + abort + removeEventListener × 3 ---
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#pollController) {
@@ -189,13 +178,10 @@ class AppClaimsPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
     }
-    if (typeof setInterval !== 'function') return;  // node:test fakeDOM safety
-    // Use unref'd setInterval so node:test processes exit cleanly when no
-    // other open handles remain (Phase 60 _setTimeoutUnref pattern).
-    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), 30_000);
+    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), 30_000);
   }
 
   // Mount-time fetch helper — Plan 61-01 callers + tests use this entry point.

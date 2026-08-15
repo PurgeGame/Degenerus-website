@@ -7,6 +7,7 @@ import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { getProvider, TX_CONFIRMED_EVENT } from '../app/contracts.js';
 import { displayEthCompact } from '../app/scaling.js';
 import { get, subscribe } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import {
   BASE_SEPOLIA_FAUCET_URL,
   isBaseSepolia,
@@ -101,8 +102,7 @@ export class AppEthOnramp extends HTMLElement {
     if (typeof document !== 'undefined') {
       document.addEventListener?.('visibilitychange', this.#focusListener);
     }
-    this.#timer = setInterval(() => void this.#refresh(), POLL_MS);
-    try { this.#timer?.unref?.(); } catch (_error) { /* browser timer */ }
+    this.#timer = registerComponentPoll(() => void this.#refresh(), POLL_MS);
     void this.#refresh();
   }
 
@@ -121,7 +121,7 @@ export class AppEthOnramp extends HTMLElement {
       document.removeEventListener?.('visibilitychange', this.#focusListener);
     }
     this.#focusListener = null;
-    if (this.#timer != null) clearInterval(this.#timer);
+    if (typeof this.#timer === 'function') this.#timer();
     this.#timer = null;
     this.#seq += 1;
     this.#initialized = false;

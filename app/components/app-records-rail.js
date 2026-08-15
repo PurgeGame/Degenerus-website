@@ -28,6 +28,7 @@ import {
 } from '../app/records.js';
 import { displayEthCompact, displayToken } from '../app/scaling.js';
 import { TX_CONFIRMED_EVENT } from '../app/contracts.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import {
   readPurchaseQuote,
   ticketCostFromTickets,
@@ -429,8 +430,7 @@ class AppRecordsRail extends HTMLElement {
       this.#profileLinkedListener = () => { void this.#refreshProfiles(); };
       document.addEventListener(PROFILE_LINKED_EVENT, this.#profileLinkedListener);
     }
-    this.#timer = setInterval(() => { void this.#refresh(); }, POLL_MS);
-    try { this.#timer?.unref?.(); } catch (_e) { /* browser timer */ }
+    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
     void this.#refresh();
   }
 
@@ -449,7 +449,7 @@ class AppRecordsRail extends HTMLElement {
       catch (_e) { /* defensive */ }
     }
     this.#profileLinkedListener = null;
-    if (this.#timer != null) clearInterval(this.#timer);
+    if (typeof this.#timer === 'function') this.#timer();
     this.#timer = null;
     if (this.#noticeTimer != null) clearTimeout(this.#noticeTimer);
     this.#noticeTimer = null;

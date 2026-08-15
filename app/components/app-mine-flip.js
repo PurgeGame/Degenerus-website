@@ -16,17 +16,10 @@ import { subscribe, get, getActingAddress } from '../app/store.js';
 import { VOLUME_WINDOW } from '../app/chain-config.js';
 import { loadWorkQueue, nextAction } from '../app/work-queue.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const POLL_INTERVAL_MS = 30_000;
 const RESOLVER_SOURCE = 'mine-flip-resolver';
-
-function _setIntervalUnref(fn, ms) {
-  const handle = setInterval(fn, ms);
-  if (handle && typeof handle.unref === 'function') {
-    try { handle.unref(); } catch (_error) { /* browser timer */ }
-  }
-  return handle;
-}
 
 function _mineFlipGeneration() {
   const gameState = get('app.gameState') || {};
@@ -66,7 +59,7 @@ class AppMineFlipResolver extends HTMLElement {
     this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
     this.#unsubs.push(subscribe('app.gameState', () => this.#refresh()));
 
-    this.#pollHandle = _setIntervalUnref(() => this.#refresh(), POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_INTERVAL_MS);
     this.#onFocus = () => { if (!document.hidden) this.#refresh(); };
     document.addEventListener('visibilitychange', this.#onFocus);
     this.#refresh();
@@ -77,7 +70,7 @@ class AppMineFlipResolver extends HTMLElement {
       try { unsubscribe(); } catch (_error) { /* defensive */ }
     });
     this.#unsubs = [];
-    if (this.#pollHandle != null) clearInterval(this.#pollHandle);
+    if (typeof this.#pollHandle === 'function') this.#pollHandle();
     if (this.#onFocus) document.removeEventListener('visibilitychange', this.#onFocus);
     this.#pollHandle = null;
     this.#onFocus = null;

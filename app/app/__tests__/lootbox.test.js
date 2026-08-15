@@ -1184,7 +1184,8 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     });
     result.buildTx();
     const sentTx = fakeSigner._calls.sendTransaction[0].tx;
-    assert.equal(sentTx.gasLimit, 50_400n, 'gasLimit carries the shared 20% estimate cushion');
+    assert.equal(sentTx.gasLimit, 180_400n,
+      'gasLimit carries the shared 20% pad plus the absolute branch cushion');
   });
 
   test('estimateGas rejection: pre-warm still resolves; gasLimit undefined (graceful fallback)', async () => {

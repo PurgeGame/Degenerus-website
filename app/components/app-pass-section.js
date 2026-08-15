@@ -38,6 +38,7 @@ import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { parseEther } from 'ethers';
 import { get, update, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import {
@@ -138,17 +139,6 @@ function lazyPassCostWei(level) {
     total += p;
   }
   return total;
-}
-
-// Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
-// 30s poll tick so node:test processes exit cleanly when no other open handles
-// remain. Verbatim port of app-decimator-panel.js _setIntervalUnref.
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
 }
 
 function _setTimeoutUnref(fn, ms) {
@@ -416,8 +406,8 @@ class AppPassSection extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#pollController) {
@@ -837,11 +827,8 @@ class AppPassSection extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
-    }
-    if (typeof setInterval !== 'function') return;
-    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), POLL_INTERVAL_MS);
+    if (typeof this.#pollHandle === 'function') this.#pollHandle();
+    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), POLL_INTERVAL_MS);
   }
 
   async #runPollCycle() {

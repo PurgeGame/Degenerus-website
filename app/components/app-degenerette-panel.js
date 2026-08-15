@@ -107,14 +107,7 @@ import {
 import { boonBoostDelta } from '../app/boons.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
-
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
+import { registerComponentPoll } from '../app/component-poll.js';
 
 // Clipboard API calls must happen during the original click's transient user
 // activation. This fallback uses a real, temporarily mounted field instead of
@@ -1015,8 +1008,8 @@ class AppDegenerettePanel extends HTMLElement {
     this.#pendingRecoverySeq += 1;
     this.#pendingRecoveryAddress = null;
     this.#resolutionGeneration += 1;
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#pollController) {
@@ -1970,11 +1963,10 @@ class AppDegenerettePanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
     }
-    if (typeof setInterval !== 'function') return;
-    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), POLL_INTERVAL_MS);
   }
 
   #syncPickerContext() {

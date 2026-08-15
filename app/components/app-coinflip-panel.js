@@ -35,17 +35,7 @@ import { CHAIN } from '../app/chain-config.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { depositCoinflip, parseCoinflipDepositFromReceipt } from '../app/coinflip.js';
-
-// Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
-// 30s poll tick so node:test processes exit cleanly when no other open handles
-// remain. Verbatim port of app-decimator-panel.js _setIntervalUnref.
-function _setIntervalUnref(fn, ms) {
-  const h = setInterval(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
@@ -81,8 +71,8 @@ class AppCoinflipPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
     }
     if (this.#pollController) {
@@ -145,11 +135,10 @@ class AppCoinflipPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_) { /* defensive */ }
     }
-    if (typeof setInterval !== 'function') return;
-    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), POLL_INTERVAL_MS);
   }
 
   async #runPollCycle() {

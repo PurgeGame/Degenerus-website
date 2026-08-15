@@ -147,12 +147,18 @@
            row once BOTH the board and the flip have played out. -->
       <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
         <div class="jackpot-hero__draw">
-          <h2 class="jackpot-hero__draw-title">
-            <span>DEGENERUS</span>
-            <strong>DAILY DRAWING</strong>
-          </h2>
-          <last-day-jackpot></last-day-jackpot>
-          <replay-panel single-button></replay-panel>
+          <!-- Keep the illustrated drawing instrument independent from the
+               expandable day-history / summary region below it. The hero row
+               can grow when another column opens a disclosure without
+               stretching this backplate or moving its four foil modules. -->
+          <div class="jackpot-hero__machine">
+            <h2 class="jackpot-hero__draw-title">
+              <span>DEGENERUS</span>
+              <strong>DAILY DRAWING</strong>
+            </h2>
+            <last-day-jackpot></last-day-jackpot>
+            <replay-panel single-button></replay-panel>
+          </div>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
                aria-label="Jackpot day history">
             <button type="button" data-bind="jackpot-day-prev"

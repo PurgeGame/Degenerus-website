@@ -513,6 +513,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'composite pictograms do not contain another approximate FLIP redraw');
     assert.match(PANEL_SRC, /qst-painted-icon__flip-mark[\s\S]*?src = '\/whitepaper\/flame-logo-split\.svg'/,
       'composite quest icons layer the real FLIP mark');
+    assert.match(PANEL_SRC, /9:\s*'\/whitepaper\/flame-logo-split\.svg'/,
+      'Redeem FLIP gives the canonical mark the whole icon tile instead of crushing it into a vertical shorthand');
   });
 
   test('quest action sheets have themed completion hierarchy and motion-safe polish', () => {
@@ -1092,8 +1094,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.doesNotMatch(el.textContent, /Mint with FLIP/i);
     assert.deepEqual(
       redeemSlot.querySelector('.qst-slot-icon').querySelectorAll('img').map((img) => img.src),
-      ['/app/assets/quests/redeem-flip.svg', '/whitepaper/flame-logo-split.svg'],
-      'Redeem FLIP keeps its ticket pictogram but uses the canonical FLIP mark inside it',
+      ['/whitepaper/flame-logo-split.svg'],
+      'Redeem FLIP gives the canonical mark the full icon tile instead of a tiny composite',
     );
     el.disconnectedCallback();
   });

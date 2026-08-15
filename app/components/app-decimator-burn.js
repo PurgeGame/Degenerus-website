@@ -21,6 +21,7 @@ import {
   readDecimatorRawBurnTotal,
 } from '../app/decimator.js';
 import { compactUiError } from '../app/ui-error.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 
@@ -112,8 +113,7 @@ class AppDecimatorBurn extends HTMLElement {
         else void this.#refresh();
       }));
     }
-    this.#timer = setInterval(() => { void this.#refresh(); }, POLL_MS);
-    try { this.#timer?.unref?.(); } catch (_e) { /* browser timer */ }
+    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
     void this.#refresh();
   }
 
@@ -122,7 +122,7 @@ class AppDecimatorBurn extends HTMLElement {
       try { unsubscribe(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#timer != null) clearInterval(this.#timer);
+    if (typeof this.#timer === 'function') this.#timer();
     if (this.#postBurnTimer != null) clearTimeout(this.#postBurnTimer);
     if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
     if (typeof document !== 'undefined') {
