@@ -15,6 +15,10 @@
        HTML parse. KEEP THE -vNN SUFFIXES IN SYNC with app.css when art bumps. -->
   <link rel="preload" as="image" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
   <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v4.webp">
+  <!-- Inter is self-hosted (shared/nav.css @font-face). Preloading the latin
+       file lets it beat first paint on cold loads — without this the swap
+       from the fallback font re-wraps the nav and headline (~0.16 CLS). -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/shared/fonts/inter-var-latin-v20.woff2">
   <link rel="stylesheet" href="/shared/nav.css">
   <link rel="stylesheet" href="/app/styles/base.css">
   <link rel="stylesheet" href="/app/styles/panels.css">
