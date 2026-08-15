@@ -8,15 +8,19 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
 
-# CSP in REPORT-ONLY mode: violations log to the browser console and block
-# nothing. Flip to enforcing (rename to Content-Security-Policy) only after a
-# session exercised wallet connect + all panels with a clean console.
+# CSP ENFORCING since 2026-08-15, after a full report-only pass (cold load,
+# every panel, replay/reveal overlays, settings, referrals, and the live
+# WalletConnect QR modal — 878-request esm.sh SDK graph + relay + web3modal)
+# surfaced exactly three missing origins, all added below.
 # Origins: publicnode/base.org = chain RPC (MAINNET CUTOVER: add the mainnet
 # RPC hosts here); fly.dev = DB API; api.degener.us = session server; esm.sh =
 # lazy WalletConnect SDK; walletconnect/web3modal = WC relay, config, verify
-# iframe, wallet icons; discord CDN = avatars; blob: = the badge bundle store.
+# iframe, wallet icons; discord CDN = avatars; blob: = the badge bundle store;
+# fonts.googleapis/gstatic = Inter via shared/nav.css @import;
+# cloudflareinsights = the zone's auto-injected Web Analytics beacon (script)
+# and its /cdn-cgi/rum POST target (connect).
 /app/*
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; connect-src 'self' https://degenerus-db.fly.dev https://api.degener.us https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org wss://relay.walletconnect.com wss://relay.walletconnect.org; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://degenerus-db.fly.dev https://api.degener.us https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
 
 /index.html
   Cache-Control: no-store
