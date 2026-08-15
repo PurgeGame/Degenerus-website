@@ -524,9 +524,14 @@
 
     var nav = buildNav(config);
 
-    // Insert at top of .container or .page or body
+    // Insert at top of .container or .page or body. A page may reserve the
+    // nav's footprint with a #nav-slot placeholder (the app does, to avoid
+    // the layout shift of a late top-of-page insertion) — swap into it.
+    var slot = document.getElementById('nav-slot');
     var container = document.querySelector('.container') || document.querySelector('.page') || document.body;
-    if (container.firstChild) {
+    if (slot && slot.parentNode) {
+      slot.parentNode.replaceChild(nav, slot);
+    } else if (container.firstChild) {
       container.insertBefore(nav, container.firstChild);
     } else {
       container.appendChild(nav);

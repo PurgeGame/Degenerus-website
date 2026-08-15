@@ -765,7 +765,7 @@ class AppDecimatorPanel extends HTMLElement {
             <label class="dec-input-label" for="dec-tickets-input">
               <span data-bind="dec-ticket-action-label">Buy tickets</span>
             </label>
-            <span class="dec-input-accessories" aria-label="Ticket purchase modifiers">
+            <span class="dec-input-accessories" role="group" aria-label="Ticket purchase modifiers">
               <boon-product-indicator product="purchase"
                                       variant="purchase-control"></boon-product-indicator>
               <quest-objective-indicator product="purchase"></quest-objective-indicator>
@@ -790,7 +790,7 @@ class AppDecimatorPanel extends HTMLElement {
             <label class="dec-input-label" for="dec-lootbox-eth-input">
               <span>Buy luckbox</span>
             </label>
-            <span class="dec-input-accessories" aria-label="Luckbox purchase modifiers">
+            <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
               <boon-product-indicator product="lootbox"
                                       variant="purchase-control"></boon-product-indicator>
               <quest-objective-indicator product="lootbox"></quest-objective-indicator>

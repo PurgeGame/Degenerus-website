@@ -16,11 +16,11 @@
 # RPC hosts here); fly.dev = DB API; api.degener.us = session server; esm.sh =
 # lazy WalletConnect SDK; walletconnect/web3modal = WC relay, config, verify
 # iframe, wallet icons; discord CDN = avatars; blob: = the badge bundle store;
-# fonts.googleapis/gstatic = Inter via shared/nav.css @import;
 # cloudflareinsights = the zone's auto-injected Web Analytics beacon (script)
-# and its /cdn-cgi/rum POST target (connect).
+# and its /cdn-cgi/rum POST target (connect). Google Fonts origins were
+# dropped 2026-08-15 when Inter moved to self-hosted /shared/fonts/.
 /app/*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://degenerus-db.fly.dev https://api.degener.us https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://degenerus-db.fly.dev https://api.degener.us https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
 
 /index.html
   Cache-Control: no-store
@@ -69,6 +69,12 @@
 
 /shared/*
   Cache-Control: no-store
+
+# Vendored font files are immutable (versioned filenames). This rule sits
+# AFTER /shared/* because on a same-header collision the later matching rule
+# wins — without it the fonts would re-download no-store on every page load.
+/shared/fonts/*
+  Cache-Control: public, max-age=604800, immutable
 
 # App ES modules had NO rule here, so they fell back to the 4h default
 # (max-age=14400). That bit on 2026-08-05: the RPC endpoint in

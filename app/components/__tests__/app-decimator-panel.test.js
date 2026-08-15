@@ -674,7 +674,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
-      /class="dec-input-accessories" aria-label="Luckbox purchase modifiers"[\s\S]*?<boon-product-indicator[\s\S]*?<quest-objective-indicator product="lootbox"/,
+      /class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<boon-product-indicator[\s\S]*?<quest-objective-indicator product="lootbox"/,
       'boon and quest markers have dedicated non-overlapping slots');
     assert.doesNotMatch(el.innerHTML, /Luckbox value/i);
     assert.match(

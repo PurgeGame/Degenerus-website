@@ -2250,7 +2250,7 @@ class AppDailyFlip extends HTMLElement {
                 <small class="df-coinflip-record__label df-coinflip-record__label--recent"
                        aria-hidden="true">LAST 15</small>
                 <span class="df-coinflip-record__recent" data-bind="df-coinflip-recent"
-                      aria-label="Last fifteen coinflip results"></span>
+                      role="img" aria-label="Last fifteen coinflip results"></span>
               </span>
             </span>
             <button type="button" class="df-auto-rebuy-cta"

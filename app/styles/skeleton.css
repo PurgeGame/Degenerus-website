@@ -90,3 +90,59 @@
   border-color: var(--text-secondary, #aaa);
   color: var(--text-primary, #eee);
 }
+
+/* ---- First-paint geometry reservations (2026-08-15) ----
+   Pre-upgrade custom elements are inline/empty, so the jackpot hero used to
+   re-flow when they mounted — 0.83 of a measured 1.33 CLS, with another 0.12
+   from the JS-injected nav. Reserving each block's measured footprint holds
+   the page still. Heights measured on prod at 390px and 1280px viewports;
+   between the 640px nav breakpoint and the hero's 1100px grid switch (both
+   from existing stylesheets) conservative floors apply, so tablets keep a
+   small residual shift rather than blank space. */
+
+#nav-slot { height: 49px; }
+@media (max-width: 640px) { #nav-slot { height: 81px; } }
+
+gold-rush-headline { display: block; min-height: 120px; }
+body.layout-basic .jackpot-hero__draw { min-height: 320px; }
+body.layout-basic .jackpot-hero > app-daily-flip { display: block; min-height: 320px; }
+body.layout-basic .jackpot-hero > app-decimator-panel { min-height: 300px; }
+
+@media (max-width: 640px) {
+  gold-rush-headline { min-height: 143px; }
+  body.layout-basic .jackpot-hero__draw { min-height: 390px; }
+  body.layout-basic .jackpot-hero > app-daily-flip { min-height: 402px; }
+  body.layout-basic .jackpot-hero > app-decimator-panel { min-height: 380px; }
+}
+
+@media (min-width: 1100px) {
+  gold-rush-headline { min-height: 206px; }
+  body.layout-basic .jackpot-hero__draw { min-height: 470px; }
+  body.layout-basic .jackpot-hero > app-daily-flip { min-height: 470px; }
+  body.layout-basic .jackpot-hero > app-decimator-panel { min-height: 470px; }
+}
+
+/* The level-pool strip above the hero mounts late and pushed the hero down
+   ~46px on mobile. Same reservation idea as the hero blocks above. */
+app-pool-progress { display: block; min-height: 34px; }
+@media (max-width: 640px) { app-pool-progress { min-height: 45px; } }
+
+/* The nav grows when the jackpot clock hydrates (one row -> wrapped rows on
+   mobile). Scoped to the app page body class so other pages' navs are
+   untouched. Heights match the #nav-slot reservation above. */
+body.layout-basic .unified-nav { min-height: 49px; }
+@media (max-width: 640px) { body.layout-basic .unified-nav { min-height: 81px; } }
+
+/* The disconnected protocol-wallet banner ships hidden and unhides after the
+   store settles — reserve its footprint ONLY when the html.no-wallet-session
+   class (inline head script) says no persisted session exists, i.e. exactly
+   the visitors for whom it will appear. Returning connected players keep the
+   collapsed default. */
+html.no-wallet-session app-protocol-wallet-banner[hidden] {
+  display: block;
+  visibility: hidden;
+  min-height: 50px;
+}
+@media (max-width: 640px) {
+  html.no-wallet-session app-protocol-wallet-banner[hidden] { min-height: 87px; }
+}

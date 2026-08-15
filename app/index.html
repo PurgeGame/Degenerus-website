@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus App</title>
+  <!-- First-paint signal for skeleton.css: no persisted wallet session means
+       the disconnected protocol-wallet banner WILL appear, so its footprint
+       can be reserved before it mounts (wallet.js sets/clears lastWalletRdns
+       on every connect/disconnect path). Must run before the stylesheets. -->
+  <script>try{if(!localStorage.getItem('lastWalletRdns'))document.documentElement.classList.add('no-wallet-session');}catch(e){}</script>
+  <!-- The jackpot hero art is referenced from app.css background rules, so the
+       browser only discovers it after CSS parses AND the custom elements mount
+       — it was the LCP element arriving last. Preload starts both fetches at
+       HTML parse. KEEP THE -vNN SUFFIXES IN SYNC with app.css when art bumps. -->
+  <link rel="preload" as="image" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
+  <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v4.webp">
   <link rel="stylesheet" href="/shared/nav.css">
   <link rel="stylesheet" href="/app/styles/base.css">
   <link rel="stylesheet" href="/app/styles/panels.css">
@@ -58,12 +69,16 @@
   <script src="/app/app/tutorial-frame-freeze.js"></script>
 </head>
 <body class="layout-basic">
+  <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
+       push the whole page down 43px after first paint (0.18 of mobile CLS).
+       testnet-beta-banner.js still hides it when the configured chain is not
+       Base Sepolia. MAINNET CUTOVER (WR-06): re-add the `hidden` attribute
+       here so mainnet visitors never see a testnet flash. -->
   <div
     id="testnet-beta-banner"
     class="testnet-beta-banner"
     role="status"
     aria-label="Testnet beta warning"
-    hidden
   >
     <span class="testnet-beta-banner__dot" aria-hidden="true"></span>
     <strong>TESTNET BETA · NOT REAL MONEY</strong>
@@ -75,8 +90,12 @@
       aria-label="Get free Base Sepolia play money from the Alchemy faucet"
     >GET FREE PLAY MONEY</a>
   </div>
+  <h1 style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">Degenerus App</h1>
   <div class="container">
-    <!-- Nav injected by shared/nav.js (prepends into .container; order-independent) -->
+    <!-- Nav injected by shared/nav.js. #nav-slot reserves the nav's footprint
+         (height in skeleton.css) so the late insertion causes no layout shift;
+         nav.js swaps the real nav into the slot when it finds one. -->
+    <div id="nav-slot" aria-hidden="true"></div>
 
     <!-- Chrome strip (user call): no page header — the nav bar carries the
          Degenerus logo + Discord + wallet Connect (its links/extra buttons
