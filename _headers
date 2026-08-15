@@ -70,10 +70,13 @@
 /shared/*
   Cache-Control: no-store
 
-# Vendored font files are immutable (versioned filenames). This rule sits
-# AFTER /shared/* because on a same-header collision the later matching rule
-# wins — without it the fonts would re-download no-store on every page load.
+# Vendored font files are immutable (versioned filenames). Cloudflare MERGES
+# same-name headers across matching rules (verified live: the /shared/*
+# no-store landed in the same Cache-Control as this rule's value, and
+# no-store wins in browsers) — so DETACH the inherited header first with the
+# `!` syntax, then set the long-cache value.
 /shared/fonts/*
+  ! Cache-Control
   Cache-Control: public, max-age=604800, immutable
 
 # App ES modules had NO rule here, so they fell back to the 4h default
