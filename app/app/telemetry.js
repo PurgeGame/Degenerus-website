@@ -82,9 +82,13 @@ function send(payload) {
   if (!payload) return;
   try {
     const body = JSON.stringify(payload);
-    const blob = new Blob([body], { type: 'application/json' });
+    // text/plain keeps the request CORS-SIMPLE — no preflight. Chromium
+    // accepts an application/json beacon (returns true) then silently drops
+    // the POST after the preflight, proven live 2026-08-15; the API parses
+    // text/plain bodies back into JSON for exactly this reason.
+    const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
     if (!(navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, blob))) {
-      fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
+      fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'text/plain;charset=UTF-8' }, body, keepalive: true }).catch(() => {});
     }
     sentCount += payload.events.length;
   } catch (_e) { /* telemetry never surfaces */ }
