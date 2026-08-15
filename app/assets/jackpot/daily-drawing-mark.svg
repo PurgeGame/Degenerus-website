@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Degenerus Daily Drawing">
+  <defs>
+    <linearGradient id="dd-gold" x1="18" y1="8" x2="82" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff0ad"/>
+      <stop offset=".34" stop-color="#d99a2b"/>
+      <stop offset=".7" stop-color="#8b4a0c"/>
+      <stop offset="1" stop-color="#f2c45f"/>
+    </linearGradient>
+    <radialGradient id="dd-red" cx="0" cy="0" r="1" gradientTransform="translate(42 35) rotate(52) scale(50)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a91d21"/>
+      <stop offset=".58" stop-color="#4d080b"/>
+      <stop offset="1" stop-color="#150203"/>
+    </radialGradient>
+    <filter id="dd-glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M50 3 60 12h19l9 9v19l9 10-9 10v19l-9 9H60L50 97 40 88H21l-9-9V60L3 50l9-10V21l9-9h19Z"
+        fill="#080304" stroke="url(#dd-gold)" stroke-width="2.2"/>
+  <path d="M50 11 58 19h17l6 6v17l8 8-8 8v17l-6 6H58l-8 8-8-8H25l-6-6V58l-8-8 8-8V25l6-6h17Z"
+        fill="url(#dd-red)" stroke="#6e3510" stroke-width="1.2"/>
+  <g fill="#f6cf70" opacity=".82">
+    <path d="m50 13 4 4-4 4-4-4Z"/><path d="m83 46 4 4-4 4-4-4Z"/>
+    <path d="m50 79 4 4-4 4-4-4Z"/><path d="m17 46 4 4-4 4-4-4Z"/>
+  </g>
+  <circle cx="50" cy="50" r="29" fill="#ed0e11" stroke="#ffcf66" stroke-width="1.6" filter="url(#dd-glow)"/>
+  <circle cx="50" cy="50" r="22.5" fill="#101010"/>
+  <circle cx="50" cy="50" r="17" fill="#fff4d4" stroke="#d69b35" stroke-width="1"/>
+  <path fill="#130203" d="M51.4 66.5c-9.2 0-15.9-5.9-15.9-14.3 0-6.7 3.7-11.4 9-16.2-.8 5.9 1.1 9.8 4.1 12.5-.8-6 1.6-12.1 7.6-18.4-.5 7.6 3.9 11.7 6.8 15.7 2.2 2.9 3.5 6.3 3.5 10 0 6.1-4.9 10.7-11.4 10.7 3.2-2.5 5-5.4 5-8.8 0-3.1-1.6-5.5-4.1-8.3.1 4.9-2.1 7.7-4.6 10.4-1.7 1.9-2.5 3.8-2.1 5.8-2.9-2.1-4.9-5.1-4.9-9-2.2 2.7-3.3 5.5-3.3 8.4 0 5 4.1 8.1 10.3 8.1Z"/>
+</svg>

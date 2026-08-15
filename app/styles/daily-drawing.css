@@ -1,0 +1,193 @@
+/* The Daily Drawing is the hero's attraction, not a small plaque inside a
+   full-width empty cabinet. This sheet is intentionally separate from the
+   at-capacity app.css and owns only the cabinet's responsive identity pass. */
+
+body.layout-basic .jackpot-hero__machine {
+  --jp-board-size: clamp(15rem, 68cqi, 28rem);
+  --jp-foil-size: clamp(2.75rem, 11.8cqi, 5.65rem);
+  --jp-side-gap: clamp(0.2rem, 0.85cqi, 0.42rem);
+  --jp-stage-top: 3.64rem;
+  width: min(100%, 48rem);
+  margin-inline: auto;
+  padding: 0.24rem 0.34rem 0.38rem;
+  background:
+    radial-gradient(62% 18% at 50% 2%, rgba(237, 14, 17, 0.11), transparent 72%),
+    radial-gradient(48% 72% at 50% 47%, rgba(117, 17, 20, 0.1), transparent 76%),
+    url('/app/assets/jackpot/daily-drawing-backplate-v4.webp') center / 100% 100% no-repeat,
+    #090203;
+}
+
+body.layout-basic .jackpot-hero__draw-title {
+  display: grid;
+  width: min(27rem, 88%);
+  height: 3.42rem;
+  flex-basis: 3.42rem;
+  grid-template-columns: 2.92rem minmax(0, auto);
+  grid-template-rows: 1fr 1fr;
+  column-gap: 0.62rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0.04rem auto -0.08rem;
+  padding: 0.08rem 0.8rem;
+  text-align: left;
+}
+
+body.layout-basic .jackpot-hero__draw-title::before {
+  inset: 0.42rem 0 0.34rem;
+  clip-path: none;
+  background: linear-gradient(90deg, transparent, rgba(54, 5, 8, 0.72) 16%, rgba(17, 2, 3, 0.94) 50%, rgba(54, 5, 8, 0.72) 84%, transparent);
+}
+
+body.layout-basic .jackpot-hero__draw-title::after {
+  inset: auto 4% 0.25rem;
+  height: 1px;
+  clip-path: none;
+  background: linear-gradient(90deg, transparent, rgba(201, 142, 45, 0.54) 18%, #f2c45f 50%, rgba(201, 142, 45, 0.54) 82%, transparent);
+  box-shadow: 0 -2.5rem 0 rgba(169, 29, 33, 0.16), 0 0 8px rgba(242, 196, 95, 0.26);
+}
+
+body.layout-basic .jackpot-hero__draw-mark {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  width: 2.92rem;
+  height: 2.92rem;
+  filter: drop-shadow(0 0 7px rgba(237, 14, 17, 0.26));
+}
+
+body.layout-basic .jackpot-hero__draw-title > span {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: 0.14rem;
+  color: #f2b84d;
+  font-size: clamp(0.5rem, 1.55cqi, 0.62rem);
+  letter-spacing: 0.3em;
+  text-shadow: 0 1px #160101, 0 0 8px rgba(237, 14, 17, 0.28);
+}
+
+body.layout-basic .jackpot-hero__draw-title > strong {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  color: transparent;
+  background: linear-gradient(180deg, #fff4c8 4%, #ffe08a 48%, #c98219 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-size: clamp(0.92rem, 3.35cqi, 1.14rem);
+  letter-spacing: 0.12em;
+  text-shadow: none;
+  filter: drop-shadow(0 1px 0 #160101) drop-shadow(0 0 6px rgba(245, 166, 35, 0.2));
+}
+
+body.layout-basic .jackpot-hero__machine replay-panel .panel {
+  padding-top: 0.12rem;
+  padding-bottom: 0.38rem;
+}
+
+/* Foil tickets sit in actual machine sockets here. Empty sockets keep the
+   ticket's four-panel silhouette and centre seal in dim steel; owned tickets
+   retain their real trait artwork but use one neutral silver chassis so the
+   surrounding cabinet does not change colour from ticket to ticket. */
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot {
+  justify-self: center;
+  border-color: rgba(166, 174, 184, 0.34);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(158, 166, 176, 0.2) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(0deg, transparent calc(50% - 0.5px), rgba(158, 166, 176, 0.2) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(145deg, rgba(93, 101, 111, 0.15), rgba(6, 7, 9, 0.74) 48%, rgba(47, 52, 58, 0.17));
+  box-shadow:
+    inset 0 3px 9px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 2px rgba(12, 14, 17, 0.72),
+    inset 0 0 0 3px rgba(178, 186, 196, 0.055),
+    0 1px 0 rgba(226, 232, 240, 0.08);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:not(.is-loaded)::after {
+  position: absolute;
+  z-index: 1;
+  width: 22%;
+  height: 22%;
+  box-sizing: border-box;
+  border: 1px solid rgba(172, 180, 190, 0.34);
+  border-radius: 2px;
+  background: linear-gradient(145deg, rgba(79, 86, 95, 0.38), rgba(11, 13, 16, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(222, 228, 234, 0.035), 0 1px 3px rgba(0, 0, 0, 0.72);
+  content: '';
+  transform: rotate(45deg);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:not(.is-loaded)::before {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  width: 10%;
+  height: 14%;
+  background: rgba(181, 188, 197, 0.3);
+  content: '';
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded {
+  border-color: rgba(173, 181, 190, 0.5);
+  background: linear-gradient(145deg, rgba(135, 144, 154, 0.17), rgba(5, 6, 8, 0.88) 56%, rgba(88, 95, 104, 0.14));
+  box-shadow:
+    inset 0 2px 7px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 1px rgba(218, 224, 231, 0.07),
+    0 1px 0 rgba(238, 242, 246, 0.12);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-ticket {
+  width: calc(100% - 0.28rem);
+  height: calc(100% - 0.28rem);
+  place-self: center;
+  border-color: #aeb5bd;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+    0 1px 4px rgba(0, 0, 0, 0.68);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-ticket::before,
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-ticket::after {
+  background: #aeb5bd;
+  box-shadow: 0 0 2px rgba(235, 239, 244, 0.22);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center {
+  border-color: #bbc2ca;
+  background: linear-gradient(145deg, #eef1f4 0%, #858d96 44%, #d7dde2 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(45, 51, 58, 0.52),
+    inset 0 1px 2px rgba(255, 255, 255, 0.5),
+    0 0 3px rgba(207, 214, 222, 0.34);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center img {
+  filter: grayscale(1) contrast(1.08) brightness(0.42);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-match {
+  border-color: #d8dee5;
+  box-shadow:
+    inset 0 0 0 1px rgba(247, 250, 252, 0.18),
+    0 0 6px rgba(74, 222, 128, 0.78),
+    0 0 16px rgba(34, 197, 94, 0.42);
+}
+
+@media (max-width: 430px) {
+  body.layout-basic .jackpot-hero__draw-title {
+    width: 92%;
+    grid-template-columns: 2.62rem minmax(0, auto);
+    column-gap: 0.48rem;
+    padding-inline: 0.4rem;
+  }
+  body.layout-basic .jackpot-hero__draw-mark { width: 2.62rem; height: 2.62rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .jackpot-hero__draw-mark { filter: none; }
+}
+
+@media (forced-colors: active) {
+  body.layout-basic .jackpot-hero__draw-title > strong { color: CanvasText; background: none; filter: none; }
+}
