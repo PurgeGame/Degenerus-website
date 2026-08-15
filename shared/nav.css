@@ -288,6 +288,17 @@ a {
   .nav-logo { width: 30px; height: 30px; }
   .nav-links a { font-size: 0.72rem; padding: 0.3em 0.45em; }
   .nav-btn { padding: 0.3rem 0.45rem; font-size: 0.68rem; }
-  .nav-btn .btn-label { display: none; }
+  /* Visually hidden, NOT display:none — the labels are these icon buttons'
+     only accessible names (and they track state: Connect -> 0x…abcd), so
+     hiding them from layout must not hide them from the accessibility tree. */
+  .nav-btn .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .nav-affiliate input { width: 100px; }
 }
