@@ -296,7 +296,7 @@ class AppBalancesStrip extends HTMLElement {
     if (strip) strip.classList.toggle('abs-strip--fuzzed', fuzzed);
     if (hint) {
       hint.hidden = !fuzzed;
-      hint.textContent = 'Balances hidden — reveal the jackpot draw and the daily coinflip first.';
+      hint.textContent = 'Balances hidden — reveal the jackpot draw and the Community Coinflip first.';
     }
 
     const vals = this.#tileValues();

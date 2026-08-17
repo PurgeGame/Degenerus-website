@@ -166,6 +166,23 @@ describe('headless Mine FLIP resolver', () => {
     noWork.disconnectedCallback();
   });
 
+  test('re-probes immediately when the direct RNG day-sync witness changes', async () => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: false });
+    const resolver = await mountResolver();
+    assert.equal(publishedResolver(), undefined);
+
+    // day-rollover publishes isRngFulfilled() through app.daySync. The Mine
+    // FLIP action must appear off that edge, not the 30-second safety poll.
+    stubProbe({ hasWork: true });
+    store.update('app.daySync', { day: 81, rngFulfilled: true });
+    await settle();
+
+    assert.match(publishedResolver()?.id || '', /:day-81$/);
+    assert.equal(publishedResolver()?.state, 'ready');
+    resolver.disconnectedCallback();
+  });
+
   test('does not offer work the wallet cannot afford to mine', async () => {
     store.update('connected.address', TEST_ADDR);
     stubProbe({ hasWork: true, balanceWei: 100n, gasEstimate: 100n, maxFeePerGas: 2n });
@@ -243,7 +260,11 @@ describe('single-surface mounting', () => {
   test('keeps the lifecycle refresh and teardown guards', () => {
     assert.match(src, /registerComponentPoll/);
     assert.match(src, /visibilitychange/);
+    assert.match(src, /subscribe\('app\.daySync'/,
+      'the direct RNG fulfillment edge immediately re-probes the crank');
     assert.match(src, /if \(seq !== this\.#loadSeq\) return/);
     assert.match(src, /clearPendingActions\(RESOLVER_SOURCE\)/);
+    assert.match(src, /refreshForDayShift\(\{ includePlayer: true \}\)/,
+      'a completed Mine FLIP immediately reconciles the jackpot feeds');
   });
 });

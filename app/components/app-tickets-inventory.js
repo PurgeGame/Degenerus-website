@@ -42,6 +42,7 @@ import { registerComponentPoll } from '../app/component-poll.js';
 import {
   applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
+  dgnDisplaySymbol,
   dgnPartitionTicketEntries,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
@@ -360,7 +361,7 @@ function invTicketHasGold(ids) {
 function invEntryLabel(traitId) {
   const { q, sym, col } = invTraitToQSC(Number(traitId));
   const category = INV_QUADRANTS[q];
-  const symbol = INV_SYMBOLS[category]?.[sym] || 'trait';
+  const symbol = dgnDisplaySymbol(q, sym, col) || 'trait';
   const color = INV_COLORS[col] || 'unknown';
   return `${symbol.replace(/[_-]+/g, ' ')} ${color}`;
 }
@@ -2141,7 +2142,7 @@ class AppTicketsInventory extends HTMLElement {
         if (col === INV_GOLD_COLOR_IDX) cell.classList.add('trait-quadrant--gold');
         const img = document.createElement('img');
         img.src = invBadgePath(q, sym, col);
-        img.alt = `${INV_SYMBOLS[INV_QUADRANTS[q]][sym]} ${INV_COLORS[col]}`;
+        img.alt = `${dgnDisplaySymbol(q, sym, col)} ${INV_COLORS[col]}`;
         img.loading = 'lazy';
         img.decoding = 'async';
         cell.appendChild(img);
@@ -2315,7 +2316,7 @@ class AppTicketsInventory extends HTMLElement {
           }
           const img = document.createElement('img');
           img.src = invBadgePath(q, s, c);
-          img.alt = `${INV_SYMBOLS[cat][s]} ${INV_COLORS[c]}`;
+          img.alt = `${dgnDisplaySymbol(q, s, c)} ${INV_COLORS[c]}`;
           img.loading = 'lazy';
           img.decoding = 'async';
           cell.appendChild(img);

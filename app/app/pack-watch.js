@@ -1039,6 +1039,26 @@ function _comboKey(ids) {
 }
 
 /**
+ * Remove the generic-feed copies owned by the authoritative foil projection.
+ * `/tickets/by-trait` has no foil discriminator, and some index versions fold
+ * the four foil lines into that ordinary card stream. Use a multiset so equal
+ * foil lines consume only their real number of copies instead of swallowing an
+ * unrelated ordinary ticket with the same traits.
+ */
+function _withoutProjectedFoilTickets(pieces, keyCounts) {
+  if (!keyCounts?.size) return pieces;
+  const remaining = new Map(keyCounts);
+  return pieces.filter((piece) => {
+    if (piece?.kind !== 'ticket' || !Array.isArray(piece.traitIds)) return true;
+    const key = _comboKey(piece.traitIds);
+    const count = remaining.get(key) || 0;
+    if (count <= 0) return true;
+    remaining.set(key, count - 1);
+    return false;
+  });
+}
+
+/**
  * The level's foil-pack line keys. `complete` distinguishes a real no-pack
  * answer from the indexer lagging behind a just-mined foil purchase; without
  * that distinction the four special lines could be permanently revealed as an
@@ -1176,8 +1196,19 @@ async function _inspectOne(address, rec, sweep = null, { jackpotCovered = false 
     _replacePendingRecord(rec);
   }
   const revealed = _revealedSet(address, level);
-  const allFresh = _openedPieces(payload)
+  const genericFresh = _openedPieces(payload)
     .filter((piece) => !revealed.has(String(piece.key)));
+  // The foil projection is authoritative for both identity and presentation.
+  // Once all four lines exist, remove their unmarked copies from the generic
+  // stream and add them back below with stable foil receipt keys. If the
+  // generic endpoint is behind and omits them, the projection still supplies
+  // the complete foil pack.
+  let foilState = { complete: true, lines: [], keys: new Set(), keyCounts: new Map() };
+  if (rec.foilExpected) foilState = await _foilState(address, level);
+  const foilBlocked = Boolean(rec.foilExpected && !foilState.complete);
+  const allFresh = rec.foilExpected && foilState.complete
+    ? _withoutProjectedFoilTickets(genericFresh, foilState.keyCounts)
+    : genericFresh;
   // Owed entries are FIFO and jackpot awards are appended after the player's
   // existing hands. While the draw is still covered, withhold the newest pieces
   // attributable to the already-indexed award. Existing purchased packs
@@ -1208,13 +1239,6 @@ async function _inspectOne(address, rec, sweep = null, { jackpotCovered = false 
         return true;
       })
     : ledgerVisibleFresh;
-  // The foil projection is authoritative for foil tickets. They are filed in
-  // separate foil entry rows on the current deploy, so requiring them to also
-  // appear in /tickets/by-trait creates a permanent "still indexing" deadlock
-  // for a foil-only purchase. Ordinary cards remain owned by the generic feed.
-  let foilState = { complete: true, lines: [], keys: new Set(), keyCounts: new Map() };
-  if (rec.foilExpected) foilState = await _foilState(address, level);
-  const foilBlocked = Boolean(rec.foilExpected && !foilState.complete);
   const foilTickets = rec.foilExpected && foilState.complete
     ? foilState.lines.map((traitIds, index) => ({
         traitIds,

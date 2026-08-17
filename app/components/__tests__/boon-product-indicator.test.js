@@ -81,6 +81,43 @@ describe('<boon-product-indicator>', () => {
     el.disconnectedCallback();
   });
 
+  test('suppression hides an active marker and clears its host decoration', () => {
+    assert.ok(BoonProductIndicator.observedAttributes.includes('suppressed'),
+      'native attribute changes rerender the custom element');
+    const host = new FakeHTMLElement();
+    const el = new BoonProductIndicator();
+    el.setAttribute('product', 'purchase');
+    el.closest = () => host;
+    el.connectedCallback();
+    storeMod.update('app.boons', {
+      address: '0xabc',
+      day: 62,
+      boons: [{ boonType: 9, consumed: false }],
+    });
+    assert.equal(el.hidden, false);
+    assert.equal(host.classList.contains('has-active-boon'), true);
+
+    el.setAttribute('suppressed', '');
+    el.attributeChangedCallback();
+    assert.equal(el.hidden, true);
+    assert.equal(host.classList.contains('has-active-boon'), false);
+    assert.equal(el.getAttribute('data-boon-product'), null);
+
+    storeMod.update('app.boons', {
+      address: '0xabc',
+      day: 63,
+      boons: [{ boonType: 9, consumed: false }],
+    });
+    assert.equal(el.hidden, true, 'a live boon refresh cannot undo payment-mode suppression');
+    assert.equal(host.classList.contains('has-active-boon'), false);
+
+    el.removeAttribute('suppressed');
+    el.attributeChangedCallback();
+    assert.equal(el.hidden, false);
+    assert.equal(host.classList.contains('has-active-boon'), true);
+    el.disconnectedCallback();
+  });
+
   test('glows the affected purchase field and exposes the exact bonus on hover', () => {
     const host = new FakeHTMLElement();
     host.setAttribute('title', 'Luckbox amount');

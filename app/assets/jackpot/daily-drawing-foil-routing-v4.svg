@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1372 1000" preserveAspectRatio="none">
+  <!--
+    This viewBox matches the live foil bank: 174 / 12 / 1000 / 12 / 174.
+    Every socket receives four independent feeds at its quadrant centers.
+    Routes begin under either the perimeter rail or the central processor and
+    terminate beneath the opaque socket, so there are no decorative dead ends.
+
+    v4 fixes the outer feeds. v3 started them at x=0 and x=1372 — the bank's own
+    edge — which is OUTSIDE the perimeter ground rail on the backplate sheet, so
+    each of the eight ran past the rail and stopped in bare mask a few pixels
+    short of the cabinet frame. That is the "circuitry going nowhere but the
+    edge".
+
+    The rail sits at daily-drawing-board-routing-v4.svg x=84 / x=1196. Measured
+    against the live DOM, that projects into THIS sheet at x=34 and x=1338 in
+    BOTH layouts (desktop 543x526 and phone 372x409 agree to the unit), because
+    the bank and the cabinet scale together. The outer feeds therefore now start
+    exactly on the rail, with a plated via at the junction, and run inboard to
+    the socket. Nothing crosses the rail any more.
+
+    The inner feeds off the processor bus (x=186 / x=1186) are unchanged.
+  -->
+  <defs>
+    <!-- Plated via, matched to the backplate sheet's ring once both are scaled
+         onto the cabinet: annular ring with a drilled centre. -->
+    <g id="foilVia">
+      <circle r="7" fill="#c49a4d" fill-opacity="0.36"/>
+      <circle r="3" fill="#050f0a" fill-opacity="0.9"/>
+    </g>
+  </defs>
+
+  <g fill="none" stroke="#b48435" stroke-opacity="0.34" stroke-width="2.1"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <!-- upper-left socket: two feeds off the ground rail, two off the bus -->
+    <path d="M34 74H52L68 90V164"/>
+    <path d="M186 58H166L130 94V164"/>
+    <path d="M34 426H52L68 410V336"/>
+    <path d="M186 442H166L130 406V336"/>
+
+    <!-- lower-left socket -->
+    <path d="M34 574H52L68 590V664"/>
+    <path d="M186 558H166L130 594V664"/>
+    <path d="M34 926H52L68 910V836"/>
+    <path d="M186 942H166L130 906V836"/>
+
+    <!-- upper-right socket -->
+    <path d="M1186 58H1206L1242 94V164"/>
+    <path d="M1338 74H1320L1304 90V164"/>
+    <path d="M1186 442H1206L1242 406V336"/>
+    <path d="M1338 426H1320L1304 410V336"/>
+
+    <!-- lower-right socket -->
+    <path d="M1186 558H1206L1242 594V664"/>
+    <path d="M1338 574H1320L1304 590V664"/>
+    <path d="M1186 942H1206L1242 906V836"/>
+    <path d="M1338 926H1320L1304 910V836"/>
+  </g>
+
+  <!-- Bus junction vias on the processor bus, a full gutter away from the
+       sockets. -->
+  <g fill="#c49a4d" fill-opacity="0.4">
+    <circle cx="186" cy="58" r="3"/><circle cx="186" cy="442" r="3"/>
+    <circle cx="186" cy="558" r="3"/><circle cx="186" cy="942" r="3"/>
+    <circle cx="1186" cy="58" r="3"/><circle cx="1186" cy="442" r="3"/>
+    <circle cx="1186" cy="558" r="3"/><circle cx="1186" cy="942" r="3"/>
+  </g>
+
+  <!-- Ground-rail bonds: where the eight outer feeds land on the perimeter
+       rail. These are the terminations that v3 was missing. -->
+  <g>
+    <use href="#foilVia" x="34" y="74"/><use href="#foilVia" x="34" y="426"/>
+    <use href="#foilVia" x="34" y="574"/><use href="#foilVia" x="34" y="926"/>
+    <use href="#foilVia" x="1338" y="74"/><use href="#foilVia" x="1338" y="426"/>
+    <use href="#foilVia" x="1338" y="574"/><use href="#foilVia" x="1338" y="926"/>
+  </g>
+</svg>

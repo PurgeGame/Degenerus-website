@@ -17,11 +17,16 @@ import { VOLUME_WINDOW } from '../app/chain-config.js';
 import { loadWorkQueue, nextAction } from '../app/work-queue.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { refreshForDayShift } from '../app/polling.js';
 
 const POLL_INTERVAL_MS = 30_000;
 const RESOLVER_SOURCE = 'mine-flip-resolver';
 
 function _mineFlipGeneration() {
+  const daySync = get('app.daySync') || {};
+  const chainDay = Number(daySync?.day);
+  if (Number.isInteger(chainDay) && chainDay > 0) return `day-${chainDay}`;
+
   const gameState = get('app.gameState') || {};
   const resolvedDay = Number(gameState?.dailyRng?.day ?? gameState?.currentDay);
   if (Number.isInteger(resolvedDay) && resolvedDay > 0) return `day-${resolvedDay}`;
@@ -58,6 +63,10 @@ class AppMineFlipResolver extends HTMLElement {
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
     this.#unsubs.push(subscribe('app.gameState', () => this.#refresh()));
+    // day-rollover.js publishes the direct isRngFulfilled() edge here. Probe
+    // in that same update instead of making the player wait for this
+    // resolver's 30-second fallback poll before the first Mine FLIP press.
+    this.#unsubs.push(subscribe('app.daySync', () => this.#refresh()));
 
     this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_INTERVAL_MS);
     this.#onFocus = () => { if (!document.hidden) this.#refresh(); };
@@ -149,14 +158,21 @@ class AppMineFlipResolver extends HTMLElement {
 
     this.#busy = true;
     this.#publish(player);
+    let shouldReconcile = false;
     try {
       await item.run({ player });
+      shouldReconcile = true;
     } catch (error) {
       // NoWork means the permissionless state changed between simulation and
       // inclusion. Anything else belongs in the tray's visible error surface.
       if (!error || error.code !== 'NoWork') throw error;
+      shouldReconcile = true;
     } finally {
       this.#busy = false;
+      // A confirmed Mine FLIP can finish the exact jackpot stage. Do not wait
+      // for the next 15-second game poll before asking the chain/indexer feeds
+      // for the board that receipt just made possible.
+      if (shouldReconcile) void refreshForDayShift({ includePlayer: true });
       await this.#refresh();
     }
   }

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coinflip Felt Demo</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/records-rail.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
+  <link rel="stylesheet" href="/app/styles/status-indicators.css" data-demo-indicators>
+  <link rel="stylesheet" href="/app/styles/coinflip-felt-demo.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "/app/vendor/ethers.mjs",
+      "gsap": "/app/vendor/gsap.mjs",
+      "gsap/Flip": "/app/vendor/gsap-flip.mjs",
+      "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
+      "lean-qr": "/app/vendor/lean-qr.mjs",
+      "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic coinflip-felt-demo-page">
+  <main class="coinflip-felt-demo">
+    <header class="coinflip-felt-demo__header">
+      <a href="/app/">← APP</a>
+      <span>
+        <small>LOCAL VISUAL DEMO</small>
+        <h1>COINFLIP FELT &amp; CHIPS</h1>
+      </span>
+      <b>SIMULATED</b>
+    </header>
+    <nav class="coinflip-felt-demo__controls" aria-label="Simulated coinflip amounts">
+      <fieldset data-group="today">
+        <legend>TODAY'S BET</legend>
+        <button type="button" data-today="0">NO BET</button>
+        <button type="button" data-today="1000">1,000</button>
+        <button type="button" data-today="43844" class="is-active">43,844</button>
+        <button type="button" data-today="43844" data-today-win="150">WIN ×150%</button>
+        <button type="button" data-today="600000">600K</button>
+        <button type="button" data-today="5000000">5M</button>
+        <button type="button" data-today="43844" data-today-lost="true">LOST</button>
+      </fieldset>
+      <fieldset data-group="tomorrow">
+        <legend>TOMORROW'S BET</legend>
+        <button type="button" data-tomorrow="0">NO BET</button>
+        <button type="button" data-tomorrow="1000">1,000</button>
+        <button type="button" data-tomorrow="25300" class="is-active">25,300</button>
+        <button type="button" data-tomorrow="25300" data-tomorrow-masked="true">MASKED</button>
+      </fieldset>
+      <fieldset data-group="bankroll">
+        <legend>BANKROLL</legend>
+        <button type="button" data-bankroll="0">0</button>
+        <button type="button" data-bankroll="21">21</button>
+        <button type="button" data-bankroll="1234">1,234</button>
+        <button type="button" data-bankroll="987654" class="is-active">987,654</button>
+        <button type="button" data-bankroll="4526397">4,526,397</button>
+        <button type="button" data-bankroll="987654" data-bankroll-credit="65766">+CREDIT</button>
+      </fieldset>
+      <fieldset data-group="dayshift">
+        <legend>ROLLOVER</legend>
+        <button type="button" data-day-shift="1">DAY SHIFT</button>
+      </fieldset>
+      <fieldset data-group="width">
+        <legend>WIDTH</legend>
+        <button type="button" data-width="320">320</button>
+        <button type="button" data-width="360" class="is-active">360</button>
+        <button type="button" data-width="430">430</button>
+        <button type="button" data-width="520">520</button>
+      </fieldset>
+    </nav>
+    <section class="coinflip-felt-demo__stage">
+      <div class="jackpot-hero coinflip-felt-demo__hero" style="--demo-width: 360px">
+        <div class="coinflip-felt-demo__host">
+          <section class="panel app-daily-flip">
+            <div class="df-coinflip-record-rail">
+              <span class="df-coinflip-record">
+                <span class="df-coinflip-record__group df-coinflip-record__group--score" data-majority="win">
+                  <small class="df-coinflip-record__label df-coinflip-record__label--record" aria-hidden="true">ALL TIME</small>
+                  <strong class="df-coinflip-record__score">
+                    <b>27</b><i aria-hidden="true">–</i><b>19</b>
+                  </strong>
+                </span>
+                <span class="df-coinflip-record__group df-coinflip-record__group--recent" data-majority="win">
+                  <small class="df-coinflip-record__label df-coinflip-record__label--recent" aria-hidden="true">LAST 25</small>
+                  <span class="df-coinflip-record__recent" data-bind="demo-recent" role="img"></span>
+                </span>
+              </span>
+            </div>
+            <div class="df-modifier-meter-slot" aria-label="Win multiplier scale">
+              <div class="df-modifier-meter-live"></div>
+              <div class="df-modifier-meter__table-scale" aria-hidden="true">
+                <span>250%</span><span>200%</span><span>150%</span>
+              </div>
+            </div>
+            <button type="button" class="df-auto-rebuy-cta">
+              <small class="df-auto-rebuy-cta__label" aria-hidden="true">AUTO REBUY</small>
+              <span class="df-auto-rebuy-cta__spot" aria-hidden="true">
+                <img class="df-auto-rebuy-cta__chip" src="/shared/flip-chips/face.svg" alt="">
+              </span>
+              <strong class="df-auto-rebuy-cta__status">OFF</strong>
+            </button>
+            <div class="df-bet-table">
+              <small class="df-bet-table__today-label" aria-hidden="true">TODAY'S BET</small>
+              <div class="df-bet-oval" data-bind="df-bet-oval" role="img" aria-label="Today's bet">
+                <span class="df-today-winnings-row" data-bind="df-today-winnings-row" data-state="empty" aria-hidden="true">
+                  <span class="df-bet-chip-rack" data-bind="df-today-winnings-rack" aria-hidden="true"></span>
+                </span>
+                <span class="df-bet-chip-rack" data-bind="df-bet-chip-rack" aria-hidden="true">—</span>
+                <div class="df-position-slot df-bet-today-slot" data-bind="df-position-today"></div>
+              </div>
+            </div>
+            <div class="df-baf-score" aria-label="Big Ass Flip rank and score">
+              <a class="df-baf-score__title" href="/learn/baf/">
+                <span class="df-baf-score__unit">BAF</span>
+                <small class="df-baf-score__rank">RANK 4</small>
+              </a>
+              <strong class="df-baf-score__value">128,406</strong>
+            </div>
+            <header class="df-title-bar">
+              <div class="df-title-bar__heading">
+                <h2 class="df-section-title">
+                  <small>COMMUNITY</small>
+                  <strong>COINFLIP</strong>
+                </h2>
+              </div>
+            </header>
+            <svg class="df-once-daily" viewBox="0 0 100 44" aria-hidden="true">
+              <defs><path id="df-once-daily-arc" d="M 14 8 Q 50 40 86 8"></path></defs>
+              <text><textPath href="#df-once-daily-arc" startOffset="50%" text-anchor="middle">ONCE DAILY</textPath></text>
+            </svg>
+            <div class="df-coin-stage">
+              <div class="df-coin-zone" data-bind="df-coin-zone">
+                <div class="df-coin df-coin--landed">
+                  <img src="/shared/coinflip-face-eth.svg" alt="Green ETH face — win">
+                </div>
+              </div>
+            </div>
+            <p class="df-outcome"></p>
+            <div class="df-table-watermark" aria-hidden="true">
+              <span class="df-table-watermark__type">
+                <strong>DEGENERUS</strong>
+              </span>
+              <span class="df-table-watermark__flame"></span>
+              <span class="df-table-watermark__type">
+                <strong>PROTOCOL</strong>
+              </span>
+            </div>
+            <div class="df-position">
+              <div class="df-tomorrow-layout" role="button" tabindex="0"
+                   aria-label="Add FLIP to tomorrow's bet" title="Add FLIP to tomorrow's bet">
+                <small class="df-tomorrow-layout__felt-label" aria-hidden="true">
+                  <span>TOMORROW'S BET</span><b data-bind="df-tomorrow-felt-bonus" hidden></b>
+                </small>
+                <div class="df-tomorrow-bet-oval" data-bind="df-tomorrow-bet-oval" role="img" aria-label="Tomorrow's bet">
+                  <span class="df-tomorrow-layout__add-cue" aria-hidden="true">+</span>
+                  <span class="df-bet-chip-rack" data-bind="df-tomorrow-chip-rack" aria-hidden="true">—</span>
+                  <span class="df-flip-group df-next-bet">
+                    <quest-objective-indicator class="df-next-bet__quest"
+                                               data-quest-pointer="bottom-left"
+                                               product="coinflip"></quest-objective-indicator>
+                    <boon-product-indicator class="df-next-bet__boon"
+                                            product="coinflip"></boon-product-indicator>
+                  </span>
+                </div>
+                <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
+              </div>
+            </div>
+            <div class="df-funds" aria-label="FLIP balance and claim rack">
+              <small class="df-funds__title" aria-hidden="true">CLAIM</small>
+              <button type="button" class="df-bankroll__well" aria-label="Open FLIP claim">
+                <span class="df-bankroll__rack" data-bind="df-bankroll-rack" role="img" aria-label="FLIP bankroll"></span>
+              </button>
+              <div class="df-funds__coins">
+                <small class="df-funds__box-label" aria-hidden="true">AVAILABLE FUNDS</small>
+                <div class="df-funds__display df-funds__display--claimable df-funds__display--flip-total">
+                  <strong class="df-funds__value df-funds__value--flip-total">
+                    <span class="df-funds__number" data-bind="df-funds-flip-total">—</span>
+                    <span class="df-funds__unit">FLIP</span>
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/app/coinflip-felt-demo.js"></script>
+</body>
+</html>

@@ -14,6 +14,21 @@ const INDEX_SRC = readFileSync(new URL('../../index.html', import.meta.url), 'ut
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 describe('standalone ALL IN chooser', () => {
+  test('every spend format maps to the quest it can finish', async () => {
+    const { allInQuestProduct } = await import('../app-all-in-dialog.js');
+    assert.equal(allInQuestProduct({ target: 'tickets', currency: 'ETH' }), 'purchase');
+    assert.equal(allInQuestProduct({ target: 'tickets', currency: 'FLIP' }), 'redeem-flip');
+    assert.equal(allInQuestProduct({ target: 'lootbox', currency: 'ETH' }), 'lootbox');
+    assert.equal(allInQuestProduct({ target: 'coinflip', currency: 'FLIP' }), 'coinflip');
+    assert.equal(allInQuestProduct({ target: 'decimator', currency: 'FLIP' }), 'decimator');
+    assert.equal(allInQuestProduct({ target: 'degenerette', currency: 'ETH' }), 'degenerette-eth');
+    assert.equal(allInQuestProduct({ target: 'degenerette', currency: 'FLIP' }), 'degenerette-flip');
+    assert.equal(allInQuestProduct({ target: 'unknown', currency: 'ETH' }), null);
+    assert.match(DIALOG_SRC, /data-bind="allin-quest-bonus"/);
+    assert.match(DIALOG_SRC, /questCompletionBonusModel\([\s\S]*?quote\.spendWei/s);
+    assert.match(APP_CSS, /\.allin-quest-bonus[^}]*#86efac/);
+  });
+
   test('dice selects only from the supplied eligible formats', async () => {
     const { randomAllInTarget, randomAllInSelection } = await import('../app-all-in-dialog.js');
     const formats = ['coinflip', 'degenerette', 'tickets'];

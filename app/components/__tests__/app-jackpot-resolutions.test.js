@@ -142,7 +142,9 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
     'combined/read-only presentation still receives the global Decimator draw');
   assert.match(resolutions, /decWaiting[\s\S]*?state: this\.#busy === 'decimator' \|\| decWaiting \? 'busy' : 'ready'/,
     'a due Decimator holds the shared action while its indexed result catches up');
-  assert.match(resolutions, /await openDecimatorDraw\(\{ level, player: this\.#address \}\)/);
+  assert.match(resolutions,
+    /return openDecimatorDraw\(\{[\s\S]*?player: this\.#address,[\s\S]*?onReady:[\s\S]*?_markSeen\('decimator'/,
+    'the draw is marked seen only after its bounded snapshot is staged');
   assert.match(resolutions, /autoOpen:\s*!willWrite,[\s\S]{0,100}?primarySurface:\s*'jackpot'/,
     'a view-only Decimator final honors the Pending Auto open preference');
   assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
@@ -172,6 +174,9 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(overlay,
     /openDecimatorDraw[\s\S]*?warmupSfx\(\)[\s\S]*?removeActive\(\)/,
     'manual draw launch warms WebAudio before the first asynchronous snapshot read');
+  assert.match(overlay,
+    /decimator-draw-modal__retry[\s\S]*?DRAW DATA UNAVAILABLE[\s\S]*?return Boolean\(active\?\.overlay === overlay/,
+    'an RPC load failure stays in the fullscreen with a retry instead of becoming a failed action');
 });
 
 test('a due BAF opens its dedicated staged fullscreen final', () => {

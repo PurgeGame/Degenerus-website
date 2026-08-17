@@ -60,10 +60,10 @@ const _state = {
     allInEligible: false,  // connected self-view currently clears the >60 Degen Rating ALL IN gate
     foilQuest: null,       // current account's unfinished daily foil quest + routed purchase level
     questObjectives: null, // unfinished daily/level quests published by app-quest-panel
-    // The right-side Protocol Coins instrument owns the FLIP spoiler gate.
-    // Its compact mirror on the buy side subscribes to this exact disclosure
-    // state so the same balance is never visible in one column and masked in
-    // the other. `{ address, visible }` is intentionally account-scoped.
+    // The right-side Protocol Coins instrument owns the RNG-safe FLIP hold.
+    // Its compact mirror on the buy side subscribes to the exact value painted
+    // there so one column can never race ahead of the other.
+    // `{ address, valueWei, held }` is intentionally account-scoped.
     protocolCoinsFlipDisclosure: null,
   },
   // Phase 60+ adds: game.*, player.*, claims.*, ... (mirroring /beta/app/store.js shape)

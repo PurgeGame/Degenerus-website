@@ -105,6 +105,7 @@ describe('Decimator draw log reconstruction', () => {
   test('loader requests level-indexed game logs and bounds raw FLIP burns to the resolution', async () => {
     const calls = [];
     __setDecimatorDrawProviderForTest({
+      async getBlockNumber() { return 14; },
       async getLogs(filter) {
         calls.push(filter);
         if (calls.length === 1) return [resolutionLog];
@@ -113,12 +114,44 @@ describe('Decimator draw log reconstruction', () => {
       },
     });
 
-    const snapshot = await loadDecimatorDrawSnapshot({ level, player: PLAYER_A });
+    const snapshot = await loadDecimatorDrawSnapshot({
+      level,
+      player: PLAYER_A,
+      fromBlock: 10,
+    });
     assert.equal(snapshot.winningScore, '200');
     assert.equal(calls.length, 3);
+    assert.ok(calls.every((call) => Number.isInteger(call.fromBlock)
+      && Number.isInteger(call.toBlock)), 'every log query is numerically bounded');
     assert.equal(calls[0].topics.length, 2, 'resolution query includes the indexed level');
     assert.equal(calls[1].topics.length, 3, 'burn query includes player wildcard + indexed level');
     assert.equal(calls[2].fromBlock, 10);
     assert.equal(calls[2].toBlock, 14);
+  });
+
+  test('loader scans large ranges in chunks below the public RPC cap', async () => {
+    const calls = [];
+    __setDecimatorDrawProviderForTest({
+      async getBlockNumber() { return 4_000; },
+      async getLogs(filter) {
+        calls.push(filter);
+        const includesFixture = Number(filter.fromBlock) <= 14 && Number(filter.toBlock) >= 14;
+        if (filter.topics.length === 2) return includesFixture ? [resolutionLog] : [];
+        if (filter.topics.length === 3) return burnLogs;
+        return flipLogs;
+      },
+    });
+
+    const snapshot = await loadDecimatorDrawSnapshot({
+      level,
+      player: PLAYER_A,
+      fromBlock: 10,
+    });
+    assert.equal(snapshot.winningScore, '200');
+    assert.ok(calls.length > 3, 'the resolution search walks newest chunks first');
+    assert.ok(calls.every((call) => Number(call.toBlock) - Number(call.fromBlock) + 1 <= 1_800),
+      'no eth_getLogs request exceeds the Base public range limit');
+    assert.ok(calls.every((call) => call.toBlock !== 'latest'),
+      'the draw never sends a deployment-to-latest log query');
   });
 });

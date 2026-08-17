@@ -304,6 +304,15 @@ describe('app.css LOC budget', () => {
     // and the level/resolution panel polish that shipped alongside it. One
     // deliberate new surface (the dialog) plus its phone stacks; the ~170-line
     // margin keeps the next bump honest.
-    assert.ok(cssLines.length <= 23600, `total <=23600, got ${cssLines.length}`);
+    // 23600 → 23700 covers the shared reveal action dock and the in-place
+    // Decimator draw retry state. Both harden existing fullscreen surfaces.
+    // 23700 → 23850 for the jackpot hero art pass: cabinet lighting on the
+    // hero and its draw column, and one button state system applied to both
+    // controls that live in the cabinet — the day-history keys and the new-day
+    // banner's View now. Each gains rest/hover/active/focus-visible/disabled;
+    // neither previously had a pressed state or a focus indicator that hover
+    // could not be mistaken for. No new surface: ~110 lines across three
+    // existing blocks, over half of it the state rules and their comments.
+    assert.ok(cssLines.length <= 23850, `total <=23850, got ${cssLines.length}`);
   });
 });

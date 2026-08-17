@@ -1,4 +1,4 @@
-// /app/app/__tests__/share-win.test.js — SHARE MY WIN pure helpers.
+// /app/app/__tests__/share-win.test.js — SHARE YOUR WIN pure helpers.
 // Run: cd website && node --test app/app/__tests__/share-win.test.js
 //
 // Covers buildShareRefUrl (registered-code bytes32 form > bare-address form,
@@ -164,7 +164,7 @@ describe('extractWinLines', () => {
 describe('canShareWin', () => {
   beforeEach(() => __resetForTest());
 
-  const winSeq = { kind: 'jackpot', cards: [{ type: 'eth', value: '0.1' }] };
+  const winSeq = { kind: 'jackpot', big: true, cards: [{ type: 'eth', value: '0.1' }] };
 
   test('self mode + winnings → true; no winnings → false', () => {
     assert.equal(canShareWin(winSeq), true);
@@ -176,19 +176,25 @@ describe('canShareWin', () => {
     assert.equal(canShareWin(winSeq), false);
   });
 
-  test('paid Degenerette shares only at a real 2x return or better', () => {
+  test('paid Degenerette shares only at a real 5x return or better', () => {
     const result = (total, totalWager) => ({
       kind: 'degenerette',
       cards: [{ type: 'flip', value: String(total) }],
       spinBoard: { total, totalWager, currency: 1, unit: 'FLIP' },
     });
-    assert.equal(clearsShareWinMultiple(result(199n, 100n)), false);
-    assert.equal(canShareWin(result(199n, 100n)), false);
-    assert.equal(canShareWin(result(200n, 100n)), true,
-      'exactly double the buy-in reaches the share threshold');
-    assert.equal(canShareWin(result(500n, 100n)), true);
+    assert.equal(clearsShareWinMultiple(result(499n, 100n)), false);
+    assert.equal(canShareWin(result(499n, 100n)), false);
+    assert.equal(clearsShareWinMultiple(result(500n, 100n)), true);
+    assert.equal(canShareWin(result(500n, 100n)), true,
+      'exactly five times the buy-in reaches the share threshold');
     assert.equal(canShareWin(result(500n, 0n)), false,
       'a paid result without a provable buy-in does not claim a multiple');
+  });
+
+  test('a positive but non-big unpriced reward does not advertise itself', () => {
+    assert.equal(canShareWin({
+      kind: 'jackpot', big: false, cards: [{ type: 'eth', value: '0.001' }],
+    }), false);
   });
 });
 

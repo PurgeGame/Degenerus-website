@@ -4,7 +4,7 @@ import { get, subscribe } from '../app/store.js';
 import { boonIndicatorModel } from '../app/boons.js';
 
 class BoonProductIndicator extends HTMLElement {
-  static get observedAttributes() { return ['product', 'variant']; }
+  static get observedAttributes() { return ['product', 'variant', 'suppressed']; }
 
   #unsub = null;
   #decoratedHost = null;
@@ -94,8 +94,9 @@ class BoonProductIndicator extends HTMLElement {
   #render() {
     const product = this.getAttribute?.('product') || '';
     const model = boonIndicatorModel(get('app.boons'), product);
-    this.hidden = !model;
-    if (!model) {
+    const suppressed = this.hasAttribute?.('suppressed') ?? this.getAttribute?.('suppressed') != null;
+    this.hidden = suppressed || !model;
+    if (suppressed || !model) {
       this.#clearHostDecoration();
       this.textContent = '';
       this.removeAttribute?.('title');

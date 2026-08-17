@@ -144,7 +144,16 @@ class GoldRushHeadline extends HTMLElement {
 
   #renderShell() {
     this.classList.add('gr');
-    this.innerHTML = `
+    // LCP: index.html ships this exact shell statically inside the
+    // <gold-rush-headline> tag so the hero paints before any module executes.
+    // Adopt it when all three data-el hooks are present; re-render only as the
+    // fallback (a host page without the static shell, or markup drift — where
+    // falling back reproduces the old JS-rendered behavior instead of leaving
+    // a null hook to crash the payload path). Keep the template below and the
+    // static copy in index.html byte-for-byte in sync.
+    if (!(this.querySelector('[data-el="amount"]')
+      && this.querySelector('[data-el="chip"]')
+      && this.querySelector('[data-el="float"]'))) this.innerHTML = `
       <div class="gr__inner">
         <div class="gr__masthead">
           <span class="gr__brand">

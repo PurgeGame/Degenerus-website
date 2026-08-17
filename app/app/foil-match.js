@@ -23,6 +23,27 @@ export function decodeTrait(traitId) {
   };
 }
 
+/**
+ * Put one four-trait foil line into canonical quadrant order.
+ *
+ * The quadrant is encoded in the trait byte itself, so API/contract adapters
+ * are free to return a set in a different iteration order. Rendering the raw
+ * array makes otherwise valid badges land in the wrong panel and also applies
+ * match faces to the wrong art. Duplicate or missing quadrants are malformed.
+ */
+export function normalizeFoilLine(lineTraits) {
+  if (!Array.isArray(lineTraits) || lineTraits.length !== 4) return null;
+  const ordered = new Array(4);
+  for (const raw of lineTraits) {
+    const trait = Number(raw);
+    if (!Number.isInteger(trait) || trait < 0 || trait > 255) return null;
+    const quadrant = trait >> 6;
+    if (ordered[quadrant] != null) return null;
+    ordered[quadrant] = trait;
+  }
+  return ordered.every((trait) => Number.isInteger(trait)) ? ordered : null;
+}
+
 /** Unpack a winning-set uint32 into its 4 per-quadrant trait bytes. */
 export function unpackWinSet(packed) {
   const p = Number(packed) >>> 0;

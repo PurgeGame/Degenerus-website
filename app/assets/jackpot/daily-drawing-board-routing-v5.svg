@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <!--
+    Copper layer for the daily-drawing backplate. The sheet is stretched to the
+    cabinet box, so it is authored against BOTH measured layouts and only uses
+    regions that are bare plate in each of them. These boxes are MEASURED from
+    the live DOM (not estimated), in this sheet's 1280 space:
+
+                        desktop (543x526)        phone (372x409)
+      title controller   50,11  -> 1230,117      37,14   -> 1243,150
+      foil socket J1     55,268 -> 203,421       55,282  -> 207,420
+      foil socket J2     55,708 -> 203,861       55,666  -> 207,804
+      foil sockets J3/J4 mirrored on x
+      draw processor    214,121 -> 1066,1002    218,155  -> 1062,923
+      LCD module        301,1069 -> 979,1195    218,1009 -> 1062,1171
+      VRF modules       213,1093 -> 288,1171    108,1045 -> 206,1134
+
+    Rule for the whole layer: an exposed route may only end under one of those
+    parts, on the perimeter ground rail, or in a plated via. Nothing trails off
+    into bare solder mask. Every bend is 45 degrees.
+
+    v4 closes the endpoints that were authored against the desktop box alone and
+    so floated free of their part in the phone layout. Every one now ends inside
+    the INTERSECTION of both measured boxes:
+      - socket buses leave at y=300 (was 278, above the phone socket lip);
+      - the lower-socket ground bonds leave at y=780 (was 866, which on a phone
+        sat 60 units below the socket in bare mask);
+      - the interlock and LCD data lanes start at y=915 (was 930, below the
+        phone processor edge);
+      - the two ground bonds gained a via where they land on the rail, so the
+        junction reads as a bond rather than a trace meeting an edge.
+
+    v5 closes the last endpoints that could not be honest in both layouts: the
+    VRF module boxes are the one pair of parts whose measured boxes do not
+    overlap at all (desktop x213-288, phone x108-206), so no single point is
+    under the module in both. The interlock now leaves from a plated via at
+    x=210 / x=1070, which is on the module's edge in EITHER layout and is a
+    legal terminus in its own right, and the four display interlocks gained the
+    same via on their module-side end. Nothing on this layer now terminates in
+    bare mask on a phone.
+    Endpoint changes are mirrored verbatim into daily-drawing-board-current-v4.svg.
+  -->
+  <defs>
+    <filter id="traceGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Crosshatched ground pour. The cell tiles seamlessly, so the four
+         patches read as one poured plane interrupted by hardware. -->
+    <pattern id="pour" patternUnits="userSpaceOnUse" width="20" height="20">
+      <path d="M0 0 20 20M0 20 20 0" fill="none" stroke="#b1832f"
+            stroke-opacity="0.36" stroke-width="1.7"/>
+    </pattern>
+
+    <!-- Plated via: annular ring with a drilled centre. -->
+    <g id="via">
+      <circle r="6.2" fill="#c9a052" fill-opacity="0.32"/>
+      <circle r="2.6" fill="#050f0a" fill-opacity="0.9"/>
+    </g>
+  </defs>
+
+  <!-- Poured copper fills the socket gutters, the only large area of plate no
+       part is mounted on in either layout. The patches are chamfered like the
+       rest of the layer so they read as poured regions with a real boundary
+       rather than swatches dropped on the board. The mid gutters stay bare
+       mask: that is where the silkscreen sheet prints its two marks. -->
+  <g opacity="0.26" fill="url(#pour)">
+    <path d="M112 168H184L200 184V234L184 250H112L96 234V184Z"/>
+    <path d="M1168 168H1096L1080 184V234L1096 250H1168L1184 234V184Z"/>
+    <path d="M112 880H184L200 896V934L184 950H112L96 934V896Z"/>
+    <path d="M1168 880H1096L1080 896V934L1096 950H1168L1184 934V896Z"/>
+  </g>
+
+  <!-- Perimeter ground rail. One continuous conductor: it drops from a via at
+       the processor's top contacts, runs the full left edge behind J1 and J2,
+       crosses under the LCD and climbs the mirror path on the right. -->
+  <g fill="none" stroke="#b8862f" stroke-opacity="0.2" stroke-width="2.4"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <path d="M240 128H130L84 174V1176L110 1202H1170L1196 1176V174L1150 128H1040"/>
+  </g>
+
+  <!-- The complete signal tree: title + sockets -> processor -> LCD, with the
+       two Chainlink modules feeding both the processor and display interlock. -->
+  <g fill="none" stroke="#b98a38" stroke-opacity="0.27" stroke-width="2"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <!-- Title controller into the processor's upper contacts. -->
+    <path d="M430 82V116L474 160"/>
+    <path d="M850 82V116L806 160"/>
+
+    <!-- One controller bus per foil socket. The four quadrant feeds live in
+         daily-drawing-foil-routing-v4.svg and join these covered contacts. -->
+    <path d="M148 300H222L260 338H292"/>
+    <path d="M148 718H222L260 680H292"/>
+    <path d="M1132 300H1058L1020 338H988"/>
+    <path d="M1132 718H1058L1020 680H988"/>
+
+    <!-- Chainlink modules at lower left/right feed the processor interlock.
+         These are the source lanes: the animated sheet drives every one of
+         them outward from the module. -->
+    <path d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/>
+    <path d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/>
+
+    <!-- Four independent data lanes from the draw processor into the LCD. -->
+    <path d="M414 915V982L432 1000H438L456 1018V1098"/>
+    <path d="M506 915V1002L524 1020H530L548 1038V1098"/>
+    <path d="M774 915V1002L756 1020H750L732 1038V1098"/>
+    <path d="M866 915V982L848 1000H842L824 1018V1098"/>
+
+    <!-- Paired Chainlink display-interlock lanes. No perimeter dead ends. -->
+    <path d="M286 1116H350"/>
+    <path d="M286 1158H350"/>
+    <path d="M994 1116H930"/>
+    <path d="M994 1158H930"/>
+  </g>
+
+  <!-- Secondary routing: the lane that links each socket pair down its own
+       gutter, and the bond from the lower socket back to the ground rail. -->
+  <g fill="none" stroke="#a8792f" stroke-opacity="0.19" stroke-width="1.7"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <path d="M126 400V486L110 502V612L126 628V740"/>
+    <path d="M1154 400V486L1170 502V612L1154 628V740"/>
+    <path d="M160 780V1090L134 1116H84"/>
+    <path d="M1120 780V1090L1146 1116H1196"/>
+  </g>
+
+  <!-- Very low-energy halo, confined to the same real routes. -->
+  <g fill="none" stroke="#d0a34c" stroke-opacity="0.055" stroke-width="7"
+     stroke-linecap="square" stroke-linejoin="miter" filter="url(#traceGlow)"
+     vector-effect="non-scaling-stroke">
+    <path d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/>
+    <path d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/>
+    <path d="M414 915V982L432 1000H438L456 1018V1098"/>
+    <path d="M866 915V982L848 1000H842L824 1018V1098"/>
+    <path d="M286 1116H350"/>
+    <path d="M994 1116H930"/>
+  </g>
+
+  <!-- Vias exist only at real bus junctions, covered hardware contacts, or as
+       the terminus where a surface route drops to an inner layer. The pair at
+       x=84 / x=1196 is where the lower-socket ground bonds land on the rail. -->
+  <g>
+    <use href="#via" x="240" y="128"/><use href="#via" x="1040" y="128"/>
+    <use href="#via" x="360" y="1006"/><use href="#via" x="920" y="1006"/>
+    <use href="#via" x="456" y="1098"/><use href="#via" x="548" y="1098"/>
+    <use href="#via" x="732" y="1098"/><use href="#via" x="824" y="1098"/>
+    <use href="#via" x="350" y="1116"/><use href="#via" x="930" y="1116"/>
+    <use href="#via" x="350" y="1158"/><use href="#via" x="930" y="1158"/>
+    <use href="#via" x="210" y="1116"/><use href="#via" x="1070" y="1116"/>
+    <use href="#via" x="286" y="1116"/><use href="#via" x="994" y="1116"/>
+    <use href="#via" x="286" y="1158"/><use href="#via" x="994" y="1158"/>
+    <use href="#via" x="110" y="512"/><use href="#via" x="110" y="612"/>
+    <use href="#via" x="1170" y="512"/><use href="#via" x="1170" y="612"/>
+    <use href="#via" x="134" y="1116"/><use href="#via" x="1146" y="1116"/>
+    <use href="#via" x="84" y="1116"/><use href="#via" x="1196" y="1116"/>
+    <use href="#via" x="330" y="1202"/><use href="#via" x="640" y="1202"/>
+    <use href="#via" x="950" y="1202"/>
+  </g>
+</svg>

@@ -90,9 +90,16 @@ export function dailyJackpotProcessingSignals({
     && daySync?.rngRequested === true
     && daySync?.rngLocked === false
   );
+  // The authoritative witness: day-rollover.js reads `isRngFulfilled()` off the
+  // GAME contract in its existing pinned snapshot, so this is true in the same
+  // block the VRF callback assigns the word. Every other witness here is an
+  // inference from a lock edge or a lagging indexed/`/game/state` sample, which
+  // is exactly the lag a player notices while staring at the machine.
+  const rngFulfilled = Boolean(syncExact && daySync?.rngFulfilled === true);
   const rngReady = Boolean(
     coinflipReady
     || jackpotReady
+    || rngFulfilled
     || rngApplied
     || (gameExact && _positiveWord(gameState?.dailyRng?.finalWord)),
   );
@@ -116,10 +123,52 @@ export function dailyJackpotProcessingSignals({
       || jackpotReady
     )),
     rngReady,
+    // Exposed separately from `rngReady` because it is the only witness here
+    // that is a direct contract read. The LCD key uses it to decide whether the
+    // crank has a word waiting to be ground, which the inferred witnesses
+    // cannot answer promptly enough to be worth acting on.
+    rngFulfilled,
     coinflipReady,
     ticketsReady,
     jackpotReady,
   };
+}
+
+/**
+ * Is the Chainlink word in for this day?
+ *
+ * THREE independent witnesses. `live.rngFulfilled` is the authoritative one: a
+ * direct `isRngFulfilled()` read off the GAME contract, true in the same block
+ * the VRF callback assigns `rngWordCurrent`. The other two are inferences from
+ * feeds that lag it, and are kept because that contract read is positive-only
+ * — the advance pipeline zeroes the word once it drains it, so a `false` from
+ * the chain is not evidence of anything and a day whose word has already been
+ * consumed still needs the durable indexed witness below.
+ *
+ * Two inferred witnesses, because the live one has a blind spot. Live
+ * `rngReady` leans on `rngApplied`, which needs the watcher to have seen the
+ * request lock rise and then fall, and `reconcileDaySync` only ever latches
+ * `rngRequested` off that lock, an indexed jackpot, or a resolved coinflip. In
+ * the window after the word is applied but before the coinflip resolves — the
+ * exact window where the keeper crank lights up, because applying the word is
+ * what gives it an advance to do — all three are false on a cold load, and the
+ * instrument sat on RNG INCOMING with the randomness already in.
+ *
+ * The indexed DailyRng row is durable proof of the same fact and answers a
+ * cold load correctly: a positive final word cannot un-happen. Either witness
+ * is sufficient; neither one present means NOT ready, so a missing feed keeps
+ * the instrument reporting progress instead of falsely closing the ring.
+ *
+ * @param {{live: object|null, hasIndexedFinalWord: boolean}} input
+ * @returns {boolean}
+ */
+export function rngMilestoneSatisfied({ live = null, hasIndexedFinalWord = false } = {}) {
+  // No live pipeline feed at all is a historical/non-app load, whose contract
+  // work is complete by definition; those begin at the board-fetch phase.
+  if (!live) return true;
+  return live.rngFulfilled === true
+    || live.rngReady === true
+    || hasIndexedFinalWord === true;
 }
 
 /**
@@ -214,6 +263,21 @@ export function jackpotProcessingPresentationStep({
     : { day: targetDay, done: 0, rngArrivedShown: false, mode: null, holdUntil: 0 };
   next.done = Math.min(Math.max(0, Math.trunc(Number(next.done) || 0)), targetDone);
   const clock = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+
+  // Once all seven real inputs and the exact-day board are ready, cosmetic
+  // narration must not hold a disabled LCD over a playable spin. Collapse any
+  // remaining catch-up beats immediately; the animation is only useful while
+  // genuine work or data is still outstanding.
+  if (targetDone === JACKPOT_PROCESSING_MILESTONES.length && target?.key === 'ready') {
+    next = {
+      ...next,
+      done: targetDone,
+      rngArrivedShown: true,
+      mode: null,
+      holdUntil: 0,
+    };
+    return { stage: target, state: next, pending: false, delay: 0 };
+  }
 
   if (Number(next.holdUntil) > clock) {
     const arrived = next.mode === 'rng-arrived';

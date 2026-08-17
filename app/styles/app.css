@@ -1,8 +1,6 @@
 /* /app/styles/app.css — Phase 56 scope */
 
 :root {
-  /* One privacy treatment for the primary ETH/FLIP ledgers and bet boxes. */
-  --main-balance-spoiler-blur: 0.3rem;
   /* Shared casino-instrument materials for the two thermometer treatments. */
   --gauge-face: #100806;
   --gauge-well: #070605;
@@ -589,6 +587,10 @@ account-switcher[hidden] {
  *   .ldj-winner-row--mine — wallet-conditional row highlight (D-05)
  * =========================================================================== */
 
+/* This strip mounts inside the drawing cabinet, so it is built from the same
+   materials as the rest of it: an unlit panel face, a bronze rim and a lit top
+   edge. The old pale-blue notification read as a browser alert pasted onto the
+   machine — position and copy already say "new day", the colour never had to. */
 .ldj-new-day-banner {
   display: flex;
   align-items: center;
@@ -596,12 +598,17 @@ account-switcher[hidden] {
   gap: 0.75rem;
   padding: 0.65rem 1rem;
   margin-bottom: 1rem;
-  background: rgba(99, 179, 237, 0.10);          /* subtle blue accent */
-  border: 1px solid rgba(99, 179, 237, 0.35);
+  background:
+    linear-gradient(180deg, rgba(255, 231, 176, 0.06), transparent 46%),
+    linear-gradient(180deg, rgba(20, 7, 9, 0.94), rgba(8, 3, 4, 0.96));
+  border: 1px solid var(--jp-gold-dim, #8b6526);
   border-radius: 8px;
-  color: var(--text-primary);
+  color: #f6e4c4;
   font-size: 0.88rem;
   font-weight: 500;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 176, 0.12),
+    0 6px 16px -10px rgba(0, 0, 0, 0.9);
   transition: opacity 200ms ease;
 }
 
@@ -609,21 +616,49 @@ account-switcher[hidden] {
   display: none !important;
 }
 
+/* Same five states, and the same grammar, as the day-history keys: hover
+   brings the red up, a press sinks the key, focus takes a gold ring. */
 .ldj-view-now {
   padding: 0.4rem 0.9rem;
   border-radius: 6px;
-  background: rgba(99, 179, 237, 0.20);
-  border: 1px solid rgba(99, 179, 237, 0.55);
-  color: var(--text-primary);
+  background:
+    linear-gradient(180deg, rgba(237, 14, 17, 0.26) 0%, rgba(237, 14, 17, 0.08) 58%, rgba(0, 0, 0, 0.3) 100%);
+  border: 1px solid var(--jp-gold-edge, rgba(227, 182, 98, 0.34));
+  color: var(--jp-gold-hi, #ffe7b0);
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background 150ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 231, 176, 0.12);
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 80ms ease;
 }
-.ldj-view-now:hover { background: rgba(99, 179, 237, 0.35); }
+.ldj-view-now:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(237, 14, 17, 0.55) 0%, rgba(237, 14, 17, 0.24) 58%, rgba(0, 0, 0, 0.22) 100%);
+  border-color: var(--jp-gold, #e3b662);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 176, 0.24),
+    0 0 12px rgba(237, 14, 17, 0.28);
+}
+.ldj-view-now:active:not(:disabled) {
+  background: linear-gradient(180deg, rgba(104, 6, 8, 0.72), rgba(28, 3, 5, 0.8));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
+  transform: translateY(1px);
+}
 .ldj-view-now:focus-visible {
-  outline: 2px solid rgba(99, 179, 237, 0.7);
+  outline: 2px solid var(--jp-gold-hi, #ffe7b0);
   outline-offset: 2px;
+}
+.ldj-view-now:disabled {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.44));
+  border-color: rgba(227, 182, 98, 0.16);
+  color: rgba(246, 228, 196, 0.28);
+  box-shadow: none;
+  cursor: default;
 }
 
 /* Wallet-conditional highlight (D-05) — accent left-border + subtle tint.
@@ -2053,12 +2088,18 @@ body.layout-basic .jackpot-hero {
   overflow: hidden;
   border: 1px solid rgba(245, 166, 35, 0.45);
   border-radius: 14px;
+  /* Cabinet lighting: one warm source above the instrument, the floor falling
+     off to black. The old single top gradient over a flat --bg-secondary left
+     the lower half of the hero reading as an empty div. */
   background:
     radial-gradient(120% 90% at 50% 0%, rgba(245, 166, 35, 0.10) 0%, transparent 55%),
+    radial-gradient(130% 76% at 50% 104%, rgba(0, 0, 0, 0.5), transparent 66%),
     var(--bg-secondary);
   box-shadow:
     0 0 32px rgba(245, 166, 35, 0.12),
-    inset 0 1px 0 rgba(255, 192, 77, 0.18);
+    inset 0 1px 0 rgba(255, 192, 77, 0.18),
+    inset 0 0 0 1px rgba(255, 192, 77, 0.05),
+    0 22px 46px -28px rgba(0, 0, 0, 0.95);
 }
 
 @media (min-width: 1100px) {
@@ -3969,30 +4010,56 @@ body.layout-basic .chain-chip-row {
    .jackpot-hero as its right grid column — grid rules live on the hero. */
 
 /* --- Daily flip widget (the hero's coinflip column) --- */
+body.layout-basic .df-title-bar {
+  position: relative; box-sizing: border-box; display: flex; width: 100%;
+  height: 2.42rem; flex: 0 0 2.42rem; align-items: center; justify-content: center;
+  margin: 0.12rem 0 0.08rem; padding: 0.2rem 0.5rem 0.12rem;
+}
+body.layout-basic .df-title-bar::before,
+body.layout-basic .df-title-bar::after {
+  content: none;
+}
+body.layout-basic .df-title-bar__heading {
+  position: relative; z-index: 1; display: flex; min-width: 0;
+  align-items: center; justify-content: center;
+}
 body.layout-basic .df-section-title {
-  box-sizing: border-box;
-  display: flex;
-  height: 2.55rem;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  color: var(--text-primary, #eee);
-  font-family: inherit;
-  font-size: 1.05rem;
-  font-weight: 950;
-  letter-spacing: 0.13em;
-  line-height: 1.2;
-  text-align: center;
+  box-sizing: border-box; display: grid; height: auto; place-items: center; gap: 0.03rem;
+  margin: 0; padding: 0; border: 0; font-family: inherit; text-align: center;
+  filter: none; opacity: 0.82; text-shadow: none;
+}
+body.layout-basic .df-section-title small {
+  color: #f3dfb1; font-size: 0.42rem; font-weight: 850; letter-spacing: 0.3em; line-height: 1;
+}
+body.layout-basic .df-section-title strong {
+  color: #f7e6bd; font-size: 1.08rem; font-weight: 900; letter-spacing: 0.16em; line-height: 1;
+  -webkit-text-stroke: 0; white-space: nowrap;
 }
 
 body.layout-basic .df-coin-stage {
   position: relative;
 }
+/* Keep the quiet table rings tied to the responsive coin stage, rather than
+   baking them into a full-height image where they drift as the panel stacks. */
+body.layout-basic .df-coin-stage::after {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(clamp(110px, 14vw, 150px) + clamp(1rem, 2.5vw, 1.5rem));
+  aspect-ratio: 1;
+  border: 1px solid rgba(187, 247, 208, 0.11);
+  border-radius: 50%;
+  content: "";
+  outline: 1px solid rgba(134, 239, 172, 0.07);
+  outline-offset: clamp(0.55rem, 1.2vw, 0.75rem);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
 
 body.layout-basic .df-coin-zone {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4028,82 +4095,69 @@ body.layout-basic .df-coin:focus-visible {
 
 body.layout-basic .df-reveal-cue {
   position: absolute;
-  z-index: 3;
-  top: 0.68rem;
-  right: calc(50% + clamp(55px, 7vw, 75px) - 0.05rem);
-  display: inline-flex;
-  align-items: flex-end;
+  z-index: 5;
+  top: 0.08rem;
+  right: 0;
+  left: 0;
+  display: grid;
+  justify-items: center;
   gap: 0;
-  padding: 0;
+  width: max-content;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  padding: 0.18rem 0.24rem;
+  appearance: none;
   border: 0;
-  background: transparent;
-  color: #86efac;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(190, 255, 210, 0.88);
   font: inherit;
-  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.72));
+  filter: none;
   cursor: pointer;
+  transform: none;
+  isolation: isolate;
+  touch-action: manipulation;
 }
 body.layout-basic .df-reveal-cue:focus-visible {
   outline: 2px solid #86efac;
   outline-offset: 3px;
 }
 body.layout-basic .df-reveal-cue__copy {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.25rem 0.34rem;
-  border: 1px solid rgba(239, 68, 68, 0.58);
-  border-radius: 5px;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
-    #140707;
-  box-shadow: inset 0 0 8px rgba(248, 113, 113, 0.12);
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: clamp(0.47rem, 1.45vw, 0.6rem);
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: clamp(0.48rem, 1.4vw, 0.58rem);
   font-weight: 950;
-  letter-spacing: 0.055em;
-  line-height: 1.05;
+  letter-spacing: 0.12em;
+  line-height: 1;
   text-align: center;
+  text-shadow: 0 1px rgba(0, 0, 0, 0.42), 0 0 5px rgba(34, 197, 94, 0.18);
   white-space: nowrap;
-  animation: df-reveal-cue-pulse 2.4s ease-in-out infinite;
 }
 body.layout-basic .df-reveal-cue__arrow {
-  position: relative;
   display: block;
-  width: clamp(1rem, 3vw, 1.5rem);
-  height: 1px;
-  background: currentColor;
-  box-shadow: 0 0 5px rgba(34, 197, 94, 0.55);
-  transform: rotate(45deg);
-  transform-origin: left center;
-}
-body.layout-basic .df-reveal-cue__arrow::after {
-  position: absolute;
-  top: 50%;
-  right: -1px;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-top: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  content: '';
-  transform: translateY(-50%) rotate(45deg);
+  width: auto;
+  height: auto;
+  margin-top: -0.06rem;
+  background: none;
+  box-shadow: none;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 0.8;
+  opacity: 0.7;
+  transform: none;
 }
 body.layout-basic .df-reveal-cue[hidden] { display: none !important; }
 
-@keyframes df-reveal-cue-pulse {
-  0%, 100% { opacity: 0.86; box-shadow: inset 0 0 8px rgba(248, 113, 113, 0.1); }
-  50% { opacity: 1; box-shadow: inset 0 0 10px rgba(248, 113, 113, 0.2), 0 0 7px rgba(34, 197, 94, 0.18); }
-}
-
 @media (max-width: 420px) {
-  body.layout-basic .df-reveal-cue {
-    gap: 0;
-  }
-  body.layout-basic .df-reveal-cue__copy { padding-inline: 0.24rem; }
-  body.layout-basic .df-reveal-cue__arrow { width: 0.72rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.layout-basic .df-reveal-cue__copy { animation: none; opacity: 1; }
+  body.layout-basic .df-reveal-cue { padding-inline: 0.16rem; }
 }
 
 body.layout-basic .df-outcome {
@@ -4932,11 +4986,22 @@ body.layout-basic .jackpot-hero replay-panel .panel {
 
 /* Draw column: stack the shell + board panels and keep them off the
    coinflip column (grid child min-width guard). */
+/* The column is the recess the cabinet is mounted in, not a black backing
+   sheet: a warm pool of light where the machine's top edge sits, a maroon
+   floor bounce under it, and darkness at the column's own edges. Without this
+   the machine's bottom edge ended in a flat black band, most visible on phones
+   where the coinflip column starts immediately below it. */
 body.layout-basic .jackpot-hero__draw {
   grid-area: draw;
   position: relative;
   min-width: 0; display: flex; flex-direction: column; overflow: visible;
-  background: linear-gradient(180deg, rgba(12, 3, 5, 0.98), rgba(6, 2, 3, 0.99));
+  background:
+    radial-gradient(76% 42% at 50% -2%, rgba(245, 166, 35, 0.11), transparent 70%),
+    radial-gradient(112% 60% at 50% 112%, rgba(74, 20, 27, 0.5), transparent 72%),
+    linear-gradient(180deg, rgba(12, 3, 5, 0.98), rgba(6, 2, 3, 0.99));
+  box-shadow:
+    inset 14px 0 30px -26px rgba(0, 0, 0, 0.95),
+    inset -14px 0 30px -26px rgba(0, 0, 0, 0.95);
 }
 
 /* Only the compact instrument owns art. History, summaries, and neighboring
@@ -4948,7 +5013,8 @@ body.layout-basic .jackpot-hero__machine {
   box-sizing: border-box; width: 100%; flex: 0 0 auto; overflow: hidden;
   padding: 0.4rem 0.45rem 0.48rem;
   background:
-    url('/app/assets/jackpot/daily-drawing-backplate-v4.webp') center / 100% 100% no-repeat,
+    url('/app/assets/jackpot/daily-drawing-board-routing-v6.svg') center / 100% 100% no-repeat,
+    url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,
     #090203;
 }
 
@@ -5036,13 +5102,15 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:nth-child(1) { g
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:nth-child(2) { grid-column: 1; grid-row: 2; }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:nth-child(3) { grid-column: 5; grid-row: 1; }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot:nth-child(4) { grid-column: 5; grid-row: 2; }
+/* The empty socket prints a ticket silhouette, not a house mark. The flame
+   belongs to the board silkscreen and to the ticket's own centre; stamping it
+   into the bay as well made the empty socket look like a badge rather than a
+   fitting. daily-drawing.css draws the silhouette on this box. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot::before {
   width: 42%;
   height: 42%;
-  background: rgba(229, 196, 135, 0.065);
+  background: rgba(214, 220, 226, 0.07);
   content: "";
-  -webkit-mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
-  mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
 }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded { border-color: transparent; background: transparent; box-shadow: none; }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded::before { display: none; }
@@ -5088,7 +5156,11 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center {
   width: 20%;
   height: 20%;
   place-items: center;
-  border-radius: 3px;
+  /* A true diamond, not a lozenge. The full-size .ticket-card-center carries
+     3px, where it is a hairline chamfer on a wide face; on the ~13px socketed
+     centre 3px is most of every edge, and the ticket centre printed as a
+     rounded pill with a flame in it. The full-size card keeps its 3px. */
+  border-radius: 0;
   transform: translate(-50%, -50%) rotate(45deg);
 }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center img {
@@ -5097,21 +5169,24 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center img {
   object-fit: contain;
   filter: grayscale(1);
 }
-body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-graded .ldj-foil-machine-ticket {
-  filter: grayscale(0.45) brightness(0.68);
-  opacity: 0.56;
+/* Grading alone no longer lifts the card. A revealed draw that hit nothing is
+   information too, and it should read as "nothing here" rather than as a fully
+   lit ticket with dim faces.
+
+   THE DORMANT CELL TREATMENT IS NOT HERE. It lives once, in daily-drawing.css,
+   on `.is-loaded .ldj-foil-machine-cell`. A second copy used to sit here with
+   different values and a 0.2 alpha, and because the two applied under
+   different conditions the same unmatched quadrant rendered differently
+   depending on whether a NEIGHBOURING quadrant had hit. Do not reintroduce a
+   per-cell dim here; change the one in daily-drawing.css. */
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell.is-no-match {
+  background: rgba(3, 7, 8, 0.24);
 }
-body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-graded .ldj-foil-machine-cell {
-  opacity: 0.24;
-}
-body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell.is-symbol-match {
-  background: rgba(96, 165, 250, 0.38);
-  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.8));
-  opacity: 0.92 !important;
-}
-body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell.is-color-match {
-  background: rgba(253, 230, 138, 0.5);
-  filter: brightness(1.16) drop-shadow(0 0 5px rgba(250, 204, 21, 0.92));
+/* A newly committed hit returns to its real material only for the lock flash.
+   Its durable grade remains on the DOM after this presentation class clears,
+   while the face itself drops back to the dormant treatment above. */
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded .ldj-foil-machine-cell.is-match-flash {
+  filter: none;
   opacity: 1 !important;
 }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-match {
@@ -5156,6 +5231,11 @@ body.layout-basic .jackpot-hero__summary-slot {
   padding: 0 clamp(0.65rem, 2vw, 1rem) 0.28rem;
 }
 body.layout-basic .jackpot-hero__summary-slot[hidden] { display: none !important; }
+/* Day history reads as a control mounted on the cabinet, not a web widget: a
+   brushed maroon faceplate lit from above, a bronze rim, and a machined seam
+   between each key and the readout. (Corner rivets were tried here to echo the
+   backplate's; at this bar's height they land inside the keys and read as
+   specks rather than hardware.) */
 body.layout-basic .jackpot-day-history {
   box-sizing: border-box;
   display: grid;
@@ -5166,20 +5246,23 @@ body.layout-basic .jackpot-day-history {
   align-self: center;
   margin: 0.16rem auto 0.42rem;
   overflow: hidden;
-  border: 1px solid rgba(245, 166, 35, 0.48);
+  border: 1px solid var(--jp-gold-dim, #8b6526);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(74, 20, 27, 0.94), rgba(32, 10, 17, 0.98));
+    linear-gradient(180deg, rgba(255, 231, 176, 0.05), transparent 34%),
+    linear-gradient(180deg, var(--jp-plate, #4a141b) 0%, rgba(32, 10, 17, 0.98) 62%, rgba(14, 4, 7, 0.99) 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
-    0 5px 16px rgba(0, 0, 0, 0.25);
+    inset 0 1px 0 rgba(255, 231, 176, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(255, 231, 176, 0.05),
+    0 6px 16px -6px rgba(0, 0, 0, 0.7);
 }
 body.layout-basic .jackpot-day-history[hidden] { display: none !important; }
 body.layout-basic .jackpot-day-history > span {
   display: grid;
   min-width: 0;
   place-items: center;
-  color: #ffd777;
+  color: var(--jp-gold-hi, #ffe7b0);
   font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-size: clamp(0.56rem, 2vw, 0.68rem);
   font-weight: 800;
@@ -5189,30 +5272,70 @@ body.layout-basic .jackpot-day-history > span {
   text-shadow: 0 0 9px rgba(245, 166, 35, 0.3);
   white-space: nowrap;
 }
+/* Five real states. Rest is a dark key with a lit top edge; hover brings the
+   red up under the glyph; :active presses the key into the plate (the state
+   the control had no answer for before); :focus-visible adds a gold ring the
+   hover treatment cannot be mistaken for; disabled goes flat and stops
+   answering. */
 body.layout-basic .jackpot-day-history > button {
   min-width: 0;
   border: 0;
-  background: rgba(237, 14, 17, 0.16);
-  color: #ffb1a9;
-  font: 900 1.18rem/1 "Inter", system-ui, sans-serif;
+  background:
+    linear-gradient(180deg, rgba(237, 14, 17, 0.24) 0%, rgba(237, 14, 17, 0.07) 58%, rgba(0, 0, 0, 0.3) 100%);
+  color: #ffc6a4;
+  font: 900 1.3rem/1 "Inter", system-ui, sans-serif;
   cursor: pointer;
-  transition: color 0.14s ease, background 0.14s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 231, 176, 0.1);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    box-shadow 0.14s ease,
+    text-shadow 0.14s ease,
+    transform 0.08s ease;
 }
 body.layout-basic .jackpot-day-history > button:first-child {
-  border-right: 1px solid rgba(245, 166, 35, 0.24);
+  border-right: 1px solid var(--jp-gold-edge, rgba(227, 182, 98, 0.34));
 }
 body.layout-basic .jackpot-day-history > button:last-child {
-  border-left: 1px solid rgba(245, 166, 35, 0.24);
+  border-left: 1px solid var(--jp-gold-edge, rgba(227, 182, 98, 0.34));
 }
 body.layout-basic .jackpot-day-history > button:hover:not(:disabled),
+body.layout-basic .jackpot-day-history > button:focus-visible:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(237, 14, 17, 0.55) 0%, rgba(237, 14, 17, 0.24) 58%, rgba(0, 0, 0, 0.22) 100%);
+  color: #fff6e2;
+  text-shadow: 0 0 10px rgba(255, 128, 96, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 176, 0.24),
+    inset 0 0 14px rgba(237, 14, 17, 0.3);
+}
 body.layout-basic .jackpot-day-history > button:focus-visible {
-  background: rgba(237, 14, 17, 0.38);
-  color: #fff5dc;
+  outline: 2px solid var(--jp-gold-hi, #ffe7b0);
+  /* The bar clips its children, so the ring has to live inside the key. */
+  outline-offset: -3px;
+}
+body.layout-basic .jackpot-day-history > button:active:not(:disabled) {
+  background: linear-gradient(180deg, rgba(104, 6, 8, 0.72), rgba(28, 3, 5, 0.8));
+  color: #ffd9b8;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.9),
+    inset 0 0 12px rgba(237, 14, 17, 0.22);
+  transform: translateY(1px);
 }
 body.layout-basic .jackpot-day-history > button:disabled {
-  color: rgba(255, 177, 169, 0.22);
-  background: rgba(0, 0, 0, 0.12);
+  color: rgba(255, 198, 164, 0.2);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.44));
+  text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   cursor: default;
+}
+
+/* Phone: the keys are the smallest thing anyone taps in the draw column. */
+@media (max-width: 430px) {
+  body.layout-basic .jackpot-day-history {
+    min-height: 2.55rem;
+  }
 }
 
 /* Far-future long-term view (tickets inventory) */
@@ -8016,6 +8139,18 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(2.2rem, 9vw, 3rem);
 }
 .rvl-card-icon img { width: 100%; height: 100%; object-fit: contain; }
+/* A pile-scale FLIP prize trades the square logo slot for a wide chip-pile
+   lane; the art is bottom-anchored so the coins rest on the card, and its
+   ladder level sets how much of the lane the pile fills. */
+.rvl-card-icon--flip-pile {
+  width: min(100%, clamp(120px, 36vw, 176px));
+  height: clamp(56px, 16vw, 82px);
+  align-items: flex-end;
+}
+.rvl-card-icon--flip-pile img {
+  object-position: center bottom;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
 .rvl-card--quest-shield {
   border-color: rgba(255, 255, 255, 0.76);
   background: radial-gradient(circle at 50% 33%, rgba(219, 234, 254, 0.18), transparent 48%), linear-gradient(180deg, #20283a, #101522);
@@ -10233,7 +10368,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: #090608 url('/app/assets/jackpot/golden-ticket-frame-v1.webp') center / 100% 100% no-repeat;
   box-shadow:
     0 18px 42px rgba(0, 0, 0, 0.34),
-    0 0 34px rgba(237, 14, 17, 0.07);
+    0 0 34px rgba(237, 14, 17, 0.07),
+    inset 0 0 0 1px rgba(255, 200, 110, 0.08);
   overflow: hidden;
   text-align: center;
 }
@@ -10396,7 +10532,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
      Leave a tiny transparent gutter so background-clip:text never shears the
      right edge of that glyph (and the matching left overhang stays balanced). */
   padding-inline: 0.035em 0.07em;
-  background: linear-gradient(180deg, #fff8d8 2%, #ffe093 29%, #ffc249 62%, #ed8d0d 100%);
+  /* Struck metal, not a yellow-to-orange fade: light gathers to a specular
+     band just above the midline, then breaks hard to the shaded lower face.
+     That one value step is what separates gold from amber plastic. */
+  background: linear-gradient(180deg,
+    #fff9e4 0%,
+    #ffe7a4 24%,
+    #ffdf8e 45%,
+    #f7b93f 51%,
+    #eda01c 76%,
+    #c9700a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -13115,11 +13260,11 @@ body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn {
 }
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn::before { content: ""; width: 1.05rem; height: 1.05rem; flex: 0 0 auto; background: #ffd664; -webkit-mask: url("/whitepaper/flame-center.svg") center/contain no-repeat; mask: url("/whitepaper/flame-center.svg") center/contain no-repeat; filter: drop-shadow(0 0 5px rgba(237,14,17,0.5)); }
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn:hover:not(:disabled), body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn:focus-visible { border-color: #fff0a8; filter: brightness(1.15); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 18px rgba(237,14,17,0.45), 0 0 8px rgba(255,198,65,0.34); transform: none !important; }
-body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-bonus { border-color: rgba(255,213,100,0.92); background: radial-gradient(circle at 50% 0, rgba(244,114,182,0.22), transparent 48%), linear-gradient(180deg, #75113f, #490729 55%, #260116); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(237,14,17,0.32); }
+body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-bonus { border-color: rgba(255,213,100,0.92); background: radial-gradient(circle at 50% 0, rgba(244,114,182,0.22), transparent 48%), linear-gradient(180deg, #75113f, #490729 55%, #260116); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(237,14,17,0.32); } body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-bonus:disabled:not(.is-processing):not(.is-spinning) { gap: 0.28rem; padding: 0.55rem 0.5rem; font-size: clamp(0.6rem, 2.3vw, 0.68rem); letter-spacing: 0.045em; }
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing { border-color: rgba(231,188,89,0.76); background: linear-gradient(110deg, rgba(47,12,15,0.98), rgba(28,12,15,0.98) 54%, rgba(12,8,10,0.98)); color: #fff0bd; cursor: wait; opacity: 1; }
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn:disabled { opacity: 0.62; }
 
-/* Only the "No bonus this draw" note lives here in single-button mode; keep it
+/* Only the compact no-bonus status lives here in single-button mode; keep it
    tight under the button rather than a full row of padding below the board. */
 body.layout-basic .jackpot-hero replay-panel .replay-bonus-section {
   order: 3;
@@ -14199,16 +14344,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
   display: inline-block;
   transition: filter 0.2s ease, opacity 0.2s ease;
 }
-.dec-flip-balance--spoiler .dec-flip-balance__value > [data-bind="dec-flip-balance-value"] {
-  filter: blur(var(--main-balance-spoiler-blur));
-  opacity: 0.7;
-  user-select: none;
-}
-.dec-funds__total--spoiler .dec-funds__number {
-  filter: blur(var(--main-balance-spoiler-blur));
-  opacity: 0.72;
-  user-select: none;
-}
 .dec-funds__display {
   box-sizing: border-box;
   display: grid;
@@ -14360,17 +14495,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
   filter: none;
   opacity: 1;
 }
-.dec-funds__display--spoiler .dec-funds__number {
-  filter: blur(var(--main-balance-spoiler-blur));
-  opacity: 0.72;
-  user-select: none;
-  cursor: pointer;
-}
-.dec-funds__display--spoiler .dec-funds__number:focus-visible {
-  outline: 2px solid rgba(158, 213, 255, 0.82);
-  outline-offset: 0.18rem;
-}
-
 /* Shared ledger award cue. The number counts in JS while this gold sweep and
    delta flare provide the Golden Ticket-style hit without changing layout. */
 .balance-rise {
@@ -14638,16 +14762,6 @@ body.layout-basic .rvl-ticket-batch-status { margin-top: 0.8rem; color: var(--te
 .rvl-dgn-fact.is-win .rvl-dgn-fact-value { color: #4ade80; }
 .rvl-dgn-fact.is-loss .rvl-dgn-fact-value { color: #fca5a5; }
 .rvl-dgn-fact.is-miss .rvl-dgn-fact-value { color: var(--text-secondary, #aaa); }
-.rvl-dgn-result-details { display: flex; width: min(100%, 760px); flex-direction: column; align-items: center; gap: 0.38rem; }
-.rvl-dgn-results { display: flex; width: min(100%, 760px); max-height: min(27vh, 240px); flex-direction: column; gap: 0.25rem; overflow-y: auto; padding: 0.15rem; scrollbar-width: thin; }
-.rvl-dgn-result-line { display: grid; width: 100%; grid-template-columns: 4.5rem 3rem minmax(0, 1fr) minmax(5.5rem, auto); align-items: center; gap: 0.45rem; padding: 0.38rem 0.5rem; border: 0; border-left: 3px solid rgba(107, 107, 141, 0.5); border-radius: 7px; background: rgba(255, 255, 255, 0.025); color: inherit; font: inherit; font-size: 0.66rem; text-align: left; cursor: pointer; }
-.rvl-dgn-result-line.is-win { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.07); }
-.rvl-dgn-result-line.is-selected { box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.62), 0 0 10px rgba(59, 130, 246, 0.2); }
-.rvl-dgn-result-spin, .rvl-dgn-result-score { color: var(--text-primary, #eee); }
-.rvl-dgn-result-matches { min-width: 0; color: var(--text-secondary, #aaa); overflow-wrap: anywhere; }
-.rvl-dgn-result-payout { color: var(--text-dim, #6b6b8d); text-align: right; font-variant-numeric: tabular-nums; }
-.rvl-dgn-result-line.is-win .rvl-dgn-result-payout { color: #4ade80; }
-
 /* Keep Hero identification visual: the existing burst is brighter without
    adding a label or another block of copy to the ticket. */
 .rvl-stage--degenerette .rvl-gamepiece .rvl-rq.rvl-rq--hero::before {
@@ -14655,7 +14769,7 @@ body.layout-basic .rvl-ticket-batch-status { margin-top: 0.8rem; color: var(--te
   opacity: 1;
   filter: drop-shadow(0 0 5px rgba(255, 196, 0, 0.78));
 }
-@media (max-width: 560px) { .rvl-stage.rvl-stage--degenerette { --rvl-gamepiece-size: min(170px, 39vw, 30dvh); padding-inline: 0.35rem; } .rvl-dgn-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rvl-dgn-speed > span { display: none; } .rvl-dgn-speed input[type="range"] { width: 3.7rem; } .rvl-dgn-result-line { grid-template-columns: 3.8rem 2.6rem minmax(0, 1fr); gap: 0.3rem; } .rvl-dgn-result-payout { grid-column: 2 / -1; text-align: left; } }
+@media (max-width: 560px) { .rvl-stage.rvl-stage--degenerette { --rvl-gamepiece-size: min(170px, 39vw, 30dvh); padding-inline: 0.35rem; } .rvl-dgn-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rvl-dgn-speed > span { display: none; } .rvl-dgn-speed input[type="range"] { width: 3.7rem; } }
 
 /* BoxSpin currency seal: denomination-neutral until the first verified reel lands. */
 .rvl-box-currency-reveal {
@@ -18556,13 +18670,29 @@ body.layout-basic .dgn-results-summary.is-spinning {
    stack. Today's committed stake is safe to show before the result; only the
    claimable-inclusive FLIP number remains spoiler-masked. */
 body.layout-basic .app-daily-flip {
+  --df-score-cap-top: calc(50% - 2.1rem);
   position: relative;
   display: flex;
   min-height: 100%;
   flex-direction: column;
   padding-top: 0;
 }
-
+@media (max-width: 1099px) { body.layout-basic .jackpot-hero > app-daily-flip { min-height: 450px; } }
+body.layout-basic .jackpot-hero .app-daily-flip {
+  background:
+    repeating-linear-gradient(
+      12deg,
+      rgba(255, 238, 226, 0.018) 0 1px,
+      transparent 1px 7px
+    ) bottom / 100% 49% no-repeat,
+    repeating-linear-gradient(
+      102deg,
+      rgba(56, 0, 0, 0.024) 0 1px,
+      transparent 1px 9px
+    ) bottom / 100% 49% no-repeat,
+    url('/app/assets/jackpot/community-coinflip-felt-v6.webp') center / 100% 100% no-repeat,
+    #06351f;
+}
 /* The BAF lock-in copy lives beside PURCHASE DAY ... (FINAL) in the shared
    pool header. GAME.purchaseInfo still drives this restrained event glow. */
 body.layout-basic .app-daily-flip--baf-eve .df-coin-stage::before {
@@ -18577,158 +18707,159 @@ body.layout-basic .app-daily-flip--baf-eve .df-coin > img,
 body.layout-basic .app-daily-flip--baf-eve .df-coin3d__inner {
   filter: drop-shadow(0 0 11px rgba(59, 130, 246, 0.38)) drop-shadow(0 0 6px rgba(250, 204, 21, 0.2));
 }
-body.layout-basic .app-daily-flip--baf-eve .df-tomorrow-layout {
+body.layout-basic .app-daily-flip--baf-eve .df-tomorrow-bet-oval {
   border-color: rgba(96, 165, 250, 0.66);
   box-shadow: inset 0 0 12px rgba(59, 130, 246, 0.09), 0 0 8px rgba(250, 204, 21, 0.09);
 }
-/* The payout rail is an overlay, not a row in the ledger. Keeping it pinned
-   beside the coin means appearing/disappearing never moves the bet boxes. */
+/* The payout selector is embedded in the table: its scale is quiet printed
+   ink, while stacked cells in the L25-style channel fill only while in use. */
 body.layout-basic .df-modifier-meter-slot {
   position: absolute;
-  z-index: 4;
-  top: 0.58rem;
-  left: 0.38rem;
-  width: 2.95rem;
-  height: clamp(110px, 14vw, 150px);
+  z-index: 5;
+  top: 25%;
+  left: 0.18rem;
+  box-sizing: border-box;
+  display: grid;
+  width: 3.2rem;
+  height: 8.93rem;
+  grid-template-columns: 1.48rem minmax(0, 1fr);
+  gap: 0.14rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
   pointer-events: none;
+  transform: translateY(-50%);
 }
-body.layout-basic .df-modifier-meter-slot:empty { display: none; }
-body.layout-basic .df-modifier-flash {
+body.layout-basic .df-modifier-meter__table-scale {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  color: rgba(240, 217, 166, 0.58);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.45rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  opacity: 0.74;
+}
+body.layout-basic .df-modifier-meter__table-scale span {
+  position: relative;
+  padding-left: 0.3rem;
+}
+body.layout-basic .df-modifier-meter__table-scale span::before {
   position: absolute;
   top: 50%;
   left: 0;
-  width: max-content;
-  color: #86efac;
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: clamp(1.2rem, 4vw, 1.72rem);
-  font-weight: 950;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.025em;
-  line-height: 1;
+  width: 0.22rem;
+  height: 1px;
+  background: currentColor;
+  content: '';
+  opacity: 0.52;
+}
+body.layout-basic .df-modifier-meter-live {
+  --df-meter-pip-bank-height: calc(8.93rem - 0.24rem - 2px);
+  position: relative;
+  box-sizing: border-box;
+  width: 1.48rem;
+  height: 100%;
+  overflow: visible;
+  border: 1px solid rgba(245, 166, 35, 0.52);
+  border-radius: 4px;
+  background-color: #0d0907;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.016) 0,
+    rgba(255, 255, 255, 0.016) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  box-shadow: inset 0 0 10px rgba(245, 158, 11, 0.04);
+  opacity: 0.92;
+}
+body.layout-basic .df-modifier-meter-live:has(> .df-modifier-meter) {
+  border-color: rgba(245, 166, 35, 0.52);
+  box-shadow:
+    inset 0 0 10px rgba(245, 158, 11, 0.04),
+    0 0 7px rgba(74, 222, 128, 0.12);
+  opacity: 1;
+}
+body.layout-basic .df-modifier-flash {
+  position: absolute; z-index: 5; top: 50%; left: calc(100% + 0.42rem); width: max-content;
+  padding: 0.25rem 0.38rem 0.22rem; border: 1px solid rgba(134, 239, 172, 0.48);
+  border-radius: 3px; background: rgba(3, 24, 13, 0.92); color: #86efac;
+  font: 950 clamp(1.05rem, 3.6vw, 1.46rem)/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.025em;
   text-shadow: 0 0 3px #14532d, 0 0 7px rgba(34, 197, 94, 0.4);
-  transform: translateY(-50%);
-  animation: df-multiplier-flash 0.85s ease-out both;
+  transform: translateY(-50%); animation: df-multiplier-flash 0.85s ease-out both;
 }
-body.layout-basic .df-modifier-flash--low {
-  color: #f87171;
-  text-shadow: 0 0 3px #7f1d1d, 0 0 7px rgba(239, 68, 68, 0.42);
-}
-body.layout-basic .df-modifier-flash--high {
-  color: #60a5fa;
-  text-shadow: 0 0 3px #1e3a8a, 0 0 7px rgba(59, 130, 246, 0.42);
-}
+body.layout-basic .df-modifier-flash--low { border-color: rgba(253,224,71,.48); color: #fde047; }
+body.layout-basic .df-modifier-flash--high { border-color: rgba(147,197,253,.5); color: #60a5fa; }
 @keyframes df-multiplier-flash {
   0% { opacity: 0; transform: translateY(-50%) scale(0.64); }
-  24% { opacity: 1; transform: translateY(-50%) scale(1.16); }
-  70% { opacity: 1; transform: translateY(-50%) scale(1); }
+  24%, 70% { opacity: 1; transform: translateY(-50%) scale(1); }
   100% { opacity: 0; transform: translateY(-50%) scale(1.04); }
 }
 body.layout-basic .df-modifier-meter {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 0.52rem;
-  grid-template-rows: minmax(0, 1fr) auto;
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   margin: 0;
-  gap: 0.16rem 0.18rem;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.38));
-}
-body.layout-basic .df-modifier-meter__scale {
-  display: flex;
-  flex-direction: column;
-  grid-column: 1;
-  grid-row: 1;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin: 0;
-  color: var(--gauge-label);
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: 0.47rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  text-shadow: 0 1px 0 #000;
-}
-body.layout-basic .df-modifier-meter__scale span {
-  position: relative;
-  padding-right: 0.28rem;
-}
-body.layout-basic .df-modifier-meter__scale span::after {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: 0.2rem;
-  height: 1px;
-  background: currentColor;
-  opacity: 0.58;
-  content: '';
-}
-body.layout-basic .df-modifier-meter__scale span:first-child { color: rgba(147, 197, 253, 0.72); }
-body.layout-basic .df-modifier-meter__scale span:last-child { color: rgba(248, 113, 113, 0.72); }
-body.layout-basic .df-modifier-meter__scale span:nth-child(2) { color: rgba(240, 217, 166, 0.62); }
-body.layout-basic .df-modifier-meter__track::before {
-  position: absolute;
-  z-index: 1;
-  inset: 1px;
-  border-radius: 2px;
-  background: repeating-linear-gradient(to bottom, transparent 0 8px, rgba(255, 232, 180, 0.13) 8px 9px);
-  content: '';
-  pointer-events: none;
+  filter: none;
 }
 body.layout-basic .df-modifier-meter__track {
-  position: relative;
-  box-sizing: border-box;
-  grid-column: 2;
-  grid-row: 1;
-  width: 0.52rem;
-  height: 100%;
-  border: 1px solid var(--gauge-edge);
-  border-radius: 3px;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 38%, rgba(0, 0, 0, 0.3)),
-    linear-gradient(to top, var(--gauge-red) 0 3%, var(--gauge-green) 3% 94.34%, var(--gauge-blue) 94.34% 100%);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.82), 0 0 0 1px rgba(54, 29, 7, 0.48);
+  position: absolute;
+  inset: 0.12rem;
+  isolation: isolate;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 1px;
+  background: #09100f;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.76);
 }
 body.layout-basic .df-modifier-meter__marker {
   position: absolute;
-  top: auto;
-  left: 50%;
-  bottom: 50%;
+  inset: auto 0 0;
   box-sizing: border-box;
   z-index: 2;
-  width: 1.05rem;
-  height: 0.24rem;
-  border: 1px solid #d6ad60;
-  border-radius: 1px;
-  background: linear-gradient(180deg, #fff1bd 0 1px, #b88332 1px 70%, #55300f 70% 100%);
-  box-shadow: 0 0 0 1px rgba(39, 20, 6, 0.78), 0 1px 3px rgba(0, 0, 0, 0.68);
-  transform: translate(-50%, 50%);
-  will-change: bottom;
+  width: 100%;
+  height: 50%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  filter: none;
+  transform: none;
+  will-change: height;
 }
-body.layout-basic .df-modifier-meter__readout {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  margin: 0;
-  color: var(--gauge-label);
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: 0.58rem;
-  font-weight: 900;
-  line-height: 1;
-  text-align: right;
-  letter-spacing: 0.02em;
-  text-shadow: 0 1px 0 #000;
+body.layout-basic .df-modifier-meter__pip-bank {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  display: grid;
+  width: 100%;
+  height: var(--df-meter-pip-bank-height);
+  min-height: 0;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(25, minmax(0, 1fr));
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 1px;
+  pointer-events: none;
 }
-body.layout-basic .df-modifier-meter--settled .df-modifier-meter__readout {
-  color: #86efac;
-  text-shadow: 0 0 5px rgba(74, 222, 128, 0.3);
-}
-body.layout-basic .df-modifier-meter--settled .df-modifier-meter__readout--low {
-  color: #f87171;
-  text-shadow: 0 0 5px rgba(239, 68, 68, 0.32);
-}
-body.layout-basic .df-modifier-meter--settled .df-modifier-meter__readout--high {
-  color: #60a5fa;
-  text-shadow: 0 0 5px rgba(59, 130, 246, 0.32);
+body.layout-basic .df-modifier-meter__pip-bank--peak {
+  z-index: 1;
+  opacity: 0;
 }
 body.layout-basic .df-modifier-meter--scanning .df-modifier-meter__marker {
   animation: df-meter-scan 0.58s ease-in-out infinite alternate;
@@ -18737,15 +18868,32 @@ body.layout-basic .df-modifier-meter--settling .df-modifier-meter__marker {
   animation: df-meter-settle var(--df-meter-settle-duration, 1600ms)
     cubic-bezier(0.18, 0.72, 0.2, 1) forwards;
 }
+body.layout-basic .df-modifier-meter--settling .df-modifier-meter__pip-bank--peak {
+  animation: df-meter-peak-blue var(--df-meter-settle-duration, 1600ms)
+    cubic-bezier(0.18, 0.72, 0.2, 1) forwards;
+}
+body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__pip-bank--peak {
+  animation: df-meter-rebound-peak-blue var(--df-meter-rebound-duration, 1150ms) linear forwards;
+}
 @keyframes df-meter-scan {
-  from { left: 50%; bottom: 2%; }
-  to { left: 50%; bottom: 98%; }
+  from { height: 2%; }
+  to { height: 98%; }
 }
 @keyframes df-meter-settle {
-  0% { left: 50%; bottom: 6%; }
-  42% { left: 50%; bottom: 94%; }
-  72% { left: 50%; bottom: 28%; }
-  100% { left: 50%; bottom: var(--df-meter-stop, 50%); }
+  0% { height: 6%; }
+  42% { height: 100%; }
+  72% { height: 28%; }
+  100% { height: var(--df-meter-stop, 50%); }
+}
+@keyframes df-meter-peak-blue {
+  0%, 38% { opacity: 0; }
+  41%, 46% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes df-meter-rebound-peak-blue {
+  0%, 35% { opacity: 0; }
+  38%, 43% { opacity: 1; }
+  47%, 100% { opacity: 0; }
 }
 body.layout-basic .df-position,
 body.layout-basic .df-funds {
@@ -18753,115 +18901,90 @@ body.layout-basic .df-funds {
   grid-template-columns: minmax(0, 1fr);
   gap: 0.42rem;
 }
-body.layout-basic .df-position { margin: auto 0 0.42rem; }
+body.layout-basic .df-position { margin: auto 0 0.22rem; }
 body.layout-basic .df-position-slot { min-width: 0; }
 body.layout-basic .df-position > .df-position-slot { height: 2.6rem; }
 body.layout-basic .df-baf-score {
+  position: absolute;
+  z-index: 5;
+  top: var(--df-score-cap-top);
+  left: 0.18rem;
   box-sizing: border-box;
   display: grid;
+  width: 5.1rem;
   min-width: 0;
-  height: 2.6rem;
-  grid-template-areas: "title label" "title value";
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0 0.45rem;
-  padding: 0.25rem 0.48rem;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 3px),
-    #140707;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.68), inset 0 0 18px rgba(248, 113, 113, 0.045);
+  height: 1.62rem;
+  grid-template-rows: 0.42rem minmax(0, 1fr);
+  place-items: center;
+  gap: 0;
+  padding: 0.1rem 0.3rem 0.11rem;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.52);
+  border-radius: 4px;
+  background-color: #0d0907;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.016) 0, rgba(255, 255, 255, 0.016) 1px,
+    transparent 1px, transparent 3px
+  );
+  box-shadow: inset 0 1px rgba(191, 219, 254, 0.08), inset 0 0 12px rgba(59, 130, 246, 0.05);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  contain: layout paint;
   font-variant-numeric: tabular-nums;
 }
 body.layout-basic .df-baf-score__title {
-  grid-area: title;
-  display: grid;
-  grid-template-areas: "unit rank";
-  grid-template-columns: auto auto;
-  min-width: 0;
-  align-content: center;
-  align-items: center;
-  align-self: stretch;
-  justify-self: start;
-  justify-items: start;
-  gap: 0 0.34rem;
-}
-body.layout-basic .df-baf-score__label {
-  grid-area: label;
   display: inline-flex;
+  min-width: 0;
   align-items: center;
-  gap: 0.28rem;
-  color: rgba(254, 202, 202, 0.58);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.5rem;
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  line-height: 1.1;
   align-self: end;
-  justify-self: end;
-  padding-bottom: 0.02rem;
-  text-align: right;
+  justify-content: center;
+  gap: 0.18rem;
+  color: rgba(191, 219, 254, 0.72);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.42rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
 }
-body.layout-basic .df-baf-score__unit,
 body.layout-basic .df-baf-score__value {
+  max-width: 100%;
+  overflow: hidden;
   color: #60a5fa;
   font-family: "OCR A Std", "Share Tech Mono", "Lucida Console", ui-monospace, monospace;
-  font-size: clamp(0.92rem, 2.8vw, 1.16rem);
-  font-weight: 700;
-  letter-spacing: 0.015em;
-  line-height: 1.1;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 0.9;
+  text-align: center;
+  text-overflow: ellipsis;
   text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
   white-space: nowrap;
 }
-body.layout-basic .df-baf-score__unit { grid-area: unit; }
-body.layout-basic .df-baf-score__value {
-  grid-area: value;
-  align-self: end;
-  text-align: right;
-}
-body.layout-basic .df-baf-score__info {
-  box-sizing: border-box;
-  display: inline-grid;
-  width: 0.72rem;
-  height: 0.72rem;
-  min-width: 0.72rem;
-  min-height: 0.72rem;
-  flex: 0 0 0.72rem;
-  place-items: center;
-  padding: 0;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  color: inherit;
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.44rem;
-  font-weight: 900;
-  line-height: 1;
-  text-decoration: none;
-  text-shadow: none;
-}
 body.layout-basic .df-baf-score__rank {
-  grid-area: rank;
-  display: inline-flex;
-  align-items: center;
-  align-self: center;
-  color: rgba(147, 197, 253, 0.82);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.5rem;
-  font-weight: 900;
-  letter-spacing: 0.075em;
-  line-height: 1.1;
-  white-space: nowrap;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
 }
-body.layout-basic .df-baf-score__info:hover,
-body.layout-basic .df-baf-score__info:focus-visible {
-  border-color: rgba(254, 226, 226, 0.9);
-  color: rgba(254, 226, 226, 0.9);
+body.layout-basic .df-baf-score__unit { color: #93c5fd; }
+body.layout-basic .df-once-daily {
+  position: absolute; z-index: 4; top: 50%; left: 50%;
+  width: calc(clamp(110px, 14vw, 150px) + clamp(2.1rem, 4.9vw, 3rem));
+  height: auto; aspect-ratio: 1; overflow: visible; pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+body.layout-basic .df-once-daily text {
+  fill: rgba(240,217,166,.68); stroke: rgba(6,53,31,.48); stroke-width: .55px;
+  font: 950 .66rem/1 "Inter",system-ui,sans-serif; letter-spacing: .055em;
+  paint-order: stroke fill; text-shadow: 0 1px rgba(0,0,0,.38); text-transform: uppercase;
+}
+body.layout-basic .df-baf-score__title:hover,
+body.layout-basic .df-baf-score__title:focus-visible {
+  color: #dbeafe;
   outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22);
+  text-shadow: 0 0 5px rgba(96, 165, 250, 0.52);
 }
 body.layout-basic .df-baf-score.balance-rise::before {
   background: linear-gradient(
@@ -18912,7 +19035,7 @@ body.layout-basic .df-baf-transfer {
   }
 }
 @keyframes df-baf-transfer-impact {
-  0%, 100% { border-color: rgba(239, 68, 68, 0.42); transform: scale(1); }
+  0%, 100% { border-color: rgba(96, 165, 250, 0.52); transform: scale(1); }
   34% { border-color: rgba(96, 165, 250, 0.9); transform: scale(1.018); }
 }
 body.layout-basic .balance-rise .df-baf-score__value {
@@ -18937,36 +19060,30 @@ body.layout-basic .df-tomorrow-layout {
   position: relative;
   box-sizing: border-box;
   display: grid;
-  grid-template-areas: "action total";
-  grid-template-columns: calc(3rem + 0.22rem) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  align-items: stretch;
-  gap: 0.16rem;
+  width: min(12.4rem, calc(100% - 1rem));
+  grid-template-areas: "label" "oval" "total";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1.95rem 1.2rem;
+  justify-self: center;
+  gap: 0.05rem;
   min-width: 0;
-  height: 2.6rem;
-  padding: 0.16rem 0.24rem 0.18rem;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.016) 0,
-      rgba(255, 255, 255, 0.016) 1px,
-      transparent 1px,
-      transparent 3px
-    ),
-    #140707;
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.68),
-    inset 0 0 18px rgba(248, 113, 113, 0.045);
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
 }
-body.layout-basic .df-tomorrow-layout .df-position-label:has(.df-position-bonus) {
-  display: inline-flex;
-  width: 100%;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.34rem;
+body.layout-basic .df-tomorrow-layout:focus-visible { outline: 0; }
+body.layout-basic .df-tomorrow-layout:hover .df-tomorrow-bet-oval,
+body.layout-basic .df-tomorrow-layout:focus-visible .df-tomorrow-bet-oval {
+  border-color: rgba(253,230,138,.78);
+  box-shadow: inset 0 0 0 2px rgba(253,230,138,.07),inset 0 5px 11px rgba(0,0,0,.2),0 0 8px rgba(253,230,138,.1);
 }
+body.layout-basic .df-tomorrow-layout__felt-label {
+  grid-area: label;
+}
+body.layout-basic .df-tomorrow-layout__felt-label b { color: #86efac; font-size: .4rem; letter-spacing: .08em; }
 body.layout-basic .df-position-bonus {
   display: inline;
   color: #4ade80;
@@ -18978,52 +19095,10 @@ body.layout-basic .df-position-bonus {
 body.layout-basic .df-next-bet {
   display: contents;
 }
-body.layout-basic .df-next-bet .df-flip-cta {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-}
-body.layout-basic .df-next-bet .df-flip-cta {
-  grid-area: action;
-  width: 3rem;
-  min-width: 3rem;
-  max-width: 3rem;
-  justify-self: start;
-  align-self: center;
-  margin-left: 0.22rem;
-  height: 1.3rem;
-  min-height: 1.3rem;
-  max-height: 1.3rem;
-  padding: 0 0.42rem;
-  border-color: rgba(253, 230, 138, 0.72);
-  border-radius: 4px;
-  background: linear-gradient(180deg, #fde68a, #f59e0b);
-  color: #2b0808;
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: var(--df-action-font-size, 0.56rem);
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.22);
-}
-@media (max-width: 520px) {
-  body.layout-basic .df-tomorrow-layout {
-    grid-template-columns: calc(3rem + 0.22rem) minmax(0, 1fr);
-    height: 2.6rem;
-    gap: 0.1rem;
-    padding: 0.12rem 0.15rem;
-  }
-  body.layout-basic .df-next-bet .df-flip-cta {
-    width: 3rem;
-    min-width: 3rem;
-    max-width: 3rem;
-  }
-  body.layout-basic .df-tomorrow-layout .df-position-row {
-    padding: 0.08rem 0.12rem;
-  }
-  body.layout-basic .df-tomorrow-layout .df-position-value {
-    font-size: var(--hero-box-currency-font-size);
-  }
+body.layout-basic .df-tomorrow-layout__add-cue {
+  position: absolute; z-index: 4; top: 50%; left: .3rem;
+  color: rgba(246,222,174,.72); font: 950 .72rem/1 "Inter",system-ui,sans-serif;
+  text-shadow: 0 1px rgba(0,0,0,.38); pointer-events: none; translate: 0 -50%;
 }
 body.layout-basic .df-add-bet-dialog__card {
   width: min(92vw, 360px);
@@ -19068,6 +19143,14 @@ body.layout-basic .df-add-bet-dialog__reuse { margin: 0.42rem 0 0; color: #4ade8
 body.layout-basic .df-add-bet-dialog__reuse[hidden] { display: none !important; }
 body.layout-basic .df-add-bet-dialog__boon { margin: 0.32rem 0 0; color: #cbd5e1; font: 950 0.58rem/1.2 "Roboto Mono", monospace; letter-spacing: 0.045em; text-align: center; text-shadow: 0 0 8px rgba(203, 213, 225, 0.3); }
 body.layout-basic .df-add-bet-dialog__boon[hidden] { display: none !important; }
+body.layout-basic .df-add-bet-dialog__quest-bonus {
+  margin: 0.38rem 0 0; color: #86efac;
+  font: 950 0.6rem/1.25 "Roboto Mono", ui-monospace, monospace; letter-spacing: 0.055em;
+  text-align: center; text-shadow: 0 0 9px rgba(74, 222, 128, 0.28);
+}
+body.layout-basic .df-add-bet-dialog__quest-bonus[hidden] { display: none !important; }
+body.layout-basic .allin-quest-bonus { margin: 0; color: #86efac; font: 950 0.6rem/1.25 "Roboto Mono", ui-monospace, monospace; letter-spacing: 0.055em; text-align: center; text-shadow: 0 0 9px rgba(74, 222, 128, 0.28); }
+body.layout-basic .allin-quest-bonus[hidden] { display: none !important; }
 body.layout-basic .df-add-bet-dialog boon-product-indicator { margin: 0.62rem 0 0.1rem; }
 body.layout-basic .df-add-bet-dialog__status { margin: 0.55rem 0 0; color: #fca5a5; font: 700 0.62rem/1.35 "Inter", system-ui, sans-serif; }
 body.layout-basic .df-add-bet-dialog__status[hidden] { display: none !important; }
@@ -19075,32 +19158,14 @@ body.layout-basic .df-add-bet-dialog .df-reverse-dialog__actions { margin-top: 0
 body.layout-basic .df-actions--secondary:empty,
 body.layout-basic .df-outcome:empty { display: none; }
 body.layout-basic .df-funds {
-  box-sizing: border-box;
-  min-height: 2.6rem;
-  margin-top: 0;
-  gap: 0.14rem;
-  padding: 0.2rem 0.24rem 0.24rem;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.016) 0,
-      rgba(255, 255, 255, 0.016) 1px,
-      transparent 1px,
-      transparent 3px
-    ),
-    #140707;
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.68),
-    inset 0 0 18px rgba(248, 113, 113, 0.045);
-}
-body.layout-basic .df-funds:has(.df-funds__toggle[aria-expanded="false"]) {
-  height: 2.6rem;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-body.layout-basic .df-funds:has(.df-funds__toggle[aria-expanded="true"]) {
-  height: auto;
+  --df-bankroll-well-height: clamp(1.85rem, 6vw, 2.15rem);
+  position: relative; box-sizing: border-box; display: grid;
+  width: min(17.4rem, calc(100% - 5rem)); min-height: 0; align-self: center; margin-top: 0;
+  grid-template-areas: "bankroll-rack" "coins";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--df-bankroll-well-height) 1.2rem;
+  gap: .08rem; padding: 0; border: 0; background: none; box-shadow: none;
+  transform: translateX(-.7rem);
 }
 body.layout-basic .df-position-row {
   box-sizing: border-box;
@@ -19131,95 +19196,59 @@ body.layout-basic .df-position-row {
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
 }
-/* Add Bet and the live Tomorrow total share one framed instrument. The inner
-   ledger row sheds its own chrome so this reads as one box, not two cards. */
 body.layout-basic .df-tomorrow-layout .df-position-row {
-  grid-template-areas: "label" "result";
+  height: 100%;
+  grid-template-areas: "result";
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  padding: 0.12rem 0.22rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0; padding: .1rem .42rem; border-radius: 5px;
 }
 body.layout-basic .df-tomorrow-layout > .df-position-slot {
-  grid-area: total;
-  min-width: 0;
+  grid-area: total; width: min(11.4rem, 100%); min-width: 0; height: 1.2rem; justify-self: center;
 }
 body.layout-basic .df-tomorrow-layout .df-position-result {
-  align-self: center;
-  justify-content: flex-end;
+  align-self: center; justify-content: center;
 }
 body.layout-basic .df-tomorrow-layout .df-position-value {
-  margin-left: auto;
-  font-size: var(--hero-box-currency-font-size);
-  text-align: right;
+  margin: 0; font-size: clamp(.68rem,1.8vw,.74rem); text-align: center;
 }
-body.layout-basic .df-tomorrow-layout .df-position-unit {
-  margin-left: 1ch;
+body.layout-basic .df-tomorrow-layout .df-position-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+body.layout-basic .df-tomorrow-layout .df-position-unit { margin-left: 1ch; }
+body.layout-basic .df-bankroll__well {
+  grid-area: bankroll-rack; box-sizing: border-box; display: grid; width: 100%; height: 100%;
+  min-width: 0; min-height: 0; place-items: center; margin: 0; padding: .3rem .38rem .24rem;
+  overflow: hidden; border: 1px solid rgba(198,171,124,.5); border-radius: .42rem;
+  background:
+    linear-gradient(180deg,rgba(10,4,4,.9),rgba(45,7,9,.76) 58%,rgba(14,4,5,.94)),
+    #130506;
+  box-shadow: inset 0 0 0 2px rgba(232,215,174,.045), inset 0 .5rem .7rem rgba(0,0,0,.62), inset 0 -.22rem rgba(0,0,0,.5), 0 1px rgba(240,217,166,.06);
+  color: inherit; cursor: pointer;
 }
-body.layout-basic .df-funds__title {
-  display: inline-flex;
+body.layout-basic .df-bankroll__well:hover:not(:disabled),
+body.layout-basic .df-bankroll__well:focus-visible {
+  border-color: rgba(253,230,138,.76); outline: 0;
+  box-shadow: inset 0 0 0 2px rgba(253,230,138,.08), inset 0 5px 11px rgba(0,0,0,.34), 0 0 8px rgba(253,230,138,.12);
+}
+body.layout-basic .df-bankroll__well:disabled { cursor: default; opacity: .46; }
+body.layout-basic .df-bankroll__well[data-write-locked] { filter: none; }
+body.layout-basic .df-bankroll__well .df-bankroll__rack {
+  display: flex; width: 100%; height: .78rem; min-width: 0;
+  align-items: end; align-self: end; justify-content: center; gap: .07rem; overflow: hidden;
+}
+body.layout-basic .df-bankroll__rack {
   min-width: 0;
-  min-height: 0;
-  align-items: center;
-  justify-self: end;
-  gap: 0.34rem;
-  margin: 0;
-  padding: 0.06rem 0.1rem;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: rgba(254, 202, 202, 0.58);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.5rem;
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  line-height: 1;
-  text-align: right;
-  cursor: pointer;
 }
-body.layout-basic .df-funds__title:hover {
-  color: rgba(254, 226, 226, 0.88);
+body.layout-basic .df-bankroll__roll {
+  --df-chip-tone: #f409cd; position: relative; width: var(--df-bankroll-roll-span);
+  height: .46rem; flex: 0 0 var(--df-bankroll-roll-span);
 }
-body.layout-basic .df-funds__title:focus-visible {
-  outline: 1px solid rgba(254, 202, 202, 0.72);
-  outline-offset: 2px;
-}
-body.layout-basic .df-funds__chevron {
-  box-sizing: border-box;
-  width: 0.42rem;
-  height: 0.42rem;
-  flex: 0 0 auto;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translateY(-0.1rem) rotate(45deg);
-  transition: transform 0.16s ease;
-}
-body.layout-basic .df-funds__toggle[aria-expanded="true"] .df-funds__chevron {
-  transform: translateY(0.1rem) rotate(225deg);
+body.layout-basic .df-bankroll__chip {
+  position: absolute; z-index: 1; left: var(--df-bankroll-chip-x); bottom: 0;
+  width: 1.12rem; height: .31rem; border-radius: 50%;
 }
 body.layout-basic .df-funds__coins {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
-  margin-top: 0.12rem;
-  padding-top: 0.08rem;
-  border-top: 0;
-}
-body.layout-basic .df-funds__toggle[aria-expanded="false"] + .df-funds__coins {
-  min-height: 0;
-  margin-top: 0;
-  padding-top: 0;
-}
-body.layout-basic .df-funds__toggle[aria-expanded="false"] + .df-funds__coins .df-funds__display {
-  min-height: 0;
-  height: 100%;
-  padding-block: 0;
-}
-body.layout-basic .df-funds__toggle[aria-expanded="true"] + .df-funds__coins {
-  border-top: 1px solid rgba(254, 202, 202, 0.16);
+  grid-area: coins; display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr);
+  margin: 0; padding: 0; border-top: 0;
 }
 body.layout-basic .df-funds__display[hidden] {
   display: none !important;
@@ -19241,6 +19270,14 @@ body.layout-basic .df-funds__display {
   background: transparent;
   box-shadow: none;
 }
+body.layout-basic .df-funds__display--flip-total {
+  width: min(11.4rem, 100%); min-height: 1.2rem; height: 1.2rem; justify-self: center;
+  grid-template-areas: "value"; grid-template-columns: minmax(0,1fr); gap: 0; padding: .1rem .3rem;
+  border: 1px solid rgba(240,217,166,.28); border-radius: 5px;
+  background: repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px),rgba(10,4,5,.88);
+  box-shadow: inset 0 2px 7px rgba(0,0,0,.68),inset 0 0 0 1px rgba(255,235,194,.025),0 1px rgba(240,217,166,.05);
+}
+body.layout-basic .df-funds__display--flip-total .df-funds__value { justify-content: center; text-align: center; }
 body.layout-basic .df-funds__display + .df-funds__display::before {
   position: absolute;
   top: 0;
@@ -19399,123 +19436,13 @@ body.layout-basic .df-position-row--win .df-position-multiplier {
   text-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
 }
 body.layout-basic .df-position-row--loss .df-position-multiplier { color: #fca5a5; }
-body.layout-basic .df-position-row--spoiler .df-position-number,
-body.layout-basic .df-funds__display--spoiler .df-funds__number {
-  filter: blur(var(--main-balance-spoiler-blur));
-  opacity: 0.68;
-  user-select: none;
-}
-body.layout-basic .df-position-row--spoiler .df-position-result,
-body.layout-basic .df-funds__display--spoiler .df-funds__number {
-  cursor: pointer;
-}
-body.layout-basic .df-position-row--spoiler .df-position-result:focus-visible,
-body.layout-basic .df-funds__display--spoiler .df-funds__number:focus-visible {
-  outline: 2px solid rgba(253, 230, 138, 0.88);
-  outline-offset: 0.16rem;
-}
 body.layout-basic .df-position-unit {
   filter: none;
   opacity: 1;
 }
-body.layout-basic .df-funds .df-claim-flip-cta[data-write],
-body.layout-basic .df-funds .df-burn-wwxrp-cta[data-write],
-body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write] {
-  grid-area: action;
-  align-self: center;
-  justify-self: start;
-  width: auto;
-  min-width: 2.7rem;
-  min-height: 1.25rem;
-  margin: 0;
-  padding: 0.2rem 0.38rem;
-  border: 1px solid rgba(254, 202, 202, 0.6);
-  border-radius: 4px;
-  background: linear-gradient(180deg, #fca5a5, #ef4444);
-  color: #250707;
-  font-size: var(--df-action-font-size, 0.56rem);
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.24);
-}
-body.layout-basic .df-funds .df-claim-flip-cta[data-write] {
-  border-color: rgba(253, 230, 138, 0.72);
-  background: linear-gradient(180deg, #fde68a, #f59e0b);
-  color: #2b0808;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.22);
-}
-body.layout-basic .df-funds:has(.df-funds__toggle[aria-expanded="false"])
-  .df-claim-flip-cta[data-write] {
-  transform: translateY(-0.38rem);
-}
-body.layout-basic .df-funds .df-burn-wwxrp-cta[data-write] {
-  border-color: rgba(255, 122, 124, 0.76);
-  background: linear-gradient(180deg, #ff7375, #ed0e11);
-  color: #250707;
-  box-shadow: 0 2px 10px rgba(237, 14, 17, 0.28);
-}
-body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write] {
-  border-color: rgba(253, 230, 138, 0.64);
-  background: linear-gradient(180deg, #fde68a, #f59e0b);
-  color: #2b0808;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
-}
-body.layout-basic .df-funds__sdgnrs-actions {
-  grid-area: action;
-  display: flex;
-  align-items: center;
-  gap: 0.24rem;
-}
-body.layout-basic .df-funds__sdgnrs-actions .df-charity-vote-cta,
-body.layout-basic .df-funds__sdgnrs-actions .df-burn-sdgnrs-cta[data-write] {
-  width: auto;
-  min-width: 2.7rem;
-  min-height: 1.25rem;
-  margin: 0;
-  padding: 0.2rem 0.38rem;
-  border-radius: 5px;
-  font-size: var(--df-action-font-size, 0.56rem);
-  font-weight: 950;
-  letter-spacing: 0.055em;
-  line-height: 1;
-  cursor: pointer;
-}
-body.layout-basic .df-funds__sdgnrs-actions .df-charity-vote-cta {
-  border: 1px solid rgba(196, 181, 253, 0.72);
-  background: linear-gradient(180deg, #c4b5fd, #8b5cf6);
-  color: #160a2e;
-  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.24);
-}
-body.layout-basic .df-funds__sdgnrs-actions .df-burn-sdgnrs-cta[data-write] {
-  border-color: rgba(255, 122, 124, 0.72);
-  background: linear-gradient(180deg, #ff7375, #ed0e11);
-  color: #250707;
-  box-shadow: 0 2px 10px rgba(237, 14, 17, 0.26);
-}
-body.layout-basic .df-funds .df-charity-vote-cta:hover {
-  border-color: #ede9fe;
-  filter: brightness(1.08);
-}
-body.layout-basic .df-funds__display--sdgnrs {
-  border-color: transparent;
-}
-body.layout-basic .df-funds__display--wwxrp {
-  border-color: transparent;
-}
 body.layout-basic .df-funds__display--flip-total .df-funds__value {
   color: #fde68a;
   text-shadow: 0 0 7px rgba(245, 158, 11, 0.48);
-}
-body.layout-basic .df-funds__display--wwxrp .df-funds__value {
-  color: #f87171;
-  font-family: "OCR A Std", "Share Tech Mono", "Lucida Console", ui-monospace, monospace;
-  font-weight: 700;
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-}
-body.layout-basic .df-funds__display--sdgnrs .df-funds__value {
-  color: #d8b4fe;
-  text-shadow: 0 0 7px rgba(168, 85, 247, 0.48);
 }
 /* Currency readouts in the three-column hero use one responsive scale. Keep
    asset colors and shadows distinct, but never make one ledger look quieter
@@ -19523,52 +19450,17 @@ body.layout-basic .df-funds__display--sdgnrs .df-funds__value {
 body.layout-basic .jackpot-hero :is(
   .app-decimator-panel .dec-flip-balance__value,
   .app-decimator-panel .dec-funds__value,
-  .app-daily-flip .df-baf-score__unit,
-  .app-daily-flip .df-baf-score__value,
   .app-daily-flip .df-position-value,
   .app-daily-flip .df-funds__value
 ) {
   font-size: var(--hero-box-currency-font-size);
 }
-body.layout-basic .df-funds .df-claim-flip-cta[data-write]:disabled,
-body.layout-basic .df-funds .df-burn-wwxrp-cta[data-write]:disabled,
-body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write]:disabled {
-  border-color: rgba(254, 202, 202, 0.14);
-  background: rgba(0, 0, 0, 0.16);
-  color: rgba(254, 202, 202, 0.25);
-  box-shadow: none;
-  cursor: default;
-}
-
-/* The five primary flip controls use one label and physical rhythm. */
-body.layout-basic .app-daily-flip :is(
-  .df-flip-cta,
-  .df-claim-flip-cta,
-  .df-burn-wwxrp-cta,
-  .df-charity-vote-cta,
-  .df-burn-sdgnrs-cta
-) {
-  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: var(--df-action-font-size, 0.56rem);
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-/* Ledger actions share one physical control language across Available Funds
-   and Protocol Coins. Color still communicates each action's asset/meaning;
-   geometry and type no longer jump between source rows. */
+/* Available Funds actions share one physical control language. */
 body.layout-basic :is(
   .app-decimator-panel .dec-funds__priority,
   .app-decimator-panel .dec-funds__claim,
   .app-decimator-panel .dec-funds__faucet,
-  .app-decimator-panel .dec-flip-toggle,
-  .app-daily-flip .df-next-bet .df-flip-cta[data-write],
-  .app-daily-flip .df-funds .df-claim-flip-cta[data-write],
-  .app-daily-flip .df-funds .df-burn-wwxrp-cta[data-write],
-  .app-daily-flip .df-funds .df-charity-vote-cta,
-  .app-daily-flip .df-funds .df-burn-sdgnrs-cta[data-write]
+  .app-decimator-panel .dec-flip-toggle
 ) {
   box-sizing: border-box;
   display: inline-flex;
@@ -19609,10 +19501,6 @@ body.layout-basic .app-decimator-panel :is(
   min-width: 4rem;
   max-width: 4rem;
 }
-@media (max-width: 520px) {
-  body.layout-basic .app-daily-flip { --df-action-font-size: 0.49rem; }
-}
-
 body.layout-basic .df-wwxrp-dialog .df-burn-dialog__card {
   background:
     radial-gradient(circle at 88% 8%, rgba(59, 130, 246, 0.24), transparent 31%),
@@ -20746,11 +20634,11 @@ body.layout-basic .rvl-bursting .rvl-vessel--pack {
   animation: rvl-pack-burst-quiet 0.26s ease-in forwards;
 }
 
-/* DAY SUMMARY takes the exact action row vacated by Reveal Draw. */
-body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta {
-  min-height: 38px;
-  margin: 0;
-}
+/* DAY SUMMARY takes the exact action row and silhouette vacated by Spin Jackpot. */
+body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta { position: relative; isolation: isolate; display: grid; box-sizing: border-box; height: 2.5rem; min-height: 2.5rem; place-items: center; margin: 0; padding: 0 0.9rem; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%); animation: none; transform: none; }
+body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta::before, body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta::after { position: absolute; z-index: -2; inset: 0; background: #ffe08a; clip-path: inherit; content: ""; pointer-events: none; }
+body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta::after { z-index: -1; inset: 1px; background: linear-gradient(180deg, #ffc04d, #e99a18); }
+body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta:hover, body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta:active { filter: brightness(1.08); transform: none; }
 
 /* Keep the compact two-card rail on small tablets. Phones switch to the
    dedicated horizontal touch controls below. */
@@ -21399,7 +21287,7 @@ body.layout-basic .pass-afking__topup-field > span {
 
 body.layout-basic .pass-afking__topup-field small {
   position: absolute;
-  right: 0.55rem;
+  right: 2.05rem;
   top: 50%;
   color: #8abce8;
   font: 800 0.58rem/1 var(--font-mono, "Roboto Mono", monospace);
@@ -22645,13 +22533,6 @@ body.layout-basic :is(
   text-transform: uppercase;
   white-space: nowrap;
 }
-/* Add Bet and its sibling Protocol Coins Claim share one compact footprint. */
-body.layout-basic .app-daily-flip .df-next-bet .df-flip-cta[data-write],
-body.layout-basic .app-daily-flip .df-funds .df-claim-flip-cta[data-write] {
-  width: 3rem;
-  min-width: 3rem;
-  max-width: 3rem;
-}
 /* Available Funds does have a repeated action column. This selector includes
    data-write so the older transaction-CTA safeguard cannot shrink CLAIM below
    the adjacent USE FIRST controls. */
@@ -22836,6 +22717,29 @@ body.decimator-draw-open { overflow: hidden !important; }
   font-weight: 950;
   letter-spacing: 0.14em;
 }
+.decimator-draw-modal__retry {
+  min-width: 10rem;
+  min-height: 2.75rem;
+  margin: 0.55rem auto 0;
+  padding: 0.62rem 1.1rem;
+  border: 1px solid rgba(255, 189, 54, 0.76);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 189, 54, 0.2), rgba(113, 24, 35, 0.34));
+  color: #ffe4a3;
+  font: 950 0.68rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(227, 41, 62, 0.2);
+}
+.decimator-draw-modal__retry:hover,
+.decimator-draw-modal__retry:focus-visible {
+  border-color: #ffe4a3;
+  outline: 2px solid rgba(170, 255, 223, 0.58);
+  outline-offset: 2px;
+  filter: brightness(1.12);
+}
+.decimator-draw-modal__retry[hidden] { display: none !important; }
+.decimator-draw-modal.is-error .decimator-draw-modal__loading::after { display: none; }
 .decimator-draw-modal__loading::after {
   width: 2.4rem;
   height: 2.4rem;
@@ -22864,131 +22768,66 @@ body.decimator-draw-open { overflow: hidden !important; }
   .decimator-draw-modal__loading::after { animation: none; }
 }
 
-/* A balanced scoreboard rail sits just above Today's Bet: an invisible square
-   mirrors Auto Rebuy on the left, keeping the lifetime W–L / Last 15 display
-   truly centered instead of optically drifting toward the free side. */
+/* The paired score caps sit low in the green field. L25 is a separate vertical
+   bank centered in that field instead of hanging from the All Time cap. */
 body.layout-basic .df-position { position: relative; }
 body.layout-basic .df-coinflip-record-rail {
-  position: absolute;
-  z-index: 6;
-  top: -1.92rem;
-  right: 0;
-  left: 0;
-  display: grid;
-  height: 1.62rem;
-  grid-template-columns: 1.62rem minmax(0, 1fr) 1.62rem;
-  align-items: stretch;
-  gap: 0.32rem;
-  pointer-events: none;
-}
-/* Expanded Protocol Coins needs real vertical room. Put the scoreboard back in
-   the position stack so it cannot float over the coin/reveal artwork. */
-body.layout-basic .app-daily-flip:has(.df-funds__toggle[aria-expanded="true"])
-  .df-coinflip-record-rail {
-  position: relative;
-  top: auto;
-  right: auto;
-  left: auto;
-  width: 100%;
-}
-body.layout-basic .df-coinflip-record-rail__spacer {
-  display: block;
-  width: 1.62rem;
-  height: 1.62rem;
+  position: absolute; z-index: 5; top: 0; right: 0.18rem;
+  display: block; width: 5.1rem; height: 100%; pointer-events: none;
 }
 body.layout-basic .df-coinflip-record {
-  position: relative;
-  display: grid;
-  isolation: isolate;
-  box-sizing: border-box;
-  width: min(100%, 13.25rem);
-  height: 1.62rem;
-  min-width: 0;
-  grid-template-columns: minmax(3.45rem, 0.76fr) minmax(0, 1.24fr);
-  align-items: center;
-  justify-self: center;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(245, 166, 35, 0.48);
-  border-radius: 4px;
-  background:
-    radial-gradient(90% 180% at 50% 115%, rgba(245, 166, 35, 0.07), transparent 62%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #24160f 0%, #100a08 54%, #070605 100%);
-  box-shadow:
-    inset 0 1px rgba(255, 231, 170, 0.1),
-    inset 0 0 0 1px rgba(52, 22, 4, 0.72),
-    inset 0 0 14px rgba(245, 158, 11, 0.045),
-    0 2px 7px rgba(0, 0, 0, 0.46);
-  pointer-events: auto;
-}
-body.layout-basic .df-coinflip-record::before {
-  position: absolute;
-  z-index: -1;
-  inset: 2px;
-  border: 1px solid rgba(253, 230, 138, 0.07);
-  border-radius: 2px;
-  content: '';
-  pointer-events: none;
+  position: relative; display: block; isolation: isolate; box-sizing: border-box;
+  width: 5.1rem; height: 100%; min-width: 0; padding: 0; overflow: visible;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  contain: layout; pointer-events: none;
 }
 body.layout-basic .df-coinflip-record__group {
-  position: relative;
-  display: grid;
-  box-sizing: border-box;
-  min-width: 0;
-  height: 100%;
+  position: absolute; display: grid; box-sizing: border-box; min-width: 0;
   grid-template-rows: 0.42rem minmax(0, 1fr);
   align-items: center;
+  background-color: #0d0907;
   background-image: repeating-linear-gradient(
     0deg,
-    rgba(255, 255, 255, 0.016) 0,
-    rgba(255, 255, 255, 0.016) 1px,
-    transparent 1px,
-    transparent 3px
+    rgba(255, 255, 255, 0.016) 0, rgba(255, 255, 255, 0.016) 1px,
+    transparent 1px, transparent 3px
   );
   transition: background-color 0.2s ease;
 }
 body.layout-basic .df-coinflip-record__group--score {
-  justify-items: center;
-  padding: 0.1rem 0.34rem 0.11rem 0.38rem;
+  top: var(--df-score-cap-top); left: 0; width: 5.1rem; height: 1.62rem;
+  justify-items: center; padding: 0.1rem 0.3rem 0.11rem;
+  border: 1px solid rgba(245, 166, 35, 0.52); border-radius: 4px;
+  box-shadow: inset 0 1px rgba(255, 231, 170, 0.09), inset 0 0 12px rgba(245, 158, 11, 0.045);
 }
 body.layout-basic .df-coinflip-record__group--recent {
-  padding: 0.1rem 0.38rem 0.11rem;
-  border-left: 1px solid rgba(253, 230, 138, 0.14);
+  top: 25%; right: 0; width: 1.48rem; height: 8.93rem;
+  grid-template-rows: minmax(0, 1fr);
+  justify-items: stretch; padding: 0.12rem;
+  border: 1px solid rgba(245, 166, 35, 0.52); border-radius: 4px;
+  box-shadow: inset 0 0 10px rgba(245, 158, 11, 0.04);
+  transform: translateY(-50%);
 }
-body.layout-basic .df-coinflip-record__group[data-majority="win"] {
-  background-color: #07140b;
-}
-body.layout-basic .df-coinflip-record__group[data-majority="loss"] {
-  background-color: #140707;
-}
+body.layout-basic .df-coinflip-record__group[data-majority="win"] { background-color: #07140b; }
+body.layout-basic .df-coinflip-record__group[data-majority="loss"] { background-color: #140707; }
 body.layout-basic .df-coinflip-record__label {
-  align-self: end;
-  color: rgba(253, 230, 138, 0.54);
+  align-self: end; color: rgba(253, 230, 138, 0.54);
   font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.42rem;
-  font-weight: 950;
-  letter-spacing: 0.15em;
-  line-height: 1;
+  font-size: 0.42rem; font-weight: 950; letter-spacing: 0.15em; line-height: 1;
   text-transform: uppercase;
   text-shadow: 0 0 6px rgba(245, 158, 11, 0.14);
   white-space: nowrap;
 }
-body.layout-basic .df-coinflip-record__label--recent { justify-self: center; }
+body.layout-basic .df-coinflip-record__label--recent {
+  position: absolute; top: -0.72rem; left: calc(50% - 0.42rem); width: 3.2rem;
+  font-size: 0.42rem; letter-spacing: 0.1em; text-align: center;
+  transform: translateX(-50%);
+}
 body.layout-basic .df-coinflip-record__score {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 0.1rem;
+  display: inline-flex; flex: 0 0 auto; min-width: 0;
+  align-items: center; justify-content: center; gap: 0.1rem;
   font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.84rem;
-  font-weight: 1000;
-  line-height: 0.9;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  font-size: 0.84rem; font-weight: 1000; line-height: 0.9;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
   -webkit-text-stroke: 0.2px currentColor;
 }
 body.layout-basic .df-coinflip-record__score b { min-width: 1.18rem; text-align: center; }
@@ -23009,19 +22848,16 @@ body.layout-basic .df-coinflip-record__score i {
   text-shadow: 0 0 5px rgba(245, 158, 11, 0.42);
 }
 body.layout-basic .df-coinflip-record__recent {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(15, 0.38rem);
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  gap: 0.1rem;
+  display: grid; width: 100%; height: 100%; min-height: 0;
+  grid-template-columns: 1fr; grid-template-rows: repeat(25, minmax(0, 1fr));
+  align-items: stretch; justify-content: stretch; gap: 1px;
 }
 body.layout-basic .df-coinflip-record__mark {
   display: block;
   box-sizing: border-box;
-  width: 0.38rem;
-  height: 0.52rem;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   border: 1px solid rgba(100, 116, 139, 0.22);
   border-radius: 1px;
   background: #17222b;
@@ -23057,6 +22893,111 @@ body.layout-basic .df-coinflip-record__recent.is-shifting {
   animation: df-coinflip-bank-shift 0.52s cubic-bezier(0.2, 0.82, 0.24, 1) both;
 }
 body.layout-basic .df-coinflip-record__mark.is-empty { opacity: 0.42; }
+body.layout-basic .df-bet-table {
+  position: absolute; z-index: 2; left: 50%; width: min(13.6rem, calc(100% - 6rem));
+  pointer-events: none; transform: translateX(-50%);
+}
+body.layout-basic .df-bet-table { top: calc(50% + .38rem); display: grid; gap: 0.04rem; }
+body.layout-basic :is(.df-bet-oval,.df-tomorrow-bet-oval) {
+  position: relative; box-sizing: border-box; display: grid; width: 100%; height: 1.95rem;
+  grid-template-rows: minmax(0, 1fr); place-items: center; padding: 0.08rem 0.34rem;
+  overflow: hidden; border: 1px solid rgba(240, 217, 166, 0.56); border-radius: 0.62rem;
+  background: linear-gradient(180deg, rgba(44,2,5,.46), rgba(95,9,15,.18));
+  box-shadow: inset 0 0 0 2px rgba(232,215,174,.075), inset 0 5px 11px rgba(0,0,0,.18), 0 1px rgba(255,235,194,.045);
+  color: rgba(240, 217, 166, 0.68);
+}
+body.layout-basic .df-bet-oval {
+  height: 4.35rem; grid-template-rows: repeat(2, minmax(0, 1fr)) .78rem; gap: .04rem;
+}
+body.layout-basic .df-tomorrow-bet-oval { grid-area: oval; background: linear-gradient(180deg, rgba(41,2,5,.42), rgba(86,7,13,.16)); }
+body.layout-basic .df-today-winnings-row {
+  position: relative; box-sizing: border-box; display: grid; width: 100%; height: 100%;
+  place-items: center; border-bottom: 1px solid rgba(240,217,166,.17);
+  box-shadow: 0 1px rgba(0,0,0,.24);
+}
+body.layout-basic .df-today-winnings-row[data-state="empty"] .df-bet-chip-rack { visibility: hidden; }
+body.layout-basic .df-bet-chip-rack {
+  --df-chip-width: 1.56rem; --df-chip-height: .74rem; --df-chip-stack-height: 1.42rem;
+  --df-chip-mark-width: .68rem; --df-chip-mark-height: .54rem;
+  display: flex; width: 100%; height: var(--df-chip-stack-height); align-items: flex-end; justify-content: center; gap: .02rem;
+  font: 900 0.38rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.08em;
+}
+body.layout-basic .df-bet-chip-stack {
+  --df-chip-tone: #f409cd; position: relative; flex: 1 1 var(--df-chip-width);
+  width: var(--df-chip-width); min-width: .8rem; max-width: var(--df-chip-width); height: var(--df-chip-stack-height);
+}
+body.layout-basic .df-bet-chip {
+  position: absolute; left: 50%; bottom: calc(0.03rem + var(--df-chip-rise)); box-sizing: border-box;
+  display: block; width: min(var(--df-chip-width), calc(100% + .18rem)); height: var(--df-chip-height); border: 0; border-radius: 50%;
+  background: radial-gradient(ellipse, #fff8e8 0 48%, #111 50% 64%, var(--df-chip-tone) 66% 94%, #090b0a 96%);
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.22), 0 1px 0 #090b0a, 0 2px 3px rgba(0,0,0,0.55);
+  transform: translateX(-50%);
+}
+body.layout-basic .df-bet-chip.is-top::after {
+  position: absolute; top: 50%; left: 50%; width: var(--df-chip-mark-width); height: var(--df-chip-mark-height);
+  border: 1px solid #111; border-radius: 50%;
+  background: url('/whitepaper/flame-center.svg') center / 42% 78% no-repeat, #fff8e8;
+  box-shadow: inset 0 -1px rgba(0,0,0,.12);
+  content: ''; transform: translate(-50%, -51%) rotate(-3deg);
+}
+body.layout-basic .df-tomorrow-bet-oval .df-bet-chip-rack {
+  width: calc(100% - 1.7rem); justify-self: start; justify-content: center;
+}
+body.layout-basic .df-tomorrow-bet-oval :is(.df-next-bet__quest,.df-next-bet__boon) {
+  top: 50%; bottom: auto; width: 1rem; min-width: 1rem; max-width: 1rem;
+  height: 1rem; min-height: 1rem; max-height: 1rem; padding: 0; scale: .84;
+  translate: 0 -50%;
+}
+body.layout-basic .df-tomorrow-bet-oval .df-next-bet__quest { right: .12rem; left: auto; }
+body.layout-basic .df-tomorrow-bet-oval .df-next-bet__boon { right: auto; left: 1rem; }
+body.layout-basic :is(.df-bet-table__today-label,.df-tomorrow-layout__felt-label) {
+  display: flex; min-width: 0; align-items: center; justify-content: center; gap: .28rem;
+  color: rgba(246,222,174,.8); font: 950 clamp(.5rem,1.4vw,.56rem)/1 "Inter",system-ui,sans-serif;
+  letter-spacing: .17em; text-align: center; text-shadow: 0 1px rgba(0,0,0,.42);
+  white-space: nowrap;
+}
+body.layout-basic :is(.df-bet-table__today-label,.df-tomorrow-layout__felt-label)::before,
+body.layout-basic :is(.df-bet-table__today-label,.df-tomorrow-layout__felt-label)::after {
+  width: 1.45rem; height: 1px; flex: 0 1 1.45rem;
+  background: linear-gradient(90deg, transparent, rgba(240,217,166,.4)); content: '';
+}
+body.layout-basic :is(.df-bet-table__today-label,.df-tomorrow-layout__felt-label)::after { transform: scaleX(-1); }
+body.layout-basic .df-bet-today-slot {
+  width: 100%; height: .78rem; min-width: 0; align-self: stretch; justify-self: stretch;
+}
+body.layout-basic .df-bet-today-slot .df-position-row {
+  height: 100%; grid-template-areas: "result"; grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr); gap: 0; padding: 0 .3rem; border-radius: 0;
+}
+body.layout-basic :is(.df-bet-today-slot,.df-tomorrow-layout) .df-position-row {
+  border-color: rgba(240,217,166,.28);
+  background: repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px), rgba(10,4,5,.88);
+  box-shadow: inset 0 2px 7px rgba(0,0,0,.68), inset 0 0 0 1px rgba(255,235,194,.025), 0 1px rgba(240,217,166,.05);
+}
+body.layout-basic .df-bet-today-slot .df-position-row--win { border-color: rgba(74,222,128,.46); }
+body.layout-basic .df-bet-today-slot .df-position-row--loss { border-color: rgba(248,113,113,.5); }
+body.layout-basic .df-bet-today-slot .df-position-label { display: none; }
+body.layout-basic .df-bet-today-slot .df-position-result { justify-content: center; }
+body.layout-basic .df-bet-today-slot .df-position-value { margin: 0; font-size: clamp(0.68rem, 1.8vw, 0.74rem); text-align: center; }
+body.layout-basic .df-bet-today-slot :is(.df-position-multiplier, .df-position-result-bonus) { display: none; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="purple"] { --df-chip-tone: #7c2bff; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="green"] { --df-chip-tone: #30d100; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="red"] { --df-chip-tone: #ed0e11; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="blue"] { --df-chip-tone: #1317f7; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="orange"] { --df-chip-tone: #f7931a; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="silver"] { --df-chip-tone: #8b929b; }
+body.layout-basic :is(.df-bet-chip-stack,.df-bankroll__roll)[data-chip-color="gold"] { --df-chip-tone: #ab8d3f; }
+@media (min-width: 521px) {
+  body.layout-basic .df-bet-oval { height: 4.75rem; }
+  body.layout-basic .df-tomorrow-layout {
+    width: min(13.6rem, calc(100% - 1rem));
+    grid-template-rows: auto 2.35rem 1.2rem;
+  }
+  body.layout-basic .df-bet-chip-rack {
+    --df-chip-width: 1.86rem; --df-chip-height: .92rem; --df-chip-stack-height: 1.7rem;
+    --df-chip-mark-width: .82rem; --df-chip-mark-height: .68rem;
+  }
+}
 @keyframes df-coinflip-score-tick {
   0% { opacity: 0.28; transform: translateY(0.34rem) scaleY(0.72); }
   48% { opacity: 1; transform: translateY(-0.06rem) scale(1.16, 1.04); }
@@ -23073,57 +23014,80 @@ body.layout-basic .df-coinflip-record__mark.is-empty { opacity: 0.42; }
   100% { filter: brightness(1); }
 }
 @keyframes df-coinflip-bank-shift {
-  0% { opacity: 0.62; transform: translateX(-0.4rem); }
-  62% { opacity: 1; transform: translateX(0.04rem); }
-  100% { opacity: 1; transform: translateX(0); }
+  0% { opacity: 0.62; transform: translateY(-0.4rem); }
+  62% { opacity: 1; transform: translateY(0.04rem); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 body.layout-basic .df-auto-rebuy-cta {
-  position: relative;
-  z-index: 1;
-  justify-self: end;
+  position: absolute;
+  z-index: 7;
+  top: calc(50% + 0.45rem);
+  right: 0.25rem;
   box-sizing: border-box;
   display: grid;
-  width: 1.62rem;
-  min-width: 1.62rem;
-  max-width: 1.62rem;
-  height: 1.62rem;
-  min-height: 1.62rem;
-  max-height: 1.62rem;
+  width: 2.9rem;
+  height: 2.65rem;
+  grid-template-rows: auto minmax(0, 1fr);
   place-items: center;
+  gap: 0.1rem;
   padding: 0;
-  border: 1px solid rgba(245, 166, 35, 0.38);
-  border-radius: 4px;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #24110e, #100706);
-  color: rgba(254, 202, 202, 0.72);
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.48), inset 0 1px rgba(255, 231, 170, 0.08);
-  font: 900 0.9rem/1 "Inter", system-ui, sans-serif;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: rgba(240, 217, 166, 0.58);
   cursor: pointer;
   pointer-events: auto;
+  transition: color 0.16s ease;
   transform: none;
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
-body.layout-basic .df-auto-rebuy-cta::after {
-  position: absolute;
-  right: 0.13rem;
-  bottom: 0.13rem;
-  width: 0.22rem;
-  height: 0.22rem;
+body.layout-basic .df-auto-rebuy-cta__label {
+  color: rgba(246, 222, 174, 0.72);
+  font: 900 0.4rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-shadow: 0 1px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+body.layout-basic .df-auto-rebuy-cta__spot {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  width: 2.05rem;
+  height: 2.05rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(240, 217, 166, 0.5);
   border-radius: 50%;
-  background: #ef4444;
-  box-shadow: 0 0 4px rgba(239, 68, 68, 0.58);
+  background: radial-gradient(circle, rgba(99, 12, 18, 0.12), rgba(35, 3, 6, 0.25));
+  box-shadow: inset 0 0 0 2px rgba(232,215,174,.055), inset 0 3px 6px rgba(0,0,0,.3);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+body.layout-basic .df-auto-rebuy-cta__spot::before {
+  position: absolute;
+  inset: 0.1rem;
+  border: 1px solid rgba(240, 217, 166, 0.18);
+  border-radius: 50%;
   content: '';
+}
+body.layout-basic .df-auto-rebuy-cta__chip {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 85%;
+  height: 85%;
+  opacity: 0;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.58));
+  transform: translate(-50%, -50%) scale(0.72);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 body.layout-basic .df-auto-rebuy-cta:hover,
 body.layout-basic .df-auto-rebuy-cta:focus-visible {
-  border-color: rgba(253, 230, 138, 0.7);
   color: #fde68a;
-  outline: 2px solid rgba(253, 230, 138, 0.24);
-  outline-offset: 2px;
 }
-body.layout-basic .df-auto-rebuy-cta__icon {
-  transform: translate(-0.02rem, -0.01rem);
+body.layout-basic .df-auto-rebuy-cta:hover .df-auto-rebuy-cta__spot,
+body.layout-basic .df-auto-rebuy-cta:focus-visible .df-auto-rebuy-cta__spot {
+  border-color: rgba(253, 230, 138, 0.68);
+  box-shadow: inset 0 0 0 2px rgba(232, 215, 174, 0.08), 0 0 0 2px rgba(253, 230, 138, 0.1);
 }
 body.layout-basic .df-auto-rebuy-cta__status {
   position: absolute;
@@ -23135,17 +23099,12 @@ body.layout-basic .df-auto-rebuy-cta__status {
   white-space: nowrap;
   border: 0;
 }
-body.layout-basic .df-auto-rebuy-cta.is-active {
-  border-color: rgba(74, 222, 128, 0.52);
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #17321e, #09140c);
-  color: #86efac;
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.48), inset 0 0 8px rgba(74, 222, 128, 0.08);
+body.layout-basic .df-auto-rebuy-cta.is-active .df-auto-rebuy-cta__chip {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
-body.layout-basic .df-auto-rebuy-cta.is-active::after {
-  background: #4ade80;
-  box-shadow: 0 0 7px rgba(74, 222, 128, 0.72);
+body.layout-basic .df-auto-rebuy-cta.is-active .df-auto-rebuy-cta__spot {
+  border-color: rgba(134, 239, 172, 0.34);
 }
 
 body.layout-basic .df-auto-rebuy-dialog__card {
@@ -23389,38 +23348,24 @@ body.layout-basic .df-auto-rebuy-dialog__actions button {
 }
 
 @media (max-width: 520px) {
-  body.layout-basic .df-coinflip-record-rail {
-    position: relative;
-    top: auto;
-    right: auto;
-    left: auto;
-    width: 100%;
-    height: 1.55rem;
-    grid-template-columns: 1.55rem minmax(0, 1fr) 1.55rem;
-    gap: 0.24rem;
+  body.layout-basic .df-title-bar {
+    height: 2.32rem;
+    flex-basis: 2.32rem;
+    margin-top: 0.08rem;
+    padding: 0.16rem 0.38rem 0.08rem;
   }
-  body.layout-basic .df-coinflip-record-rail__spacer,
-  body.layout-basic .df-coinflip-record {
-    height: 1.55rem;
+  body.layout-basic .df-section-title strong { font-size: 1.02rem; }
+  body.layout-basic .df-coinflip-record-rail { right: 0.14rem; }
+  body.layout-basic .df-modifier-meter-slot { left: 0.14rem; }
+  body.layout-basic .df-modifier-meter-slot,
+  body.layout-basic .df-coinflip-record__group--recent {
+    top: calc(25% - 0.5rem);
   }
-  body.layout-basic .df-coinflip-record-rail__spacer { width: 1.55rem; }
-  body.layout-basic .df-coinflip-record {
-    gap: 0;
-    padding-inline: 0.3rem;
-  }
-  body.layout-basic .df-auto-rebuy-cta {
-    width: 1.55rem;
-    min-width: 1.55rem;
-    max-width: 1.55rem;
-    height: 1.55rem;
-    min-height: 1.55rem;
-    max-height: 1.55rem;
-    padding: 0;
-    font-size: 0.86rem;
-  }
+  body.layout-basic .df-baf-score { left: 0.14rem; }
   body.layout-basic .df-auto-rebuy-dialog__card { padding: 0.88rem 0.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
+  body.layout-basic .df-modifier-meter__pip-bank--peak { animation: none !important; opacity: 0; }
   body.layout-basic .df-coinflip-record__score b.is-ticking,
   body.layout-basic .df-coinflip-record__mark.is-new,
   body.layout-basic .df-coinflip-record__group.is-resolving,
@@ -23429,6 +23374,8 @@ body.layout-basic .df-auto-rebuy-dialog__actions button {
     transition: none;
   }
   body.layout-basic .df-auto-rebuy-cta,
+  body.layout-basic .df-auto-rebuy-cta__spot,
+  body.layout-basic .df-auto-rebuy-cta__chip,
   body.layout-basic .df-auto-rebuy-toggle__track,
   body.layout-basic .df-auto-rebuy-toggle__track > span { transition: none; }
 }
@@ -23595,5 +23542,69 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
     min-width: 0;
     max-width: none;
     grid-column: 1 / -1;
+  }
+}
+
+/* Keep every real reveal action on one repeatable, thumb-friendly target.
+   There is deliberately no permanent socket: an absent action occupies no
+   space and cannot leave a second empty button-shaped gap during handoffs. */
+.rvl-backdrop {
+  --rvl-action-bottom: max(clamp(4.25rem, 13dvh, 7.5rem), calc(env(safe-area-inset-bottom) + 2.25rem));
+  padding-bottom: 0;
+}
+.rvl-summary > .rvl-collect-cta,
+.rvl-foil-match__continue {
+  position: fixed; z-index: 7; bottom: calc(var(--rvl-action-bottom) + 0.28rem); left: 50%;
+  box-sizing: border-box;
+  width: min(15rem, calc(100vw - 1.7rem));
+  min-width: 0; margin: 0; translate: -50% 0;
+}
+.rvl-ticket-actions,
+.rvl-dgn-actions,
+.rvl-vessel-pack-actions {
+  position: fixed; z-index: 7; bottom: calc(var(--rvl-action-bottom) + 0.28rem); left: 50%;
+  box-sizing: border-box;
+  width: min(40rem, calc(100vw - 1rem));
+  min-height: 2.8rem; margin: 0; translate: -50% 0;
+}
+.rvl-vessel-pack-actions {
+  display: grid; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 15rem) minmax(0, 1fr);
+}
+.rvl-vessel-pack-actions > :is(.rvl-vessel-open-pack, .rvl-vessel-open-all) {
+  grid-column: 2; grid-row: 1; justify-self: stretch;
+}
+.rvl-vessel-pack-actions > .rvl-vessel-skip {
+  grid-column: 3; grid-row: 1; justify-self: start;
+}
+.rvl-ticket-actions { justify-content: center; }
+.rvl-dgn-actions:is(.rvl-dgn-actions--box, .rvl-dgn-actions--result-exit, .rvl-dgn-actions--result-ready) {
+  width: min(15rem, calc(100vw - 1.7rem));
+}
+.rvl-ticket-actions > .rvl-open-all-cta {
+  position: absolute; right: 0.35rem; bottom: 50%;
+  max-width: calc(50% - 8rem);
+  padding-inline: 0.75rem; transform: translateY(50%);
+}
+.rvl-summary { padding-bottom: 0; }
+.rvl-summary:has(> .rvl-collect-cta:not([hidden])) {
+  padding-bottom: calc(3.8rem + var(--rvl-action-bottom));
+}
+.rvl-stage.rvl-stage--degenerette:has(.rvl-dgn-actions:not([hidden])) {
+  padding-bottom: calc(3.7rem + var(--rvl-action-bottom));
+}
+
+@media (max-width: 620px) {
+  .rvl-ticket-actions > .rvl-open-all-cta {
+    right: 50%; bottom: calc(100% + 0.35rem);
+    max-width: calc(100vw - 1.4rem);
+    transform: translateX(50%);
+  }
+  .rvl-vessel-pack-actions {
+    grid-template-columns: minmax(2.7rem, 1fr) minmax(0, 15rem) minmax(2.7rem, 1fr);
+    gap: 0.28rem;
+  }
+  .rvl-vessel-pack-actions > .rvl-vessel-skip {
+    min-width: 0; padding-inline: 0.45rem; font-size: 0.62rem;
   }
 }

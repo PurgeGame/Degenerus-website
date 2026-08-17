@@ -161,12 +161,12 @@
   overflow: hidden;
 }
 
-/* A reward callout can extend beyond its own quadrant. Promote the whole
-   quadrant while it is active so a neighboring scratch canvas cannot paint
-   over the callout. The activation stack keeps the first simultaneous win in
-   front, matching the ordering used by the badges themselves. */
+/* A reward callout can extend beyond its own quadrant. Raise its quadrant over
+   neighboring scratch canvases, but keep it below the center seal (z20). The
+   old z30 promotion briefly painted the revealed quadrant's green paper over
+   the center diamond before the callout settled. */
 .replay-tq.q-reward-pop-active {
-  z-index: calc(30 + var(--replay-quadrant-reward-stack, 1));
+  z-index: var(--replay-quadrant-reward-stack, 1);
   overflow: visible;
 }
 
@@ -631,7 +631,7 @@
   inset: 50% calc(100% + 4px) auto auto;
   transform-origin: 100% 50%;
 }
-.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"].is-reward-pop {
+.replay-tq.q-result-revealed .replay-badge-wrap.is-reward-pop {
   z-index: calc(15 + var(--replay-reward-stack, 1));
 }
 .replay-badge-wrap.is-reward-pop .replay-badge-reward-pop {

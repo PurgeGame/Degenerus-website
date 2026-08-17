@@ -465,20 +465,25 @@ class AppJackpotResolutions extends HTMLElement {
   }
 
   async #queueDecimator(level) {
-    const opened = await openDecimatorDraw({ level, player: this.#address });
-    if (!opened) return false;
-    _markSeen('decimator', this.#address, level);
-    // Re-arm the ordinary jackpot underneath the takeover. Besides enforcing
-    // the intended Decimator -> Jackpot order, this repairs browsers whose
-    // current-day reveal receipt was poisoned by the old rollover race.
-    try {
-      const detail = { level: Number(level), day: Number(this.#gameState?.day) };
-      const event = typeof CustomEvent === 'function'
-        ? new CustomEvent('decimator:opened', { detail })
-        : { type: 'decimator:opened', detail };
-      document.dispatchEvent(event);
-    } catch (_e) { /* headless: the overlay itself remains authoritative */ }
-    return true;
+    return openDecimatorDraw({
+      level,
+      player: this.#address,
+      onReady: () => {
+        _markSeen('decimator', this.#address, level);
+        // Re-arm the ordinary jackpot underneath the takeover. Besides
+        // enforcing Decimator -> Jackpot order, this repairs browsers whose
+        // current-day receipt was poisoned by the old rollover race. Do this
+        // only after the reconstructed draw is safely staged; a retry screen
+        // is not a consumed result.
+        try {
+          const detail = { level: Number(level), day: Number(this.#gameState?.day) };
+          const event = typeof CustomEvent === 'function'
+            ? new CustomEvent('decimator:opened', { detail })
+            : { type: 'decimator:opened', detail };
+          document.dispatchEvent(event);
+        } catch (_e) { /* headless: the overlay itself remains authoritative */ }
+      },
+    });
   }
 
   async #queueBaf(level, consolation = this.#bafConsolation) {
@@ -505,7 +510,7 @@ class AppJackpotResolutions extends HTMLElement {
         await claimDecimatorLevels({ player: this.#address, levels: [level] });
         this.#decimatorClaimState = 'claimed';
       }
-      if (show) await this.#queueDecimator(level);
+      if (show) return await this.#queueDecimator(level);
     } finally {
       this.#busy = null;
       this.#publish();

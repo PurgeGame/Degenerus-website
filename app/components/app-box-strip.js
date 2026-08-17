@@ -34,6 +34,7 @@ import {
 } from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
 import {
+  enrichHumanBoxSpinLegs,
   enrichLootboxBoonLegs,
   parseOpenLegsFromReceipt,
   openLegsFromFeed,
@@ -254,6 +255,7 @@ function _readPending(addr) {
         resultTransactionHash: e.resultTransactionHash == null
           ? null
           : String(e.resultTransactionHash),
+        blockNumber: Number.isFinite(Number(e.blockNumber)) ? Number(e.blockNumber) : null,
         transactionHashes: [...new Set([
           ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
           e.transactionHash,
@@ -289,6 +291,7 @@ function _writePending(addr, entries) {
       resultKey: e.resultKey ?? null,
       transactionHash: e.transactionHash ?? null,
       resultTransactionHash: e.resultTransactionHash ?? null,
+      blockNumber: Number.isFinite(Number(e.blockNumber)) ? Number(e.blockNumber) : null,
       transactionHashes: [...new Set([
         ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
         e.transactionHash,
@@ -1181,8 +1184,14 @@ class AppBoxStrip extends HTMLElement {
         lootboxIndex: box.index,
       });
       let legs = parseOpenLegsFromReceipt(receipt, this.#addr);
+      legs = await enrichHumanBoxSpinLegs(legs, {
+        player: this.#addr,
+        lootboxIndex: box.index,
+        blockNumber: receipt?.blockNumber ?? null,
+      });
       legs = await enrichLootboxBoonLegs(legs, {
         player: this.#addr,
+        lootboxIndex: box.index,
         blockNumber: receipt?.blockNumber ?? null,
       });
       const settlementHash = receipt?.hash || receipt?.transactionHash || null;
@@ -1293,9 +1302,18 @@ class AppBoxStrip extends HTMLElement {
       }
     }
 
+    const settlementBlockNumber = box.blockNumber
+      ?? legs.find((leg) => leg?.blockNumber != null)?.blockNumber
+      ?? null;
+    legs = await enrichHumanBoxSpinLegs(legs, {
+      player: this.#addr,
+      lootboxIndex: box.index,
+      blockNumber: settlementBlockNumber,
+    });
     legs = await enrichLootboxBoonLegs(legs, {
       player: this.#addr,
-      blockNumber: box.blockNumber ?? null,
+      lootboxIndex: box.index,
+      blockNumber: settlementBlockNumber,
     });
     if (key && legs.length > 0) this.#resolvedLegCache.set(key, legs);
     return legs;

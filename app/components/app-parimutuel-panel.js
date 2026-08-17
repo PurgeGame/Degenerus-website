@@ -432,14 +432,7 @@ class AppParimutuelPanel extends HTMLElement {
   // Direct pool/phase reads are not settlement inputs and do not depend on any
   // player or market history. Keeping them isolated is what lets the strip
   // paint promptly on cold load and at a phase transition.
-  async #loadPoolBenchmarks(seq, level) {
-    const [ratchets, poolTarget, phaseContext, history] = await Promise.all([
-      readGrowthRatchets({ round: level }).catch(() => null),
-      readPrizePoolTarget().catch(() => null),
-      readJackpotPhaseContext().catch(() => null),
-      readGrowthRatchetHistory({ throughLevel: level }).catch(() => null),
-    ]);
-    if (seq !== this.#fetchSeq) return;
+  #publishPoolBenchmarks({ level, ratchets, poolTarget, phaseContext, history = null }) {
     const benchmarkLevel = Number(level);
     const contractLevel = Number(ratchets?.currentLevel);
     const benchmarkIsCurrent = Number.isInteger(contractLevel)
@@ -483,12 +476,42 @@ class AppParimutuelPanel extends HTMLElement {
             lastPurchaseDay: phaseContext.lastPurchaseDay === true,
             rngLocked: phaseContext.rngLocked === true,
             day: Number(ratchets.phaseDay) || 0,
-            compressedFlag: Number(phaseContext.compressedFlag) || 0,
+            // Preserve "unknown" (null). `|| 0` used to forge a normal-cadence
+            // tier out of a failed jackpotCompressionTier() read.
+            compressedFlag: Number.isInteger(Number(phaseContext.compressedFlag))
+              ? Number(phaseContext.compressedFlag)
+              : null,
           }
           : null,
       });
+      return true;
     }
+    return false;
+  }
+
+  async #loadPoolBenchmarks(seq, level) {
+    const [ratchets, poolTarget, phaseContext] = await Promise.all([
+      readGrowthRatchets({ round: level }).catch(() => null),
+      readPrizePoolTarget().catch(() => null),
+      readJackpotPhaseContext().catch(() => null),
+    ]);
+    if (seq !== this.#fetchSeq) return;
+    const published = this.#publishPoolBenchmarks({
+      level,
+      ratchets,
+      poolTarget,
+      phaseContext,
+    });
     if (ratchets) this.#ratchets = ratchets;
+    this.#render();
+    if (!published) return;
+
+    // Completed-level graduations are decoration, not a prerequisite for a
+    // working meter. Fetch them only after the target and phase are visible so
+    // a cold Multicall cannot hold the whole thermometer blank.
+    const history = await readGrowthRatchetHistory({ throughLevel: level }).catch(() => null);
+    if (seq !== this.#fetchSeq) return;
+    this.#publishPoolBenchmarks({ level, ratchets, poolTarget, phaseContext, history });
     this.#render();
   }
 

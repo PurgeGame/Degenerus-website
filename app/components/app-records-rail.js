@@ -35,6 +35,7 @@ import {
 } from '../app/lootbox.js';
 import { ETH_DIVISOR } from '../app/chain-config.js';
 import { degeneretteLimits } from '../app/degenerette.js';
+import { questCompletionBonusModel } from '../app/quest-objectives.js';
 import { get, getActingAddress, getViewedAddress, subscribe, update } from '../app/store.js';
 import {
   readBiggestBountiesModePreference,
@@ -68,6 +69,15 @@ const RECORD_KIND_CARD_TITLE = new Map([
   [RECORD_KIND_BUY, 'PACK RIPPED'],
   [RECORD_KIND_FLIP, 'COINFLIP'],
 ]);
+
+export function recordBountyQuestProduct(kind) {
+  const value = Number(kind);
+  if (value === RECORD_KIND_BUY) return 'purchase';
+  if (value === RECORD_KIND_LUCKBOX) return 'lootbox';
+  if (value === RECORD_KIND_FLIP) return 'coinflip';
+  if (value === RECORD_KIND_SPIN) return 'degenerette-eth';
+  return null;
+}
 
 let _fetchRecords = fetchRecords;
 let _fetchProfiles = fetchProfiles;
@@ -411,6 +421,9 @@ class AppRecordsRail extends HTMLElement {
     // The accrued share grows every game day, so a rollover re-prices all four
     // cards without needing a poll.
     this.#unsubs.push(subscribe('app.daySync', () => { this.#render(); }));
+    this.#unsubs.push(subscribe('ui.questObjectives', () => {
+      if (this.#bountyDialogQuote) this.#renderBountyQuestBonus();
+    }));
     this.#unsubs.push(subscribeUiPreferences(({ name }) => {
       if (name !== 'biggestBountiesMode') return;
       if (readBiggestBountiesModePreference() !== 'on') {
@@ -554,6 +567,8 @@ class AppRecordsRail extends HTMLElement {
               <span data-bind="records-bounty-spin-target">—</span>
             </p>
           </section>
+          <p class="records-bounty-dialog__quest-bonus" data-bind="records-bounty-quest-bonus"
+             role="status" hidden></p>
           <p class="records-bounty-dialog__alert" data-bind="records-bounty-alert"
              aria-live="polite" hidden></p>
           <button type="button" class="records-bounty-dialog__confirm" data-write
@@ -652,6 +667,7 @@ class AppRecordsRail extends HTMLElement {
     this.#bountyDialogQuote = next;
     this.#bountySpinDraftValid = true;
     this.#renderBountySpinControls();
+    this.#renderBountyQuestBonus();
     this.#renderBountyConfirm();
   }
 
@@ -675,6 +691,7 @@ class AppRecordsRail extends HTMLElement {
       const next = recordBountySpinSelection(quote, { amountPerSpinWei: parsed });
       if (next) this.#bountyDialogQuote = next;
     }
+    this.#renderBountyQuestBonus();
     this.#renderBountyConfirm();
   }
 
@@ -692,6 +709,7 @@ class AppRecordsRail extends HTMLElement {
     this.#bountyDialogQuote = next;
     this.#bountySpinDraftValid = true;
     this.#renderBountySpinControls();
+    this.#renderBountyQuestBonus();
     this.#renderBountyConfirm();
   }
 
@@ -797,7 +815,21 @@ class AppRecordsRail extends HTMLElement {
       alert.classList?.toggle('is-error', Boolean(error));
     }
     this.#renderBountySpinControls();
+    this.#renderBountyQuestBonus();
     this.#renderBountyConfirm(confirm);
+  }
+
+  #renderBountyQuestBonus() {
+    const host = this.querySelector('[data-bind="records-bounty-quest-bonus"]');
+    if (!host) return;
+    const quote = this.#bountyDialogQuote;
+    const product = recordBountyQuestProduct(quote?.kind);
+    const valid = quote?.kind !== RECORD_KIND_SPIN || this.#bountySpinDraftValid;
+    const completion = quote && product && valid
+      ? questCompletionBonusModel(get('ui.questObjectives'), product, quote.costWei)
+      : null;
+    host.hidden = completion == null;
+    host.textContent = completion?.message || '';
   }
 
   #renderBountySpinControls() {
@@ -1072,6 +1104,11 @@ class AppRecordsRail extends HTMLElement {
       record.kind,
       record.held ? record.value : record.meta.floorValue,
     );
+    const amountFit = compactValue.amount.length >= 6
+      ? 'tight'
+      : compactValue.amount.length >= 5
+        ? 'compact'
+        : 'standard';
     const profile = record.player ? this.#profiles.get(record.player) : null;
     const holderAddress = shortAddress(record.player);
     const holder = record.held ? (profile?.name || holderAddress) : 'OPEN RECORD';
@@ -1127,6 +1164,7 @@ class AppRecordsRail extends HTMLElement {
       </span>
       <span class="records-rail__leader-bet">
         <strong class="records-rail__leader-value"
+                data-amount-fit="${amountFit}"
                 aria-label="Current record ${escapeHtml(compactValue.amount)} ${escapeHtml(compactValue.suffix)}">
           <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>
           ${compactValue.suffix

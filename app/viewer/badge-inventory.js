@@ -25,8 +25,12 @@ function traitToBadge(traitIndex) {
   const within = traitIndex % 64;
   const itemIdx = Math.floor(within / 8);
   const colorIdx = within % 8;
+  const rawItem = ITEMS[category][itemIdx];
+  const item = category === 'dice' && rawItem === '6' && COLORS[colorIdx] === 'gold'
+    ? '6ix'
+    : rawItem;
   return {
-    category, item: ITEMS[category][itemIdx], itemIdx, colorIdx, color: COLORS[colorIdx],
+    category, item, itemIdx, colorIdx, color: COLORS[colorIdx],
     path: badgePath(category, itemIdx, colorIdx),
   };
 }

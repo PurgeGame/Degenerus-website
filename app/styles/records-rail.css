@@ -311,7 +311,7 @@ body.layout-basic .records-rail__leader-strip {
   position: absolute;
   z-index: 1;
   top: 58%;
-  right: 25%;
+  right: 26.5%;
   bottom: 7%;
   left: 29%;
   display: block;
@@ -354,9 +354,9 @@ body.layout-basic .records-rail__leader-bet {
   position: absolute;
   z-index: 1;
   top: 58%;
-  right: 4.2%;
-  bottom: 7%;
-  left: 75%;
+  right: 2.2%;
+  bottom: 5.5%;
+  left: 73.5%;
   display: block;
   min-width: 0;
   box-sizing: border-box;
@@ -366,6 +366,7 @@ body.layout-basic .records-rail__leader-bet {
   border-left: 1px solid rgba(var(--rec-gold), 0.34);
   background: linear-gradient(180deg, rgba(24, 25, 26, 0.97), rgba(15, 16, 17, 0.99));
   box-shadow: inset 1px 0 rgba(var(--rec-red), 0.12);
+  clip-path: polygon(0 0, 100% 0, 100% 68%, 87% 100%, 0 100%);
 }
 
 body.layout-basic .records-rail__leader-value {
@@ -386,7 +387,7 @@ body.layout-basic .records-rail__leader-value {
   align-items: center;
   justify-content: center;
   gap: 0.04rem;
-  padding: 1% 1.5%;
+  padding: 1% 9% 1% 3%;
   color: #fff0c7;
   font: 950 clamp(0.56rem, 0.85vw, 0.78rem)/0.9 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
@@ -395,10 +396,23 @@ body.layout-basic .records-rail__leader-value {
 }
 
 body.layout-basic .records-rail__leader-amount {
+  display: block;
+  width: 100%;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
+  text-align: center;
   text-overflow: clip;
+}
+
+body.layout-basic .records-rail__leader-value[data-amount-fit="compact"] {
+  font-size: clamp(0.52rem, 0.76vw, 0.71rem);
+  letter-spacing: -0.035em;
+}
+
+body.layout-basic .records-rail__leader-value[data-amount-fit="tight"] {
+  font-size: clamp(0.44rem, 0.66vw, 0.62rem);
+  letter-spacing: -0.055em;
 }
 
 body.layout-basic .records-rail__leader-value :is(em, i) {
@@ -1141,6 +1155,23 @@ body.layout-basic .records-bounty-dialog__spin-controls {
 }
 
 body.layout-basic .records-bounty-dialog__spin-controls[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .records-bounty-dialog__quest-bonus {
+  margin: 0 1rem 0.72rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  border-radius: 8px;
+  background: rgba(7, 45, 26, 0.36);
+  color: #86efac;
+  font: 950 0.62rem/1.25 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.055em;
+  text-align: center;
+  text-shadow: 0 0 9px rgba(74, 222, 128, 0.24);
+}
+
+body.layout-basic .records-bounty-dialog__quest-bonus[hidden] {
   display: none !important;
 }
 

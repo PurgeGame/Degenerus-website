@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <defs>
+    <filter id="currentGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#6c98ff"/>
+      <stop offset="0.46" stop-color="#73e8b0"/>
+      <stop offset="1" stop-color="#e4b54e"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .current { stroke-dasharray: 16 46; animation: current-flow 1.18s linear infinite; }
+    .current--return { animation-direction: reverse; }
+    @keyframes current-flow { to { stroke-dashoffset: -62; } }
+    @media (prefers-reduced-motion: reduce) {
+      .current { stroke-dasharray: none; animation: none; opacity: .42; }
+    }
+  </style>
+  <g class="current" fill="none" stroke="url(#signal)" stroke-opacity="0.72"
+     stroke-width="3.1" stroke-linecap="square" stroke-linejoin="miter"
+     filter="url(#currentGlow)" vector-effect="non-scaling-stroke">
+    <!-- Chainlink modules -> processor interlock. -->
+    <path d="M250 1084V1006H382V930"/>
+    <path d="M1030 1084V1006H898V930"/>
+    <!-- Processor -> LCD data lanes. -->
+    <path d="M414 930V1000H456V1098"/>
+    <path d="M506 930V1020H548V1098"/>
+    <path d="M774 930V1020H732V1098"/>
+    <path d="M866 930V1000H824V1098"/>
+  </g>
+  <g class="current current--return" fill="none" stroke="#74a0ff" stroke-opacity="0.58"
+     stroke-width="2.6" stroke-linecap="square" vector-effect="non-scaling-stroke">
+    <!-- The LCD's two interlock returns terminate beneath the VRF modules. -->
+    <path d="M286 1116H350"/>
+    <path d="M286 1158H350"/>
+    <path d="M994 1116H930"/>
+    <path d="M994 1158H930"/>
+  </g>
+</svg>

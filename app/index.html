@@ -39,13 +39,30 @@
   <!-- The jackpot hero art is referenced from app.css background rules, so the
        browser only discovers it after CSS parses AND the custom elements mount
        — it was the LCP element arriving last. Preload starts both fetches at
-       HTML parse. KEEP THE -vNN SUFFIXES IN SYNC with app.css when art bumps. -->
-  <link rel="preload" as="image" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
-  <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v4.webp">
+       HTML parse. KEEP THE -vNN SUFFIXES IN SYNC with app.css when art bumps.
+       The golden-ticket frame is the LCP image: fetchpriority="high" lifts it
+       out of Chrome's default low-priority lane for preloaded background
+       images. The backplate deliberately stays at default priority so it does
+       not compete with the frame on the first round trips. -->
+  <link rel="preload" as="image" fetchpriority="high" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
+  <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v9.webp">
   <!-- Inter is self-hosted (shared/nav.css @font-face). Preloading the latin
        file lets it beat first paint on cold loads — without this the swap
        from the fallback font re-wraps the nav and headline (~0.16 CLS). -->
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/shared/fonts/inter-var-latin-v20.woff2">
+  <!-- Stylesheet tiers (2026-08-15 LCP round). BLOCKING sheets style what is
+       visible at first paint: the shell/nav/skeleton, the testnet banner
+       (status-indicators.css), the static gold-rush hero (app.css), the
+       drawing-machine chrome (jackpot/daily-drawing), nav chrome
+       (settings-menu) and the top-of-page wallet banner slot.
+       DEFERRED sheets (media="print" + onload swap) style surfaces that only
+       JS can put on screen — closed drawers, hidden dialogs, event-gated
+       overlays, below-the-fold idle-tier panels — so they download in
+       parallel without blocking the hero's first paint. The onload swap keeps
+       each <link> in its original cascade position, so override order
+       ("loaded after app.css" comments in the sheets) is unchanged.
+       ⚠ Keep any sheet that styles STATIC index.html markup in the blocking
+       tier — a deferred sheet here means a flash of unstyled content. -->
   <link rel="stylesheet" href="/shared/nav.css">
   <link rel="stylesheet" href="/app/styles/base.css">
   <link rel="stylesheet" href="/app/styles/panels.css">
@@ -53,23 +70,27 @@
   <link rel="stylesheet" href="/app/styles/status-bar.css">
   <link rel="stylesheet" href="/app/styles/skeleton.css">
   <link rel="stylesheet" href="/app/styles/forms.css">
-  <link rel="stylesheet" href="/app/styles/tx-status.css">
+  <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/jackpot.css">
-  <link rel="stylesheet" href="/app/styles/viewer.css">
-  <link rel="stylesheet" href="/app/styles/replay.css">
-  <link rel="stylesheet" href="/app/styles/boons.css">
+  <link rel="stylesheet" href="/app/styles/viewer.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css">
-  <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css">
+  <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
-  <link rel="stylesheet" href="/app/styles/afking-funding-warning.css">
+  <link rel="stylesheet" href="/app/styles/afking-funding-warning.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
-  <link rel="stylesheet" href="/app/styles/eth-onramp.css">
-  <link rel="stylesheet" href="/app/styles/baf-eve.css">
-  <link rel="stylesheet" href="/app/styles/records-rail.css">
-  <link rel="stylesheet" href="/app/styles/baf-resolution.css">
-  <link rel="stylesheet" href="/app/styles/jackpot-processing.css">
+  <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/baf-eve.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/records-rail.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/baf-resolution.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
+  <!-- BUY IN is part of the static three-column hero, so its final visual
+       layer stays render-blocking and loads after the shared status badges. -->
+  <link rel="stylesheet" href="/app/styles/purchase-desk.css">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -158,8 +179,36 @@
            next + future prize pools + yield accumulator, per _payGoldRush's grand
            branch). Sampled per block by the indexer, so it ticks up whenever new
            money enters the pools. First thing on the page by design — it is the
-           draw, and it is the only number that moves on its own. -->
-      <gold-rush-headline></gold-rush-headline>
+           draw, and it is the only number that moves on its own.
+           STATIC SHELL (LCP): this markup is a byte-for-byte copy of the
+           template in gold-rush-headline.js #renderShell, shipped in the HTML
+           so the hero (the page's LCP element) paints as soon as CSS is ready
+           instead of waiting for the module graph to execute. The component
+           ADOPTS these nodes via the data-el hooks — keep both copies in sync
+           (index-structure.test.js asserts the hooks are present here). -->
+      <gold-rush-headline class="gr">
+        <div class="gr__inner">
+          <div class="gr__masthead">
+            <span class="gr__brand">
+              <img class="gr__brand-logo" src="/whitepaper/flame-logo.svg" alt="">
+              <span class="gr__brand-copy">
+                <strong>DEGENERUS</strong>
+                <small>PROTOCOL</small>
+              </span>
+            </span>
+            <span class="gr__masthead-divider" aria-hidden="true"></span>
+            <div class="gr__label">
+              <span class="gr__label-text">Golden Ticket Jackpot</span>
+              <span class="gr__chip" data-el="chip" hidden></span>
+            </div>
+          </div>
+          <div class="gr__amount-row">
+            <span class="gr__amount" data-el="amount">—</span>
+            <span class="gr__unit-code" title="Ethereum" aria-label="Ethereum">ETH</span>
+            <span class="gr__float" data-el="float" hidden></span>
+          </div>
+        </div>
+      </gold-rush-headline>
 
       <!-- The level-wide objective: live nextPrizePool against both the
            progression threshold and the growth-market O/U line. -->
@@ -204,10 +253,9 @@
                stretching this backplate or moving its four foil modules. -->
           <div class="jackpot-hero__machine">
             <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
-              <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/daily-drawing-mark.svg"
-                   width="100" height="100" alt="" aria-hidden="true">
-              <span>DEGENERUS</span>
-              <strong>DAILY DRAWING</strong>
+              <img class="jackpot-hero__draw-mark" src="/whitepaper/flame-center-silver.svg"
+                   width="38" height="54" alt="" aria-hidden="true">
+              <strong>DEGENERUS DAILY DRAWING</strong>
             </h2>
             <last-day-jackpot></last-day-jackpot>
             <replay-panel single-button></replay-panel>

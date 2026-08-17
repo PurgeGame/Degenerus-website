@@ -11,7 +11,11 @@ import { CHAIN, CONTRACTS } from './chain-config.js';
 import { ethers } from './contracts.js';
 import { fetchJSON } from './api.js';
 import { TX_CONFIRMED_EVENT } from './contracts.js';
-import { DGN_QUADRANTS, DGN_SYMBOLS, dgnBadgePath } from './dgn-traits.js';
+import {
+  DGN_QUADRANTS,
+  dgnBadgePath,
+  dgnDisplaySymbol,
+} from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { queueReveal } from '../components/reveal-overlay.js';
 import { claimBingo } from './bingo.js';
@@ -286,7 +290,7 @@ export function bingoQuadrantEntryCounts(payload, quadrant) {
 function _symbolLabel(receipt) {
   const quadrant = Number(receipt.symbol) >> 3;
   const sym = Number(receipt.symbol) & 7;
-  const raw = DGN_SYMBOLS[DGN_QUADRANTS[quadrant]]?.[sym] || `symbol ${sym + 1}`;
+  const raw = dgnDisplaySymbol(quadrant, sym) || `symbol ${sym + 1}`;
   return String(raw).replace(/[_-]+/g, ' ').toUpperCase();
 }
 

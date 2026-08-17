@@ -147,6 +147,28 @@ describe('actionableRevealItems', () => {
     );
   });
 
+  test('keeps an unclassified foil-gold claim neutral instead of inventing a Golden Ticket', () => {
+    // The contract's claimGoldenTicket entrypoint covers the full 3+ gold
+    // ladder. A successful simulation does not distinguish three scattered
+    // golds (allGoldTickets == 0) from one actual all-gold ticket, so Pending
+    // must keep the broader category and preserve the real claim action.
+    const [item] = trayModule.actionableRevealItems([
+      { kind: 'foil-gold', state: 'ready', run() {} },
+    ]);
+    assert.equal(item?.kind, 'foil-gold');
+
+    const launchClaimsSource = readFileSync(
+      new URL('../../app/launch-claims.js', import.meta.url),
+      'utf8',
+    );
+    assert.match(launchClaimsSource, /kind:\s*'foil-gold'/);
+    assert.match(launchClaimsSource, /kindLabel:\s*'FOIL GOLD'/);
+    assert.doesNotMatch(
+      launchClaimsSource,
+      /kind:\s*'golden-ticket'|kindLabel:\s*'GOLDEN TICKET'/,
+    );
+  });
+
   test('incoming RNG estimates advance four lights across the expected ready window', () => {
     const startedAt = 1_000_000;
     const dotsAt = (elapsed) => trayModule.rngTimedConfirmationDots({

@@ -2,6 +2,7 @@
 // No ethers import, no contract calls. Data transformation only.
 
 import { BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgePath } from './constants.js';
+import { dgnDisplaySymbol } from './dgn-traits.js';
 
 /**
  * Derive 4 winning trait indices from a VRF RNG word.
@@ -49,7 +50,9 @@ export function traitToBadge(traitIndex) {
   const colorIdx = Math.floor(withinQuadrant / 8);
   const color = BADGE_COLORS[colorIdx] || 'blue';
   const items = BADGE_ITEMS[category] || [];
-  const item = items[itemIdx] || String(itemIdx);
+  const item = dgnDisplaySymbol(quadrant, itemIdx, colorIdx)
+    || items[itemIdx]
+    || String(itemIdx);
   return {
     category,
     item,

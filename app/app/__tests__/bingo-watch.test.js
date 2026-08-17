@@ -148,7 +148,7 @@ describe('bingo event watcher', () => {
           blockNumber: TEST_BLOCK,
           player: PLAYER,
           level: 31,
-          symbol: 2,
+          symbol: 0,
           tier: 'first-symbol',
           flipReward: String(2_000n * 10n ** 18n),
           dgnrsPaid: '77',
@@ -156,7 +156,7 @@ describe('bingo event watcher', () => {
       }),
       tickets: async () => ({
         cards: Array.from({ length: 8 }, (_unused, color) => ({
-          entries: [{ traitId: (color * 8) + 2 }],
+          entries: [{ traitId: color * 8 }],
         })),
       }),
     });
@@ -168,7 +168,7 @@ describe('bingo event watcher', () => {
     let rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
     assert.equal(rows.length, 1);
     assert.equal(rows[0].kindLabel, 'FIRST-SYMBOL BINGO');
-    assert.match(rows[0].label, /Level 31 SUI Bingo/);
+    assert.match(rows[0].label, /Level 31 WWXRP Bingo/);
     assert.match(rows[0].detail, /all 8 colors collected/);
 
     await rows[0].run();

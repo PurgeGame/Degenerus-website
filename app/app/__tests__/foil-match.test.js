@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   FOIL_CLAIM_THRESHOLD,
   decodeTrait,
+  normalizeFoilLine,
   unpackWinSet,
   gradeLine,
   bestGrade,
@@ -29,6 +30,21 @@ describe('decodeTrait (canonical bit layout — f47f106)', () => {
     assert.deepEqual(decodeTrait(172), { quadrant: 2, colorIdx: 5, symbolIdx: 4 });
     assert.deepEqual(decodeTrait(0), { quadrant: 0, colorIdx: 0, symbolIdx: 0 });
     assert.deepEqual(decodeTrait(255), { quadrant: 3, colorIdx: 7, symbolIdx: 7 });
+  });
+});
+
+describe('normalizeFoilLine', () => {
+  test('uses encoded quadrant bits instead of trusting API iteration order', () => {
+    assert.deepEqual(
+      normalizeFoilLine([trait(2, 3, 2), trait(0, 1, 1), trait(3, 1, 0), trait(1, 0, 6)]),
+      [trait(0, 1, 1), trait(1, 0, 6), trait(2, 3, 2), trait(3, 1, 0)],
+    );
+  });
+
+  test('rejects incomplete, duplicate-quadrant, and out-of-range lines', () => {
+    assert.equal(normalizeFoilLine([1, 70, 130]), null);
+    assert.equal(normalizeFoilLine([1, 2, 130, 200]), null);
+    assert.equal(normalizeFoilLine([1, 70, 130, 300]), null);
   });
 });
 

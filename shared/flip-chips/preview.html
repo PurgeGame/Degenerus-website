@@ -1,0 +1,92 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>flip-chips preview</title>
+<style>
+  body { margin:0; background:#121216; font:11px/1.3 system-ui, sans-serif; color:#ccc; }
+  h2 { margin:6px 8px 2px; font-size:12px; color:#eee; font-weight:600; }
+  .row { display:flex; }
+  .swatch { flex:1; padding:8px 10px 10px; }
+  .felt   { background:#a01015; }
+  .amber  { background:#6e4f12; }
+  .navy   { background:#1d2c59; }
+  .walnut { background:#38200d; }
+  .cell { display:flex; align-items:flex-end; gap:10px; margin-top:6px; }
+  .cell img { display:block; image-rendering:auto; }
+</style></head>
+<body>
+<h2>face.svg — 20 / 24 / 48 / 140</h2>
+<div class="row">
+  <div class="swatch felt"><div class="cell">
+    <img src="face.svg" width="20"><img src="face.svg" width="24"><img src="face.svg" width="48"><img src="face.svg" width="140">
+  </div></div>
+  <div class="swatch amber"><div class="cell">
+    <img src="face.svg" width="20"><img src="face.svg" width="24"><img src="face.svg" width="48"><img src="face.svg" width="140">
+  </div></div>
+  <div class="swatch navy"><div class="cell">
+    <img src="face.svg" width="20"><img src="face.svg" width="24"><img src="face.svg" width="48"><img src="face.svg" width="140">
+  </div></div>
+  <div class="swatch walnut"><div class="cell">
+    <img src="face.svg" width="20"><img src="face.svg" width="24"><img src="face.svg" width="48"><img src="face.svg" width="140">
+  </div></div>
+</div>
+
+<h2>coin.svg / coin-spun.svg — 20 / 24 / 48 / 120</h2>
+<div class="row">
+  <div class="swatch felt"><div class="cell">
+    <img src="coin.svg" width="20"><img src="coin.svg" width="24"><img src="coin.svg" width="48"><img src="coin.svg" width="120">
+    <img src="coin-spun.svg" width="48"><img src="coin-spun.svg" width="120">
+  </div></div>
+  <div class="swatch amber"><div class="cell">
+    <img src="coin.svg" width="20"><img src="coin.svg" width="24"><img src="coin.svg" width="48"><img src="coin.svg" width="120">
+    <img src="coin-spun.svg" width="48"><img src="coin-spun.svg" width="120">
+  </div></div>
+  <div class="swatch navy"><div class="cell">
+    <img src="coin.svg" width="20"><img src="coin.svg" width="24"><img src="coin.svg" width="48"><img src="coin.svg" width="120">
+    <img src="coin-spun.svg" width="48"><img src="coin-spun.svg" width="120">
+  </div></div>
+  <div class="swatch walnut"><div class="cell">
+    <img src="coin.svg" width="20"><img src="coin.svg" width="24"><img src="coin.svg" width="48"><img src="coin.svg" width="120">
+    <img src="coin-spun.svg" width="48"><img src="coin-spun.svg" width="120">
+  </div></div>
+</div>
+
+<h2>stack.svg / stack-spun.svg — 24 / 40 / 112</h2>
+<div class="row">
+  <div class="swatch felt"><div class="cell">
+    <img src="stack.svg" width="24"><img src="stack.svg" width="40"><img src="stack.svg" width="112">
+    <img src="stack-spun.svg" width="24"><img src="stack-spun.svg" width="40"><img src="stack-spun.svg" width="112">
+  </div></div>
+  <div class="swatch navy"><div class="cell">
+    <img src="stack.svg" width="24"><img src="stack.svg" width="40"><img src="stack.svg" width="112">
+    <img src="stack-spun.svg" width="24"><img src="stack-spun.svg" width="40"><img src="stack-spun.svg" width="112">
+  </div></div>
+</div>
+
+<h2>stack ladder — stack-2 … stack-10, dealer-neat then messy (w=56)</h2>
+<div class="row">
+  <div class="swatch felt"><div class="cell">
+    <img src="stack-2.svg" width="56"><img src="stack-3.svg" width="56"><img src="stack-4.svg" width="56">
+    <img src="stack-5.svg" width="56"><img src="stack-6.svg" width="56"><img src="stack-7.svg" width="56">
+    <img src="stack-8.svg" width="56"><img src="stack-9.svg" width="56"><img src="stack-10.svg" width="56">
+  </div></div>
+  <div class="swatch navy"><div class="cell">
+    <img src="stack-2-messy.svg" width="58"><img src="stack-3-messy.svg" width="58"><img src="stack-4-messy.svg" width="60">
+    <img src="stack-5-messy.svg" width="62"><img src="stack-6-messy.svg" width="61"><img src="stack-7-messy.svg" width="62">
+    <img src="stack-8-messy.svg" width="61"><img src="stack-9-messy.svg" width="62"><img src="stack-10-messy.svg" width="65">
+  </div></div>
+</div>
+
+<h2>pile ladder — pile-1 / 4 / 7 / 10 / 14 / 17 / 20, and pile-7 + its win overlay</h2>
+<div class="row">
+  <div class="swatch navy"><div class="cell">
+    <img src="pile-1.svg" width="120"><img src="pile-4.svg" width="130"><img src="pile-7.svg" width="150">
+    <img src="pile-10.svg" width="180"><img src="pile-14.svg" width="200"><img src="pile-17.svg" width="220">
+    <img src="pile-20.svg" width="230">
+  </div></div>
+  <div class="swatch felt"><div class="cell" style="position:relative">
+    <span style="position:relative;display:block;width:170px">
+      <img src="pile-7.svg" width="170">
+      <img src="pile-7-add.svg" width="170" style="position:absolute;inset:0">
+    </span>
+  </div></div>
+</div>
+</body></html>

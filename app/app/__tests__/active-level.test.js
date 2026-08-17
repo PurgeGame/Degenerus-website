@@ -10,7 +10,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { activeTicketLevel, JACKPOT_LEVEL_CAP } from '../active-level.js';
+import {
+  activeTicketLevel,
+  foilPackDisplayLevel,
+  JACKPOT_LEVEL_CAP,
+} from '../active-level.js';
 
 const state = (over = {}) => ({
   level: 25,
@@ -98,6 +102,38 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
     }), 25);
   });
 
+  // The gold-rush slot0 decode (polling.js:333) spells the counter
+  // `jackpotCounter`; only the parimutuel benchmark spells it `day`. Reading
+  // just `day` pinned cnt to 0 for every chain-ticker-driven caller, so the
+  // sealed final-window promotion could fire only on a turbo — the one tier
+  // whose step alone reaches the cap from zero.
+  test('the chain decode counter is read under its own field name', () => {
+    const stale = state({ rngLockedFlag: false, jackpotCounter: 0 });
+    assert.equal(activeTicketLevel(stale, {
+      level: 25,
+      jackpot: true,
+      rngLocked: true,
+      jackpotCounter: 4,
+      compressedFlag: 0,
+    }), 26, 'the final normal day seals and routes buys forward');
+    assert.equal(activeTicketLevel(stale, {
+      level: 25,
+      jackpot: true,
+      rngLocked: true,
+      jackpotCounter: 3,
+      compressedFlag: 0,
+    }), 25, 'day four of five is not yet sealed');
+  });
+
+  test('an unknown direct tier falls back to /game/state rather than to normal', () => {
+    // readJackpotPhaseContext() now reports null when jackpotCompressionTier()
+    // fails; the port must not read that as a real tier 0.
+    assert.equal(activeTicketLevel(
+      state({ rngLockedFlag: true, jackpotCounter: 0, compressedJackpotFlag: 2 }),
+      { level: 25, jackpot: true, rngLocked: true, day: 0, compressedFlag: null },
+    ), 26, 'the turbo known to /game/state still seals the level');
+  });
+
   test('a stale direct snapshot from another level is ignored', () => {
     assert.equal(activeTicketLevel(
       state({ rngLockedFlag: false, jackpotCounter: 1 }),
@@ -114,5 +150,42 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
       activeTicketLevel({ level: 26, jackpotPhaseFlag: true, jackpotCounter: 0 }), // L26 jackpot
     ];
     assert.deepEqual(seen, [25, 25, 26, 26, 26]);
+  });
+});
+
+describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
+  test('keeps level 45 visible for the full level 45 jackpot, including final RNG lock', () => {
+    assert.equal(foilPackDisplayLevel(state({
+      level: 45,
+      rngLockedFlag: true,
+      jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+    })), 45);
+  });
+
+  test('moves to the next pack only when the jackpot end-phase transition starts', () => {
+    assert.equal(foilPackDisplayLevel(state({
+      level: 45,
+      rngLockedFlag: true,
+      jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+      phaseTransitionActive: true,
+    })), 46);
+  });
+
+  test('purchase phase still previews the incoming level pack', () => {
+    assert.equal(foilPackDisplayLevel({
+      level: 45,
+      phase: 'PURCHASE',
+      jackpotPhaseFlag: false,
+      phaseTransitionActive: false,
+    }), 46);
+  });
+
+  test('explicit live jackpot state wins over a stale same-level side poll', () => {
+    assert.equal(foilPackDisplayLevel(state({ level: 45 }), {
+      level: 45,
+      jackpot: false,
+      rngLocked: true,
+      day: 4,
+    }), 45);
   });
 });

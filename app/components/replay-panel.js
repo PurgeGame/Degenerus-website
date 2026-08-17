@@ -39,6 +39,7 @@ import {
   jackpotProcessingPresentationStep,
   jackpotSpinControlState,
   latchedJackpotProcessingStage,
+  rngMilestoneSatisfied,
 } from '../app/jackpot-processing.js';
 
 const DAY_DATA_RETRY_BASE_MS = 1_500;
@@ -48,6 +49,17 @@ const MAIN_SPIN_LABEL = 'SPIN JACKPOT';
 const BONUS_SPIN_LABEL = 'BONUS SPIN';
 const BONUS_SPIN_LOCKED_LABEL = 'SCRATCH TO UNLOCK BONUS';
 const SPIN_AGAIN_LABEL = 'SPIN AGAIN';
+const COINFLIP_LABEL = 'FLIP COIN';
+// Shown on the LCD key while the resolver owns its action phase. The resolver's
+// successful mineFlip() simulation is the chain-authoritative work predicate;
+// the face is `white-space: nowrap` monospace at 0.12em tracking, so this stays
+// at or under the longest label the key already carries (RESOLVE + RUN
+// DECIMATOR), which keeps it on one line down to a 390px viewport.
+const MINE_FLIP_CRANK_LABEL = 'MINE FLIP · PROCESSING';
+// Same family, shown while one crank call is in flight. The key is disabled
+// for that window, so without this it would sit inert on the idle wording and
+// give a player who just pressed it nothing back.
+const MINE_FLIP_MINING_LABEL = 'MINE FLIP · MINING';
 let replayApiRetryAfterUntil = 0;
 
 /** Keep the tiny center-diamond FLIP prize to three significant figures. */
@@ -370,6 +382,10 @@ class ReplayPanel extends HTMLElement {
   // Spin button is the ONLY roll trigger — after Roll 1 it becomes the Bonus
   // Spin trigger, and the day ends with no button rather than a replay spin.
   #btnMode = 'reveal';          // 'reveal' | 'bonus' — what reveal-btn fires
+  #mainSpinComplete = false;    // durable spin-complete flags; scratch state is separate
+  #bonusSpinComplete = false;
+  #coinflipHandoff = { day: null, available: false, revealed: false };
+  #coinflipHandoffStarting = false;
   // Public main-draw result under each scratch cover. When the viewed player
   // has no winning entry, the quadrant still reveals its badge, ETH per win,
   // and the number of winning entries.
@@ -420,6 +436,12 @@ class ReplayPanel extends HTMLElement {
   #primaryDecimatorAction = null;
   #primaryDecimatorBusy = false;
   #primaryDecimatorError = '';
+  // The permissionless Mine FLIP crank, mirrored off the same pending-actions
+  // feed the bottom tray renders. It is never re-derived here: this holds the
+  // resolver's own published row and calls the resolver's own `run`.
+  #mineFlipAction = null;
+  #mineFlipBusy = false;
+  #mineFlipArmed = false;
   #pendingActionUnsubscribe = null;
   #revealStateBeforeDecimator = null;
   // Highest processing-milestone count seen for the day being handed off, so a
@@ -450,9 +472,25 @@ class ReplayPanel extends HTMLElement {
               <option value="">Select a day first</option>
             </select>
           </div>
+          <div class="jackpot-chainlink jackpot-chainlink--left" aria-hidden="true">
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--1"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--2"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--3"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--4"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--5"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--6"></span>
+          </div>
           <button class="btn-primary replay-reveal-btn" data-bind="reveal-btn" disabled>
             SPIN JACKPOT
           </button>
+          <div class="jackpot-chainlink jackpot-chainlink--right" aria-hidden="true">
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--1"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--2"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--3"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--4"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--5"></span>
+            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--6"></span>
+          </div>
         </div>
 
         <div class="replay-ticket-bar" data-bind="ticket-info" hidden>
@@ -494,7 +532,7 @@ class ReplayPanel extends HTMLElement {
           <button class="btn-primary replay-bonus-btn" data-bind="bonus-btn">
             BONUS SPIN
           </button>
-          <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus this draw</p>
+          <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus round</p>
         </div>
 
         <!-- Plan 39-10: compact day summary mounted between card grid and winners list -->
@@ -518,9 +556,28 @@ class ReplayPanel extends HTMLElement {
 
     this.querySelector('[data-bind="day-select"]').addEventListener('change', (e) => this.#onDayChange(e));
     this.querySelector('[data-bind="player-select"]').addEventListener('change', (e) => this.#onPlayerChange(e));
-    this.querySelector('[data-bind="reveal-btn"]').addEventListener('click', () => {
+    const revealBtn = this.querySelector('[data-bind="reveal-btn"]');
+    revealBtn.addEventListener('click', () => {
       if (this.#primaryDecimatorAction) {
         void this.#triggerPrimaryDecimator();
+        return;
+      }
+      // While the day's results are still being ground out, this key feeds the
+      // crank that grinds them. It takes many mineFlip calls to walk ticket and
+      // jackpot processing to a resolved day, and the player staring at this
+      // LCD is the one who wants it finished. The face and click route share
+      // one explicit action token, so a key rendered as Mine FLIP cannot fall
+      // through into an ordinary jackpot spin. #triggerMineFlip still performs
+      // the final callable check, including its in-flight/double-fire guard.
+      if (revealBtn.dataset?.replayAction === 'mine-flip') {
+        void this.#triggerMineFlip();
+        return;
+      }
+      // Read the owned control directly. Synthetic/custom click dispatchers do
+      // not all preserve Event.currentTarget, and a missing value here would
+      // incorrectly replay the jackpot instead of handing off to the coin.
+      if (revealBtn.dataset?.replayAction === 'coinflip') {
+        this.#triggerCoinflipHandoff();
         return;
       }
       if (this.#btnMode === 'bonus') this.#triggerBonusRoll();
@@ -566,6 +623,7 @@ class ReplayPanel extends HTMLElement {
 
     this.#pendingActionUnsubscribe = subscribePendingActions((items) => {
       this.#setPrimaryDecimatorAction(items);
+      this.#setMineFlipAction(items);
     });
     this.#syncSpinControlState();
     this.refreshDays();
@@ -600,6 +658,9 @@ class ReplayPanel extends HTMLElement {
     this.#primaryDecimatorAction = null;
     this.#primaryDecimatorBusy = false;
     this.#primaryDecimatorError = '';
+    this.#mineFlipAction = null;
+    this.#mineFlipBusy = false;
+    this.#mineFlipArmed = false;
     this.#revealStateBeforeDecimator = null;
     this.removeAttribute?.('data-primary-action');
     this.#stopIdleSpin();
@@ -804,6 +865,21 @@ class ReplayPanel extends HTMLElement {
     return this.#dayDataReady(day);
   }
 
+  /** App-shell hook: publish the exact-day coinflip's reveal state to the LCD. */
+  setCoinflipHandoff({ day = null, available = false, revealed = false } = {}) {
+    const parsedDay = Number(day);
+    const nextDay = Number.isInteger(parsedDay) && parsedDay > 0 ? parsedDay : null;
+    if (nextDay !== this.#coinflipHandoff.day || revealed) {
+      this.#coinflipHandoffStarting = false;
+    }
+    this.#coinflipHandoff = {
+      day: nextDay,
+      available: Boolean(available),
+      revealed: Boolean(revealed),
+    };
+    this.#syncSpinControlState();
+  }
+
   /** App-shell hook: exact contract/indexer phases for the incoming live day. */
   setJackpotProcessingState(signals = null) {
     const day = Number(signals?.day);
@@ -823,6 +899,9 @@ class ReplayPanel extends HTMLElement {
       active: signals?.active === true,
       requested: signals?.requested === true,
       rngReady: signals?.rngReady === true,
+      // The direct isRngFulfilled() contract witness, kept distinct from the
+      // inferred rngReady so the milestone can consume authoritative proof.
+      rngFulfilled: signals?.rngFulfilled === true,
       coinflipReady: signals?.coinflipReady === true,
       ticketsReady: signals?.ticketsReady === true,
       jackpotReady: signals?.jackpotReady === true,
@@ -872,9 +951,10 @@ class ReplayPanel extends HTMLElement {
     let hasFinalWord = false;
     try { hasFinalWord = BigInt(rng?.finalWord ?? 0) > 0n; } catch { /* malformed row */ }
     return {
-      // Historical/non-app loads have no live pipeline feed. Their contract
-      // work is already complete, so begin at the board-fetch phase.
-      rng: live ? live.rngReady : true,
+      // Two witnesses, because the live feed has a blind spot in exactly the
+      // window the player is watching. `hasFinalWord` is the indexed row this
+      // method already loads for `draw`; see rngMilestoneSatisfied.
+      rng: rngMilestoneSatisfied({ live, hasIndexedFinalWord: hasFinalWord }),
       coinflip: live ? live.coinflipReady : true,
       packs: live ? live.ticketsReady : true,
       jackpot: live ? live.jackpotReady : true,
@@ -922,8 +1002,17 @@ class ReplayPanel extends HTMLElement {
   }
 
   #syncSpinControlState() {
+    // Disarmed by default, re-armed only by the processing branch below. Every
+    // other path through this method — spinning, decimator, day summary, spin
+    // ready, coinflip handoff — is a state where the key has its own live
+    // action, and the crank must not be able to eat that press.
+    this.#mineFlipArmed = false;
     const btn = this.querySelector?.('[data-bind="reveal-btn"]');
     if (!btn) return;
+    // Cleared here for the same reason as #mineFlipArmed above: only the
+    // processing branch may set it, so no other path can inherit a stale
+    // pickaxe from a state the key has already left.
+    btn.removeAttribute?.('data-jp-action');
     // Contract/indexer polling continues while the reels animate. Those
     // refreshes own the processing labels, but they must never repaint an
     // already-running main or bonus action back to its idle CTA. The class is
@@ -940,7 +1029,8 @@ class ReplayPanel extends HTMLElement {
       const ready = decimator.state === 'ready' && typeof decimator.run === 'function';
       btn.hidden = false;
       btn.classList?.add('is-decimator');
-      btn.classList?.remove('is-bonus');
+      btn.classList?.remove('is-bonus', 'is-coinflip');
+      if (btn.dataset) btn.dataset.replayAction = 'decimator';
       btn.classList?.toggle('is-processing', busy);
       btn.disabled = busy || this.#spinning || !ready;
       btn.textContent = this.#primaryDecimatorError
@@ -956,7 +1046,22 @@ class ReplayPanel extends HTMLElement {
         : 'Open the resolved Decimator wheel';
       return;
     }
-    btn.classList?.remove('is-decimator');
+    btn.classList?.remove('is-decimator', 'is-coinflip');
+    // DAY SUMMARY is another owner of this exact LCD face. On reload its
+    // durable completion gates can resolve while the replay fetch is still
+    // marked loading; give the already-valid summary precedence so a later
+    // loading repaint cannot put two controls in the one hardware socket.
+    const resultsCta = this.querySelector?.('.ldj-results-cta');
+    if (resultsCta && resultsCta.hidden === false) {
+      btn.hidden = true;
+      btn.classList?.remove('is-processing', 'is-bonus');
+      if (btn.dataset) delete btn.dataset.replayAction;
+      btn.style?.removeProperty?.('--jp-progress');
+      btn.removeAttribute?.('data-jp-stage');
+      btn.removeAttribute?.('aria-busy');
+      btn.removeAttribute?.('aria-label');
+      return;
+    }
     const sourceProcessing = this.hasAttribute('data-day-warming')
       || this.hasAttribute('data-day-loading');
     let stage = null;
@@ -986,9 +1091,37 @@ class ReplayPanel extends HTMLElement {
     const processing = control.processing;
     btn.classList?.toggle('is-processing', processing);
     if (processing) {
+      btn.hidden = false;
       stage ||= this.#jackpotProcessingStage();
-      btn.disabled = true;
-      btn.textContent = stage.label;
+      // The one thing a player can DO while this window is open is turn the
+      // crank. Availability is the resolver's, not ours: it publishes the row
+      // only when a simulated mineFlip actually succeeds, so an armed key means
+      // the chain really does have pending work for this wallet right now. An
+      // in-flight call disarms it, which is what stops a double-fire; the
+      // resolver re-probes and republishes after each receipt, and that
+      // re-arms the key for the next call.
+      const mineFlipKeyActive = this.#mineFlipKeyPhaseActive();
+      this.#mineFlipArmed = mineFlipKeyActive && this.#mineFlipCallable();
+      if (btn.dataset) {
+        btn.dataset.replayAction = this.#mineFlipArmed ? 'mine-flip' : 'processing';
+      }
+      btn.disabled = !this.#mineFlipArmed;
+      // The LABEL follows the resolver-owned PHASE, not the momentary armed
+      // flag or a second RNG witness: a press
+      // disarms the key for the length of its transaction, and the key must
+      // keep saying what it is doing across that whole window. With no crank
+      // published at all it still falls back to the stage, so a wallet-less or
+      // finished board never advertises an action nobody can take.
+      const crankLabel = mineFlipKeyActive;
+      btn.textContent = crankLabel
+        ? (this.#mineFlipBusy ? MINE_FLIP_MINING_LABEL : MINE_FLIP_CRANK_LABEL)
+        : stage.label;
+      // The LCD's indicator glyph is keyed off data-jp-stage, so while the key
+      // is naming the crank it would still be showing the pipeline stage's own
+      // mark — the coinflip stage paints a full-colour ETH coin face there.
+      // This attribute is the hook that swaps in the pickaxe for exactly this
+      // state; every other state keeps whatever its stage puts there.
+      if (crankLabel) btn.setAttribute?.('data-jp-action', 'mine-flip');
       // The fill and the flame cadence are both driven off this one number, so
       // there is exactly one place where progress can disagree with itself.
       btn.style?.setProperty?.('--jp-progress', String(stage.progress));
@@ -996,7 +1129,9 @@ class ReplayPanel extends HTMLElement {
       btn.setAttribute?.('aria-busy', 'true');
       btn.setAttribute?.(
         'aria-label',
-        `${stage.label}. Step ${stage.done} of ${stage.total}.`,
+        crankLabel
+          ? `${btn.textContent}. ${stage.label}. Step ${stage.done} of ${stage.total}.`
+          : `${stage.label}. Step ${stage.done} of ${stage.total}.`,
       );
       btn.title = stage.label;
       return;
@@ -1005,6 +1140,26 @@ class ReplayPanel extends HTMLElement {
     btn.removeAttribute?.('data-jp-stage');
     btn.removeAttribute?.('aria-busy');
     btn.removeAttribute?.('aria-label');
+    if (this.#coinflipHandoffReady()) {
+      btn.hidden = false;
+      btn.classList?.remove('is-bonus');
+      btn.classList?.add('is-coinflip');
+      if (btn.dataset) btn.dataset.replayAction = 'coinflip';
+      btn.disabled = this.#coinflipHandoffStarting;
+      btn.textContent = this.#coinflipHandoffStarting ? 'COIN FLIPPING…' : COINFLIP_LABEL;
+      btn.title = this.#coinflipHandoffStarting
+        ? 'The Community Coinflip is playing'
+        : 'Reveal the Community Coinflip';
+      btn.setAttribute?.('aria-label', btn.textContent);
+      return;
+    }
+    if (this.#singleButton() && this.#jackpotSpinsComplete()) {
+      btn.hidden = true;
+      if (btn.dataset) delete btn.dataset.replayAction;
+      return;
+    }
+    btn.hidden = false;
+    if (btn.dataset) btn.dataset.replayAction = this.#btnMode;
     btn.classList?.toggle('is-bonus', this.#btnMode === 'bonus');
     if (this.#btnMode === 'bonus') {
       const ready = this.#mainReadyForBonus();
@@ -1078,6 +1233,123 @@ class ReplayPanel extends HTMLElement {
     // button. Recompute from today's live readiness instead of leaving the
     // stale pre-takeover "JACKPOT PROCESSING" snapshot disabled forever.
     this.#syncSpinControlState();
+  }
+
+  /**
+   * Mirror the resolver's published Mine FLIP row. Nothing about availability
+   * is decided here: app-mine-flip.js publishes the row only when a simulated
+   * `mineFlip()` succeeds for the acting wallet, and clears it when another
+   * keeper wins the race. Reading that row is how this key stays honest.
+   */
+  #setMineFlipAction(items) {
+    const next = (Array.isArray(items) ? items : []).find((item) => (
+      typeof item?.id === 'string' && item.id.startsWith('mine-flip:')
+    )) || null;
+    const had = Boolean(this.#mineFlipAction);
+    this.#mineFlipAction = next;
+    if (next || had) this.#syncSpinControlState();
+  }
+
+  /** Test-only seam: the exact payload the pending-actions subscription hands us. */
+  __setPendingActionsForTest(items) {
+    this.#setPrimaryDecimatorAction(items);
+    this.#setMineFlipAction(items);
+  }
+
+  /** Test-only seam: the press the armed LCD key performs. */
+  __triggerMineFlipForTest() {
+    return this.#triggerMineFlip();
+  }
+
+  /**
+   * Test-only seam: pin the day the key is reporting on, without the network
+   * load `#loadDay` would otherwise perform to set it.
+   */
+  __setSelectedDayForTest(day) {
+    const target = Number(day);
+    this.#selectedDay = Number.isInteger(target) && target > 0 ? target : null;
+  }
+
+  /**
+   * Does the resolver-owned crank belong on this selected-day LCD?
+   *
+   * The resolver row is authoritative for whether Mine FLIP work exists, but
+   * it is global and can briefly outlive this panel's exact-day processing
+   * context. With live context present, keep both the label and click route
+   * scoped to the selected active unresolved day. A warming panel without the
+   * live feed yet may still trust the resolver row; its click re-probes before
+   * opening the wallet.
+   */
+  #mineFlipKeyPhaseActive() {
+    if (!this.#mineFlipPhaseActive()) return false;
+    const live = this.#jpProcessingSignals;
+    if (!live) return true;
+    const target = Number(this.#selectedDay);
+    return Number.isInteger(target)
+      && target > 0
+      && Number(live.day) === target
+      && live.active === true
+      && live.jackpotReady !== true;
+  }
+
+  /**
+   * Is the crank the thing this key is FOR right now?
+   *
+   * Deliberately not the same question as #mineFlipCallable. Callability is
+   * momentary — it drops the instant a press puts a transaction in flight, and
+   * the resolver itself republishes the row as `state: 'busy'` while it runs —
+   * so a label driven off it flipped back to the pipeline stage the moment the
+   * player pressed the key, which is exactly when they most needed it to still
+   * say what they had just started.
+   *
+   * The row EXISTING is the resolver's statement that this wallet has crank
+   * work; its `state` only says whether it can be pressed this instant. So the
+   * phase runs from the first published row until the resolver clears it —
+   * which it does when the chain reports no work left, or the wallet goes
+   * away. That makes the label a function of the phase: press, in flight,
+   * confirm, re-arm and press again all sit inside it, and it ends only when
+   * the processing branch yields to results/another action or the resolver
+   * reports that mining is genuinely done.
+   */
+  #mineFlipPhaseActive() {
+    return Boolean(this.#mineFlipAction) || this.#mineFlipBusy;
+  }
+
+  /** Callable right now: a ready row, a real runner, and nothing in flight. */
+  #mineFlipCallable() {
+    const action = this.#mineFlipAction;
+    return Boolean(
+      action
+      && action.state === 'ready'
+      && typeof action.run === 'function'
+      && !this.#mineFlipBusy
+      && !this.#spinning,
+    );
+  }
+
+  /**
+   * One deliberate press, one crank call. The resolver's own `run` re-probes at
+   * intent time, opens the wallet, and refreshes the day feeds on a receipt, so
+   * there is no transaction logic here and no loop: the player presses again
+   * when the key re-arms.
+   */
+  async #triggerMineFlip() {
+    if (!this.#mineFlipCallable()) return false;
+    const action = this.#mineFlipAction;
+    this.#mineFlipBusy = true;
+    this.#syncSpinControlState();
+    try {
+      await action.run();
+      return true;
+    } catch (error) {
+      // The tray owns the visible error surface for this action; this key just
+      // stops claiming to be armed.
+      console.warn('[replay-panel] Mine FLIP crank failed', error);
+      return false;
+    } finally {
+      this.#mineFlipBusy = false;
+      this.#syncSpinControlState();
+    }
   }
 
   async #triggerPrimaryDecimator() {
@@ -1223,6 +1495,8 @@ class ReplayPanel extends HTMLElement {
     this.#bonusPhase = false;
     this.#mainScratchComplete = true;
     this.#bonusScratchComplete = true;
+    this.#mainSpinComplete = true;
+    this.#bonusSpinComplete = true;
     this.#btnMode = 'reveal';
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     if (btn) {
@@ -1233,6 +1507,7 @@ class ReplayPanel extends HTMLElement {
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
     this.#syncDrawToggleAffordance();
+    this.#syncSpinControlState();
   }
 
   #startIdleSpin() {
@@ -1771,11 +2046,6 @@ class ReplayPanel extends HTMLElement {
 
     this.querySelector('[data-bind="empty-state"]').hidden = true;
 
-    // Load day detail (replay endpoint — still needed for distributions used in player-select label)
-    const detail = await this.#loadDayDetail(dayNum);
-    if (!loadIsCurrent()) return finishStaleLoad();
-    this.#distributions = Array.isArray(detail?.distributions) ? detail.distributions : [];
-
     // Both exact roll payloads are mandatory scratch-underlay data. A transient
     // 404 here used to enable Reveal anyway, producing an empty or prior-day
     // underside; retain the loading gate and retry instead.
@@ -1784,6 +2054,20 @@ class ReplayPanel extends HTMLElement {
     this.#dayRoll1 = rolls.roll1;
     this.#dayRoll2 = rolls.roll2;
     this.#repairOpeningFlipRolls(dayNum);
+
+    // Do not request the potentially large distribution feed while the two
+    // exact roll endpoints still say this processing day is not ready. The
+    // retry loop only needs those small readiness payloads; once both exist we
+    // load day detail exactly as before for player labels and prize mapping.
+    const rollPayloadsReady = Number(this.#dayRoll1?.day) === dayNum
+      && Array.isArray(this.#dayRoll1?.wins)
+      && Number(this.#dayRoll2?.day) === dayNum
+      && Array.isArray(this.#dayRoll2?.wins);
+    if (rollPayloadsReady) {
+      const detail = await this.#loadDayDetail(dayNum);
+      if (!loadIsCurrent()) return finishStaleLoad();
+      this.#distributions = Array.isArray(detail?.distributions) ? detail.distributions : [];
+    }
 
     // Load winners from the authoritative day/winners endpoint.
     // This gives us level, winner list with breakdown, and hasBonus flags.
@@ -2238,6 +2522,7 @@ class ReplayPanel extends HTMLElement {
 
     const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
     if (!completed || this.#selectionKey() !== selectionKey) return false;
+    this.#mainSpinComplete = true;
     btn.classList?.remove('is-spinning');
     btn.removeAttribute?.('aria-busy');
 
@@ -2252,7 +2537,7 @@ class ReplayPanel extends HTMLElement {
           ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus spin ready' : '')
           : 'Scratch the main draw first';
       } else {
-        btn.hidden = true;
+        this.#syncSpinControlState();
       }
     } else {
       btn.disabled = false;
@@ -2464,6 +2749,43 @@ class ReplayPanel extends HTMLElement {
     return this.hasAttribute('single-button');
   }
 
+  #jackpotSpinsComplete() {
+    return this.#mainSpinComplete && (!this.#hasBonus || this.#bonusSpinComplete);
+  }
+
+  #coinflipHandoffReady() {
+    return this.#singleButton()
+      && this.#jackpotSpinsComplete()
+      && Number(this.#coinflipHandoff.day) === Number(this.#selectedDay)
+      && this.#coinflipHandoff.available
+      && !this.#coinflipHandoff.revealed;
+  }
+
+  #triggerCoinflipHandoff() {
+    if (!this.#coinflipHandoffReady() || this.#coinflipHandoffStarting) return false;
+    const target = typeof document !== 'undefined'
+      ? document.querySelector?.('app-daily-flip')
+      : null;
+    if (!target) return false;
+    let mobile = false;
+    try {
+      mobile = typeof matchMedia === 'function'
+        ? matchMedia('(max-width: 760px)').matches
+        : Number(globalThis.innerWidth) <= 760;
+    } catch (_error) { /* desktop fallback */ }
+    this.#coinflipHandoffStarting = true;
+    this.#syncSpinControlState();
+    let started = false;
+    try {
+      started = target.startCoinflipFromJackpot?.({ scroll: mobile }) === true;
+    } catch (_error) { started = false; }
+    if (!started) {
+      this.#coinflipHandoffStarting = false;
+      this.#syncSpinControlState();
+    }
+    return started;
+  }
+
   #mainReadyForBonus() {
     return this.#mainScratchComplete || this.#mainAllRed;
   }
@@ -2544,6 +2866,7 @@ class ReplayPanel extends HTMLElement {
     if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
     const completed = await this.#runSpin(displayTraits);
     if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+    this.#bonusSpinComplete = true;
     btn?.classList?.remove('is-spinning');
     btn?.removeAttribute?.('aria-busy');
 
@@ -2551,7 +2874,7 @@ class ReplayPanel extends HTMLElement {
       if (this.#singleButton()) {
         // Both rolls are done — nothing left to fire until the day changes.
         this.#btnMode = 'reveal';
-        btn.hidden = true;
+        this.#syncSpinControlState();
       } else {
         btn.disabled = false;
         btn.textContent = SPIN_AGAIN_LABEL;
@@ -2858,6 +3181,46 @@ class ReplayPanel extends HTMLElement {
     let idleCount = 2 + Math.floor(Math.random() * 3);
     let finalLockSettling = false;
 
+    // Phase 64 (app embed): publish the reels' own committed faces while they
+    // are still turning, so a host shell can grade seated foil tickets against
+    // what the player is actually looking at. A quadrant counts as committed
+    // only once BOTH its colour and its symbol are locked — the frame loop
+    // treats that same pair as "fully locked" when it commits the quadrant's
+    // ownership colour, and a symbol-locked quadrant still shows a random
+    // colour, which would grade as a colour miss against the real draw.
+    // Uncommitted quadrants publish null, never a placeholder trait.
+    // The event fires only when the committed COUNT changes, so a spin emits
+    // at most five of them; it is spin presentation, not a data feed. The
+    // opening emit publishes four nulls, which is how a host drops the
+    // previous roll's presentation before this one starts.
+    let announcedCommits = -1;
+    const emitSpinProgress = () => {
+      const traits = [null, null, null, null];
+      let commits = 0;
+      for (let i = 0; i < 4; i++) {
+        if (!lockedSymbols[i] || !lockedColors[i]) continue;
+        if (displayTraits[i] == null) continue;
+        const { contractQ, col, sym } = targets[i];
+        if (!(contractQ >= 0 && contractQ < 4)) continue;
+        traits[contractQ] = (contractQ * 64) + (col * 8) + sym;
+        commits += 1;
+      }
+      if (commits === announcedCommits) return;
+      announcedCommits = commits;
+      if (!announce) return;
+      try {
+        this.dispatchEvent(new CustomEvent('replay:spin-progress', {
+          detail: {
+            day: this.#selectedDay,
+            player: this.#selectedPlayer,
+            bonusPhase: this.#bonusPhase,
+            traits,
+          },
+          bubbles: true,
+        }));
+      } catch { /* headless / CustomEvent shim absent */ }
+    };
+
     setMajorDrawActivity('jackpot-replay', true);
     return new Promise(resolve => {
       let activitySettled = false;
@@ -2994,6 +3357,7 @@ class ReplayPanel extends HTMLElement {
           }
         }
         this.#syncOwnedGoldState(quads);
+        emitSpinProgress();
         // Ordinary frames get one terse digital pulse whose pitch/volume
         // follows the blue count. A lock frame substitutes its red/blue/gold
         // cue instead of stacking both sounds on the same animation frame.
@@ -3020,6 +3384,7 @@ class ReplayPanel extends HTMLElement {
         const delay = 80 + Math.floor((locksDone / totalLocks) * 120);
         setTimeout(step, delay);
       };
+      emitSpinProgress();
       step();
     });
   }
@@ -3195,19 +3560,19 @@ class ReplayPanel extends HTMLElement {
     if (!this.#bonusPhase) {
       if (hint) {
         hint.textContent = this.#mainAllRed && this.#hasBonus
-          ? 'All red — bonus spin is ready.'
-          : 'Scratch every quadrant to reveal the draw!';
+          ? 'Bonus round ready'
+          : ((4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining');
       }
     } else if (anyScratchable) {
-      if (hint) hint.textContent = 'Scratch every quadrant to reveal the bonus draw!';
+      if (hint) hint.textContent = (4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining';
     } else {
       if (hint) hint.textContent = '';
     }
 
-    // Phase 64 (app embed): announce spin completion so host shells (the app's
-    // last-day-jackpot wrapper) can open their spoiler gates + fire follow-on
-    // UI (winnings banner, foil match lighting). Additive — no behavior change
-    // for /play or /beta consumers.
+    // Phase 64 (app embed): announce spin completion so host shells can sync
+    // post-spin visuals such as foil match lighting. Scratch completion below
+    // remains the spoiler/persistence gate. Additive — no behavior change for
+    // /play or /beta consumers.
     if (announce) {
       try {
         this.dispatchEvent(new CustomEvent('replay:spin-complete', {
@@ -3594,19 +3959,24 @@ class ReplayPanel extends HTMLElement {
         const pctX = (cx / canvas.width) * 100;
         const pctY = (cy / canvas.height) * 100;
         const circles = this.#quadBadgeBounds[qIdx];
+        const quads = this.querySelectorAll('.replay-tq');
+        const quad = quads[qIdx];
+        const badgeWraps = quad?.querySelectorAll?.('.replay-badge-wrap') || [];
         for (let ci = 0; ci < circles.length; ci++) {
           if (this.#badgesRevealed[qIdx].indexOf(ci) !== -1) continue;
           const ddx = pctX - circles[ci].cx, ddy = pctY - circles[ci].cy;
           if (ddx * ddx + ddy * ddy <= circles[ci].r * circles[ci].r) {
             this.#badgesRevealed[qIdx].push(ci);
-            this.#sfxGreenReveal();
             if (!this.#greenRevealed[qIdx]) {
               this.#greenRevealed[qIdx] = true;
-              const quads = this.querySelectorAll('.replay-tq');
-              const quad = quads[qIdx];
               quad.classList.remove('q-scratchable', 'q-scratch-underlay', 'q-result-pending');
               quad.classList.add('q-result-revealed', 'q-has-tickets');
             }
+            // The reward readout belongs to the exact paid-badge hit, not the
+            // later full-quadrant threshold. Keep it on the same event turn as
+            // the arcade coin cue so sight and sound identify one reveal.
+            this.#sfxGreenReveal();
+            this.#activateBadgeReward(badgeWraps[ci]);
           }
         }
       }
@@ -3855,13 +4225,6 @@ class ReplayPanel extends HTMLElement {
       quad.classList.add('q-has-tickets');
       const badges = quad.querySelectorAll('.replay-badge-wrap');
       for (const badge of badges) badge.tabIndex = 0;
-      // Crossing the full-quadrant threshold is itself a reveal action. Fire
-      // every untouched winner callout now so a player does not have to hunt
-      // over each scattered badge after uncovering the whole result. Silent
-      // instant restores deliberately remain inert on page refresh.
-      if (!instant && !silent) {
-        for (const badge of badges) this.#activateBadgeReward(badge);
-      }
     } else {
       quad.classList.add('q-no-tickets');
       // Show main badge again for non-win owned quadrants
@@ -3937,7 +4300,7 @@ class ReplayPanel extends HTMLElement {
     } else {
       let remaining = this.#scratched.filter(s => !s).length;
       if (centerPending) remaining++;
-      if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
+      if (hint) hint.textContent = remaining + ' panel' + (remaining !== 1 ? 's' : '') + ' remaining';
     }
   }
 
@@ -3974,6 +4337,9 @@ class ReplayPanel extends HTMLElement {
     // forcing later rewards to wait or erase it.
     const sequence = this.#rewardPopSequence++;
     const stack = Math.max(1, 20 - sequence);
+    // Quadrants need ordering against one another, but their paper must stay
+    // beneath the center seal at z20. Badge callouts retain the full stack.
+    const quadrantStack = Math.max(1, stack - 2);
     wrap.style.setProperty('--replay-reward-stack', String(stack));
     const quad = wrap.parentElement;
     if (quad) {
@@ -3983,7 +4349,7 @@ class ReplayPanel extends HTMLElement {
       ) || 0;
       quad.style.setProperty(
         '--replay-quadrant-reward-stack',
-        String(Math.max(currentQuadStack, stack)),
+        String(Math.max(currentQuadStack, quadrantStack)),
       );
       quad.classList.add('q-reward-pop-active');
     }
@@ -4196,6 +4562,9 @@ class ReplayPanel extends HTMLElement {
     this.#mainScratchComplete = false;
     this.#mainAllRed = false;
     this.#bonusScratchComplete = false;
+    this.#mainSpinComplete = false;
+    this.#bonusSpinComplete = false;
+    this.#coinflipHandoffStarting = false;
     this.#drawViewSwitching = false;
     this.#bonusTraitIds = new Set();
     this.#bonusQuadrants = new Set();
@@ -4206,7 +4575,7 @@ class ReplayPanel extends HTMLElement {
     const revealBtn = this.querySelector('[data-bind="reveal-btn"]');
     if (revealBtn) {
       revealBtn.hidden = false;
-      revealBtn.classList?.remove('is-bonus', 'is-spinning');
+      revealBtn.classList?.remove('is-bonus', 'is-coinflip', 'is-spinning');
       revealBtn.removeAttribute?.('aria-busy');
       revealBtn.textContent = MAIN_SPIN_LABEL;
     }

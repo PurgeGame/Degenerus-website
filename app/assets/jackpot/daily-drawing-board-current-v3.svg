@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <!-- Moving current on the interlock and data lanes. Geometry is copied from
+       daily-drawing-board-routing-v4.svg verbatim, chamfers included, so no
+       animated trace can leave the functional net. v3 tracks v4's endpoint
+       fixes: the interlock and data lanes now start at y=915 so their top ends
+       stay under the processor in the phone layout too. -->
+  <defs>
+    <filter id="currentGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#6c98ff"/>
+      <stop offset="0.46" stop-color="#73e8b0"/>
+      <stop offset="1" stop-color="#e4b54e"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .current { stroke-dasharray: 16 46; animation: current-flow 1.18s linear infinite; }
+    .current--return { animation-direction: reverse; }
+    @keyframes current-flow { to { stroke-dashoffset: -62; } }
+    @media (prefers-reduced-motion: reduce) {
+      .current { stroke-dasharray: none; animation: none; opacity: .42; }
+    }
+  </style>
+  <g class="current" fill="none" stroke="url(#signal)" stroke-opacity="0.72"
+     stroke-width="3.1" stroke-linecap="square" stroke-linejoin="miter"
+     filter="url(#currentGlow)" vector-effect="non-scaling-stroke">
+    <!-- Chainlink modules -> processor interlock. -->
+    <path d="M250 1100V1028L272 1006H360L382 984V915"/>
+    <path d="M1030 1100V1028L1008 1006H920L898 984V915"/>
+    <!-- Processor -> LCD data lanes. -->
+    <path d="M414 915V982L432 1000H438L456 1018V1098"/>
+    <path d="M506 915V1002L524 1020H530L548 1038V1098"/>
+    <path d="M774 915V1002L756 1020H750L732 1038V1098"/>
+    <path d="M866 915V982L848 1000H842L824 1018V1098"/>
+  </g>
+  <g class="current current--return" fill="none" stroke="#74a0ff" stroke-opacity="0.58"
+     stroke-width="2.6" stroke-linecap="square" vector-effect="non-scaling-stroke">
+    <!-- The LCD's two interlock returns terminate beneath the VRF modules. -->
+    <path d="M286 1116H350"/>
+    <path d="M286 1158H350"/>
+    <path d="M994 1116H930"/>
+    <path d="M994 1158H930"/>
+  </g>
+</svg>

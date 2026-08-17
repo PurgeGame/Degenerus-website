@@ -483,9 +483,16 @@ export async function readJackpotPhaseContext() {
       // Rolling-deploy fallback for an older reader/ABI.
       jackpot = Boolean(await contract.jackpotPhase());
     }
-    let compressedFlag = 0;
-    try { compressedFlag = Number(await contract.jackpotCompressionTier()); }
-    catch (_e) { /* old deploy / transient read: ordinary cadence is conservative */ }
+    // null, NOT 0. A failed read is "unknown", and 0 is a real tier meaning
+    // "normal five-day phase". Reporting 0 here made a transient RPC error
+    // indistinguishable from a genuine normal cadence, and the consumers use
+    // `??`, which does not fall through a 0 — so one bad read masked a live
+    // turbo/compressed phase behind a five-day label.
+    let compressedFlag = null;
+    try {
+      const tier = Number(await contract.jackpotCompressionTier());
+      if (Number.isInteger(tier) && tier >= 0) compressedFlag = tier;
+    } catch (_e) { /* old deploy / transient read: leave the tier unknown */ }
     return { level, jackpot, lastPurchaseDay, rngLocked, compressedFlag };
   } catch (_e) {
     return null;

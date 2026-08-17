@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <!--
+    White-ink silkscreen for the daily-drawing backplate. Shares the coordinate
+    space and the safe-zone table of daily-drawing-board-routing-v3.svg.
+
+    Everything here is deliberately under the attention threshold: legible with
+    your nose on the glass, board texture from a normal viewing distance. It is
+    also the only place on the cabinet allowed any flavour text, and it never
+    carries state.
+  -->
+  <g fill="#cfd9d1" fill-opacity="0.15"
+     font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+     font-weight="700" letter-spacing="1.6">
+    <!-- Fab legend on the free strip below the LCD, in both layouts. -->
+    <text x="150" y="1234" font-size="18">DGN-JP4 · REV D · SN 0x7F4A9C2E1B</text>
+    <!-- The house rule, printed the way a fab prints its own part number. -->
+    <text x="1170" y="1234" font-size="18" text-anchor="end">ZERO RAKE</text>
+  </g>
+
+  <!-- Assembly fiducial, mirroring the house mark across the two gutters. -->
+  <g fill="none" stroke="#cfd9d1" stroke-opacity="0.12" stroke-width="1.9"
+     vector-effect="non-scaling-stroke">
+    <circle cx="1111" cy="530" r="12"/>
+    <path d="M1111 509v42M1090 530h42"/>
+  </g>
+
+  <!-- House mark on the bare mask of the left gutter, opposite the fiducial.
+       The path is the flame from daily-drawing-mark.svg, inlined because an
+       SVG used as a CSS background image cannot reference another file. -->
+  <g fill="#cfd9d1" fill-opacity="0.115" transform="translate(79.8 444.8) scale(1.8228)">
+    <path d="M51.4 66.5c-9.2 0-15.9-5.9-15.9-14.3 0-6.7 3.7-11.4 9-16.2-.8 5.9 1.1 9.8 4.1 12.5-.8-6 1.6-12.1 7.6-18.4-.5 7.6 3.9 11.7 6.8 15.7 2.2 2.9 3.5 6.3 3.5 10 0 6.1-4.9 10.7-11.4 10.7 3.2-2.5 5-5.4 5-8.8 0-3.1-1.6-5.5-4.1-8.3.1 4.9-2.1 7.7-4.6 10.4-1.7 1.9-2.5 3.8-2.1 5.8-2.9-2.1-4.9-5.1-4.9-9-2.2 2.7-3.3 5.5-3.3 8.4 0 5 4.1 8.1 10.3 8.1Z"/>
+  </g>
+</svg>

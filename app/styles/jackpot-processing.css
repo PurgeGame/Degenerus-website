@@ -4,12 +4,11 @@
 /* Registering the progress as a number lets the hard gradient stop interpolate.
    It inherits because the animated icon is the button's ::before child. */
 @property --jp-progress { syntax: '<number>'; inherits: true; initial-value: 0; }
-@property --jp-rng-progress { syntax: '<number>'; inherits: false; initial-value: 0.2; }
 
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing {
   min-height: 40px;
   gap: 0.36rem;
-  padding: 0.42rem 0.6rem 0.62rem;
+  padding: 0.42rem 0.6rem;
   border-color: rgba(231, 188, 89, 0.72);
   background:
     linear-gradient(90deg,
@@ -49,84 +48,24 @@ body.layout-basic .jackpot-hero replay-panel
     0 5px 16px rgba(8, 10, 14, 0.35);
 }
 
-/* Seven compact cells communicate the pipeline without adding another row of
-   text to the control. They are thick enough to read as a real instrument at
-   mobile scale rather than as a decorative hairline. */
+/* The key carries no instrument of its own. The VRF wait is reported by the
+   two Chainlink modules bolted either side of it, which is where a player
+   already looks for randomness; duplicating that as a bar inside the display
+   put two progress readings on one control and buried the word itself. The
+   key is now only the word, on the LCD face. */
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing::after {
-  position: absolute;
-  right: 0.58rem;
-  bottom: 0.2rem;
-  left: 0.58rem;
-  height: 4px;
-  border-radius: 999px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 calc(14.285714% - 2px),
-      rgba(8, 10, 18, 0.92) calc(14.285714% - 2px) 14.285714%
-    ),
-    linear-gradient(
-      90deg,
-      #ffd66b 0 calc(var(--jp-bar-progress, var(--jp-progress, 0)) * 100%),
-      rgba(245, 179, 36, 0.14) calc(var(--jp-bar-progress, var(--jp-progress, 0)) * 100%) 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.06),
-    0 0 8px rgba(245, 179, 36, 0.3);
-  content: "";
-  pointer-events: none;
+  content: none;
 }
 
-/* Match the five-light Chainlink instrument in the lower action tray. Four
-   lights fill across the expected ten-confirmation (~20s) wait; the fifth is
-   reserved for the real RNG-arrived signal, so elapsed time never pretends the
-   result is ready. */
-body.layout-basic .jackpot-hero replay-panel
-  .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"])::after {
-  --jp-bar-progress: var(--jp-rng-progress);
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 calc(20% - 2px),
-      rgba(7, 12, 12, 0.94) calc(20% - 2px) 20%
-    ),
-    linear-gradient(
-      90deg,
-      #4ade80 0 calc(var(--jp-bar-progress) * 100%),
-      rgba(134, 239, 172, 0.13) calc(var(--jp-bar-progress) * 100%) 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.05),
-    0 0 9px rgba(74, 222, 128, 0.42);
-}
-body.layout-basic .jackpot-hero replay-panel
-  .replay-reveal-btn.is-processing[data-jp-stage="rng"]::after {
-  --jp-rng-progress: 0.2;
-  animation: jackpot-rng-progress 20s steps(3, end) forwards;
-}
-body.layout-basic .jackpot-hero replay-panel
-  .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"]::after {
-  --jp-rng-progress: 1;
-  animation: none;
-}
-
+/* No stage icon during the two RNG beats either: the lit modules are the mark.
+   The other stages keep their own icon, which is theirs alone. */
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"])::before {
-  width: 1.38rem;
-  height: 1.38rem;
-  background:
-    url("/symbols/crypto_05_chainlink_blue.svg") center/1.02rem 1.02rem no-repeat,
-    radial-gradient(circle, rgba(255,255,255,0.13), rgba(255,255,255,0.025) 62%, transparent 64%);
-  -webkit-mask: none;
-  mask: none;
-  filter: drop-shadow(0 0 5px rgba(147, 197, 253, 0.5));
-  animation: jackpot-rng-wait 1.8s ease-in-out infinite;
+  content: none;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="coinflip"]::before {
-  background: url("/shared/coinflip-face-eth.svg") center/contain no-repeat;
-  -webkit-mask: none;
-  mask: none;
+  content: none;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="packs"]::before {
@@ -176,35 +115,62 @@ body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-spinning::bef
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing::before {
   animation-duration: calc(1.15s - var(--jp-progress, 0) * 0.55s);
 }
-body.layout-basic .jackpot-hero replay-panel
-  .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"]::before {
-  animation: jackpot-rng-arrived 0.72s cubic-bezier(0.2, 1.45, 0.34, 1) both;
-}
 
 @keyframes jackpot-spin-flame {
   50% { opacity: 0.55; transform: scale(0.82); filter: drop-shadow(0 0 9px rgba(147,197,253,0.9)); }
 }
-@keyframes jackpot-rng-wait {
-  0%, 100% { opacity: 0.82; transform: scale(0.96); }
-  50% { opacity: 1; transform: scale(1.03); filter: drop-shadow(0 0 7px rgba(147,197,253,0.68)); }
-}
-@keyframes jackpot-rng-arrived {
-  0% { opacity: 0.35; transform: scale(0.62) rotate(-12deg); }
-  58% { opacity: 1; transform: scale(1.18) rotate(3deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0); }
-}
-@keyframes jackpot-rng-progress {
-  from { --jp-rng-progress: 0.2; }
-  to { --jp-rng-progress: 0.8; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn::before { animation: none !important; }
-  body.layout-basic .jackpot-hero replay-panel
-    .replay-reveal-btn.is-processing[data-jp-stage="rng"]::after {
-    --jp-rng-progress: 0.2;
-    animation: none !important;
-  }
   /* The fill remains because it conveys state; only its slide is removed. */
   body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing { transition: none !important; }
+}
+
+/* The live pipeline keeps its exact milestone fill and stage icons, but uses
+   the same inset digital display as the resting jackpot action. This final
+   layer intentionally follows the stage-specific rules above. */
+body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing {
+  --jp-display-rgb: 112, 240, 158;
+}
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"]) {
+  --jp-display-rgb: 147, 197, 253;
+}
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="coinflip"] {
+  --jp-display-rgb: 110, 231, 183;
+}
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="packs"] {
+  --jp-display-rgb: 251, 191, 36;
+}
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"] {
+  --jp-display-rgb: 134, 239, 172;
+}
+
+body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing,
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"]),
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="coinflip"],
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="packs"],
+body.layout-basic .jackpot-hero replay-panel
+  .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"] {
+  border-color: rgba(var(--jp-display-rgb), 0.66);
+  background:
+    radial-gradient(80% 160% at 50% 50%, rgba(var(--jp-display-rgb), 0.1), transparent 72%),
+    linear-gradient(90deg,
+      rgba(var(--jp-display-rgb), 0.13) 0 calc(var(--jp-progress, 0) * 100%),
+      transparent calc(var(--jp-progress, 0) * 100%)),
+    repeating-linear-gradient(0deg, rgba(var(--jp-display-rgb), 0.025) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #081b12, #020704);
+  background-color: #020704;
+  color: rgb(var(--jp-display-rgb));
+  box-shadow:
+    inset 0 1px 0 rgba(226, 255, 237, 0.07),
+    inset 0 0 13px rgba(0, 0, 0, 0.78),
+    0 0 10px rgba(var(--jp-display-rgb), 0.12);
+  text-shadow: 0 0 6px rgba(var(--jp-display-rgb), 0.38);
 }

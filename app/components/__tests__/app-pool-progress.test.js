@@ -15,8 +15,11 @@ const {
   growthOverTargetWei,
   growthLinePercent,
   poolProgressModel,
+  prizePoolThermometerContext,
   jackpotPoolModel,
   jackpotCadenceModel,
+  jackpotCompressionTier,
+  isTurboTier,
   jackpotDrawCounter,
   jackpotPrizePoolWei,
   phaseStripModel,
@@ -29,6 +32,7 @@ const {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolvePath(__dirname, '../../index.html'), 'utf8');
 const css = readFileSync(resolvePath(__dirname, '../../styles/app.css'), 'utf8');
+const drawingCss = readFileSync(resolvePath(__dirname, '../../styles/daily-drawing.css'), 'utf8');
 const pari = readFileSync(resolvePath(__dirname, '../app-parimutuel-panel.js'), 'utf8');
 const component = readFileSync(resolvePath(__dirname, '../app-pool-progress.js'), 'utf8');
 
@@ -50,6 +54,51 @@ describe('next-pool progression model', () => {
     assert.equal(growthOverTargetWei({ prev: 80n, current: 100n }), 126n,
       'first integer satisfying live * 80 > 100²');
     assert.equal(growthOverTargetWei({ prev: 0n, current: 100n }), null);
+  });
+
+  test('does not invent progress while the contract benchmark is loading', () => {
+    const loading = poolProgressModel({ nextWei: 13_461n });
+    assert.equal(loading.target, null);
+    assert.equal(loading.levelPercent, null);
+    assert.equal(loading.fillPercent, 0,
+      'a pool cannot be positioned honestly until its guarantee is known');
+  });
+
+  test('keeps the closing pool separate from the next ticket level after final-day lock', () => {
+    const closing = prizePoolThermometerContext({
+      phaseLevel: 55,
+      benchmarkLevel: 54,
+      targetWei: 50n,
+      ratchets: { prev: 12_182n, current: 0n, next: 0n },
+      contractPhase: {
+        level: 54,
+        jackpot: false,
+        lastPurchaseDay: true,
+        rngLocked: true,
+      },
+    });
+    assert.deepEqual(closing, {
+      level: 54,
+      targetWei: 12_182n,
+      closing: true,
+    }, 'the promoted buy route must not relabel the still-live closing pool or use bootstrap');
+
+    assert.deepEqual(prizePoolThermometerContext({
+      phaseLevel: 54,
+      benchmarkLevel: 53,
+      targetWei: 12_182n,
+      ratchets: { prev: 11_000n, current: 12_182n },
+      contractPhase: {
+        level: 53,
+        jackpot: false,
+        lastPurchaseDay: false,
+        rngLocked: false,
+      },
+    }), {
+      level: 54,
+      targetWei: 12_182n,
+      closing: false,
+    }, 'ordinary purchase phases continue to show the level accepting tickets');
   });
 
   test('one scale carries live pool, level target, and growth target', () => {
@@ -231,6 +280,149 @@ describe('jackpot depletion model', () => {
       step: 5,
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Compression tier 3 — the chained turbo.
+  //
+  // storage/DegenerusGameStorage.sol:65 declares FOUR tiers:
+  //   0=norm 1=comp 2=turbo 3=turbo+owed
+  // Tier 3 is written by AdvanceModule.sol:329 when a turbo is armed while the
+  // previous turbo's coinflip bonus latch is still owed (two back-to-back
+  // levels that each met target inside one purchase day). It is a turbo: the
+  // contract's own cadence predicate is `>= 2` (AdvanceModule.sol:2360,
+  // JackpotModule.sol:2404, DegenerusGame.sol:2602/:2563).
+  //
+  // The client tested `=== 2`, so tier 3 fell through to the normal branch and
+  // a one-physical-day jackpot was presented as a five-day phase.
+  // ---------------------------------------------------------------------
+  test('tier 3 is a turbo, not a normal five-day phase', () => {
+    assert.equal(isTurboTier(3), true, 'chained arm is a turbo');
+    assert.equal(isTurboTier(2), true);
+    assert.equal(isTurboTier(1), false, 'compressed keeps three physical days');
+    assert.equal(isTurboTier(0), false);
+
+    assert.deepEqual(
+      jackpotCadenceModel({ counter: 0, compressedFlag: 3 }),
+      jackpotCadenceModel({ counter: 0, compressedFlag: 2 }),
+      'a chained turbo renders exactly like a plain turbo',
+    );
+    assert.equal(jackpotCadenceModel({ counter: 0, compressedFlag: 3 }).drawCount, 1);
+  });
+
+  test('a chained turbo takes the whole pool on its single draw', () => {
+    const chained = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 3,
+    });
+    const plain = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 2,
+    });
+    assert.equal(chained.step, 5, 'all five logical days collapse into one');
+    assert.equal(chained.finalDraw, true, 'so the only draw is the final draw');
+    assert.equal(chained.physicalDraw, 1);
+    assert.equal(chained.physicalDrawCount, 1);
+    assert.equal(chained.maxWinWei, plain.maxWinWei);
+    // Under the old `=== 2` test this was step 1 / finalDraw false, which
+    // quoted 14% of the pool at the 40% solo share instead of the grand prize.
+    const understated = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 0,
+    });
+    assert.ok(chained.maxWinWei > understated.maxWinWei * 5n,
+      'the grand prize is not the ordinary daily slice');
+  });
+
+  test('the phase strip labels a chained turbo as a one-draw phase', () => {
+    assert.equal(
+      phaseStripModel({
+        gameState: { level: 41, phase: 'JACKPOT', jackpotPhaseFlag: true },
+        contractPhase: { jackpot: true, jackpotCounter: 0, compressedFlag: 3 },
+      }).dayLabel,
+      'JACKPOT DRAW 1 OF 1',
+    );
+  });
+});
+
+describe('jackpot cadence source resolution', () => {
+  // The gold-rush slot0 decode (polling.js:333) names the counter
+  // `jackpotCounter`; the parimutuel benchmark names the same contract field
+  // `day`. Reading only `day` dropped the live chain counter on every render
+  // driven by the chain ticker.
+  test('the chain decode counter is honoured under its own field name', () => {
+    assert.equal(
+      jackpotDrawCounter({ contractPhase: { jackpot: true, jackpotCounter: 3 } }),
+      3,
+    );
+    assert.equal(
+      jackpotDrawCounter({ contractPhase: { jackpot: true, day: 2 } }),
+      2,
+      'the benchmark spelling still wins when present',
+    );
+  });
+
+  test('a live chain counter outranks the lagging indexed snapshot', () => {
+    // /game/state briefly retains the pre-advance counter. The chain value is
+    // the authority; the old order let the stale one win.
+    assert.equal(
+      jackpotDrawCounter({
+        contractPhase: { jackpot: true, jackpotCounter: 4 },
+        gameState: { jackpotCounter: 0 },
+        goldRush: { phaseDay: 4 },
+      }),
+      4,
+    );
+    assert.equal(
+      jackpotDrawCounter({ gameState: { jackpotCounter: 0 }, goldRush: { phaseDay: 3 } }),
+      3,
+      'without a contract phase the chain-fed goldRush day still outranks the index',
+    );
+  });
+
+  test('cold load with no source at all reads as draw zero, not NaN', () => {
+    assert.equal(jackpotDrawCounter({}), 0);
+    assert.equal(jackpotCompressionTier({}), 0);
+    assert.equal(jackpotCadenceModel({}).drawCount, 5);
+  });
+
+  test('an unknown tier falls through to the next source instead of forging "normal"', () => {
+    // readJackpotPhaseContext() returns null when jackpotCompressionTier()
+    // fails. Under the old `?? 0` coercion that null became a hard 0, and `??`
+    // never falls through a 0 — so one bad RPC read masked a live turbo.
+    assert.equal(
+      jackpotCompressionTier({
+        contractPhase: { compressedFlag: null },
+        goldRush: { phaseClock: { compressedFlag: 2 } },
+      }),
+      2,
+      'the slot0 decode answers when the direct tier read failed',
+    );
+    assert.equal(
+      jackpotCompressionTier({
+        contractPhase: { compressedFlag: null },
+        gameState: { compressedJackpotFlag: 1 },
+      }),
+      1,
+    );
+    assert.equal(
+      jackpotCompressionTier({
+        contractPhase: { compressedFlag: 0 },
+        goldRush: { phaseClock: { compressedFlag: 2 } },
+      }),
+      0,
+      'a real 0 is an answer, not a miss — it must not be overridden',
+    );
+    assert.equal(
+      jackpotCompressionTier({ contractPhase: { compressedFlag: null } }),
+      0,
+      'no source anywhere fails closed to the ordinary cadence',
+    );
+  });
+
+  test('a masked tier no longer downgrades a chained turbo to five days', () => {
+    const resolved = jackpotCompressionTier({
+      contractPhase: { compressedFlag: null },
+      goldRush: { phaseClock: { compressedFlag: 3 } },
+    });
+    assert.equal(jackpotCadenceModel({ counter: 0, compressedFlag: resolved }).drawCount, 1);
+  });
 });
 
 describe('phase strip copy', () => {
@@ -386,7 +578,8 @@ describe('special level-transition jackpot countdown', () => {
 
 describe('pool thermometer and daily-jackpot shell wiring', () => {
   test('thermometer sits between the jackpot headline and daily instrument', () => {
-    const headline = html.indexOf('<gold-rush-headline>');
+    // Prefix match: the tag carries class="gr" + the static LCP shell now.
+    const headline = html.indexOf('<gold-rush-headline');
     const meter = html.indexOf('<app-pool-progress>');
     const hero = html.indexOf('<section class="jackpot-hero"');
     assert.ok(headline >= 0 && headline < meter && meter < hero);
@@ -401,10 +594,11 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       /<div class="jackpot-hero__machine">[\s\S]*?<last-day-jackpot>[\s\S]*?<replay-panel single-button>[\s\S]*?<\/div>[\s\S]*?<nav class="jackpot-day-history"/,
       'the fixed drawing instrument closes before expandable history content');
     assert.match(draw,
-      /<h2 class="jackpot-hero__draw-title">[\s\S]*?<span>DEGENERUS<\/span>[\s\S]*?<strong>DAILY DRAWING<\/strong>[\s\S]*?<\/h2>/);
-    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*3\.05rem[^}]*flex-direction:\s*column[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*text-align:\s*center/s,
-      'the two-line machine marquee remains centered inside its compact recess');
-    assert.match(css, /\.jackpot-hero__machine\s*\{[^}]*daily-drawing-backplate-v4\.webp[^}]*100% 100% no-repeat/s,
+      /<h2 class="jackpot-hero__draw-title"[^>]*>[\s\S]*?flame-center-silver\.svg[\s\S]*?<strong>DEGENERUS DAILY DRAWING<\/strong>[\s\S]*?<\/h2>/,
+      'the accessible marquee includes the canonical flame and one-line attraction name');
+    assert.match(drawingCss, /\.jackpot-hero__draw-title\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*row[^}]*height:\s*2\.72rem[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*text-align:\s*center/s,
+      'the single-line machine marquee remains centered inside its compact recess');
+    assert.match(drawingCss, /\.jackpot-hero__machine\s*\{[^}]*daily-drawing-backplate-v9\.webp[^}]*100% 100% no-repeat/s,
       'only the compact machine owns its purpose-built backplate artwork');
     assert.match(css, /\.jackpot-hero__machine\s*\{[^}]*container-type:\s*inline-size/s,
       'board and foil modules share the machine container instead of the expandable hero row');
@@ -468,6 +662,10 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
         < pari.indexOf('const seal = await readLastVolumeSeal'),
       'pool publication lives on a separate path from the slower volume-log scan',
     );
+    const fastPublish = pari.indexOf('const published = this.#publishPoolBenchmarks');
+    const historyRead = pari.indexOf('const history = await readGrowthRatchetHistory');
+    assert.ok(fastPublish >= 0 && fastPublish < historyRead,
+      'the live target and phase publish before completed-level history is fetched');
   });
 
   test('live pool values use the same fast sample as the Grand Prize ticker', () => {

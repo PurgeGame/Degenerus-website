@@ -977,6 +977,49 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  test('the quest purchase sheet shows the active ticket or luckbox boon value', async () => {
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/game/quests/day/')) {
+        return { day: 1, quests: [{ slot: 0, questType: 1, target: '40000000000' }] };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: '0', target: '40000000000', completed: false },
+        ],
+        levelQuest: null,
+      });
+    };
+    storeMod.update('app.lastDay', { day: 1 });
+    storeMod.update('app.boons', {
+      day: 1,
+      boons: [
+        { boonType: 9, consumed: false },
+        { boonType: 22, consumed: false },
+      ],
+    });
+
+    const el = instantiate();
+    await settle(40);
+    el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
+
+    const boon = el.querySelector('[data-bind="qst-action-boon"]');
+    const indicator = el.querySelector('[data-bind="qst-action-boon-indicator"]');
+    assert.equal(boon.hidden, false);
+    assert.equal(indicator.getAttribute('product'), 'purchase');
+    assert.equal(el.querySelector('[data-bind="qst-action-boon-label"]').textContent, '25% MORE TICKETS');
+    assert.match(el.querySelector('[data-bind="qst-action-boon-value"]').textContent, /^\+\S+ TICKETS?$/);
+
+    el.querySelector('[data-bind="qst-action-lootbox"]').dispatchEvent({ type: 'click' });
+    assert.equal(indicator.getAttribute('product'), 'lootbox');
+    assert.equal(el.querySelector('[data-bind="qst-action-boon-label"]').textContent, '25% BIGGER LUCKBOX');
+    assert.equal(el.querySelector('[data-bind="qst-action-boon-value"]').textContent, '+0.01 ETH VALUE');
+    el.disconnectedCallback();
+  });
+
   test('a Degenerette quest popup shows the selected ticket and submits its exact five-spin wager', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);

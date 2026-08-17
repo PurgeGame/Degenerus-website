@@ -28,6 +28,17 @@ export const DGN_CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
 
 export const DGN_COLORS = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
 
+/** Player-facing symbol name; asset slugs remain unchanged. */
+export function dgnDisplaySymbol(q, sym, col) {
+  const category = DGN_QUADRANTS[Number(q)];
+  const symbol = DGN_SYMBOLS[category]?.[Number(sym)];
+  const color = typeof col === 'string' ? col : DGN_COLORS[Number(col)];
+  if (category === 'crypto' && Number(sym) === 0) return 'wwxrp';
+  return category === 'dice' && Number(sym) === 5 && color === 'gold'
+    ? '6ix'
+    : symbol;
+}
+
 export const DGN_COLOR_HEX = Object.freeze({
   // Exact outer-ring fills from /badges-circular/*.svg. These are deliberately
   // not theme approximations: the picker dot should be the badge it selects.

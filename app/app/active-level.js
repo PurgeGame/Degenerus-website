@@ -56,12 +56,31 @@ export function activeTicketLevel(gameState, contractPhase = null) {
     ? contractPhase.rngLocked
     : gameState?.rngLockedFlag === true;
   if (rngLocked) {
-    const cnt = Number(directIsCurrent ? contractPhase?.day : gameState?.jackpotCounter) || 0;
+    // `day` is the parimutuel benchmark's name for growthState.phaseDay; the
+    // gold-rush slot0 decode calls the same contract field `jackpotCounter`
+    // (polling.js:333). Reading only `day` pinned cnt to 0 for every caller
+    // driven by the chain ticker, so the final-locked-window promotion could
+    // only ever fire on a turbo (the one tier whose step alone reaches the cap).
+    const cnt = Number(directIsCurrent
+      ? contractPhase?.day ?? contractPhase?.jackpotCounter
+      : gameState?.jackpotCounter) || 0;
     // /game/state currently omits this tier, so the direct contract snapshot
     // is what makes the three-day and one-day final locked windows exact.
     const comp = Number(
-      directIsCurrent ? contractPhase?.compressedFlag : gameState?.compressedJackpotFlag,
+      directIsCurrent
+        ? contractPhase?.compressedFlag ?? gameState?.compressedJackpotFlag
+        : gameState?.compressedJackpotFlag,
     ) || 0;
+    // `comp === 2`, NOT `>= 2`, and deliberately so. Everywhere the client
+    // PRESENTS cadence it must use the contract's `>= 2` turbo test, because a
+    // chained-arm tier 3 collapses the phase into one physical day. But this
+    // function is a line-for-line port of the contract's own
+    // `_activeTicketLevel` (DegenerusGameMintStreakUtils.sol:155-158), which
+    // tests `comp == 2`. Its answer decides which level a buy is PRICED and
+    // DELIVERED at, so it has to agree with the chain even where the chain is
+    // idiosyncratic: on a tier-3 day the contract itself computes step 1 and
+    // keeps routing to `level`. Widening this to `>= 2` would quote a level the
+    // contract will not charge. Any change here belongs in the contract first.
     const step = comp === 2
       ? JACKPOT_LEVEL_CAP
       : (comp === 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
@@ -69,4 +88,40 @@ export function activeTicketLevel(gameState, contractPhase = null) {
   }
 
   return level;
+}
+
+/**
+ * Level whose foil pack belongs in the Daily Drawing cabinet.
+ *
+ * This deliberately differs from `activeTicketLevel()` during the sealed
+ * final-RNG window. New buys may already route forward there, but the cabinet
+ * is still presenting the current level's jackpot and must keep that level's
+ * foil tickets visible until the end-phase transition actually starts.
+ */
+export function foilPackDisplayLevel(gameState, contractPhase = null) {
+  const level = Number(gameState?.level ?? contractPhase?.level);
+  if (!Number.isFinite(level)) return null;
+
+  // _endPhase is the exact hand-off requested by the cabinet: from this point
+  // onward the old level has no remaining jackpot presentation.
+  if (gameState?.phaseTransitionActive === true) return level + 1;
+
+  // Prefer the explicit /game/state phase. A slower side-bet contract poll can
+  // otherwise hide the live level's foils by briefly reporting the adjacent
+  // purchase cadence for the same numeric level.
+  const hasGamePhase = typeof gameState?.jackpotPhaseFlag === 'boolean'
+    || typeof gameState?.phase === 'string';
+  if (hasGamePhase) {
+    const jackpot = Boolean(
+      gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
+    );
+    return jackpot ? level : level + 1;
+  }
+
+  const directLevel = Number(contractPhase?.level);
+  const directIsCurrent = typeof contractPhase?.jackpot === 'boolean'
+    && (!Number.isFinite(directLevel) || directLevel === level);
+  if (directIsCurrent) return contractPhase.jackpot ? level : level + 1;
+
+  return activeTicketLevel(gameState, contractPhase);
 }

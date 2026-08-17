@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Pickaxe, drawn as a CSS mask: only alpha matters, so the fill colour is
+       irrelevant and the LCD supplies the lit green. It renders at ~15px, and
+       three things are load-bearing at that size:
+         - the head keeps its thickness out to both tips (tapering to a point
+           makes the ends vanish and the mark collapses into an arrowhead),
+         - the shaft is raked (a vertical shaft under a symmetric head reads as
+           an up arrow, not a tool),
+         - both strokes are heavy enough to match the LCD text weight; hairline
+           geometry greys out against the lit face. -->
+  <!-- Head: wide, near-constant-thickness arc spanning the full width. -->
+  <path d="M0.9 9.4C6.6 4.9 17.4 4.9 23.1 9.4l-2.1 2.9c-4.3-3.2-13.7-3.2-18 0Z"/>
+  <!-- Shaft: hung from the middle of the head and raked right, overlapping it
+       so the mask unions into one solid silhouette. -->
+  <path d="M10.5 8 13.6 8.7 19.3 20.7 16.3 21.9Z"/>
+</svg>

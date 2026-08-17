@@ -28,6 +28,8 @@ import {
   bestGrade,
   claimableDrawGrades,
   FOIL_CLAIM_THRESHOLD,
+  gradeLine,
+  normalizeFoilLine,
   unpackWinSet,
 } from '../app/foil-match.js';
 import { traitToBadge } from '../app/jackpot-data.js';
@@ -35,7 +37,11 @@ import { applyDgnTicketAccent } from '../app/dgn-traits.js';
 import { fetchJSON } from '../app/api.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
-import { queueReveal } from './reveal-overlay.js';
+import {
+  PACK_REVEAL_COMPLETE_EVENT,
+  REVEAL_OVERLAY_IDLE_EVENT,
+  queueReveal,
+} from './reveal-overlay.js';
 import {
   claimFoilMatch,
   FOIL_TIER_FACES,
@@ -47,9 +53,10 @@ import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 import { normalizeLastDayPayload } from '../app/last-day-state.js';
-import { activeTicketLevel } from '../app/active-level.js';
+import { foilPackDisplayLevel } from '../app/active-level.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
+const FOIL_MATCH_FLASH_MS = 640;
 
 function _terminalFoilClaimError(error) {
   const seen = new Set();
@@ -130,12 +137,32 @@ class LastDayJackpot extends HTMLElement {
   #foilSeq = 0;
   #bridgeTimer = null;
   #bridgeAttempts = 0;
+  #spinCompleteListener = null;
   #scratchCompleteListener = null;
   #decimatorOpenedListener = null;
+  #packRevealCompleteListener = null;
+  #revealOverlayIdleListener = null;
+  #foilSlottingArmed = null;
+  #foilSlottingPending = false;
+  // A completed foil reveal is the authority for the four tickets that must
+  // visibly seat. A one-day jackpot can advance the live purchase target while
+  // the fullscreen pack is still open; without this pin the idle refresh would
+  // fetch the next level and animate an entirely different pack into the bank.
+  #slottedFoilLevel = null;
   #foilClaimBusy = false; // one in-flight foil claim at a time
   #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
-  #foilMainActivated = false;  // this tab has uncovered Roll 1 for the pinned day
-  #foilBonusActivated = false; // this tab has uncovered Roll 2 for the pinned day
+  #foilMainActivated = false;  // this tab has landed Roll 1 for the pinned day
+  #foilBonusActivated = false; // this tab has landed Roll 2 for the pinned day
+  #foilMainClaimReady = false;  // Roll 1 scratch gate cleared in this tab
+  #foilBonusClaimReady = false; // Roll 2 scratch gate cleared in this tab
+  // The reels' own committed faces for the spin currently on screen, as
+  // published by replay:spin-progress: { day, traits } with a trait per
+  // CONTRACT quadrant and null wherever the reel is still turning. This is
+  // presentation, never a record — nothing here opens a spoiler or claim gate.
+  #foilPresentation = null;
+  #foilFlashQuadrants = new Set();
+  #foilFlashTimers = new Map();
+  #spinProgressListener = null;
   // --- "Whole board played out" gates for the results CTA (user call: the
   //     main UI — every scratch roll AND the coin flip — plays out first;
   //     the full-reveal popup sits behind a button, never auto-pops). ---
@@ -244,9 +271,11 @@ class LastDayJackpot extends HTMLElement {
     this.#foilSeq += 1;
     this.#foilData = null;
     this.#foilDataKey = null;
+    this.#resetFoilSlotting({ preserveInFlight: true });
     clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     this.#winners = [];
     this.#resetDayGates();
+    this.#clearFoilMatchLamps();
     const label = this.querySelector('[data-bind="day"]');
     if (label) label.textContent = `Day ${day}`;
     this.#renderColdStart();
@@ -356,32 +385,130 @@ class LastDayJackpot extends HTMLElement {
   }
 
   #foilTargetLevel() {
+    const slotted = Number(this.#slottedFoilLevel);
+    if (Number.isInteger(slotted) && slotted > 0) return slotted;
+
     // A shell can reconnect after polling has already populated the store.
     // Read that snapshot until the initial subscription callbacks hydrate the
     // instance, so the first paint cannot flash the resolved level's old pack.
     const gameState = this.#gameState ?? get('app.gameState');
     const benchmarks = this.#poolBenchmarks ?? get('app.poolBenchmarks');
-    const active = activeTicketLevel(
+    const active = foilPackDisplayLevel(
       gameState,
       benchmarks?.contractPhase,
     );
     return Number.isInteger(active) && active > 0 ? active : this.#resolvedFoilLevel();
   }
 
-  #activatedFoilSets() {
+  #resetFoilSlotting({ preserveInFlight = false } = {}) {
+    const armedLevel = Number(this.#foilSlottingArmed);
+    const slottedLevel = Number(this.#slottedFoilLevel);
+    const releaseInFlight = (Number.isInteger(armedLevel) && armedLevel > 0)
+      || (this.#foilSlottingPending
+        && Number.isInteger(slottedLevel)
+        && slottedLevel > 0);
+    if (preserveInFlight && releaseInFlight) return;
+    this.#foilSlottingArmed = null;
+    this.#foilSlottingPending = false;
+    this.#slottedFoilLevel = null;
+  }
+
+  #activatedFoilSets({ claimableOnly = false } = {}) {
     const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
-    const mainActive = this.#foilMainActivated
+    const mainActive = (claimableOnly ? this.#foilMainClaimReady : this.#foilMainActivated)
       || (!replayFresh && this.#hasSpunPinnedDay());
-    const bonusActive = this.#foilBonusActivated
+    const bonusActive = (claimableOnly ? this.#foilBonusClaimReady : this.#foilBonusActivated)
       || (!replayFresh && this.#hasCompletedPinnedDay());
     const summary = this.#lastPayload?.summary;
-    const foilLevel = Number(this.#foilData?.level ?? this.#foilTargetLevel());
-    const resolvedLevel = this.#resolvedFoilLevel();
-    const levelLocked = resolvedLevel != null && foilLevel === resolvedLevel;
+    const levelLocked = this.#foilLevelLocked();
     return {
       mainSet: mainActive && levelLocked ? (summary?.rollOne?.mainTraitsPacked ?? null) : null,
       bonusSet: bonusActive && levelLocked ? (summary?.rollTwo?.bonusTraitsPacked ?? null) : null,
     };
+  }
+
+  // The seated pack is only comparable to the board in front of it when both
+  // belong to the same level. Every path that lights a foil face — settled or
+  // mid-spin — passes through here, so a pack bought for the next level cannot
+  // light against the level currently resolving.
+  #foilLevelLocked() {
+    const foilLevel = Number(this.#foilData?.level ?? this.#foilTargetLevel());
+    const resolvedLevel = this.#resolvedFoilLevel();
+    return resolvedLevel != null && foilLevel === resolvedLevel;
+  }
+
+  // Grade one foil line against the faces the spin presentation has actually
+  // stopped on. Returns null — dormant — whenever there is no presentation, it
+  // belongs to another day, the pack is off-level, or no reel has committed
+  // yet. `committed` is a quadrant bitmask: a quadrant whose reel is still
+  // turning is not a miss, it is not yet information, so its cell gets neither
+  // a match class nor the graded miss class.
+  //
+  // Grading is gradeLine, unmodified. The presentation shows the real draw, so
+  // these faces are the same faces the settled render arrives at; merging the
+  // two with Math.max is what makes settling a lit quadrant a no-op instead of
+  // a repaint.
+  #foilPresentationGrade(line) {
+    const presentation = this.#foilPresentation;
+    const traits = presentation?.traits;
+    if (!Array.isArray(traits)) return null;
+    if (Number(presentation.day) !== Number(this.#pinnedDay)) return null;
+    if (!this.#foilLevelLocked()) return null;
+    let committed = 0;
+    let packed = 0;
+    for (let quadrant = 0; quadrant < 4; quadrant += 1) {
+      const trait = traits[quadrant];
+      // Deliberately typeof-strict rather than Number()-coerced: an
+      // uncommitted quadrant publishes null, and Number(null) is 0 — a
+      // perfectly valid trait byte. Coercing here would grade every reel that
+      // has NOT stopped as if it had stopped on quadrant 0, colour 0, symbol 0.
+      if (typeof trait !== 'number' || !Number.isInteger(trait)
+        || trait < 0 || trait > 255) continue;
+      packed |= trait << (quadrant * 8);
+      committed |= 1 << quadrant;
+    }
+    if (committed === 0) return null;
+    const { faces } = gradeLine(line, packed >>> 0);
+    return {
+      committed,
+      faces: faces.map((face, quadrant) => (((committed >> quadrant) & 1) ? face : 0)),
+    };
+  }
+
+  // Match classes are durable grading data; brightness is a one-beat event.
+  // Keep that pulse on its own clock so a settled claim can retain its score
+  // without leaving every matching foil face switched on indefinitely.
+  #clearFoilMatchFlashes() {
+    for (const handle of this.#foilFlashTimers.values()) {
+      try { clearTimeout(handle); } catch { /* defensive */ }
+    }
+    this.#foilFlashTimers.clear();
+    this.#foilFlashQuadrants.clear();
+    this.querySelectorAll?.('.ldj-foil-machine-cell')?.forEach?.((cell) => {
+      cell.classList?.remove?.('is-match-flash');
+    });
+  }
+
+  #startFoilMatchFlashes(quadrants) {
+    for (const quadrant of quadrants) {
+      const previous = this.#foilFlashTimers.get(quadrant);
+      if (previous != null) {
+        try { clearTimeout(previous); } catch { /* defensive */ }
+      }
+      this.#foilFlashQuadrants.add(quadrant);
+      if (typeof setTimeout !== 'function') continue;
+      const handle = setTimeout(() => {
+        this.#foilFlashTimers.delete(quadrant);
+        this.#foilFlashQuadrants.delete(quadrant);
+        this.querySelectorAll?.('.ldj-foil-machine-cell')?.forEach?.((cell) => {
+          if (Number(cell.getAttribute?.('data-foil-quadrant')) === quadrant) {
+            cell.classList?.remove?.('is-match-flash');
+          }
+        });
+      }, FOIL_MATCH_FLASH_MS);
+      if (handle && typeof handle.unref === 'function') handle.unref();
+      this.#foilFlashTimers.set(quadrant, handle);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -429,11 +556,39 @@ class LastDayJackpot extends HTMLElement {
     this.#foilSeq += 1; // invalidate any older-day request still in flight
     this.#foilData = null;
     this.#foilDataKey = null;
+    this.#resetFoilSlotting({ preserveInFlight: true });
     clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     this.#winners = [];
     if (resetGates) this.#resetDayGates();
+    // Same boundary, reached from the indexed lastDay feed instead of the
+    // chain clock. resetGates IS the "this is a different day" signal here;
+    // the first adoption of a freshly mounted board has no lit sockets to
+    // clear and no pack fetched yet.
+    if (resetGates) this.#clearFoilMatchLamps();
     this.#renderForStatus(payload);
     this.#dispatchDaySelection(false);
+  }
+
+  /**
+   * Put the foil cabinet back to dormant on a day boundary.
+   *
+   * The match lamps are day state that lives in the DOM. Both day-advance
+   * paths clear the MODEL the lamps derive from — the day's payload, the
+   * activation gates, the cached pack — but a socket already showing
+   * is-symbol-match/is-color-match keeps showing it until something repaints
+   * the cabinet, and neither path did. Every trigger that eventually cleared
+   * them (a level change, a wallet change, the next spin, a manual day pick)
+   * is an unrelated event that may not arrive for hours, so yesterday's hits
+   * sat lit over today's undrawn board.
+   *
+   * Call this AFTER the gates are down: the repaint reads them, so the
+   * sockets fail closed to dormant. The refresh then re-seats them against
+   * the new day's own data, which is the only thing allowed to light them
+   * again.
+   */
+  #clearFoilMatchLamps() {
+    this.#renderFoilBackdrop();
+    void this.#refreshFoil();
   }
 
   #renderForStatus(payload) {
@@ -483,6 +638,7 @@ class LastDayJackpot extends HTMLElement {
     this.#foilSeq += 1;
     this.#foilData = null;
     this.#foilDataKey = null;
+    this.#resetFoilSlotting();
     clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     this.#winners = [];
     this.#resetDayGates();
@@ -825,6 +981,7 @@ class LastDayJackpot extends HTMLElement {
       this.#foilSeq += 1;
       this.#foilData = null;
       this.#foilDataKey = null;
+      this.#resetFoilSlotting();
       this.#winners = [];
       this.#resetDayGates();
       this.#renderFoil();
@@ -867,6 +1024,50 @@ class LastDayJackpot extends HTMLElement {
     this.#bridgeTimer = handle;
   }
 
+  // The reels committed another quadrant. Repaint the seated foils against
+  // what is on the board RIGHT NOW, so a player watching their pack sees a
+  // quadrant light as its reel stops instead of four at once at the end.
+  //
+  // Presentation only. It opens no gate, writes no key, and publishes no
+  // claim; #onPanelSpinComplete below is still what powers the settled state,
+  // and scratch completion is still the spoiler/claim gate. A malformed or
+  // absent traits array fails closed to dormant.
+  #onPanelSpinProgress(e) {
+    const d = e?.detail;
+    const eventDay = Number(d?.day);
+    if (!Number.isInteger(eventDay) || eventDay <= 0
+      || eventDay !== Number(this.#pinnedDay)) return;
+    const traits = Array.isArray(d?.traits) ? d.traits.slice(0, 4) : null;
+    const prior = Number(this.#foilPresentation?.day) === eventDay
+      && Array.isArray(this.#foilPresentation?.traits)
+      ? this.#foilPresentation.traits
+      : [];
+    const validTrait = (trait) => typeof trait === 'number'
+      && Number.isInteger(trait) && trait >= 0 && trait <= 255;
+    const newlyCommitted = traits
+      ? traits.flatMap((trait, quadrant) => (
+        validTrait(trait) && !validTrait(prior[quadrant]) ? [quadrant] : []
+      ))
+      : [];
+    if (!traits || !traits.some(validTrait)) this.#clearFoilMatchFlashes();
+    this.#foilPresentation = traits ? { day: eventDay, traits } : null;
+    this.#startFoilMatchFlashes(newlyCommitted);
+    this.#renderFoilBackdrop();
+  }
+
+  // A completed spin powers only its matching foil lane. This is deliberately
+  // visual-only: claims, persistence, and follow-on UI remain gated behind the
+  // player's scratch completion below.
+  #onPanelSpinComplete(e) {
+    const d = e?.detail;
+    const eventDay = Number(d?.day);
+    if (!Number.isInteger(eventDay) || eventDay <= 0
+      || eventDay !== Number(this.#pinnedDay)) return;
+    if (d?.bonusPhase === true) this.#foilBonusActivated = true;
+    else this.#foilMainActivated = true;
+    this.#renderFoilBackdrop();
+  }
+
   // Panel reveal fully scratched — open the spoiler gate and fire follow-on
   // UI. Fires per roll (Roll 1, then bonus Roll 2); every step below is
   // idempotent, and the winner effect is additionally once-per-day guarded.
@@ -885,10 +1086,12 @@ class LastDayJackpot extends HTMLElement {
     this.#markSpunPinnedDay(eventDay);
     if (appliesToPinnedDay) {
       this.#sawScratchEvent = true;
-      // Roll 1 must never activate a better bonus-set foil match. Each draw
-      // powers its own bank lane only after that exact scratch completes.
+      // Keep scratch completion as a compatibility fallback for older panels
+      // that do not emit replay:spin-complete.
       this.#foilMainActivated = true;
+      this.#foilMainClaimReady = true;
       if (d?.bonusPhase === true) this.#foilBonusActivated = true;
+      if (d?.bonusPhase === true) this.#foilBonusClaimReady = true;
       this.#renderFoil();
     }
     // The replay board itself knows whether THIS scratch phase contained an
@@ -955,6 +1158,10 @@ class LastDayJackpot extends HTMLElement {
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
     this.#foilBonusActivated = false;
+    this.#foilMainClaimReady = false;
+    this.#foilBonusClaimReady = false;
+    this.#foilPresentation = null;
+    this.#clearFoilMatchFlashes();
     this.#manualReplayDay = null;
     this.#setResultsCtaVisible(this.#resultsCta(), false);
 
@@ -984,10 +1191,27 @@ class LastDayJackpot extends HTMLElement {
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
     this.#foilBonusActivated = false;
+    this.#foilMainClaimReady = false;
+    this.#foilBonusClaimReady = false;
+    this.#foilPresentation = null;
+    this.#clearFoilMatchFlashes();
     this.#flipResult = undefined;
     this.#flipFetchedDay = null;
     const cta = this.#resultsCta();
     this.#setResultsCtaVisible(cta, false);
+    this.#syncCoinflipHandoff();
+  }
+
+  #syncCoinflipHandoff() {
+    const panel = this.#panel();
+    if (!panel || typeof panel.setCoinflipHandoff !== 'function') return;
+    const exactRowKnown = this.#pinnedDay != null
+      && Number(this.#flipFetchedDay) === Number(this.#pinnedDay);
+    panel.setCoinflipHandoff({
+      day: this.#pinnedDay,
+      available: Boolean(exactRowKnown && this.#flipResult != null),
+      revealed: this.#flipGateOpen(),
+    });
   }
 
   // Coin flip revealed for the pinned day? Same gate as app-balances-strip:
@@ -1043,10 +1267,10 @@ class LastDayJackpot extends HTMLElement {
     if (!cta || typeof document === 'undefined') return;
     const replay = document.querySelector('replay-panel');
     const controls = replay?.querySelector?.('.replay-controls');
-    const slot = document.querySelector('[data-bind="day-summary-slot"]');
-    const target = controls || slot;
-    if (!target || cta.parentNode === target || cta.parentElement === target) return;
-    try { target.appendChild(cta); } catch { /* fakeDOM — leave it in the shell */ }
+    // This action replaces Spin Jackpot; it must never fall through into a
+    // second row below the cabinet while replay-panel is still upgrading.
+    if (!controls || cta.parentNode === controls || cta.parentElement === controls) return;
+    try { controls.appendChild(cta); } catch { /* fakeDOM — leave it in the shell */ }
   }
 
   #setResultsCtaVisible(cta, visible) {
@@ -1061,12 +1285,13 @@ class LastDayJackpot extends HTMLElement {
       reveal.hidden = true;
     }
     const slot = document.querySelector('[data-bind="day-summary-slot"]');
-    if (slot) slot.hidden = controls ? true : !visible;
+    if (slot) slot.hidden = true;
   }
 
   #maybeShowResultsCta() {
     const cta = this.#resultsCta();
     if (!cta) return;
+    this.#syncCoinflipHandoff();
     this.#mountResultsCta(cta);
     // Reloaded spun day: the board was already played out in a prior session
     // (spun_day persisted) — don't force a re-scratch to reach the results.
@@ -1375,8 +1600,8 @@ class LastDayJackpot extends HTMLElement {
   }
 
   // The machine keeps four quiet foil indents around the draw. Owned lines use
-  // the same real ticket-card artwork as inventory, but remain faded until a
-  // claimable match locks against a draw the player has actually uncovered.
+  // the same real ticket-card artwork as inventory. Once a draw is uncovered,
+  // every face displays its protocol score: miss (0), symbol (1), exact (2).
   #renderFoilBackdrop() {
     const slots = [...this.querySelectorAll('.ldj-foil-machine-slot')];
     if (slots.length === 0) return;
@@ -1385,26 +1610,46 @@ class LastDayJackpot extends HTMLElement {
       : [];
     const { mainSet, bonusSet } = this.#activatedFoilSets();
 
+    let slotted = 0;
     slots.forEach((slot, index) => {
       slot.textContent = '';
-      slot.classList.remove('is-loaded', 'is-graded', 'is-match');
+      slot.classList.remove('is-loaded', 'is-graded', 'is-match', 'is-slotting');
       slot.removeAttribute('data-score');
       slot.removeAttribute('data-draw-kind');
-      const parsedLine = Array.isArray(lines[index]) && lines[index].length === 4
-        ? lines[index].map(Number)
-        : null;
-      const line = parsedLine?.every((traitId) => (
-        Number.isInteger(traitId) && traitId >= 0 && traitId <= 255
-      )) ? parsedLine : null;
+      const line = normalizeFoilLine(lines[index]);
       if (!line) return;
 
       const grade = bestGrade(line, mainSet, bonusSet);
+      // Roll 2 adds information; it must never extinguish a quadrant already
+      // powered by Roll 1 merely because the bonus draw has a better total on
+      // different faces. Claims remain draw-scoped via `grade`, while the four
+      // socket lamps retain the best point value each revealed draw produced.
+      //
+      // The in-flight spin seeds that same maximum. Its faces come from the
+      // reels the player is watching, so a quadrant lights the moment its reel
+      // stops rather than waiting for the whole board, and a quadrant the
+      // settled draw then confirms is already at its final value.
+      const presented = this.#foilPresentationGrade(line);
+      const displayFaces = [mainSet, bonusSet].reduce((faces, packedSet) => {
+        if (packedSet == null) return faces;
+        const revealed = gradeLine(line, packedSet).faces;
+        return faces.map((value, quadrant) => Math.max(value, Number(revealed[quadrant]) || 0));
+      }, presented ? [...presented.faces] : [0, 0, 0, 0]);
+      // Which quadrants carry information at all. A revealed draw grades all
+      // four; a spin in progress grades only the reels that have stopped.
+      const faceMask = (grade ? 0b1111 : 0) | (presented ? presented.committed : 0);
       const locked = Boolean(grade && grade.score >= FOIL_CLAIM_THRESHOLD);
       slot.classList.add('is-loaded');
+      if (grade) slot.classList.add('is-graded');
       if (locked) {
-        slot.classList.add('is-graded', 'is-match');
+        slot.classList.add('is-match');
         slot.setAttribute('data-score', `T${grade.score}`);
         slot.setAttribute('data-draw-kind', String(grade.drawKind));
+      }
+      if (this.#foilSlottingPending) {
+        slot.classList.add('is-slotting');
+        slot.style?.setProperty?.('--foil-slot-index', String(index));
+        slotted += 1;
       }
 
       const ticket = document.createElement('span');
@@ -1414,11 +1659,19 @@ class LastDayJackpot extends HTMLElement {
         const badge = traitToBadge(traitId);
         const cell = document.createElement('span');
         cell.className = 'ldj-foil-machine-cell trait-quadrant';
+        cell.setAttribute('data-foil-quadrant', String(quadrant));
         if (badge?.color) cell.setAttribute('data-trait-color', badge.color);
         if (badge?.color === 'gold') cell.classList.add('trait-quadrant--gold');
-        const face = Number(grade?.faces?.[quadrant] || 0);
-        if (locked && face === 1) cell.classList.add('is-symbol-match');
-        if (locked && face === 2) cell.classList.add('is-color-match');
+        const face = Number(displayFaces[quadrant] || 0);
+        if ((faceMask >> quadrant) & 1) {
+          cell.setAttribute('data-match-points', String(face));
+          if (face === 0) cell.classList.add('is-no-match');
+          if (face === 1) cell.classList.add('is-symbol-match');
+          if (face === 2) cell.classList.add('is-color-match');
+          if (face > 0 && this.#foilFlashQuadrants.has(quadrant)) {
+            cell.classList.add('is-match-flash');
+          }
+        }
         if (badge) {
           const image = document.createElement('img');
           image.src = badge.path;
@@ -1440,6 +1693,7 @@ class LastDayJackpot extends HTMLElement {
       ticket.appendChild(center);
       slot.appendChild(ticket);
     });
+    if (slotted > 0) this.#foilSlottingPending = false;
   }
 
   #renderFoil() {
@@ -1453,7 +1707,7 @@ class LastDayJackpot extends HTMLElement {
     }
     // Each draw is independently spoiler-gated. In particular, Roll 1 cannot
     // publish a bonus match merely because the bonus packed set already exists.
-    const { mainSet, bonusSet } = this.#activatedFoilSets();
+    const { mainSet, bonusSet } = this.#activatedFoilSets({ claimableOnly: true });
     if (mainSet == null && bonusSet == null) {
       publishEmpty();
       return;
@@ -1461,10 +1715,12 @@ class LastDayJackpot extends HTMLElement {
 
     const claims = Array.isArray(d.claims) ? d.claims : [];
     const day = Number(this.#pinnedDay);
-    const level = Number(this.#foilTargetLevel());
+    const level = Number(d.level);
 
     const candidates = [];
-    d.lines.forEach((line, i) => {
+    d.lines.forEach((rawLine, i) => {
+      const line = normalizeFoilLine(rawLine);
+      if (!line) return;
       for (const grade of claimableDrawGrades(line, mainSet, bonusSet)) {
         if (grade.score < FOIL_CLAIM_THRESHOLD) continue;
         const key = this.#foilClaimKey(player, day, i, grade.drawKind);
@@ -1645,6 +1901,88 @@ class LastDayJackpot extends HTMLElement {
             <span class="ldj-foil-machine-slot"></span>
             <span class="ldj-foil-machine-slot"></span>
             <span class="ldj-foil-machine-slot"></span>
+            <!-- The bank's current sheet. Every other sheet on this machine is
+                 a CSS background, and this one is not, for one reason: an SVG
+                 used as a background-image is an isolated document that the
+                 page stylesheet cannot reach into, and Chrome does not pass
+                 prefers-reduced-motion down to it either (verified against
+                 both this geometry and daily-drawing-board-current-v4.svg — a
+                 reduce-emulated capture kept animating). Inline, the page owns
+                 both halves of the behaviour: which socket's feeds carry
+                 current, and whether the current moves.
+
+                 It is the LAST child on purpose. The four sockets are placed
+                 on the bank grid by .ldj-foil-machine-slot:nth-child(1..4) in
+                 app.css; anything inserted ahead of them shifts every one of
+                 those placements.
+
+                 The eight paths are the eight paths of
+                 daily-drawing-foil-routing-v5.svg, copied verbatim in its own
+                 socket order (upper left, lower left, upper right, lower
+                 right) — the copper is the functional net and the current is
+                 not allowed to invent a route. A test asserts the two lists
+                 are identical, so they cannot drift.
+
+                 Eight, not sixteen. Every one of these leaves the draw
+                 processor's own edge (x=186 / x=1186 are literally the board's
+                 left and right edges in this viewBox) and ends on a socket
+                 edge, so each lit lane is a visible board-to-socket
+                 connection. The eight the copper sheet dropped in v5 ran from
+                 the perimeter ground rail instead, and current on those read
+                 as light crawling in from the frame — a rail is not a thing a
+                 player can name, so nothing here is allowed to flow out of
+                 one.
+
+                 Both ramps are pinned in user space to a Chainlink VRF module,
+                 which is where the board sheet pins its own: the modules sit
+                 at (250,1132) and (1030,1132) in the board sheet's 1280x1280
+                 space and project into this 1372x1000 one at x=229 / x=1143 in
+                 both layouts, at y=1144 desktop and y=1267 phone. Current
+                 leaves the module blue and cools with distance, exactly as it
+                 does on the board. The radius is 1850 rather than the board's
+                 430 so the bank spans the same PART of that ramp the board
+                 actually uses: the board's lanes are all within ~254 units of
+                 a module and so run offset 0 to ~0.6, blue through green,
+                 never reaching the gold stop. The bank's lanes are 336 units
+                 away at the near end and 1143 at the far end; 1850 puts them
+                 at 0.18 and 0.62. On the board's own 430 every lane here would
+                 land past the last stop and the whole bank would flatten to
+                 gold on copper. -->
+            <svg class="ldj-foil-machine-current" viewBox="0 0 1372 1000"
+                 preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <defs>
+                <radialGradient id="ldjFoilCurrentL" gradientUnits="userSpaceOnUse"
+                                cx="229" cy="1200" r="1850">
+                  <stop stop-color="#a5cbff"/>
+                  <stop offset="0.2" stop-color="#5f93ff"/>
+                  <stop offset="0.55" stop-color="#73e8b0"/>
+                  <stop offset="1" stop-color="#e4b54e"/>
+                </radialGradient>
+                <radialGradient id="ldjFoilCurrentR" gradientUnits="userSpaceOnUse"
+                                cx="1143" cy="1200" r="1850">
+                  <stop stop-color="#a5cbff"/>
+                  <stop offset="0.2" stop-color="#5f93ff"/>
+                  <stop offset="0.55" stop-color="#73e8b0"/>
+                  <stop offset="1" stop-color="#e4b54e"/>
+                </radialGradient>
+              </defs>
+              <g class="ldj-foil-lane ldj-foil-lane--1" stroke="url(#ldjFoilCurrentL)">
+                <path d="M186 58H166L130 94V164"/>
+                <path d="M186 442H166L130 406V336"/>
+              </g>
+              <g class="ldj-foil-lane ldj-foil-lane--2" stroke="url(#ldjFoilCurrentL)">
+                <path d="M186 558H166L130 594V664"/>
+                <path d="M186 942H166L130 906V836"/>
+              </g>
+              <g class="ldj-foil-lane ldj-foil-lane--3" stroke="url(#ldjFoilCurrentR)">
+                <path d="M1186 58H1206L1242 94V164"/>
+                <path d="M1186 442H1206L1242 406V336"/>
+              </g>
+              <g class="ldj-foil-lane ldj-foil-lane--4" stroke="url(#ldjFoilCurrentR)">
+                <path d="M1186 558H1206L1242 594V664"/>
+                <path d="M1186 942H1206L1242 906V836"/>
+              </g>
+            </svg>
           </div>
         </div>
       </div>
@@ -1682,6 +2020,7 @@ class LastDayJackpot extends HTMLElement {
     // Viewed-player changes re-target both the spin panel and the foil strip.
     this.#unsubs.push(
       subscribe('viewing.address', () => {
+        this.#resetFoilSlotting();
         this.#syncReplayPanel();
         this.#refreshFoil();
         this.#maybeShowResultsCta();
@@ -1689,21 +2028,60 @@ class LastDayJackpot extends HTMLElement {
     );
     this.#unsubs.push(
       subscribe('connected.address', () => {
+        this.#resetFoilSlotting();
         this.#syncReplayPanel();
         this.#refreshFoil();
         this.#maybeShowResultsCta();
       })
     );
 
-    // Panel scratch completion (bubbles from the sibling <replay-panel>) —
-    // the spoiler gate opens only after the player scratches every owned
-    // area, not at spin end. The event's detail (bonusPhase/bonusAvailable)
-    // feeds the results-CTA "whole board done" gate.
+    // Spin completion powers each foil bank as soon as its four winning
+    // quadrants land. Scratch completion separately opens the spoiler/claim
+    // gates and feeds the results-CTA "whole board done" state.
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      this.#spinProgressListener = (e) => this.#onPanelSpinProgress(e);
+      document.addEventListener('replay:spin-progress', this.#spinProgressListener);
+      this.#spinCompleteListener = (e) => this.#onPanelSpinComplete(e);
+      document.addEventListener('replay:spin-complete', this.#spinCompleteListener);
       this.#scratchCompleteListener = (e) => this.#onPanelScratchComplete(e);
       document.addEventListener('replay:scratch-complete', this.#scratchCompleteListener);
       this.#decimatorOpenedListener = (e) => this.#onDecimatorOpened(e);
       document.addEventListener('decimator:opened', this.#decimatorOpenedListener);
+      // A pack's completion fires before the fullscreen queue necessarily
+      // ends. Arm on the foil release, then seat the tickets only when the
+      // reveal overlay announces that every queued fullscreen beat is gone.
+      this.#packRevealCompleteListener = (event) => {
+        const detail = event?.detail;
+        if (detail?.foilPack !== true) return;
+        const viewed = String(getViewedAddress() || '').toLowerCase();
+        const releasedFor = String(detail?.address || '').toLowerCase();
+        if (viewed && releasedFor && releasedFor !== viewed) return;
+        const releasedLevel = Number(detail?.level);
+        if (!Number.isInteger(releasedLevel) || releasedLevel <= 0) return;
+        // Do not compare this with the live target. In a turbo jackpot the
+        // target may already be the next level by the time the player closes
+        // the pack; the completed pack itself identifies what must be seated.
+        this.#foilSlottingArmed = releasedLevel;
+        this.#slottedFoilLevel = releasedLevel;
+      };
+      document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, this.#packRevealCompleteListener);
+      this.#revealOverlayIdleListener = (event) => {
+        const releasedLevel = Number(this.#foilSlottingArmed);
+        if (!Number.isInteger(releasedLevel) || releasedLevel <= 0) return;
+        this.#foilSlottingArmed = null;
+        if (event?.detail?.aborted === true) {
+          this.#foilSlottingPending = false;
+          if (Number(this.#slottedFoilLevel) === releasedLevel) {
+            this.#slottedFoilLevel = null;
+            void this.#refreshFoil();
+          }
+          return;
+        }
+        this.#slottedFoilLevel = releasedLevel;
+        this.#foilSlottingPending = true;
+        void this.#refreshFoil();
+      };
+      document.addEventListener(REVEAL_OVERLAY_IDLE_EVENT, this.#revealOverlayIdleListener);
       // Coin-flip reveal (app-daily-flip) — the other half of the CTA gate.
       this.#flipListener = () => this.#maybeShowResultsCta();
       document.addEventListener('flip:revealed', this.#flipListener);
@@ -1717,6 +2095,13 @@ class LastDayJackpot extends HTMLElement {
   disconnectedCallback() {
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
+    // Invalidate any foil read still in flight BEFORE clearing the tray.
+    // #refreshFoil checks this sequence after its await and bails, so a
+    // response that lands after teardown cannot render into a detached board
+    // or republish the claim row the next line is about to remove. Day
+    // boundaries now kick a refresh of their own, which makes an unlucky
+    // unmount-during-fetch that much easier to hit.
+    this.#foilSeq += 1;
     clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     // The CTA may be parked inside <app-daily-flip>; innerHTML teardown here
     // would not reach it, so pull it out explicitly (connectedCallback mints a
@@ -1729,6 +2114,22 @@ class LastDayJackpot extends HTMLElement {
       try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
       this.#bridgeTimer = null;
     }
+    if (this.#spinProgressListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('replay:spin-progress', this.#spinProgressListener); }
+      catch { /* defensive */ }
+    }
+    this.#spinProgressListener = null;
+    this.#foilPresentation = null;
+    this.#clearFoilMatchFlashes();
+    if (this.#spinCompleteListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('replay:spin-complete', this.#spinCompleteListener); }
+      catch { /* defensive */ }
+    }
+    this.#spinCompleteListener = null;
     if (this.#scratchCompleteListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {
@@ -1743,6 +2144,21 @@ class LastDayJackpot extends HTMLElement {
       catch { /* defensive */ }
     }
     this.#decimatorOpenedListener = null;
+    if (this.#packRevealCompleteListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, this.#packRevealCompleteListener); }
+      catch { /* defensive */ }
+    }
+    this.#packRevealCompleteListener = null;
+    if (this.#revealOverlayIdleListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener(REVEAL_OVERLAY_IDLE_EVENT, this.#revealOverlayIdleListener); }
+      catch { /* defensive */ }
+    }
+    this.#revealOverlayIdleListener = null;
+    this.#resetFoilSlotting();
     if (this.#flipListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {

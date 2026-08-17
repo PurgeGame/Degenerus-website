@@ -32,6 +32,17 @@ function playDrawSound(cue, args = []) {
   }
 }
 
+function drawLoadErrorMessage(error) {
+  const message = String(error?.shortMessage || error?.message || '').trim();
+  if (/rate limit|too many requests|\b429\b|32016/i.test(message)) {
+    return 'PUBLIC CHAIN DATA IS BUSY. TRY AGAIN.';
+  }
+  if (/sync|indexed|unavailable/i.test(message)) {
+    return 'THE FINAL DRAW IS STILL SYNCING. TRY AGAIN.';
+  }
+  return message ? message.slice(0, 180) : 'DRAW DATA COULD NOT BE LOADED. TRY AGAIN.';
+}
+
 function removeActive() {
   if (!active) return;
   const { overlay, storageKey, onKeydown, onMessage } = active;
@@ -47,7 +58,7 @@ export function closeDecimatorDraw() {
   removeActive();
 }
 
-export async function openDecimatorDraw({ level, player } = {}) {
+export async function openDecimatorDraw({ level, player, onReady } = {}) {
   if (typeof document === 'undefined' || !document.body) return false;
   // Run before the first await so a manual OPEN/RUN click unlocks WebAudio
   // while browser user activation is still live.
@@ -69,6 +80,12 @@ export async function openDecimatorDraw({ level, player } = {}) {
   loadingDetail.textContent = 'REBUILDING THE RESOLVED WHEEL…';
   loading.appendChild(loadingTitle);
   loading.appendChild(loadingDetail);
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'decimator-draw-modal__retry';
+  retry.textContent = 'TRY AGAIN';
+  retry.hidden = true;
+  loading.appendChild(retry);
   overlay.appendChild(loading);
 
   const close = document.createElement('button');
@@ -105,37 +122,75 @@ export async function openDecimatorDraw({ level, player } = {}) {
   document.body.classList.add('decimator-draw-open');
   document.body.appendChild(overlay);
 
-  try {
-    const snapshot = await loadDecimatorDrawSnapshot({ level, player });
-    if (!active || active.overlay !== overlay || !overlay.isConnected) return false;
-    try {
-      sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
-    } catch (_error) {
-      throw new Error('This browser could not stage the Decimator draw.');
-    }
+  let loadPending = null;
+  let readyNotified = false;
+  const mountDraw = async () => {
+    if (loadPending) return loadPending;
+    loadPending = (async () => {
+      overlay.classList.add('is-loading');
+      overlay.classList.remove('is-error');
+      loading.hidden = false;
+      loadingTitle.textContent = 'LOADING DECIMATOR DRAW';
+      loadingDetail.textContent = 'REBUILDING THE RESOLVED WHEEL…';
+      retry.hidden = true;
+      retry.disabled = true;
+      try {
+        const snapshot = await loadDecimatorDrawSnapshot({ level, player });
+        if (!active || active.overlay !== overlay || !overlay.isConnected) return false;
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+        } catch (_error) {
+          throw new Error('This browser could not stage the Decimator draw.');
+        }
 
-    const frame = document.createElement('iframe');
-    frame.className = 'decimator-draw-modal__frame';
-    frame.title = `Level ${Number(level)} Decimator draw`;
-    frame.setAttribute('allow', 'autoplay');
-    active.frame = frame;
-    const params = new URLSearchParams({
-      embed: '1',
-      snapshot: storageKey,
-      ...(player ? { player: String(player).toLowerCase() } : {}),
-    });
-    frame.src = `/decimator-draw/?${params.toString()}`;
-    frame.addEventListener('load', () => {
-      if (active?.overlay !== overlay) return;
-      overlay.classList.remove('is-loading');
-      loading.hidden = true;
-      try { frame.focus(); } catch (_error) { /* focus remains on close control */ }
-    }, { once: true });
-    overlay.appendChild(frame);
-    close.focus();
-    return true;
-  } catch (error) {
-    if (active?.overlay === overlay) removeActive();
-    throw error;
-  }
+        const frame = document.createElement('iframe');
+        frame.className = 'decimator-draw-modal__frame';
+        frame.title = `Level ${Number(level)} Decimator draw`;
+        frame.setAttribute('allow', 'autoplay');
+        active.frame = frame;
+        const params = new URLSearchParams({
+          embed: '1',
+          snapshot: storageKey,
+          ...(player ? { player: String(player).toLowerCase() } : {}),
+        });
+        frame.src = `/decimator-draw/?${params.toString()}`;
+        frame.addEventListener('load', () => {
+          if (active?.overlay !== overlay) return;
+          overlay.classList.remove('is-loading', 'is-error');
+          loading.hidden = true;
+          try { frame.focus(); } catch (_error) { /* focus remains on close control */ }
+        }, { once: true });
+        overlay.appendChild(frame);
+        if (!readyNotified) {
+          readyNotified = true;
+          try { onReady?.(); } catch (_error) { /* presentation receipt is best-effort */ }
+        }
+        close.focus();
+        return true;
+      } catch (error) {
+        if (!active || active.overlay !== overlay || !overlay.isConnected) return false;
+        // Loading failures belong inside the fullscreen they opened. Removing
+        // it here made an RPC rate limit look like a failed game transaction.
+        overlay.classList.add('is-error');
+        loadingTitle.textContent = 'DRAW DATA UNAVAILABLE';
+        loadingDetail.textContent = drawLoadErrorMessage(error);
+        retry.hidden = false;
+        retry.disabled = false;
+        try { retry.focus(); } catch (_focusError) { /* close remains available */ }
+        return false;
+      } finally {
+        loadPending = null;
+      }
+    })();
+    return loadPending;
+  };
+  retry.addEventListener('click', (event) => {
+    try { event.stopPropagation(); } catch (_error) { /* defensive */ }
+    void mountDraw();
+  });
+
+  await mountDraw();
+  // Once the takeover is mounted, a data error is recoverable in place and is
+  // not a failed Pending action. The result remains unseen until onReady fires.
+  return Boolean(active?.overlay === overlay && overlay.isConnected);
 }

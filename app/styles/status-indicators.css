@@ -73,6 +73,49 @@
 
 html[data-degenerus-tutorial] .testnet-beta-banner { display: none !important; }
 
+/* The quest action sheet is also a real purchase surface. Keep the boon's
+   exact incremental value visible when that shortcut submits the buy. */
+body.layout-basic .qst-action-boon {
+  position: relative;
+  display: flex;
+  min-height: 2.85rem;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.48rem 0.72rem;
+  border: 1px solid rgba(var(--boon-rgb, 245, 166, 35), 0.52);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(var(--boon-rgb, 245, 166, 35), 0.18), transparent 34%),
+    rgba(5, 7, 16, 0.68);
+  box-shadow: inset 0 0 16px rgba(var(--boon-rgb, 245, 166, 35), 0.08);
+}
+body.layout-basic .qst-action-boon[hidden] { display: none !important; }
+body.layout-basic .qst-action-boon[data-boon-product="purchase"] {
+  --boon-rgb: 245, 166, 35;
+  --boon-ink: #ffd98a;
+}
+body.layout-basic .qst-action-boon[data-boon-product="lootbox"] {
+  --boon-rgb: 167, 139, 250;
+  --boon-ink: #ddd6fe;
+}
+body.layout-basic .qst-action-boon > boon-product-indicator {
+  position: relative;
+  inset: auto;
+  flex: 0 0 1.72rem;
+}
+body.layout-basic .qst-action-boon > span { display: grid; gap: 0.08rem; min-width: 0; }
+body.layout-basic .qst-action-boon small {
+  color: var(--boon-ink, #ffd98a);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+body.layout-basic .qst-action-boon strong {
+  color: #f8fafc;
+  font: 900 0.82rem/1.1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.025em;
+}
+
 /* Active boons sit beside the exact control they modify. */
 boon-product-indicator {
   --boon-logo: none;
@@ -902,12 +945,9 @@ body.layout-basic .df-reveal-bias--loss-heavy.df-reveal-ending--triple-to-win {
 body.layout-basic .df-modifier-meter--draining .df-modifier-meter__marker {
   animation: df-meter-drain-to-min 350ms cubic-bezier(0.4, 0, 0.7, 1) forwards;
 }
-body.layout-basic .df-modifier-meter--draining .df-modifier-meter__readout {
-  color: #fca5a5;
-}
 @keyframes df-meter-drain-to-min {
-  from { left: 50%; bottom: var(--df-meter-stop, 50%); }
-  to { left: 50%; bottom: 0%; }
+  from { height: var(--df-meter-stop, 50%); }
+  to { height: 0%; }
 }
 
 body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__marker {
@@ -915,13 +955,13 @@ body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__marker {
     linear forwards;
 }
 @keyframes df-meter-rebound-from-min {
-  0%, 6.086957% { left: 50%; bottom: 0%; transform: translate(-50%, 50%) scale(1.18, 0.78); }
-  39.130435% { left: 50%; bottom: 98%; transform: translate(-50%, 50%) scale(0.88, 1.16); }
-  65.217391% { left: 50%; bottom: 8%; transform: translate(-50%, 50%) scale(1.08, 0.9); }
-  78.26087% { left: 50%; bottom: var(--df-meter-handoff, 64%); transform: translate(-50%, 50%) scale(0.97, 1.04); }
-  87.826087% { left: 50%; bottom: var(--df-meter-low, 44%); transform: translate(-50%, 50%) scale(1.03, 0.97); }
-  94.782609% { left: 50%; bottom: var(--df-meter-bounce, 53%); transform: translate(-50%, 50%) scale(0.99, 1.02); }
-  100% { left: 50%; bottom: var(--df-meter-stop, 50%); transform: translate(-50%, 50%) scale(1); }
+  0%, 6.086957% { height: 0%; }
+  39.130435% { height: 100%; }
+  65.217391% { height: 8%; }
+  78.26087% { height: var(--df-meter-handoff, 64%); }
+  87.826087% { height: var(--df-meter-low, 44%); }
+  94.782609% { height: var(--df-meter-bounce, 53%); }
+  100% { height: var(--df-meter-stop, 50%); }
 }
 
 /* Winning branches finish while the longer branch is still using the same
@@ -932,10 +972,10 @@ body.layout-basic .df-modifier-meter--recovery-tail .df-modifier-meter__marker {
     linear forwards;
 }
 @keyframes df-meter-recovery-tail {
-  0% { left: 50%; bottom: var(--df-meter-handoff, 64%); transform: translate(-50%, 50%) scale(0.97, 1.04); }
-  44% { left: 50%; bottom: var(--df-meter-low, 44%); transform: translate(-50%, 50%) scale(1.03, 0.97); }
-  76% { left: 50%; bottom: var(--df-meter-bounce, 53%); transform: translate(-50%, 50%) scale(0.99, 1.02); }
-  100% { left: 50%; bottom: var(--df-meter-stop, 50%); transform: translate(-50%, 50%) scale(1); }
+  0% { height: var(--df-meter-handoff, 64%); }
+  44% { height: var(--df-meter-low, 44%); }
+  76% { height: var(--df-meter-bounce, 53%); }
+  100% { height: var(--df-meter-stop, 50%); }
 }
 
 /* A third reversal to a real loss begins descending the instant the shared
@@ -945,12 +985,9 @@ body.layout-basic .df-modifier-meter--terminal-draining .df-modifier-meter__mark
   animation: df-meter-terminal-drain var(--df-meter-terminal-drain-duration, 650ms)
     linear forwards;
 }
-body.layout-basic .df-modifier-meter--terminal-draining .df-modifier-meter__readout {
-  color: #fca5a5;
-}
 @keyframes df-meter-terminal-drain {
-  from { left: 50%; bottom: var(--df-meter-stop, 50%); transform: translate(-50%, 50%) scale(1); }
-  to { left: 50%; bottom: 0%; transform: translate(-50%, 50%) scale(1.12, 0.84); }
+  from { height: var(--df-meter-stop, 50%); }
+  to { height: 0%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

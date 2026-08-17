@@ -41,6 +41,7 @@ const {
   BIGGEST_SPIN_PRICE_STEP_WEI,
   orderBiggestRecords,
   parseRecordBountyEthInput,
+  recordBountyQuestProduct,
   recordBountyActivationDetail,
   recordBountySpinSelection,
   recordBountyTransactionQuote,
@@ -101,6 +102,27 @@ describe('record claim bar', () => {
     assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 101n), 122n);
     assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 0n), 100n);
   });
+});
+
+test('every bounty shortcut identifies the quest action it can complete', () => {
+  assert.equal(recordBountyQuestProduct(RECORD_KIND_BUY), 'purchase');
+  assert.equal(recordBountyQuestProduct(RECORD_KIND_LUCKBOX), 'lootbox');
+  assert.equal(recordBountyQuestProduct(RECORD_KIND_FLIP), 'coinflip');
+  assert.equal(recordBountyQuestProduct(RECORD_KIND_SPIN), 'degenerette-eth');
+  assert.match(COMPONENT, /records-bounty-quest-bonus/);
+  assert.match(CSS, /records-bounty-dialog__quest-bonus/);
+  const spinEditors = COMPONENT.slice(
+    COMPONENT.indexOf('#setBountySpinCount('),
+    COMPONENT.indexOf('async #loadBountyQuote('),
+  );
+  assert.equal(
+    (spinEditors.match(/#renderBountyQuestBonus\(\)/g) || []).length,
+    3,
+    'spin count, live price edits, and blur clamping all refresh the preview',
+  );
+  assert.match(COMPONENT,
+    /const valid = quote\?\.kind !== RECORD_KIND_SPIN \|\| this\.#bountySpinDraftValid;[\s\S]*?quote && product && valid/,
+    'an invalid draft cannot advertise a completion reward');
 });
 
 describe('one-confirm Biggest transaction presets', () => {
@@ -752,13 +774,13 @@ describe('rail wiring', () => {
     assert.match(CSS,
       /records-rail__leader-title > strong\s*\{[^}]*clamp\(0\.54rem, 0\.78vw, 0\.75rem\)\/1 "Rockwell"[^}]*letter-spacing:\s*0\.085em/s,
       'the category contrasts with a narrower western sign face');
-    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*25%[^}]*bottom:\s*7%[^}]*left:\s*29%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*background:\s*transparent/s,
+    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*26\.5%[^}]*bottom:\s*7%[^}]*left:\s*29%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*background:\s*transparent/s,
       'the holder owns the complete lower black area without entering the amount box');
     assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*right:\s*0[^}]*left:\s*0[^}]*height:\s*100%[^}]*clamp\(0\.42rem, 0\.65vw, 0\.62rem\)[^}]*overflow-wrap:\s*anywhere[^}]*text-overflow:\s*clip[^}]*white-space:\s*normal/s,
       'long Discord names get two centered lines instead of being ellipsized');
     assert.doesNotMatch(CSS, /records-rail__leader-holder\s*\{[^}]*text-overflow:\s*ellipsis/s);
-    assert.match(CSS, /records-rail__leader-bet\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*4\.2%[^}]*bottom:\s*7%[^}]*left:\s*75%[^}]*display:\s*block[^}]*overflow:\s*hidden/s,
-      'the record amount owns the complete far-right annotated area');
+    assert.match(CSS, /records-rail__leader-bet\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*2\.2%[^}]*bottom:\s*5\.5%[^}]*left:\s*73\.5%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*clip-path:\s*polygon\(0 0, 100% 0, 100% 68%, 87% 100%, 0 100%\)/s,
+      'the wider record lane masks the obsolete inset edge and follows the card corner');
     assert.match(CSS,
       /records-rail__leader-bet\s*\{[^}]*border:\s*0[^}]*border-left:\s*1px solid rgba\(var\(--rec-gold\), 0\.34\)[^}]*background:\s*linear-gradient\(/s,
       'the value is one integrated right-hand lane rather than a second inset plaque');
@@ -767,8 +789,14 @@ describe('rail wiring', () => {
       'the currency remains readable beneath the compact amount');
     assert.doesNotMatch(CSS, /records-rail__leader-kind-icon\s*\{/,
       'the removed game icon has no leftover styling');
-    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*position:\s*absolute[^}]*top:\s*0[^}]*height:\s*100%[^}]*flex-direction:\s*column[^}]*gap:\s*0\.04rem[^}]*padding:\s*1% 1\.5%[^}]*clamp\(0\.56rem, 0\.85vw, 0\.78rem\)/s,
+    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*position:\s*absolute[^}]*top:\s*0[^}]*height:\s*100%[^}]*flex-direction:\s*column[^}]*gap:\s*0\.04rem[^}]*padding:\s*1% 9% 1% 3%[^}]*clamp\(0\.56rem, 0\.85vw, 0\.78rem\)/s,
       'the bet amount and its currency stack as two prominent centered lines');
+    assert.match(COMPONENT, /data-amount-fit="\$\{amountFit\}"/,
+      'record amounts publish a deterministic fit tier instead of clipping unpredictably');
+    assert.match(CSS, /data-amount-fit="compact"[^}]*clamp\(0\.52rem, 0\.76vw, 0\.71rem\)/s,
+      'five-character compact values such as 5.51M get a readable fitted type size');
+    assert.match(CSS, /data-amount-fit="tight"[^}]*clamp\(0\.44rem, 0\.66vw, 0\.62rem\)/s,
+      'exceptionally long small-decimal values also stay inside the lane');
     assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*clamp\(0\.32rem, 0\.48vw, 0\.44rem\)[^}]*"Inter"/s,
       'the currency gets its own smaller label line instead of sharing the numeric row');
     assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*clip/s,

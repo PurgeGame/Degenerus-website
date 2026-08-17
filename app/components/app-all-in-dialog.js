@@ -3,6 +3,21 @@
 // the fresh quote. It never edits the player's ordinary purchase drafts.
 
 import { lock, unlock } from '../app/scroll-lock.js';
+import { questCompletionBonusModel } from '../app/quest-objectives.js';
+import { get, subscribe } from '../app/store.js';
+
+export function allInQuestProduct(quote) {
+  const target = String(quote?.target || '');
+  const currency = String(quote?.currency || '').toUpperCase();
+  if (target === 'tickets') return currency === 'FLIP' ? 'redeem-flip' : 'purchase';
+  if (target === 'lootbox') return 'lootbox';
+  if (target === 'coinflip') return 'coinflip';
+  if (target === 'decimator') return 'decimator';
+  if (target === 'degenerette') {
+    return currency === 'FLIP' ? 'degenerette-flip' : 'degenerette-eth';
+  }
+  return null;
+}
 
 export function randomAllInTarget(targets = [], random = Math.random) {
   const choices = Array.isArray(targets) ? targets.filter(Boolean) : [];
@@ -71,6 +86,7 @@ class AppAllInDialog extends HTMLElement {
   #spins = 5;
   #blindSelection = null;
   #refreshSeq = 0;
+  #questUnsub = null;
   #targetByCurrency = { ETH: 'tickets', FLIP: 'coinflip' };
   #openListener = (event) => this.#show(event);
 
@@ -83,12 +99,17 @@ class AppAllInDialog extends HTMLElement {
     if (typeof document !== 'undefined') {
       document.addEventListener?.('app-all-in:open', this.#openListener);
     }
+    this.#questUnsub ??= subscribe('ui.questObjectives', () => {
+      if (this.#open) this.#render();
+    });
   }
 
   disconnectedCallback() {
     if (typeof document !== 'undefined') {
       document.removeEventListener?.('app-all-in:open', this.#openListener);
     }
+    try { this.#questUnsub?.(); } catch (_e) { /* defensive */ }
+    this.#questUnsub = null;
     if (this.#open) {
       this.#open = false;
       unlock();
@@ -140,6 +161,7 @@ class AppAllInDialog extends HTMLElement {
           </label>
 
           <p class="allin-feedback" data-bind="allin-feedback" aria-live="polite"></p>
+          <p class="allin-quest-bonus" data-bind="allin-quest-bonus" role="status" hidden></p>
           <button type="button" class="qst-action-confirm allin-confirm is-incomplete"
                   data-bind="allin-confirm" disabled>ALL IN UNAVAILABLE</button>
           <button type="button" class="allin-too-risky" data-bind="allin-close">TOO RISKY</button>
@@ -354,8 +376,20 @@ class AppAllInDialog extends HTMLElement {
     const quote = this.#quote();
     const valid = Boolean(quote?.valid);
     const feedback = this.querySelector('[data-bind="allin-feedback"]');
+    const questBonus = this.querySelector('[data-bind="allin-quest-bonus"]');
     const confirm = this.querySelector('[data-bind="allin-confirm"]');
     if (feedback) feedback.textContent = valid ? '' : (quote?.message || 'Choose another format.');
+    if (questBonus) {
+      const completion = valid
+        ? questCompletionBonusModel(
+            get('ui.questObjectives'),
+            allInQuestProduct(quote),
+            quote.spendWei,
+          )
+        : null;
+      questBonus.hidden = completion == null;
+      questBonus.textContent = completion?.message || '';
+    }
     if (confirm) {
       const buttonLabel = this.#target === 'random' && valid
         ? `ALL IN BLIND: ${quote.spendLabel}`

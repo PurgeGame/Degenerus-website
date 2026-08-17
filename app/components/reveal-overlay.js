@@ -14,7 +14,7 @@
 //            then shrink to the tray; 'spins' cards expand into the
 //            Degenerette reel sub-stage first)
 //   → summary (ordinary rewards) OR persistent full result (Degenerette), with
-//              an outcome-specific exit + optional SHARE MY WIN
+//              an outcome-specific exit + optional SHARE YOUR WIN
 // Queue: multiple sequences chain under one backdrop (multi-box opens).
 //
 // Juice sources: app/app/jackpot-sfx.js (WebAudio cues — first production
@@ -50,9 +50,10 @@
 
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import {
-  DGN_COLORS, DGN_QUADRANTS, DGN_SYMBOLS,
+  DGN_COLORS, DGN_QUADRANTS,
   applyDgnTicketAccent,
   dgnBadgePath, dgnComputeMatches, dgnScoringMatchStates,
+  dgnDisplaySymbol,
   dgnTraitIdToQSC, dgnTraitIdsToQuadrants, dgnUnpackTicket,
 } from '../app/dgn-traits.js';
 import {
@@ -83,6 +84,7 @@ import {
 } from '../app/lootbox-value-tone.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
 import { appendCoinFaces } from '../app/coin-faces.js';
+import { flipPileLevel, flipPileArt } from '../app/flip-piles.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
@@ -100,6 +102,11 @@ let _queuedPariPresentationIds = new Set();
 // consumed. Pack-watch owns the durable pending/revealed bookkeeping.
 export const PACK_REVEAL_COMPLETE_EVENT = 'degenerus:pack-reveal-complete';
 export const PACK_REVEAL_ABORT_EVENT = 'degenerus:pack-reveal-abort';
+// Fired only after the complete fullscreen queue has drained and its backdrop
+// is hidden. Consumers that reveal background state (for example seating a
+// foil pack in the Daily Drawing cabinet) must wait for this rather than a
+// per-sequence completion event, because more fullscreen rewards may follow.
+export const REVEAL_OVERLAY_IDLE_EVENT = 'degenerus:reveal-overlay-idle';
 export const LOOTBOX_REVEAL_COMPLETE_EVENT = 'degenerus:lootbox-reveal-complete';
 export const LOOTBOX_REVEAL_ABORT_EVENT = 'degenerus:lootbox-reveal-abort';
 export const LOOTBOX_REVEAL_QUEUED_EVENT = 'degenerus:lootbox-reveal-queued';
@@ -244,6 +251,28 @@ const ICONS = Object.freeze({
 
 const LOOTBOX_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-v3.webp';
 
+/**
+ * A pile-scale FLIP win lands as a physical chip pile (the same 50K-FLIP
+ * ladder the coinflip felt uses); smaller wins keep the flame logo.
+ */
+function _flipPrizeArt(amountWei) {
+  const pile = flipPileLevel(amountWei);
+  return pile > 0
+    ? { icon: flipPileArt(pile), pile }
+    : { icon: ICONS.flip, pile: null };
+}
+
+/** Warm an asset that will be swapped in mid-animation. Best-effort only. */
+function _preloadImage(src) {
+  try {
+    const scope = typeof window !== 'undefined' ? window : globalThis;
+    if (typeof scope?.Image !== 'function') return;
+    const image = new scope.Image();
+    image.decoding = 'sync';
+    image.src = src;
+  } catch (_e) { /* a cold swap still paints, just a frame later */ }
+}
+
 const SPIN_LABELS = Object.freeze({
   wwxrp: 'WWXRP SPIN', flip: 'FLIP SPINS', eth: 'ETH SPIN', record: 'RECORD BOUNTY',
 });
@@ -253,6 +282,9 @@ const SPIN_LABELS = Object.freeze({
 const DGN_UNITS = Object.freeze({ 0: 'ETH', 1: 'FLIP', 3: 'WWXRP' });
 const DGN_CARD_TYPES = Object.freeze({ 0: 'eth', 1: 'flip', 3: 'wwxrp' });
 const BOX_SPIN_CURRENCIES = Object.freeze({ eth: 0, flip: 1, record: 1, wwxrp: 3 });
+// FlipRoundLib.FLIP_ROUND_THRESHOLD: above this a surviving FLIP mint is
+// collapsed onto a whole 100-FLIP multiple, so halving it is an estimate.
+const FLIP_ROUND_THRESHOLD = 1_000n * (10n ** 18n);
 
 // Keep batched boxes moving, but spend the saved time where the player can
 // actually read what came out. Manual receipts remain tap-to-dismiss.
@@ -281,7 +313,7 @@ export function goldTicketLabel(traitIds) {
   const quadrants = dgnTraitIdsToQuadrants(traitIds);
   const names = quadrants.flatMap((trait, q) => {
     if (!trait || trait.col !== 7) return [];
-    const raw = DGN_SYMBOLS[DGN_QUADRANTS[q]]?.[trait.sym];
+    const raw = dgnDisplaySymbol(q, trait.sym, trait.col);
     if (!raw) return [];
     if (raw === 'xrp') return ['GOLD WWXRP'];
     const name = TRAIT_LABEL_OVERRIDES[raw] || String(raw).replace(/[_-]+/g, ' ').toUpperCase();
@@ -639,16 +671,22 @@ export function buildBoxSpinBoard(spin) {
   const reconstructedAtRisk = spinType === 'record'
     ? _recordSpinPayoutAtRisk(spin, rows)
     : null;
-  // Existing BoxSpin events omit the pre-survival sum, but survival is a
-  // straight double-or-nothing. A successful result therefore reveals the
-  // exact stake as one half of its final payout.
+  // Last-resort inference, and the reason a bust used to show no amount at
+  // all: BoxSpin omits the pre-survival sum, so halving the final payout is
+  // the only stake source that needs no reconstruction — and it exists solely
+  // on the surviving branch. It is also not exact. The contract doubles the
+  // preliminary sum and then collapses it onto a whole 100-FLIP granule above
+  // 1,000 FLIP (DegenerusGameDegeneretteModule.sol:1954-1965), so half of the
+  // emitted payout recovers the stake to within 50 FLIP there.
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
   const payoutAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
     : reconstructedAtRisk?.amount ?? inferredAtRisk;
-  const payoutAtRiskApproximate = explicitAtRisk <= 0n
-    && reconstructedAtRisk != null
-    && reconstructedAtRisk.approximate;
+  const payoutAtRiskApproximate = explicitAtRisk > 0n
+    ? false
+    : reconstructedAtRisk != null
+      ? reconstructedAtRisk.approximate
+      : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
   if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
@@ -666,8 +704,11 @@ export function buildBoxSpinBoard(spin) {
     survivalStake,
     payoutAtRisk,
     payoutAtRiskApproximate,
+    // Derive the "WIN x" figure from the stake, never from the settled total.
+    // Sourcing it from `total` published a number on survivors and nothing on
+    // busts, which announced the coin's result before it was thrown.
     survivalWinPayout: _safeBigInt(spin?.survivalWinPayout) || (
-      total > 0n ? total : (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n)
+      payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n
     ),
     heroIdx,
     boxSpin: true,
@@ -724,8 +765,8 @@ function _entryHasGold(traitId) {
 }
 
 function _goldEntryLabel(traitId) {
-  const { q, sym } = dgnTraitIdToQSC(traitId);
-  const raw = DGN_SYMBOLS[DGN_QUADRANTS[q]]?.[sym];
+  const { q, sym, col } = dgnTraitIdToQSC(traitId);
+  const raw = dgnDisplaySymbol(q, sym, col);
   const name = TRAIT_LABEL_OVERRIDES[raw] || String(raw || 'ENTRY').replace(/[_-]+/g, ' ').toUpperCase();
   return `GOLD ${name} ENTRY`;
 }
@@ -769,8 +810,9 @@ function _cardsFromLeg(leg) {
         });
       }
       if ((leg.flip ?? 0n) > 0n) {
+        const art = _flipPrizeArt(leg.flip);
         cards.push({
-          type: 'flip', rarity: 'common', icon: ICONS.flip, glyph: null,
+          type: 'flip', rarity: 'common', icon: art.icon, pile: art.pile, glyph: null,
           label: 'FLIP', value: _tokenText(leg.flip),
           countText: _tokenText(leg.flip), spin: null,
         });
@@ -801,14 +843,16 @@ function _cardsFromLeg(leg) {
         countText: _ethText(leg.amount), spin: null,
       });
       break;
-    case 'flip':
+    case 'flip': {
+      const art = _flipPrizeArt(leg.amount);
       cards.push({
-        type: 'flip', rarity: 'rare', icon: ICONS.flip, glyph: null,
+        type: 'flip', rarity: 'rare', icon: art.icon, pile: art.pile, glyph: null,
         label: 'FLIP', value: _tokenText(leg.amount),
         sub: 'Redemption coinflip payout',
         countText: _tokenText(leg.amount), spin: null,
       });
       break;
+    }
     case 'whalepass':
       cards.push({
         type: 'whalepass', rarity: 'legendary', icon: null, glyph: '🐳',
@@ -897,6 +941,44 @@ function _cardsFromLeg(leg) {
       break;
   }
   return cards;
+}
+
+function _settledBoxSpinSummaryCard(card, resultLabel) {
+  const board = buildBoxSpinBoard(card?.spin);
+  const rawType = String(card?.spin?.spinType || '').toLowerCase();
+  const currency = board?.currency ?? BOX_SPIN_CURRENCIES[rawType];
+  const unit = board?.unit ?? DGN_UNITS[currency] ?? 'FLIP';
+  const credited = board?.total ?? (rawType === 'eth'
+    ? _safeBigInt(card?.spin?.ethShare)
+    : _safeBigInt(card?.spin?.payout));
+  const won = credited > 0n;
+  const rows = Array.isArray(board?.rows) ? board.rows : [];
+  const hits = rows.filter((row) => row?.won).length;
+  const resultDetail = rows.length > 0
+    ? board?.survivalStage && board?.survived === false
+      ? `${hits} of ${rows.length} hit · survival lost`
+      : `${hits} of ${rows.length} paid`
+    : 'Settled result';
+  const amount = currency === 0 ? _ethText(credited) : _tokenText(credited);
+  return {
+    ...card,
+    type: 'spins',
+    rarity: won ? (currency === 0 ? 'epic' : 'rare') : 'common',
+    revealedRarity: null,
+    icon: currency === 0 ? ICONS.ethFace : currency === 3 ? ICONS.wwxrp : ICONS.flip,
+    label: `${unit} BOX SPIN`,
+    revealedLabel: null,
+    value: `${amount} ${unit}`,
+    revealedValue: null,
+    sub: [resultDetail, resultLabel].filter(Boolean).join(' · '),
+    outcome: won ? 'win' : 'loss',
+    summaryDetail: true,
+    settledBoxSpin: true,
+    countText: null,
+    // A Day Summary is a receipt for already-consumed outcomes. Keeping the
+    // payload here made #playSequence launch the full reel a second time.
+    spin: null,
+  };
 }
 
 /** Normalize any accepted sequence shape. Returns null if nothing to show. */
@@ -996,6 +1078,7 @@ export function normalizeSequence(seq) {
     if (!spinBoard) return null;
     const won = spinBoard.total > 0n;
     const hits = spinBoard.rows.filter((row) => row.won).length;
+    const art = won ? _flipPrizeArt(spinBoard.total) : null;
     return {
       kind,
       title: 'BIGGEST SPIN BOUNTY',
@@ -1008,7 +1091,8 @@ export function normalizeSequence(seq) {
       cards: [{
         type: won ? 'flip' : 'nowin',
         rarity: won ? 'epic' : 'common',
-        icon: won ? ICONS.flip : ICONS.flame,
+        icon: won ? art.icon : ICONS.flame,
+        pile: won ? art.pile : null,
         glyph: null,
         label: 'BIGGEST SPIN BOUNTY',
         value: `${_tokenText(spinBoard.total)} FLIP`,
@@ -1221,7 +1305,7 @@ export function normalizeSequence(seq) {
       : (symbol >> 3);
     const sym = Number.isInteger(Number(seq.sym)) ? (Number(seq.sym) & 7) : (symbol & 7);
     const quadrantName = String(DGN_QUADRANTS[quadrant] || 'trait').toUpperCase();
-    const symbolName = String(DGN_SYMBOLS[DGN_QUADRANTS[quadrant]]?.[sym] || `symbol ${sym + 1}`)
+    const symbolName = String(dgnDisplaySymbol(quadrant, sym) || `symbol ${sym + 1}`)
       .replace(/[_-]+/g, ' ')
       .toUpperCase();
     const tier = ['first-quadrant', 'first-symbol'].includes(String(seq.tier))
@@ -1255,12 +1339,15 @@ export function normalizeSequence(seq) {
       spin: null,
       bingo: { level, symbol, quadrant, sym, counts, tier },
     }];
-    if (flipReward > 0n) cards.push({
-      type: 'flip', rarity: 'rare', icon: ICONS.flip, glyph: null,
-      label: 'FLIP', value: _tokenText(flipReward),
-      sub: 'Credited to your coinflip balance',
-      countText: _tokenText(flipReward), spin: null,
-    });
+    if (flipReward > 0n) {
+      const art = _flipPrizeArt(flipReward);
+      cards.push({
+        type: 'flip', rarity: 'rare', icon: art.icon, pile: art.pile, glyph: null,
+        label: 'FLIP', value: _tokenText(flipReward),
+        sub: 'Credited to your coinflip balance',
+        countText: _tokenText(flipReward), spin: null,
+      });
+    }
     if (dgnrsPaid > 0n) cards.push({
       type: 'dgnrs', rarity, icon: ICONS.dgnrs, glyph: null,
       label: 'sDGNRS', value: _tokenText(dgnrsPaid),
@@ -1290,6 +1377,7 @@ export function normalizeSequence(seq) {
     const betTickets = seq.betTickets == null ? '' : String(seq.betTickets).trim();
     const resultTickets = seq.resultTickets == null ? '' : String(seq.resultTickets).trim();
     const hasVolumeResult = market === 'VOLUME' && betTickets && resultTickets;
+    const art = won ? _flipPrizeArt(payout) : null;
     return {
       kind,
       title: won ? `${marketLabel} PAID` : `${marketLabel} RESULT`,
@@ -1302,7 +1390,8 @@ export function normalizeSequence(seq) {
       cards: [{
         type: won ? 'flip' : 'nowin',
         rarity: won ? 'rare' : 'common',
-        icon: won ? ICONS.flip : ICONS.flame,
+        icon: won ? art.icon : ICONS.flame,
+        pile: won ? art.pile : null,
         glyph: null,
         label: hasVolumeResult
           ? `YOUR BET: ${side} ${betTickets} TICKETS`
@@ -1433,8 +1522,9 @@ export function normalizeSequence(seq) {
           countText: _ethText(p.amount), spin: null,
         });
       } else if (p.type === 'flip' && BigInt(p.amount ?? 0) > 0n) {
+        const art = _flipPrizeArt(p.amount);
         cards.push({
-          type: 'flip', rarity: 'rare', icon: ICONS.flip, glyph: null,
+          type: 'flip', rarity: 'rare', icon: art.icon, pile: art.pile, glyph: null,
           label: 'FLIP', value: _tokenText(p.amount),
           sub: 'Bonus draw payout',
           winningTraitIds: _winningTraitIds(p.winningTraitIds),
@@ -1546,15 +1636,15 @@ export function normalizeSequence(seq) {
         : `LUCKBOX #${String(rawIndex)}`;
       const resultCards = (Array.isArray(result?.legs) ? result.legs : [])
         .flatMap(_cardsFromLeg)
-        .map((card) => ({
-          ...card,
-          // These are final historical results, so the compact receipt can
-          // show the reward immediately without replaying a second box flow.
-          summaryDetail: true,
-          sub: card.spin
-            ? resultLabel
-            : [card.sub, resultLabel].filter(Boolean).join(' · '),
-        }));
+        .map((card) => card.spin
+          ? _settledBoxSpinSummaryCard(card, resultLabel)
+          : ({
+              ...card,
+              // These are final historical results, so the compact receipt can
+              // show the reward immediately without replaying a second box flow.
+              summaryDetail: true,
+              sub: [card.sub, resultLabel].filter(Boolean).join(' · '),
+            }));
       cards.push(...resultCards);
     }
     if (cards.length === 0) return null;
@@ -1564,11 +1654,13 @@ export function normalizeSequence(seq) {
     // action merely because they omitted the old consolationOnly hint.
     const hasNonConsolationWin = cards.some((card) => {
       if (card.type === 'coinflip-result') return card.outcome === 'win';
+      if (card.settledBoxSpin) return card.outcome === 'win';
       return !['nowin', 'wwxrp'].includes(card.type);
     });
     const hasSettledLoss = Boolean(seq.consolationOnly) || cards.some((card) => (
       card.type === 'nowin'
       || card.type === 'wwxrp'
+      || (card.settledBoxSpin && card.outcome === 'loss')
       || (card.type === 'coinflip-result' && card.outcome === 'loss')
     ));
     const fullLoss = hasSettledLoss && !hasNonConsolationWin;
@@ -1983,7 +2075,11 @@ class RevealOverlay extends HTMLElement {
     grid.appendChild(badge);
   }
 
-  #appendTicketGridPieces(seq, grid, { singlePiece = false, showLesson = false } = {}) {
+  #appendTicketGridPieces(
+    seq,
+    grid,
+    { singlePiece = false, showLesson = false, queued = false } = {},
+  ) {
     const dealt = [];
     const pieces = Array.isArray(seq?.ticketGrid) ? seq.ticketGrid : [];
     const wholeTickets = pieces.filter((piece) => !piece?.entry);
@@ -1994,6 +2090,10 @@ class RevealOverlay extends HTMLElement {
       if (singlePiece || showLesson) {
         paper.querySelector('.ticket-card')?.classList?.remove('tc-small');
       }
+      // A motion-enabled deal must enter the DOM concealed. Adding this class
+      // after append lets the browser paint the completed hand for a frame
+      // (and for the whole inline-wrapper beat during OPEN ALL).
+      if (queued) paper.classList?.add('rvl-paper--queued');
       grid.appendChild(paper);
       dealt.push({ el: paper, ticket });
     }
@@ -2017,6 +2117,7 @@ class RevealOverlay extends HTMLElement {
         if (showLesson) {
           paper.querySelector('.ticket-entry-card')?.classList?.remove('tc-small');
         }
+        if (queued) paper.classList?.add('rvl-paper--queued');
         clusterGrid.appendChild(paper);
         dealt.push({ el: paper, ticket });
       }
@@ -2477,6 +2578,14 @@ class RevealOverlay extends HTMLElement {
       this.#openAllPacks = false;
       this.#skipAllPacks = false;
       this.#packHistory = [];
+      if (typeof document !== 'undefined' && typeof document.dispatchEvent === 'function'
+        && typeof CustomEvent === 'function') {
+        try {
+          document.dispatchEvent(new CustomEvent(REVEAL_OVERLAY_IDLE_EVENT, {
+            detail: { aborted: this.#aborted },
+          }));
+        } catch (_e) { /* background presentation must never break cleanup */ }
+      }
     }
   }
 
@@ -2530,6 +2639,7 @@ class RevealOverlay extends HTMLElement {
       document.dispatchEvent(new CustomEvent(PACK_REVEAL_COMPLETE_EVENT, {
         detail: {
           ...release,
+          ...(seq?.foilPack ? { foilPack: true } : {}),
           cardIndexes: [...release.cardIndexes],
           ...(release.itemKeys ? { itemKeys: [...release.itemKeys] } : {}),
         },
@@ -3124,25 +3234,29 @@ class RevealOverlay extends HTMLElement {
       + (showLesson && !singlePiece ? ' rvl-ticket-grid-stage--lesson-stack' : '');
     (lessonLayout || surface).appendChild(grid);
 
+    const reduced = _reducedMotion();
+
     // Reserve the complete hand before dealing it. Appending one ticket at a
     // time used to add whole grid rows mid-animation and shove the controls.
+    // Motion-enabled tickets are concealed before insertion so the completed
+    // hand cannot flash before the one-by-one deal begins.
     this.#appendSinglePackBadge(seq, grid);
-    const dealt = this.#appendTicketGridPieces(seq, grid, { singlePiece, showLesson });
+    const dealt = this.#appendTicketGridPieces(seq, grid, {
+      singlePiece,
+      showLesson,
+      queued: !reduced,
+    });
     if (lessonLayout) lessonLayout.appendChild(this.#buildTicketLesson(seq));
     const footer = document.createElement('div');
     footer.className = 'rvl-ticket-footer';
     surface.appendChild(footer);
 
-    const reduced = _reducedMotion();
     if (inlineAutoPack && !reduced) {
       // Let the enlarged wrapper arrive and begin tearing before the first
       // ticket deals. Previously the hand appeared in the same frame as the
       // tiny pack, which made the opening beat almost impossible to read.
       await this.#wait(420);
       if (this.#aborted) return;
-    }
-    if (!reduced) {
-      for (const { el } of dealt) el.classList?.add('rvl-paper--queued');
     }
     if (seq.extra > 0) {
       const more = document.createElement('div');
@@ -3794,21 +3908,6 @@ class RevealOverlay extends HTMLElement {
     };
   }
 
-  #dgnMatchText(row) {
-    if (row.houseTraits == null) return 'REEL UNAVAILABLE';
-    const states = dgnScoringMatchStates(
-      dgnUnpackTicket(row.playerTraits),
-      dgnUnpackTicket(row.houseTraits),
-    );
-    const counts = { full: 0, sym: 0, col: 0, miss: 0 };
-    for (const state of states) counts[state] += 1;
-    const bits = [];
-    if (counts.full) bits.push(`${counts.full} FULL`);
-    if (counts.sym) bits.push(`${counts.sym} SYMBOL`);
-    if (counts.miss) bits.push(`${counts.miss} MISS`);
-    return bits.join(' · ');
-  }
-
   #buildFullGamepiece(traits, sideLabel, heroIdx = null) {
     const el = this.#buildTicket(traits, null, sideLabel, heroIdx);
     if (el.classList) el.classList.add('rvl-gamepiece');
@@ -4213,73 +4312,6 @@ class RevealOverlay extends HTMLElement {
     this.#syncFullSpinSelection(rendered);
   }
 
-  #appendFullSpinResultDetails(rendered, board) {
-    if (board.boxSpin) return null;
-    const paid = board.rows.filter((row) => row.payout > 0n).length;
-
-    const details = document.createElement('div');
-    details.className = 'rvl-dgn-result-details';
-    details.setAttribute('aria-label', 'Detailed Degenerette results');
-
-    const facts = document.createElement('div');
-    facts.className = 'rvl-dgn-facts rvl-dgn-facts--result';
-    facts.appendChild(this.#buildDgnFact(
-      'PAID SPINS',
-      `${paid} / ${board.rows.length}`,
-      paid > 0 ? 'is-win' : 'is-miss',
-    ));
-    facts.appendChild(this.#buildDgnFact(
-      'PAYOUT',
-      `${this.#formatDgnAmount(board, board.total)} ${board.unit}`,
-      board.total > 0n ? 'is-win' : 'is-miss',
-    ));
-    if (board.lootboxAwarded) {
-      facts.appendChild(this.#buildDgnFact('BONUS', 'LUCKBOX WON', 'is-lootbox'));
-    }
-    if (board.totalWager > 0n) {
-      const net = board.total - board.totalWager;
-      const sign = net > 0n ? '+' : net < 0n ? '−' : '';
-      const magnitude = net < 0n ? -net : net;
-      facts.appendChild(this.#buildDgnFact(
-        'NET',
-        `${sign}${this.#formatDgnAmount(board, magnitude)} ${board.unit}`,
-        net > 0n ? 'is-win' : net < 0n ? 'is-loss' : '',
-      ));
-    }
-    details.appendChild(facts);
-
-    const results = document.createElement('div');
-    results.className = 'rvl-dgn-results';
-    for (const row of board.rows) {
-      const won = row.payout > 0n;
-      const line = document.createElement('button');
-      line.type = 'button';
-      line.className = `rvl-dgn-result-line ${won ? 'is-win' : 'is-miss'}`;
-      const spin = document.createElement('strong');
-      spin.className = 'rvl-dgn-result-spin';
-      spin.textContent = `SPIN ${row.spinIndex + 1}`;
-      const score = document.createElement('span');
-      score.className = 'rvl-dgn-result-score';
-      score.textContent = row.score > 0 ? `S ${row.score}` : 'MISS';
-      const matches = document.createElement('span');
-      matches.className = 'rvl-dgn-result-matches';
-      matches.textContent = this.#dgnMatchText(row);
-      const payout = document.createElement('strong');
-      payout.className = 'rvl-dgn-result-payout';
-      payout.textContent = won
-        ? `+${this.#formatDgnAmount(board, row.payout)} ${board.unit}`
-        : '—';
-      line.appendChild(spin);
-      line.appendChild(score);
-      line.appendChild(matches);
-      line.appendChild(payout);
-      this.#registerFullSpinSelector(rendered, line, row, board);
-      results.appendChild(line);
-    }
-    details.appendChild(results);
-    return details;
-  }
-
   async #appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
     interstitial = false,
   } = {}) {
@@ -4299,13 +4331,19 @@ class RevealOverlay extends HTMLElement {
       `rvl-box-currency-coin--${currencyKey}`,
       'df-coin3d__inner',
     ].join(' ');
-    appendCoinFaces(coin, {
+    // ETH and FLIP both land on the rotor's back-facing side, so loading the
+    // destination art there up front put the FLIP flame on screen at every one
+    // of the track's half-turns. Seeing it even once settled the currency
+    // several seconds early, and seeing the ETH face instead ruled FLIP out —
+    // the plane leaked the answer whichever way it fell. Spin one neutral back
+    // for all three outcomes and install the real art later.
+    const faces = appendCoinFaces(coin, {
       frontSrc: ICONS.wwxrp,
-      // ETH and FLIP both land on the rotor's back-facing side. Loading the
-      // actual destination art into that plane makes FLIP rotate into view;
-      // it never appears by replacing a fully visible ETH logo.
-      backSrc: board.currency === 1 ? ICONS.flip : ICONS.ethFace,
+      backSrc: ICONS.ethFace,
     });
+    // Only a FLIP result changes this plane. Decode the flame now so the swap
+    // at the boundary cannot land on an unpainted frame.
+    if (board.currency === 1) _preloadImage(ICONS.flip);
     icon.appendChild(coin);
 
     const eyebrow = document.createElement('span');
@@ -4348,7 +4386,16 @@ class RevealOverlay extends HTMLElement {
       sfxSpinStart(flipMs);
       // Preserve the truthful, non-skippable landing while honoring the
       // player's chosen animation pace exactly once.
-      await this.#waitForCoinflip(flipMs);
+      await this.#waitForCoinflip(trackMs);
+      if (this.#aborted) return;
+      // The track ends on rotateX(2070deg) — an exact multiple of 90 that is
+      // not a multiple of 180, so the surface is edge-on and the back plane
+      // occupies zero pixels. Repainting it here is invisible, and the ending
+      // keyframes then carry the coin through one last WWXRP pass before the
+      // back face arrives at 2340deg. A FLIP flame can therefore only ever be
+      // seen on the final turn, and only when FLIP is the actual result.
+      if (board.currency === 1 && faces?.backImage) faces.backImage.src = ICONS.flip;
+      await this.#waitForCoinflip(endingMs);
       if (this.#aborted) return;
     }
 
@@ -4521,8 +4568,15 @@ class RevealOverlay extends HTMLElement {
     detail.textContent = board.boxSpin
       ? (board.survived
           ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} PAID`
+          // The reels really did earn this before the coin took it. Naming the
+          // amount is the whole point of the panel; falling back to a bare reel
+          // count is the fail-closed branch for a stake we could not rebuild.
           : atRisk > 0n
-            ? `${reelResultText} · LOST ON SURVIVAL FLIP`
+            ? `${payingReelsText} · ${this.#boxSpinAmountText(
+              board,
+              atRisk,
+              board.payoutAtRiskApproximate === true,
+            )} LOST`
             : `${payingReelsText} · LOST ON SURVIVAL FLIP`)
       : board.survived
         ? `${_tokenText(board.spinSum)} FLIP PAID DOUBLE`
@@ -4564,7 +4618,6 @@ class RevealOverlay extends HTMLElement {
     if (board.survived == null) {
       this.#setRunningTotal(rendered, board, board.total, reducedMotion ? 0 : 600);
     }
-    const resultDetails = this.#appendFullSpinResultDetails(rendered, board);
     this.#enableFullSpinSelection(rendered);
 
     const totalEl = document.createElement('div');
@@ -4657,10 +4710,6 @@ class RevealOverlay extends HTMLElement {
     }
     if (rendered.actions) rendered.stage.appendChild(rendered.actions);
     else rendered.stage.appendChild(rendered.cta);
-    // The verdict and exit must remain reachable before the potentially tall
-    // per-spin breakdown. Players who only want to leave never need to scroll
-    // through detailed results first.
-    if (resultDetails) rendered.stage.appendChild(resultDetails);
     await this.#waitTap();
     return won;
   }
@@ -5307,7 +5356,8 @@ class RevealOverlay extends HTMLElement {
     const quadrant = Number(meta?.quadrant) & 3;
     const winningSym = Number(meta?.sym) & 7;
     const category = DGN_QUADRANTS[quadrant];
-    const symbolName = String(DGN_SYMBOLS[category]?.[winningSym] || `symbol ${winningSym + 1}`)
+    const symbolName = String(dgnDisplaySymbol(quadrant, winningSym)
+      || `symbol ${winningSym + 1}`)
       .replace(/[_-]+/g, ' ')
       .toUpperCase();
     const counts = Array.from({ length: 64 }, (_unused, index) => (
@@ -5416,6 +5466,9 @@ class RevealOverlay extends HTMLElement {
       icon.className = 'rvl-card-icon rvl-card-icon--sdgnrs';
       icon.appendChild(this.#buildSdgnrsBadge());
     } else if (card.icon) {
+      // A pile-scale FLIP prize renders as its chip pile: a wide bottom-
+      // anchored lane instead of the square logo slot.
+      if (card.pile) icon.className = 'rvl-card-icon rvl-card-icon--flip-pile';
       const img = document.createElement('img');
       img.src = card.icon;
       img.alt = '';
@@ -5549,7 +5602,7 @@ class RevealOverlay extends HTMLElement {
     const share = document.createElement('button');
     share.type = 'button';
     share.className = 'rvl-share-cta';
-    share.textContent = 'SHARE MY WIN';
+    share.textContent = 'SHARE YOUR WIN';
     share.addEventListener('click', async (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (share.disabled) return;
@@ -5560,7 +5613,7 @@ class RevealOverlay extends HTMLElement {
       share.disabled = false;
       share.textContent = result === 'shared' ? 'SHARED ✓'
         : result === 'downloaded' ? 'SAVED — LINK COPIED ✓'
-          : result === 'cancelled' ? 'SHARE MY WIN'
+          : result === 'cancelled' ? 'SHARE YOUR WIN'
             : 'SHARE FAILED';
     });
     return share;
@@ -5739,7 +5792,7 @@ class RevealOverlay extends HTMLElement {
       summary.appendChild(openAllBoxes);
     }
 
-    // SHARE MY WIN — winnings sequences only (jackpot prizes / paid spins;
+    // SHARE YOUR WIN — genuinely big winnings only (jackpot prizes / 5x paid spins;
     // never packs, NO HIT, or view-mode). Builds the share card (total +
     // affiliate-link QR) and hands it to the Web Share API; desktop saves
     // the PNG instead. share-win.js owns the whole flow.

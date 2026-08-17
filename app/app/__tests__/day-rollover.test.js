@@ -77,6 +77,63 @@ describe('authoritative day rollover reducer', () => {
       'the consumed live quote cannot reset the waiting coin to the wrong side');
   });
 
+  test('the fulfilled word is proof the request happened, without the lock', () => {
+    // isRngFulfilled() reads `rngWordCurrent != 0`, assigned by the VRF
+    // callback. A cold load landing after the callback sees no lock edge, no
+    // indexed jackpot and no resolved coinflip, and used to conclude nothing
+    // had been requested at all.
+    const state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null,
+      rngLocked: false, rngFulfilled: true,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.rngFulfilled, true);
+    assert.equal(state.rngRequested, true,
+      'a delivered word cannot coexist with an unrequested day');
+  });
+
+  test('the latch survives the advance pipeline zeroing the word', () => {
+    // DegenerusGameAdvanceModule.sol zeroes rngWordCurrent once it has drained
+    // the word, so isRngFulfilled() goes back to false mid-processing. That is
+    // not the word un-arriving.
+    let state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null, rngFulfilled: true,
+    }, null);
+    assert.equal(state.rngFulfilled, true);
+
+    state = apply(state, {
+      day: 41, blockNumber: 111, coinflip: null, rngFulfilled: false,
+    }, null);
+    assert.equal(state.rngFulfilled, true,
+      'the drained word is still the word that arrived for this day');
+  });
+
+  test('an unreadable fulfillment view neither asserts nor clears', () => {
+    let state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null, rngFulfilled: null,
+    }, null);
+    assert.equal(state.rngFulfilled, false, 'a failed read is never fulfillment');
+    assert.equal(state.rngRequested, false);
+
+    state = apply(state, {
+      day: 41, blockNumber: 111, coinflip: null, rngFulfilled: true,
+    }, null);
+    state = apply(state, {
+      day: 41, blockNumber: 112, coinflip: null, rngFulfilled: null,
+    }, null);
+    assert.equal(state.rngFulfilled, true, 'nor does it retract one already seen');
+  });
+
+  test('a new chain day clears the fulfilled latch with the rest', () => {
+    const prior = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null, rngFulfilled: true,
+    }, null);
+    const shifted = apply(prior, {
+      day: 42, blockNumber: 120, coinflip: null, rngFulfilled: false,
+    }, null);
+    assert.equal(shifted.rngFulfilled, false);
+    assert.equal(shifted.rngRequested, false);
+  });
+
   test('stale and duplicate responses cannot regress a ready target', () => {
     const ready = apply(null, { day: 52, blockNumber: 500, coinflip: win(52, 99) }, {
       day: 52, status: 'resolved',

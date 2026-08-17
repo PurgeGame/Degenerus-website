@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <!-- Moving current on the interlock and data lanes. Geometry is copied from
+       daily-drawing-board-routing-v5.svg verbatim, chamfers included, so no
+       animated trace can leave the functional net.
+
+       v4 makes the two VRF modules the SOURCE rather than one more part on the
+       net. Every lane now travels AWAY from them: the pair of display
+       interlocks used to run backwards into the modules on a reversed dash and
+       read as a sink. Nothing on this sheet flows toward a module any more.
+
+       Colour carries the same claim. Each side is stroked with a radial ramp
+       pinned in user space to its own module, so current leaves the module
+       Chainlink blue and cools to the board's green and gold as it gets
+       further from it. The ramps are the reason the two sides are separate
+       groups; the routes themselves are still one net. -->
+  <defs>
+    <filter id="currentGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="fromVrfL" gradientUnits="userSpaceOnUse" cx="250" cy="1132" r="430">
+      <stop stop-color="#a5cbff"/>
+      <stop offset="0.2" stop-color="#5f93ff"/>
+      <stop offset="0.55" stop-color="#73e8b0"/>
+      <stop offset="1" stop-color="#e4b54e"/>
+    </radialGradient>
+    <radialGradient id="fromVrfR" gradientUnits="userSpaceOnUse" cx="1030" cy="1132" r="430">
+      <stop stop-color="#a5cbff"/>
+      <stop offset="0.2" stop-color="#5f93ff"/>
+      <stop offset="0.55" stop-color="#73e8b0"/>
+      <stop offset="1" stop-color="#e4b54e"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .current { stroke-dasharray: 16 46; animation: current-flow 1.18s linear infinite; }
+    @keyframes current-flow { to { stroke-dashoffset: -62; } }
+    @media (prefers-reduced-motion: reduce) {
+      .current { stroke-dasharray: none; animation: none; opacity: .42; }
+    }
+  </style>
+  <!-- Left VRF module outward. -->
+  <g class="current" fill="none" stroke="url(#fromVrfL)" stroke-opacity="0.72"
+     stroke-width="3.1" stroke-linecap="square" stroke-linejoin="miter"
+     filter="url(#currentGlow)" vector-effect="non-scaling-stroke">
+    <!-- Module -> processor interlock. -->
+    <path d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/>
+    <!-- Processor -> LCD data lanes on this half of the board. -->
+    <path d="M414 915V982L432 1000H438L456 1018V1098"/>
+    <path d="M506 915V1002L524 1020H530L548 1038V1098"/>
+    <!-- Module -> LCD display interlocks. -->
+    <g stroke-width="2.6">
+      <path d="M286 1116H350"/>
+      <path d="M286 1158H350"/>
+    </g>
+  </g>
+  <!-- Right VRF module outward. -->
+  <g class="current" fill="none" stroke="url(#fromVrfR)" stroke-opacity="0.72"
+     stroke-width="3.1" stroke-linecap="square" stroke-linejoin="miter"
+     filter="url(#currentGlow)" vector-effect="non-scaling-stroke">
+    <path d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/>
+    <path d="M774 915V1002L756 1020H750L732 1038V1098"/>
+    <path d="M866 915V982L848 1000H842L824 1018V1098"/>
+    <g stroke-width="2.6">
+      <path d="M994 1116H930"/>
+      <path d="M994 1158H930"/>
+    </g>
+  </g>
+</svg>

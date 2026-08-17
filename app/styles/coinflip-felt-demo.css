@@ -1,0 +1,118 @@
+/* Local-only chrome for the coinflip felt/chips visual demo. */
+
+body.coinflip-felt-demo-page {
+  min-height: 100vh;
+  margin: 0;
+  background: #0b0b12;
+  color: #f1f5f9;
+}
+
+.coinflip-felt-demo {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+}
+
+.coinflip-felt-demo__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.coinflip-felt-demo__header a {
+  color: #94a3b8;
+  font: 700 0.72rem/1 "Inter", system-ui, sans-serif;
+  text-decoration: none;
+}
+
+.coinflip-felt-demo__header small {
+  display: block;
+  color: #64748b;
+  font: 800 0.55rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.2em;
+}
+
+.coinflip-felt-demo__header h1 {
+  margin: 0.15rem 0 0;
+  font: 900 1.05rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.coinflip-felt-demo__header b {
+  margin-left: auto;
+  color: #f59e0b;
+  font: 900 0.6rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.14em;
+}
+
+.coinflip-felt-demo__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.coinflip-felt-demo__controls fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  margin: 0;
+  padding: 0.42rem 0.55rem 0.5rem;
+  border: 1px solid #263042;
+  border-radius: 9px;
+}
+
+.coinflip-felt-demo__controls legend {
+  padding: 0 0.3rem;
+  color: #64748b;
+  font: 900 0.52rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.14em;
+}
+
+.coinflip-felt-demo__controls button {
+  padding: 0.32rem 0.55rem;
+  border: 1px solid #334155;
+  border-radius: 7px;
+  background: #141a26;
+  color: #cbd5e1;
+  font: 800 0.62rem/1 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.coinflip-felt-demo__controls button.is-active {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+}
+
+.coinflip-felt-demo__stage {
+  display: grid;
+  justify-content: center;
+}
+
+/* Replicates the hero grid cell + `.jackpot-hero > app-daily-flip` context the
+   real column receives, at a controllable width. */
+.coinflip-felt-demo__hero.jackpot-hero {
+  display: block;
+  width: var(--demo-width, 360px);
+  margin: 0;
+}
+
+.coinflip-felt-demo__host {
+  position: relative;
+  display: flex;
+  min-height: 560px;
+  flex-direction: column;
+  padding-top: 0;
+}
+
+.coinflip-felt-demo__host .app-daily-flip {
+  flex: 1;
+}
+
+/* Deterministic headless screenshots: ?noanim=1 freezes arrival choreography. */
+body.demo-no-anim .df-bet-chip,
+body.demo-no-anim .df-bankroll__roll {
+  animation: none !important;
+}

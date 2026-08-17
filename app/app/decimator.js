@@ -436,7 +436,7 @@ async function _firstBlockAtOrAfter(provider, timestamp, head) {
 }
 
 /** Indexed stage-7 block that opens the burn window for target level N+1. */
-async function _readIndexedDecimatorWindowStartBlock(targetLevel) {
+export async function readIndexedDecimatorWindowStartBlock(targetLevel) {
   const target = Number(targetLevel);
   const windowLevel = target - 1;
   if (!Number.isInteger(windowLevel) || windowLevel < 0) return null;
@@ -480,7 +480,7 @@ export async function readDecimatorRawBurnTotal({ level, sinceTimestamp, sinceBl
   if (!Number.isInteger(startBlock) || startBlock < 0) startBlock = null;
   if (!Number.isInteger(lvl) || lvl < 1) return null;
   if (startTime == null && startBlock == null) {
-    startBlock = await _readIndexedDecimatorWindowStartBlock(lvl);
+    startBlock = await readIndexedDecimatorWindowStartBlock(lvl);
   }
   if (startTime == null && startBlock == null) return null;
   const provider = _contextProvider();

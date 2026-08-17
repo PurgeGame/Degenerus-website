@@ -86,7 +86,12 @@ import {
 // Boxes that need a separate openBox call go to the app-root
 // <app-box-strip tray-only> controller via the tx-confirmed event's `boxes`
 // detail. It publishes the eventual open/replay action to the bottom tray.
-import { enrichLootboxBoonLegs, parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
+import {
+  enrichHumanBoxSpinLegs,
+  enrichLootboxBoonLegs,
+  lootboxPresentationKey,
+  parseOpenLegsFromReceipt,
+} from '../app/lootbox-legs.js';
 // Contract port of _activeTicketLevel — the level a buy routes to right now.
 import { activeTicketLevel } from '../app/active-level.js';
 // FLIP ticket buy (GAME.redeemFlip) — a second, window-gated payment path for
@@ -105,6 +110,7 @@ import {
 import { formatFlip } from '../viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
+import { heldBalanceValue } from '../app/balance-hold.js';
 import { degeneretteLimits } from '../app/degenerette.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
 import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
@@ -599,9 +605,7 @@ class AppDecimatorPanel extends HTMLElement {
   #useAfking = true;          // Allow prepaid AFKing funds to cover purchase shortfalls.
   #fundingOrder = ['claimable', 'wallet', 'afking'];
   #fundsExpanded = false;     // Available Funds mirrors Protocol Coins disclosure.
-  #pendingActions = [];       // Unseen ETH-capable RNG results mask the compact total.
-  #claimableSpoilerOverrideKey = null;
-  #claimableSpoilerHiddenKey = null;
+  #pendingActions = [];       // Unseen ETH-capable RNG results hold the settled claimable value.
   // Referral assignment is player-specific and permanent after the first buy.
   // null = unknown (keep the field hidden), false = first-buy field available,
   // true = already assigned (field stays out of the purchase flow).
@@ -766,7 +770,7 @@ class AppDecimatorPanel extends HTMLElement {
               <span data-bind="dec-ticket-action-label">Buy tickets</span>
             </label>
             <span class="dec-input-accessories" role="group" aria-label="Ticket purchase modifiers">
-              <boon-product-indicator product="purchase"
+              <boon-product-indicator product="purchase" data-bind="dec-ticket-boon"
                                       variant="purchase-control"></boon-product-indicator>
               <quest-objective-indicator product="purchase"></quest-objective-indicator>
             </span>
@@ -840,6 +844,10 @@ class AppDecimatorPanel extends HTMLElement {
         <!-- Stable half-and-half desktop action rail. On phones the optional bonus
              and primary action stack so BUY IN gets the whole tap width. -->
         <div class="dec-buy-row">
+          <!-- Decorative dormant BONUS window (art only — no data, no
+               handlers). purchase-desk.css shows it in the basic layout and
+               swaps it out whenever the live dec-flip-credit tally appears. -->
+          <span class="dec-desk-bonus-slot" aria-hidden="true"></span>
           <div class="dec-flip-credit" data-bind="dec-flip-credit" hidden>
             <img src="/whitepaper/flame-logo-split.svg" alt="">
             <span data-bind="dec-flip-credit-label">BONUS</span>
@@ -863,6 +871,15 @@ class AppDecimatorPanel extends HTMLElement {
 
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
+
+        <!-- Decorative spacer: fills the flexible space between the action
+             rail and the counter ledger with the house seal pressed tonally
+             into the felt (art only — aria-hidden, no data, no handlers; all
+             visuals live in purchase-desk.css and the block stays
+             display:none outside the basic layout). -->
+        <div class="dec-desk-cage" aria-hidden="true">
+          <span class="dec-desk-cage__seal"></span>
+        </div>
 
         <!-- ALL IN keeps its normal half-width action footprint above the ledgers.
              During the redemption window FLIP then receives a full compact row,
@@ -980,13 +997,6 @@ class AppDecimatorPanel extends HTMLElement {
     const afkingClaimBtn = this.querySelector('[data-bind="dec-funds-afking-claim"]');
     if (afkingClaimBtn) {
       afkingClaimBtn.addEventListener('click', (e) => this.#onClaimAfkingFundsClick(e));
-    }
-    const claimableValue = this.querySelector('[data-bind="dec-funds-claimable"]');
-    const totalValue = this.querySelector('[data-bind="dec-funds-total"]');
-    for (const value of [claimableValue, totalValue]) {
-      if (!value) continue;
-      value.addEventListener('click', (event) => this.#toggleClaimableSpoiler(event));
-      value.addEventListener('keydown', (event) => this.#toggleClaimableSpoiler(event));
     }
     const afkingJump = this.querySelector('[data-bind="dec-afking-jump"]');
     if (afkingJump) {
@@ -2446,6 +2456,12 @@ class AppDecimatorPanel extends HTMLElement {
     }
     const ticketLabel = this.querySelector('[data-bind="dec-ticket-action-label"]');
     if (ticketLabel) ticketLabel.textContent = flipMode ? 'Burn for tickets' : 'Buy tickets';
+    const ticketBoon = this.querySelector('[data-bind="dec-ticket-boon"]');
+    if (ticketBoon) {
+      ticketBoon.hidden = flipMode;
+      if (flipMode) ticketBoon.setAttribute?.('suppressed', '');
+      else ticketBoon.removeAttribute?.('suppressed');
+    }
     const buyRow = this.querySelector('.dec-buy-row');
     if (buyRow?.classList) buyRow.classList.toggle('dec-buy-row--flip', flipMode);
     const lootboxGroup = this.querySelector('[data-bind="dec-lootbox-group"]');
@@ -2525,26 +2541,33 @@ class AppDecimatorPanel extends HTMLElement {
       ? this.#coinflipBackingWei
       : flipClaimableWei + this.#coinflipCarryWei();
     // Display all coinflip value the player could withdraw, including active
-    // auto-rebuy carry. RNG lock affects execution timing, not this balance.
-    const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipBackingWei);
+    // auto-rebuy carry. The right-side rack publishes the value it actually
+    // painted so this mirror cannot race ahead of its reveal.
     const protocolCoinsDisclosure = get('ui.protocolCoinsFlipDisclosure');
-    const flipBalanceVisible = Boolean(
+    const matchingFlipDisclosure = Boolean(
       actingLower
       && protocolCoinsDisclosure?.address === actingLower
-      && protocolCoinsDisclosure?.visible === true
     );
-    flipBalanceDisplay?.classList?.toggle(
-      'dec-flip-balance--spoiler',
-      !flipBalanceVisible,
-    );
+    const flipBackingDisplayed = heldBalanceValue({
+      namespace: `protocol-flip-backing:${CHAIN.id}`,
+      scope: actingLower,
+      value: flipBackingWei,
+      released: matchingFlipDisclosure && protocolCoinsDisclosure?.held === false,
+    });
+    let protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipBackingDisplayed);
+    if (matchingFlipDisclosure && protocolCoinsDisclosure?.valueWei != null) {
+      try { protocolFlipWei = BigInt(protocolCoinsDisclosure.valueWei); }
+      catch (_error) { /* retain the locally composed settled value */ }
+    }
+    const flipBalanceHeld = !matchingFlipDisclosure || protocolCoinsDisclosure?.held !== false;
+    flipBalanceDisplay?.setAttribute?.('data-balance-held', String(flipBalanceHeld));
     updateBalanceDisplay(flipBalanceValue, {
       container: flipBalanceDisplay,
       scope: actingLower == null ? null : `${actingLower}:flip-total`,
       value: protocolFlipWei,
-      visible: flipBalanceVisible,
+      visible: true,
       format: (raw) => raw === 0n ? '-' : formatFlip(String(raw)),
       formatDelta: (delta) => `+${formatFlip(String(delta))} FLIP`,
-      hiddenText: '••••',
     });
 
     let claimable = 0n;
@@ -2554,11 +2577,6 @@ class AppDecimatorPanel extends HTMLElement {
       // A malformed snapshot stays visibly unknown instead of breaking buys.
     }
 
-    const spoilerOpen = this.#claimableSpoilerOpen();
-    const spoilerKey = this.#claimableSpoilerKey();
-    const forcedVisible = this.#claimableSpoilerOverrideKey === spoilerKey;
-    const forcedHidden = this.#claimableSpoilerHiddenKey === spoilerKey;
-    const displayOpen = !forcedHidden && (spoilerOpen || forcedVisible);
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
     const walletKnown = this.#walletEthWei != null
@@ -2568,11 +2586,18 @@ class AppDecimatorPanel extends HTMLElement {
     const walletBalance = walletKnown ? BigInt(this.#walletEthWei) : null;
     const afkingBalance = fundingKnown ? BigInt(this.#afkingFundingWei) : null;
     const spendableClaimable = this.#claimableKnown && claimable > 1n ? claimable - 1n : 0n;
-    const totalDisplayOpen = !forcedHidden && (
-      forcedVisible || (spoilerOpen && !pendingMayChangeEth(this.#pendingActions))
-    );
-    const totalSpoiler = !totalDisplayOpen;
-    const claimableHasFunds = this.#claimableKnown && spendableClaimable > 0n;
+    const ethRewardsReleased = this.#claimableSpoilerOpen()
+      && !pendingMayChangeEth(this.#pendingActions);
+    const displayedClaimable = heldBalanceValue({
+      namespace: `claimable-eth:${CHAIN.id}`,
+      scope: actingLower,
+      value: this.#claimableKnown ? spendableClaimable : null,
+      released: ethRewardsReleased,
+      // Existing winnings can be spent or claimed while another result is
+      // pending. Let that decrease paint; only a possible new award is held.
+      allowDecrease: true,
+    });
+    const claimableHasFunds = displayedClaimable != null && displayedClaimable > 0n;
     const afkingHasFunds = fundingKnown && afkingBalance > 0n;
     const walletHasFunds = walletKnown && walletBalance > 0n;
     const rows = {
@@ -2655,10 +2680,11 @@ class AppDecimatorPanel extends HTMLElement {
       allIn.title = 'Choose a currency and where to go all in';
     }
     root.setAttribute?.('data-primary-funding', compactSource);
-    const totalComplete = this.#claimableKnown && fundingKnown && walletKnown;
-    const totalKnown = this.#claimableKnown || fundingKnown || walletKnown;
+    const displayedClaimableKnown = displayedClaimable != null;
+    const totalComplete = displayedClaimableKnown && fundingKnown && walletKnown;
+    const totalKnown = displayedClaimableKnown || fundingKnown || walletKnown;
     const totalBalance = totalKnown
-      ? (this.#claimableKnown ? spendableClaimable : 0n)
+      ? (displayedClaimableKnown ? displayedClaimable : 0n)
         + (fundingKnown ? afkingBalance : 0n)
         + (walletKnown ? walletBalance : 0n)
       : null;
@@ -2667,22 +2693,21 @@ class AppDecimatorPanel extends HTMLElement {
       totalDisplay.hidden = this.#fundsExpanded;
       if (totalDisplay.hidden) totalDisplay.setAttribute?.('hidden', '');
       else totalDisplay.removeAttribute?.('hidden');
-      totalDisplay.classList?.toggle('dec-funds__total--spoiler', totalSpoiler);
       totalDisplay.classList?.toggle('dec-funds__total--flip-active', flipMode);
-      if (totalSpoiler) {
-        totalDisplay.setAttribute?.(
-          'aria-label',
-          'Total available funds hidden until pending RNG results are viewed.',
-        );
+      totalDisplay.setAttribute?.('data-balance-held', String(!ethRewardsReleased));
+      if (!ethRewardsReleased) {
+        totalDisplay.setAttribute?.('aria-label',
+          'Last settled available funds. Wallet and AFKING changes continue to update.');
       } else {
         totalDisplay.removeAttribute?.('aria-label');
       }
     }
     if (totalValue) {
-      totalValue.setAttribute('role', 'button');
-      totalValue.setAttribute('tabindex', '0');
-      const totalAction = totalDisplayOpen ? 'Hide available funds' : 'Show available funds';
-      const totalLabel = totalComplete ? totalAction : `${totalAction}; some sources are still loading`;
+      totalValue.removeAttribute('role');
+      totalValue.removeAttribute('tabindex');
+      const totalLabel = !ethRewardsReleased
+        ? 'Last settled winnings; wallet and AFKING changes remain live'
+        : totalComplete ? 'Available funds' : 'Available funds; some sources are still loading';
       totalValue.setAttribute('title', totalLabel);
       totalValue.setAttribute('aria-label', totalLabel);
     }
@@ -2690,11 +2715,9 @@ class AppDecimatorPanel extends HTMLElement {
       container: totalDisplay,
       scope: `${actingLower || ''}:${connectedLower || ''}`,
       value: totalBalance,
-      visible: !totalSpoiler,
+      visible: true,
       format: formatFundsEth,
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
-      hiddenText: '••••',
-      revealDelay: 240,
     });
     updateBalanceDisplay(walletValue, {
       container: walletDisplay,
@@ -2729,14 +2752,10 @@ class AppDecimatorPanel extends HTMLElement {
     updateBalanceDisplay(claimableValue, {
       container: claimableDisplay,
       scope: this.#claimableAddress,
-      value: this.#claimableKnown ? spendableClaimable : null,
-      visible: displayOpen,
+      value: displayedClaimable,
+      visible: true,
       format: (raw) => raw === 0n ? '-' : formatFundsEth(raw),
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
-      hiddenText: '••••',
-      // On unblur, hold the private pre-reveal balance for one short beat,
-      // then show the newly-safe +ETH cue.
-      revealDelay: 240,
     });
 
     if (afkingDisplay) {
@@ -2752,21 +2771,23 @@ class AppDecimatorPanel extends HTMLElement {
       format: (raw) => raw === 0n ? '- ETH' : `${formatFundsEth(raw)} ETH`,
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
     });
-    claimableDisplay?.classList?.toggle('dec-funds__display--spoiler', !displayOpen);
+    claimableDisplay?.setAttribute?.('data-balance-held', String(!ethRewardsReleased));
     claimableValue.removeAttribute('aria-hidden');
-    claimableValue.setAttribute('role', 'button');
-    claimableValue.setAttribute('tabindex', '0');
-    claimableValue.setAttribute('title', displayOpen ? 'Hide claimable balance' : 'Show claimable balance');
-    claimableValue.setAttribute('aria-label', displayOpen ? 'Hide claimable balance' : 'Show claimable balance');
-    if (!displayOpen) {
+    claimableValue.removeAttribute('role');
+    claimableValue.removeAttribute('tabindex');
+    if (!ethRewardsReleased) {
+      claimableValue.setAttribute('title', 'Last settled value; updates after RNG reveals');
+      claimableValue.setAttribute('aria-label', 'Last settled claimable balance. Updates after RNG reveals.');
       claimableDisplay?.setAttribute(
         'aria-label',
-        'Claimable balance hidden. Activate the number to show it.',
+        'Last settled claimable balance. Updates after RNG reveals.',
       );
     } else {
+      claimableValue.removeAttribute('title');
+      claimableValue.removeAttribute('aria-label');
       claimableDisplay?.removeAttribute('aria-label');
     }
-    root.classList?.toggle('has-claimable', displayOpen && claimableHasFunds);
+    root.classList?.toggle('has-claimable', claimableHasFunds);
     root.classList?.toggle('has-afking-funding', afkingHasFunds);
     root.classList?.toggle('is-expanded', this.#fundsExpanded);
     const busy = this.#claimBusy === 'eth';
@@ -2839,25 +2860,6 @@ class AppDecimatorPanel extends HTMLElement {
     } catch (_e) {
       return false;
     }
-  }
-
-  #claimableSpoilerKey() {
-    const day = get('app.daySync')?.day ?? get('app.lastDay')?.day ?? '';
-    const address = decimatorReadAddress() || '';
-    return `${day}:${String(address).toLowerCase()}`;
-  }
-
-  #toggleClaimableSpoiler(event) {
-    if (event?.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
-    try { event?.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
-    const key = this.#claimableSpoilerKey();
-    const forcedVisible = this.#claimableSpoilerOverrideKey === key;
-    const forcedHidden = this.#claimableSpoilerHiddenKey === key;
-    const naturallyVisible = this.#claimableSpoilerOpen();
-    const visible = forcedVisible || (!forcedHidden && naturallyVisible);
-    this.#claimableSpoilerOverrideKey = visible ? null : key;
-    this.#claimableSpoilerHiddenKey = visible ? key : null;
-    this.#renderFundsFooter();
   }
 
   async #onClaimFundsClick(e) {
@@ -3433,18 +3435,31 @@ class AppDecimatorPanel extends HTMLElement {
           }).catch(() => {});
         }
         let autoLegs = parseOpenLegsFromReceipt(receipt, buyer);
+        const openedBoxIndex = autoLegs.find(
+          (leg) => leg?.legType === 'opened' && leg.lootboxIndex != null,
+        )?.lootboxIndex;
+        // Spin rolls suppress LootBoxOpened, but this purchase still published
+        // exactly one RNG index. Preserve it here so a losing FLIP survival
+        // draw can recover and display the exact preliminary payout at risk.
+        const autoBoxIndex = openedBoxIndex
+          ?? (boxes.length === 1 ? boxes[0]?.index : null);
+        autoLegs = await enrichHumanBoxSpinLegs(autoLegs, {
+          player: buyer,
+          lootboxIndex: autoBoxIndex,
+          blockNumber: receipt?.blockNumber ?? null,
+        });
         autoLegs = await enrichLootboxBoonLegs(autoLegs, {
           player: buyer,
+          lootboxIndex: autoBoxIndex,
           blockNumber: receipt?.blockNumber ?? null,
         });
         if (autoLegs.length > 0) {
-          const autoBoxIndex = autoLegs.find(
-            (leg) => leg?.legType === 'opened' && leg.lootboxIndex != null,
-          )?.lootboxIndex;
+          // Spin rolls intentionally suppress LootBoxOpened, so a pure
+          // BoxSpin receipt has no index-bearing result leg. The purchase
+          // event still published the one shared RNG batch to Pending above;
+          // reuse it so receipt completion retires that exact indexed action.
           const transactionHash = receipt?.hash || receipt?.transactionHash || null;
-          const releaseKey = transactionHash
-            ? `tx:${String(transactionHash).toLowerCase()}`
-            : null;
+          const releaseKey = lootboxPresentationKey(autoBoxIndex, transactionHash);
           recordLootboxTicketPacks({
             address: buyer,
             legs: autoLegs,

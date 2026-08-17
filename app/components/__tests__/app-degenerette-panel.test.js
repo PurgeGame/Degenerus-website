@@ -2848,6 +2848,31 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     );
   });
 
+  test('feed fragments merge one payout event once as metadata fills in', async () => {
+    const { mergeDegeneretteFeedItems } = await import('../app-degenerette-panel.js');
+    const base = { player: CONNECTED, betId: '89', betIndex: 4, packedData: '1' };
+    const payout = {
+      rewardType: 'BoxSpin',
+      transactionHash: '0xshared-payout',
+      logIndex: 18,
+      rewardData: {
+        betId: String((1n << 63n) | (1n << 60n) | 7n),
+        spinType: 'flip',
+        payout: '200',
+        reels: [{ spinIndex: 0, playerTicket: '1', resultTicket: '2', score: 2 }],
+      },
+    };
+    const [merged] = mergeDegeneretteFeedItems([
+      { ...base, lootboxPayouts: [payout] },
+      { ...base, lootboxPayouts: [{ ...payout, blockNumber: '5001' }] },
+    ]);
+
+    assert.equal(merged.lootboxPayouts.length, 1,
+      'the same transaction/log child cannot become two BoxSpin sequences');
+    assert.equal(merged.lootboxPayouts[0].blockNumber, '5001',
+      'the more complete projection still wins');
+  });
+
   test('a resolved summary cannot shorten a round while later spin rows are still arriving', async () => {
     const { normalizeDegeneretteSpinResults } = await import('../app-degenerette-panel.js');
     const row = (spinIndex) => ({

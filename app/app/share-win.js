@@ -1,4 +1,4 @@
-// /app/app/share-win.js — "SHARE MY WIN" card builder + share flow.
+// /app/app/share-win.js — "SHARE YOUR WIN" card builder + share flow.
 //
 // Consumed by reveal-overlay.js on the summary stage. Given a normalized
 // reveal sequence, extracts the winnings lines, paints a 1080×1350 share
@@ -105,20 +105,20 @@ export function extractWinLines(seq) {
 /**
  * True when a paid result is large enough to advertise as a win.
  * Degenerette carries an exact same-currency wager and payout, so require a
- * genuine 2x return. Granted box spins and jackpot prizes do not have a
- * directly comparable buy-in in their reveal payload and remain governed by
- * the normal winnings-line check.
+ * genuine 5x return. Granted box spins and jackpot prizes do not have a
+ * directly comparable buy-in in their reveal payload, so they must also carry
+ * the normalized sequence's explicit `big` verdict.
  */
-export function clearsShareWinMultiple(seq, multiple = 2n) {
-  if (seq?.kind !== 'degenerette') return true;
+export function clearsShareWinMultiple(seq, multiple = 5n) {
+  if (seq?.kind !== 'degenerette') return seq?.big === true;
   const board = seq?.spinBoard;
-  if (board?.boxSpin) return true;
+  if (board?.boxSpin) return seq?.big === true;
   let payout = 0n;
   let wager = 0n;
   try { payout = BigInt(board?.total ?? 0); } catch (_e) { return false; }
   try { wager = BigInt(board?.totalWager ?? 0); } catch (_e) { return false; }
   if (wager <= 0n || payout <= 0n) return false;
-  const threshold = typeof multiple === 'bigint' && multiple > 0n ? multiple : 2n;
+  const threshold = typeof multiple === 'bigint' && multiple > 0n ? multiple : 5n;
   return payout >= wager * threshold;
 }
 

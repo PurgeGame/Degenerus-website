@@ -12,6 +12,16 @@ import { existsSync, readFileSync } from 'node:fs';
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const REPLAY_CSS = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
 const PROCESSING_CSS = readFileSync(new URL('../../styles/jackpot-processing.css', import.meta.url), 'utf8');
+const DRAWING_CSS = readFileSync(new URL('../../styles/daily-drawing.css', import.meta.url), 'utf8');
+const FOIL_ROUTING_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-foil-routing-v5.svg', import.meta.url), 'utf8');
+const BOARD_ROUTING_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-routing-v6.svg', import.meta.url), 'utf8');
+const SILKSCREEN_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-silkscreen-v3.svg', import.meta.url), 'utf8');
+const CANONICAL_FLAME_SVG = readFileSync(new URL('../../../whitepaper/flame-center.svg', import.meta.url), 'utf8');
+const CANONICAL_CHAINLINK_SVG = readFileSync(new URL('../../../symbols/crypto_05_chainlink_blue.svg', import.meta.url), 'utf8');
+const BOARD_CURRENT_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-current-v5.svg', import.meta.url), 'utf8');
+// The silkscreen bakes the deployed game address, so the legend is checked
+// against the profile the app is actually pointed at rather than a literal.
+const CHAIN_PROFILE_SRC = readFileSync(new URL('../../app/chain-config.sepolia.js', import.meta.url), 'utf8');
 const REPLAY_PANEL_SRC = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 const LAST_DAY_SRC = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
 const INDEX_SRC = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -169,6 +179,7 @@ function makeFakeElement(tag = 'div') {
       }
     },
     getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k) ? this.attributes[k] : null; },
+    hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k); },
     removeAttribute(k) { delete this.attributes[k]; },
   };
   return el;
@@ -293,6 +304,7 @@ import * as storeMod from '../../app/store.js';
 import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import { CHAIN } from '../../app/chain-config.js';
+import { traitToBadge } from '../../app/jackpot-data.js';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -322,42 +334,480 @@ test('only live scratch covers show the custom coin cursor', () => {
   );
 });
 
+test('the Daily Drawing is a responsive branded attraction rather than an empty full-width cabinet', () => {
+  assert.match(INDEX_SRC, /styles\/daily-drawing\.css/);
+  assert.match(
+    INDEX_SRC,
+    /jackpot-hero__draw-mark[^>]*flame-center-silver\.svg[^>]*width="38" height="54"/s,
+  );
+  assert.equal(
+    existsSync(new URL('../../../whitepaper/flame-center-silver.svg', import.meta.url)),
+    true,
+    'the marquee uses the real protocol flame instead of a second custom emblem',
+  );
+  assert.match(
+    DRAWING_CSS,
+    /--jp-board-size:\s*clamp\(15rem, 68cqi, 28rem\);[\s\S]*?width:\s*min\(100%, 48rem\);/,
+    'the board grows at stacked widths while the illustrated cabinet stops stretching',
+  );
+  assert.match(
+    DRAWING_CSS,
+    /jackpot-hero__draw-title\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*row;[^}]*width:\s*min\(35rem, 94%\)[^}]*height:\s*2\.72rem[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+    'the real mark and full attraction name share one unboxed centered line',
+  );
+  assert.match(DRAWING_CSS,
+    /jackpot-hero__draw-title::before,[\s\S]*?jackpot-hero__draw-title::after\s*\{[^}]*position:\s*static[^}]*clip-path:\s*none/s,
+    'the title uses fine PCB rails instead of another banner or plaque');
+  assert.match(DRAWING_CSS,
+    /jackpot-hero__draw-title > strong\s*\{[^}]*white-space:\s*nowrap/s,
+    'the attraction name cannot fall back into the old two-line lockup');
+});
+
 describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
   test('the jackpot uses one fancy Spin control without a duplicate processing bubble', () => {
     assert.match(REPLAY_PANEL_SRC, /const MAIN_SPIN_LABEL = 'SPIN JACKPOT'/);
     assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LABEL = 'BONUS SPIN'/);
+    assert.match(REPLAY_PANEL_SRC, /const COINFLIP_LABEL = 'FLIP COIN'/);
     assert.match(REPLAY_PANEL_SRC, /const SPIN_AGAIN_LABEL = 'SPIN AGAIN'/);
-    assert.match(REPLAY_PANEL_SRC, /btn\.textContent = stage\.label/);
+    assert.match(REPLAY_PANEL_SRC,
+      /btn\.textContent = crankLabel\s*\n\s*\? \(this\.#mineFlipBusy \? MINE_FLIP_MINING_LABEL : MINE_FLIP_CRANK_LABEL\)\s*\n\s*: stage\.label/,
+      'the processing key reports the stage unless the crank has taken the face');
     assert.match(REPLAY_PANEL_SRC, /setJackpotProcessingState\(signals = null\)/);
     assert.match(REPLAY_PANEL_SRC, /jackpotProcessingPresentationStep/);
     assert.doesNotMatch(REPLAY_PANEL_SRC, /textContent = '(?:Reveal Draw|Revealing\.\.\.|Bonus Roll|Replay)'/);
     assert.doesNotMatch(LAST_DAY_SRC, /SPIN AVAILABLE SOON/);
     assert.doesNotMatch(INDEX_SRC, /SPIN AVAILABLE SOON|jackpot-load-status/);
-    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(180deg, #721317 0%, #430709 52%, #260203 100%\)[^}]*letter-spacing:\s*0\.12em/s,
-      'the first/main Spin uses the protocol oxblood-and-gold control treatment');
+    assert.match(DRAWING_CSS,
+      /replay-controls\s*\{[^}]*height:\s*3\.24rem[^}]*padding:\s*0\.31rem[^}]*border:\s*1px solid #616864[^}]*outline:\s*1px solid rgba\(160, 119, 45, 0\.42\)[^}]*radial-gradient\(circle at 6px 6px/s,
+      'the control has a permanent opaque hardware bezel on the board');
+    assert.match(DRAWING_CSS,
+      /replay-controls > \.replay-reveal-btn,[\s\S]*?replay-controls > \.ldj-results-cta\s*\{[^}]*background-color:\s*#020303[^}]*clip-path:\s*none[^}]*ui-monospace[^}]*opacity:\s*1/s,
+      'Spin and Day Summary use the same fully opaque LCD face');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn:not\(:disabled\),[\s\S]*?replay-controls > \.ldj-results-cta\s*\{[^}]*rgba\(var\(--lcd-rgb\), 0\.11\)[^}]*color:\s*rgb\(var\(--lcd-rgb\)\)/s,
+      'the LCD lights only for actionable or informational states');
+    assert.match(REPLAY_PANEL_SRC,
+      /setCoinflipHandoff\([\s\S]*?#coinflipHandoffReady\([\s\S]*?startCoinflipFromJackpot/s,
+      'the same LCD advances from both jackpot rolls into the Community Coinflip');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn\.is-coinflip\s*\{[^}]*--lcd-rgb:\s*103, 232, 249/s,
+      'the coinflip handoff has a distinct live digital-display state');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn:disabled:not\(\.is-processing\):not\(\.is-spinning\)\s*\{[^}]*linear-gradient\(180deg, #080a09 0%, #020303 100%\)[^}]*background-color:\s*#020303[^}]*color:\s*#565c59[^}]*text-shadow:\s*none/s,
+      'a disabled LCD stays neutral-black instead of inheriting a bonus or action hue');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn:not\(:disabled\):not\(\.is-processing\):not\(\.is-spinning\),[\s\S]*?ldj-results-cta\s*\{[^}]*animation:\s*jackpot-key-attract/s,
+      'a key waiting for the player runs the attract loop; processing and spinning keep steady panes');
+    assert.match(DRAWING_CSS,
+      /@keyframes jackpot-key-attract\s*\{[\s\S]*?rgba\(var\(--lcd-hot\), 0\.62\)/,
+      'the attract peak breathes toward the hot counter-tone, not just brighter green');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn\.is-bonus\s*\{[^}]*--lcd-hot:\s*244, 114, 182/s,
+      'the amber bonus key counter-breathes in pink instead of gold-on-gold');
+    assert.match(DRAWING_CSS,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?jackpot-key-attract[\s\S]*?\}|@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?ldj-results-cta::after\s*\{\s*animation:\s*none/s,
+      'reduced motion parks the attract loop and its sheen');
+    assert.match(REPLAY_PANEL_SRC, /'Bonus round ready'/);
+    assert.match(REPLAY_PANEL_SRC, /panel' \+ \(remaining !== 1 \? 's' : ''\) \+ ' remaining'/);
     assert.match(APP_CSS, /\.replay-reveal-btn\.is-processing\s*\{[^}]*cursor:\s*wait[^}]*opacity:\s*1/s);
-    assert.match(PROCESSING_CSS, /crypto_05_chainlink_blue\.svg/,
-      'the two RNG beats carry a small Chainlink mark');
+    assert.match(
+      APP_CSS,
+      /\.replay-reveal-btn\.is-bonus:disabled:not\(\.is-processing\):not\(\.is-spinning\)\s*\{[^}]*padding:\s*0\.55rem 0\.5rem;[^}]*font-size:\s*clamp\(0\.6rem, 2\.3vw, 0\.68rem\);[^}]*letter-spacing:\s*0\.045em/s,
+      'the long scratch-to-unlock label stays inside the compact action slot',
+    );
+    // The key reports the VRF wait with the word alone. The two modules bolted
+    // either side of it own the progress, so the key carries neither a second
+    // Chainlink mark nor a bar duplicating what they already say.
+    assert.doesNotMatch(PROCESSING_CSS, /crypto_05_chainlink_blue\.svg/,
+      'the RNG key prints no Chainlink mark of its own; the flanking modules are the mark');
+    assert.match(PROCESSING_CSS,
+      /is-processing:is\(\[data-jp-stage="rng"\], \[data-jp-stage="rng-arrived"\]\)::before\s*\{\s*content:\s*none/s,
+      'and it carries no stage icon at all through the two RNG beats');
+    assert.match(PROCESSING_CSS,
+      /is-processing\[data-jp-stage="coinflip"\]::before\s*\{\s*content:\s*none/s,
+      'coinflip processing prints no redundant mini ETH badge beside its label');
+    assert.doesNotMatch(PROCESSING_CSS, /coinflip-face-eth\.svg/,
+      'the processing key no longer loads the ETH face as a stage ornament');
+    assert.match(PROCESSING_CSS,
+      /\.replay-reveal-btn\.is-processing::after\s*\{\s*content:\s*none/s,
+      'the segmented progress bar is gone from the processing key entirely');
+    assert.equal((REPLAY_PANEL_SRC.match(/class="jackpot-chainlink jackpot-chainlink--/g) || []).length, 2,
+      'paired Chainlink instruments flank the shared LCD');
+    assert.equal((REPLAY_PANEL_SRC.match(/jackpot-chainlink__cell jackpot-chainlink__cell--/g) || []).length, 12,
+      'each Chainlink instrument has six independently addressable LCD sides');
+    assert.doesNotMatch(REPLAY_PANEL_SRC, /jackpot-chainlink__core/,
+      'both six-cell instruments stay hollow instead of carrying a center logo');
+    assert.doesNotMatch(DRAWING_CSS, /jackpot-chainlink__core/,
+      'the removed center logo leaves no hidden core styling behind');
+    // Brand recognition outranks LED texture on this instrument. The silhouette
+    // is masked from the SAME artwork the board prints when Chainlink is the
+    // drawn crypto trait, so it is the real mark rather than six bars arranged
+    // into something hexagon-shaped.
+    assert.match(CANONICAL_CHAINLINK_SVG, /m18\.9 0-4 2\.3L4 8\.6/,
+      'the canonical Chainlink artwork still carries the hexagon-ring path this instrument masks');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink::before\s*\{[^}]*mask:\s*url\('\/symbols\/crypto_05_chainlink_blue\.svg'\) center \/ contain no-repeat/s,
+      'the standby instrument is the canonical Chainlink mark, unbroken');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink__cell\s*\{[^}]*mask:\s*url\('\/symbols\/crypto_05_chainlink_blue\.svg'\) center \/ contain no-repeat/s,
+      'every addressable cell is a band of that same mark, so lighting one cannot break the logo');
+    assert.doesNotMatch(DRAWING_CSS, /clip-path:\s*polygon\(7% 0/,
+      'the six beveled LED segments that only approximated a hexagon are gone');
+    assert.doesNotMatch(DRAWING_CSS, /--jp-chainlink-radius/,
+      'nothing still lays the cells out on a ring radius');
+    // The wait is reported as a chain assembling, one link per side of the
+    // hexagon ring. Height bands were the earlier attempt: a band lights the
+    // part of the ring the fill is darkest in, so two lit read as six lit.
+    //
+    // The sector is a MASK LAYER, never a clip-path, and that is load-bearing.
+    // A clip-path is a path in the element's own box while the artwork is a
+    // rasterised mask image, and Chrome snaps the mask raster to whole pixels
+    // while it does not snap the path. This module hangs off a fluid,
+    // container-query-sized row, so its box lands on a FRACTIONAL x, and the
+    // two drifted apart by however much that fraction was: measured across a
+    // range of sub-pixel offsets the clip-path seam wandered from 1.50% of the
+    // box short of the vertex to 0.30% PAST it, about 0.58px of swing, and past
+    // the vertex is the direction that reads broken. No constant angle can
+    // correct an error that changes with the layout. Composited into the mask,
+    // the sector and the artwork snap together and the seam does not move.
+    assert.doesNotMatch(DRAWING_CSS, /jackpot-chainlink__cell[^{]*\{[^}]*clip-path:/s,
+      'the wedge is composited into the mask, never clipped: a clip-path does not snap '
+      + 'with the mask raster, so its seam drifts off the corner by up to half a pixel');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink__cell\s*\{[^}]*mask-composite:\s*intersect/s,
+      'the artwork layer and the sector layer INTERSECT, so a lit link is one side of the mark');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink__cell\s*\{[^}]*-webkit-mask-composite:\s*source-in/s,
+      'with the WebKit spelling carried alongside it');
+    assert.equal((DRAWING_CSS.match(/jackpot-chainlink__cell--\d \{\n\s*--jp-link-a-angle:/g) || []).length, 6,
+      'all six links are sectors of the mark, one per side of the ring');
+    // The sector is TWO HALF-PLANES, never one conic sector, and that is what
+    // keeps the seams straight. A conic sector's edges both pass through its
+    // centre, so biasing an edge can only ROTATE it — and a rotated seam is no
+    // longer parallel to the corner miter it runs along. On the two vertical
+    // seams that showed: a 250px edge leaning 0.75 degrees drifts ~0.7px
+    // sideways, crosses a pixel boundary partway down, and rasterises with a
+    // notch in it. A half-plane boundary moves PARALLEL to itself, so the bias
+    // is an offset and every cut stays exactly on its meridian.
+    assert.doesNotMatch(DRAWING_CSS, /jackpot-chainlink__cell\s*\{[^}]*conic-gradient/s,
+      'a conic sector cannot be biased without rotating its edges off the miter, '
+      + 'which is what put a stair-step in the vertical seams');
+    assert.equal((DRAWING_CSS.match(/linear-gradient\(\s*var\(--jp-link-[ab]-angle\)/g) || []).length, 4,
+      'both mask shorthands carry both half-planes');
+    //
+    // Overlap between them is DIRECTIONAL. Overlap goes only into the neighbour
+    // that is already lit when a link fires, where it is lit-on-lit and can
+    // never print; every EXPOSED edge is pulled SHORT instead. At 28-38px a
+    // corner is two or three device pixels, so an edge exactly on the miter
+    // still antialiases into the first pixel of the dark face. Undershoot
+    // surrenders a sliver back to the dim standby ring and still reads as a
+    // corner; overshoot reads as broken.
+    //
+    // Checked as geometry, not as a string: each edge is given as a gradient
+    // angle plus the stop where that gradient turns off, which is a straight
+    // boundary at a chosen angle AND distance. Recover both back out.
+    const CHAINLINK_CX = 49.82;
+    const CHAINLINK_CY = 49.64;
+    const CHAINLINK_OVERLAP = 2.0;   // % of the box, pushed OUTWARD onto lit material
+    const CHAINLINK_BIAS = 0.45;     // % of the box, pulled INWARD on an exposed edge
+    const vertexOf = (a) => (((Math.round((a - 30) / 60) * 60 + 30) % 360) + 360) % 360;
+    const signedDeg = (d) => {
+      const v = (((d % 360) + 360) % 360);
+      return v > 180 ? v - 360 : v;
+    };
+    /**
+     * A CSS gradient angle A has direction d = (sin A, -cos A) and its line is
+     * centred on the BOX, whose length for a square box is 100(|sin|+|cos|).
+     * Undo that to get the boundary's angle and its perpendicular offset from
+     * the MARK's centre. `kind` picks which side of the line the sector is on.
+     */
+    const readEdge = (angleDeg, stopPct, kind) => {
+      const ar = (angleDeg * Math.PI) / 180;
+      const d = [Math.sin(ar), -Math.cos(ar)];
+      const L = 100 * (Math.abs(Math.sin(ar)) + Math.abs(Math.cos(ar)));
+      const s = (L * (stopPct - 50)) / 100;
+      const alongD = s - ((CHAINLINK_CX - 50) * d[0] + (CHAINLINK_CY - 50) * d[1]);
+      const n = [-d[0], -d[1]];           // inward normal: into the kept sector
+      const phi = kind === 'start'
+        ? Math.atan2(-n[0], n[1])
+        : Math.atan2(n[0], -n[1]);
+      return {
+        phi: ((((phi * 180) / Math.PI) % 360) + 360) % 360,
+        offset: -alongD,                  // + is inward (short), - is outward (overlap)
+      };
+    };
+    const wedges = [...DRAWING_CSS.matchAll(
+      /jackpot-chainlink__cell--(\d) \{\n\s*--jp-link-a-angle: (-?[\d.]+)deg;\n\s*--jp-link-a-stop: (-?[\d.]+)%;\n\s*--jp-link-b-angle: (-?[\d.]+)deg;\n\s*--jp-link-b-stop: (-?[\d.]+)%;\n\}/g,
+    )];
+    assert.equal(wedges.length, 6, 'each of the six links is two half-planes: an angle and a stop each');
+    const links = [];
+    for (const [, index, aAngle, aStop, bAngle, bStop] of wedges) {
+      const link = Number(index);
+      const a = readEdge(Number(aAngle), Number(aStop), 'start');
+      const b = readEdge(Number(bAngle), Number(bStop), 'end');
+      const startVertex = vertexOf(a.phi);
+      const endVertex = vertexOf(b.phi);
+      // THE anti-jag invariant: a cut must lie EXACTLY on its vertex meridian,
+      // because that meridian is the corner's own miter (the ring's inner and
+      // outer vertices share a radial). Any rotation off it both tilts the seam
+      // away from the miter and makes a near-vertical edge step.
+      assert.ok(Math.abs(signedDeg(a.phi - startVertex)) < 0.02,
+        `link ${link} trailing cut sits at ${a.phi.toFixed(3)} degrees, off its ${startVertex} meridian: `
+        + 'a cut that is not parallel to the corner miter rasterises with a step in it');
+      assert.ok(Math.abs(signedDeg(b.phi - endVertex)) < 0.02,
+        `link ${link} leading cut sits at ${b.phi.toFixed(3)} degrees, off its ${endVertex} meridian: `
+        + 'a cut that is not parallel to the corner miter rasterises with a step in it');
+      // Link 1 fires with BOTH neighbours dark, so both its edges are exposed.
+      // Link 6 closes the ring against two lit neighbours and is the only link
+      // that overruns at both ends.
+      const wantA = link === 1 ? CHAINLINK_BIAS : -CHAINLINK_OVERLAP;
+      const wantB = link === 6 ? -CHAINLINK_OVERLAP : CHAINLINK_BIAS;
+      assert.ok(Math.abs(a.offset - wantA) < 0.01,
+        `link ${link} trailing edge is offset ${a.offset.toFixed(3)}% of the box, expected ${wantA}`);
+      assert.ok(Math.abs(b.offset - wantB) < 0.01,
+        `link ${link} leading edge is offset ${b.offset.toFixed(3)}% of the box, expected ${wantB}: `
+        + 'the frontier of a part-filled ring stops just inside the corner, never overhanging it');
+      links.push({ link, startVertex, endVertex });
+    }
+    // Outward has to beat inward or the closed ring keeps a dim seam where two
+    // links meet: the overlap must swallow the bias its neighbour gave up.
+    assert.ok(CHAINLINK_OVERLAP > CHAINLINK_BIAS,
+      'the overlap must exceed the bias, or the closed ring shows a dim hairline at every joint');
+    links.sort((a, b) => a.link - b.link);
+    // Fill order IS ring order, and the ring is read as a CLOCK: link 1 is the
+    // side leaving 12 o'clock and every later link is the next one clockwise.
+    // The delays below run 1..5 in cell order, so the sectors have to sweep the
+    // ring that way or the lit region arrives in two pieces with dark between.
+    assert.equal(links[0].startVertex, 270,
+      'the chain starts at the TOP vertex — 12 o\'clock — not at the bottom');
+    assert.deepEqual(links.map((l) => l.startVertex), [270, 330, 30, 90, 150, 210],
+      'the links sweep the ring clockwise in fill order, the way a hand sweeps a clock face');
+    for (let i = 0; i < links.length; i += 1) {
+      const next = links[(i + 1) % links.length];
+      assert.equal(links[i].endVertex, next.startVertex,
+        `link ${links[i].link} ends exactly where link ${next.link} begins, so the lit region is always ONE arc`);
+    }
+    assert.deepEqual([...links.map((l) => l.startVertex)].sort((a, b) => a - b), [30, 90, 150, 210, 270, 330],
+      'the six sectors tile the whole ring with no side owned twice and none left dark');
+    assert.equal(links[5].endVertex, links[0].startVertex,
+      'and the last link closes back onto 12 o\'clock, where the first one started');
+    assert.doesNotMatch(DRAWING_CSS, /clip-path: polygon\(49\.82% 49\.64%,/,
+      'the polygon wedges are gone: a path that does not snap with the mask is what '
+      + 'walked the frontier off its corner in the first place');
+    // The two seams on the vertical meridian are the ones a stair-step shows up
+    // on, and 90/270 are the only gradient angles whose iso-lines are exactly
+    // vertical. Pinned literally so the straightness cannot be refactored away.
+    assert.match(DRAWING_CSS,
+      /jackpot-chainlink__cell--3 \{\n\s*--jp-link-a-angle: 30deg;\n\s*--jp-link-a-stop: [\d.]+%;\n\s*--jp-link-b-angle: 270deg;/,
+      'the 6 o\'clock seam is cut by an exactly vertical gradient');
+    assert.match(DRAWING_CSS,
+      /jackpot-chainlink__cell--1 \{\n\s*--jp-link-a-angle: 270deg;/,
+      'and so is the 12 o\'clock seam the chain starts from');
+    // Chrome does not antialias a gradient hard stop here, so the diagonals came
+    // out as a bare staircase. Measured at 10x: 0.15px smears the cut into a
+    // three-pixel ramp and stops reading as an edge; 0.06px resolves the
+    // staircase and leaves the vertical seams a single crisp transition pixel.
+    const feather = DRAWING_CSS.match(/--jp-link-feather:\s*([\d.]+)px/);
+    assert.ok(feather, 'the seams carry a feather');
+    assert.ok(Number(feather[1]) > 0 && Number(feather[1]) <= 0.08,
+      `the feather is ${feather[1]}px: big enough to resolve the diagonal staircase, `
+      + 'small enough that the cut still reads as an edge rather than a blur');
+    assert.match(DRAWING_CSS,
+      /#000 calc\(var\(--jp-link-a-stop\) - var\(--jp-link-feather\)\),\s*\n\s*transparent calc\(var\(--jp-link-a-stop\) \+ var\(--jp-link-feather\)\)/,
+      'and it is symmetric about the stop, so the 50% crossing stays exactly on the '
+      + 'biased line and a softened edge cannot creep past its corner');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink\s*\{[^}]*background:\s*linear-gradient\(180deg, #16191d 0%, #090b0e 100%\)/s,
+      'the VRF module has an opaque body, so the routing that terminates under it cannot show through the mark');
+    // The delay has to travel INSIDE the shorthand. A shared
+    // `.jackpot-chainlink__cell:not(--6)` rule that set `animation` and then
+    // handed each link its delay separately outspecified the per-link rules,
+    // so every delay lost to the shorthand's implicit 0s and all five links
+    // lit at once. That defeated the whole instrument.
+    // Delay order must be cell order, because the geometry above pins cell
+    // order to ring order. Break either one and the fill stops being one arc.
+    for (const [link, delay] of [[1, '0s'], [2, '4s'], [3, '8s'], [4, '12s'], [5, '16s']]) {
+      assert.match(DRAWING_CSS,
+        new RegExp(`data-jp-stage='rng'[\\s\\S]*?jackpot-chainlink__cell--${link} \\{ animation: `
+          + `jackpot-chainlink-cell-charge 240ms ease-out ${delay} both`),
+        `link ${link} lights ${delay} into the wait, so step N is step N-1 plus the next side along`);
+    }
+    assert.doesNotMatch(DRAWING_CSS,
+      /jackpot-chainlink__cell:not\(\.jackpot-chainlink__cell--6\)\s*\{\s*animation:/s,
+      'no shared shorthand can reset those delays to zero again');
+    assert.equal((DRAWING_CSS.match(/animation: jackpot-chainlink-cell-charge/g) || []).length, 5,
+      'exactly five links are on the elapsed-time clock; the sixth never is');
+    assert.match(DRAWING_CSS,
+      /is-processing:not\(\[data-jp-stage='rng'\]\)[\s\S]*?jackpot-chainlink__cell\s*\{[^}]*#4d75df/s,
+      'the sixth link closes the ring in blue after RNG has actually arrived');
+    assert.match(DRAWING_CSS,
+      /data-jp-stage='rng-arrived'\]\s*\)\s*\.jackpot-chainlink\s*\{[^}]*animation:\s*jackpot-chainlink-closed/s,
+      'closing the ring is the arrival beat, now that the key has no icon to pop');
+    assert.doesNotMatch(DRAWING_CSS,
+      /\.jackpot-chainlink__cell\s*\{[^}]*#c5d6ff/s,
+      'the lit instrument stays below the SPIN key: no near-white cell fill');
+    // Lit and dim are each ONE value. The mark's own modelling used to be a
+    // top-to-bottom ramp on the standby layer, which left the upper sides of
+    // the resting mark about four times brighter than the lower ones — more
+    // spread than lit-vs-dim itself carried. A lit link on a lower side then
+    // read dimmer than an unlit link on an upper one and a part-filled ring
+    // looked broken rather than part-filled.
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink__cell\s*\{[^}]*background:\s*#6f9bf2;/s,
+      'a lit link is one flat LED blue, so any two lit links read identically wherever they sit on the ring');
+    assert.match(DRAWING_CSS,
+      /\.jackpot-chainlink::before\s*\{[^}]*background:\s*#213669;/s,
+      'and the unlit remainder is one flat dim blue, so no unlit side can outshine a lit one');
+    assert.doesNotMatch(DRAWING_CSS, /#3a5aa6|#16255a/,
+      'the standby ramp that shaded the resting mark top-bright is gone');
+    assert.match(BOARD_CURRENT_SVG, /current-flow 2\.2s linear infinite/,
+      'live current travels over the functional board net, at a walking pace');
+    // 62px of dash in 2.2s is 28 px/s. The foil bank runs 30px in 1.05s = 28.5.
+    // The two halves of the flow system are calibrated together on purpose: a
+    // bank that chased faster than the board would pull the eye off the board.
+    assert.match(DRAWING_CSS, /animation: ldj-foil-lane-flow 1\.05s linear infinite/,
+      'the bank lanes travel at the board sheet\'s own rate');
+    assert.doesNotMatch(BOARD_CURRENT_SVG, /stroke-opacity="0\.72"/,
+      'and the chase itself is dimmer than the v4 it replaces');
+    // The animated sheet is a second copy of the static net, so every lit route
+    // must exist verbatim in the copper. Without this the two drift apart on
+    // the next art pass and current starts flowing down decorative dead ends.
+    // Matched on the `d` alone: a route with a stroke-width override is still a
+    // route and still has to exist in the copper.
+    const currentRoutes = [...BOARD_CURRENT_SVG.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(currentRoutes.length >= 10, 'the current sheet lights the interlock and data lanes');
+    for (const route of currentRoutes) {
+      assert.ok(BOARD_ROUTING_SVG.includes(`d="${route}"`),
+        `animated route ${route} is drawn on the copper layer`);
+    }
+    // THE MODULES ARE THE SOURCE. Every lane travels away from a VRF module:
+    // the two display interlocks used to run backwards into one on a reversed
+    // dash, which read as the modules being a sink for the board's work rather
+    // than the thing powering it.
+    assert.doesNotMatch(BOARD_CURRENT_SVG, /current--return|animation-direction:\s*reverse/,
+      'nothing on the animated sheet flows back toward a module');
+    assert.match(BOARD_CURRENT_SVG,
+      /<radialGradient id="fromVrfL" gradientUnits="userSpaceOnUse" cx="250" cy="1132"/,
+      'the left half is coloured from a ramp pinned to the left module itself');
+    assert.match(BOARD_CURRENT_SVG,
+      /<radialGradient id="fromVrfR" gradientUnits="userSpaceOnUse" cx="1030" cy="1132"/,
+      'and the right half from one pinned to the right module');
+    assert.equal((BOARD_CURRENT_SVG.match(/stroke="url\(#fromVrf[LR]\)"/g) || []).length, 2,
+      'both halves are stroked from their own module, so current cools as it leaves one');
+    // The VRF pair is the ONE pair of parts whose measured desktop and phone
+    // boxes do not overlap, so no lane start can sit under the module in both.
+    // Each now leaves from a plated via at the union edge, which is a legal
+    // terminus in its own right, instead of ending in bare mask on a phone.
+    assert.match(BOARD_ROUTING_SVG, /d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/,
+      'the left interlock leaves from the module edge rather than mid-module');
+    assert.match(BOARD_ROUTING_SVG, /d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/,
+      'and the right interlock mirrors it');
+    for (const route of [
+      'M360 1006H608L626 988H640',
+      'M920 1006H672L654 988H640',
+      'M640 988V915',
+    ]) {
+      assert.ok(BOARD_ROUTING_SVG.includes(`d="${route}"`),
+        `the Chainlink center bridge owns copper route ${route}`);
+      assert.ok(BOARD_CURRENT_SVG.includes(`d="${route}"`),
+        `live current stays on the center bridge route ${route}`);
+    }
+    assert.ok(BOARD_ROUTING_SVG.includes('<use href="#via" x="640" y="988"/>'),
+      'both Chainlink sides meet at one plated midpoint before entering the processor');
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /d="M(?:250|1030) 1100V1028/,
+      'the old interlock start that floated free of the phone module is gone');
+    for (const via of ['x="210" y="1116"', 'x="1070" y="1116"', 'x="286" y="1116"',
+      'x="994" y="1116"', 'x="286" y="1158"', 'x="994" y="1158"']) {
+      assert.ok(BOARD_ROUTING_SVG.includes(`<use href="#via" ${via}/>`),
+        `the module-side lane end at ${via} terminates in a plated via`);
+    }
+    // The drawing is the one moment the board is under load, and the load is
+    // the randomness those modules just delivered.
+    assert.match(DRAWING_CSS,
+      /:has\(replay-panel \.replay-reveal-btn\.is-spinning\)::before\s*\{[^}]*animation:\s*jackpot-board-current-drive/s,
+      'the current only comes up to full while the drawing is actually running');
+    // The modules used to BLOOM here: a 30px halo on the plate and a 5px
+    // drop-shadow pulsing on a 1.05s clock. Mid-draw that made the supply the
+    // brightest thing on the board, competing with the reels and the SPIN key
+    // for the eye. It is a slight pulse now — the mark breathes on a slow
+    // clock, the plate around it stays dark. The current leaving the modules is
+    // untouched; only the module's own glow was tamed.
+    assert.doesNotMatch(DRAWING_CSS,
+      /replay-reveal-btn\.is-spinning\s*\)\s*\.jackpot-chainlink\s*\{[^}]*0 0 30px rgba\(70, 120, 226/s,
+      'the drawing-state modules no longer bloom a halo onto the plate');
+    assert.match(DRAWING_CSS,
+      /replay-reveal-btn\.is-spinning\s*\)\s*\.jackpot-chainlink\s*\{[^}]*animation:\s*jackpot-chainlink-source 2\.4s/s,
+      'they breathe on a slow clock instead');
+    // Scoped to the keyframes block itself: one level of nesting, so a stray
+    // `[^@]*` cannot wander into the rules that follow it.
+    const sourceKeyframes = DRAWING_CSS.match(
+      /@keyframes jackpot-chainlink-source \{(?:[^{}]|\{[^{}]*\})*\}/s,
+    );
+    assert.ok(sourceKeyframes, 'the drawing-state breath still has its keyframes');
+    assert.doesNotMatch(sourceKeyframes[0], /box-shadow:/,
+      'and the breath never animates a box-shadow: that is what put light on the plate');
+    assert.match(sourceKeyframes[0], /brightness\(1\.1\)/,
+      'the pulse is a tenth of brightness on the mark, not a beacon');
+    assert.match(DRAWING_CSS,
+      /> \.replay-reveal-btn\.is-spinning\s*\)\s*\.jackpot-chainlink__cell,/s,
+      'a running drawing holds the ring closed rather than dropping the modules dark');
+    assert.match(BOARD_ROUTING_SVG, /Paired Chainlink display-interlock lanes/);
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /M42 1050|M1238 1050|M74 1116|M1206 1116/,
+      'the former lower perimeter traces no longer terminate at nowhere');
+    // Endpoints authored against the desktop box alone floated free of their
+    // part on a phone, where the processor, sockets and VRF modules all sit at
+    // different measured coordinates. Every start now lands inside the
+    // INTERSECTION of both measured boxes.
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /d="M(?:414|506|774|866) 930/,
+      'the LCD data lanes no longer start below the phone processor edge');
+    assert.equal((BOARD_ROUTING_SVG.match(/d="M(?:414|506|774|866) 915V/g) || []).length, 6,
+      'all four data lanes start under the processor in both layouts, halo copies included');
+    // The lower-socket ground bonds are GONE (v6). They ran the full left and
+    // right gutters from under the socket to a plated via on the perimeter rail
+    // at x=84 / x=1196 — the two longest exposed traces on the sheet, ending on
+    // a dot beside the frame. Landing on the rail was the v4/v5 defence and it
+    // was never a defence: a rail is an edge, not a part, so a player reads the
+    // trace as going nowhere no matter what is drawn at the end of it.
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /d="M(?:160|1120) (?:780|866)/,
+      'the lower-socket ground bonds are gone, not re-terminated');
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /<use href="#via" x="(?:84|1196|134|1146)" y="1116"/,
+      'and so are the four vias whose only job was to end them');
+    // What is left in that group connects socket J1 to socket J2 down the
+    // gutter: two parts, both of which the player can point at.
+    assert.match(BOARD_ROUTING_SVG, /d="M126 400V486L110 502V612L126 628V740"/,
+      'the surviving gutter lane still links the two foil sockets to each other');
+    // Nothing on the copper may terminate on the rail any more. The rail is
+    // still drawn — it is a closed loop from a processor via back to a
+    // processor via and reads as the board's edge — but no lane ends on it.
+    const railX = ['84', '1196'];
+    const boardRoutes = [...BOARD_ROUTING_SVG.matchAll(/<path d="([^"]+)"\/>/g)].map((m) => m[1]);
+    for (const route of boardRoutes) {
+      if (route.startsWith('M240 128H130')) continue;  // the perimeter rail itself
+      const endsOnRail = railX.some((x) => route.endsWith(`H${x}`) || route.endsWith(`V${x}`));
+      assert.equal(endsOnRail, false, `${route} must not dead-end on the perimeter rail`);
+    }
+    assert.doesNotMatch(BOARD_ROUTING_SVG, /d="M(?:148|1132) 278H/,
+      'the socket buses no longer leave above the phone socket lip');
     assert.match(
       PROCESSING_CSS,
       /data-jp-stage="rng"[\s\S]*?rgba\(20, 22, 26, 0\.98\)[\s\S]*?rgba\(34, 34, 40, 0\.97\)/,
       'the Chainlink mark sits on a graphite field instead of a blue block',
     );
-    assert.match(PROCESSING_CSS, /height:\s*4px[\s\S]*?14\.285714%/,
-      'the seven-step pipeline uses readable compact cells rather than a hairline');
-    assert.match(PROCESSING_CSS, /14\.285714%/,
-      'the compact control visualizes all seven confirmed phases without a second copy row');
+    assert.doesNotMatch(PROCESSING_CSS, /14\.285714%/,
+      'the seven-cell bar inside the key is gone');
+    assert.doesNotMatch(PROCESSING_CSS, /--jp-rng-progress|jackpot-rng-progress/,
+      'and so is the elapsed-time bar that duplicated the modules\' own chase');
     assert.match(
       PROCESSING_CSS,
-      /data-jp-stage="rng"\][^}]*::after\s*\{[^}]*jackpot-rng-progress 20s steps\(3, end\) forwards/s,
-      'RNG INCOMING advances the same five-light confirmation instrument used below',
+      /--jp-display-rgb:\s*112, 240, 158[\s\S]*?repeating-linear-gradient\(0deg, rgba\(var\(--jp-display-rgb\), 0\.025\)/,
+      'processing keeps the live progress data inside the same scan-line display chassis',
     );
-    assert.match(PROCESSING_CSS, /to\s*\{\s*--jp-rng-progress:\s*0\.8;/,
-      'elapsed time can light only four of five RNG bars');
+    // The pipeline fill survives as the display's own backlight sweep, which is
+    // a wash behind the word rather than a second instrument competing with it.
     assert.match(
       PROCESSING_CSS,
-      /data-jp-stage="rng-arrived"\][^}]*::after\s*\{[^}]*--jp-rng-progress:\s*1;/s,
-      'only the actual RNG-arrived state lights the final bar',
+      /rgba\(var\(--jp-display-rgb\), 0\.13\) 0 calc\(var\(--jp-progress, 0\) \* 100%\)/,
+      'the confirmed-milestone count still lights the LCD face itself',
     );
     assert.match(INDEX_SRC, /jackpot-processing\.css/,
       'the state visualization is loaded after the app surface it augments');
@@ -388,6 +838,28 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       assert.equal(button.disabled, true, 'the running action remains inert');
       assert.equal(button.getAttribute('aria-busy'), 'true');
     }
+  });
+
+  test('a reloaded DAY SUMMARY owns the LCD before a loading repaint can claim it', async () => {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    const panel = new Ctor();
+    panel.innerHTML = `
+      <div class="replay-controls">
+        <button data-bind="reveal-btn"></button>
+        <button class="ldj-results-cta">DAY SUMMARY</button>
+      </div>`;
+    const reveal = panel.querySelector('[data-bind="reveal-btn"]');
+    const summary = panel.querySelector('.ldj-results-cta');
+    summary.hidden = false;
+
+    panel.attributeChangedCallback('data-day-loading', null, '45');
+
+    assert.equal(reveal.hidden, true, 'the loading control cannot coexist with Day Summary');
+    assert.equal(reveal.classList.contains('is-processing'), false);
+    assert.match(DRAWING_CSS,
+      /replay-controls > \.replay-reveal-btn\[hidden\],[\s\S]*?replay-controls > \.ldj-results-cta\[hidden\]\s*\{[^}]*display:\s*none !important/s,
+      'author display rules cannot override the single-control hidden state');
   });
 
   test('the loading attract reel keeps ownership-aware pink and blue faces', () => {
@@ -593,18 +1065,18 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_CSS,
-      /\.replay-tq\.q-result-revealed \.replay-badge-wrap\[tabindex="0"\]\.is-reward-pop\s*\{[^}]*z-index:\s*calc\(15 \+ var\(--replay-reward-stack, 1\)\)/s,
-      'the activation-order stack wins the normal revealed-badge layer specificity',
+      /\.replay-tq\.q-result-revealed \.replay-badge-wrap\.is-reward-pop\s*\{[^}]*z-index:\s*calc\(15 \+ var\(--replay-reward-stack, 1\)\)/s,
+      'the hit-time callout clears the remaining scratch canvas before tabindex promotion',
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /--replay-quadrant-reward-stack[\s\S]*q-reward-pop-active[\s\S]*!quad\.querySelector\('\.replay-badge-wrap\.is-reward-pop'\)/,
-      'the owning quadrant stays elevated until its final active reward has cleared',
+      /const quadrantStack = Math\.max\(1, stack - 2\)[\s\S]*--replay-quadrant-reward-stack[\s\S]*q-reward-pop-active[\s\S]*!quad\.querySelector\('\.replay-badge-wrap\.is-reward-pop'\)/,
+      'the owning quadrant stays elevated, but capped below the center seal, until its final reward clears',
     );
     assert.match(
       REPLAY_CSS,
-      /\.replay-tq\.q-reward-pop-active\s*\{[^}]*z-index:\s*calc\(30 \+ var\(--replay-quadrant-reward-stack, 1\)\);[^}]*overflow:\s*visible/s,
-      'an active reward promotes its quadrant above neighboring scratch canvases without clipping',
+      /\.replay-tq\.q-reward-pop-active\s*\{[^}]*z-index:\s*var\(--replay-quadrant-reward-stack, 1\);[^}]*overflow:\s*visible/s,
+      'an active reward clears neighboring scratch canvases without raising green quadrant paper above the z20 center seal',
     );
     assert.match(
       REPLAY_CSS,
@@ -620,8 +1092,13 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /#revealQuadrant[\s\S]*if \(!instant && !silent\)\s*\{\s*for \(const badge of badges\) this\.#activateBadgeReward\(badge\);/,
-      'finishing a live quadrant activates every untouched winner callout in that quadrant',
+      /this\.#badgesRevealed\[qIdx\]\.push\(ci\);[\s\S]{0,700}this\.#sfxGreenReveal\(\);\s*this\.#activateBadgeReward\(badgeWraps\[ci\]\);/,
+      'the amount popup activates in the same badge-hit turn as its reveal sound',
+    );
+    assert.doesNotMatch(
+      REPLAY_PANEL_SRC,
+      /for \(const badge of badges\) this\.#activateBadgeReward\(badge\)/,
+      'finishing the whole quadrant no longer bulk-pops badge amounts',
     );
     assert.match(
       REPLAY_PANEL_SRC,
@@ -1059,7 +1536,10 @@ describe('Plan 59-03: localStorage spin-idempotency', () => {
 
     // Spin end alone must NOT open the gate — prizes are still under the
     // scratch cover (user-reported bug: banner spoiled the win pre-scratch).
-    globalThis.document.dispatchEvent({ type: 'replay:spin-complete' });
+    globalThis.document.dispatchEvent({
+      type: 'replay:spin-complete',
+      detail: { day: 5, bonusPhase: false },
+    });
     await flushMicrotasks();
     assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), null,
       'spun_day key NOT written at spin end');
@@ -1494,10 +1974,89 @@ describe('foil match pending action', () => {
     assert.equal(el.querySelectorAll('.ldj-foil-machine-slot').length, 4,
       'one subdued machine module is reserved for each foil ticket');
     assert.equal(
-      existsSync(new URL('../../assets/jackpot/daily-drawing-backplate-v4.webp', import.meta.url)),
+      existsSync(new URL('../../assets/jackpot/daily-drawing-backplate-v9.webp', import.meta.url)),
       true,
       'the compact drawing backplate ships with the app',
     );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-bank\s*\{[^}]*daily-drawing-foil-routing-v5\.svg[^}]*100% 100% no-repeat/s,
+      'the circuit map scales from the same measured grid as the live foil sockets',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /daily-drawing-board-routing-v6\.svg[^}]*daily-drawing-backplate-v9\.webp/s,
+      'a second connected routing layer sits over the substrate and beneath all hardware',
+    );
+    assert.match(BOARD_ROUTING_SVG,
+      /Four independent data lanes from the draw processor into the LCD/,
+      'the new complexity has a functional processor-to-display purpose');
+    const lcdFeeds = [...BOARD_ROUTING_SVG.matchAll(/<path d="([^"]+)"\/>/g)]
+      .map((match) => match[1])
+      .filter((route) => /(?:V1098|H350|H930)$/.test(route));
+    assert.ok(lcdFeeds.length >= 8,
+      'multiple data and power traces terminate beneath the LCD bezel');
+    const foilRoutes = [...FOIL_ROUTING_SVG.matchAll(/<path d="([^"]+)"\/>/g)].map((match) => match[1]);
+    assert.equal(foilRoutes.length, 8, 'two feeds per socket, and both of them come off the board');
+    // EVERY LANE CONNECTS TWO THINGS A PLAYER CAN NAME. x=186 and x=1186 are
+    // the draw processor's own left and right edges in this viewBox, and
+    // y=164/336/664/836 are the socket edges — so each surviving route visibly
+    // leaves the board and lands on a socket.
+    //
+    // v4 also ran eight OUTER feeds from the perimeter ground rail at x=34 /
+    // x=1338, and defended them with a plated via on the rail. A via is a legal
+    // terminus on a real board and means nothing to a player, who sees a line
+    // cross the gutter and stop at a dot near the frame. Those eight are gone,
+    // and with them the "one feed per foil quadrant" story they existed to tell.
+    assert.ok(
+      foilRoutes.every((route) => /^M(?:186|1186)\b/.test(route)
+        && /V(?:164|336|664|836)$/.test(route)),
+      'every exposed route runs from the draw processor into a socket',
+    );
+    assert.equal(foilRoutes.filter((route) => /^M(?:0|34|1338|1372)\b/.test(route)).length, 0,
+      'no lane starts on the ground rail or the bank edge — nothing feeds in from the frame');
+    assert.doesNotMatch(FOIL_ROUTING_SVG, /foilVia/,
+      'and the rail vias that used to terminate those lanes went with them');
+    assert.doesNotMatch(FOIL_ROUTING_SVG, /<rect/,
+      'no solder-pad footprints crowd the socket edges');
+    assert.doesNotMatch(FOIL_ROUTING_SVG, /<text/,
+      'no reference designators print in the socket gutters');
+    // The silkscreen house mark is the real Degenerus flame lifted verbatim from
+    // the canonical artwork, printed as flat neutral ink. A redrawn approximation
+    // is the exact failure this pins against.
+    assert.match(
+      DRAWING_CSS,
+      /daily-drawing-board-silkscreen-v3\.svg/,
+      'the cabinet prints the current silkscreen sheet',
+    );
+    const canonicalFlamePath = CANONICAL_FLAME_SVG.match(/\sd="([^"]+)"/)[1];
+    assert.ok(SILKSCREEN_SVG.includes(canonicalFlamePath),
+      'the silkscreen house mark uses the canonical flame path, not a redrawn one');
+    assert.doesNotMatch(SILKSCREEN_SVG, /M51\.4 66\.5/,
+      'the hand-drawn flame that did not match the brand mark is gone');
+    assert.equal((SILKSCREEN_SVG.match(/<path transform="matrix/g) || []).length, 1,
+      'one house mark is printed on the board, with no second ghost');
+    // The fab legend names the part and prints the serial of the thing the
+    // board IS: the deployed game contract from the active chain profile. The
+    // value is baked at deploy, so this pins the SHAPE, not the address — a
+    // redeploy re-bakes the line without breaking the suite.
+    assert.match(SILKSCREEN_SVG, /<text[^>]*>DGN-VRF · REV PG · SN 0x[0-9a-fA-F]{40}<\/text>/,
+      'the legend reads DGN-VRF, its revision, and a real 40-hex game address');
+    assert.doesNotMatch(SILKSCREEN_SVG, /DGN-JP4|REV D ·|0x7F4A9C2E1B/,
+      'the old part number and the invented serial are gone');
+    assert.match(SILKSCREEN_SVG, /letter-spacing="1\.2"/,
+      'the band is tracked in to seat all 42 characters short of ZERO RAKE');
+    assert.match(SILKSCREEN_SVG, /fill-opacity="0\.15"/,
+      'and it is still printed as faint silkscreen ink rather than a label');
+    {
+      // The address is real, not decorative: it has to be the one the app is
+      // actually pointed at, or the board is printing a lie.
+      const legend = SILKSCREEN_SVG.match(/SN (0x[0-9a-fA-F]{40})/)[1];
+      assert.ok(CHAIN_PROFILE_SRC.includes(legend),
+        'the baked serial is the GAME address declared by the active chain profile');
+      assert.match(CHAIN_PROFILE_SRC, new RegExp(`GAME:\\s*'${legend}'`),
+        'and it is the GAME entry specifically, not some other contract');
+    }
     assert.match(
       APP_CSS,
       /\.ldj-foil-machine-slot\s*\{[^}]*inset 0 3px 9px rgba\(0, 0, 0, 0\.92\)/s,
@@ -1507,6 +2066,340 @@ describe('foil match pending action', () => {
       APP_CSS,
       /\.ldj-foil-machine-ticket\s*\{[^}]*filter:\s*grayscale\(0\.35\) saturate\(0\.52\) brightness\(0\.68\)[^}]*opacity:\s*0\.48[^}]*animation:\s*none/s,
       'unlocked foils use subdued, non-shimmering ticket artwork',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /--jp-foil-size:\s*clamp\(2\.75rem, 11\.8cqi, 5\.65rem\)/,
+      'the four sockets are slightly larger while remaining tied to the cabinet width',
+    );
+    // An empty socket says exactly one thing: a ticket-shaped processor drops in
+    // here. Three parts and no more — a dull silver bay, the printed ticket
+    // silhouette, and a BLANK centre seal.
+    // Empty is also the COMMON state: most players are looking at four of these
+    // and nothing seated, so the bay is board furniture rather than a feature.
+    // Every value below is pitched to sit AT the laminate rather than above it.
+    // The body carries the board's own green cast instead of a lighter neutral
+    // grey, and the chamfer, lip line, seal and guide all take a further step
+    // down. Measured off the rendered cabinet, an empty bay went from 2.22x the
+    // bare laminate's luminance to 1.18x: it now has to be hunted for. A seated
+    // ticket is the only thing in this bank meant to be seen across the room.
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*border-color:\s*rgba\(168, 173, 178, 0\.04\)/s,
+      'the opening is framed in dull neutral metal held near the board, not a bright edge',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*inset 0 0 0 3px rgba\(214, 222, 232/s,
+      'no bright inner ring emphasises the empty frame',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*linear-gradient\(180deg, rgba\(226, 230, 234, 0\.014\), rgba\(226, 230, 234, 0\)\) top \/ 100% 0\.2rem no-repeat/s,
+      'the machined lead-in chamfer is down to a whisper on the top lip rather than a rim light',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*0 1px 0 rgba\(198, 203, 208, 0\.012\)/s,
+      'and the outer lip highlight no longer draws a bright line under an empty fitting',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot:not\(\.is-loaded\)::after\s*\{[^}]*width:\s*22%[^}]*border:\s*1px solid rgba\(198, 203, 209, 0\.06\)[^}]*transform:\s*rotate\(45deg\)/s,
+      'an empty socket carries the centre seal at the seated ticket\'s own diamond proportion, held back',
+    );
+    // The seal is BLANK. The house flame stays on the board silkscreen and on
+    // the ticket's own centre; stamping it into the bay too made the socket read
+    // as a badge rather than as a fitting.
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.ldj-foil-machine-slot::before\s*\{[^}]*flame-center\.svg/s,
+      'the socket seal no longer masks the flame artwork',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot:not\(\.is-loaded\)::(?:before|after)\s*\{[^}]*flame-center\.svg/s,
+      'and nothing re-prints the flame onto the empty bay from the cabinet sheet',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*linear-gradient\(180deg, #080b0a 0%, #0b0e0d 58%, #0d100f 100%\)/s,
+      'the empty socket body is opaque dull silver taken down to unlit, so background circuits disappear beneath it without the bay lighting up',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\s*\{[^}]*repeating-linear-gradient/s,
+      'an empty socket carries no row of contact fingers',
+    );
+    // The ticket-like lines: a stamped guide at the footprint a card occupies,
+    // echoing the four-quadrant layout so the bay reads as a fitting for one.
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot:not\(\.is-loaded\)::before\s*\{[^}]*calc\(50% - 0\.5px\)[^}]*calc\(50% \+ 0\.5px\)/s,
+      'an empty socket prints the quadrant-cross hairlines of the ticket that fits it',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot:not\(\.is-loaded\)::before\s*\{[^}]*border:\s*1px solid rgba\(214, 220, 226, 0\.014\)/s,
+      'the silhouette outline stays fainter than its own cross, so the guide reads as one stamp',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot:not\(\.is-loaded\)::before\s*\{[^}]*filter:[^;]*blur\(/s,
+      'the guide is printed crisp rather than softened out of shape',
+    );
+    // The engaged gold strip is gone: every seated socket lit it, so it reported
+    // "occupied" four times over and said nothing about the draw.
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\.is-loaded\s*\{[^}]*bottom \/ 100% 0\.14rem no-repeat/s,
+      'a seated socket no longer lights a permanent engaged strip',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\.is-loaded\s*\{[^}]*linear-gradient\(145deg, #383b3e 0%, #16181a 56%, #2b2e30 100%\)/s,
+      'a loaded socket also occludes the backplate around the seated ticket',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-ticket\s*\{[^}]*width:\s*calc\(100% - 0\.36rem\)[^}]*place-self:\s*center[^}]*border:\s*1px solid #59616a/s,
+      'the real foil ticket is centred inside a thin dark-silver chassis',
+    );
+    // The card's corner has to be concentric with the socket rim it sits in.
+    // The rim is 6px over a 1px wall, so it turns on 5px inside; the card was
+    // turning on 4px inside its own 1px wall, tighter than the frame around it,
+    // and its square 108% foil art printed a hard corner against that curve.
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-ticket\s*\{[^}]*border-radius:\s*6px/s,
+      'the card turns on the socket rim\'s own inner radius rather than tighter than it',
+    );
+    for (const [nth, corner] of [[1, 'top-left'], [2, 'top-right'], [3, 'bottom-left'], [4, 'bottom-right']]) {
+      assert.match(
+        DRAWING_CSS,
+        new RegExp(`\\.ldj-foil-machine-cell:nth-child\\(${nth}\\)\\s*\\{\\s*border-${corner}-radius:\\s*5px`, 's'),
+        `the ${corner} quadrant clips its own art to that corner, so no state can poke square foil past the frame`,
+      );
+    }
+    // Sharp diamond, not a lozenge. 3px is a hairline chamfer on a full-size
+    // card face and most of every edge on the ~13px socketed one.
+    assert.match(
+      APP_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*border-radius:\s*0/s,
+      'the socketed centre is a true sharp diamond',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ticket-card-center\s*\{[^}]*border-radius:\s*3px/s,
+      'while the full-size ticket centre keeps its 3px chamfer',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*border-radius:/s,
+      'and nothing in the socket sheet rounds it back off',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*width:\s*20%[^}]*height:\s*20%[^}]*\}/s,
+      'socketed tickets use the same centre-diamond proportion as the unsocketed ticket without repainting its foil material',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*(?:#626b75|#c2c8ce|#69717a|#aeb6bd)/s,
+      'the socket chassis does not replace the real foil centre with a grey approximation',
+    );
+    // The centre's structural line belongs to the socket, like the chassis and
+    // the quadrant cross. It used to inherit `--ticket-line-color`, the ticket's
+    // own accent: a hairline on a full-size card, but most of the object on a
+    // 9px diamond, so a red-accented ticket seated as a red lozenge with a
+    // flame trapped in it.
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*border-width:\s*1px;\s*border-color:\s*#59616a/s,
+      'the seated centre takes the socket\'s own hairline instead of the ticket accent that read as a red ring',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*border-color:\s*var\(--ticket-line-color/s,
+      'nothing puts the per-ticket accent back around the seated centre',
+    );
+    // A HIT CHANGES ONLY THE CELL THAT HIT. Presence used to be a group
+    // operation on the ticket (filter + opacity 0.3), so restoring a card for
+    // one hit also restored everything else on it, and the unmatched cells —
+    // now alpha-blended over the card's own pale substrate instead of the dark
+    // socket — rendered visibly lighter than the identical miss on a card that
+    // hit nothing. The dormant treatment therefore has to be per cell, and
+    // opaque, so a cell's appearance cannot depend on what is behind it or on
+    // what its neighbours did.
+    const declarationOf = (block, property) => (block || '')
+      .split(';')
+      .map((declaration) => declaration.trim())
+      .find((declaration) => declaration.startsWith(`${property}:`)) || null;
+    const ruleFor = (selectorSource) => DRAWING_CSS.match(
+      new RegExp(`${selectorSource} \\{([^}]*)\\}`, 's'),
+    )?.[1];
+
+    const dormantCell = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded \\.ldj-foil-machine-cell',
+    );
+    assert.ok(dormantCell, 'the dormant quadrant states its own presence, per cell');
+    assert.ok(declarationOf(dormantCell, 'filter'), 'and it mutes with a filter');
+    assert.equal(declarationOf(dormantCell, 'opacity'), 'opacity: 1',
+      'opaque, so an unmatched quadrant renders the same over any backdrop');
+
+    // No group fade survives on the card itself: that is the coupling that made
+    // one quadrant's hit visible on its neighbours. app.css still ships a base
+    // ticket fade from when the card was the unit of presence, so the seated
+    // card has to actively neutralise it rather than merely not add one.
+    const ticketRule = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded \\.ldj-foil-machine-ticket',
+    );
+    assert.ok(ticketRule, 'the seated card states its own (absent) presence');
+    assert.equal(declarationOf(ticketRule, 'filter'), 'filter: none',
+      'the seated card carries no filter of its own to fade as a group');
+    assert.equal(declarationOf(ticketRule, 'opacity'), 'opacity: 1',
+      'nor any group alpha, which is what made a miss depend on its backdrop');
+    assert.match(
+      APP_CSS,
+      /\.ldj-foil-machine-ticket \{[^}]*opacity:\s*0\.48/s,
+      'the base fade this neutralises still exists, so the override is load-bearing');
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /:has\(\.is-symbol-match, \.is-color-match\) \.ldj-foil-machine-ticket/,
+      'and nothing restores the whole card off a single hit');
+
+    // Only the cell that hit changes, and only for the lock beat.
+    const matchedCell = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded\\s*\\n?\\s*\\.ldj-foil-machine-cell\\.is-match-flash',
+    );
+    assert.ok(matchedCell, 'a newly matched quadrant states its own temporary restore');
+    assert.match(matchedCell, /filter:\s*none/, 'and comes back to its real material');
+    assert.match(matchedCell, /animation:\s*ldj-foil-face-flash 640ms/,
+      'full material lasts for one finite lock flash');
+    assert.doesNotMatch(DRAWING_CSS,
+      /\.ldj-foil-machine-cell:is\(\.is-symbol-match, \.is-color-match\)\s*\{[^}]*filter:\s*none/s,
+      'durable grading classes cannot leave a face bright forever');
+
+    // The centre states its muting unconditionally — no match state at all.
+    const centreRule = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded \\.ldj-foil-machine-center',
+    );
+    assert.ok(centreRule, 'the seated centre states its presence explicitly');
+    assert.equal(declarationOf(centreRule, 'filter'), declarationOf(dormantCell, 'filter').replace(/brightness\([\d.]+\)/, 'brightness(0.46)'),
+      'the centre is muted in the same idiom as a dormant quadrant');
+    assert.equal(declarationOf(centreRule, 'opacity'), 'opacity: 1',
+      'and stays fully opaque so a lit quadrant cannot show through it');
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /:has\(\.is-symbol-match, \.is-color-match\) \.ldj-foil-machine-center/,
+      'the centre never varies with match state, so no rule keys it off one');
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center\s*\{[^}]*border-width:\s*1px;\s*border-color:\s*#59616a/s,
+      'and it keeps the dark structural rim the lit foil stops against',
+    );
+
+    // One source of truth: app.css must not keep a second per-cell dim.
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.ldj-foil-machine-slot\.is-graded \.ldj-foil-machine-cell \{[^}]*opacity:/s,
+      'no competing per-cell dormant treatment survives in app.css');
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-cell(?:\.is-symbol-match|\.is-color-match)[^{]*\{[^}]*box-shadow:[^};]*rgba/s,
+      'and matched quadrants add no glow of their own either: a hit is the card at its own material',
+    );
+    // A seated centre that already blooms leaves the lit centre nothing to say.
+    // The canonical foil centre carries an outer gold bloom at rest; the socket
+    // keeps its inset modelling and drops that bloom, so the only glow on a
+    // seated card is the multi-match signal.
+    const layersOf = (block) => (block || '')
+      .replace(/rgba\([^)]*\)/g, 'C')
+      .split(',')
+      .map((layer) => layer.trim())
+      .filter(Boolean);
+    const restingCentreShadow = layersOf(
+      DRAWING_CSS.match(/\.ldj-foil-machine-center \{[^}]*box-shadow:([^;]+);/s)?.[1],
+    );
+    assert.ok(restingCentreShadow.length >= 2,
+      'the seated centre states its own shadow rather than inheriting the card\'s');
+    assert.ok(restingCentreShadow.every((layer) => layer.startsWith('inset')),
+      'every layer of a seated centre is inset: foil modelling, never a bloom, in any state');
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center img\s*\{[^}]*width:\s*95%[^}]*height:\s*95%[^}]*object-position:\s*center[^}]*transform:\s*rotate\(-45deg\)/s,
+      'the socketed foil flame matches the unsocketed flame scale and alignment',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-center img\s*\{[^}]*filter:/s,
+      'the socketed flame keeps the canonical foil-ticket treatment',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ticket-card--foil \.ticket-card-center\s*\{[^}]*conic-gradient\(from 215deg, #7b5005, #e5b62f, #fff0a0/s,
+      'loaded tickets retain the canonical reflective foil centre',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-cell img\s*\{[^}]*width:\s*108%[^}]*object-position:\s*50% 50%/s,
+      'each real badge is centred without pushing into the chassis',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\.is-slotting \.ldj-foil-machine-ticket\s*\{[^}]*ldj-foil-ticket-slot[^}]*--foil-slot-index/s,
+      'new foil packs seat into their four processor sockets with a staggered animation',
+    );
+    // A seated ticket is dormant until the board lights it. Grading alone no
+    // longer lifts the card: an ungraded card, a graded card that hit nothing,
+    // and a card whose match state could not be derived all stay muted, so the
+    // socket fails closed to dark rather than claiming a win it cannot prove.
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.ldj-foil-machine-slot\.is-graded \.ldj-foil-machine-ticket\s*\{[^}]*filter:\s*none/s,
+      'being graded is no longer enough on its own to illuminate a card',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\.is-loaded \.ldj-foil-machine-cell\s*\{[^}]*filter:\s*grayscale\(0\.86\) saturate\(0\.26\) brightness\([\d.]+\);\s*opacity:\s*1/s,
+      'a seated quadrant is the real foil artwork held right down: present, but asleep — '
+        + 'and held down per cell so a neighbour\'s hit cannot change it',
+    );
+    // A lock hit returns only that face to its real material, for one finite
+    // beat. Symbol alone and symbol-with-colour use the same flash; their
+    // durable point classes remain grading data and do not carry brightness.
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-cell\.is-match-flash\s*\{[^}]*filter:\s*none;\s*opacity:\s*1;[^}]*ldj-foil-face-flash 640ms/s,
+      'a newly matched quadrant wakes to full colour once — and only that quadrant',
+    );
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-ticket\s*\{[^}]*filter:\s*brightness\([^}]*\)\s*saturate\(/s,
+      'no seated card is driven brighter than its own foil material',
+    );
+    assert.equal((DRAWING_CSS.match(/\.ldj-foil-machine-slot\.is-loaded:not\(\.is-match\):has\(/g) || []).length, 0,
+      'no chassis glow reports a partial hit alongside the claim ring');
+    // The dormant treatment is unconditional now, so there is nothing left to
+    // key off "this card matched nothing" — which is precisely why a miss can
+    // no longer look different depending on its neighbours.
+    assert.doesNotMatch(
+      DRAWING_CSS,
+      /:not\(:has\(\.is-symbol-match, \.is-color-match\)\) \.ldj-foil-machine-cell/,
+      'no rule treats a quadrant differently because its card hit nothing',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ldj-foil-machine-slot\.is-loaded \.ldj-foil-machine-cell\.is-match-flash\s*\{[^}]*filter:\s*none;[^}]*opacity:\s*1 !important/s,
+      'one-point and two-point hits share the same transient full-color class',
+    );
+    assert.doesNotMatch(APP_CSS,
+      /\.ldj-foil-machine-cell\.is-(?:symbol|color)-match\s*\{[^}]*filter:\s*none/s,
+      'neither durable grade can restore full color on its own');
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.ldj-foil-machine-cell\.is-color-match\s*\{[^}]*drop-shadow/s,
+      'the two-point face no longer carries extra illumination of its own',
     );
     el.disconnectedCallback();
   });
@@ -1559,7 +2452,7 @@ describe('foil match pending action', () => {
         ok: true,
         json: async () => ({
           address: player, level: 12, present: true,
-          lines: [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]],
+          lines: [[traits[2], traits[0], traits[3], traits[1]], [1, 78, 131, 201], [3, 68, 133, 206], [4, 69, 134, 207]],
           claims: [],
         }),
       };
@@ -1598,8 +2491,29 @@ describe('foil match pending action', () => {
       assert.ok(ticket.querySelector('.ticket-card-center'),
         'the real foil center diamond remains part of the card');
       assert.equal(ticket.querySelectorAll('.trait-quadrant').length, 4);
+      assert.deepEqual(
+        ticket.querySelectorAll('.ldj-foil-machine-cell').map((cell) => (
+          new URL(cell.querySelector('img')?.src, 'http://localhost').pathname.split('/').at(-1).split('_')[0]
+        )),
+        ['crypto', 'zodiac', 'cards', 'dice'],
+        'encoded quadrant bits put every badge back in its canonical ticket panel',
+      );
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'Pending remains behind the same spoiler gate');
+
+      document.dispatchEvent({
+        type: 'degenerus:pack-reveal-complete',
+        detail: { address: player, level: 12, foilPack: true },
+      });
+      assert.equal(slots.some((slot) => slot.classList.contains('is-slotting')), false,
+        'the foil pack does not seat while another fullscreen reveal may still follow');
+      document.dispatchEvent({
+        type: 'degenerus:reveal-overlay-idle',
+        detail: { aborted: false },
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(slots.filter((slot) => slot.classList.contains('is-slotting')).length, 4,
+        'all four foil tickets seat only after the fullscreen queue is gone');
 
       document.dispatchEvent({
         type: 'replay:scratch-complete',
@@ -1627,6 +2541,16 @@ describe('foil match pending action', () => {
       assert.equal(slots[0].getAttribute('data-score'), 'T8');
       assert.equal(slots[0].querySelectorAll('.is-color-match').length, 4,
         'all four exact symbol-and-color faces light independently');
+      assert.equal(slots[1].classList.contains('is-graded'), true,
+        'a sub-threshold ticket is still graded visually after the draw');
+      assert.equal(slots[1].classList.contains('is-match'), false,
+        'visual scoring does not turn a T3 ticket into a claim');
+      assert.equal(slots[1].querySelectorAll('.is-color-match').length, 1,
+        'a 2-point exact symbol-and-color face receives the extra-light state');
+      assert.equal(slots[1].querySelectorAll('.is-symbol-match').length, 1,
+        'a 1-point symbol-only face receives full illumination');
+      assert.equal(slots[1].querySelectorAll('.is-no-match').length, 2,
+        '0-point wrong-symbol faces remain deliberately dim');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'detaching the owner cannot leave a stale foil reminder');
@@ -1635,10 +2559,11 @@ describe('foil match pending action', () => {
     }
   });
 
-  test('the bonus foil set stays dim until the bonus scratch itself completes', async () => {
+  test('each foil set powers at spin end and the bonus cannot extinguish a main-draw face', async () => {
     const player = '0xab12000000000000000000000000000000000000';
-    const bonusTraits = [1, 70, 130, 200];
-    const mainTraits = [2, 69, 131, 201];
+    const lineTraits = [1, 70, 130, 200];
+    const bonusTraits = [2, 70, 130, 200];
+    const mainTraits = [1, 69, 131, 201];
     const pack = (traits) => traits.reduce((word, trait, quadrant) => (
       word | ((trait & 0xff) << (quadrant * 8))
     ), 0) >>> 0;
@@ -1647,7 +2572,7 @@ describe('foil match pending action', () => {
       ok: true,
       json: async () => ({
         address: player, level: 12, present: true,
-        lines: [bonusTraits, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
+        lines: [lineTraits, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
         claims: [],
       }),
     });
@@ -1672,7 +2597,7 @@ describe('foil match pending action', () => {
 
       const slot = el.querySelectorAll('.ldj-foil-machine-slot')[0];
       document.dispatchEvent({
-        type: 'replay:scratch-complete',
+        type: 'replay:spin-complete',
         detail: { day: 45, player, bonusPhase: false, bonusAvailable: true },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
@@ -1680,20 +2605,231 @@ describe('foil match pending action', () => {
         'revealing Roll 1 does not leak a match from the packed bonus result');
       assert.equal(slot.getAttribute('data-draw-kind'), null);
       assert.equal(pendingActionsMod.getPendingActions().length, 0);
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 1,
+        'the four Roll 1 quadrants grade as soon as that spin lands');
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 45, player, bonusPhase: false, bonusAvailable: true },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'the non-claimable Roll 1 scratch does not publish a foil action');
+
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 45, player, bonusPhase: true, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(slot.classList.contains('is-match'), true,
+        'the ticket powers up as soon as the bonus spin lands');
+      assert.equal(slot.getAttribute('data-draw-kind'), '1');
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'spin-end lighting alone cannot publish the still-covered claim');
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 4,
+        'bonus lighting adds its three exact faces without dimming the earlier main face');
+      storeMod.update('viewing.address', player);
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'a player/poll refresh cannot promote powered visuals past the scratch gate');
 
       document.dispatchEvent({
         type: 'replay:scratch-complete',
         detail: { day: 45, player, bonusPhase: true, bonusAvailable: false },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      assert.equal(slot.classList.contains('is-match'), true,
-        'the ticket powers up as soon as the bonus result is actually uncovered');
-      assert.equal(slot.getAttribute('data-draw-kind'), '1');
-      assert.equal(pendingActionsMod.getPendingActions()[0]?.drawKind, 1);
+      assert.equal(pendingActionsMod.getPendingActions()[0]?.drawKind, 1,
+        'the matching claim publishes only after the bonus scratch completes');
       el.disconnectedCallback();
     } finally {
       globalThis.fetch = priorFetch;
     }
+  });
+
+  test('the day boundary puts yesterday\'s foil lamps out', async () => {
+    // The lamps are day state living in the DOM. Clearing the model they came
+    // from does not unpaint them, and every repaint trigger the cabinet had
+    // was an unrelated event (a level change, a wallet change, the next spin)
+    // that can be hours away — so a card lit by yesterday's draw kept claiming
+    // hits against today's undrawn board.
+    const player = '0xab12000000000000000000000000000000000000';
+    const lineTraits = [1, 70, 130, 200];
+    const pack = (traits) => traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        address: player, level: 12, present: true,
+        lines: [lineTraits, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
+        claims: [],
+      }),
+    });
+    const matchedCells = () => el.querySelectorAll('.ldj-foil-machine-cell')
+      .filter((cell) => cell.classList.contains('is-symbol-match')
+        || cell.classList.contains('is-color-match'));
+    let el = null;
+    try {
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      storeMod.update('app.lastDay', {
+        day: 45, level: 12,
+        summary: {
+          rollOne: { mainTraitsPacked: pack(lineTraits) },
+          rollTwo: { bonusTraitsPacked: null },
+        },
+        winners: [],
+        roll1: { day: 45, level: 12, purchaseLevel: 12, wins: [] },
+        roll2: { day: 45, level: 12, purchaseLevel: 12, wins: [] },
+        status: 'resolved',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 45, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(matchedCells().length, 4,
+        'day 45 lights the four exact faces (the state this test then rolls over)');
+
+      // The chain clock moves. No new draw has been revealed for day 46.
+      storeMod.update('app.daySync', {
+        day: 46, ready: false, jackpotReady: false, coinflipReady: false,
+        rngRequested: false, rngLocked: false, rngFulfilled: false,
+        phase: 'waiting-both',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      assert.equal(matchedCells().length, 0,
+        'not one of yesterday\'s faces is still lit on the new day');
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-cell')
+          .filter((cell) => cell.getAttribute('data-match-points') != null).length,
+        0,
+        'and no face carries a stale score either',
+      );
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-slot')
+          .filter((slot) => slot.classList.contains('is-graded')
+            || slot.classList.contains('is-match')).length,
+        0,
+        'no socket still reads as graded or claimable from the previous draw',
+      );
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'nor does a stale foil claim survive the boundary');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('an indexed day advance also leaves no lamp lit', async () => {
+    // There are TWO day-advance paths. The chain clock drives #primeChainDay;
+    // a newer indexed lastDay payload drives #adoptLatestDay. Whichever lands
+    // first has to put the lamps out, or the other one is simply too late.
+    // This asserts the observable end state on the indexed path — several
+    // repaints can reach it, and it does not prove which one did. The
+    // mechanism itself (both paths clear, and clear after their gates) is
+    // pinned separately in the test below.
+    const player = '0xab12000000000000000000000000000000000000';
+    const lineTraits = [1, 70, 130, 200];
+    const pack = (traits) => traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        address: player, level: 12, present: true,
+        lines: [lineTraits, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
+        claims: [],
+      }),
+    });
+    const matchedCells = () => el.querySelectorAll('.ldj-foil-machine-cell')
+      .filter((cell) => cell.classList.contains('is-symbol-match')
+        || cell.classList.contains('is-color-match'));
+    let el = null;
+    try {
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      const dayPayload = (day) => ({
+        day, level: 12,
+        summary: {
+          rollOne: { mainTraitsPacked: pack(lineTraits) },
+          rollTwo: { bonusTraitsPacked: null },
+        },
+        winners: [],
+        roll1: { day, level: 12, purchaseLevel: 12, wins: [] },
+        roll2: { day, level: 12, purchaseLevel: 12, wins: [] },
+        status: 'resolved',
+      });
+      storeMod.update('app.lastDay', dayPayload(51));
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 51, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(matchedCells().length, 4, 'day 51 is lit before the advance');
+
+      // A newer indexed day arrives with no draw revealed against it.
+      storeMod.update('app.lastDay', { ...dayPayload(52), summary: null });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(matchedCells().length, 0,
+        'the indexed advance puts yesterday\'s faces out by itself');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('the reset fires on the boundary itself, not on the next unrelated repaint', () => {
+    // Guard against a regression to lazy clearing: BOTH day-advance paths have
+    // to clear, and the repaint has to sit after the gates that decide whether
+    // a face may light, so it fails closed.
+    const between = (from, to) => LAST_DAY_SRC.slice(
+      LAST_DAY_SRC.indexOf(from), LAST_DAY_SRC.indexOf(to),
+    );
+    const prime = between('#primeChainDay(day) {', '#onDaySync(sync) {');
+    assert.ok(prime, 'the chain-clock day-change path is still named #primeChainDay');
+    assert.ok(prime.includes('this.#resetDayGates();'), 'it still clears the day gates');
+    assert.ok(
+      prime.indexOf('this.#resetDayGates();') < prime.indexOf('this.#clearFoilMatchLamps();'),
+      'the cabinet repaints only after the activation gates are down',
+    );
+
+    const adopt = between('#adoptLatestDay(payload, resetGates) {', '#clearFoilMatchLamps() {');
+    assert.ok(adopt, 'the indexed day-change path is still named #adoptLatestDay');
+    assert.ok(
+      adopt.indexOf('if (resetGates) this.#resetDayGates();')
+        < adopt.indexOf('this.#clearFoilMatchLamps();'),
+      'and the indexed path clears in the same order, on the same signal',
+    );
+
+    // One implementation, so the two boundaries cannot drift apart.
+    const lamps = LAST_DAY_SRC.slice(LAST_DAY_SRC.indexOf('#clearFoilMatchLamps() {'));
+    assert.match(lamps, /^#clearFoilMatchLamps\(\) \{\s*\n\s*this\.#renderFoilBackdrop\(\);\s*\n\s*void this\.#refreshFoil\(\);/,
+      'the new day repaints AND re-fetches its own foil data instead of waiting to be asked');
+
+    // That refresh is fire-and-forget on a path every day boundary now takes,
+    // so teardown has to invalidate an outstanding read the same way the two
+    // day-advance paths already do — #refreshFoil re-checks the sequence after
+    // its await and bails, which is what stops a late response rendering into
+    // a detached board or republishing the row teardown just cleared.
+    const teardown = between('disconnectedCallback() {', '// The CTA may be parked');
+    assert.ok(
+      teardown.indexOf('this.#foilSeq += 1;')
+        < teardown.indexOf('clearPendingActions(FOIL_MATCH_ACTION_SOURCE);'),
+      'teardown invalidates in-flight foil reads before it clears the tray',
+    );
   });
 
   test('level 38 purchase phase displays level 39 foils, never resolved level 38 foils', async () => {
@@ -1764,6 +2900,189 @@ describe('foil match pending action', () => {
     }
   });
 
+  test('level 45 foils stay visible through its final jackpot lock and move only at transition', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const traits = [1, 70, 130, 200];
+    const requestedLevels = [];
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      if (!parsedUrl.pathname.endsWith('/foil')) {
+        return { ok: true, json: async () => null };
+      }
+      const level = Number(parsedUrl.searchParams.get('level'));
+      requestedLevels.push(level);
+      return {
+        ok: true,
+        json: async () => ({
+          address: player, level, present: true,
+          lines: [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]],
+          claims: [],
+        }),
+      };
+    };
+    try {
+      storeMod.update('connected.address', player);
+      storeMod.update('app.gameState', {
+        level: 45,
+        phase: 'JACKPOT',
+        jackpotPhaseFlag: true,
+        rngLockedFlag: true,
+        jackpotCounter: 4,
+        phaseTransitionActive: false,
+      });
+      // This stale adjacent poll reproduces the live symptom: it must not hide
+      // the pack while /game/state still says level 45 jackpot.
+      storeMod.update('app.poolBenchmarks', {
+        level: 45,
+        contractPhase: { level: 45, jackpot: false, rngLocked: true, day: 4 },
+      });
+      storeMod.update('app.lastDay', {
+        day: 245, level: 45, summary: {}, winners: [],
+        roll1: { day: 245, level: 45, purchaseLevel: 45, wins: [] },
+        roll2: { day: 245, level: 45, purchaseLevel: 45, wins: [] },
+        status: 'resolved',
+      });
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      assert.deepEqual([...new Set(requestedLevels)], [45]);
+      assert.equal(el.querySelectorAll('.ldj-foil-machine-slot')[0].classList.contains('is-loaded'), true);
+
+      storeMod.update('app.gameState', {
+        level: 45,
+        phase: 'JACKPOT',
+        jackpotPhaseFlag: true,
+        rngLockedFlag: true,
+        jackpotCounter: 4,
+        phaseTransitionActive: true,
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.deepEqual([...new Set(requestedLevels)], [45, 46],
+        'the cabinet switches to level 46 only when level 45 enters end-phase');
+      el.disconnectedCallback();
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('a one-day level transition seats the exact foil pack that just finished revealing', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const level39Lines = [
+      [1, 70, 130, 200],
+      [2, 71, 131, 201],
+      [3, 72, 132, 202],
+      [4, 73, 133, 203],
+    ];
+    const level40Lines = [
+      [7, 79, 143, 207],
+      [6, 78, 142, 206],
+      [5, 77, 141, 205],
+      [0, 76, 140, 204],
+    ];
+    const requestedLevels = [];
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      if (!parsedUrl.pathname.endsWith('/foil')) {
+        return { ok: true, json: async () => null };
+      }
+      const level = Number(parsedUrl.searchParams.get('level'));
+      requestedLevels.push(level);
+      return {
+        ok: true,
+        json: async () => ({
+          address: player,
+          level,
+          present: true,
+          lines: level === 39 ? level39Lines : level40Lines,
+          claims: [],
+        }),
+      };
+    };
+    try {
+      storeMod.update('connected.address', player);
+      storeMod.update('app.gameState', {
+        level: 39,
+        phase: 'JACKPOT',
+        jackpotPhaseFlag: true,
+        rngLockedFlag: true,
+        jackpotCounter: 0,
+        compressedJackpotFlag: 2,
+        phaseTransitionActive: false,
+      });
+      storeMod.update('app.lastDay', {
+        day: 238, level: 39, summary: {}, winners: [],
+        roll1: { day: 238, level: 39, purchaseLevel: 39, wins: [] },
+        roll2: { day: 238, level: 39, purchaseLevel: 39, wins: [] },
+        status: 'resolved',
+      });
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      const firstBadgePath = () => el
+        .querySelectorAll('.ldj-foil-machine-slot')[0]
+        ?.querySelector('.ldj-foil-machine-cell')
+        ?.querySelector('img')?.src;
+      assert.match(firstBadgePath(), /crypto_01_tron_pink\.svg$/,
+        'the cabinet begins with the same level 39 pack that is fullscreen');
+
+      document.dispatchEvent({
+        type: 'degenerus:pack-reveal-complete',
+        detail: { address: player, level: 39, foilPack: true },
+      });
+
+      // A compressed jackpot can finish its only physical draw while more
+      // fullscreen rewards are still queued. Both live phase and last-day
+      // polling then advance before reveal-overlay emits its final idle event.
+      storeMod.update('app.gameState', {
+        level: 39,
+        phase: 'PURCHASE',
+        jackpotPhaseFlag: false,
+        rngLockedFlag: false,
+        jackpotCounter: 0,
+        compressedJackpotFlag: 2,
+        phaseTransitionActive: false,
+      });
+      storeMod.update('app.lastDay', {
+        day: 239, level: 39, summary: {}, winners: [],
+        roll1: { day: 239, level: 39, purchaseLevel: 39, wins: [] },
+        roll2: { day: 239, level: 39, purchaseLevel: 39, wins: [] },
+        status: 'resolved',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      document.dispatchEvent({
+        type: 'degenerus:reveal-overlay-idle',
+        detail: { aborted: false },
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      const slots = el.querySelectorAll('.ldj-foil-machine-slot');
+      assert.equal(slots.filter((slot) => slot.classList.contains('is-slotting')).length, 4,
+        'all four completed foil tickets still receive the seating animation');
+      assert.equal(requestedLevels.at(-1), 39,
+        'the final cabinet read is pinned to the completed release, not the new buy level');
+      assert.match(firstBadgePath(), /crypto_01_tron_pink\.svg$/,
+        'the visible ticket is from the revealed level 39 pack, not level 40');
+      assert.deepEqual(
+        slots.map((slot) => slot.querySelectorAll('.ldj-foil-machine-cell')
+          .map((cell) => cell.querySelector('img')?.src)),
+        level39Lines.map((line) => line.map((trait) => traitToBadge(trait)?.path)),
+        'every seated quadrant is the exact badge from each revealed foil ticket',
+      );
+      el.disconnectedCallback();
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
   test('a same-day empty catch-up response cannot retract a verified foil match', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
@@ -1815,6 +3134,450 @@ describe('foil match pending action', () => {
   });
 });
 
+// ===========================================================================
+// The seated foils grade against the SPIN PRESENTATION while the reels are
+// still turning: each quadrant lights the moment its own reel stops, instead
+// of all four landing at once when the board settles. The panel publishes what
+// it has committed (replay:spin-progress); the cabinet grades it with the same
+// gradeLine the settled path uses and paints the same faces. Nothing here is a
+// record: no claim, no key, no gate.
+// ===========================================================================
+
+describe('foil faces track the spin presentation', () => {
+  const PLAYER = '0xab12000000000000000000000000000000000000';
+  // Slot 0's line, and a draw built to grade it 2 / 1 / 0 / 2 = T5:
+  //   q0 trait 1   vs 1   — symbol and colour  -> 2
+  //   q1 trait 70  vs 78  — symbol only        -> 1
+  //   q2 trait 130 vs 131 — nothing            -> 0
+  //   q3 trait 200 vs 200 — symbol and colour  -> 2
+  const LINE = [1, 70, 130, 200];
+  const DRAW = [1, 78, 131, 200];
+  const pack = (traits) => traits.reduce((word, trait, quadrant) => (
+    word | ((trait & 0xff) << (quadrant * 8))
+  ), 0) >>> 0;
+
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    pendingActionsMod.__resetPendingActionsForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  function foilFetch(level = 12) {
+    return async () => ({
+      ok: true,
+      json: async () => ({
+        address: PLAYER, level, present: true,
+        lines: [LINE, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
+        claims: [],
+      }),
+    });
+  }
+
+  async function mount({ level = 12, day = 45 } = {}) {
+    storeMod.update('connected.address', PLAYER);
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    storeMod.update('app.lastDay', {
+      day, level,
+      summary: {
+        rollOne: { mainTraitsPacked: pack(DRAW) },
+        rollTwo: { bonusTraitsPacked: null },
+      },
+      winners: [],
+      roll1: { day, level, purchaseLevel: level, wins: [] },
+      roll2: { day, level, purchaseLevel: level, wins: [] },
+      status: 'resolved',
+    });
+    for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+    return el;
+  }
+
+  async function progress(traits, { day = 45, bonusPhase = false } = {}) {
+    document.dispatchEvent({
+      type: 'replay:spin-progress',
+      detail: { day, player: PLAYER, bonusPhase, traits },
+    });
+    for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+  }
+
+  // One readable snapshot of the first card: what each quadrant is claiming.
+  const faces = (el) => el
+    .querySelectorAll('.ldj-foil-machine-slot')[0]
+    .querySelectorAll('.ldj-foil-machine-cell')
+    .map((cell) => ({
+      points: cell.getAttribute('data-match-points'),
+      symbol: cell.classList.contains('is-symbol-match'),
+      colour: cell.classList.contains('is-color-match'),
+      miss: cell.classList.contains('is-no-match'),
+    }));
+  const flashes = (el) => el
+    .querySelectorAll('.ldj-foil-machine-slot')[0]
+    .querySelectorAll('.ldj-foil-machine-cell')
+    .map((cell) => cell.classList.contains('is-match-flash'));
+  const DORMANT = { points: null, symbol: false, colour: false, miss: false };
+  const HIT2 = { points: '2', symbol: false, colour: true, miss: false };
+  const HIT1 = { points: '1', symbol: true, colour: false, miss: false };
+  const MISS = { points: '0', symbol: false, colour: false, miss: true };
+
+  test('a matching reel lock flashes full color once, then returns to dormant material', async () => {
+    const priorFetch = globalThis.fetch;
+    const priorSetTimeout = globalThis.setTimeout;
+    const priorClearTimeout = globalThis.clearTimeout;
+    const scheduled = [];
+    globalThis.fetch = foilFetch();
+    globalThis.setTimeout = (fn, delay) => {
+      const handle = { fn, delay, cleared: false, unref() {} };
+      scheduled.push(handle);
+      return handle;
+    };
+    globalThis.clearTimeout = (handle) => { if (handle) handle.cleared = true; };
+    let el = null;
+    try {
+      el = await mount();
+      await progress([DRAW[0], null, null, null]);
+      assert.deepEqual(flashes(el), [true, false, false, false],
+        'only the newly committed matching quadrant receives the full-color pulse');
+      const firstFlash = scheduled.find((entry) => entry.delay === 640 && !entry.cleared);
+      assert.ok(firstFlash, 'the lock pulse has a finite 640ms lifetime');
+      firstFlash.fn();
+      assert.deepEqual(flashes(el), [false, false, false, false],
+        'the full-color class clears when its one-shot window ends');
+      assert.equal(faces(el)[0].colour, true,
+        'grading remains intact after brightness drops, so claim logic loses nothing');
+
+      await progress([DRAW[0], DRAW[1], null, null]);
+      assert.deepEqual(flashes(el), [false, true, false, false],
+        'the next reel flashes its own hit without relighting the prior quadrant');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      globalThis.setTimeout = priorSetTimeout;
+      globalThis.clearTimeout = priorClearTimeout;
+    }
+  });
+
+  test('each quadrant lights as its own reel stops, and the rest stay dormant', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'a seated card is dormant before the reels commit anything');
+
+      // The panel opens every spin by publishing four nulls.
+      await progress([null, null, null, null]);
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'an opening emit with nothing committed lights nothing');
+
+      await progress([DRAW[0], null, null, null]);
+      assert.deepEqual(faces(el), [HIT2, DORMANT, DORMANT, DORMANT],
+        'the first reel to stop lights its own quadrant and only its own');
+
+      await progress([DRAW[0], DRAW[1], null, null]);
+      assert.deepEqual(faces(el), [HIT2, HIT1, DORMANT, DORMANT],
+        'a symbol-only stop reads as one point, exactly as it does when settled');
+
+      await progress([DRAW[0], DRAW[1], DRAW[2], null]);
+      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, DORMANT],
+        'a stopped reel that missed is a graded miss; the one still turning is not');
+
+      await progress(DRAW);
+      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2],
+        'the last reel completes the card');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('settling on the same faces is a no-op — the card does not repaint', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      await progress(DRAW);
+      const duringSpin = faces(el);
+      assert.deepEqual(duringSpin, [HIT2, HIT1, MISS, HIT2]);
+
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 45, player: PLAYER, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+
+      assert.deepEqual(faces(el), duringSpin,
+        'the presentation showed the real draw, so settling changes not one face');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('a lit presentation is not a claim: the ring and the tray wait for the settle', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      await progress(DRAW);
+      const slot = el.querySelectorAll('.ldj-foil-machine-slot')[0];
+      // This card grades T5 — over the claim threshold — yet mid-spin it may
+      // announce nothing beyond the four faces the reels have shown.
+      assert.equal(slot.classList.contains('is-match'), false,
+        'no claim ring while the board is still spinning');
+      assert.equal(slot.classList.contains('is-graded'), false,
+        'and the socket is not marked graded off a presentation');
+      assert.equal(slot.getAttribute('data-score'), null);
+      assert.equal(slot.getAttribute('data-draw-kind'), null);
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'and nothing is published to the shared claim tray');
+
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 45, player: PLAYER, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.equal(slot.classList.contains('is-match'), true,
+        'the ring is the settled draw\'s statement and arrives with it');
+      assert.equal(slot.getAttribute('data-score'), 'T5');
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'the claim itself still waits behind the scratch gate');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('fail closed: malformed, out-of-range and foreign-day presentations light nothing', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      await progress([300, -1, 'gold', null]);
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'a trait outside 0..255, a negative, and a string are all not-information');
+
+      document.dispatchEvent({
+        type: 'replay:spin-progress',
+        detail: { day: 44, player: PLAYER, bonusPhase: false, traits: DRAW },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'a spin on another day cannot light the pinned day\'s cards');
+
+      document.dispatchEvent({
+        type: 'replay:spin-progress',
+        detail: { day: 45, player: PLAYER, bonusPhase: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'an event with no traits array at all is dormant, not a crash');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('an off-level pack stays dark through the whole spin', async () => {
+    // Same rule the settled path already enforces: a pack bought for the next
+    // level is not comparable to the level resolving in front of it. The
+    // presentation goes through the same gate, so the card cannot light during
+    // the show and then go dark at the settle.
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch(39);
+    let el = null;
+    try {
+      storeMod.update('app.gameState', { level: 38, phase: 'PURCHASE', jackpotPhaseFlag: false });
+      el = await mount({ level: 38, day: 190 });
+      await progress(DRAW, { day: 190 });
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'the level 39 pack grades against nothing on the level 38 board, spinning or settled');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('the day boundary puts a presentation-lit card out too', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      await progress(DRAW);
+      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2]);
+
+      storeMod.update('app.daySync', {
+        day: 46, ready: false, jackpotReady: false, coinflipReady: false,
+        rngRequested: false, rngLocked: false, rngFulfilled: false,
+        phase: 'waiting-both',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      // The new day has no pack yet, so the sockets empty out entirely. What
+      // matters is that nothing the old reels lit survives into them.
+      assert.deepEqual(faces(el).filter((face) => face.points != null), [],
+        'yesterday\'s reels do not keep a face lit over today\'s undrawn board');
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-cell')
+          .filter((cell) => cell.classList.contains('is-symbol-match')
+            || cell.classList.contains('is-color-match')).length,
+        0,
+        'and not one presentation hit is still burning anywhere in the bank');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('teardown drops the presentation and unsubscribes the progress feed', () => {
+    const src = LAST_DAY_SRC;
+    const teardown = src.slice(src.indexOf('disconnectedCallback() {'));
+    assert.match(teardown, /removeEventListener\('replay:spin-progress'/,
+      'the progress feed is released with the rest of the panel listeners');
+    assert.match(teardown, /this\.#foilPresentation = null;/,
+      'and a detached cabinet keeps no reels state');
+    for (const reset of ['#resetDayGates() {', '#onDecimatorOpened(e) {']) {
+      const from = src.indexOf(reset);
+      assert.ok(from > 0, `${reset} still exists`);
+      assert.ok(src.slice(from, from + 1800).includes('this.#foilPresentation = null;'),
+        `${reset} clears the presentation along with the other day gates`);
+    }
+  });
+
+  test('the current sheet is inline, last, and cannot fork from the copper', () => {
+    const bank = LAST_DAY_SRC.slice(
+      LAST_DAY_SRC.indexOf('<div class="ldj-foil-machine-bank"'),
+      LAST_DAY_SRC.indexOf('</svg>') + 6,
+    );
+    // Placement: app.css puts the four sockets on the bank grid by
+    // .ldj-foil-machine-slot:nth-child(1..4). Anything inserted ahead of them
+    // shifts every one of those placements, so the sheet goes last.
+    assert.ok(bank.lastIndexOf('<span class="ldj-foil-machine-slot">')
+      < bank.indexOf('<svg class="ldj-foil-machine-current"'),
+      'the sheet is the last child, behind all four sockets in source order');
+    assert.match(APP_CSS, /\.ldj-foil-machine-slot:nth-child\(4\) \{ grid-column: 5; grid-row: 2; \}/,
+      'and the nth-child grid placement it must not disturb is still what places them');
+
+    // The lit lanes ARE the copper lanes. Same list, same order, no exceptions.
+    const inline = [...bank.matchAll(/<path d="([^"]+)"\/>/g)].map((m) => m[1]);
+    const copper = [...FOIL_ROUTING_SVG.matchAll(/<path d="([^"]+)"\/>/g)].map((m) => m[1]);
+    assert.deepEqual(inline, copper,
+      'the current sheet is the copper sheet, verbatim — it cannot light a route the board does not have');
+    assert.equal(inline.length, 8);
+
+    // Four groups, two lanes each, in the socket order app.css places them in.
+    for (const group of [1, 2, 3, 4]) {
+      assert.match(bank, new RegExp(`ldj-foil-lane ldj-foil-lane--${group}"`),
+        `socket ${group} has its own lane group`);
+    }
+    assert.match(bank, /ldj-foil-lane--1" stroke="url\(#ldjFoilCurrentL\)"/,
+      'left-hand sockets take the left module\'s ramp');
+    assert.match(bank, /ldj-foil-lane--4" stroke="url\(#ldjFoilCurrentR\)"/,
+      'and right-hand sockets the right module\'s');
+    assert.equal(inline.filter((route) => /^M(?:34|1338)\b/.test(route)).length, 0,
+      'no current runs in from the ground rail — flow only follows board-to-socket lanes');
+  });
+
+  test('an occupied socket lights its own lanes, and only during the drawing', () => {
+    // Occupancy is read straight off the DOM state the bank already publishes:
+    // #renderFoilBackdrop puts .is-loaded on a socket that seated a ticket.
+    for (const socket of [1, 2, 3, 4]) {
+      assert.match(DRAWING_CSS, new RegExp(
+        `\\.ldj-foil-machine-bank:has\\(\\.ldj-foil-machine-slot:nth-child\\(${socket}\\)\\.is-loaded\\) `
+        + `\\.ldj-foil-lane--${socket}`,
+      ), `socket ${socket}'s lanes are lit by socket ${socket}'s own occupancy`);
+    }
+    assert.match(DRAWING_CSS, /\.ldj-foil-machine-current \{[^}]*opacity: 0;/s,
+      'the sheet is dark at rest, so an empty bank never draws current');
+    assert.match(DRAWING_CSS, /\.ldj-foil-lane \{[^}]*opacity: 0;/s,
+      'and an empty bay\'s lanes are dark even while the machine is spinning');
+    assert.match(
+      DRAWING_CSS,
+      /:has\(replay-panel \.replay-reveal-btn\.is-spinning\)\s*\n?\s*\.ldj-foil-machine-current \{[^}]*opacity: 0\.4;/s,
+      'the bank only carries current while the drawing is actually running',
+    );
+  });
+
+  test('the bank stays quieter than the board, and both stay quiet', () => {
+    const peak = (name) => {
+      const block = DRAWING_CSS.match(new RegExp(`@keyframes ${name} \\{[^}]*\\}`, 's'))[0];
+      return Math.max(...[...block.matchAll(/opacity: ([\d.]+)/g)].map((m) => Number(m[1])));
+    };
+    const board = peak('jackpot-board-current-drive');
+    const bank = peak('jackpot-foil-current-drive');
+    assert.ok(bank < board,
+      `the bank (${bank}) must never outshine the board bus (${board})`);
+    // The whole flow system came down a notch on user call: the chase was the
+    // loudest thing on a cabinet whose headline is the board and whose call to
+    // action is the SPIN key.
+    assert.ok(board <= 0.7,
+      `the board bus peaks at ${board}; at the old 1.0 it read as the machine shouting`);
+    assert.ok(bank <= 0.5, `the bank peaks at ${bank}`);
+  });
+
+  test('reduced motion keeps the lanes lit and stops them moving', () => {
+    const reduced = DRAWING_CSS.slice(DRAWING_CSS.indexOf('@media (prefers-reduced-motion: reduce)'));
+    assert.match(reduced, /\.ldj-foil-machine-current \{\s*animation: none !important;/,
+      'the sheet stops breathing');
+    assert.match(reduced, /\.ldj-foil-lane path \{\s*stroke-dasharray: none;\s*animation: none;/,
+      'and the dashes close into solid traces rather than travelling');
+    assert.doesNotMatch(reduced, /\.ldj-foil-lane \{[^}]*opacity/s,
+      'but which sockets are being fed is state, so nothing goes dark');
+    // This is the whole reason the sheet is inline. Verified in Chrome: a
+    // prefers-reduced-motion query INSIDE an SVG used as a background-image is
+    // not applied, so the identical query that daily-drawing-board-current-v5
+    // still carries cannot actually stop that sheet.
+    assert.doesNotMatch(DRAWING_CSS, /ldj-foil-machine-current[^{]*\{[^}]*background:\s*url/s,
+      'the bank current is never served as a background image again');
+  });
+
+  test('the panel commits a quadrant only when BOTH its reels have stopped', () => {
+    const src = REPLAY_PANEL_SRC;
+    const from = src.indexOf('const emitSpinProgress = () => {');
+    assert.ok(from > 0, 'the panel publishes its committed faces');
+    const emit = src.slice(from, src.indexOf('\n    };', from));
+
+    assert.match(emit, /if \(!lockedSymbols\[i\] \|\| !lockedColors\[i\]\) continue;/,
+      'a symbol-locked reel whose colour is still turning is NOT committed — the '
+      + 'shown colour is random, and grading it would invent a colour miss');
+    assert.match(emit, /if \(displayTraits\[i\] == null\) continue;/,
+      'and a quadrant with no real trait publishes nothing rather than the 0/0 fallback');
+    assert.match(emit, /const traits = \[null, null, null, null\];/,
+      'uncommitted quadrants publish null, which the host reads as "not yet information"');
+    assert.match(emit, /traits\[contractQ\] = \(contractQ \* 64\) \+ \(col \* 8\) \+ sym;/,
+      'the published byte is packed the way the contract packs it, in CONTRACT quadrant order');
+    assert.match(emit, /if \(commits === announcedCommits\) return;/,
+      'the feed fires only when the committed count changes: at most five per spin');
+    assert.match(emit, /if \(!announce\) return;/,
+      'and a silent restore replays no presentation');
+
+    // The same frame loop uses the same both-locked test to commit a
+    // quadrant's ownership colour. If these two ever disagree, the foil card
+    // would light against a face the board has not shown yet.
+    assert.match(src, /if \(lockedSymbols\[i\] && lockedColors\[i\]\) \{/,
+      'the frame loop still gates its own commit on the same pair');
+  });
+
+  test('the cabinet grades the presentation with gradeLine, not a second copy', () => {
+    const src = LAST_DAY_SRC;
+    const from = src.indexOf('#foilPresentationGrade(line) {');
+    assert.ok(from > 0, 'the presentation grader exists');
+    const body = src.slice(from, src.indexOf('\n  }', from));
+    assert.match(body, /gradeLine\(line, packed >>> 0\)/,
+      'presentation faces come from the same grader the settled path uses');
+    assert.doesNotMatch(body, /&\s*7|>>\s*3/,
+      'it does not re-derive symbol/colour bits — that logic lives once, in foil-match.js');
+    assert.match(body, /if \(!this\.#foilLevelLocked\(\)\) return null;/,
+      'and it fails closed on the same level gate as the settled sets');
+  });
+});
+
 describe('Results CTA gating (whole board + flip before the popup)', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
@@ -1847,6 +3610,23 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
   function scratchEvent(detail) {
     return { type: 'replay:scratch-complete', detail };
   }
+
+  test('DAY SUMMARY occupies the fixed digital Spin Jackpot slot without corner overshoot', () => {
+    assert.doesNotMatch(LAST_DAY_SRC, /const target = controls \|\| slot/,
+      'the CTA never falls through into the obsolete second row');
+    assert.match(LAST_DAY_SRC, /if \(slot\) slot\.hidden = true/,
+      'the fallback row remains collapsed in every state');
+    assert.match(
+      DRAWING_CSS,
+      /replay-controls > \.ldj-results-cta\s*\{[^}]*border-radius:\s*2px;[^}]*background-color:\s*#020303[^}]*clip-path:\s*none[^}]*font-family:\s*ui-monospace/s,
+      'the replacement button uses the same opaque LCD control envelope',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /replay-controls > \.ldj-results-cta::before,[\s\S]*?replay-controls > \.ldj-results-cta::after\s*\{[^}]*content:\s*none/s,
+      'the old pseudo-element plate cannot protrude behind the digital display corners',
+    );
+  });
 
   test('hidden on a fresh resolved day; roll-1 completion with a bonus AHEAD keeps it hidden', async () => {
     const { CHAIN } = await import('../../app/chain-config.js');
@@ -2513,5 +4293,427 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       globalThis.fetch = priorFetch;
       revealMod.__resetForTest();
     }
+  });
+});
+
+describe('the LCD key turns the Mine FLIP crank while results are pending', () => {
+  // mineFlip() is the permissionless keeper crank (app/app/mine-flip.js), and it
+  // has to be called repeatedly to walk ticket and jackpot processing to a
+  // resolved day. The player watching this LCD is the one who wants that
+  // finished, so while the results window is open the key feeds the crank. The
+  // row and its runner come from app-mine-flip.js via pending-actions; nothing
+  // about availability or the transaction is re-derived here.
+  const mineFlipRow = (over = {}) => ({
+    id: 'mine-flip:0xabc:day-81',
+    kind: 'mass-resolution',
+    label: 'Mine FLIP',
+    state: 'ready',
+    write: true,
+    run: async () => {},
+    ...over,
+  });
+
+  async function processingPanel() {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    const panel = new Ctor();
+    panel.innerHTML = `
+      <div class="replay-controls">
+        <button data-bind="reveal-btn"></button>
+      </div>`;
+    panel.setAttribute('data-day-warming', '');
+    panel.attributeChangedCallback('data-day-warming', null, '');
+    return { panel, btn: panel.querySelector('[data-bind="reveal-btn"]') };
+  }
+
+  test('a callable crank arms the key and names the action it will run', async () => {
+    const { panel, btn } = await processingPanel();
+    assert.equal(btn.classList.contains('is-processing'), true);
+    assert.equal(btn.disabled, true, 'an unarmed processing key stays inert');
+    const label = btn.textContent;
+
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+
+    assert.equal(btn.disabled, false, 'the crank makes the key pressable');
+    assert.equal(btn.dataset.replayAction, 'mine-flip',
+      'the enabled face and its click route share one action token');
+    assert.equal(btn.textContent, 'MINE FLIP · PROCESSING',
+      'an enabled Mine FLIP key cannot simultaneously claim RNG is incoming');
+    assert.notEqual(btn.textContent, label,
+      'the action name replaces the passive pipeline label while the crank owns the key');
+    assert.equal(btn.getAttribute('data-jp-stage'), 'rng',
+      'and the stage it reports is unchanged, so the ring keeps chasing');
+  });
+
+  test('no crank, or a busy one, falls through to the normal inert key', async () => {
+    const { panel, btn } = await processingPanel();
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.disabled, true, 'no published row means no hijack');
+
+    panel.__setPendingActionsForTest([mineFlipRow({ state: 'busy', run: null })]);
+    assert.equal(btn.disabled, true, 'a row the resolver marked busy is not callable');
+
+    panel.__setPendingActionsForTest([mineFlipRow({ run: undefined })]);
+    assert.equal(btn.disabled, true, 'a row without a runner is not callable');
+  });
+
+  test('one press, one call: the key cannot double-fire while a call is in flight', async () => {
+    const { panel, btn } = await processingPanel();
+    let calls = 0;
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    panel.__setPendingActionsForTest([mineFlipRow({
+      run: async () => { calls += 1; await gate; },
+    })]);
+    assert.equal(btn.disabled, false);
+
+    const first = panel.__triggerMineFlipForTest();
+    assert.equal(calls, 1, 'the press reached the resolver runner');
+    assert.equal(btn.disabled, true, 'the in-flight call disarms the key');
+
+    const second = await panel.__triggerMineFlipForTest();
+    assert.equal(second, false, 'a second press while pending does nothing');
+    assert.equal(calls, 1, 'and never reaches the runner twice');
+
+    release();
+    assert.equal(await first, true);
+  });
+
+  test('the key re-arms for the next call once the receipt lands', async () => {
+    const { panel, btn } = await processingPanel();
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(await panel.__triggerMineFlipForTest(), true);
+    // The resolver re-probes after each receipt and republishes while work
+    // remains, which is what makes the next press possible.
+    assert.equal(btn.disabled, false, 'still armed for the next crank call');
+
+    // When the chain finally has no work left, the resolver clears the row.
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.disabled, true);
+  });
+
+  test('a failing crank stops claiming to be armed rather than throwing at the key', async () => {
+    const { panel, btn } = await processingPanel();
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      panel.__setPendingActionsForTest([mineFlipRow({
+        run: async () => { throw new Error('wallet rejected'); },
+      })]);
+      assert.equal(await panel.__triggerMineFlipForTest(), false);
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(btn.disabled, false, 'the row is still ready, so the player may retry');
+  });
+
+  test('results in restores the normal key: no crank press can be armed off-window', async () => {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    const panel = new Ctor();
+    panel.innerHTML = `
+      <div class="replay-controls">
+        <button data-bind="reveal-btn"></button>
+        <button class="ldj-results-cta">DAY SUMMARY</button>
+      </div>`;
+    panel.querySelector('.ldj-results-cta').hidden = false;
+    panel.setAttribute('data-day-warming', '');
+    panel.attributeChangedCallback('data-day-warming', null, '');
+
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    const btn = panel.querySelector('[data-bind="reveal-btn"]');
+    assert.equal(btn.hidden, true, 'the day summary owns the socket once results are in');
+    assert.equal(await panel.__triggerMineFlipForTest(), true,
+      'the runner itself is still reachable by the tray');
+    // The press path is gated on the action token, which only the processing
+    // branch assigns while the crank is armed; the summary branch clears it.
+    assert.match(REPLAY_PANEL_SRC,
+      /revealBtn\.dataset\?\.replayAction === 'mine-flip'[\s\S]*?this\.#triggerMineFlip\(\)/,
+      'the key press is gated on its rendered action, not on the row existing');
+    assert.match(REPLAY_PANEL_SRC, /this\.#mineFlipArmed = false;\s*\n\s*const btn = this\.querySelector/,
+      'and every non-processing path through the sync disarms it first');
+  });
+
+  test('an armed (enabled) key cannot close the Chainlink ring early', () => {
+    // The ring closes for `:not(:disabled)` keys, which used to be a safe proxy
+    // for "the board is playable". Arming the crank breaks that proxy, so the
+    // processing state is excluded explicitly.
+    assert.match(DRAWING_CSS,
+      /> \.replay-reveal-btn:not\(:disabled\):not\(\[hidden\]\):not\(\.is-decimator\):not\(\.is-processing\)/,
+      'a pressable processing key must not read as a closed ring');
+  });
+
+  test('warming/loading lockout leaves an armed Mine FLIP key clickable', () => {
+    assert.match(DRAWING_CSS,
+      /replay-panel\[data-day-warming\][\s\S]*?replay-controls:has\([\s\S]*?data-replay-action='mine-flip'[\s\S]*?pointer-events:\s*auto/,
+      'the broad stale-board pointer lock has an explicit Mine FLIP exception');
+    assert.match(DRAWING_CSS,
+      /is-processing\[[\s\S]*?data-replay-action='mine-flip'[\s\S]*?cursor:\s*pointer/,
+      'the armed processing key presents itself as an action, not a wait cursor');
+  });
+});
+
+describe('the LCD key names the contract-authoritative Mine FLIP action', () => {
+  // A resolver row means a simulation of the deployed mineFlip entrypoint found
+  // executable work for this wallet. Once that row owns the selected-day key,
+  // the key stops narrating a possibly lagging pipeline witness and names the
+  // work the press actually does. No transaction is ever started for the player.
+  const CRANK_LABEL = 'MINE FLIP · PROCESSING';
+  const MINING_LABEL = 'MINE FLIP · MINING';
+  const DAY = 81;
+
+  const mineFlipRow = (over = {}) => ({
+    id: `mine-flip:0xabc:day-${DAY}`,
+    kind: 'mass-resolution',
+    label: 'Mine FLIP',
+    state: 'ready',
+    write: true,
+    run: async () => {},
+    ...over,
+  });
+
+  const signals = (over = {}) => ({
+    day: DAY,
+    active: true,
+    requested: true,
+    rngReady: true,
+    rngFulfilled: true,
+    coinflipReady: false,
+    ticketsReady: false,
+    jackpotReady: false,
+    ...over,
+  });
+
+  async function crankPanel(signalOverrides = {}) {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    const panel = new Ctor();
+    panel.innerHTML = `
+      <div class="replay-controls">
+        <button data-bind="reveal-btn"></button>
+      </div>`;
+    panel.__setSelectedDayForTest(DAY);
+    panel.setAttribute('data-day-warming', '');
+    panel.attributeChangedCallback('data-day-warming', null, '');
+    panel.setJackpotProcessingState(signals(signalOverrides));
+    return { panel, btn: panel.querySelector('[data-bind="reveal-btn"]') };
+  }
+
+  test('word in + results pending + a callable crank renames the key', async () => {
+    const { panel, btn } = await crankPanel();
+    const stageLabel = btn.textContent;
+    assert.notEqual(stageLabel, CRANK_LABEL, 'an unarmed key still reports the pipeline');
+
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+
+    assert.equal(btn.textContent, CRANK_LABEL, 'the armed key names the crank');
+    assert.equal(btn.disabled, false, 'and it is pressable');
+    assert.equal(btn.title, stageLabel,
+      'the pipeline stage it replaced stays available on the title');
+    assert.match(btn.getAttribute('aria-label'), /^MINE FLIP · PROCESSING\. .+\. Step \d+ of 7\.$/,
+      'the accessible name carries the action AND the stage it is grinding');
+    assert.equal(btn.classList.contains('is-processing'), true,
+      'renaming the face does not take the key out of its processing state');
+  });
+
+  test('no crank at all means no claim; a crank mid-work still holds the face', async () => {
+    const { panel, btn } = await crankPanel();
+    const stageLabel = btn.textContent;
+
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.textContent, stageLabel,
+      'no published row means the mining phase is not running, so no claim');
+
+    // A row the resolver marked busy is the SAME phase, mid-call. The key is
+    // not pressable, but it must not stop saying what it is doing.
+    panel.__setPendingActionsForTest([mineFlipRow({ state: 'busy', run: null })]);
+    assert.equal(btn.textContent, CRANK_LABEL,
+      'a busy row is the crank working, not the crank gone');
+    assert.equal(btn.disabled, true, 'and it is not pressable while it works');
+
+    panel.__setPendingActionsForTest([mineFlipRow({ run: undefined })]);
+    assert.equal(btn.textContent, CRANK_LABEL,
+      'a row without a runner is still a published phase; it just cannot be pressed');
+    assert.equal(btn.disabled, true);
+
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.textContent, stageLabel,
+      'and clearing the row — the chain reporting no work left — ends the phase');
+  });
+
+  test('the label survives the whole crank: press, in flight, receipt, re-arm', async () => {
+    // The reported bug: pressing the key made it stop saying MINE FLIP. The
+    // press disarms the key for the length of its transaction, and the label
+    // used to be gated on that armed flag.
+    const { panel, btn } = await crankPanel();
+    const stageLabel = btn.textContent;
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    panel.__setPendingActionsForTest([mineFlipRow({
+      run: async () => { await gate; },
+    })]);
+    assert.equal(btn.textContent, CRANK_LABEL);
+
+    const press = panel.__triggerMineFlipForTest();
+    assert.equal(btn.disabled, true, 'the in-flight call disarms the key');
+    assert.equal(btn.textContent, MINING_LABEL,
+      'but the key keeps naming the crank while the transaction is in flight');
+    assert.match(btn.getAttribute('aria-label'), /^MINE FLIP · MINING\./,
+      'and says so to a screen reader too');
+    assert.equal(btn.getAttribute('data-jp-action'), 'mine-flip',
+      'the pickaxe stays through the call');
+
+    release();
+    assert.equal(await press, true);
+    assert.equal(btn.textContent, CRANK_LABEL,
+      'the receipt re-arms it for the next call without ever leaving the label');
+    assert.equal(btn.disabled, false);
+    assert.notEqual(btn.textContent, stageLabel);
+  });
+
+  test('results landing ends the phase even with the crank still published', async () => {
+    const { panel, btn } = await crankPanel();
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(btn.textContent, CRANK_LABEL);
+
+    panel.setJackpotProcessingState(signals({ jackpotReady: true }));
+    assert.notEqual(btn.textContent, CRANK_LABEL,
+      'the day resolving is the other way the phase ends');
+  });
+
+  test('no wallet means no row at all, so the key keeps reporting the stage', async () => {
+    // app-mine-flip.js clears its published row the moment getActingAddress()
+    // is empty, so "wallet connected" is already a precondition of the row
+    // existing. A disconnected player sees exactly today's key.
+    const { panel, btn } = await crankPanel();
+    const stageLabel = btn.textContent;
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(btn.textContent, CRANK_LABEL);
+
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.textContent, stageLabel, 'disconnecting restores the pipeline label');
+  });
+
+  test('the contract-authoritative callable crank renames the key without a second RNG witness', async () => {
+    // A successful mineFlip() simulation is already the chain's own definition
+    // of executable work. Requiring a separate isRngFulfilled() read only for
+    // the label can leave an enabled Mine FLIP key saying RNG INCOMING.
+    const { panel, btn } = await crankPanel({ rngFulfilled: false });
+    const stageLabel = btn.textContent;
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(btn.textContent, CRANK_LABEL);
+    assert.notEqual(btn.textContent, stageLabel);
+    assert.equal(btn.disabled, false, 'the action name and clickability share the same authority');
+  });
+
+  test('signals for another day cannot rename the key', async () => {
+    const { panel, btn } = await crankPanel({ day: DAY + 1 });
+    const stageLabel = btn.textContent;
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(btn.textContent, stageLabel);
+  });
+
+  test('results in ends the crank label for the day', async () => {
+    const { panel, btn } = await crankPanel({ jackpotReady: true });
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.notEqual(btn.textContent, CRANK_LABEL,
+      'a resolved day is not still being ground out');
+  });
+
+  test('clicking the renamed key runs Mine FLIP: one click, one crank call', async () => {
+    const priorFetch = globalThis.fetch;
+    const priorImage = globalThis.Image;
+    let calls = 0;
+    let panel = null;
+    try {
+      resetDom();
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => [] });
+      // connectedCallback decode-warms eight badge lanes in the background.
+      // Keep that unrelated browser primitive inert in the headless click test.
+      globalThis.Image = class FakeImage {};
+      await import('../replay-panel.js');
+      const Ctor = customElements.get('replay-panel');
+      panel = new Ctor();
+      _docBody.appendChild(panel);
+      panel.connectedCallback();
+      panel.__setSelectedDayForTest(DAY);
+      panel.setAttribute('data-day-warming', '');
+      panel.attributeChangedCallback('data-day-warming', null, '');
+      panel.setJackpotProcessingState(signals());
+      panel.__setPendingActionsForTest([mineFlipRow({
+        run: async () => { calls += 1; },
+      })]);
+      const btn = panel.querySelector('[data-bind="reveal-btn"]');
+      assert.equal(btn.textContent, CRANK_LABEL);
+      assert.equal(btn.dataset.replayAction, 'mine-flip');
+      assert.equal(calls, 0, 'renaming the key starts no transaction on its own');
+
+      btn.dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      assert.equal(calls, 1, 'the actual button click reaches the resolver runner');
+    } finally {
+      panel?.disconnectedCallback();
+      await flushMicrotasks();
+      globalThis.fetch = priorFetch;
+      if (priorImage === undefined) delete globalThis.Image;
+      else globalThis.Image = priorImage;
+    }
+  });
+
+  test('the crank state marks itself so the LCD can swap its indicator glyph', async () => {
+    const { panel, btn } = await crankPanel();
+    assert.equal(btn.getAttribute('data-jp-action'), null,
+      'an unarmed key claims no action of its own');
+
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+    assert.equal(btn.getAttribute('data-jp-action'), 'mine-flip');
+    assert.equal(btn.getAttribute('data-jp-stage'), 'rng-arrived',
+      'and the pipeline stage is still reported alongside it');
+
+    panel.__setPendingActionsForTest([]);
+    assert.equal(btn.getAttribute('data-jp-action'), null,
+      'losing the crank drops the mark with the label');
+  });
+
+  test('the indicator becomes a pickaxe glyph instead of the stage icon', () => {
+    // The socket is otherwise keyed off data-jp-stage, and those rules paint
+    // full-colour picture icons into it — the coinflip stage puts an ETH coin
+    // face there, which is what a player reads next to MINE FLIP.
+    const rule = DRAWING_CSS.match(
+      /\.replay-reveal-btn\.is-processing\[data-jp-action="mine-flip"\]::before \{([^}]*)\}/s,
+    )?.[1];
+    assert.ok(rule, 'the crank state states its own indicator');
+    assert.match(rule, /mask:\s*url\('\/app\/assets\/jackpot-stage-mine\.svg'\)/,
+      'the pickaxe arrives as a MASK, so it takes the LCD colour rather than being a coloured badge');
+    assert.match(rule, /background:\s*rgb\(var\(--lcd-rgb\)\)/,
+      'and that colour is the display\'s own lit green, like the pip it replaces');
+    assert.match(rule, /content:\s*""/,
+      'restated because the RNG stages set content:none and would delete the element');
+    assert.doesNotMatch(rule, /background-image|url\('\/shared\//,
+      'no stage picture icon survives into this state');
+
+    // jackpot-processing.css loads AFTER this sheet and its stage rules are
+    // (0,5,3); the extra `.replay-controls >` is what makes this (0,6,3) so it
+    // wins on specificity instead of on source order.
+    assert.match(
+      DRAWING_CSS,
+      /\.replay-controls\s*\n?\s*>\s*\.replay-reveal-btn\.is-processing\[data-jp-action="mine-flip"\]::before/,
+      'the selector outranks the stage icons it has to override',
+    );
+
+    const svg = readFileSync(new URL('../../assets/jackpot-stage-mine.svg', import.meta.url), 'utf8');
+    assert.match(svg, /viewBox="0 0 24 24"/, 'square viewBox, so `contain` fills the socket');
+    assert.equal((svg.match(/<path/g) || []).length, 2, 'two strokes: head and shaft');
+    assert.doesNotMatch(svg, /fill="|opacity="/,
+      'a mask reads alpha only, so the file carries no colour to be ignored');
+  });
+
+  test('the label is short enough to stay on the LCD at mobile width', () => {
+    // The face is `white-space: nowrap`, so an overlong label does not wrap, it
+    // overflows the key. Stay within the longest label the control already
+    // carries at the same monospace size and tracking.
+    assert.ok(CRANK_LABEL.length <= 'RESOLVE + RUN DECIMATOR'.length,
+      `${CRANK_LABEL} (${CRANK_LABEL.length}) must not exceed the widest existing key label`);
+    assert.match(REPLAY_PANEL_SRC, /const MINE_FLIP_CRANK_LABEL = 'MINE FLIP · PROCESSING'/);
   });
 });

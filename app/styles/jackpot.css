@@ -1,21 +1,54 @@
 /* jackpot.css -- Jackpot panel, trait card grid, reveal animation, and winner glow */
 
 /* -------------------------------------------------------------------------
+   Jackpot panel palette.
+
+   The hero had drifted into six near-identical golds (#c99b3e, #f5b446,
+   #cf8e2d, #d4af37, #e4c57a, #f5a623), three unrelated near-blacks (#151515,
+   #131418, #090203) and teal/magenta section accents that belong to no other
+   surface on the page. These tokens are the deduplicated set: one gold read as
+   metal (specular / body / shadow side), one warm ink, and the maroon
+   faceplate the day-history control already used.
+
+   The gold is the app's --accent-primary family; --jp-gold-hi and
+   --jp-gold-dim are its lit and shaded faces, which is what makes an edge read
+   as metal instead of as a yellow line. The two roll accents stay two colours
+   apart — that distinction carries information — but both come home to the
+   red/gold language.
+   ------------------------------------------------------------------------- */
+:root {
+  --jp-gold-hi: #ffe7b0;
+  --jp-gold: #e3b662;
+  --jp-gold-dim: #8b6526;
+  --jp-gold-edge: rgba(227, 182, 98, 0.34);
+  --jp-ink: #0d0507;
+  --jp-ink-deep: #050203;
+  --jp-plate: #4a141b;
+  --jp-roll-1: #e3b662;
+  --jp-roll-2: #cc4a4f;
+}
+
+/* -------------------------------------------------------------------------
    Plan 39-10: <day-jackpot-summary> widget — compact day summary rendered
    inside <replay-panel> between the card grid and the winners list.
    ------------------------------------------------------------------------- */
 .day-jackpot-summary {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
-  border: 1px solid #3a2a10;
-  border-radius: 6px;
-  background: #151515;
+  border: 1px solid var(--jp-gold-dim, #8b6526);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(227, 182, 98, 0.05), transparent 40%),
+    var(--jp-ink, #0d0507);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 176, 0.08),
+    0 6px 18px -10px rgba(0, 0, 0, 0.9);
 }
 .day-jackpot-summary > header {
   font-size: 0.85rem;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #c99b3e;
+  color: var(--jp-gold, #e3b662);
   margin-bottom: 0.5rem;
 }
 .day-jackpot-summary-body {
@@ -29,20 +62,23 @@
   margin-top: 0.6rem;
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(227, 182, 98, 0.035);
 }
+/* The two rolls stay a full hue apart so the sections remain tellable at a
+   glance; both now read as jackpot surfaces rather than as a teal/magenta pair
+   borrowed from somewhere else. */
 .day-jackpot-summary .jp-section-rollone {
-  border-left: 3px solid #2cb5a5; /* teal */
+  border-left: 3px solid var(--jp-roll-1, #e3b662);
 }
 .day-jackpot-summary .jp-section-rolltwo {
-  border-left: 3px solid #c44bd1; /* magenta */
+  border-left: 3px solid var(--jp-roll-2, #cc4a4f);
 }
 .day-jackpot-summary .jp-section-title {
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #c99b3e;
+  color: var(--jp-gold, #e3b662);
   margin: 0 0 0.35rem;
 }
 .day-jackpot-summary .jp-subsection {
@@ -63,9 +99,9 @@
   vertical-align: middle;
 }
 .day-jackpot-summary .jp-solo-bucket {
-  background: rgba(245, 180, 70, 0.08);
-  border: 1px solid rgba(245, 180, 70, 0.45);
-  box-shadow: 0 0 0 1px rgba(245, 180, 70, 0.25) inset;
+  background: rgba(227, 182, 98, 0.09);
+  border: 1px solid var(--jp-gold-edge, rgba(227, 182, 98, 0.34));
+  box-shadow: 0 0 0 1px rgba(227, 182, 98, 0.16) inset;
   border-radius: 4px;
   padding: 3px 6px !important;
 }
@@ -76,12 +112,12 @@
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #1a1a2e;
-  background: #f5b446;
+  color: #1a1206;
+  background: linear-gradient(180deg, var(--jp-gold-hi, #ffe7b0), var(--jp-gold, #e3b662));
   border-radius: 3px;
 }
 .day-jackpot-summary .jp-far-future {
-  border-top: 1px dashed rgba(196, 75, 209, 0.4);
+  border-top: 1px dashed rgba(204, 74, 79, 0.42);
   padding-top: 4px;
 }
 .day-jackpot-summary .jp-summary-empty,
@@ -821,9 +857,11 @@
 .jp-trait-dist {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
-  border: 1px solid #3a2a10;
-  border-radius: 6px;
-  background: #151515;
+  border: 1px solid var(--jp-gold-dim, #8b6526);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(227, 182, 98, 0.05), transparent 40%),
+    var(--jp-ink, #0d0507);
 }
 .jp-trait-dist-header {
   display: flex;
@@ -833,9 +871,9 @@
 }
 .jp-trait-dist-label {
   font-size: 0.85rem;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #c99b3e;
+  color: var(--jp-gold, #e3b662);
 }
 .jp-trait-dist-level {
   font-size: 0.8rem;
@@ -843,9 +881,10 @@
 }
 .jp-trait-dist-level select {
   margin-left: 0.4rem;
-  background: #1f1f1f;
-  color: #e4c57a;
-  border: 1px solid #3a2a10;
+  background: var(--jp-ink-deep, #050203);
+  color: var(--jp-gold-hi, #ffe7b0);
+  border: 1px solid var(--jp-gold-dim, #8b6526);
+  border-radius: 4px;
   padding: 2px 6px;
 }
 .jp-trait-dist-body {

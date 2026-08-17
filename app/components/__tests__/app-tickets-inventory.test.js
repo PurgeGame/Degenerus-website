@@ -423,6 +423,44 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
+  test('an active-level rollover clears old gold cards before the empty replacement settles', async () => {
+    const gold = card('opened', [56, 73, 130, 201]);
+    _byLevel.set(17, byTraitPayload({ level: 17, cards: [gold] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [] }));
+    storeMod.update('app.lastDay', {
+      day: 67, status: 'resolved', level: 17,
+      roll1: { day: 67, purchaseLevel: 17, wins: [] },
+    });
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      phaseTransitionActive: false,
+    });
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(el.querySelectorAll('.inv-card--gold').length, 1,
+      'the old level starts with one authoritative gold-trait ticket');
+
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      rngLockedFlag: true,
+      phaseTransitionActive: true,
+    });
+
+    const cardsDuringRollover = el.querySelectorAll('.inv-card').length;
+    const goldDuringRollover = el.querySelectorAll('.inv-card--gold').length;
+    await flushMicrotasks();
+    assert.match(el.querySelector('.inv-empty')?.textContent || '', /No tickets at level 18/);
+    assert.equal(cardsDuringRollover, 0,
+      'selecting the new empty level immediately removes the prior level cards');
+    assert.equal(goldDuringRollover, 0,
+      'a gold ticket from the resolved level cannot survive as a cosmetic rollover artifact');
+    el.disconnectedCallback();
+  });
+
   test('a level tile expands its tickets and the selected tile contracts them', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     const el = mount({ expanded: false });

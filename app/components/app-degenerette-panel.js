@@ -65,6 +65,7 @@ import {
 } from '../app/lootbox.js';
 import {
   enrichLootboxBoonLegs,
+  lootboxPresentationKey,
   openLegsFromDegenerettePayouts,
   parseOpenLegsFromReceipt,
 } from '../app/lootbox-legs.js';
@@ -88,7 +89,7 @@ import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_COLORS, DGN_COLOR_HEX,
   applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
-  dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
+  dgnBadgePath, dgnDisplaySymbol, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTraitIdsToQuadrants,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
@@ -451,10 +452,24 @@ export function mergeDegeneretteFeedItems(items) {
     });
     const lootboxPayouts = Array.isArray(item?.lootboxPayouts) ? item.lootboxPayouts : [];
     lootboxPayouts.forEach((payout, i) => {
+      const transactionHash = String(payout?.transactionHash || '').toLowerCase();
+      const logIndex = payout?.logIndex == null ? Number.NaN : Number(payout.logIndex);
       let payload = '';
       try { payload = JSON.stringify(payout?.rewardData ?? null); } catch (_e) { payload = String(i); }
-      const payoutKey = [payout?.blockNumber, payout?.rewardType, payload].join(':');
-      merged.__lootboxPayouts.set(payoutKey, payout);
+      const payoutKey = transactionHash && Number.isInteger(logIndex) && logIndex >= 0
+        ? `event:${transactionHash}:${logIndex}`
+        : [payout?.blockNumber, payout?.rewardType, payload].join(':');
+      const prior = merged.__lootboxPayouts.get(payoutKey);
+      merged.__lootboxPayouts.set(payoutKey, prior ? {
+        ...prior,
+        ...payout,
+        rewardData: payout?.rewardData == null
+          ? prior.rewardData
+          : { ...(prior.rewardData || {}), ...payout.rewardData },
+        spin: payout?.spin == null
+          ? prior.spin
+          : { ...(prior.spin || {}), ...payout.spin },
+      } : payout);
     });
   }
   return Array.from(groups.values()).map((merged) => {
@@ -766,9 +781,7 @@ export function degeneretteLootboxRelease(player, legs, fallbackTransactionHash 
   const transactionHash = String(
     opened.transactionHash || fallbackTransactionHash || '',
   ).toLowerCase();
-  const key = index === 0
-    ? (transactionHash ? `tx:${transactionHash}` : '')
-    : String(index);
+  const key = lootboxPresentationKey(index, transactionHash);
   if (!key) return null;
   return {
     address,
@@ -1868,7 +1881,7 @@ class AppDegenerettePanel extends HTMLElement {
       const t = this.#dgnTraits[q];
       if (img) {
         img.src = dgnBadgePath(q, t.s, t.c);
-        img.alt = `${DGN_SYMBOLS[DGN_QUADRANTS[q]][t.s]} ${DGN_COLORS[t.c]}`;
+        img.alt = `${dgnDisplaySymbol(q, t.s, t.c)} ${DGN_COLORS[t.c]}`;
       }
       if (cell && cell.classList) {
         cell.classList.toggle('q-hero', this.#dgnHero === q);

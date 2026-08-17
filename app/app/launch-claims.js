@@ -274,8 +274,10 @@ async function _goldenTicketItems(address, levels, currentLevel) {
   return checks.filter((level) => level != null).map((level) => ({
     id: `golden-ticket:${address}:${level}`,
     dismissScope: address,
-    kind: 'golden-ticket',
-    kindLabel: 'GOLDEN TICKET',
+    // claimGoldenTicket covers the whole 3+ foil-gold ladder. A successful
+    // simulation does not prove the pack contains an actual all-gold ticket.
+    kind: 'foil-gold',
+    kindLabel: 'FOIL GOLD',
     label: `L${level} FOIL GOLD`,
     detail: '',
     shortLabel: 'Claim',

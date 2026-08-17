@@ -271,6 +271,31 @@ describe('view decoding', () => {
     });
   });
 
+  test('a chained-turbo tier 3 survives the read verbatim', async () => {
+    // storage/DegenerusGameStorage.sol:65 — 3 = turbo armed while the previous
+    // turbo's bonus is still owed. It must reach the cadence model intact.
+    pari.__setGameFactoryForTest(() => ({
+      purchaseInfo: async () => [38, true, false, true, 0n],
+      jackpotCompressionTier: async () => 3,
+    }));
+    assert.equal((await pari.readJackpotPhaseContext()).compressedFlag, 3);
+  });
+
+  test('a failed compression-tier read reports null, never a forged tier 0', async () => {
+    // 0 is a REAL tier ("normal five-day phase"). Returning it for a failed
+    // read made a transient RPC error indistinguishable from a genuine normal
+    // cadence, and the consumers use `??`, which will not fall through a 0 —
+    // so a single bad read masked a live turbo behind a five-day label.
+    pari.__setGameFactoryForTest(() => ({
+      purchaseInfo: async () => [38, true, false, true, 0n],
+      jackpotCompressionTier: async () => { throw new Error('rpc hiccup'); },
+    }));
+    const context = await pari.readJackpotPhaseContext();
+    assert.equal(context.compressedFlag, null);
+    assert.equal(context.level, 38, 'the rest of the snapshot is still usable');
+    assert.equal(context.jackpot, true);
+  });
+
   test('growthState round 0 remains readable for the level-1 bootstrap target', async () => {
     const calls = [];
     pari.__setGameFactoryForTest(() => ({

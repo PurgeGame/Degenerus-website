@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1372 1000" preserveAspectRatio="none">
+  <!--
+    This viewBox matches the live foil bank: 174 / 12 / 1000 / 12 / 174.
+    Every socket receives four independent feeds at its quadrant centers.
+    Routes begin under either the perimeter rail or the central processor and
+    terminate beneath the opaque socket, so there are no decorative dead ends.
+
+    v3 drops v2's solder pads and J1-J4 designators. The sockets are plain
+    slots; the arriving traces are what make them read as mounted hardware, so
+    every feed now runs clean into the socket edge with no footprint detail
+    crowding the connector. Routing away from the sockets is unchanged.
+  -->
+  <g fill="none" stroke="#b48435" stroke-opacity="0.34" stroke-width="2.1"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <!-- upper-left socket -->
+    <path d="M0 74H18V112L44 138V164"/>
+    <path d="M186 58H166L130 94V164"/>
+    <path d="M0 426H18V388L44 362V336"/>
+    <path d="M186 442H166L130 406V336"/>
+
+    <!-- lower-left socket -->
+    <path d="M0 574H18V612L44 638V664"/>
+    <path d="M186 558H166L130 594V664"/>
+    <path d="M0 926H18V888L44 862V836"/>
+    <path d="M186 942H166L130 906V836"/>
+
+    <!-- upper-right socket -->
+    <path d="M1186 58H1206L1242 94V164"/>
+    <path d="M1372 74H1354V112L1328 138V164"/>
+    <path d="M1186 442H1206L1242 406V336"/>
+    <path d="M1372 426H1354V388L1328 362V336"/>
+
+    <!-- lower-right socket -->
+    <path d="M1186 558H1206L1242 594V664"/>
+    <path d="M1372 574H1354V612L1328 638V664"/>
+    <path d="M1186 942H1206L1242 906V836"/>
+    <path d="M1372 926H1354V888L1328 862V836"/>
+  </g>
+
+  <!-- Bus junction vias, unchanged from v1. These sit on the processor bus, a
+       full gutter away from the sockets. -->
+  <g fill="#c49a4d" fill-opacity="0.4">
+    <circle cx="186" cy="58" r="3"/><circle cx="186" cy="442" r="3"/>
+    <circle cx="186" cy="558" r="3"/><circle cx="186" cy="942" r="3"/>
+    <circle cx="1186" cy="58" r="3"/><circle cx="1186" cy="442" r="3"/>
+    <circle cx="1186" cy="558" r="3"/><circle cx="1186" cy="942" r="3"/>
+  </g>
+</svg>

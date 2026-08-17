@@ -55,6 +55,7 @@ import {
 } from '../app/dgn-traits.js';
 import { readLiveQuestBoard } from '../app/quests.js';
 import { questStreakScorePoints, degenScoreLootTier } from '../app/activity-score.js';
+import { boonBoostBps, boonBoostDelta } from '../app/boons.js';
 import { sfxQuestComplete } from '../app/jackpot-sfx.js';
 import './boon-product-indicator.js';
 
@@ -601,6 +602,14 @@ class AppQuestPanel extends HTMLElement {
                       aria-label="Increase quest action amount">+</button>
             </span>
           </label>
+          <div class="qst-action-boon" data-bind="qst-action-boon" hidden
+               aria-live="polite">
+            <boon-product-indicator data-bind="qst-action-boon-indicator"></boon-product-indicator>
+            <span>
+              <small data-bind="qst-action-boon-label">BOON APPLIED</small>
+              <strong data-bind="qst-action-boon-value"></strong>
+            </span>
+          </div>
           <div class="qst-action-dgn" data-bind="qst-action-dgn" hidden>
             <div class="ticket-card tc-small dgn-ticket qst-action-dgn__ticket"
                  aria-label="Degenerette quest ticket">
@@ -981,6 +990,42 @@ class AppQuestPanel extends HTMLElement {
     return { label: 'SET UP QUEST', target: required, completes: true };
   }
 
+  #questPurchaseBoon(model, action) {
+    const type = Number(model?.questType);
+    const isLootbox = type === 6 || (type === 1 && this.#questDialogChoice === 'lootbox');
+    const isTickets = type === 1 && !isLootbox;
+    if (!isLootbox && !isTickets) return null;
+
+    const payload = get('app.boons');
+    const product = isLootbox ? 'lootbox' : 'purchase';
+    const bps = boonBoostBps(payload, product);
+    if (bps <= 0) return null;
+    const percent = bps / 100;
+
+    if (isLootbox) {
+      const delta = boonBoostDelta(action?.target, payload, product);
+      if (delta <= 0n) return null;
+      return {
+        product,
+        label: `${percent}% BIGGER LUCKBOX`,
+        value: `+${_fmtDailyQuestAmount(1, delta)} VALUE`,
+      };
+    }
+
+    const ticket = this.#ticketActionForSpend(
+      BigInt(action?.target ?? 0),
+      this.#questTicketPrice(model),
+    );
+    const extraTickets = Number(ticket.count) * bps / 10_000;
+    if (!Number.isFinite(extraTickets) || extraTickets <= 0) return null;
+    const formatted = extraTickets.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    return {
+      product,
+      label: `${percent}% MORE TICKETS`,
+      value: `+${formatted} ${extraTickets === 1 ? 'TICKET' : 'TICKETS'}`,
+    };
+  }
+
   #openQuestDialog(model, returnFocus) {
     const dialog = this.querySelector('[data-bind="qst-action-dialog"]');
     if (!dialog) return;
@@ -1016,6 +1061,10 @@ class AppQuestPanel extends HTMLElement {
     const adjustLabel = this.querySelector('[data-bind="qst-action-adjust-label"]');
     const adjustNeeded = this.querySelector('[data-bind="qst-action-adjust-needed"]');
     const adjustUnit = this.querySelector('[data-bind="qst-action-adjust-unit"]');
+    const boon = this.querySelector('[data-bind="qst-action-boon"]');
+    const boonIndicator = this.querySelector('[data-bind="qst-action-boon-indicator"]');
+    const boonLabel = this.querySelector('[data-bind="qst-action-boon-label"]');
+    const boonValue = this.querySelector('[data-bind="qst-action-boon-value"]');
     const dgn = this.querySelector('[data-bind="qst-action-dgn"]');
     const dgnBet = this.querySelector('[name="qst-action-dgn-bet"]');
     const dgnSpins = this.querySelector('[name="qst-action-dgn-spins"]');
@@ -1032,6 +1081,7 @@ class AppQuestPanel extends HTMLElement {
     // noise and makes the confirmation sheet feel like a second game form.
     const adjustConfig = hasPurchaseChoice ? this.#questAdjustConfig(model) : null;
     const action = this.#questAction(model);
+    const purchaseBoon = this.#questPurchaseBoon(model, action);
     const variant = ['primary', 'secondary', 'level'].includes(String(model.variant))
       ? String(model.variant)
       : 'primary';
@@ -1107,6 +1157,17 @@ class AppQuestPanel extends HTMLElement {
         adjustNeeded.textContent = `NEEDED ${needed}${adjustConfig.unit ? ` ${adjustConfig.unit}` : ''}`;
       }
     }
+    if (boon) {
+      boon.hidden = !purchaseBoon;
+      if (purchaseBoon) boon.setAttribute('data-boon-product', purchaseBoon.product);
+      else boon.removeAttribute('data-boon-product');
+    }
+    if (boonIndicator) {
+      if (purchaseBoon) boonIndicator.setAttribute('product', purchaseBoon.product);
+      else boonIndicator.removeAttribute('product');
+    }
+    if (boonLabel) boonLabel.textContent = purchaseBoon?.label || 'BOON APPLIED';
+    if (boonValue) boonValue.textContent = purchaseBoon?.value || '';
     if (dgn) dgn.hidden = !isDgn;
     if (isDgn) {
       const currency = Number(model.questType) === 7 ? 0 : 1;
@@ -1420,7 +1481,10 @@ class AppQuestPanel extends HTMLElement {
     const u5 = subscribe('app.poolBenchmarks', (benchmarks) => {
       if (benchmarks?.contractPhase) this.#renderQuests();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5);
+    const u6 = subscribe('app.boons', () => {
+      if (this.#questDialogModel) this.#renderQuestDialog();
+    });
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6);
   }
 
   // ---------------------------------------------------------------------
@@ -2241,6 +2305,8 @@ class AppQuestPanel extends HTMLElement {
       return;
     }
 
+    const primary = (sorted || []).find((quest) => Number(quest?.slot ?? 0) === 0);
+    const primaryComplete = this.#afkingActive || Boolean(primary?.completed);
     const quests = [];
     for (const quest of sorted || []) {
       const questType = Number(quest?.questType ?? 0);
@@ -2249,9 +2315,16 @@ class AppQuestPanel extends HTMLElement {
       if (questType <= 0 || quest?.completed || handledByAfking) continue;
       quests.push({
         questType,
+        slot,
         role: slot === 0 ? 'DAILY' : 'BONUS',
         label: QUEST_TYPE_LABELS[questType] || 'Quest',
         completed: false,
+        progress: String(quest?.progress ?? 0),
+        target: String(quest?.target ?? 0),
+        progressAvailable: quest?.progressAvailable !== false,
+        gated: slot === 1 && !primaryComplete,
+        flipReward: 100,
+        streakReward: 0,
       });
     }
 
@@ -2266,6 +2339,13 @@ class AppQuestPanel extends HTMLElement {
         role: 'LEVEL',
         label: QUEST_TYPE_LABELS[levelType] || 'Level quest',
         completed: false,
+        progress: String(level?.progress ?? 0),
+        target: String(level?.target ?? 0),
+        progressAvailable: level?.progressAvailable !== false,
+        eligible: level?.eligible !== false,
+        gated: false,
+        flipReward: 800,
+        streakReward: 5,
       });
     }
 

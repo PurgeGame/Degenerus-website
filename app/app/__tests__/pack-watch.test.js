@@ -842,6 +842,41 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.ok([standard, foil].every((pack) => pack.totalCount === 5));
   });
 
+  test('does not reveal generic copies of a foil pack before the real foil pack', async () => {
+    const pending = Array.from({ length: 4 }, (_unused, i) => card(i, false));
+    _routes['/tickets/by-trait'] = byTrait(pending);
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      foilExpected: true,
+      standardExpected: false,
+      expectedTickets: 4,
+      sourceKey: 'foil-in-generic-feed',
+    });
+
+    const rolled = Array.from({ length: 4 }, (_unused, i) => card(i, true));
+    const foilLines = rolled.map((row) => row.entries.map((entry) => entry.traitId));
+    // The live generic endpoint has no isFoil field and can contain these same
+    // four physical tickets. They still belong to one foil reveal, not an
+    // ordinary reveal followed by a duplicate foil reveal.
+    _routes['/tickets/by-trait'] = byTrait(rolled);
+    _routes['/foil'] = { present: true, level: LEVEL, lines: foilLines };
+
+    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 1);
+    const [foil] = takeQueued();
+    assert.equal(foil.foilPack, true);
+    assert.equal(foil.packCount, 1);
+    assert.equal(foil.totalCount, 4);
+    assert.equal(foil.tickets.length, 4);
+    assert.deepEqual(foil.tickets.map((ticket) => ticket.traitIds), foilLines);
+    assert.ok(foil.tickets.every((ticket) => ticket.foil));
+
+    await packWatch.completePackReveal(foil.packRelease);
+    assert.equal(packWatch.pendingPacks().length, 0,
+      'the duplicate generic rows do not inflate the receipt or leave it stuck');
+    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 0);
+  });
+
   test('a resolved foil-only purchase cannot stay pending behind an empty generic ticket feed', async () => {
     _routes['/tickets/by-trait'] = byTrait([]);
     _routes['/foil'] = { present: false, level: LEVEL, lines: null };

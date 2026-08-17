@@ -1,0 +1,663 @@
+/* BUY IN / purchase desk
+   ----------------------
+   The quiet counter of the hero: oxblood felt, aged brass, and one family of
+   green-LED glass readouts (price window, dormant bonus window, funds ledger).
+   Between two loud machines this column stays restrained on purpose — the only
+   ornament is the house seal pressed tonally into the felt of the flexible
+   middle. Cues stay abstract so the form still belongs beside the drawing
+   machine and Community Coinflip instead of turning into a themed prop. */
+
+body.layout-basic .jackpot-hero > app-decimator-panel {
+  --dec-desk-ivory: #fff2cf;
+  --dec-desk-claret: #210b11;
+  --dec-desk-ink: #09070c;
+}
+
+/* The decorative seal spacer + dormant bonus window exist only as art for
+   this sheet. Outside the basic layout they must never paint (deliberate
+   namespace exception: this is the off-switch that keeps them inert). */
+.app-decimator-panel .dec-desk-cage,
+.app-decimator-panel .dec-desk-bonus-slot {
+  display: none;
+}
+
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel {
+  background:
+    linear-gradient(90deg, rgba(255, 233, 190, 0.018) 1px, transparent 1px) 0 0 / 11px 100%,
+    repeating-linear-gradient(45deg, rgba(255, 226, 178, 0.012) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 4px),
+    radial-gradient(90% 38% at 50% 0%, rgba(176, 91, 32, 0.18), transparent 72%),
+    radial-gradient(72% 54% at 50% 47%, rgba(100, 45, 75, 0.09), transparent 76%),
+    radial-gradient(130% 74% at 50% 46%, transparent 58%, rgba(0, 0, 0, 0.36)),
+    linear-gradient(180deg, var(--dec-desk-claret) 0%, #100a12 47%, var(--dec-desk-ink) 100%);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 217, 146, 0.1),
+    inset 0 1px 0 rgba(255, 237, 201, 0.055),
+    inset 0 -28px 42px rgba(0, 0, 0, 0.3);
+}
+
+/* The base watermark flame is retired — the pressed seal below owns the
+   panel's one emblem. */
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::before {
+  content: none;
+}
+
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::after {
+  top: 0.8rem;
+  bottom: 0.8rem;
+  left: 0.22rem;
+  width: 1px;
+  background: linear-gradient(transparent, rgba(241, 207, 131, 0.7) 12%, rgba(153, 94, 24, 0.4) 72%, transparent);
+  box-shadow: 2px 0 7px rgba(199, 148, 63, 0.12);
+}
+
+/* Headline rail: the neighboring hero widgets both use a centered two-level
+   lockup. BUY IN keeps its plain accessible h2 while CSS supplies the smaller
+   house line and the flanking brass rules. */
+body.layout-basic .app-decimator-panel .panel-header {
+  position: relative;
+  display: grid;
+  height: auto;
+  min-height: 4.45rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 0.42rem;
+  padding: 0.48rem 0.56rem 0.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(214, 166, 83, 0.42);
+  border-radius: 8px 8px 5px 5px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 221, 154, 0.05) 48%, transparent),
+    linear-gradient(180deg, rgba(75, 26, 22, 0.84), rgba(23, 10, 15, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 233, 187, 0.14),
+    inset 0 -1px 0 rgba(63, 24, 8, 0.72),
+    0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .app-decimator-panel .panel-header::after {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0;
+  left: 0.45rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(241, 207, 131, 0.52), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::before,
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  height: 1px;
+  flex: 1 1 1.8rem;
+  background: linear-gradient(90deg, transparent, rgba(215, 169, 88, 0.5));
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  margin-right: 1.55rem;
+  background: linear-gradient(90deg, rgba(215, 169, 88, 0.5), transparent);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.13rem;
+  place-items: center;
+  color: var(--dec-desk-ivory);
+  font-size: clamp(1.02rem, 2.65vw, 1.2rem);
+  font-weight: 950;
+  letter-spacing: 0.17em;
+  line-height: 0.94;
+  text-indent: 0.17em;
+  text-shadow: 0 1px 0 #050203, 0 0 9px rgba(240, 183, 77, 0.22);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading::before {
+  color: rgba(225, 192, 125, 0.66);
+  content: 'DEGENERUS';
+  font-size: 0.4rem;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  text-indent: 0.28em;
+  text-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-help {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1.32rem;
+  height: 1.32rem;
+  margin: 0;
+  border-color: rgba(225, 185, 108, 0.46);
+  background: rgba(6, 4, 7, 0.3);
+  color: #e8c77f;
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 204, 0.025);
+  transform: translateY(-50%);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-help:hover {
+  border-color: rgba(249, 216, 149, 0.8);
+  background: rgba(150, 83, 20, 0.28);
+  transform: translateY(calc(-50% - 1px));
+}
+
+/* Rate window: first of the panel's green-LED glass readouts (the dormant
+   bonus window and funds ledger repeat the same glass-in-brass-bezel
+   language). */
+body.layout-basic .app-decimator-panel .dec-price {
+  box-sizing: border-box;
+  width: min(11.4rem, calc(100% - 1rem));
+  justify-self: center;
+  padding: 0.28rem 0.72rem 0.25rem;
+  overflow: hidden;
+  border: 1px solid rgba(118, 159, 128, 0.38);
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    #08100d;
+  color: #cce9d1;
+  box-shadow:
+    0 0 0 1px rgba(124, 88, 34, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.64),
+    inset 0 0 9px rgba(81, 190, 112, 0.04);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.61rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 5px rgba(115, 223, 147, 0.18);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-row--pair {
+  gap: 0.46rem;
+  margin-top: 0.02rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group {
+  min-height: 3.18rem;
+  padding: 0.42rem 0.46rem 0.42rem 0.7rem;
+  border-color: rgba(205, 157, 77, 0.4);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(255, 220, 150, 0.055), transparent 48%),
+    linear-gradient(180deg, rgba(68, 35, 17, 0.64), rgba(16, 11, 14, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 234, 190, 0.1),
+    inset 0 -1px 0 rgba(52, 25, 8, 0.72),
+    0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group::before {
+  right: 0.55rem;
+  left: 0.55rem;
+  background: linear-gradient(90deg, transparent, rgba(236, 192, 108, 0.7), transparent);
+  opacity: 0.46;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group::after {
+  top: 0.48rem;
+  bottom: 0.48rem;
+  width: 2px;
+  background: linear-gradient(#f5d994, #b97921 58%, #74400e);
+  box-shadow: 0 0 7px rgba(221, 166, 66, 0.25);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox {
+  border-color: rgba(157, 129, 194, 0.36);
+  background:
+    linear-gradient(90deg, rgba(184, 153, 224, 0.055), transparent 48%),
+    linear-gradient(180deg, rgba(53, 36, 67, 0.68), rgba(15, 11, 18, 0.9));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox::before {
+  background: linear-gradient(90deg, transparent, rgba(195, 166, 226, 0.62), transparent);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox::after {
+  background: linear-gradient(#decdf2, #9e78c8 58%, #58386f);
+  box-shadow: 0 0 7px rgba(176, 137, 215, 0.24);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group:hover {
+  border-color: rgba(232, 188, 108, 0.62);
+  background:
+    linear-gradient(90deg, rgba(255, 222, 158, 0.08), transparent 52%),
+    linear-gradient(180deg, rgba(78, 40, 18, 0.7), rgba(18, 12, 15, 0.92));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox:hover {
+  border-color: rgba(190, 158, 226, 0.58);
+  background:
+    linear-gradient(90deg, rgba(196, 166, 230, 0.08), transparent 52%),
+    linear-gradient(180deg, rgba(61, 41, 75, 0.74), rgba(17, 12, 20, 0.92));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-label,
+body.layout-basic .app-decimator-panel .dec-input-group--tickets .dec-input-label {
+  color: #e9cd92;
+  font-size: clamp(0.69rem, 1.45vw, 0.75rem);
+  letter-spacing: 0.095em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-input-label {
+  color: #cdb9e2;
+}
+
+body.layout-basic .app-decimator-panel .dec-stepper {
+  width: 6.75rem;
+  flex-basis: 6.75rem;
+  border-color: rgba(220, 177, 98, 0.38);
+  border-radius: 5px;
+  background: #09080b;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 210, 0.045),
+    inset 0 0 10px rgba(183, 121, 27, 0.035),
+    0 2px 7px rgba(0, 0, 0, 0.34);
+}
+
+body.layout-basic .app-decimator-panel .dec-stepper .dec-input {
+  padding-inline: 0.24rem;
+  color: #fff4da;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.92rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 5px rgba(238, 196, 113, 0.14);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-accessories {
+  right: 7.5rem;
+  width: 2.7rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-step,
+body.layout-basic .app-decimator-panel .dec-quarter-step {
+  border-color: rgba(218, 173, 90, 0.25);
+  background: linear-gradient(180deg, rgba(218, 171, 84, 0.2), rgba(82, 45, 11, 0.16));
+  color: #eed09a;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-step {
+  border-color: rgba(183, 151, 219, 0.25);
+  background: linear-gradient(180deg, rgba(179, 146, 216, 0.19), rgba(70, 43, 91, 0.16));
+  color: #d8c6ea;
+}
+
+/* The action rail is the counter lip: one thin brass rule, then the BONUS
+   window / BUY IN key pair. */
+body.layout-basic .app-decimator-panel .dec-buy-row {
+  position: relative;
+  margin-top: 0.12rem;
+  padding-top: 0.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row::before {
+  position: absolute;
+  top: 0.12rem;
+  right: 0.12rem;
+  left: 0.12rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(227, 181, 95, 0.56) 18%, rgba(227, 181, 95, 0.56) 82%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+/* Pin both rail cells to one row so the dormant bonus window can share the
+   live tally's cell without creating a phantom second row. Desktop only: the
+   phone rail stacks its cells in a single column (app.css ≤520px), so the
+   pins would overlap the live tally with the button there. */
+@media (min-width: 521px) {
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-flip-credit,
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta,
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+    grid-row: 1;
+  }
+}
+
+/* Dormant BONUS window: the same LED glass as the price window and funds
+   ledger, switched off until a quote earns FLIP (then the live dec-flip-credit
+   tally takes over the cell). */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+  grid-column: 1;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.22rem;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 3rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(98, 158, 115, 0.22);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+    #071009;
+  box-shadow:
+    0 0 0 1px rgba(94, 68, 28, 0.32),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 10px rgba(78, 212, 116, 0.025);
+}
+
+body.layout-basic .app-decimator-panel .dec-desk-bonus-slot::before {
+  color: rgba(177, 205, 187, 0.42);
+  content: 'BONUS';
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-desk-bonus-slot::after {
+  color: rgba(148, 187, 160, 0.34);
+  content: '— FLIP';
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* The live tally replaces the dormant window; flip mode gives BUY the whole
+   rail, so the window bows out there too. */
+body.layout-basic .app-decimator-panel .dec-buy-row:has(> .dec-flip-credit:not([hidden])) > .dec-desk-bonus-slot,
+body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-desk-bonus-slot {
+  display: none;
+}
+
+/* BUY IN: the machined brass counter key. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 224, 158, 0.78);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 244, 214, 0.045) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 245, 213, 0.32), transparent 42%),
+    linear-gradient(135deg, #a96818, #e2ad4d 52%, #9b5c13);
+  color: #221307;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 223, 0.58),
+    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
+    0 5px 15px rgba(196, 126, 25, 0.2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+/* Quiet ready cue: the key's lamp breathes very slowly when a buy can go. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:not(:disabled) {
+  animation: dec-desk-key-ready 4.2s ease-in-out infinite;
+}
+
+@keyframes dec-desk-key-ready {
+  0%, 100% { box-shadow:
+    inset 0 1px 0 rgba(255, 248, 223, 0.58),
+    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
+    0 5px 15px rgba(196, 126, 25, 0.2); }
+  50% { box-shadow:
+    inset 0 1px 0 rgba(255, 248, 223, 0.58),
+    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
+    0 5px 19px rgba(216, 143, 35, 0.31); }
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]::before {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(68, 36, 9, 0.2);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255, 248, 220, 0.16);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action,
+body.layout-basic .app-decimator-panel .dec-buy-cta__amount {
+  position: relative;
+  z-index: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action {
+  letter-spacing: 0.075em;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:hover:not(:disabled),
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:focus-visible:not(:disabled) {
+  border-color: #fff0c3;
+  filter: brightness(1.1);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+/* Unlit key: same machined metal, lamp off — crisp edges, engraved label. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:disabled {
+  border-color: rgba(216, 178, 108, 0.5);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 244, 214, 0.03) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 238, 196, 0.1), transparent 46%),
+    linear-gradient(135deg, #5f431f, #8d6934 52%, #573b1b);
+  color: rgba(255, 239, 205, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 215, 0.14),
+    inset 0 -2px 0 rgba(40, 21, 5, 0.34);
+  filter: saturate(0.6);
+  opacity: 1;
+  text-shadow: 0 1px 0 rgba(24, 12, 2, 0.55);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit {
+  border-color: rgba(98, 184, 119, 0.42);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 3px),
+    #08110d;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.54), inset 0 0 10px rgba(78, 212, 116, 0.04);
+}
+
+/* ------------------------------------------------------------------ */
+/* The quiet middle: a plain stretch of felt with the house seal       */
+/* pressed into it. Tone only — pressed shadow and a warm edge-light,  */
+/* never enamel or bright brass. The spacer is invisible furniture     */
+/* (aria-hidden markup): it takes whatever room the form leaves over   */
+/* and the seal scales with it, bowing out when the space runs dry.    */
+/* ------------------------------------------------------------------ */
+body.layout-basic .app-decimator-panel .dec-desk-cage {
+  position: relative;
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  place-items: center;
+  container-type: size;
+  background: radial-gradient(58% 62% at 50% 48%, rgba(158, 84, 58, 0.07), transparent 72%);
+  pointer-events: none;
+}
+
+/* Pressed disc: a darker dish in the felt, light catching the lower rim. */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal {
+  position: relative;
+  width: min(76cqmin, 9.4rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.1) 58%, transparent 78%),
+    radial-gradient(circle at 50% 82%, rgba(198, 128, 78, 0.06), transparent 60%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 5px 11px rgba(0, 0, 0, 0.52),
+    inset 0 -2px 4px rgba(233, 186, 120, 0.09),
+    0 1px 0 rgba(238, 196, 130, 0.08),
+    0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Ring groove pressed just inside the disc's rim. */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal::before {
+  position: absolute;
+  inset: 7.5%;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 50%;
+  box-shadow:
+    0 1px 0 rgba(233, 190, 124, 0.08),
+    inset 0 1px 0 rgba(0, 0, 0, 0.3),
+    inset 0 -1px 0 rgba(233, 190, 124, 0.06);
+  content: '';
+}
+
+/* The house flame, stamped in the same felt tones (masked flame-center.svg). */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal::after {
+  position: absolute;
+  inset: 25%;
+  background: linear-gradient(180deg, rgba(206, 132, 84, 0.1), rgba(190, 116, 74, 0.16) 58%, rgba(224, 158, 100, 0.2));
+  content: '';
+  filter:
+    drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 1px 0 rgba(233, 190, 124, 0.09));
+  -webkit-mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+  mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+}
+
+/* When the form leaves no real room (busy connected states), the seal bows
+   out and the spacer quietly disappears. */
+@container (max-height: 4.1rem) {
+  body.layout-basic .app-decimator-panel .dec-desk-cage__seal {
+    display: none;
+  }
+}
+
+/* Below the three-column hero (app.css stacks the panel full-width under the
+   drawing machine at 1100px) the panel hugs its content, so the spacer keeps
+   a shallow fixed depth for the seal — and hands it back once connected rows
+   need the height. */
+@media (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .dec-desk-cage {
+    flex-basis: 5rem;
+    min-height: 5rem;
+  }
+
+  body.layout-basic .app-decimator-panel:has(> .dec-presale:not([hidden])) .dec-desk-cage,
+  body.layout-basic .app-decimator-panel:has(> .dec-afking-jump:not([hidden])) .dec-desk-cage,
+  body.layout-basic .app-decimator-panel:has(.dec-flip-balance:not([hidden])) .dec-desk-cage {
+    flex-basis: 0;
+    min-height: 0;
+  }
+}
+
+/* Keep breathing room between the seal felt and the ledger without a
+   decorative divider above the optional ALL IN action. */
+body.layout-basic .app-decimator-panel .dec-funds-stack {
+  position: relative;
+  padding-top: 0.45rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-funds {
+  border-color: rgba(103, 153, 117, 0.5);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #09140f, #060d0a);
+  box-shadow:
+    0 0 0 1px rgba(94, 68, 28, 0.4),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 16px rgba(63, 255, 157, 0.035),
+    0 3px 9px rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .app-decimator-panel .dec-funds__summary-label {
+  color: rgba(189, 212, 198, 0.62);
+}
+
+body.layout-basic .app-decimator-panel .dec-funds__value,
+body.layout-basic .app-decimator-panel .dec-funds__number {
+  text-shadow: 0 0 6px rgba(85, 229, 129, 0.28);
+}
+
+body.layout-basic .app-decimator-panel .dec-foil {
+  border-radius: 6px;
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    min-height: 4.6rem;
+    padding-inline: 0.62rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-heading {
+    font-size: 1.12rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-input-group {
+    min-height: 5.8rem;
+    padding: 0.4rem 0.5rem 0.48rem 0.66rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-stepper {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-input-accessories {
+    right: 0.52rem;
+    width: 3.05rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row {
+    padding-top: 0.62rem;
+  }
+
+  /* The phone rail stacks in one column; BUY IN keeps the whole tap width and
+     the dormant window bows out. */
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
+  body.layout-basic .app-decimator-panel .dec-purchase-help {
+    transition: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:not(:disabled) {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel,
+  body.layout-basic .app-decimator-panel .panel-header,
+  body.layout-basic .app-decimator-panel .dec-input-group,
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-funds {
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::before,
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::after,
+  body.layout-basic .app-decimator-panel .panel-header::after,
+  body.layout-basic .app-decimator-panel .dec-header-title::before,
+  body.layout-basic .app-decimator-panel .dec-header-title::after,
+  body.layout-basic .app-decimator-panel .dec-buy-row::before,
+  body.layout-basic .app-decimator-panel .dec-desk-cage,
+  body.layout-basic .app-decimator-panel .dec-desk-bonus-slot {
+    display: none;
+  }
+}

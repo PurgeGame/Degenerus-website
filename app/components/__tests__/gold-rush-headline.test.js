@@ -237,12 +237,14 @@ describe('gold-rush headline wiring', () => {
   const polling = readFileSync(pollingPath, 'utf8');
 
   test('mounted in the app shell and its module is loaded', () => {
-    assert.match(html, /<gold-rush-headline><\/gold-rush-headline>/);
+    // The tag ships the static LCP shell (class="gr" + adopted children) —
+    // index-structure.test.js asserts the shell's contents in depth.
+    assert.match(html, /<gold-rush-headline class="gr">/);
     assert.match(html, /src="\/app\/components\/gold-rush-headline\.js"/);
   });
 
   test('mounted above the main jackpot hero (it is the headline)', () => {
-    const grIdx = html.indexOf('<gold-rush-headline>');
+    const grIdx = html.indexOf('<gold-rush-headline');
     const heroIdx = html.indexOf('<section class="jackpot-hero"');
     assert.ok(grIdx > -1 && heroIdx > -1, 'both elements present');
     assert.ok(grIdx < heroIdx, 'gold-rush headline comes first');

@@ -25,8 +25,10 @@
 // packedSpins decode mirrors database/src/handlers/box-spins.ts bit-for-bit.
 
 import { ethers, getProvider } from './contracts.js';
-import { CHAIN, CONTRACTS } from './chain-config.js';
+import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { dgnUnpackTicket } from './dgn-traits.js';
+import { degenerettePayoutTable } from './degenerette.js';
+import { scaledTicketPriceWei } from './lootbox.js';
 import {
   boonTypePresentation,
   boonVisualForProduct,
@@ -56,6 +58,7 @@ const BOX_SPIN_TAGS = [
   0x4275726e69655370696en, // "BurnieSpin" / FLIP
   0x4574685370696en, // "EthSpin"
 ];
+const BOX_FLIP_SPIN_TAG = BOX_SPIN_TAGS[1];
 const SPIN_STRIDE = 72n;
 const COUNT_SHIFT = 216n;
 const SURVIVED_SHIFT = 224n;
@@ -79,12 +82,471 @@ export function boxSpinHeroQuadrant(betId) {
   }
 }
 
+/**
+ * Canonical presentation identity shared by receipt and indexed-box paths.
+ * Nonzero boxes live in one RNG batch slot, while index-zero/direct boxes need
+ * their settlement transaction to remain collision-free.
+ */
+export function lootboxPresentationKey(lootboxIndex, transactionHash = null) {
+  try {
+    const index = BigInt(lootboxIndex ?? 0);
+    if (index > 0n) return String(index);
+  } catch (_e) { /* fall through to the immutable settlement transaction */ }
+  const hash = String(transactionHash || '').toLowerCase();
+  return hash ? `tx:${hash}` : null;
+}
+
 function _entropyHash2(a, b) {
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
     ['uint256', 'uint256'],
     [BigInt(a), BigInt(b)],
   );
   return BigInt(ethers.keccak256(encoded));
+}
+
+const FULL_ETH_WEI = 10n ** 18n;
+const PRICE_COIN_UNIT = 1_000n * FULL_ETH_WEI;
+const LOOTBOX_BOON_BUDGET_BPS = 1_000n;
+const LOOTBOX_BOON_MAX_BUDGET = FULL_ETH_WEI / BigInt(ETH_DIVISOR);
+const LOOTBOX_BOON_UTILIZATION_BPS = 5_000n;
+const BOON_PPM_SCALE = 1_000_000n;
+const BOON_WEIGHT_TOTAL = 2_608n;
+const LOOTBOX_SPLIT_THRESHOLD = (FULL_ETH_WEI / 2n) / BigInt(ETH_DIVISOR);
+const LOOTBOX_FLIP_SPINS_STAKE_BPS = 7_060n;
+// DegenerusGameDegeneretteModule.sol:1763 / FlipRoundLib.sol:21-27. A surviving
+// box-spin chain mints `2 x preliminary`, then collapses that onto a whole
+// 100-FLIP granule above 1,000 FLIP (whole-FLIP floor below it). Halving the
+// emitted payout therefore recovers the stake only to within 50 FLIP, which is
+// why a survivor's payout is not a substitute for the real pre-flip sum.
+const BOX_FLIP_ROUND_TAG = 0x466c6970526f756e64n;
+const FLIP_ROUND_UNIT = 100n * FULL_ETH_WEI;
+const FLIP_ROUND_THRESHOLD = 1_000n * FULL_ETH_WEI;
+const LOOTBOX_EV_NEUTRAL_POINTS = 60n;
+const LOOTBOX_EV_MAX_POINTS = 400n;
+const ACTIVITY_SEG_B_KNEE_POINTS = 500n;
+const ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000n;
+
+function _lootboxEvMultiplierBps(scoreRaw) {
+  const score = BigInt(scoreRaw ?? 0);
+  if (score <= LOOTBOX_EV_NEUTRAL_POINTS) {
+    return 9_000n + (score * 1_000n) / LOOTBOX_EV_NEUTRAL_POINTS;
+  }
+  if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return 14_500n;
+  if (score <= LOOTBOX_EV_MAX_POINTS) {
+    return 10_000n
+      + ((score - LOOTBOX_EV_NEUTRAL_POINTS) * 3_950n)
+        / (LOOTBOX_EV_MAX_POINTS - LOOTBOX_EV_NEUTRAL_POINTS);
+  }
+  if (score <= ACTIVITY_SEG_B_KNEE_POINTS) {
+    return 13_950n
+      + ((score - LOOTBOX_EV_MAX_POINTS) * 440n)
+        / (ACTIVITY_SEG_B_KNEE_POINTS - LOOTBOX_EV_MAX_POINTS);
+  }
+  return 14_390n
+    + ((score - ACTIVITY_SEG_B_KNEE_POINTS) * 110n)
+      / (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
+}
+
+function _humanBoxRootSeed(rngWord, player, amountWei) {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256', 'address', 'uint256'],
+    [BigInt(rngWord), player, BigInt(amountWei)],
+  );
+  return BigInt(ethers.keccak256(encoded));
+}
+
+function _flipToEthValue(flipAmount, priceWei) {
+  return (BigInt(flipAmount) * BigInt(priceWei)) / PRICE_COIN_UNIT;
+}
+
+/**
+ * Exact static-table average used by `_rollLootboxBoons`. Keeping this local
+ * makes the shared 4/5/6 reward IDs recoverable from the committed human-box
+ * word even when a weaker roll leaves both packed boon families unchanged.
+ */
+function _humanBoxBoonAverageMaxValue(currentLevel) {
+  const level = Number(currentLevel);
+  if (!Number.isInteger(level) || level < 1) return 0n;
+  const priceWei = scaledTicketPriceWei(level - 1);
+  if (priceWei <= 0n) return 0n;
+  const eth = FULL_ETH_WEI / BigInt(ETH_DIVISOR);
+  let weightedMax = 0n;
+  const add = (weight, value) => {
+    weightedMax += BigInt(weight) * BigInt(value);
+  };
+  const pct = (value, bps) => (BigInt(value) * BigInt(bps)) / 10_000n;
+
+  const coinflipCap = 100_000n * FULL_ETH_WEI;
+  add(200n, _flipToEthValue(pct(coinflipCap, 500n), priceWei));
+  add(40n, _flipToEthValue(pct(coinflipCap, 1_000n), priceWei));
+  add(8n, _flipToEthValue(pct(coinflipCap, 2_500n), priceWei));
+
+  const boostCap = 10n * eth;
+  add(200n, pct(boostCap, 500n));
+  add(30n, pct(boostCap, 1_500n));
+  add(8n, pct(boostCap, 2_500n));
+  add(400n, pct(boostCap, 500n));
+  add(80n, pct(boostCap, 1_500n));
+  add(16n, pct(boostCap, 2_500n));
+
+  const decimatorCap = 50_000n * FULL_ETH_WEI;
+  add(40n, _flipToEthValue(pct(decimatorCap, 1_000n), priceWei));
+  add(8n, _flipToEthValue(pct(decimatorCap, 2_500n), priceWei));
+  add(2n, _flipToEthValue(pct(decimatorCap, 5_000n), priceWei));
+
+  const whalePassPrice = 4n * eth;
+  add(28n, pct(whalePassPrice, 1_000n));
+  add(10n, pct(whalePassPrice, 2_000n));
+  add(2n, pct(whalePassPrice, 3_500n));
+
+  const deityPassNominalPrice = 160n * eth;
+  add(28n, pct(deityPassNominalPrice, 1_000n));
+  add(10n, pct(deityPassNominalPrice, 2_000n));
+  add(2n, pct(deityPassNominalPrice, 3_500n));
+
+  // Activity and quest-shield tiers add weight but deliberately carry no
+  // assumed value. Whale-pass and lazy-pass values follow them in the table.
+  add(2n, (9n * eth) / 2n);
+  let lazyPassValue = 0n;
+  for (let offset = 0; offset < 10; offset += 1) {
+    lazyPassValue += scaledTicketPriceWei(level + 1 + offset);
+  }
+  add(30n, pct(lazyPassValue, 1_000n));
+  add(8n, pct(lazyPassValue, 2_500n));
+  add(2n, pct(lazyPassValue, 5_000n));
+
+  const degenEthCap = 10n * eth;
+  add(200n, pct(degenEthCap, 400n));
+  add(50n, pct(degenEthCap, 800n));
+  add(10n, pct(degenEthCap, 1_200n));
+  const degenFlipCap = 100_000n * FULL_ETH_WEI;
+  add(200n, _flipToEthValue(pct(degenFlipCap, 400n), priceWei));
+  add(50n, _flipToEthValue(pct(degenFlipCap, 800n), priceWei));
+  add(10n, _flipToEthValue(pct(degenFlipCap, 1_200n), priceWei));
+  // WWXRP's three 200-weight tiers carry no assumed value.
+
+  return weightedMax / BOON_WEIGHT_TOTAL;
+}
+
+/**
+ * Recover the exact shared-family boon drawn by a stored human Luckbox. The
+ * return value is needed only through the purchase band; later table entries
+ * cannot have emitted compact reward IDs 4/5/6.
+ */
+export function deriveHumanLootboxBoonType({
+  player,
+  rngWord,
+  packedBox,
+  currentLevel,
+} = {}) {
+  if (!player) return null;
+  let word;
+  let packed;
+  try {
+    word = BigInt(rngWord ?? 0);
+    packed = BigInt(packedBox ?? 0);
+  } catch (_e) {
+    return null;
+  }
+  if (word === 0n || packed === 0n) return null;
+  const amount = packed & ((1n << 128n) - 1n);
+  const adjusted = (packed >> 128n) & ((1n << 64n) - 1n);
+  const activityScore = (packed >> 192n) & 0xFFFFn;
+  if (amount === 0n) return null;
+  const evBps = _lootboxEvMultiplierBps(activityScore);
+  const scaledAmount = evBps <= 10_000n
+    ? (amount * evBps) / 10_000n
+    : (adjusted * evBps) / 10_000n + (amount - adjusted);
+  let boonBudget = (scaledAmount * LOOTBOX_BOON_BUDGET_BPS) / 10_000n;
+  if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) boonBudget = LOOTBOX_BOON_MAX_BUDGET;
+  if (boonBudget <= 0n) return null;
+
+  const avgMaxValue = _humanBoxBoonAverageMaxValue(currentLevel);
+  const expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000n;
+  if (expectedPerBoon <= 0n) return null;
+  let totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon;
+  if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
+  if (totalChance <= 0n) return null;
+
+  let seed;
+  try { seed = _humanBoxRootSeed(word, player, amount); }
+  catch (_e) { return null; }
+  const roll = ((seed >> 120n) & U32) % BOON_PPM_SCALE;
+  if (roll >= totalChance) return null;
+  const weightedRoll = (roll * BOON_WEIGHT_TOTAL) / totalChance;
+  const steps = [
+    [200n, 1], [40n, 2], [8n, 3],
+    [200n, 5], [30n, 6], [8n, 22],
+    [400n, 7], [80n, 8], [16n, 9],
+  ];
+  let cursor = 0n;
+  for (const [weight, boonType] of steps) {
+    cursor += weight;
+    if (weightedRoll < cursor) return boonType;
+  }
+  return null;
+}
+
+function _packedPlayerTicket(reel) {
+  try {
+    if (reel?.playerTicket != null) return BigInt(reel.playerTicket) & U32;
+  } catch (_e) { /* fall through to decoded traits */ }
+  const traits = Array.isArray(reel?.playerTraits) ? reel.playerTraits : [];
+  if (traits.length < 4) return 0n;
+  let packed = 0n;
+  for (let q = 0; q < 4; q += 1) {
+    const trait = traits[q] || {};
+    const symbol = Number(trait.sym ?? trait.symbol);
+    const color = Number(trait.col ?? trait.color);
+    if (!Number.isInteger(symbol) || !Number.isInteger(color)) return 0n;
+    const byte = (q << 6) | ((color & 7) << 3) | (symbol & 7);
+    packed |= BigInt(byte) << BigInt(q * 8);
+  }
+  return packed;
+}
+
+/**
+ * Contract-identical reconstruction of a human Luckbox's preliminary FLIP
+ * payout. BoxSpin emits only the post-survival total, so a bust is zero in the
+ * event; the immutable RNG word plus the pre-open packed box word recover the
+ * exact stake, activity ROI, per-reel heroes, and therefore the amount risked.
+ */
+function _deriveHumanBoxSpin({
+  spin,
+  player,
+  rngWord,
+  packedBox,
+  currentLevel,
+} = {}) {
+  if (String(spin?.spinType || '').toLowerCase() !== 'flip' || !player) return null;
+  let word;
+  let packed;
+  let betId;
+  try {
+    word = BigInt(rngWord ?? 0);
+    packed = BigInt(packedBox ?? 0);
+    betId = BigInt(spin?.betId ?? 0);
+  } catch (_e) {
+    return null;
+  }
+  const level = Number(currentLevel);
+  if (word === 0n || packed === 0n || betId === 0n
+      || !Number.isInteger(level) || level < 0) return null;
+
+  const amount = packed & ((1n << 128n) - 1n);
+  const adjusted = (packed >> 128n) & ((1n << 64n) - 1n);
+  const activityScore = (packed >> 192n) & 0xFFFFn;
+  if (amount === 0n) return null;
+  const evBps = _lootboxEvMultiplierBps(activityScore);
+  const scaledAmount = evBps <= 10_000n
+    ? (amount * evBps) / 10_000n
+    : (adjusted * evBps) / 10_000n + (amount - adjusted);
+  const boonBudget = (scaledAmount * LOOTBOX_BOON_BUDGET_BPS) / 10_000n;
+  const mainAmount = scaledAmount - (
+    boonBudget > LOOTBOX_BOON_MAX_BUDGET ? LOOTBOX_BOON_MAX_BUDGET : boonBudget
+  );
+  if (mainAmount <= 0n) return null;
+
+  let rootSeed;
+  try { rootSeed = _humanBoxRootSeed(word, player, amount); }
+  catch (_e) { return null; }
+  const rollSeeds = [rootSeed];
+  const rollAmounts = [mainAmount];
+  if (mainAmount > LOOTBOX_SPLIT_THRESHOLD) {
+    const first = mainAmount / 2n;
+    rollAmounts[0] = first;
+    rollAmounts.push(mainAmount - first);
+    rollSeeds.push(_entropyHash2(rootSeed, 1n));
+  }
+
+  let rollSeed = null;
+  let rollAmount = 0n;
+  let spinSeed = 0n;
+  for (let i = 0; i < rollSeeds.length; i += 1) {
+    const candidateSeed = _entropyHash2(rollSeeds[i], BOX_FLIP_SPIN_TAG);
+    const candidateId = BOX_BET_ID_SENTINEL
+      | (1n << 60n)
+      | (candidateSeed & BOX_BET_ID_ENTROPY_MASK);
+    if (candidateId !== betId) continue;
+    rollSeed = rollSeeds[i];
+    rollAmount = rollAmounts[i];
+    spinSeed = candidateSeed;
+    break;
+  }
+  if (rollSeed == null || rollAmount <= 0n) return null;
+
+  const varianceRoll = Number((rollSeed >> 80n) & 0xFFFFn) % 20;
+  const largeFlipBps = varianceRoll < 16
+    ? 4_388n + BigInt(varianceRoll) * 360n
+    : 23_199n + BigInt(varianceRoll - 16) * 7_125n;
+  const priceWei = scaledTicketPriceWei(level);
+  if (priceWei <= 0n) return null;
+  const largeFlip = ((rollAmount * largeFlipBps) / 10_000n)
+    * PRICE_COIN_UNIT / priceWei;
+  const totalStake = (largeFlip * LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000n;
+  const perSpin = totalStake / 3n;
+  if (perSpin <= 0n) return null;
+
+  let payoutAtRisk = 0n;
+  const reels = Array.isArray(spin?.reels) ? spin.reels.slice(0, 3) : [];
+  for (let i = 0; i < reels.length; i += 1) {
+    const reel = reels[i] || {};
+    const score = Number(reel.score);
+    if (!Number.isInteger(score) || score < 0 || score > 9) continue;
+    const heroQuadrant = Number(_entropyHash2(spinSeed, BigInt(i)) & 3n);
+    const table = degenerettePayoutTable({
+      customTicket: _packedPlayerTicket(reel),
+      heroQuadrant,
+      currency: 1,
+      activityScore,
+    });
+    const row = table.rows[score];
+    payoutAtRisk += (perSpin * row.multiplierNumerator) / row.multiplierDenominator;
+  }
+  return { amount: payoutAtRisk, spinSeed, activityScore };
+}
+
+export function deriveHumanBoxSpinPayoutAtRisk(args) {
+  return _deriveHumanBoxSpin(args)?.amount ?? 0n;
+}
+
+/**
+ * Replay the contract's surviving branch on a reconstructed preliminary sum.
+ *
+ * `_flipSpinChain` doubles the pre-flip total and then collapses it
+ * (DegenerusGameDegeneretteModule.sol:1954-1965). Reproducing that exactly is
+ * what lets a *surviving* spin audit the reconstruction: the emitted payout is
+ * a published fact, so a derived stake that does not settle back to it is
+ * wrong and must not be shown for the busted spins that cannot self-check.
+ */
+export function boxSpinFlipSurvivalPayout(payoutAtRisk, spinSeed) {
+  let total;
+  let seed;
+  try {
+    total = BigInt(payoutAtRisk ?? 0) * 2n;
+    seed = BigInt(spinSeed ?? 0);
+  } catch (_e) {
+    return 0n;
+  }
+  if (total <= 0n) return 0n;
+  if (total <= FLIP_ROUND_THRESHOLD) return (total / FULL_ETH_WEI) * FULL_ETH_WEI;
+  const hundreds = total / FLIP_ROUND_UNIT;
+  const remainderFlip = (total % FLIP_ROUND_UNIT) / FULL_ETH_WEI;
+  const entropy = _entropyHash2(seed, BOX_FLIP_ROUND_TAG) & 0xFFFFFFFFn;
+  const roundsUp = remainderFlip !== 0n && (entropy % 100n) < remainderFlip;
+  return (hundreds + (roundsUp ? 1n : 0n)) * FLIP_ROUND_UNIT;
+}
+
+function _storageKey(types, values) {
+  return ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(types, values));
+}
+
+async function _readStorageAt(provider, slot, blockTag) {
+  const storageSlot = typeof slot === 'string'
+    ? slot
+    : ethers.toBeHex(BigInt(slot), 32);
+  if (typeof provider?.getStorage === 'function') {
+    return provider.getStorage(CONTRACTS.GAME, storageSlot, blockTag);
+  }
+  if (typeof provider?.send === 'function') {
+    return provider.send('eth_getStorageAt', [
+      CONTRACTS.GAME,
+      storageSlot,
+      ethers.toQuantity(blockTag),
+    ]);
+  }
+  throw new Error('Historical storage reader unavailable');
+}
+
+async function _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber }) {
+  const index = BigInt(lootboxIndex);
+  const settlementBlock = Number(blockNumber);
+  if (index <= 0n || !Number.isSafeInteger(settlementBlock) || settlementBlock < 1) return null;
+  const provider = getProvider();
+  if (!provider || !CONTRACTS.GAME) return null;
+  const preBlock = settlementBlock - 1;
+  const outer = _storageKey(['uint48', 'uint256'], [index, 15n]);
+  const boxSlot = _storageKey(['address', 'bytes32'], [player, outer]);
+  const rngSlot = _storageKey(['uint48', 'uint256'], [index, 34n]);
+  const [packedRaw, rngRaw, timingRaw] = await Promise.all([
+    _readStorageAt(provider, boxSlot, preBlock),
+    _readStorageAt(provider, rngSlot, preBlock),
+    _readStorageAt(provider, 0n, preBlock),
+  ]);
+  const packedBox = BigInt(packedRaw ?? 0);
+  const rngWord = BigInt(rngRaw ?? 0);
+  const timing = BigInt(timingRaw ?? 0);
+  const currentLevel = Number((timing >> 96n) & 0xFFFFFFn) + 1;
+  return packedBox > 0n && rngWord > 0n
+    ? { packedBox, rngWord, currentLevel }
+    : null;
+}
+
+/** True for any human-box FLIP spin whose pre-flip sum is still unnamed. */
+function _wantsSurvivalStake(leg) {
+  return leg?.legType === 'spin'
+    && String(leg?.spinType || '').toLowerCase() === 'flip'
+    && _feedBigInt(leg?.preSurvivalPayout ?? leg?.survivalPayout ?? leg?.payoutAtRisk) === 0n
+    && (Array.isArray(leg?.reels) ? leg.reels : []).some((reel) => Number(reel?.score) >= 2);
+}
+
+/**
+ * Attach the pre-flip FLIP sum to human-box FLIP spins, won or busted alike.
+ *
+ * The stake is a property of the reels and the box, not of the coin: deriving
+ * it only for busts left the amount sourced from the settled payout on every
+ * other path, which is exactly why a bust had no number to show. Deriving it
+ * for both outcomes also buys a live audit — a survivor's emitted payout must
+ * replay from the derived stake, and a spin that fails that check is dropped
+ * rather than shown.
+ */
+export async function enrichHumanBoxSpinLegs(legs, {
+  player,
+  lootboxIndex,
+  blockNumber = null,
+  context = null,
+} = {}) {
+  const rows = Array.isArray(legs) ? legs : [];
+  const needsAmount = rows.some(_wantsSurvivalStake);
+  if (!needsAmount || !player) return rows;
+  let exactContext = context;
+  if (!exactContext) {
+    try {
+      exactContext = await _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber });
+    } catch (_e) {
+      return rows;
+    }
+  }
+  if (!exactContext) return rows;
+  // The indexed leg feed records the stored chain level at settlement. Prefer
+  // that event-block projection when available; the packed slot read remains
+  // the receipt/legacy fallback. The contract prices this roll at level + 1.
+  const indexedLevel = rows
+    .map((leg) => leg?.levelAtOpen)
+    .filter((value) => value != null && value !== '')
+    .map(Number)
+    .find((value) => Number.isInteger(value) && value >= 0);
+  if (indexedLevel != null) {
+    exactContext = { ...exactContext, currentLevel: indexedLevel + 1 };
+  }
+  let changed = false;
+  const enriched = rows.map((leg) => {
+    if (!_wantsSurvivalStake(leg)) return leg;
+    const derived = _deriveHumanBoxSpin({ spin: leg, player, ...exactContext });
+    const preSurvivalPayout = derived?.amount ?? 0n;
+    if (preSurvivalPayout <= 0n) return leg;
+    // A nonzero payout is the surviving branch, and the contract's own
+    // doubling + FLIP collapse must reproduce it from this stake. A mismatch
+    // means the reconstruction is off, so publish nothing.
+    const settled = _feedBigInt(leg?.payout);
+    if (settled > 0n
+      && boxSpinFlipSurvivalPayout(preSurvivalPayout, derived.spinSeed) !== settled) {
+      return leg;
+    }
+    changed = true;
+    return { ...leg, preSurvivalPayout };
+  });
+  return changed ? enriched : rows;
 }
 
 /**
@@ -347,6 +809,14 @@ const SHARED_BOON_TYPES = Object.freeze({
   5: [6, 8],
   6: [22, 9],
 });
+const SHARED_BOON_FAMILIES = Object.freeze([
+  [5, 6, 22],
+  [7, 8, 9],
+]);
+
+function _activeFamilyType(types, family) {
+  return family.find((candidate) => types.has(candidate)) ?? null;
+}
 
 /**
  * The compact reward event loses the coinflip tier and shares IDs 4/5/6 between
@@ -357,6 +827,8 @@ const SHARED_BOON_TYPES = Object.freeze({
 export async function enrichLootboxBoonLegs(legs, {
   player,
   blockNumber = null,
+  lootboxIndex = null,
+  context = null,
 } = {}) {
   const rows = Array.isArray(legs) ? legs : [];
   if (!player || !rows.some((leg) => {
@@ -376,17 +848,69 @@ export async function enrichLootboxBoonLegs(legs, {
     exact?.currentDay,
   );
   const activeTypes = new Set(active.map((boon) => Number(boon?.boonType)));
+  const hasSharedReward = rows.some((leg) => (
+    leg?.legType === 'reward' && SHARED_BOON_TYPES[Number(leg?.rewardType)]
+  ));
+  let priorTypes = null;
+  const settlementBlock = Number(blockNumber);
+  if (hasSharedReward && Number.isSafeInteger(settlementBlock) && settlementBlock > 0) {
+    try {
+      const prior = await readExactBoonState(player, { blockTag: settlementBlock - 1 });
+      priorTypes = new Set(decodePackedBoons(
+        prior?.slot0,
+        prior?.slot1,
+        prior?.currentDay,
+      ).map((boon) => Number(boon?.boonType)));
+    } catch (_e) {
+      // Without historical state, retain the honest category fallback below.
+    }
+  }
+  let sharedFamilyIndex = null;
+  if (priorTypes) {
+    // Shared reward IDs do not encode their product. A post-state match is
+    // insufficient: an ignored lower Ticket roll can share its tier with a
+    // held Luckbox boon. A unique before/after family mutation proves which
+    // product this event actually rolled.
+    const changedFamilies = SHARED_BOON_FAMILIES
+      .map((family, index) => ({
+        index,
+        changed: _activeFamilyType(priorTypes, family)
+          !== _activeFamilyType(activeTypes, family),
+      }))
+      .filter((entry) => entry.changed);
+    if (changedFamilies.length === 1) sharedFamilyIndex = changedFamilies[0].index;
+  }
+  if (hasSharedReward && sharedFamilyIndex == null) {
+    let exactContext = context;
+    if (!exactContext) {
+      try {
+        exactContext = await _readHumanBoxSpinContext({
+          player,
+          lootboxIndex,
+          blockNumber,
+        });
+      } catch (_e) { /* direct/index-zero boxes retain the state-derived fallback */ }
+    }
+    if (exactContext) {
+      const drawnBoonType = deriveHumanLootboxBoonType({ player, ...exactContext });
+      if (SHARED_BOON_FAMILIES[0].includes(drawnBoonType)) sharedFamilyIndex = 0;
+      else if (SHARED_BOON_FAMILIES[1].includes(drawnBoonType)) sharedFamilyIndex = 1;
+    }
+  }
   return rows.map((leg) => {
     if (leg?.legType !== 'reward') return leg;
+    if (leg?.boonType != null) return leg;
     const rewardType = Number(leg?.rewardType);
     if (rewardType === 2) {
       const boonType = [3, 2, 1].find((candidate) => activeTypes.has(candidate));
       const boonBps = COINFLIP_BOON_BPS[boonType] || null;
       return boonBps == null ? leg : { ...leg, boonType, boonBps };
     }
-    const matches = (SHARED_BOON_TYPES[rewardType] || [])
-      .filter((candidate) => activeTypes.has(candidate));
-    return matches.length === 1 ? { ...leg, boonType: matches[0] } : leg;
+    const candidates = SHARED_BOON_TYPES[rewardType];
+    if (candidates && sharedFamilyIndex != null) {
+      return { ...leg, boonType: candidates[sharedFamilyIndex] };
+    }
+    return leg;
   });
 }
 
@@ -589,6 +1113,7 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
           const decoded = decodeBoxSpin(BigInt(parsed.args.betId), BigInt(parsed.args.packedSpins));
           out.push({
             legType: 'spin',
+            blockNumber: receipt?.blockNumber ?? log?.blockNumber ?? null,
             ...decoded,
             payout: BigInt(parsed.args.payout),
             ethShare: BigInt(parsed.args.ethShare),
@@ -674,6 +1199,8 @@ export function openLegsFromDegenerettePayouts(items) {
         const decoded = decodeBoxSpin(_feedBigInt(data.betId), _feedBigInt(data.packedSpins));
         out.push({
           legType: 'spin',
+          blockNumber: item?.blockNumber ?? data?.blockNumber ?? null,
+          levelAtOpen: item?.levelAtOpen ?? data?.levelAtOpen ?? null,
           ...decoded,
           payout: _feedBigInt(data.payout),
           ethShare: _feedBigInt(data.ethShare),
@@ -682,6 +1209,8 @@ export function openLegsFromDegenerettePayouts(items) {
       } else if (Array.isArray(data.reels)) {
         out.push({
           legType: 'spin',
+          blockNumber: item?.blockNumber ?? data?.blockNumber ?? null,
+          levelAtOpen: item?.levelAtOpen ?? data?.levelAtOpen ?? null,
           boxOrigin: true,
           betId: data.betId == null ? null : String(data.betId),
           heroQuadrant: data.heroQuadrant == null
@@ -717,7 +1246,40 @@ export function openLegsFromDegenerettePayouts(items) {
  * @returns {Array<object>}
  */
 export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash } = {}) {
-  const rows = Array.isArray(items) ? items : [];
+  // Exact and recent feed projections are often merged by callers. One chain
+  // event is uniquely (transactionHash, logIndex), so collapse overlap before
+  // it can become duplicate reward cards or duplicate BoxSpin choreography.
+  const rows = [];
+  const eventSlots = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const txHash = String(item?.transactionHash || '').toLowerCase();
+    const rawLogIndex = item?.logIndex;
+    const logIndex = rawLogIndex == null ? Number.NaN : Number(rawLogIndex);
+    const eventKey = txHash && Number.isInteger(logIndex) && logIndex >= 0
+      ? `${txHash}:${logIndex}`
+      : null;
+    if (!eventKey) {
+      rows.push(item);
+      continue;
+    }
+    const priorIndex = eventSlots.get(eventKey);
+    if (priorIndex == null) {
+      eventSlots.set(eventKey, rows.length);
+      rows.push(item);
+      continue;
+    }
+    const prior = rows[priorIndex] || {};
+    rows[priorIndex] = {
+      ...prior,
+      ...item,
+      rewardData: item?.rewardData == null
+        ? prior.rewardData
+        : { ...(prior.rewardData || {}), ...item.rewardData },
+      spin: item?.spin == null
+        ? prior.spin
+        : { ...(prior.spin || {}), ...item.spin },
+    };
+  }
   const wantPlayer = String(player || '').toLowerCase();
   const wantIndex = String(lootboxIndex ?? '');
   const wantTx = String(transactionHash || '').toLowerCase();
@@ -829,6 +1391,8 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         const spin = item.spin || {};
         out.push({
           legType: 'spin',
+          blockNumber: item?.blockNumber ?? spin?.blockNumber ?? null,
+          levelAtOpen: item?.levelAtOpen ?? spin?.levelAtOpen ?? null,
           boxOrigin: true,
           betId: spin.betId == null ? null : String(spin.betId),
           heroQuadrant: spin.heroQuadrant == null

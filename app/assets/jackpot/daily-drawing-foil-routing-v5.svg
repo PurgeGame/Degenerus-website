@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1372 1000" preserveAspectRatio="none">
+  <!--
+    This viewBox matches the live foil bank: 174 / 12 / 1000 / 12 / 174. The
+    1000-unit middle column is the draw processor itself, so x=186 and x=1186
+    are literally the board's left and right edges.
+
+    v5 deletes the eight outer feeds. v4 ran them from the perimeter ground
+    rail at x=34 / x=1338 into the socket, and defended that with a plated via
+    on the rail — a terminus that is legal on a real board and worthless to a
+    player, who sees a line leave a socket, cross the gutter and stop at a dot
+    near the frame. That is the "circuit going nowhere" read, and a via does not
+    fix it.
+
+    The surviving rule is stricter than v4's and is the one this layer is now
+    authored to: an exposed lane must visibly connect two things a player can
+    NAME. Here that is exactly one pair — the draw processor and a foil socket
+    — so every remaining lane leaves the processor's edge and ends on a socket
+    edge, two per socket. Nothing terminates on the rail, on the frame, or in a
+    via floating in bare mask.
+
+    Losing the outer pair also loses v4's "one feed per foil quadrant" claim.
+    That claim was fiction dressed as function: the quadrants are printed on the
+    card, not wired to it, and buying it cost the sheet eight lanes that read as
+    debris. Two honest feeds per socket say the same thing about the socket
+    being powered by the board, at half the line count.
+  -->
+  <g fill="none" stroke="#b48435" stroke-opacity="0.34" stroke-width="2.1"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <!-- upper-left socket: both feeds off the processor edge -->
+    <path d="M186 58H166L130 94V164"/>
+    <path d="M186 442H166L130 406V336"/>
+
+    <!-- lower-left socket -->
+    <path d="M186 558H166L130 594V664"/>
+    <path d="M186 942H166L130 906V836"/>
+
+    <!-- upper-right socket -->
+    <path d="M1186 58H1206L1242 94V164"/>
+    <path d="M1186 442H1206L1242 406V336"/>
+
+    <!-- lower-right socket -->
+    <path d="M1186 558H1206L1242 594V664"/>
+    <path d="M1186 942H1206L1242 906V836"/>
+  </g>
+
+  <!-- Bus junction vias, on the processor edge where each lane leaves it. -->
+  <g fill="#c49a4d" fill-opacity="0.4">
+    <circle cx="186" cy="58" r="3"/><circle cx="186" cy="442" r="3"/>
+    <circle cx="186" cy="558" r="3"/><circle cx="186" cy="942" r="3"/>
+    <circle cx="1186" cy="58" r="3"/><circle cx="1186" cy="442" r="3"/>
+    <circle cx="1186" cy="558" r="3"/><circle cx="1186" cy="942" r="3"/>
+  </g>
+</svg>

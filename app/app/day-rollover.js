@@ -16,6 +16,13 @@ import { get, subscribe, update } from './store.js';
 const GAME_DAY_ABI = [
   'function currentDayView() external view returns (uint24)',
   'function rngLocked() external view returns (bool)',
+  // DegenerusGame.sol:2481 — `rngWordCurrent != 0`. The VRF callback assigns
+  // that word (DegenerusGame.sol:2211), so this view flips true in the same
+  // block the randomness lands, with no indexer in the path. There is no
+  // checked-in GAME ABI artifact to regenerate; every module declares its own
+  // minimal fragments, and this one was verified by raw eth_call against the
+  // live Base Sepolia GAME (0xe57d3910…, selector 0xabd9f3da -> 0x00…00).
+  'function isRngFulfilled() external view returns (bool)',
   'function rngNudgeQuote() external view returns (uint256 queued, uint256 cost)',
 ];
 const COINFLIP_DAY_ABI = [
@@ -112,7 +119,17 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
   const rngLocked = hasLockReading
     ? snapshot.rngLocked
     : Boolean(sameTarget && previous?.rngLocked);
+  // isRngFulfilled() reads `rngWordCurrent != 0`, and the advance pipeline
+  // ZEROES that word once it has drained it (DegenerusGameAdvanceModule.sol
+  // :1570, :1955, :2330, :2461). So `true` is proof the day's word arrived and
+  // `false` proves nothing whatsoever — it is equally the state before the VRF
+  // callback and the state after the drain. Latch it positive-only for the
+  // day: a word that arrived cannot un-arrive, and a failed read (null) leaves
+  // whatever the latch already knew untouched.
+  const rngFulfilled = snapshot?.rngFulfilled === true
+    || Boolean(sameTarget && previous?.rngFulfilled);
   const rngRequested = rngLocked
+    || rngFulfilled
     || indexedJackpotResolved
     || Boolean(coinflipResult?.resolved)
     || Boolean(sameTarget && previous?.rngRequested);
@@ -145,6 +162,7 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
     jackpotReady,
     coinflipReady,
     rngLocked,
+    rngFulfilled,
     rngRequested,
     reverseQueued: reverseQueued == null ? null : reverseQueued.toString(),
     ready,
@@ -160,6 +178,7 @@ function _materialKey(state) {
     state.jackpotReady ? 1 : 0,
     state.coinflipReady ? 1 : 0,
     state.rngLocked ? 1 : 0,
+    state.rngFulfilled ? 1 : 0,
     state.rngRequested ? 1 : 0,
     state.reverseQueued ?? '',
     state.coinflipResult?.win ? 1 : 0,
@@ -183,9 +202,10 @@ async function _readSnapshot() {
   const overrides = blockNumber == null ? [] : [{ blockTag: blockNumber }];
   const day = _positiveDay(await game.currentDayView(...overrides));
   if (day == null) throw new Error('Invalid chain day');
-  const [coinflipResult, lockResult, nudgeResult] = await Promise.allSettled([
+  const [coinflipResult, lockResult, fulfilledResult, nudgeResult] = await Promise.allSettled([
     coinflip.getCoinflipDayResult(day, ...overrides),
     game.rngLocked(...overrides),
+    game.isRngFulfilled(...overrides),
     game.rngNudgeQuote(...overrides),
   ]);
   if (coinflipResult.status !== 'fulfilled') throw coinflipResult.reason;
@@ -195,6 +215,9 @@ async function _readSnapshot() {
     blockNumber,
     coinflip: _normalizedCoinflip(day, raw),
     rngLocked: lockResult.status === 'fulfilled' ? Boolean(lockResult.value) : null,
+    // null, never false, when the read failed: an absent answer must not be
+    // reducible to "the word is not in".
+    rngFulfilled: fulfilledResult.status === 'fulfilled' ? Boolean(fulfilledResult.value) : null,
     reverseQueued: nudgeResult.status === 'fulfilled'
       ? String(nudgeResult.value?.queued ?? nudgeResult.value?.[0] ?? 0)
       : null,
@@ -307,6 +330,7 @@ export function startDayRollover({ onRefreshNeeded = null } = {}) {
       blockNumber: current.chainBlock,
       coinflip: current.coinflipResult,
       rngLocked: current.rngLocked,
+      rngFulfilled: current.rngFulfilled,
       reverseQueued: current.reverseQueued,
     });
   });

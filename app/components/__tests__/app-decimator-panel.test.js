@@ -292,6 +292,7 @@ globalThis.fetch = async (url) => {
 };
 
 function resetDom() {
+  __resetHeldBalancesForTest();
   pendingActionsMod.__resetPendingActionsForTest();
   decimatorMod.__resetContractFactoryForTest();
   coinflipMod.__setClaimableReaderForTest(null);
@@ -337,6 +338,10 @@ import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as uiPreferencesMod from '../../app/ui-preferences.js';
 import { invalidateJSONCache } from '../../app/api.js';
+import {
+  __resetHeldBalancesForTest,
+  heldBalanceValue,
+} from '../../app/balance-hold.js';
 
 // Seats auto-mint with the pass, so `claimSeat`/`canClaimSeat` are gone — holding one is the
 // whole signal.
@@ -372,6 +377,10 @@ const PANEL_SRC = readFileSync(
 );
 const APP_CSS = readFileSync(
   new URL('../../styles/app.css', import.meta.url),
+  'utf8',
+);
+const PURCHASE_DESK_CSS = readFileSync(
+  new URL('../../styles/purchase-desk.css', import.meta.url),
   'utf8',
 );
 const STATUS_CSS = readFileSync(
@@ -669,7 +678,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     const el = instantiate();
     assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
     assert.match(el.innerHTML,
-      /<boon-product-indicator product="purchase"\s+variant="purchase-control"/);
+      /<boon-product-indicator product="purchase" data-bind="dec-ticket-boon"\s+variant="purchase-control"/);
     assert.match(el.innerHTML, /<span>Buy luckbox<\/span>/);
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
@@ -1140,6 +1149,26 @@ describe('combined ticket + lootbox buy', () => {
       'receipt-confirmed RNG work must not wait behind boon/reveal RPC enrichment');
   });
 
+  test('an auto-presented nonzero box uses the same index identity as Pending', () => {
+    assert.match(
+      PANEL_SRC,
+      /lootboxPresentationKey\(autoBoxIndex, transactionHash\)/,
+      'receipt completion must retire the indexed Pending action for the same box',
+    );
+    assert.match(
+      PANEL_SRC,
+      /const autoBoxIndex = openedBoxIndex\s*\?\? \(boxes\.length === 1 \? boxes\[0\]\?\.index : null\)/,
+      'a pure BoxSpin still inherits the purchase index despite suppressing LootBoxOpened',
+    );
+    const riskEnrichmentAt = PANEL_SRC.indexOf('autoLegs = await enrichHumanBoxSpinLegs');
+    const boonEnrichmentAt = PANEL_SRC.indexOf('autoLegs = await enrichLootboxBoonLegs');
+    const revealAt = PANEL_SRC.indexOf("kind: 'lootbox'", riskEnrichmentAt);
+    assert.ok(riskEnrichmentAt >= 0 && boonEnrichmentAt > riskEnrichmentAt,
+      'the exact survival stake is attached before reward-card enrichment');
+    assert.ok(revealAt > boonEnrichmentAt,
+      'the auto-open reveal receives the fully enriched BoxSpin');
+  });
+
   test('both zero → validation error, no tx', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
@@ -1387,7 +1416,9 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-funds__breakdown\[hidden\]\s*\{[^}]*display:\s*none !important/s,
       'closing the disclosure removes the entire source-detail list from layout',
     );
-    for (const selector of ['inv-disclosure__chevron', 'dec-funds__chevron', 'df-funds__chevron']) {
+    // The coinflip funds box is now a printed AVAILABLE FUNDS plate with no
+    // disclosure, so df-funds__chevron no longer exists.
+    for (const selector of ['inv-disclosure__chevron', 'dec-funds__chevron']) {
       const rule = APP_CSS.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] || '';
       assert.match(rule, /width:\s*0\.42rem/);
       assert.match(rule, /height:\s*0\.42rem/);
@@ -1589,8 +1620,14 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('claimable blur toggles without disabling the ETH claim', async () => {
+  test('claimable holds its last settled value without disabling the ETH claim', async () => {
     storeMod.update('app.lastDay', { day: 67 });
+    heldBalanceValue({
+      namespace: 'claimable-eth:84532',
+      scope: CONNECTED,
+      value: lootboxMod.scaledTicketPriceWei(12) / 2n,
+      released: true,
+    });
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
@@ -1606,60 +1643,36 @@ describe('combined ticket + lootbox buy', () => {
     const claim = el.querySelector('[data-bind="dec-funds-claim"]');
     const total = el.querySelector('[data-bind="dec-funds-total"]');
     const totalDisplay = el.querySelector('[data-bind="dec-funds-total-display"]');
-    assert.ok(display.classList.contains('dec-funds__display--spoiler'));
-    assert.ok(totalDisplay.classList.contains('dec-funds__total--spoiler'));
-    assert.equal(total.textContent, '••••', 'the aggregate cannot spoil an unseen jackpot either');
-    assert.equal(value.textContent, '••••', 'the amount DOM only contains a fixed-length mask');
-    assert.equal(unit.textContent, 'ETH', 'the currency unit stays readable beside the mask');
-    assert.doesNotMatch(value.textContent, /\d/, 'the hidden balance cannot leak through blurred digits');
-    assert.equal(value.getAttribute('role'), 'button', 'the spoiler is explicitly revealable');
+    assert.equal(display.getAttribute('data-balance-held'), 'true');
+    assert.equal(totalDisplay.getAttribute('data-balance-held'), 'true');
+    assert.doesNotMatch(total.textContent, /•/, 'Available Funds paints a settled number, never a mask');
+    assert.doesNotMatch(value.textContent, /•/, 'Claimable paints the prior settled number');
+    assert.match(value.textContent, /\d/, 'the prior settled amount remains readable');
+    assert.equal(unit.textContent, 'ETH');
+    assert.equal(value.getAttribute('role'), null, 'the RNG hold has no manual reveal bypass');
+    const heldValue = value.textContent;
     total.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.doesNotMatch(total.textContent, /•/, 'clicking Available Funds unmasks its current total');
-    total.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.equal(total.textContent, '••••', 'clicking the total again reblurs it');
+    assert.equal(value.textContent, heldValue, 'clicking Available Funds cannot bypass the hold');
     el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     assert.equal(claim.hidden, false);
-    assert.equal(claim.disabled, false, 'privacy masking never gates a valid ETH claim');
+    assert.equal(claim.disabled, false, 'holding presentation never gates existing ETH winnings');
     value.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.notEqual(value.textContent, '••••', 'clicking the number reveals the current balance');
-    assert.equal(claim.disabled, false);
-    value.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.equal(value.textContent, '••••', 'clicking the revealed number reblurs it');
-    assert.equal(claim.disabled, false, 'reblurring leaves Claim live');
-    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.equal(value.textContent, heldValue, 'clicking Claimable cannot reveal the queued amount');
 
     globalThis.localStorage.setItem('spun_day_84532_67', '1');
     storeMod.update('app.lastDay', { day: 67 });
-    assert.ok(!display.classList.contains('dec-funds__display--spoiler'));
-    assert.ok(!totalDisplay.classList.contains('dec-funds__total--spoiler'));
-    assert.doesNotMatch(total.textContent, /•/, 'the aggregate returns after the jackpot is viewed');
-    assert.notEqual(value.textContent, '••••', 'the real balance is inserted only after reveal');
+    assert.equal(display.getAttribute('data-balance-held'), 'false');
+    assert.equal(totalDisplay.getAttribute('data-balance-held'), 'false');
+    assert.notEqual(value.textContent, heldValue, 'the queued balance is inserted only after reveal');
     assert.equal(unit.textContent, 'ETH');
     assert.equal(value.getAttribute('aria-hidden'), null);
     assert.equal(claim.disabled, false);
-    value.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.equal(value.textContent, '••••', 'the player can reblur even after the jackpot is viewed');
-    assert.equal(claim.disabled, false);
-    value.dispatchEvent({ type: 'click', preventDefault() {} });
-    assert.notEqual(value.textContent, '••••', 'the same control toggles it visible again');
-    assert.match(
-      APP_CSS,
-      /\.dec-funds__display--spoiler \.dec-funds__number\s*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
-    );
-    assert.doesNotMatch(
-      APP_CSS,
-      /\.dec-funds__display--spoiler \.dec-funds__value\s*\{[^}]*filter:\s*blur/s,
-      'the spoiler blur does not include the ETH unit',
-    );
-    assert.doesNotMatch(
-      APP_CSS,
-      /\.dec-funds__display--spoiler \.dec-funds__claim\[data-write\][\s\S]*?background:\s*rgba\(0, 0, 0, 0\.16\)[\s\S]*?box-shadow:\s*none/s,
-      'the privacy mask does not paint a live Claim as dormant',
-    );
+    assert.doesNotMatch(APP_CSS, /--main-balance-spoiler-blur|filter:\s*blur\(var\(--main-balance/,
+      'primary balances no longer use the old blur treatment');
     el.disconnectedCallback();
   });
 
-  test('collapsed Total masks only pending results that can change ETH', async () => {
+  test('collapsed Total holds only the RNG-sensitive claimable component', async () => {
     const el = instantiate();
     await settle(60);
     const total = el.querySelector('[data-bind="dec-funds-total"]');
@@ -1670,26 +1683,33 @@ describe('combined ticket + lootbox buy', () => {
       id: 'degenerette:eth:1', kind: 'degenerette', currency: 0, mayAddEth: true,
       phase: 'waiting-rng', state: 'waiting', label: '1 spin',
     }]);
-    assert.equal(total.textContent, '••••');
-    assert.ok(totalDisplay.classList.contains('dec-funds__total--spoiler'));
-    assert.doesNotMatch(total.textContent, /\d/, 'masked Total never leaves hidden digits in the DOM');
+    assert.equal(total.textContent, '3.12', 'an ETH-capable RNG does not blank the settled total');
+    assert.equal(totalDisplay.getAttribute('data-balance-held'), 'true');
+
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, 4_125_000_000_000n));
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+    assert.equal(total.textContent, '4.12',
+      'an ordinary wallet change still updates while RNG-derived claimable ETH is held');
+    assert.equal(totalDisplay.getAttribute('data-balance-held'), 'true',
+      'the wallet refresh does not release the queued RNG credit');
 
     pendingActionsMod.publishPendingActions('degenerette-live', [{
       id: 'degenerette:flip:1', kind: 'degenerette', currency: 1, mayAddEth: false,
       phase: 'waiting-rng', state: 'waiting', label: '1 spin',
     }]);
-    assert.equal(total.textContent, '3.12', 'a FLIP-only result cannot change the ETH aggregate');
-    assert.ok(!totalDisplay.classList.contains('dec-funds__total--spoiler'));
+    assert.equal(total.textContent, '4.12', 'a FLIP-only result cannot change the ETH aggregate');
+    assert.equal(totalDisplay.getAttribute('data-balance-held'), 'false');
 
     pendingActionsMod.publishPendingActions('lootbox-live', [{
       id: 'lootbox:1', kind: 'lootbox', resolved: true, mayAddEth: true,
       phase: 'result-ready', state: 'ready', label: 'Luckbox',
     }]);
-    assert.equal(total.textContent, '••••', 'an indexed unseen lootbox result also protects Total');
+    assert.equal(total.textContent, '4.12', 'an indexed unseen lootbox keeps the last settled total');
     el.disconnectedCallback();
   });
 
-  test('ALL IN uses known ETH even while the ordinary balance remains spoiler-masked', async () => {
+  test('ALL IN uses known ETH while the ordinary balance holds its settled value', async () => {
     storeMod.update('app.lastDay', { day: 67 });
     _fetchHandler = async (url) => {
       const u = String(url);
@@ -1704,7 +1724,11 @@ describe('combined ticket + lootbox buy', () => {
       id: 'lootbox:all-in-spoiler', kind: 'lootbox', mayAddEth: true,
       phase: 'waiting-rng', state: 'waiting', label: 'Luckbox',
     }]);
-    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '••••');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '3.12');
+    assert.equal(
+      el.querySelector('[data-bind="dec-funds-total-display"]').getAttribute('data-balance-held'),
+      'true',
+    );
 
     let opened = null;
     el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
@@ -1712,7 +1736,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.ok(opened);
     const quote = opened.quote({ currency: 'ETH', target: 'lootbox', spins: 5 });
     assert.equal(quote.valid, true,
-      'an explicit ALL IN quote can use known ETH without waiting for the reveal mask');
+      'an explicit ALL IN quote can use known ETH without waiting for the presentation hold');
     assert.doesNotMatch(quote.message || '', /hidden|pending/i);
     el.disconnectedCallback();
   });
@@ -2009,6 +2033,8 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(APP_CSS,
       /\.dec-all-in\s*\{[^}]*grid-column:\s*2/s,
       'the action is pinned above the right side of the ETH bar');
+    assert.doesNotMatch(PURCHASE_DESK_CSS, /\.dec-funds-stack::before\s*\{/,
+      'no decorative divider sits above the ALL IN action');
     assert.match(APP_CSS,
       /\.dec-funds-stack:has\(> \.dec-funds > \.dec-funds__summary\[aria-expanded="false"\]\) > \.dec-all-in\s*\{[^}]*transform:\s*translateY\(-0\.2rem\)/s,
       'ALL IN rises slightly while Available Funds is collapsed');
@@ -3519,8 +3545,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       APP_CSS,
-      /\.app-decimator-panel \.dec-funds__priority,[\s\S]*?\.app-daily-flip \.df-funds \.df-burn-sdgnrs-cta\[data-write\][\s\S]*?height:\s*1\.3rem;[\s\S]*?border-radius:\s*4px;[\s\S]*?font-size:\s*0\.52rem;/,
-      'ETH and Protocol Coins actions share one compact size and type rhythm',
+      /\.app-decimator-panel \.dec-funds__priority,[\s\S]*?\.app-decimator-panel \.dec-flip-toggle[\s\S]*?height:\s*1\.3rem;[\s\S]*?border-radius:\s*4px;[\s\S]*?font-size:\s*0\.52rem;/,
+      'Available Funds actions share one compact size and type rhythm',
     );
     assert.match(
       APP_CSS,
@@ -3588,7 +3614,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       : { claimableEth: '0', flipBalance: String(1n * FLIP), coinflip: { claimablePreview: '0' } };
     storeMod.update('ui.protocolCoinsFlipDisclosure', {
       address: CONNECTED.toLowerCase(),
-      visible: false,
+      valueWei: String(2_800n * FLIP),
+      held: true,
     });
 
     const el = instantiate();
@@ -3596,44 +3623,33 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     const balance = el.querySelector('[data-bind="dec-flip-balance"]');
     const value = el.querySelector('[data-bind="dec-flip-balance-value"]');
     assert.match(el.innerHTML, /dec-flip-balance__label">FLIP BALANCE</);
-    assert.equal(value.textContent, '••••', 'the left copy starts behind the Protocol Coins mask');
-    assert.ok(balance.classList.contains('dec-flip-balance--spoiler'));
+    assert.equal(value.textContent, '2,800', 'the left copy mirrors the last settled Protocol Coins value');
+    assert.equal(balance.getAttribute('data-balance-held'), 'true');
 
     storeMod.update('ui.protocolCoinsFlipDisclosure', {
       address: CONNECTED.toLowerCase(),
-      visible: true,
+      valueWei: String(2_925n * FLIP),
+      held: false,
     });
     assert.equal(value.textContent, '2,925',
       'the mirror adds full withdrawable backing, including 175 FLIP of auto-rebuy carry');
-    assert.ok(!balance.classList.contains('dec-flip-balance--spoiler'));
+    assert.equal(balance.getAttribute('data-balance-held'), 'false');
 
     storeMod.update('ui.protocolCoinsFlipDisclosure', {
       address: CONNECTED.toLowerCase(),
-      visible: false,
+      valueWei: String(2_925n * FLIP),
+      held: true,
     });
-    assert.equal(value.textContent, '••••', 'reblurring Protocol Coins reblurs its left mirror');
-    assert.ok(balance.classList.contains('dec-flip-balance--spoiler'));
-    assert.match(
-      APP_CSS,
-      /:root\s*\{[^}]*--main-balance-spoiler-blur:\s*0\.3rem/s,
-      'main balance boxes share one privacy-blur token',
-    );
-    assert.match(
-      APP_CSS,
-      /\.dec-flip-balance--spoiler[^{]*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
-      'the buy-side FLIP mirror uses the shared blur treatment',
-    );
-    assert.match(
-      APP_CSS,
-      /\.df-position-row--spoiler \.df-position-number,[\s\S]*?\.df-funds__display--spoiler \.df-funds__number\s*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
-      'Protocol Coins and the primary bet boxes use that same blur treatment',
-    );
+    assert.equal(value.textContent, '2,925', 'a new RNG hold leaves the settled mirror readable');
+    assert.equal(balance.getAttribute('data-balance-held'), 'true');
+    assert.doesNotMatch(APP_CSS, /--main-balance-spoiler-blur|dec-flip-balance--spoiler/,
+      'the old shared blur treatment is retired');
 
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
 
-  test('ALL IN quotes FLIP while Protocol Coins stays privacy-blurred', async () => {
+  test('ALL IN quotes FLIP while Protocol Coins stays on its settled value', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     _fetchHandler = async (url) => (
       String(url).includes('/game/state')
@@ -3648,13 +3664,14 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     await settle(60);
     storeMod.update('ui.protocolCoinsFlipDisclosure', {
       address: CONNECTED.toLowerCase(),
-      visible: false,
+      valueWei: String(2_250n * 10n ** 18n),
+      held: true,
     });
     await settle(10);
     assert.equal(
-      el.querySelector('[data-bind="dec-flip-balance"]').classList.contains('dec-flip-balance--spoiler'),
-      true,
-      'the amount remains visually private',
+      el.querySelector('[data-bind="dec-flip-balance-value"]').textContent,
+      '2,250',
+      'the settled amount remains readable',
     );
     el.querySelector('[data-bind="dec-funds-total-flip"]').dispatchEvent({ type: 'click' });
 
@@ -3672,9 +3689,9 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     const quote = opened.quote({ currency: 'FLIP', target: 'tickets', spins: 5 });
     assert.equal(quote.valid, true);
     assert.equal(
-      el.querySelector('[data-bind="dec-flip-balance"]').classList.contains('dec-flip-balance--spoiler'),
-      true,
-      'quoting ALL IN does not reveal the balance',
+      el.querySelector('[data-bind="dec-flip-balance"]').getAttribute('data-balance-held'),
+      'true',
+      'quoting ALL IN does not release the held balance',
     );
     assert.equal(quote.ticketAmount, '2.25');
     assert.equal(quote.spendWei, 2_250n * 10n ** 18n);
@@ -3693,6 +3710,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     const tickets = el.querySelector('[name="dec-tickets"]');
     const lootbox = el.querySelector('[name="dec-lootbox-eth"]');
     const lootboxGroup = el.querySelector('[data-bind="dec-lootbox-group"]');
+    const ticketBoon = el.querySelector('[data-bind="dec-ticket-boon"]');
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     const useClaimable = el.querySelector('[data-bind="dec-funds-use-claimable"]');
     const useWallet = el.querySelector('[data-bind="dec-funds-use-wallet"]');
@@ -3704,6 +3722,9 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(tickets.value, '1', 'zero tickets seed to one when USE FLIP is selected');
     assert.equal(lootbox.value, '0', 'the incompatible lootbox amount is cleared');
     assert.equal(lootboxGroup.hidden, true, 'the whole lootbox control is removed in FLIP mode');
+    assert.equal(ticketBoon.hidden, true, 'the ETH purchase boon is removed in FLIP mode');
+    assert.equal(ticketBoon.getAttribute('suppressed'), '',
+      'boon refreshes cannot restore an inapplicable ticket-purchase marker');
     assert.equal(useClaimable.getAttribute('aria-pressed'), 'true',
       'the selected ETH priority is not rewritten by USE FLIP');
     assert.equal(useWallet.getAttribute('aria-pressed'), 'false');
@@ -3711,6 +3732,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     mode.checked = false;
     mode.dispatchEvent({ type: 'change' });
     assert.equal(lootboxGroup.hidden, false, 'lootboxes return when FLIP mode is left');
+    assert.equal(ticketBoon.getAttribute('suppressed'), null,
+      'the ticket boon can return when ETH purchasing is restored');
     assert.equal(useClaimable.getAttribute('aria-pressed'), 'true');
     assert.equal(useWallet.getAttribute('aria-pressed'), 'false');
 

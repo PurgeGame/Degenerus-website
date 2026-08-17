@@ -191,6 +191,26 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(html, /id="chain-chip"/);
   });
 
+  test('gold-rush hero ships its static LCP shell (adopted, not re-rendered)', () => {
+    // The hero is the page's LCP element. Shipping its shell in the HTML lets
+    // it paint before the module graph executes (the 2026-08-15 LCP fix); the
+    // component adopts these nodes through its data-el hooks. If the hooks or
+    // the .gr class disappear, gold-rush-headline.js silently falls back to a
+    // JS innerHTML render and the LCP win quietly reverts — this is the guard.
+    const shellMatch = html.match(/<gold-rush-headline class="gr">([\s\S]*?)<\/gold-rush-headline>/);
+    assert.ok(shellMatch, '<gold-rush-headline class="gr"> static shell present');
+    const shell = shellMatch[1];
+    for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"']) {
+      assert.ok(shell.includes(hook), `adoption hook present in static shell: ${hook}`);
+    }
+    assert.match(shell, /class="gr__amount" data-el="amount">—</,
+      'placeholder amount matches the JS template');
+    // And the component must adopt rather than unconditionally re-render.
+    const component = readFileSync(resolvePath(__dirname, '../../components/gold-rush-headline.js'), 'utf8');
+    assert.match(component, /querySelector\('\[data-el="amount"\]'\)[\s\S]*?this\.innerHTML =/,
+      'renderShell only falls back to innerHTML when the static shell is absent');
+  });
+
   test('view-mode banner div removed; its script stays (data-write manager)', () => {
     assert.equal(html.indexOf('id="view-mode-banner"'), -1, 'banner div removed');
     assert.ok(html.includes('src="/app/components/view-mode-banner.js"'),

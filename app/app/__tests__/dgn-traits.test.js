@@ -12,7 +12,7 @@ import { dirname, resolve as resolvePath } from 'node:path';
 
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
-  dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
+  dgnBadgePath, dgnDisplaySymbol, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent,
   dgnPartitionTicketEntries,
 } from '../dgn-traits.js';
@@ -34,6 +34,13 @@ describe('dgnBadgePath', () => {
     assert.equal(DGN_COLORS.length, 8);
     assert.equal(DGN_CARD_IDX.length, 8);
     for (const q of DGN_QUADRANTS) assert.equal(DGN_SYMBOLS[q].length, 8);
+  });
+  test('player-facing aliases do not change their asset slugs', () => {
+    assert.equal(dgnDisplaySymbol(0, 0, 0), 'wwxrp');
+    assert.equal(dgnBadgePath(0, 0, 0), '/badges-circular/crypto_00_xrp_pink.svg');
+    assert.equal(dgnDisplaySymbol(3, 5, 7), '6ix');
+    assert.equal(dgnDisplaySymbol(3, 5, 6), '6');
+    assert.equal(dgnBadgePath(3, 5, 7), '/badges-circular/dice_05_6_gold.svg');
   });
   test('round crypto picker art exposes its complete disc in every color', () => {
     const colors = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];

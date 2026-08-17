@@ -172,7 +172,10 @@ export function poolProgressModel({
     target: target != null && target > 0n ? target : null,
     growthTarget,
     growthLinePercent: growthLinePercent(ratchets),
-    fillPercent: position(next ?? 0n),
+    // A live amount without its contract benchmark is not measurable progress.
+    // Leaving the tube empty while that async read warms avoids a convincing
+    // but entirely synthetic ~89% fill (next / 1.125 * next).
+    fillPercent: target != null && target > 0n ? position(next ?? 0n) : 0,
     targetPercent: position(target),
     growthPercent: position(growthTarget),
     levelReady,
@@ -195,8 +198,74 @@ export function poolProgressModel({
   };
 }
 
+/**
+ * Resolve the pool represented by nextPrizePool independently of the level
+ * currently accepting ticket purchases.
+ *
+ * On the locked final purchase day, GAME promotes `level` before the transition
+ * writes that level's closing ratchet. Purchases consequently route to level+1,
+ * while nextPrizePool still represents the level being closed. During that
+ * short window prizePoolTargetView() falls back to the 50 ETH bootstrap value;
+ * the previous write-once ratchet is the actual guarantee for the closing pool.
+ */
+export function prizePoolThermometerContext({
+  phaseLevel = null,
+  benchmarkLevel = null,
+  targetWei = null,
+  ratchets = null,
+  contractPhase = null,
+} = {}) {
+  const purchaseLevel = Number(phaseLevel);
+  const chainLevel = Number(benchmarkLevel);
+  const previousRatchet = _wei(ratchets?.prev);
+  const currentRatchet = _wei(ratchets?.current);
+  const promotedFinalWindow = contractPhase?.jackpot === false
+    && contractPhase?.lastPurchaseDay === true
+    && contractPhase?.rngLocked === true
+    && Number.isInteger(purchaseLevel)
+    && Number.isInteger(chainLevel)
+    && purchaseLevel === chainLevel + 1
+    && previousRatchet != null
+    && previousRatchet > 0n
+    && (currentRatchet == null || currentRatchet === 0n);
+
+  return {
+    level: promotedFinalWindow
+      ? chainLevel
+      : Number.isInteger(purchaseLevel) ? purchaseLevel : null,
+    targetWei: promotedFinalWindow ? previousRatchet : _wei(targetWei),
+    closing: promotedFinalWindow,
+  };
+}
+
+/**
+ * The contract's compression tier is FOUR-valued, not three
+ * (storage/DegenerusGameStorage.sol:65 — `0=norm 1=comp 2=turbo 3=turbo+owed`).
+ *
+ * Tier 3 is a turbo that was armed while the PREVIOUS turbo's coinflip bonus
+ * latch was still owed (AdvanceModule.sol:329 —
+ * `compressedJackpotFlag = compressedJackpotFlag == 2 ? 3 : 2`), i.e. two
+ * back-to-back levels that each met their target inside one purchase day. It
+ * collapses all five logical days into one physical day exactly as a plain
+ * turbo does, and drops back to 2 at that day's settlement
+ * (AdvanceModule.sol:1647).
+ *
+ * So the contract's cadence predicate is `>= 2`, not `== 2`:
+ *   - AdvanceModule.sol:2360 `if (compressedJackpotFlag >= 2 && jackpotCounter == 0)`
+ *     with the comment "covers the chained-arm request, whose flag is 3",
+ *   - JackpotModule.sol:2404 `compressedJackpotFlag >= 2 ? lvl + 1 : lvl`,
+ *   - DegenerusGame.sol:2602 `bettingOpen = ... compressedJackpotFlag < 2`,
+ *     documented at :2563 as "a turbo phase (2, or 3 before its predecessor's
+ *     bonus is paid down to 2) takes all five logical days in one physical day".
+ *
+ * Treating 3 as normal made a chained turbo render as a five-day phase.
+ */
+export function isTurboTier(compressedFlag) {
+  return (Number(compressedFlag) || 0) >= 2;
+}
+
 function _jackpotStep(counter, compressedFlag) {
-  if (compressedFlag === 2 && counter === 0) return JACKPOT_DAY_CAP;
+  if (isTurboTier(compressedFlag) && counter === 0) return JACKPOT_DAY_CAP;
   if (compressedFlag === 1 && counter > 0 && counter < JACKPOT_DAY_CAP - 1) return 2;
   return 1;
 }
@@ -206,7 +275,7 @@ function _jackpotStep(counter, compressedFlag) {
  *
  * Normal:     counters 0,1,2,3,4 -> draws 1..5
  * Compressed: counters 0,1,3     -> draws 1..3
- * Turbo:      counter 0          -> draw 1/1
+ * Turbo:      counter 0          -> draw 1/1   (tier 2 AND tier 3)
  *
  * The logical range remains available for payout copy, but it must never be
  * presented as the number of real-world days a player has waited.
@@ -214,7 +283,7 @@ function _jackpotStep(counter, compressedFlag) {
 export function jackpotCadenceModel({ counter = 0, compressedFlag = 0 } = {}) {
   const completed = Math.max(0, Math.min(JACKPOT_DAY_CAP, Number(counter) || 0));
   const compressed = Number(compressedFlag) || 0;
-  const starts = compressed === 2
+  const starts = isTurboTier(compressed)
     ? [0]
     : compressed === 1
       ? [0, 1, 3]
@@ -293,11 +362,45 @@ export function jackpotPoolModel({ currentWei, baselineWei, counter = 0, compres
  * advanced, which otherwise makes a final draw look like an ordinary day-one draw.
  */
 export function jackpotDrawCounter({ contractPhase = null, gameState = null, goldRush = null } = {}) {
+  // Two producers spell the same contract field differently: the parimutuel
+  // benchmark snapshot calls it `day` (growthState.phaseDay), the gold-rush
+  // slot0 decode calls it `jackpotCounter` (polling.js:333). Reading only `day`
+  // silently dropped the live chain counter whenever the gold-rush reader was
+  // the phase source, handing the label the LAGGING indexed value this function
+  // exists to outrank — and pinning a compressed phase to "draw 1 of 3".
   const raw = contractPhase?.day
-    ?? gameState?.jackpotCounter
+    ?? contractPhase?.jackpotCounter
     ?? goldRush?.phaseDay
+    ?? gameState?.jackpotCounter
     ?? 0;
   return Math.max(0, Math.min(JACKPOT_DAY_CAP, Number(raw) || 0));
+}
+
+/**
+ * Resolve the compression tier from whichever source actually has one.
+ *
+ * Every reader used to coerce a missing/failed read to 0 ("normal"), and the
+ * consumers used `??`, which does not fall through a 0. A single transient
+ * failure of `jackpotCompressionTier()` therefore MASKED a live turbo or
+ * compressed phase behind a five-day label until the next successful poll.
+ * Unknown must stay null so the next source gets a turn.
+ */
+export function jackpotCompressionTier({
+  contractPhase = null,
+  gameState = null,
+  goldRush = null,
+} = {}) {
+  const candidates = [
+    contractPhase?.compressedFlag,
+    goldRush?.phaseClock?.compressedFlag,
+    gameState?.compressedJackpotFlag,
+  ];
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    const tier = Number(candidate);
+    if (Number.isInteger(tier) && tier >= 0) return tier;
+  }
+  return 0;
 }
 
 /** Fixed achieved pool banked when this level crossed into jackpot phase. */
@@ -377,9 +480,11 @@ export function phaseStripModel({
       gameState: state,
       goldRush,
     });
-    const compressedFlag = contractPhase?.compressedFlag
-      ?? state?.compressedJackpotFlag
-      ?? 0;
+    const compressedFlag = jackpotCompressionTier({
+      contractPhase: hasContractPhase ? contractPhase : null,
+      gameState: state,
+      goldRush,
+    });
     const cadence = jackpotCadenceModel({ counter, compressedFlag });
     return {
       jackpot: true,
@@ -650,7 +755,14 @@ class AppPoolProgress extends HTMLElement {
     const gameState = get('app.gameState');
     const goldRush = get('app.goldRush');
     const benchmarks = get('app.poolBenchmarks');
-    const stateLevel = Number(gameState?.level ?? goldRush?.level);
+    const chainPhase = goldRush?.phaseClock || null;
+    const chainLevel = Number(chainPhase?.level);
+    // During a transition the direct chain ticker can lead /game/state. Match
+    // benchmarks against that newer level so an old target cannot repaint the
+    // newly promoted pool during the indexer's brief catch-up window.
+    const stateLevel = Number(Number.isInteger(chainLevel)
+      ? chainLevel
+      : gameState?.level ?? goldRush?.level);
     const benchmarkLevel = Number(benchmarks?.level);
     const sameLevel = !Number.isInteger(stateLevel)
       || (Number.isInteger(benchmarkLevel) && benchmarkLevel === stateLevel);
@@ -658,9 +770,7 @@ class AppPoolProgress extends HTMLElement {
     const ratchets = sameLevel ? benchmarks?.ratchets : null;
     const history = sameLevel ? benchmarks?.history : null;
     const benchmarkPhase = sameLevel ? benchmarks?.contractPhase : null;
-    const chainPhase = goldRush?.phaseClock || null;
     const contractPhase = chainPhase || benchmarkPhase;
-    const chainLevel = Number(chainPhase?.level);
     const phaseGameState = Number.isInteger(chainLevel)
       ? {
         ...(gameState || {}),
@@ -677,7 +787,15 @@ class AppPoolProgress extends HTMLElement {
       goldRush,
       contractPhase,
     });
-    const targetWei = prizePoolTargetForLevel(phase.level, benchmarkTargetWei);
+    const thermometer = prizePoolThermometerContext({
+      phaseLevel: phase.level,
+      benchmarkLevel: sameLevel ? benchmarkLevel : null,
+      targetWei: benchmarkTargetWei,
+      ratchets,
+      contractPhase,
+    });
+    const poolLevel = phase.jackpot ? phase.level : thermometer.level;
+    const targetWei = prizePoolTargetForLevel(poolLevel, thermometer.targetWei);
     const shell = this.querySelector('.pool-progress');
     const head = this.querySelector('.pool-progress__head');
     const body = this.querySelector('.pool-progress__body');
@@ -709,9 +827,9 @@ class AppPoolProgress extends HTMLElement {
     }
 
     this.#set('pool-day', phase.dayLabel);
-    this.#set('pool-name', phase.level == null
+    this.#set('pool-name', poolLevel == null
       ? phase.jackpot ? 'DAILY JACKPOT' : 'PRIZE POOL'
-      : `LEVEL ${phase.level} ${phase.jackpot ? 'DAILY JACKPOT' : 'PRIZE POOL'}`);
+      : `LEVEL ${poolLevel} ${phase.jackpot ? 'DAILY JACKPOT' : 'PRIZE POOL'}`);
     shell?.setAttribute('data-mode', phase.jackpot ? 'jackpot' : 'purchase');
 
     if (phase.jackpot) {
@@ -727,8 +845,7 @@ class AppPoolProgress extends HTMLElement {
         currentWei,
         baselineWei: fixedPoolWei,
         counter: jackpotDrawCounter({ contractPhase, gameState, goldRush }),
-        compressedFlag: contractPhase?.compressedFlag
-          ?? gameState?.compressedJackpotFlag,
+        compressedFlag: jackpotCompressionTier({ contractPhase, gameState, goldRush }),
       });
       if (specialJackpot) {
         specialJackpot.hidden = true;
@@ -777,7 +894,7 @@ class AppPoolProgress extends HTMLElement {
       targetWei,
       ratchets,
       history,
-      currentLevel: phase.level,
+      currentLevel: poolLevel,
     });
     const referenceKind = this.#set('pool-reference-kind', model.levelReady ? '' : 'GUARANTEE');
     if (referenceKind) referenceKind.hidden = model.levelReady;
@@ -791,9 +908,9 @@ class AppPoolProgress extends HTMLElement {
         : 100;
       fill.style.backgroundSize = `${span}% 100%`;
     }
-    const levelLabel = phase.level == null ? 'Current level' : `Level ${phase.level}`;
+    const levelLabel = poolLevel == null ? 'Current level' : `Level ${poolLevel}`;
     this.#setMarker('pool-target-marker', model.targetPercent, poolTargetMarkerLabel({
-      level: phase.level,
+      level: poolLevel,
       targetWei: model.target,
       complete: model.levelReady,
     }));

@@ -56,7 +56,7 @@ const REVEAL_KINDS = new Set([
   'foil-match',
   'affiliate-bonus',
   'wwxrp-draw',
-  'golden-ticket',
+  'foil-gold',
   'mass-resolution',
   'batch-resolution',
 ]);
@@ -97,7 +97,7 @@ const CLAIM_KINDS = new Set([
   'foil-match',
   'affiliate-bonus',
   'wwxrp-draw',
-  'golden-ticket',
+  'foil-gold',
 ]);
 
 // Generic rows used to fall back to punctuation, letters, or a question mark.
@@ -128,9 +128,9 @@ const ACTION_ICON_PATHS = Object.freeze({
     'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
     'M8 8l8 8M16 8l-8 8',
   ],
-  'golden-ticket': [
-    'M4 7h16v10H4V7Z',
-    'M8 7v3M8 14v3M12 10h5M12 14h3',
+  'foil-gold': [
+    'M5 6h5v5H5V6ZM14 6h5v5h-5V6ZM9.5 14h5v5h-5v-5Z',
+    'm7.5 3 .6 1.4 1.4.6-1.4.6L7.5 7l-.6-1.4L5.5 5l1.4-.6L7.5 3Z',
   ],
   baf: [
     'm12 3 1.7 5.2H19l-4.3 3.1 1.7 5.2-4.4-3.2-4.4 3.2 1.7-5.2L5 8.2h5.3L12 3Z',
@@ -644,7 +644,7 @@ function _kindLabel(kind) {
   if (kind === 'foil-match') return 'FOIL TICKET MATCH';
   if (kind === 'affiliate-bonus') return 'AFFILIATE BONUS';
   if (kind === 'wwxrp-draw') return 'WWXRP DRAW';
-  if (kind === 'golden-ticket') return 'GOLDEN TICKET';
+  if (kind === 'foil-gold') return 'FOIL GOLD';
   if (kind === 'mass-resolution' || kind === 'batch-resolution') return 'PROTOCOL RESOLUTION';
   return 'TICKET PACK';
 }

@@ -9,6 +9,7 @@
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { sharedReadProvider } from './read-provider.js';
 import { ethers } from './contracts.js';
+import { readIndexedDecimatorWindowStartBlock } from './decimator.js';
 
 const GAME_EVENTS = [
   'event DecBurnRecorded(address indexed player,uint24 indexed lvl,uint8 bucket,uint8 subBucket,uint256 effectiveAmount,uint256 newTotalBurn)',
@@ -20,6 +21,9 @@ const FLIP_EVENTS = [
 
 const gameInterface = new ethers.Interface(GAME_EVENTS);
 const flipInterface = new ethers.Interface(FLIP_EVENTS);
+// Base's public RPC caps and rate-limits wide eth_getLogs reads. Stay below
+// the same 2,000-block boundary used by the live Decimator entry reader.
+const DRAW_LOG_CHUNK_BLOCKS = 1_800;
 let readProvider = null;
 let providerOverride = null;
 
@@ -43,6 +47,32 @@ function provider() {
 
 function levelTopic(level) {
   return ethers.zeroPadValue(ethers.toBeHex(level), 32);
+}
+
+async function boundedLogs(reader, filter, fromBlock, toBlock) {
+  const from = Number(fromBlock);
+  const to = Number(toBlock);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) return [];
+  const rows = [];
+  for (let start = from; start <= to; start += DRAW_LOG_CHUNK_BLOCKS) {
+    const end = Math.min(to, start + DRAW_LOG_CHUNK_BLOCKS - 1);
+    const chunk = await reader.getLogs({ ...filter, fromBlock: start, toBlock: end });
+    if (Array.isArray(chunk)) rows.push(...chunk);
+  }
+  return rows;
+}
+
+async function latestBoundedLog(reader, filter, fromBlock, toBlock) {
+  const floor = Number(fromBlock);
+  const ceiling = Number(toBlock);
+  if (!Number.isInteger(floor) || !Number.isInteger(ceiling) || floor > ceiling) return null;
+  for (let end = ceiling; end >= floor; end -= DRAW_LOG_CHUNK_BLOCKS) {
+    const start = Math.max(floor, end - DRAW_LOG_CHUNK_BLOCKS + 1);
+    const chunk = await reader.getLogs({ ...filter, fromBlock: start, toBlock: end });
+    const latest = [...(Array.isArray(chunk) ? chunk : [])].sort(logOrder).at(-1);
+    if (latest) return latest;
+  }
+  return null;
 }
 
 export function unpackDecimatorWinningSubbuckets(packedValue) {
@@ -163,46 +193,53 @@ export function buildDecimatorDrawSnapshot({
   };
 }
 
-export async function loadDecimatorDrawSnapshot({ level, player } = {}) {
+export async function loadDecimatorDrawSnapshot({ level, player, fromBlock: knownFromBlock } = {}) {
   const lvl = integer(level, -1);
   if (lvl <= 0) throw new Error('Invalid Decimator level.');
   const reader = provider();
   const topic = levelTopic(lvl);
   const resolvedEvent = gameInterface.getEvent('DecimatorResolved');
   const burnEvent = gameInterface.getEvent('DecBurnRecorded');
-  const fromBlock = Number(CHAIN.deployBlock || 0);
+  const head = Number(await reader.getBlockNumber());
+  if (!Number.isInteger(head) || head < 0) {
+    throw new Error('The latest Decimator block is unavailable.');
+  }
+  let fromBlock = Number(knownFromBlock);
+  if (!Number.isInteger(fromBlock) || fromBlock < 0) {
+    try { fromBlock = Number(await readIndexedDecimatorWindowStartBlock(lvl)); }
+    catch (_error) { fromBlock = Number.NaN; }
+  }
+  if (!Number.isInteger(fromBlock) || fromBlock < 0 || fromBlock > head) {
+    fromBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
+  }
 
-  const [resolutionLogs, burnLogs] = await Promise.all([
-    reader.getLogs({
-      address: CONTRACTS.GAME,
-      fromBlock,
-      toBlock: 'latest',
-      topics: [resolvedEvent.topicHash, topic],
-    }),
-    reader.getLogs({
-      address: CONTRACTS.GAME,
-      fromBlock,
-      toBlock: 'latest',
-      topics: [burnEvent.topicHash, null, topic],
-    }),
-  ]);
-  const resolvedLog = [...resolutionLogs].sort(logOrder).at(-1);
+  // The latest resolved event is all the replay needs. Search newest chunks
+  // first so a missing index boundary still finds a just-finished draw without
+  // walking the whole deployment before the fullscreen can paint.
+  const resolutionFilter = {
+    address: CONTRACTS.GAME,
+    topics: [resolvedEvent.topicHash, topic],
+  };
+  const resolvedLog = await latestBoundedLog(reader, resolutionFilter, fromBlock, head);
   if (!resolvedLog) throw new Error(`Level ${lvl} Decimator result is still syncing.`);
+  const resolutionBlock = Number(resolvedLog.blockNumber);
+  const burnLogs = await boundedLogs(reader, {
+    address: CONTRACTS.GAME,
+    topics: [burnEvent.topicHash, null, topic],
+  }, fromBlock, resolutionBlock);
   const firstBurnBlock = burnLogs.reduce(
     (lowest, log) => Math.min(lowest, Number(log.blockNumber)),
-    Number(resolvedLog.blockNumber),
+    resolutionBlock,
   );
   const flipEvent = flipInterface.getEvent('DecimatorBurn');
-  const flipLogs = await reader.getLogs({
+  const flipLogs = await boundedLogs(reader, {
     address: CONTRACTS.COIN,
-    fromBlock: firstBurnBlock,
-    toBlock: Number(resolvedLog.blockNumber),
     topics: [flipEvent.topicHash],
-  });
+  }, firstBurnBlock, resolutionBlock);
   return buildDecimatorDrawSnapshot({
     level: lvl,
     player,
-    gameLogs: [...burnLogs, ...resolutionLogs],
+    gameLogs: [...burnLogs, resolvedLog],
     flipLogs,
   });
 }

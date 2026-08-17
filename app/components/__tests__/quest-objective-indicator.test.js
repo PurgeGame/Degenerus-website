@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as storeMod from '../../app/store.js';
 import {
+  questCompletionBonusModel,
   questObjectiveIndicatorModel,
   questProductsForType,
 } from '../../app/quest-objectives.js';
@@ -97,6 +98,59 @@ describe('<quest-objective-indicator>', () => {
     assert.match(model.title, /2 unfinished quests/i);
     assert.match(model.title, /daily: buy a ticket or luckbox/i);
     assert.match(model.title, /level: buy luckbox/i);
+  });
+
+  test('previews only rewards this exact action will complete', () => {
+    const unit = 10n ** 18n;
+    const payload = { quests: [
+      {
+        questType: 2, role: 'DAILY', label: 'Coinflip', completed: false,
+        progress: String(1_500n * unit), target: String(2_000n * unit),
+        flipReward: 100,
+      },
+      {
+        questType: 2, role: 'LEVEL', label: 'Coinflip', completed: false,
+        progress: String(1_900n * unit), target: String(2_000n * unit),
+        eligible: true, flipReward: 800, streakReward: 5,
+      },
+    ] };
+    assert.equal(questCompletionBonusModel(payload, 'coinflip', 99n * unit), null);
+    const bonus = questCompletionBonusModel(payload, 'coinflip', 500n * unit);
+    assert.equal(bonus.count, 2);
+    assert.equal(bonus.flipReward, 900);
+    assert.equal(bonus.streakReward, 5);
+    assert.equal(bonus.message, '2 QUEST COMPLETION BONUSES · +900 FLIP · +5 STREAK');
+  });
+
+  test('a locked bonus is omitted unless one Luckbox also completes its primary', () => {
+    const unit = 10n ** 18n;
+    const payload = { quests: [
+      {
+        questType: 1, role: 'DAILY', progress: String(900n * unit),
+        target: String(1_000n * unit), completed: false, gated: false,
+      },
+      {
+        questType: 6, role: 'BONUS', progress: 0, target: String(100n * unit),
+        completed: false, gated: true,
+      },
+      {
+        questType: 2, role: 'BONUS', progress: 0, target: String(100n * unit),
+        completed: false, gated: true,
+      },
+    ] };
+    const lootbox = questCompletionBonusModel(payload, 'lootbox', 100n * unit);
+    assert.equal(lootbox.count, 2, 'one Luckbox can complete primary and bonus atomically');
+    assert.equal(lootbox.flipReward, 200);
+    assert.equal(questCompletionBonusModel(payload, 'coinflip', 100n * unit), null,
+      'an unrelated locked bonus cannot promise a payout');
+  });
+
+  test('does not promise an ineligible level reward', () => {
+    const unit = 10n ** 18n;
+    assert.equal(questCompletionBonusModel({ quests: [{
+      questType: 8, role: 'LEVEL', progress: 0, target: String(100n * unit),
+      completed: false, eligible: false,
+    }] }, 'degenerette-flip', 100n * unit), null);
   });
 
   test('clicking the marker opens the same matching quest flow as its quest card', () => {
