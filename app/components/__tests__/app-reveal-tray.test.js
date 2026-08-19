@@ -169,6 +169,23 @@ describe('actionableRevealItems', () => {
     );
   });
 
+  test('Pending omits passive WWXRP draw losses that have no action', () => {
+    const launchClaimsSource = readFileSync(
+      new URL('../../app/launch-claims.js', import.meta.url),
+      'utf8',
+    );
+    assert.match(
+      launchClaimsSource,
+      /const playerWins = resolved\.filter\(\(row\) => row\.won && row\.winner === address\)/,
+      'only the connected player\'s wins enter the WWXRP Pending feed',
+    );
+    assert.doesNotMatch(
+      launchClaimsSource,
+      /WWXRP · LOST|shortLabel:\s*['"]Lost['"]|wwxrp-draw:[^\n]*['"]lost['"]/,
+      'a WWXRP loss can no longer produce a dead notification row',
+    );
+  });
+
   test('incoming RNG estimates advance four lights across the expected ready window', () => {
     const startedAt = 1_000_000;
     const dotsAt = (elapsed) => trayModule.rngTimedConfirmationDots({
@@ -333,7 +350,7 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('a Bingo receipt names why it paid and uses the completed-symbol badge', () => {
+  test('a Bingo pending button keeps its badge beside the two-line level and trait receipt', () => {
     pending.publishPendingActions('bingo-claims', [{
       id: 'bingo:0xabc:4', kind: 'bingo', kindLabel: 'QUADRANT-FIRST BINGO',
       label: 'Level 27 ETHEREUM Bingo', shortLabel: 'Reveal Bingo',
@@ -345,11 +362,19 @@ describe('<app-reveal-tray>', () => {
     el.connectedCallback();
     const action = el.querySelector('.rrt-action--bingo');
     assert.ok(action);
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'QUADRANT-FIRST BINGO');
-    assert.match(action.querySelector('.rrt-action__detail').textContent, /all 8 colors/);
+    assert.match(action.className, /rrt-action--compact/);
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'BINGO\nL27 ETHEREUM');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css,
+      /body\.layout-basic \.rrt-action__label\.rrt-bingo-summary\s*\{[^}]*white-space:\s*pre-line;/s,
+      'the Bingo-specific label rule must outrank the later generic nowrap rule');
+    assert.equal(action.getAttribute('aria-label'),
+      'VIEW: BINGO L27 ETHEREUM. CRYPTO quadrant · all 8 colors collected');
     assert.equal(action.querySelector('.rrt-action__art--bingo').querySelector('img').src,
       '/badges-circular/crypto_06_ethereum_gold.svg');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
+    assert.equal(action.querySelector('.rrt-action__kind'), null);
+    assert.equal(action.querySelector('.rrt-action__detail'), null);
+    assert.equal(action.querySelector('.rrt-action__cta'), null);
     el.disconnectedCallback();
   });
 
@@ -441,7 +466,7 @@ describe('<app-reveal-tray>', () => {
       label: '4 TICKETS PENDING', detail: 'Queued before the next jackpot',
       ticketCount: 4,
       state: 'waiting', pinned: true, passive: true, compact: true,
-      pendingPacks: [{ level: 77, count: 4, foilPack: false, packIndex: 1, packCount: 1 }],
+      pendingPacks: [{ level: 77, count: 4, foilPack: false }],
     }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
@@ -507,7 +532,7 @@ describe('<app-reveal-tray>', () => {
     pending.publishPendingActions('pack', [{
       id: 'ticket-packs:pending', kind: 'tickets', label: '3 TICKETS PENDING',
       ticketCount: 3, state: 'waiting', pinned: true, passive: true, compact: true,
-      pendingPacks: [{ level: 77, count: 3, foilPack: false, packIndex: 1, packCount: 1 }],
+      pendingPacks: [{ level: 77, count: 3, foilPack: false }],
       dismissIds: ['ticket-pack:77'],
     }]);
     const el = new trayModule.AppRevealTray();
@@ -527,14 +552,11 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('pending pack dropdown stamps each split-pack ticket count without status filler', () => {
+  test('pending pack dropdown consolidates one level without status filler', () => {
     pending.publishPendingActions('pack', [{
       id: 'ticket-packs:pending', kind: 'tickets', label: '12 TICKETS PENDING',
       ticketCount: 12, state: 'waiting', pinned: true, passive: true, compact: true,
-      pendingPacks: [
-        { level: 77, count: 9, foilPack: false, packIndex: 1, packCount: 2 },
-        { level: 77, count: 3, foilPack: false, packIndex: 2, packCount: 2 },
-      ],
+      pendingPacks: [{ level: 77, count: 12, foilPack: false }],
     }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
@@ -544,15 +566,10 @@ describe('<app-reveal-tray>', () => {
     assert.deepEqual(
       details.querySelectorAll('.rvl-pack-count')
         .map((node) => node.textContent),
-      ['9 TICKETS', '3 TICKETS'],
-      'each physical wrapper carries its own authoritative quantity',
+      ['12 TICKETS'],
+      'one level carries one authoritative pending quantity',
     );
-    assert.deepEqual(
-      details.querySelectorAll('.rrt-pending-pack-preview__caption')
-        .map((node) => node.textContent),
-      ['PACK 1 OF 2', 'PACK 2 OF 2'],
-      'multi-pack ordinals remain without repeating Pending',
-    );
+    assert.equal(details.querySelector('.rrt-pending-pack-preview__caption'), null);
     assert.doesNotMatch(details.textContent, /PACKS ON THE WAY|PENDING/i);
     el.disconnectedCallback();
   });

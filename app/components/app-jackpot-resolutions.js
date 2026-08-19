@@ -415,9 +415,12 @@ class AppJackpotResolutions extends HTMLElement {
           : decView.message,
         state: this.#busy === 'decimator' || decWaiting ? 'busy' : 'ready',
         write: willWrite,
-        // A read-only final honors the Pending tray's Auto open preference.
-        // A claimable winner still requires an explicit transaction click.
-        autoOpen: !willWrite,
+        // NEVER auto-opens, Auto open preference or not. The Decimator final
+        // is a full-screen takeover of the whole app, not a tray-scale
+        // reveal: it seizes the viewport out from under whatever the player
+        // was doing. A takeover is entered deliberately, so the row waits on
+        // its own View draw / Resolve + view click.
+        autoOpen: false,
         primarySurface: 'jackpot',
         order: 12,
         run: decWaiting
@@ -456,7 +459,9 @@ class AppJackpotResolutions extends HTMLElement {
         detail: this.#busy === 'baf' ? 'Claiming on-chain' : bafView.message,
         state: this.#busy === 'baf' ? 'busy' : 'ready',
         write: willWrite,
-        autoOpen: !willWrite,
+        // Same rule as the Decimator final above: a full-screen ceremony is
+        // never started for the player.
+        autoOpen: false,
         order: 13,
         run: () => this.#runBaf(bafLevel, { resolve: willWrite, show: bafUnseen }),
       });

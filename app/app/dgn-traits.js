@@ -46,6 +46,22 @@ export const DGN_COLOR_HEX = Object.freeze({
   blue: '#1317f7', orange: '#f7931a', silver: '#5e5e5e', gold: '#ab8d3f',
 });
 
+/** Give a rendered trait cell the exact palette of its circular badge. */
+export function applyDgnTraitColor(element, col) {
+  const name = typeof col === 'string' ? col : DGN_COLORS[Number(col)];
+  const hex = DGN_COLOR_HEX[name];
+  if (!element || !hex) return null;
+  try {
+    if (typeof element.style?.setProperty === 'function') {
+      element.style.setProperty('--dgn-trait-color', hex);
+    } else if (element.style) {
+      element.style['--dgn-trait-color'] = hex;
+    }
+  } catch (_e) { /* visual enhancement only */ }
+  try { element.setAttribute?.('data-trait-color', name); } catch (_e) {}
+  return Object.freeze({ name, hex });
+}
+
 // Ticket paper uses the trait palette for its three structural strokes: outer
 // edge, cross dividers, and centre-diamond edge. Gold is deliberately brighter
 // than the badge's antique-gold outer ring so it still reads against paper.

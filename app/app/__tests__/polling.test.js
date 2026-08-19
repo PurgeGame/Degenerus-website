@@ -503,7 +503,7 @@ describe('fetchJSONWithSignal (Pitfall 5)', () => {
     };
     const ctrl = new AbortController();
     const request = _testing.fetchJSONWithSignal('/foo', { signal: ctrl.signal });
-    assert.equal(captured.url, 'http://localhost:3000/foo', 'API_BASE prepended');
+    assert.equal(captured.url, 'https://degenerus-db.fly.dev/foo', 'API_BASE prepended');
     ctrl.abort();
     await assert.rejects(request, { name: 'AbortError' });
     assert.equal(captured.opts.signal.aborted, true, 'last consumer abort cancels network work');
@@ -524,7 +524,7 @@ describe('fetchJSONWithSignal (Pitfall 5)', () => {
       return { ok: true, status: 200, json: async () => ({}) };
     };
     await _testing.fetchJSONWithSignal('/baz');
-    assert.equal(captured.url, 'http://localhost:3000/baz');
+    assert.equal(captured.url, 'https://degenerus-db.fly.dev/baz');
     assert.equal(captured.opts.signal instanceof AbortSignal, true);
     assert.equal(captured.opts.signal.aborted, false);
   });

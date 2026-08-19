@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coinflip Felt Demo</title>
+  <!-- The app serves Inter from here (shared/nav.css @font-face). Without
+       it this harness silently falls back to system-ui, which measures
+       differently — the whole point of the demo is faithful typography. -->
+  <link rel="stylesheet" href="/shared/nav.css">
   <link rel="stylesheet" href="/app/styles/base.css">
   <link rel="stylesheet" href="/app/styles/panels.css">
   <link rel="stylesheet" href="/app/styles/buttons.css">
@@ -64,6 +68,7 @@
       </fieldset>
       <fieldset data-group="dayshift">
         <legend>ROLLOVER</legend>
+        <button type="button" data-result-shift="1">RESULT HANDOFF</button>
         <button type="button" data-day-shift="1">DAY SHIFT</button>
       </fieldset>
       <fieldset data-group="width">
@@ -105,8 +110,11 @@
               </span>
               <strong class="df-auto-rebuy-cta__status">OFF</strong>
             </button>
-            <div class="df-bet-table">
-              <small class="df-bet-table__today-label" aria-hidden="true">TODAY'S BET</small>
+            <div class="df-bet-table" data-bind="demo-today-surface" role="button" tabindex="0">
+              <small class="df-bet-table__today-label" aria-hidden="true">
+                <b class="df-bet-table__add-cue" data-bind="demo-today-add-cue" hidden>+</b>
+                <span data-bind="demo-today-label">TODAY'S BET</span>
+              </small>
               <div class="df-bet-oval" data-bind="df-bet-oval" role="img" aria-label="Today's bet">
                 <span class="df-today-winnings-row" data-bind="df-today-winnings-row" data-state="empty" aria-hidden="true">
                   <span class="df-bet-chip-rack" data-bind="df-today-winnings-rack" aria-hidden="true"></span>
@@ -152,13 +160,13 @@
               </span>
             </div>
             <div class="df-position">
-              <div class="df-tomorrow-layout" role="button" tabindex="0"
+              <div class="df-tomorrow-layout" data-bind="demo-lower-surface" role="button" tabindex="0"
                    aria-label="Add FLIP to tomorrow's bet" title="Add FLIP to tomorrow's bet">
                 <small class="df-tomorrow-layout__felt-label" aria-hidden="true">
-                  <span>TOMORROW'S BET</span><b data-bind="df-tomorrow-felt-bonus" hidden></b>
+                  <span data-bind="demo-lower-label">TOMORROW'S BET</span><b data-bind="df-tomorrow-felt-bonus" hidden></b>
                 </small>
                 <div class="df-tomorrow-bet-oval" data-bind="df-tomorrow-bet-oval" role="img" aria-label="Tomorrow's bet">
-                  <span class="df-tomorrow-layout__add-cue" aria-hidden="true">+</span>
+                  <span class="df-tomorrow-layout__add-cue" data-bind="demo-tomorrow-add-cue" aria-hidden="true">+</span>
                   <span class="df-bet-chip-rack" data-bind="df-tomorrow-chip-rack" aria-hidden="true">—</span>
                   <span class="df-flip-group df-next-bet">
                     <quest-objective-indicator class="df-next-bet__quest"

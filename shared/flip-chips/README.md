@@ -17,8 +17,8 @@ coin, never recolors — a coin with red on top does not exist.
 | `stack.svg` / `stack-spun.svg` | 120×128 | Pre-baked five-coin stacks at 16-unit rise — every coin, top included, shows the same 25% band. |
 | `stack-2.svg` … `stack-10.svg` | varies | The stack ladder: free-standing dealer-neat columns of 2–10 coins with seeded face spins. Bottom-tight viewBox, so the base coin sits flush on whatever the art is anchored to. |
 | `stack-N-messy.svg` | varies | The same heights hand-cut: coins drift sideways coin to coin and a few faces lean, for spots where a machine-racked column would look staged. |
-| `pile-1.svg` … `pile-20.svg` | varies | The wager ladder: twenty distinct seeded compositions (archetypes cycle row / towers / mound / cascade / chaos) growing from ~19 coins with a proper tower to a ~135-coin whale sprawl. The first rung deliberately beats the composed-stacks lane's ~17-coin peak so crossing the 50K threshold never reads as the bet shrinking. Levels are spaced ×1.45 so any ≥×1.5 win crosses a level. |
-| `pile-N-add.svg` | same as its base | Win-growth overlay: extra coins in the SAME viewBox as `pile-N.svg`. Layer it over the base (absolute inset 0, same contain fit) so a win grows the original pile in place instead of switching graphics. |
+| `pile-5.svg` … `pile-20.svg` (+ `-b`, `-c`) | varies | The wager ladder: seeded mound compositions growing from ~42 coins to a ~200-coin whale sprawl, three interchangeable variants per rung so one bet size is not one fixed picture. Variant `a` is the mound: real columns plus planned spill, where the outermost lattice slots on each side come up empty felt, a loose coin, or a short stack. Variants `-b` and `-c` are ALIGNED racks — equal columns, an even staircase, or two squared runs, set down all together with one repeated joint and no jitter, lean, or spill. Levels are spaced ×1.45 so any ≥×1.5 pile-scale win crosses a level. **Rungs 1-4 are not shipped:** a two-layer scatter of 21-30 coins reads as LESS money than the tidy stacks below it, so common wagers grow through composed stacks before the mound ladder opens at rung 5 (100K FLIP). The generator still computes them — every later rung's count and width floors chain off them. |
+| `pile-N-add.svg` (+ `-b`, `-c`) | W × 3·H | Win-growth sprite: three vertically stacked frames of extra coins on the same footprint and baseline as `pile-N.svg`, cumulative, at 0.5× / 1.0× / 1.56× the base pile — the three payout classes Coinflip.sol rolls. Pick a frame with `background-position-y` (0% / 50% / 100%); `background-size` is `100% 300%`. The frame is TALLER than the base viewBox (a lucky day climbs), so the overlay element takes the extra height from its own generated rule rather than `inset: 0`. |
 
 ## Usage
 
@@ -38,8 +38,8 @@ depth with `filter: drop-shadow(...)` — contact shadows are intentionally not
 baked into the assets.
 
 Escalate presentation with the amount the way the app does
-(`coinflipBetPresentation`): composed stacks below 50K FLIP, then ladder level
-`min(20, floor(log(flip/50000)/log(1.45)) + 1)`. Regenerate the whole ladder
+(`coinflipBetPresentation`): composed stacks below 100K FLIP, then ladder level
+`min(20, floor(log(flip/100000)/log(1.45)) + 5)`. Regenerate the whole ladder
 (piles, the stack ladder, and `pile-ladder.css`) with
 `python3 shared/flip-chips/build-piles.py`, then splice the css between the
 AUTO-PILES markers in `coinflip-chipset.css`.

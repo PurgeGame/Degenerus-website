@@ -87,7 +87,7 @@ import {
 // Shared trait codecs (extracted from this file — see dgn-traits.js header).
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_COLORS, DGN_COLOR_HEX,
-  applyDgnTicketAccent,
+  applyDgnTicketAccent, applyDgnTraitColor,
   DGN_TICKET_COPY_EVENT,
   dgnBadgePath, dgnDisplaySymbol, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTraitIdsToQuadrants,
@@ -105,7 +105,7 @@ import {
   candidateClaimsRecord,
   RECORD_KIND_SPIN,
 } from '../app/records.js';
-import { boonBoostDelta } from '../app/boons.js';
+import { degeneretteBoonBoostDelta } from '../app/boons.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 import { registerComponentPoll } from '../app/component-poll.js';
@@ -1884,6 +1884,7 @@ class AppDegenerettePanel extends HTMLElement {
         img.alt = `${dgnDisplaySymbol(q, t.s, t.c)} ${DGN_COLORS[t.c]}`;
       }
       if (cell && cell.classList) {
+        applyDgnTraitColor(cell, t.c);
         cell.classList.toggle('q-hero', this.#dgnHero === q);
         cell.classList.toggle('is-editing', this.#dgnEditing === q);
       }
@@ -2460,13 +2461,15 @@ class AppDegenerettePanel extends HTMLElement {
     const verb = this.#state === STATE.PLACING ? 'Placing' : 'Place Bet';
     button.textContent = `${verb} · ${formatted} ${unit}`;
     const rawPerSpin = parseDegeneretteAmountInput(amountInput?.value, currency);
-    const product = currency === 0
-      ? 'degenerette-eth'
-      : currency === 3 ? 'degenerette-wwxrp' : 'degenerette-flip';
     const rawTotal = rawPerSpin != null && Number.isInteger(spins) && spins > 0
       ? rawPerSpin * BigInt(spins)
       : 0n;
-    const boonDelta = boonBoostDelta(rawTotal, get('app.boons'), product);
+    const boonDelta = degeneretteBoonBoostDelta(
+      rawTotal,
+      get('app.boons'),
+      currency,
+      spins,
+    );
     const boonText = boonDelta > 0n ? _pendingDegeneretteAmount(boonDelta, currency) : null;
     if (boonText) button.setAttribute('data-boon-effect', `+${boonText} BOON`);
     else button.removeAttribute('data-boon-effect');
@@ -3784,6 +3787,7 @@ class AppDegenerettePanel extends HTMLElement {
       if (heroIdx === q) cell.classList.add('q-hero');
       const t = traits[q];
       if (t) {
+        applyDgnTraitColor(cell, t.col);
         const img = document.createElement('img');
         img.src = dgnBadgePath(q, t.sym, t.col);
         img.alt = '';

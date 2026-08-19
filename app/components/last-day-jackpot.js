@@ -212,12 +212,30 @@ class LastDayJackpot extends HTMLElement {
 
   #syncReplayProcessingState(panel = this.#panel()) {
     if (!panel || typeof panel.setJackpotProcessingState !== 'function') return;
-    panel.setJackpotProcessingState(dailyJackpotProcessingSignals({
+    const gameState = this.#gameState ?? get('app.gameState');
+    const contractPhase = (this.#poolBenchmarks ?? get('app.poolBenchmarks'))?.contractPhase;
+    const payloadIsPinned = Number(this.#lastPayload?.day) === Number(this.#pinnedDay);
+    const indexedPurchaseLevel = Number(
+      payloadIsPinned ? this.#lastPayload?.roll1?.purchaseLevel : null,
+    );
+    const livePurchaseLevel = this.#syncAppliesToPinned()
+      ? foilPackDisplayLevel(gameState, contractPhase)
+      : null;
+    const purchaseLevel = Number.isInteger(indexedPurchaseLevel) && indexedPurchaseLevel > 0
+      ? indexedPurchaseLevel
+      : livePurchaseLevel;
+    panel.setJackpotProcessingState({
+      ...dailyJackpotProcessingSignals({
       day: this.#pinnedDay,
       daySync: this.#daySync,
-      gameState: this.#gameState,
+      gameState,
       jackpotPayload: this.#lastPayload,
-    }));
+      }),
+      // The slow pre-RNG reel exists before replay/day has a settled Roll 1
+      // row. Give it the cabinet's live ticket level so pink/blue can still be
+      // graded against the viewed player's real holdings during that window.
+      purchaseLevel,
+    });
   }
 
   #onGameState(state) {
@@ -475,9 +493,10 @@ class LastDayJackpot extends HTMLElement {
     };
   }
 
-  // Match classes are durable grading data; brightness is a one-beat event.
-  // Keep that pulse on its own clock so a settled claim can retain its score
-  // without leaving every matching foil face switched on indefinitely.
+  // Match classes carry the steady lamps: badge-only for a symbol and badge +
+  // quadrant for a full match. Keep the brighter lock-on pop on its own clock
+  // so each reel landing still has a crisp beginning without restarting the
+  // lamps that earlier reels already earned.
   #clearFoilMatchFlashes() {
     for (const handle of this.#foilFlashTimers.values()) {
       try { clearTimeout(handle); } catch { /* defensive */ }

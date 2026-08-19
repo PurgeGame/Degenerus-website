@@ -13,7 +13,7 @@ import { dirname, resolve as resolvePath } from 'node:path';
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
   dgnBadgePath, dgnDisplaySymbol, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
-  dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent,
+  dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent, applyDgnTraitColor,
   dgnPartitionTicketEntries,
 } from '../dgn-traits.js';
 
@@ -80,6 +80,17 @@ describe('dgnTicketAccent', () => {
     const accent = applyDgnTicketAccent(el, [0, 73, 146, 219]);
     assert.equal(style['--ticket-line-color'], accent.hex);
     assert.equal(attrs['data-ticket-accent'], accent.name);
+  });
+});
+
+describe('applyDgnTraitColor', () => {
+  test('exposes the exact badge-ring color to cell effects', () => {
+    const style = { setProperty(name, value) { this[name] = value; } };
+    const attrs = {};
+    const el = { style, setAttribute(name, value) { attrs[name] = value; } };
+    assert.deepEqual(applyDgnTraitColor(el, 1), { name: 'purple', hex: '#7c2bff' });
+    assert.equal(style['--dgn-trait-color'], '#7c2bff');
+    assert.equal(attrs['data-trait-color'], 'purple');
   });
 });
 

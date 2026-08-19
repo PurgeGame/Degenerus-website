@@ -11,6 +11,7 @@ globalThis.customElements ||= {
 
 const {
   decimatorBoonBps,
+  formatDecimatorBurnQuote,
   parseDecimatorFlipInput,
 } = await import('../app-decimator-burn.js');
 
@@ -36,6 +37,34 @@ describe('<app-decimator-burn>', () => {
     assert.equal(decimatorBoonBps({ boons: [{ boonType: 14, consumed: false }] }), 2_500);
     assert.equal(decimatorBoonBps({ boons: [{ boonType: 15, consumed: false }] }), 5_000);
     assert.equal(decimatorBoonBps({ boons: [] }), 0);
+  });
+
+  test('keeps the boon marker left of the amount box and its compact delta on one button line', () => {
+    assert.equal(
+      formatDecimatorBurnQuote(1_500n * FLIP, 500n * FLIP),
+      '+1.5K · +500 BOON',
+    );
+    assert.equal(
+      formatDecimatorBurnQuote(12_345n * FLIP, 4_115n * FLIP),
+      '+12.3K · +4.11K BOON',
+    );
+    assert.equal(formatDecimatorBurnQuote(900n * FLIP), '+900 SCORE');
+    assert.match(
+      COMPONENT,
+      /<label class="dbb__input">\s*<boon-product-indicator product="decimator"><\/boon-product-indicator>\s*<span class="dbb__input-control">/s,
+      'the marker is a sibling before the bordered input box',
+    );
+    assert.match(
+      CSS,
+      /\.dbb__input:has\(> boon-product-indicator:not\(\[hidden\]\)\)\s*\{[^}]*grid-template-columns:\s*1\.45rem minmax\(0, 1fr\)/s,
+      'an active marker receives a dedicated left-hand track',
+    );
+    assert.match(
+      CSS,
+      /\.dbb__burn strong\.has-boon\s*\{[^}]*font-size:[^}]*letter-spacing:/s,
+      'the one-line boon quote has a bounded compact treatment',
+    );
+    assert.doesNotMatch(CSS, /\.dbb__input-control > boon-product-indicator[^}]*left:\s*6\.15rem/s);
   });
 
   test('mounts full-width between the main jackpot and the secondary play grid', () => {
@@ -64,7 +93,7 @@ describe('<app-decimator-burn>', () => {
     assert.doesNotMatch(COMPONENT, /YOUR WEIGHT/);
     assert.match(COMPONENT, /SCORE —/);
     assert.match(COMPONENT, /decimatorEffectiveMultiplierBps/);
-    assert.match(COMPONENT, /\+\$\{_fmtFlip\(boonWeight\)\} BOON/,
+    assert.match(COMPONENT, /formatDecimatorBurnQuote\(weight, boonWeight\)/,
       'the burn quote names the concrete score added by an active Decimator boon');
     assert.match(COMPONENT, /<small>YOUR MULTIPLIER<\/small>/,
       'the strip labels selected-burn score divided by spend, after contract caps');

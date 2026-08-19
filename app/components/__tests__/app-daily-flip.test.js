@@ -322,9 +322,9 @@ function seedTomorrowHold(wei) {
   });
 }
 
-function seedFlipBackingHold(wei) {
+function seedFlipAvailableHold(wei) {
   return heldBalanceValue({
-    namespace: 'protocol-flip-backing:84532',
+    namespace: 'protocol-flip-available:84532',
     scope: TEST_ADDR,
     value: wei,
     released: true,
@@ -341,6 +341,36 @@ function mount() {
 
 const revealPlanning = await import('../app-daily-flip.js');
 
+function bankrollChipCounts(rack) {
+  const ratio = rack.querySelector('.df-bankroll__row--ratio');
+  const total = rack.querySelector('.df-bankroll__row--total');
+  const tones = ratio?.querySelectorAll('.df-bankroll__chip')
+    .map((chip) => chip.className.match(/df-bankroll__chip--(claimable|liquid)/)?.[1]) ?? [];
+  return {
+    claimable: tones.filter((tone) => tone === 'claimable').length,
+    liquid: tones.filter((tone) => tone === 'liquid').length,
+    total: total?.querySelectorAll('.df-bankroll__chip').length ?? 0,
+    tones,
+  };
+}
+
+function assertBankrollChipCounts(rack, expected, message) {
+  const actual = bankrollChipCounts(rack);
+  assert.equal(actual.claimable, expected.claimable, `${message}: red claimable chips`);
+  assert.equal(actual.liquid, expected.liquid, `${message}: green liquid chips`);
+  if (expected.total != null) {
+    assert.equal(actual.total, expected.total, `${message}: logarithmic amount chips`);
+  }
+  assert.deepEqual(
+    actual.tones,
+    [
+      ...Array(expected.claimable).fill('claimable'),
+      ...Array(expected.liquid).fill('liquid'),
+    ],
+    `${message}: red chips precede green chips`,
+  );
+}
+
 describe('day-wide reveal planning', () => {
   test('wager piles grow logarithmically: identical FLIP coins, more of them', () => {
     const unit = 10n ** 18n;
@@ -348,13 +378,14 @@ describe('day-wide reveal planning', () => {
 
     assert.equal(count(0n), 0, 'no bet racks no coins');
     assert.equal(count(1n), 1, 'any live bet places at least one coin on the spot');
-    const ladder = [100n, 1_000n, 10_000n, 100_000n, 1_000_000n].map(count);
-    assert.deepEqual(ladder, [3, 8, 13, 18, 23],
-      'each 10x of wager adds the same visible pile growth');
+    const ladder = [100n, 1_000n, 5_000n, 10_000n, 25_000n, 50_000n, 100_000n]
+      .map(count);
+    assert.deepEqual(ladder, [1, 4, 8, 10, 14, 17, 20],
+      'the common wager band starts small and gains distinct stack sizes');
     assert.equal(count(1_000_000_000n), 24,
       'a whale bet caps the spot instead of flooding it');
 
-    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [6, 6, 5],
+    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [6, 5, 5],
       'coins split into table piles of at most seven, near-even heights');
     assert.deepEqual(revealPlanning.coinflipBetChipPiles(0n), [],
       'an empty wager has no piles');
@@ -365,12 +396,12 @@ describe('day-wide reveal planning', () => {
       'the piles are exactly the logarithmic coin count, split up',
     );
     assert.deepEqual(
-      [43_844n, 49_999n, 50_000n, 72_500n, 600_000n, 5_000_000n, 1_000_000_000n]
+      [99_999n, 100_000n, 150_000n, 250_000n, 500_000n, 1_000_000n, 5_000_000n, 1_000_000_000n]
         .map((flip) => revealPlanning.coinflipBetPresentation(flip * unit)),
-      [0, 0, 1, 2, 7, 13, 20],
-      'heavy wagers climb a twenty-graphic pile ladder from 50K FLIP up',
+      [0, 5, 6, 7, 9, 11, 15, 20],
+      'sub-100K wagers remain stacks before the mound ladder opens',
     );
-    for (const flip of [60_000n, 400_000n, 3_000_000n, 20_000_000n]) {
+    for (const flip of [100_000n, 500_000n, 5_000_000n]) {
       assert.ok(
         revealPlanning.coinflipBetPresentation(flip * 3n * unit / 2n)
           > revealPlanning.coinflipBetPresentation(flip * unit),
@@ -379,24 +410,86 @@ describe('day-wide reveal planning', () => {
     }
   });
 
-  test('the bankroll rack fills logarithmically toward its tray capacity', () => {
+  test('the payout racks the wager\'s own coins, scaled by the day\'s multiplier', () => {
     const unit = 10n ** 18n;
-    const count = (amount, capacity) => (
-      revealPlanning.coinflipRackChipCount(amount * unit, capacity)
+    const payout = (flip, rewardPercent) => {
+      const stake = flip * unit;
+      return [
+        revealPlanning.coinflipWinChipCount(stake, stake + (stake * BigInt(rewardPercent)) / 100n),
+        revealPlanning.coinflipWinChipPiles(stake, stake + (stake * BigInt(rewardPercent)) / 100n),
+      ];
+    };
+    const staked = revealPlanning.coinflipBetChipCount(43_844n * unit);
+    assert.equal(staked, 16);
+
+    // The contract pays 150%-256% of the stake, so the payout lane spans from
+    // half the wager's coins to half again more than all of them.
+    assert.deepEqual(payout(43_844n, 50), [8, [4, 4]],
+      'the unlucky 150% day pays back visibly less than the player put down');
+    assert.deepEqual(payout(43_844n, 96), [15, [5, 5, 5]],
+      'a middle day pays back about the wager itself');
+    assert.deepEqual(payout(43_844n, 150), [24, [6, 6, 6, 6]],
+      'the lucky 250% day pays half again more coins than the wager');
+    assert.equal(payout(43_844n, 156)[1].length, 4,
+      'the biggest payout stays inside the spot: five stacks is the budget');
+
+    // The wager holds its own count no matter what the payout does — the
+    // logarithmic curve prices the bet, never the win beside it.
+    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [6, 5, 5]);
+    assert.equal(revealPlanning.coinflipWinChipCount(43_844n * unit, 43_844n * unit), 0,
+      'a returned stake is not a payout');
+    assert.deepEqual(revealPlanning.coinflipWinChipPiles(0n, 100n * unit), [],
+      'no wager, no payout coins');
+    assert.equal(revealPlanning.coinflipWinChipCount(20n * unit, 50n * unit), 2,
+      'the smallest wagers still show a physically bigger payout than their coin');
+  });
+
+  test('the claim tray derives bounded ratio and one-chip-per-doubling amount counts', () => {
+    const unit = 10n ** 18n;
+    const ratio = (claimable, liquid) => (
+      revealPlanning.coinflipClaimTrayRatioChipCounts(claimable * unit, liquid * unit)
+    );
+    const count = (amount) => (
+      revealPlanning.coinflipClaimTrayAmountChipCount(amount * unit, 12)
     );
 
-    assert.equal(count(0n, 96), 0, 'an empty balance leaves the tray empty');
-    assert.ok(count(21n, 96) > 4 && count(21n, 96) < 30,
-      'a starting bankroll already registers in the rack');
-    assert.ok(count(987_654n, 96) > 72,
-      'a deep bankroll reads mostly full');
-    assert.equal(count(1_000_000_000_000n, 96), Math.round(96 * 0.92),
-      'even a whale bankroll never pretends the tray is colored up solid');
-    const ladder = [100n, 10_000n, 1_000_000n].map((amount) => count(amount, 96));
-    assert.ok(ladder[0] < ladder[1] && ladder[1] < ladder[2],
-      'more balance always racks more coins');
-    assert.ok(count(987_654n, 64) < count(987_654n, 128),
-      'the same balance scales to the tray it is racked in');
+    assert.deepEqual(ratio(1n, 1n), { claimable: 10, liquid: 10 });
+    assert.deepEqual(ratio(1n, 3n), { claimable: 5, liquid: 15 });
+    assert.deepEqual(ratio(10n, 0n), { claimable: 20, liquid: 0 });
+    assert.deepEqual(ratio(0n, 10n), { claimable: 0, liquid: 20 });
+    assert.deepEqual(ratio(1n, 1_000_000n), { claimable: 1, liquid: 19 },
+      'both positive components retain at least one chip of each tone');
+    assert.deepEqual(ratio(0n, 0n), { claimable: 0, liquid: 0 });
+    assert.deepEqual(
+      revealPlanning.coinflipClaimTrayRatioChipCounts('not-a-balance', -1n),
+      { claimable: 0, liquid: 0 },
+      'invalid and negative external balances have a deterministic empty row',
+    );
+    const giantRatio = revealPlanning.coinflipClaimTrayRatioChipCounts(10n ** 200n, 1n);
+    assert.deepEqual(giantRatio, { claimable: 19, liquid: 1 },
+      'giant BigInts remain bounded and preserve the two positive tones');
+    assert.equal(giantRatio.claimable + giantRatio.liquid, 20);
+
+    assert.equal(count(0n), 0, 'an empty combined balance has no amount chips');
+    assert.equal(revealPlanning.coinflipClaimTrayAmountChipCount(1n, 12), 1,
+      'a positive sub-FLIP balance has one physical chip');
+    assert.deepEqual([1n, 2n, 4n, 8n].map(count), [1, 2, 3, 4],
+      'each whole-FLIP doubling adds exactly one visible chip');
+    assert.deepEqual([3n, 7n, 15n].map(count), [2, 3, 4],
+      'values immediately below the next power of two stay on the prior rung');
+    assert.equal(revealPlanning.coinflipClaimTrayAmountChipCount(16n * unit, 5), 5,
+      'the last free rung reaches physical capacity');
+    assert.equal(revealPlanning.coinflipClaimTrayAmountChipCount(32n * unit, 5), 5,
+      'the next doubling is capped at physical capacity');
+    assert.equal(
+      revealPlanning.coinflipClaimTrayAmountChipCount((10n ** 200n) * unit, 12),
+      12,
+      'a giant BigInt is capped before DOM creation without Number coercion',
+    );
+    assert.equal(revealPlanning.coinflipClaimTrayAmountChipCount('not-a-balance', 12), 0,
+      'invalid external balance text has a deterministic empty display');
+    assert.equal(revealPlanning.coinflipClaimTrayAmountChipCount(-1n, 12), 0,
+      'a negative external balance has a deterministic empty display');
   });
 
   test('prints the daily jackpot boundary in the player timezone', () => {
@@ -652,21 +745,22 @@ describe('day-wide reveal planning', () => {
       '250% and larger multipliers remain blue');
   });
 
-  test('sDGNRS stays within three significant figures and promotes suffix carries', () => {
+  test('large sDGNRS stays within two significant figures and promotes suffix carries', () => {
     const unit = 10n ** 18n;
     assert.equal(revealPlanning.formatSdgnrsBalance(999n * unit), '999');
     assert.equal(revealPlanning.formatSdgnrsBalance(0n), '0');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_999n * unit), '10.0K');
-    assert.equal(revealPlanning.formatSdgnrsBalance(10_000n * unit), '10.0K');
-    assert.equal(revealPlanning.formatSdgnrsBalance(12_345n * unit), '12.3K');
-    assert.equal(revealPlanning.formatSdgnrsBalance(999_999n * unit), '1.00M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_543n * unit), '9.88M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_999_999n * unit), '10.0M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(10_000_000n * unit), '10.0M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(10_450_000n * unit), '10.5M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(99_900_000n * unit), '99.9M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999n * unit), '10K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_000n * unit), '10K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(12_345n * unit), '12K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(999_999n * unit), '1M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_543n * unit), '9.9M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999_999n * unit), '10M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_000_000n * unit), '10M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_450_000n * unit), '10M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(99_900_000n * unit), '100M');
     assert.equal(revealPlanning.formatSdgnrsBalance(100_000_000n * unit), '100M');
-    assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '123M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '120M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_000_000_000_000n * unit), '9.9Q');
   });
 
   test("Tomorrow's Bet keeps at most four significant whole-FLIP digits", () => {
@@ -927,6 +1021,29 @@ describe('app-daily-flip — coin reveal + actions', () => {
       APP_CSS,
       /\.df-coin:focus-visible\s*\{[^}]*border-radius:\s*50%[^}]*outline:/s,
       'keyboard users retain a circular visible focus indicator',
+    );
+  });
+
+  test('an open coinflip dialog escapes the isolated felt without elevating ordinary table UI', () => {
+    assert.match(
+      CHIPSET_CSS,
+      /body\.layout-basic \.jackpot-hero \.app-daily-flip\s*\{[^}]*isolation:\s*isolate/s,
+      'the felt retains its local stacking context for the table rail and watermark',
+    );
+    assert.match(
+      CHIPSET_CSS,
+      /body\.layout-basic \.jackpot-hero \.app-daily-flip:has\(> \.df-reverse-dialog:not\(\[hidden\]\)\)\s*\{[^}]*isolation:\s*auto/s,
+      'a visible dialog temporarily opens the felt backdrop root so the page behind it can dim',
+    );
+    assert.match(
+      CHIPSET_CSS,
+      /body\.layout-basic \.jackpot-hero \.app-daily-flip > \.df-reverse-dialog:not\(\[hidden\]\)\s*\{[^}]*z-index:\s*12030/s,
+      'the visible dialog alone joins the shared modal layer',
+    );
+    assert.doesNotMatch(
+      CHIPSET_CSS,
+      /\.app-daily-flip:has\([^}]+\)\s*\{[^}]*z-index:\s*12030/s,
+      'ordinary coinflip table content never rises with its modal backdrop',
     );
   });
 
@@ -1299,12 +1416,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.equal(
-      _fetchCounts.get('http://localhost:3000/player/0xab12000000000000000000000000000000000000'),
+      _fetchCounts.get('https://degenerus-db.fly.dev/player/0xab12000000000000000000000000000000000000'),
       1,
       'immediate-fire store subscriptions share one dashboard request',
     );
     assert.equal(
-      _fetchCounts.get('http://localhost:3000/game/coinflip/day/67'),
+      _fetchCounts.get('https://degenerus-db.fly.dev/game/coinflip/day/67'),
       1,
       'daily result is requested once at mount',
     );
@@ -1425,13 +1542,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP',
       'the currency unit remains readable beside the settled value');
     const safeRack = el.querySelector('[data-bind="df-bankroll-rack"]');
-    assert.ok(safeRack.children.length > 0,
-      'the already-owned wallet chips can render while result-sensitive reads are pending');
-    assert.equal(
-      safeRack.children.some((roll) => roll.getAttribute('data-bankroll-source') === 'credit'),
-      false,
-      'claimable payout chips stay out of the rack until the result is disclosed',
-    );
+    assertBankrollChipCounts(safeRack, { claimable: 0, liquid: 20, total: 20 },
+      'held backing stays hidden while the live wallet still paints the tray');
+    assert.equal(safeRack.textContent, '', 'the held tray exposes no exact visible copy');
+    assert.match(safeRack.getAttribute('aria-label'),
+      /Claimable 0 FLIP\. Liquid 987,654 FLIP\. Combined 987,654 FLIP/,
+      'the disclosure-safe held values remain exact for assistive technology');
     assert.equal(el.querySelector('[data-position="today"]').textContent, "Today's bet—",
       'the still-pending resolved-day value keeps its loading placeholder');
     assert.equal(el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
@@ -1451,12 +1567,15 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
     assert.match(el.querySelector('[data-position="today"]').textContent, /43,840 FLIP/,
       "today's committed stake uses the four-significant-digit display before reveal");
-    const chipStacks = el.querySelector('[data-bind="df-bet-chip-rack"]').children;
-    assert.deepEqual(
-      chipStacks.map((stack) => stack.getAttribute('data-chip-count')),
-      ['6', '6', '5'],
-      'the wager racks as identical FLIP-coin piles sized by the logarithmic count',
+    const wagerStacks = Array.from(
+      el.querySelector('[data-bind="df-bet-chip-rack"]').children,
     );
+    assert.deepEqual(
+      wagerStacks.map((stack) => stack.getAttribute('data-chip-count')),
+      ['6', '5', '5'],
+      'a common 43K wager remains three substantial dealer stacks',
+    );
+    assert.ok(wagerStacks.every((stack) => stack.className.includes('df-bet-chip-stack')));
     assert.match(el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
       /Today’s bet|Today's bet: 43,844 FLIP/);
     assert.match(APP_CSS,
@@ -1478,7 +1597,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-bet-today-slot \.df-position-row\s*\{[^}]*border:\s*0[^}]*background:\s*none[^}]*box-shadow:\s*none[^}]*transform:\s*translateY\(-0\.14rem\)/s,
       'the exact amount prints as bare table ink, lifted just off the oval boundary');
     assert.match(el.innerHTML,
-      /class="df-bet-table"[^]*class="df-bet-table__today-label"[^>]*>TODAY'S BET<[^]*class="df-bet-oval"[^]*data-bind="df-position-today"/,
+      /class="df-bet-table"[^]*class="df-bet-table__today-label"[^]*data-bind="df-today-felt-label">TODAY'S BET<[^]*class="df-bet-oval"[^]*data-bind="df-position-today"/,
       'Today’s Bet is printed on the felt above both its badge strip and signed amount display');
     assert.match(
       el.innerHTML,
@@ -1568,6 +1687,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const el = mount();
     await flushMicrotasks();
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '1,200');
+    let meter = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(meter, { claimable: 3, liquid: 17, total: 11 },
+      'initial confirmed ledger snapshot');
+    assert.match(meter.getAttribute('aria-label'),
+      /Claimable 200 FLIP\. Liquid 1,000 FLIP\. Combined 1,200 FLIP/);
     const initialBalanceReads = balanceReads;
     const initialClaimableReads = claimableReads;
 
@@ -1582,10 +1706,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(balanceReads > initialBalanceReads, 'minted FLIP is re-read after confirmation');
     assert.ok(claimableReads > initialClaimableReads, 'claimable FLIP is re-read after confirmation');
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '750');
+    meter = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(meter, { claimable: 1, liquid: 19, total: 10 },
+      'confirmed transaction repaints both physical rows');
+    assert.match(meter.getAttribute('aria-label'),
+      /Claimable 50 FLIP\. Liquid 700 FLIP\. Combined 750 FLIP/);
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+      'the same claim opener survives the confirmed-transaction repaint');
+
+    const lowerAmountChips = bankrollChipCounts(meter).total;
+    wallet = 2_048n * unit;
+    claimable = 0n;
+    document.dispatchEvent({ type: contractsMod.TX_CONFIRMED_EVENT });
+    await flushMicrotasks();
+    meter = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(meter, { claimable: 0, liquid: 20, total: 12 },
+      'a mounted richer balance climbs the doubling ladder');
+    assert.ok(bankrollChipCounts(meter).total > lowerAmountChips,
+      'the mounted bottom row visibly gains chips as the wallet gets richer');
     el.disconnectedCallback();
   });
 
-  test('Protocol Coins includes auto-rebuy carry even while RNG is locked', async () => {
+  test('Available Funds excludes auto-rebuy carry even while RNG is locked', async () => {
     const unit = 10n ** 18n;
     coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
       flipBalance: 1_000n * unit,
@@ -1618,9 +1760,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.equal(
       el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
-      '1,675',
-      'wallet plus ordinary claimable plus the 475 FLIP rolling carry is shown',
+      '1,200',
+      'wallet plus ordinary claimable is shown without the committed 475 FLIP carry',
     );
+    const meter = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(meter, { claimable: 3, liquid: 17, total: 11 },
+      'only ordinary claimable stays on the red available side');
+    assert.match(meter.getAttribute('aria-label'),
+      /Claimable 200 FLIP\. Liquid 1,000 FLIP\. Combined 1,200 FLIP/);
     assert.equal(
       el.querySelector('[data-bind="df-claim-flip-cta"]').disabled,
       false,
@@ -1715,7 +1862,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('the restored inline Claim opens the FLIP funds popup independently of disclosure', async () => {
+  test('the CASH OUT rack opens ETH and FLIP together independently of disclosure', async () => {
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
@@ -1753,8 +1900,23 @@ describe('app-daily-flip — coin reveal + actions', () => {
       openedModes.push(event?.detail?.mode);
     });
     claim.dispatchEvent({ type: 'click' });
-    assert.deepEqual(openedModes, ['flip'],
-      'the old inline Claim opens the popup focused on FLIP');
+    assert.deepEqual(openedModes, ['cashout'],
+      'the table CASH OUT control opens the combined withdrawal popup');
+
+    await import('../app-player-funds-dialog.js');
+    const FundsDialog = customElements.get('app-player-funds-dialog');
+    const fundsDialog = new FundsDialog();
+    _docBody.appendChild(fundsDialog);
+    fundsDialog.connectedCallback();
+    fundsDialog.open(openedModes[0]);
+    assert.equal(fundsDialog.querySelector('[data-bind="pfd-eth-section"]').hidden, false,
+      'cash out exposes the existing ETH claim controls');
+    assert.equal(fundsDialog.querySelector('[data-bind="pfd-flip-section"]').hidden, false,
+      'cash out keeps the existing FLIP claim controls in the same popup');
+    assert.equal(fundsDialog.querySelector('[data-bind="pfd-link-section"]').hidden, true,
+      'LINK funding remains outside the cash-out surface');
+    assert.equal(fundsDialog.querySelector('[data-bind="pfd-title"]').textContent, 'Cash out');
+    fundsDialog.disconnectedCallback();
     el.disconnectedCallback();
   });
 
@@ -1885,7 +2047,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
   test('the modifier rail waits until a real win is final, then settles vertically', async () => {
     _currentStakeWei = '12000000000000000000000';
-    seedFlipBackingHold('4526397000000000000000000');
+    seedFlipAvailableHold('4526397000000000000000000');
     _fetchResponses = {
       dashboard: {
         ...dashboardPayload(),
@@ -2083,23 +2245,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
       assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
         'the exact bankroll opens on the same completion event as the final result');
       const bankroll = el.querySelector('[data-bind="df-bankroll-rack"]');
-      const rolls = Array.from(bankroll.querySelectorAll('.df-bankroll__roll'));
-      const rackChips = rolls.reduce((sum, roll) => (
-        sum + Number(roll.getAttribute('data-chip-count'))
-      ), 0);
-      // Fallback tray capacity 123 (channel 13.2rem): base 105 + credit 18.
-      assert.equal(rackChips, 123,
-        'the disclosed payout run tops the tray up to its full two-row capacity');
-      assert.ok(rolls.some((roll) => (
-        roll.getAttribute('data-bankroll-source') === 'credit'
-      )), 'newly disclosed winnings arrive as a distinct physical run');
-      assert.equal(bankroll.querySelector('.is-face'), null,
-        'no bankroll chip turns its badge face toward the camera');
-      assert.equal(bankroll.querySelector('.df-bankroll__count'), null,
-        'the physical rack enumerates chips instead of overlaying count labels');
-      assert.equal(bankroll.classList.contains('is-crediting'), true,
-        'the payout run receives the one-shot rack-settle treatment');
-      assert.match(bankroll.getAttribute('aria-label'), /FLIP balance: 5,599,985 FLIP/);
+      assertBankrollChipCounts(bankroll, { claimable: 16, liquid: 4, total: 23 },
+        'reveal completion releases claim-side and combined physical chips together');
+      assert.equal(bankroll.textContent, '', 'reveal does not print exact values in the tray');
+      assert.match(bankroll.querySelector('.df-bankroll__row--ratio').getAttribute('aria-label'),
+        /Claimable 4,612,331 FLIP\. Liquid 987,654 FLIP\./);
+      assert.match(bankroll.querySelector('.df-bankroll__row--total').getAttribute('aria-label'),
+        /Combined balance 5,599,985 FLIP\./);
       assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
         'claim unlocks only after the result sequence completes');
       assert.equal(
@@ -2453,25 +2605,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-win-strip"]'), null,
       'the win does not create a second winnings display');
     assert.equal(betOval.classList.contains('has-payout'), false);
-    assert.match(betOval.getAttribute('aria-label'), /Today's bet: 43,844 FLIP/);
+    assert.match(betOval.getAttribute('aria-label'), /Today's bet: 43,844 FLIP/,
+      'the original sub-100K dealer stacks keep their exact accessible stake');
+    const wagerStacks = Array.from(
+      el.querySelector('[data-bind="df-bet-chip-rack"]').children,
+    );
     assert.deepEqual(
-      el.querySelector('[data-bind="df-bet-chip-rack"]').children.map((stack) => (
-        stack.getAttribute('data-chip-count')
-      )),
-      ['6', '6', '5'],
-      'the lower row keeps the original wager piles after the win',
+      wagerStacks.map((stack) => stack.getAttribute('data-chip-count')),
+      ['6', '5', '5'],
+      'the won stake remains in its original three-stack composition',
     );
     const winningsRow = el.querySelector('[data-bind="df-today-winnings-row"]');
     assert.equal(winningsRow.dataset.state, 'win');
-    assert.equal(winningsRow.getAttribute('aria-hidden'), 'false');
-    assert.deepEqual(
-      el.querySelector('[data-bind="df-today-winnings-rack"]').children.map((stack) => (
-        stack.getAttribute('data-chip-count')
-      )),
-      ['6', '6', '5'],
-      'the additional 42,090 FLIP racks its own independent coin piles above',
+    assert.equal(winningsRow.getAttribute('aria-hidden'), 'false',
+      'sub-100K wins push their added chips into the upper dealer rack');
+    const winningsStacks = Array.from(
+      el.querySelector('[data-bind="df-today-winnings-rack"]').children,
     );
-    assert.equal(el.querySelector('[data-bind="df-today-winnings-rack"]').querySelectorAll('.df-bet-chip').length, 17);
+    assert.deepEqual(
+      winningsStacks.map((stack) => stack.getAttribute('data-chip-count')),
+      ['5', '5', '5'],
+      'the 96% payout adds three balanced stacks above the stake',
+    );
     assert.equal(el.querySelectorAll('.is-payout').length, 0,
       'upper and lower racks use the exact same badge chip classes and colors');
     assert.ok(el.querySelector('.df-modifier-meter--settled'),
@@ -2554,6 +2709,99 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /lost; chips cleared/);
     assert.equal(el.querySelector('.df-modifier-meter'), null,
       'loss clears the scanner instead of settling on a modifier');
+    el.disconnectedCallback();
+  });
+
+  test("the first resolved Today activation rolls the bets; the second opens Add Bet", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _resolvedStakeWei = '43844000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+
+    const todaySurface = el.querySelector('[data-bind="df-today-bet-cta"]');
+    const lowerSurface = el.querySelector('[data-bind="df-flip-cta"]');
+    assert.equal(todaySurface.getAttribute('role'), 'button',
+      'the settled Today circle advertises the handoff interaction');
+    assert.match(el.querySelector('[data-position="today"]').textContent, /LOSS-43,840/);
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
+
+    todaySurface.dispatchEvent({ type: 'click' });
+
+    assert.equal(todaySurface.classList.contains('is-add-bet'), true);
+    assert.equal(todaySurface.getAttribute('aria-label'), "Add FLIP to today's bet");
+    assert.equal(todaySurface.getAttribute('aria-expanded'), 'false');
+    assert.equal(el.querySelector('[data-bind="df-today-add-cue"]').hidden, true,
+      'a real promoted chip stack hides the empty-state plus instead of showing through it');
+    assert.match(CHIPSET_CSS,
+      /\.df-bet-table__add-cue\s*\{[^}]*position:\s*absolute[^}]*top:\s*calc\(50% \+ 0\.32rem\)[^}]*left:\s*0\.3rem/s,
+      'when Today is empty, its plus is pinned to the left-center of the oval');
+    assert.match(el.querySelector('[data-position="today"]').textContent, /12,000 FLIP/,
+      'the previously staged wager now owns the large Today spot');
+    assert.equal(lowerSurface.classList.contains('is-yesterday'), true);
+    assert.equal(lowerSurface.getAttribute('role'), 'img');
+    assert.equal(el.querySelector('[data-bind="df-lower-felt-label"]').textContent, "YESTERDAY'S BET");
+    assert.equal(el.querySelector('[data-bind="df-tomorrow-add-cue"]').hidden, true);
+    assert.equal(
+      el.querySelector('[data-bind="df-tomorrow-bet-oval"]').getAttribute('data-yesterday-outcome'),
+      'loss',
+    );
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /LOSS-43,840/,
+      'the resolved amount and result remain in the fixed compact Yesterday fixture');
+    assert.equal(lowerSurface.getAttribute('aria-label'), "Yesterday's bet lost 43,844 FLIP");
+    assert.match(CHIPSET_CSS,
+      /\.df-tomorrow-layout\.is-yesterday > \.df-position-slot\s*\{[^}]*width:\s*100%[^}]*grid-area:\s*oval/s,
+      'Yesterday reuses one full-width receipt inside the existing lower oval');
+    assert.match(CHIPSET_CSS,
+      /\.df-tomorrow-layout\.is-yesterday \.df-tomorrow-bet-oval \.df-bet-chip-rack\s*\{\s*display:\s*none;/s,
+      'Yesterday does not split the oval into a second stake readout and result');
+    assert.match(CHIPSET_CSS,
+      /\.df-tomorrow-layout\.is-yesterday \.df-position-multiplier\s*\{[^}]*display:\s*inline-flex/s,
+      'the reused receipt exposes WIN or LOSS beside its signed amount');
+    assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, true,
+      'the rollover activation is visual only and does not also open Add Bet');
+
+    todaySurface.dispatchEvent({ type: 'click' });
+
+    assert.equal(todaySurface.getAttribute('aria-expanded'), 'true');
+    assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, false,
+      'a later activation uses the whole promoted Today surface as Add Bet');
+    assert.equal(el.querySelector('[data-bind="df-add-bet-title"]').textContent, "ADD TO TODAY'S BET");
+    assert.equal(
+      el.querySelector('[data-bind="df-add-bet-number"]').getAttribute('aria-label'),
+      "FLIP to add to today's bet",
+    );
+
+    el.querySelector('[data-bind="df-add-bet-close"]').dispatchEvent({ type: 'click' });
+    lowerSurface.dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, true,
+      'Yesterday is a result receipt, never a second Add Bet target');
+    el.disconnectedCallback();
+  });
+
+  test("an empty promoted Today's Bet keeps its add cue", async () => {
+    _currentStakeWei = '0';
+    _resolvedStakeWei = '43844000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+    const todaySurface = el.querySelector('[data-bind="df-today-bet-cta"]');
+    todaySurface.dispatchEvent({ type: 'click' });
+
+    assert.equal(todaySurface.classList.contains('is-add-bet'), true);
+    assert.equal(el.querySelector('[data-bind="df-bet-chip-rack"]').children.length, 0);
+    assert.equal(el.querySelector('[data-bind="df-today-add-cue"]').hidden, false,
+      'the plus stays visible when there are no wager chips to conflict with it');
     el.disconnectedCallback();
   });
 
@@ -2640,9 +2888,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }
   });
 
-  test('stacked day bets keep a spoiler-safe physical FLIP rack below the red felt', async () => {
+  test('stacked day bets keep a spoiler-safe physical FLIP claim tray below the red felt', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
+    const loadingRack = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assert.equal(loadingRack.getAttribute('data-state'), 'loading');
+    assert.equal(loadingRack.querySelectorAll('.df-bankroll__chip').length, 0);
+    assert.equal(loadingRack.getAttribute('aria-label'), 'FLIP bankroll is loading');
     await flushMicrotasks();
 
     const rows = el.querySelectorAll('.df-position-row');
@@ -2663,30 +2915,68 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '987,654',
       'the safe wallet FLIP remains visible while result backing is held');
     const bankroll = el.querySelector('[data-bind="df-bankroll-rack"]');
-    const allRolls = Array.from(bankroll.querySelectorAll('.df-bankroll__roll'));
-    const baseRolls = allRolls.filter((roll) => (
-      roll.getAttribute('data-bankroll-source') === 'base'
-    ));
-    const physicalCount = baseRolls.reduce((sum, roll) => (
-      sum + Number(roll.getAttribute('data-chip-count'))
-    ), 0);
-    // Fallback tray capacity 123 (channel 13.2rem): 987,654 FLIP racks 105
-    // identical FLIP coins via the logarithmic fill.
-    assert.equal(physicalCount, 105,
-      'the unrevealed rack holds only the already-owned wallet fill');
-    assert.ok(baseRolls.every((roll) => Number(roll.getAttribute('data-chip-count')) <= 20),
-      'every rack channel follows the casino twenty-chip barrel convention');
-    assert.ok(bankroll.children.length <= 2,
-      'the tray racks its barrels across at most two physical rows');
+    assertBankrollChipCounts(bankroll, { claimable: 0, liquid: 20, total: null },
+      'result-sensitive backing stays held while live wallet chips remain visible');
+    const ratioRow = bankroll.querySelector('.df-bankroll__row--ratio');
+    const totalRow = bankroll.querySelector('.df-bankroll__row--total');
+    const ratioRoll = ratioRow?.querySelector('.df-bankroll__roll');
+    const totalRolls = totalRow?.querySelectorAll('.df-bankroll__roll') ?? [];
+    assert.ok(ratioRoll, 'the dynamic ratio chips remain inside the original standing barrel');
+    assert.ok(totalRolls.length >= 1,
+      'the amount row uses the original physical barrel machinery');
+    assert.equal(ratioRoll.getAttribute('data-chip-count'), '20');
+    assert.match(ratioRoll.getAttribute('style'), /--df-bankroll-roll-span:[0-9.]+rem/);
     assert.equal(
-      allRolls.some((roll) => roll.getAttribute('data-bankroll-source') === 'credit'),
-      false,
-      'result-sensitive backing does not enter the rack before disclosure',
+      totalRolls.every((roll) => Number(roll.getAttribute('data-chip-count')) <= 20),
+      true,
+      'the original renderer packs no more than twenty chips into one barrel',
     );
+    assert.equal(
+      totalRolls.reduce((sum, roll) => sum + Number(roll.getAttribute('data-chip-count')), 0),
+      bankrollChipCounts(bankroll).total,
+      'barrel metadata accounts for every bounded logarithmic amount chip',
+    );
+    assert.deepEqual(
+      totalRolls.map((roll) => roll.getAttribute('data-chip-color')),
+      totalRolls.map((_roll, index) => index % 2 === 0 ? 'red' : 'green'),
+      'the amount barrels retain the original red/green checkerboard treatment',
+    );
+    assert.equal(
+      totalRolls.flatMap((roll) => roll.children).every((chip) => (
+        /df-bankroll__chip--(?:claimable|liquid)/.test(chip.className)
+      )),
+      true,
+      'every bottom amount chip uses the restored red/green palette rather than a neutral tone',
+    );
+    assert.equal(totalRow.querySelector('.df-bankroll__chip--total'), null,
+      'the retired neutral/gold total-chip marker is absent from the bottom DOM');
+    assert.equal(
+      [
+        ...ratioRoll.children,
+        ...totalRolls.flatMap((roll) => roll.children),
+      ].every((chip) => (
+        /--df-bankroll-chip-x:[0-9.]+rem/.test(chip.getAttribute('style') || '')
+      )),
+      true,
+      'every chip keeps the original absolute edge-stack coordinate',
+    );
+    assert.equal(bankroll.textContent, '',
+      'the tray visibly prints no amounts, percentages, total, or scale caption');
+    assert.equal(bankroll.querySelectorAll('.df-bankroll__chip').every((chip) => (
+      chip.textContent === '' && chip.getAttribute('aria-hidden') === 'true'
+    )), true, 'every physical chip is empty text and individually decorative');
+    for (const rejectedClass of [
+      '.df-bankroll__labels',
+      '.df-bankroll__ratio-track',
+      '.df-bankroll__segment',
+      '.df-bankroll__total-copy',
+      '.df-bankroll__total-track',
+      '.df-bankroll__total-fill',
+      '.df-bankroll__scale',
+    ]) assert.equal(bankroll.querySelector(rejectedClass), null, `${rejectedClass} is retired`);
     assert.match(bankroll.getAttribute('data-bankroll-key'), /credit:unknown:held$/);
-    assert.match(bankroll.getAttribute('aria-label'), /Visible wallet rack: 987,654 FLIP/);
-    assert.equal(bankroll.querySelector('.is-face'), null,
-      'every physical bankroll chip remains edge-on');
+    assert.match(bankroll.getAttribute('aria-label'),
+      /Claimable 0 FLIP\. Liquid 987,654 FLIP\. Combined 987,654 FLIP/);
     assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP',
       'the protocol unit stays beside the settled number');
     assert.equal(el.querySelectorAll('.df-position-delta').length, 0,
@@ -2699,13 +2989,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(claim, 'the recessed rack itself remains the FLIP Claim opener');
     assert.match(el.innerHTML,
       /class="df-bankroll__well"[^>]*data-write[\s\S]*?data-bind="df-claim-flip-cta"[\s\S]*?class="df-bankroll__rack"/,
-      'the clickable claim surface owns the physical chip rack');
+      'the clickable claim surface owns the physical chip tray');
     assert.equal(el.querySelector('[data-bind="df-funds-toggle"]'), null,
       'the Other Coins disclosure is gone from the table');
     assert.equal(el.querySelector('[data-bind="df-funds-wwxrp-box"]'), null);
     assert.equal(el.querySelector('[data-bind="df-funds-sdgnrs-box"]'), null);
-    assert.match(el.innerHTML, /class="df-funds__title"[^>]*>CLAIM</,
-      'the clickable corner tray is plainly labeled as the Claim surface');
+    assert.match(el.innerHTML, /class="df-funds__title"[^>]*>CASH OUT</,
+      'the clickable corner tray is plainly labeled as the Cash Out surface');
     assert.match(el.innerHTML, /class="df-funds__box-label"[^>]*>AVAILABLE FUNDS</,
       'the FLIP balance box is titled like the ETH Available Funds fixture');
     assert.doesNotMatch(el.innerHTML, />OTHER COINS</,
@@ -2755,20 +3045,35 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-bankroll__well\s*\{[^}]*border-radius:\s*\.42rem[^}]*inset 0 \.5rem \.7rem rgba\(0,0,0,\.62\)/s,
       'the chip lane is recessed into the red felt like a physical tray');
     assert.match(CHIPSET_CSS,
-      /\.df-bankroll__chip\s*\{[^}]*width:\s*0\.17rem[^}]*height:\s*0\.62rem[^}]*var\(--df-flip-red\)/s,
-      'racked coins stand on edge as narrow solid FLIP pills');
+      /\.df-bankroll__well \.df-bankroll__rack\s*\{[^}]*display:\s*flex[^}]*height:\s*1\.62rem[^}]*flex-direction:\s*column[^}]*gap:\s*0\.12rem/s,
+      'the original two-level recessed barrel rack owns the dynamic rows');
     assert.match(CHIPSET_CSS,
-      /\.df-bankroll__roll:nth-child\(2n\) \.df-bankroll__chip[^{]*\{[^}]*var\(--df-flip-green\)/s,
-      'barrels alternate the two solid coin bodies, never half-and-half coins');
+      /\.df-bankroll__row\s*\{[^}]*display:\s*flex[^}]*height:\s*0\.68rem[^}]*justify-content:\s*center[^}]*gap:\s*0\.2rem/s,
+      'rows retain the original centered barrel geometry and spacing');
     assert.match(CHIPSET_CSS,
-      /\.df-bankroll__row:nth-child\(2n\) \.df-bankroll__roll:nth-child\(2n\) \.df-bankroll__chip\s*\{[^}]*var\(--df-flip-red\)/s,
-      'the second rack row checkerboards so neither row runs one color');
+      /\.df-bankroll__roll\s*\{[^}]*height:\s*0\.62rem[^}]*isolation:\s*isolate/s,
+      'each data run is restored to an isolated standing-chip barrel');
     assert.match(CHIPSET_CSS,
-      /\.df-bankroll__chip\.is-face::after\s*\{[^}]*display:\s*none[^}]*content:\s*none/s,
-      'the rack art explicitly suppresses every badge face and flame');
+      /\.df-bankroll__roll \+ \.df-bankroll__roll::before\s*\{[^}]*width:\s*0\.05rem[^}]*height:\s*0\.72rem[^}]*#7a552b/s,
+      'adjacent amount barrels retain the original walnut divider posts');
     assert.match(CHIPSET_CSS,
-      /\.df-bankroll__rack\.is-crediting[\s\S]*?\[data-bankroll-source="credit"\][^}]*df-bankroll-credit-settle/s,
-      'newly disclosed payout chips physically settle into the existing rack');
+      /\.df-bankroll__chip\s*\{[^}]*width:\s*0\.17rem[^}]*height:\s*0\.62rem[^}]*border-radius:\s*0\.07rem[^}]*linear-gradient\(90deg/s,
+      'claim-tray pieces retain the original narrow edge-pill material and highlights');
+    assert.match(CHIPSET_CSS,
+      /\.df-bankroll__chip--claimable\s*\{[^}]*var\(--df-flip-red\)[^}]*\}[\s\S]*?\.df-bankroll__chip--liquid\s*\{[^}]*var\(--df-flip-green\)/s,
+      'the ratio assignment changes only the original edge-pill red/green tone');
+    assert.match(CHIPSET_CSS,
+      /\.df-bankroll__rack\.is-crediting\s+\.df-bankroll__roll\[data-bankroll-source="credit"\]\s*\{[^}]*df-bankroll-credit-settle/s,
+      'newly released claimable barrels retain the prior settle motion');
+    assert.doesNotMatch(CHIPSET_CSS,
+      /\.df-bankroll__row--(?:ratio|total)\s*\{[^}]*grid-template-columns/s,
+      'dynamic count never replaces the original barrel with a flat equal-cell grid');
+    assert.doesNotMatch(CHIPSET_CSS,
+      /--df-bankroll-(?:share|fill)-bps|df-bankroll__(?:labels|ratio-track|segment|total-copy|total-track|total-fill|scale)/,
+      'no continuous balance-derived widths or visible meter-copy selectors remain');
+    assert.doesNotMatch(CHIPSET_CSS,
+      /\.df-bankroll__chip--total\s*\{[^}]*--df-bankroll-chip-(?:hi|tone|lo)/s,
+      'the semantic total marker never introduces a yellow or gold material treatment');
     assert.match(APP_INDEX, /href="\/app\/styles\/app\.css"[\s\S]*?href="\/app\/styles\/coinflip-chipset\.css"/,
       'the reviewed chipset loads after the base coinflip geometry');
     assert.match(
@@ -2841,6 +3146,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-number').textContent,
       '123,500',
     );
+    const tomorrowRack = el.querySelector('[data-bind="df-tomorrow-chip-rack"]');
+    assert.equal(tomorrowRack.textContent, '123,500 FLIP',
+      'the compact Tomorrow spot prints its amount as text');
+    assert.equal(tomorrowRack.querySelector('.df-bet-chip-stack, .df-bet-pile'), null,
+      'Tomorrow does not duplicate Today’s physical wager stacks');
     el.disconnectedCallback();
   });
 
@@ -3182,7 +3492,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('Tomorrow is one Add Bet surface and the chip rack is the FLIP Claim surface', async () => {
+  test('Tomorrow is one Add Bet surface and the chip rack is the cash-out surface', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
     await flushMicrotasks();
@@ -3197,29 +3507,54 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'there is no separate yellow Add button inside the betting area');
     const amount = el.querySelector('[name="df-amount"]');
     assert.match(el.innerHTML,
-      /df-add-bet-dialog__value[\s\S]*?type="number" name="df-amount"[^>]*data-bind="df-add-bet-number"/,
+      /df-add-bet-dialog__value[\s\S]*?type="text" name="df-amount"[^>]*data-bind="df-add-bet-number"[^>]*inputmode="numeric"/,
       'the amount headliner itself accepts an exact numeric amount');
     assert.doesNotMatch(el.innerHTML, /EXACT AMOUNT|df-add-bet-dialog__number-field/,
       'there is no redundant exact-amount input below the headliner');
     assert.match(el.innerHTML, /type="range" data-bind="df-add-bet-slider"/,
       'the dialog retains its quick amount slider');
     assert.match(el.innerHTML,
-      /df-add-bet-dialog__head[\s\S]*?src="\/whitepaper\/flame-logo-split\.svg"/,
-      'the popup header uses the FLIP split-flame mark');
-    assert.doesNotMatch(el.innerHTML,
-      /df-add-bet-dialog__head[\s\S]*?src="\/specials\/special_flip_static\.svg"/,
-      'the popup no longer shows the WWXRP-style face');
+      /df-add-bet-dialog__chip-scene[\s\S]*?src="\/shared\/flip-chips\/coin\.svg"[\s\S]*?data-bind="df-add-bet-chip-pile"/,
+      'the popup header starts with one canonical FLIP coin');
+    assert.match(el.innerHTML,
+      /df-add-bet-dialog__value[\s\S]*?src="\/whitepaper\/flame-logo-split\.svg"[\s\S]*?data-bind="df-add-bet-number"/,
+      'the editable betting spot uses the flat FLIP mark without replacing its input');
+    assert.doesNotMatch(el.querySelector('.df-add-bet-dialog__head').textContent,
+      /COMMUNITY COINFLIP/,
+      'the popup has one direct bet instruction instead of a second header label');
     const dialog = el.querySelector('[data-bind="df-add-bet-dialog"]');
     assert.equal(dialog.hidden, true, 'the slider stays out of the Tomorrow row until requested');
     flip.dispatchEvent({ type: 'click' });
     assert.equal(dialog.hidden, false, 'Add Bet opens its amount dialog without sending a transaction');
     const reuse = el.querySelector('[data-bind="df-add-bet-reuse"]');
+    const chipPile = el.querySelector('[data-bind="df-add-bet-chip-pile"]');
+    assert.equal(chipPile.getAttribute('data-pile-count'), '4');
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/stack-4.svg',
+      'the common 1,000 FLIP default opens on a small meaningful stack');
     assert.equal(reuse.hidden, false);
     assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +7 FLIP',
       'the default rebet truncates its claimable-winnings bonus to whole FLIP');
+    amount.value = '5000';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/stack-6.svg',
+      'lower common bets gain visible stack height before mound scale');
+    amount.value = '10000';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/stack-7.svg',
+      '10K remains a taller dealer stack');
+    amount.value = '100000';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/pile-5-c.svg',
+      '100K opens the first full mound composition');
+    amount.value = '5000000';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/pile-15-c.svg',
+      'multi-million-FLIP entries continue up the mound ladder');
     amount.value = '54000';
     amount.dispatchEvent({ type: 'input' });
-    assert.equal(amount.value, '54000', 'the prominent amount headliner retains the typed selection');
+    assert.equal(amount.value, '54,000', 'the prominent amount headliner formats the typed selection');
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/stack-9.svg',
+      'a 54K entry is a near-full dealer stack, not a loose mound');
     assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +405 FLIP',
       'the reuse bonus follows the exact typed amount');
     const slider = el.querySelector('[data-bind="df-add-bet-slider"]');
@@ -3227,24 +3562,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(slider.value, '54000', 'the number field keeps the slider synchronized');
     amount.value = '54123';
     amount.dispatchEvent({ type: 'input' });
-    assert.equal(amount.value, '54123', 'typing can still retain an exact whole-FLIP amount');
+    assert.equal(amount.value, '54,123', 'typing can still retain an exact whole-FLIP amount');
     assert.equal(slider.value, '54100', 'the slider thumb follows the nearest round stop');
     slider.value = '54149';
     slider.dispatchEvent({ type: 'input' });
     assert.equal(slider.value, '54100', 'a large-total slider selection snaps to its nearest round stop');
-    assert.equal(amount.value, '54100', 'a snapped slider selection updates the exact number field');
+    assert.equal(amount.value, '54,100', 'a snapped slider selection updates the formatted number field');
     slider.dispatchEvent({ type: 'pointerdown', shiftKey: false });
     slider.value = '54700';
     slider.dispatchEvent({ type: 'input' });
     assert.equal(slider.value, '55000', 'ordinary dragging magnetizes the slider to 1,000-FLIP stops');
-    assert.equal(amount.value, '55000', 'the coarse drag value remains synchronized');
+    assert.equal(amount.value, '55,000', 'the coarse drag value remains synchronized');
     slider.dispatchEvent({ type: 'pointerup' });
     slider.dispatchEvent({ type: 'pointerdown', shiftKey: true });
     slider.value = '54700';
     slider.dispatchEvent({ type: 'input' });
     assert.equal(slider.value, '54700', 'Shift-drag retains 100-FLIP precision');
-    assert.equal(amount.value, '54700', 'the fine drag value remains synchronized');
+    assert.equal(amount.value, '54,700', 'the fine drag value remains synchronized');
     slider.dispatchEvent({ type: 'pointerup' });
+    amount.value = '100';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(chipPile.getAttribute('src'), '/shared/flip-chips/coin.svg',
+      'reducing the entered amount visibly returns the stack to one coin');
     assert.match(el.innerHTML, /aria-description="Drag in 1,000 FLIP steps\.[^"]*100 FLIP adjustments\."/,
       'assistive copy explains coarse and fine manipulation');
     assert.equal(el.querySelector('[data-bind="df-bet-up"]'), null);
@@ -3281,11 +3620,20 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.df-add-bet-dialog__value input\s*\{[^}]*font:\s*inherit[^}]*text-align:\s*center/s,
       'the editable input inherits the prominent amount treatment');
+    assert.match(CHIPSET_CSS,
+      /\.df-add-bet-dialog__value\s*\{[^}]*border:\s*0\.14rem solid var\(--df-add-bet-blue\)[^}]*border-radius:\s*999px[^}]*linear-gradient\(180deg, #2a3d75/s,
+      'the amount input is presented in the same painted blue oval language as the table');
+    assert.match(CHIPSET_CSS,
+      /input\[type="range"\]::-(?:webkit-slider-thumb|moz-range-thumb)\s*\{[^}]*background:\s*url\('\/shared\/flip-chips\/face\.svg'\) center \/ contain no-repeat/s,
+      'the quick slider uses a canonical FLIP chip for its physical thumb');
+    assert.match(CHIPSET_CSS,
+      /@media \(max-width: 360px\)\s*\{[\s\S]*?\.df-add-bet-dialog__card\s*\{[^}]*max-height:\s*calc\(100dvh - 1rem\)[^}]*padding:\s*0\.72rem/s,
+      'the chip-led placard keeps an explicit compact layout for a 320px viewport');
     assert.doesNotMatch(APP_CSS, /\.df-player-fund-actions|\.df-player-fund-widget/,
       'the removed three-widget strip leaves no dormant styling behind');
     assert.match(el.innerHTML,
       /<button type="button" class="df-bankroll__well" data-write[\s\S]*?data-bind="df-claim-flip-cta"/,
-      'the recessed physical rack—not a yellow utility button—opens FLIP Claim');
+      'the recessed physical rack—not a separate utility button—opens cash out');
     assert.doesNotMatch(APP_CSS,
       /\.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\],/,
       'the Tomorrow felt pill owns its geometry instead of inheriting the ledger action size');
@@ -3345,6 +3693,59 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('a broadcast Add Bet can be dismissed while its receipt stays pending', async () => {
+    let releaseReceipt;
+    let receiptConfirmed = false;
+    const receiptGate = new Promise((resolve) => { releaseReceipt = resolve; });
+    const calls = [];
+    const deposit = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        return {
+          hash: '0xpending-add-bet',
+          wait: async () => {
+            const receipt = await receiptGate;
+            receiptConfirmed = true;
+            return receipt;
+          },
+        };
+      },
+      { staticCall: async (...args) => { calls.push(['static', ...args]); } },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflipWithCarry: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const dialog = el.querySelector('[data-bind="df-add-bet-dialog"]');
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="df-add-bet-confirm"]').dispatchEvent({ type: 'click' });
+    await flushPromises();
+    assert.equal(calls.filter(([stage]) => stage === 'send').length, 1,
+      'the wallet has broadcast exactly one deposit');
+    assert.equal(receiptConfirmed, false, 'the receipt is still pending');
+
+    el.querySelectorAll('[data-bind="df-add-bet-close"]')[0]
+      .dispatchEvent({ type: 'click' });
+    assert.equal(dialog.hidden, true,
+      'the X removes the blocking modal before the receipt arrives');
+    assert.equal(receiptConfirmed, false,
+      'closing presentation does not pretend the transaction confirmed');
+
+    releaseReceipt({ status: 1, logs: [] });
+    await flushPromises();
+    assert.equal(receiptConfirmed, true,
+      'receipt handling continues after the modal is dismissed');
+    el.disconnectedCallback();
+  });
+
   test('Add Bet bonuses only the portion funded by reused winnings', async () => {
     const unit = 10n ** 18n;
     const dashboard = dashboardPayload();
@@ -3357,7 +3758,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
     const input = el.querySelector('[data-bind="df-add-bet-number"]');
     const reuse = el.querySelector('[data-bind="df-add-bet-reuse"]');
-    assert.equal(input.value, '1000');
+    assert.equal(input.value, '1,000');
     assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +1 FLIP',
       'the claimable-funded bonus is shown as whole FLIP only');
     assert.equal(reuse.getAttribute('title'), '200 FLIP of this bet comes from winnings.');
@@ -3420,7 +3821,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const amount = el.querySelector('[data-bind="df-add-bet-number"]');
     const bonus = el.querySelector('[data-bind="df-add-bet-quest-bonus"]');
     assert.equal(bonus.hidden, false);
-    assert.equal(bonus.textContent, 'QUEST COMPLETION BONUS · +100 FLIP');
+    assert.equal(bonus.textContent, 'QUEST COMPLETION BONUS · +100 FLIP · +1 STREAK');
 
     amount.value = '100';
     amount.dispatchEvent({ type: 'input' });
@@ -3685,7 +4086,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('every live FLIP display uses the replayed auto-rebuy remainder', async () => {
+  test('auto-rebuy remainder stays in the bet and out of Available Funds', async () => {
     const unit = 10n ** 18n;
     _currentStakeWei = String(1_286n * unit);
     coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
@@ -3719,9 +4120,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.equal(
       el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
-      '186,472',
-      'Protocol Coins is wallet plus the same claimable + replayed carry backing',
+      '185,186',
+      'Available Funds is wallet plus ordinary claimable without replayed carry',
     );
+    const carryRack = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(carryRack, { claimable: 2, liquid: 18, total: 18 },
+      'the physical rack excludes committed carry too');
+    assert.match(carryRack.getAttribute('aria-label'),
+      /Claimable 20,000 FLIP\. Liquid 165,186 FLIP\. Combined 185,186 FLIP/);
     assert.equal(
       el.querySelector('[data-bind="df-claim-flip-cta"]').disabled,
       false,
@@ -3771,9 +4177,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
     assert.equal(
       el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
-      '186,472',
-      'pre-claim total is wallet plus banked FLIP plus the rolling remainder',
+      '185,186',
+      'pre-claim total is wallet plus banked FLIP without the rolling remainder',
     );
+    let claimRack = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(claimRack, { claimable: 2, liquid: 18, total: 18 },
+      'pre-claim physical composition');
 
     // A normal claim mints the banked 20,000 into the wallet. The combined
     // value must stay unchanged even while the indexed dashboard still has
@@ -3789,9 +4198,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.equal(
       el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
-      '186,472',
+      '185,186',
       'the same 20,000 is not counted in both wallet and claimable after confirmation',
     );
+    claimRack = el.querySelector('[data-bind="df-bankroll-rack"]');
+    assertBankrollChipCounts(claimRack, { claimable: 0, liquid: 20, total: 18 },
+      'confirmation repaints composition without changing combined magnitude');
+    assert.match(claimRack.getAttribute('aria-label'),
+      /Claimable 0 FLIP\. Liquid 185,186 FLIP\. Combined 185,186 FLIP/);
     assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
       'the unified funds popup remains available after one ledger is emptied');
     assert.match(
@@ -3871,7 +4285,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('an empty FLIP balance leaves an empty physical rack and one unit-bearing receipt', async () => {
+  test('an empty FLIP balance leaves an empty physical tray and one unit-bearing receipt', async () => {
     globalThis.localStorage.setItem('flip_day_84532_67', '1');
     _fetchResponses = {
       dashboard: {
@@ -3892,8 +4306,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '-');
     assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP');
     const rack = el.querySelector('[data-bind="df-bankroll-rack"]');
-    assert.equal(rack.children.length, 0);
-    assert.match(rack.getAttribute('aria-label'), /FLIP balance: 0 FLIP.*rack is empty/i);
+    assert.equal(rack.getAttribute('data-state'), 'empty');
+    assertBankrollChipCounts(rack, { claimable: 0, liquid: 0, total: 0 },
+      'zero balance creates no physical nodes');
+    assert.equal(rack.textContent, '');
+    assert.match(rack.getAttribute('aria-label'),
+      /Claimable 0 FLIP\. Liquid 0 FLIP\. Combined 0 FLIP/);
     assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
       'the rack remains the Claim opener even when there are no chips');
     el.disconnectedCallback();
@@ -3911,7 +4329,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const amount = el.querySelector('[name="df-amount"]');
     const add = el.querySelector('[data-bind="df-flip-cta"]');
-    assert.equal(amount.value, '2000', '18-decimal quest target becomes an exact slider selection');
+    assert.equal(amount.value, '2,000', '18-decimal quest target becomes an exact slider selection');
     assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, false,
       'the quest opens the same Add Bet popup for review');
     assert.equal(el.querySelector('[data-bind="df-add-bet-value"]'), null,
@@ -3963,7 +4381,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       ['static', TEST_ADDR, target],
       ['send', TEST_ADDR, target],
     ]);
-    assert.equal(normalAmount.value, '1375',
+    assert.equal(normalAmount.value, '1,375',
       'the one-off quest stake does not replace Tomorrow\'s Bet draft');
     el.disconnectedCallback();
   });
@@ -4002,6 +4420,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
       const button = el.querySelector('[data-bind="df-reverse-cta"]');
       assert.ok(button, 'Reverse card appears beside the landed coin after the delay');
+      assert.match(APP_CSS,
+        /@media\s*\(max-width:\s*430px\)[\s\S]*?\.df-reversi-card,[\s\S]*?\.df-reversi-card--live-tap\s*\{[^}]*right:\s*auto;[^}]*left:\s*calc\(50% \+ 60px\)/s,
+        'phone layouts dock both Reverse states beside the coin instead of under Last 25');
+      assert.doesNotMatch(APP_CSS,
+        /@media\s*\(max-width:\s*430px\)[\s\S]{0,220}?\.df-reversi-card\s*\{[^}]*right:\s*0\.15rem/s,
+        'the removed right-edge phone dock cannot regress beneath the record rail');
       assert.equal(button.getAttribute('data-reverse-target'), 'wwxrp');
       assert.ok(button.classList.contains('df-reversi-card--target-wwxrp'),
         'an odd/ETH current side makes the next-reversal card red for WWXRP');
@@ -4259,7 +4683,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       .classList.contains('is-bounty-trigger'), true);
     assert.match(BOUNTY_CSS, /\.df-add-bet-dialog__card\.is-bounty-trigger\s*\{[^}]*box-shadow:/s);
     assert.match(BOUNTY_CSS, /\.df-add-bet-dialog__bounty\s*\{[^}]*color:\s*#fde68a/s);
-    assert.equal(BigInt(input.value) * unit, 200_000n * unit);
+    assert.equal(BigInt(input.value.replace(/,/g, '')) * unit, 200_000n * unit);
     el.disconnectedCallback();
   });
 });
@@ -4406,19 +4830,28 @@ describe('new-day rollover (codex-found race)', () => {
     el.disconnectedCallback();
   });
 
-  test("the bare clock shift deals Tomorrow's staged bet into Today without replacing the old coin", async () => {
-    _currentStakeWei = '12000000000000000000000';
+  test("the bare clock shift deals Tomorrow's carry-inclusive stake into Today", async () => {
+    const unit = 10n ** 18n;
+    // The live stake reader has already combined 12,000 stored FLIP with the
+    // 475 FLIP auto-rebuy carry. That committed carry must move into Today;
+    // it must never return to Available Funds as though it could be bet again.
+    _currentStakeWei = String(12_475n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 0n,
+      carryWei: 475n * unit,
+      startDay: 64,
+    }));
     _resolvedStakeWei = '43844000000000000000000';
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
+    localStorage.setItem('flip_day_84532_67', '1');
     const el = mount();
     await flushMicrotasks();
 
-    const oldCoin = el.querySelector('.df-coin--spinning');
-    assert.ok(oldCoin, 'the completed day-67 coin is mounted');
-    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,480 FLIP/);
 
     storeMod.update('app.daySync', {
       day: 68,
@@ -4432,15 +4865,11 @@ describe('new-day rollover (codex-found race)', () => {
     });
     await flushMicrotasks();
 
-    assert.ok(el.querySelector('.df-coin--spinning'),
-      'the completed coin remains the visible coin until the RNG request starts');
-    assert.equal(el.querySelector('.df-coin--syncing'), null,
-      'the wall-clock tick alone does not advertise RNG processing');
-    assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,000 FLIP/,
-      'the staged numeric bet changes day ownership at the wall-clock tick');
+    assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,480 FLIP/,
+      'the stored stake and its auto-rebuy carry change day ownership together');
     assert.match(el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
-      /Today's bet: 12,000 FLIP/,
-      'the physical chip spot receives the staged bet in the same transition');
+      /Today's bet: 12,475 FLIP/,
+      'the physical chip spot receives the exact carry-inclusive bet in the same transition');
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /Tomorrow's bet0/,
       'the new Tomorrow spot resets when its stake moves into Today');
 
@@ -4461,7 +4890,7 @@ describe('new-day rollover (codex-found race)', () => {
     await flushMicrotasks();
 
     assert.ok(el.querySelector('.df-coin--syncing'), 'the RNG edge adopts the new coin day');
-    assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,000 FLIP/,
+    assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,480 FLIP/,
       'full day adoption preserves the clock-carried bet while reads are pending');
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /Tomorrow's bet0/);
     el.disconnectedCallback();

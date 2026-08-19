@@ -369,15 +369,26 @@ async function mount() {
   return el;
 }
 
+async function mountWwxrp() {
+  const Ctor = customElements.get('app-wwxrp-burn');
+  const el = new Ctor();
+  _docBody.appendChild(el);
+  el.connectedCallback();
+  await flush();
+  return el;
+}
+
 function panelOf(el) { return el.querySelector('.app-parimutuel'); }
 function growthCard(el) { return el.querySelector('[data-bind="pari-growth"]'); }
 function decimatorCard(el) { return el.querySelector('[data-bind="pari-decimator"]'); }
 
 const revealMod = await import('../reveal-overlay.js');
 const { thermometerScale, decimatorWindowIsOpen } = await import('../app-parimutuel-panel.js');
+const wwxrpWidget = await import('../app-wwxrp-burn.js');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const PARI_SOURCE = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
 const DAILY_FLIP_SOURCE = readFileSync(new URL('../app-daily-flip.js', import.meta.url), 'utf8');
+const WWXRP_SOURCE = readFileSync(new URL('../app-wwxrp-burn.js', import.meta.url), 'utf8');
 
 test('thermometer color scale is target-anchored and becomes solid green after crossing', () => {
   const below = thermometerScale(50n, 100n);
@@ -409,6 +420,15 @@ test('Decimator window accepts indexed shapes and the deterministic milestone fa
   assert.equal(decimatorWindowIsOpen({ level: 25, decWindowOpen: false }), false);
 });
 
+test('WWXRP footer keeps decimal parsing exact and compacts large balances', () => {
+  assert.equal(wwxrpWidget.parseWwxrpAmount('25'), 25n * FLIP);
+  assert.equal(wwxrpWidget.parseWwxrpAmount('25.125'), 25_125n * (10n ** 15n));
+  assert.equal(wwxrpWidget.parseWwxrpAmount('25.1234567890123456789'), null);
+  assert.equal(wwxrpWidget.formatWwxrpBalance(999n * FLIP), '999');
+  assert.equal(wwxrpWidget.formatWwxrpBalance(12_345n * FLIP), '12.3K');
+  assert.equal(wwxrpWidget.formatWwxrpBalance(999_999n * FLIP), '1M');
+});
+
 // ---------------------------------------------------------------------------
 
 describe('app-parimutuel-panel', () => {
@@ -432,6 +452,7 @@ describe('app-parimutuel-panel', () => {
 
   afterEach(() => {
     for (const child of _docBody.children || []) child.disconnectedCallback?.();
+    wwxrpWidget.__resetWwxrpBurnWidgetDepsForTest();
     pari.__resetContractFactoryForTest();
     pari.__resetQuestFactoryForTest();
     pari.__resetClockForTest();
@@ -453,6 +474,15 @@ describe('app-parimutuel-panel', () => {
       'the removed strip leaves no dead styling behind');
     assert.doesNotMatch(DAILY_FLIP_SOURCE, /record-strip|readBiggestFlipRecord/,
       'the record rail no longer consumes space in the daily coinflip');
+    assert.match(PARI_SOURCE,
+      /<div class="pari-error"[\s\S]*?<app-wwxrp-burn><\/app-wwxrp-burn>/,
+      'WWXRP is mounted after the book and error surfaces at the bottom of Side Bets');
+    assert.match(WWXRP_SOURCE,
+      /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
+      'the footer owns the authoritative balance read, minimum, and burn write path');
+    assert.match(APP_CSS,
+      /\.app-parimutuel > app-wwxrp-burn\s*\{[^}]*margin-top:\s*auto;/s,
+      'the restored WWXRP wrapper stays pinned to the bottom of the Side Bets column');
     assert.match(APP_CSS,
       /\.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
       'the Side Bets heading is centered at every viewport width');
@@ -461,6 +491,75 @@ describe('app-parimutuel-panel', () => {
     const empty = el.querySelector('[data-bind="pari-empty"]');
     assert.equal(empty.hidden, false);
     assert.match(empty.textContent, /Books are closed|No side-bet book/i);
+  });
+
+  test('restored WWXRP wrapper shows the viewed balance and burns from self view', async () => {
+    let burned = null;
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
+      balances: async () => ({ wwxrpBalance: 12_345n * FLIP }),
+      burn: async ({ amount }) => {
+        burned = amount;
+        return { receipt: { status: 1 } };
+      },
+    });
+
+    const el = await mountWwxrp();
+    assert.equal(el.hidden, false);
+    assert.match(WWXRP_SOURCE, /<small>DAILY INCINERATOR<\/small>/);
+    assert.doesNotMatch(WWXRP_SOURCE, /<small>DAILY DRAW<\/small>/);
+    assert.match(WWXRP_SOURCE,
+      /aria-label="WWXRP balance and Daily Incinerator entry"/);
+    assert.equal(el.querySelector('[data-bind="wwxrp-balance"]').textContent, '12.3K');
+    const open = el.querySelector('[data-bind="wwxrp-open"]');
+    assert.equal(open.disabled, false);
+    open.click();
+
+    const dialog = el.querySelector('[data-bind="wwxrp-dialog"]');
+    const input = el.querySelector('[data-bind="wwxrp-amount"]');
+    const accept = el.querySelector('[data-bind="wwxrp-accept"]');
+    assert.equal(dialog.hidden, false);
+    assert.match(WWXRP_SOURCE, /today’s Daily Incinerator/);
+    assert.equal(input.value, '25');
+    assert.equal(accept.disabled, false);
+
+    input.value = '24';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(accept.disabled, true, 'the on-chain 25 WWXRP minimum is enforced in the dialog');
+    input.value = '25';
+    input.dispatchEvent({ type: 'input' });
+    accept.click();
+    await flush();
+
+    assert.equal(burned, 25n * FLIP);
+    assert.equal(dialog.hidden, true);
+    assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /BURN CONFIRMED/);
+  });
+
+  test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {
+    const viewed = '0xcd34000000000000000000000000000000000000';
+    let resolveViewed;
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
+      balances: async ({ player }) => {
+        if (String(player).toLowerCase() === TEST_ADDR) {
+          return { wwxrpBalance: 250n * FLIP };
+        }
+        return new Promise((resolve) => { resolveViewed = resolve; });
+      },
+    });
+
+    const el = await mountWwxrp();
+    const balance = el.querySelector('[data-bind="wwxrp-balance"]');
+    assert.equal(balance.textContent, '250');
+
+    storeMod.update('viewing.address', viewed);
+    assert.equal(balance.textContent, '—',
+      'the old wallet amount is invalidated before the replacement read settles');
+    assert.equal(el.querySelector('[data-bind="wwxrp-open"]').disabled, true);
+
+    await Promise.resolve();
+    resolveViewed({ wwxrpBalance: 0n });
+    await flush();
+    assert.equal(balance.textContent, '0');
   });
 
   test('does not publish a prize-pool target while the API and RPC disagree on level', async () => {
@@ -729,8 +828,8 @@ describe('app-parimutuel-panel', () => {
       'the split percentages appear once beside the bar',
     );
     assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
-      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +150 FLIP',
-      'the fixed bet and contract-quoted growth reward are visible before betting');
+      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +150 FLIP · +1 STREAK',
+      'the fixed bet and complete contract-quoted growth reward are visible before betting');
     assert.match(
       APP_CSS,
       /\.pari-prebet-bonus\s*\{[^}]*justify-content:\s*center[^}]*font-size:\s*0\.55rem/s,
@@ -879,6 +978,27 @@ describe('app-parimutuel-panel', () => {
     assert.equal(result.outcome, 2);
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'viewing a loss retires that result from the widget');
+  });
+
+  test('a settled loss alone does not leave a ghost growth card behind', async () => {
+    installContract({
+      growth: {
+        [LEVEL]: { openRound: 0 },
+        [LEVEL - 1]: { side: 1, outcome: 2, payout: 0n },
+      },
+    });
+    const el = await mount();
+
+    assert.equal(growthCard(el).hidden, true,
+      'the shared result rail owns settled losses once the live book is closed');
+    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false,
+      'an unseen result does not suppress the closed-books state');
+    const [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending.state, 'ready');
+    assert.equal(pending.kind, 'pari');
+    assert.equal(typeof pending.run, 'function',
+      'the player can still open the result reveal from the shared rail');
+    el.disconnectedCallback();
   });
 
   test('clicking Bet OVER reaches placeBet(player, true)', async () => {

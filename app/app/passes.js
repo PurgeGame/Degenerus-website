@@ -7,7 +7,8 @@
 // On-chain surfaces (verified against degenerus-audit/contracts/):
 //   - BUY-02: DegenerusGame.sol — purchaseWhalePass(address buyer, uint256 quantity) payable
 //     (renamed from purchaseWhaleBundle in the Base Sepolia redeploy #7 surface)
-//   - BUY-03: DegenerusGame.sol:644 — purchaseDeityPass(address buyer, uint8 symbolId) payable
+//   - BUY-03: DegenerusGame.sol — purchaseDeityPass(address buyer, uint8 symbolId,
+//     bytes32 affiliateCode) payable
 //
 // CONTEXT D-05 LOCKED + RESEARCH R8 + Pitfall 3:
 //   Whale-pass + deity-pass have NO custom-error reverts on these paths — all
@@ -53,8 +54,9 @@ const PASSES_ABI = [
   // decoded as the reason-map's UNKNOWN catch-all — "unexpected error" on every
   // whale-pass buy, whatever the wallet's balance or the game's state.
   'function purchaseWhalePass(address buyer, uint256 quantity, bytes32 affiliateCode) external payable',
-  // BUY-03: DegenerusGame.sol:644 — purchaseDeityPass(buyer, symbolId) payable
-  'function purchaseDeityPass(address buyer, uint8 symbolId) external payable',
+  // BUY-03: purchaseDeityPass(buyer, symbolId, affiliateCode) links the same
+  // first-touch referral used by every other purchase family.
+  'function purchaseDeityPass(address buyer, uint8 symbolId, bytes32 affiliateCode) external payable',
   // AFKing seat holders configure the Game-resident subscription here. Keeping
   // the read views beside the write also lets the pass panel show authoritative
   // active/funding state without waiting for an indexer cycle.
@@ -828,7 +830,8 @@ export async function purchaseWhaleBundle({ quantity, msgValueWei } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// purchaseDeityPass — BUY-03 — purchaseDeityPass(buyer, symbolId) payable.
+// purchaseDeityPass — BUY-03 — purchaseDeityPass(buyer, symbolId,
+// affiliateCode) payable.
 // ---------------------------------------------------------------------------
 
 /**
@@ -846,14 +849,20 @@ export async function purchaseDeityPass({ symbolId, msgValueWei } = {}) {
 
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
+  const affiliateCode = readAffiliateCode(CHAIN.id, buyer);
 
   if (signer) {
     const c = _buildContract(signer);
-    const sim = await requireStaticCall(c, 'purchaseDeityPass', [buyer, sid, { value }], signer);
+    const sim = await requireStaticCall(
+      c, 'purchaseDeityPass', [buyer, sid, affiliateCode, { value }], signer,
+    );
     if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call purchaseDeityPass');
   }
 
-  const receipt = await sendTx((s) => _buildContract(s).purchaseDeityPass(buyer, sid, { value }), 'Buy deity pass');
+  const receipt = await sendTx(
+    (s) => _buildContract(s).purchaseDeityPass(buyer, sid, affiliateCode, { value }),
+    'Buy deity pass',
+  );
   return { receipt };
 }
 

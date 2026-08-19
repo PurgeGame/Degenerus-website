@@ -23,6 +23,18 @@ body.layout-basic .jackpot-hero .app-daily-flip {
   isolation: isolate;
 }
 
+/* The isolated felt is also a backdrop root. Open that boundary only for a
+   live direct-child dialog so its blur/dimmer can sample the whole page. */
+body.layout-basic .jackpot-hero .app-daily-flip:has(> .df-reverse-dialog:not([hidden])) {
+  isolation: auto;
+}
+
+/* Only the modal joins the shared layer. Ordinary table content stays in the
+   page stack beneath its full-viewport backdrop. */
+body.layout-basic .jackpot-hero .app-daily-flip > .df-reverse-dialog:not([hidden]) {
+  z-index: 12030;
+}
+
 body.layout-basic .jackpot-hero .app-daily-flip::before {
   content: none;
 }
@@ -131,6 +143,45 @@ body.layout-basic .df-tomorrow-layout:focus-visible .df-tomorrow-bet-oval {
     0 0 9px rgba(127, 163, 240, 0.34);
 }
 
+/* A resolved Today spot is the handoff control. Activating it deals the live
+   wager upward; from then on the entire large spot is the Add Bet target. */
+body.layout-basic .df-bet-table.is-actionable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+body.layout-basic .df-bet-table.is-actionable:focus-visible { outline: 0; }
+body.layout-basic .df-bet-table.is-actionable:hover .df-bet-oval,
+body.layout-basic .df-bet-table.is-actionable:focus-visible .df-bet-oval {
+  border-color: #a7c2fa;
+  box-shadow:
+    inset 0 0 0 1px rgba(10, 4, 4, 0.55),
+    inset 0 0 1rem rgba(127, 163, 240, 0.3),
+    0 0 9px rgba(127, 163, 240, 0.34);
+}
+
+body.layout-basic .df-bet-table__add-cue {
+  position: absolute;
+  z-index: 4;
+  top: calc(50% + 0.32rem);
+  left: 0.3rem;
+  color: #dbeafe;
+  font: 1000 0.78rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0;
+  pointer-events: none;
+  text-shadow: 0 0 7px rgba(125, 211, 252, 0.66);
+  translate: 0 -50%;
+}
+
+body.layout-basic .df-bet-table__add-cue[hidden],
+body.layout-basic .df-bet-table__today-label > b[hidden] { display: none !important; }
+
+body.layout-basic .df-bet-table__today-label > b:not(.df-bet-table__add-cue) {
+  color: #86efac;
+  font-size: 0.4rem;
+  letter-spacing: 0.08em;
+}
+
 /* Empty copy (NO BET / ••••) prints in each spot's own paint. */
 body.layout-basic .df-bet-oval .df-bet-chip-rack {
   color: rgba(152, 178, 235, 0.65);
@@ -138,22 +189,22 @@ body.layout-basic .df-bet-oval .df-bet-chip-rack {
 
 body.layout-basic .df-tomorrow-bet-oval .df-bet-chip-rack {
   width: calc(100% - 3.8rem);
+  height: auto;
+  align-self: center;
+  align-items: center;
   justify-self: center;
   justify-content: center;
+  margin-bottom: 0;
   color: rgba(152, 178, 235, 0.65);
+  font: 900 clamp(0.66rem, 2vw, 0.76rem)/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.025em;
 }
 
-/* Tomorrow is a printed readout, not a chip spot: the staged amount sits as
-   table ink inside the blue box, and its row below the spot retires. Chips
-   appear only when the day shift moves the stake into Today's spot. */
+/* Tomorrow stays a compact text-only planning slot. Physical wager piles are
+   reserved for Today, where they have enough height to read clearly. */
 body.layout-basic .df-tomorrow-bet-oval[data-tomorrow-display="amount"] .df-bet-chip-rack {
-  height: auto;
-  align-items: center;
-  color: #fde68a;
-  font: 700 clamp(0.72rem, 2vw, 0.82rem)/1.1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.015em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  color: #dbeafe;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58), 0 0 0.45rem rgba(127, 163, 240, 0.22);
 }
 
 body.layout-basic .df-tomorrow-layout {
@@ -164,8 +215,136 @@ body.layout-basic .df-tomorrow-layout > .df-position-slot {
   display: none;
 }
 
+/* After the handoff, the compact lower fixture stays bolted in place and
+   receives the same signed, color-coded receipt that occupied the bottom of
+   Today. The oval is one instrument, not separate wager/result columns. */
+body.layout-basic .df-tomorrow-layout.is-yesterday {
+  position: relative;
+  z-index: 3;
+  grid-template-areas: "label" "oval";
+  grid-template-rows: auto 1.95rem;
+  pointer-events: none;
+  cursor: default;
+}
+
+body.layout-basic .df-tomorrow-layout.is-yesterday > .df-position-slot {
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  grid-area: oval;
+  justify-self: stretch;
+  pointer-events: none;
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-next-bet { display: none; }
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-tomorrow-layout__felt-label {
+  position: relative;
+  z-index: 1;
+  color: rgba(203, 220, 252, 0.78);
+  text-shadow: 0 1px rgba(0, 0, 0, 0.7), 0 0 6px rgba(127, 163, 240, 0.3);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-tomorrow-bet-oval .df-bet-chip-rack {
+  display: none;
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-tomorrow-bet-oval {
+  border-color: rgba(184, 196, 214, 0.62);
+  background:
+    radial-gradient(120% 170% at 50% 0%, rgba(255, 255, 255, 0.08), transparent 58%),
+    linear-gradient(180deg, #3b414c 0%, #292f39 58%, #20252d 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(5, 8, 12, 0.68),
+    inset 0 0.3rem 0.8rem rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(5, 8, 12, 0.5);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  padding: 0.05rem 0.34rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday :is(
+  .df-position-row--win,
+  .df-position-row--loss
+) {
+  justify-content: space-between;
+  padding-inline: 0.72rem;
+}
+/* Optical centering. Both halves of the receipt are box-centered in the oval
+   already, but a line box reserves descender space these glyphs never use, so
+   the INK rides high inside it — and the two halves ride high by DIFFERENT
+   amounts, because the pill is Inter and the figure is the monospace stack.
+   Measured against the oval's midline at 8x: pill 0.94px high, figure 0.44px.
+   Nudge each back onto the midline in em, so it holds through the clamped
+   font sizes. */
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-multiplier {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  align-self: center;
+  gap: 0.24rem;
+  overflow: visible;
+  font-family: "Inter", system-ui, sans-serif;
+  line-height: 1;
+  transform: translateY(0.064em);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-result-bonus { display: none; }
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-outcome {
+  color: #4ade80;
+  font-size: clamp(0.66rem, 1.9vw, 0.74rem);
+  font-weight: 1000;
+  letter-spacing: 0.09em;
+  text-shadow: 0 0 7px rgba(48, 209, 0, 0.48);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-percentage {
+  color: #4ade80;
+  font: 900 clamp(0.6rem, 1.7vw, 0.68rem)/1 "Roboto Mono", ui-monospace, monospace;
+  text-shadow: 0 0 7px rgba(48, 209, 0, 0.48);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-result {
+  flex: 0 1 auto;
+  justify-content: center;
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-value {
+  margin: 0;
+  overflow: visible;
+  color: #4ade80;
+  font-size: clamp(0.94rem, 2.8vw, 1.08rem);
+  font-weight: 900;
+  line-height: 0.95;
+  text-align: center;
+  text-shadow: 0 0 7px rgba(48, 209, 0, 0.48);
+  transform: translateY(0.029em);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row--loss .df-position-outcome {
+  color: #fca5a5;
+  text-shadow: 0 0 7px rgba(239, 68, 68, 0.48);
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row--loss .df-position-value {
+  color: #f87171;
+  text-shadow: 0 0 7px rgba(239, 68, 68, 0.48);
+}
+
+body.layout-basic .df-bet-table.is-add-bet {
+  animation: df-bet-promote 0.34s cubic-bezier(0.2, 0.82, 0.24, 1) both;
+}
+
+@keyframes df-bet-promote {
+  from { opacity: 0.45; transform: translate(-50%, 3.1rem) scale(0.84); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
 @media (min-width: 521px) {
   body.layout-basic .df-tomorrow-layout {
+    grid-template-rows: auto 2.35rem;
+  }
+  body.layout-basic .df-tomorrow-layout.is-yesterday {
     grid-template-rows: auto 2.35rem;
   }
 }
@@ -196,6 +375,16 @@ body.layout-basic .df-bet-chip-stack:nth-child(3) .df-bet-chip:nth-child(4) { an
 body.layout-basic .df-bet-chip-stack:nth-child(3) .df-bet-chip:nth-child(5) { animation-delay: 0.36s; }
 body.layout-basic .df-bet-chip-stack:nth-child(3) .df-bet-chip:nth-child(6) { animation-delay: 0.4s; }
 body.layout-basic .df-bet-chip-stack:nth-child(3) .df-bet-chip:nth-child(7) { animation-delay: 0.44s; }
+/* A big multiplier pays past the wager's three stacks; the extra ones land
+   as one push each rather than chip by chip. */
+body.layout-basic .df-bet-chip-stack:nth-child(4) .df-bet-chip { animation-delay: 0.3s; }
+body.layout-basic .df-bet-chip-stack:nth-child(5) .df-bet-chip { animation-delay: 0.4s; }
+
+/* The stake is already on the table when the payout arrives: only the
+   winnings rack deals in. */
+body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) > .df-bet-chip-rack .df-bet-chip {
+  animation: none;
+}
 
 @keyframes df-chip-arrive {
   0% {
@@ -213,7 +402,8 @@ body.layout-basic .df-bet-chip-stack:nth-child(3) .df-bet-chip:nth-child(7) { an
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.layout-basic .df-bet-chip {
+  body.layout-basic .df-bet-chip,
+  body.layout-basic .df-bet-table.is-add-bet {
     animation: none;
   }
 }
@@ -238,18 +428,37 @@ body.layout-basic .df-today-winnings-row[data-state="empty"] {
   display: none;
 }
 
-/* With the whole zone to itself, the wager racks up at full table scale. */
-body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) .df-bet-chip-rack {
+/* Today's chips are one physical size, win or no win: a payout adds stacks
+   to the table, it never re-mints the player's wager as smaller coins. */
+body.layout-basic .df-bet-oval .df-bet-chip-rack {
   --df-chip-width: 1.58rem;
   --df-chip-height: 0.84rem;
   --df-chip-stack-height: 2.05rem;
 }
 
+/* Two racks share the spot on a win, so the box takes the extra height and
+   each lane keeps only the headroom a seven-high stack actually needs. */
+body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) {
+  height: 5.1rem;
+}
+
+body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
+  --df-chip-stack-height: 1.86rem;
+}
+
 @media (min-width: 521px) {
-  body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) .df-bet-chip-rack {
+  body.layout-basic .df-bet-oval .df-bet-chip-rack {
     --df-chip-width: 1.8rem;
     --df-chip-height: 0.96rem;
     --df-chip-stack-height: 2.6rem;
+  }
+
+  body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) {
+    height: 5.6rem;
+  }
+
+  body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
+    --df-chip-stack-height: 2.1rem;
   }
 }
 
@@ -286,8 +495,7 @@ body.layout-basic .df-bet-chip-rack {
 
 /* Wagers rest ON the felt: the rack settles low in the box and every pile
    casts a contact shadow instead of hovering. */
-body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) .df-bet-chip-rack,
-body.layout-basic .df-tomorrow-bet-oval .df-bet-chip-rack {
+body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) .df-bet-chip-rack {
   align-self: end;
   margin-bottom: 0.34rem;
 }
@@ -348,214 +556,560 @@ body.layout-basic .df-bet-pile {
   animation: df-pile-arrive 0.4s cubic-bezier(0.2, 0.84, 0.3, 1) backwards;
 }
 
-body.layout-basic .df-bet-pile[data-pile="1"] {
-  width: 6.45rem;
-  aspect-ratio: 384 / 174;
-  background-image: url('/shared/flip-chips/pile-1.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="1"] > .df-bet-pile-add {
-  background-image: url('/shared/flip-chips/pile-1-add.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="2"] {
-  width: 6.90rem;
-  aspect-ratio: 476 / 139;
-  background-image: url('/shared/flip-chips/pile-2.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="2"] > .df-bet-pile-add {
-  background-image: url('/shared/flip-chips/pile-2-add.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="3"] {
-  width: 7.35rem;
-  aspect-ratio: 560 / 140;
-  background-image: url('/shared/flip-chips/pile-3.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="3"] > .df-bet-pile-add {
-  background-image: url('/shared/flip-chips/pile-3-add.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="4"] {
-  width: 7.80rem;
-  aspect-ratio: 487 / 174;
-  background-image: url('/shared/flip-chips/pile-4.svg');
-}
-
-body.layout-basic .df-bet-pile[data-pile="4"] > .df-bet-pile-add {
-  background-image: url('/shared/flip-chips/pile-4-add.svg');
-}
-
 body.layout-basic .df-bet-pile[data-pile="5"] {
-  width: 8.25rem;
-  aspect-ratio: 382 / 188;
+  width: 8.53rem;
+  aspect-ratio: 505 / 198;
   background-image: url('/shared/flip-chips/pile-5.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="5"] > .df-bet-pile-add {
+  height: 123.7%;
   background-image: url('/shared/flip-chips/pile-5-add.svg');
 }
 
-body.layout-basic .df-bet-pile[data-pile="6"] {
+body.layout-basic .df-bet-pile[data-pile="5"][data-variant="b"] {
+  width: 8.21rem;
+  aspect-ratio: 486 / 216;
+  background-image: url('/shared/flip-chips/pile-5-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="5"][data-variant="b"] > .df-bet-pile-add {
+  height: 111.6%;
+  background-image: url('/shared/flip-chips/pile-5-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="5"][data-variant="c"] {
   width: 8.70rem;
-  aspect-ratio: 365 / 211;
+  aspect-ratio: 515 / 190;
+  background-image: url('/shared/flip-chips/pile-5-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="5"][data-variant="c"] > .df-bet-pile-add {
+  height: 113.7%;
+  background-image: url('/shared/flip-chips/pile-5-c-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="6"] {
+  width: 9.02rem;
+  aspect-ratio: 534 / 216;
   background-image: url('/shared/flip-chips/pile-6.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="6"] > .df-bet-pile-add {
+  height: 134.7%;
   background-image: url('/shared/flip-chips/pile-6-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="6"][data-variant="b"] {
+  width: 8.72rem;
+  aspect-ratio: 516 / 191;
+  background-image: url('/shared/flip-chips/pile-6-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="6"][data-variant="b"] > .df-bet-pile-add {
+  height: 119.4%;
+  background-image: url('/shared/flip-chips/pile-6-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="6"][data-variant="c"] {
+  width: 8.65rem;
+  aspect-ratio: 512 / 203;
+  background-image: url('/shared/flip-chips/pile-6-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="6"][data-variant="c"] > .df-bet-pile-add {
+  height: 115.8%;
+  background-image: url('/shared/flip-chips/pile-6-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="7"] {
-  width: 9.15rem;
-  aspect-ratio: 546 / 201;
+  width: 9.13rem;
+  aspect-ratio: 540 / 216;
   background-image: url('/shared/flip-chips/pile-7.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="7"] > .df-bet-pile-add {
+  height: 129.2%;
   background-image: url('/shared/flip-chips/pile-7-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="7"][data-variant="b"] {
+  width: 9.62rem;
+  aspect-ratio: 569 / 228;
+  background-image: url('/shared/flip-chips/pile-7-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="7"][data-variant="b"] > .df-bet-pile-add {
+  height: 117.5%;
+  background-image: url('/shared/flip-chips/pile-7-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="7"][data-variant="c"] {
+  width: 10.17rem;
+  aspect-ratio: 602 / 241;
+  background-image: url('/shared/flip-chips/pile-7-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="7"][data-variant="c"] > .df-bet-pile-add {
+  height: 107.1%;
+  background-image: url('/shared/flip-chips/pile-7-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="8"] {
-  width: 9.60rem;
-  aspect-ratio: 452 / 224;
+  width: 9.92rem;
+  aspect-ratio: 587 / 220;
   background-image: url('/shared/flip-chips/pile-8.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="8"] > .df-bet-pile-add {
+  height: 138.2%;
   background-image: url('/shared/flip-chips/pile-8-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="8"][data-variant="b"] {
+  width: 10.29rem;
+  aspect-ratio: 609 / 253;
+  background-image: url('/shared/flip-chips/pile-8-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="8"][data-variant="b"] > .df-bet-pile-add {
+  height: 109.9%;
+  background-image: url('/shared/flip-chips/pile-8-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="8"][data-variant="c"] {
+  width: 10.34rem;
+  aspect-ratio: 612 / 228;
+  background-image: url('/shared/flip-chips/pile-8-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="8"][data-variant="c"] > .df-bet-pile-add {
+  height: 107.9%;
+  background-image: url('/shared/flip-chips/pile-8-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="9"] {
-  width: 10.05rem;
-  aspect-ratio: 460 / 236;
+  width: 9.79rem;
+  aspect-ratio: 579 / 295;
   background-image: url('/shared/flip-chips/pile-9.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="9"] > .df-bet-pile-add {
+  height: 128.1%;
   background-image: url('/shared/flip-chips/pile-9-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="9"][data-variant="b"] {
+  width: 10.46rem;
+  aspect-ratio: 619 / 267;
+  background-image: url('/shared/flip-chips/pile-9-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="9"][data-variant="b"] > .df-bet-pile-add {
+  height: 118.0%;
+  background-image: url('/shared/flip-chips/pile-9-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="9"][data-variant="c"] {
+  width: 10.43rem;
+  aspect-ratio: 617 / 278;
+  background-image: url('/shared/flip-chips/pile-9-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="9"][data-variant="c"] > .df-bet-pile-add {
+  height: 113.3%;
+  background-image: url('/shared/flip-chips/pile-9-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="10"] {
-  width: 10.50rem;
-  aspect-ratio: 632 / 206;
+  width: 10.97rem;
+  aspect-ratio: 649 / 317;
   background-image: url('/shared/flip-chips/pile-10.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="10"] > .df-bet-pile-add {
+  height: 119.2%;
   background-image: url('/shared/flip-chips/pile-10-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="10"][data-variant="b"] {
+  width: 10.21rem;
+  aspect-ratio: 604 / 303;
+  background-image: url('/shared/flip-chips/pile-10-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="10"][data-variant="b"] > .df-bet-pile-add {
+  height: 116.5%;
+  background-image: url('/shared/flip-chips/pile-10-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="10"][data-variant="c"] {
+  width: 10.33rem;
+  aspect-ratio: 611 / 315;
+  background-image: url('/shared/flip-chips/pile-10-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="10"][data-variant="c"] > .df-bet-pile-add {
+  height: 120.0%;
+  background-image: url('/shared/flip-chips/pile-10-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="11"] {
-  width: 10.95rem;
-  aspect-ratio: 468 / 216;
+  width: 11.09rem;
+  aspect-ratio: 656 / 344;
   background-image: url('/shared/flip-chips/pile-11.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="11"] > .df-bet-pile-add {
+  height: 109.9%;
   background-image: url('/shared/flip-chips/pile-11-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="11"][data-variant="b"] {
+  width: 11.32rem;
+  aspect-ratio: 670 / 332;
+  background-image: url('/shared/flip-chips/pile-11-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="11"][data-variant="b"] > .df-bet-pile-add {
+  height: 111.1%;
+  background-image: url('/shared/flip-chips/pile-11-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="11"][data-variant="c"] {
+  width: 12.30rem;
+  aspect-ratio: 728 / 290;
+  background-image: url('/shared/flip-chips/pile-11-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="11"][data-variant="c"] > .df-bet-pile-add {
+  height: 104.5%;
+  background-image: url('/shared/flip-chips/pile-11-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="12"] {
-  width: 11.40rem;
-  aspect-ratio: 644 / 230;
+  width: 11.32rem;
+  aspect-ratio: 670 / 341;
   background-image: url('/shared/flip-chips/pile-12.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="12"] > .df-bet-pile-add {
+  height: 107.9%;
   background-image: url('/shared/flip-chips/pile-12-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="12"][data-variant="b"] {
+  width: 12.64rem;
+  aspect-ratio: 748 / 278;
+  background-image: url('/shared/flip-chips/pile-12-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="12"][data-variant="b"] > .df-bet-pile-add {
+  height: 109.0%;
+  background-image: url('/shared/flip-chips/pile-12-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="12"][data-variant="c"] {
+  width: 12.62rem;
+  aspect-ratio: 747 / 327;
+  background-image: url('/shared/flip-chips/pile-12-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="12"][data-variant="c"] > .df-bet-pile-add {
+  height: 104.0%;
+  background-image: url('/shared/flip-chips/pile-12-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="13"] {
-  width: 11.85rem;
-  aspect-ratio: 571 / 235;
+  width: 11.86rem;
+  aspect-ratio: 702 / 328;
   background-image: url('/shared/flip-chips/pile-13.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="13"] > .df-bet-pile-add {
+  height: 115.2%;
   background-image: url('/shared/flip-chips/pile-13-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="13"][data-variant="b"] {
+  width: 12.59rem;
+  aspect-ratio: 745 / 378;
+  background-image: url('/shared/flip-chips/pile-13-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="13"][data-variant="b"] > .df-bet-pile-add {
+  height: 100.0%;
+  background-image: url('/shared/flip-chips/pile-13-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="13"][data-variant="c"] {
+  width: 12.32rem;
+  aspect-ratio: 729 / 378;
+  background-image: url('/shared/flip-chips/pile-13-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="13"][data-variant="c"] > .df-bet-pile-add {
+  height: 100.0%;
+  background-image: url('/shared/flip-chips/pile-13-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="14"] {
-  width: 12.30rem;
-  aspect-ratio: 550 / 242;
+  width: 12.00rem;
+  aspect-ratio: 710 / 334;
   background-image: url('/shared/flip-chips/pile-14.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="14"] > .df-bet-pile-add {
+  height: 113.2%;
   background-image: url('/shared/flip-chips/pile-14-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="14"][data-variant="b"] {
+  width: 12.27rem;
+  aspect-ratio: 726 / 378;
+  background-image: url('/shared/flip-chips/pile-14-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="14"][data-variant="b"] > .df-bet-pile-add {
+  height: 100.0%;
+  background-image: url('/shared/flip-chips/pile-14-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="14"][data-variant="c"] {
+  width: 12.44rem;
+  aspect-ratio: 736 / 365;
+  background-image: url('/shared/flip-chips/pile-14-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="14"][data-variant="c"] > .df-bet-pile-add {
+  height: 103.6%;
+  background-image: url('/shared/flip-chips/pile-14-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="15"] {
-  width: 12.75rem;
-  aspect-ratio: 662 / 258;
+  width: 13.87rem;
+  aspect-ratio: 821 / 329;
   background-image: url('/shared/flip-chips/pile-15.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="15"] > .df-bet-pile-add {
+  height: 114.9%;
   background-image: url('/shared/flip-chips/pile-15-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="15"][data-variant="b"] {
+  width: 12.74rem;
+  aspect-ratio: 754 / 355;
+  background-image: url('/shared/flip-chips/pile-15-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="15"][data-variant="b"] > .df-bet-pile-add {
+  height: 106.5%;
+  background-image: url('/shared/flip-chips/pile-15-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="15"][data-variant="c"] {
+  width: 12.25rem;
+  aspect-ratio: 725 / 367;
+  background-image: url('/shared/flip-chips/pile-15-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="15"][data-variant="c"] > .df-bet-pile-add {
+  height: 103.0%;
+  background-image: url('/shared/flip-chips/pile-15-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="16"] {
-  width: 13.52rem;
-  aspect-ratio: 805 / 340;
+  width: 15.23rem;
+  aspect-ratio: 901 / 366;
   background-image: url('/shared/flip-chips/pile-16.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="16"] > .df-bet-pile-add {
+  height: 103.3%;
   background-image: url('/shared/flip-chips/pile-16-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="16"][data-variant="b"] {
+  width: 14.99rem;
+  aspect-ratio: 887 / 341;
+  background-image: url('/shared/flip-chips/pile-16-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="16"][data-variant="b"] > .df-bet-pile-add {
+  height: 110.9%;
+  background-image: url('/shared/flip-chips/pile-16-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="16"][data-variant="c"] {
+  width: 14.23rem;
+  aspect-ratio: 842 / 354;
+  background-image: url('/shared/flip-chips/pile-16-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="16"][data-variant="c"] > .df-bet-pile-add {
+  height: 106.8%;
+  background-image: url('/shared/flip-chips/pile-16-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="17"] {
-  width: 15.12rem;
-  aspect-ratio: 903 / 353;
+  width: 15.29rem;
+  aspect-ratio: 905 / 328;
   background-image: url('/shared/flip-chips/pile-17.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="17"] > .df-bet-pile-add {
+  height: 111.9%;
   background-image: url('/shared/flip-chips/pile-17-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="17"][data-variant="b"] {
+  width: 15.09rem;
+  aspect-ratio: 893 / 319;
+  background-image: url('/shared/flip-chips/pile-17-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="17"][data-variant="b"] > .df-bet-pile-add {
+  height: 115.7%;
+  background-image: url('/shared/flip-chips/pile-17-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="17"][data-variant="c"] {
+  width: 15.90rem;
+  aspect-ratio: 941 / 365;
+  background-image: url('/shared/flip-chips/pile-17-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="17"][data-variant="c"] > .df-bet-pile-add {
+  height: 103.6%;
+  background-image: url('/shared/flip-chips/pile-17-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="18"] {
-  width: 16.40rem;
-  aspect-ratio: 974 / 358;
+  width: 15.33rem;
+  aspect-ratio: 907 / 355;
   background-image: url('/shared/flip-chips/pile-18.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="18"] > .df-bet-pile-add {
+  height: 104.5%;
   background-image: url('/shared/flip-chips/pile-18-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="18"][data-variant="b"] {
+  width: 16.19rem;
+  aspect-ratio: 958 / 341;
+  background-image: url('/shared/flip-chips/pile-18-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="18"][data-variant="b"] > .df-bet-pile-add {
+  height: 108.8%;
+  background-image: url('/shared/flip-chips/pile-18-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="18"][data-variant="c"] {
+  width: 15.35rem;
+  aspect-ratio: 908 / 329;
+  background-image: url('/shared/flip-chips/pile-18-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="18"][data-variant="c"] > .df-bet-pile-add {
+  height: 114.9%;
+  background-image: url('/shared/flip-chips/pile-18-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="19"] {
-  width: 16.58rem;
-  aspect-ratio: 990 / 367;
+  width: 16.00rem;
+  aspect-ratio: 947 / 348;
   background-image: url('/shared/flip-chips/pile-19.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="19"] > .df-bet-pile-add {
+  height: 108.6%;
   background-image: url('/shared/flip-chips/pile-19-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="19"][data-variant="b"] {
+  width: 16.71rem;
+  aspect-ratio: 989 / 335;
+  background-image: url('/shared/flip-chips/pile-19-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="19"][data-variant="b"] > .df-bet-pile-add {
+  height: 112.8%;
+  background-image: url('/shared/flip-chips/pile-19-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="19"][data-variant="c"] {
+  width: 15.50rem;
+  aspect-ratio: 917 / 342;
+  background-image: url('/shared/flip-chips/pile-19-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="19"][data-variant="c"] > .df-bet-pile-add {
+  height: 110.5%;
+  background-image: url('/shared/flip-chips/pile-19-c-add.svg');
+}
+
 body.layout-basic .df-bet-pile[data-pile="20"] {
-  width: 17.89rem;
-  aspect-ratio: 1069 / 376;
+  width: 16.02rem;
+  aspect-ratio: 948 / 375;
   background-image: url('/shared/flip-chips/pile-20.svg');
 }
 
 body.layout-basic .df-bet-pile[data-pile="20"] > .df-bet-pile-add {
+  height: 100.0%;
   background-image: url('/shared/flip-chips/pile-20-add.svg');
 }
 
+body.layout-basic .df-bet-pile[data-pile="20"][data-variant="b"] {
+  width: 17.76rem;
+  aspect-ratio: 1051 / 366;
+  background-image: url('/shared/flip-chips/pile-20-b.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="20"][data-variant="b"] > .df-bet-pile-add {
+  height: 103.3%;
+  background-image: url('/shared/flip-chips/pile-20-b-add.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="20"][data-variant="c"] {
+  width: 17.39rem;
+  aspect-ratio: 1029 / 378;
+  background-image: url('/shared/flip-chips/pile-20-c.svg');
+}
+
+body.layout-basic .df-bet-pile[data-pile="20"][data-variant="c"] > .df-bet-pile-add {
+  height: 100.0%;
+  background-image: url('/shared/flip-chips/pile-20-c-add.svg');
+}
+
 /* On a win the SAME pile grows: the add overlay shares the base file's
-   viewBox, so its extra coins land exactly on the original composition. */
+   viewBox, so its extra coins land exactly on the original composition. The
+   overlay file is a vertical sprite of cumulative frames — one per payout
+   class — so how much the pile grows is how much the day paid. */
 body.layout-basic .df-bet-pile-add {
   position: absolute;
-  inset: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: block;
-  background: center bottom / contain no-repeat;
+  background-repeat: no-repeat;
+  background-size: 100% 300%;
+  background-position: center 100%;
   animation: df-pile-arrive 0.45s cubic-bezier(0.2, 0.84, 0.3, 1) 0.28s backwards;
+}
+
+body.layout-basic .df-bet-pile-add[data-pay="0"] {
+  background-position-y: 0%;
+}
+
+body.layout-basic .df-bet-pile-add[data-pay="1"] {
+  background-position-y: 50%;
+}
+
+body.layout-basic .df-bet-pile-add[data-pay="2"] {
+  background-position-y: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -592,8 +1146,8 @@ body.layout-basic .df-bet-pile--held {
   }
 }
 
-/* A pile-scale wager may spill past the printed box — deliberate. */
-body.layout-basic :is(.df-bet-oval, .df-tomorrow-bet-oval) {
+/* A pile-scale wager may spill past Today's printed box — deliberate. */
+body.layout-basic .df-bet-oval {
   overflow: visible;
 }
 
@@ -777,10 +1331,11 @@ body.layout-basic .df-bankroll__well {
     0 1px rgba(240, 217, 166, 0.06);
 }
 
-/* The recessed chip channel routed into the tray: two rack rows split by a
-   thin brass mid-rail. The renderer packs whole barrels per row. */
+/* Restore the original two-level standing-chip channel. The renderer changes
+   only the tones/counts inside these physical barrels. */
 body.layout-basic .df-bankroll__well .df-bankroll__rack {
   box-sizing: border-box;
+  display: flex;
   height: 1.62rem;
   flex-direction: column;
   align-self: center;
@@ -814,58 +1369,11 @@ body.layout-basic .df-bankroll__row {
 
 body.layout-basic .df-bankroll__roll {
   height: 0.62rem;
-}
-
-/* One coin on edge: a narrow solid-color pill — a racked FLIP coin side-on.
-   Every physical coin is fully red or fully green, so barrels alternate the
-   two solid bodies just like the wager piles do. */
-body.layout-basic .df-bankroll__chip {
-  box-sizing: border-box;
-  width: 0.17rem;
-  height: 0.62rem;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0.07rem;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
-    linear-gradient(180deg, #ff5a52 0 12%, var(--df-flip-red) 12% 62%, #9c0608 62% 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(10, 8, 2, 0.5),
-    0 1px 1px rgba(0, 0, 0, 0.5);
-  transform: none;
-}
-
-body.layout-basic .df-bankroll__roll:nth-child(2n) .df-bankroll__chip,
-body.layout-basic .df-bankroll__row:nth-child(2n) .df-bankroll__roll:nth-child(2n + 1) .df-bankroll__chip {
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
-    linear-gradient(180deg, #55e723 0 12%, var(--df-flip-green) 12% 62%, #1a7a09 62% 100%);
-}
-
-/* Checkerboard across the two rack rows so neither row runs one color. */
-body.layout-basic .df-bankroll__row:nth-child(2n) .df-bankroll__roll:nth-child(2n) .df-bankroll__chip {
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
-    linear-gradient(180deg, #ff5a52 0 12%, var(--df-flip-red) 12% 62%, #9c0608 62% 100%);
-}
-
-body.layout-basic .df-bankroll__chip.is-face::after {
-  display: none;
-  content: none;
-}
-
-/* Tray posts divide adjacent barrels so each max-20 run reads as its own
-   tube without consuming the renderer's exact denomination arithmetic. */
-body.layout-basic .df-bankroll__roll {
   isolation: isolate;
 }
 
 body.layout-basic .df-bankroll__roll + .df-bankroll__roll::before {
   position: absolute;
-  z-index: 2;
   bottom: -0.05rem;
   left: -0.1rem;
   width: 0.05rem;
@@ -876,14 +1384,54 @@ body.layout-basic .df-bankroll__roll + .df-bankroll__roll::before {
   content: '';
 }
 
-/* A newly revealed payout/backing run lands in the tray without changing its
-   measured footprint. The chips stay edge-on throughout the movement. */
+body.layout-basic .df-bankroll__chip {
+  --df-bankroll-chip-hi: #ff5a52;
+  --df-bankroll-chip-tone: var(--df-flip-red);
+  --df-bankroll-chip-lo: #9c0608;
+  box-sizing: border-box;
+  width: 0.17rem;
+  height: 0.62rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.07rem;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
+    linear-gradient(
+      180deg,
+      var(--df-bankroll-chip-hi) 0 12%,
+      var(--df-bankroll-chip-tone) 12% 62%,
+      var(--df-bankroll-chip-lo) 62% 100%
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(10, 8, 2, 0.5),
+    0 1px 1px rgba(0, 0, 0, 0.5);
+  transform: none;
+}
+
+body.layout-basic .df-bankroll__chip--claimable {
+  --df-bankroll-chip-hi: #ff5a52;
+  --df-bankroll-chip-tone: var(--df-flip-red);
+  --df-bankroll-chip-lo: #9c0608;
+}
+
+body.layout-basic .df-bankroll__chip--liquid {
+  --df-bankroll-chip-hi: #55e723;
+  --df-bankroll-chip-tone: var(--df-flip-green);
+  --df-bankroll-chip-lo: #1a7a09;
+}
+
+body.layout-basic .df-bankroll__chip.is-face::after {
+  display: none;
+  content: none;
+}
+
 body.layout-basic .df-bankroll__rack.is-crediting
   .df-bankroll__roll[data-bankroll-source="credit"] {
   z-index: 3;
   transform-origin: 50% 100%;
-  animation: df-bankroll-credit-settle 0.52s cubic-bezier(0.2, 0.84, 0.24, 1) both;
   will-change: filter, opacity, transform;
+  animation: df-bankroll-credit-settle 0.52s cubic-bezier(0.2, 0.84, 0.24, 1) both;
 }
 
 body.layout-basic .df-bankroll__rack.is-crediting
@@ -898,13 +1446,13 @@ body.layout-basic .df-bankroll__rack.is-crediting
 
 @keyframes df-bankroll-credit-settle {
   0% {
-    opacity: 0;
     filter: brightness(1.45);
+    opacity: 0;
     transform: translateY(-0.42rem) rotate(0.8deg) scaleY(0.82);
   }
   52% {
-    opacity: 1;
     filter: brightness(1.18);
+    opacity: 1;
     transform: translateY(0.035rem) rotate(-0.3deg) scaleY(1.08);
   }
   72% {
@@ -912,20 +1460,15 @@ body.layout-basic .df-bankroll__rack.is-crediting
     transform: translateY(-0.035rem) rotate(0.12deg) scaleY(0.98);
   }
   100% {
-    opacity: 1;
     filter: none;
+    opacity: 1;
     transform: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.layout-basic .df-bankroll__rack.is-crediting
-    .df-bankroll__roll[data-bankroll-source="credit"] {
+  body.layout-basic .df-bankroll__rack.is-crediting .df-bankroll__roll {
     animation: none;
-    filter: none;
-    opacity: 1;
-    transform: none;
-    will-change: auto;
   }
 }
 
@@ -939,13 +1482,14 @@ body.layout-basic .df-bankroll__rack.is-crediting
 body.layout-basic .jackpot-hero .app-daily-flip {
   --df-table-rail-size: 0.42rem;
   --df-table-content-inset: calc(var(--df-table-rail-size) + 0.35rem);
+  border-radius: var(--df-table-rail-size);
 }
 
 body.layout-basic .jackpot-hero .app-daily-flip::before {
   position: absolute;
   z-index: 20;
   inset: 0;
-  border-radius: 0.42rem;
+  border-radius: var(--df-table-rail-size);
   background:
     radial-gradient(circle at 0.34rem 0.34rem,
       #f6d77f 0 0.055rem,
@@ -1038,7 +1582,7 @@ body.layout-basic .jackpot-hero .df-reveal-cue {
 body.layout-basic .jackpot-hero .df-reveal-cue__arrow {
   justify-self: start;
   margin-top: -0.02rem;
-  margin-left: 0.35rem;
+  margin-left: 0.65rem;
   transform: rotate(45deg);
   transform-origin: center;
 }
@@ -1065,8 +1609,476 @@ body.layout-basic .jackpot-hero .df-funds {
     --df-table-content-inset: calc(var(--df-table-rail-size) + 0.42rem);
   }
 
-  body.layout-basic .jackpot-hero .app-daily-flip::before {
-    border-radius: 0.34rem;
+}
+
+/* --------------------------------------------------------------- *
+ *  Add Bet placard — a pocket version of the live coinflip table   *
+ * --------------------------------------------------------------- */
+
+/* The amount controls keep their native inputs and bindings; this treatment
+   makes the dialog read as a dealer's felt placard, using only the canonical
+   FLIP chip set already used by the table underneath it. */
+body.layout-basic .df-add-bet-dialog {
+  padding: clamp(0.5rem, 3vw, 1rem);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(52, 14, 18, 0.24), transparent 42%),
+    rgba(3, 4, 9, 0.84);
+  backdrop-filter: blur(9px) saturate(0.78);
+}
+
+body.layout-basic .df-add-bet-dialog__card {
+  --df-add-bet-blue: #7fa3f0;
+  --df-add-bet-yellow: #fde68a;
+  --df-add-bet-red: #ed0e11;
+  width: min(100%, 24rem);
+  max-height: calc(100dvh - 1rem);
+  padding: 0.9rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0.12rem solid rgba(226, 201, 142, 0.78);
+  border-radius: 1rem;
+  background-color: #160607;
+  background-image:
+    radial-gradient(circle at 7% 3%, rgba(245, 158, 11, 0.13), transparent 31%),
+    radial-gradient(circle at 96% 0%, rgba(237, 14, 17, 0.17), transparent 38%),
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 5px),
+    linear-gradient(152deg, #310a0d 0%, #200708 54%, #100405 100%);
+  box-shadow:
+    0 1.6rem 5rem rgba(0, 0, 0, 0.76),
+    0 0 0 0.24rem rgba(6, 2, 3, 0.72),
+    inset 0 0 0 1px rgba(255, 244, 214, 0.13),
+    inset 0 -1.2rem 2.8rem rgba(0, 0, 0, 0.22);
+  color: #fff7ed;
+  scrollbar-color: rgba(127, 163, 240, 0.45) transparent;
+  scrollbar-width: thin;
+  text-align: left;
+  animation: df-add-bet-placard-in 220ms cubic-bezier(0.2, 0.78, 0.22, 1) both;
+}
+
+body.layout-basic .df-add-bet-dialog__card.has-active-boon {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(var(--boon-rgb), 0.16), transparent 48%),
+    radial-gradient(circle at 7% 3%, rgba(245, 158, 11, 0.12), transparent 31%),
+    radial-gradient(circle at 96% 0%, rgba(237, 14, 17, 0.16), transparent 38%),
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 5px),
+    linear-gradient(152deg, #310a0d 0%, #200708 54%, #100405 100%);
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__close {
+  z-index: 5;
+  top: 0.42rem;
+  right: 0.48rem;
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid rgba(255, 247, 237, 0.16);
+  border-radius: 50%;
+  background: rgba(7, 2, 3, 0.3);
+  color: rgba(255, 247, 237, 0.74);
+  font: 400 1.25rem/1 "Inter", system-ui, sans-serif;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__close:hover,
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__close:focus-visible {
+  border-color: rgba(127, 163, 240, 0.72);
+  outline: 0;
+  background: rgba(31, 44, 89, 0.62);
+  color: #fff;
+}
+
+body.layout-basic .df-add-bet-dialog__head {
+  position: relative;
+  display: grid;
+  min-height: 3.9rem;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 8.4rem);
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 1.82rem 0.12rem 0.2rem;
+}
+
+body.layout-basic .df-add-bet-dialog__heading-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+body.layout-basic .df-add-bet-dialog__head h3 {
+  margin: 0;
+  color: var(--df-add-bet-yellow);
+  font: 950 clamp(0.82rem, 3.5vw, 1.08rem)/1.05 "Inter", system-ui, sans-serif;
+  letter-spacing: -0.015em;
+  text-align: left;
+  text-shadow: 0 0 0.7rem rgba(245, 158, 11, 0.25);
+  white-space: nowrap;
+}
+
+body.layout-basic .df-add-bet-dialog__chip-scene {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 3.65rem;
+  align-self: end;
+  pointer-events: none;
+}
+
+body.layout-basic .df-add-bet-dialog__chip-pile,
+body.layout-basic .df-add-bet-dialog__value-chip {
+  display: block;
+  max-width: none;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+body.layout-basic .df-add-bet-dialog__head .df-add-bet-dialog__chip-pile {
+  position: absolute;
+  right: 50%;
+  bottom: 0.12rem;
+  width: 3rem;
+  max-height: 3.5rem;
+  height: auto;
+  filter: drop-shadow(0 0.16rem 0.12rem rgba(0, 0, 0, 0.58));
+  transform: translateX(50%) rotate(-3deg);
+}
+
+body.layout-basic .df-add-bet-dialog__head .df-add-bet-dialog__chip-pile[data-pile-kind="stack"] {
+  bottom: 0;
+  width: 2.5rem;
+  transform: translateX(50%);
+}
+
+body.layout-basic .df-add-bet-dialog__head .df-add-bet-dialog__chip-pile[data-pile-kind="pile"] {
+  right: -0.1rem;
+  bottom: -0.02rem;
+  width: min(8.6rem, 116%);
+  max-height: none;
+  transform: rotate(-1.5deg);
+}
+
+body.layout-basic .df-add-bet-dialog__wager-deck {
+  position: relative;
+  margin-top: 0.18rem;
+  padding: 0.58rem 0.58rem 0.42rem;
+  border: 1px solid rgba(127, 163, 240, 0.2);
+  border-radius: 0.8rem;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(127, 163, 240, 0.09), transparent 62%),
+    rgba(3, 6, 16, 0.26);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.26),
+    inset 0 0.5rem 1.1rem rgba(0, 0, 0, 0.18);
+}
+
+/* The editable amount is the dialog's betting spot: same blue paint, keyline,
+   and recessed felt used by Today's and Tomorrow's ovals. */
+body.layout-basic .df-add-bet-dialog__value {
+  position: relative;
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0.14rem solid var(--df-add-bet-blue);
+  border-radius: 999px;
+  background:
+    radial-gradient(130% 170% at 50% 0%, rgba(255, 250, 235, 0.08), transparent 62%),
+    linear-gradient(180deg, #2a3d75 0%, #1d2c59 58%, #131f42 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(10, 4, 4, 0.56),
+    inset 0 0.34rem 0.82rem rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(10, 4, 4, 0.54);
+  color: var(--df-add-bet-yellow);
+  font-family: "OCR A Std", "Share Tech Mono", "Lucida Console", ui-monospace, monospace;
+  font-size: var(--hero-box-currency-font-size, clamp(0.92rem, 2.8vw, 1.16rem));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .df-add-bet-dialog__value input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 4.3rem 0 3.25rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--df-add-bet-yellow);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-shadow: 0 0 7px rgba(245, 158, 11, 0.48);
+  appearance: textfield;
+}
+
+body.layout-basic .df-add-bet-dialog__value input::-webkit-inner-spin-button,
+body.layout-basic .df-add-bet-dialog__value input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+body.layout-basic .df-add-bet-dialog__value input::placeholder {
+  color: rgba(157, 184, 238, 0.56);
+  opacity: 1;
+  text-shadow: none;
+}
+
+body.layout-basic .df-add-bet-dialog__value b {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 0.78rem;
+  color: var(--df-add-bet-yellow);
+  font: inherit;
+  letter-spacing: 0.015em;
+  text-shadow: 0 0 7px rgba(245, 158, 11, 0.48);
+  transform: translateY(-50%);
+}
+
+body.layout-basic .df-add-bet-dialog__value-chip {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 0.6rem;
+  width: 1.95rem;
+  height: 1.95rem;
+  filter: drop-shadow(0 0 0.3rem rgba(245, 158, 11, 0.2));
+  transform: translateY(-50%);
+}
+
+body.layout-basic .df-add-bet-dialog__value:focus-within {
+  border-color: #b7cdfa;
+  box-shadow:
+    inset 0 0 0 1px rgba(10, 4, 4, 0.56),
+    inset 0 0.34rem 0.82rem rgba(0, 0, 0, 0.3),
+    0 0 0 2px rgba(127, 163, 240, 0.18),
+    0 0 0.72rem rgba(127, 163, 240, 0.28);
+}
+
+body.layout-basic .df-add-bet-dialog__value:has(input[aria-invalid="true"]) {
+  border-color: #f87171;
+}
+
+body.layout-basic .df-add-bet-dialog__value:has(input:disabled) {
+  filter: saturate(0.45);
+  opacity: 0.46;
+}
+
+body.layout-basic .df-add-bet-dialog__slider-deck {
+  padding: 0.36rem 0.18rem 0;
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"] {
+  width: 100%;
+  height: 2.05rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.34rem;
+  border: 1px solid rgba(184, 209, 255, 0.36);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #24386f, #4764a1 50%, #24386f);
+  box-shadow: inset 0 1px 0.14rem rgba(0, 0, 0, 0.72);
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]::-webkit-slider-thumb {
+  width: 1.85rem;
+  height: 1.85rem;
+  margin-top: -0.82rem;
+  border: 0;
+  border-radius: 50%;
+  background: url('/shared/flip-chips/face.svg') center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 0.12rem 0.1rem rgba(0, 0, 0, 0.62));
+  appearance: none;
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]::-moz-range-track {
+  height: 0.28rem;
+  border: 1px solid rgba(184, 209, 255, 0.36);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #24386f, #4764a1 50%, #24386f);
+  box-shadow: inset 0 1px 0.14rem rgba(0, 0, 0, 0.72);
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]::-moz-range-progress {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: #7fa3f0;
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]::-moz-range-thumb {
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 0;
+  border-radius: 50%;
+  background: url('/shared/flip-chips/face.svg') center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 0.12rem 0.1rem rgba(0, 0, 0, 0.62));
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]:focus-visible {
+  filter: drop-shadow(0 0 0.32rem rgba(127, 163, 240, 0.72));
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"]:disabled {
+  cursor: default;
+  filter: saturate(0.2);
+  opacity: 0.38;
+}
+
+body.layout-basic .df-add-bet-dialog__range {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: -0.08rem;
+  color: rgba(203, 220, 252, 0.68);
+  font: 850 0.46rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.075em;
+  white-space: nowrap;
+}
+
+body.layout-basic .df-add-bet-dialog boon-product-indicator {
+  display: grid;
+  margin: 0.54rem auto 0.04rem;
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__actions {
+  margin-top: 0.7rem;
+  grid-template-columns: 0.72fr 1.28fr;
+  gap: 0.5rem;
+}
+
+body.layout-basic .df-add-bet-dialog :is(
+  .df-reverse-dialog__later,
+  .df-reverse-dialog__accept
+) {
+  min-height: 2.65rem;
+  border-radius: 999px;
+  font: 950 0.7rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__later {
+  border-color: rgba(203, 220, 252, 0.25);
+  background: rgba(7, 9, 18, 0.38);
+  color: rgba(255, 247, 237, 0.72);
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept {
+  border: 1px solid #fff3b0;
+  background: linear-gradient(180deg, #fde68a 0%, #fbbf24 56%, #f59e0b 100%);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.38),
+    0 0 0.72rem rgba(245, 158, 11, 0.22);
+  color: #251404;
+  text-shadow: 0 1px rgba(255, 255, 255, 0.24);
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:hover,
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:focus-visible {
+  outline: 0;
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.42),
+    0 0 1rem rgba(245, 158, 11, 0.4);
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__later:focus-visible {
+  border-color: rgba(127, 163, 240, 0.74);
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(127, 163, 240, 0.18);
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:disabled {
+  filter: grayscale(0.72);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@keyframes df-add-bet-placard-in {
+  from { opacity: 0; transform: translateY(0.5rem) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 360px) {
+  body.layout-basic .df-add-bet-dialog {
+    padding: 0.5rem;
   }
 
+  body.layout-basic .df-add-bet-dialog__card {
+    max-height: calc(100dvh - 1rem);
+    padding: 0.72rem;
+    border-radius: 0.88rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__head {
+    min-height: 3.45rem;
+    grid-template-columns: minmax(0, 1fr) 6.4rem;
+    gap: 0.16rem;
+    padding-right: 1.7rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__head h3 {
+    font-size: 0.76rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__chip-scene {
+    height: 3.2rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__head .df-add-bet-dialog__chip-pile[data-pile-kind="pile"] {
+    width: 7.05rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__wager-deck {
+    padding: 0.48rem 0.46rem 0.36rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__value {
+    min-height: 3.05rem;
+  }
+
+  body.layout-basic .df-add-bet-dialog__value input {
+    padding-right: 3.9rem;
+    padding-left: 2.95rem;
+    font-size: var(--hero-box-currency-font-size, 0.92rem);
+  }
+
+  body.layout-basic .df-add-bet-dialog__value-chip {
+    left: 0.5rem;
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .df-add-bet-dialog__card,
+  body.layout-basic .df-add-bet-dialog__chip-pile {
+    animation: none;
+  }
+
+  body.layout-basic .df-add-bet-dialog .df-reverse-dialog__close {
+    transition: none;
+  }
 }

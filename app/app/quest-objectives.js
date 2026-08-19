@@ -31,7 +31,9 @@ function _asBigInt(value) {
 function _completionReward(quest) {
   const role = String(quest?.role || '').toUpperCase();
   const fallbackFlip = role === 'LEVEL' ? 800 : 100;
-  const fallbackStreak = role === 'LEVEL' ? 5 : 0;
+  const fallbackStreak = role === 'LEVEL'
+    ? 5
+    : (role === 'DAILY' || role === 'BONUS') ? 1 : 0;
   const flip = Number(quest?.flipReward ?? fallbackFlip);
   const streak = Number(quest?.streakReward ?? fallbackStreak);
   return {

@@ -289,7 +289,9 @@ export function inferActiveWhalePassCount(tickets, currentLevel) {
   // whale score can still fall back to one pass while the indexer catches up.
   if (repeated.length !== 4) return 0;
   const inferredHalfPasses = repeated.reduce((sum, lane) => sum + Math.min(...lane), 0);
-  return Math.max(0, Math.min(200, inferredHalfPasses)) / 2;
+  // Purchase quantity is capped at 100, but jackpot awards are not. Do not
+  // apply the checkout cap to an already-owned stack (398 halves = 199 passes).
+  return Math.max(0, inferredHalfPasses) / 2;
 }
 
 function formatActiveWhalePassCount(count) {

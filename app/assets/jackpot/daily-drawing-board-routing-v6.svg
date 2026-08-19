@@ -12,7 +12,7 @@
       foil sockets J3/J4 mirrored on x
       draw processor    214,121 -> 1066,1002    218,155  -> 1062,923
       LCD module        301,1069 -> 979,1195    218,1009 -> 1062,1171
-      VRF modules       213,1093 -> 288,1171    108,1045 -> 206,1134
+      VRF module        992,1093 -> 1084,1185   1074,1045 -> 1180,1145
 
     Rule for the whole layer: an exposed route may only end under one of those
     parts, on the perimeter ground rail, or in a plated via. Nothing trails off
@@ -29,14 +29,10 @@
       - the two ground bonds gained a via where they land on the rail, so the
         junction reads as a bond rather than a trace meeting an edge.
 
-    v5 closes the last endpoints that could not be honest in both layouts: the
-    VRF module boxes are the one pair of parts whose measured boxes do not
-    overlap at all (desktop x213-288, phone x108-206), so no single point is
-    under the module in both. The interlock now leaves from a plated via at
-    x=210 / x=1070, which is on the module's edge in EITHER layout and is a
-    legal terminus in its own right, and the four display interlocks gained the
-    same via on their module-side end. Nothing on this layer now terminates in
-    bare mask on a phone.
+    v5 closed the earlier paired-module endpoints with plated vias. The current
+    layout keeps only the larger bottom-right module. Its processor lane leaves
+    at x=1070; its two key lanes leave at x=994. Both anchors remain covered by
+    the enlarged hardware at desktop and phone widths.
     v6 stops defending traces with fab realism. The rule above allowed a route
     to end "on the perimeter ground rail", and two of them did: the lower-socket
     ground bonds, which ran the whole left and right gutters and stopped at a
@@ -48,12 +44,13 @@
     via back to a processor via and reads as the board's edge rather than as a
     trace with a loose end.
 
-    The lower interlock now also has a center bridge: each Chainlink feed taps
-    inward from its existing plated junction, meets at the cabinet midpoint,
-    and rises under the draw processor's bottom contact. It is one connected
-    net, not a decorative line ending beside the frame.
+    The remaining lower interlock taps inward from the right Chainlink feed,
+    reaches the cabinet midpoint, and rises under the draw processor's bottom
+    contact. It is one connected net, not a decorative line ending beside the
+    frame.
 
-    Endpoint changes are mirrored verbatim into daily-drawing-board-current-v5.svg.
+    The active processor subset is mirrored into daily-drawing-board-current-v5.svg;
+    the two key interlocks are mirrored into daily-drawing-button-current-v1.svg.
   -->
   <defs>
     <filter id="traceGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -95,8 +92,8 @@
     <path d="M240 128H130L84 174V1176L110 1202H1170L1196 1176V174L1150 128H1040"/>
   </g>
 
-  <!-- The complete signal tree: title + sockets -> processor -> LCD, with the
-       two Chainlink modules feeding both the processor and display interlock. -->
+  <!-- The complete signal tree: title + sockets -> processor -> LCD, with one
+       bottom-right Chainlink module feeding the processor and key interlock. -->
   <g fill="none" stroke="#b98a38" stroke-opacity="0.27" stroke-width="2"
      stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
     <!-- Title controller into the processor's upper contacts. -->
@@ -110,15 +107,10 @@
     <path d="M1132 300H1058L1020 338H988"/>
     <path d="M1132 718H1058L1020 680H988"/>
 
-    <!-- Chainlink modules at lower left/right feed the processor interlock.
-         These are the source lanes: the animated sheet drives every one of
-         them outward from the module. -->
-    <path d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/>
+    <!-- The bottom-right Chainlink module feeds the processor interlock. -->
     <path d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/>
 
-    <!-- Both VRF feeds bridge across the frame midpoint into one covered
-         processor contact. The two branch ends are existing net junctions. -->
-    <path d="M360 1006H608L626 988H640"/>
+    <!-- The VRF feed bridges into a covered processor contact. -->
     <path d="M920 1006H672L654 988H640"/>
     <path d="M640 988V915"/>
 
@@ -128,9 +120,7 @@
     <path d="M774 915V1002L756 1020H750L732 1038V1098"/>
     <path d="M866 915V982L848 1000H842L824 1018V1098"/>
 
-    <!-- Paired Chainlink display-interlock lanes. No perimeter dead ends. -->
-    <path d="M286 1116H350"/>
-    <path d="M286 1158H350"/>
+    <!-- Chainlink-to-key interlock lanes. No perimeter dead ends. -->
     <path d="M994 1116H930"/>
     <path d="M994 1158H930"/>
   </g>
@@ -155,11 +145,9 @@
   <g fill="none" stroke="#d0a34c" stroke-opacity="0.055" stroke-width="7"
      stroke-linecap="square" stroke-linejoin="miter" filter="url(#traceGlow)"
      vector-effect="non-scaling-stroke">
-    <path d="M210 1116H228L250 1094V1028L272 1006H360L382 984V915"/>
     <path d="M1070 1116H1052L1030 1094V1028L1008 1006H920L898 984V915"/>
     <path d="M414 915V982L432 1000H438L456 1018V1098"/>
     <path d="M866 915V982L848 1000H842L824 1018V1098"/>
-    <path d="M286 1116H350"/>
     <path d="M994 1116H930"/>
   </g>
 
@@ -169,15 +157,13 @@
        actually arrives. -->
   <g>
     <use href="#via" x="240" y="128"/><use href="#via" x="1040" y="128"/>
-    <use href="#via" x="360" y="1006"/><use href="#via" x="920" y="1006"/>
+    <use href="#via" x="920" y="1006"/>
     <use href="#via" x="640" y="988"/>
     <use href="#via" x="456" y="1098"/><use href="#via" x="548" y="1098"/>
     <use href="#via" x="732" y="1098"/><use href="#via" x="824" y="1098"/>
-    <use href="#via" x="350" y="1116"/><use href="#via" x="930" y="1116"/>
-    <use href="#via" x="350" y="1158"/><use href="#via" x="930" y="1158"/>
-    <use href="#via" x="210" y="1116"/><use href="#via" x="1070" y="1116"/>
-    <use href="#via" x="286" y="1116"/><use href="#via" x="994" y="1116"/>
-    <use href="#via" x="286" y="1158"/><use href="#via" x="994" y="1158"/>
+    <use href="#via" x="930" y="1116"/><use href="#via" x="930" y="1158"/>
+    <use href="#via" x="1070" y="1116"/>
+    <use href="#via" x="994" y="1116"/><use href="#via" x="994" y="1158"/>
     <use href="#via" x="110" y="512"/><use href="#via" x="110" y="612"/>
     <use href="#via" x="1170" y="512"/><use href="#via" x="1170" y="612"/>
     <use href="#via" x="330" y="1202"/><use href="#via" x="640" y="1202"/>

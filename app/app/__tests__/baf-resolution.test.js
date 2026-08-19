@@ -7,6 +7,7 @@ const {
   bafCutSurvivorRank,
   bafGateWon,
   buildBafResolutionSnapshot,
+  normalizeBafPrizeHits,
   loadBafResolutionSnapshot,
   __setBafResolutionFetcherForTest,
   __resetBafResolutionFetcherForTest,
@@ -88,6 +89,19 @@ describe('BAF resolution model', () => {
     assert.equal(allocation.entries.at(-1)?.kind, 'other');
     assert.equal(allocation.entries.at(-1)?.score, '25');
     assert.equal(allocation.entries.at(-1)?.endPpm, 1_000_000);
+  });
+
+  test('keeps player-only BAF prize hits, including future target-level tickets', () => {
+    assert.deepEqual(normalizeBafPrizeHits([
+      { level: 40, day: 9, awardType: 'eth_baf', amount: '25' },
+      { level: 47, sourceLevel: 40, day: 9, awardType: 'tickets_baf', amount: '12' },
+      { level: 0, day: 9, awardType: 'whale_pass_baf', amount: '2', halfPassCount: 2 },
+      { level: 40, day: 9, awardType: 'eth', amount: '999' },
+    ], 40, 9), [
+      { kind: 'eth', amount: '25', count: 1 },
+      { kind: 'tickets', amount: '3', entries: '12', count: 1, level: 47 },
+      { kind: 'whale-pass', amount: '2', count: 1 },
+    ]);
   });
 
   test('rank four survives, rank three is killed, and the player payout is retained', () => {
@@ -190,23 +204,35 @@ describe('BAF fullscreen presentation', () => {
   const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
   const demo = readFileSync(new URL('../../baf-resolution-demo.js', import.meta.url), 'utf8');
 
-  test('starts with #2 crossed out, then flips, cuts 3/4, and reveals prizes', () => {
-    assert.match(overlay, /rank === 2\) item\.classList\.add\('is-eliminated', 'is-precut'\)/);
-    assert.match(overlay, /shell\.dataset\.stage = 'gate'/);
-    assert.match(overlay, /snapshot\.eliminatedCutRank/);
-    assert.match(overlay, /shell\.dataset\.stage = 'prizes'/);
+  test('runs a large dedicated coin before wallet results and the final-day wheel', () => {
+    assert.match(overlay, /data-stage="coin"/);
+    assert.match(overlay, /shell\.dataset\.stage = 'coin-flip'/);
+    assert.match(overlay, /shell\.dataset\.stage = 'results'/);
+    assert.match(overlay, /shell\.dataset\.stage = snapshot\.gateWon \? 'wheel' : 'wheel-loss'/);
+    assert.match(overlay, /shell\.dataset\.stage = 'complete'/);
     assert.match(overlay, /appendCoinFaces\(rotor/,
       'the ceremony uses the same compositor-safe normal daily coin faces');
-    assert.match(css, /\.baf-res__leader\.is-eliminated::before[\s\S]*linear-gradient/s);
+    assert.match(css, /\.baf-res__coin-scene\s*\{[^}]*clamp\(16rem, 36vmin, 24rem\)/s,
+      'the BAF coin, rather than a dashboard of global standings, owns the stage');
     assert.match(css, /@keyframes baf-res-flip-win/);
     assert.match(css, /@keyframes baf-res-flip-loss/);
     assert.match(overlay, /BAF LOSS/);
-    assert.doesNotMatch(overlay, /BAF SKIPPED/,
-      'a losing BAF uses loss terminology in every player-facing ceremony label');
+    assert.doesNotMatch(overlay, /TOP FOUR|PRIZE MAP/,
+      'global leaderboard and prize-map clutter no longer compete with the player reveal');
     assert.match(css, /\.baf-res__payout\.is-loss/);
   });
 
-  test('replaces the generic BAF receipt and has a live review page', () => {
+  test('shows only this wallet’s prize-bearing draw results', () => {
+    assert.match(overlay, /snapshot\.player\.prizeHits/);
+    assert.match(overlay, /YOUR WALLET ONLY/);
+    assert.match(overlay, /Only this wallet’s prize-bearing ticket draws and direct BAF awards are shown/);
+    assert.match(overlay, /NO PRIZE LANDED ON YOUR TICKETS/);
+    assert.match(overlay, /LEVEL \$\{hit\.level\} TICKET PAYOUT/);
+    assert.match(css, /\.baf-res__result-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,/s);
+    assert.match(css, /\.baf-res__result-card\[data-kind="tickets"\]/);
+  });
+
+  test('replaces the generic BAF receipt and retains a live review page', () => {
     assert.match(controller, /await openBafResolution\(/);
     assert.doesNotMatch(controller, /queueReveal\(\{ kind: 'resolution'/);
     assert.match(index, /href="\/app\/styles\/baf-resolution\.css"/);
@@ -215,34 +241,38 @@ describe('BAF fullscreen presentation', () => {
     assert.match(demo, /history: winner \? \{ wins:/);
   });
 
-  test('fetches before mounting, always repairs scroll lock, and retains an explicit close control', () => {
-    const load = overlay.indexOf('const resolved = snapshot || await loadBafResolutionSnapshot');
+  test('parks the normal coinflip during fetch, then mounts with explicit close controls', () => {
+    const hold = overlay.indexOf("document.body.classList.add('baf-resolution-pending')");
+    const load = overlay.indexOf('resolved = snapshot || await loadBafResolutionSnapshot');
     const create = overlay.indexOf("const overlay = document.createElement('section')");
     const lock = overlay.indexOf("document.body.classList.add('baf-resolution-open')");
-    assert.ok(load >= 0 && load < create && create < lock,
-      'a slow or missing API route cannot mount a page-blocking loader');
+    assert.ok(hold >= 0 && hold < load && load < create && create < lock,
+      'the ordinary coin is held before the fetch while the fullscreen still mounts only when ready');
+    assert.match(overlay, /classList\.remove\('baf-resolution-pending'\)/);
     assert.match(overlay, /classList\?\.remove\('baf-resolution-open'\)/,
       'teardown repairs a stale scroll lock even when the overlay record is gone');
+    assert.match(css, /body\.layout-basic\.baf-resolution-pending \.df-coin--spinning \.df-coin3d__inner\s*\{[^}]*animation:\s*none !important/s);
+    assert.match(css, /body\.layout-basic\.baf-resolution-pending \.df-coin--spinning\s*\{[^}]*pointer-events:\s*none/s);
     assert.match(overlay, /data-bind="baf-close"/);
     assert.match(overlay, /focus\(\{ preventScroll: true \}\)/,
-      'mobile completion focus does not push the prize pool out of view');
-    assert.doesNotMatch(overlay, /LOADING BAF FINAL|baf-res__loading/);
+      'mobile completion focus does not push the final result out of view');
     assert.match(overlay, /baf-res__mark[^>]*><b>BAF<\/b><small>×10<\/small>/);
     assert.match(css, /\.baf-res__pool strong\s*\{[^}]*clamp\(1\.05rem/s);
   });
 
-  test('gives the final-day draw a Decimator-style weighted pie with top ten plus you', () => {
+  test('finishes with a short honest spin of the final-day weighted pie', () => {
     assert.match(overlay, /buildBafDrawAllocation\(draw, snapshot\.player\.address\)/);
     assert.match(overlay, /data-bind="baf-draw-pie"/);
     assert.match(overlay, /data-bind="baf-draw-player-percent"/);
-    assert.match(overlay, /entry\.isPlayer\) row\.classList\.add\('is-player'\)/);
+    assert.match(overlay, /label: 'YOU'/);
+    assert.match(overlay, /label: 'EVERYONE ELSE'/);
+    assert.match(overlay, /if \(snapshot\.gateWon\) \{[\s\S]*wheel\?\.classList\.add\('is-spinning'\)/s,
+      'a losing gate never animates a weighted draw that did not occur');
     assert.match(css, /\.baf-res__draw-ticks\s*\{[^}]*repeating-conic-gradient/s);
     assert.match(css, /\.baf-res__draw-pie\s*\{[^}]*var\(--baf-draw-pie/s);
-    assert.match(css, /\.baf-res__draw-legend\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
-    assert.match(css, /\.baf-res__draw-legend li\.is-player\s*\{/s,
-      'the viewed player stays conspicuous even outside the top ten');
-    assert.match(css,
-      /data-stage="draw"[\s\S]*?data-stage="draw-loss"[\s\S]*?\.baf-res__weighted\s*\{[^}]*opacity:\s*1/s,
-      'the weighted instrument takes over the center after the gate resolves');
+    assert.match(css, /\.baf-res__draw-wheel\.is-spinning \.baf-res__draw-pie\s*\{[^}]*animation:\s*baf-res-wheel-spin/s);
+    assert.match(css, /@keyframes baf-res-wheel-spin/);
+    assert.match(css, /data-stage="wheel"[\s\S]*data-stage="wheel-loss"[\s\S]*data-stage="complete"[\s\S]*\.baf-res__weighted/s,
+      'the wheel is the final scene rather than a permanent dashboard panel');
   });
 });

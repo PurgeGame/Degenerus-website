@@ -48,16 +48,16 @@ body.layout-basic .jackpot-hero replay-panel
     0 5px 16px rgba(8, 10, 14, 0.35);
 }
 
-/* The key carries no instrument of its own. The VRF wait is reported by the
-   two Chainlink modules bolted either side of it, which is where a player
+/* The key carries no second instrument of its own. The VRF wait is reported by the
+   single Chainlink module bolted at the board's lower-right edge, which is where a player
    already looks for randomness; duplicating that as a bar inside the display
    put two progress readings on one control and buried the word itself. The
-   key is now only the word, on the LCD face. */
+   key is now only the word, on the LED face. */
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing::after {
   content: none;
 }
 
-/* No stage icon during the two RNG beats either: the lit modules are the mark.
+/* No stage icon during the two RNG beats either: the lit module is the mark.
    The other stages keep their own icon, which is theirs alone. */
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"])::before {
@@ -127,26 +127,36 @@ body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing::b
 }
 
 /* The live pipeline keeps its exact milestone fill and stage icons, but uses
-   the same inset digital display as the resting jackpot action. This final
+   the same three-colour LED bank as the resting jackpot action. This final
    layer intentionally follows the stage-specific rules above. */
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing {
-  --jp-display-rgb: 112, 240, 158;
+  --jp-led-a: 52, 211, 153;
+  --jp-led-b: 250, 204, 21;
+  --jp-led-c: 56, 189, 248;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing:is([data-jp-stage="rng"], [data-jp-stage="rng-arrived"]) {
-  --jp-display-rgb: 147, 197, 253;
+  --jp-led-a: 59, 130, 246;
+  --jp-led-b: 167, 139, 250;
+  --jp-led-c: 34, 211, 238;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="coinflip"] {
-  --jp-display-rgb: 110, 231, 183;
+  --jp-led-a: 16, 185, 129;
+  --jp-led-b: 250, 204, 21;
+  --jp-led-c: 34, 211, 238;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="packs"] {
-  --jp-display-rgb: 251, 191, 36;
+  --jp-led-a: 245, 158, 11;
+  --jp-led-b: 244, 63, 94;
+  --jp-led-c: 168, 85, 247;
 }
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"] {
-  --jp-display-rgb: 134, 239, 172;
+  --jp-led-a: 34, 197, 94;
+  --jp-led-b: 250, 204, 21;
+  --jp-led-c: 45, 212, 191;
 }
 
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing,
@@ -158,19 +168,24 @@ body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="packs"],
 body.layout-basic .jackpot-hero replay-panel
   .replay-reveal-btn.is-processing[data-jp-stage="rng-arrived"] {
-  border-color: rgba(var(--jp-display-rgb), 0.66);
+  border-color: transparent;
   background:
-    radial-gradient(80% 160% at 50% 50%, rgba(var(--jp-display-rgb), 0.1), transparent 72%),
     linear-gradient(90deg,
-      rgba(var(--jp-display-rgb), 0.13) 0 calc(var(--jp-progress, 0) * 100%),
-      transparent calc(var(--jp-progress, 0) * 100%)),
-    repeating-linear-gradient(0deg, rgba(var(--jp-display-rgb), 0.025) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #081b12, #020704);
-  background-color: #020704;
-  color: rgb(var(--jp-display-rgb));
+      rgba(var(--jp-led-b), 0.24) 0 calc(var(--jp-progress, 0) * 100%),
+      transparent calc(var(--jp-progress, 0) * 100%)) padding-box,
+    radial-gradient(circle at 8% 40%, rgba(var(--jp-led-a), 0.4), transparent 34%) padding-box,
+    radial-gradient(circle at 91% 55%, rgba(var(--jp-led-c), 0.34), transparent 37%) padding-box,
+    linear-gradient(105deg, rgba(29, 7, 31, 0.98), rgba(34, 22, 8, 0.97) 49%, rgba(3, 25, 35, 0.99)) padding-box,
+    linear-gradient(102deg, rgb(var(--jp-led-a)), rgb(var(--jp-led-b)) 48%, rgb(var(--jp-led-c))) border-box;
+  background-color: transparent;
+  color: #fffaf0;
   box-shadow:
-    inset 0 1px 0 rgba(226, 255, 237, 0.07),
-    inset 0 0 13px rgba(0, 0, 0, 0.78),
-    0 0 10px rgba(var(--jp-display-rgb), 0.12);
-  text-shadow: 0 0 6px rgba(var(--jp-display-rgb), 0.38);
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.52),
+    0 0 9px rgba(var(--jp-led-a), 0.24),
+    0 0 16px rgba(var(--jp-led-c), 0.14);
+  text-shadow:
+    0 0 5px rgba(var(--jp-led-b), 0.65),
+    -2px 0 9px rgba(var(--jp-led-a), 0.28),
+    2px 0 9px rgba(var(--jp-led-c), 0.26);
 }

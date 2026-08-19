@@ -1,6 +1,6 @@
-// One mounted host for three deliberately separate Protocol Coins actions.
-// Each entry opens directly onto ETH claim, FLIP claim, or LINK funding; none
-// is bundled into Pending or hidden behind tabs.
+// One mounted host for Protocol Coins actions. Dedicated entry points can open
+// ETH, FLIP, or LINK directly; the coinflip CASH OUT entry shows ETH and FLIP
+// together without routing either action through Pending or a second popup.
 
 import { formatEther, parseEther } from 'ethers';
 import { ETH_DIVISOR } from '../app/chain-config.js';
@@ -217,10 +217,12 @@ class AppPlayerFundsDialog extends HTMLElement {
     const eth = this.querySelector('[data-bind="pfd-eth-section"]');
     const flip = this.querySelector('[data-bind="pfd-flip-section"]');
     const link = this.querySelector('[data-bind="pfd-link-section"]');
-    if (eth) eth.hidden = this.#mode !== 'eth';
-    if (flip) flip.hidden = this.#mode !== 'flip';
+    const cashout = this.#mode === 'cashout';
+    if (eth) eth.hidden = !cashout && this.#mode !== 'eth';
+    if (flip) flip.hidden = !cashout && this.#mode !== 'flip';
     if (link) link.hidden = this.#mode !== 'link';
     const titles = {
+      cashout: ['PROTOCOL FUNDS', 'Cash out'],
       eth: ['ETH CASHOUT', 'Claim ETH'],
       flip: ['COINFLIP FUNDS', 'Claim FLIP'],
       link: ['CHAINLINK RNG', 'Fund RNG'],

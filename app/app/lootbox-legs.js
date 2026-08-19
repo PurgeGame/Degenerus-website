@@ -8,7 +8,8 @@
 // Event sources (verified against degenerus-audit/contracts):
 //   modules/DegenerusGameLootboxModule.sol
 //     LootBoxOpened(player, lootboxIndex, amount, futureLevel, futureTickets, flip, roundedUp)
-//     LootBoxDgnrsReward(player, lootboxAmount, dgnrsAmount)
+//     LootBoxDgnrsBatch(player, requested, paid)
+//     LootBoxDgnrsReward(player, lootboxAmount, dgnrsAmount) (historical runs)
 //     LootBoxWhalePassJackpot(player, lootboxAmount, targetLevel, entriesPerLevel, ...)
 //     LootBoxReward(player, rewardType, lootboxAmount, amount)
 //       rewardType: 2=CoinflipBoon 4=Boost5 5=Boost15 6=Boost25 8=DecimatorBoost
@@ -35,6 +36,7 @@ import {
   decodePackedBoons,
 } from './boons.js';
 import { readExactBoonState } from './polling.js';
+import { sharedReadProvider } from './read-provider.js';
 
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
 // lives in lootbox.js).
@@ -42,6 +44,7 @@ export const OPEN_EVENTS_ABI = [
   'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
   'event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId)',
   'event LootBoxOpened(address indexed player, uint48 indexed lootboxIndex, uint256 amount, uint24 futureLevel, uint32 futureTickets, uint256 flip, bool roundedUp)',
+  'event LootBoxDgnrsBatch(address indexed player, uint256 requested, uint256 paid)',
   'event LootBoxDgnrsReward(address indexed player, uint256 lootboxAmount, uint256 dgnrsAmount)',
   'event LootBoxWhalePassJackpot(address indexed player, uint256 lootboxAmount, uint24 targetLevel, uint32 entriesPerLevel, uint24 statsBoost, uint24 frozenUntilLevel)',
   'event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount)',
@@ -459,27 +462,47 @@ async function _readStorageAt(provider, slot, blockTag) {
 }
 
 async function _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber }) {
-  const index = BigInt(lootboxIndex);
+  let index;
+  try { index = BigInt(lootboxIndex); }
+  catch (_e) { return null; }
   const settlementBlock = Number(blockNumber);
   if (index <= 0n || !Number.isSafeInteger(settlementBlock) || settlementBlock < 1) return null;
-  const provider = getProvider();
-  if (!provider || !CONTRACTS.GAME) return null;
+  if (!CONTRACTS.GAME) return null;
   const preBlock = settlementBlock - 1;
   const outer = _storageKey(['uint48', 'uint256'], [index, 15n]);
   const boxSlot = _storageKey(['address', 'bytes32'], [player, outer]);
   const rngSlot = _storageKey(['uint48', 'uint256'], [index, 34n]);
-  const [packedRaw, rngRaw, timingRaw] = await Promise.all([
-    _readStorageAt(provider, boxSlot, preBlock),
-    _readStorageAt(provider, rngSlot, preBlock),
-    _readStorageAt(provider, 0n, preBlock),
-  ]);
-  const packedBox = BigInt(packedRaw ?? 0);
-  const rngWord = BigInt(rngRaw ?? 0);
-  const timing = BigInt(timingRaw ?? 0);
-  const currentLevel = Number((timing >> 96n) & 0xFFFFFFn) + 1;
-  return packedBox > 0n && rngWord > 0n
-    ? { packedBox, rngWord, currentLevel }
-    : null;
+  const readContext = async (provider) => {
+    const [packedRaw, rngRaw, timingRaw] = await Promise.all([
+      _readStorageAt(provider, boxSlot, preBlock),
+      _readStorageAt(provider, rngSlot, preBlock),
+      _readStorageAt(provider, 0n, preBlock),
+    ]);
+    const packedBox = BigInt(packedRaw ?? 0);
+    const rngWord = BigInt(rngRaw ?? 0);
+    const timing = BigInt(timingRaw ?? 0);
+    const currentLevel = Number((timing >> 96n) & 0xFFFFFFn) + 1;
+    return packedBox > 0n && rngWord > 0n
+      ? { packedBox, rngWord, currentLevel }
+      : null;
+  };
+
+  // Historical storage support varies across injected wallet RPCs. Try the
+  // connected provider first, then the app's public archival read path before
+  // giving up on the exact committed result.
+  const connected = getProvider();
+  if (connected) {
+    try {
+      const context = await readContext(connected);
+      if (context) return context;
+    } catch (_e) { /* retry through the public provider below */ }
+  }
+  let publicProvider = null;
+  try { publicProvider = sharedReadProvider(); }
+  catch (_e) { return null; }
+  if (!publicProvider || publicProvider === connected) return null;
+  try { return await readContext(publicProvider); }
+  catch (_e) { return null; }
 }
 
 /** True for any human-box FLIP spin whose pre-flip sum is still unnamed. */
@@ -820,9 +843,9 @@ function _activeFamilyType(types, family) {
 
 /**
  * The compact reward event loses the coinflip tier and shares IDs 4/5/6 between
- * Luckbox and Ticket boons. Read the post-settlement packed state and attach
- * the exact boon type before presentation. A failed optional read leaves a
- * concise but honest category fallback in place.
+ * Luckbox and Ticket boons. Recover the exact type from packed state changes
+ * or the box's committed RNG before presentation. Only genuinely unknowable
+ * legacy/direct events retain the concise category fallback.
  */
 export async function enrichLootboxBoonLegs(legs, {
   player,
@@ -836,24 +859,29 @@ export async function enrichLootboxBoonLegs(legs, {
     return leg?.legType === 'reward'
       && (rewardType === 2 || SHARED_BOON_TYPES[rewardType]);
   })) return rows;
-  let exact;
+  let exact = null;
   try {
     exact = await readExactBoonState(player, { blockTag: blockNumber });
   } catch (_e) {
-    return rows;
+    // The packed-state read is one evidence source, not a prerequisite. A
+    // human box can still be identified exactly from its immutable RNG.
   }
-  const active = decodePackedBoons(
-    exact?.slot0,
-    exact?.slot1,
-    exact?.currentDay,
+  const active = exact == null ? [] : decodePackedBoons(
+    exact.slot0,
+    exact.slot1,
+    exact.currentDay,
   );
   const activeTypes = new Set(active.map((boon) => Number(boon?.boonType)));
   const hasSharedReward = rows.some((leg) => (
     leg?.legType === 'reward' && SHARED_BOON_TYPES[Number(leg?.rewardType)]
   ));
+  const hasCoinflipReward = rows.some((leg) => (
+    leg?.legType === 'reward' && Number(leg?.rewardType) === 2
+  ));
   let priorTypes = null;
   const settlementBlock = Number(blockNumber);
-  if (hasSharedReward && Number.isSafeInteger(settlementBlock) && settlementBlock > 0) {
+  if (exact != null && hasSharedReward
+      && Number.isSafeInteger(settlementBlock) && settlementBlock > 0) {
     try {
       const prior = await readExactBoonState(player, { blockTag: settlementBlock - 1 });
       priorTypes = new Set(decodePackedBoons(
@@ -862,7 +890,7 @@ export async function enrichLootboxBoonLegs(legs, {
         prior?.currentDay,
       ).map((boon) => Number(boon?.boonType)));
     } catch (_e) {
-      // Without historical state, retain the honest category fallback below.
+      // Fall through to the post-state and committed-RNG evidence below.
     }
   }
   let sharedFamilyIndex = null;
@@ -880,19 +908,30 @@ export async function enrichLootboxBoonLegs(legs, {
       .filter((entry) => entry.changed);
     if (changedFamilies.length === 1) sharedFamilyIndex = changedFamilies[0].index;
   }
-  if (hasSharedReward && sharedFamilyIndex == null) {
+
+  // If the immutable prior block is unavailable, one active post-state family
+  // still proves the product: an award in the absent family would have written
+  // that family into this same settlement state.
+  if (sharedFamilyIndex == null && exact != null
+      && Number.isSafeInteger(settlementBlock) && settlementBlock > 0) {
+    const activeFamilies = SHARED_BOON_FAMILIES
+      .map((family, index) => ({ index, active: _activeFamilyType(activeTypes, family) != null }))
+      .filter((entry) => entry.active);
+    if (activeFamilies.length === 1) sharedFamilyIndex = activeFamilies[0].index;
+  }
+
+  let drawnBoonType = null;
+  if (hasCoinflipReward || (hasSharedReward && sharedFamilyIndex == null)) {
     let exactContext = context;
     if (!exactContext) {
-      try {
-        exactContext = await _readHumanBoxSpinContext({
-          player,
-          lootboxIndex,
-          blockNumber,
-        });
-      } catch (_e) { /* direct/index-zero boxes retain the state-derived fallback */ }
+      exactContext = await _readHumanBoxSpinContext({
+        player,
+        lootboxIndex,
+        blockNumber,
+      });
     }
     if (exactContext) {
-      const drawnBoonType = deriveHumanLootboxBoonType({ player, ...exactContext });
+      drawnBoonType = deriveHumanLootboxBoonType({ player, ...exactContext });
       if (SHARED_BOON_FAMILIES[0].includes(drawnBoonType)) sharedFamilyIndex = 0;
       else if (SHARED_BOON_FAMILIES[1].includes(drawnBoonType)) sharedFamilyIndex = 1;
     }
@@ -902,7 +941,9 @@ export async function enrichLootboxBoonLegs(legs, {
     if (leg?.boonType != null) return leg;
     const rewardType = Number(leg?.rewardType);
     if (rewardType === 2) {
-      const boonType = [3, 2, 1].find((candidate) => activeTypes.has(candidate));
+      const boonType = [1, 2, 3].includes(drawnBoonType)
+        ? drawnBoonType
+        : [3, 2, 1].find((candidate) => activeTypes.has(candidate));
       const boonBps = COINFLIP_BOON_BPS[boonType] || null;
       return boonBps == null ? leg : { ...leg, boonType, boonBps };
     }
@@ -1066,6 +1107,9 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
           });
           break;
         }
+        case 'LootBoxDgnrsBatch':
+          out.push({ legType: 'dgnrs', amount: BigInt(parsed.args.paid) });
+          break;
         case 'LootBoxDgnrsReward':
           out.push({ legType: 'dgnrs', amount: BigInt(parsed.args.dgnrsAmount) });
           break;
@@ -1178,8 +1222,8 @@ export function openLegsFromDegenerettePayouts(items) {
         ),
         flip: _feedBigInt(data.flip),
       });
-    } else if (type === 'LootBoxDgnrsReward' || type === 'dgnrs') {
-      out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrsAmount ?? data.amount) });
+    } else if (type === 'LootBoxDgnrsBatch' || type === 'LootBoxDgnrsReward' || type === 'dgnrs') {
+      out.push({ legType: 'dgnrs', amount: _feedBigInt(data.paid ?? data.dgnrsAmount ?? data.amount) });
     } else if (type === 'LootBoxWhalePassJackpot' || type === 'whalepass') {
       out.push({
         legType: 'whalepass',
@@ -1360,7 +1404,7 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         break;
       }
       case 'dgnrs':
-        out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrsAmount ?? data.amount) });
+        out.push({ legType: 'dgnrs', amount: _feedBigInt(data.paid ?? data.dgnrsAmount ?? data.amount) });
         break;
       case 'whalepass':
         out.push({

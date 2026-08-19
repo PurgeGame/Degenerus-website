@@ -425,22 +425,26 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.match(
       el.innerHTML,
       /<a class="qst-learn-link" href="\/learn\/quests\/">QUESTS<\/a>/,
-      'the Quests heading links directly to its Learn page',
+      'the clean Quests heading still links directly to its Learn page',
+    );
+    assert.doesNotMatch(el.innerHTML, /qst-title-scroll|📜/,
+      'the abandoned scroll treatment stays out of the header');
+    assert.doesNotMatch(el.innerHTML, /qst-title-mark|qst-streak-alert/,
+      'the original header uses no added alert decoration');
+    assert.match(el.innerHTML, /qst-streak-flame" aria-hidden="true">◆<\/span>/,
+      'the original streak diamond remains the single state mark');
+    assert.match(APP_CSS,
+      /\.play-grid \.qst-streak-chip\s*\{[^}]*grid-template-columns:\s*auto auto;[^}]*padding:\s*0\.42rem 0\.58rem;[^}]*border-radius:\s*9px/s,
+      'the original squared streak control is restored');
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-header h2\s*\{[^}]*justify-self:\s*start;/s,
+      'the original heading placement is restored',
     );
     assert.match(
       APP_CSS,
-      /\.play-grid \.qst-header h2\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;[^}]*text-align:\s*center;/s,
-      'the Quests title owns the true center column at every viewport width',
-    );
-    assert.match(
-      APP_CSS,
-      /\.play-grid \.qst-streak-chip\s*\{[^}]*grid-column:\s*1;[^}]*justify-self:\s*start;/s,
-      'the streak stays in the left column',
-    );
-    assert.match(
-      APP_CSS,
-      /\.play-grid \.qst-score-control\s*\{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s,
-      'Degen Rating stays in the right column',
+      /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid \.qst-header h2\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center/s,
+      'the established wide-row alignment remains intact',
     );
     assert.doesNotMatch(el.innerHTML, /DAILY RUN/, 'removed daily-run kicker stays absent');
     assert.doesNotMatch(el.innerHTML, /qst-blurb/, 'explanatory subtitle removed');
@@ -450,7 +454,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'rewards belong inside their quest cards, not in a strip below them');
   });
 
-  test('quest blocks keep a fixed height instead of stretching to fill the column', () => {
+  test('quest blocks keep a fixed height without adding an inner scrollbar', () => {
     assert.match(
       APP_CSS,
       /\.play-grid \.qst-slot\s*\{[^}]*height:\s*7\.5rem/s,
@@ -458,6 +462,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.match(
       APP_CSS,
       /\.play-grid \.qst-slots\s*\{[^}]*grid-auto-rows:\s*7\.5rem[^}]*align-content:\s*start/s,
+    );
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.play-grid \.qst-slots\s*\{[^}]*(?:overflow-y|scrollbar-color|max-height):/s,
+      'the quest list never adds an inner scrollbar',
     );
     assert.match(
       APP_CSS,
@@ -646,18 +655,16 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(roles[1]?.textContent, 'BONUS', 'secondary slot uses compact BONUS role chip');
     assert.equal(roles[2]?.textContent, 'LEVEL', 'level quest has its own role chip');
     assert.equal(el.querySelectorAll('.qst-slot-icon').length, 3, 'each quest has a game-style icon tile');
-    assert.deepEqual(
-      el.querySelectorAll('.qst-slot-icon').map((icon) => icon.querySelector('img')?.src),
+    assert.deepEqual(el.querySelectorAll('.qst-slot-icon').map((icon) => icon.querySelector('img')?.src),
       [
         '/app/assets/quests/buy-ticket-luckbox.svg',
         '/whitepaper/flame-logo-split.svg',
         '/app/assets/quests/luckbox.svg',
       ],
-      'quest cards use product-specific artwork and the canonical FLIP logo',
-    );
+      'quest cards retain yesterday\'s illustrated product icons');
     assert.match(APP_CSS,
-      /\.qst-slot-icon img\s*\{[^}]*width:\s*2\.15rem;[^}]*height:\s*2\.15rem;[^}]*object-fit:\s*contain/s,
-      'the richer icons stay inside the existing fixed tile');
+      /\.qst-slot-icon\s*\{[^}]*clip-path:\s*polygon\(24% 0, 76% 0/s,
+      'the original octagonal icon tile is restored');
     assert.match(slot0Text, /Buy a Ticket or Luckbox/,
       'the shared purchase quest names both valid completion routes');
 
@@ -667,10 +674,19 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'the gated bonus card still shows its real progress target');
     assert.doesNotMatch(slots[1].textContent, /START|MAIN FIRST|DAILY FIRST/,
       'progress replaces the old command-like placeholder');
+    assert.equal(slots[0].querySelector('.qst-slot-reward-extra')?.textContent, '+1 STREAK',
+      'daily quest shows its streak reward beneath FLIP');
+    assert.equal(slots[1].querySelector('.qst-slot-reward-extra')?.textContent, '+1 STREAK',
+      'bonus quest shows its streak reward beneath FLIP');
     assert.match(slots[2].textContent, /800 FLIP/,
       'level card shows its distinct FLIP reward');
     assert.equal(slots[2].querySelector('.qst-slot-reward-extra')?.textContent, '+5 STREAK',
       'level streak reward sits on its own line');
+    assert.equal(
+      slots[2].querySelector('.qst-slot-reward-extra')?.parentElement?.matches('.qst-slot-copy'),
+      true,
+      'the level streak bonus sits below the original inline reward',
+    );
     const rewards = el.querySelectorAll('.qst-slot-reward');
     const rewardLogos = el.querySelectorAll('.qst-slot-reward-logo');
     assert.equal(rewards.length, 3, 'every card owns its reward line');
@@ -1135,11 +1151,9 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const redeemSlot = el.querySelectorAll('.qst-slot')[1];
     assert.match(redeemSlot.textContent, /Redeem FLIP/);
     assert.doesNotMatch(el.textContent, /Mint with FLIP/i);
-    assert.deepEqual(
-      redeemSlot.querySelector('.qst-slot-icon').querySelectorAll('img').map((img) => img.src),
-      ['/whitepaper/flame-logo-split.svg'],
-      'Redeem FLIP gives the canonical mark the full icon tile instead of a tiny composite',
-    );
+    assert.equal(redeemSlot.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+      '/whitepaper/flame-logo-split.svg',
+      'Redeem FLIP keeps its canonical product icon');
     el.disconnectedCallback();
   });
 
@@ -1398,6 +1412,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'daily and level quest completion labels use the same wording',
     );
     assert.doesNotMatch(el.textContent, /\bDONE\b/);
+    assert.doesNotMatch(APP_CSS, /\.qst-slot--completed \.qst-meter::after/,
+      'the original completed card does not add a permanent victory footer');
+    assert.match(APP_CSS,
+      /\.qst-slot--completed\s*\{[^}]*--qst-accent:\s*#4ade80;[^}]*--qst-rgb:\s*74, 222, 128/s,
+      'completion returns to the original restrained green card state');
     assert.equal(el.querySelector('.qst-slot--just-completed'), null,
       'loading an existing completion does not pretend it just happened');
 
@@ -1509,7 +1528,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       );
       assert.equal(
         el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-        '+100 FLIP',
+        '+100 FLIP · +1 STREAK',
       );
 
       storeMod.update('connected.address', CONNECTED);
@@ -1573,7 +1592,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      '+900 FLIP · +5 STREAK',
+      '+900 FLIP · +6 STREAK',
       'simultaneous daily and level rewards are folded into one visible notification',
     );
     el.disconnectedCallback();
@@ -1671,7 +1690,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      '+900 FLIP · +5 STREAK',
+      '+900 FLIP · +6 STREAK',
       'the authoritative level completion adds 800 instead of being mistaken for another daily',
     );
     assert.ok(

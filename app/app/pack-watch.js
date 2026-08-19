@@ -170,11 +170,9 @@ function _pendingPackPreviews(rows) {
       : 0;
     remaining = Math.max(0, remaining - foilCount);
 
-    while (remaining > 0) {
-      const count = Math.min(MAX_TICKETS_PER_PACK, remaining);
-      previews.push({ level, count, foilPack: false });
-      remaining = Math.max(0, remaining - count);
-    }
+    // Pending is an inventory summary, not a preview of every future 3x3
+    // opening hand. Keep the full unresolved standard balance together.
+    if (remaining > 0) previews.push({ level, count: remaining, foilPack: false });
     if (foilCount > 0) previews.push({ level, count: foilCount, foilPack: true });
 
     // A legacy/failed-read record can prove that a pack exists without yet
@@ -187,17 +185,28 @@ function _pendingPackPreviews(rows) {
       if (expectedEntries === 0) previews.push({ level, count: null, foilPack: false });
     }
   }
-  // Mirror the physical OPEN ALL order: preserve chronology within each kind,
-  // but keep every special foil pack after all ordinary packs.
-  const ordered = [
-    ...previews.filter((preview) => !preview.foilPack),
-    ...previews.filter((preview) => preview.foilPack),
+  // Coalesce any duplicate records defensively. Standard and foil packs stay
+  // distinct because they have different wrappers and reveal paths.
+  const consolidated = new Map();
+  for (const preview of previews) {
+    const key = `${preview.level}:${preview.foilPack ? 'foil' : 'standard'}`;
+    const current = consolidated.get(key);
+    if (!current) {
+      consolidated.set(key, { ...preview });
+      continue;
+    }
+    current.count = current.count == null || preview.count == null
+      ? null
+      : current.count + preview.count;
+  }
+
+  // Preserve chronology within each kind, with special foil packs after the
+  // ordinary level balances. Actual OPEN ALL hands still split at nine below.
+  const grouped = [...consolidated.values()];
+  return [
+    ...grouped.filter((preview) => !preview.foilPack),
+    ...grouped.filter((preview) => preview.foilPack),
   ];
-  return ordered.map((preview, index) => ({
-    ...preview,
-    packIndex: index + 1,
-    packCount: ordered.length,
-  }));
 }
 
 // Pending rows are level-scoped, so a later ordinary purchase can merge into

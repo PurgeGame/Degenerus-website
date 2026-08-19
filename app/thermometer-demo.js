@@ -5,7 +5,7 @@ const ETH = 10n ** 12n;
 const LEVEL = 36;
 const TARGET_ETH = 4_000n;
 const TARGET = TARGET_ETH * ETH;
-const history = Array.from({ length: LEVEL - 1 }, (_unused, index) => {
+const history = Array.from({ length: LEVEL }, (_unused, index) => {
   const level = index + 1;
   const poolEth = BigInt(Math.round(18 * (1.17 ** index)));
   return { level, poolWei: String(poolEth * ETH) };

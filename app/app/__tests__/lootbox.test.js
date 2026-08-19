@@ -45,7 +45,7 @@ function makeFakeContract(opts = {}) {
     buyPresaleBoxStatic: [],
     openBox: [],
     openBoxStatic: [],
-    lootboxStatus: [],
+    boxIndexComplete: [],
     claimableWinningsOf: [], afkingFundingOf: [],
     purchaseInfo: [],
   };
@@ -93,9 +93,10 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('openBox') }
     ),
-    lootboxStatus: async (...args) => {
-      calls.lootboxStatus.push(args);
-      return opts.lootboxStatus ?? [1n, false];
+    boxIndexComplete: async (...args) => {
+      calls.boxIndexComplete.push(args);
+      if (opts.boxIndexCompleteShouldRevert) throw new Error('completion read failed');
+      return opts.boxIndexComplete ?? false;
     },
     claimableWinningsOf: async (player) => {
       calls.claimableWinningsOf.push(player);
@@ -277,7 +278,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     // DegenerusGame.sol:703 — "Purchase units (400 = 4*QTY_SCALE = one whole
     // ticket = 4 entries)". x100 bought a QUARTER of what the field said.
     assert.equal(args[1], 2000n, '5 tickets = 20 entries = 2000 purchase units');
-    assert.ok(args[2] > 0n, 'lootBoxAmount > 0 (default LOOTBOX_MIN_WEI × N)');
+    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 1 }), 'one Small box is packed');
     assert.equal(typeof args[3], 'string');
     assert.equal(args[3], '0x0000000000000000000000000000000000000000000000000000000000000000', 'ZeroHash affiliate default');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
@@ -304,6 +305,50 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lootboxMod.ticketCostFromTickets(price, 1), price, 'one ticket = one ticket price');
     assert.equal(lootboxMod.ticketCostFromTickets(price, 0.25), price / 4n, 'one entry = a quarter');
     assert.equal(lootboxMod.ticketCostFromTickets(price, 5), price * 5n);
+  });
+
+  test('packed box orders round-trip all four tiers and quote 1x/5x/25x plus custom', () => {
+    const priceWei = 4n * lootboxMod.LOOTBOX_MIN_WEI;
+    const customSizeWei = 2n * lootboxMod.LOOTBOX_MIN_WEI;
+    const order = lootboxMod.packBoxOrder({
+      small: 2,
+      medium: 3,
+      large: 4,
+      customCount: 5,
+      customSizeWei,
+    });
+    assert.deepEqual(lootboxMod.unpackBoxOrder(order), {
+      small: 2,
+      medium: 3,
+      large: 4,
+      customCount: 5,
+      customSizeWei,
+    });
+    assert.equal(
+      lootboxMod.boxOrderCostFromPriceWei(priceWei, order),
+      priceWei * (2n + 3n * 5n + 4n * 25n) + customSizeWei * 5n,
+    );
+  });
+
+  test('packed box orders reject fractional counts, more than 100 boxes, and undersized custom boxes', () => {
+    assert.throws(() => lootboxMod.packBoxOrder({ small: 0.5 }), /whole number/);
+    assert.throws(
+      () => lootboxMod.packBoxOrder({ small: 50, medium: 51 }),
+      /at most 100 boxes/,
+    );
+    assert.throws(
+      () => lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: lootboxMod.LOOTBOX_MIN_WEI - 1n }),
+      /at least 0\.01 ETH each/,
+    );
+  });
+
+  test('purchaseEth rejects non-canonical packed words before an RPC call', async () => {
+    await assert.rejects(
+      lootboxMod.purchaseEth({ ticketQuantity: 0, boxOrder: 1n << 120n }),
+      /valid packed box order/,
+    );
+    assert.equal(lastFakeContract._calls.purchaseStatic.length, 0);
+    assert.equal(lastFakeContract._calls.purchase.length, 0);
   });
 
   test('purchaseInfo supplies the exact routed price across a level-tier boundary', async () => {
@@ -491,11 +536,18 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(result.payment.claimableUsedWei, 0n, 'claimable is untouched');
   });
 
-  test('purchaseEth lootBoxAmount = LOOTBOX_MIN_WEI × N when not provided', async () => {
-    await lootboxMod.purchaseEth({ ticketQuantity: 0, lootboxQuantity: 3 });
+  test('purchaseEth packs legacy quantity as Small boxes and quotes each at the routed price', async () => {
+    const result = await lootboxMod.purchaseEth({ ticketQuantity: 0, lootboxQuantity: 3 });
     const [args] = lastFakeContract._calls.purchase;
-    // LOOTBOX_MIN_WEI = 0.01 ether / ETH_DIVISOR (testnet-scaled); × 3.
-    assert.equal(args[2], lootboxMod.LOOTBOX_MIN_WEI * 3n);
+    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 3 }));
+    assert.deepEqual(lootboxMod.unpackBoxOrder(args[2]), {
+      small: 3,
+      medium: 0,
+      large: 0,
+      customCount: 0,
+      customSizeWei: 0n,
+    });
+    assert.equal(result.boxCostWei, lootboxMod.LOOTBOX_MIN_WEI * 3n);
     assert.equal(args[6].value, lootboxMod.LOOTBOX_MIN_WEI * 3n);
   });
 
@@ -658,16 +710,14 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(args[1], 7n);
   });
 
-  test('fresh lootbox status is checked for the exact owner and index', async () => {
+  test('index completion uses the sweep frontier while opens remain owner-pinned', async () => {
     const other = '0xcd34000000000000000000000000000000000000';
-    lastFakeContract = makeFakeContract({ lootboxStatus: [0n, true] });
+    lastFakeContract = makeFakeContract({ boxIndexComplete: true });
     lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
 
-    assert.deepEqual(
-      await lootboxMod.readLootboxStatus({ player: other, lootboxIndex: 7 }),
-      { amount: 0n, presale: true },
-    );
-    assert.deepEqual(lastFakeContract._calls.lootboxStatus, [[other, 7n]]);
+    assert.equal(await lootboxMod.readLootboxIndexCompletion(7), true);
+    assert.deepEqual(lastFakeContract._calls.boxIndexComplete, [[7n]],
+      'completion is index-wide and never pretends to inspect one player');
 
     await lootboxMod.openLootBox({ player: other, lootboxIndex: 7 });
     assert.deepEqual(lastFakeContract._calls.openBox, [[other, 7n]],
@@ -1097,9 +1147,9 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
     assert.equal(args[0], CONNECTED, 'buyer is connected.address (lowercase)');
     assert.equal(args[1], 2000n, '5 tickets = 2000 purchase units (400 per ticket)');
-    assert.ok(args[2] > 0n, 'lootBoxAmount > 0 (default LOOTBOX_MIN_WEI × 1)');
+    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 1 }), 'one Small box is packed');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
-    assert.ok(txOverrides && txOverrides.value > 0n, '{value: lootBoxAmountWei} override');
+    assert.ok(txOverrides && txOverrides.value > 0n, '{value: quoted box cost} override');
   });
 
   test('buildTx calls signer.sendTransaction synchronously (no await) inside the click frame', async () => {
@@ -1202,12 +1252,12 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
       'gasLimit undefined → signer.sendTransaction will re-estimate internally');
   });
 
-  test('lootboxQuantity=0 + ticketQuantity=1: lootBoxAmountWei=0n is acceptable {value:0n}', async () => {
+  test('lootboxQuantity=0 + ticketQuantity=1: boxOrder=0n is acceptable {value:0n}', async () => {
     await lootboxMod.prewarmLootboxBuy({
       ticketQuantity: 1, lootboxQuantity: 0,
     });
     const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
-    assert.equal(args[2], 0n, 'lootBoxAmount = LOOTBOX_MIN_WEI * 0 = 0n');
+    assert.equal(args[2], 0n, 'no boxes produce an empty packed order');
     assert.equal(txOverrides.value, 0n, 'value override = 0n (tickets-only purchase)');
   });
 

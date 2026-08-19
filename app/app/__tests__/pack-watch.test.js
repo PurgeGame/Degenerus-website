@@ -183,7 +183,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(item.passive, true);
     assert.equal(item.compact, true);
     assert.deepEqual(item.pendingPacks, [{
-      level: LEVEL, count: 1, foilPack: false, packIndex: 1, packCount: 1,
+      level: LEVEL, count: 1, foilPack: false,
     }]);
     assert.doesNotMatch(item.detail, /foil/i,
       'an ordinary pack never inherits foil indexing copy');
@@ -370,9 +370,9 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(item.id, 'ticket-packs:pending');
     assert.equal(item.ticketCount, 2.25, 'nine owed entries retain quarter-ticket precision');
     assert.deepEqual(item.pendingPacks, [{
-      level: LEVEL + 1, count: 1, foilPack: false, packIndex: 1, packCount: 2,
+      level: LEVEL + 1, count: 1, foilPack: false,
     }, {
-      level: LEVEL + 3, count: 1.25, foilPack: false, packIndex: 2, packCount: 2,
+      level: LEVEL + 3, count: 1.25, foilPack: false,
     }]);
     assert.equal(item.label, '2.25 TICKETS PENDING');
     assert.equal(item.passive, true);
@@ -532,10 +532,8 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(item?.id, 'ticket-packs:pending');
     assert.equal(item?.ticketCount, 18);
     assert.deepEqual(item?.pendingPacks, [{
-      level: LEVEL, count: 9, foilPack: false, packIndex: 1, packCount: 2,
-    }, {
-      level: LEVEL, count: 9, foilPack: false, packIndex: 2, packCount: 2,
-    }], 'the details popup shows the two physical packs the award will become');
+      level: LEVEL, count: 18, foilPack: false,
+    }], 'the details popup consolidates one level into one pending balance');
 
     ticketPayload = {
       address: ADDR.toLowerCase(), level: LEVEL, day: null,
@@ -821,6 +819,11 @@ describe('pack-watch — deferred ticket reveals', () => {
       'does not mislabel foil tickets while /foil is behind');
     assert.equal(takeQueued().length, 0);
     assert.equal(packWatch.pendingPacks().length, 1, 'record remains pending through indexer lag');
+    assert.deepEqual(pendingActions.getPendingActions()[0]?.pendingPacks, [{
+      level: LEVEL, count: 1, foilPack: false,
+    }, {
+      level: LEVEL, count: 4, foilPack: true,
+    }], 'standard and foil balances remain distinct in the consolidated dropdown');
 
     const foilLines = Array.from({ length: 4 }, (_unused, i) => (
       card(i + 1, true).entries.map((entry) => entry.traitId)

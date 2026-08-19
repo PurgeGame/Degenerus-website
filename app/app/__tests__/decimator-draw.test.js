@@ -263,8 +263,18 @@ describe('standalone Decimator draw replay', () => {
       'the dynamic hub unit follows the score label');
     assert.match(drawSource, /hubOutput\.textContent = formatted/,
       'the hub winning total counts upward with the side-board score');
-    assert.match(html, /REPLAY DRAW/);
+    assert.match(html, /START DRAW/,
+      'opening the fullscreen parks on a ready wheel until the player clicks');
     assert.match(html, /SKIP TO RESULTS/);
+    assert.match(drawSource,
+      /this\.\#setPrimaryAction\('start'\);[\s\S]*?this\.bind\('replay'\)\?\.focus\(\)/,
+      'the loaded draw focuses its explicit start control instead of auto-running');
+    assert.doesNotMatch(drawSource,
+      /await sleep\(this\.reducedMotion \? 50 : 550\);\s*this\.play\(\)/,
+      'initialization has no delayed automatic play path');
+    assert.match(drawSource,
+      /this\.bind\('replay'\)\.addEventListener\('click',[\s\S]*?this\.play\(\)/,
+      'the primary click is what starts the wheel');
     assert.doesNotMatch(html, /class="round-proof"/,
       'the redundant bottom block/pool strip is removed');
     assert.doesNotMatch(drawSource, /svg\('tspan', 'wheel-label__sub'\)/,

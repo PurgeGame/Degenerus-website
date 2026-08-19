@@ -485,6 +485,7 @@ class AppTicketsInventory extends HTMLElement {
     const next = Number(value);
     if (!Number.isInteger(next) || next <= 0) return false;
     let changed = false;
+    let detailScopeChanged = false;
     if (!Number.isInteger(Number(this.#activeLevel)) || next > Number(this.#activeLevel)) {
       this.#activeLevel = next;
       changed = true;
@@ -493,8 +494,27 @@ class AppTicketsInventory extends HTMLElement {
     if (this.#viewLevel == null || Number(this.#viewLevel) < floor) {
       this.#viewLevel = floor;
       changed = true;
+      detailScopeChanged = true;
     }
+    if (detailScopeChanged) this.#invalidateTicketDetailScope();
     return changed;
+  }
+
+  #invalidateTicketDetailScope({ accountChanged = false } = {}) {
+    this.#data = null;
+    this.#dataLevel = null;
+    this.#dataRenderKey = 'empty';
+    this.#cardsRenderKey = null;
+    this.#chartRenderKey = null;
+    this.#foilLines = [];
+    this.#deityExpectedEntries = new Map();
+    this.#deityExpectedScope = '';
+    this.#deityExpectedLoading = '';
+    if (accountChanged) this.#deityPassSymbols = [];
+    const cards = this.querySelector('[data-bind="inv-cards"]');
+    const chart = this.querySelector('[data-bind="inv-chart"]');
+    if (cards) cards.textContent = '';
+    if (chart) chart.textContent = '';
   }
 
   disconnectedCallback() {
@@ -816,12 +836,7 @@ class AppTicketsInventory extends HTMLElement {
     this.#viewLevel = lvl;
     // Never let the prior level's payload render under the newly selected
     // label while its request is in flight.
-    this.#data = null;
-    this.#dataLevel = null;
-    this.#dataRenderKey = 'empty';
-    this.#cardsRenderKey = null;
-    this.#chartRenderKey = null;
-    this.#foilLines = [];
+    this.#invalidateTicketDetailScope();
     return this.#refresh();
   }
 
@@ -923,7 +938,10 @@ class AppTicketsInventory extends HTMLElement {
       || get('viewing.address')
       || get('connected.address')
       || null;
+    const accountChanged = String(this.#address || '').toLowerCase()
+      !== String(addr || '').toLowerCase();
     this.#address = addr;
+    if (accountChanged) this.#invalidateTicketDetailScope({ accountChanged: true });
     const seq = ++this.#fetchSeq;
 
     // Primary active-level source is the last-day payload's

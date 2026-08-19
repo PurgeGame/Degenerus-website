@@ -211,4 +211,14 @@ describe('<boon-product-indicator>', () => {
     assert.ok(displays.length > 0, 'this guard only means something while such rules exist');
     assert.match(STATUS_CSS, /boon-product-indicator\[hidden\]\s*\{\s*display:\s*none\s*!important/);
   });
+
+  test('a marker with no live boon paints nothing even when a host un-hides it', () => {
+    // Host panels repaint on their own poll cadence and have toggled `hidden`
+    // on these markers. Visibility must not be what decides the art exists:
+    // without a model the element carries no data-boon-product, and that is
+    // the gate. Otherwise a bare arrow flashes beside a control every cycle.
+    assert.match(STATUS_CSS,
+      /boon-product-indicator:not\(\[data-boon-product\]\)::before,\s*boon-product-indicator:not\(\[data-boon-product\]\)::after\s*\{\s*display:\s*none\s*!important/,
+      'the emblem is gated on the data model, not on the hidden attribute');
+  });
 });

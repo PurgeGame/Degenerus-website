@@ -3072,7 +3072,7 @@ body.layout-basic .dgn-rq.q-hero::before,
   width: auto;
   height: auto;
   color: transparent;
-  background: #fff5bd;
+  background: var(--dgn-trait-color, #fff5bd);
   clip-path: polygon(
     50% 0%, 57% 13%, 69% 4%, 73% 20%, 88% 12%, 84% 29%,
     100% 31%, 87% 43%, 100% 50%, 87% 57%, 100% 69%, 84% 71%,
@@ -4441,8 +4441,16 @@ body.layout-basic .df-reverse-dialog__later { border: 1px solid rgba(255, 255, 2
 body.layout-basic .df-reverse-dialog__accept { border: 1px solid #fff7d6; background: linear-gradient(180deg, #fde68a, #f59e0b); color: #3d0b18; }
 body.layout-basic .df-reverse-dialog__accept:disabled { filter: grayscale(0.8); cursor: not-allowed; opacity: 0.55; }
 @media (max-width: 430px) {
-  body.layout-basic .df-reversi-card { left: auto; right: 0.15rem; }
-  body.layout-basic .df-reversi-card--live-tap { left: calc(50% + 60px); right: auto; }
+  /* Keep the post-result card in the open lane immediately beside the coin.
+     Docking it to the stage's right edge put it underneath the full-height
+     Last 25 rail on phones even though the center-right felt was empty. The
+     live tap already travelled from this coin-relative dock, so both resting
+     and animated states now share one collision-free origin. */
+  body.layout-basic .df-reversi-card,
+  body.layout-basic .df-reversi-card--live-tap {
+    right: auto;
+    left: calc(50% + 60px);
+  }
 }
 /* .df-claim-cta rules removed with the Claim DGNRS button (user call). */
 
@@ -5013,7 +5021,7 @@ body.layout-basic .jackpot-hero__machine {
   box-sizing: border-box; width: 100%; flex: 0 0 auto; overflow: hidden;
   padding: 0.4rem 0.45rem 0.48rem;
   background:
-    url('/app/assets/jackpot/daily-drawing-board-routing-v6.svg') center / 100% 100% no-repeat,
+    url('/app/assets/jackpot/daily-drawing-board-routing-v7.svg') center / 100% 100% no-repeat,
     url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,
     #090203;
 }
@@ -5182,11 +5190,10 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-center img {
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell.is-no-match {
   background: rgba(3, 7, 8, 0.24);
 }
-/* A newly committed hit returns to its real material only for the lock flash.
-   Its durable grade remains on the DOM after this presentation class clears,
-   while the face itself drops back to the dormant treatment above. */
+/* The later daily-drawing sheet splits the persistent match lamp between the
+   badge and quadrant background. This base rule only guarantees that a lock
+   beat cannot inherit an old group fade before that sheet loads. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded .ldj-foil-machine-cell.is-match-flash {
-  filter: none;
   opacity: 1 !important;
 }
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-match {
@@ -6515,6 +6522,16 @@ body.layout-basic .rrt-action--compact .rrt-action__label {
   font-weight: 1000;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+body.layout-basic .rrt-action--bingo.rrt-action--compact {
+  grid-template-columns: 2.35rem auto;
+  min-width: 6.5rem;
+  padding: 0.34rem 0.72rem;
+}
+body.layout-basic .rrt-action__label.rrt-bingo-summary {
+  line-height: 1.08;
+  text-align: center;
+  white-space: pre-line;
 }
 body.layout-basic .rrt-degenerette-summary { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 0.2rem; row-gap: 0.06rem; line-height: 0.96; white-space: nowrap; }
 body.layout-basic .rrt-degenerette-summary__amount { grid-column: 1 / -1; color: #f1f5f9; font-size: 0.66rem; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -10998,6 +11015,64 @@ body.layout-basic .pool-progress {
   padding: 0.48rem clamp(0.62rem, 1.8vw, 0.9rem) 0.54rem;
 }
 
+body.layout-basic .pool-progress__turbo-jackpot {
+  display: flex;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(0.18rem, 0.7vw, 0.38rem);
+  overflow: hidden;
+  color: #facc15;
+  font-size: clamp(0.54rem, 1.24vw, 0.7rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  letter-spacing: 0.075em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 0 8px rgba(250, 204, 21, 0.28);
+}
+
+body.layout-basic .pool-progress__turbo-jackpot[hidden],
+body.layout-basic .pool-progress__day[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .pool-progress__turbo-jackpot > strong {
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 1.12em;
+  letter-spacing: 0.025em;
+}
+
+body.layout-basic .pool-progress__turbo-jackpot > i {
+  color: rgba(255, 255, 255, 0.34);
+  font-style: normal;
+}
+
+body.layout-basic .pool-progress__turbo-jackpot-prize {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.2rem;
+  color: #facc15;
+}
+
+body.layout-basic .pool-progress__turbo-jackpot-prize strong {
+  color: #86efac;
+  font-size: 1.12em;
+  letter-spacing: 0.015em;
+}
+
+body.layout-basic .pool-progress__turbo-jackpot-prize em {
+  color: #86efac;
+  font-size: 0.82em;
+  font-style: normal;
+  letter-spacing: 0.065em;
+}
+
 body.layout-basic .pool-progress__special-jackpot {
   display: flex;
   grid-column: 2;
@@ -11197,21 +11272,20 @@ body.layout-basic .pool-progress__track.is-ready .pool-progress__marker--target 
   box-shadow: 0 0 0 1px rgba(240, 217, 166, 0.38);
 }
 body.layout-basic .pool-progress__track.is-ready .pool-progress__marker--growth {
-  z-index: 3;
-  top: 28%;
-  bottom: 28%;
-  width: 1px;
-  min-width: 1px;
-  max-width: 1px;
+  z-index: 4;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  min-width: 2px;
+  max-width: 2px;
   border: 0;
   border-radius: 0;
-  background: #547485;
-  box-shadow: none;
+  background: #7dd3fc;
+  box-shadow: 0 0 5px rgba(125, 211, 252, 0.52);
 }
 
-/* Immutable prior-level finals read like a real thermometer scale throughout
-   purchase phase: crisp ticks sit inside the tube, with a slightly
-   longer/thicker graduation at every fifth level. */
+/* Completed ruler: previous final, five-level checkpoints counted back from
+   the live level, and Level 1. Hover/focus exposes the exact level and pool. */
 body.layout-basic .pool-progress__history { display: contents; }
 body.layout-basic .pool-progress__history[hidden] { display: none !important; }
 body.layout-basic .pool-progress__marker--history {
@@ -11227,24 +11301,27 @@ body.layout-basic .pool-progress__marker--history {
   box-shadow: none;
   transform: translateX(-50%);
 }
-body.layout-basic .pool-progress__marker--history-major {
+body.layout-basic .pool-progress__marker--history-previous {
   z-index: 4;
   width: 3px;
   min-width: 3px;
   max-width: 3px;
-  height: 72%;
+  height: 82%;
   background: var(--gauge-cream);
+  box-shadow: 0 0 4px rgba(240, 217, 166, 0.35);
+}
+body.layout-basic .pool-progress__marker--history-start {
+  z-index: 4;
+  width: 2px;
+  min-width: 2px;
+  max-width: 2px;
+  height: 62%;
+  background: rgba(240, 217, 166, 0.82);
   box-shadow: none;
 }
-body.layout-basic .pool-progress__marker--history::after {
-  inset: -0.34rem -0.32rem;
-}
+body.layout-basic .pool-progress__marker--history::after { inset: -0.34rem -0.32rem; }
 body.layout-basic .pool-progress__marker--history:hover,
-body.layout-basic .pool-progress__marker--history:focus-visible {
-  z-index: 8;
-  background: #fff4cf;
-  box-shadow: none;
-}
+body.layout-basic .pool-progress__marker--history:focus-visible { z-index: 8; background: #fff4cf; box-shadow: none; }
 
 body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label {
   bottom: calc(100% + 0.3rem);
@@ -11263,13 +11340,8 @@ body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label em
 }
 
 @media (max-width: 560px) {
-  body.layout-basic .pool-progress__marker--history-mobile-skip { display: none; }
-  body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label[data-edge="right"] {
-    transform: translateX(-100%);
-  }
-  body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label[data-edge="left"] {
-    transform: translateX(0);
-  }
+  body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label[data-edge="right"] { transform: translateX(-100%); }
+  body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label[data-edge="left"] { transform: translateX(0); }
 }
 
 body.layout-basic .pool-progress__marker-label {
@@ -12439,6 +12511,151 @@ body.layout-basic .pari-error {
 }
 body.layout-basic .pari-error[hidden] { display: none !important; }
 
+/* WWXRP keeps its former red balance/BURN wrapper, but lives with the other
+   side wagers now. margin-top:auto pins it to the bottom of the equal-height
+   Side Bets column without disturbing open or settled book cards. */
+body.layout-basic .app-parimutuel > app-wwxrp-burn {
+  display: block;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 0.08rem;
+}
+body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] {
+  display: none !important;
+}
+body.layout-basic .pari-wwxrp {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.58rem minmax(3rem, 0.72fr) minmax(3.5rem, 1fr) auto;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.45rem 0.48rem;
+  overflow: hidden;
+  border: 1px solid rgba(239, 68, 68, 0.42);
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.014) 0,
+      rgba(255, 255, 255, 0.014) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    linear-gradient(100deg, rgba(48, 7, 10, 0.92), rgba(18, 5, 8, 0.82));
+  box-shadow:
+    inset 0 1px rgba(254, 202, 202, 0.055),
+    inset 0 0 15px rgba(239, 68, 68, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.18);
+}
+body.layout-basic .pari-wwxrp__mark {
+  display: grid;
+  width: 1.58rem;
+  height: 1.58rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 122, 124, 0.5);
+  border-radius: 50%;
+  background: #190507;
+  box-shadow: 0 0 9px rgba(237, 14, 17, 0.22);
+}
+body.layout-basic .pari-wwxrp__mark img {
+  display: block;
+  width: 1.46rem;
+  height: 1.46rem;
+  object-fit: contain;
+}
+body.layout-basic .pari-wwxrp__identity {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+body.layout-basic .pari-wwxrp__identity small {
+  overflow: hidden;
+  color: rgba(254, 202, 202, 0.55);
+  font: 900 0.4rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.09em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.layout-basic .pari-wwxrp__identity strong {
+  overflow: hidden;
+  color: #fca5a5;
+  font: 950 0.64rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.layout-basic .pari-wwxrp__balance {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #f87171;
+  font: 800 clamp(0.68rem, 1.35vw, 0.88rem)/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-align: right;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.48);
+  white-space: nowrap;
+}
+body.layout-basic .pari-wwxrp__burn[data-write] {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: auto;
+  min-width: 2.85rem;
+  height: 1.45rem;
+  min-height: 1.45rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 0.4rem;
+  border: 1px solid rgba(255, 122, 124, 0.76);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ff7375, #ed0e11);
+  color: #250707;
+  font: 950 0.52rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 10px rgba(237, 14, 17, 0.28);
+  cursor: pointer;
+}
+body.layout-basic .pari-wwxrp__burn[data-write]:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+body.layout-basic .pari-wwxrp__burn[data-write]:focus-visible {
+  outline: 2px solid #fecaca;
+  outline-offset: 2px;
+}
+body.layout-basic .pari-wwxrp__burn[data-write]:disabled {
+  border-color: rgba(254, 202, 202, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(254, 202, 202, 0.28);
+  box-shadow: none;
+  cursor: default;
+}
+body.layout-basic .pari-wwxrp__feedback {
+  grid-column: 1 / -1;
+  margin: 0.08rem 0 0;
+  color: #86efac;
+  font: 850 0.48rem/1.25 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.045em;
+  text-align: right;
+}
+body.layout-basic .pari-wwxrp__feedback[data-state="error"],
+body.layout-basic .pari-wwxrp__dialog-status[data-state="error"] {
+  color: #fca5a5;
+}
+body.layout-basic .pari-wwxrp__feedback[hidden],
+body.layout-basic .pari-wwxrp__dialog-status[hidden] {
+  display: none !important;
+}
+body.layout-basic .pari-wwxrp__dialog-status {
+  margin: -0.45rem 0 0.72rem;
+  color: #86efac;
+  font: 750 0.62rem/1.35 "Inter", system-ui, sans-serif;
+}
+
 /* A reveal card whose face IS a ticket (deferred ticket reveals — the four
    symbols are known by the time this pops; see app/app/pack-watch.js). The
    default .rvl-card-icon is a fixed square sized for one glyph, which clips the
@@ -13030,7 +13247,7 @@ body.layout-basic .rvl-ticket-more {
 }
 .rvl-gamepiece .rvl-rq--hero.q-sym::before,
 .rvl-gamepiece .rvl-rq--hero.q-col::before {
-  background: #dbeafe;
+  background: var(--dgn-trait-color, #dbeafe);
 }
 .rvl-gamepiece .rvl-rq--hero.q-sym img,
 .rvl-gamepiece .rvl-rq--hero.q-col img {
@@ -13044,7 +13261,7 @@ body.layout-basic .rvl-ticket-more {
   outline-color: #9bc2ff;
 }
 .rvl-gamepiece .rvl-rq--hero.q-lock-symbol-hit::before {
-  background: #dbeafe;
+  background: var(--dgn-trait-color, #dbeafe);
 }
 .rvl-gamepiece .rvl-rq--hero.q-lock-symbol-hit img {
   filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.68));
@@ -13057,7 +13274,7 @@ body.layout-basic .rvl-ticket-more {
   outline-color: #67e8f9;
 }
 .rvl-gamepiece .rvl-rq--hero.q-lock-color-hit::before {
-  background: #cffafe;
+  background: var(--dgn-trait-color, #cffafe);
 }
 .rvl-gamepiece .rvl-rq--hero.q-lock-color-hit img {
   filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.7));
@@ -14765,9 +14982,9 @@ body.layout-basic .rvl-ticket-batch-status { margin-top: 0.8rem; color: var(--te
 /* Keep Hero identification visual: the existing burst is brighter without
    adding a label or another block of copy to the ticket. */
 .rvl-stage--degenerette .rvl-gamepiece .rvl-rq.rvl-rq--hero::before {
-  background: #ffd83d;
+  background: var(--dgn-trait-color, #ffd83d);
   opacity: 1;
-  filter: drop-shadow(0 0 5px rgba(255, 196, 0, 0.78));
+  filter: drop-shadow(0 0 5px var(--dgn-trait-color, rgba(255, 196, 0, 0.78)));
 }
 @media (max-width: 560px) { .rvl-stage.rvl-stage--degenerette { --rvl-gamepiece-size: min(170px, 39vw, 30dvh); padding-inline: 0.35rem; } .rvl-dgn-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rvl-dgn-speed > span { display: none; } .rvl-dgn-speed input[type="range"] { width: 3.7rem; } }
 
@@ -15214,9 +15431,7 @@ body.layout-basic .play-grid .qst-header {
   margin: 0;
 }
 body.layout-basic .play-grid .qst-header h2 {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: center;
+  justify-self: start;
   margin: 0;
   padding: 0;
   border: 0;
@@ -15224,7 +15439,6 @@ body.layout-basic .play-grid .qst-header h2 {
   font-size: 1.05rem;
   font-weight: 950;
   letter-spacing: 0.13em;
-  text-align: center;
 }
 body.layout-basic .play-grid .qst-learn-link {
   color: inherit;
@@ -15244,15 +15458,13 @@ body.layout-basic .play-grid .qst-streak-chip {
   display: grid;
   position: relative;
   flex: 0 0 auto;
-  grid-column: 1;
-  grid-row: 1;
   grid-template-areas:
     "gem value"
     "gem label";
   grid-template-columns: auto auto;
   align-items: center;
   column-gap: 0.38rem;
-  justify-self: start;
+  justify-self: center;
   padding: 0.42rem 0.58rem;
   border: 1px solid rgba(var(--qst-streak-rgb), 0.58);
   border-radius: 9px;
@@ -15336,8 +15548,6 @@ body.layout-basic .play-grid .qst-streak-chip--increased .qst-streak-gain {
 body.layout-basic .play-grid .qst-score-control {
   position: relative;
   display: grid;
-  grid-column: 3;
-  grid-row: 1;
   justify-self: end;
   gap: 0.08rem;
   min-width: 4.9rem;
@@ -15613,7 +15823,6 @@ body.layout-basic .play-grid .qst-slot-core {
   gap: 0.55rem;
 }
 body.layout-basic .play-grid .qst-slot-icon {
-  position: relative;
   display: grid;
   flex: 0 0 2.65rem;
   width: 2.65rem;
@@ -16566,7 +16775,6 @@ body.layout-basic .play-grid .app-parimutuel > .panel-header h2 {
   letter-spacing: 0.13em;
   line-height: 1.2;
 }
-
 body.layout-basic .deg-setup {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(13.5rem, 1fr);
@@ -17522,6 +17730,23 @@ body.layout-basic .df-add-bet-dialog__card.has-active-boon {
     min-height: 2.55rem;
   }
 
+  body.layout-basic .play-grid .qst-header h2 {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+    text-align: center;
+  }
+  body.layout-basic .play-grid .qst-streak-chip {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+  body.layout-basic .play-grid .qst-score-control {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
   body.layout-basic .deg-setup {
     height: 23.54rem;
     align-items: stretch;
@@ -18094,8 +18319,28 @@ body.layout-basic .dbb__actual-multi strong em[hidden] { display: none !importan
 body.layout-basic .dbb__entry-controls { display: grid; grid-template-columns: minmax(9.5rem, 1.08fr) minmax(7.4rem, 0.82fr); align-items: end; gap: 0.4rem; min-width: 0; }
 
 body.layout-basic .dbb__input {
+  position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
   min-width: 0;
+}
+
+body.layout-basic .dbb__input:has(> boon-product-indicator:not([hidden])) {
+  grid-template-columns: 1.45rem minmax(0, 1fr);
+  column-gap: 0.34rem;
+}
+
+body.layout-basic .dbb__input > boon-product-indicator {
+  position: relative;
+  z-index: 3;
+  top: auto;
+  left: auto;
+  width: 1.45rem;
+  height: 1.45rem;
+  align-self: center;
+  flex-basis: 1.45rem;
 }
 
 body.layout-basic .dbb__input-control {
@@ -18127,16 +18372,6 @@ body.layout-basic .dbb__input-control input {
 }
 
 body.layout-basic .dbb__input-control > small { position: absolute; z-index: 1; top: 0.34rem; left: 0.58rem; color: rgba(252, 165, 165, 0.58); font: 900 0.48rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.105em; pointer-events: none; }
-body.layout-basic .dbb__input-control > boon-product-indicator {
-  position: absolute;
-  z-index: 3;
-  top: 0.16rem;
-  left: 6.15rem;
-  width: 1.45rem;
-  height: 1.45rem;
-  flex-basis: 1.45rem;
-}
-
 body.layout-basic .dbb__input-control:focus-within {
   border-color: rgba(252, 165, 165, 0.76);
   box-shadow: 0 0 0 2px rgba(var(--dbb-red), 0.1), inset 0 1px 7px rgba(0, 0, 0, 0.5);
@@ -18204,6 +18439,7 @@ body.layout-basic .dbb__burn::after {
 body.layout-basic .dbb__burn > * { position: relative; z-index: 1; }
 body.layout-basic .dbb__burn span { font: 1000 0.8rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.07em; }
 body.layout-basic .dbb__burn strong { overflow: hidden; color: #fde68a; font: 900 0.62rem/1 "Roboto Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .dbb__burn strong.has-boon { font-size: clamp(0.48rem, 0.65vw, 0.56rem); letter-spacing: -0.02em; }
 body.layout-basic .dbb__burn:hover:not(:disabled) { border-color: #fda4af; filter: brightness(1.12); box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 5px 20px rgba(var(--dbb-red), 0.34); }
 body.layout-basic .dbb__burn:hover:not(:disabled)::after { transform: translateX(54%); }
 body.layout-basic .dbb__burn:active:not(:disabled) { transform: translateY(1px); }
@@ -18266,6 +18502,7 @@ body.layout-basic .dbb__feedback.is-error { color: #fca5a5; }
   body.layout-basic .dbb__stepper button { min-width: 3rem; font-size: 0.86rem; }
   body.layout-basic .dbb__stepper button:first-child { border-right: 1px solid rgba(var(--dbb-red), 0.22); border-bottom: 0; }
   body.layout-basic .dbb__burn { min-height: 3.35rem; font-size: 1rem; }
+  body.layout-basic .dbb__burn strong.has-boon { font-size: 0.62rem; letter-spacing: 0; }
   body.layout-basic .dbb-stat { padding: 0.56rem; }
 }
 
@@ -18468,7 +18705,7 @@ body.layout-basic .dgn-inline-spin .dgn-rq.q-hero.q-col {
 }
 body.layout-basic .dgn-inline-spin .dgn-rq.q-hero.q-sym::before,
 body.layout-basic .dgn-inline-spin .dgn-rq.q-hero.q-col::before {
-  background: #dbeafe;
+  background: var(--dgn-trait-color, #dbeafe);
 }
 body.layout-basic .dgn-inline-spin .dgn-rq.q-hero.q-sym img,
 body.layout-basic .dgn-inline-spin .dgn-rq.q-hero.q-col img {
@@ -18510,6 +18747,12 @@ body.layout-basic .deg-currency-option[data-bind="deg-currency-option-0"] img {
 }
 .rvl-card--coinflip-result.rvl-card--outcome-win .rvl-card-value { color: #86efac; }
 .rvl-card--coinflip-result.rvl-card--outcome-loss .rvl-card-value { color: #fca5a5; }
+.rvl-stage--day-summary .rvl-card--coinflip-result .rvl-card-value--long {
+  max-width: 100%;
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
 .rvl-card--coinflip-result .rvl-card-sub--coinflip {
   display: inline-flex;
   max-width: none;
@@ -21265,7 +21508,7 @@ body.layout-basic .pass-afking__topup-field input {
   height: 2.2rem;
   min-height: 2.2rem;
   max-height: 2.2rem;
-  padding: 0.4rem 2.35rem 0.4rem 3.55rem;
+  padding: 0.4rem 2.75rem 0.4rem 3.55rem;
   border: 1px solid rgba(105, 185, 255, 0.3);
   border-radius: 8px;
   color: #e5f3ff;
@@ -21273,6 +21516,15 @@ body.layout-basic .pass-afking__topup-field input {
   font: 800 0.78rem/1 var(--font-mono, "Roboto Mono", monospace);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+body.layout-basic .pass-afking__topup-field input::-webkit-inner-spin-button,
+body.layout-basic .pass-afking__topup-field input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 body.layout-basic .pass-afking__topup-field > span {
@@ -21287,7 +21539,7 @@ body.layout-basic .pass-afking__topup-field > span {
 
 body.layout-basic .pass-afking__topup-field small {
   position: absolute;
-  right: 2.05rem;
+  right: 0.72rem;
   top: 50%;
   color: #8abce8;
   font: 800 0.58rem/1 var(--font-mono, "Roboto Mono", monospace);

@@ -223,26 +223,25 @@ async function _wwxrpItems(address, days) {
     return next;
   });
   const resolved = outcomes.filter((row) => row?.resolved).sort((a, b) => b.day - a.day);
-  const unclaimedWins = resolved.filter((row) => row.won && row.winner === address && !row.claimed);
-  const recentResults = resolved.slice(0, 3);
-  const visible = [...new Map([...unclaimedWins, ...recentResults].map((row) => [row.day, row])).values()];
+  // Pending is an action surface, not draw history. A lost WWXRP draw had no
+  // action and only produced a dead notification, so retain the player's wins
+  // (especially every unclaimed one) and omit losses entirely.
+  const playerWins = resolved.filter((row) => row.won && row.winner === address);
+  const unclaimedWins = playerWins.filter((row) => !row.claimed);
+  const recentWins = playerWins.slice(0, 3);
+  const visible = [...new Map([...unclaimedWins, ...recentWins].map((row) => [row.day, row])).values()];
   return visible.map((row) => {
-    const playerWon = row.won && row.winner === address;
-    const amount = playerWon ? _fmtToken(row.prizeWei) : null;
-    const claimable = playerWon && !row.claimed;
+    const amount = _fmtToken(row.prizeWei);
+    const claimable = !row.claimed;
     return {
       id: `wwxrp-draw:${address}:${row.day}`,
       dismissScope: address,
-      dismissKey: `wwxrp-draw:${row.day}:${claimable ? 'claim' : playerWon ? 'won' : 'lost'}`,
+      dismissKey: `wwxrp-draw:${row.day}:${claimable ? 'claim' : 'won'}`,
       kind: 'wwxrp-draw',
       kindLabel: `DAY ${row.day}`,
-      label: claimable
-        ? `D${row.day} WWXRP · WON ${amount} FLIP`
-        : playerWon
-          ? `D${row.day} WWXRP · WON ${amount} FLIP`
-          : `D${row.day} WWXRP · LOST`,
+      label: `D${row.day} WWXRP · WON ${amount} FLIP`,
       detail: '',
-      shortLabel: claimable ? 'Claim' : playerWon ? 'Won' : 'Lost',
+      shortLabel: claimable ? 'Claim' : 'Won',
       state: 'ready',
       order: 9,
       compact: true,

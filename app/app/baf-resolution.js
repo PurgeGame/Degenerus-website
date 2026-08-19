@@ -6,7 +6,6 @@
 
 import { fetchJSON } from './api.js';
 import { ethers } from './contracts.js';
-import { summarizeBafAwards } from './jackpot-resolutions.js';
 import { normalizeBafDraw } from './baf-draw.js';
 
 const FLIP = 10n ** 18n;
@@ -61,6 +60,67 @@ export function normalizeBafTopFour(payload, level) {
   return [...byRank.values()].sort((a, b) => a.rank - b.rank);
 }
 
+function _rowCount(row) {
+  const count = Number(row?.count);
+  return Number.isInteger(count) && count > 0 ? count : 1;
+}
+
+function _isPrizeHitForRound(row, level, day) {
+  const kind = String(row?.awardType || '').toLowerCase();
+  const rowLevel = Number(row?.level);
+  const sourceLevel = Number(row?.sourceLevel);
+  const rowDay = Number(row?.day);
+
+  if (kind === 'eth_baf') return rowLevel === level;
+  if (kind === 'tickets_baf') {
+    // BAF ticket prizes are emitted at their new target level. sourceLevel is
+    // the resolved BAF level in a normal phase and level + 1 in compressed
+    // turbo settlement, so filtering on row.level alone silently drops most of
+    // the player-facing ticket outcomes.
+    return rowLevel === level || sourceLevel === level || sourceLevel === level + 1;
+  }
+  if (kind === 'whale_pass_baf') {
+    // v77 whale-pass rows deliberately carry level=0. Their indexed day is the
+    // only round attribution left on the event.
+    return Number.isInteger(day) && Number.isInteger(rowDay) && rowDay === day;
+  }
+  return false;
+}
+
+/** Player-only prize-bearing BAF results, retained as individual reveal cards. */
+export function normalizeBafPrizeHits(wins, level, day = null) {
+  const lvl = Number(level);
+  const resolvedDay = Number(day);
+  const hits = [];
+  for (const row of Array.isArray(wins) ? wins : []) {
+    if (!_isPrizeHitForRound(row, lvl, resolvedDay)) continue;
+    const kind = String(row?.awardType || '').toLowerCase();
+    const count = _rowCount(row);
+    if (kind === 'eth_baf') {
+      const amount = _big(row?.amount);
+      if (amount > 0n) hits.push({ kind: 'eth', amount: amount.toString(), count });
+      continue;
+    }
+    if (kind === 'tickets_baf') {
+      const entries = _big(row?.amount);
+      if (entries <= 0n) continue;
+      hits.push({
+        kind: 'tickets',
+        amount: (entries / ENTRIES_PER_TICKET).toString(),
+        entries: entries.toString(),
+        count,
+        level: Number.isInteger(Number(row?.level)) ? Number(row.level) : null,
+      });
+      continue;
+    }
+    const halfPassCount = Number(row?.halfPassCount ?? row?.amount ?? 0);
+    if (Number.isInteger(halfPassCount) && halfPassCount > 0) {
+      hits.push({ kind: 'whale-pass', amount: String(halfPassCount), count });
+    }
+  }
+  return hits;
+}
+
 export function buildBafResolutionSnapshot({
   level,
   player,
@@ -90,7 +150,16 @@ export function buildBafResolutionSnapshot({
 
   const topFour = normalizeBafTopFour(leaderboard, lvl);
   const viewed = _address(player || playerOutcome?.player);
-  const playerAwards = summarizeBafAwards(history?.wins ?? history, lvl);
+  const prizeHits = normalizeBafPrizeHits(history?.wins ?? history, lvl, metadata?.day);
+  const playerAwards = prizeHits.reduce((totals, hit) => {
+    const amount = _big(hit.amount);
+    // Aggregated feeds may attach count while amount already contains the sum;
+    // never multiply the value a second time here.
+    if (hit.kind === 'eth') totals.eth += amount;
+    if (hit.kind === 'tickets') totals.tickets += amount;
+    if (hit.kind === 'whale-pass') totals.whalePassHalves += amount;
+    return totals;
+  }, { eth: 0n, tickets: 0n, whalePassHalves: 0n });
   const finalDayDraw = normalizeBafDraw(draw, metadata?.day, viewed);
   const rank = Number(playerOutcome?.rank);
   const playerRank = Number.isInteger(rank) && rank > 0 ? rank : null;
@@ -101,6 +170,7 @@ export function buildBafResolutionSnapshot({
     leaderSlicePct > 0
     || playerAwards.eth > 0n
     || playerAwards.tickets > 0n
+    || playerAwards.whalePassHalves > 0n
   );
   const ticketEntries = _big(metadata?.awards?.ticketEntries);
 
@@ -130,6 +200,8 @@ export function buildBafResolutionSnapshot({
         : null,
       eth: playerAwards.eth.toString(),
       tickets: playerAwards.tickets.toString(),
+      whalePassHalves: playerAwards.whalePassHalves.toString(),
+      prizeHits,
       consolation: _big(consolation).toString(),
       leaderSlicePct,
       wonAny,

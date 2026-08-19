@@ -1891,7 +1891,8 @@ class AppQuestPanel extends HTMLElement {
         isUnstarted: !isDone && Boolean(s?.notStarted),
         isGated,
         rewardText: '100 FLIP',
-        rewardTitle: 'Quest reward: 100 FLIP',
+        rewardExtraText: '+1 STREAK',
+        rewardTitle: 'Quest reward: 100 FLIP +1 quest streak',
         questType: questTypeRaw,
         progress: s?.progress ?? 0,
         target: s?.target ?? 0,
@@ -1914,9 +1915,9 @@ class AppQuestPanel extends HTMLElement {
         key: completion.dailyKeys.get(slot),
         scope: 'daily',
         title: QUEST_TYPE_LABELS[questType] || 'Quest',
-        detail: '+100 FLIP',
+        detail: '+100 FLIP · +1 STREAK',
         flipReward: 100,
-        streakReward: 0,
+        streakReward: 1,
       });
     }
     if (completion.levelKey && completion.newlyCompleted.has(completion.levelKey)) {
@@ -2324,7 +2325,7 @@ class AppQuestPanel extends HTMLElement {
         progressAvailable: quest?.progressAvailable !== false,
         gated: slot === 1 && !primaryComplete,
         flipReward: 100,
-        streakReward: 0,
+        streakReward: 1,
       });
     }
 

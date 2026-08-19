@@ -6,11 +6,10 @@
 // #unsubs[] for store subscriptions, panel-owned 30s poll cycle (Phase 61 D-04
 // LOCKED — NOT polling.js's fictional generic API per RESEARCH Pitfall 9).
 //
-// On-chain surface: DegenerusGame.purchase() (RESEARCH Example 1) — SAME call as
-// Phase 60 LBX-01, just with ticketQuantity > 0 and lootboxQuantity = 0 for
-// tickets-only level-mint. Re-exports purchaseEth + purchaseCoin from decimator.js
-// (which re-exports from lootbox.js — eager import triggers Phase 60's reason-map
-// registrations: GameOverPossible / AfKingLockActive / NotApproved).
+// On-chain surface: DegenerusGame.purchase() with entryQuantityScaled plus the
+// packed Small / Medium / Large / Custom box order. purchaseEth is re-exported
+// through decimator.js; importing it eagerly also installs the purchase-path
+// revert mappings.
 //
 // Carry-forwards (CONTEXT 62-CONTEXT.md):
 //   CF-01: Phase 58 closure-form sendTx — flows through decimator.purchaseEth/Coin
@@ -60,9 +59,9 @@ import {
 } from '../app/passes.js';
 // readAffiliateCode comes directly from lootbox.js — Plan 62-01's decimator.js
 // only re-exports the two purchase helpers per its minimal-surface design.
-// LOOTBOX_MIN_WEI: floor on the lootbox ETH leg. There is no per-box price —
-// the contract's lootBoxAmount is a free ETH value (min 0.01 ether); the
-// widget takes it as a single ETH input and both legs ride ONE purchase() tx.
+// Box purchases now use the contract's packed four-tier order. Preset boxes
+// price at 1x / 5x / 25x the frozen ticket price; custom boxes carry their
+// own per-box ETH size (minimum 0.01 ETH).
 import {
   readAffiliateCode, LOOTBOX_MIN_WEI, parseLootboxIdxFromReceipt,
   foilPackCostFromPriceWei, readPurchaseQuote,
@@ -70,6 +69,8 @@ import {
   probeFoilPackAvailabilityState,
   readPresaleBoxState, purchasePresaleBox, parsePresaleBoxBuyFromReceipt,
   PRESALE_BOX_MIN_WEI,
+  packBoxOrder, boxOrderCostFromPriceWei, BOX_ORDER_MAX_BOXES,
+  BOX_ORDER_MEDIUM_MULTIPLE, BOX_ORDER_LARGE_MULTIPLE,
   // A ticket is 4 entries; the contract takes entries and charges per entry, so
   // both the quote and the call go through these (see lootbox.js UNITS note).
   // These mirror the click-time funding split for the bonus preview, including
@@ -94,6 +95,7 @@ import {
 } from '../app/lootbox-legs.js';
 // Contract port of _activeTicketLevel — the level a buy routes to right now.
 import { activeTicketLevel } from '../app/active-level.js';
+import { dgnBadgePath, dgnTicketAccent } from '../app/dgn-traits.js';
 // FLIP ticket buy (GAME.redeemFlip) — a second, window-gated payment path for
 // the ticket leg only. Public pool views drive visibility independently of
 // whether the current player can afford one whole ticket.
@@ -126,10 +128,57 @@ import { boonBoostBps, boonBoostDelta } from '../app/boons.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { lock, unlock } from '../app/scroll-lock.js';
 
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
+const PURCHASE_TICKET_SAMPLE_REFRESH_MS = 60_000;
+
+/** Contract-exact heavy-tail color bucket used by DegenerusTraitUtils.traitFromWord. */
+export function purchaseTicketColorBucket(randomWord) {
+  const scaled = (Number(randomWord) >>> 0) >>> 24;
+  if (scaled < 64) return 0;
+  if (scaled < 128) return 1;
+  if (scaled < 192) return 2;
+  if (scaled < 224) return 3;
+  if (scaled < 240) return 4;
+  if (scaled < 248) return 5;
+  if (scaled < 254) return 6;
+  return 7;
+}
+
+/**
+ * Build the four canonical trait bytes from four uint64 words represented as
+ * [low32, high32] pairs. Color comes from low32; symbol is high32 & 7.
+ */
+export function purchaseTicketTraitsFromWords(randomWords) {
+  const words = Array.from(randomWords || [], (word) => Number(word) >>> 0);
+  if (words.length < 8) throw new RangeError('Eight uint32 words are required for a ticket sample.');
+  return Array.from({ length: 4 }, (_unused, quadrant) => {
+    const col = purchaseTicketColorBucket(words[quadrant * 2]);
+    const sym = words[(quadrant * 2) + 1] & 7;
+    return Object.freeze({
+      q: quadrant,
+      quadrant,
+      col,
+      sym,
+      byte: (quadrant << 6) | (col << 3) | sym,
+    });
+  });
+}
+
+function randomPurchaseTicketTraits() {
+  const words = new Uint32Array(8);
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(words);
+  } else {
+    for (let index = 0; index < words.length; index += 1) {
+      words[index] = Math.floor(Math.random() * 0x1_0000_0000);
+    }
+  }
+  return purchaseTicketTraitsFromWords(words);
+}
 // Purchase quotes are controls, not accounting tables: fixed-width values such
 // as "0.0400" add noise and can make an input step look more precise than it
 // is. Keep displayEth's chain scaling/precision, then trim only fractional zeroes.
@@ -572,6 +621,12 @@ class AppDecimatorPanel extends HTMLElement {
   #allInCueTimer = null;
   #storageListener = null;
   #questActivateListener = null;
+  #ticketSampleTimer = null;
+  #buyInDialogOpen = false;
+  #buyInDialogChoice = 'tickets';
+  #buyInDialogReturnFocus = null;
+  #customBoxOpen = false;
+  #presaleBoxOpen = false;
   // --- Pinned data (server-derived; rendered via textContent) ---
   #gameState = null;   // Phase 64 — /game/state snapshot (level + jackpotPhaseFlag → ticket price)
   #purchaseQuote = null; // Exact purchaseInfo() buy-now route/price.
@@ -652,6 +707,7 @@ class AppDecimatorPanel extends HTMLElement {
       ...this.#fundingOrder.filter((source) => source !== primarySource),
     ];
     this.#renderShell();
+    this.#startTicketSample();
     this.#wireEventHandlers();
     this.#wireAllInCoinflipCue();
     this.#wireQuestPresets();
@@ -665,6 +721,12 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.#closeBuyInDialog({ restoreFocus: false });
+    this.#closeBuilderPopovers({ restoreFocus: false });
+    if (this.#ticketSampleTimer != null) {
+      try { clearInterval(this.#ticketSampleTimer); } catch (_) { /* defensive */ }
+      this.#ticketSampleTimer = null;
+    }
     resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-total"]'));
     resetBalanceDisplay(this.querySelector('[data-bind="dec-flip-balance-value"]'));
     resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-wallet"]'));
@@ -739,9 +801,8 @@ class AppDecimatorPanel extends HTMLElement {
   #renderShell() {
     // Condensed shell: the purchase desk gets one short, useful identity line
     // without restoring the old blurb/level snapshot. The routed level and
-    // price remain in the header. The lootbox leg is a single ETH-value input — there is no
-    // per-box price; purchase()'s lootBoxAmount is a free ETH amount with a
-    // 0.01 ETH floor.
+    // price remain in the header; the visual box builder mirrors purchase()'s
+    // packed Small / Medium / Large / Custom order.
     this.innerHTML = `
       <div class="panel app-decimator-panel">
         <div class="panel-header">
@@ -751,7 +812,16 @@ class AppDecimatorPanel extends HTMLElement {
                aria-label="Learn about tickets, Luckbox, and foil packs"
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
-          <span class="dec-price" data-bind="dec-price">Price - —</span>
+          <span class="dec-price" data-bind="dec-price">LEVEL — · 1 TICKET = —</span>
+          <div class="dec-flip-credit dec-flip-credit--header is-idle"
+               data-bind="dec-flip-credit"
+               aria-label="Play to earn bonus FLIP with tickets">
+            <img src="/whitepaper/flame-logo-split.svg" alt="">
+            <span data-bind="dec-flip-credit-label">PLAY TO EARN</span>
+            <strong data-bind="dec-flip-credit-total">BONUS FLIP</strong>
+            <small class="dec-flip-credit__boon" data-bind="dec-purchase-boon-effect"
+                   hidden></small>
+          </div>
         </div>
 
         <!-- Account-switcher (2026-07-16): mode 'combined' shows the summed
@@ -760,104 +830,242 @@ class AppDecimatorPanel extends HTMLElement {
              write (Buy CTA auto-disables via [data-write] + canSign). -->
         <div class="dec-combined-summary" data-bind="dec-combined-summary" hidden></div>
 
-        <!-- Tickets + combined-buy lootbox leg share the compact desktop rail and
-             become full-width touch rows on phones. The lootbox size is a free ETH
-             amount (min 0.01) riding the same purchase() tx. Both default to 0;
-             its ▲/▼ control steps by one live ticket price. -->
-        <div class="dec-input-row dec-input-row--pair">
-          <span class="dec-input-group dec-input-group--tickets">
-            <label class="dec-input-label" for="dec-tickets-input">
-              <span data-bind="dec-ticket-action-label">Buy tickets</span>
-            </label>
+        <!-- Visual order builders mirror the deployed ABI. Ticket pieces add
+             entry-sized increments to the footer total. Box quantities pack
+             into [small:8][medium:8][large:8][custom:8][customSize:48]. -->
+        <div class="dec-purchase-builders dec-input-row dec-input-row--pair">
+          <section class="dec-purchase-builder dec-input-group dec-input-group--tickets"
+                   aria-label="Add tickets">
             <span class="dec-input-accessories" role="group" aria-label="Ticket purchase modifiers">
               <boon-product-indicator product="purchase" data-bind="dec-ticket-boon"
                                       variant="purchase-control"></boon-product-indicator>
               <quest-objective-indicator product="purchase"></quest-objective-indicator>
             </span>
-            <span class="dec-stepper">
-              <span class="dec-quarter-stepper">
-                <button type="button" class="dec-quarter-step" data-dir="1"
-                        aria-label="Increase by 0.25 ticket" tabindex="-1">+.25</button>
-                <button type="button" class="dec-quarter-step" data-dir="-1"
-                        aria-label="Decrease by 0.25 ticket" tabindex="-1">−.25</button>
+
+            <div class="dec-ticket-pieces" role="group" aria-label="Add tickets to your buy in">
+              <button type="button" class="dec-ticket-piece dec-ticket-piece--entry"
+                      data-bind="dec-ticket-add-entry" aria-label="Add one entry, 0.25 ticket">
+                <span class="dec-ticket-piece__copy"><strong>ENTRY</strong></span>
+                <span class="dec-ticket-piece__art" aria-hidden="true">
+                  <span class="dec-entry-face" data-bind="dec-entry-face">
+                    <span class="dec-ticket-trait"><img data-bind="dec-entry-badge" alt=""></span>
+                  </span>
+                </span>
+              </button>
+              <button type="button" class="dec-ticket-piece dec-ticket-piece--ticket"
+                      data-bind="dec-ticket-add-ticket" aria-label="Add one ticket">
+                <span class="dec-ticket-piece__copy"><strong>TICKET</strong></span>
+                <span class="dec-ticket-piece__art" aria-hidden="true">
+                  <span class="dec-ticket-face" data-bind="dec-ticket-sample">
+                    <span class="dec-ticket-trait"><img data-bind="dec-ticket-badge-0" alt=""></span>
+                    <span class="dec-ticket-trait"><img data-bind="dec-ticket-badge-1" alt=""></span>
+                    <span class="dec-ticket-trait"><img data-bind="dec-ticket-badge-2" alt=""></span>
+                    <span class="dec-ticket-trait"><img data-bind="dec-ticket-badge-3" alt=""></span>
+                    <span class="dec-ticket-center"><img src="/whitepaper/flame-center.svg" alt=""></span>
+                  </span>
+                </span>
+              </button>
+              <button type="button" class="dec-ticket-piece dec-ticket-piece--pack"
+                      data-bind="dec-ticket-add-pack" aria-label="Add one pack, 10 tickets">
+                <span class="dec-ticket-piece__copy"><strong>PACK</strong></span>
+                <span class="dec-ticket-piece__art" aria-hidden="true">
+                  <span class="dec-pack-face">
+                    <span class="dec-pack-mark"><img src="/whitepaper/flame-logo.svg" alt=""></span>
+                    <span class="dec-pack-level" data-bind="dec-pack-level">LEVEL —</span>
+                    <span class="dec-pack-count">10 TICKETS</span>
+                  </span>
+                </span>
+              </button>
+              <label class="dec-ticket-piece dec-ticket-piece--foil" data-bind="dec-foil-row"
+                     aria-label="Toggle one foil pack, limit one" hidden>
+                <input type="checkbox" name="dec-foil" class="dec-foil-check"
+                       data-bind="dec-foil-check">
+                <span class="dec-ticket-piece__copy"><strong>FOIL PACK</strong></span>
+                <span class="dec-ticket-piece__art" aria-hidden="true">
+                  <span class="dec-pack-face dec-foil-pack-face">
+                    <span class="dec-pack-shine"></span>
+                    <span class="dec-pack-mark"><img src="/whitepaper/flame-logo.svg" alt=""></span>
+                    <span class="dec-pack-level" data-bind="dec-foil-level">LEVEL —</span>
+                    <span class="dec-pack-count">4 TICKETS</span>
+                  </span>
+                  <span class="dec-foil-limit-stamp"><strong>LIMIT</strong><small>1</small></span>
+                  <span class="dec-foil-selected-check">✓</span>
+                </span>
+                <quest-objective-indicator product="foil"></quest-objective-indicator>
+                <span class="dec-foil-price dec-visually-hidden" data-bind="dec-foil-price">—</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="dec-purchase-builder dec-input-group dec-input-group--lootbox"
+                   data-bind="dec-lootbox-group" aria-labelledby="dec-box-builder-title">
+            <div class="dec-builder-head">
+              <span class="dec-builder-title"><strong id="dec-box-builder-title">LUCKBOXES</strong></span>
+              <button type="button" class="dec-presale-toggle" data-bind="dec-presale-toggle"
+                      aria-expanded="false" aria-controls="dec-presale-box-dialog" hidden>
+                <span aria-hidden="true">▣</span><strong>PRESALE</strong>
+              </button>
+              <button type="button" class="dec-custom-box-toggle" data-bind="dec-custom-box-toggle"
+                      aria-expanded="false" aria-controls="dec-custom-box-fields">
+                <span aria-hidden="true">◇</span><strong>CUSTOM</strong>
+              </button>
+              <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
+                <boon-product-indicator product="lootbox"
+                                        variant="purchase-control"></boon-product-indicator>
+                <quest-objective-indicator product="lootbox"></quest-objective-indicator>
               </span>
-              <input type="number" name="dec-tickets" id="dec-tickets-input"
-                     class="dec-input" min="0" step="0.25" value="0"
-                     inputmode="decimal">
-              <span class="dec-stepper-btns">
-                <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="1" aria-label="Increase by one whole ticket" tabindex="-1">▲</button>
-                <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="-1" aria-label="Decrease by one whole ticket" tabindex="-1">▼</button>
+            </div>
+
+            <div class="dec-box-grid">
+              <article class="dec-box-card dec-box-card--small" data-tone="green">
+                <button type="button" class="dec-box-card__add" data-bind="dec-box-add-small"
+                        aria-label="Add one small Luckbox">
+                  <span class="dec-box-card__art" aria-hidden="true">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <span class="dec-box-value">
+                      <strong data-bind="dec-box-price-small">—</strong><small>ETH</small>
+                    </span>
+                  </span>
+                </button>
+                <span class="dec-box-quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-small" data-dir="-1"
+                          aria-label="Remove one small Luckbox">−</button>
+                  <input type="number" name="dec-box-small" min="0" max="100" step="1" value="0"
+                         inputmode="numeric" aria-label="Small Luckbox quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-small" data-dir="1"
+                          aria-label="Add one small Luckbox">+</button>
+                </span>
+              </article>
+
+              <article class="dec-box-card dec-box-card--medium" data-tone="purple">
+                <button type="button" class="dec-box-card__add" data-bind="dec-box-add-medium"
+                        aria-label="Add one medium Luckbox">
+                  <span class="dec-box-card__art" aria-hidden="true">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <span class="dec-box-value">
+                      <strong data-bind="dec-box-price-medium">—</strong><small>ETH</small>
+                    </span>
+                  </span>
+                </button>
+                <span class="dec-box-quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-medium" data-dir="-1"
+                          aria-label="Remove one medium Luckbox">−</button>
+                  <input type="number" name="dec-box-medium" min="0" max="100" step="1" value="0"
+                         inputmode="numeric" aria-label="Medium Luckbox quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-medium" data-dir="1"
+                          aria-label="Add one medium Luckbox">+</button>
+                </span>
+              </article>
+
+              <article class="dec-box-card dec-box-card--large" data-tone="gold">
+                <button type="button" class="dec-box-card__add" data-bind="dec-box-add-large"
+                        aria-label="Add one large Luckbox">
+                  <span class="dec-box-card__art" aria-hidden="true">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <span class="dec-box-value">
+                      <strong data-bind="dec-box-price-large">—</strong><small>ETH</small>
+                    </span>
+                  </span>
+                </button>
+                <span class="dec-box-quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-large" data-dir="-1"
+                          aria-label="Remove one large Luckbox">−</button>
+                  <input type="number" name="dec-box-large" min="0" max="100" step="1" value="0"
+                         inputmode="numeric" aria-label="Large Luckbox quantity">
+                  <button type="button" class="dec-box-step" data-step-for="dec-box-large" data-dir="1"
+                          aria-label="Add one large Luckbox">+</button>
+                </span>
+              </article>
+            </div>
+            <p class="dec-box-summary dec-visually-hidden" data-bind="dec-box-summary"
+               aria-live="polite"></p>
+          </section>
+        </div>
+
+        <div id="dec-custom-box-fields" class="dec-builder-popover"
+             data-bind="dec-custom-box-fields" hidden>
+          <button type="button" class="dec-builder-popover__backdrop"
+                  data-bind="dec-custom-box-close" aria-label="Close custom Luckbox popup"></button>
+          <section class="dec-builder-dialog" role="dialog" aria-modal="true"
+                   aria-labelledby="dec-custom-box-title">
+            <header class="dec-builder-dialog__head">
+              <span><strong id="dec-custom-box-title">CUSTOM LUCKBOX</strong><small>Choose quantity and ETH per box</small></span>
+              <button type="button" class="dec-builder-dialog__close" data-bind="dec-custom-box-close"
+                      aria-label="Close custom Luckbox popup">×</button>
+            </header>
+            <label class="dec-builder-dialog__field" for="dec-box-custom-count">
+              <span>BOXES</span>
+              <span class="dec-custom-box-control dec-box-quantity">
+                <button type="button" class="dec-box-step" data-step-for="dec-box-custom-count" data-dir="-1"
+                        aria-label="Remove one custom Luckbox">−</button>
+                <input type="number" id="dec-box-custom-count" name="dec-box-custom-count" min="0" max="100" step="1" value="0"
+                       inputmode="numeric" aria-label="Custom Luckbox quantity">
+                <button type="button" class="dec-box-step" data-step-for="dec-box-custom-count" data-dir="1"
+                        aria-label="Add one custom Luckbox">+</button>
               </span>
-            </span>
-          </span>
-          <span class="dec-input-group dec-input-group--lootbox" data-bind="dec-lootbox-group">
-            <label class="dec-input-label" for="dec-lootbox-eth-input">
-              <span>Buy luckbox</span>
             </label>
-            <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
-              <boon-product-indicator product="lootbox"
-                                      variant="purchase-control"></boon-product-indicator>
-              <quest-objective-indicator product="lootbox"></quest-objective-indicator>
-            </span>
-            <span class="dec-stepper">
-              <input type="number" name="dec-lootbox-eth" id="dec-lootbox-eth-input"
-                     class="dec-input" min="0" step="0.01" value="0"
-                     inputmode="decimal" aria-label="Buy luckbox amount in ETH">
-              <span class="dec-stepper-btns">
-                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="1" aria-label="Increase luckbox size by one ticket price" tabindex="-1">▲</button>
-                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="-1" aria-label="Decrease luckbox size by one ticket price" tabindex="-1">▼</button>
+            <label class="dec-builder-dialog__field" for="dec-box-custom-eth">
+              <span>ETH EACH</span>
+              <span class="dec-custom-box-control dec-custom-box-control--size">
+                <input type="number" id="dec-box-custom-eth" name="dec-box-custom-eth" min="0.01" step="0.01" value="0.01"
+                       inputmode="decimal" aria-label="Custom Luckbox ETH per box">
+                <strong>ETH</strong>
               </span>
+            </label>
+            <button type="button" class="dec-builder-dialog__done" data-bind="dec-custom-box-done">APPLY CUSTOM BOX</button>
+          </section>
+        </div>
+
+        <!-- Live credit-gated presale. The trigger is rendered only while the
+             contract latch is open and the acting player can meet its minimum. -->
+        <div id="dec-presale-box-dialog" class="dec-builder-popover dec-presale"
+             data-bind="dec-presale-row" hidden>
+          <button type="button" class="dec-builder-popover__backdrop"
+                  data-bind="dec-presale-close" aria-label="Close presale box popup"></button>
+          <section class="dec-builder-dialog dec-presale__dialog" role="dialog" aria-modal="true"
+                   aria-labelledby="dec-presale-title">
+            <header class="dec-builder-dialog__head">
+              <span><strong id="dec-presale-title">PRESALE BOX</strong><small>Use available box credit</small></span>
+              <button type="button" class="dec-builder-dialog__close" data-bind="dec-presale-close"
+                      aria-label="Close presale box popup">×</button>
+            </header>
+            <div class="dec-presale__offer">
+              <div class="dec-presale__label">
+                <span class="dec-presale__art" aria-hidden="true">
+                  <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt=""><b>PRESALE</b>
+                </span>
+                <span><strong>PRESALE BOX</strong><small data-bind="dec-presale-available">— ETH AVAILABLE</small></span>
+              </div>
+              <div class="dec-presale__controls">
+                <input type="number" name="dec-presale-box-eth"
+                       min="0" step="0.01" value="0"
+                       inputmode="decimal" aria-label="Presale box amount in ETH">
+                <span>ETH</span>
+                <button type="button" data-bind="dec-presale-max">MAX</button>
+              </div>
+            </div>
+            <button type="button" class="dec-builder-dialog__done" data-bind="dec-presale-done">APPLY PRESALE BOX</button>
+          </section>
+        </div>
+
+        <!-- One stable order rail: Clear, editable tickets, then purchase. -->
+        <div class="dec-buy-row">
+          <button type="button" data-bind="dec-ticket-clear" class="dec-ticket-clear">CLEAR</button>
+          <span class="dec-ticket-total__field">
+            <input type="number" name="dec-tickets" id="dec-tickets-input"
+                   class="dec-input" min="0" step="0.25" value="0"
+                   inputmode="decimal" aria-label="Tickets in order">
+            <strong>TIX</strong>
+            <span class="dec-ticket-stepper">
+              <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="1"
+                      aria-label="Add one ticket"></button>
+              <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="-1"
+                      aria-label="Remove one ticket"></button>
             </span>
           </span>
-        </div>
-
-        <!-- Optional foil leg: one compact add-on row. Detailed mechanics live
-             on /learn/purchases/ so the transaction form stays scannable. -->
-        <label class="dec-foil" data-bind="dec-foil-row" hidden>
-          <!-- No data-write on the checkbox — panel convention keeps inputs
-               enabled in view mode (the Buy CTA is the gated write control). -->
-          <input type="checkbox" name="dec-foil" class="dec-foil-check" data-bind="dec-foil-check">
-          <span class="dec-foil-label">Foil pack (limit 1)
-            <quest-objective-indicator product="foil"></quest-objective-indicator>
-          </span>
-          <span class="dec-foil-price" data-bind="dec-foil-price">—</span>
-        </label>
-
-        <!-- Live credit-gated presale. A non-zero amount attaches the box to
-             this normal purchase; with no other amount it uses the standalone
-             presale-box selector. The regular purchase earns 25% box credit
-             before the attached leg is checked on-chain. -->
-        <div class="dec-presale" data-bind="dec-presale-row" hidden>
-          <div class="dec-presale__label">
-            <strong>PRESALE BOX</strong>
-            <span data-bind="dec-presale-available">— ETH AVAILABLE</span>
-          </div>
-          <div class="dec-presale__controls">
-            <input type="number" name="dec-presale-box-eth"
-                   min="0" step="0.01" value="0"
-                   inputmode="decimal" aria-label="Presale box amount in ETH">
-            <span>ETH</span>
-            <button type="button" data-bind="dec-presale-max">MAX</button>
-          </div>
-        </div>
-
-        <!-- Stable half-and-half desktop action rail. On phones the optional bonus
-             and primary action stack so BUY IN gets the whole tap width. -->
-        <div class="dec-buy-row">
-          <!-- Decorative dormant BONUS window (art only — no data, no
-               handlers). purchase-desk.css shows it in the basic layout and
-               swaps it out whenever the live dec-flip-credit tally appears. -->
-          <span class="dec-desk-bonus-slot" aria-hidden="true"></span>
-          <div class="dec-flip-credit" data-bind="dec-flip-credit" hidden>
-            <img src="/whitepaper/flame-logo-split.svg" alt="">
-            <span data-bind="dec-flip-credit-label">BONUS</span>
-            <strong data-bind="dec-flip-credit-total">+0 FLIP</strong>
-            <small class="dec-flip-credit__boon" data-bind="dec-purchase-boon-effect"
-                   hidden></small>
-          </div>
           <!-- CF-15: data-write triggers Phase 58 view-mode disable manager. -->
           <button type="button" class="dec-buy-cta" data-write data-bind="dec-buy-cta">
-            <span class="dec-buy-cta__action" data-bind="dec-buy-cta-action">Buy in</span>
+            <span class="dec-buy-cta__action" data-bind="dec-buy-cta-action">CLICK TO ADD</span>
             <strong class="dec-buy-cta__amount" data-bind="dec-buy-cta-amount" hidden></strong>
           </button>
         </div>
@@ -981,13 +1189,155 @@ class AppDecimatorPanel extends HTMLElement {
     `;
   }
 
+  #startTicketSample() {
+    this.#renderTicketSample();
+    if (this.#ticketSampleTimer != null) {
+      try { clearInterval(this.#ticketSampleTimer); } catch (_) { /* defensive */ }
+    }
+    this.#ticketSampleTimer = setInterval(
+      () => this.#renderTicketSample(),
+      PURCHASE_TICKET_SAMPLE_REFRESH_MS,
+    );
+    // Node's test runner should not stay alive solely for this visual timer.
+    this.#ticketSampleTimer?.unref?.();
+  }
+
+  #renderTicketSample() {
+    let traits;
+    try { traits = randomPurchaseTicketTraits(); }
+    catch (_e) { return; }
+    const ticket = this.querySelector('[data-bind="dec-ticket-sample"]');
+    const entry = this.querySelector('[data-bind="dec-entry-face"]');
+    const setAccent = (element, sampleTraits) => {
+      if (!element) return;
+      const accent = dgnTicketAccent(sampleTraits).hex;
+      try {
+        if (typeof element.style?.setProperty === 'function') {
+          element.style.setProperty('--ticket-line-color', accent);
+        } else if (element.style) {
+          element.style['--ticket-line-color'] = accent;
+        }
+      } catch (_e) { /* visual enhancement only */ }
+    };
+    setAccent(ticket, traits);
+    setAccent(entry, [traits[0]]);
+    traits.forEach((trait, quadrant) => {
+      const image = this.querySelector(`[data-bind="dec-ticket-badge-${quadrant}"]`);
+      image?.setAttribute?.('src', dgnBadgePath(quadrant, trait.sym, trait.col));
+    });
+    this.querySelector('[data-bind="dec-entry-badge"]')?.setAttribute?.(
+      'src',
+      dgnBadgePath(0, traits[0].sym, traits[0].col),
+    );
+  }
+
+  #renderBuilderPopovers() {
+    const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
+    const custom = this.querySelector('[data-bind="dec-custom-box-fields"]');
+    customToggle?.setAttribute?.('aria-expanded', String(this.#customBoxOpen));
+    if (custom) {
+      custom.hidden = !this.#customBoxOpen;
+      if (custom.hidden) custom.setAttribute?.('hidden', '');
+      else custom.removeAttribute?.('hidden');
+    }
+
+    const presaleToggle = this.querySelector('[data-bind="dec-presale-toggle"]');
+    const presale = this.querySelector('[data-bind="dec-presale-row"]');
+    presaleToggle?.setAttribute?.('aria-expanded', String(this.#presaleBoxOpen));
+    if (presale && !this.#presaleBoxOpen) {
+      presale.hidden = true;
+      presale.setAttribute?.('hidden', '');
+    }
+  }
+
+  #closeCustomBoxPopover({ restoreFocus = true } = {}) {
+    const wasOpen = this.#customBoxOpen;
+    this.#customBoxOpen = false;
+    this.#renderBuilderPopovers();
+    if (wasOpen && restoreFocus) {
+      try { this.querySelector('[data-bind="dec-custom-box-toggle"]')?.focus?.({ preventScroll: true }); }
+      catch (_e) { /* focus is progressive enhancement */ }
+    }
+  }
+
+  #closePresaleBoxPopover({ restoreFocus = true } = {}) {
+    const wasOpen = this.#presaleBoxOpen;
+    this.#presaleBoxOpen = false;
+    this.#renderBuilderPopovers();
+    if (wasOpen && restoreFocus) {
+      try { this.querySelector('[data-bind="dec-presale-toggle"]')?.focus?.({ preventScroll: true }); }
+      catch (_e) { /* focus is progressive enhancement */ }
+    }
+  }
+
+  #closeBuilderPopovers({ restoreFocus = false } = {}) {
+    const customWasOpen = this.#customBoxOpen;
+    const presaleWasOpen = this.#presaleBoxOpen;
+    this.#customBoxOpen = false;
+    this.#presaleBoxOpen = false;
+    this.#renderBuilderPopovers();
+    if (!restoreFocus) return;
+    const bind = customWasOpen
+      ? 'dec-custom-box-toggle'
+      : presaleWasOpen ? 'dec-presale-toggle' : null;
+    if (!bind) return;
+    try { this.querySelector(`[data-bind="${bind}"]`)?.focus?.({ preventScroll: true }); }
+    catch (_e) { /* focus is progressive enhancement */ }
+  }
+
   #wireEventHandlers() {
     const buyBtn = this.querySelector('[data-bind="dec-buy-cta"]');
     if (buyBtn) {
-      buyBtn.addEventListener('click', (e) => (
-        this.#flipModeEnabled() ? this.#onBuyWithFlipClick(e) : this.#onBuyClick(e)
-      ));
+      buyBtn.addEventListener('click', (e) => {
+        if (!this.#hasBuySelection()) {
+          try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+          const builders = this.querySelector('.dec-purchase-builders');
+          builders?.classList?.remove('is-prompting');
+          // Restart the compact visual cue without opening a second chooser.
+          void builders?.offsetWidth;
+          builders?.classList?.add('is-prompting');
+          try { this.querySelector('[data-bind="dec-ticket-add-entry"]')?.focus?.({ preventScroll: true }); }
+          catch (_e) { /* focus is progressive enhancement */ }
+          return;
+        }
+        void (this.#flipModeEnabled() ? this.#onBuyWithFlipClick(e) : this.#onBuyClick(e));
+      });
     }
+    for (const close of Array.from(
+      this.querySelectorAll?.('[data-bind="dec-buy-dialog-close"]') || [],
+    )) {
+      close.addEventListener?.('click', () => this.#closeBuyInDialog());
+    }
+    this.querySelector('[data-bind="dec-buy-dialog-tickets"]')?.addEventListener?.(
+      'click', () => this.#selectBuyInDialogChoice('tickets'),
+    );
+    this.querySelector('[data-bind="dec-buy-dialog-luckbox"]')?.addEventListener?.(
+      'click', () => this.#selectBuyInDialogChoice('luckbox'),
+    );
+    this.querySelector('[data-bind="dec-buy-dialog-foil"]')?.addEventListener?.(
+      'click', () => this.#selectBuyInDialogChoice('foil'),
+    );
+    const buyInAmount = this.querySelector('[name="dec-buy-dialog-amount"]');
+    buyInAmount?.addEventListener?.('input', () => this.#renderBuyInDialog());
+    buyInAmount?.addEventListener?.('change', () => this.#renderBuyInDialog());
+    this.querySelector('[data-bind="dec-buy-dialog-down"]')?.addEventListener?.('click', () => {
+      const model = this.#buyInDialogAmountModel();
+      if (!buyInAmount || model.fixed) return;
+      this.#stepInput(buyInAmount, -1, model.step);
+      this.#renderBuyInDialog();
+    });
+    this.querySelector('[data-bind="dec-buy-dialog-up"]')?.addEventListener?.('click', () => {
+      const model = this.#buyInDialogAmountModel();
+      if (!buyInAmount || model.fixed) return;
+      this.#stepInput(buyInAmount, 1, model.step);
+      this.#renderBuyInDialog();
+    });
+    this.querySelector('[data-bind="dec-buy-dialog-confirm"]')?.addEventListener?.(
+      'click', (event) => { void this.#submitBuyInDialog(event); },
+    );
+    this.querySelector('[data-bind="dec-buy-dialog"]')?.addEventListener?.('keydown', (event) => {
+      if (event?.key === 'Escape') this.#closeBuyInDialog();
+    });
     const allIn = this.querySelector('[data-bind="dec-all-in"]');
     if (allIn) allIn.addEventListener('click', () => this.#openAllInDialog());
     const claimBtn = this.querySelector('[data-bind="dec-funds-claim"]');
@@ -1045,7 +1395,7 @@ class AppDecimatorPanel extends HTMLElement {
           // Do not let a prior FLIP quote remain painted while the control is
           // visibly back in ETH mode. #renderPurchaseMode immediately replaces
           // this baseline with the value-accurate ETH total.
-          this.#setBuyLabel('Buy in');
+          this.#setBuyLabel('CLICK TO ADD');
         }
         this.#renderPurchaseMode();
       });
@@ -1061,8 +1411,100 @@ class AppDecimatorPanel extends HTMLElement {
         this.#updateTotalLabel();
       });
     }
+    for (const [bind, amount] of [
+      ['dec-ticket-add-entry', 0.25],
+      ['dec-ticket-add-ticket', 1],
+      ['dec-ticket-add-pack', 10],
+    ]) {
+      this.querySelector(`[data-bind="${bind}"]`)?.addEventListener?.('click', () => {
+        const input = this.querySelector('[name="dec-tickets"]');
+        if (!input) return;
+        this.#stepInput(input, 1, amount);
+        this.#updateTotalLabel();
+      });
+    }
+    this.querySelector('[data-bind="dec-ticket-clear"]')?.addEventListener?.('click', () => {
+      const input = this.querySelector('[name="dec-tickets"]');
+      if (input) input.value = '0';
+      this.#clearBoxDraft();
+      const foil = this.querySelector('[data-bind="dec-foil-check"]');
+      if (foil) foil.checked = false;
+      const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
+      foilRow?.classList?.remove('is-selected');
+      foilRow?.setAttribute?.('aria-pressed', 'false');
+      const presale = this.querySelector('[name="dec-presale-box-eth"]');
+      if (presale) presale.value = '0';
+      this.#closeBuilderPopovers({ restoreFocus: false });
+      this.#updateTotalLabel();
+    });
+    for (const [bind, name] of [
+      ['dec-box-add-small', 'dec-box-small'],
+      ['dec-box-add-medium', 'dec-box-medium'],
+      ['dec-box-add-large', 'dec-box-large'],
+    ]) {
+      this.querySelector(`[data-bind="${bind}"]`)?.addEventListener?.('click', () => {
+        this.#stepBoxInput(name, 1);
+      });
+    }
+    const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
+    customToggle?.addEventListener?.('click', () => {
+      this.#customBoxOpen = !this.#customBoxOpen;
+      this.#presaleBoxOpen = false;
+      this.#renderBuilderPopovers();
+      if (this.#customBoxOpen) {
+        try { this.querySelector('[name="dec-box-custom-count"]')?.focus?.({ preventScroll: true }); }
+        catch (_e) { /* focus is progressive enhancement */ }
+      }
+      this.#updateTotalLabel();
+    });
+    for (const close of Array.from(
+      this.querySelectorAll?.('[data-bind="dec-custom-box-close"]') || [],
+    )) {
+      close.addEventListener?.('click', () => this.#closeCustomBoxPopover());
+    }
+    this.querySelector('[data-bind="dec-custom-box-done"]')?.addEventListener?.(
+      'click', () => this.#closeCustomBoxPopover(),
+    );
+    this.querySelector('[data-bind="dec-custom-box-fields"]')?.addEventListener?.(
+      'keydown', (event) => {
+        if (event?.key === 'Escape') this.#closeCustomBoxPopover();
+      },
+    );
+    const presaleToggle = this.querySelector('[data-bind="dec-presale-toggle"]');
+    presaleToggle?.addEventListener?.('click', () => {
+      if (presaleToggle.hidden || presaleToggle.disabled) return;
+      this.#presaleBoxOpen = !this.#presaleBoxOpen;
+      this.#customBoxOpen = false;
+      this.#renderBuilderPopovers();
+      this.#renderPresaleRow();
+      if (this.#presaleBoxOpen) {
+        try { this.querySelector('[name="dec-presale-box-eth"]')?.focus?.({ preventScroll: true }); }
+        catch (_e) { /* focus is progressive enhancement */ }
+      }
+    });
+    for (const close of Array.from(
+      this.querySelectorAll?.('[data-bind="dec-presale-close"]') || [],
+    )) {
+      close.addEventListener?.('click', () => this.#closePresaleBoxPopover());
+    }
+    this.querySelector('[data-bind="dec-presale-done"]')?.addEventListener?.(
+      'click', () => this.#closePresaleBoxPopover(),
+    );
+    this.querySelector('[data-bind="dec-presale-row"]')?.addEventListener?.(
+      'keydown', (event) => {
+        if (event?.key === 'Escape') this.#closePresaleBoxPopover();
+      },
+    );
     // Live total-cost label on the Buy button as quantities change.
-    for (const name of ['dec-tickets', 'dec-lootbox-eth', 'dec-presale-box-eth']) {
+    for (const name of [
+      'dec-tickets',
+      'dec-box-small',
+      'dec-box-medium',
+      'dec-box-large',
+      'dec-box-custom-count',
+      'dec-box-custom-eth',
+      'dec-presale-box-eth',
+    ]) {
       const inp = this.querySelector(`[name="${name}"]`);
       if (inp && typeof inp.addEventListener === 'function') {
         inp.addEventListener('input', () => {
@@ -1071,6 +1513,9 @@ class AppDecimatorPanel extends HTMLElement {
             // presale box therefore exits the optional foil leg explicitly.
             const foil = this.querySelector('[data-bind="dec-foil-check"]');
             if (foil) foil.checked = false;
+            const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
+            foilRow?.classList?.remove('is-selected');
+            foilRow?.setAttribute?.('aria-pressed', 'false');
           }
           this.#updateTotalLabel();
         });
@@ -1083,7 +1528,12 @@ class AppDecimatorPanel extends HTMLElement {
         if (foilCheck.checked) {
           const presale = this.querySelector('[name="dec-presale-box-eth"]');
           if (presale) presale.value = '0';
+          this.#presaleBoxOpen = false;
         }
+        const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
+        foilRow?.classList?.toggle('is-selected', Boolean(foilCheck.checked));
+        foilRow?.setAttribute?.('aria-pressed', String(Boolean(foilCheck.checked)));
+        this.#renderBuilderPopovers();
         this.#updateTotalLabel();
       });
     }
@@ -1097,6 +1547,9 @@ class AppDecimatorPanel extends HTMLElement {
         input.value = formatPurchaseEth(available);
         const foil = this.querySelector('[data-bind="dec-foil-check"]');
         if (foil) foil.checked = false;
+        const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
+        foilRow?.classList?.remove('is-selected');
+        foilRow?.setAttribute?.('aria-pressed', 'false');
         this.#updateTotalLabel();
       });
     }
@@ -1129,6 +1582,273 @@ class AppDecimatorPanel extends HTMLElement {
         this.#updateTotalLabel();
       });
     }
+    const boxSteps = typeof this.querySelectorAll === 'function'
+      ? this.querySelectorAll('.dec-box-step') : [];
+    for (const btn of Array.from(boxSteps)) {
+      if (!btn || typeof btn.addEventListener !== 'function') continue;
+      btn.addEventListener('click', () => {
+        const name = btn.getAttribute?.('data-step-for');
+        const dir = Number(btn.getAttribute?.('data-dir')) || 0;
+        if (name && dir) this.#stepBoxInput(name, dir);
+      });
+    }
+  }
+
+  #buyInDialogFoilAvailable() {
+    if (this.#flipModeEnabled()) return false;
+    const row = this.querySelector('[data-bind="dec-foil-row"]');
+    const check = this.querySelector('[data-bind="dec-foil-check"]');
+    return Boolean(row && !row.hidden && check && !check.disabled);
+  }
+
+  #buyInDialogAmountModel(choice = this.#buyInDialogChoice) {
+    if (choice === 'luckbox') {
+      return {
+        fixed: false,
+        label: 'ETH PER BOX',
+        unit: 'ETH',
+        minimum: 'MIN 0.01',
+        min: 0.01,
+        step: 0.01,
+        initial: '0.01',
+      };
+    }
+    if (choice === 'foil') {
+      return {
+        fixed: true,
+        label: 'FOIL PACK',
+        unit: 'PACK',
+        minimum: 'LIMIT 1',
+        min: 1,
+        step: 1,
+        initial: '1',
+      };
+    }
+    return {
+      fixed: false,
+      label: 'TICKETS',
+      unit: 'TIX',
+      minimum: 'MIN 0.25',
+      min: 0.25,
+      step: 0.25,
+      initial: '1',
+    };
+  }
+
+  #buyInTicketText(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '0';
+    return Number.isInteger(amount)
+      ? String(amount)
+      : String(amount).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  #buyInDialogQuote() {
+    const fail = (message) => ({
+      valid: false,
+      choice: this.#buyInDialogChoice,
+      costLabel: '—',
+      actionLabel: 'SET BUY IN',
+      message,
+    });
+    const choice = this.#buyInDialogChoice;
+    if (choice === 'foil') {
+      if (!this.#buyInDialogFoilAvailable()) return fail('Foil packs are not available right now.');
+      const price = this.#ticketPriceWei();
+      if (price == null || price <= 0n) return fail('Price is still loading.');
+      const costWei = foilPackCostFromPriceWei(price);
+      return {
+        valid: true,
+        choice,
+        foil: true,
+        costWei,
+        costLabel: `${formatPurchaseEth(costWei)} ETH`,
+        actionLabel: 'BUY FOIL PACK',
+        message: '',
+      };
+    }
+
+    const input = this.querySelector('[name="dec-buy-dialog-amount"]');
+    const raw = Number(input?.value ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) return fail('Set an amount.');
+    if (choice === 'luckbox') {
+      let costWei = 0n;
+      try { costWei = BigInt(Math.round(raw * 1e18)) / ETH_DIVISOR; }
+      catch (_e) { costWei = 0n; }
+      if (costWei < LOOTBOX_MIN_WEI) return fail('Custom boxes are at least 0.01 ETH each.');
+      return {
+        valid: true,
+        choice,
+        lootBoxAmountWei: costWei,
+        costWei,
+        costLabel: `${formatPurchaseEth(costWei)} ETH`,
+        actionLabel: 'BUY CUSTOM BOX',
+        message: '',
+      };
+    }
+
+    const tickets = Math.round(raw * ENTRIES_PER_TICKET) / ENTRIES_PER_TICKET;
+    if (tickets < 0.25) return fail('Minimum buy-in is 0.25 ticket.');
+    const count = this.#buyInTicketText(tickets);
+    if (this.#flipModeEnabled()) {
+      const costWei = flipCostFromTickets(tickets);
+      return {
+        valid: true,
+        choice: 'tickets',
+        tickets,
+        costWei,
+        costLabel: `${formatFlip(costWei.toString())} FLIP`,
+        actionLabel: `BURN FOR ${count} ${tickets === 1 ? 'TICKET' : 'TICKETS'}`,
+        message: '',
+      };
+    }
+    const price = this.#ticketPriceWei();
+    if (price == null || price <= 0n) return fail('Price is still loading.');
+    const costWei = ticketCostFromTickets(price, tickets);
+    return {
+      valid: true,
+      choice: 'tickets',
+      tickets,
+      costWei,
+      costLabel: `${formatPurchaseEth(costWei)} ETH`,
+      actionLabel: `BUY ${count} ${tickets === 1 ? 'TICKET' : 'TICKETS'}`,
+      message: '',
+    };
+  }
+
+  #openBuyInDialog(returnFocus = null) {
+    if (this.#busy || this.#buyInDialogOpen || get('ui.mode') !== 'self') return;
+    const dialog = this.querySelector('[data-bind="dec-buy-dialog"]');
+    if (!dialog) return;
+    this.#buyInDialogChoice = 'tickets';
+    this.#buyInDialogReturnFocus = returnFocus || null;
+    const amount = this.querySelector('[name="dec-buy-dialog-amount"]');
+    if (amount) amount.value = this.#buyInDialogAmountModel('tickets').initial;
+    this.#clearError();
+    this.#buyInDialogOpen = true;
+    dialog.hidden = false;
+    dialog.removeAttribute?.('hidden');
+    returnFocus?.setAttribute?.('aria-expanded', 'true');
+    lock();
+    this.#renderBuyInDialog();
+    try {
+      this.querySelector('[data-bind="dec-buy-dialog-tickets"]')?.focus?.({ preventScroll: true });
+    } catch (_e) { /* focus is progressive enhancement */ }
+  }
+
+  #closeBuyInDialog({ restoreFocus = true } = {}) {
+    if (!this.#buyInDialogOpen) return;
+    const dialog = this.querySelector('[data-bind="dec-buy-dialog"]');
+    if (dialog) {
+      dialog.hidden = true;
+      dialog.setAttribute?.('hidden', '');
+    }
+    const returnFocus = this.#buyInDialogReturnFocus;
+    returnFocus?.setAttribute?.('aria-expanded', 'false');
+    this.#buyInDialogOpen = false;
+    this.#buyInDialogReturnFocus = null;
+    unlock();
+    if (restoreFocus) {
+      try { returnFocus?.focus?.({ preventScroll: true }); }
+      catch (_e) { /* focus is progressive enhancement */ }
+    }
+  }
+
+  #selectBuyInDialogChoice(choice) {
+    if (!this.#buyInDialogOpen) return;
+    if (choice === 'luckbox' && this.#flipModeEnabled()) return;
+    if (choice === 'foil' && !this.#buyInDialogFoilAvailable()) return;
+    if (!['tickets', 'luckbox', 'foil'].includes(choice)) return;
+    this.#buyInDialogChoice = choice;
+    const amount = this.querySelector('[name="dec-buy-dialog-amount"]');
+    const model = this.#buyInDialogAmountModel(choice);
+    if (amount) amount.value = model.initial;
+    this.#renderBuyInDialog();
+    try {
+      (model.fixed
+        ? this.querySelector('[data-bind="dec-buy-dialog-confirm"]')
+        : amount)?.focus?.({ preventScroll: true });
+    } catch (_e) { /* focus is progressive enhancement */ }
+  }
+
+  #renderBuyInDialog() {
+    if (!this.#buyInDialogOpen) return;
+    const flipMode = this.#flipModeEnabled();
+    const foilAvailable = this.#buyInDialogFoilAvailable();
+    if ((this.#buyInDialogChoice === 'luckbox' && flipMode)
+      || (this.#buyInDialogChoice === 'foil' && !foilAvailable)) {
+      this.#buyInDialogChoice = 'tickets';
+    }
+
+    const choices = [
+      ['tickets', this.querySelector('[data-bind="dec-buy-dialog-tickets"]'), true],
+      ['luckbox', this.querySelector('[data-bind="dec-buy-dialog-luckbox"]'), !flipMode],
+      ['foil', this.querySelector('[data-bind="dec-buy-dialog-foil"]'), foilAvailable],
+    ];
+    for (const [choice, button, visible] of choices) {
+      if (!button) continue;
+      const selected = this.#buyInDialogChoice === choice;
+      button.hidden = !visible;
+      if (visible) button.removeAttribute?.('hidden');
+      else button.setAttribute?.('hidden', '');
+      button.disabled = !visible;
+      button.classList?.toggle('is-selected', selected);
+      button.setAttribute?.('aria-pressed', String(selected));
+    }
+
+    const model = this.#buyInDialogAmountModel();
+    const amountRow = this.querySelector('[data-bind="dec-buy-dialog-amount-row"]');
+    const amount = this.querySelector('[name="dec-buy-dialog-amount"]');
+    const label = this.querySelector('[data-bind="dec-buy-dialog-amount-label"]');
+    const minimum = this.querySelector('[data-bind="dec-buy-dialog-minimum"]');
+    const unit = this.querySelector('[data-bind="dec-buy-dialog-unit"]');
+    if (amountRow) amountRow.hidden = model.fixed;
+    if (amount) {
+      amount.min = String(model.min);
+      amount.step = String(model.step);
+      amount.setAttribute?.('min', amount.min);
+      amount.setAttribute?.('step', amount.step);
+    }
+    if (label) label.textContent = model.label;
+    if (minimum) minimum.textContent = model.minimum;
+    if (unit) unit.textContent = model.unit;
+
+    const quote = this.#buyInDialogQuote();
+    const quoteEl = this.querySelector('[data-bind="dec-buy-dialog-quote"]');
+    const feedback = this.querySelector('[data-bind="dec-buy-dialog-feedback"]');
+    const confirm = this.querySelector('[data-bind="dec-buy-dialog-confirm"]');
+    if (quoteEl) quoteEl.textContent = quote.costLabel;
+    if (feedback) feedback.textContent = quote.message;
+    if (confirm) {
+      confirm.textContent = quote.actionLabel;
+      confirm.disabled = !quote.valid || this.#busy || get('ui.mode') !== 'self';
+      confirm.classList?.toggle('is-incomplete', !quote.valid);
+    }
+  }
+
+  async #submitBuyInDialog(event) {
+    try { event?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (!this.#buyInDialogOpen || this.#busy || get('ui.mode') !== 'self') return false;
+    const quote = this.#buyInDialogQuote();
+    if (!quote.valid) {
+      this.#renderBuyInDialog();
+      return false;
+    }
+
+    const tickets = this.querySelector('[name="dec-tickets"]');
+    const presale = this.querySelector('[name="dec-presale-box-eth"]');
+    const foil = this.querySelector('[data-bind="dec-foil-check"]');
+    if (tickets) tickets.value = quote.choice === 'tickets' ? String(quote.tickets) : '0';
+    if (quote.choice === 'luckbox') this.#setCustomBoxDraft(quote.lootBoxAmountWei);
+    else this.#clearBoxDraft();
+    if (presale) presale.value = '0';
+    if (foil) foil.checked = quote.choice === 'foil';
+
+    this.#closeBuyInDialog({ restoreFocus: false });
+    this.#updateTotalLabel();
+    return this.#flipModeEnabled()
+      ? this.#onBuyWithFlipClick(event)
+      : this.#onBuyClick(event);
   }
 
   #openAfkingPasses() {
@@ -1265,7 +1985,6 @@ class AppDecimatorPanel extends HTMLElement {
     if (![1, 4, 6, 9].includes(questType)) return false;
 
     const tickets = this.querySelector('[name="dec-tickets"]');
-    const lootbox = this.querySelector('[name="dec-lootbox-eth"]');
     const foil = this.querySelector('[data-bind="dec-foil-check"]');
     const flip = this.querySelector('[data-bind="dec-flip-check"]');
     const price = this.#ticketPriceWei();
@@ -1283,8 +2002,7 @@ class AppDecimatorPanel extends HTMLElement {
         if (amount <= 0n && price != null) amount = price;
         if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
         if (tickets) tickets.value = '0';
-        if (lootbox) lootbox.value = formatPurchaseEth(amount);
-        focus = lootbox;
+        focus = this.#setCustomBoxDraft(amount);
       } else {
         // Ticket choice: express the raw spend target as quarter-ticket entries.
         let wanted = 1;
@@ -1293,7 +2011,7 @@ class AppDecimatorPanel extends HTMLElement {
           wanted = Math.max(0.25, Number(entries) / ENTRIES_PER_TICKET);
         }
         if (tickets) tickets.value = String(wanted);
-        if (lootbox) lootbox.value = '0';
+        this.#clearBoxDraft();
       }
       if (foil) foil.checked = false;
       if (flip) flip.checked = false;
@@ -1305,14 +2023,13 @@ class AppDecimatorPanel extends HTMLElement {
       if (amount <= 0n && price != null) amount = price * 2n;
       if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
       if (tickets) tickets.value = '0';
-      if (lootbox) lootbox.value = formatPurchaseEth(amount);
+      focus = this.#setCustomBoxDraft(amount);
       if (foil) foil.checked = false;
       if (flip) flip.checked = false;
       this.#renderPurchaseMode();
-      focus = lootbox;
     } else if (questType === 4) {
       if (tickets) tickets.value = '0';
-      if (lootbox) lootbox.value = '0';
+      this.#clearBoxDraft();
       if (flip) flip.checked = false;
       this.#renderPurchaseMode();
       await this.#refreshFoilStatus();
@@ -1330,7 +2047,7 @@ class AppDecimatorPanel extends HTMLElement {
       } else if (tickets && (!Number.isFinite(current) || current <= 0)) {
         tickets.value = '1';
       }
-      if (lootbox) lootbox.value = '0';
+      this.#clearBoxDraft();
       if (foil) foil.checked = false;
       if (flip) flip.checked = this.#flipBuyOpen;
       ready = Boolean(flip?.checked);
@@ -1424,6 +2141,168 @@ class AppDecimatorPanel extends HTMLElement {
     input.value = String(Math.round(next * 1e6) / 1e6);
   }
 
+  #boxCountValue(name) {
+    const raw = this.querySelector(`[name="${name}"]`)?.value;
+    if (raw == null || String(raw).trim() === '') return 0;
+    return Number(raw);
+  }
+
+  #boxSelection() {
+    return {
+      small: this.#boxCountValue('dec-box-small'),
+      medium: this.#boxCountValue('dec-box-medium'),
+      large: this.#boxCountValue('dec-box-large'),
+      customCount: this.#boxCountValue('dec-box-custom-count'),
+      customSizeWei: this.#ethInputWei('dec-box-custom-eth'),
+    };
+  }
+
+  #boxDraft(priceWei = this.#ticketPriceWei()) {
+    const selection = this.#boxSelection();
+    const counts = [selection.small, selection.medium, selection.large, selection.customCount];
+    const hasInput = counts.some((count) => !Number.isFinite(count) || count !== 0);
+    const totalBoxes = counts.reduce(
+      (total, count) => total + (Number.isInteger(count) && count > 0 ? count : 0),
+      0,
+    );
+    try {
+      const order = packBoxOrder(selection);
+      const presetCount = selection.small + selection.medium + selection.large;
+      const quotedPrice = priceWei == null ? 0n : BigInt(priceWei);
+      const pricePending = order > 0n && presetCount > 0 && quotedPrice <= 0n;
+      return {
+        selection,
+        hasInput,
+        totalBoxes,
+        order,
+        costWei: boxOrderCostFromPriceWei(quotedPrice, order),
+        pricePending,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        selection,
+        hasInput,
+        totalBoxes,
+        order: 0n,
+        costWei: 0n,
+        pricePending: false,
+        error: error?.message || 'Check the box quantities and custom size.',
+      };
+    }
+  }
+
+  #stepBoxInput(name, dir) {
+    const input = this.querySelector(`[name="${name}"]`);
+    if (!input || input.disabled) return;
+    const names = [
+      'dec-box-small',
+      'dec-box-medium',
+      'dec-box-large',
+      'dec-box-custom-count',
+    ];
+    let current = Number(input.value ?? 0);
+    if (!Number.isInteger(current) || current < 0) current = 0;
+    const others = names
+      .filter((candidate) => candidate !== name)
+      .reduce((total, candidate) => {
+        const count = this.#boxCountValue(candidate);
+        return total + (Number.isInteger(count) && count > 0 ? count : 0);
+      }, 0);
+    const ceiling = Math.max(0, BOX_ORDER_MAX_BOXES - others);
+    input.value = String(Math.min(ceiling, Math.max(0, current + Math.sign(dir))));
+    if (name === 'dec-box-custom-count' && Number(input.value) > 0) {
+      this.#customBoxOpen = true;
+    }
+    this.#updateTotalLabel();
+  }
+
+  #setCustomBoxDraft(amountWei = 0n) {
+    for (const name of ['dec-box-small', 'dec-box-medium', 'dec-box-large']) {
+      const input = this.querySelector(`[name="${name}"]`);
+      if (input) input.value = '0';
+    }
+    const count = this.querySelector('[name="dec-box-custom-count"]');
+    const size = this.querySelector('[name="dec-box-custom-eth"]');
+    const amount = BigInt(amountWei ?? 0n);
+    if (count) count.value = amount > 0n ? '1' : '0';
+    if (size && amount > 0n) size.value = formatPurchaseEth(amount);
+    this.#customBoxOpen = amount > 0n;
+    return size;
+  }
+
+  #clearBoxDraft() {
+    for (const name of [
+      'dec-box-small',
+      'dec-box-medium',
+      'dec-box-large',
+      'dec-box-custom-count',
+    ]) {
+      const input = this.querySelector(`[name="${name}"]`);
+      if (input) input.value = '0';
+    }
+    const customSize = this.querySelector('[name="dec-box-custom-eth"]');
+    if (customSize) customSize.value = '0.01';
+    this.#customBoxOpen = false;
+  }
+
+  #renderBoxDraft(draft = this.#boxDraft()) {
+    const { selection, totalBoxes, costWei, pricePending, error } = draft;
+    const group = this.querySelector('[data-bind="dec-lootbox-group"]');
+    group?.classList?.toggle('has-selection', totalBoxes > 0);
+    group?.classList?.toggle('has-error', Boolean(error));
+
+    for (const [tier, count] of [
+      ['small', selection.small],
+      ['medium', selection.medium],
+      ['large', selection.large],
+    ]) {
+      this.querySelector(`.dec-box-card--${tier}`)?.classList?.toggle(
+        'is-selected',
+        Number.isInteger(count) && count > 0,
+      );
+    }
+
+    const customSelected = Number.isInteger(selection.customCount) && selection.customCount > 0;
+    const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
+    customToggle?.classList?.toggle('is-selected', customSelected);
+    customToggle?.setAttribute?.('aria-expanded', String(this.#customBoxOpen));
+    const customFields = this.querySelector('[data-bind="dec-custom-box-fields"]');
+    if (customFields) {
+      customFields.hidden = !this.#customBoxOpen;
+      if (this.#customBoxOpen) customFields.removeAttribute?.('hidden');
+      else customFields.setAttribute?.('hidden', '');
+    }
+
+    for (const name of [
+      'dec-box-small',
+      'dec-box-medium',
+      'dec-box-large',
+      'dec-box-custom-count',
+      'dec-box-custom-eth',
+    ]) {
+      const input = this.querySelector(`[name="${name}"]`);
+      if (!input) continue;
+      if (error) input.setAttribute?.('aria-invalid', 'true');
+      else input.removeAttribute?.('aria-invalid');
+    }
+
+    const summary = this.querySelector('[data-bind="dec-box-summary"]');
+    if (!summary) return;
+    summary.classList?.toggle('is-error', Boolean(error));
+    if (error) {
+      summary.textContent = error;
+    } else if (totalBoxes === 0) {
+      summary.textContent = 'Choose any mix of boxes.';
+    } else if (pricePending) {
+      summary.textContent = `${totalBoxes} ${totalBoxes === 1 ? 'box' : 'boxes'} selected · price loading`;
+    } else {
+      let cost = '';
+      try { cost = formatPurchaseEth(costWei); } catch (_e) { cost = ''; }
+      summary.textContent = `${totalBoxes} ${totalBoxes === 1 ? 'box' : 'boxes'} · ${cost || '—'} ETH`;
+    }
+  }
+
   // Total purchase cost = tickets + lootbox + optional foil. The action and its
   // amount use separate lines so long quotes do not squeeze the button.
   // Skipped while #busy (the click handler owns its pending label then).
@@ -1436,6 +2315,14 @@ class AppDecimatorPanel extends HTMLElement {
     return Math.round(t * ENTRIES_PER_TICKET) / ENTRIES_PER_TICKET;
   }
 
+  #hasBuySelection() {
+    if (this.#ticketsWanted() > 0) return true;
+    if (this.#flipModeEnabled()) return false;
+    return this.#boxDraft().hasInput
+      || this.#presaleWantedWei() > 0n
+      || this.#foilWanted();
+  }
+
   #ethInputWei(name) {
     const raw = this.querySelector(`[name="${name}"]`)?.value ?? '0';
     const amount = Number(raw);
@@ -1445,8 +2332,8 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #draftMintCostWei() {
-    let total = this.#ethInputWei('dec-lootbox-eth');
     const price = this.#ticketPriceWei();
+    let total = this.#boxDraft(price).costWei;
     const tickets = this.#ticketsWanted();
     if (price != null && tickets > 0) total += ticketCostFromTickets(price, tickets);
     return total;
@@ -1727,10 +2614,11 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderPresaleRow(mintCostWei = this.#draftMintCostWei()) {
     const row = this.querySelector('[data-bind="dec-presale-row"]');
+    const toggle = this.querySelector('[data-bind="dec-presale-toggle"]');
     const input = this.querySelector('[name="dec-presale-box-eth"]');
     const availableEl = this.querySelector('[data-bind="dec-presale-available"]');
     const maxButton = this.querySelector('[data-bind="dec-presale-max"]');
-    if (!row || !input || !availableEl || !maxButton) return;
+    if (!row || !toggle || !input || !availableEl || !maxButton) return;
 
     const buyer = getActingAddress();
     const buyerKey = buyer ? String(buyer).toLowerCase() : null;
@@ -1750,10 +2638,15 @@ class AppDecimatorPanel extends HTMLElement {
     // until the player has enough current or same-purchase credit to buy the
     // contract's minimum box.
     const visible = live && !foilSelected && !flipMode && available >= PRESALE_BOX_MIN_WEI;
-    row.hidden = !visible;
-    if (row.hidden) row.setAttribute?.('hidden', '');
-    else row.removeAttribute?.('hidden');
+    toggle.hidden = !visible;
+    if (toggle.hidden) toggle.setAttribute?.('hidden', '');
+    else toggle.removeAttribute?.('hidden');
     if (!visible) {
+      this.#presaleBoxOpen = false;
+      toggle.setAttribute?.('aria-expanded', 'false');
+      toggle.classList?.remove('has-selection');
+      row.hidden = true;
+      row.setAttribute?.('hidden', '');
       if (foilSelected || flipMode || (live && available < PRESALE_BOX_MIN_WEI)) input.value = '0';
       if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
         input.value = '0';
@@ -1767,6 +2660,11 @@ class AppDecimatorPanel extends HTMLElement {
     input.disabled = false;
     maxButton.disabled = available < PRESALE_BOX_MIN_WEI;
     const wanted = this.#presaleWantedWei();
+    toggle.classList?.toggle('has-selection', wanted > 0n);
+    toggle.setAttribute?.('aria-expanded', String(this.#presaleBoxOpen));
+    row.hidden = !this.#presaleBoxOpen;
+    if (row.hidden) row.setAttribute?.('hidden', '');
+    else row.removeAttribute?.('hidden');
     row.classList?.toggle('dec-presale--selected', wanted > 0n);
     row.classList?.toggle('dec-presale--over-limit', wanted > available);
   }
@@ -1797,7 +2695,7 @@ class AppDecimatorPanel extends HTMLElement {
     const actionEl = this.querySelector('[data-bind="dec-buy-cta-action"]');
     const amountEl = this.querySelector('[data-bind="dec-buy-cta-amount"]');
     if (!btn || !actionEl || !amountEl) return;
-    const actionText = String(action || 'Buy in');
+    const actionText = String(action || 'CLICK TO ADD');
     const amountText = String(amount || '');
     actionEl.textContent = actionText;
     amountEl.textContent = amountText;
@@ -1812,6 +2710,9 @@ class AppDecimatorPanel extends HTMLElement {
     // Tickets are divisible to the entry (0.25), so parseFloat — parseInt threw
     // away the fraction and quoted the wrong number.
     const tq = this.#ticketsWanted();
+    const priceWei = this.#ticketPriceWei();
+    const boxDraft = this.#boxDraft(priceWei);
+    this.#renderBoxDraft(boxDraft);
     if (this.#flipModeEnabled()) {
       // FLIP is tickets-only. Run the presale renderer before this branch's
       // early return so switching payment modes cannot leave the ETH-only row
@@ -1835,15 +2736,10 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderFlipCredit(null);
       return;
     }
-    const boxFloat = Number(this.querySelector('[name="dec-lootbox-eth"]')?.value ?? '0') || 0;
     let totalWei = 0n;
-    let mintCostWei = 0n;
+    let mintCostWei = boxDraft.costWei;
     let foilCostWei = 0n;
-    const priceWei = this.#ticketPriceWei();
     if (priceWei != null && tq > 0) mintCostWei += ticketCostFromTickets(priceWei, tq);
-    if (boxFloat > 0) {
-      try { mintCostWei += BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR; } catch (_e) { /* skip */ }
-    }
     this.#renderPresaleRow(mintCostWei);
     const presaleCostWei = this.#presaleWantedWei();
     totalWei = mintCostWei;
@@ -1857,20 +2753,23 @@ class AppDecimatorPanel extends HTMLElement {
     if (totalWei > 0n) {
       try { amount = `${formatPurchaseEth(totalWei)} ETH`; } catch (_e) { amount = ''; }
     }
-    const hasPrimaryDraft = tq > 0 || boxFloat > 0 || this.#foilWanted();
-    const action = presaleCostWei > 0n
-      ? (hasPrimaryDraft ? 'Buy in + presale box' : 'Buy presale box')
-      : 'Buy in';
+    const action = totalWei > 0n ? 'BUY IN ·' : 'CLICK TO ADD';
     this.#setBuyLabel(action, amount);
     const recordBountyWei = purchaseRecordBountyWei({
       state: get('app.records'),
       tickets: tq,
-      luckboxWei: this.#ethInputWei('dec-lootbox-eth'),
+      // The packed-order contract arms Biggest Luckbox only for a custom
+      // tier, using the size of one custom box (never the whole order).
+      luckboxWei: boxDraft.error || boxDraft.selection.customCount <= 0
+        ? 0n
+        : boxDraft.selection.customSizeWei,
       today: Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null,
     });
     this.#renderFlipCredit({
       tickets: tq,
-      luckboxWei: this.#ethInputWei('dec-lootbox-eth'),
+      // Boon previews use the whole box spend; the record preview above uses
+      // one custom box because those two protocol rules intentionally differ.
+      luckboxWei: boxDraft.costWei,
       priceWei,
       totalCostWei: totalWei,
       mintCostWei,
@@ -1882,6 +2781,7 @@ class AppDecimatorPanel extends HTMLElement {
       useAfking: this.#useAfking,
       bountyWei: recordBountyWei ?? 0n,
     });
+    if (this.#buyInDialogOpen) this.#renderBuyInDialog();
   }
 
   #renderBountyTriggers() {
@@ -1898,10 +2798,14 @@ class AppDecimatorPanel extends HTMLElement {
       RECORD_KIND_BUY,
       ticketCandidate,
     );
+    const boxDraft = this.#boxDraft();
+    const customCandidateWei = boxDraft.error || boxDraft.selection.customCount <= 0
+      ? 0n
+      : boxDraft.selection.customSizeWei;
     const luckboxClaims = ethPurchase && candidateClaimsRecord(
       state,
       RECORD_KIND_LUCKBOX,
-      this.#ethInputWei('dec-lootbox-eth'),
+      customCandidateWei,
     );
 
     const paint = (input, group, active, description) => {
@@ -1923,10 +2827,10 @@ class AppDecimatorPanel extends HTMLElement {
       'This manual ETH ticket buy reaches the live Biggest Degen bounty target.',
     );
     paint(
-      this.querySelector('[name="dec-lootbox-eth"]'),
+      this.querySelector('[name="dec-box-custom-eth"]'),
       this.querySelector('.dec-input-group--lootbox'),
       luckboxClaims,
-      'This deposit reaches the live Biggest Luckbox bounty target.',
+      'This custom box reaches the live Biggest Luckbox bounty target.',
     );
   }
 
@@ -1955,7 +2859,6 @@ class AppDecimatorPanel extends HTMLElement {
     const bounty = parts?.bounty ?? 0n;
     const includesBounty = bounty > 0n;
     const label = this.querySelector('[data-bind="dec-flip-credit-label"]');
-    if (label) label.textContent = includesBounty ? 'BONUS + BOUNTY' : 'BONUS';
     box.classList?.toggle('dec-flip-credit--bounty', includesBounty);
     if (includesBounty) {
       box.setAttribute('data-includes-bounty', 'true');
@@ -1967,20 +2870,31 @@ class AppDecimatorPanel extends HTMLElement {
       box.removeAttribute('data-includes-bounty');
       box.removeAttribute('title');
     }
-    const show = Boolean(
+    const active = Boolean(
       args
       && args.priceWei != null
       && args.totalCostWei > 0n
       && parts
       && (parts.total > 0n || boonEffects.length > 0)
     );
-    box.hidden = !show;
-    if (!show) {
-      box.removeAttribute('aria-label');
+    box.hidden = false;
+    box.removeAttribute?.('hidden');
+    box.classList?.toggle('is-idle', !active);
+    const total = this.querySelector('[data-bind="dec-flip-credit-total"]');
+    if (!active) {
+      if (label) label.textContent = 'PLAY TO EARN';
+      if (total) {
+        total.textContent = 'BONUS FLIP';
+        total.classList?.remove('is-zero');
+      }
+      box.classList?.remove('dec-flip-credit--bounty');
+      box.removeAttribute('data-includes-bounty');
+      box.removeAttribute('title');
+      box.setAttribute('aria-label', 'Play to earn bonus FLIP with tickets.');
       return;
     }
 
-    const total = this.querySelector('[data-bind="dec-flip-credit-total"]');
+    if (label) label.textContent = includesBounty ? 'BONUS + BOUNTY' : 'BONUS';
     if (!total) return;
     total.textContent = `+${formatPurchaseBonusFlip(parts.total)} FLIP`;
     total.classList?.toggle('is-zero', parts.total === 0n);
@@ -2384,10 +3298,13 @@ class AppDecimatorPanel extends HTMLElement {
         try { text = `${formatPurchaseEth(foilPackCostFromPriceWei(priceWei))} ETH`; } catch (_e) { text = '—'; }
       }
       priceEl.textContent = text;
+      row.setAttribute?.('aria-label', `Toggle one foil pack, limit one${text === '—' ? '' : `, ${text}`}`);
     }
     if (check) {
       check.disabled = !available || flipMode;
       if (!available || flipMode) check.checked = false;
+      row.classList?.toggle('is-selected', Boolean(check.checked));
+      row.setAttribute?.('aria-pressed', String(Boolean(check.checked)));
     }
     // redeemFlip is a tickets-only route. Hiding the incompatible add-on is
     // clearer than leaving a disabled foil control in the FLIP draft; it is
@@ -2458,25 +3375,44 @@ class AppDecimatorPanel extends HTMLElement {
     if (ticketLabel) ticketLabel.textContent = flipMode ? 'Burn for tickets' : 'Buy tickets';
     const ticketBoon = this.querySelector('[data-bind="dec-ticket-boon"]');
     if (ticketBoon) {
-      ticketBoon.hidden = flipMode;
-      if (flipMode) ticketBoon.setAttribute?.('suppressed', '');
-      else ticketBoon.removeAttribute?.('suppressed');
+      // The marker owns its own visibility — it hides itself whenever no boon
+      // is live. Never un-hide it from here: this method runs on every poll
+      // cycle (via #renderFlipBuyRow), so `hidden = flipMode` painted a bare
+      // boon arrow beside the ticket input on every cycle, which then vanished
+      // at the next app.boons publish. Suppression is the one-way signal; its
+      // removal re-renders the element, which decides for itself.
+      if (flipMode) {
+        ticketBoon.hidden = true;
+        ticketBoon.setAttribute?.('suppressed', '');
+      } else {
+        ticketBoon.removeAttribute?.('suppressed');
+      }
     }
     const buyRow = this.querySelector('.dec-buy-row');
     if (buyRow?.classList) buyRow.classList.toggle('dec-buy-row--flip', flipMode);
     const lootboxGroup = this.querySelector('[data-bind="dec-lootbox-group"]');
-    const lootboxInput = this.querySelector('[name="dec-lootbox-eth"]');
     if (lootboxGroup) {
       lootboxGroup.hidden = flipMode;
       lootboxGroup.classList?.toggle('dec-input-group--disabled', flipMode);
     }
-    if (lootboxInput) {
-      lootboxInput.disabled = flipMode;
-      if (flipMode) lootboxInput.value = '0';
+    if (flipMode) this.#clearBoxDraft();
+    for (const name of [
+      'dec-box-small',
+      'dec-box-medium',
+      'dec-box-large',
+      'dec-box-custom-count',
+      'dec-box-custom-eth',
+    ]) {
+      const input = this.querySelector(`[name="${name}"]`);
+      if (input) input.disabled = flipMode;
     }
-    for (const step of Array.from(this.querySelectorAll?.('.dec-step') || [])) {
-      if (step.getAttribute?.('data-step-for') === 'dec-lootbox-eth') step.disabled = flipMode;
+    for (const selector of ['.dec-box-step', '.dec-box-card__add']) {
+      for (const control of Array.from(this.querySelectorAll?.(selector) || [])) {
+        control.disabled = flipMode;
+      }
     }
+    const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
+    if (customToggle) customToggle.disabled = flipMode;
 
     const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
     const foilCheck = this.querySelector('[data-bind="dec-foil-check"]');
@@ -2915,9 +3851,16 @@ class AppDecimatorPanel extends HTMLElement {
     // amounts. Programmatic quest/all-in buys deliberately bypass this helper
     // so their temporary values cannot erase a player's normal draft.
     const tickets = this.querySelector('[name="dec-tickets"]');
-    const luckbox = this.querySelector('[name="dec-lootbox-eth"]');
     if (tickets) tickets.value = '0';
-    if (luckbox) luckbox.value = '0';
+    this.#clearBoxDraft();
+    const foil = this.querySelector('[data-bind="dec-foil-check"]');
+    if (foil) foil.checked = false;
+    const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
+    foilRow?.classList?.remove('is-selected');
+    foilRow?.setAttribute?.('aria-pressed', 'false');
+    const presale = this.querySelector('[name="dec-presale-box-eth"]');
+    if (presale) presale.value = '0';
+    this.#closeBuilderPopovers({ restoreFocus: false });
   }
 
   async #onBuyWithFlipClick(e, options = {}) {
@@ -3049,6 +3992,8 @@ class AppDecimatorPanel extends HTMLElement {
     // summary immediately; the merged payload updates live as polling.js's
     // combined-mode cycle refreshes.
     const u3 = subscribe('ui.mode', () => {
+      if (get('ui.mode') !== 'self') this.#closeBuyInDialog({ restoreFocus: false });
+      else if (this.#buyInDialogOpen) this.#renderBuyInDialog();
       this.#renderCombinedSummary();
       this.#renderAfkingShortcut();
       this.#runPollCycle();
@@ -3136,28 +4081,41 @@ class AppDecimatorPanel extends HTMLElement {
     const priceEl = this.querySelector('[data-bind="dec-price"]');
     if (!priceEl) return;
     const priceWei = this.#ticketPriceWei();
-    let priceText = 'Price - —';
+    const targetLevel = this.#targetLevel();
+    const levelText = targetLevel == null ? 'LEVEL —' : `LEVEL ${targetLevel}`;
+    let priceText = `${levelText} · 1 TICKET = —`;
     if (this.#flipModeEnabled()) {
       try {
         const price = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
-        priceText = `Price - ${price}`;
-      } catch (_e) { priceText = 'Price - —'; }
+        priceText = `${levelText} · 1 TICKET = ${price}`;
+      } catch (_e) { priceText = `${levelText} · 1 TICKET = —`; }
     } else if (priceWei != null) {
       try {
         const price = `${formatPurchaseEth(priceWei)} ETH`;
-        priceText = `Price - ${price}`;
-      } catch (_e) { priceText = 'Price - —'; }
+        priceText = `${levelText} · 1 TICKET = ${price}`;
+      } catch (_e) { priceText = `${levelText} · 1 TICKET = —`; }
     }
     priceEl.textContent = priceText;
-    // The lootbox is a variable-size ETH leg. One arrow press should add or
-    // remove the same ETH amount as one ticket at the currently routed level.
-    const lootboxInput = this.querySelector('[name="dec-lootbox-eth"]');
-    if (lootboxInput && priceWei != null) {
-      try {
-        const step = formatPurchaseEth(priceWei);
-        lootboxInput.step = step;
-        lootboxInput.setAttribute?.('step', step);
-      } catch (_e) { /* retain the safe 0.01 shell default */ }
+    for (const bind of ['dec-pack-level', 'dec-foil-level']) {
+      const level = this.querySelector(`[data-bind="${bind}"]`);
+      if (level) level.textContent = levelText;
+    }
+    // Preset cards show the exact 1x / 5x / 25x ABI tier prices. The contract
+    // freezes those prices for a player's active box period; the static call
+    // remains authoritative if an older frozen order crosses a level change.
+    for (const [bind, multiple] of [
+      ['dec-box-price-small', 1n],
+      ['dec-box-price-medium', BOX_ORDER_MEDIUM_MULTIPLE],
+      ['dec-box-price-large', BOX_ORDER_LARGE_MULTIPLE],
+    ]) {
+      const label = this.querySelector(`[data-bind="${bind}"]`);
+      if (!label) continue;
+      if (priceWei == null) {
+        label.textContent = `${multiple}× PRICE`;
+        continue;
+      }
+      try { label.textContent = `${formatPurchaseEth(priceWei * multiple)} ETH`; }
+      catch (_e) { label.textContent = `${multiple}× PRICE`; }
     }
     this.#renderFundsFooter();
     // Price is now known — refresh the Buy button's total-cost label.
@@ -3201,24 +4159,37 @@ class AppDecimatorPanel extends HTMLElement {
       const ticketQuantity = questPurchase?.ticketQuantity == null
         ? this.#ticketsWanted()
         : Number(questPurchase.ticketQuantity);
-      // Lootbox leg: a single ETH value (no per-box price). Convert the
-      // input float to full-scale wei, then /1M-descale to the deployed
-      // contract's wei scale (ETH_DIVISOR; 1n on mainnet) — same shape as
-      // app-degenerette-panel's ETH amount handling.
-      const boxInput = this.querySelector('[name="dec-lootbox-eth"]');
-      // Missing/empty value reads as 0 (fakeDOM inputs have no .value until
-      // assigned; browsers give '' for a cleared number input).
-      const boxRaw = boxInput == null || boxInput.value == null
-        || String(boxInput.value).trim() === '' ? '0' : String(boxInput.value);
-      const boxFloat = Number(boxRaw);
-      if (questPurchase == null && (!Number.isFinite(boxFloat) || boxFloat < 0)) {
-        return rejectPurchase('Luckbox ETH must be 0 or at least 0.01.');
-      }
-      const lootBoxAmountWei = questPurchase?.lootBoxAmountWei == null
-        ? (boxFloat > 0 ? BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR : 0n)
-        : BigInt(questPurchase.lootBoxAmountWei);
-      if (lootBoxAmountWei > 0n && lootBoxAmountWei < LOOTBOX_MIN_WEI) {
-        return rejectPurchase('Minimum luckbox spend is 0.01 ETH.');
+      // The current ABI accepts one packed order, not a raw ETH amount. The
+      // visual form owns four quantities; legacy quest/all-in callers that
+      // still provide lootBoxAmountWei become one custom box so those flows
+      // stay exact while they migrate.
+      let boxOrder = 0n;
+      let boxCostWei = 0n;
+      try {
+        if (questPurchase == null) {
+          const draft = this.#boxDraft(this.#ticketPriceWei());
+          if (draft.error) return rejectPurchase(draft.error);
+          boxOrder = draft.order;
+          boxCostWei = draft.costWei;
+        } else if (questPurchase.boxSelection != null) {
+          boxOrder = packBoxOrder(questPurchase.boxSelection);
+          boxCostWei = questPurchase.boxCostWei == null
+            ? boxOrderCostFromPriceWei(this.#ticketPriceWei() ?? 0n, boxOrder)
+            : BigInt(questPurchase.boxCostWei);
+        } else if (questPurchase.boxOrder != null) {
+          boxOrder = BigInt(questPurchase.boxOrder);
+          boxCostWei = questPurchase.boxCostWei == null
+            ? boxOrderCostFromPriceWei(this.#ticketPriceWei() ?? 0n, boxOrder)
+            : BigInt(questPurchase.boxCostWei);
+        } else {
+          const legacySizeWei = BigInt(questPurchase.lootBoxAmountWei ?? 0n);
+          if (legacySizeWei > 0n) {
+            boxOrder = packBoxOrder({ customCount: 1, customSizeWei: legacySizeWei });
+            boxCostWei = legacySizeWei;
+          }
+        }
+      } catch (error) {
+        return rejectPurchase(error?.message || 'Check the Luckbox order.');
       }
       const presaleInput = this.querySelector('[name="dec-presale-box-eth"]');
       const presaleRaw = presaleInput == null || presaleInput.value == null
@@ -3239,9 +4210,9 @@ class AppDecimatorPanel extends HTMLElement {
       if (foilWanted && presaleBoxAmountWei > 0n) {
         return rejectPurchase('Buy the foil pack separately from a presale box.');
       }
-      if (ticketQuantity < 0 || (ticketQuantity <= 0 && lootBoxAmountWei <= 0n
+      if (ticketQuantity < 0 || (ticketQuantity <= 0 && boxOrder <= 0n
         && presaleBoxAmountWei <= 0n && !foilWanted)) {
-        return rejectPurchase('Enter tickets, a luckbox amount, a presale box amount, or select the foil pack.');
+        return rejectPurchase('Add tickets or Luckboxes, enter a presale box amount, or select the foil pack.');
       }
 
       // Match lootbox.js's actual write target (self or the owner selected in
@@ -3251,17 +4222,13 @@ class AppDecimatorPanel extends HTMLElement {
       const affiliateCode = readAffiliateCode(CHAIN.id, buyer);
       let purchaseTicketPriceWei = this.#ticketPriceWei();
 
-      // Phase 64: the funding helper needs the exact total cost before it can
-      // spend claimable first and send only the wallet shortfall. Price comes
-      // from /game/state level + phase. The lootbox leg
-      // rides the SAME purchase() tx — its ETH value adds to the total
-      // (user ask: buy lootboxes at the same time as tickets). The foil leg
-      // (ten ticket prices, one per level) prices from the SAME fresh
-      // snapshot — a level flip between quote and click would otherwise
-      // quote the wrong claimable/wallet split.
+      // Funding needs one fresh routed price for tickets, preset boxes, and
+      // foil. Custom box sizes are already encoded in the order, but they use
+      // the same purchase and payment waterfall.
       let ticketCostWei = 0n;
       let foilCostWei = 0n;
-      if (ticketQuantity > 0 || foilWanted) {
+      const hasPresetBoxes = (boxOrder & 0xFFFFFFn) !== 0n;
+      if (ticketQuantity > 0 || boxOrder > 0n || foilWanted) {
         // Codex finding: a cached /game/state can cross a phase/level
         // boundary between polls — underpay silently pulls afking credit,
         // overpay silently credits it (no revert to save us). Refetch at
@@ -3278,7 +4245,7 @@ class AppDecimatorPanel extends HTMLElement {
         // the exact contract static-call with this level/value, which is both
         // fresher and authoritative.
         purchaseTicketPriceWei = this.#ticketPriceWei();
-        if (purchaseTicketPriceWei == null) {
+        if (purchaseTicketPriceWei == null && (ticketQuantity > 0 || hasPresetBoxes || foilWanted)) {
           return rejectPurchase('Ticket price unavailable — try again in a moment.');
         }
         // Exactly what the contract charges: priceWei * entryQuantityScaled /
@@ -3290,9 +4257,15 @@ class AppDecimatorPanel extends HTMLElement {
         if (foilWanted) {
           foilCostWei = foilPackCostFromPriceWei(purchaseTicketPriceWei);
         }
+        if (boxOrder > 0n) {
+          boxCostWei = boxOrderCostFromPriceWei(purchaseTicketPriceWei ?? 0n, boxOrder);
+          if (boxCostWei <= 0n) {
+            return rejectPurchase('Luckbox price unavailable — try again in a moment.');
+          }
+        }
       }
 
-      const mintCostWei = ticketCostWei + lootBoxAmountWei;
+      const mintCostWei = ticketCostWei + boxCostWei;
       if (presaleBoxAmountWei > 0n) {
         let livePresale = null;
         try { livePresale = await readPresaleBoxState({ player: buyer }); }
@@ -3312,8 +4285,12 @@ class AppDecimatorPanel extends HTMLElement {
         }
       }
 
-      const hasMintPurchase = ticketQuantity > 0 || lootBoxAmountWei > 0n || foilWanted;
-      const hasRngBoxPurchase = lootBoxAmountWei > 0n || presaleBoxAmountWei > 0n;
+      // Keep the aggregate amount under the legacy event key while pending
+      // consumers migrate; new consumers also receive the packed order and
+      // explicitly named cost.
+      const lootBoxAmountWei = boxCostWei;
+      const hasMintPurchase = ticketQuantity > 0 || boxOrder > 0n || foilWanted;
+      const hasRngBoxPurchase = boxOrder > 0n || presaleBoxAmountWei > 0n;
       const onSubmitted = hasRngBoxPurchase
         ? (tx) => {
             submittedLootboxHash = String(tx?.hash || `local-${Date.now()}`).toLowerCase();
@@ -3323,6 +4300,8 @@ class AppDecimatorPanel extends HTMLElement {
                 detail: {
                   player: buyer,
                   transactionHash: submittedLootboxHash,
+                  boxOrder,
+                  boxCostWei,
                   lootBoxAmountWei,
                   presaleBoxAmountWei,
                   ticketPriceWei: purchaseTicketPriceWei,
@@ -3341,7 +4320,7 @@ class AppDecimatorPanel extends HTMLElement {
             onSubmitted,
           })
         : await purchaseEth({
-            ticketQuantity, lootboxQuantity: 0, affiliateCode, ticketCostWei, lootBoxAmountWei,
+            ticketQuantity, boxOrder, boxCostWei, affiliateCode, ticketCostWei,
             foil: foilWanted, foilCostWei, presaleBoxAmountWei,
             preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
             useAfking: questPurchase?.useAfking ?? this.#useAfking,
@@ -3397,6 +4376,8 @@ class AppDecimatorPanel extends HTMLElement {
         this.dispatchEvent(new CustomEvent('app-decimator:tx-confirmed', {
           detail: {
             ticketQuantity,
+            boxOrder,
+            boxCostWei,
             lootBoxAmountWei,
             presaleBoxAmountWei,
             ticketPriceWei: purchaseTicketPriceWei,

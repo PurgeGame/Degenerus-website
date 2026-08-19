@@ -392,6 +392,25 @@ function _luckboxUiText(value) {
   });
 }
 
+export function bingoPendingSummary(item) {
+  const source = _luckboxUiText(item?.label || '').trim();
+  const level = /\blevel\s+(\d+)\b/i.exec(source)?.[1];
+  const levelText = level ? `L${level}` : 'L—';
+  const trait = source
+    .replace(/\blevel\s+\d+\b/i, '')
+    .replace(/\bbingo\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase() || 'TRAIT';
+  return {
+    level: level == null ? null : Number(level),
+    levelText,
+    trait,
+    label: `BINGO\n${levelText} ${trait}`,
+    text: `BINGO ${levelText} ${trait}`,
+  };
+}
+
 function _compactActionLabel(item) {
   const label = _luckboxUiText(item?.label || _kindLabel(item?.kind)).trim();
   if (item?.kind === 'tickets') {
@@ -418,7 +437,7 @@ function _compactActionLabel(item) {
     return `WHALE PASS${count ? ` · ${count}` : ''}`;
   }
   if (item?.kind === 'bingo') {
-    return label.replace(/^level\s+\d+\s+/i, '').toUpperCase();
+    return bingoPendingSummary(item).label;
   }
   return abbreviatePendingTokenAmounts(label.toUpperCase());
 }
@@ -1285,8 +1304,9 @@ class AppRevealTray extends HTMLElement {
       const compactDegenerette = item.kind === 'degenerette';
       const compactFoilMatch = item.kind === 'foil-match';
       const compactDecimator = item.kind === 'decimator';
+      const compactBingo = item.kind === 'bingo';
       const compact = item.compact === true || compactDegenerette || compactFoilMatch
-        || compactDecimator;
+        || compactDecimator || compactBingo;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
       const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
       const waitingFeedback = compactLootbox && waiting && !busy;
@@ -1355,6 +1375,9 @@ class AppRevealTray extends HTMLElement {
             ? degenerettePendingSummary(item).text
             : compactFoilMatch
               ? foilMatchPendingSummary(item).text
+            : compactBingo
+              ? `${actionVerb}: ${bingoPendingSummary(item).text}`
+                + (item.detail ? `. ${_luckboxUiText(item.detail)}` : '')
             : compactLootbox
               ? lootboxPendingSummary(item).text
             : compactDecimator
@@ -1485,6 +1508,9 @@ class AppRevealTray extends HTMLElement {
         _appendDecimatorPendingLabel(label, item);
       } else if (compactFoilMatch) {
         _appendFoilMatchPendingLabel(label, item);
+      } else if (compactBingo) {
+        label.classList?.add('rrt-bingo-summary');
+        label.textContent = bingoPendingSummary(item).label;
       } else if (compactLootbox) {
         _appendLootboxPendingLabel(label, item);
       } else if (compact && passive && item.kind === 'tickets') {
@@ -1621,16 +1647,7 @@ class AppRevealTray extends HTMLElement {
       pack.appendChild(brand);
       pack.appendChild(level);
       pack.appendChild(quantity);
-      const caption = document.createElement('span');
-      caption.className = 'rrt-pending-pack-preview__caption';
       tile.appendChild(pack);
-      // The wrapper already says its level and exact ticket quantity. Keep an
-      // ordinal only when several physical packs share the dropdown; the
-      // enclosing Pending surface already explains their unresolved state.
-      if (packs.length > 1) {
-        caption.textContent = `PACK ${pendingPack.packIndex} OF ${pendingPack.packCount}`;
-        tile.appendChild(caption);
-      }
       list.appendChild(tile);
     }
     host.appendChild(list);

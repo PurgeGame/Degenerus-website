@@ -57,6 +57,7 @@ import { publishPendingActions, clearPendingActions } from '../app/pending-actio
 import { queueReveal } from './reveal-overlay.js';
 import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';
+import './app-wwxrp-burn.js';
 
 const POLL_IDLE_MS = 30_000;
 const POLL_HOT_MS = 5_000;
@@ -627,8 +628,6 @@ class AppParimutuelPanel extends HTMLElement {
     return Boolean(this.#openState(this.#growth))
       || (Boolean(this.#openState(this.#volume)) && Boolean(this.#volumeMark(this.#volume.openRound)))
       || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition)
-      || this.#lost(this.#growth, 'growth').length > 0
-      || this.#lost(this.#volume, 'volume').length > 0
       || this.#pendingSettlement(this.#growth).length > 0
       || this.#pendingSettlement(this.#volume).length > 0;
   }
@@ -677,6 +676,7 @@ class AppParimutuelPanel extends HTMLElement {
         </div>
         <p class="pari-empty" data-bind="pari-empty">Checking…</p>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
+        <app-wwxrp-burn></app-wwxrp-burn>
       </section>
     `;
   }
@@ -1043,7 +1043,6 @@ class AppParimutuelPanel extends HTMLElement {
     const win = volumeWindow();
     const volumeSoon = !win.open && win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
     const hasContent = Boolean(open)
-      || lost.length > 0
       || pending.length > 0;
     const volumeLineReady = kind !== 'volume'
       || !book.openRound
@@ -1422,7 +1421,7 @@ class AppParimutuelPanel extends HTMLElement {
     label.textContent = `BET: ${_fmtFlip(STAKE_WEI)} FLIP\u00a0\u00a0\u00a0BONUS: `;
     const value = document.createElement('strong');
     value.className = 'pari-prebet-bonus__value';
-    value.textContent = `+${_fmtFlip(amount)} FLIP`;
+    value.textContent = `+${_fmtFlip(amount)} FLIP${kind === 'growth' ? ' · +1 STREAK' : ''}`;
     bonus.appendChild(label);
     bonus.appendChild(value);
     host.appendChild(bonus);

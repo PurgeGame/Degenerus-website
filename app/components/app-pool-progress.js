@@ -21,6 +21,7 @@ import { get, subscribe } from '../app/store.js';
 const SCALE_HEADROOM_BPS = 11_250n;
 const POST_TARGET_BREAK_PERCENT = 68;
 const POST_TARGET_START_PERCENT = 2;
+const HISTORY_CYCLE_LEVELS = 100;
 const POSITION_RATIO_SCALE = 1_000_000n;
 const JACKPOT_DAY_CAP = 5;
 const DAILY_CURRENT_BPS_MAX = 1_400n;
@@ -53,6 +54,14 @@ function _ratio(value, total) {
   if (value == null || total == null || total <= 0n) return 0;
   const clamped = value < 0n ? 0n : value > total ? total : value;
   return Number((clamped * POSITION_RATIO_SCALE) / total) / Number(POSITION_RATIO_SCALE);
+}
+
+/** Historical ticks restart at x01; the completed x00 level is never shown. */
+function _historyCycleStart(currentLevel) {
+  const level = Number(currentLevel);
+  if (!Number.isInteger(level) || level <= 1) return 1;
+  const completedCenturies = Math.floor((level - 1) / HISTORY_CYCLE_LEVELS);
+  return Math.max(1, (completedCenturies * HISTORY_CYCLE_LEVELS) + 1);
 }
 
 /**
@@ -91,17 +100,47 @@ function _postTargetPosition(value, target, scale, floor) {
 function _historicalPools(history, currentLevel) {
   const limit = Number(currentLevel);
   const hasLimit = Number.isInteger(limit) && limit > 0;
+  const cycleStart = hasLimit ? _historyCycleStart(limit) : 1;
   const byLevel = new Map();
   for (const row of Array.isArray(history) ? history : []) {
     const level = Number(row?.level);
     const poolWei = _wei(row?.poolWei ?? row?.value ?? row?.pool);
-    if (!Number.isInteger(level) || level < 1 || (hasLimit && level >= limit)) continue;
+    if (!Number.isInteger(level) || level < cycleStart || (hasLimit && level >= limit)) continue;
     if (poolWei == null || poolWei <= 0n) continue;
     byLevel.set(level, poolWei);
   }
   return [...byLevel.entries()]
     .sort(([a], [b]) => a - b)
     .map(([level, poolWei]) => ({ level, poolWei }));
+}
+
+/**
+ * Keep the completed ruler legible instead of turning every past level into a
+ * barcode. The immediately preceding final is the previous-level reference;
+ * older finals are sampled in five-level steps measured back from the live level.
+ * Each century begins at x01. After an x00 settlement, its tick stays hidden
+ * and the next level starts a fresh ruler, so the reset pool is not scaled
+ * against the previous century's much larger pools.
+ */
+export function sampledPoolHistory(history, currentLevel) {
+  const rows = _historicalPools(history, currentLevel);
+  if (rows.length === 0) return [];
+  const latest = rows[rows.length - 1];
+  const liveLevel = Number(currentLevel);
+  const anchor = Number.isInteger(liveLevel) && liveLevel > latest.level
+    ? liveLevel
+    : latest.level + 1;
+  const cycleStart = _historyCycleStart(anchor);
+  return rows.flatMap((row) => {
+    const kind = row.level === anchor - 1
+      ? 'previous'
+      : row.level === cycleStart
+        ? 'start'
+        : row.level > 3 && (anchor - row.level) % 5 === 0
+          ? 'interval'
+          : null;
+    return kind == null ? [] : [{ ...row, kind }];
+  });
 }
 
 /** Level 1 has no prior pool to ratchet from; the contract bootstraps it at 50 ETH. */
@@ -139,6 +178,7 @@ export function poolProgressModel({
   const target = _wei(targetWei);
   const growthTarget = growthOverTargetWei(ratchets);
   const historicalPools = _historicalPools(history, currentLevel);
+  const displayedHistoricalPools = sampledPoolHistory(history, currentLevel);
   const levelReady = next != null && target != null && target > 0n && next > target;
   const values = [
     next,
@@ -183,7 +223,7 @@ export function poolProgressModel({
     // Prior final pools become the thermometer's graduations only after the
     // current guarantee is cleared. Below 100% the tube stays visually clean.
     historyMarkers: levelReady
-      ? historicalPools.map((row) => ({
+      ? displayedHistoricalPools.map((row) => ({
           ...row,
           position: position(row.poolWei),
         }))
@@ -354,6 +394,39 @@ export function jackpotPoolModel({ currentWei, baselineWei, counter = 0, compres
     remainingPercent,
     fillPercent: _clampPercent(remainingPercent),
   };
+}
+
+/**
+ * Promote a purchase header only when this pool has armed the contract's
+ * one-day jackpot path. The progression check is deliberately supplied by
+ * poolProgressModel: it is strict `next > target`, so a rounded 100% display
+ * cannot announce turbo early. BAF levels keep their dedicated x10 treatment.
+ */
+export function purchaseTurboJackpotModel({
+  level = null,
+  purchaseDay = null,
+  levelReady = false,
+  nextWei = null,
+} = {}) {
+  const targetLevel = Number(level);
+  const pool = _wei(nextWei);
+  if (!levelReady
+      || Number(purchaseDay) !== 1
+      || !Number.isInteger(targetLevel)
+      || targetLevel <= 0
+      || targetLevel % 10 === 0
+      || pool == null
+      || pool <= 0n) {
+    return null;
+  }
+
+  const grandPrizeWei = jackpotPoolModel({
+    currentWei: pool,
+    baselineWei: pool,
+    counter: 0,
+    compressedFlag: 2,
+  }).maxWinWei;
+  return grandPrizeWei == null ? null : { level: targetLevel, grandPrizeWei };
 }
 
 /**
@@ -585,6 +658,7 @@ class AppPoolProgress extends HTMLElement {
   #initialized = false;
   #countdownTimer = null;
   #specialJackpotClock = null;
+  #turboJackpotClock = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -617,6 +691,14 @@ class AppPoolProgress extends HTMLElement {
       <section class="pool-progress" data-mode="purchase" aria-label="Level prize pool">
         <header class="pool-progress__head">
           <strong class="pool-progress__day" data-el="pool-day">PURCHASE DAY —</strong>
+          <div class="pool-progress__turbo-jackpot" data-el="pool-turbo-jackpot" hidden>
+            <span>TURBO JACKPOT IN</span>
+            <strong data-el="pool-turbo-jackpot-countdown">--:--</strong>
+            <i aria-hidden="true">·</i>
+            <span class="pool-progress__turbo-jackpot-prize">
+              GRAND PRIZE: UP TO <strong data-el="pool-turbo-jackpot-prize">—</strong> <em>ETH</em>
+            </span>
+          </div>
           <div class="pool-progress__special-jackpot" data-el="pool-special-jackpot" hidden>
             <span data-el="pool-special-jackpot-label">NEXT JACKPOT IN:</span>
             <strong data-el="pool-special-jackpot-countdown">--:--</strong>
@@ -680,6 +762,29 @@ class AppPoolProgress extends HTMLElement {
   #paintCountdown() {
     const countdown = formatJackpotCountdown(secondsUntilDayCrossover());
     this.#set('pool-jackpot-countdown', countdown);
+    const turboJackpot = this.querySelector('[data-el="pool-turbo-jackpot"]');
+    const poolDay = this.querySelector('[data-el="pool-day"]');
+    if (turboJackpot && !turboJackpot.hidden && this.#turboJackpotClock != null) {
+      const turboRemaining = Math.max(
+        0,
+        Math.ceil((this.#turboJackpotClock.deadlineMs - Date.now()) / 1000),
+      );
+      if (turboRemaining <= 0) {
+        turboJackpot.hidden = true;
+        if (poolDay) {
+          poolDay.textContent = 'PURCHASE DAY 1';
+          poolDay.hidden = false;
+        }
+        turboJackpot.removeAttribute('aria-label');
+      } else {
+        const rendered = formatJackpotCountdown(turboRemaining);
+        this.#set('pool-turbo-jackpot-countdown', rendered);
+        turboJackpot.setAttribute(
+          'aria-label',
+          `Turbo jackpot in ${rendered}; grand prize up to ${this.querySelector('[data-el="pool-turbo-jackpot-prize"]')?.textContent || '—'} ETH`,
+        );
+      }
+    }
     const special = this.querySelector('[data-el="pool-special-jackpot"]');
     const specialLabel = this.querySelector('[data-el="pool-special-jackpot-label"]');
     const specialCountdown = this.querySelector('[data-el="pool-special-jackpot-countdown"]');
@@ -733,17 +838,17 @@ class AppPoolProgress extends HTMLElement {
     host.setAttribute('aria-hidden', rows.length === 0 ? 'true' : 'false');
     for (const row of rows) {
       const marker = document.createElement('span');
-      const major = Number(row.level) % 5 === 0;
-      const mobileSkip = !major && Number(row.level) % 2 !== 0;
       marker.className = [
         'pool-progress__marker',
         'pool-progress__marker--history',
-        major ? 'pool-progress__marker--history-major' : '',
-        mobileSkip ? 'pool-progress__marker--history-mobile-skip' : '',
+        row.kind === 'previous' ? 'pool-progress__marker--history-previous' : '',
+        row.kind === 'start' ? 'pool-progress__marker--history-start' : '',
       ].filter(Boolean).join(' ');
       marker.dataset.level = String(row.level);
+      marker.dataset.kind = String(row.kind || 'interval');
       marker.style.left = `${row.position}%`;
-      const label = `Level ${row.level} final prize pool · ${_formatMarkerEth(row.poolWei)} ETH`;
+      const prefix = row.kind === 'previous' ? 'Previous level' : `Level ${row.level}`;
+      const label = `${prefix} final prize pool · ${_formatMarkerEth(row.poolWei)} ETH`;
       marker.title = label;
       marker.tabIndex = 0;
       marker.setAttribute('aria-label', label);
@@ -802,7 +907,39 @@ class AppPoolProgress extends HTMLElement {
     const jackpotSummary = this.querySelector('[data-el="pool-jackpot-summary"]');
     const track = this.querySelector('[data-el="pool-track"]');
     const fill = this.querySelector('[data-el="pool-fill"]');
+    const poolDay = this.querySelector('[data-el="pool-day"]');
+    const turboJackpot = this.querySelector('[data-el="pool-turbo-jackpot"]');
     const specialJackpot = this.querySelector('[data-el="pool-special-jackpot"]');
+    const nextWei = goldRush?.components?.nextWei
+      ?? gameState?.prizePools?.nextPrizePool
+      ?? null;
+    const purchaseModel = poolProgressModel({
+      nextWei,
+      targetWei,
+      ratchets,
+      history,
+      currentLevel: poolLevel,
+    });
+    const turboCandidate = purchaseTurboJackpotModel({
+      level: poolLevel,
+      purchaseDay: phase.day,
+      levelReady: !phase.jackpot && purchaseModel.levelReady,
+      nextWei,
+    });
+    if (turboCandidate) {
+      const clockKey = `turbo:${turboCandidate.level}`;
+      if (this.#turboJackpotClock?.key !== clockKey) {
+        this.#turboJackpotClock = {
+          key: clockKey,
+          deadlineMs: Date.now() + (secondsUntilDayCrossover() * 1000),
+        };
+      }
+    } else {
+      this.#turboJackpotClock = null;
+    }
+    const turboActive = turboCandidate != null
+      && this.#turboJackpotClock != null
+      && this.#turboJackpotClock.deadlineMs > Date.now();
     const exactLevel = contractPhase?.level == null ? null : Number(contractPhase.level);
     const rewardJackpot = transitionJackpotCountdownModel({
       level: Number.isInteger(exactLevel) ? exactLevel : stateLevel,
@@ -826,7 +963,11 @@ class AppPoolProgress extends HTMLElement {
       this.#specialJackpotClock = null;
     }
 
-    this.#set('pool-day', phase.dayLabel);
+    this.#set(
+      'pool-day',
+      turboCandidate != null && !turboActive ? 'PURCHASE DAY 1' : phase.dayLabel,
+    );
+    if (poolDay) poolDay.hidden = turboActive;
     this.#set('pool-name', poolLevel == null
       ? phase.jackpot ? 'DAILY JACKPOT' : 'PRIZE POOL'
       : `LEVEL ${poolLevel} ${phase.jackpot ? 'DAILY JACKPOT' : 'PRIZE POOL'}`);
@@ -837,6 +978,11 @@ class AppPoolProgress extends HTMLElement {
       if (head) head.hidden = true;
       if (body) body.hidden = true;
       if (jackpotSummary) jackpotSummary.hidden = false;
+      if (poolDay) poolDay.hidden = false;
+      if (turboJackpot) {
+        turboJackpot.hidden = true;
+        turboJackpot.removeAttribute('aria-label');
+      }
       const currentWei = goldRush?.components?.currentWei
         ?? gameState?.prizePools?.currentPrizePool
         ?? null;
@@ -870,9 +1016,16 @@ class AppPoolProgress extends HTMLElement {
     if (head) head.hidden = false;
     if (body) body.hidden = false;
     if (jackpotSummary) jackpotSummary.hidden = true;
+    if (turboJackpot) {
+      turboJackpot.hidden = !turboActive;
+      if (turboCandidate) {
+        this.#set('pool-turbo-jackpot-prize', _formatWholeEth(turboCandidate.grandPrizeWei));
+      }
+      if (!turboActive) turboJackpot.removeAttribute('aria-label');
+    }
     if (specialJackpot) {
-      specialJackpot.hidden = rewardJackpot == null;
-      if (rewardJackpot) {
+      specialJackpot.hidden = rewardJackpot == null || turboCandidate != null;
+      if (rewardJackpot && turboCandidate == null) {
         specialJackpot.dataset.kind = rewardJackpot.kind;
         specialJackpot.setAttribute(
           'aria-label',
@@ -884,19 +1037,15 @@ class AppPoolProgress extends HTMLElement {
         specialJackpot.removeAttribute('aria-label');
       }
     }
-    if (rewardJackpot) this.#set('pool-special-jackpot-label', rewardJackpot.label);
+    if (rewardJackpot && turboCandidate == null) {
+      this.#set('pool-special-jackpot-label', rewardJackpot.label);
+    }
     this.#paintCountdown();
-    const nextWei = goldRush?.components?.nextWei
-      ?? gameState?.prizePools?.nextPrizePool
-      ?? null;
-    const model = poolProgressModel({
-      nextWei,
-      targetWei,
-      ratchets,
-      history,
-      currentLevel: poolLevel,
-    });
-    const referenceKind = this.#set('pool-reference-kind', model.levelReady ? '' : 'GUARANTEE');
+    const model = purchaseModel;
+    const referenceKind = this.#set(
+      'pool-reference-kind',
+      model.levelReady ? 'CURRENT' : 'GUARANTEE',
+    );
     if (referenceKind) referenceKind.hidden = model.levelReady;
     this.#set('pool-target-inline', _formatWholeEth(model.referenceWei));
     const percent = this.#set('pool-percent', _formatBarPercent(model.levelPercent));

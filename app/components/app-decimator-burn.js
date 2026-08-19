@@ -42,6 +42,43 @@ function _fmtFlip(raw) {
   } catch (_e) { return '—'; }
 }
 
+function _compactFlip(raw) {
+  let value;
+  try { value = BigInt(raw ?? 0); }
+  catch (_e) { return '—'; }
+
+  const negative = value < 0n;
+  const whole = (negative ? -value : value) / FLIP;
+  const sign = negative ? '-' : '';
+  if (whole < 1_000n) return `${sign}${whole.toLocaleString('en-US')}`;
+
+  const tiers = [
+    [1_000_000_000_000n, 'T'],
+    [1_000_000_000n, 'B'],
+    [1_000_000n, 'M'],
+    [1_000n, 'K'],
+  ];
+  const [scale, suffix] = tiers.find(([threshold]) => whole >= threshold);
+  const units = whole / scale;
+  const decimals = units >= 100n ? 0 : units >= 10n ? 1 : 2;
+  const factor = 10n ** BigInt(decimals);
+  const truncated = (whole * factor) / scale;
+  const integer = truncated / factor;
+  const fraction = decimals === 0
+    ? ''
+    : String(truncated % factor).padStart(decimals, '0').replace(/0+$/, '');
+  return `${sign}${integer}${fraction ? `.${fraction}` : ''}${suffix}`;
+}
+
+export function formatDecimatorBurnQuote(weight, boonWeight = 0n) {
+  let boon = 0n;
+  try { boon = BigInt(boonWeight ?? 0); } catch (_e) { boon = 0n; }
+  const total = _compactFlip(weight);
+  return boon > 0n
+    ? `+${total} · +${_compactFlip(boon)} BOON`
+    : `+${total} SCORE`;
+}
+
 function _fmtEth(raw) {
   try {
     const value = displayEth(BigInt(raw || 0), 3)
@@ -186,9 +223,9 @@ class AppDecimatorBurn extends HTMLElement {
           </span>
           <div class="dbb__entry-controls">
             <label class="dbb__input">
+              <boon-product-indicator product="decimator"></boon-product-indicator>
               <span class="dbb__input-control">
                 <small>BURN AMOUNT</small>
-                <boon-product-indicator product="decimator"></boon-product-indicator>
                 <input type="text" inputmode="decimal" name="dbb-amount" value="1000"
                        aria-label="Decimator burn amount in FLIP">
                 <b>FLIP</b>
@@ -383,11 +420,21 @@ class AppDecimatorBurn extends HTMLElement {
       multiplierCapped = decimatorMultiplierCapApplied(scoreArgs);
     }
     if (quote) {
+      const hasBoonQuote = weight != null && boonWeight > 0n;
       quote.textContent = amount != null && amount < DECIMATOR_MIN_FLIP_WEI
         ? 'MIN 1,000 FLIP'
         : weight == null
           ? 'SCORE —'
-          : `+${_fmtFlip(weight)} SCORE${boonWeight > 0n ? ` · +${_fmtFlip(boonWeight)} BOON` : ''}`;
+          : formatDecimatorBurnQuote(weight, boonWeight);
+      quote.classList?.toggle('has-boon', hasBoonQuote);
+      if (hasBoonQuote) {
+        const detail = `Adds ${_fmtFlip(weight)} score, including ${_fmtFlip(boonWeight)} from Decimator boon`;
+        quote.setAttribute?.('title', detail);
+        quote.setAttribute?.('aria-label', detail);
+      } else {
+        quote.removeAttribute?.('title');
+        quote.removeAttribute?.('aria-label');
+      }
     }
     if (action) action.textContent = this.#busy ? 'BURNING…' : 'BURN FLIP';
     const liveMulti = this.querySelector('[data-bind="dbb-live-multi"]');

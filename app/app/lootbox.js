@@ -84,7 +84,7 @@ let _rngQueueReadProvider = null;
 // ---------------------------------------------------------------------------
 // GAME_ABI fragment — minimal human-readable ABI, reconciled against the
 // Base Sepolia redeploy #7 GAME ABI (degenerus-sim/deployments/abis/GAME.json):
-//   - purchase(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind, foil)
+//   - purchase(buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, foil)
 //   - openBox(player, index)            — renamed from openLootBox
 //   - boxIndexComplete(index)           — conservative swept-index view
 //   - requestLootboxRng()               — permissionless mid-day RNG request
@@ -101,14 +101,13 @@ export const GAME_ABI = [
   //   FOIL_PACK_TICKETS × priceForLevel(target) on top of tickets/lootboxes; see
   //   DegenerusGame._purchaseWithFoil), purchaseCoin (FLIP-paid tickets) was REMOVED
   //   on-chain, and openLootBox was renamed openBox (same (address, uint48) shape).
-  'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, bool foil) payable',
+  'function purchase(address buyer, uint256 entryQuantityScaled, uint256 boxOrder, bytes32 affiliateCode, uint8 payKind, bool foil) payable',
   'function openBox(address player, uint48 index)',
   // The raw lootbox RNG mapping is intentionally not exposed by the deployed
   // GAME. Readiness is probed with the exact write as eth_call; this avoids the
   // stale `lootboxRngWordByIndex` selector that silently reverted in production.
   'function boxIndexComplete(uint48 index) view returns (bool complete)',
   'function requestLootboxRng()',
-  'function lootboxStatus(address player, uint48 lootboxIndex) view returns (uint256 amount, bool presale)',
   'function lootboxPresaleActiveFlag() view returns (bool active)',
   'function presaleBoxCreditOf(address player) view returns (uint256 credit)',
   'function presaleBoxEthRemaining() view returns (uint256 remaining)',
@@ -116,7 +115,7 @@ export const GAME_ABI = [
   'function afkingFundingOf(address player) view returns (uint256)',
   'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
   'function buyPresaleBox(address buyer, uint256 boxAmount) payable',
-  'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
+  'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 boxOrder, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
   'error E()',
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
   // them in this interface lets ethers populate error.revert.name.
@@ -200,6 +199,136 @@ export const FOIL_PACK_TICKETS = 10n;
 export const LOOTBOX_MIN_WEI = ethers.parseEther('0.01') / ETH_DIVISOR;
 /** Credit-gated presale boxes use the same 0.01 ETH-scaled minimum. */
 export const PRESALE_BOX_MIN_WEI = LOOTBOX_MIN_WEI;
+
+// ---------------------------------------------------------------------------
+// Packed box orders — DegenerusGame.purchase() ABI as of 2026-08-19.
+//
+// Calldata layout (LSB -> MSB):
+//   [small:8][medium:8][large:8][customCount:8][customSize:48]
+// Preset sizes are 1x / 5x / 25x the ticket price frozen for the current box
+// period. customSize is the PER-BOX amount in 1e12-wei mainnet units; the
+// testnet overlay applies the same /ETH_DIVISOR scale as every ETH value.
+// ---------------------------------------------------------------------------
+
+export const BOX_ORDER_MEDIUM_MULTIPLE = 5n;
+export const BOX_ORDER_LARGE_MULTIPLE = 25n;
+export const BOX_ORDER_MAX_BOXES = 100;
+export const BOX_ORDER_CUSTOM_SCALE_WEI = (10n ** 12n) / ETH_DIVISOR;
+
+const BOX_ORDER_MEDIUM_SHIFT = 8n;
+const BOX_ORDER_LARGE_SHIFT = 16n;
+const BOX_ORDER_CUSTOM_COUNT_SHIFT = 24n;
+const BOX_ORDER_CUSTOM_SIZE_SHIFT = 32n;
+const BOX_ORDER_COUNT_MASK = 0xFFn;
+const BOX_ORDER_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFFn;
+
+function _boxOrderCount(value, label) {
+  const count = Number(value ?? 0);
+  if (!Number.isInteger(count) || count < 0 || count > 255) {
+    throw new RangeError(`${label} box quantity must be a whole number from 0 to 255.`);
+  }
+  return count;
+}
+
+/**
+ * Encode the four visible box quantities into the uint256 accepted by purchase().
+ * The contract caps the combined order at 100; validating here gives the form an
+ * actionable error instead of the contract's compact E() revert.
+ */
+export function packBoxOrder({
+  small = 0,
+  medium = 0,
+  large = 0,
+  customCount = 0,
+  customSizeWei = 0n,
+} = {}) {
+  const counts = {
+    small: _boxOrderCount(small, 'Small'),
+    medium: _boxOrderCount(medium, 'Medium'),
+    large: _boxOrderCount(large, 'Large'),
+    customCount: _boxOrderCount(customCount, 'Custom'),
+  };
+  const total = counts.small + counts.medium + counts.large + counts.customCount;
+  if (total > BOX_ORDER_MAX_BOXES) {
+    throw new RangeError(`A box order can contain at most ${BOX_ORDER_MAX_BOXES} boxes.`);
+  }
+  if (total === 0) return 0n;
+
+  let customScaled = 0n;
+  if (counts.customCount > 0) {
+    let size = 0n;
+    try { size = BigInt(customSizeWei ?? 0n); }
+    catch (_e) { throw new RangeError('Enter a valid custom box size.'); }
+    if (size < LOOTBOX_MIN_WEI) {
+      throw new RangeError('Custom boxes must be at least 0.01 ETH each.');
+    }
+    customScaled = size / BOX_ORDER_CUSTOM_SCALE_WEI;
+    if (customScaled <= 0n || customScaled > BOX_ORDER_CUSTOM_SIZE_MASK) {
+      throw new RangeError('Custom box size is outside the supported range.');
+    }
+  }
+
+  return BigInt(counts.small)
+    | (BigInt(counts.medium) << BOX_ORDER_MEDIUM_SHIFT)
+    | (BigInt(counts.large) << BOX_ORDER_LARGE_SHIFT)
+    | (BigInt(counts.customCount) << BOX_ORDER_CUSTOM_COUNT_SHIFT)
+    | (customScaled << BOX_ORDER_CUSTOM_SIZE_SHIFT);
+}
+
+/** Decode a packed order for quoting, tests, and receipt-side presentation. */
+export function unpackBoxOrder(value = 0n) {
+  let order = 0n;
+  try { order = BigInt(value ?? 0n); }
+  catch (_e) { throw new RangeError('Enter a valid packed box order.'); }
+  if (order < 0n) throw new RangeError('Enter a valid packed box order.');
+  const customScaled = (order >> BOX_ORDER_CUSTOM_SIZE_SHIFT) & BOX_ORDER_CUSTOM_SIZE_MASK;
+  return {
+    small: Number(order & BOX_ORDER_COUNT_MASK),
+    medium: Number((order >> BOX_ORDER_MEDIUM_SHIFT) & BOX_ORDER_COUNT_MASK),
+    large: Number((order >> BOX_ORDER_LARGE_SHIFT) & BOX_ORDER_COUNT_MASK),
+    customCount: Number((order >> BOX_ORDER_CUSTOM_COUNT_SHIFT) & BOX_ORDER_COUNT_MASK),
+    customSizeWei: customScaled * BOX_ORDER_CUSTOM_SCALE_WEI,
+  };
+}
+
+/** Quote an order using the live/frozen ticket price supplied by the caller. */
+export function boxOrderCostFromPriceWei(priceWei, value = 0n) {
+  let price = 0n;
+  try { price = BigInt(priceWei ?? 0n); } catch (_e) { price = 0n; }
+  if (price < 0n) price = 0n;
+  const order = unpackBoxOrder(value);
+  return (BigInt(order.small)
+      + BOX_ORDER_MEDIUM_MULTIPLE * BigInt(order.medium)
+      + BOX_ORDER_LARGE_MULTIPLE * BigInt(order.large)) * price
+    + BigInt(order.customCount) * order.customSizeWei;
+}
+
+function _boxOrderFromPurchaseArgs(args = {}) {
+  if (args.boxOrder != null) {
+    const packed = BigInt(args.boxOrder);
+    // Decode and re-pack so high garbage bits, an over-cap total, and an
+    // invalid custom lane fail before an RPC call instead of collapsing into
+    // the contract's compact E() revert.
+    const decoded = unpackBoxOrder(packed);
+    if (packBoxOrder(decoded) !== packed) {
+      throw new RangeError('Enter a valid packed box order.');
+    }
+    return packed;
+  }
+  if (args.boxSelection != null) return packBoxOrder(args.boxSelection);
+
+  // Backward-compatible bridge for older call sites while the visual panel is
+  // migrating: a free ETH stake is one custom box; the old quantity-only API
+  // becomes that many Small (1x) presets.
+  let legacyAmount = 0n;
+  try { legacyAmount = BigInt(args.lootBoxAmountWei ?? 0n); }
+  catch (_e) { throw new RangeError('Enter a valid custom box size.'); }
+  if (legacyAmount > 0n) {
+    return packBoxOrder({ customCount: 1, customSizeWei: legacyAmount });
+  }
+  const legacyCount = _boxOrderCount(args.lootboxQuantity ?? 0, 'Small');
+  return packBoxOrder({ small: legacyCount });
+}
 
 // ---------------------------------------------------------------------------
 // scaledTicketPriceWei — JS port of PriceLookupLib.priceForLevel (verified at
@@ -568,8 +697,9 @@ async function _purchaseFundingFor(
 }
 
 /**
- * @param {{ticketQuantity: number, lootboxQuantity: number, affiliateCode?: string,
- *          lootBoxAmountWei?: bigint, ticketCostWei?: bigint,
+ * @param {{ticketQuantity: number, boxOrder?: bigint, boxSelection?: object,
+ *          boxCostWei?: bigint, lootboxQuantity?: number, lootBoxAmountWei?: bigint,
+ *          affiliateCode?: string, ticketCostWei?: bigint,
  *          foil?: boolean, foilCostWei?: bigint, presaleBoxAmountWei?: bigint,
  *          preferClaimable?: boolean, useAfking?: boolean,
  *          onSubmitted?: function(import('ethers').TransactionResponse): void}} args
@@ -589,28 +719,41 @@ async function _purchaseFundingFor(
 export async function purchaseEth(args) {
   const buyer = _readBuyer();
   const ticketQuantity = Number(args.ticketQuantity ?? 0);
-  const lootboxQuantity = Number(args.lootboxQuantity ?? 0);
-  // Plan 60-04: auto-read affiliate code from chainId-scoped localStorage when caller
-  // omits explicit value. Widget call site is `purchaseEth({ticketQuantity, lootboxQuantity})`
-  // — affiliate plumbing is invisible per CONTEXT D-05 (no UI element in Phase 60).
+  const boxOrder = _boxOrderFromPurchaseArgs(args);
+  // Auto-read the chain-scoped affiliate when the packed-order purchase omits
+  // an explicit code; affiliate plumbing remains independent of the builder UI.
   const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
-  // Default lootBoxAmountWei = LOOTBOX_MIN_WEI × N. Plan 60-04 may upgrade by reading
-  // mintPrice() from chain to honor higher tiers; Plan 60-02 uses the contract minimum.
-  const lootBoxAmountWei = args.lootBoxAmountWei
-    ?? (LOOTBOX_MIN_WEI * BigInt(Math.max(0, lootboxQuantity)));
   // purchaseInfo() is authoritative at click time. In the final sealed RNG
   // window the API can still say Level N while purchase() already routes to
-  // Level N+1; trusting the panel's stale price there underfunded the foil leg
-  // by exactly one level-tier jump.
-  const purchaseQuote = ticketQuantity > 0 || args.foil
+  // Level N+1; preset box tiers and foils both derive from this routed price.
+  const purchaseQuote = ticketQuantity > 0 || boxOrder > 0n || args.foil
     ? await readPurchaseQuote()
     : null;
   const quotedPriceWei = purchaseQuote?.priceWei ?? 0n;
+  let boxCostWei = 0n;
+  if (boxOrder > 0n) {
+    if (quotedPriceWei > 0n) {
+      // Re-price presets from the click-time contract quote. A rendered form
+      // quote may have crossed a routed-level boundary before the wallet opens.
+      boxCostWei = boxOrderCostFromPriceWei(quotedPriceWei, boxOrder);
+    } else if (args.boxCostWei != null) {
+      try { boxCostWei = BigInt(args.boxCostWei); }
+      catch (_e) { throw new Error('Enter a valid box order cost.'); }
+    } else {
+      // Presets use the routed ticket price. When an older test/degraded
+      // provider cannot expose purchaseInfo(), the protocol's minimum ticket
+      // price is the conservative compatibility fallback; custom orders are
+      // fully priced from their packed size either way.
+      const boxPriceWei = quotedPriceWei > 0n ? quotedPriceWei : LOOTBOX_MIN_WEI;
+      boxCostWei = boxOrderCostFromPriceWei(boxPriceWei, boxOrder);
+    }
+    if (boxCostWei <= 0n) throw new Error('Box order cost is unavailable.');
+  }
   const ticketCostWei = quotedPriceWei > 0n && ticketQuantity > 0
     ? ticketCostFromTickets(quotedPriceWei, ticketQuantity)
     : BigInt(args.ticketCostWei ?? 0n);
   // Foil leg (additive): DegenerusGame._purchaseWithFoil caps fresh ETH at
-  // tickets + lootbox + FOIL_PACK_TICKETS × price and credits any excess to
+  // tickets + boxes + FOIL_PACK_TICKETS × price and credits any excess to
   // afking, so msg.value must include the exact foil cost.
   const foil = Boolean(args.foil);
   const foilCostWei = foil
@@ -630,7 +773,7 @@ export async function purchaseEth(args) {
     // callers never believe a foil leg was included when it was not.
     throw new Error('Buy the foil pack separately from a presale box.');
   }
-  const mintCostWei = lootBoxAmountWei + ticketCostWei + foilCostWei;
+  const mintCostWei = boxCostWei + ticketCostWei + foilCostWei;
   if (presaleBoxAmountWei > 0n && mintCostWei <= 0n) {
     throw new Error('Use the standalone presale box purchase when there is no regular purchase.');
   }
@@ -666,9 +809,9 @@ export async function purchaseEth(args) {
   if (signer) {
     const method = presaleBoxAmountWei > 0n ? 'buyLootboxAndPresaleBox' : 'purchase';
     const callArgs = presaleBoxAmountWei > 0n
-      ? [buyer, entryQuantityScaled, lootBoxAmountWei, affiliateCode, payment.payKind,
+      ? [buyer, entryQuantityScaled, boxOrder, affiliateCode, payment.payKind,
         presaleBoxAmountWei, { value: payment.msgValueWei }]
-      : [buyer, entryQuantityScaled, lootBoxAmountWei, affiliateCode, payment.payKind, foil,
+      : [buyer, entryQuantityScaled, boxOrder, affiliateCode, payment.payKind, foil,
         { value: payment.msgValueWei }];
     const sim = await requireStaticCall(
       signerContract,
@@ -693,7 +836,7 @@ export async function purchaseEth(args) {
           return c.buyLootboxAndPresaleBox(
             buyer,
             entryQuantityScaled,
-            lootBoxAmountWei,
+            boxOrder,
             affiliateCode,
             payment.payKind,
             presaleBoxAmountWei,
@@ -703,7 +846,7 @@ export async function purchaseEth(args) {
         return c.purchase(
           buyer,
           entryQuantityScaled,
-          lootBoxAmountWei,
+          boxOrder,
           affiliateCode,
           payment.payKind,
           foil,
@@ -711,7 +854,7 @@ export async function purchaseEth(args) {
         );
       },
       `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
-        : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy luckbox'} (${
+        : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy boxes'} (${
         args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
       })`,
       { onSubmitted: args.onSubmitted },
@@ -725,7 +868,7 @@ export async function purchaseEth(args) {
 
   // Build a contract bound to the provider (signer-free) for log parsing.
   const contract = _buildContract(provider);
-  return { receipt, contract, payment };
+  return { receipt, contract, payment, boxOrder, boxCostWei };
 }
 
 // ---------------------------------------------------------------------------
@@ -848,9 +991,8 @@ export function parsePresaleBoxBuyFromReceipt(receipt, contract) {
 
 /**
  * Recover the two purchase legs sharing one RNG index from a mined transaction.
- * This is the only reliable presale-only existence check on the current GAME:
- * lootboxStatus() exposes lootboxEth, but intentionally does not expose the
- * separate presaleBoxEth mapping.
+ * Purchase logs are the durable source of truth for which regular/presale legs
+ * were bought. The current GAME deliberately exposes no per-player box amount.
  */
 export async function readLootboxPurchaseReceipt({ transactionHash, player, lootboxIndex } = {}) {
   const hash = String(transactionHash || '');
@@ -1077,13 +1219,27 @@ export async function canOpenLootbox({ player, lootboxIndex } = {}) {
   }
 }
 
-/** Conservative completion hint used when the exact box has already vanished. */
-export async function isLootboxIndexComplete(lootboxIndex) {
+/**
+ * Read the monotonic permissionless-sweep frontier for one RNG index.
+ * `false` is deliberately not a per-player pending signal: another player's
+ * box can keep the same index open after this player's box has settled.
+ * A null result means the RPC could not answer.
+ */
+export async function readLootboxIndexCompletion(lootboxIndex) {
   const provider = getProvider();
-  if (!provider || lootboxIndex == null) return false;
+  if (!provider || lootboxIndex == null) return null;
   const contract = _buildContract(provider);
-  if (typeof contract?.boxIndexComplete !== 'function') return false;
-  return Boolean(await contract.boxIndexComplete(BigInt(lootboxIndex)));
+  if (typeof contract?.boxIndexComplete !== 'function') return null;
+  try {
+    return Boolean(await contract.boxIndexComplete(BigInt(lootboxIndex)));
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Conservative boolean completion hint for callers that only need true/false. */
+export async function isLootboxIndexComplete(lootboxIndex) {
+  return (await readLootboxIndexCompletion(lootboxIndex)) === true;
 }
 
 /** Decode the two packed GAME slots that describe the shared mid-day RNG queue. */
@@ -1200,30 +1356,6 @@ export async function requestLootboxRng() {
   return { receipt };
 }
 
-/**
- * Fresh chain status for one player's ETH-lootbox leg. The amount is cleared
- * before settlement events are emitted, so `amount === 0n` is the authoritative
- * "already resolved / no longer pending" signal for the combined-buy boxes this
- * app tracks. A null result means the RPC could not answer and callers should
- * fall back to the transaction's own static-call race gate.
- *
- * @param {{player?: string, lootboxIndex: bigint | number}} args
- * @returns {Promise<{amount: bigint, presale: boolean}|null>}
- */
-export async function readLootboxStatus({ player, lootboxIndex } = {}) {
-  const owner = player || getActingAddress();
-  if (!owner || lootboxIndex == null) return null;
-  const provider = getProvider();
-  if (!provider) return null;
-  const contract = _buildContract(provider);
-  if (typeof contract.lootboxStatus !== 'function') return null;
-  const out = await contract.lootboxStatus(owner, BigInt(lootboxIndex));
-  return {
-    amount: BigInt(out?.amount ?? out?.[0] ?? 0n),
-    presale: Boolean(out?.presale ?? out?.[1] ?? false),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Purchase-default affiliate code (LBX-03, semantics fixed 2026-07-16).
 //
@@ -1322,7 +1454,8 @@ function readSiteRef(chainId, address) {
 /**
  * Pre-warm lootbox purchase tx params for synchronous click-time send.
  *
- * @param {{ticketQuantity:number, lootboxQuantity:number,
+ * @param {{ticketQuantity:number, boxOrder?:bigint, boxSelection?:object,
+ *          boxCostWei?:bigint, lootboxQuantity?:number,
  *          affiliateCode?:string, lootBoxAmountWei?:bigint,
  *          ticketCostWei?:bigint, preferClaimable?:boolean, useAfking?:boolean}} args
  * @returns {Promise<{buildTx:()=>Promise<import('ethers').TransactionResponse>,
@@ -1350,15 +1483,27 @@ export async function prewarmLootboxBuy(args) {
   const contract = _buildContract(signer);
   const ticketsScaled = entriesScaledFromTickets(args.ticketQuantity ?? 0);
 
-  // Lootboxes are ETH-denominated, but claimable winnings are the preferred
-  // funding source. Only the uncovered remainder is included as msg.value.
-  const lootBoxAmountWei = args.lootBoxAmountWei
-    ?? (LOOTBOX_MIN_WEI * BigInt(Math.max(0, Number(args.lootboxQuantity ?? 0))));
+  // Packed presets/custom boxes are ETH-denominated, but claimable winnings
+  // remain the preferred funding source. Only the uncovered remainder rides
+  // as msg.value.
+  const boxOrder = _boxOrderFromPurchaseArgs(args);
+  const quote = boxOrder > 0n ? await readPurchaseQuote() : null;
+  let boxCostWei = 0n;
+  if (boxOrder > 0n) {
+    if (quote?.priceWei > 0n) {
+      boxCostWei = boxOrderCostFromPriceWei(quote.priceWei, boxOrder);
+    } else if (args.boxCostWei != null) {
+      boxCostWei = BigInt(args.boxCostWei);
+    } else boxCostWei = boxOrderCostFromPriceWei(
+      quote?.priceWei > 0n ? quote.priceWei : LOOTBOX_MIN_WEI,
+      boxOrder,
+    );
+  }
   const ticketCostWei = args.ticketCostWei ?? 0n;
   const payment = await _purchaseFundingFor(
     contract,
     buyer,
-    lootBoxAmountWei + ticketCostWei,
+    boxCostWei + ticketCostWei,
     {
       useClaimable: args.preferClaimable !== false,
       useAfking: args.useAfking === true,
@@ -1366,12 +1511,12 @@ export async function prewarmLootboxBuy(args) {
   );
   const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
   const unsignedTx = await contract.purchase.populateTransaction(
-    buyer, ticketsScaled, lootBoxAmountWei, affiliateCode, payment.payKind, false,
+    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, false,
     { value: payment.msgValueWei }
   );
   const staticCallMethod = 'purchase';
   const staticCallArgs = [
-    buyer, ticketsScaled, lootBoxAmountWei, affiliateCode, payment.payKind, false,
+    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, false,
     { value: payment.msgValueWei },
   ];
 
@@ -1403,5 +1548,7 @@ export async function prewarmLootboxBuy(args) {
     abort: () => { aborted = true; },
     expiresAt: Date.now() + PREWARM_TTL_MS,
     payment,
+    boxOrder,
+    boxCostWei,
   };
 }

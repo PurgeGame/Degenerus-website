@@ -622,6 +622,7 @@ class DecimatorDrawReplay {
     this.totalBurned = totalFlipBurned(snapshot);
     this.ethDisplayScale = raw(snapshot.ethDisplayScale) || 1n;
     this.reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+    this.hasStarted = false;
     this.bind = (name) => document.querySelector(`[data-bind="${name}"]`);
   }
 
@@ -647,8 +648,8 @@ class DecimatorDrawReplay {
       this.finish();
       return;
     }
-    await sleep(this.reducedMotion ? 50 : 550);
-    this.play();
+    this.#setPrimaryAction('start');
+    try { this.bind('replay')?.focus(); } catch (_error) { /* wheel remains readable */ }
   }
 
   setWinnerNames(names) {
@@ -756,8 +757,20 @@ class DecimatorDrawReplay {
       const url = new URL(window.location.href);
       url.searchParams.set('player', this.player.address);
       window.history.replaceState(null, '', url);
-      this.play();
+      if (this.hasStarted) this.play();
+      else this.#resetView();
     });
+  }
+
+  #setPrimaryAction(action) {
+    const button = this.bind('replay');
+    if (!button) return;
+    const starts = action === 'start';
+    button.textContent = starts ? 'START DRAW' : 'REPLAY DRAW';
+    button.setAttribute(
+      'aria-label',
+      starts ? 'Start the Decimator draw' : 'Replay the Decimator draw',
+    );
   }
 
   #cancelRun() {
@@ -811,6 +824,8 @@ class DecimatorDrawReplay {
   }
 
   async play() {
+    this.hasStarted = true;
+    this.#setPrimaryAction('replay');
     this.#cancelRun();
     const token = this.runToken;
     this.#resetView();
@@ -852,6 +867,8 @@ class DecimatorDrawReplay {
   }
 
   finish() {
+    this.hasStarted = true;
+    this.#setPrimaryAction('replay');
     this.#cancelRun();
     const token = this.runToken;
     this.completed = [...this.frames];
@@ -1705,9 +1722,9 @@ async function bootstrap() {
       throw new Error('Last Decimator winning-score snapshot does not reconcile.');
     }
     const replay = new DecimatorDrawReplay(snapshot);
-    // Names are decorative and best-effort. Start the draw immediately; if the
-    // public Discord directory returns before (or after) the final pie, update
-    // only its legend without delaying authoritative on-chain animation data.
+    // Names are decorative and best-effort. Load them while the ready wheel is
+    // waiting for its explicit START DRAW click; a late response only updates
+    // the legend and never delays authoritative on-chain animation data.
     void loadKnownWinnerNames().then((names) => replay.setWinnerNames(names));
     await replay.init();
   } catch (error) {

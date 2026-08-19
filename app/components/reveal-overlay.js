@@ -49,9 +49,10 @@
 // Class palette: .rvl-* (verified non-colliding).
 
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
+import { ETH_DIVISOR } from '../app/chain-config.js';
 import {
   DGN_COLORS, DGN_QUADRANTS,
-  applyDgnTicketAccent,
+  applyDgnTicketAccent, applyDgnTraitColor,
   dgnBadgePath, dgnComputeMatches, dgnScoringMatchStates,
   dgnDisplaySymbol,
   dgnTraitIdToQSC, dgnTraitIdsToQuadrants, dgnUnpackTicket,
@@ -84,7 +85,7 @@ import {
 } from '../app/lootbox-value-tone.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
 import { appendCoinFaces } from '../app/coin-faces.js';
-import { flipPileLevel, flipPileArt } from '../app/flip-piles.js';
+import { flipPileLevel, flipPileArt, flipPileVariant } from '../app/flip-piles.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
@@ -252,13 +253,13 @@ const ICONS = Object.freeze({
 const LOOTBOX_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-v3.webp';
 
 /**
- * A pile-scale FLIP win lands as a physical chip pile (the same 50K-FLIP
- * ladder the coinflip felt uses); smaller wins keep the flame logo.
+ * A pile-scale FLIP win lands as a physical chip pile (the same wager ladder
+ * the coinflip felt uses); smaller wins keep the flame logo.
  */
 function _flipPrizeArt(amountWei) {
   const pile = flipPileLevel(amountWei);
   return pile > 0
-    ? { icon: flipPileArt(pile), pile }
+    ? { icon: flipPileArt(pile, flipPileVariant(amountWei)), pile }
     : { icon: ICONS.flip, pile: null };
 }
 
@@ -285,6 +286,11 @@ const BOX_SPIN_CURRENCIES = Object.freeze({ eth: 0, flip: 1, record: 1, wwxrp: 3
 // FlipRoundLib.FLIP_ROUND_THRESHOLD: above this a surviving FLIP mint is
 // collapsed onto a whole 100-FLIP multiple, so halving it is an estimate.
 const FLIP_ROUND_THRESHOLD = 1_000n * (10n ** 18n);
+const TOKEN_WEI = 10n ** 18n;
+const BOX_ESTIMATE_VARIANCE_BPS = 12_448n;
+const BOX_ESTIMATE_MAIN_BPS = 9_000n;
+const BOX_ESTIMATE_STAKE_BPS = 7_060n;
+const BOX_ESTIMATE_SPLIT_THRESHOLD = (TOKEN_WEI / 2n) / BigInt(ETH_DIVISOR);
 
 // Keep batched boxes moving, but spend the saved time where the player can
 // actually read what came out. Manual receipts remain tap-to-dismiss.
@@ -547,7 +553,7 @@ function _boxSpinFlipWeight(row) {
   };
 }
 
-function _allocateBoxSpinPreview(rows, amount) {
+function _allocateBoxSpinPreview(rows, amount, approximate = false) {
   const total = _safeBigInt(amount);
   if (total <= 0n) return false;
   const weighted = rows.map(_boxSpinFlipWeight);
@@ -571,7 +577,7 @@ function _allocateBoxSpinPreview(rows, amount) {
     // A lone hit owns the whole survival stake. With multiple hits, the
     // score-table split is still exact unless the packed reel permits more
     // than one hero interpretation with different payout weights.
-    row.previewApproximate = paidRows > 1 && item.ambiguous;
+    row.previewApproximate = approximate || (paidRows > 1 && item.ambiguous);
     row.previewWeightAmbiguous = item.ambiguous;
     allocated += value;
   });
@@ -587,18 +593,20 @@ function _allocateBoxSpinPreview(rows, amount) {
 // estimate rather than hiding the stake altogether.
 function _recordSpinPayoutAtRisk(spin, rows) {
   const totalStake = _safeBigInt(spin?.recordStake);
-  const activityScore = Number(spin?.activityScore);
-  if (totalStake <= 0n
-    || !Number.isInteger(activityScore)
-    || activityScore < 0
-    || activityScore > 0xFFFF) return null;
+  const suppliedActivityScore = Number(spin?.activityScore);
+  const activityKnown = spin?.activityScore != null
+    && Number.isInteger(suppliedActivityScore)
+    && suppliedActivityScore >= 0
+    && suppliedActivityScore <= 0xFFFF;
+  const activityScore = activityKnown ? suppliedActivityScore : 0;
+  if (totalStake <= 0n) return null;
 
   // The protocol's record chain is authored as exactly three FLIP spins. Its
   // integer remainder is deliberately unstaked, matching totalStake / 3 here.
   const perSpin = totalStake / 3n;
   if (perSpin <= 0n) return null;
   let amount = 0n;
-  let approximate = false;
+  let approximate = !activityKnown;
   for (const row of rows) {
     if (!boxSpinScorePays(row?.score)) continue;
     const candidates = [];
@@ -626,6 +634,31 @@ function _recordSpinPayoutAtRisk(spin, rows) {
     }
   }
   return amount > 0n ? { amount, approximate } : null;
+}
+
+/**
+ * Result-independent fallback for a human Luckbox whose historical storage
+ * context is unavailable. The opened box value and level price still support
+ * a neutral-EV estimate: average the contract's twenty FLIP-size rolls, then
+ * apply the real 70.6% three-reel stake and the visible score-table weights.
+ * This deliberately cannot announce whether the later survival coin won.
+ */
+function _humanBoxSpinPayoutEstimate(spin, rows) {
+  const amountWei = _safeBigInt(spin?.estimateBoxAmountWei);
+  const ticketPriceWei = _safeBigInt(spin?.estimateTicketPriceWei);
+  if (amountWei <= 0n || ticketPriceWei <= 0n) return null;
+  let rollAmount = (amountWei * BOX_ESTIMATE_MAIN_BPS) / 10_000n;
+  if (rollAmount > BOX_ESTIMATE_SPLIT_THRESHOLD) rollAmount /= 2n;
+  const largeFlip = ((rollAmount * BOX_ESTIMATE_VARIANCE_BPS) / 10_000n)
+    * (1_000n * TOKEN_WEI) / ticketPriceWei;
+  const perSpin = ((largeFlip * BOX_ESTIMATE_STAKE_BPS) / 10_000n) / 3n;
+  if (perSpin <= 0n) return null;
+  let amount = 0n;
+  for (const row of rows) {
+    const { weight } = _boxSpinFlipWeight(row);
+    if (weight > 0n) amount += (perSpin * weight) / 100n;
+  }
+  return amount > 0n ? { amount, approximate: true } : null;
 }
 
 /**
@@ -671,6 +704,9 @@ export function buildBoxSpinBoard(spin) {
   const reconstructedAtRisk = spinType === 'record'
     ? _recordSpinPayoutAtRisk(spin, rows)
     : null;
+  const estimatedAtRisk = flipLike
+    ? _humanBoxSpinPayoutEstimate(spin, rows)
+    : null;
   // Last-resort inference, and the reason a bust used to show no amount at
   // all: BoxSpin omits the pre-survival sum, so halving the final payout is
   // the only stake source that needs no reconstruction — and it exists solely
@@ -681,13 +717,15 @@ export function buildBoxSpinBoard(spin) {
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
   const payoutAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
-    : reconstructedAtRisk?.amount ?? inferredAtRisk;
+    : reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? inferredAtRisk;
   const payoutAtRiskApproximate = explicitAtRisk > 0n
     ? false
     : reconstructedAtRisk != null
       ? reconstructedAtRisk.approximate
-      : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
-  if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk);
+      : estimatedAtRisk != null
+        ? true
+        : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
+  if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk, payoutAtRiskApproximate);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
     rows,
@@ -931,6 +969,8 @@ function _cardsFromLeg(leg) {
             ?? leg.payoutAtRisk
             ?? null,
           survivalWinPayout: leg.survivalWinPayout ?? null,
+          estimateBoxAmountWei: leg.estimateBoxAmountWei ?? null,
+          estimateTicketPriceWei: leg.estimateTicketPriceWei ?? null,
           boxOrigin: Boolean(leg.boxOrigin),
           reels,
         },
@@ -1024,6 +1064,20 @@ export function normalizeSequence(seq) {
     const boxValue = routedPriceWei == null
       ? lootboxValuePresentation(amountWei)
       : lootboxValuePresentation(amountWei, routedPriceWei);
+    // Exact event-block enrichment remains authoritative. When it is absent,
+    // give FLIP boards the result-independent inputs for a clearly marked
+    // estimate so a blank meter cannot spoil the survival coin.
+    cards = cards.map((card) => card?.spin?.spinType === 'flip'
+      && _safeBigInt(card.spin.preSurvivalPayout) <= 0n
+      ? {
+          ...card,
+          spin: {
+            ...card.spin,
+            estimateBoxAmountWei: card.spin.estimateBoxAmountWei ?? amountWei,
+            estimateTicketPriceWei: card.spin.estimateTicketPriceWei ?? routedPriceWei,
+          },
+        }
+      : card);
     const rawIndex = seq.lootboxIndex ?? opened?.lootboxIndex;
     const boxIndex = rawIndex == null || String(rawIndex) === '0' ? null : String(rawIndex);
     const boxSpinCount = cards.reduce(
@@ -2748,6 +2802,15 @@ class RevealOverlay extends HTMLElement {
   }
 
   async #waitAfterSummary(seq) {
+    if (seq?.kind === 'pack'
+      && this.#isOpeningAll(seq)
+      && this.#hasMorePacks(seq)) {
+      // OPEN ALL is the player's one confirmation for the whole batch. The
+      // legacy sealed-card receipt must advance just like the ticket-grid
+      // path instead of presenting an enabled OPEN NEXT button elsewhere.
+      await this.#wait(_reducedMotion() ? 180 : 700);
+      return;
+    }
     if (seq?.kind === 'lootbox'
       && seq.autoAdvance
       && this.#queue[0]?.kind === 'lootbox') {
@@ -3087,6 +3150,21 @@ class RevealOverlay extends HTMLElement {
     // --- ticket packs: the whole hand at once ---
     if (Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0) {
       await this.#playTicketGrid(seq, { openingAll: this.#isOpeningAll(seq) });
+      return;
+    }
+
+    // Bingo is already one composed result: the completed 8×8 board and its
+    // FLIP/sDGNRS payouts explain each other. Land them together on the final
+    // receipt instead of dealing those same three objects individually first.
+    if (seq.kind === 'bingo') {
+      this.#renderSummary(seq);
+      if (seq.big) {
+        sfxFanfare(true);
+        this.#celebrateWin(true);
+      } else {
+        sfxRollDone(true);
+      }
+      await this.#waitAfterSummary(seq);
       return;
     }
 
@@ -3848,10 +3926,11 @@ class RevealOverlay extends HTMLElement {
     if (remaining > 0) {
       rendered.boxPayoutDetail.textContent = `${remaining} REEL${remaining === 1 ? '' : 'S'} LEFT`;
     } else if (board.survivalStage && board.survivalWinPayout > 0n) {
-      rendered.boxPayoutDetail.textContent = `DOUBLE OR NOTHING · WIN ${this.#formatDgnAmount(
+      rendered.boxPayoutDetail.textContent = `DOUBLE OR NOTHING · WIN ${this.#boxSpinAmountText(
         board,
         board.survivalWinPayout,
-      )} ${board.unit}`;
+        board.payoutAtRiskApproximate === true,
+      )}`;
     } else if (board.survivalStage) {
       rendered.boxPayoutDetail.textContent = 'DOUBLE OR NOTHING';
     } else {
@@ -4520,7 +4599,9 @@ class RevealOverlay extends HTMLElement {
       : `${_tokenText(atRisk)} FLIP AT RISK`;
     const survivalWin = board.boxSpin ? _safeBigInt(board.survivalWinPayout) : atRisk * 2n;
     detail.textContent = survivalWin > 0n
-      ? `${reelResultText} · WIN ${_tokenText(survivalWin)} FLIP`
+      ? `${reelResultText} · WIN ${board.boxSpin
+          ? this.#boxSpinAmountText(board, survivalWin, board.payoutAtRiskApproximate === true)
+          : `${_tokenText(survivalWin)} FLIP`}`
       : `${reelResultText} · DOUBLE OR NOTHING`;
 
     flipEl.appendChild(eyebrow);
@@ -5526,6 +5607,9 @@ class RevealOverlay extends HTMLElement {
       value.textContent = (!compact && card.countText)
         ? ''
         : (compact && card.revealedValue ? card.revealedValue : (card.value || ''));
+      if (card.type === 'coinflip-result' && value.textContent.length > 12) {
+        value.classList.add('rvl-card-value--long');
+      }
       const label = document.createElement('div');
       label.className = 'rvl-card-label';
       // BoxSpin cards remain mystery cards before the reel. Compact cards are
@@ -5576,6 +5660,7 @@ class RevealOverlay extends HTMLElement {
       if (matchStates && matchStates[q]) cell.classList.add(`q-${matchStates[q]}`);
       const t = traits && traits[q];
       if (t) {
+        applyDgnTraitColor(cell, t.col);
         const img = document.createElement('img');
         img.src = dgnBadgePath(q, t.sym, t.col);
         img.alt = '';
@@ -5717,6 +5802,7 @@ class RevealOverlay extends HTMLElement {
       return;
     }
     const hasMorePacks = this.#hasMorePacks(seq);
+    const openingNextPack = hasMorePacks && this.#isOpeningAll(seq);
     const readyLootboxes = seq.kind === 'lootbox'
       ? this.#readyPendingLootboxes(seq.lootboxRelease)
       : [];
@@ -5741,13 +5827,15 @@ class RevealOverlay extends HTMLElement {
     cta.__rvlTerminalLabel = terminalLabel;
     cta.textContent = unlucky
       ? 'UNLUCKY'
+      : openingNextPack
+      ? 'OPENING NEXT PACK…'
       : hasMorePacks
       ? 'OPEN NEXT PACK'
       : hasMoreLootboxes ? 'OPEN NEXT LUCKBOX'
         : autoNextLootbox ? 'OPENING NEXT LUCKBOX…'
           : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : terminalLabel);
     cta.classList?.toggle('rvl-collect-cta--unlucky', unlucky);
-    cta.disabled = autoNextLootbox;
+    cta.disabled = autoNextLootbox || openingNextPack;
     cta.dataset.mode = pendingAction ? 'pending-action' : 'continue';
     cta.__rvlPendingAction = pendingAction;
     cta.addEventListener('click', (e) => {

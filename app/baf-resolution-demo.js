@@ -63,8 +63,10 @@ function snapshotFor(state) {
       roundStatus: skipped ? 'skipped' : 'closed',
     },
     history: winner ? { wins: [
-      { level: 40, awardType: 'eth_baf', amount: '4593750000000' },
-      { level: 40, awardType: 'tickets_baf', amount: '40' },
+      { level: 40, day: 200, awardType: 'eth_baf', amount: '4593750000000' },
+      // BAF ticket awards are indexed at their future target level. sourceLevel
+      // ties this Level 47 payout back to the Level 40 fullscreen final.
+      { level: 47, sourceLevel: 40, day: 200, awardType: 'tickets_baf', amount: '40' },
     ] } : { wins: [] },
     draw: {
       entries: drawLeaders,

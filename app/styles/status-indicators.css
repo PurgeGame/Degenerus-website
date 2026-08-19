@@ -135,6 +135,12 @@ boon-product-indicator {
 
 boon-product-indicator[hidden] { display: none !important; }
 
+/* The emblem is data-driven: no live boon means no data-boon-product, and the
+   art must not paint even if a host component un-hides the element. Guards the
+   whole class of "bare arrow beside a control" bugs, not one caller. */
+boon-product-indicator:not([data-boon-product])::before,
+boon-product-indicator:not([data-boon-product])::after { display: none !important; }
+
 boon-product-indicator::before {
   position: absolute;
   inset: 0.03rem 0.14rem 0.04rem;
@@ -328,13 +334,15 @@ body.layout-basic .app-decimator-panel .dec-input-accessories > quest-objective-
 body.layout-basic .app-decimator-panel .dec-foil-label {
   position: relative;
   width: fit-content;
+  padding-left: 1.32rem;
   justify-self: start;
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-label > quest-objective-indicator {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
   position: absolute;
   top: 50%;
-  left: calc(100% + 0.3rem);
+  left: 0;
   width: 1.02rem;
   height: 1.02rem;
   translate: 0 -50%;

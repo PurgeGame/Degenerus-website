@@ -13,8 +13,9 @@
 //   - Persists pending indices at pending-boxes:${CHAIN.id}:${addr}
 //     (chainId-scoped, mirrors the revealed-packs:* convention).
 //   - openBox is permissionless (anyone can open; rewards credit the owner) —
-//     a fresh status read avoids doomed writes, and an already-open race replays
-//     the receipt's actual prize legs instead of replacing them with an error.
+//     a fresh exact-player simulation avoids doomed writes, and an already-open
+//     race replays the receipt's actual prize legs instead of replacing them
+//     with an error.
 //
 // One chip = one RNG batch index. Multiple boxes bought in one purchase()
 // share the index and open together in one openBox call (LootboxModule
@@ -29,7 +30,7 @@ import { fetchJSON } from '../app/api.js';
 import {
   openLootBox,
   canOpenLootbox,
-  readLootboxStatus,
+  readLootboxIndexCompletion,
   readLootboxPurchaseReceipt,
 } from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
@@ -979,8 +980,9 @@ class AppBoxStrip extends HTMLElement {
       if (legsCall.status === 'fulfilled') _writeResultCursor(owner, newestOrd);
 
       // Unresolved DB purchases are only candidates. `opened:false` is not
-      // authoritative for legacy rows whose settlement event lacked an index;
-      // the player's live amount slot decides whether a box really exists.
+      // authoritative for legacy rows whose settlement event lacked an index.
+      // Only a local purchase receipt or an exact successful open simulation
+      // proves that this player still owns an actionable box.
       const candidates = new Map(
         [...local.values()]
           .filter((box) => !box.resolved && Number(box.index) > 0)
@@ -996,11 +998,7 @@ class AppBoxStrip extends HTMLElement {
 
       const probes = [...candidates.values()];
       const probeResults = await Promise.allSettled(probes.map(async (box) => {
-        const status = await readLootboxStatus({
-          player: owner,
-          lootboxIndex: box.index,
-        }).catch(() => null);
-        const hasAmount = Boolean(status && BigInt(status.amount ?? 0) > 0n);
+        const completion = await readLootboxIndexCompletion(box.index);
         let hasLootboxLeg = Boolean(box.hasLootboxLeg);
         let hasPresaleLeg = Boolean(box.hasPresaleLeg);
         let receiptAmountWei = null;
@@ -1016,14 +1014,15 @@ class AppBoxStrip extends HTMLElement {
             receiptAmountWei = String(purchase.amountWei);
           }
         }
-        const presaleOnly = hasPresaleLeg && !hasLootboxLeg;
         let chainReady = false;
         // Re-probe a box that has actually failed. `ready` used to latch: once
         // true it was never checked again, so a box the chain had stopped
         // accepting stayed armed forever and every click failed the same way.
-        // Healthy ready boxes still skip the RPC — only failures pay for it.
+        // Unverified DB rows must also pass the exact-player simulation before
+        // they can create a notification.
         const suspect = Number(box.openFailures) > 0;
-        if ((hasAmount || presaleOnly) && (!box.ready || suspect)) {
+        const receiptBacked = Boolean(box.fromReceipt);
+        if (completion !== true && (!receiptBacked || !box.ready || suspect)) {
           chainReady = await canOpenLootbox({
             player: owner,
             lootboxIndex: box.index,
@@ -1033,50 +1032,36 @@ class AppBoxStrip extends HTMLElement {
           key: _boxKey(box),
           index: box.index,
           candidate: box,
-          statusKnown: status != null,
-          amountWei: status == null ? null : String(status.amount ?? 0),
-          hasAmount,
+          completionKnown: completion != null,
+          complete: completion === true,
+          chainReady,
           hasLootboxLeg,
           hasPresaleLeg,
-          presaleOnly,
           receiptAmountWei,
-          ready: (hasAmount || presaleOnly)
-            && (suspect ? chainReady : (Boolean(box.ready) || chainReady)),
+          ready: completion !== true && (
+            receiptBacked && !suspect ? Boolean(box.ready || chainReady) : chainReady
+          ),
         };
       }));
       if (this.#addr !== owner) return;
       for (const result of probeResults) {
         if (result.status !== 'fulfilled') continue;
         const {
-          key, index, candidate, statusKnown, amountWei, hasAmount, ready,
-          hasLootboxLeg, hasPresaleLeg, presaleOnly, receiptAmountWei,
+          key, index, candidate, completionKnown, complete, chainReady, ready,
+          hasLootboxLeg, hasPresaleLeg, receiptAmountWei,
         } = result.value;
         const prior = local.get(key);
-        if (!statusKnown && !presaleOnly) {
+        const receiptBacked = Boolean(prior?.fromReceipt);
+        if (!completionKnown && !receiptBacked && !chainReady) {
           // A receipt row survives an RPC blip; an unverified DB-history row
-          // never earns a notification from an unavailable status read.
-          if (!prior?.fromReceipt) local.delete(key);
+          // never earns a notification from unavailable chain reads.
+          local.delete(key);
           continue;
         }
-        if (presaleOnly) {
-          local.set(key, {
-            ...candidate,
-            ...prior,
-            ready,
-            resolved: false,
-            opening: Boolean(prior?.opening),
-            fromReceipt: Boolean(prior?.fromReceipt),
-            hasLootboxLeg,
-            hasPresaleLeg,
-            amountWei: prior?.amountWei ?? candidate?.amountWei ?? receiptAmountWei,
-          });
-          continue;
-        }
-        if (!hasAmount) {
-          if (prior?.fromReceipt) {
-            // A receipt-confirmed box cannot become disposable merely because
-            // somebody else won the permissionless open race. A zero slot
-            // proves settlement, but result legs can trail it in the indexer.
+        if (complete && !chainReady) {
+          if (receiptBacked) {
+            // Completion proves the entire index was swept. Keep the durable
+            // purchase receipt while its immutable result legs catch up.
             local.set(key, {
               ...candidate,
               ...prior,
@@ -1084,7 +1069,11 @@ class AppBoxStrip extends HTMLElement {
               resolved: true,
               resultSyncing: true,
               opening: false,
-              amountWei: prior?.amountWei ?? candidate?.amountWei ?? amountWei,
+              amountWei: _firstPositiveAmount(
+                prior?.amountWei,
+                receiptAmountWei,
+                candidate?.amountWei,
+              ),
             });
           } else {
             local.delete(key);
@@ -1092,14 +1081,26 @@ class AppBoxStrip extends HTMLElement {
           }
           continue;
         }
+        if (!receiptBacked && !chainReady) {
+          // An incomplete index is ambiguous: this row may be waiting for RNG,
+          // already settled while another player's box remains, or stale DB
+          // history. Do not invent a player box without receipt evidence.
+          local.delete(key);
+          continue;
+        }
         local.set(key, {
           ...candidate,
           ...prior,
           ready,
           resolved: false,
-          amountWei: prior?.amountWei ?? candidate?.amountWei ?? amountWei,
+          resultSyncing: false,
+          amountWei: _firstPositiveAmount(
+            prior?.amountWei,
+            receiptAmountWei,
+            candidate?.amountWei,
+          ),
           opening: Boolean(prior?.opening),
-          fromReceipt: Boolean(prior?.fromReceipt),
+          fromReceipt: receiptBacked,
           hasLootboxLeg,
           hasPresaleLeg,
         });
@@ -1157,26 +1158,30 @@ class AppBoxStrip extends HTMLElement {
     box.opening = true;
     this.#render();
     this.#clearError();
-    const presaleOnly = Boolean(box.hasPresaleLeg && !box.hasLootboxLeg);
     try {
       if (box.resolved) {
         return await this.#replayResolvedBox(box);
       }
       // The indexer can learn about a settlement between polling cycles (or
       // while the connected RPC is still serving the pre-settlement block).
-      // Prefer that immutable result before consulting the mutable amount
-      // slot; otherwise a stale non-zero RPC read can send the player into an
-      // unnecessary openBox wallet flow for a box that is already finished.
+      // Prefer that immutable result before consulting the exact write probe.
       if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return;
-      // Never open from a stale UI snapshot. The amount slot is cleared before
-      // the settlement events emit, so zero means another wallet/crank already
-      // won the race and this click should replay, not ask for a doomed tx.
-      const status = await readLootboxStatus({
+      // Never open from a stale UI snapshot. This exact-player static call is
+      // the only current GAME read that proves the box is ready and pending.
+      const actionable = await canOpenLootbox({
         player: this.#addr,
         lootboxIndex: box.index,
-      }).catch(() => null);
-      if (!presaleOnly && status && status.amount === 0n) {
-        return await this.#replayResolvedBox(box);
+      }).catch(() => false);
+      if (!actionable) {
+        const complete = await readLootboxIndexCompletion(box.index);
+        box.opening = false;
+        box.ready = false;
+        box.resolved = complete === true;
+        box.resultSyncing = complete === true;
+        if (this.#addr) _writePending(this.#addr, this.#boxes);
+        this.#render();
+        if (complete === true) void this.#runPollCycle();
+        return false;
       }
 
       const { receipt } = await openLootBox({
@@ -1217,17 +1222,11 @@ class AppBoxStrip extends HTMLElement {
     } catch (error) {
       box.opening = false;
       const rawMsg = error?.userMessage || error?.message || '';
-      const latest = await readLootboxStatus({
-        player: this.#addr,
-        lootboxIndex: box.index,
-      }).catch(() => null);
-      const clearedByRace = !presaleOnly
-        && latest != null && BigInt(latest.amount ?? 0) === 0n;
+      const complete = await readLootboxIndexCompletion(box.index);
       // A competitor can land between the read and our wallet broadcast. Treat
-      // the contract's race signal exactly like the pre-read's zero slot:
-      // recover the indexed result and replay it, without dropping the receipt
-      // row while its settlement legs are still indexing.
-      if (clearedByRace || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
+      // an advanced sweep frontier or an explicit race signal as settlement:
+      // recover the indexed result without dropping the purchase receipt.
+      if (complete === true || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
         return await this.#replayResolvedBox(box);
       } else {
         // Record the failure so the next poll RE-PROBES this box instead of
@@ -1338,7 +1337,7 @@ class AppBoxStrip extends HTMLElement {
     }
 
     // Probe mode is used immediately before a write. A miss simply continues
-    // to the fresh amount-slot check without changing the button's busy state.
+    // to the exact-player readiness check without changing the busy state.
     if (silentIfMissing) return false;
 
     // A miss here used to unconditionally re-arm `ready + resolved`, which put
@@ -1347,16 +1346,14 @@ class AppBoxStrip extends HTMLElement {
     // suppresses the error toast. Ask the chain what is actually true before
     // deciding whether waiting is even the right thing to do.
     box.opening = false;
-    const status = await readLootboxStatus({
+    const actionable = await canOpenLootbox({
       player: this.#addr,
       lootboxIndex: box.index,
-    }).catch(() => null);
+    }).catch(() => false);
 
-    if (status != null && BigInt(status.amount ?? 0) > 0n) {
-      // The slot still holds ETH, so the box is NOT settled and there are no
-      // legs to replay — it was marked resolved in error (the poll matches the
-      // leg feed by index, this path re-filters it by a different rule, and the
-      // two can disagree). Hand it back to the normal open path.
+    if (actionable) {
+      // The exact write still succeeds, so the box is NOT settled and there are
+      // no legs to replay. Hand it back to the normal open path.
       box.resolved = false;
       box.resultSyncing = false;
       this.#resolvedLegCache.delete(_boxKey(box));

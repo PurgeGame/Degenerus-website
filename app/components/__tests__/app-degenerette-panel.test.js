@@ -753,7 +753,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       '/badges-circular/crypto_00_xrp_gold.svg');
     assert.equal(el.querySelector('[data-bind="dgn-img-1"]').src,
       '/badges-circular/zodiac_01_taurus_pink.svg');
-    assert.ok(el.querySelector('[data-bind="dgn-cell-0"]').classList.contains('q-hero'));
+    const hero = el.querySelector('[data-bind="dgn-cell-0"]');
+    assert.ok(hero.classList.contains('q-hero'));
+    assert.equal(hero.getAttribute('data-trait-color'), 'gold');
+    assert.equal(hero.style['--dgn-trait-color'], '#ab8d3f',
+      'Hero spikes inherit the exact color of their badge');
     assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
       'copying an inventory ticket keeps the manual trait picker closed');
     assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, 'Ticket copied');
@@ -799,6 +803,58 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(place.textContent, 'Place Bet · 2 ETH');
     assert.equal(place.getAttribute('data-boon-effect'), '+0.24 ETH BOON');
     assert.match(place.getAttribute('aria-label'), /plus 0\.24 ETH from your boon/);
+    el.disconnectedCallback();
+  });
+
+  test('Place Bet mirrors Degenerette boon caps and explains their scope', async () => {
+    const payload = {
+      address: CONNECTED.toLowerCase(),
+      day: 62,
+      exact: true,
+      boons: [
+        { boonType: 34, consumed: false },
+        { boonType: 37, consumed: false },
+        { boonType: 40, consumed: false },
+      ],
+    };
+    storeMod.update('app.boons', payload);
+    const el = instantiate();
+    const amount = el.querySelector('[name="deg-amount"]');
+    const spins = el.querySelector('[name="deg-ticket-count"]');
+    const place = el.querySelector('[data-bind="deg-place-cta"]');
+
+    amount.value = '1';
+    amount.dispatchEvent({ type: 'input' });
+    spins.value = '25';
+    spins.dispatchEvent({ type: 'change' });
+    assert.equal(place.textContent, 'Place Bet · 25 ETH');
+    assert.equal(place.getAttribute('data-boon-effect'), '+1.2 ETH BOON',
+      'only the first 10 ETH receives the 12% boost');
+
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    amount.value = '10000';
+    amount.dispatchEvent({ type: 'input' });
+    spins.value = '15';
+    spins.dispatchEvent({ type: 'change' });
+    assert.equal(place.textContent, 'Place Bet · 150,000 FLIP');
+    assert.equal(place.getAttribute('data-boon-effect'), '+12000 FLIP BOON',
+      'only the first 100,000 FLIP receives the 12% boost');
+
+    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
+    amount.value = '30000';
+    amount.dispatchEvent({ type: 'input' });
+    spins.value = '5';
+    spins.dispatchEvent({ type: 'change' });
+    assert.equal(place.textContent, 'Place Bet · 150,000 WWXRP');
+    assert.equal(place.getAttribute('data-boon-effect'), '+18000 WWXRP BOON',
+      'WWXRP keeps the uncapped 12% boost');
+
+    const { boonIndicatorModel } = await import('../../app/boons.js');
+    assert.match(boonIndicatorModel(payload, 'degenerette-eth').title,
+      /up to 10 ETH.*bet, split across its spins/i);
+    assert.match(boonIndicatorModel(payload, 'degenerette-flip').title,
+      /up to 100,000 FLIP.*bet, split across its spins/i);
+    assert.match(boonIndicatorModel(payload, 'degenerette-wwxrp').title, /uncapped/i);
     el.disconnectedCallback();
   });
 

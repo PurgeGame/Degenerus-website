@@ -450,7 +450,7 @@ describe('app-box-strip', () => {
     });
     lootboxMod.__setContractFactoryForTest(() => ({
       interface: { parseLog: (log) => log.parsed },
-      lootboxStatus: async () => [regularWei, false],
+      boxIndexComplete: async () => false,
       openBox: { staticCall: async () => undefined },
     }));
     globalThis.fetch = async (url) => ({
@@ -674,12 +674,12 @@ describe('app-box-strip', () => {
   });
 
   test('a spin-only settled box recovers in the background without sending openBox', async () => {
-    const calls = { status: [], open: [] };
+    const calls = { complete: [], open: [] };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
-      lootboxStatus: async (...args) => {
-        calls.status.push(args);
-        return [0n, false];
+      boxIndexComplete: async (...args) => {
+        calls.complete.push(args);
+        return true;
       },
       openBox: Object.assign(
         async (...args) => {
@@ -730,8 +730,8 @@ describe('app-box-strip', () => {
       .find((action) => action.id === 'lootbox:8');
     assert.ok(pending, 'the tracked box remains visible while its result catches up');
 
-    assert.ok(calls.status.length >= 1, 'the background poll checks the settled amount slot');
-    assert.ok(calls.status.every(([owner, index]) => owner === ADDR_LC && index === 8n));
+    assert.ok(calls.complete.length >= 1, 'the background poll checks the sweep frontier');
+    assert.ok(calls.complete.every(([index]) => index === 8n));
     assert.equal(calls.open.length, 0, 'no wallet write for a cleared on-chain slot');
     const recovering = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');
@@ -778,12 +778,12 @@ describe('app-box-strip', () => {
 
   test('a competing opener cannot make a failed write eat the receipt-backed box', async () => {
     let raced = false;
-    const calls = { status: 0, open: 0 };
+    const calls = { complete: 0, open: 0 };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
-      lootboxStatus: async () => {
-        calls.status += 1;
-        return raced ? [0n, false] : [10_000_000_000n, false];
+      boxIndexComplete: async () => {
+        calls.complete += 1;
+        return raced;
       },
       openBox: Object.assign(
         async () => {
@@ -791,7 +791,11 @@ describe('app-box-strip', () => {
           raced = true;
           throw new Error('Box already resolved');
         },
-        { staticCall: async () => undefined },
+        {
+          staticCall: async () => {
+            if (raced) throw new Error('Box already resolved');
+          },
+        },
       ),
       queryFilter: async () => [],
       filters: {},
@@ -820,7 +824,7 @@ describe('app-box-strip', () => {
       'losing the opener race yields passive result synchronization instead of fake completion');
 
     assert.equal(calls.open, 1, 'this wallet reached the write before losing the race');
-    assert.ok(calls.status >= 2, 'the failed write rechecks the cleared amount slot');
+    assert.ok(calls.complete >= 1, 'the failed write checks whether the sweep frontier advanced');
     const recovered = pendingActionsMod.getPendingActions()
       .find((item) => item.id === 'lootbox:8');
     assert.ok(recovered, 'the box stays present while settlement legs index');
@@ -838,7 +842,7 @@ describe('app-box-strip', () => {
     const failure = new Error('User rejected the request');
     failure.code = 'ACTION_REJECTED';
     const fake = {
-      lootboxStatus: async () => [10_000_000_000n, false],
+      boxIndexComplete: async () => false,
       openBox: Object.assign(async () => { throw failure; }, {
         staticCall: async () => undefined,
       }),
@@ -873,14 +877,14 @@ describe('app-box-strip', () => {
   });
 
   test('a newly indexed result wins over a stale non-zero RPC slot before openBox', async () => {
-    const calls = { status: [], open: [] };
+    const calls = { complete: [], open: [] };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
-      lootboxStatus: async (...args) => {
-        calls.status.push(args);
-        // Simulate an RPC still serving the block before settlement cleared
-        // the amount slot. The immutable indexed leg below is newer.
-        return [1n, false];
+      boxIndexComplete: async (...args) => {
+        calls.complete.push(args);
+        // Simulate an RPC still serving the pre-sweep frontier. The immutable
+        // indexed settlement leg below is newer.
+        return false;
       },
       openBox: Object.assign(
         async (...args) => {
@@ -931,11 +935,11 @@ describe('app-box-strip', () => {
     const pending = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');
     assert.ok(pending, 'the pre-indexed snapshot still exposes the open action');
-    calls.status.length = 0;
+    calls.complete.length = 0;
     await pending.run();
 
-    assert.equal(calls.status.length, 0,
-      'indexed settlement is authoritative before consulting a potentially stale RPC slot');
+    assert.equal(calls.complete.length, 0,
+      'indexed settlement is authoritative before consulting a potentially stale frontier');
     assert.equal(calls.open.length, 0, 'an already-settled box never reaches the wallet write');
     const [replay] = revealMod.__takeQueuedForTest();
     assert.equal(replay?.kind, 'lootbox');
@@ -949,7 +953,7 @@ describe('app-box-strip', () => {
 
   test('an unresolved legacy DB row cannot create a notification for an empty chain slot', async () => {
     const fake = {
-      lootboxStatus: async () => [0n, false],
+      boxIndexComplete: async () => true,
       lootboxRngWordByIndex: async () => 1n,
     };
     contractsMod.setProvider({
@@ -978,7 +982,7 @@ describe('app-box-strip', () => {
     for (let i = 0; i < 10; i += 1) await tick();
 
     assert.equal(el.querySelectorAll('.bxs-chip').length, 0,
-      'DB history is only a candidate; zero live amount prevents a phantom chip');
+      'DB history is only a candidate; a completed index prevents a phantom chip');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the bottom tray is not spammed by the stale row');
     assert.equal(globalThis.localStorage.getItem(KEY), null,
@@ -986,9 +990,9 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a receipt-confirmed presale-only box survives the regular zero amount slot', async () => {
+  test('a receipt-confirmed presale-only box survives an incomplete shared index', async () => {
     const fake = {
-      lootboxStatus: async () => [0n, false],
+      boxIndexComplete: async () => false,
       openBox: Object.assign(async () => ({ wait: async () => ({ logs: [] }) }), {
         staticCall: async () => undefined,
       }),
@@ -1015,14 +1019,14 @@ describe('app-box-strip', () => {
     for (let i = 0; i < 8; i += 1) await tick();
 
     const chip = el.querySelector('.bxs-chip');
-    assert.ok(chip, 'the presale box remains present despite lootboxStatus amount zero');
+    assert.ok(chip, 'the receipt keeps the presale box present while its index is incomplete');
     assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'PRESALE BOX');
     assert.equal(chip.querySelector('.bxs-open-cta').textContent, 'OPEN PRESALE BOX');
     const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
     assert.equal(stored[0].hasLootboxLeg, false);
     assert.equal(stored[0].hasPresaleLeg, true);
     assert.equal(stored[0].resolved, false,
-      'the regular mapping cannot falsely settle a presale-only purchase');
+      'index incompleteness cannot falsely settle a presale-only purchase');
     el.disconnectedCallback();
   });
 

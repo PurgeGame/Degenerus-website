@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-22800 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-24075 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -313,6 +313,8 @@ describe('app.css LOC budget', () => {
     // neither previously had a pressed state or a focus indicator that hover
     // could not be mistaken for. No new surface: ~110 lines across three
     // existing blocks, over half of it the state rules and their comments.
-    assert.ok(cssLines.length <= 23850, `total <=23850, got ${cssLines.length}`);
+    // 23850 → 24075 covers the compact quest reward rail, familiar state
+    // glyphs, and persistent victory treatment. This refines one surface.
+    assert.ok(cssLines.length <= 24075, `total <=24075, got ${cssLines.length}`);
   });
 });

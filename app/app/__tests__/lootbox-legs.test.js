@@ -308,6 +308,67 @@ describe('enrichLootboxBoonLegs', () => {
       { boonType: enriched.boonType },
     ).label, 'TICKET BOON');
   });
+
+  test('still derives the exact product when the optional packed-state read fails', async () => {
+    const amount = 100_000_000_000n;
+    const context = {
+      // Contract-derived vector: the boon draw is Purchase +15% (type 8).
+      rngWord: 115n,
+      packedBox: amount | (amount << 128n) | (60n << 192n),
+      currentLevel: 45,
+    };
+    pollingTesting.setBoonStateReader(async () => {
+      throw new Error('wallet RPC has no historical state');
+    });
+
+    const [enriched] = await enrichLootboxBoonLegs([{
+      legType: 'reward',
+      rewardType: 5,
+      amount: 1_500n,
+    }], {
+      player: PLAYER,
+      blockNumber: 12_350,
+      lootboxIndex: 7,
+      context,
+    });
+
+    assert.equal(enriched.boonType, 8);
+    assert.equal(lootboxRewardPresentation(
+      enriched.rewardType,
+      enriched.amount,
+      { boonType: enriched.boonType },
+    ).label, 'TICKET BOON');
+  });
+
+  test('uses a unique post-state family when the prior block read is unavailable', async () => {
+    pollingTesting.setBoonStateReader(async (_address, { blockTag }) => {
+      if (blockTag === 12_350) {
+        return {
+          // Only the awarded Luckbox +25% family is active after settlement.
+          slot0: (3n << 104n) | (62n << 56n),
+          slot1: 0n,
+          currentDay: 62,
+        };
+      }
+      throw new Error('historical block pruned');
+    });
+
+    const [enriched] = await enrichLootboxBoonLegs([{
+      legType: 'reward',
+      rewardType: 6,
+      amount: 2_500n,
+    }], {
+      player: PLAYER,
+      blockNumber: 12_350,
+    });
+
+    assert.equal(enriched.boonType, 22);
+    assert.equal(lootboxRewardPresentation(
+      enriched.rewardType,
+      enriched.amount,
+      { boonType: enriched.boonType },
+    ).label, 'LUCKBOX BOON');
+  });
 });
 
 describe('human BoxSpin payout enrichment', () => {
@@ -620,7 +681,7 @@ describe('parseOpenLegsFromReceipt', () => {
       blockNumber: 45_678,
       logs: [
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 6, 1094, ethers.parseEther('120'), true]),
-        log('LootBoxDgnrsReward', [PLAYER, 10_000_000_000n, ethers.parseEther('3')]),
+        log('LootBoxDgnrsBatch', [PLAYER, ethers.parseEther('4'), ethers.parseEther('3')]),
         log('LootBoxReward', [PLAYER, 11, 10_000_000_000n, 500n]),
         log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('240'), 0n]),
       ],
@@ -652,6 +713,14 @@ describe('parseOpenLegsFromReceipt', () => {
       'receipt normalization retains the settlement block needed for exact replay enrichment');
     assert.equal(legs[3].reels.length, 1);
     assert.equal(legs[3].reels[0].score, 4);
+  });
+
+  test('keeps historical LootBoxDgnrsReward receipts replayable', () => {
+    const receipt = {
+      logs: [log('LootBoxDgnrsReward', [PLAYER, 10_000_000_000n, ethers.parseEther('2')])],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs, [{ legType: 'dgnrs', amount: ethers.parseEther('2') }]);
   });
 
   test('whale pass leg decodes as legendary payload', () => {
@@ -841,8 +910,8 @@ describe('openLegsFromDegenerettePayouts', () => {
         },
       },
       {
-        rewardType: 'LootBoxDgnrsReward',
-        rewardData: { lootboxAmount: '900', dgnrsAmount: '55' },
+        rewardType: 'LootBoxDgnrsBatch',
+        rewardData: { requested: '57', paid: '55' },
       },
     ]);
 

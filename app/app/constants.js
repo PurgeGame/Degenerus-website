@@ -1,6 +1,7 @@
 // app/constants.js -- Contract addresses, chain config, badge paths
 
 import { resolveBadgeUrl } from './badge-sprite.js';
+import { CHAIN as ACTIVE_CHAIN } from './chain-config.js';
 
 export const CHAIN = {
   id: 31337,
@@ -39,15 +40,12 @@ export const ETHERSCAN_BASE = 'http://localhost:8545';
 export const ETH_DISPLAY_SCALE = 1_000_000n;
 export const TOKEN_DISPLAY_SCALE = 1n;
 
-// Indexer/DB API (Fastify, database repo). Host-aware: pages served from
-// localhost keep the local dev stack; the deployed site hits the Fly app.
+// Indexer/DB API (Fastify, database repo). Local and deployed pages deliberately
+// share the one hosted data plane; localhost no longer boots or depends on a
+// second database/indexer just to render the app.
 // NOTE: this is NOT the api.degener.us session server (Discord/wallet login) —
 // two different services.
-export const API_BASE =
-  typeof window === 'undefined' ||
-  /^(localhost|127\.0\.0\.1)$/.test(window.location?.hostname ?? 'localhost')
-    ? 'http://localhost:3000'
-    : 'https://degenerus-db.fly.dev';
+export const API_BASE = ACTIVE_CHAIN.indexerBase;
 
 export const POLL_INTERVALS = {
   gameState: 15000,    // 15 seconds

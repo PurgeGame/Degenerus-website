@@ -8,7 +8,10 @@ import {
   coinflipBetChipPiles,
   coinflipBetPresentation,
   coinflipRackChipCount,
+  coinflipWinChipPiles,
+  coinflipWinPileFrame,
 } from '/app/components/app-daily-flip.js';
+import { flipPileVariant } from '/app/app/flip-piles.js';
 
 const UNIT = 10n ** 18n;
 
@@ -18,6 +21,7 @@ const state = {
   todayLost: false,
   tomorrowFlip: 25_300n,
   tomorrowMasked: false,
+  shifted: false,
   bankrollFlip: 987_654n,
   bankrollCreditFlip: 0n,
 };
@@ -30,6 +34,7 @@ if (params.has('win')) state.todayWinPercent = Number(params.get('win'));
 if (params.has('lost')) state.todayLost = true;
 if (params.has('tomorrow')) state.tomorrowFlip = BigInt(params.get('tomorrow'));
 if (params.has('masked')) state.tomorrowMasked = true;
+if (params.has('shifted')) state.shifted = true;
 if (params.has('bankroll')) state.bankrollFlip = BigInt(params.get('bankroll'));
 if (params.has('credit')) state.bankrollCreditFlip = BigInt(params.get('credit'));
 if (params.has('noanim')) document.body.classList.add('demo-no-anim');
@@ -43,21 +48,24 @@ const fmt = (flip) => flip.toLocaleString('en-US');
 
 // --- mirrors of the component's private renderers -------------------------
 
-function renderChipStrip({ host, rack, amountWei, growToWei = null, emptyCopy }) {
+function renderChipStrip({ host, rack, amountWei, growToWei = null, pileCounts = null, emptyCopy }) {
   rack.textContent = '';
-  const piles = amountWei == null ? [] : coinflipBetChipPiles(amountWei);
+  const piles = pileCounts
+    ?? (amountWei == null ? [] : coinflipBetChipPiles(amountWei));
   if (piles.length === 0) {
     rack.textContent = emptyCopy;
     return;
   }
-  const presentation = coinflipBetPresentation(amountWei);
+  const presentation = pileCounts ? 0 : coinflipBetPresentation(amountWei);
   if (presentation > 0) {
     const pile = document.createElement('i');
     pile.className = `df-bet-pile${growToWei != null ? ' df-bet-pile--held' : ''}`;
     pile.setAttribute('data-pile', String(presentation));
+    pile.setAttribute('data-variant', flipPileVariant(amountWei));
     if (growToWei != null) {
       const add = document.createElement('i');
       add.className = 'df-bet-pile-add';
+      add.setAttribute('data-pay', String(coinflipWinPileFrame(amountWei, growToWei)));
       pile.appendChild(add);
     }
     rack.appendChild(pile);
@@ -190,7 +198,11 @@ function renderBankrollRack({ baseWei, creditWei = 0n, creditVisible = false }) 
 function renderToday() {
   const won = state.todayWinPercent != null && !state.todayLost;
   const stakeWei = state.todayFlip * UNIT;
-  const totalWei = won ? (stakeWei * BigInt(state.todayWinPercent)) / 100n : null;
+  // ?win= is the contract's reward percent, so the payout is the stake plus
+  // that share of it — mirrors #winPayoutWei.
+  const totalWei = won
+    ? stakeWei + ((stakeWei * BigInt(state.todayWinPercent)) / 100n)
+    : null;
   renderChipStrip({
     host: $('df-bet-oval'),
     rack: $('df-bet-chip-rack'),
@@ -203,11 +215,13 @@ function renderToday() {
   const row = $('df-today-winnings-row');
   const winPile = won && totalWei != null && coinflipBetPresentation(stakeWei) > 0;
   const addedWei = !winPile && totalWei != null && totalWei > stakeWei ? totalWei - stakeWei : null;
-  row.dataset.state = addedWei == null ? 'empty' : 'win';
+  const winPiles = addedWei == null ? [] : coinflipWinChipPiles(stakeWei, totalWei);
+  row.dataset.state = winPiles.length === 0 ? 'empty' : 'win';
   renderChipStrip({
     host: row,
     rack: $('df-today-winnings-rack'),
     amountWei: addedWei,
+    pileCounts: winPiles,
     emptyCopy: '',
   });
   const slot = $('df-position-today');
@@ -245,7 +259,7 @@ function renderToday() {
     : state.todayLost
       ? `-${fmt(state.todayFlip)}`
       : won
-        ? `+${fmt((state.todayFlip * BigInt(state.todayWinPercent)) / 100n)}`
+        ? `+${fmt(totalWei / UNIT)}`
         : coinflipAmountLabel(state.todayFlip * UNIT);
   result.appendChild(value);
   positionRow.appendChild(result);
@@ -288,6 +302,81 @@ function renderTomorrow() {
   slot.appendChild(row);
 }
 
+function renderShiftedPositions() {
+  const resultFlip = state.todayFlip;
+  const resultWinPercent = state.todayWinPercent;
+  const resultLost = state.todayLost;
+  const liveFlip = state.tomorrowFlip;
+
+  // Reuse the production-mirroring Today renderer to deal the staged wager
+  // into the large spot, then restore the immutable result for Yesterday.
+  state.todayFlip = liveFlip;
+  state.todayWinPercent = null;
+  state.todayLost = false;
+  renderToday();
+  state.todayFlip = resultFlip;
+  state.todayWinPercent = resultWinPercent;
+  state.todayLost = resultLost;
+
+  const lowerOval = $('df-tomorrow-bet-oval');
+  const lowerRack = $('df-tomorrow-chip-rack');
+  const outcome = resultFlip === 0n ? 'no-bet' : resultLost ? 'loss' : 'win';
+  lowerOval.setAttribute('data-tomorrow-display', resultFlip > 0n ? 'amount' : 'placeholder');
+  lowerOval.setAttribute('data-yesterday-outcome', outcome);
+  renderChipStrip({
+    host: lowerOval,
+    rack: lowerRack,
+    amountWei: null,
+    emptyCopy: resultFlip > 0n ? coinflipAmountLabel(resultFlip * UNIT) : 'NO BET',
+  });
+
+  const slot = $('df-position-tomorrow');
+  slot.textContent = '';
+  const row = document.createElement('div');
+  row.className = `df-position-row df-position-row--${outcome}`;
+  row.setAttribute('data-position', 'tomorrow');
+  if (outcome !== 'no-bet') {
+    const multi = document.createElement('span');
+    multi.className = 'df-position-multiplier';
+    const tag = document.createElement('span');
+    tag.className = 'df-position-outcome';
+    tag.textContent = outcome === 'win' ? 'WIN' : 'LOSS';
+    multi.appendChild(tag);
+    if (outcome === 'win') {
+      const pct = document.createElement('span');
+      pct.className = 'df-position-percentage';
+      pct.textContent = `${100 + Number(resultWinPercent || 0)}%`;
+      multi.appendChild(pct);
+    }
+    row.appendChild(multi);
+  }
+  const result = document.createElement('span');
+  result.className = 'df-position-result';
+  const value = document.createElement('span');
+  value.className = `df-position-value df-position-value--${outcome}`;
+  value.textContent = outcome === 'no-bet'
+    ? ''
+    : outcome === 'loss'
+      ? `-${fmt(resultFlip)}`
+      : `+${fmt(resultFlip + ((resultFlip * BigInt(resultWinPercent || 0)) / 100n))}`;
+  result.appendChild(value);
+  row.appendChild(result);
+  slot.appendChild(row);
+}
+
+function renderPositionChrome() {
+  const top = $('demo-today-surface');
+  const lower = $('demo-lower-surface');
+  top.classList.add('is-actionable');
+  top.classList.toggle('is-add-bet', state.shifted);
+  lower.classList.toggle('is-yesterday', state.shifted);
+  $('demo-today-label').textContent = "TODAY'S BET";
+  $('demo-lower-label').textContent = state.shifted ? "YESTERDAY'S BET" : "TOMORROW'S BET";
+  $('demo-today-add-cue').hidden = !state.shifted;
+  $('demo-tomorrow-add-cue').hidden = state.shifted;
+  if (!state.shifted) $('df-tomorrow-bet-oval').removeAttribute('data-yesterday-outcome');
+}
+
 function renderBankroll() {
   renderBankrollRack({
     baseWei: state.bankrollFlip * UNIT,
@@ -310,20 +399,37 @@ function renderRecent() {
 }
 
 function renderAll() {
-  renderToday();
-  renderTomorrow();
+  if (state.shifted) renderShiftedPositions();
+  else {
+    renderToday();
+    renderTomorrow();
+  }
+  renderPositionChrome();
   renderBankroll();
 }
+
+$('demo-today-surface').addEventListener('click', () => {
+  if (state.todayWinPercent == null && !state.todayLost) return;
+  state.shifted = true;
+  renderAll();
+});
 
 document.querySelector('.coinflip-felt-demo__controls').addEventListener('click', (event) => {
   const button = event.target.closest('button');
   if (!button) return;
+  if (button.dataset.resultShift != null) {
+    if (state.todayWinPercent == null && !state.todayLost) state.todayWinPercent = 96;
+    state.shifted = true;
+    renderAll();
+    return;
+  }
   if (button.dataset.dayShift != null) {
     // Preview the rollover choreography: today's spot clears, then the
     // staged readout turns into chips that fill the circle.
     state.todayFlip = 0n;
     state.todayWinPercent = null;
     state.todayLost = false;
+    state.shifted = false;
     renderAll();
     setTimeout(() => {
       state.todayFlip = state.tomorrowFlip;
@@ -340,11 +446,13 @@ document.querySelector('.coinflip-felt-demo__controls').addEventListener('click'
     return;
   }
   if (button.dataset.today != null) {
+    state.shifted = false;
     state.todayFlip = BigInt(button.dataset.today);
     state.todayWinPercent = button.dataset.todayWin ? Number(button.dataset.todayWin) : null;
     state.todayLost = button.dataset.todayLost === 'true';
   }
   if (button.dataset.tomorrow != null) {
+    state.shifted = false;
     state.tomorrowFlip = BigInt(button.dataset.tomorrow);
     state.tomorrowMasked = button.dataset.tomorrowMasked === 'true';
   }

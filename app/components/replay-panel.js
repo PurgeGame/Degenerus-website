@@ -62,6 +62,102 @@ const MINE_FLIP_CRANK_LABEL = 'MINE FLIP · PROCESSING';
 const MINE_FLIP_MINING_LABEL = 'MINE FLIP · MINING';
 let replayApiRetryAfterUntil = 0;
 
+/** Resolve the ticket cohort used to color the main jackpot reel. */
+export function replayHoldingsLevel({
+  exactPurchaseLevel = null,
+  processingPurchaseLevel = null,
+  processingDay = null,
+  selectedDay = null,
+  selectedLevel = null,
+} = {}) {
+  const exact = Number(exactPurchaseLevel);
+  if (Number.isInteger(exact) && exact > 0) return exact;
+
+  const live = Number(processingPurchaseLevel);
+  if (Number(processingDay) === Number(selectedDay)
+    && Number.isInteger(live) && live > 0) return live;
+
+  const settled = Number(selectedLevel);
+  return Number.isInteger(settled) && settled >= 0 ? settled + 1 : null;
+}
+
+function ticketWinIdentity(win) {
+  const traitId = win?.traitId == null ? '' : Number(win.traitId);
+  const level = win?.level == null ? '' : Number(win.level);
+  const ticketIndex = win?.ticketIndex == null ? '' : Number(win.ticketIndex);
+  return [
+    String(win?.winner || '').toLowerCase(),
+    String(win?.awardType || '').toLowerCase(),
+    traitId,
+    String(win?.amount ?? '0'),
+    level,
+    ticketIndex,
+  ].join('|');
+}
+
+/**
+ * Restore day-one early-bird ticket awards to the bonus reel.
+ *
+ * The exact Roll 1/2 endpoints currently omit these rows, while the
+ * composed winner total (and therefore DAY SUMMARY) included them. The replay
+ * day feed already contains every discrete payout, so subtract the ticket rows
+ * represented by the two exact rolls and seat the remaining bonus-trait rows
+ * on Roll 2. The multiset subtraction also makes this safe once the API starts
+ * returning early-bird rows directly: already-accounted rows are never added
+ * twice.
+ */
+export function includeEarlyBirdTicketWins({ roll1, roll2, distributions, bonusTraits } = {}) {
+  const roll1Wins = Array.isArray(roll1?.wins) ? roll1.wins : [];
+  const roll2Wins = Array.isArray(roll2?.wins) ? roll2.wins : [];
+  const allRows = Array.isArray(distributions) ? distributions : [];
+  const allowedTraits = new Set(
+    (Array.isArray(bonusTraits) ? bonusTraits : [])
+      .map(Number)
+      .filter((traitId) => Number.isInteger(traitId) && traitId >= 0 && traitId <= 255),
+  );
+  if (allowedTraits.size === 0) return roll2;
+
+  const accounted = new Map();
+  for (const win of [...roll1Wins, ...roll2Wins]) {
+    if (!['ticket', 'tickets'].includes(String(win?.awardType || '').toLowerCase())) continue;
+    const key = ticketWinIdentity(win);
+    accounted.set(key, (accounted.get(key) || 0) + 1);
+  }
+
+  const earlyBirdWins = [];
+  for (const row of allRows) {
+    if (!['ticket', 'tickets'].includes(String(row?.awardType || '').toLowerCase())) continue;
+    const key = ticketWinIdentity(row);
+    const remaining = accounted.get(key) || 0;
+    if (remaining > 0) {
+      accounted.set(key, remaining - 1);
+      continue;
+    }
+    const traitId = Number(row?.traitId);
+    if (!Number.isInteger(traitId) || !allowedTraits.has(traitId)) continue;
+    earlyBirdWins.push({
+      winner: String(row?.winner || '').toLowerCase(),
+      awardType: 'tickets',
+      traitId,
+      quadrant: Math.floor(traitId / 64),
+      amount: String(row?.amount ?? '0'),
+      level: row?.level == null ? null : Number(row.level),
+      sourceLevel: row?.sourceLevel == null ? null : Number(row.sourceLevel),
+      ticketIndex: row?.ticketIndex == null ? null : Number(row.ticketIndex),
+      earlyBird: true,
+    });
+  }
+  if (earlyBirdWins.length === 0) return roll2;
+
+  return {
+    ...(roll2 || {}),
+    day: roll2?.day ?? roll1?.day ?? null,
+    level: roll2?.level ?? roll1?.level ?? null,
+    purchaseLevel: roll2?.purchaseLevel ?? roll1?.purchaseLevel ?? null,
+    wins: [...roll2Wins, ...earlyBirdWins],
+  };
+}
+
 /** Keep the tiny center-diamond FLIP prize to three significant figures. */
 export function formatCenterBonusFlip(weiValue) {
   let raw;
@@ -295,6 +391,28 @@ export function winningBadgeRewardLines(win = {}) {
   return rows;
 }
 
+/**
+ * Count the player's still-covered possible-win panels on Roll 1.
+ *
+ * Blue/gold already tells the player that they owned the offered trait, so
+ * every such quadrant must be uncovered before Bonus Spin even when it turns
+ * out to be a miss. Red guaranteed-loss quadrants remain optional. The center
+ * is included only when it contains a player payout and therefore has a cover.
+ */
+export function countUnscratchedPotentialWinPanels({
+  quadOwned = [],
+  scratched = [],
+  centerWinCount = 0,
+  centerScratched = false,
+} = {}) {
+  let remaining = 0;
+  for (let i = 0; i < 4; i++) {
+    if (Boolean(quadOwned[i]) && !scratched[i]) remaining++;
+  }
+  if (Number(centerWinCount) > 0 && !centerScratched) remaining++;
+  return remaining;
+}
+
 /** Miniature four-trait ticket shared by jackpot receipts and badge popups. */
 function createJackpotTicketIcon(extraClass = '') {
   const ticketIcon = document.createElement('span');
@@ -371,8 +489,8 @@ class ReplayPanel extends HTMLElement {
 
   // Bonus Spin (Roll 2) state — reuses the main widget
   #bonusPhase = false;          // true while bonus roll is active (Roll 2 reveal)
-  #mainScratchComplete = false; // Roll 2 stays locked until Roll 1 is uncovered
-  #mainAllRed = false;          // no owned quadrant/center win: Roll 2 may start immediately
+  #mainScratchComplete = false; // full Roll 1 board; remains the spoiler/persistence boundary
+  #mainPotentialScratchComplete = false; // durable Bonus Spin gate: every blue/gold Roll 1 panel uncovered
   #bonusScratchComplete = false;// both boards can be revisited once Roll 2 is uncovered
   #drawViewSwitching = false;   // coalesces rapid center-flame view toggles
   #bonusTraitIds = new Set();   // traitIds the player won in Roll 2 (unused — kept for compat)
@@ -472,24 +590,18 @@ class ReplayPanel extends HTMLElement {
               <option value="">Select a day first</option>
             </select>
           </div>
-          <div class="jackpot-chainlink jackpot-chainlink--left" aria-hidden="true">
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--1"></span>
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--2"></span>
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--3"></span>
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--4"></span>
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--5"></span>
-            <span class="jackpot-chainlink__cell jackpot-chainlink__cell--6"></span>
-          </div>
           <button class="btn-primary replay-reveal-btn" data-bind="reveal-btn" disabled>
             SPIN JACKPOT
           </button>
           <div class="jackpot-chainlink jackpot-chainlink--right" aria-hidden="true">
+            <span class="jackpot-chainlink__pins"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--1"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--2"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--3"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--4"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--5"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--6"></span>
+            <span class="jackpot-chainlink__core">VRF</span>
           </div>
         </div>
 
@@ -885,6 +997,11 @@ class ReplayPanel extends HTMLElement {
     const day = Number(signals?.day);
     const normalizedDay = Number.isInteger(day) && day > 0 ? day : null;
     const priorDay = Number(this.#jpProcessingSignals?.day);
+    const priorPurchaseLevel = Number(this.#jpProcessingSignals?.purchaseLevel);
+    const rawPurchaseLevel = Number(signals?.purchaseLevel);
+    const purchaseLevel = Number.isInteger(rawPurchaseLevel) && rawPurchaseLevel > 0
+      ? rawPurchaseLevel
+      : null;
     if (normalizedDay !== (Number.isInteger(priorDay) ? priorDay : null)) {
       if (this.#jpPresentationTimer != null) {
         try { clearTimeout(this.#jpPresentationTimer); } catch { /* defensive */ }
@@ -905,7 +1022,24 @@ class ReplayPanel extends HTMLElement {
       coinflipReady: signals?.coinflipReady === true,
       ticketsReady: signals?.ticketsReady === true,
       jackpotReady: signals?.jackpotReady === true,
+      purchaseLevel,
     };
+    // Before RNG settles there is no Roll 1 payload to identify the ticket
+    // cohort. When the app shell supplies (or corrects) that live level, load
+    // its traits immediately; the already-running slow reel reads this Set on
+    // every frame and will switch each face to the proper pink/blue state.
+    const purchaseLevelChanged = purchaseLevel != null
+      && purchaseLevel !== (Number.isInteger(priorPurchaseLevel) ? priorPurchaseLevel : null);
+    const selectedDayIsLive = normalizedDay != null
+      && normalizedDay === Number(this.#selectedDay);
+    const hasExactPurchaseLevel = Number.isInteger(Number(this.#dayRoll1?.purchaseLevel))
+      && Number(this.#dayRoll1?.purchaseLevel) > 0;
+    if (purchaseLevelChanged && selectedDayIsLive && this.#selectedPlayer
+      && !hasExactPurchaseLevel) {
+      this.#playerTraitIds = new Set();
+      this.#traitsCacheAddress = null;
+      void this.#loadPlayerTraits();
+    }
     // Only a day observed while genuinely incomplete replays the full visual
     // pipeline. Opening an already-finished historical day starts at its real
     // PREPARING SPIN fetch instead of pretending to request Chainlink again.
@@ -1013,6 +1147,12 @@ class ReplayPanel extends HTMLElement {
     // processing branch may set it, so no other path can inherit a stale
     // pickaxe from a state the key has already left.
     btn.removeAttribute?.('data-jp-action');
+    // `data-jp-stage="rng"` begins at the day boundary so the LCD can describe
+    // what the pipeline is waiting for. It is NOT proof that a request exists.
+    // Keep that proof on its own short-lived hook; the Chainlink instrument and
+    // its current layer use it to remain dormant until the exact-day watcher has
+    // seen the request (or a later state that proves it happened).
+    btn.removeAttribute?.('data-jp-rng-requested');
     // Contract/indexer polling continues while the reels animate. Those
     // refreshes own the processing labels, but they must never repaint an
     // already-running main or bonus action back to its idle CTA. The class is
@@ -1093,6 +1233,12 @@ class ReplayPanel extends HTMLElement {
     if (processing) {
       btn.hidden = false;
       stage ||= this.#jackpotProcessingStage();
+      const rngRequestObserved = this.#jpProcessingSignals?.active === true
+        && Number(this.#jpProcessingSignals?.day) === Number(this.#selectedDay)
+        && this.#jpProcessingSignals?.requested === true;
+      if (rngRequestObserved) {
+        btn.setAttribute?.('data-jp-rng-requested', 'true');
+      }
       // The one thing a player can DO while this window is open is turn the
       // crank. Availability is the resolver's, not ours: it publishes the row
       // only when a simulated mineFlip actually succeeds, so an armed key means
@@ -1154,6 +1300,11 @@ class ReplayPanel extends HTMLElement {
       return;
     }
     if (this.#singleButton() && this.#jackpotSpinsComplete()) {
+      // Once the player's draw actions are exhausted this LCD would otherwise
+      // be an empty hardware socket. Let the resolver-owned permissionless
+      // crank occupy that fallback, but only after Decimator, Day Summary,
+      // processing state, and the Community Coinflip have all had priority.
+      if (this.#paintMineFlipFallback(btn)) return;
       btn.hidden = true;
       if (btn.dataset) delete btn.dataset.replayAction;
       return;
@@ -1165,7 +1316,7 @@ class ReplayPanel extends HTMLElement {
       const ready = this.#mainReadyForBonus();
       btn.textContent = ready ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
       btn.disabled = !ready || !this.#dayDataReady(this.#selectedDay);
-      btn.title = ready ? '' : 'Scratch the main draw first';
+      btn.title = ready ? '' : 'Scratch blue and gold panels first';
     } else {
       btn.textContent = MAIN_SPIN_LABEL;
       btn.disabled = !exactDayReady;
@@ -1268,6 +1419,38 @@ class ReplayPanel extends HTMLElement {
   __setSelectedDayForTest(day) {
     const target = Number(day);
     this.#selectedDay = Number.isInteger(target) && target > 0 ? target : null;
+  }
+
+  /** Test-only seam for the post-spin empty-LCD action priority. */
+  __setCompletedSpinsForTest({ hasBonus = false, bonusComplete = true } = {}) {
+    this.#hasBonus = Boolean(hasBonus);
+    this.#mainSpinComplete = true;
+    this.#bonusSpinComplete = !this.#hasBonus || Boolean(bonusComplete);
+    this.#btnMode = 'reveal';
+    this.#syncSpinControlState();
+  }
+
+  /**
+   * Lowest-priority owner of the shared LCD: permissionless maintenance after
+   * every player-facing draw action has vacated it.
+   */
+  #paintMineFlipFallback(btn) {
+    if (!btn || !this.#mineFlipPhaseActive()) return false;
+    this.#mineFlipArmed = this.#mineFlipCallable();
+    btn.hidden = false;
+    btn.classList?.remove('is-bonus', 'is-coinflip');
+    btn.classList?.add('is-processing');
+    if (btn.dataset) {
+      btn.dataset.replayAction = this.#mineFlipArmed ? 'mine-flip' : 'processing';
+    }
+    btn.disabled = !this.#mineFlipArmed;
+    btn.textContent = this.#mineFlipBusy ? MINE_FLIP_MINING_LABEL : MINE_FLIP_CRANK_LABEL;
+    btn.title = 'Process pending jackpot work';
+    btn.setAttribute?.('data-jp-action', 'mine-flip');
+    btn.setAttribute?.('aria-label', btn.textContent);
+    if (this.#mineFlipBusy) btn.setAttribute?.('aria-busy', 'true');
+    else btn.removeAttribute?.('aria-busy');
+    return true;
   }
 
   /**
@@ -1494,6 +1677,7 @@ class ReplayPanel extends HTMLElement {
     if (!this.#hostAllRollsCleared || !this.#hasBonus) return;
     this.#bonusPhase = false;
     this.#mainScratchComplete = true;
+    this.#mainPotentialScratchComplete = true;
     this.#bonusScratchComplete = true;
     this.#mainSpinComplete = true;
     this.#bonusSpinComplete = true;
@@ -1527,7 +1711,7 @@ class ReplayPanel extends HTMLElement {
     // the mixed front/underside frame reported during bonus clearing.
     this.#bonusPhase = false;
     this.#mainScratchComplete = false;
-    this.#mainAllRed = false;
+    this.#mainPotentialScratchComplete = false;
     this.#bonusScratchComplete = false;
     this.#drawViewSwitching = false;
     this.#resetMainWidget();
@@ -1929,8 +2113,13 @@ class ReplayPanel extends HTMLElement {
     // that level. The old /replay/player-traits endpoint aggregated ALL
     // levels, which lit quadrants scratchable for players who could never
     // win the day's draw (user bug report: "should be red and unscratchable").
-    const level = this.#dayRoll1?.purchaseLevel
-      ?? (this.#selectedLevel != null ? Number(this.#selectedLevel) + 1 : null);
+    const level = replayHoldingsLevel({
+      exactPurchaseLevel: this.#dayRoll1?.purchaseLevel,
+      processingPurchaseLevel: this.#jpProcessingSignals?.purchaseLevel,
+      processingDay: this.#jpProcessingSignals?.day,
+      selectedDay: this.#selectedDay,
+      selectedLevel: this.#selectedLevel,
+    });
     if (level == null) {
       this.#playerTraitIds = new Set();
       this.#traitsCacheAddress = null;
@@ -2067,6 +2256,13 @@ class ReplayPanel extends HTMLElement {
       const detail = await this.#loadDayDetail(dayNum);
       if (!loadIsCurrent()) return finishStaleLoad();
       this.#distributions = Array.isArray(detail?.distributions) ? detail.distributions : [];
+      const rng = this.#rngDays.find((entry) => Number(entry?.day) === dayNum);
+      this.#dayRoll2 = includeEarlyBirdTicketWins({
+        roll1: this.#dayRoll1,
+        roll2: this.#dayRoll2,
+        distributions: this.#distributions,
+        bonusTraits: this.#packedTraits(rng?.bonusTraitsPacked),
+      });
     }
 
     // Load winners from the authoritative day/winners endpoint.
@@ -2534,8 +2730,8 @@ class ReplayPanel extends HTMLElement {
         btn.disabled = !this.#mainReadyForBonus();
         btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
         btn.title = this.#mainReadyForBonus()
-          ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus spin ready' : '')
-          : 'Scratch the main draw first';
+          ? ''
+          : 'Scratch blue and gold panels first';
       } else {
         this.#syncSpinControlState();
       }
@@ -2786,8 +2982,23 @@ class ReplayPanel extends HTMLElement {
     return started;
   }
 
+  #refreshMainPotentialScratchGate() {
+    const remaining = countUnscratchedPotentialWinPanels({
+      quadOwned: this.#quadOwned,
+      scratched: this.#scratched,
+      centerWinCount: this.#centerWins.length,
+      centerScratched: this.#centerScratched,
+    });
+    // Once the player has exposed every visibly possible Roll 1 result, keep
+    // that disclosure durable while Roll 2 replaces this widget's ownership
+    // state and while the two completed draws are revisited through the toggle.
+    if (remaining === 0) this.#mainPotentialScratchComplete = true;
+    return remaining;
+  }
+
   #mainReadyForBonus() {
-    return this.#mainScratchComplete || this.#mainAllRed;
+    return this.#mainSpinComplete
+      && this.#mainPotentialScratchComplete;
   }
 
   #showBonusSection() {
@@ -2812,8 +3023,8 @@ class ReplayPanel extends HTMLElement {
       btn.disabled = !this.#mainReadyForBonus();
       btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
       btn.title = this.#mainReadyForBonus()
-        ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus spin ready' : '')
-        : 'Scratch the main draw first';
+        ? ''
+        : 'Scratch blue and gold panels first';
       noBonus.hidden = true;
     } else {
       btn.hidden = true;
@@ -3549,19 +3760,22 @@ class ReplayPanel extends HTMLElement {
       anyScratchable = true;
     }
 
-    // A board with four guaranteed-loss faces and no center payout contains no
-    // hidden personal result. Let the player continue directly to Roll 2; they
-    // can still scratch or revisit the public main-board results later.
-    if (!this.#bonusPhase) {
-      this.#mainAllRed = this.#quadOwned.every((owned) => !owned)
-        && this.#centerWins.length === 0;
-    }
+    // Blue/gold already identifies possible wins. Require those covers even
+    // when they hide an owned miss; red guaranteed-loss results stay optional.
+    const mainPotentialRemaining = !this.#bonusPhase
+      ? this.#refreshMainPotentialScratchGate()
+      : null;
 
     if (!this.#bonusPhase) {
       if (hint) {
-        hint.textContent = this.#mainAllRed && this.#hasBonus
-          ? 'Bonus round ready'
-          : ((4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining');
+        if (this.#hasBonus && !this.#bonusSpinComplete) {
+          hint.textContent = mainPotentialRemaining === 0
+            ? 'Bonus round ready'
+            : (mainPotentialRemaining + ' possible-win panel'
+              + (mainPotentialRemaining !== 1 ? 's' : '') + ' remaining');
+        } else {
+          hint.textContent = (4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining';
+        }
       }
     } else if (anyScratchable) {
       if (hint) hint.textContent = (4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining';
@@ -4272,26 +4486,21 @@ class ReplayPanel extends HTMLElement {
     const hint = this.querySelector('[data-bind="hint"]');
     const centerPending = this.#centerWins.length > 0 && !this.#centerScratched;
     const allDone = this.#scratched.every(s => s) && !centerPending;
+    const mainPotentialRemaining = !this.#bonusPhase
+      ? this.#refreshMainPotentialScratchGate()
+      : null;
     if (allDone) {
-      if (hint) hint.textContent = '';
       if (!this.#bonusPhase) {
         this.#mainScratchComplete = true;
-        const sharedBtn = this.querySelector('[data-bind="reveal-btn"]');
-        if (this.#singleButton() && this.#btnMode === 'bonus' && sharedBtn) {
-          sharedBtn.disabled = false;
-          sharedBtn.textContent = BONUS_SPIN_LABEL;
-          sharedBtn.title = '';
-        }
-        const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
-        if (bonusBtn) {
-          bonusBtn.disabled = false;
-          bonusBtn.textContent = BONUS_SPIN_LABEL;
-          bonusBtn.title = '';
-        }
+        this.#mainPotentialScratchComplete = true;
       } else {
         this.#bonusScratchComplete = true;
       }
-      this.#syncDrawToggleAffordance();
+      if (hint) {
+        hint.textContent = !this.#bonusPhase && this.#hasBonus && !this.#bonusSpinComplete
+          ? 'Bonus round ready'
+          : '';
+      }
       const anyWon = this.#quadWinArrays.some(w => w.some(d => d.awardType !== 'overflow')) || this.#centerWins.length > 0;
       if (!silent) {
         if (anyWon) this.#celebrate({ sound: !this.#soloEthCuePlayed });
@@ -4300,8 +4509,22 @@ class ReplayPanel extends HTMLElement {
     } else {
       let remaining = this.#scratched.filter(s => !s).length;
       if (centerPending) remaining++;
-      if (hint) hint.textContent = remaining + ' panel' + (remaining !== 1 ? 's' : '') + ' remaining';
+      if (hint) {
+        if (!this.#bonusPhase && this.#hasBonus && !this.#bonusSpinComplete) {
+          hint.textContent = mainPotentialRemaining === 0
+            ? 'Bonus round ready'
+            : (mainPotentialRemaining + ' possible-win panel'
+              + (mainPotentialRemaining !== 1 ? 's' : '') + ' remaining');
+        } else {
+          hint.textContent = remaining + ' panel' + (remaining !== 1 ? 's' : '') + ' remaining';
+        }
+      }
     }
+    if (!this.#bonusPhase) {
+      this.#syncSpinControlState();
+      this.#showBonusSection();
+    }
+    this.#syncDrawToggleAffordance();
   }
 
   #isSoloEthWinner(qIdx) {
@@ -4560,7 +4783,7 @@ class ReplayPanel extends HTMLElement {
     // Reset bonus roll state
     this.#bonusPhase = false;
     this.#mainScratchComplete = false;
-    this.#mainAllRed = false;
+    this.#mainPotentialScratchComplete = false;
     this.#bonusScratchComplete = false;
     this.#mainSpinComplete = false;
     this.#bonusSpinComplete = false;
@@ -4586,7 +4809,7 @@ class ReplayPanel extends HTMLElement {
       bonusBtn.disabled = true;
       bonusBtn.hidden = false;
       bonusBtn.textContent = BONUS_SPIN_LOCKED_LABEL;
-      bonusBtn.title = 'Scratch the main draw first';
+      bonusBtn.title = 'Scratch blue and gold panels first';
     }
     const noBonus = this.querySelector('[data-bind="no-bonus"]');
     if (noBonus) noBonus.hidden = true;

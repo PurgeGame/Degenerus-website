@@ -17,18 +17,13 @@ import {
   sfxCoinflipWhoosh,
 } from '../app/jackpot-sfx.js';
 
-const NORMAL_TIMING = Object.freeze({ lineup: 1_350, flip: 3_250, draw: 1_450, cut: 900 });
-const REDUCED_TIMING = Object.freeze({ lineup: 80, flip: 80, draw: 80, cut: 80 });
+const NORMAL_TIMING = Object.freeze({ intro: 520, flip: 3_250, results: 2_650, wheel: 1_550 });
+const REDUCED_TIMING = Object.freeze({ intro: 80, flip: 80, results: 120, wheel: 80 });
 let active = null;
 let openSeq = 0;
 
 function _big(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
-}
-
-function _short(value) {
-  const address = String(value || '');
-  return address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address || '—';
 }
 
 function _formatEth(value, digits = 3) {
@@ -53,6 +48,15 @@ function _formatDrawWeight(value) {
     return `${tenths / 10n}${tenths % 10n === 0n ? '' : `.${tenths % 10n}`}${suffix}`;
   }
   return amount.toLocaleString('en-US');
+}
+
+function _formatWhalePassHalves(value) {
+  const halves = _big(value);
+  if (halves > 0n && halves % 2n === 0n) {
+    const passes = halves / 2n;
+    return `${passes} WHALE PASS${passes === 1n ? '' : 'ES'}`;
+  }
+  return `${halves} HALF-PASS${halves === 1n ? '' : 'ES'}`;
 }
 
 function _motionReduced() {
@@ -88,9 +92,11 @@ function _destroyActive() {
     try { document.removeEventListener('keydown', current.onKeydown); } catch (_e) {}
     try { current.overlay.remove(); } catch (_e) {}
   }
-  // Always repair the scroll lock, even if an interrupted render lost its
-  // in-memory `active` record.
-  try { document.body?.classList?.remove('baf-resolution-open'); } catch (_e) {}
+  // Always repair both handoff states, including an interrupted pre-mount load.
+  try {
+    document.body?.classList?.remove('baf-resolution-pending');
+    document.body?.classList?.remove('baf-resolution-open');
+  } catch (_e) {}
 }
 
 function _clearActive() {
@@ -102,35 +108,23 @@ export function closeBafResolution() {
   _clearActive();
 }
 
-function _leaderCard(row, snapshot) {
-  const item = document.createElement('li');
-  const rank = Number(row?.rank);
-  item.className = 'baf-res__leader';
-  item.dataset.rank = String(rank);
-  if (rank === 1) item.classList.add('is-locked');
-  if (rank === 2) item.classList.add('is-eliminated', 'is-precut');
-  if (row?.player && row.player === snapshot.player.address) item.classList.add('is-you');
-
-  const rankNode = document.createElement('span');
-  rankNode.className = 'baf-res__leader-rank';
-  rankNode.textContent = `#${rank}`;
-  const copy = document.createElement('span');
-  copy.className = 'baf-res__leader-copy';
-  const address = document.createElement('small');
-  address.textContent = row ? _short(row.player) : '—';
-  const score = document.createElement('strong');
-  score.textContent = row ? formatBafResolutionScore(row.score) : '—';
-  const state = document.createElement('b');
-  state.className = 'baf-res__leader-state';
-  state.textContent = rank === 1
-    ? '10% LOCKED'
-    : (rank === 2 ? 'OUT' : (snapshot.cutKnown ? 'FLIP CUT' : 'CUT SYNCING'));
-  copy.appendChild(address);
-  copy.appendChild(score);
-  item.appendChild(rankNode);
-  item.appendChild(copy);
-  item.appendChild(state);
-  return item;
+function _drawLegendRow({ kind, color, label, weight, percent }) {
+  const row = document.createElement('li');
+  row.dataset.kind = kind;
+  const swatch = document.createElement('i');
+  swatch.style.setProperty('--baf-draw-color', color);
+  swatch.setAttribute('aria-hidden', 'true');
+  const identity = document.createElement('span');
+  identity.textContent = label;
+  const score = document.createElement('b');
+  score.textContent = weight;
+  const share = document.createElement('strong');
+  share.textContent = percent;
+  row.appendChild(swatch);
+  row.appendChild(identity);
+  row.appendChild(score);
+  row.appendChild(share);
+  return row;
 }
 
 function _paintWeightedDraw(overlay, snapshot) {
@@ -142,24 +136,25 @@ function _paintWeightedDraw(overlay, snapshot) {
   const playerWeight = overlay.querySelector('[data-bind="baf-draw-player-weight"]');
   const context = overlay.querySelector('[data-bind="baf-draw-context"]');
   const state = overlay.querySelector('[data-bind="baf-draw-state"]');
-  const total = draw?.totalWeight;
-  const ownWeight = draw?.player?.score;
+  const total = _big(draw?.totalWeight);
+  const ownWeight = _big(draw?.player?.score);
+  const ownPercent = formatBafDrawPercent(ownWeight, draw?.totalWeight);
 
-  if (chance) chance.textContent = formatBafDrawPercent(ownWeight, total);
+  if (chance) chance.textContent = ownPercent;
   if (playerWeight) {
     playerWeight.textContent = draw?.player
       ? `${_formatDrawWeight(ownWeight)} FLIP WEIGHT`
-      : 'WEIGHT SYNCING';
+      : 'NO FINAL-DAY ENTRY';
   }
   if (context) {
     const playerCount = draw?.totalParticipants == null
       ? '— PLAYERS'
       : `${draw.totalParticipants.toLocaleString('en-US')} PLAYERS`;
-    context.textContent = total == null
-      ? `TOTAL SYNCING · ${playerCount}`
-      : `${_formatDrawWeight(total)} FLIP TOTAL · ${playerCount}`;
+    context.textContent = total <= 0n
+      ? `FINAL-DAY BOOK UNAVAILABLE · ${playerCount}`
+      : `${_formatDrawWeight(total)} FLIP IN THE BOOK · ${playerCount}`;
   }
-  if (state) state.textContent = snapshot.gateWon ? 'DRAW BOOK LOCKED' : 'VOID · BAF LOSS';
+  if (state) state.textContent = snapshot.gateWon ? 'WAITING FOR DRAW' : 'VOID · BAF LOSS';
 
   const visibleSlices = allocation.entries.filter((entry) => entry.endPpm > entry.startPpm);
   if (pie) {
@@ -176,110 +171,218 @@ function _paintWeightedDraw(overlay, snapshot) {
     }
     pie.setAttribute(
       'aria-label',
-      `Final-day BAF draw weights. Your chance ${formatBafDrawPercent(ownWeight, total)}.`,
+      `Final-day BAF draw weights. Your chance ${ownPercent}.`,
     );
   }
 
   if (!legend) return;
   legend.textContent = '';
-  for (const entry of allocation.entries) {
-    const row = document.createElement('li');
-    row.dataset.kind = entry.kind;
-    if (entry.isPlayer) row.classList.add('is-player');
+  legend.appendChild(_drawLegendRow({
+    kind: 'player',
+    color: '#d9fff5',
+    label: 'YOU',
+    weight: draw?.player ? `${_formatDrawWeight(ownWeight)} FLIP` : 'NO ENTRY',
+    percent: ownPercent,
+  }));
+  const fieldWeight = total > ownWeight ? total - ownWeight : 0n;
+  legend.appendChild(_drawLegendRow({
+    kind: 'field',
+    color: '#334155',
+    label: 'EVERYONE ELSE',
+    weight: total > 0n ? `${_formatDrawWeight(fieldWeight)} FLIP` : '—',
+    percent: formatBafDrawPercent(fieldWeight, draw?.totalWeight),
+  }));
+}
 
-    const swatch = document.createElement('i');
-    swatch.style.setProperty('--baf-draw-color', entry.color);
-    swatch.setAttribute('aria-hidden', 'true');
-    const identity = document.createElement('span');
-    if (entry.kind === 'other') identity.textContent = 'EVERYONE ELSE';
-    else if (entry.isPlayer) identity.textContent = entry.rank ? `#${entry.rank} · YOU` : 'YOU';
-    else identity.textContent = `#${entry.rank} · ${_short(entry.player)}`;
-    const score = document.createElement('b');
-    score.textContent = `${_formatDrawWeight(entry.score)} FLIP`;
-    const percent = document.createElement('strong');
-    percent.textContent = entry.percent;
-    row.appendChild(swatch);
-    row.appendChild(identity);
-    row.appendChild(score);
-    row.appendChild(percent);
-    legend.appendChild(row);
+function _resultCard({ eyebrow, value, detail, kind, icon = null }) {
+  const card = document.createElement('article');
+  card.className = 'baf-res__result-card';
+  card.dataset.kind = kind;
+  if (icon) {
+    const image = document.createElement('img');
+    image.src = icon;
+    image.alt = '';
+    card.appendChild(image);
+  }
+  const copy = document.createElement('span');
+  const small = document.createElement('small');
+  small.textContent = eyebrow;
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+  const note = document.createElement('b');
+  note.textContent = detail;
+  copy.appendChild(small);
+  copy.appendChild(strong);
+  copy.appendChild(note);
+  card.appendChild(copy);
+  return card;
+}
+
+function _paintPlayerResults(overlay, snapshot) {
+  const scene = overlay.querySelector('[data-bind="baf-player-results"]');
+  const heading = overlay.querySelector('[data-bind="baf-results-heading"]');
+  const copy = overlay.querySelector('[data-bind="baf-results-copy"]');
+  const grid = overlay.querySelector('[data-bind="baf-result-grid"]');
+  if (!scene || !heading || !copy || !grid) return;
+  grid.textContent = '';
+
+  if (!snapshot.gateWon) {
+    scene.dataset.outcome = 'loss';
+    heading.textContent = 'THE BAF DID NOT FIRE';
+    copy.textContent = 'The red face kept the pool in the futurepool. No ticket samples or final-day draw ran.';
+    if (_big(snapshot.player.consolation) > 0n) {
+      grid.appendChild(_resultCard({
+        eyebrow: 'YOUR CONSOLATION',
+        value: `${formatBafResolutionScore(snapshot.player.consolation)} WWXRP`,
+        detail: 'CLAIMABLE BAF LOSS REWARD',
+        kind: 'consolation',
+      }));
+    }
+    return;
+  }
+
+  const hits = Array.isArray(snapshot.player.prizeHits) ? snapshot.player.prizeHits : [];
+  scene.dataset.outcome = snapshot.player.wonAny ? 'win' : 'miss';
+  if (snapshot.player.wonAny) {
+    heading.textContent = 'YOUR BAF RESULTS';
+    copy.textContent = 'Only this wallet’s prize-bearing ticket draws and direct BAF awards are shown.';
+  } else {
+    heading.textContent = 'NO PRIZE LANDED ON YOUR TICKETS';
+    copy.textContent = 'The BAF ran, but no prize-bearing ticket result was recorded for this wallet.';
+  }
+
+  const visibleHits = hits.slice(0, 6);
+  for (let index = 0; index < visibleHits.length; index += 1) {
+    const hit = visibleHits[index];
+    const suffix = Number(hit.count) > 1 ? ` · ×${hit.count}` : '';
+    if (hit.kind === 'eth') {
+      grid.appendChild(_resultCard({
+        eyebrow: `PRIZE RESULT ${index + 1}${suffix}`,
+        value: `${_formatEth(hit.amount, 4)} ETH`,
+        detail: 'PAID TO YOUR CLAIMABLE BALANCE',
+        kind: 'eth',
+        icon: '/badges-circular/crypto_06_ethereum_green.svg',
+      }));
+    } else if (hit.kind === 'tickets') {
+      const amount = _big(hit.amount);
+      grid.appendChild(_resultCard({
+        eyebrow: `PRIZE RESULT ${index + 1}${suffix}`,
+        value: `${amount} TICKET${amount === 1n ? '' : 'S'}`,
+        detail: hit.level == null ? 'FUTURE TICKET PAYOUT' : `LEVEL ${hit.level} TICKET PAYOUT`,
+        kind: 'tickets',
+        icon: '/whitepaper/flame-center.svg',
+      }));
+    } else {
+      grid.appendChild(_resultCard({
+        eyebrow: `PRIZE RESULT ${index + 1}${suffix}`,
+        value: _formatWhalePassHalves(hit.amount),
+        detail: 'DEFERRED BAF TICKET VALUE',
+        kind: 'whale-pass',
+        icon: '/app/assets/baf-mark.svg',
+      }));
+    }
+  }
+
+  if (hits.length > visibleHits.length) {
+    grid.appendChild(_resultCard({
+      eyebrow: 'MORE RESULTS',
+      value: `+${hits.length - visibleHits.length}`,
+      detail: 'INCLUDED IN YOUR TOTAL BELOW',
+      kind: 'overflow',
+    }));
+  }
+  if (!grid.childElementCount && snapshot.player.leaderSlicePct > 0) {
+    grid.appendChild(_resultCard({
+      eyebrow: snapshot.player.leaderSlicePct === 10 ? 'TOP BAF SCORE' : 'CUT SURVIVOR',
+      value: `${snapshot.player.leaderSlicePct}% SLICE`,
+      detail: 'PAYOUT DETAILS ARE STILL SYNCING',
+      kind: 'leader',
+    }));
+  }
+  if (!grid.childElementCount) {
+    grid.appendChild(_resultCard({
+      eyebrow: 'YOUR FINISH',
+      value: snapshot.player.rank == null ? 'UNRANKED' : `RANK #${snapshot.player.rank}`,
+      detail: `${formatBafResolutionScore(snapshot.player.score)} BAF SCORE · NO PAYOUT`,
+      kind: 'miss',
+    }));
   }
 }
 
 function _renderSnapshot(overlay, snapshot) {
-  overlay.classList.remove('is-loading');
   overlay.dataset.gate = snapshot.gateWon ? 'win' : 'loss';
   overlay.innerHTML = `
     <div class="baf-res__ambient" aria-hidden="true"></div>
-    <main class="baf-res__shell" data-bind="baf-shell" data-stage="lineup">
+    <main class="baf-res__shell" data-bind="baf-shell" data-stage="coin">
       <header class="baf-res__header">
         <span class="baf-res__brand">
           <span class="baf-res__mark" aria-hidden="true"><b>BAF</b><small>×10</small></span>
           <span><small>LEVEL ${snapshot.level} FINAL</small><h1>BIG ASS FLIP</h1></span>
         </span>
-        <span class="baf-res__pool" data-bind="baf-pool" ${snapshot.estimatedPoolWei == null ? 'hidden' : ''}>
+        <span class="baf-res__pool" ${snapshot.estimatedPoolWei == null ? 'hidden' : ''}>
           <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="ETH">
-          <span><small>FINAL PRIZE POOL</small><strong>${_formatEth(snapshot.estimatedPoolWei)} <em>ETH</em></strong></span>
+          <span><small>BAF PRIZE POOL</small><strong>${_formatEth(snapshot.estimatedPoolWei)} <em>ETH</em></strong></span>
         </span>
-        <span class="baf-res__steps" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
       </header>
 
-      <section class="baf-res__standing" aria-label="Your Big Ass Flip standing">
-        <small>YOUR STANDING</small>
-        <strong>${snapshot.player.rank == null ? 'UNRANKED' : `RANK #${snapshot.player.rank}`}</strong>
-        <span><b>${formatBafResolutionScore(snapshot.player.score)}</b> SCORE</span>
-        <em>${snapshot.player.totalParticipants == null ? '—' : snapshot.player.totalParticipants.toLocaleString('en-US')} PLAYERS</em>
-      </section>
+      <ol class="baf-res__steps" aria-label="Big Ass Flip reveal progress">
+        <li><i></i><span>THE FLIP</span></li>
+        <li><i></i><span>YOUR RESULTS</span></li>
+        <li><i></i><span>LAST-DAY DRAW</span></li>
+      </ol>
 
-      <section class="baf-res__lineup" aria-label="BAF top four">
-        <header><strong>TOP FOUR</strong><span>${snapshot.cutKnown ? '#2 CUT BEFORE THE GATE' : 'FINAL CUT SYNCING'}</span></header>
-        <ol data-bind="baf-leaders"></ol>
-      </section>
-
-      <section class="baf-res__gate" aria-live="polite">
-        <span class="baf-res__gate-line baf-res__gate-line--left" aria-hidden="true"></span>
-        <div class="baf-res__coin-wrap">
-          <small data-bind="baf-gate-eyebrow">BAF GATE</small>
-          <div class="baf-res__coin-scene" aria-hidden="true">
-            <span class="baf-res__coin-shadow"></span>
-            <span class="baf-res__coin-rotor" data-bind="baf-coin"></span>
-          </div>
-          <strong data-bind="baf-gate-result">FLIP INCOMING</strong>
+      <section class="baf-res__scene baf-res__gate" aria-live="polite">
+        <small>50 / 50 FIRE GATE</small>
+        <h2>ONE FLIP DECIDES THE WHOLE BAF</h2>
+        <div class="baf-res__coin-scene" aria-hidden="true">
+          <span class="baf-res__coin-aura"></span>
+          <span class="baf-res__coin-shadow"></span>
+          <span class="baf-res__coin-rotor" data-bind="baf-coin"></span>
         </div>
-        <span class="baf-res__gate-line baf-res__gate-line--right" aria-hidden="true"></span>
+        <strong data-bind="baf-gate-result">FLIP TO RUN THE DRAW</strong>
+        <p>Green fires the ticket draws. Red leaves the prize pool untouched.</p>
       </section>
 
-      <section class="baf-res__weighted" data-bind="baf-weighted"
+      <section class="baf-res__scene baf-res__results" data-bind="baf-player-results" hidden
+               aria-label="Your BAF draw results">
+        <header>
+          <span><small>YOUR WALLET ONLY</small><h2 data-bind="baf-results-heading">YOUR BAF RESULTS</h2></span>
+          <span class="baf-res__standing">
+            <b>${snapshot.player.rank == null ? 'UNRANKED' : `RANK #${snapshot.player.rank}`}</b>
+            <small>${formatBafResolutionScore(snapshot.player.score)} BAF SCORE</small>
+          </span>
+        </header>
+        <p data-bind="baf-results-copy"></p>
+        <div class="baf-res__result-grid" data-bind="baf-result-grid"></div>
+        <footer>50 SCATTER ROUNDS · 2 FAR-FUTURE DRAWS · ONLY YOUR RESULTS SHOWN</footer>
+      </section>
+
+      <section class="baf-res__scene baf-res__weighted" data-bind="baf-weighted" hidden
                aria-label="Final purchase day BAF weighted draw">
         <header>
-          <span><small>5% BAF SLICE</small><strong>FINAL-DAY WEIGHTED DRAW</strong></span>
-          <b data-bind="baf-draw-state">DRAW BOOK LOCKED</b>
+          <span><small>5% BAF SLICE</small><h2>FINAL-DAY WEIGHTED DRAW</h2></span>
+          <b data-bind="baf-draw-state">WAITING FOR GATE</b>
         </header>
         <div class="baf-res__weighted-body">
-          <div class="baf-res__draw-wheel">
+          <div class="baf-res__draw-wheel" data-bind="baf-draw-wheel">
+            <span class="baf-res__draw-pointer" aria-hidden="true"></span>
             <span class="baf-res__draw-ticks" aria-hidden="true"></span>
             <div class="baf-res__draw-pie" data-bind="baf-draw-pie" role="img">
               <span class="baf-res__draw-core">
                 <img src="/app/assets/baf-mark.svg" alt="">
                 <small>YOUR CHANCE</small>
                 <strong data-bind="baf-draw-player-percent">—</strong>
-                <b data-bind="baf-draw-player-weight">WEIGHT SYNCING</b>
+                <b data-bind="baf-draw-player-weight">NO FINAL-DAY ENTRY</b>
               </span>
             </div>
           </div>
-          <ol class="baf-res__draw-legend" data-bind="baf-draw-legend"></ol>
+          <div class="baf-res__draw-copy">
+            <h3>YOUR LAST-DAY FLIP WEIGHT</h3>
+            <p>Direct FLIP added on the final purchase day became one weighted chance at this five-percent slice.</p>
+            <ol class="baf-res__draw-legend" data-bind="baf-draw-legend"></ol>
+          </div>
         </div>
-        <footer data-bind="baf-draw-context">TOTAL SYNCING</footer>
-      </section>
-
-      <section class="baf-res__prizes" aria-label="BAF prize lanes">
-        <header>
-          <strong>PRIZE MAP</strong>
-          <span>${snapshot.resolutionDetailsAvailable
-            ? `<b>${snapshot.awards.ethCount}</b> ETH AWARDS · <b>${snapshot.awards.ticketCount}</b> TICKET AWARDS`
-            : 'PAYOUT DETAILS SYNCING'}</span>
-        </header>
-        <div class="baf-res__prize-grid" data-bind="baf-prize-grid"></div>
+        <footer data-bind="baf-draw-context">FINAL-DAY BOOK UNAVAILABLE</footer>
       </section>
 
       <footer class="baf-res__footer">
@@ -290,34 +393,8 @@ function _renderSnapshot(overlay, snapshot) {
     <button type="button" class="baf-res__close" data-bind="baf-close" aria-label="Close BAF resolution">×</button>
   `;
 
-  const leaders = overlay.querySelector('[data-bind="baf-leaders"]');
-  const byRank = new Map(snapshot.topFour.map((row) => [Number(row.rank), row]));
-  for (let rank = 1; rank <= 4; rank += 1) {
-    leaders?.appendChild(_leaderCard(byRank.get(rank) || { rank }, snapshot));
-  }
-
-  const prizeGrid = overlay.querySelector('[data-bind="baf-prize-grid"]');
-  for (const lane of snapshot.prizeLanes) {
-    const card = document.createElement('article');
-    card.className = 'baf-res__prize';
-    card.dataset.lane = lane.id;
-    const mine = (lane.id === 'leader' && snapshot.player.leaderSlicePct === 10)
-      || (lane.id === 'cut' && snapshot.player.leaderSlicePct === 5);
-    if (mine) card.classList.add('is-player-win');
-    const detail = document.createElement('small');
-    detail.textContent = lane.detail;
-    const label = document.createElement('span');
-    label.textContent = lane.label;
-    const share = document.createElement('strong');
-    share.textContent = `${lane.share}%`;
-    card.appendChild(detail);
-    card.appendChild(label);
-    card.appendChild(share);
-    prizeGrid?.appendChild(card);
-  }
-
+  _paintPlayerResults(overlay, snapshot);
   _paintWeightedDraw(overlay, snapshot);
-
   const rotor = overlay.querySelector('[data-bind="baf-coin"]');
   appendCoinFaces(rotor, { initialSide: 'red' });
   overlay.querySelector('[data-bind="baf-close"]')?.addEventListener('click', _clearActive);
@@ -329,7 +406,6 @@ function _paintPayout(overlay, snapshot) {
   if (!payout) return;
   payout.textContent = '';
   payout.className = 'baf-res__payout';
-
   const heading = document.createElement('strong');
   const rewards = document.createElement('span');
   rewards.className = 'baf-res__reward-list';
@@ -348,16 +424,17 @@ function _paintPayout(overlay, snapshot) {
     reward.appendChild(copy);
     rewards.appendChild(reward);
   };
+
   if (!snapshot.gateWon) {
     payout.classList.add('is-loss');
     heading.textContent = 'BAF LOSS';
     rewards.classList.add('is-summary');
     rewards.textContent = _big(snapshot.player.consolation) > 0n
       ? `${formatBafResolutionScore(snapshot.player.consolation)} WWXRP CONSOLATION`
-      : 'NO BAF PAYOUT';
+      : 'NO DRAW · POOL STAYS IN THE FUTUREPOOL';
   } else if (snapshot.player.wonAny) {
     payout.classList.add('is-win');
-    heading.textContent = 'YOU WON';
+    heading.textContent = 'YOUR BAF RESULT';
     if (_big(snapshot.player.eth) > 0n) {
       addReward(
         `${_formatEth(snapshot.player.eth, 4)} ETH`,
@@ -372,81 +449,92 @@ function _paintPayout(overlay, snapshot) {
         '/whitepaper/flame-center.svg',
       );
     }
+    if (_big(snapshot.player.whalePassHalves) > 0n) {
+      addReward(_formatWhalePassHalves(snapshot.player.whalePassHalves), 'whale-pass', '/app/assets/baf-mark.svg');
+    }
     if (!rewards.childElementCount && snapshot.player.leaderSlicePct > 0) {
-      addReward(`${snapshot.player.leaderSlicePct}% LEADER PRIZE`, 'leader');
+      addReward(`${snapshot.player.leaderSlicePct}% LEADER PRIZE · SYNCING`, 'leader');
     }
   } else {
-    payout.classList.add('is-loss');
+    payout.classList.add('is-miss');
     heading.textContent = 'NO BAF PAYOUT';
     rewards.classList.add('is-summary');
-    rewards.textContent = `RANK #${snapshot.player.rank ?? '—'} · ${formatBafResolutionScore(snapshot.player.score)} SCORE`;
+    rewards.textContent = `${snapshot.player.rank == null ? 'UNRANKED' : `RANK #${snapshot.player.rank}`} · ${formatBafResolutionScore(snapshot.player.score)} SCORE`;
   }
   payout.appendChild(heading);
   payout.appendChild(rewards);
+}
+
+function _finishCeremony(overlay, snapshot) {
+  const shell = overlay.querySelector('[data-bind="baf-shell"]');
+  if (!shell) return;
+  shell.dataset.stage = 'complete';
+  const wheel = overlay.querySelector('[data-bind="baf-draw-wheel"]');
+  wheel?.classList.remove('is-spinning');
+  wheel?.classList.add(snapshot.gateWon ? 'is-settled' : 'is-void');
+  const state = overlay.querySelector('[data-bind="baf-draw-state"]');
+  if (state) state.textContent = snapshot.gateWon ? 'DRAW COMPLETE' : 'NOT DRAWN · BAF LOSS';
+  _paintPayout(overlay, snapshot);
+  const done = overlay.querySelector('[data-bind="baf-done"]');
+  if (done) {
+    done.hidden = false;
+    try { done.focus({ preventScroll: true }); } catch (_e) { try { done.focus(); } catch (_ignore) {} }
+  }
+  try {
+    document.dispatchEvent(new CustomEvent('baf:revealed', {
+      detail: {
+        level: snapshot.level,
+        won: snapshot.gateWon,
+        prizeHits: snapshot.player.prizeHits?.length || 0,
+      },
+    }));
+  } catch (_e) { /* optional integration event */ }
 }
 
 function _runCeremony(overlay, snapshot) {
   const shell = overlay.querySelector('[data-bind="baf-shell"]');
   const rotor = overlay.querySelector('[data-bind="baf-coin"]');
   const result = overlay.querySelector('[data-bind="baf-gate-result"]');
-  const eyebrow = overlay.querySelector('[data-bind="baf-gate-eyebrow"]');
+  const gate = overlay.querySelector('.baf-res__gate');
+  const playerResults = overlay.querySelector('[data-bind="baf-player-results"]');
+  const weighted = overlay.querySelector('[data-bind="baf-weighted"]');
+  const wheel = overlay.querySelector('[data-bind="baf-draw-wheel"]');
+  const state = overlay.querySelector('[data-bind="baf-draw-state"]');
   const timing = _motionReduced() ? REDUCED_TIMING : NORMAL_TIMING;
 
   _schedule(() => {
     if (!shell || !rotor) return;
-    shell.dataset.stage = 'gate';
+    shell.dataset.stage = 'coin-flip';
     rotor.classList.add('is-flipping', snapshot.gateWon ? 'is-win' : 'is-loss');
     if (result) result.textContent = 'FLIPPING';
     _sound(warmupCoinflipSfx);
     _sound(sfxCoinflipStart);
-    _schedule(() => _sound(() => sfxCoinflipWhoosh(0.78)), Math.floor(timing.flip * 0.46));
+    _schedule(() => _sound(() => sfxCoinflipWhoosh(0.82)), Math.floor(timing.flip * 0.46));
 
     _schedule(() => {
       if (!shell) return;
       _sound(() => sfxCoinflipLand(snapshot.gateWon));
-      shell.dataset.stage = snapshot.gateWon ? 'draw' : 'draw-loss';
-      if (eyebrow) eyebrow.textContent = snapshot.gateWon ? 'BAF LIVE' : 'BAF LOSS';
-      if (result) result.textContent = snapshot.gateWon ? 'GATE WON' : 'BAF LOSS';
+      if (result) result.textContent = snapshot.gateWon ? 'BAF FIRES' : 'BAF LOSS';
+      shell.dataset.stage = 'results';
+      if (gate) gate.hidden = true;
+      if (playerResults) playerResults.hidden = false;
 
       _schedule(() => {
         if (!shell) return;
-        shell.dataset.stage = snapshot.gateWon ? 'cut' : 'draw-loss';
-        if (snapshot.gateWon && snapshot.cutKnown) {
-          const eliminated = overlay.querySelector(`.baf-res__leader[data-rank="${snapshot.eliminatedCutRank}"]`);
-          const survivor = overlay.querySelector(`.baf-res__leader[data-rank="${snapshot.survivorRank}"]`);
-          eliminated?.classList.add('is-eliminated', 'is-cut-now');
-          const eliminatedState = eliminated?.querySelector('.baf-res__leader-state');
-          if (eliminatedState) eliminatedState.textContent = 'OUT';
-          survivor?.classList.add('is-survivor');
-          const survivorState = survivor?.querySelector('.baf-res__leader-state');
-          if (survivorState) survivorState.textContent = '5% WINNER';
-        } else if (!snapshot.gateWon) {
-          for (const card of overlay.querySelectorAll('.baf-res__leader')) card.classList.add('is-gate-out');
-        } else {
-          for (const rank of [3, 4]) {
-            const pending = overlay.querySelector(`.baf-res__leader[data-rank="${rank}"] .baf-res__leader-state`);
-            if (pending) pending.textContent = 'CUT SYNCING';
-          }
+        shell.dataset.stage = snapshot.gateWon ? 'wheel' : 'wheel-loss';
+        if (playerResults) playerResults.hidden = true;
+        if (weighted) weighted.hidden = false;
+        if (snapshot.gateWon) {
+          wheel?.classList.add('is-spinning');
+          if (state) state.textContent = 'DRAWING';
+          _sound(() => sfxCoinflipWhoosh(0.42, true));
+        } else if (state) {
+          state.textContent = 'VOID · BAF LOSS';
         }
-
-        _schedule(() => {
-          if (!shell) return;
-          shell.dataset.stage = 'prizes';
-          _paintPayout(overlay, snapshot);
-          const done = overlay.querySelector('[data-bind="baf-done"]');
-          if (done) {
-            done.hidden = false;
-            try { done.focus({ preventScroll: true }); } catch (_e) { try { done.focus(); } catch (_ignore) {} }
-          }
-          try {
-            document.dispatchEvent(new CustomEvent('baf:revealed', {
-              detail: { level: snapshot.level, won: snapshot.gateWon },
-            }));
-          } catch (_e) { /* optional integration event */ }
-        }, timing.cut);
-      }, timing.draw);
+        _schedule(() => _finishCeremony(overlay, snapshot), timing.wheel);
+      }, timing.results);
     }, timing.flip);
-  }, timing.lineup);
+  }, timing.intro);
 }
 
 export async function openBafResolution({
@@ -461,16 +549,23 @@ export async function openBafResolution({
   const seq = ++openSeq;
   _destroyActive();
 
-  // Fetch first. The Pending row supplies the loading feedback while the app
-  // remains completely usable; only a ready ceremony is allowed to scroll-lock
-  // the page.
-  const resolved = snapshot || await loadBafResolutionSnapshot({
-    level,
-    player,
-    consolation,
-    playerOutcome,
-    history,
-  });
+  // The normal Community Coinflip uses the same transition moment. Park that
+  // background coin while the player-specific fullscreen data loads so it
+  // cannot preview or compete with the BAF gate ceremony.
+  document.body.classList.add('baf-resolution-pending');
+  let resolved;
+  try {
+    resolved = snapshot || await loadBafResolutionSnapshot({
+      level,
+      player,
+      consolation,
+      playerOutcome,
+      history,
+    });
+  } catch (error) {
+    if (seq === openSeq) document.body.classList.remove('baf-resolution-pending');
+    throw error;
+  }
   if (seq !== openSeq) return false;
 
   const overlay = document.createElement('section');
@@ -486,6 +581,7 @@ export async function openBafResolution({
     if (seq !== openSeq || active?.overlay !== overlay) return false;
     document.addEventListener('keydown', onKeydown);
     document.body.appendChild(overlay);
+    document.body.classList.remove('baf-resolution-pending');
     document.body.classList.add('baf-resolution-open');
     _runCeremony(overlay, resolved);
     try { overlay.querySelector('[data-bind="baf-close"]')?.focus({ preventScroll: true }); } catch (_e) {}

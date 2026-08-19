@@ -118,8 +118,8 @@ describe('<quest-objective-indicator>', () => {
     const bonus = questCompletionBonusModel(payload, 'coinflip', 500n * unit);
     assert.equal(bonus.count, 2);
     assert.equal(bonus.flipReward, 900);
-    assert.equal(bonus.streakReward, 5);
-    assert.equal(bonus.message, '2 QUEST COMPLETION BONUSES · +900 FLIP · +5 STREAK');
+    assert.equal(bonus.streakReward, 6);
+    assert.equal(bonus.message, '2 QUEST COMPLETION BONUSES · +900 FLIP · +6 STREAK');
   });
 
   test('a locked bonus is omitted unless one Luckbox also completes its primary', () => {
@@ -141,6 +141,7 @@ describe('<quest-objective-indicator>', () => {
     const lootbox = questCompletionBonusModel(payload, 'lootbox', 100n * unit);
     assert.equal(lootbox.count, 2, 'one Luckbox can complete primary and bonus atomically');
     assert.equal(lootbox.flipReward, 200);
+    assert.equal(lootbox.streakReward, 2);
     assert.equal(questCompletionBonusModel(payload, 'coinflip', 100n * unit), null,
       'an unrelated locked bonus cannot promise a payout');
   });

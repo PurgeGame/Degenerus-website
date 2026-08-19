@@ -145,8 +145,12 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(resolutions,
     /return openDecimatorDraw\(\{[\s\S]*?player: this\.#address,[\s\S]*?onReady:[\s\S]*?_markSeen\('decimator'/,
     'the draw is marked seen only after its bounded snapshot is staged');
-  assert.match(resolutions, /autoOpen:\s*!willWrite,[\s\S]{0,100}?primarySurface:\s*'jackpot'/,
-    'a view-only Decimator final honors the Pending Auto open preference');
+  assert.doesNotMatch(resolutions, /autoOpen:\s*!willWrite/,
+    'neither full-screen final is ever auto-opened, Auto open preference or not');
+  assert.match(resolutions, /autoOpen:\s*false,[\s\S]{0,120}?primarySurface:\s*'jackpot'/,
+    'the Decimator takeover waits for its own View draw click');
+  assert.match(resolutions, /autoOpen:\s*false,\s*\n\s*order:\s*13,/,
+    'the BAF ceremony waits for its own click too');
   assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
     'opening the takeover re-arms the ordinary jackpot underneath it');
   assert.match(resolutions,
@@ -190,9 +194,9 @@ test('a due BAF opens its dedicated staged fullscreen final', () => {
     'the final reuses the already-fetched award history');
   assert.match(resolutions, /const revealConsolation = this\.\#bafConsolation/,
     'a claim-before-view keeps the consolation amount in the ceremony');
-  assert.match(overlay, /TOP FOUR/);
-  assert.match(overlay, /PRIZE MAP/);
-  assert.match(overlay, /YOU WON/);
+  assert.match(overlay, /ONE FLIP DECIDES THE WHOLE BAF/);
+  assert.match(overlay, /YOUR WALLET ONLY/);
+  assert.match(overlay, /FINAL-DAY WEIGHTED DRAW/);
 });
 
 test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', () => {

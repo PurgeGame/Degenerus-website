@@ -720,7 +720,8 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
 });
 
 // ===========================================================================
-// purchaseDeityPass — calls contract.purchaseDeityPass(buyer, symbolId) with msg.value.
+// purchaseDeityPass — calls purchaseDeityPass(buyer, symbolId, affiliateCode)
+// with msg.value.
 // ===========================================================================
 
 describe('Plan 62-02: purchaseDeityPass', () => {
@@ -741,15 +742,26 @@ describe('Plan 62-02: purchaseDeityPass', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes purchaseDeityPass(buyer, symbolId) with closure-form sendTx + msg.value', async () => {
+  test('invokes purchaseDeityPass(buyer, symbolId, affiliateCode) with closure-form sendTx + msg.value', async () => {
     const value = 24n * 10n ** 18n;
-    await passesMod.purchaseDeityPass({ symbolId: 7, msgValueWei: value });
+    const affiliateCode = `0x${'12'.repeat(32)}`;
+    const priorLocalStorage = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: (key) => key === 'affiliate-ref' ? affiliateCode : null,
+    };
+    try {
+      await passesMod.purchaseDeityPass({ symbolId: 7, msgValueWei: value });
+    } finally {
+      if (priorLocalStorage === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = priorLocalStorage;
+    }
     assert.equal(lastFakeContract._calls.purchaseDeityPass.length, 1);
     const [args] = lastFakeContract._calls.purchaseDeityPass;
     assert.equal(args[0], CONNECTED, 'buyer = connected.address');
     assert.equal(args[1], 7, 'symbolId arg = number 7');
-    assert.ok(args[2] && typeof args[2] === 'object', 'overrides object passed');
-    assert.equal(args[2].value, value, 'msg.value matches msgValueWei');
+    assert.equal(args[2], affiliateCode, 'first-touch affiliate code passed');
+    assert.ok(args[3] && typeof args[3] === 'object', 'overrides object passed');
+    assert.equal(args[3].value, value, 'msg.value matches msgValueWei');
   });
 
   test('rejects symbolId < 0', async () => {
@@ -881,14 +893,14 @@ describe('Plan 62-02: passes.js source-level invariants', () => {
     // Simulating at value 0 priced the buy from claimable instead of the
     // payment, so the gate could reject a buy the real tx would have settled.
     assert.ok(
-      SRC.includes("requireStaticCall(c, 'purchaseDeityPass', [buyer, sid, { value }], signer)"),
+      SRC.includes("c, 'purchaseDeityPass', [buyer, sid, affiliateCode, { value }], signer"),
       'deity pre-flight passes the overrides object',
     );
   });
 
-  test('canonical ABI: purchaseDeityPass(address buyer, uint8 symbolId) external payable', () => {
+  test('canonical ABI: purchaseDeityPass(address,uint8,bytes32) carries referrals', () => {
     assert.ok(
-      SRC.includes('function purchaseDeityPass(address buyer, uint8 symbolId) external payable'),
+      SRC.includes('function purchaseDeityPass(address buyer, uint8 symbolId, bytes32 affiliateCode) external payable'),
       'canonical PASSES_ABI fragment present',
     );
   });

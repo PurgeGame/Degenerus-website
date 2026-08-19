@@ -601,6 +601,17 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
       tickets: elevenHalfPasses,
     }, 100)?.label, '5½ ACTIVE WHALE PASSES');
+    const jackpotStack = Array.from({ length: 24 }, (_unused, index) => {
+      const level = 101 + index;
+      const halfPassesByLane = [99, 100, 100, 99];
+      return { level, entryCount: halfPassesByLane[level & 3] * 4 };
+    });
+    assert.equal(inferActiveWhalePassCount(jackpotStack, 100), 199,
+      'jackpot-awarded stacks are not clipped to the 100-pass purchase limit');
+    assert.equal(activePassSummary({
+      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
+      tickets: jackpotStack,
+    }, 100)?.label, '199 ACTIVE WHALE PASSES');
     assert.equal(inferActiveWhalePassCount([{ level: 101, entryCount: 4 }], 100), 0,
       'one ordinary future ticket is not mislabeled as a Whale pass');
     assert.equal(activePassSummary({
@@ -1133,6 +1144,15 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(css,
       /\.pass-afking__topup-field input\s*\{[^}]*display:\s*block;[^}]*text-align:\s*right;/s,
       'the input has no inline baseline gap and keeps its amount right-aligned');
+    assert.match(css,
+      /\.pass-afking__topup-field input\s*\{[^}]*padding:\s*0\.4rem 2\.75rem 0\.4rem 3\.55rem;[^}]*appearance:\s*textfield;/s,
+      'the amount reserves a separate right-hand lane for its ETH suffix');
+    assert.match(css,
+      /\.pass-afking__topup-field input::\-webkit-inner-spin-button,[\s\S]*?input::\-webkit-outer-spin-button\s*\{[^}]*appearance:\s*none;/s,
+      'native number steppers cannot occupy the ETH suffix lane');
+    assert.match(css,
+      /\.pass-afking__topup-field small\s*\{[^}]*right:\s*0\.72rem;/s,
+      'the ETH suffix is anchored inside its reserved edge lane');
     assert.match(css,
       /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__topup-field,[\s\S]*?\.pass-afking__quick > \.pass-afking__edit\s*\{[^}]*height:\s*2\.75rem;[^}]*min-height:\s*2\.75rem;[^}]*max-height:\s*2\.75rem/s,
       'the field grows with the buttons at the mobile touch-size breakpoint');

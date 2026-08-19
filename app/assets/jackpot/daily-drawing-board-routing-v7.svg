@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" preserveAspectRatio="none">
+  <!--
+    Copper layer for the daily-drawing backplate. The sheet is stretched to the
+    cabinet box, so every exposed route is authored against the intersection of
+    the measured desktop and phone hardware positions.
+
+                        desktop (543x526)        phone (372x409)
+      title controller   50,11  -> 1230,117      37,14   -> 1243,150
+      foil socket J1     55,268 -> 203,421       55,282  -> 207,420
+      foil socket J2     55,708 -> 203,861       55,666  -> 207,804
+      foil sockets J3/J4 mirrored on x
+      draw processor    214,121 -> 1066,1002    218,155  -> 1062,923
+      LED key / LCD     301,1069 -> 979,1195    218,1009 -> 1062,1171
+      VRF module        992,1093 -> 1084,1185   1074,1045 -> 1180,1145
+
+    v7 makes the power story match the physical controls. The VRF module no
+    longer takes a visual shortcut straight into the draw processor. Its two
+    lanes enter the LED key first; four separate lanes then fan upward from the
+    key into the main jackpot processor. This also removes the long horizontal
+    bridge at y=1006 that hugged the processor's lower edge like an accidental
+    underline. Every bend remains 45 degrees and every exposed route ends under
+    named hardware.
+
+    The complete jackpot-time sequence is mirrored into
+    daily-drawing-board-current-v6.svg. Ticket-only processing still uses the
+    two input lanes in daily-drawing-button-current-v1.svg.
+  -->
+  <defs>
+    <filter id="traceGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <pattern id="pour" patternUnits="userSpaceOnUse" width="20" height="20">
+      <path d="M0 0 20 20M0 20 20 0" fill="none" stroke="#b1832f"
+            stroke-opacity="0.36" stroke-width="1.7"/>
+    </pattern>
+
+    <g id="via">
+      <circle r="6.2" fill="#c9a052" fill-opacity="0.32"/>
+      <circle r="2.6" fill="#050f0a" fill-opacity="0.9"/>
+    </g>
+  </defs>
+
+  <!-- Crosshatched copper pour in the exposed socket gutters. -->
+  <g opacity="0.26" fill="url(#pour)">
+    <path d="M112 168H184L200 184V234L184 250H112L96 234V184Z"/>
+    <path d="M1168 168H1096L1080 184V234L1096 250H1168L1184 234V184Z"/>
+    <path d="M112 880H184L200 896V934L184 950H112L96 934V896Z"/>
+    <path d="M1168 880H1096L1080 896V934L1096 950H1168L1184 934V896Z"/>
+  </g>
+
+  <!-- Closed perimeter ground rail. -->
+  <g fill="none" stroke="#b8862f" stroke-opacity="0.2" stroke-width="2.4"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <path d="M240 128H130L84 174V1176L110 1202H1170L1196 1176V174L1150 128H1040"/>
+  </g>
+
+  <!-- The complete signal tree: title and sockets into the processor, then
+       VRF -> LED key -> four-way jackpot processor fanout. -->
+  <g fill="none" stroke="#b98a38" stroke-opacity="0.27" stroke-width="2"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <!-- Title controller into the processor's upper contacts. -->
+    <path d="M430 82V116L474 160"/>
+    <path d="M850 82V116L806 160"/>
+
+    <!-- One controller bus per foil socket. -->
+    <path d="M148 300H222L260 338H292"/>
+    <path d="M148 718H222L260 680H292"/>
+    <path d="M1132 300H1058L1020 338H988"/>
+    <path d="M1132 718H1058L1020 680H988"/>
+
+    <!-- The two physical randomness-module outputs terminate beneath the key. -->
+    <path d="M994 1116H930"/>
+    <path d="M994 1158H930"/>
+
+    <!-- Four independent lanes leave the LED key and fan into the main jackpot
+         processor. They are authored source-first for the live current sheet. -->
+    <path d="M456 1098V1018L438 1000H432L414 982V915"/>
+    <path d="M548 1098V1038L530 1020H524L506 1002V915"/>
+    <path d="M732 1098V1038L750 1020H756L774 1002V915"/>
+    <path d="M824 1098V1018L842 1000H848L866 982V915"/>
+  </g>
+
+  <!-- One quiet lane links each socket pair down its own gutter. -->
+  <g fill="none" stroke="#a8792f" stroke-opacity="0.19" stroke-width="1.7"
+     stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
+    <path d="M126 400V486L110 502V612L126 628V740"/>
+    <path d="M1154 400V486L1170 502V612L1154 628V740"/>
+  </g>
+
+  <!-- Very low-energy halo, confined to the real VRF/key/processor tree. -->
+  <g fill="none" stroke="#d0a34c" stroke-opacity="0.05" stroke-width="6"
+     stroke-linecap="square" stroke-linejoin="miter" filter="url(#traceGlow)"
+     vector-effect="non-scaling-stroke">
+    <path d="M994 1116H930"/>
+    <path d="M456 1098V1018L438 1000H432L414 982V915"/>
+    <path d="M548 1098V1038L530 1020H524L506 1002V915"/>
+    <path d="M732 1098V1038L750 1020H756L774 1002V915"/>
+    <path d="M824 1098V1018L842 1000H848L866 982V915"/>
+  </g>
+
+  <!-- Plated contacts live only at hardware anchors or real bus junctions. -->
+  <g>
+    <use href="#via" x="240" y="128"/><use href="#via" x="1040" y="128"/>
+    <use href="#via" x="456" y="1098"/><use href="#via" x="548" y="1098"/>
+    <use href="#via" x="732" y="1098"/><use href="#via" x="824" y="1098"/>
+    <use href="#via" x="930" y="1116"/><use href="#via" x="930" y="1158"/>
+    <use href="#via" x="994" y="1116"/><use href="#via" x="994" y="1158"/>
+    <use href="#via" x="110" y="512"/><use href="#via" x="110" y="612"/>
+    <use href="#via" x="1170" y="512"/><use href="#via" x="1170" y="612"/>
+    <use href="#via" x="330" y="1202"/><use href="#via" x="640" y="1202"/>
+    <use href="#via" x="950" y="1202"/>
+  </g>
+</svg>

@@ -387,6 +387,10 @@ const STATUS_CSS = readFileSync(
   new URL('../../styles/status-indicators.css', import.meta.url),
   'utf8',
 );
+const QUEST_LEFT_ICON = readFileSync(
+  new URL('../../assets/quest-objective-tail-left.svg', import.meta.url),
+  'utf8',
+);
 const PURCHASE_LEARN_SRC = readFileSync(
   new URL('../../../learn/purchases/index.html', import.meta.url),
   'utf8',
@@ -577,15 +581,54 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders shell with static innerHTML — no server data, header copy "TICKETS"', () => {
+  test('the rotating sample ticket uses the contract-exact color cutoffs and symbol bits', async () => {
+    const {
+      purchaseTicketColorBucket,
+      purchaseTicketTraitsFromWords,
+    } = await import('../app-decimator-panel.js');
+    const boundaries = [
+      [0x00000000, 0], [0x3f000000, 0],
+      [0x40000000, 1], [0x7f000000, 1],
+      [0x80000000, 2], [0xbf000000, 2],
+      [0xc0000000, 3], [0xdf000000, 3],
+      [0xe0000000, 4], [0xef000000, 4],
+      [0xf0000000, 5], [0xf7000000, 5],
+      [0xf8000000, 6], [0xfd000000, 6],
+      [0xfe000000, 7], [0xff000000, 7],
+    ];
+    for (const [word, expected] of boundaries) {
+      assert.equal(purchaseTicketColorBucket(word), expected, `0x${word.toString(16)}`);
+    }
+
+    const traits = purchaseTicketTraitsFromWords([
+      0x00000000, 0x00000007,
+      0x40000000, 0x00000008,
+      0xe0000000, 0xabcdef0f,
+      0xfe000000, 0x00000005,
+    ]);
+    assert.deepEqual(
+      traits.map(({ q, col, sym, byte }) => ({ q, col, sym, byte })),
+      [
+        { q: 0, col: 0, sym: 7, byte: 7 },
+        { q: 1, col: 1, sym: 0, byte: 72 },
+        { q: 2, col: 4, sym: 7, byte: 167 },
+        { q: 3, col: 7, sym: 5, byte: 253 },
+      ],
+      'color uses the low uint32 and the uniform symbol uses high32 & 7',
+    );
+    assert.match(PANEL_SRC, /PURCHASE_TICKET_SAMPLE_REFRESH_MS\s*=\s*60_000/);
+    assert.match(PANEL_SRC, /setInterval\([\s\S]*?#renderTicketSample\(\)[\s\S]*?PURCHASE_TICKET_SAMPLE_REFRESH_MS,\s*\)/);
+    assert.match(PANEL_SRC, /dgnBadgePath\(quadrant, trait\.sym, trait\.col\)/);
+    assert.match(PANEL_SRC, /dgnTicketAccent\(sampleTraits\)/);
+  });
+
+  test('Panel renders shell with static innerHTML — no server data, header copy "BUY IN"', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
-    // Static header copy — Phase 64 basic-mode retitle: gamblers see "TICKETS"
-    // (the decimator level-mint mechanics live on under the hood).
     assert.match(
       el.innerHTML.toUpperCase(),
-      /TICKETS/,
-      'header copy contains TICKETS (static template literal)',
+      /<H2 CLASS="DEC-PURCHASE-HEADING">BUY IN<\/H2>/,
+      'header copy contains the finalized BUY IN title',
     );
     // No server-derived strings (userMessage / address / amount) bled into innerHTML
     // at mount time. Phase 58 T-58-18 hardening — server data flows via textContent.
@@ -674,22 +717,32 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('purchase fields use action labels and become finger-sized full-width phone rows', () => {
+  test('purchase builders expose the four-piece ticket shelf and responsive box quantities', () => {
     const el = instantiate();
-    assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
+    for (const [bind, label] of [
+      ['dec-ticket-add-entry', 'ENTRY'],
+      ['dec-ticket-add-ticket', 'TICKET'],
+      ['dec-ticket-add-pack', 'PACK'],
+    ]) {
+      assert.match(el.innerHTML, new RegExp(`data-bind="${bind}"[\\s\\S]*?<strong>${label}<\\/strong>`));
+    }
     assert.match(el.innerHTML,
       /<boon-product-indicator product="purchase" data-bind="dec-ticket-boon"\s+variant="purchase-control"/);
-    assert.match(el.innerHTML, /<span>Buy luckbox<\/span>/);
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
       /class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<boon-product-indicator[\s\S]*?<quest-objective-indicator product="lootbox"/,
       'boon and quest markers have dedicated non-overlapping slots');
-    assert.doesNotMatch(el.innerHTML, /Luckbox value/i);
+    for (const name of [
+      'dec-box-small', 'dec-box-medium', 'dec-box-large',
+      'dec-box-custom-count', 'dec-box-custom-eth',
+    ]) {
+      assert.ok(el.querySelector(`[name="${name}"]`), `${name} is independently editable`);
+    }
     assert.match(
-      APP_CSS,
-      /\.app-decimator-panel \.dec-input-label\s*\{[^}]*font-size:\s*clamp\(0\.72rem, 1\.55vw, 0\.82rem\)/s,
-      'Buy Tickets and Buy Luckbox use the larger matched label size',
+      el.innerHTML,
+      /degenerus-lootbox-case-v3\.webp/,
+      'preset cards use the existing Luckbox case art',
     );
     assert.doesNotMatch(
       STATUS_CSS,
@@ -722,44 +775,24 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'native product badges can be overlaid without entering the field layout',
     );
     assert.match(
-      APP_CSS,
-      /\.dec-input\s*\{[^}]*text-align:\s*right;/s,
-      'numeric input text aligns to the right',
+      PURCHASE_DESK_CSS,
+      /Approved compact asset desk[\s\S]*?\.dec-ticket-pieces\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
+      'Entry, Ticket, Pack, and Foil Pack remain one scannable row',
     );
     assert.match(
-      APP_CSS,
-      /\.dec-input-group\s*\{[^}]*justify-content:\s*space-between;/s,
-      'paired controls align their fields at the group edge',
+      PURCHASE_DESK_CSS,
+      /\.dec-box-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
+      'Small, Medium, and Large stay side by side with their own fields',
     );
     assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-row--pair\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
-      'each purchase field gets the full phone width',
+      PURCHASE_DESK_CSS,
+      /@media \(min-width: 700px\) and \(max-width: 1099px\)[\s\S]*?\.dec-purchase-builders\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'the wide single-column hero uses parallel builders',
     );
     assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*auto 4rem[^}]*min-height:\s*5\.8rem[^}]*justify-content:\s*stretch/s,
-      'each phone selector is twice the desktop card height with a full-height touch control',
-    );
-    assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-stepper-btns\s*\{[^}]*flex-direction:\s*row/s,
-      'the old whole-ticket arrows sit side by side instead of becoming tiny stacked halves',
-    );
-    assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-step\s*\{[^}]*min-width:\s*3rem[^}]*min-height:\s*4rem/s,
-      'whole-ticket arrow buttons fill the enlarged 64px phone control',
-    );
-    assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-buy-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
-      'the optional bonus and BUY IN stack rather than halving the phone action width',
-    );
-    assert.match(
-      APP_CSS,
-      /\.dec-stepper\s*\{[^}]*width:\s*6\.25rem[^}]*flex:\s*0 0 6\.25rem/s,
-      'ticket and lootbox controls retain the exact same outer width',
+      PURCHASE_DESK_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.dec-ticket-total__field \.dec-input,[\s\S]*?font-size:\s*1rem/s,
+      'phone number fields avoid browser zoom and remain comfortably editable',
     );
     assert.match(
       PANEL_SRC,
@@ -768,8 +801,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PANEL_SRC,
-      /name="dec-lootbox-eth"[^>]*inputmode="decimal"/s,
-      'lootbox entry requests the decimal keyboard on mobile',
+      /name="dec-box-custom-eth"[^>]*inputmode="decimal"/s,
+      'custom ETH requests the decimal keyboard on mobile',
     );
     el.disconnectedCallback();
   });
@@ -880,7 +913,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('Click handler invokes decimator.purchaseEth (closure form) with ticketQuantity > 0 + lootBoxAmountWei = 0', async () => {
+  test('Click handler invokes decimator.purchaseEth with ticketQuantity > 0 + boxOrder = 0', async () => {
     // Stub decimator.purchaseEth via lootbox factory injection (decimator
     // re-exports purchaseEth from lootbox.js — same function reference per
     // decimator.test.js Test 1).
@@ -905,16 +938,14 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     btn.dispatchEvent({ type: 'click' });
     await settle(60);
 
-    // purchase() called once with ticketQuantity > 0 + lootBoxAmountWei = 0
-    // (lootboxQuantity = 0 means FLIP-side default to 0). Verified via
+    // purchase() called once with ticketQuantity > 0 + boxOrder = 0. Verified via
     // fakeContract._calls.purchase[0] — ticketQuantity*100 (Phase 60 scaling).
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called exactly once');
     const args = fakeContract._calls.purchase[0];
-    // args = [buyer, ticketQuantity*100n, lootBoxAmountWei, affiliateCode, payKind]
+    // args = [buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, foil]
     assert.equal(args[0], CONNECTED, 'buyer = connected address');
     assert.equal(args[1], 2000n, '5 tickets = 20 entries = 2000 purchase units (400 per ticket)');
-    // CONTEXT: lootboxQuantity = 0 for level-mint-only buys.
-    assert.equal(args[2], 0n, 'lootBoxAmountWei = 0n (tickets-only level mint)');
+    assert.equal(args[2], 0n, 'boxOrder = 0n (tickets-only level mint)');
 
     el.disconnectedCallback();
   });
@@ -1074,16 +1105,17 @@ describe('combined ticket + lootbox buy', () => {
     await import('../app-decimator-panel.js');
   });
 
-  test('tickets + lootbox ETH ride ONE purchase() tx (lootBoxAmountWei = ETH input, /1M-descaled)', async () => {
+  test('tickets + mixed Luckbox tiers ride one purchase() tx as a packed order', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
 
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '2';
-    // No per-box price (user call): the lootbox leg is a free ETH value.
-    // 0.03 ETH → 3 × the 0.01 minimum in the deployed contract's wei scale.
-    el.querySelector('[name="dec-lootbox-eth"]').value = '0.03';
+    el.querySelector('[name="dec-box-small"]').value = '1';
+    el.querySelector('[name="dec-box-medium"]').value = '2';
+    el.querySelector('[name="dec-box-custom-count"]').value = '1';
+    el.querySelector('[name="dec-box-custom-eth"]').value = '0.03';
 
     el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1091,12 +1123,18 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'single combined tx');
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 800n, '2 tickets = 8 entries = 800 purchase units');
-    const { LOOTBOX_MIN_WEI } = await import('../../app/lootbox.js');
-    assert.equal(args[2], LOOTBOX_MIN_WEI * 3n, 'lootBoxAmountWei = 0.03 ETH scaled');
+    const { LOOTBOX_MIN_WEI, packBoxOrder } = await import('../../app/lootbox.js');
+    assert.equal(args[2], packBoxOrder({
+      small: 1,
+      medium: 2,
+      customCount: 1,
+      customSizeWei: LOOTBOX_MIN_WEI * 3n,
+    }), 'the third ABI argument contains all selected box lanes');
     assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
       'a mined buy clears the ticket draft');
-    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0',
-      'a mined buy clears the luckbox draft');
+    for (const name of ['dec-box-small', 'dec-box-medium', 'dec-box-large', 'dec-box-custom-count']) {
+      assert.equal(el.querySelector(`[name="${name}"]`).value, '0', 'a mined buy clears every box count');
+    }
     el.disconnectedCallback();
   });
 
@@ -1109,8 +1147,10 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await flushMicrotasks();
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const luckbox = el.querySelector('[name="dec-box-custom-eth"]');
+    const customCount = el.querySelector('[name="dec-box-custom-count"]');
     tickets.value = '2';
+    customCount.value = '1';
     luckbox.value = '0.03';
 
     el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
@@ -1118,6 +1158,7 @@ describe('combined ticket + lootbox buy', () => {
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'reverted simulation never sends');
     assert.equal(tickets.value, '2', 'ticket draft is retained after failure');
+    assert.equal(customCount.value, '1', 'custom box quantity is retained after failure');
     assert.equal(luckbox.value, '0.03', 'luckbox draft is retained after failure');
     el.disconnectedCallback();
   });
@@ -1129,7 +1170,7 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '0';
-    el.querySelector('[name="dec-lootbox-eth"]').value = '0.02';
+    el.querySelector('[name="dec-box-large"]').value = '1';
 
     el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1137,8 +1178,8 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called');
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'zero ticket leg');
-    const { LOOTBOX_MIN_WEI } = await import('../../app/lootbox.js');
-    assert.equal(args[2], LOOTBOX_MIN_WEI * 2n, 'lootbox leg present');
+    const { packBoxOrder } = await import('../../app/lootbox.js');
+    assert.equal(args[2], packBoxOrder({ large: 1 }), 'large-box lane is present');
     el.disconnectedCallback();
   });
 
@@ -1169,33 +1210,56 @@ describe('combined ticket + lootbox buy', () => {
       'the auto-open reveal receives the fully enriched BoxSpin');
   });
 
-  test('both zero → validation error, no tx', async () => {
+  test('an empty click prompts the asset shelf without opening a chooser or sending a tx', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
 
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '0';
-    el.querySelector('[name="dec-lootbox-eth"]').value = '0';
 
     el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
+    assert.equal(el.querySelector('[data-bind="dec-buy-dialog"]'), null,
+      'the retired chooser is not rendered');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'CLICK TO ADD');
+    assert.equal(el.querySelector('.dec-purchase-builders').classList.contains('is-prompting'), true,
+      'the existing visual choices receive the empty-state prompt');
     const err = el.querySelector('[data-bind="dec-error"]');
-    assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /ticket amount|luckbox/i, 'validation copy');
+    assert.equal(err.hidden, true, 'an empty order is a prompt, not an error');
     el.disconnectedCallback();
   });
 
-  test('below-minimum lootbox ETH (0 < x < 0.01) → validation error, no tx', async () => {
+  test('the compact TIX arrows step whole tickets while preserving quarter entries', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+
+    const el = instantiate();
+    await settle(60);
+    const input = el.querySelector('[name="dec-tickets"]');
+    input.value = '0.25';
+    const steps = el.querySelectorAll('[data-step-for="dec-tickets"]');
+    steps.find((step) => step.getAttribute('data-dir') === '1')
+      .dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '1.25', 'up adds one whole ticket');
+    steps.find((step) => step.getAttribute('data-dir') === '-1')
+      .dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.25', 'down removes one whole ticket without discarding the entry');
+    assert.equal(fakeContract._calls.purchase.length, 0, 'editing never submits');
+    el.disconnectedCallback();
+  });
+
+  test('a below-minimum custom box shows validation and sends no tx', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
 
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '0';
-    el.querySelector('[name="dec-lootbox-eth"]').value = '0.005';
+    el.querySelector('[name="dec-box-custom-count"]').value = '1';
+    el.querySelector('[name="dec-box-custom-eth"]').value = '0.005';
 
     el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1203,7 +1267,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
     const err = el.querySelector('[data-bind="dec-error"]');
     assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /Minimum luckbox spend/, 'minimum copy');
+    assert.match(err.textContent, /at least 0\.01 ETH each/, 'minimum copy');
     el.disconnectedCallback();
   });
 
@@ -1217,7 +1281,8 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await flushMicrotasks();
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const luckbox = el.querySelector('[name="dec-box-custom-eth"]');
+    el.querySelector('[name="dec-box-custom-count"]').value = '1';
 
     tickets.value = '99.75';
     tickets.dispatchEvent({ type: 'input' });
@@ -1249,7 +1314,8 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const luckbox = el.querySelector('[name="dec-box-custom-eth"]');
+    el.querySelector('[name="dec-box-custom-count"]').value = '1';
     const tally = el.querySelector('[data-bind="dec-flip-credit"]');
     const label = el.querySelector('[data-bind="dec-flip-credit-label"]');
     const total = el.querySelector('[data-bind="dec-flip-credit-total"]');
@@ -1286,7 +1352,8 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const luckbox = el.querySelector('[name="dec-box-custom-eth"]');
+    el.querySelector('[name="dec-box-custom-count"]').value = '1';
     const effect = el.querySelector('[data-bind="dec-purchase-boon-effect"]');
 
     tickets.value = '100';
@@ -2412,7 +2479,7 @@ describe('combined ticket + lootbox buy', () => {
       'Decimator is independent of the FLIP ticket-redemption window');
   });
 
-  test('Buy and the optional bonus use a stable compact half-width action rail', async () => {
+  test('the bonus keeps a stable splashy header slot in both idle and active states', async () => {
     const el = instantiate();
     await settle(60);
     const input = el.querySelector('[name="dec-tickets"]');
@@ -2430,104 +2497,113 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(PANEL_SRC, /\/whitepaper\/flame-logo-split\.svg/);
     assert.match(
       PANEL_SRC,
-      /<div class="dec-buy-row">[\s\S]*?data-bind="dec-flip-credit"[\s\S]*?data-bind="dec-buy-cta"/,
-      'BONUS sits left of Buy in one action rail',
+      /<div class="panel-header">[\s\S]*?data-bind="dec-flip-credit"[\s\S]*?<\/div>\s*<\/div>/,
+      'BONUS lives in the header instead of changing the order rail',
     );
     assert.match(
-      APP_CSS,
-      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
-      'Buy and BONUS receive equal, non-clipping columns',
+      PURCHASE_DESK_CSS,
+      /Approved compact asset desk[\s\S]*?\.panel-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 7\.4rem;[^}]*grid-template-rows:\s*auto auto;/s,
+      'the header permanently reserves the bonus column',
     );
     assert.match(
-      APP_CSS,
-      /\.dec-buy-row\s*>\s*\.dec-buy-cta\s*\{[^}]*width:\s*100%[^}]*height:\s*3rem[^}]*min-height:\s*3rem[^}]*max-height:\s*3rem[^}]*min-width:\s*0/s,
-      'the Buy action fills only its half and stays a fixed height',
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header\s*\{[^}]*height:\s*2\.55rem;[^}]*grid-column:\s*2;[^}]*grid-row:\s*1 \/ 3;/s,
+      'idle and numeric bonus content use the same fixed footprint',
     );
     assert.match(
-      APP_CSS,
-      /\.dec-flip-credit\s*\{[^}]*grid-column:\s*1/s,
-      'BONUS owns the left half',
-    );
-    assert.match(
-      APP_CSS,
-      /\.dec-buy-row\s*>\s*\.dec-buy-cta\s*\{[^}]*grid-column:\s*2/s,
-      'Buy owns the right half even while BONUS is hidden',
-    );
-    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*img\s*\{[^}]*width:\s*1\.82rem/s);
-    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*span\s*\{[^}]*color:\s*#86efac[^}]*font-size:\s*0\.76rem/s);
-    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*strong\s*\{[^}]*color:\s*#4ade80/s,
-      'the enlarged purchase BONUS is green');
-    assert.match(
-      APP_CSS,
-      /\.dec-buy-cta\[aria-label\$=" ETH"\] \.dec-buy-cta__amount\s*\{[^}]*font-size:\s*0\.84em/s,
-      'the ETH quote receives a small second-line emphasis without enlarging FLIP quotes',
-    );
-    assert.match(
-      APP_CSS,
-      /\.app-decimator-panel \.dec-buy-row\s*>\s*\.dec-buy-cta\[data-write\]\s*\{[^}]*padding:\s*0\.35rem 0\.55rem/s,
-      'the fixed-height two-line action overrides the older single-line CTA padding',
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header\s*\{[^}]*radial-gradient\([^}]*linear-gradient\(130deg,/s,
+      'the bonus slot has the approved splashy layered background',
     );
 
     input.value = '0.75';
     input.dispatchEvent({ type: 'input' });
-    assert.equal(tally.hidden, true, 'zero-bonus purchases do not show the tally');
+    assert.equal(tally.hidden, false, 'the reserved bonus slot never disappears');
+    assert.equal(tally.classList.contains('is-idle'), true);
+    assert.equal(el.querySelector('[data-bind="dec-flip-credit-label"]').textContent, 'PLAY TO EARN');
+    assert.equal(el.querySelector('[data-bind="dec-flip-credit-total"]').textContent, 'BONUS FLIP');
     el.disconnectedCallback();
   });
 
-  test('ticket controls flank the input with quarter steps and whole-ticket arrows', async () => {
+  test('Entry, Ticket, and Pack visuals add 0.25, 1, and 10 to the ticket field', async () => {
     const el = instantiate();
     await settle(60);
 
     const input = el.querySelector('[name="dec-tickets"]');
-    const up = el.querySelectorAll('.dec-step').find(
-      (button) => button.getAttribute('data-step-for') === 'dec-tickets'
-        && button.getAttribute('data-dir') === '1',
-    );
-    const down = el.querySelectorAll('.dec-step').find(
-      (button) => button.getAttribute('data-step-for') === 'dec-tickets'
-        && button.getAttribute('data-dir') === '-1',
-    );
-    const quarter = el.querySelectorAll('.dec-quarter-step');
-    assert.equal(quarter.length, 2, 'the quarter-ticket pair is mounted left of the input');
-    assert.match(el.innerHTML, />\+\.25<\/button>[\s\S]*?>−\.25<\/button>/);
-    assert.match(el.innerHTML, />▲<\/button>[\s\S]*?>▼<\/button>/,
-      'the familiar up/down arrow pair remains on the right');
+    const entry = el.querySelector('[data-bind="dec-ticket-add-entry"]');
+    const ticket = el.querySelector('[data-bind="dec-ticket-add-ticket"]');
+    const pack = el.querySelector('[data-bind="dec-ticket-add-pack"]');
     input.value = '0';
-    quarter[0].dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.25', 'the upper-left button adds one quarter ticket');
-    quarter[1].dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0', 'the lower-left button removes one quarter ticket');
-    quarter[0].dispatchEvent({ type: 'click' });
-    up.dispatchEvent({ type: 'click' });
+    entry.dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.25', 'Entry adds one quarter ticket');
+    ticket.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '1.25', 'up adds one whole ticket');
-    down.dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.25', 'down removes one whole ticket');
+    pack.dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '11.25', 'Pack adds ten tickets');
+    el.querySelector('[data-bind="dec-ticket-clear"]').dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0', 'Clear resets the editable total');
     assert.equal(input.step, '0.25', 'typed decimals use the same entry-sized increment');
     el.disconnectedCallback();
   });
 
-  test('lootbox arrows step by exactly one current ticket price', async () => {
+  test('Luckbox presets show centered 1/5/25 values, clean prices, and independent quantities', async () => {
     const el = instantiate();
     await settle(60);
 
     const price = el.querySelector('[data-bind="dec-price"]');
-    const input = el.querySelector('[name="dec-lootbox-eth"]');
-    assert.equal(price.textContent, 'Price - 0.04 ETH');
-    assert.equal(input.step, '0.04', 'native number arrows use one ticket price');
+    assert.equal(price.textContent, 'LEVEL 12 · 1 TICKET = 0.04 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-small"]').textContent, '0.04 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-medium"]').textContent, '0.2 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-large"]').textContent, '1 ETH');
+    for (const tier of ['small', 'medium', 'large']) {
+      const input = el.querySelector(`[name="dec-box-${tier}"]`);
+      el.querySelector(`[data-bind="dec-box-add-${tier}"]`).dispatchEvent({ type: 'click' });
+      assert.equal(input.value, '1', `${tier} card increments only its own field`);
+    }
+    assert.match(el.innerHTML, /class="dec-box-value">1<\/span>/);
+    assert.match(el.innerHTML, /class="dec-box-value">5<\/span>/);
+    assert.match(el.innerHTML, /class="dec-box-value">25<\/span>/);
+    assert.doesNotMatch(el.innerHTML, />SMALL<|>MEDIUM<|>LARGE</,
+      'the box art communicates tier without redundant labels');
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /3 boxes/);
+    el.disconnectedCallback();
+  });
 
-    const up = el.querySelectorAll('.dec-step').find(
-      (button) => button.getAttribute('data-step-for') === 'dec-lootbox-eth'
-        && button.getAttribute('data-dir') === '1',
-    );
-    const down = el.querySelectorAll('.dec-step').find(
-      (button) => button.getAttribute('data-step-for') === 'dec-lootbox-eth'
-        && button.getAttribute('data-dir') === '-1',
-    );
-    assert.ok(up && down, 'custom lootbox arrows are wired');
-    up.dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.04', 'up adds one ticket price');
-    down.dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0', 'down removes one ticket price and clamps at zero');
+  test('Custom Box opens a quantity-and-size drawer that can collapse without losing its draft', async () => {
+    const el = instantiate();
+    await settle(60);
+    const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
+    const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
+    const count = el.querySelector('[name="dec-box-custom-count"]');
+    const size = el.querySelector('[name="dec-box-custom-eth"]');
+
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(fields.hidden, false);
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(count.value, '0', 'opening the popup does not silently add a box');
+    count.value = '1';
+    count.dispatchEvent({ type: 'input' });
+    size.value = '0.02';
+    size.dispatchEvent({ type: 'input' });
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.02 ETH/);
+
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(fields.hidden, true, 'the detail drawer can collapse');
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(count.value, '1', 'collapsing preserves the selected box');
+    assert.equal(size.value, '0.02', 'collapsing preserves the per-box size');
+    el.disconnectedCallback();
+  });
+
+  test('Luckbox increment controls clamp the combined order at 100 boxes', async () => {
+    const el = instantiate();
+    await settle(60);
+    const small = el.querySelector('[name="dec-box-small"]');
+    const large = el.querySelector('[name="dec-box-large"]');
+    small.value = '100';
+    el.querySelector('[data-bind="dec-box-add-large"]').dispatchEvent({ type: 'click' });
+    assert.equal(large.value, '0', 'another tier cannot push the packed order over its cap');
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /100 boxes/);
     el.disconnectedCallback();
   });
 
@@ -2543,9 +2619,10 @@ describe('combined ticket + lootbox buy', () => {
     }));
 
     assert.equal(el.querySelector('[name="dec-tickets"]').value, '0');
-    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0.08',
-      'lootbox mission uses exactly two level-12 ticket prices');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'Buy in');
+    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '1');
+    assert.equal(el.querySelector('[name="dec-box-custom-eth"]').value, '0.08',
+      'lootbox mission becomes one custom box at exactly two level-12 ticket prices');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'BUY IN ·');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.08 ETH');
     assert.equal(fakeContract._calls.purchase.length, 0, 'quest click only configures the form');
     el.disconnectedCallback();
@@ -2568,7 +2645,8 @@ describe('combined ticket + lootbox buy', () => {
     }));
 
     assert.equal(el.querySelector('[name="dec-tickets"]').value, '0');
-    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0.04');
+    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '1');
+    assert.equal(el.querySelector('[name="dec-box-custom-eth"]').value, '0.04');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.04 ETH');
     assert.equal(fakeContract._calls.purchase.length, 0,
       'popup confirmation configures the exact action without bypassing the normal buy review');
@@ -2596,7 +2674,8 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'confirmation reaches the existing buy transaction');
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'the lootbox choice does not add tickets');
-    assert.equal(args[2], target, 'the submitted lootbox spend is the exact displayed minimum');
+    assert.equal(args[2], lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: target }),
+      'the submitted order contains one custom box at the exact displayed minimum');
     el.disconnectedCallback();
   });
 
@@ -2642,38 +2721,48 @@ describe('combined ticket + lootbox buy', () => {
     await settle(80);
 
     const row = el.querySelector('[data-bind="dec-presale-row"]');
+    const toggle = el.querySelector('[data-bind="dec-presale-toggle"]');
     const tickets = el.querySelector('[name="dec-tickets"]');
     const input = el.querySelector('[name="dec-presale-box-eth"]');
     const max = el.querySelector('[data-bind="dec-presale-max"]');
     assert.equal(row.hidden, true, 'zero current/draft credit keeps the presale option out of sight');
+    assert.equal(toggle.hidden, true);
 
     tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
     tickets.dispatchEvent({ type: 'input' });
-    assert.equal(row.hidden, false, 'a draft that earns the minimum credit reveals the attached box');
+    assert.equal(toggle.hidden, false, 'an eligible live presale reveals its pinned trigger');
+    assert.equal(row.hidden, true, 'eligibility alone does not select or open a presale box');
     assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
       '0.01 ETH AVAILABLE');
     assert.equal(max.disabled, false);
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(row.hidden, false, 'the player opens the presale popup explicitly');
 
     const foil = el.querySelector('[data-bind="dec-foil-check"]');
     foil.checked = true;
     foil.dispatchEvent({ type: 'change' });
-    assert.equal(row.hidden, true, 'selecting the incompatible foil leg removes the presale row');
+    assert.equal(toggle.hidden, true, 'selecting the incompatible foil leg removes the presale trigger');
+    assert.equal(row.hidden, true, 'selecting foil closes the popup');
     assert.equal(input.value, '0', 'hiding the presale row also clears its quote');
     foil.checked = false;
     foil.dispatchEvent({ type: 'change' });
-    assert.equal(row.hidden, false, 'the presale row returns when foil is unchecked');
+    assert.equal(toggle.hidden, false, 'the presale trigger returns when foil is unchecked');
+    assert.equal(row.hidden, true, 'the popup remains opt-in after returning');
+    toggle.dispatchEvent({ type: 'click' });
     max.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.01');
 
     tickets.value = '0';
     tickets.dispatchEvent({ type: 'input' });
-    assert.equal(row.hidden, true, 'removing the credit-earning draft hides presale again');
+    assert.equal(toggle.hidden, true, 'removing the credit-earning draft hides presale again');
+    assert.equal(row.hidden, true);
     assert.equal(input.value, '0', 'a newly unavailable hidden box cannot remain in the quote');
     tickets.value = '1';
     tickets.dispatchEvent({ type: 'input' });
+    toggle.dispatchEvent({ type: 'click' });
     max.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'Buy in + presale box');
+      'BUY IN ·');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.05 ETH');
 
     let confirmed = null;
@@ -2707,25 +2796,32 @@ describe('combined ticket + lootbox buy', () => {
     await settle(80);
 
     const row = el.querySelector('[data-bind="dec-presale-row"]');
+    const toggle = el.querySelector('[data-bind="dec-presale-toggle"]');
     const input = el.querySelector('[name="dec-presale-box-eth"]');
+    assert.equal(toggle.hidden, false, 'banked credit exposes the trigger while presale is live');
+    assert.equal(row.hidden, true, 'the popup does not auto-open');
+    toggle.dispatchEvent({ type: 'click' });
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.02');
     const flip = el.querySelector('[data-bind="dec-flip-check"]');
     flip.checked = true;
     flip.dispatchEvent({ type: 'change' });
-    assert.equal(row.hidden, true, 'USE FLIP removes the incompatible presale box');
+    assert.equal(toggle.hidden, true, 'USE FLIP removes the incompatible presale option');
+    assert.equal(row.hidden, true);
     assert.equal(input.value, '0', 'entering FLIP cannot retain a hidden presale spend');
     flip.checked = false;
     flip.dispatchEvent({ type: 'change' });
-    assert.equal(row.hidden, false, 'returning to ETH restores the available presale box');
+    assert.equal(toggle.hidden, false, 'returning to ETH restores the available presale trigger');
+    assert.equal(row.hidden, true, 'restoring eligibility does not auto-open the popup');
+    toggle.dispatchEvent({ type: 'click' });
     const tickets = el.querySelector('[name="dec-tickets"]');
     tickets.value = '0';
     tickets.dispatchEvent({ type: 'input' });
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.02');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'Buy presale box',
-      'a standalone presale box is not presented as a game buy-in');
+      'BUY IN ·',
+      'the compact CTA uses one stable selected-order label');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
     let confirmed = null;
     el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
@@ -2907,7 +3003,7 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('foil row is only a checkbox, one-pack limit label, and 10× price', async () => {
+  test('Foil Pack uses the real pack treatment, external LIMIT 1 stamp, and selected check', async () => {
     const el = instantiate();
     await settle(60);
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -2916,28 +3012,19 @@ describe('Foil pack buy leg', () => {
     const price = el.querySelector('[data-bind="dec-foil-price"]');
     assert.equal(price.textContent, '0.4 ETH', '10 × level-12 ticket price');
     assert.match(el.innerHTML,
-      /<span class="dec-foil-label">Foil pack \(limit 1\)[\s\S]*?<quest-objective-indicator product="foil"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
-      'the unfinished-quest marker is anchored inside the visible foil label');
-    assert.match(STATUS_CSS,
-      /\.app-decimator-panel \.dec-foil-label > quest-objective-indicator\s*\{[^}]*position:\s*absolute;[^}]*left:\s*calc\(100% \+ 0\.3rem\)/s,
-      'the foil quest icon is removed from the three-column checkbox row');
-    assert.doesNotMatch(el.innerHTML, /dec-foil-card|dec-foil-sub|dec-foil-shine/,
-      'the old promotional card and helper copy are gone');
-    assert.match(APP_CSS,
-      /\.app-decimator-panel \.dec-foil-check\s*\{[^}]*appearance:\s*none;[^}]*border-radius:\s*4px/s,
-      'the foil choice uses a deliberate custom checkbox instead of the browser default');
-    assert.match(APP_CSS,
-      /\.app-decimator-panel \.dec-foil-check:checked\s*\{[^}]*34, 211, 238[^}]*236, 72, 153[^}]*234, 179, 8/s,
-      'the checked state carries a restrained foil spectrum');
-    assert.match(APP_CSS,
-      /@keyframes dec-foil-occasional-glint\s*\{[^}]*0%, 68%[^}]*opacity:\s*0/s,
-      'the foil glint spends most of its cycle quiet');
-    assert.match(APP_CSS,
-      /animation:\s*dec-foil-occasional-glint 11\.25s ease-in-out infinite/,
-      'the foil glint runs one-third less often than its original 7.5 second cycle');
-    assert.match(APP_CSS,
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-decimator-panel \.dec-foil::after\s*\{\s*animation:\s*none/s,
-      'the decorative glint respects reduced motion');
+      /class="dec-ticket-piece dec-ticket-piece--foil"[\s\S]*?<strong>FOIL PACK<\/strong>[\s\S]*?class="dec-pack-shine"[\s\S]*?flame-logo\.svg[\s\S]*?4 TICKETS[\s\S]*?class="dec-foil-limit-stamp"><strong>LIMIT<\/strong><small>1<\/small>[\s\S]*?class="dec-foil-selected-check">✓/,
+      'foil art includes its identity, Degenerus mark, ticket count, stamp, and check');
+    assert.equal((el.innerHTML.match(/class="dec-pack-shine"/g) || []).length, 1,
+      'only the foil pack shines; the normal pack stays matte');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-foil-limit-stamp\s*\{[^}]*right:\s*-0\.08rem;[^}]*border:\s*2px solid #ff3542;[^}]*transform:\s*rotate\(8deg\);/s,
+      'LIMIT 1 is a large red stamp outside the pack face');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--foil\.is-selected \.dec-foil-selected-check\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*scale\(1\)/s,
+      'selection reveals the green circular check');
+    assert.match(PURCHASE_DESK_CSS,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.dec-foil-pack-face,[\s\S]*?\.dec-pack-shine,[\s\S]*?animation:\s*none/s,
+      'foil motion respects reduced-motion preferences');
     el.disconnectedCallback();
   });
 
@@ -2964,7 +3051,8 @@ describe('Foil pack buy leg', () => {
 
     const el = instantiate();
     await settle(70);
-    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.08 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
+      'LEVEL 30 · 1 TICKET = 0.08 ETH');
     assert.equal(el.querySelector('[data-bind="dec-foil-price"]').textContent, '0.8 ETH');
 
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -3025,8 +3113,8 @@ describe('Foil pack buy leg', () => {
     assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
       'availability is re-probed without trusting the quest level');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
-    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.04 ETH');
-    assert.doesNotMatch(el.querySelector('[data-bind="dec-price"]').textContent, /Level/i);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
+      'LEVEL 12 · 1 TICKET = 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -3084,7 +3172,8 @@ describe('Foil pack buy leg', () => {
     assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
       'the live purchase route offers level 2');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
-    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.01 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
+      'LEVEL 2 · 1 TICKET = 0.01 ETH');
     el.disconnectedCallback();
   });
 
@@ -3104,8 +3193,8 @@ describe('Foil pack buy leg', () => {
 
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.04 ETH');
-    assert.doesNotMatch(el.querySelector('[data-bind="dec-price"]').textContent, /Level/i);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
+      'LEVEL 12 · 1 TICKET = 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -3161,11 +3250,11 @@ describe('Foil pack buy leg', () => {
     check.dispatchEvent({ type: 'change' });
     const action = el.querySelector('[data-bind="dec-buy-cta-action"]');
     const amount = el.querySelector('[data-bind="dec-buy-cta-amount"]');
-    assert.equal(action.textContent, 'Buy in');
+    assert.equal(action.textContent, 'BUY IN ·');
     assert.equal(amount.textContent, '0.4 ETH', 'foil-only total is on the second line');
     check.checked = false;
     check.dispatchEvent({ type: 'change' });
-    assert.equal(action.textContent, 'Buy in', 'back to bare Buy in when unchecked');
+    assert.equal(action.textContent, 'CLICK TO ADD', 'empty order returns to the prompt when unchecked');
     assert.equal(amount.hidden, true, 'empty amount line collapses when unchecked');
     el.disconnectedCallback();
   });
@@ -3708,7 +3797,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
 
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const lootbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const smallBoxes = el.querySelector('[name="dec-box-small"]');
+    const customBoxes = el.querySelector('[name="dec-box-custom-count"]');
     const lootboxGroup = el.querySelector('[data-bind="dec-lootbox-group"]');
     const ticketBoon = el.querySelector('[data-bind="dec-ticket-boon"]');
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
@@ -3716,11 +3806,13 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     const useWallet = el.querySelector('[data-bind="dec-funds-use-wallet"]');
 
     tickets.value = '0';
-    lootbox.value = '0.08';
+    smallBoxes.value = '2';
+    customBoxes.value = '1';
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
     assert.equal(tickets.value, '1', 'zero tickets seed to one when USE FLIP is selected');
-    assert.equal(lootbox.value, '0', 'the incompatible lootbox amount is cleared');
+    assert.equal(smallBoxes.value, '0', 'preset boxes are cleared in tickets-only FLIP mode');
+    assert.equal(customBoxes.value, '0', 'custom boxes are cleared in tickets-only FLIP mode');
     assert.equal(lootboxGroup.hidden, true, 'the whole lootbox control is removed in FLIP mode');
     assert.equal(ticketBoon.hidden, true, 'the ETH purchase boon is removed in FLIP mode');
     assert.equal(ticketBoon.getAttribute('suppressed'), '',
@@ -3734,6 +3826,9 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(lootboxGroup.hidden, false, 'lootboxes return when FLIP mode is left');
     assert.equal(ticketBoon.getAttribute('suppressed'), null,
       'the ticket boon can return when ETH purchasing is restored');
+    assert.equal(ticketBoon.hidden, true,
+      'leaving FLIP mode never un-hides the marker — the element decides that '
+      + 'from app.boons, and this repaint runs on every poll cycle');
     assert.equal(useClaimable.getAttribute('aria-pressed'), 'true');
     assert.equal(useWallet.getAttribute('aria-pressed'), 'false');
 
@@ -3767,7 +3862,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     await settle(80);
     assert.equal(tickets.value, '2.25', 'quest metadata does not overwrite a nonzero amount');
     assert.equal(flip.checked, true, 'the freshly verified USE FLIP control is selected');
-    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0');
+    assert.equal(el.querySelector('[name="dec-box-small"]').value, '0');
+    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '0');
     assert.equal(fake._calls.filter((call) => call[0] !== 'static').length, 0,
       'quest activation does not send redeemFlip');
 
@@ -3790,10 +3886,12 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     const el = instantiate();
     await settle(60);
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const lootbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const customCount = el.querySelector('[name="dec-box-custom-count"]');
+    const customSize = el.querySelector('[name="dec-box-custom-eth"]');
     const flip = el.querySelector('[data-bind="dec-flip-check"]');
     tickets.value = '2.25';
-    lootbox.value = '0.08';
+    customCount.value = '1';
+    customSize.value = '0.08';
     flip.checked = false;
 
     document.dispatchEvent(new CustomEvent('quest:activate', {
@@ -3808,7 +3906,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(sends.length, 1);
     assert.equal(sends[0][1], 800n, 'the confirmed two-ticket quest amount is redeemed');
     assert.equal(tickets.value, '2.25', 'the normal ticket draft is preserved');
-    assert.equal(lootbox.value, '0.08', 'the normal lootbox draft is preserved');
+    assert.equal(customCount.value, '1', 'the normal custom-box quantity is preserved');
+    assert.equal(customSize.value, '0.08', 'the normal custom-box size is preserved');
     assert.equal(flip.checked, false, 'the quest does not select USE FLIP in the normal form');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
@@ -3850,7 +3949,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('zero tickets → validation error, no tx', async () => {
+  test('zero FLIP tickets prompt the ticket shelf without opening a chooser or sending a tx', async () => {
     const fake = makeFakeRedeemFlipContract();
     claimsMod.__setContractFactoryForTest(() => fake);
     const el = instantiate();
@@ -3863,12 +3962,17 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     // Selecting USE FLIP seeds zero to one. A player can still explicitly
     // clear the field afterward, and click-time validation must reject that.
     el.querySelector('[name="dec-tickets"]').value = '0';
+    el.querySelector('[name="dec-tickets"]').dispatchEvent({ type: 'input' });
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
+    assert.equal(el.querySelector('[data-bind="dec-buy-dialog"]'), null,
+      'the retired chooser is absent in FLIP mode too');
+    assert.equal(el.querySelector('.dec-purchase-builders').classList.contains('is-prompting'), true);
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'Burn FLIP');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, 'for tickets');
     const err = el.querySelector('[data-bind="dec-error"]');
-    assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /ticket amount/i);
+    assert.equal(err.hidden, true, 'zeroes are a shelf prompt, not an error');
     assert.equal(fake._calls.filter((c) => c[0] !== 'static').length, 0, 'no tx sent');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
@@ -3879,7 +3983,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.doesNotMatch(PANEL_SRC, />\s*REDEEM FLIP\s*</);
     assert.doesNotMatch(PANEL_SRC, /data-bind="dec-flip-buy"/);
     assert.doesNotMatch(PANEL_SRC, /Mint with FLIP/i);
-    assert.match(PANEL_SRC, /lootboxInput\.disabled = flipMode/);
+    assert.match(PANEL_SRC, /input\.disabled = flipMode/);
+    assert.match(PANEL_SRC, /if \(flipMode\) this\.#clearBoxDraft\(\)/);
     assert.match(PANEL_SRC, /lootboxGroup\.hidden = flipMode/);
     assert.match(
       APP_CSS,

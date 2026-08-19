@@ -1,3 +1,5 @@
+import { ETH_DIVISOR } from './chain-config.js';
+
 // Compact product mapping for the player-facing active-boon indicators.
 // The DB feed carries the contract boon type; this table deliberately uses the
 // EFFECTIVE values. Whale/deity tier names 25/50 are historical tier labels,
@@ -30,15 +32,15 @@ const BOON_UI = Object.freeze({
   29: { product: 'lazy', label: 'BOON −10%', detail: 'Your lazy pass purchase costs 10% less' },
   30: { product: 'lazy', label: 'BOON −25%', detail: 'Your lazy pass purchase costs 25% less' },
   31: { product: 'lazy', label: 'BOON −50%', detail: 'Your lazy pass purchase costs 50% less' },
-  32: { product: 'degenerette-eth', label: '4% BONUS ETH BET', detail: '4% bonus ETH bet on your next Degenerette spin' },
-  33: { product: 'degenerette-eth', label: '8% BONUS ETH BET', detail: '8% bonus ETH bet on your next Degenerette spin' },
-  34: { product: 'degenerette-eth', label: '12% BONUS ETH BET', detail: '12% bonus ETH bet on your next Degenerette spin' },
-  35: { product: 'degenerette-flip', label: '4% BONUS FLIP BET', detail: '4% bonus FLIP bet on your next Degenerette spin' },
-  36: { product: 'degenerette-flip', label: '8% BONUS FLIP BET', detail: '8% bonus FLIP bet on your next Degenerette spin' },
-  37: { product: 'degenerette-flip', label: '12% BONUS FLIP BET', detail: '12% bonus FLIP bet on your next Degenerette spin' },
-  38: { product: 'degenerette-wwxrp', label: '4% BONUS WWXRP BET', detail: '4% bonus WWXRP bet on your next Degenerette spin' },
-  39: { product: 'degenerette-wwxrp', label: '8% BONUS WWXRP BET', detail: '8% bonus WWXRP bet on your next Degenerette spin' },
-  40: { product: 'degenerette-wwxrp', label: '12% BONUS WWXRP BET', detail: '12% bonus WWXRP bet on your next Degenerette spin' },
+  32: { product: 'degenerette-eth', label: '4% BONUS ETH BET', detail: 'Adds 4% effective stake to up to 10 ETH of your next eligible Degenerette bet, split across its spins' },
+  33: { product: 'degenerette-eth', label: '8% BONUS ETH BET', detail: 'Adds 8% effective stake to up to 10 ETH of your next eligible Degenerette bet, split across its spins' },
+  34: { product: 'degenerette-eth', label: '12% BONUS ETH BET', detail: 'Adds 12% effective stake to up to 10 ETH of your next eligible Degenerette bet, split across its spins' },
+  35: { product: 'degenerette-flip', label: '4% BONUS FLIP BET', detail: 'Adds 4% effective stake to up to 100,000 FLIP of your next eligible Degenerette bet, split across its spins' },
+  36: { product: 'degenerette-flip', label: '8% BONUS FLIP BET', detail: 'Adds 8% effective stake to up to 100,000 FLIP of your next eligible Degenerette bet, split across its spins' },
+  37: { product: 'degenerette-flip', label: '12% BONUS FLIP BET', detail: 'Adds 12% effective stake to up to 100,000 FLIP of your next eligible Degenerette bet, split across its spins' },
+  38: { product: 'degenerette-wwxrp', label: '4% BONUS WWXRP BET', detail: 'Adds 4% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
+  39: { product: 'degenerette-wwxrp', label: '8% BONUS WWXRP BET', detail: 'Adds 8% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
+  40: { product: 'degenerette-wwxrp', label: '12% BONUS WWXRP BET', detail: 'Adds 12% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
 });
 
 /* Reuse real site art where it exists. Most controls already name/show the
@@ -376,6 +378,48 @@ export function coinflipBoonBoostDelta(amount, payload) {
     ? COINFLIP_BOON_MAX_BASE_WEI
     : raw;
   return boonBoostDelta(eligible, payload, 'coinflip');
+}
+
+// Degenerette caps the total bet principal eligible for its virtual stake
+// bonus. ETH is stored in the active deployment's raw scale; FLIP and WWXRP
+// remain ordinary 18-decimal token amounts on every chain profile.
+export const DEGENERETTE_BOON_ETH_MAX_BASE_RAW = (10n * (10n ** 18n)) / ETH_DIVISOR;
+export const DEGENERETTE_BOON_FLIP_MAX_BASE_RAW = 100_000n * (10n ** 18n);
+
+/**
+ * Contract-identical total effective-stake delta for one Degenerette bet.
+ * `amount` is the paid total across every spin. The contract floors the bonus
+ * per spin, so multiply that per-spin result back out for an exact UI total.
+ */
+export function degeneretteBoonBoostDelta(amount, payload, currency, spinCount = 1) {
+  let raw;
+  let spins;
+  try {
+    raw = BigInt(amount ?? 0);
+    spins = BigInt(spinCount ?? 1);
+  } catch (_error) {
+    return 0n;
+  }
+  if (raw <= 0n || spins <= 0n) return 0n;
+
+  const lane = Number(currency);
+  let product;
+  let maxBase = null;
+  if (lane === 0) {
+    product = 'degenerette-eth';
+    maxBase = DEGENERETTE_BOON_ETH_MAX_BASE_RAW;
+  } else if (lane === 1) {
+    product = 'degenerette-flip';
+    maxBase = DEGENERETTE_BOON_FLIP_MAX_BASE_RAW;
+  } else if (lane === 3) {
+    product = 'degenerette-wwxrp';
+  } else {
+    return 0n;
+  }
+
+  const eligible = maxBase != null && raw > maxBase ? maxBase : raw;
+  const totalBonus = boonBoostDelta(eligible, payload, product);
+  return (totalBonus / spins) * spins;
 }
 
 /** Text/tooltip model shared by every <boon-product-indicator>. */
