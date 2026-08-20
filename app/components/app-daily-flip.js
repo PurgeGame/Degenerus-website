@@ -5001,6 +5001,39 @@ class AppDailyFlip extends HTMLElement {
     if (oval) oval.setAttribute('data-balance-held', String(held));
   }
 
+  #advanceConfirmedTomorrowWager({ player, day, amount, held, safeBefore }) {
+    if (!held || !this.#active || Number(day) !== Number(this.#day)) return;
+    const scope = String(player || '').toLowerCase();
+    const currentScope = String(this.#dashboardAddress || '').toLowerCase();
+    if (!scope || scope !== currentScope) return;
+
+    // If the reveal opened while the wallet was confirming, the ordinary
+    // authoritative refresh owns the display. This exception is only for a
+    // Tomorrow snapshot that is still spoiler-held.
+    const oval = this.querySelector('[data-bind="df-tomorrow-bet-oval"]');
+    if (oval?.getAttribute('data-balance-held') !== 'true') return;
+
+    const before = safeBefore == null ? 0n : this.#asWei(safeBefore);
+    const confirmedFloor = before + this.#asWei(amount);
+    const currentSafe = heldBalanceValue({
+      namespace: `coinflip-tomorrow:${CHAIN.id}`,
+      scope,
+      value: null,
+      released: false,
+    });
+    // A concurrent authoritative refresh may already include this wager. In
+    // that case retain its newer safe snapshot instead of adding twice.
+    if (currentSafe == null || this.#asWei(currentSafe) < confirmedFloor) {
+      heldBalanceValue({
+        namespace: `coinflip-tomorrow:${CHAIN.id}`,
+        scope,
+        value: confirmedFloor,
+        released: true,
+      });
+    }
+    this.#renderPosition();
+  }
+
   #renderChipStrip({
     hostBind,
     rackBind,
@@ -6054,10 +6087,29 @@ class AppDailyFlip extends HTMLElement {
         if (amount == null || amount < 100n * (10n ** 18n)) {
           throw new Error('Minimum coinflip bet is 100 FLIP.');
         }
+        const confirmedWagerScope = String(player).toLowerCase();
+        const confirmedWagerDay = this.#day;
+        const tomorrowOval = this.querySelector('[data-bind="df-tomorrow-bet-oval"]');
+        const tomorrowHeld = tomorrowOval?.getAttribute('data-balance-held') === 'true';
+        const safeTomorrowBefore = tomorrowHeld
+          ? heldBalanceValue({
+              namespace: `coinflip-tomorrow:${CHAIN.id}`,
+              scope: confirmedWagerScope,
+              value: null,
+              released: false,
+            })
+          : null;
         // The current contract handles claimable -> unlocked auto-rebuy carry
         // -> wallet in one deposit. No preliminary carry-claim signature is
         // needed, and an RNG-locked carry leg never falls through to the wallet.
         await depositCoinflip({ player, amount, useCarry: true });
+        this.#advanceConfirmedTomorrowWager({
+          player: confirmedWagerScope,
+          day: confirmedWagerDay,
+          amount,
+          held: tomorrowHeld,
+          safeBefore: safeTomorrowBefore,
+        });
         if (options?.amount == null) this.#closeAddBetDialog();
       } else if (kind === 'auto-rebuy') {
         const info = this.#activeAutoRebuyInfo();

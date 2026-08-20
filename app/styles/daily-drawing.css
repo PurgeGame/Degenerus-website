@@ -1317,6 +1317,7 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
    bonus-only payout: the ticket can honestly invite a claim without locking
    Roll 2's faces into the cabinet. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-claimable {
+  pointer-events: auto;
   border-color: rgba(253, 224, 71, 0.94);
   box-shadow:
     inset 0 0 0 1px rgba(254, 249, 195, 0.3),
@@ -1341,6 +1342,7 @@ body.layout-basic .jackpot-hero__machine
   color: inherit;
   font: inherit;
   cursor: pointer;
+  pointer-events: auto;
   filter:
     brightness(1.08)
     drop-shadow(0 0 5px rgba(74, 222, 128, 0.5))
@@ -1366,8 +1368,9 @@ body.layout-basic .jackpot-hero__machine
 }
 
 /* Reuse the game's quest waypoint so claimable foil work reads like every
-   other actionable objective. It lives inside the ticket button: clicking the
-   icon or anywhere on the card therefore invokes the exact same claim tuple. */
+   other actionable objective. The ticket clips its foil quadrants, so the
+   marker is a sibling button on the overflow-visible socket; both controls
+   invoke the exact same immutable claim tuple. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker {
   position: absolute;
   z-index: 7;
@@ -1376,10 +1379,20 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker {
   display: block;
   width: 1.12rem;
   height: 1.12rem;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: url('/app/assets/quest-objective-tail-bottom-left.svg') center / contain no-repeat;
+  cursor: pointer;
   filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.78));
   pointer-events: auto;
   animation: ldj-foil-claim-marker 0.92s ease-in-out infinite alternate;
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker:focus-visible {
+  outline: 2px solid rgba(253, 224, 71, 0.96);
+  outline-offset: 2px;
 }
 
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-claim-busy {

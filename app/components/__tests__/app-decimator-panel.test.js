@@ -776,7 +776,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     }
     assert.match(
       el.innerHTML,
-      /degenerus-lootbox-case-small-v14-top\.webp[\s\S]*degenerus-lootbox-case-medium-v14-top\.webp[\s\S]*degenerus-lootbox-case-large-v15-top\.webp/,
+      /degenerus-lootbox-case-small-v14-top\.webp[\s\S]*degenerus-lootbox-case-medium-v14-top\.webp[\s\S]*degenerus-lootbox-case-large-v16-top\.webp/,
       'preset cards use their distinct canonical top-down case models',
     );
     assert.doesNotMatch(
@@ -2838,7 +2838,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-box-price-large-unit"]').hidden, false,
       'a whole-number gold-box price reads as 1 ETH instead of an old tier number');
     for (const tier of ['small', 'medium', 'large']) {
-      const version = tier === 'large' ? 'v15' : 'v14';
+      const version = tier === 'large' ? 'v16' : 'v14';
       assert.match(
         el.innerHTML,
         new RegExp(`dec-box-card--${tier}[\\s\\S]*?data-lootbox-case-model="${tier}"[\\s\\S]*?degenerus-lootbox-case-${tier}-${version}-top\\.webp`),

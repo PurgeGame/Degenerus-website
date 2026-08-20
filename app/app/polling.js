@@ -106,7 +106,7 @@ let _forcePlayerCycle = null;
 let _jackpotCompletionDay = null;
 let _jackpotCompletionPromise = null;
 let _jackpotCompletionPending = false;
-const JACKPOT_INDEXER_WAIT_MS = 30_000;
+const JACKPOT_INDEXER_WAIT_MS = 60_000;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
 // at the floor rather than inheriting a backed-off delay from before it was hidden.

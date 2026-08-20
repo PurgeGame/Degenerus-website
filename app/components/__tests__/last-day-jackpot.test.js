@@ -302,6 +302,8 @@ async function flushMicrotasks() {
 import * as storeMod from '../../app/store.js';
 import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as contractsMod from '../../app/contracts.js';
+import * as foilClaimMod from '../../app/foil-claim.js';
 import { CHAIN } from '../../app/chain-config.js';
 import { traitToBadge } from '../../app/jackpot-data.js';
 
@@ -2712,6 +2714,8 @@ describe('foil match pending action', () => {
       word | ((trait & 0xff) << (quadrant * 8))
     ), 0) >>> 0;
     const priorFetch = globalThis.fetch;
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
     globalThis.fetch = async (url) => {
       assert.match(String(url), new RegExp(`/player/${player}/foil\\?level=12$`, 'i'));
       return {
@@ -2812,13 +2816,19 @@ describe('foil match pending action', () => {
       assert.equal(claimTicket?.tagName, 'BUTTON',
         'the whole paying ticket is a native keyboard/click claim control');
       assert.equal(claimTicket?.getAttribute('type'), 'button');
-      assert.match(claimTicket?.getAttribute('aria-label') || '', /Claim T8 main-spin foil match from ticket 1/);
+      assert.match(claimTicket?.getAttribute('aria-label') || '', /Claim T8 main spin foil match from ticket 1/);
       assert.equal(claimTicket?.eventListeners?.click?.length, 1,
         'the ticket invokes the same direct claim path as Pending');
       const claimMarker = claimTicket?.querySelector('.ldj-foil-claim-marker');
-      assert.ok(claimMarker, 'the paying ticket carries the quest claim marker');
-      assert.equal(claimMarker.parentElement, claimTicket,
-        'clicking the marker lands inside the same ticket button');
+      assert.equal(claimMarker, null,
+        'the overflow-clipped foil card does not swallow the marker');
+      const socketMarker = slots[0].querySelector('.ldj-foil-claim-marker');
+      assert.equal(socketMarker?.tagName, 'BUTTON',
+        'the quest marker is its own native claim control above the socket');
+      assert.equal(socketMarker?.parentElement, slots[0]);
+      assert.match(socketMarker?.getAttribute('aria-label') || '', /Claim T8 main spin foil match/);
+      assert.equal(socketMarker?.eventListeners?.click?.length, 1,
+        'clicking the icon invokes the same direct claim path as the ticket');
       assert.equal(slots[0].querySelectorAll('.is-color-match').length, 4,
         'all four exact symbol-and-color faces light independently');
       assert.equal(slots[1].classList.contains('is-graded'), true,
@@ -2835,10 +2845,47 @@ describe('foil match pending action', () => {
         'a 1-point symbol-only face receives full illumination');
       assert.equal(slots[1].querySelectorAll('.is-no-match').length, 2,
         '0-point wrong-symbol faces remain deliberately dim');
+
+      let sentArgs = null;
+      let simulatedArgs = null;
+      const receipt = { status: 1, logs: [], hash: '0xfoilclaim', blockNumber: 99 };
+      const claimMethod = async (...args) => {
+        sentArgs = args;
+        return { hash: receipt.hash, wait: async () => receipt };
+      };
+      claimMethod.staticCall = async (...args) => { simulatedArgs = args; };
+      const fakeContract = {
+        claimFoilMatch: claimMethod,
+        connect() { return this; },
+        interface: { parseLog() { return null; } },
+      };
+      contractsMod.setProvider({
+        getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+        getSigner: async () => ({ getAddress: async () => player }),
+      });
+      foilClaimMod.__setContractFactoryForTest(() => fakeContract);
+
+      socketMarker.dispatchEvent({ type: 'click' });
+      for (let i = 0; i < 20; i += 1) await flushMicrotasks();
+      assert.deepEqual(simulatedArgs, [player, 44n, 0n, 0],
+        'ticket activation pre-flights the exact player/day/ticket/draw tuple');
+      assert.deepEqual(sentArgs, [player, 44n, 0n, 0],
+        'the same click sends that exact claim tuple');
+      assert.equal(slots[0].classList.contains('is-claimable'), false,
+        'receipt confirmation retires the ticket action immediately');
+      assert.equal(slots[0].querySelector('.ldj-foil-claim-marker'), null,
+        'the quest marker disappears with the settled tuple');
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'the direct ticket claim and Pending stay reconciled');
+      assert.equal(revealMod.__takeQueuedForTest()[0]?.kind, 'foil-match',
+        'the direct claim enters the same foil reward reveal as Pending');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'detaching the owner cannot leave a stale foil reminder');
     } finally {
+      contractsMod.clearProvider();
+      foilClaimMod.__resetContractFactoryForTest();
+      revealMod.__resetForTest();
       globalThis.fetch = priorFetch;
     }
   });
@@ -2930,8 +2977,8 @@ describe('foil match pending action', () => {
         'a bonus-only payout still glows as actionable without locking bonus quadrants');
       const bonusClaimTicket = slot.querySelector('.ldj-foil-machine-ticket--claimable');
       assert.equal(bonusClaimTicket?.tagName, 'BUTTON');
-      assert.match(bonusClaimTicket?.getAttribute('aria-label') || '', /bonus-spin foil match/);
-      assert.ok(bonusClaimTicket?.querySelector('.ldj-foil-claim-marker'));
+      assert.match(bonusClaimTicket?.getAttribute('aria-label') || '', /bonus spin foil match/);
+      assert.equal(slot.querySelector('.ldj-foil-claim-marker')?.tagName, 'BUTTON');
       assert.equal(slot.querySelectorAll('.is-color-match').length, 1,
         'the main grade remains the sole durable visual after bonus scratch');
       el.disconnectedCallback();

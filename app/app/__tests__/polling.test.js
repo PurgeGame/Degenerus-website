@@ -626,7 +626,7 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(resultCalls.length, 1);
     assert.equal(resultCalls[0].opts.cache, 'no-store');
     assert.match(resultCalls[0].url, /targetDay=21/);
-    assert.match(resultCalls[0].url, /waitMs=30000/);
+    assert.match(resultCalls[0].url, /waitMs=60000/);
     assert.equal(storeMod.get('app.lastDay').day, 21);
     assert.equal(_testing.jackpotCompletionDay, 21);
 

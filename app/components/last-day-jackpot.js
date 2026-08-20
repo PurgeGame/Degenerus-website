@@ -1783,9 +1783,10 @@ class LastDayJackpot extends HTMLElement {
 
       const ticket = document.createElement(claimCandidate ? 'button' : 'span');
       ticket.className = 'ldj-foil-machine-ticket ticket-card tc-small ticket-card--foil';
+      let claimLabel = '';
       if (claimCandidate) {
-        const drawLabel = claimCandidate.grade.drawKind === 1 ? 'bonus-spin' : 'main-spin';
-        const claimLabel = `Claim T${claimCandidate.grade.score} ${drawLabel} foil match from ticket ${index + 1}`;
+        const drawLabel = claimCandidate.grade.drawKind === 1 ? 'bonus spin' : 'main spin';
+        claimLabel = `Claim T${claimCandidate.grade.score} ${drawLabel} foil match from ticket ${index + 1}`;
         ticket.classList.add('ldj-foil-machine-ticket--claimable');
         ticket.setAttribute('type', 'button');
         ticket.setAttribute('aria-label', claimLabel);
@@ -1831,13 +1832,18 @@ class LastDayJackpot extends HTMLElement {
       flame.decoding = 'async';
       center.appendChild(flame);
       ticket.appendChild(center);
-      if (claimCandidate) {
-        const marker = document.createElement('span');
-        marker.className = 'ldj-foil-claim-marker';
-        marker.setAttribute('aria-hidden', 'true');
-        ticket.appendChild(marker);
-      }
       slot.appendChild(ticket);
+      if (claimCandidate) {
+        const marker = document.createElement('button');
+        marker.className = 'ldj-foil-claim-marker';
+        marker.setAttribute('type', 'button');
+        marker.setAttribute('aria-label', claimLabel);
+        marker.setAttribute('title', claimLabel);
+        marker.disabled = this.#foilClaimBusy;
+        if (this.#foilClaimBusy) marker.setAttribute('aria-busy', 'true');
+        marker.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
+        slot.appendChild(marker);
+      }
     });
     if (slotted > 0) this.#foilSlottingPending = false;
   }

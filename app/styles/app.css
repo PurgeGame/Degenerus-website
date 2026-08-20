@@ -7752,11 +7752,15 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 
 .rvl-vessel--lootbox .rvl-chest {
+  --rvl-lid-depth: calc(var(--rvl-box-w) * 0.418);
+  --rvl-lid-closed-pitch: -68.3deg;
+  --rvl-inner-art-fill: 135%;
   z-index: 1;
   width: var(--rvl-box-w);
   height: auto;
   aspect-ratio: 1200 / 539;
   perspective: 900px;
+  perspective-origin: 50% var(--lootbox-case-seam, 37.1%);
   filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.64)) drop-shadow(0 0 20px rgb(var(--lootbox-tone-rgb) / 0.34));
   animation: rvl-case-arrive 0.48s cubic-bezier(0.2, 0.78, 0.24, 1.08) both,
     rvl-case-idle 3.2s ease-in-out 0.48s infinite;
@@ -7771,17 +7775,26 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-vessel--lootbox .rvl-chest-lid {
   top: 0;
-  right: 0;
-  left: 0;
+  right: 0; left: 0;
   z-index: 7;
   height: var(--lootbox-case-seam, 37.1%);
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  transform-origin: 50% 96%;
+  border: 0; border-radius: 0;
+  background: none; box-shadow: none;
+  transform-origin: 50% 100% calc(-1 * var(--rvl-lid-depth));
   transform-style: preserve-3d;
+  will-change: transform;
 }
+.rvl-vessel--lootbox .rvl-chest-lid::after {
+  position: absolute;
+  right: 17%; bottom: -3px; left: 17%; z-index: 5;
+  height: 7px; border: 1px solid rgba(238, 190, 82, 0.78); border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #16140f 0 9%, #b7791f 9% 12%, #f3c55b 12% 14%, #2b2419 14% 25%);
+  box-shadow: inset 0 1px rgba(255, 235, 169, 0.5), 0 2px 4px rgba(0, 0, 0, 0.72);
+  content: ''; pointer-events: none;
+  transform: translateZ(calc(-1 * var(--rvl-lid-depth)));
+}
+.rvl-stage[data-lootbox-case-model="small"] .rvl-chest { --rvl-lid-depth: calc(var(--rvl-box-w) * 0.3135); --rvl-lid-closed-pitch: -59.8deg; --rvl-inner-art-fill: 154%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-chest { --rvl-lid-depth: calc(var(--rvl-box-w) * 0.4047); --rvl-lid-closed-pitch: -64.1deg; --rvl-inner-art-fill: 113%; }
 .rvl-vessel--lootbox :is(.rvl-chest-lid__front, .rvl-chest-lid__inner, .rvl-chest-lid__edge) {
   position: absolute;
   display: block;
@@ -7792,7 +7805,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   z-index: 3;
   inset: 0;
   background: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
-  transform: translateZ(2px);
+  transform: translateZ(0);
 }
 .rvl-vessel--lootbox .rvl-chest-lid__front::before {
   position: absolute;
@@ -7812,22 +7825,23 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: var(--lootbox-inner-lid-width, 100%);
   height: auto;
   aspect-ratio: 1200 / 540;
-  background: var(--lootbox-case-inner-lid-art) center / 100% 100% no-repeat;
+  background: var(--lootbox-case-inner-lid-art) center / 100% var(--rvl-inner-art-fill) no-repeat;
   backface-visibility: visible;
   filter: drop-shadow(0 0 10px rgba(50, 255, 108, 0.28));
-  transform: rotateX(90deg) translateZ(-1px);
+  opacity: 0;
+  transform: translateZ(calc(-1 * var(--rvl-lid-depth))) rotateX(var(--rvl-lid-closed-pitch));
   transform-origin: 50% 100%;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__edge {
   z-index: 2;
   right: calc(3% + var(--lootbox-case-shell-inset, 0%));
-  bottom: -4px;
+  top: 0;
   left: calc(3% + var(--lootbox-case-shell-inset, 0%));
   height: 9px;
-  border: 1px solid rgba(255, 218, 124, 0.7);
-  background: linear-gradient(#2d2417, #090b0d 48%, #9b6b22 52%, #18140e);
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.88);
-  transform: rotateX(32deg) translateZ(1px);
+  border: 0;
+  background: none;
+  box-shadow: none;
+  transform: rotateX(-90deg);
   transform-origin: 50% 0;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__edge::after {
@@ -8148,6 +8162,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-bursting .rvl-vessel--lootbox { opacity: 1; transform: none; filter: none; animation: none; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-in-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.32, 0, 0.2, 1) both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid__inner { animation: rvl-case-inner-reveal var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid__edge::after { animation: rvl-case-lid-glow-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release var(--rvl-box-burst) ease-out both; }
@@ -8167,17 +8182,18 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 @keyframes rvl-case-lid-open {
   0%, 10% { opacity: 1; transform: rotateX(0); }
-  70%, 100% { opacity: 1; transform: rotateX(-80deg); }
+  58%, 100% { opacity: 1; transform: rotateX(24deg); }
 }
+@keyframes rvl-case-inner-reveal { 0%, 10% { opacity: 0; } 10.01%, 100% { opacity: 1; } }
 @keyframes rvl-case-lid-glow-release {
   0%, 10% { opacity: 0.42; transform: scaleX(1); }
   48% { opacity: 1; transform: scaleX(1.03); }
-  100% { opacity: 0.78; transform: scaleX(1); }
+  100% { opacity: 0.9; transform: scaleX(0.96); }
 }
 @keyframes rvl-case-interior-glow-release {
   from { opacity: 0.64; }
   55% { opacity: 1; }
-  to { opacity: 0.78; }
+  to { opacity: 0.9; }
 }
 @keyframes rvl-case-body-release {
   0% { filter: brightness(1.1); transform: none; }
@@ -10214,7 +10230,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   .rvl-spin-row, .rvl-spin-score, .rvl-spin-total, .rvl-summary {
     animation: none !important;
   }
-  .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-lid__edge::after,
+  .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-lid__inner, .rvl-chest-lid__edge::after,
   .rvl-chest-body, .rvl-chest-seam, .rvl-chest-seam::after,
   .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-badge__ring,
   .rvl-lootbox-badge__ring::before, .rvl-lootbox-badge__ring::after, .rvl-lootbox-badge__center {

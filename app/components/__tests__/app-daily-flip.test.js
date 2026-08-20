@@ -3843,6 +3843,205 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('a confirmed Add Bet advances an empty held Tomorrow by only the submitted wager', async () => {
+    const unit = 10n ** 18n;
+    _currentStakeWei = String(9_000n * unit);
+    seedTomorrowHold(0n);
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 1 }],
+          bonusDraw: [],
+          farFuture: { winnerCount: 0 },
+        },
+      },
+      roll2: { day: 67, wins: [] },
+    });
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+
+    const deposit = Object.assign(
+      async () => ({ hash: '0xsafe-add', wait: async () => ({ status: 1, logs: [] }) }),
+      { staticCall: async () => {} },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflipWithCarry: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    const oval = () => el.querySelector('[data-bind="df-tomorrow-bet-oval"]');
+    assert.match(tomorrow().textContent, /NO BET|0 FLIP/);
+    assert.equal(oval().getAttribute('data-balance-held'), 'true');
+
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const input = el.querySelector('[data-bind="df-add-bet-number"]');
+    input.value = '2000';
+    input.dispatchEvent({ type: 'input' });
+    el.querySelector('[data-bind="df-add-bet-confirm"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.match(tomorrow().textContent, /2,000 FLIP/,
+      'the player-known confirmed wager replaces the empty safe snapshot');
+    assert.equal(
+      oval().getAttribute('aria-label'),
+      "Last settled tomorrow's bet: 2,000 FLIP. Updates after the RNG reveal.",
+      'the accessible amount advances by the same exact safe wager',
+    );
+    const heldPresentation = [
+      tomorrow().textContent,
+      oval().getAttribute('aria-label'),
+      oval().getAttribute('title'),
+      el.querySelector('[data-bind="df-outcome"]')?.textContent,
+    ].filter(Boolean).join(' ');
+    assert.doesNotMatch(heldPresentation, /9,000|WIN|LOSS|196%|BONUS|AUTO REBUY/i,
+      'the larger live stake and all result-sensitive copy remain concealed');
+    assert.equal(oval().getAttribute('data-balance-held'), 'true',
+      'the exact wager exception does not open the jackpot hold');
+    assert.equal(el.querySelector('.df-modifier-meter'), null,
+      'the held presentation does not mount result multiplier UI');
+
+    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+    document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
+    assert.match(tomorrow().textContent, /9,000 FLIP/,
+      'the authoritative reveal replaces the safe wager floor without double-counting it');
+    assert.doesNotMatch(tomorrow().textContent, /11,000/);
+    assert.equal(oval().getAttribute('data-balance-held'), 'false');
+    el.disconnectedCallback();
+  });
+
+  test('a confirmed Add Bet grows an existing held Tomorrow snapshot exactly once', async () => {
+    const unit = 10n ** 18n;
+    let releaseReceipt;
+    const receiptGate = new Promise((resolve) => { releaseReceipt = resolve; });
+    _currentStakeWei = String(25_000n * unit);
+    seedTomorrowHold(10_000n * unit);
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 1 }],
+          bonusDraw: [],
+          farFuture: { winnerCount: 0 },
+        },
+      },
+      roll2: { day: 67, wins: [] },
+    });
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+
+    const deposit = Object.assign(
+      async () => ({
+        hash: '0xsafe-add-pending',
+        wait: async () => receiptGate,
+      }),
+      { staticCall: async () => {} },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflipWithCarry: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /10,000 FLIP/);
+
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const input = el.querySelector('[data-bind="df-add-bet-number"]');
+    input.value = '1000';
+    input.dispatchEvent({ type: 'input' });
+    el.querySelector('[data-bind="df-add-bet-confirm"]').dispatchEvent({ type: 'click' });
+    await flushPromises();
+    assert.match(tomorrow().textContent, /10,000 FLIP/,
+      'broadcast alone cannot advance the presentation-safe amount');
+    assert.doesNotMatch(tomorrow().textContent, /11,000/);
+
+    releaseReceipt({ status: 1, logs: [] });
+    await flushMicrotasks();
+    assert.match(tomorrow().textContent, /11,000 FLIP/,
+      'confirmation adds the exact submitted wager to the prior safe snapshot');
+    assert.doesNotMatch(tomorrow().textContent, /Tomorrow's bet1,000 FLIP|25,000/,
+      'the display neither replaces the prior stake nor copies the hidden live stake');
+    await flushMicrotasks();
+    assert.match(tomorrow().textContent, /11,000 FLIP/,
+      'receipt and refresh callbacks cannot apply the same wager twice');
+    el.disconnectedCallback();
+  });
+
+  test('a rejected Add Bet leaves the held Tomorrow snapshot unchanged', async () => {
+    const unit = 10n ** 18n;
+    _currentStakeWei = String(25_000n * unit);
+    seedTomorrowHold(10_000n * unit);
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 1 }],
+          bonusDraw: [],
+          farFuture: { winnerCount: 0 },
+        },
+      },
+      roll2: { day: 67, wins: [] },
+    });
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+
+    const deposit = Object.assign(
+      async () => ({
+        hash: '0xsafe-add-rejected',
+        wait: async () => { throw new Error('reverted'); },
+      }),
+      { staticCall: async () => {} },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflipWithCarry: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+
+    const el = mount();
+    await flushMicrotasks();
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const input = el.querySelector('[data-bind="df-add-bet-number"]');
+    input.value = '1000';
+    input.dispatchEvent({ type: 'input' });
+    el.querySelector('[data-bind="df-add-bet-confirm"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    const tomorrow = el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow.textContent, /10,000 FLIP/,
+      'a rejected receipt cannot mutate the prior presentation-safe amount');
+    assert.doesNotMatch(tomorrow.textContent, /11,000|25,000/);
+    assert.equal(
+      el.querySelector('[data-bind="df-tomorrow-bet-oval"]').getAttribute('data-balance-held'),
+      'true',
+    );
+    el.disconnectedCallback();
+  });
+
   test('Add Bet bonuses only the portion funded by reused winnings', async () => {
     const unit = 10n ** 18n;
     const dashboard = dashboardPayload();

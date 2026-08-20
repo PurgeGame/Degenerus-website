@@ -732,30 +732,46 @@ export function buildBoxSpinBoard(spin) {
   const estimatedAtRisk = flipLike
     ? _humanBoxSpinPayoutEstimate(spin, rows)
     : null;
-  // A surviving BoxSpin publishes its final payout. Prefer halving that chain
-  // fact over any neutral-EV estimate; the estimate is only for a zero-payout
-  // bust whose historical pre-open storage could not be reconstructed. Above
-  // 1,000 FLIP the contract first collapses the doubled payout onto a whole
-  // 100-FLIP granule, so the recovered reel sum remains approximate there.
+  // Keep the pre-flip meter outcome-neutral. If exact event-block enrichment
+  // is unavailable, both branches start from the same physical-box estimate;
+  // a surviving branch may reconcile to its emitted payout only after the
+  // survival coin lands. Above 1,000 FLIP that emitted payout was collapsed
+  // onto a whole 100-FLIP granule, so halving it remains approximate.
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
-  const fallbackAtRisk = inferredAtRisk > 0n
-    ? inferredAtRisk
-    : (estimatedAtRisk?.amount ?? 0n);
   const payoutAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
-    : (reconstructedAtRisk?.amount ?? fallbackAtRisk);
+    : (reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? inferredAtRisk);
   const payoutAtRiskApproximate = explicitAtRisk > 0n
     ? false
     : reconstructedAtRisk != null
       ? reconstructedAtRisk.approximate
+      : estimatedAtRisk != null
+        ? true
+        : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
+  const exactReconstructedAtRisk = reconstructedAtRisk?.approximate === false
+    ? reconstructedAtRisk.amount
+    : 0n;
+  const settledPayoutAtRisk = explicitAtRisk > 0n
+    ? explicitAtRisk
+    : exactReconstructedAtRisk > 0n
+      ? exactReconstructedAtRisk
       : inferredAtRisk > 0n
-        ? total > FLIP_ROUND_THRESHOLD
+        ? inferredAtRisk
+        : (reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? 0n);
+  const settledPayoutAtRiskApproximate = explicitAtRisk > 0n
+    || exactReconstructedAtRisk > 0n
+    ? false
+    : inferredAtRisk > 0n
+      ? total > FLIP_ROUND_THRESHOLD
+      : reconstructedAtRisk != null
+        ? reconstructedAtRisk.approximate
         : estimatedAtRisk != null;
   const suppliedSurvivalWinPayout = _safeBigInt(spin?.survivalWinPayout);
-  const settledSurvivalWinPayout = survivalStake && total > 0n ? total : 0n;
   const survivalWinPayout = suppliedSurvivalWinPayout
-    || settledSurvivalWinPayout
     || (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n);
+  const settledSurvivalWinPayout = suppliedSurvivalWinPayout
+    || (survivalStake && total > 0n ? total : 0n)
+    || (settledPayoutAtRisk > 0n ? settledPayoutAtRisk * 2n : 0n);
   if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk, payoutAtRiskApproximate);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
@@ -773,12 +789,17 @@ export function buildBoxSpinBoard(spin) {
     survivalStake,
     payoutAtRisk,
     payoutAtRiskApproximate,
-    // Both branches keep a pre-flip prize: survivors use the exact emitted
-    // payout while busts retain the stake-derived hypothetical win.
+    // Both branches keep the same outcome-neutral pre-flip prize. Once the
+    // coin settles, the emitted survivor payout may replace that estimate.
     survivalWinPayout,
     survivalWinPayoutApproximate: suppliedSurvivalWinPayout <= 0n
-      && settledSurvivalWinPayout <= 0n
       && payoutAtRiskApproximate,
+    settledPayoutAtRisk,
+    settledPayoutAtRiskApproximate,
+    settledSurvivalWinPayout,
+    settledSurvivalWinPayoutApproximate: suppliedSurvivalWinPayout <= 0n
+      && total <= 0n
+      && settledPayoutAtRiskApproximate,
     heroIdx,
     boxSpin: true,
     // A record bounty is never a mystery denomination: the contract routes it
@@ -790,6 +811,28 @@ export function buildBoxSpinBoard(spin) {
     // UI; both become visible only after reel one lands.
     headline: spinType === 'record' ? 'BIGGEST SPIN BOUNTY' : 'LUCKBOX SPIN',
   };
+}
+
+/** Reconcile a BoxSpin's outcome-neutral reel estimate after survival lands. */
+export function settleBoxSpinPayoutPresentation(board) {
+  if (!board?.boxSpin || board.payoutPresentationSettled === true) return board;
+  const settledAtRisk = _safeBigInt(board.settledPayoutAtRisk);
+  if (settledAtRisk > 0n) {
+    board.payoutAtRisk = settledAtRisk;
+    board.payoutAtRiskApproximate = board.settledPayoutAtRiskApproximate === true;
+    _allocateBoxSpinPreview(
+      Array.isArray(board.rows) ? board.rows : [],
+      settledAtRisk,
+      board.payoutAtRiskApproximate,
+    );
+  }
+  const settledWin = _safeBigInt(board.settledSurvivalWinPayout);
+  if (settledWin > 0n) {
+    board.survivalWinPayout = settledWin;
+    board.survivalWinPayoutApproximate = board.settledSurvivalWinPayoutApproximate === true;
+  }
+  board.payoutPresentationSettled = true;
+  return board;
 }
 
 /** Highest-paying reel is the useful post-autospin default. Score breaks ties
@@ -5118,18 +5161,25 @@ class RevealOverlay extends HTMLElement {
     if (flipEl.classList) flipEl.classList.add(board.survived ? 'is-win' : 'is-bust');
     // The two-faced coin's normal landing already ends on green ETH for a
     // survivor or red WWXRP for a bust; no late image swap or reversal occurs.
+    if (board.boxSpin) {
+      settleBoxSpinPayoutPresentation(board);
+      this.#refreshBoxSpinSelectors(rendered, board);
+      if (rendered.activePair) this.#showFullSpinPop(rendered, rendered.activePair.row, board);
+      this.#syncBoxSpinPayoutMeter(rendered, board, board.rows.length);
+    }
     eyebrow.textContent = board.survived ? 'PAYOUT KEPT' : 'PAYOUT LOST';
     label.textContent = board.survived ? 'SURVIVED' : 'BUSTED';
+    const settledAtRisk = board.boxSpin ? _safeBigInt(board.payoutAtRisk) : atRisk;
     detail.textContent = board.boxSpin
       ? (board.survived
           ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} PAID`
           // The reels really did earn this before the coin took it. Naming the
           // amount is the whole point of the panel; falling back to a bare reel
           // count is the fail-closed branch for a stake we could not rebuild.
-          : atRisk > 0n
+          : settledAtRisk > 0n
             ? `${payingReelsText} · ${this.#boxSpinAmountText(
               board,
-              atRisk,
+              settledAtRisk,
               board.payoutAtRiskApproximate === true,
             )} LOST`
             : `${payingReelsText} · LOST ON SURVIVAL FLIP`)

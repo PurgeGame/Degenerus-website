@@ -65,10 +65,10 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   large: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-locked-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-retracted-front.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-top.webp',
-    innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-inner-lid.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-locked-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-retracted-front.webp',
+    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-top.webp',
+    innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-inner-lid.webp',
     deadbolts: Object.freeze([
       '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-1.webp',
       '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-2.webp',

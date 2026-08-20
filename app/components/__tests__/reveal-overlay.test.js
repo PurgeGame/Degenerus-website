@@ -177,7 +177,7 @@ const {
   queueReveal, normalizeSequence, buildIndividualLootboxSequences,
   buildDegeneretteSpinFrames,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
-  boxSpinScorePays,
+  boxSpinScorePays, settleBoxSpinPayoutPresentation,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
   shouldCelebrateDegenerette, isUnluckyDegenerette,
   ticketGridSizeClass, revealTerminalActionLabel,
@@ -530,6 +530,32 @@ describe('normalizeSequence', () => {
     assert.equal(individual.at(-1).presentationId, 'combo:27');
     assert.equal(individual.at(-1).lootboxRelease.key, '27',
       'the purchase retires only after the final individual receipt');
+  });
+
+  test('a combo BoxSpin estimate uses its physical box value, not the aggregate order', () => {
+    const price = 10_000_000_000n;
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      amountWei: price * 31n,
+      ticketPriceWei: price,
+      boxOrders: [String(1n | (1n << 8n) | (1n << 16n))],
+      legs: [{
+        legType: 'opened', wholeTickets: 1, futureLevel: 12, flip: 0n,
+      }, {
+        legType: 'spin', spinType: 'flip', survived: false, payout: 0n,
+        reels: [
+          { spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 2 },
+          { spinIndex: 1, playerTicket: 3n, resultTicket: 4n, score: 0 },
+          { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 0 },
+        ],
+      }, {
+        legType: 'opened', wholeTickets: 1, futureLevel: 14, flip: 0n,
+      }],
+    });
+
+    const spin = seq.cards.find((card) => card.spin)?.spin;
+    assert.equal(spin.estimateBoxAmountWei, price * 5n,
+      'the Medium 2-of-3 spin receives 5× price rather than the 31× combo total');
   });
 
   test('empty legs → null (nothing to show)', () => {
@@ -1302,6 +1328,35 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(floored.payoutAtRiskApproximate, false);
   });
 
+  test('a settled survivor outranks an aggregate combo estimate', () => {
+    const oneFlip = 10n ** 18n;
+    const board = buildBoxSpinBoard({
+      spinType: 'flip',
+      survived: true,
+      payout: 16_000n * oneFlip,
+      // Deliberately reproduce the old bad input: the full Small + Medium +
+      // Large purchase was routed into the one Medium spin.
+      estimateBoxAmountWei: 310_000_000_000n,
+      estimateTicketPriceWei: 10_000_000_000n,
+      reels: [
+        { spinIndex: 0, playerTicket: 0xC3824100n, resultTicket: 0xC7864504n, score: 3 },
+        { spinIndex: 1, playerTicket: 0xC3824101n, resultTicket: 0xC7864505n, score: 0 },
+        { spinIndex: 2, playerTicket: 0xC3824102n, resultTicket: 0xC7864506n, score: 4 },
+      ],
+    });
+
+    assert.notEqual(board.payoutAtRisk, 8_000n * oneFlip,
+      'the pre-flip meter stays on the outcome-neutral estimate');
+    settleBoxSpinPayoutPresentation(board);
+    assert.equal(board.payoutAtRisk, 8_000n * oneFlip,
+      'after the coin lands, the emitted 16,000 FLIP settlement bounds the reel sum');
+    assert.equal(board.payoutAtRiskApproximate, true,
+      'halving a rounded large settlement keeps the honest qualifier');
+    assert.equal(board.survivalWinPayout, 16_000n * oneFlip);
+    assert.equal(board.survivalWinPayoutApproximate, false,
+      'the actual settled win is exact even though its inferred reel sum is approximate');
+  });
+
   test('estimates the same pre-survival reel payout on a BoxSpin bust', () => {
     const board = buildBoxSpinBoard({
       spinType: 'flip',
@@ -2031,8 +2086,17 @@ describe('reveal-overlay element', () => {
       /@keyframes rvl-case-charge\s*\{\s*from\s*\{\s*transform:\s*none;\s*\}\s*to\s*\{\s*transform:\s*none;\s*\}/s,
       'the case itself remains still while its internal seam glows');
     assert.match(APP_CSS,
-      /@keyframes rvl-case-lid-open\s*\{[\s\S]*opacity:\s*1[^}]*rotateX\(-80deg\)/,
-      'the unlocked lid rotates wide around its hinge instead of flying upward');
+      /@keyframes rvl-case-lid-open\s*\{[\s\S]*opacity:\s*1[^}]*rotateX\(24deg\)/,
+      'the unlocked lid cracks open from its rear hinge without flying upright');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-lid\s*\{[^}]*transform-origin:\s*50% 100% calc\(-1 \* var\(--rvl-lid-depth\)\)[^}]*preserve-3d/s,
+      'the rigid lid volume pivots around the recessed rear axis at the body seam');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-lid__inner\s*\{[^}]*bottom:\s*0[^}]*translateZ\(calc\(-1 \* var\(--rvl-lid-depth\)\)\) rotateX\(var\(--rvl-lid-closed-pitch\)\)/s,
+      'the opaque inner panel is a fixed second surface running from the rear hinge to the front lip');
+    assert.match(APP_CSS,
+      /@keyframes rvl-case-inner-reveal\s*\{\s*0%, 10%\s*\{\s*opacity:\s*0;\s*\}\s*10\.01%, 100%\s*\{\s*opacity:\s*1;\s*\}\s*\}/s,
+      'the solid underside appears with the first visible separation so the fascia never floats alone');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-lid__edge::after\s*\{[^}]*rgba\(93, 255, 132,[^}]*box-shadow/s,
       'a vivid green interior light remains attached to the underside of the lid');
@@ -3830,6 +3894,44 @@ describe('reveal-overlay element', () => {
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('a settled survivor replaces its pre-flip estimate with the emitted payout', async () => {
+    const oneFlip = 10n ** 18n;
+    queueReveal({
+      kind: 'lootbox',
+      amountWei: 310_000_000_000n,
+      ticketPriceWei: 10_000_000_000n,
+      legs: [{
+        legType: 'spin', spinType: 'flip', survived: true,
+        payout: 16_000n * oneFlip,
+        reels: [
+          { spinIndex: 0, playerTicket: 0xC3824100n, resultTicket: 0xC7864504n, score: 3 },
+          { spinIndex: 1, playerTicket: 0xC3824101n, resultTicket: 0xC7864505n, score: 0 },
+          { spinIndex: 2, playerTicket: 0xC3824102n, resultTicket: 0xC7864506n, score: 4 },
+        ],
+      }],
+    });
+    const el = instantiate();
+    await tick();
+
+    el.querySelector('[data-bind="rvl-summary"]')
+      .querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    const payoutMeter = el.querySelector('.rvl-box-payout-meter');
+    assert.match(
+      payoutMeter.textContent,
+      /REEL PAYOUT≈8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
+      'the settled screen reconciles to the chain result instead of retaining the combo estimate',
+    );
+    assert.doesNotMatch(payoutMeter.textContent, /WIN ≈16,000 FLIP/,
+      'the emitted final payout is exact even though its halved reel sum is approximate');
+
+    el.querySelector('.rvl-dgn-spin-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
   });
 
   test('a busted record bounty starts as FLIP and keeps its reel stake in the result', async () => {
