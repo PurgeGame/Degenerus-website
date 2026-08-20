@@ -372,6 +372,62 @@ function assertBankrollChipCounts(rack, expected, message) {
 }
 
 describe('day-wide reveal planning', () => {
+  test('isolates only this player\'s unrevealed bonus-spin FLIP', () => {
+    const unit = 10n ** 18n;
+    const payload = {
+      day: 67,
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 3 }],
+          bonusDraw: [{ traitId: 12, winnerCount: 3 }],
+          farFuture: { winnerCount: 1 },
+        },
+      },
+      roll2: {
+        day: 67,
+        wins: [
+          { winner: TEST_ADDR.toUpperCase(), awardType: 'flip', amount: String(2_000n * unit) },
+          { winner: TEST_ADDR, awardType: 'tickets', amount: '40' },
+          { winner: TEST_ADDR, awardType: 'farFutureCoin', amount: String(500n * unit) },
+          { winner: '0xcd34000000000000000000000000000000000000', awardType: 'flip', amount: String(7_000n * unit) },
+          { winner: '0xef56000000000000000000000000000000000000', currency: 'FLIP', amount: String(9_000n * unit) },
+        ],
+      },
+    };
+
+    assert.equal(revealPlanning.unrevealedBonusSpinFlipWei({
+      payload,
+      player: TEST_ADDR,
+      day: 67,
+    }), 2_500n * unit, 'only the viewed player\'s FLIP rows are withheld');
+    assert.equal(revealPlanning.unrevealedBonusSpinFlipWei({
+      payload,
+      player: TEST_ADDR,
+      day: 67,
+      revealed: true,
+    }), 0n, 'the full live stake is released after the bonus board is played');
+    assert.equal(revealPlanning.unrevealedBonusSpinFlipWei({
+      payload: {
+        day: 67,
+        summary: payload.summary,
+        roll2: { day: 67, wins: [] },
+      },
+      player: TEST_ADDR,
+      day: 67,
+    }), null, 'a stale empty Roll-2 fragment fails closed when its summary proves winners');
+    assert.equal(revealPlanning.unrevealedBonusSpinFlipWei({
+      payload: {
+        day: 67,
+        summary: {
+          rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
+        },
+        roll2: { day: 67, wins: [] },
+      },
+      player: TEST_ADDR,
+      day: 67,
+    }), 0n, 'an independently proven zero-payout Roll 2 exposes ordinary deposits');
+  });
+
   test('wager piles grow logarithmically: identical FLIP coins, more of them', () => {
     const unit = 10n ** 18n;
     const count = (amount) => revealPlanning.coinflipBetChipCount(amount * unit);
@@ -1920,9 +1976,29 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test("Tomorrow's bet holds its settled value until the bonus jackpot is cleared", async () => {
-    _currentStakeWei = '12000000000000000000000';
+  test("Tomorrow's bet hides the bonus spin while keeping new deposits live", async () => {
+    const unit = 10n ** 18n;
+    _currentStakeWei = String(13_000n * unit);
     seedTomorrowHold('10000000000000000000000');
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 1 }],
+          bonusDraw: [{ traitId: 12, winnerCount: 1 }],
+          farFuture: { winnerCount: 0 },
+        },
+      },
+      roll2: {
+        day: 67,
+        wins: [{
+          winner: TEST_ADDR,
+          awardType: 'flip',
+          amount: String(2_000n * unit),
+        }],
+      },
+    });
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
@@ -1933,13 +2009,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const el = mount();
     await flushMicrotasks();
     const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
-    assert.match(tomorrow().textContent, /10,000 FLIP/);
-    assert.doesNotMatch(tomorrow().textContent, /12,000/,
-      'the RNG-sensitive replacement is absent from the rendered Tomorrow row');
+    assert.match(tomorrow().textContent, /11,000 FLIP/,
+      'the additional 1,000 FLIP deposit remains visible');
+    assert.doesNotMatch(tomorrow().textContent, /13,000/,
+      'the exact 2,000 FLIP bonus is absent from the rendered Tomorrow row');
 
     localStorage.setItem('jackpot_complete_day_84532_67', '1');
     document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
-    assert.match(tomorrow().textContent, /12,000 FLIP/);
+    assert.match(tomorrow().textContent, /13,000 FLIP/);
     el.disconnectedCallback();
   });
 
@@ -1997,8 +2074,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
   });
 
   test("an explicitly pending bonus still holds Tomorrow's settled bet", async () => {
+    const unit = 10n ** 18n;
     _currentStakeWei = '12000000000000000000000';
     seedTomorrowHold('10000000000000000000000');
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      summary: {
+        rollTwo: {
+          coin: [{ traitId: 12, winnerCount: 1 }],
+          bonusDraw: [{ traitId: 12, winnerCount: 1 }],
+          farFuture: { winnerCount: 0 },
+        },
+      },
+      roll2: {
+        day: 67,
+        wins: [{
+          winner: TEST_ADDR,
+          awardType: 'flip',
+          amount: String(2_000n * unit),
+        }],
+      },
+    });
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },

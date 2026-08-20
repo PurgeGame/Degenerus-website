@@ -812,7 +812,7 @@ class AppDecimatorPanel extends HTMLElement {
                aria-label="Learn about tickets, Luckbox, and foil packs"
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
-          <span class="dec-price" data-bind="dec-price">LEVEL — · 1 TICKET = —</span>
+          <span class="dec-price" data-bind="dec-price">1 TICKET = —</span>
           <div class="dec-flip-credit dec-flip-credit--header is-idle"
                data-bind="dec-flip-credit"
                aria-label="Play to earn bonus FLIP with tickets">
@@ -844,7 +844,8 @@ class AppDecimatorPanel extends HTMLElement {
 
             <div class="dec-ticket-pieces" role="group" aria-label="Add tickets to your buy in">
               <button type="button" class="dec-ticket-piece dec-ticket-piece--entry"
-                      data-bind="dec-ticket-add-entry" aria-label="Add one entry, 0.25 ticket">
+                      data-bind="dec-ticket-add-entry" aria-label="Add one entry, 0.25 ticket"
+                      title="Click to add 0.25 ticket · right-click to remove">
                 <span class="dec-ticket-piece__copy"><strong>ENTRY</strong></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
                   <span class="dec-entry-face" data-bind="dec-entry-face">
@@ -853,7 +854,8 @@ class AppDecimatorPanel extends HTMLElement {
                 </span>
               </button>
               <button type="button" class="dec-ticket-piece dec-ticket-piece--ticket"
-                      data-bind="dec-ticket-add-ticket" aria-label="Add one ticket">
+                      data-bind="dec-ticket-add-ticket" aria-label="Add one ticket"
+                      title="Click to add one ticket · right-click to remove">
                 <span class="dec-ticket-piece__copy"><strong>TICKET</strong></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
                   <span class="dec-ticket-face" data-bind="dec-ticket-sample">
@@ -866,7 +868,8 @@ class AppDecimatorPanel extends HTMLElement {
                 </span>
               </button>
               <button type="button" class="dec-ticket-piece dec-ticket-piece--pack"
-                      data-bind="dec-ticket-add-pack" aria-label="Add one pack, 10 tickets">
+                      data-bind="dec-ticket-add-pack" aria-label="Add one pack, 10 tickets"
+                      title="Click to add 10 tickets · right-click to remove">
                 <span class="dec-ticket-piece__copy"><strong>PACK</strong></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
                   <span class="dec-pack-face">
@@ -900,7 +903,14 @@ class AppDecimatorPanel extends HTMLElement {
           <section class="dec-purchase-builder dec-input-group dec-input-group--lootbox"
                    data-bind="dec-lootbox-group" aria-labelledby="dec-box-builder-title">
             <div class="dec-builder-head">
-              <span class="dec-builder-title"><strong id="dec-box-builder-title">LUCKBOXES</strong></span>
+              <span class="dec-builder-title">
+                <strong id="dec-box-builder-title">LUCKBOXES</strong>
+                <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
+                  <quest-objective-indicator product="lootbox"></quest-objective-indicator>
+                  <boon-product-indicator product="lootbox"
+                                          variant="purchase-control"></boon-product-indicator>
+                </span>
+              </span>
               <button type="button" class="dec-presale-toggle" data-bind="dec-presale-toggle"
                       aria-expanded="false" aria-controls="dec-presale-box-dialog" hidden>
                 <span aria-hidden="true">▣</span><strong>PRESALE</strong>
@@ -909,21 +919,17 @@ class AppDecimatorPanel extends HTMLElement {
                       aria-expanded="false" aria-controls="dec-custom-box-fields">
                 <span aria-hidden="true">◇</span><strong>CUSTOM</strong>
               </button>
-              <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
-                <boon-product-indicator product="lootbox"
-                                        variant="purchase-control"></boon-product-indicator>
-                <quest-objective-indicator product="lootbox"></quest-objective-indicator>
-              </span>
             </div>
 
             <div class="dec-box-grid">
               <article class="dec-box-card dec-box-card--small" data-tone="green">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-small"
-                        aria-label="Add one small Luckbox">
+                        aria-label="Add one small Luckbox"
+                        title="Click to add one small Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
                     <span class="dec-box-value">
-                      <strong data-bind="dec-box-price-small">—</strong><small>ETH</small>
+                      <strong data-bind="dec-box-price-small">—</strong>
                     </span>
                   </span>
                 </button>
@@ -939,11 +945,12 @@ class AppDecimatorPanel extends HTMLElement {
 
               <article class="dec-box-card dec-box-card--medium" data-tone="purple">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-medium"
-                        aria-label="Add one medium Luckbox">
+                        aria-label="Add one medium Luckbox"
+                        title="Click to add one medium Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
                     <span class="dec-box-value">
-                      <strong data-bind="dec-box-price-medium">—</strong><small>ETH</small>
+                      <strong data-bind="dec-box-price-medium">—</strong>
                     </span>
                   </span>
                 </button>
@@ -959,11 +966,12 @@ class AppDecimatorPanel extends HTMLElement {
 
               <article class="dec-box-card dec-box-card--large" data-tone="gold">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-large"
-                        aria-label="Add one large Luckbox">
+                        aria-label="Add one large Luckbox"
+                        title="Click to add one large Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt="">
+                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
                     <span class="dec-box-value">
-                      <strong data-bind="dec-box-price-large">—</strong><small>ETH</small>
+                      <strong data-bind="dec-box-price-large">—</strong>
                     </span>
                   </span>
                 </button>
@@ -1032,7 +1040,7 @@ class AppDecimatorPanel extends HTMLElement {
             <div class="dec-presale__offer">
               <div class="dec-presale__label">
                 <span class="dec-presale__art" aria-hidden="true">
-                  <img src="/app/assets/lootbox/degenerus-lootbox-case-v3.webp" alt=""><b>PRESALE</b>
+                  <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt=""><b>PRESALE</b>
                 </span>
                 <span><strong>PRESALE BOX</strong><small data-bind="dec-presale-available">— ETH AVAILABLE</small></span>
               </div>
@@ -1416,11 +1424,17 @@ class AppDecimatorPanel extends HTMLElement {
       ['dec-ticket-add-ticket', 1],
       ['dec-ticket-add-pack', 10],
     ]) {
-      this.querySelector(`[data-bind="${bind}"]`)?.addEventListener?.('click', () => {
+      const control = this.querySelector(`[data-bind="${bind}"]`);
+      const adjust = (dir) => {
         const input = this.querySelector('[name="dec-tickets"]');
         if (!input) return;
-        this.#stepInput(input, 1, amount);
+        this.#stepInput(input, dir, amount);
         this.#updateTotalLabel();
+      };
+      control?.addEventListener?.('click', () => adjust(1));
+      control?.addEventListener?.('contextmenu', (event) => {
+        event?.preventDefault?.();
+        if (!control.disabled) adjust(-1);
       });
     }
     this.querySelector('[data-bind="dec-ticket-clear"]')?.addEventListener?.('click', () => {
@@ -1442,8 +1456,11 @@ class AppDecimatorPanel extends HTMLElement {
       ['dec-box-add-medium', 'dec-box-medium'],
       ['dec-box-add-large', 'dec-box-large'],
     ]) {
-      this.querySelector(`[data-bind="${bind}"]`)?.addEventListener?.('click', () => {
-        this.#stepBoxInput(name, 1);
+      const control = this.querySelector(`[data-bind="${bind}"]`);
+      control?.addEventListener?.('click', () => this.#stepBoxInput(name, 1));
+      control?.addEventListener?.('contextmenu', (event) => {
+        event?.preventDefault?.();
+        if (!control.disabled) this.#stepBoxInput(name, -1);
       });
     }
     const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
@@ -2187,7 +2204,7 @@ class AppDecimatorPanel extends HTMLElement {
         order: 0n,
         costWei: 0n,
         pricePending: false,
-        error: error?.message || 'Check the box quantities and custom size.',
+        error: compactUiError(error, 'Check the box quantities and custom size.'),
       };
     }
   }
@@ -2753,7 +2770,7 @@ class AppDecimatorPanel extends HTMLElement {
     if (totalWei > 0n) {
       try { amount = `${formatPurchaseEth(totalWei)} ETH`; } catch (_e) { amount = ''; }
     }
-    const action = totalWei > 0n ? 'BUY IN ·' : 'CLICK TO ADD';
+    const action = totalWei > 0n ? 'BUY IN' : 'CLICK TO ADD';
     this.#setBuyLabel(action, amount);
     const recordBountyWei = purchaseRecordBountyWei({
       state: get('app.records'),
@@ -4083,26 +4100,27 @@ class AppDecimatorPanel extends HTMLElement {
     const priceWei = this.#ticketPriceWei();
     const targetLevel = this.#targetLevel();
     const levelText = targetLevel == null ? 'LEVEL —' : `LEVEL ${targetLevel}`;
-    let priceText = `${levelText} · 1 TICKET = —`;
+    let priceText = '1 TICKET = —';
     if (this.#flipModeEnabled()) {
       try {
         const price = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
-        priceText = `${levelText} · 1 TICKET = ${price}`;
-      } catch (_e) { priceText = `${levelText} · 1 TICKET = —`; }
+        priceText = `1 TICKET = ${price}`;
+      } catch (_e) { priceText = '1 TICKET = —'; }
     } else if (priceWei != null) {
       try {
         const price = `${formatPurchaseEth(priceWei)} ETH`;
-        priceText = `${levelText} · 1 TICKET = ${price}`;
-      } catch (_e) { priceText = `${levelText} · 1 TICKET = —`; }
+        priceText = `1 TICKET = ${price}`;
+      } catch (_e) { priceText = '1 TICKET = —'; }
     }
     priceEl.textContent = priceText;
     for (const bind of ['dec-pack-level', 'dec-foil-level']) {
       const level = this.querySelector(`[data-bind="${bind}"]`);
       if (level) level.textContent = levelText;
     }
-    // Preset cards show the exact 1x / 5x / 25x ABI tier prices. The contract
-    // freezes those prices for a player's active box period; the static call
-    // remains authoritative if an older frozen order crosses a level change.
+    // Preset cases carry the exact 1x / 5x / 25x ABI tier prices in their art.
+    // The fixed ETH suffix lives in the shell, so only write the compact amount.
+    // The contract freezes those prices for a player's active box period; the
+    // static call remains authoritative if an older frozen order crosses a level.
     for (const [bind, multiple] of [
       ['dec-box-price-small', 1n],
       ['dec-box-price-medium', BOX_ORDER_MEDIUM_MULTIPLE],
@@ -4111,11 +4129,11 @@ class AppDecimatorPanel extends HTMLElement {
       const label = this.querySelector(`[data-bind="${bind}"]`);
       if (!label) continue;
       if (priceWei == null) {
-        label.textContent = `${multiple}× PRICE`;
+        label.textContent = '—';
         continue;
       }
-      try { label.textContent = `${formatPurchaseEth(priceWei * multiple)} ETH`; }
-      catch (_e) { label.textContent = `${multiple}× PRICE`; }
+      try { label.textContent = formatPurchaseEth(priceWei * multiple); }
+      catch (_e) { label.textContent = '—'; }
     }
     this.#renderFundsFooter();
     // Price is now known — refresh the Buy button's total-cost label.
@@ -4189,7 +4207,7 @@ class AppDecimatorPanel extends HTMLElement {
           }
         }
       } catch (error) {
-        return rejectPurchase(error?.message || 'Check the Luckbox order.');
+        return rejectPurchase(compactUiError(error, 'Check the Luckbox order.'));
       }
       const presaleInput = this.querySelector('[name="dec-presale-box-eth"]');
       const presaleRaw = presaleInput == null || presaleInput.value == null

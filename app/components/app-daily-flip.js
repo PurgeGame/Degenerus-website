@@ -184,6 +184,83 @@ const MODIFIER_MAX_PERCENT = 156;
 const MODIFIER_TABLE_MIN_TOTAL_PERCENT = 150;
 const MODIFIER_TABLE_MAX_TOTAL_PERCENT = 250;
 
+function _rollTwoSummaryCount(rows) {
+  if (!Array.isArray(rows)) return null;
+  let total = 0;
+  for (const row of rows) {
+    const count = Number(row?.winnerCount);
+    if (!Number.isInteger(count) || count < 0) return null;
+    total += count;
+  }
+  return total;
+}
+
+function _rollTwoExpectedFlipRows(summary) {
+  const rollTwo = summary?.rollTwo;
+  if (!rollTwo || typeof rollTwo !== 'object') return null;
+
+  // `coin` and `bonusDraw` describe the same trait-keyed FLIP winners. The
+  // latter is the four-slot presentation view, so it is only a compatibility
+  // fallback for payloads predating `coin`; adding both would double-count.
+  const traitRows = Array.isArray(rollTwo.coin) ? rollTwo.coin : rollTwo.bonusDraw;
+  const traitCount = _rollTwoSummaryCount(traitRows);
+  const farFutureCount = Number(rollTwo.farFuture?.winnerCount);
+  if (traitCount == null
+    || !Number.isInteger(farFutureCount)
+    || farFutureCount < 0) return null;
+  return traitCount + farFutureCount;
+}
+
+function _isBonusSpinFlipWin(row) {
+  const awardType = String(row?.awardType || '').toLowerCase();
+  return awardType === 'farfuturecoin'
+    || awardType.includes('flip')
+    || String(row?.currency || '').toUpperCase() === 'FLIP';
+}
+
+/**
+ * Exact Roll-2 FLIP credited to one player's next coinflip stake, while that
+ * bonus board is still covered. `null` means the composed API fragments do
+ * not yet agree, so callers must retain their last presentation-safe value.
+ */
+export function unrevealedBonusSpinFlipWei({
+  payload,
+  player,
+  day,
+  revealed = false,
+} = {}) {
+  if (revealed) return 0n;
+  const targetDay = Number(day);
+  const target = String(player || '').toLowerCase();
+  if (!Number.isInteger(targetDay) || targetDay <= 0 || !target) return null;
+  if (Number(payload?.day) !== targetDay || Number(payload?.roll2?.day) !== targetDay) {
+    return null;
+  }
+
+  const wins = payload?.roll2?.wins;
+  if (!Array.isArray(wins)) return null;
+  const flipWins = wins.filter(_isBonusSpinFlipWin);
+  const expectedFlipRows = _rollTwoExpectedFlipRows(payload?.summary);
+
+  // An empty Roll-2 array is the composer's placeholder for a 404. Accept it
+  // only when the independently composed summary proves this was a zero-FLIP
+  // draw. When rows are present the exact endpoint itself is authoritative;
+  // if a summary is also present, require the two fragments to agree.
+  if (wins.length === 0 && expectedFlipRows == null) return null;
+  if (expectedFlipRows != null && flipWins.length !== expectedFlipRows) return null;
+
+  let total = 0n;
+  for (const row of flipWins) {
+    if (String(row?.winner || '').toLowerCase() !== target) continue;
+    let amount;
+    try { amount = BigInt(row?.amount ?? 0); }
+    catch (_error) { return null; }
+    if (amount < 0n) return null;
+    total += amount;
+  }
+  return total;
+}
+
 /** Color only the multiplier number at the requested payout boundaries. */
 export function dailyFlipMultiplierTone(totalPercent) {
   const value = Math.max(0, Math.trunc(Number(totalPercent) || 0));
@@ -1295,6 +1372,10 @@ class AppDailyFlip extends HTMLElement {
         this.#adoptDay(latest);
         return;
       }
+      // Same-day fragment retries can turn an uncertain Roll-2 placeholder
+      // into the exact bonus amount. Repaint immediately so ordinary deposits
+      // stop inheriting that conservative hold as soon as the data agrees.
+      if (latest === Number(this.#day)) this.#renderPosition();
       // Routine latest-day polling must not pull a manually selected replay
       // back to today. A genuinely newer resolved day still wins, matching the
       // jackpot shell's rollover behaviour.
@@ -1676,7 +1757,11 @@ class AppDailyFlip extends HTMLElement {
   }
 
   #tomorrowRewardGateOpen() {
-    return this.#bonusJackpotCleared() && !this.#lootboxRewardGatePending();
+    // Exact daily-jackpot FLIP is removed from the live stake below, so that
+    // reward no longer requires freezing the player's ordinary deposits.
+    // Lootbox rewards are not yet attributable inside the shared balance and
+    // still use the last-safe-value gate.
+    return !this.#lootboxRewardGatePending();
   }
 
   #tomorrowAutoRebuyGateOpen(hasResult) {
@@ -4510,16 +4595,48 @@ class AppDailyFlip extends HTMLElement {
     const clockDay = Number(this.#daySync?.day);
     const dayInSync = this.#day != null
       && (!Number.isInteger(clockDay) || clockDay === Number(this.#day));
+    const hiddenBonusSpinWei = unrevealedBonusSpinFlipWei({
+      payload: get('app.lastDay'),
+      player: this.#dashboardAddress,
+      day: this.#day,
+      revealed: this.#bonusJackpotCleared(),
+    });
+    let spoilerSafeCurrentBetWei = null;
+    let bonusSpinAmountKnown = hiddenBonusSpinWei != null;
+    if (this.#currentBetWei != null && bonusSpinAmountKnown) {
+      const currentBetWei = this.#asWei(this.#currentBetWei);
+      if (currentBetWei >= hiddenBonusSpinWei) {
+        spoilerSafeCurrentBetWei = currentBetWei - hiddenBonusSpinWei;
+        // A Roll-2 row can reach the composed API just ahead of a stale RPC
+        // snapshot. Never let subtracting that not-yet-observed credit make a
+        // monotonic stake appear to decrease; wait for the next chain read.
+        if (hiddenBonusSpinWei > 0n) {
+          const priorSafeWei = heldBalanceValue({
+            namespace: `coinflip-tomorrow:${CHAIN.id}`,
+            scope: this.#dashboardAddress,
+            value: null,
+            released: false,
+          });
+          if (priorSafeWei != null && spoilerSafeCurrentBetWei < priorSafeWei) {
+            spoilerSafeCurrentBetWei = null;
+            bonusSpinAmountKnown = false;
+          }
+        }
+      } else {
+        bonusSpinAmountKnown = false;
+      }
+    }
     const tomorrowReleased = dayInSync
+      && bonusSpinAmountKnown
       && this.#tomorrowRewardGateOpen()
       && this.#tomorrowAutoRebuyGateOpen(hasResult);
-    // Keep the last settled stake painted while auto-rebuy / reward RNG can
-    // still change the next bet. A cold load with no prior safe snapshot uses
-    // the ordinary em dash; it never substitutes a blur or the live result.
+    // Hide only the exact bonus-spin credit, so direct deposits remain live.
+    // Unknown fragments, auto-rebuy, and lootbox rewards retain the last safe
+    // stake. A cold load without one uses the ordinary em dash.
     const displayedTomorrowWei = heldBalanceValue({
       namespace: `coinflip-tomorrow:${CHAIN.id}`,
       scope: this.#dashboardAddress,
-      value: this.#currentBetWei,
+      value: spoilerSafeCurrentBetWei,
       released: tomorrowReleased,
     });
     const tomorrowKnown = displayedTomorrowWei != null;

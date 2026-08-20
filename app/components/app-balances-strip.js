@@ -35,6 +35,7 @@ import { fetchJSON } from '../app/api.js';
 // Winnings tile carries the claim instead).
 import { claimEth } from '../app/claims.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { compactUiError } from '../app/ui-error.js';
 
 const ENTRIES_PER_TICKET = 4;
 
@@ -371,7 +372,7 @@ class AppBalancesStrip extends HTMLElement {
         setTimeout(() => this.#refresh(), 250);
       } catch (error) {
         btn.textContent = 'Claim';
-        this.#renderClaimError(error?.userMessage || error?.message || 'Claim failed.');
+        this.#renderClaimError(compactUiError(error, 'Claim did not go through. Try again.'));
       } finally {
         btn.disabled = false;
         setTimeout(() => { this.#claimBusy = false; }, 500);

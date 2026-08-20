@@ -1612,6 +1612,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending.sharedRng, true);
     assert.equal(pending.detail, 'Bet confirmed · syncing RNG queue');
     assert.equal(pending.run, null, 'a syncing receipt cannot offer a duplicate write');
+    const error = el.querySelector('[data-bind="deg-error"]');
+    assert.equal(error.hidden, true, 'successful receipt recovery never opens the error alert');
+    assert.equal(error.textContent, '');
+    assert.doesNotMatch(PANEL_SRC, /Bet placed — syncing its RNG status/,
+      'internal RNG/indexer recovery copy is never player-visible');
     el.disconnectedCallback();
   });
 

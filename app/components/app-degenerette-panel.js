@@ -2906,7 +2906,10 @@ class AppDegenerettePanel extends HTMLElement {
         this.#rngObservedBlock = 0;
         this.#setState(STATE.AWAITING_RNG);
         retireOptimistic();
-        this.#renderError('Bet placed — syncing its RNG status…');
+        // This is a successful placement with a temporarily undecoded receipt,
+        // not an error. Pending owns the silent recovery state until the DB
+        // supplies the bet id; never surface indexer plumbing in the alert UI.
+        this.#clearError();
         void this.#recoverPendingBetFromDb();
         setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
         return;

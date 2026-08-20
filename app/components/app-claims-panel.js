@@ -38,6 +38,7 @@ import { fetchJSON } from '../app/api.js';
 // (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).
 import { claimEth, claimFlip, claimDecimatorLevels, claimAffiliateDgnrs } from '../app/claims.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { compactUiError } from '../app/ui-error.js';
 
 // v4.6 render whitelist (D-01 LOCKED, extended by Plan 62-06 / AFF-03).
 // The 4 hidden keys (tickets, vault, farFutureCoin, terminal) are read from
@@ -820,7 +821,7 @@ class AppClaimsPanel extends HTMLElement {
           errEl.className = 'clm-row__error';
           rowEl.appendChild(errEl);
         }
-        errEl.textContent = error?.userMessage || error?.message || 'Claim failed.';
+        errEl.textContent = compactUiError(error, 'Claim did not go through. Try again.');
         // 10s auto-clear timer.
         setTimeout(() => {
           rowEl.classList.remove('clm-row--error');

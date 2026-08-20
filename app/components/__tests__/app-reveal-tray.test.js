@@ -268,8 +268,11 @@ describe('<app-reveal-tray>', () => {
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.match(css,
-      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*url\('\/app\/assets\/lootbox\/degenerus-lootbox-case-v3\.webp'\)/s,
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*url\('\/app\/assets\/lootbox\/degenerus-lootbox-case-v6-front\.webp'\)/s,
       'the mini case uses the value-tier tone through the same case silhouette mask');
+    assert.doesNotMatch(css,
+      /\.rrt-lootbox-mini::before\s*\{[^}]*flame-logo\.svg/s,
+      'the tiny front view uses the medallion already baked into the case art');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 

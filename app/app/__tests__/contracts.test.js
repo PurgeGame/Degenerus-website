@@ -314,6 +314,39 @@ describe('sendTx account-change mid-flow', () => {
   });
 });
 
+describe('sendTx player-facing error boundary', () => {
+  test('reports insufficient ETH without exposing the nested provider response', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const raw = new Error('could not coalesce error');
+    raw.code = 'UNKNOWN_ERROR';
+    raw.shortMessage = `could not coalesce error: 0x${'ab'.repeat(300)}`;
+    raw.reason = `provider payload ${'x'.repeat(300)}`;
+    raw.info = {
+      error: { code: -32003, message: 'EVM error: OutOfFunds' },
+      payload: { method: 'eth_estimateGas' },
+    };
+
+    await assert.rejects(
+      sendTx(async () => { throw raw; }, 'Buy Whale Pass'),
+      (error) => {
+        assert.equal(error.name, 'TransactionError');
+        assert.equal(error.message,
+          "This wallet doesn't have enough ETH for the transaction and gas.");
+        assert.equal(error.userMessage, error.message);
+        assert.equal(error.cause, raw, 'the full provider error remains available for diagnostics');
+        assert.equal(error.code, 'UNKNOWN_ERROR');
+        assert.equal(error.shortMessage, undefined, 'raw provider prose is not copied to the public error');
+        assert.equal(error.reason, undefined, 'raw provider prose is not copied to the public error');
+        assert.doesNotMatch(error.message, /coalesce|eth_estimateGas|0xab/i);
+        return true;
+      },
+    );
+  });
+});
+
 // ===========================================================================
 // Receipt-status check (Pattern D — preserves /beta/mint.js:756 bug-class fix)
 // ===========================================================================

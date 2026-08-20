@@ -24,7 +24,7 @@ const pending = await import('../pending-actions.js');
 const reveal = await import('../../components/reveal-overlay.js');
 const bingo = await import('../bingo-watch.js');
 const store = await import('../store.js');
-const { CHAIN } = await import('../chain-config.js');
+const { CHAIN, CONTRACTS } = await import('../chain-config.js');
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const ABI = [
@@ -213,6 +213,70 @@ describe('bingo event watcher', () => {
       'Claim Bingo', 'the same proof appears immediately after the board opens');
   });
 
+  test('publishes only one claim per level and suppresses stale proofs once that level is claimed', async () => {
+    let claimed = [];
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        // Deliberately return the higher quadrant first, matching the stale
+        // indexer behavior that used to create several writes for one level.
+        claimable: [{
+          player: PLAYER,
+          level: 34,
+          quadrant: 2,
+          symbol: 18,
+          slots: [21, 22, 23, 24, 25, 26, 27, 28],
+        }, {
+          player: PLAYER,
+          level: 34,
+          quadrant: 0,
+          symbol: 2,
+          slots: [1, 2, 3, 4, 5, 6, 7, 8],
+        }, {
+          player: PLAYER,
+          level: 35,
+          quadrant: 1,
+          symbol: 10,
+          slots: [11, 12, 13, 14, 15, 16, 17, 18],
+        }],
+        claimed,
+      }),
+    });
+
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    let claims = pending.getPendingActions()
+      .filter((row) => row.shortLabel === 'Claim Bingo');
+    assert.equal(claims.length, 2, 'one action per level, not one per quadrant');
+    assert.deepEqual(claims.map((row) => row.id).sort(), [
+      'bingo-claim:34',
+      'bingo-claim:35',
+    ]);
+    assert.match(claims.find((row) => row.id === 'bingo-claim:34')?.detail || '', /CRYPTO/i,
+      'selection is deterministic even when the API order changes');
+
+    claimed = [{
+      id: '0xlevel34:4',
+      transactionHash: '0xlevel34',
+      logIndex: 4,
+      blockNumber: TEST_BLOCK,
+      player: PLAYER,
+      level: 34,
+      symbol: 18,
+      tier: 'regular',
+      flipReward: '10',
+      dgnrsPaid: '1',
+    }];
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    claims = pending.getPendingActions().filter((row) => row.shortLabel === 'Claim Bingo');
+    assert.deepEqual(claims.map((row) => row.id), ['bingo-claim:35'],
+      'a receipt for the level suppresses every stale proof at that level');
+  });
+
   test('DB proof becomes a write action, then its receipt becomes the Bingo reveal', async () => {
     const writes = [];
     const claimReceiptLogs = [
@@ -307,6 +371,32 @@ describe('bingo event watcher', () => {
     for (let i = 0; i < 6; i += 1) await Promise.resolve();
     assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
       'the unchanged API proof stays cleared after a remount');
+  });
+
+  test('migrates old per-quadrant tombstones to suppress the whole level', async () => {
+    const storageKey = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME).toLowerCase()}:${PLAYER.toLowerCase()}`;
+    localStorage.setItem(storageKey, JSON.stringify({
+      rows: [],
+      consumed: ['claim:38:1'],
+    }));
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER,
+          level: 38,
+          quadrant: 3,
+          symbol: 27,
+          slots: [1, 2, 3, 4, 5, 6, 7, 8],
+        }],
+        claimed: [],
+      }),
+    });
+
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false);
   });
 
   test('an already-claimed static-call race retires the stale Bingo action', async () => {

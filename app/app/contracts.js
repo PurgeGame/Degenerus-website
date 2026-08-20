@@ -22,6 +22,7 @@ import { CHAIN } from './chain-config.js';
 import { get } from './store.js';
 import { invalidateJSONCache } from './api.js';
 import { invalidateReadCache } from './read-provider.js';
+import { compactUiError } from './ui-error.js';
 
 // Module-level state — only the BrowserProvider; NO signer cache (WLT-03 fix structural).
 let _provider = null;
@@ -211,7 +212,34 @@ export async function assertChain() {
 // @returns {Promise<import('ethers').TransactionReceipt>}
 // ---------------------------------------------------------------------------
 
-export async function sendTx(buildTx, action, { onSubmitted } = {}) {
+export async function sendTx(buildTx, action, options = {}) {
+  try {
+    return await _sendTxRaw(buildTx, action, options);
+  } catch (error) {
+    // Keep the provider's full object under `cause` for diagnostics while the
+    // public Error surface is always short and safe. Existing UI consumers
+    // prefer userMessage; even older consumers that read only `.message` now
+    // receive the same sanitized copy instead of RPC JSON/calldata.
+    const fallback = `${String(action || 'Transaction')} did not go through. Try again.`;
+    const userMessage = compactUiError(error, fallback);
+    const wrapped = new Error(userMessage);
+    wrapped.name = 'TransactionError';
+    wrapped.userMessage = userMessage;
+    wrapped.cause = error;
+    // Preserve fields used by control flow/decoders, but keep raw prose such
+    // as `reason` and `shortMessage` exclusively under `cause`. Some legacy
+    // views prefer those fields over `.message`, so copying them would reopen
+    // the provider-blob leak this boundary is meant to close.
+    for (const key of ['code', 'revert', 'data', 'receipt', 'replacement', 'cancelled']) {
+      try {
+        if (error?.[key] !== undefined) wrapped[key] = error[key];
+      } catch (_e) { /* hostile wallet error object */ }
+    }
+    throw wrapped;
+  }
+}
+
+async function _sendTxRaw(buildTx, action, { onSubmitted } = {}) {
   // 1. Chokepoint FIRST — throws BEFORE any provider/signer touch (T-58-02).
   requireSelf();
   // 2. Chain assertion — write-side throw on mismatch (T-58-03).

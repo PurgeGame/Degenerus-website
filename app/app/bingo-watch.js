@@ -63,10 +63,18 @@ function _readState(address) {
     const raw = localStorage.getItem(_storageKey(address));
     if (!raw) return _memoryState.get(_storageKey(address)) || fallback;
     const parsed = JSON.parse(raw);
+    const consumed = Array.isArray(parsed?.consumed) ? parsed.consumed.map(String) : [];
+    // Migrate tombstones written by the former per-quadrant model. A player
+    // who claimed or dismissed `claim:L:Q` must not see another quadrant from
+    // level L offered after updating to the one-per-level contract semantics.
+    for (const id of [...consumed]) {
+      const legacy = /^claim:(\d+):[0-3]$/.exec(id);
+      if (legacy) consumed.push(`claim:${Number(legacy[1])}`);
+    }
     return {
       // No scan cursor any more — a stale one in stored state is simply ignored.
       rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
-      consumed: Array.isArray(parsed?.consumed) ? parsed.consumed.map(String) : [],
+      consumed: [...new Set(consumed)].slice(-MAX_CONSUMED_IDS),
     };
   } catch (_e) {
     return _memoryState.get(_storageKey(address)) || fallback;
@@ -142,8 +150,8 @@ export function decodeBingoLogs(logs, address = null) {
   });
 }
 
-function _claimKey(level, quadrant) {
-  return `claim:${Number(level)}:${Number(quadrant)}`;
+function _claimKey(level) {
+  return `claim:${Number(level)}`;
 }
 
 function _claimProofKey(level, quadrant, symbol, slots) {
@@ -233,7 +241,9 @@ function _normalizeClaimable(row, address) {
     return null;
   }
   return {
-    id: _claimKey(level, quadrant),
+    // The contract permits one Bingo reward per (player, level), regardless
+    // of which completed quadrant/symbol supplies the proof.
+    id: _claimKey(level),
     // A bad indexed slot should suppress only this exact proof. If the
     // indexer later corrects one of its eight slots, the corrected proof gets
     // a new key and can become actionable without resurrecting a Bingo that
@@ -259,11 +269,36 @@ async function _loadIndexedBingos(address) {
     .map((row) => _normalizeIndexedReceipt(row, address))
     .filter(Boolean);
   _mergeReceipts(state, receipts);
+  // A claimed receipt makes every other completed symbol at that level
+  // ineligible. Persist the level tombstone as well as the receipt so an API
+  // race (claimed + stale claimables in the same response) cannot offer a
+  // second transaction now or after the reveal is dismissed.
+  const claimedLevelIds = [...receipts, ...state.rows]
+    .map((row) => _claimKey(row.level));
+  state.consumed = [...new Set([
+    ...state.consumed.map(String),
+    ...claimedLevelIds,
+  ])].slice(-MAX_CONSUMED_IDS);
   _writeState(address, state);
   const consumed = new Set(state.consumed.map(String));
-  const claimables = (Array.isArray(payload?.claimable) ? payload.claimable : [])
+  const eligible = (Array.isArray(payload?.claimable) ? payload.claimable : [])
     .map((row) => _normalizeClaimable(row, address))
-    .filter((row) => row && !consumed.has(row.id) && !consumed.has(row.proofId));
+    .filter((row) => row && !consumed.has(row.id) && !consumed.has(row.proofId))
+    .sort((a, b) => (
+      a.level - b.level
+      || a.quadrant - b.quadrant
+      || a.symbol - b.symbol
+      || a.proofId.localeCompare(b.proofId)
+    ));
+  // Older indexers may still return one candidate per quadrant. Select one
+  // deterministic proof for each level; a stale-proof revert consumes only
+  // that proofId, allowing the next candidate to be selected on refresh.
+  const seenLevels = new Set();
+  const claimables = eligible.filter((row) => {
+    if (seenLevels.has(row.level)) return false;
+    seenLevels.add(row.level);
+    return true;
+  });
   _claimableRows.set(_lower(address), claimables);
   return { receipts: state.rows, claimables };
 }
@@ -421,7 +456,7 @@ async function _publish(address, seq = null) {
       const quadrantName = String(DGN_QUADRANTS[quadrant] || 'trait').toUpperCase();
       const symbolName = _symbolLabel(candidate);
       return {
-        id: `bingo-claim:${candidate.level}:${quadrant}`,
+        id: `bingo-claim:${candidate.level}`,
         dismissScope: addr,
         kind: 'bingo',
         kindLabel: 'BINGO READY',
@@ -433,7 +468,7 @@ async function _publish(address, seq = null) {
         write: true,
         autoOpen: false,
         order: 13,
-        chronology: (Number(candidate.level) * 4) + quadrant,
+        chronology: Number(candidate.level),
         clearAll,
         run: async () => {
           let current = null;
@@ -478,7 +513,7 @@ async function _publish(address, seq = null) {
             _writeState(addr, latest);
           }
           // The proof can never become reusable: on-chain dedupe is one claim
-          // per (player, level, quadrant). Persist that fact across API lag and
+          // per (player, level). Persist that fact across API lag and
           // reloads so a confirmed transaction cannot be offered twice.
           _consume(addr, [candidate.id]);
           _claimableRows.set(addr, (_claimableRows.get(addr) || [])

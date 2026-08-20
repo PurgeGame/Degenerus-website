@@ -931,6 +931,54 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('Whale and Deity show insufficient ETH without exposing the provider blob', async () => {
+    const outOfFunds = () => {
+      const error = new Error(`could not coalesce error 0x${'ab'.repeat(300)}`);
+      error.code = 'UNKNOWN_ERROR';
+      error.info = {
+        error: { code: 'OutOfFunds' },
+        payload: { method: 'eth_estimateGas' },
+      };
+      return error;
+    };
+    passesMod.__setContractFactoryForTest(() => ({
+      purchaseWhalePass: Object.assign(
+        async () => { throw outOfFunds(); },
+        { staticCall: async () => undefined },
+      ),
+      purchaseDeityPass: Object.assign(
+        async () => { throw outOfFunds(); },
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: () => null },
+      connect(_s) { return this; },
+    }));
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+
+    const el = instantiate();
+    await settle(40);
+    el.querySelector('[name="pass-whale-qty"]').value = '1';
+    el.querySelector('.pass-whale-buy').dispatchEvent({ type: 'click' });
+    await settle(60);
+    const whaleError = el.querySelector('[data-bind="pass-whale-error"]').textContent;
+    assert.equal(whaleError,
+      "This wallet doesn't have enough ETH for the transaction and gas.");
+    assert.doesNotMatch(whaleError, /coalesce|estimateGas|0xab/i);
+
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    select.value = '7';
+    el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    const deityError = el.querySelector('[data-bind="pass-deity-error"]').textContent;
+    assert.equal(deityError,
+      "This wallet doesn't have enough ETH for the transaction and gas.");
+    assert.doesNotMatch(deityError, /coalesce|estimateGas|0xab/i);
+
+    el.disconnectedCallback();
+  });
+
   test('pass confirmation publishes its receipt bonus lootbox for Pending', async () => {
     const amountWei = 400_000_000_000_000_000n;
     passesMod.__setContractFactoryForTest(() => makeFakePassContract({

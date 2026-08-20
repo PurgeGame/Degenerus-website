@@ -36,6 +36,7 @@ import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { depositCoinflip, parseCoinflipDepositFromReceipt } from '../app/coinflip.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { compactUiError } from '../app/ui-error.js';
 
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
@@ -315,7 +316,7 @@ class AppCoinflipPanel extends HTMLElement {
       // 250ms post-confirm refetch (CF-06).
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      const msg = error?.userMessage || error?.message || 'Deposit failed.';
+      const msg = compactUiError(error, 'Deposit did not go through. Try again.');
       this.#renderError(msg);
     } finally {
       if (btn) {

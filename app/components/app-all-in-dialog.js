@@ -5,6 +5,7 @@
 import { lock, unlock } from '../app/scroll-lock.js';
 import { questCompletionBonusModel } from '../app/quest-objectives.js';
 import { get, subscribe } from '../app/store.js';
+import { compactUiError } from '../app/ui-error.js';
 
 export function allInQuestProduct(quote) {
   const target = String(quote?.target || '');
@@ -251,7 +252,11 @@ class AppAllInDialog extends HTMLElement {
   #quote(target = this.#target, spins = this.#spins) {
     try { return this.#detail?.quote?.(this.#selection(target, spins)) || null; }
     catch (error) {
-      return { valid: false, message: error?.message || 'ALL IN quote unavailable.', buttonLabel: 'ALL IN UNAVAILABLE' };
+      return {
+        valid: false,
+        message: compactUiError(error, 'ALL IN quote unavailable.'),
+        buttonLabel: 'ALL IN UNAVAILABLE',
+      };
     }
   }
 
@@ -414,9 +419,10 @@ class AppAllInDialog extends HTMLElement {
     } catch (error) {
       this.#busy = false;
       const feedback = this.querySelector('[data-bind="allin-feedback"]');
-      if (feedback) feedback.textContent = error?.userMessage || error?.message || 'ALL IN did not go through.';
+      const message = compactUiError(error, 'ALL IN did not go through. Try again.');
+      if (feedback) feedback.textContent = message;
       this.#render();
-      if (feedback) feedback.textContent = error?.userMessage || error?.message || 'ALL IN did not go through.';
+      if (feedback) feedback.textContent = message;
     }
   }
 }

@@ -30,7 +30,7 @@ test('coinflip uses a responsive whole-table rail and clears its instruments', (
   );
   assert.match(
     CHIPSET_CSS,
-    /\.df-auto-rebuy-cta\s*\{[^}]*right:\s*var\(--df-table-content-inset\);/s,
+    /\.df-auto-rebuy-cta\s*\{[^}]*top:\s*calc\(50% \+ 0\.7rem\);[^}]*right:\s*var\(--df-table-content-inset\);/s,
   );
   assert.match(
     CHIPSET_CSS,

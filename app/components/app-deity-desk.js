@@ -10,6 +10,7 @@ import { boonTypePresentation } from '../app/boons.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 import { deitySymbolPresentation } from '../app/deity-symbol.js';
 import { fetchPlayerSuggestions, resolvePlayerTarget } from '../app/player-target.js';
+import { compactUiError } from '../app/ui-error.js';
 
 const POLL_MS = 30_000;
 const ERROR_MS = 10_000;
@@ -469,7 +470,10 @@ class AppDeityDesk extends HTMLElement {
       setTimeout(() => this.#refresh(), 250);
     } catch (error) {
       const decoded = error?.userMessage ? error : decodeRevertReason(error);
-      this.#setFeedback(decoded?.userMessage || error?.message || 'Deity action failed.', true);
+      this.#setFeedback(
+        compactUiError(error, decoded?.userMessage || 'Deity action did not go through.'),
+        true,
+      );
     } finally {
       this.#busy = null;
       this.#render();

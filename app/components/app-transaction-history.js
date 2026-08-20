@@ -12,6 +12,7 @@ import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, subscribe } from '../app/store.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import { historicalLootboxReplayRows } from '../app/day-lootbox-results.js';
+import { compactUiError } from '../app/ui-error.js';
 import {
   dgnDecodePacked,
   degeneretteReplaySequences,
@@ -1347,7 +1348,7 @@ class AppTransactionHistory extends HTMLElement {
       this.#rows = [];
       this.#warnings = [];
       this.#hasNext = false;
-      this.#error = String(error?.message || 'Could not load transaction history.');
+      this.#error = compactUiError(error, 'Could not load transaction history.');
     } finally {
       if (sequence === this.#sequence) {
         this.#loading = false;
@@ -1385,7 +1386,7 @@ class AppTransactionHistory extends HTMLElement {
       if (!queued) throw new Error('This reveal is not available yet.');
       this.#setNotice('Replay queued.');
     } catch (error) {
-      this.#setNotice(String(error?.message || 'Could not replay this reveal.'));
+      this.#setNotice(compactUiError(error, 'Could not replay this reveal.'));
     } finally {
       button.disabled = false;
       button.classList?.remove('is-busy');

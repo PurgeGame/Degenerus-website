@@ -186,7 +186,7 @@ body.layout-basic boon-product-indicator[data-boon-direction="down"][data-boon-s
   --boon-amount-rgb: 250, 204, 21;
 }
 
-boon-product-indicator[data-boon-product="lootbox"] { --boon-logo: url('/app/assets/lootbox/degenerus-lootbox-case-v3.webp'); }
+boon-product-indicator[data-boon-product="lootbox"] { --boon-logo: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp'); }
 boon-product-indicator[data-boon-product="coinflip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
 boon-product-indicator[data-boon-product="quests"] { --boon-logo: url('/app/assets/boons/boon-quest-micro.svg'); }
 boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg'); }

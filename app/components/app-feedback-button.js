@@ -2,6 +2,7 @@
 // browser component only talks to the indexed API's POST /feedback endpoint.
 
 import { submitFeedback } from '../app/feedback.js';
+import { compactUiError } from '../app/ui-error.js';
 
 const BUTTON_ID = 'unav-feedback';
 const DIALOG_ID = 'app-feedback-dialog';
@@ -134,7 +135,7 @@ export function mountFeedbackButton(root = document) {
       status.hidden = false;
       form.reset();
     } catch (error) {
-      status.textContent = error?.message || 'Could not send that right now.';
+      status.textContent = compactUiError(error, 'Could not send that right now.');
       status.classList.add('is-error');
       status.hidden = false;
     } finally {

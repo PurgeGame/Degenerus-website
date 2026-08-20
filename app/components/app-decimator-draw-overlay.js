@@ -5,6 +5,7 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { loadDecimatorDrawSnapshot } from '../app/decimator-draw-data.js';
+import { compactUiError } from '../app/ui-error.js';
 import {
   sfxFanfare,
   sfxNoWin,
@@ -40,7 +41,7 @@ function drawLoadErrorMessage(error) {
   if (/sync|indexed|unavailable/i.test(message)) {
     return 'THE FINAL DRAW IS STILL SYNCING. TRY AGAIN.';
   }
-  return message ? message.slice(0, 180) : 'DRAW DATA COULD NOT BE LOADED. TRY AGAIN.';
+  return compactUiError(error, 'Draw data could not be loaded. Try again.').toUpperCase();
 }
 
 function removeActive() {

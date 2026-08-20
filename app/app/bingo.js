@@ -1,8 +1,10 @@
 // /app/app/bingo.js — color-completion Bingo claim write path.
 //
-// The GAME exposes one permissionless claim at a time:
+// The GAME exposes one permissionless claim per player and level:
 //   claimBingo(player, level, symbol, slots[8])
 // `slots[color]` is the player's bucket index for that symbol in color 0..7.
+// Once any symbol is claimed, every other completed symbol at that level is
+// ineligible.
 // There is no claimBingoMany entrypoint in the deployed ABI, so the pending
 // tray submits one player-confirmed transaction per DB-discovered proof.
 
@@ -27,7 +29,7 @@ export const BINGO_CLAIM_ABI = [
 
 register('AlreadyClaimed', {
   code: 'AlreadyClaimed',
-  userMessage: 'This reward was already claimed.',
+  userMessage: "This level's Bingo reward was already claimed.",
   recoveryAction: 'Refresh its indexed result.',
 });
 

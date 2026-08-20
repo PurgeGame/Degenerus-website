@@ -63,6 +63,45 @@ describe('UNKNOWN catch-all', () => {
   });
 });
 
+describe('native wallet balance failures', () => {
+  test('decodes the ethers INSUFFICIENT_FUNDS code', () => {
+    const decoded = decodeRevertReason({
+      code: 'INSUFFICIENT_FUNDS',
+      shortMessage: 'insufficient funds for intrinsic transaction cost',
+    });
+    assert.equal(decoded.code, 'InsufficientWalletFunds');
+    assert.match(decoded.userMessage, /enough ETH/i);
+    assert.match(decoded.recoveryAction, /extra for gas/i);
+  });
+
+  test('decodes Base RPC OutOfFunds through ethers nested provider data', () => {
+    const decoded = decodeRevertReason({
+      code: 'UNKNOWN_ERROR',
+      info: {
+        error: { code: -32003, message: 'EVM error: OutOfFunds' },
+        payload: { method: 'eth_call' },
+      },
+    });
+    assert.equal(decoded.code, 'InsufficientWalletFunds');
+    assert.match(decoded.userMessage, /transaction and network fee/i);
+  });
+
+  test('decodes OutOfFunds when a wallet supplies it only as the nested code', () => {
+    const decoded = decodeRevertReason({
+      error: { code: 'OutOfFunds' },
+    });
+    assert.equal(decoded.code, 'InsufficientWalletFunds');
+  });
+
+  test('does not confuse a Solidity Insufficient custom error with wallet ETH', () => {
+    const decoded = decodeRevertReason({
+      revert: { name: 'Insufficient' },
+      reason: 'execution reverted with custom error Insufficient()',
+    });
+    assert.equal(decoded.code, 'UNKNOWN');
+  });
+});
+
 describe('require-string fallback (legacy reverts)', () => {
   test('error.reason containing seeded key matches mapping', () => {
     const result = decodeRevertReason({ reason: 'execution reverted: NotTimeYet' });

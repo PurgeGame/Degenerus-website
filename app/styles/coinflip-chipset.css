@@ -436,14 +436,30 @@ body.layout-basic .df-bet-oval .df-bet-chip-rack {
   --df-chip-stack-height: 2.05rem;
 }
 
-/* Two racks share the spot on a win, so the box takes the extra height and
-   each lane keeps only the headroom a seven-high stack actually needs. */
+/* A win keeps the printed betting spot fixed. Tighten only the chip overlap
+   and use a green/gold halo instead of resizing the table geometry. */
 body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) {
-  height: 5.1rem;
+  border-color: #86efac;
+  background:
+    radial-gradient(110% 150% at 50% 0%, rgba(250, 204, 21, 0.13), transparent 58%),
+    radial-gradient(120% 170% at 50% 100%, rgba(48, 209, 0, 0.14), transparent 68%),
+    linear-gradient(
+      180deg,
+      var(--df-spot-felt-hi),
+      var(--df-spot-felt) 58%,
+      var(--df-spot-felt-lo)
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(10, 4, 4, 0.55),
+    inset 0 0.3rem 0.8rem rgba(0, 0, 0, 0.28),
+    inset 0 0 1rem rgba(74, 222, 128, 0.14),
+    0 0 0 1px rgba(10, 4, 4, 0.5),
+    0 0 0.9rem rgba(74, 222, 128, 0.34),
+    0 0 1.4rem rgba(250, 204, 21, 0.12);
 }
 
 body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
-  --df-chip-stack-height: 1.86rem;
+  --df-chip-stack-height: 1.58rem;
 }
 
 @media (min-width: 521px) {
@@ -453,12 +469,8 @@ body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df
     --df-chip-stack-height: 2.6rem;
   }
 
-  body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) {
-    height: 5.6rem;
-  }
-
   body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
-    --df-chip-stack-height: 2.1rem;
+    --df-chip-stack-height: 1.78rem;
   }
 }
 
@@ -1559,6 +1571,7 @@ body.layout-basic .jackpot-hero .df-coinflip-record-rail {
 }
 
 body.layout-basic .jackpot-hero .df-auto-rebuy-cta {
+  top: calc(50% + 0.7rem);
   right: var(--df-table-content-inset);
 }
 

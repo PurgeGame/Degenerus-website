@@ -375,7 +375,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.boonStrength),
       ['mid', 'high', 'mid', 'high', 'high']);
     assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3]);
-    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v3.webp');
+    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp');
     assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
     assert.equal(seq.cards[2].icon, null,
       'rating is already named on the card and needs no invented pictogram');
@@ -1876,16 +1876,18 @@ describe('reveal-overlay element', () => {
     assert.ok(el.querySelector('.rvl-lootbox-rays'), 'radial release field is mounted');
     assert.equal(el.querySelectorAll('.rvl-lootbox-spark').length, 8,
       'the burst has a balanced particle ring');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v3.webp', import.meta.url)),
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v6-front.webp', import.meta.url)),
       'the generated alpha WebP ships with the app');
-    assert.match(REVEAL_SRC, /LOOTBOX_CASE_ART = '\/app\/assets\/lootbox\/degenerus-lootbox-case-v3\.webp'/);
+    assert.match(REVEAL_SRC, /LOOTBOX_CASE_ART = '\/app\/assets\/lootbox\/degenerus-lootbox-case-v6-front\.webp'/);
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
       'the case is bounded by both viewport axes');
-    assert.match(APP_CSS, /\.rvl-chest-lid\s*\{[^}]*degenerus-lootbox-case-v3\.webp[^}]*center top \/ 100% auto no-repeat/s,
+    assert.match(APP_CSS, /\.rvl-chest-lid\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*center top \/ 100% auto no-repeat/s,
       'the new case art is cropped into the animated lid');
-    assert.match(APP_CSS, /\.rvl-chest-body\s*\{[^}]*degenerus-lootbox-case-v3\.webp[^}]*center bottom \/ 100% auto no-repeat/s,
+    assert.match(APP_CSS, /\.rvl-chest-body\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*center bottom \/ 100% auto no-repeat/s,
       'the matching lower crop preserves the physical opening beat');
-    assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*degenerus-lootbox-case-v3\.webp/s,
+    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-clasp\s*\{[^}]*display:\s*none;/s,
+      'the opener uses the complete medallion in the case art without a second circular overlay');
+    assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp/s,
       'small pending boxes reuse the same recognizable silhouette');
     assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
       'ticket-price bands publish visibly distinct case colors');
@@ -2142,7 +2144,7 @@ describe('reveal-overlay element', () => {
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     const openAll = summary.querySelector('.rvl-open-all-cta--lootboxes');
     assert.ok(openAll);
-    assert.equal(openAll.textContent, 'OPEN ALL 2 LUCKBOX');
+    assert.equal(openAll.textContent, 'OPEN ALL 2 LUCKBOXES');
     openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     await new Promise((resolve) => setTimeout(resolve, 240));
     await tick();
@@ -2159,6 +2161,84 @@ describe('reveal-overlay element', () => {
     assert.equal(finalSummary.querySelector('.rvl-card-value').textContent, '3');
     assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
     finalSummary.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('the sealed luckbox offers OPEN ONE or every ready box in Pending', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    const opened = [];
+    for (const [source, index] of [['choice-two', 2], ['choice-three', 3]]) {
+      pendingActionsMod.publishPendingActions(source, [{
+        id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
+        state: 'ready', order: index,
+        run: async () => {
+          opened.push(index);
+          pendingActionsMod.clearPendingActions(source);
+          queueReveal({
+            kind: 'lootbox', lootboxIndex: index,
+            legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+          });
+        },
+      }]);
+    }
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const actions = el.querySelector('[data-bind="rvl-pack-actions"]');
+    const openOne = el.querySelector('[data-bind="rvl-open-pack"]');
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    assert.equal(actions.hidden, false);
+    assert.equal(actions.classList.contains('rvl-vessel-pack-actions--lootboxes'), true);
+    assert.equal(openOne.textContent, 'OPEN ONE');
+    assert.equal(openAll.textContent, 'OPEN ALL 3');
+    assert.equal(el.querySelector('[data-bind="rvl-skip-pack"]').hidden, true,
+      'luckboxes never inherit the ticket-pack skip control');
+
+    openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 5; i += 1) await tick();
+    assert.deepEqual(opened, [2, 3],
+      'OPEN ALL resolves every ready luckbox in the tray before presentation advances');
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('OPEN ONE leaves the other ready luckboxes in Pending', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    let siblingRuns = 0;
+    pendingActionsMod.publishPendingActions('choice-sibling', [{
+      id: 'lootbox:2', kind: 'lootbox', label: 'Luckbox #2', state: 'ready',
+      run: async () => { siblingRuns += 1; },
+    }]);
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    el.querySelector('[data-bind="rvl-open-pack"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(siblingRuns, 0);
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((item) => item.id === 'lootbox:2'),
+      true,
+    );
+
+    el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });

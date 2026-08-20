@@ -72,6 +72,7 @@ import { CHAIN } from '../app/chain-config.js';
 // the CTA without any widget code changes (the parsing is forward-compatible).
 import { fetchJSON } from '../app/api.js';
 import { invalidateReadCache } from '../app/read-provider.js';
+import { compactUiError } from '../app/ui-error.js';
 
 // Conceptual cross-import declarations (resolved lazily at reveal time — see
 // CROSS-IMPORT MECHANICS comment above). The literal `from` strings appear here
@@ -566,7 +567,7 @@ class AppPacksPanel extends HTMLElement {
       this.#enableBuyButton();
     } catch (err) {
       this.#prewarmedTx = null;
-      const reason = (err && (err.userMessage || err.message)) || 'Cannot pre-warm purchase.';
+      const reason = compactUiError(err, 'Cannot prepare this purchase. Try again.');
       this.#disableBuyButtonWithReason(reason);
     } finally {
       this.#prewarmInflight = false;
@@ -602,9 +603,8 @@ class AppPacksPanel extends HTMLElement {
     if (buyBtn) buyBtn.disabled = true;
     const banner = this.querySelector('[data-bind="lbx-error-banner"]');
     if (banner) {
-      // textContent only — T-58-13 + T-60-08 XSS-safe rule. Reason is always
-      // a userMessage string from reason-map.js (or err.message fallback);
-      // never wallet-supplied raw data.
+      // textContent only — T-58-13 + T-60-08 XSS-safe rule. Reason has already
+      // crossed compactUiError, so provider payloads never reach this surface.
       banner.textContent = String(reason || 'Cannot pre-warm purchase.');
       banner.hidden = false;
       banner._prewarmReason = true;  // sentinel: this banner is from pre-warm,
@@ -628,9 +628,10 @@ class AppPacksPanel extends HTMLElement {
       try {
         userMessage = decodeRevertReason(err).userMessage;
       } catch (_) {
-        userMessage = (err && err.message) || 'Transaction failed.';
+        userMessage = 'Transaction did not go through. Try again.';
       }
     }
+    userMessage = compactUiError(err, userMessage || 'Transaction did not go through. Try again.');
     const banner = this.querySelector('[data-bind="lbx-error-banner"]');
     if (banner) {
       banner.textContent = String(userMessage || 'Transaction failed.');

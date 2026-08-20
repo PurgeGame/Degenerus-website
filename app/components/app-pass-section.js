@@ -58,6 +58,7 @@ import { scaledTicketPriceWei } from '../app/decimator.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 import { passBoonDiscountBps } from '../app/boons.js';
+import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';
 
 function passPurchaseConfirmationDetail(receipt, metadata = {}) {
@@ -1784,7 +1785,7 @@ class AppPassSection extends HTMLElement {
       this.#clearAllErrorStates();
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      const msg = error?.userMessage || error?.message || 'Buy failed.';
+      const msg = compactUiError(error, 'Lazy pass purchase did not go through.');
       this.#renderLazyError(msg);
     } finally {
       if (btn) btn.disabled = false;
@@ -1863,7 +1864,7 @@ class AppPassSection extends HTMLElement {
       // 250ms post-confirm refetch (CF-06).
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      const msg = error?.userMessage || error?.message || 'Buy failed.';
+      const msg = compactUiError(error, 'Whale pass purchase did not go through.');
       this.#renderWhaleError(msg);
     } finally {
       if (btn) {
@@ -1958,7 +1959,10 @@ class AppPassSection extends HTMLElement {
         ? { code: error.code, userMessage: error.userMessage, recoveryAction: error.recoveryAction }
         : decodeRevertReason(error);
       const overridden = deityPassErrorOverride(decoded);
-      const msg = overridden?.userMessage || error?.message || 'Buy failed.';
+      const msg = overridden?.code && overridden.code !== 'UNKNOWN'
+        ? (overridden.userMessage
+          || compactUiError(error, 'Deity pass purchase did not go through.'))
+        : compactUiError(error, 'Deity pass purchase did not go through.');
       this.#renderDeityError(msg);
       if (['SymbolTaken', 'DeityPassConflict', 'DeityPass-Taken'].includes(overridden?.code)) {
         const takenSymbols = new Set(this.#deityCatalog.takenSymbols);
@@ -2010,7 +2014,7 @@ class AppPassSection extends HTMLElement {
       this.#afkingDialogOpen = false;
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Funding failed.');
+      this.#renderAfkingError(compactUiError(error, 'Funding did not go through.'));
     } finally {
       this.#busyAfkingFunding = false;
       this.#renderAfking();
@@ -2044,7 +2048,7 @@ class AppPassSection extends HTMLElement {
       this.#afkingDialogOpen = false;
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Withdrawal failed.');
+      this.#renderAfkingError(compactUiError(error, 'Withdrawal did not go through.'));
     } finally {
       this.#busyAfkingWithdrawal = false;
       this.#renderAfking();
@@ -2082,7 +2086,7 @@ class AppPassSection extends HTMLElement {
       } catch (_error) { /* defensive */ }
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Bonus FLIP claim failed.');
+      this.#renderAfkingError(compactUiError(error, 'Bonus FLIP claim did not go through.'));
     } finally {
       this.#busyAfkingClaim = false;
       this.#renderAfking();
@@ -2152,7 +2156,7 @@ class AppPassSection extends HTMLElement {
       } catch (_error) { /* defensive */ }
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Subscription update failed.');
+      this.#renderAfkingError(compactUiError(error, 'Subscription update did not go through.'));
     } finally {
       this.#busyAfking = false;
       this.#renderAfking();
@@ -2191,7 +2195,7 @@ class AppPassSection extends HTMLElement {
       } catch (_error) { /* defensive */ }
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Cancellation failed.');
+      this.#renderAfkingError(compactUiError(error, 'Cancellation did not go through.'));
     } finally {
       this.#busyAfking = false;
       this.#renderAfking();

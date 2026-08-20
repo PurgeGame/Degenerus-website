@@ -59,6 +59,46 @@ const UNKNOWN = {
   recoveryAction: 'Refresh the page if this persists.',
 };
 
+// Native-currency failures happen outside Solidity, so they do not carry a
+// contract custom-error selector. BrowserProvider also nests the useful RPC
+// message differently by wallet (error.info.error, error.error, or cause).
+// Recognize only provider-specific balance language here; a contract error
+// named `Insufficient` is a separate domain failure and must keep flowing to
+// the ABI/registry path.
+const INSUFFICIENT_WALLET_FUNDS = {
+  code: 'InsufficientWalletFunds',
+  userMessage: "This wallet doesn't have enough ETH to cover the transaction and network fee.",
+  recoveryAction: 'Add ETH or lower the amount, leaving a little extra for gas.',
+};
+const WALLET_FUNDS_TEXT = /(?:\boutoffunds\b|\bout of funds\b|insufficient (?:funds|balance) (?:for|to cover) (?:gas|the transaction|transaction|intrinsic|transfer|value)|funds for gas \* price \+ value|funds required exceeds allowance|(?:sender|wallet|account)(?:'s)? (?:balance )?(?:is )?too low|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
+
+function _walletFundsMapping(error) {
+  const pending = [error];
+  const seen = new Set();
+  let inspected = 0;
+  while (pending.length > 0 && inspected < 64) {
+    inspected += 1;
+    const value = pending.pop();
+    if (typeof value === 'string') {
+      if (WALLET_FUNDS_TEXT.test(value)) return INSUFFICIENT_WALLET_FUNDS;
+      continue;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    const code = String(value.code || '');
+    if (code.toUpperCase() === 'INSUFFICIENT_FUNDS' || WALLET_FUNDS_TEXT.test(code)) {
+      return INSUFFICIENT_WALLET_FUNDS;
+    }
+    for (const key of [
+      'message', 'shortMessage', 'reason', 'error', 'info', 'cause',
+      'details', 'body', 'response', 'payload',
+    ]) {
+      try { pending.push(value[key]); } catch (_e) { /* hostile provider object */ }
+    }
+  }
+  return null;
+}
+
 // Solidity `Panic(uint256)` — not a custom error, so it never matches the
 // registry and used to land in UNKNOWN. It is common in this protocol's UI paths
 // because token burns spend a balance directly (`balanceOf[from] -= amount`),
@@ -145,6 +185,10 @@ export function decodeRevertReason(error) {
   // text ("panic code 0x11 ...") cannot collide with a registered name.
   const panic = _panicMapping(error);
   if (panic) return panic;
+  // Provider/native-balance failures have no Solidity selector. Inspect the
+  // bounded nested error chain before falling through to the generic copy.
+  const walletFunds = _walletFundsMapping(error);
+  if (walletFunds) return walletFunds;
   // Fallback: require-string match (legacy contract reverts).
   // WR-02: the catch-all 'E' is a single-character key — substring-matching it
   // produces false positives on any reason that happens to contain capital 'E'

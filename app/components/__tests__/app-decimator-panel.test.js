@@ -717,7 +717,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('purchase builders expose the four-piece ticket shelf and responsive box quantities', () => {
+  test('purchase builders expose an adaptive ticket shelf and responsive box quantities', () => {
     const el = instantiate();
     for (const [bind, label] of [
       ['dec-ticket-add-entry', 'ENTRY'],
@@ -731,7 +731,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
-      /class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<boon-product-indicator[\s\S]*?<quest-objective-indicator product="lootbox"/,
+      /<strong id="dec-box-builder-title">LUCKBOXES<\/strong>[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'boon and quest markers have dedicated non-overlapping slots');
     for (const name of [
       'dec-box-small', 'dec-box-medium', 'dec-box-large',
@@ -741,8 +741,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     }
     assert.match(
       el.innerHTML,
-      /degenerus-lootbox-case-v3\.webp/,
-      'preset cards use the existing Luckbox case art',
+      /degenerus-lootbox-case-v5-top\.webp/,
+      'preset cards use the top-down Luckbox case art',
     );
     assert.doesNotMatch(
       STATUS_CSS,
@@ -765,6 +765,16 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'the quest marker occupies the other slot',
     );
     assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-builder-title > \.dec-input-accessories\s*\{[^}]*left:\s*calc\(100% \+ 0\.1rem\);[^}]*width:\s*2\.62rem;/s,
+      'Luckbox modifiers anchor directly to the right edge of the title',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-builder-title > \.dec-input-accessories > quest-objective-indicator\s*\{[^}]*quest-objective-tail-left\.svg[^}]*right:\s*auto;[^}]*left:\s*0;/s,
+      'the first Luckbox marker points its speech tail left toward the title',
+    );
+    assert.match(
       STATUS_CSS,
       /boon-product-indicator::before\s*\{[^}]*var\(--boon-amount[^}]*clip-path:\s*polygon\(/s,
       'the compact purchase boon uses the shared amount-colored arrow',
@@ -776,8 +786,43 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /Approved compact asset desk[\s\S]*?\.dec-ticket-pieces\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
-      'Entry, Ticket, Pack, and Foil Pack remain one scannable row',
+      /Approved compact asset desk[\s\S]*?\.dec-ticket-pieces\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
+      'the default Entry, Ticket, and Pack shelf does not reserve a blank foil slot',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\)\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
+      'an eligible Foil Pack expands the same shelf to four scannable controls',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece__art > \.dec-ticket-face\s*\{[^}]*max-width:\s*100%;[^}]*height:\s*100%;/s,
+      'the real ticket face fills the button instead of inheriting the old thumbnail size',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece__art > \.dec-entry-face\s*\{[^}]*max-width:\s*100%;[^}]*height:\s*100%;[^}]*clip-path:\s*polygon\(/s,
+      'Entry keeps the real quarter-ticket shape at full button height',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*4\.75rem;/s,
+      'button and label-backed ticket tiles share identical outer dimensions',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--ticket \.dec-ticket-piece__copy\s*\{[^}]*top:\s*50%;[^}]*left:\s*50%;[^}]*width:\s*min\(3\.2rem, calc\(100% - 0\.32rem\)\);[^}]*padding:\s*0\.27rem 0\.46rem 0\.24rem;[^}]*translate\(-50%, -50%\)/s,
+      'TICKET uses a substantial centered bubble over its full-ticket art',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\) \.dec-ticket-piece--ticket \.dec-ticket-piece__copy\s*\{[^}]*padding:\s*0\.24rem 0\.3rem 0\.22rem;/s,
+      'the TICKET bubble contracts to fit the four-item Foil shelf',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-input-group--tickets[\s\S]*?> \.dec-input-accessories > boon-product-indicator\s*\{[^}]*display:\s*none !important;/s,
+      'the header bonus readout replaces the duplicate arrow that could overlap Foil Pack',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -827,6 +872,41 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       APP_CSS,
       /\.dec-funds-stack\s*\{[^}]*margin-top:\s*auto;/s,
       'the FLIP balance and Available Funds stay tethered together at the bottom',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*0\.12rem;/s,
+      'the narrow CTA stacks its action and exact total instead of truncating both inline',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*3\.1rem minmax\(0, 1fr\) minmax\(6\.45rem, 0\.7fr\);[^}]*gap:\s*0\.3rem;/s,
+      'the buy row reserves enough width to show fractional ticket totals without clipping',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-total__field \.dec-input\s*\{[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;[^}]*appearance:\s*textfield;/s,
+      'the ticket total removes shared pill styling and the browser spinner that steal value width',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-cta__action\s*\{[^}]*font-size:\s*0\.76rem;[^}]*\}[\s\S]*?\.dec-buy-cta__amount\s*\{[^}]*font-size:\s*0\.65rem;/s,
+      'BUY IN and its ETH amount retain the larger two-line treatment',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-cta:has\(\.dec-buy-cta__amount\[hidden\]\) \.dec-buy-cta__action\s*\{[^}]*white-space:\s*normal;/s,
+      'the empty CLICK TO ADD prompt wraps to two lines instead of truncating',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*height:\s*2\.55rem;[^}]*min-height:\s*2\.55rem;[^}]*max-height:\s*2\.55rem;/s,
+      'the desktop action row keeps its slimmer control height',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-row--flip\s*\{[^}]*grid-template-columns:\s*3\.1rem minmax\(0, 1fr\);[^}]*\}[\s\S]*?\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s,
+      'FLIP mode gives its detailed burn quote a full-width row beneath Clear and TIX',
     );
     assert.match(
       APP_CSS,
@@ -2507,6 +2587,11 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
+      /Approved compact asset desk[\s\S]*?\.panel-header\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
+      'BUY IN sits directly on the purchase panel instead of inside a redundant nested box',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
       /\.dec-flip-credit--header\s*\{[^}]*height:\s*2\.55rem;[^}]*grid-column:\s*2;[^}]*grid-row:\s*1 \/ 3;/s,
       'idle and numeric bonus content use the same fixed footprint',
     );
@@ -2540,32 +2625,87 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(input.value, '1.25', 'up adds one whole ticket');
     pack.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '11.25', 'Pack adds ten tickets');
+    let preventedMenus = 0;
+    const removeEvent = {
+      type: 'contextmenu',
+      preventDefault() { preventedMenus += 1; },
+    };
+    pack.dispatchEvent(removeEvent);
+    assert.equal(input.value, '1.25', 'right-clicking Pack removes ten tickets');
+    ticket.dispatchEvent(removeEvent);
+    assert.equal(input.value, '0.25', 'right-clicking Ticket removes one ticket');
+    entry.dispatchEvent(removeEvent);
+    assert.equal(input.value, '0', 'right-clicking Entry removes one quarter-ticket entry');
+    entry.dispatchEvent(removeEvent);
+    assert.equal(input.value, '0', 'secondary-click removal clamps at zero');
+    assert.equal(preventedMenus, 4, 'purchase-piece secondary clicks suppress the browser menu');
     el.querySelector('[data-bind="dec-ticket-clear"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0', 'Clear resets the editable total');
     assert.equal(input.step, '0.25', 'typed decimals use the same entry-sized increment');
     el.disconnectedCallback();
   });
 
-  test('Luckbox presets show centered 1/5/25 values, clean prices, and independent quantities', async () => {
+  test('Luckbox presets integrate clean prices into the case art and keep independent quantities', async () => {
     const el = instantiate();
     await settle(60);
 
     const price = el.querySelector('[data-bind="dec-price"]');
-    assert.equal(price.textContent, 'LEVEL 12 · 1 TICKET = 0.04 ETH');
-    assert.equal(el.querySelector('[data-bind="dec-box-price-small"]').textContent, '0.04 ETH');
-    assert.equal(el.querySelector('[data-bind="dec-box-price-medium"]').textContent, '0.2 ETH');
-    assert.equal(el.querySelector('[data-bind="dec-box-price-large"]').textContent, '1 ETH');
+    assert.equal(price.textContent, '1 TICKET = 0.04 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-small"]').textContent, '0.04');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-medium"]').textContent, '0.2');
+    assert.equal(el.querySelector('[data-bind="dec-box-price-large"]').textContent, '1');
     for (const tier of ['small', 'medium', 'large']) {
       const input = el.querySelector(`[name="dec-box-${tier}"]`);
       el.querySelector(`[data-bind="dec-box-add-${tier}"]`).dispatchEvent({ type: 'click' });
       assert.equal(input.value, '1', `${tier} card increments only its own field`);
     }
-    assert.match(el.innerHTML, /class="dec-box-value">1<\/span>/);
-    assert.match(el.innerHTML, /class="dec-box-value">5<\/span>/);
-    assert.match(el.innerHTML, /class="dec-box-value">25<\/span>/);
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /3 boxes/);
+    let preventedMenus = 0;
+    for (const tier of ['small', 'medium', 'large']) {
+      const input = el.querySelector(`[name="dec-box-${tier}"]`);
+      el.querySelector(`[data-bind="dec-box-add-${tier}"]`).dispatchEvent({
+        type: 'contextmenu',
+        preventDefault() { preventedMenus += 1; },
+      });
+      assert.equal(input.value, '0', `right-clicking ${tier} removes one box`);
+    }
+    assert.equal(preventedMenus, 3, 'Luckbox secondary clicks suppress the browser menu');
+    assert.match(el.innerHTML, /class="dec-box-value">\s*<strong data-bind="dec-box-price-small">—<\/strong>\s*<\/span>/,
+      'the case center reserves all of its space for the price amount');
+    assert.doesNotMatch(el.innerHTML, /class="dec-box-value">[\s\S]*?<small>ETH<\/small>/,
+      'the preset case does not waste its display area repeating the ETH unit');
+    assert.doesNotMatch(el.innerHTML, /class="dec-box-value">\s*(?:1|5|25)\s*<\/span>/,
+      'the old tier-number overlays are gone');
     assert.doesNotMatch(el.innerHTML, />SMALL<|>MEDIUM<|>LARGE</,
       'the box art communicates tier without redundant labels');
-    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /3 boxes/);
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card__add\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*padding:\s*0;/s,
+      'each case fills its compact square hit area without wasted vertical space');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-input-group--lootbox\.dec-purchase-builder\s*\{[^}]*padding:\s*0 0\.4rem;/s,
+      'the Luckbox builder keeps only horizontal frame padding');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card\s*\{[^}]*width:\s*min\(6\.2rem, 100%\);[^}]*aspect-ratio:\s*1;[^}]*justify-self:\s*center;[^}]*align-self:\s*center;/s,
+      'each outlined button wraps its square case instead of stretching across its grid column');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*width:\s*min\(5\.4rem, 100%\);[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*width:\s*min\(5\.8rem, 100%\);/s,
+      'the compact buttons preserve the stepped Small, Medium, and Large scale');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card__art\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*aspect-ratio:\s*1;/s,
+      'the top-down case fills the complete square button');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card__art::after\s*\{[^}]*background:\s*var\(--box-tone\);[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0\.82;/s,
+      'the case shell uses the same value-tier color wash as the opening animation');
+    assert.doesNotMatch(PURCHASE_DESK_CSS,
+      /\.dec-box-card__art::before\s*\{[^}]*flame-logo\.svg/s,
+      'the case keeps its built-in front medallion instead of stacking a second logo over it');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card__art > \.dec-box-value\s*\{[^}]*top:\s*37\.25%;[^}]*display:\s*grid;[^}]*width:\s*44%;[^}]*height:\s*20%;[^}]*place-items:\s*center;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
+      'the live price sits inside the broad display engineered into the top lid');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-value > strong\s*\{[^}]*color:\s*#fff6d8;[^}]*font:\s*900 var\(--box-price-size\)\/1[^}]*font-variant-numeric:\s*tabular-nums;[^}]*-webkit-text-stroke:\s*0\.02em[^}]*paint-order:\s*stroke fill;[^}]*text-shadow:/s,
+      'each case size gives its x.xx price a clear embossed-metal treatment');
+    assert.equal(el.querySelector('[data-bind="dec-box-summary"]').textContent, 'Choose any mix of boxes.');
     el.disconnectedCallback();
   });
 
@@ -2622,7 +2762,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '1');
     assert.equal(el.querySelector('[name="dec-box-custom-eth"]').value, '0.08',
       'lootbox mission becomes one custom box at exactly two level-12 ticket prices');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'BUY IN ·');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'BUY IN');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.08 ETH');
     assert.equal(fakeContract._calls.purchase.length, 0, 'quest click only configures the form');
     el.disconnectedCallback();
@@ -2762,7 +2902,7 @@ describe('combined ticket + lootbox buy', () => {
     toggle.dispatchEvent({ type: 'click' });
     max.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'BUY IN ·');
+      'BUY IN');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.05 ETH');
 
     let confirmed = null;
@@ -2820,7 +2960,7 @@ describe('combined ticket + lootbox buy', () => {
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.02');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'BUY IN ·',
+      'BUY IN',
       'the compact CTA uses one stable selected-order label');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
     let confirmed = null;
@@ -3017,11 +3157,20 @@ describe('Foil pack buy leg', () => {
     assert.equal((el.innerHTML.match(/class="dec-pack-shine"/g) || []).length, 1,
       'only the foil pack shines; the normal pack stays matte');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-foil-limit-stamp\s*\{[^}]*right:\s*-0\.08rem;[^}]*border:\s*2px solid #ff3542;[^}]*transform:\s*rotate\(8deg\);/s,
+      /\.dec-ticket-piece__art > \.dec-foil-limit-stamp\s*\{[^}]*z-index:\s*13;[^}]*right:\s*-0\.12rem;[^}]*width:\s*auto;[^}]*border:\s*2px solid #ff3542;[^}]*transform:\s*rotate\(8deg\);/s,
       'LIMIT 1 is a large red stamp outside the pack face');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece--foil\.is-selected \.dec-foil-selected-check\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*scale\(1\)/s,
+      /\.dec-ticket-piece__art > \.dec-foil-selected-check\s*\{[^}]*width:\s*1\.12rem;[^}]*height:\s*1\.12rem;[^}]*border-radius:\s*50%;/s,
+      'the green check overrides the legacy generic art-child dimensions');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--foil\.is-selected \.dec-ticket-piece__art > \.dec-foil-selected-check\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*scale\(1\)/s,
       'selection reveals the green circular check');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--foil > quest-objective-indicator\s*\{[^}]*top:\s*0\.12rem;[^}]*right:\s*0\.12rem;[^}]*bottom:\s*auto;/s,
+      'the quest bubble sits in the pack\'s top-right corner');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-foil-pack-face \.dec-pack-count\s*\{[^}]*width:\s*calc\(100% \+ 0\.18rem\);[^}]*font-size:\s*0\.39rem;[^}]*text-align:\s*center;/s,
+      'the four-ticket count stays centered and readable inside the foil pack');
     assert.match(PURCHASE_DESK_CSS,
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.dec-foil-pack-face,[\s\S]*?\.dec-pack-shine,[\s\S]*?animation:\s*none/s,
       'foil motion respects reduced-motion preferences');
@@ -3052,7 +3201,7 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(70);
     assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
-      'LEVEL 30 · 1 TICKET = 0.08 ETH');
+      '1 TICKET = 0.08 ETH');
     assert.equal(el.querySelector('[data-bind="dec-foil-price"]').textContent, '0.8 ETH');
 
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -3114,7 +3263,7 @@ describe('Foil pack buy leg', () => {
       'availability is re-probed without trusting the quest level');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
     assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
-      'LEVEL 12 · 1 TICKET = 0.04 ETH');
+      '1 TICKET = 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -3173,7 +3322,7 @@ describe('Foil pack buy leg', () => {
       'the live purchase route offers level 2');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
     assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
-      'LEVEL 2 · 1 TICKET = 0.01 ETH');
+      '1 TICKET = 0.01 ETH');
     el.disconnectedCallback();
   });
 
@@ -3194,7 +3343,7 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(60);
     assert.equal(el.querySelector('[data-bind="dec-price"]').textContent,
-      'LEVEL 12 · 1 TICKET = 0.04 ETH');
+      '1 TICKET = 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -3250,7 +3399,7 @@ describe('Foil pack buy leg', () => {
     check.dispatchEvent({ type: 'change' });
     const action = el.querySelector('[data-bind="dec-buy-cta-action"]');
     const amount = el.querySelector('[data-bind="dec-buy-cta-amount"]');
-    assert.equal(action.textContent, 'BUY IN ·');
+    assert.equal(action.textContent, 'BUY IN');
     assert.equal(amount.textContent, '0.4 ETH', 'foil-only total is on the second line');
     check.checked = false;
     check.dispatchEvent({ type: 'change' });
@@ -3548,6 +3697,11 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(foilRow.hidden, false, 'the verified foil offer is available in ETH mode');
     useFlip.dispatchEvent({ type: 'click' });
     assert.equal(mode.checked, true);
+    assert.equal(
+      el.querySelector('[data-bind="dec-price"]').textContent,
+      '1 TICKET = 1,000 FLIP',
+      'FLIP mode omits the level prefix so the fixed burn rate fits the header',
+    );
     assert.equal(flipBalance.hidden, false, 'the FLIP balance does not move or disappear in FLIP mode');
     assert.equal(useFlip.textContent, 'USING FLIP');
     assert.equal(useFlip.getAttribute('aria-pressed'), 'true');
@@ -3558,6 +3712,11 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(foilRow.hidden, true, 'the tickets-only FLIP route hides the incompatible foil add-on');
     useFlip.dispatchEvent({ type: 'click' });
     assert.equal(mode.checked, false, 'clicking USING FLIP switches back to ETH');
+    assert.equal(
+      el.querySelector('[data-bind="dec-price"]').textContent,
+      '1 TICKET = 0.04 ETH',
+      'switching back to ETH restores the compact ETH ticket quote',
+    );
     assert.equal(useFlip.textContent, 'USE FLIP');
     useFlip.dispatchEvent({ type: 'click' });
     assert.equal(mode.checked, true, 'the embedded button can select FLIP again');
