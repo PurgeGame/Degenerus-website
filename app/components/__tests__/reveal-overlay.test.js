@@ -174,7 +174,8 @@ globalThis.localStorage = {
 };
 
 const {
-  queueReveal, normalizeSequence, buildDegeneretteSpinFrames,
+  queueReveal, normalizeSequence, buildIndividualLootboxSequences,
+  buildDegeneretteSpinFrames,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   boxSpinScorePays,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
@@ -472,9 +473,14 @@ describe('normalizeSequence', () => {
     assert.equal(seq.boxSpinCount, 4, 'all emitted reels are scheduled, not collapsed');
   });
 
-  test('combo orders retain an honest per-box breakdown beside the combined receipt', () => {
+  test('combo orders can become one animated sequence per physical box', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
+      presentationId: 'combo:27',
+      lootboxRelease: {
+        address: '0x00000000000000000000000000000000000000ab',
+        key: '27', lootboxIndex: 27, transactionHash: '0xcombo',
+      },
       // One Small + one Medium box in the packed purchase order.
       boxOrders: [String(1n | (1n << 8n))],
       ticketPriceWei: 10_000_000_000n,
@@ -503,6 +509,27 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.lootboxSharedCards.map((card) => card.type), ['dgnrs']);
     assert.deepEqual(seq.cards.map((card) => card.type), ['tickets', 'flip', 'dgnrs'],
       'the default combined receipt preserves immutable event order');
+
+    const individual = buildIndividualLootboxSequences(seq);
+    assert.deepEqual(individual.map((part) => part.title), [
+      'SMALL LUCKBOX · 1 OF 2',
+      'MEDIUM LUCKBOX · 2 OF 2',
+      'COMBO REWARDS',
+    ]);
+    assert.deepEqual(individual.map((part) => part.noVessel), [false, false, true],
+      'every physical box gets a case animation; aggregate-only rewards do not fake one');
+    assert.deepEqual(individual.map((part) => part.cards.map((card) => card.type)), [
+      ['tickets'], ['flip'], ['dgnrs'],
+    ]);
+    assert.deepEqual(individual.map((part) => part.lootboxCaseModel), [
+      'small', 'medium', seq.lootboxCaseModel,
+    ]);
+    assert.ok(individual.slice(0, -1).every((part) => (
+      part.suppressLootboxComplete && part.lootboxRelease == null
+    )), 'opening an early case cannot retire the complete Pending combo');
+    assert.equal(individual.at(-1).presentationId, 'combo:27');
+    assert.equal(individual.at(-1).lootboxRelease.key, '27',
+      'the purchase retires only after the final individual receipt');
   });
 
   test('empty legs → null (nothing to show)', () => {
@@ -1950,7 +1977,7 @@ describe('reveal-overlay element', () => {
       'the neutral case includes its paired retracted receiver art');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp', import.meta.url)),
       'the opener includes a real inner-lid surface');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v14-deadbolt-4.webp', import.meta.url)),
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-4.webp', import.meta.url)),
       'the reinforced large case ships all four deadbolts');
     assert.match(REVEAL_SRC, /const LOOTBOX_CASE_ART = lootboxCaseAssets\('medium'\)\.lockedFront/);
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
@@ -2358,7 +2385,7 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('a combo purchase can open as one combined receipt or an individual box breakdown', async (t) => {
+  test('VIEW INDIVIDUALLY runs a fresh case animation for every combo box', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
     t.after(() => { window.matchMedia = previousMatchMedia; });
@@ -2388,22 +2415,47 @@ describe('reveal-overlay element', () => {
     assert.match(individual.getAttribute('aria-label'), /each of the 2 luckboxes/i);
 
     individual.dispatchEvent({ type: 'click', stopPropagation() {} });
-    // Taps skip only authored animation waits; they do not alter the settled data.
     const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
     const summary = el.querySelector('[data-bind="rvl-summary"]');
-    for (let i = 0; i < 5
-      && summary.querySelectorAll('.rvl-lootbox-box-group').length < 2; i += 1) {
+    const title = el.querySelector('[data-bind="rvl-title"]');
+    const vessel = el.querySelector('[data-bind="rvl-vessel"]');
+    const stage = el.querySelector('[data-bind="rvl-stage"]');
+    // Taps skip only authored waits. The first physical case still mounts and
+    // reaches its own one-box receipt before the next case can begin.
+    for (let i = 0; i < 8 && summary.hidden; i += 1) {
       await tick();
-      backdrop.dispatchEvent({ type: 'click' });
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
     }
     await tick();
+    assert.equal(title.textContent, 'SMALL LUCKBOX · 1 OF 2');
+    assert.equal(stage.getAttribute('data-lootbox-case-model'), 'small');
+    assert.match(summary.textContent, /1 TICKET/);
+    assert.doesNotMatch(summary.textContent, /25 FLIP|DGNRS/);
+    const firstNext = summary.querySelector('.rvl-collect-cta');
+    assert.equal(firstNext.textContent, 'OPEN NEXT BOX');
 
-    assert.equal(summary.querySelectorAll('.rvl-lootbox-box-group').length, 3,
-      'two physical boxes plus the event-level combo rewards group stay distinct');
-    assert.match(summary.textContent, /SMALL LUCKBOX/);
-    assert.match(summary.textContent, /MEDIUM LUCKBOX/);
-    assert.match(summary.textContent, /COMBO REWARDS/);
-    assert.match(summary.textContent, /DGNRS/);
+    firstNext.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 6 && title.textContent !== 'MEDIUM LUCKBOX · 2 OF 2'; i += 1) {
+      await tick();
+    }
+    assert.equal(vessel.hidden, false, 'the second box mounts the sealed case again');
+    assert.equal(stage.getAttribute('data-lootbox-case-model'), 'medium');
+    for (let i = 0; i < 8 && summary.hidden; i += 1) {
+      await tick();
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
+    }
+    await tick();
+    assert.match(summary.textContent, /25\s*FLIP/);
+    assert.doesNotMatch(summary.textContent, /1 TICKET|DGNRS/);
+    const secondNext = summary.querySelector('.rvl-collect-cta');
+    assert.equal(secondNext.textContent, 'COMBO REWARDS ▸');
+
+    secondNext.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 8 && title.textContent !== 'COMBO REWARDS'; i += 1) await tick();
+    backdrop.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5 && summary.hidden; i += 1) await tick();
+    assert.equal(vessel.hidden, true, 'aggregate-only rewards never impersonate another box');
+    assert.match(summary.textContent, /7\s*DGNRS/);
 
     el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });

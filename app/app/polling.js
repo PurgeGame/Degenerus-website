@@ -105,7 +105,8 @@ let _forceLastDayCycle = null;
 let _forcePlayerCycle = null;
 let _jackpotCompletionDay = null;
 let _jackpotCompletionPromise = null;
-const JACKPOT_INDEXER_GRACE_MS = 4_000;
+let _jackpotCompletionPending = false;
+const JACKPOT_INDEXER_WAIT_MS = 30_000;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
 // at the floor rather than inheriting a backed-off delay from before it was hidden.
@@ -428,7 +429,12 @@ function publishGameState(payload, refreshLastDay) {
     && (!Number.isInteger(displayedDay)
       || displayedDay <= 0
       || nextDay !== displayedDay
-      || lastDayPayloadNeedsRecheck(displayedPayload))) {
+      || lastDayPayloadNeedsRecheck(displayedPayload))
+    // The completion path already has one target-day request parked at the
+    // API. Do not let the 15s game fallback abort it and replace it with an
+    // early non-waiting request. If the bounded wait times out stale, this
+    // flag clears and the next game sample resumes the ordinary fallback.
+    && !(_jackpotCompletionPending && _jackpotCompletionDay === nextDay)) {
     try { refreshLastDay?.(); } catch { /* the fallback timer is still armed */ }
   }
   return payload;
@@ -503,14 +509,23 @@ export function lastDayMatchesDeployment(payload) {
   catch (_e) { return false; }
 }
 
-async function pollLastDay(signal, { force = false } = {}) {
+async function pollLastDay(
+  signal,
+  { force = false, targetDay = null, waitMs = 0 } = {},
+) {
   // Phase 57 ships /game/jackpot/last-day. On 404 / network error, soft-fail returns null
   // (UI panel — Phase 59 widget — renders cold-start state by default).
   // Phase 59 Plan 59-02: write payload to store on success so the widget's
   // subscribe('app.lastDay', ...) subscriber fires per polling cycle.
   try {
+    const requestedDay = Number(targetDay);
+    const requestedWait = Number(waitMs);
+    const waitQuery = Number.isInteger(requestedDay) && requestedDay > 0
+      && Number.isFinite(requestedWait) && requestedWait > 0
+      ? `?targetDay=${requestedDay}&waitMs=${Math.trunc(requestedWait)}`
+      : '';
     const payload = normalizeLastDayPayload(
-      await fetchJSONWithSignal('/game/jackpot/last-day', {
+      await fetchJSONWithSignal(`/game/jackpot/last-day${waitQuery}`, {
         signal,
         force,
         cache: force ? 'no-store' : undefined,
@@ -811,18 +826,11 @@ export function refreshForDayShift({ includePlayer = false, includeLastDay = tru
   return Promise.allSettled(cycles);
 }
 
-function waitForJackpotIndexer(ms) {
-  return new Promise((resolve) => {
-    const handle = setTimeout(resolve, ms);
-    try { handle?.unref?.(); } catch (_e) { /* browser timer */ }
-  });
-}
-
 /**
  * Fetch the sealed jackpot only after GAME.advanceDue() has fallen to false.
- * Every tab makes at most two endpoint requests for a completed day: one on the
- * exact chain edge and one after a short indexer grace period if the first raced
- * the seal. The API coalesces the crowd behind one pointer read/day build.
+ * Every tab makes exactly one completion request. The API holds it until the
+ * target seal indexes (bounded to 30s), while all tabs share one server-side
+ * pointer waiter/day. That avoids both the too-early +4s miss and a retry wave.
  */
 export function refreshJackpotAfterChainCompletion({ day, includePlayer = true } = {}) {
   const targetDay = Number(day);
@@ -834,22 +842,13 @@ export function refreshJackpotAfterChainCompletion({ day, includePlayer = true }
 
   let request;
   request = (async () => {
-    const fetchTarget = async () => {
-      if (typeof _forceLastDayCycle !== 'function') return null;
-      await _forceLastDayCycle({ force: true, includeBoons: false });
-      return get('app.lastDay') || null;
-    };
-
-    let payload = await fetchTarget();
-    if (Number(payload?.day) !== targetDay
-      && _jackpotCompletionDay === targetDay
-      && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) {
-      await waitForJackpotIndexer(JACKPOT_INDEXER_GRACE_MS);
-      payload = get('app.lastDay') || null;
-      if (_jackpotCompletionDay === targetDay && Number(payload?.day) !== targetDay) {
-        payload = await fetchTarget();
-      }
-    }
+    await _forceLastDayCycle({
+      force: true,
+      includeBoons: false,
+      targetDay,
+      waitMs: JACKPOT_INDEXER_WAIT_MS,
+    });
+    const payload = get('app.lastDay') || null;
 
     if (Number(payload?.day) === targetDay
       && includePlayer
@@ -861,6 +860,11 @@ export function refreshJackpotAfterChainCompletion({ day, includePlayer = true }
 
   _jackpotCompletionDay = targetDay;
   _jackpotCompletionPromise = request;
+  _jackpotCompletionPending = true;
+  const clearPending = () => {
+    if (_jackpotCompletionPromise === request) _jackpotCompletionPending = false;
+  };
+  void request.then(clearPending, clearPending);
   return request;
 }
 
@@ -884,9 +888,18 @@ export function start({ playerAddress = null } = {}) {
   pauseAllTimers();
   // A new sealed day zeroes the previous day's boons (playerBoonState is keyed
   // on player+day), so the day-change fan-out carries boons with it.
-  const lastDay  = ({ force = false, includeBoons = true } = {}) => {
+  const lastDay  = ({
+    force = false,
+    includeBoons = true,
+    targetDay = null,
+    waitMs = 0,
+  } = {}) => {
     if (includeBoons) void refreshBoons();
-    return runCycle('lastDay', [(s) => pollLastDay(s, { force })]);
+    return runCycle('lastDay', [(s) => pollLastDay(s, {
+      force,
+      targetDay,
+      waitMs,
+    })]);
   };
   const game     = () => runCycle('game',     [
     (s) => pollGame(s).then((payload) => publishGameState(payload, lastDay)),
@@ -927,6 +940,7 @@ export function stop() {
   _forcePlayerCycle = null;
   _jackpotCompletionDay = null;
   _jackpotCompletionPromise = null;
+  _jackpotCompletionPending = false;
 }
 
 export function abortAllInflight() {
@@ -993,6 +1007,7 @@ export const _testing = {
   resolvedDayFromGameState,
   pollLastDay,
   get jackpotCompletionDay() { return _jackpotCompletionDay; },
+  get jackpotCompletionPending() { return _jackpotCompletionPending; },
   lastDayMatchesDeployment,
   pollGoldRush,
   readGoldRushSnapshot,

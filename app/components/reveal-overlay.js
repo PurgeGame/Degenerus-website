@@ -732,24 +732,30 @@ export function buildBoxSpinBoard(spin) {
   const estimatedAtRisk = flipLike
     ? _humanBoxSpinPayoutEstimate(spin, rows)
     : null;
-  // Last-resort inference, and the reason a bust used to show no amount at
-  // all: BoxSpin omits the pre-survival sum, so halving the final payout is
-  // the only stake source that needs no reconstruction — and it exists solely
-  // on the surviving branch. It is also not exact. The contract doubles the
-  // preliminary sum and then collapses it onto a whole 100-FLIP granule above
-  // 1,000 FLIP (DegenerusGameDegeneretteModule.sol:1954-1965), so half of the
-  // emitted payout recovers the stake to within 50 FLIP there.
+  // A surviving BoxSpin publishes its final payout. Prefer halving that chain
+  // fact over any neutral-EV estimate; the estimate is only for a zero-payout
+  // bust whose historical pre-open storage could not be reconstructed. Above
+  // 1,000 FLIP the contract first collapses the doubled payout onto a whole
+  // 100-FLIP granule, so the recovered reel sum remains approximate there.
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
+  const fallbackAtRisk = inferredAtRisk > 0n
+    ? inferredAtRisk
+    : (estimatedAtRisk?.amount ?? 0n);
   const payoutAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
-    : reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? inferredAtRisk;
+    : (reconstructedAtRisk?.amount ?? fallbackAtRisk);
   const payoutAtRiskApproximate = explicitAtRisk > 0n
     ? false
     : reconstructedAtRisk != null
       ? reconstructedAtRisk.approximate
-      : estimatedAtRisk != null
-        ? true
-        : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
+      : inferredAtRisk > 0n
+        ? total > FLIP_ROUND_THRESHOLD
+        : estimatedAtRisk != null;
+  const suppliedSurvivalWinPayout = _safeBigInt(spin?.survivalWinPayout);
+  const settledSurvivalWinPayout = survivalStake && total > 0n ? total : 0n;
+  const survivalWinPayout = suppliedSurvivalWinPayout
+    || settledSurvivalWinPayout
+    || (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n);
   if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk, payoutAtRiskApproximate);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
@@ -767,12 +773,12 @@ export function buildBoxSpinBoard(spin) {
     survivalStake,
     payoutAtRisk,
     payoutAtRiskApproximate,
-    // Derive the "WIN x" figure from the stake, never from the settled total.
-    // Sourcing it from `total` published a number on survivors and nothing on
-    // busts, which announced the coin's result before it was thrown.
-    survivalWinPayout: _safeBigInt(spin?.survivalWinPayout) || (
-      payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n
-    ),
+    // Both branches keep a pre-flip prize: survivors use the exact emitted
+    // payout while busts retain the stake-derived hypothetical win.
+    survivalWinPayout,
+    survivalWinPayoutApproximate: suppliedSurvivalWinPayout <= 0n
+      && settledSurvivalWinPayout <= 0n
+      && payoutAtRiskApproximate,
     heroIdx,
     boxSpin: true,
     // A record bounty is never a mystery denomination: the contract routes it
@@ -1177,20 +1183,36 @@ export function normalizeSequence(seq) {
     const boxValue = routedPriceWei == null
       ? lootboxValuePresentation(amountWei)
       : lootboxValuePresentation(amountWei, routedPriceWei);
+    const groupAmountByCard = new Map();
+    breakdown.groups.forEach((group) => {
+      group.cards.forEach((card) => groupAmountByCard.set(card, group.amountWei));
+    });
     // Exact event-block enrichment remains authoritative. When it is absent,
-    // give FLIP boards the result-independent inputs for a clearly marked
-    // estimate so a blank meter cannot spoil the survival coin.
-    cards = cards.map((card) => card?.spin?.spinType === 'flip'
+    // give FLIP boards their physical box value for a clearly marked estimate.
+    // A counted combo's aggregate purchase value belongs to the outer receipt,
+    // never to each Small / Medium / Large spin inside it.
+    const mappedCards = cards.map((card) => card?.spin?.spinType === 'flip'
       && _safeBigInt(card.spin.preSurvivalPayout) <= 0n
       ? {
           ...card,
           spin: {
             ...card.spin,
-            estimateBoxAmountWei: card.spin.estimateBoxAmountWei ?? amountWei,
+            estimateBoxAmountWei: card.spin.estimateBoxAmountWei
+              ?? groupAmountByCard.get(card)
+              ?? amountWei,
             estimateTicketPriceWei: card.spin.estimateTicketPriceWei ?? routedPriceWei,
           },
         }
       : card);
+    if (mappedCards.some((card, index) => card !== cards[index])) {
+      const replacements = new Map(cards.map((card, index) => [card, mappedCards[index]]));
+      breakdown.groups.forEach((group) => {
+        group.cards = group.cards.map((card) => replacements.get(card) || card);
+      });
+      breakdown.sharedCards = breakdown.sharedCards
+        .map((card) => replacements.get(card) || card);
+    }
+    cards = mappedCards;
     const rawIndex = seq.lootboxIndex ?? opened?.lootboxIndex;
     const boxIndex = rawIndex == null || String(rawIndex) === '0' ? null : String(rawIndex);
     const boxSpinCount = cards.reduce(
@@ -1918,6 +1940,108 @@ export function normalizeSequence(seq) {
   return null;
 }
 
+function _individualLootboxFlags(cards) {
+  const list = Array.isArray(cards) ? cards : [];
+  const isEmpty = (card) => card?.type === 'nowin'
+    || (card?.type === 'tickets' && card?.value === '0');
+  const isWwxrp = (card) => card?.type === 'wwxrp'
+    || (card?.type === 'spins' && card?.spin?.spinType === 'wwxrp');
+  return {
+    big: list.some((card) => ['epic', 'legendary'].includes(
+      String(card?.revealedRarity || card?.rarity || ''),
+    )),
+    wwxrpOnly: list.some(isWwxrp)
+      && list.every((card) => isWwxrp(card) || isEmpty(card)),
+    unlucky: list.length > 0
+      && list.every((card) => isWwxrp(card) || isEmpty(card)),
+  };
+}
+
+/**
+ * Turn one already-settled combo receipt into presentation-only child reveals.
+ * Each physical child keeps its own case and cards; rewards whose event is
+ * aggregate-only land after the cases on one explicit COMBO REWARDS receipt.
+ * The original release identity is attached only to the final child so Pending
+ * cannot retire the purchase before every selected animation is acknowledged.
+ */
+export function buildIndividualLootboxSequences(seq) {
+  if (seq?.kind !== 'lootbox' || !Array.isArray(seq.lootboxBoxGroups)
+    || seq.lootboxBoxGroups.length < 2) return [];
+  const total = seq.lootboxBoxGroups.length;
+  const parts = seq.lootboxBoxGroups.map((group, index) => {
+    const cards = Array.isArray(group?.cards) ? group.cards : [];
+    const value = lootboxValuePresentation(group?.amountWei, seq.ticketPriceWei);
+    const flags = _individualLootboxFlags(cards);
+    return {
+      ...seq,
+      title: `${group?.label || 'LUCKBOX'} · ${index + 1} OF ${total}`,
+      hideTitle: false,
+      big: flags.big,
+      unlucky: flags.unlucky,
+      wwxrpOnly: flags.wwxrpOnly,
+      noVessel: false,
+      autoStart: false,
+      autoAdvance: false,
+      amountWei: value.amountWei,
+      ticketPriceWei: value.ticketPriceWei,
+      lootboxValueTone: value.tone,
+      lootboxCaseModel: value.model,
+      lootboxTicketUnitsLabel: value.unitsLabel,
+      boxOrders: [],
+      lootboxBoxCount: 1,
+      lootboxBoxGroups: [{ ...group, boxNumber: 1, boxCount: 1 }],
+      lootboxSharedCards: [],
+      lootboxView: 'combined',
+      comboBoxNumber: index + 1,
+      comboBoxCount: total,
+      comboRewards: false,
+      cards,
+      boxSpinCount: cards.reduce(
+        (sum, card) => sum + (card?.spin?.reels?.length || 0),
+        0,
+      ),
+      presentationId: null,
+      lootboxRelease: null,
+      suppressLootboxComplete: true,
+    };
+  });
+  const sharedCards = Array.isArray(seq.lootboxSharedCards)
+    ? seq.lootboxSharedCards : [];
+  if (sharedCards.length > 0) {
+    const flags = _individualLootboxFlags(sharedCards);
+    parts.push({
+      ...seq,
+      title: 'COMBO REWARDS',
+      hideTitle: false,
+      big: flags.big,
+      unlucky: flags.unlucky,
+      wwxrpOnly: flags.wwxrpOnly,
+      noVessel: true,
+      autoStart: true,
+      autoAdvance: false,
+      boxOrders: [],
+      lootboxBoxCount: 0,
+      lootboxBoxGroups: [],
+      lootboxSharedCards: [],
+      lootboxView: 'combined',
+      comboBoxNumber: null,
+      comboBoxCount: total,
+      comboRewards: true,
+      cards: sharedCards,
+      boxSpinCount: 0,
+      presentationId: null,
+      lootboxRelease: null,
+      suppressLootboxComplete: true,
+    });
+  }
+  if (parts.length === 0) return [];
+  const finalPart = parts[parts.length - 1];
+  finalPart.presentationId = seq.presentationId;
+  finalPart.lootboxRelease = seq.lootboxRelease;
+  finalPart.suppressLootboxComplete = false;
+  return parts;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -2591,6 +2715,43 @@ class RevealOverlay extends HTMLElement {
     );
   }
 
+  #beginIndividualLootboxPresentation(seq) {
+    const parts = buildIndividualLootboxSequences(seq);
+    if (parts.length < 2) return false;
+    const [first, ...remaining] = parts;
+    Object.assign(seq, first);
+    this.#queue.unshift(...remaining);
+
+    const title = this.#bind('rvl-title');
+    if (title) {
+      title.hidden = false;
+      title.textContent = seq.title;
+    }
+    const stage = this.#bind('rvl-stage');
+    if (stage) {
+      stage.setAttribute?.('data-lootbox-value-tone', seq.lootboxValueTone || 'unknown');
+      applyLootboxCasePresentation(stage, seq.lootboxCaseModel);
+    }
+    const vessel = this.#bind('rvl-vessel');
+    if (vessel) {
+      vessel.setAttribute?.('data-lootbox-value-tone', seq.lootboxValueTone || 'unknown');
+      vessel.setAttribute?.('aria-label', `Open ${seq.title.toLowerCase()}`);
+      vessel.setAttribute?.(
+        'title',
+        seq.lootboxTicketUnitsLabel
+          ? `${seq.lootboxTicketUnitsLabel} ticket-price luckbox`
+          : '',
+      );
+      const presentation = applyLootboxCasePresentation(vessel, seq.lootboxCaseModel);
+      [
+        presentation.assets.retractedFront,
+        presentation.assets.innerLid,
+        ...presentation.assets.deadbolts,
+      ].forEach(_preloadImage);
+    }
+    return true;
+  }
+
   #readyPendingLootboxes(excludeRelease = null) {
     return getPendingActions().filter((item) => (
       item?.kind === 'lootbox'
@@ -2614,7 +2775,12 @@ class RevealOverlay extends HTMLElement {
 
   #queuedContinuationLabel() {
     if (this.#queue.length === 0) return null;
-    return this.#queue[0]?.kind === 'lootbox' ? 'OPEN LUCKBOX' : 'NEXT ▸';
+    if (this.#queue[0]?.kind === 'lootbox') {
+      if (this.#queue[0]?.comboRewards) return 'COMBO REWARDS ▸';
+      if (this.#queue[0]?.comboBoxNumber) return 'OPEN NEXT BOX';
+      return 'OPEN LUCKBOX';
+    }
+    return 'NEXT ▸';
   }
 
   #armQueuedContinuation() {
@@ -2958,7 +3124,7 @@ class RevealOverlay extends HTMLElement {
   }
 
   #emitLootboxComplete(seq) {
-    if (seq?.kind !== 'lootbox'
+    if (seq?.kind !== 'lootbox' || seq?.suppressLootboxComplete
       || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
       || typeof CustomEvent !== 'function') return;
     const release = seq?.lootboxRelease;
@@ -3209,9 +3375,9 @@ class RevealOverlay extends HTMLElement {
     // `seq.big` only says "this is a headline sequence" — it says nothing about
     // whether the player won, so gating celebration on it alone used to put a
     // win effect over a sequence of pure losses.
-    const hasSpins = seq.cards.some((c) => Boolean(c.spin));
+    let hasSpins = seq.cards.some((c) => Boolean(c.spin));
     const hasTicketGrid = Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0;
-    const allNoWin = seq.cards.every((c) => {
+    const sequenceAllNoWin = () => seq.cards.every((c) => {
       if (c.type === 'nowin') return true;
       if (!c.spin) return false;
       const paid = c.spin.spinType === 'eth'
@@ -3219,6 +3385,7 @@ class RevealOverlay extends HTMLElement {
         : _safeBigInt(c.spin.payout);
       return paid <= 0n;
     });
+    let allNoWin = sequenceAllNoWin();
     const inlineAutoPack = seq.kind === 'pack'
       && this.#isOpeningAll(seq)
       && Array.isArray(seq.ticketGrid)
@@ -3395,9 +3562,13 @@ class RevealOverlay extends HTMLElement {
           return action;
         }
         if (canChooseLootboxBoxView && isLootbox) {
-          seq.lootboxView = action === 'view-boxes-individually'
-            ? 'individual'
-            : 'combined';
+          if (action === 'view-boxes-individually'
+            && this.#beginIndividualLootboxPresentation(seq)) {
+            hasSpins = seq.cards.some((card) => Boolean(card.spin));
+            allNoWin = sequenceAllNoWin();
+          } else {
+            seq.lootboxView = 'combined';
+          }
         }
         openingAll = action === 'open-all' || action === 'open-all-boxes'
           || this.#isOpeningAll(seq);
@@ -4232,7 +4403,7 @@ class RevealOverlay extends HTMLElement {
       rendered.boxPayoutDetail.textContent = `DOUBLE OR NOTHING · WIN ${this.#boxSpinAmountText(
         board,
         board.survivalWinPayout,
-        board.payoutAtRiskApproximate === true,
+        board.survivalWinPayoutApproximate === true,
       )}`;
     } else if (board.survivalStage) {
       rendered.boxPayoutDetail.textContent = 'DOUBLE OR NOTHING';
@@ -4903,7 +5074,7 @@ class RevealOverlay extends HTMLElement {
     const survivalWin = board.boxSpin ? _safeBigInt(board.survivalWinPayout) : atRisk * 2n;
     detail.textContent = survivalWin > 0n
       ? `${reelResultText} · WIN ${board.boxSpin
-          ? this.#boxSpinAmountText(board, survivalWin, board.payoutAtRiskApproximate === true)
+          ? this.#boxSpinAmountText(board, survivalWin, board.survivalWinPayoutApproximate === true)
           : `${_tokenText(survivalWin)} FLIP`}`
       : `${reelResultText} · DOUBLE OR NOTHING`;
 
@@ -6121,45 +6292,7 @@ class RevealOverlay extends HTMLElement {
       return grid;
     };
 
-    const individualLootboxes = seq.kind === 'lootbox'
-      && seq.lootboxView === 'individual'
-      && Array.isArray(seq.lootboxBoxGroups)
-      && seq.lootboxBoxGroups.length > 1;
-    if (individualLootboxes) {
-      const breakdown = document.createElement('div');
-      breakdown.className = 'rvl-lootbox-box-breakdown';
-      const appendGroup = (label, cards, modifier = '') => {
-        const group = document.createElement('section');
-        group.className = `rvl-lootbox-box-group${modifier}`;
-        const title = document.createElement('div');
-        title.className = 'rvl-lootbox-box-group__title';
-        title.textContent = label;
-        group.appendChild(title);
-        const shown = visibleCards(cards);
-        if (shown.length > 0) {
-          group.appendChild(buildGrid(shown));
-        } else {
-          const empty = document.createElement('div');
-          empty.className = 'rvl-lootbox-box-group__empty';
-          empty.textContent = 'Reward included in combo totals';
-          group.appendChild(empty);
-        }
-        breakdown.appendChild(group);
-      };
-      for (const group of seq.lootboxBoxGroups) {
-        appendGroup(
-          `${group.label} · ${group.boxNumber} OF ${group.boxCount}`,
-          group.cards,
-        );
-      }
-      const sharedCards = visibleCards(seq.lootboxSharedCards);
-      if (sharedCards.length > 0) {
-        appendGroup('COMBO REWARDS', sharedCards, ' rvl-lootbox-box-group--shared');
-      }
-      summary.appendChild(breakdown);
-    } else {
-      summary.appendChild(buildGrid(seq.cards));
-    }
+    summary.appendChild(buildGrid(seq.cards));
 
     const cta = document.createElement('button');
     cta.type = 'button';

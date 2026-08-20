@@ -310,6 +310,41 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
+  test('a combo luckbox uses one total while preserving each model stack and count', () => {
+    pending.publishPendingActions('lootboxes', [{
+      id: 'lootbox:combo', kind: 'lootbox', label: 'Luckbox combo',
+      amountLabel: '0.61 ETH', compact: true, state: 'waiting', pinned: true,
+      lootboxStacks: [
+        { label: 'SMALL', count: 1, lootboxCaseModel: 'small', lootboxValueTone: 'green' },
+        { label: 'MEDIUM', count: 2, lootboxCaseModel: 'medium', lootboxValueTone: 'purple' },
+        { label: 'LARGE', count: 4, lootboxCaseModel: 'large', lootboxValueTone: 'gold' },
+      ],
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const actions = el.querySelectorAll('.rrt-action--lootbox-summary');
+    assert.equal(actions.length, 1, 'one RNG index remains one open target');
+    const action = actions[0];
+    assert.match(action.className, /rrt-action--lootbox-stacks/);
+    assert.match(action.querySelector('.rrt-lootbox-summary').textContent,
+      /7× LUCKBOX/);
+    const stacks = action.querySelectorAll('.rrt-lootbox-stack');
+    assert.equal(stacks.length, 3);
+    assert.deepEqual(stacks.map((stack) => stack.getAttribute('data-box-size')),
+      ['small', 'medium', 'large']);
+    assert.deepEqual(stacks.map((stack) => stack.querySelector('.rrt-lootbox-stack__count').textContent),
+      ['×1', '×2', '×4']);
+    assert.equal(action.querySelector('.rrt-lootbox-stack__size'), null,
+      'the distinct case art replaces redundant SMALL / MEDIUM / LARGE captions');
+    assert.deepEqual(stacks.map((stack) => stack.querySelectorAll('.rrt-lootbox-stack__case').length),
+      [1, 2, 3], 'large quantities cap the visual pile at three cases and keep the exact badge');
+    assert.deepEqual(stacks.map((stack) => (
+      stack.querySelector('.rrt-lootbox-stack__case').getAttribute('data-lootbox-case-model')
+    )), ['small', 'medium', 'large']);
+    el.disconnectedCallback();
+  });
+
   test('a whale-pass balance is rendered as a guarded CLAIM action', () => {
     pending.publishPendingActions('whale-pass-claims', [{
       id: 'whale:2', kind: 'whale-pass-claim', kindLabel: 'WHALE PASS CLAIM',

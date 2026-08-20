@@ -1,9 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   lootboxCaseAssets,
   lootboxCaseModel,
+  lootboxCasePresentation,
   lootboxValuePresentation,
 } from '../lootbox-value-tone.js';
 
@@ -43,12 +45,44 @@ describe('lootbox value tone', () => {
   test('publishes the complete art family from the same canonical selector', () => {
     for (const model of ['small', 'medium', 'large']) {
       const assets = lootboxCaseAssets(model);
-      assert.match(assets.lockedFront, new RegExp(`case-${model}-v14-locked-front\\.webp$`));
-      assert.match(assets.retractedFront, new RegExp(`case-${model}-v14-retracted-front\\.webp$`));
-      assert.match(assets.top, new RegExp(`case-${model}-v14-top\\.webp$`));
-      assert.match(assets.innerLid, new RegExp(`case-${model}-v14-inner-lid\\.webp$`));
+      const version = model === 'large' ? 'v15' : 'v14';
+      assert.match(assets.lockedFront, new RegExp(`case-${model}-${version}-locked-front\\.webp$`));
+      assert.match(assets.retractedFront, new RegExp(`case-${model}-${version}-retracted-front\\.webp$`));
+      assert.match(assets.top, new RegExp(`case-${model}-${version}-top\\.webp$`));
+      assert.match(assets.innerLid, new RegExp(`case-${model}-${version}-inner-lid\\.webp$`));
       assert.equal(assets.deadbolts.length, model === 'large' ? 4 : 2);
     }
     assert.equal(lootboxCaseAssets('unknown'), lootboxCaseAssets('medium'));
+  });
+
+  test('registers purchase prices to the center of each model-specific lid panel', () => {
+    assert.deepEqual(
+      ['small', 'medium', 'large'].map((model) => {
+        const { css } = lootboxCasePresentation(model);
+        return [css['--lootbox-price-top'], css['--lootbox-price-height'], css['--lootbox-price-width']];
+      }),
+      [
+        ['36.7%', '20%', '44%'],
+        ['37.2%', '25%', '45%'],
+        ['28.7%', '23%', '42%'],
+      ],
+    );
+  });
+
+  test('all dynamic luckbox surfaces consume the shared model presentation', () => {
+    const sources = Object.fromEntries([
+      ['shop', '../../components/app-decimator-panel.js'],
+      ['pending', '../../components/app-box-strip.js'],
+      ['tray', '../../components/app-reveal-tray.js'],
+      ['opener', '../../components/reveal-overlay.js'],
+    ].map(([name, path]) => [name, readFileSync(new URL(path, import.meta.url), 'utf8')]));
+
+    assert.match(sources.shop,
+      /applyLootboxCasePresentation\(element, element\.getAttribute\('data-lootbox-case-model'\)\)/);
+    assert.match(sources.pending, /applyLootboxCasePresentation\(art, value\.model\)/);
+    assert.match(sources.tray,
+      /applyLootboxCasePresentation\((?:button|box), item\.lootboxCaseModel\)/);
+    assert.match(sources.opener,
+      /isLootbox \? seq\.lootboxCaseModel : 'medium'/);
   });
 });

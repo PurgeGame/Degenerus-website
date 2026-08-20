@@ -2652,6 +2652,21 @@ describe('foil match pending action', () => {
       /\.ldj-foil-machine-cell\.is-color-match img\s*\{[^}]*drop-shadow/s,
       'a full match keeps its badge lamp after the lock-on pop ends',
     );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-machine-slot\.is-claimable\s*\{[^}]*border-color:\s*rgba\(253, 224, 71[^}]*ldj-foil-claim-ready/s,
+      'an unclaimed paying tuple gives its socket a distinct claim-ready glow',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /\.ldj-foil-claim-marker\s*\{[^}]*quest-objective-tail-bottom-left\.svg[^}]*pointer-events:\s*auto/s,
+      'the familiar quest waypoint marks the exact clickable winning ticket',
+    );
+    assert.match(
+      DRAWING_CSS,
+      /prefers-reduced-motion:[\s\S]*?\.ldj-foil-machine-slot\.is-claimable,[\s\S]*?\.ldj-foil-claim-marker\s*\{\s*animation:\s*none !important/s,
+      'claimability remains visible without pulsing under reduced motion',
+    );
     el.disconnectedCallback();
   });
 
@@ -2790,12 +2805,30 @@ describe('foil match pending action', () => {
       assert.equal(slots[0].classList.contains('is-match'), true,
         'the claimable foil ticket powers up once the draw is uncovered');
       assert.equal(slots[0].getAttribute('data-score'), 'T8');
+      assert.equal(slots[0].classList.contains('is-claimable'), true,
+        'the exact unclaimed tuple, not a presentation-only match, gets the action glow');
+      assert.equal(slots[0].getAttribute('data-claim-score'), 'T8');
+      const claimTicket = slots[0].querySelector('.ldj-foil-machine-ticket--claimable');
+      assert.equal(claimTicket?.tagName, 'BUTTON',
+        'the whole paying ticket is a native keyboard/click claim control');
+      assert.equal(claimTicket?.getAttribute('type'), 'button');
+      assert.match(claimTicket?.getAttribute('aria-label') || '', /Claim T8 main-spin foil match from ticket 1/);
+      assert.equal(claimTicket?.eventListeners?.click?.length, 1,
+        'the ticket invokes the same direct claim path as Pending');
+      const claimMarker = claimTicket?.querySelector('.ldj-foil-claim-marker');
+      assert.ok(claimMarker, 'the paying ticket carries the quest claim marker');
+      assert.equal(claimMarker.parentElement, claimTicket,
+        'clicking the marker lands inside the same ticket button');
       assert.equal(slots[0].querySelectorAll('.is-color-match').length, 4,
         'all four exact symbol-and-color faces light independently');
       assert.equal(slots[1].classList.contains('is-graded'), true,
         'a sub-threshold ticket is still graded visually after the draw');
       assert.equal(slots[1].classList.contains('is-match'), false,
         'visual scoring does not turn a T3 ticket into a claim');
+      assert.equal(slots[1].classList.contains('is-claimable'), false);
+      assert.equal(slots[1].querySelector('.ldj-foil-claim-marker'), null,
+        'a non-paying grade gets neither the quest marker nor a click target');
+      assert.equal(slots[1].querySelector('.ticket-card--foil')?.tagName, 'SPAN');
       assert.equal(slots[1].querySelectorAll('.is-color-match').length, 1,
         'a 2-point exact symbol-and-color face receives the extra-light state');
       assert.equal(slots[1].querySelectorAll('.is-symbol-match').length, 1,
@@ -2893,6 +2926,12 @@ describe('foil match pending action', () => {
         'the matching claim publishes only after the bonus scratch completes');
       assert.equal(slot.classList.contains('is-match'), false,
         'claim eligibility does not promote the bonus result into the display');
+      assert.equal(slot.classList.contains('is-claimable'), true,
+        'a bonus-only payout still glows as actionable without locking bonus quadrants');
+      const bonusClaimTicket = slot.querySelector('.ldj-foil-machine-ticket--claimable');
+      assert.equal(bonusClaimTicket?.tagName, 'BUTTON');
+      assert.match(bonusClaimTicket?.getAttribute('aria-label') || '', /bonus-spin foil match/);
+      assert.ok(bonusClaimTicket?.querySelector('.ldj-foil-claim-marker'));
       assert.equal(slot.querySelectorAll('.is-color-match').length, 1,
         'the main grade remains the sole durable visual after bonus scratch');
       el.disconnectedCallback();

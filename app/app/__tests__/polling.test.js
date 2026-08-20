@@ -594,7 +594,7 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     let jackpotDay = 20;
     fetchImpl = async (url, opts) => {
       fetchCalls.push({ url, opts });
-      if (url.endsWith('/game/jackpot/last-day')) {
+      if (url.includes('/game/jackpot/last-day')) {
         return {
           ok: true,
           status: 200,
@@ -620,20 +620,91 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     const duplicate = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
     assert.equal(duplicate, first, 'same-day callers share one completion promise');
     const payload = await first;
-    const resultCalls = fetchCalls.filter((call) => call.url.endsWith('/game/jackpot/last-day'));
+    const resultCalls = fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day'));
 
     assert.equal(payload.day, 21);
     assert.equal(resultCalls.length, 1);
     assert.equal(resultCalls[0].opts.cache, 'no-store');
+    assert.match(resultCalls[0].url, /targetDay=21/);
+    assert.match(resultCalls[0].url, /waitMs=30000/);
     assert.equal(storeMod.get('app.lastDay').day, 21);
     assert.equal(_testing.jackpotCompletionDay, 21);
 
     await refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
     assert.equal(
-      fetchCalls.filter((call) => call.url.endsWith('/game/jackpot/last-day')).length,
+      fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day')).length,
       1,
       'a repeated completion notification cannot create another request',
     );
+  });
+
+  test('the 15s game fallback cannot abort a parked target-day result request', async () => {
+    let releaseTarget;
+    let targetStarted;
+    const started = new Promise((resolve) => { targetStarted = resolve; });
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url.includes('targetDay=21')) {
+        targetStarted();
+        await new Promise((resolve) => { releaseTarget = resolve; });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 20,
+            level: 4,
+            summary: null,
+            winners: [],
+            roll1: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      if (url.includes('/game/jackpot/last-day')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 20,
+            level: 4,
+            summary: null,
+            winners: [],
+            roll1: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    fetchCalls = [];
+
+    const completion = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
+    await started;
+    assert.equal(_testing.jackpotCompletionPending, true);
+
+    let fallbackCalls = 0;
+    _testing.publishGameState(
+      { dailyRng: { day: 21 } },
+      () => { fallbackCalls += 1; },
+    );
+    assert.equal(fallbackCalls, 0, 'the normal game tick leaves the parked request alone');
+    assert.equal(
+      fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day')).length,
+      1,
+    );
+
+    releaseTarget();
+    await completion;
+    assert.equal(_testing.jackpotCompletionPending, false);
+    _testing.publishGameState(
+      { dailyRng: { day: 21 } },
+      () => { fallbackCalls += 1; },
+    );
+    assert.equal(fallbackCalls, 1, 'a timed-out stale wait restores the low-rate fallback');
   });
 
   test('successful fetch writes payload to app.lastDay store path', async () => {

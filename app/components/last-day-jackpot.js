@@ -50,7 +50,12 @@ import {
 import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
 import { readResolvedCoinflipStake } from '../app/coinflip.js';
 import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
-import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+import {
+  publishPendingActions,
+  clearPendingActions,
+  reportPendingActionError,
+} from '../app/pending-actions.js';
+import { compactUiError } from '../app/ui-error.js';
 import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 import { normalizeLastDayPayload } from '../app/last-day-state.js';
 import { foilPackDisplayLevel } from '../app/active-level.js';
@@ -1637,6 +1642,67 @@ class LastDayJackpot extends HTMLElement {
     return [String(player || '').toLowerCase(), Number(day), Number(ticketIndex), Number(drawKind)].join(':');
   }
 
+  // One authoritative list feeds both the shared Pending tray and the ticket
+  // mounted in the cabinet. Keeping those surfaces on the same tuples prevents
+  // a merely visual T4-looking presentation, an already-indexed claim, or an
+  // in-flight replay face from receiving a clickable claim marker.
+  #foilClaimCandidates() {
+    const d = this.#foilData;
+    const player = getViewedAddress();
+    if (!player || !d?.present || !Array.isArray(d.lines) || d.lines.length === 0) return [];
+
+    // Each draw is independently spoiler-gated. In particular, Roll 1 cannot
+    // publish a bonus match merely because the bonus packed set already exists.
+    const { mainSet, bonusSet } = this.#activatedFoilSets({ claimableOnly: true });
+    if (mainSet == null && bonusSet == null) return [];
+
+    const claims = Array.isArray(d.claims) ? d.claims : [];
+    const day = Number(this.#pinnedDay);
+    const level = Number(d.level);
+    const candidates = [];
+    d.lines.forEach((rawLine, ticketIndex) => {
+      const line = normalizeFoilLine(rawLine);
+      if (!line) return;
+      for (const grade of claimableDrawGrades(line, mainSet, bonusSet)) {
+        const key = this.#foilClaimKey(player, day, ticketIndex, grade.drawKind);
+        const indexed = claims.some((claim) => (
+          Number(claim?.day) === day
+          && Number(claim?.ticketIndex) === ticketIndex
+          && Number(claim?.drawKind) === grade.drawKind
+        ));
+        if (indexed || this.#locallyClaimedFoilMatches.has(key)) continue;
+        candidates.push({
+          player: String(player),
+          day,
+          level: Number.isFinite(level) ? level : null,
+          ticketIndex,
+          lineTraits: [...line],
+          winningTraits: unpackWinSet(grade.packedSet),
+          grade,
+          key,
+        });
+      }
+    });
+    return candidates.sort((a, b) => (
+      b.grade.score - a.grade.score
+      || a.ticketIndex - b.ticketIndex
+      || a.grade.drawKind - b.grade.drawKind
+    ));
+  }
+
+  #activateFoilClaim(candidate) {
+    if (!candidate || this.#foilClaimBusy) return;
+    // Start the wallet flow synchronously from the click so injected providers
+    // retain user activation. The shared Pending tray remains the one visible
+    // error surface for both entry points.
+    void this.#onFoilClaim(candidate).catch((error) => {
+      reportPendingActionError(compactUiError(
+        error,
+        'Foil match claim did not go through. Try again.',
+      ));
+    });
+  }
+
   // The machine keeps four quiet foil indents around the draw. Owned lines use
   // the same real ticket-card artwork as inventory. Once a draw is uncovered,
   // every face displays its protocol score: miss (0), symbol (1), exact (2).
@@ -1647,15 +1713,33 @@ class LastDayJackpot extends HTMLElement {
       ? this.#foilData.lines.slice(0, slots.length)
       : [];
     const { mainSet, bonusSet } = this.#activatedFoilSets();
+    const claimByTicket = new Map();
+    for (const candidate of this.#foilClaimCandidates()) {
+      // A foil line may pay independently on both draws. Surface its best
+      // outstanding tuple first; claiming it immediately reveals the next one.
+      if (!claimByTicket.has(candidate.ticketIndex)) {
+        claimByTicket.set(candidate.ticketIndex, candidate);
+      }
+    }
 
     let slotted = 0;
     slots.forEach((slot, index) => {
       slot.textContent = '';
-      slot.classList.remove('is-loaded', 'is-graded', 'is-match', 'is-slotting');
+      slot.classList.remove(
+        'is-loaded',
+        'is-graded',
+        'is-match',
+        'is-slotting',
+        'is-claimable',
+        'is-claim-busy',
+      );
       slot.removeAttribute('data-score');
       slot.removeAttribute('data-draw-kind');
+      slot.removeAttribute('data-claim-score');
+      slot.removeAttribute('data-claim-draw-kind');
       const line = normalizeFoilLine(lines[index]);
       if (!line) return;
+      const claimCandidate = claimByTicket.get(index) || null;
 
       const grade = bestGrade(line, mainSet, bonusSet);
       // Roll 2 adds information; it must never extinguish a quadrant already
@@ -1685,14 +1769,31 @@ class LastDayJackpot extends HTMLElement {
         slot.setAttribute('data-score', `T${grade.score}`);
         slot.setAttribute('data-draw-kind', String(grade.drawKind));
       }
+      if (claimCandidate) {
+        slot.classList.add('is-claimable');
+        slot.setAttribute('data-claim-score', `T${claimCandidate.grade.score}`);
+        slot.setAttribute('data-claim-draw-kind', String(claimCandidate.grade.drawKind));
+        if (this.#foilClaimBusy) slot.classList.add('is-claim-busy');
+      }
       if (this.#foilSlottingPending) {
         slot.classList.add('is-slotting');
         slot.style?.setProperty?.('--foil-slot-index', String(index));
         slotted += 1;
       }
 
-      const ticket = document.createElement('span');
+      const ticket = document.createElement(claimCandidate ? 'button' : 'span');
       ticket.className = 'ldj-foil-machine-ticket ticket-card tc-small ticket-card--foil';
+      if (claimCandidate) {
+        const drawLabel = claimCandidate.grade.drawKind === 1 ? 'bonus-spin' : 'main-spin';
+        const claimLabel = `Claim T${claimCandidate.grade.score} ${drawLabel} foil match from ticket ${index + 1}`;
+        ticket.classList.add('ldj-foil-machine-ticket--claimable');
+        ticket.setAttribute('type', 'button');
+        ticket.setAttribute('aria-label', claimLabel);
+        ticket.setAttribute('title', claimLabel);
+        ticket.disabled = this.#foilClaimBusy;
+        if (this.#foilClaimBusy) ticket.setAttribute('aria-busy', 'true');
+        ticket.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
+      }
       applyDgnTicketAccent(ticket, line);
       line.forEach((traitId, quadrant) => {
         const badge = traitToBadge(traitId);
@@ -1730,6 +1831,12 @@ class LastDayJackpot extends HTMLElement {
       flame.decoding = 'async';
       center.appendChild(flame);
       ticket.appendChild(center);
+      if (claimCandidate) {
+        const marker = document.createElement('span');
+        marker.className = 'ldj-foil-claim-marker';
+        marker.setAttribute('aria-hidden', 'true');
+        ticket.appendChild(marker);
+      }
       slot.appendChild(ticket);
     });
     if (slotted > 0) this.#foilSlottingPending = false;
@@ -1737,57 +1844,11 @@ class LastDayJackpot extends HTMLElement {
 
   #renderFoil() {
     this.#renderFoilBackdrop();
-    const d = this.#foilData;
     const player = getViewedAddress();
     const publishEmpty = () => publishPendingActions(FOIL_MATCH_ACTION_SOURCE, []);
-    if (!player || !d || !d.present || !Array.isArray(d.lines) || d.lines.length === 0) {
-      publishEmpty();
-      return;
-    }
-    // Each draw is independently spoiler-gated. In particular, Roll 1 cannot
-    // publish a bonus match merely because the bonus packed set already exists.
-    const { mainSet, bonusSet } = this.#activatedFoilSets({ claimableOnly: true });
-    if (mainSet == null && bonusSet == null) {
-      publishEmpty();
-      return;
-    }
-
-    const claims = Array.isArray(d.claims) ? d.claims : [];
-    const day = Number(this.#pinnedDay);
-    const level = Number(d.level);
-
-    const candidates = [];
-    d.lines.forEach((rawLine, i) => {
-      const line = normalizeFoilLine(rawLine);
-      if (!line) return;
-      for (const grade of claimableDrawGrades(line, mainSet, bonusSet)) {
-        if (grade.score < FOIL_CLAIM_THRESHOLD) continue;
-        const key = this.#foilClaimKey(player, day, i, grade.drawKind);
-        const indexed = claims.some((claim) => (
-          Number(claim?.day) === day
-          && Number(claim?.ticketIndex) === i
-          && Number(claim?.drawKind) === grade.drawKind
-        ));
-        if (indexed || this.#locallyClaimedFoilMatches.has(key)) continue;
-        candidates.push({
-          player: String(player),
-          day,
-          level: Number.isFinite(level) ? level : null,
-          ticketIndex: i,
-          lineTraits: [...line],
-          winningTraits: unpackWinSet(grade.packedSet),
-          grade,
-          key,
-        });
-      }
-    });
-    candidates.sort((a, b) => (
-      b.grade.score - a.grade.score
-      || a.ticketIndex - b.ticketIndex
-      || a.grade.drawKind - b.grade.drawKind
-    ));
+    const candidates = this.#foilClaimCandidates();
     const best = candidates[0];
-    if (!best) {
+    if (!player || !best) {
       publishEmpty();
       return;
     }
@@ -1813,7 +1874,7 @@ class LastDayJackpot extends HTMLElement {
       // safely settle it; a keeper winning the same race is reconciled below.
       autoOpen: true,
       order: 15,
-      chronology: (day * 100_000) + (best.ticketIndex * 2) + best.grade.drawKind,
+      chronology: (best.day * 100_000) + (best.ticketIndex * 2) + best.grade.drawKind,
       run: () => this.#onFoilClaim(best),
     }]);
   }

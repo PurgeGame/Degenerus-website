@@ -486,6 +486,23 @@ function _appendDegenerettePendingLabel(label, item) {
 
 export function lootboxPendingSummary(item) {
   const amount = abbreviatePendingTokenAmounts(String(item?.amountLabel || '').trim());
+  const stacks = (Array.isArray(item?.lootboxStacks) ? item.lootboxStacks : [])
+    .filter((stack) => Number.isInteger(Number(stack?.count)) && Number(stack.count) > 0)
+    .map((stack) => ({
+      ...stack,
+      count: Number(stack.count),
+      label: String(stack.label || 'LUCKBOX').toUpperCase(),
+    }));
+  if (stacks.length > 0) {
+    const total = stacks.reduce((sum, stack) => sum + stack.count, 0);
+    const unit = `${total}× LUCKBOX`;
+    return {
+      amount,
+      unit,
+      stacks,
+      text: `${amount ? `${amount} · ` : ''}${unit.toLowerCase()}`,
+    };
+  }
   // Old locally-persisted rows may still carry "LOOTBOX PURCHASE". Pending is
   // a receipt, not a transaction-history sentence, so normalize every source
   // to the same terse noun.
@@ -494,7 +511,7 @@ export function lootboxPendingSummary(item) {
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase() || 'LUCKBOX';
-  return { amount, unit, text: `${amount ? `${amount} · ` : ''}${unit.toLowerCase()}` };
+  return { amount, unit, stacks, text: `${amount ? `${amount} · ` : ''}${unit.toLowerCase()}` };
 }
 
 function _appendLootboxPendingLabel(label, item) {
@@ -1309,6 +1326,7 @@ class AppRevealTray extends HTMLElement {
       const compact = item.compact === true || compactDegenerette || compactFoilMatch
         || compactDecimator || compactBingo;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
+      const lootboxStacks = compactLootbox ? lootboxPendingSummary(item).stacks : [];
       const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
       const waitingFeedback = compactLootbox && waiting && !busy;
       const passive = item.passive === true;
@@ -1333,6 +1351,7 @@ class AppRevealTray extends HTMLElement {
         resultReady ? 'is-result-ready' : '',
         compact ? 'rrt-action--compact' : '',
         compactLootbox ? 'rrt-action--lootbox-summary' : '',
+        lootboxStacks.length > 0 ? 'rrt-action--lootbox-stacks' : '',
         autoArmed ? 'is-auto-armed' : '',
         waitingFeedback ? 'is-status-clickable' : '',
         ticketOpenReady ? 'rrt-action--ticket-ready' : '',
@@ -1473,6 +1492,39 @@ class AppRevealTray extends HTMLElement {
         pack.appendChild(level);
         pack.appendChild(quantity);
         art.appendChild(pack);
+      } else if (compactLootbox && lootboxStacks.length > 0) {
+        art.classList?.add('rrt-action__art--lootbox-stacks');
+        const manifest = document.createElement('span');
+        manifest.className = 'rrt-lootbox-stacks';
+        for (const stack of lootboxStacks) {
+          const group = document.createElement('span');
+          group.className = 'rrt-lootbox-stack';
+          group.setAttribute('data-box-size', String(stack.label).toLowerCase());
+          group.setAttribute('data-box-count', String(stack.count));
+          const layers = Math.min(3, stack.count);
+          for (let layer = layers - 1; layer >= 0; layer -= 1) {
+            const box = document.createElement('span');
+            box.className = 'rrt-lootbox-mini rrt-lootbox-stack__case';
+            box.style?.setProperty?.('--rrt-lootbox-stack-layer', String(layer));
+            box.style?.setProperty?.('--rrt-lootbox-stack-x', `${layer * 0.12}rem`);
+            box.style?.setProperty?.('--rrt-lootbox-stack-y', `${(2 - layer) * 0.08}rem`);
+            box.setAttribute(
+              'data-lootbox-value-tone',
+              stack.lootboxValueTone || item.lootboxValueTone || 'unknown',
+            );
+            applyLootboxCasePresentation(
+              box,
+              stack.lootboxCaseModel || item.lootboxCaseModel,
+            );
+            group.appendChild(box);
+          }
+          const count = document.createElement('span');
+          count.className = 'rrt-lootbox-stack__count';
+          count.textContent = `×${stack.count}`;
+          group.appendChild(count);
+          manifest.appendChild(group);
+        }
+        art.appendChild(manifest);
       } else if (compactLootbox) {
         const box = document.createElement('span');
         box.className = 'rrt-lootbox-mini';

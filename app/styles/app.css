@@ -6557,6 +6557,7 @@ body.layout-basic .rrt-degenerette-summary__count { color: #fde68a; font-variant
 body.layout-basic .rrt-degenerette-summary__unit { margin-left: -0.08rem; }
 body.layout-basic .rrt-action--lootbox-summary { grid-template-columns: 2.2rem auto; padding: 0.28rem 0.72rem 0.28rem 0.42rem; }
 body.layout-basic .rrt-action--lootbox-summary .rrt-action__art--lootbox { width: 2.2rem; height: 2rem; overflow: visible; background: transparent; box-shadow: none; }
+body.layout-basic .rrt-action--lootbox-stacks { grid-template-columns: auto minmax(0,auto); } body.layout-basic .rrt-action--lootbox-stacks .rrt-action__art--lootbox { width: auto; min-width: 2.2rem; height: 1.75rem; } body.layout-basic .rrt-lootbox-stacks { display: flex; height: 1.75rem; align-items: flex-start; gap: .08rem; } body.layout-basic .rrt-lootbox-stack { position: relative; display: block; width: 1.72rem; height: 1.75rem; } body.layout-basic .rrt-lootbox-stack__case { position: absolute !important; top: var(--rrt-lootbox-stack-y); left: var(--rrt-lootbox-stack-x); width: 1.58rem !important; height: 1.5rem !important; } body.layout-basic .rrt-lootbox-stack[data-box-size="small"] .rrt-lootbox-stack__case { width: 1.42rem !important; } body.layout-basic .rrt-lootbox-stack[data-box-size="large"] { width: 1.92rem; } body.layout-basic .rrt-lootbox-stack[data-box-size="large"] .rrt-lootbox-stack__case { width: 1.78rem !important; } body.layout-basic .rrt-lootbox-stack__count { position: absolute; z-index: 5; top: -.02rem; right: -.02rem; min-width: .82rem; padding: .09rem .14rem; border: 1px solid rgba(253,230,138,.72); border-radius: 999px; background: #160b13; color: #fde68a; font-size: .46rem; font-variant-numeric: tabular-nums; font-weight: 950; line-height: 1; text-align: center; } body.layout-basic .rrt-action--lootbox-stacks .rrt-lootbox-summary { max-width: 11rem; white-space: normal; }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini {
   position: relative;
   isolation: isolate;
@@ -8035,13 +8036,13 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock {
   top: 31.5%;
   display: block;
-  width: 3.7%;
-  height: 44.6%;
+  width: 3.67%;
+  height: 44.53%;
 }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 { left: 22.8%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 33.7%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 62.6%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 { left: 73.5%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 { left: 20.83%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 32.75%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 63.58%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 { left: 75.17%; }
 .rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-1); }
@@ -9256,47 +9257,6 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(5) {
   grid-column: 2 / span 2;
 }
-.rvl-lootbox-box-breakdown {
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-.rvl-lootbox-box-group {
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.58rem;
-  padding: 0.72rem;
-  border: 1px solid rgba(232, 213, 163, 0.2);
-  border-radius: 16px;
-  background: linear-gradient(155deg, rgba(255,255,255,0.045), rgba(17,16,30,0.7));
-}
-.rvl-lootbox-box-group--shared {
-  border-color: rgba(186, 133, 255, 0.34);
-  background: linear-gradient(155deg, rgba(141,78,219,0.12), rgba(17,16,30,0.76));
-}
-.rvl-lootbox-box-group__title {
-  color: #e8d5a3;
-  font-size: 0.7rem;
-  font-weight: 900;
-  letter-spacing: 0.13em;
-  line-height: 1.25;
-  text-align: center;
-  text-transform: uppercase;
-}
-.rvl-lootbox-box-group--shared .rvl-lootbox-box-group__title { color: #d8b5ff; }
-.rvl-lootbox-box-group__empty {
-  padding: 0.5rem;
-  color: rgba(226,222,239,0.62);
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  text-align: center;
-}
-.rvl-lootbox-box-group > .rvl-summary-grid { width: 100%; }
 .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini {
   --rvl-card-launch-x: 0%;
   --rvl-card-launch-mid-x: 0%;

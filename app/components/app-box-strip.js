@@ -32,6 +32,7 @@ import {
   canOpenLootbox,
   readLootboxIndexCompletion,
   readLootboxPurchaseReceipt,
+  unpackBoxOrder,
 } from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
 import {
@@ -111,6 +112,45 @@ function _boxOrders(values, fallback = null) {
     } catch (_e) { /* old/malformed cache row */ }
   }
   return orders;
+}
+
+function _boxStacks(box) {
+  const totals = { small: 0, medium: 0, large: 0 };
+  const custom = new Map();
+  for (const packed of _boxOrders(box?.boxOrders, box?.boxOrder)) {
+    let order;
+    try { order = unpackBoxOrder(packed); } catch (_e) { continue; }
+    totals.small += Number(order.small || 0);
+    totals.medium += Number(order.medium || 0);
+    totals.large += Number(order.large || 0);
+    if (Number(order.customCount || 0) > 0 && BigInt(order.customSizeWei || 0) > 0n) {
+      const key = String(order.customSizeWei);
+      custom.set(key, (custom.get(key) || 0) + Number(order.customCount));
+    }
+  }
+  const price = _boxValuePresentation(box).ticketPriceWei;
+  const stacks = [];
+  const append = (key, label, count, amountWei, forcedModel = null) => {
+    if (!Number.isInteger(count) || count <= 0) return;
+    const value = lootboxValuePresentation(amountWei, price);
+    stacks.push({
+      key,
+      label,
+      count,
+      amountWei: amountWei == null ? null : String(amountWei),
+      amountLabel: amountWei == null ? null : `${displayEth(amountWei)} ETH`,
+      lootboxValueTone: value.tone,
+      lootboxCaseModel: forcedModel || value.model,
+      lootboxTicketUnitsLabel: value.unitsLabel,
+    });
+  };
+  append('small', 'SMALL', totals.small, price, 'small');
+  append('medium', 'MEDIUM', totals.medium, price == null ? null : price * 5n, 'medium');
+  append('large', 'LARGE', totals.large, price == null ? null : price * 25n, 'large');
+  for (const [amount, count] of custom) {
+    append(`custom:${amount}`, 'CUSTOM', count, BigInt(amount));
+  }
+  return stacks;
 }
 
 function _firstPositiveAmount(...values) {
@@ -1501,6 +1541,7 @@ class AppBoxStrip extends HTMLElement {
       lootboxValueTone: value.tone,
       lootboxCaseModel: value.model,
       lootboxTicketUnitsLabel: value.unitsLabel,
+      lootboxStacks: _boxStacks(box),
       label: _boxLabel(box),
       lootboxLabel: _boxLabel(box, true),
       shortLabel: box.optimistic

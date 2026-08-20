@@ -401,12 +401,26 @@ describe('app-box-strip', () => {
       player: ADDR,
       transactionHash: '0xcombo',
       boxOrder: comboOrder,
+      ticketPriceWei: 10_000_000_000n,
     });
     await tick();
 
     const stored = JSON.parse(localStorage.getItem(KEY));
     assert.deepEqual(stored[0].boxOrders, [String(comboOrder)],
       'the exact Small/Medium/Large counts remain attached to the shared RNG row');
+    const pending = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:27');
+    assert.deepEqual(
+      pending.lootboxStacks.map((stack) => ({
+        label: stack.label, count: stack.count, model: stack.lootboxCaseModel,
+      })),
+      [
+        { label: 'SMALL', count: 1, model: 'small' },
+        { label: 'MEDIUM', count: 1, model: 'medium' },
+        { label: 'LARGE', count: 2, model: 'large' },
+      ],
+      'Pending exposes one size-labelled visual stack per tier without duplicating the action',
+    );
 
     el.disconnectedCallback();
     const restored = instantiate({ trayOnly: true });

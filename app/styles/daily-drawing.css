@@ -1311,6 +1311,106 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
   100% { opacity: 1; filter: none; }
 }
 
+/* A paying, unclaimed tuple is an action—not just another grading state. The
+   socket gets a warm claim-ready halo while its quadrants continue to show
+   only the main draw's durable score. That distinction matters for a
+   bonus-only payout: the ticket can honestly invite a claim without locking
+   Roll 2's faces into the cabinet. */
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-claimable {
+  border-color: rgba(253, 224, 71, 0.94);
+  box-shadow:
+    inset 0 0 0 1px rgba(254, 249, 195, 0.3),
+    inset 0 0 12px rgba(34, 197, 94, 0.2),
+    0 0 7px rgba(74, 222, 128, 0.7),
+    0 0 19px rgba(250, 204, 21, 0.5);
+  animation: ldj-foil-claim-ready 1.25s ease-in-out infinite alternate;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-slot.is-match.is-claimable::after {
+  right: auto;
+  left: -0.28rem;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-ticket--claimable {
+  position: relative;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  filter:
+    brightness(1.08)
+    drop-shadow(0 0 5px rgba(74, 222, 128, 0.5))
+    drop-shadow(0 0 9px rgba(250, 204, 21, 0.32));
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-ticket--claimable:hover,
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-ticket--claimable:focus-visible {
+  filter:
+    brightness(1.18)
+    drop-shadow(0 0 7px rgba(74, 222, 128, 0.72))
+    drop-shadow(0 0 13px rgba(250, 204, 21, 0.48));
+  transform: scale(1.025);
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-ticket--claimable:focus-visible {
+  outline: 2px solid rgba(253, 224, 71, 0.96);
+  outline-offset: 2px;
+}
+
+/* Reuse the game's quest waypoint so claimable foil work reads like every
+   other actionable objective. It lives inside the ticket button: clicking the
+   icon or anywhere on the card therefore invokes the exact same claim tuple. */
+body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker {
+  position: absolute;
+  z-index: 7;
+  top: -0.52rem;
+  right: -0.48rem;
+  display: block;
+  width: 1.12rem;
+  height: 1.12rem;
+  background: url('/app/assets/quest-objective-tail-bottom-left.svg') center / contain no-repeat;
+  filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.78));
+  pointer-events: auto;
+  animation: ldj-foil-claim-marker 0.92s ease-in-out infinite alternate;
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-claim-busy {
+  cursor: wait;
+  animation: none;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-slot.is-claim-busy .ldj-foil-machine-ticket--claimable {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-slot.is-claim-busy .ldj-foil-claim-marker {
+  opacity: 0.64;
+  filter: grayscale(0.35) drop-shadow(0 0 3px rgba(250, 204, 21, 0.5));
+  animation: none;
+}
+
+@keyframes ldj-foil-claim-ready {
+  from { filter: brightness(0.98); }
+  to { filter: brightness(1.12); }
+}
+
+@keyframes ldj-foil-claim-marker {
+  from { transform: translateY(0) scale(0.96); }
+  to { transform: translateY(-1px) scale(1.05); }
+}
+
 /* The centre never comes up with a hit. The quadrant is the claim; the centre
    is structure. It used to inherit the card's group fade and therefore rose
    with the card, putting a second bright object dead centre announcing the
@@ -1488,6 +1588,13 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
     transition: none !important;
   }
   body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell img {
+    transition: none !important;
+  }
+  body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-claimable,
+  body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker {
+    animation: none !important;
+  }
+  body.layout-basic .jackpot-hero__machine .ldj-foil-machine-ticket--claimable {
     transition: none !important;
   }
   body.layout-basic .jackpot-hero__machine .ldj-foil-lane path {

@@ -65,15 +65,15 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   large: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v14-locked-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v14-retracted-front.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v14-top.webp',
-    innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v14-inner-lid.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-locked-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-retracted-front.webp',
+    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-top.webp',
+    innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v15-inner-lid.webp',
     deadbolts: Object.freeze([
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v14-deadbolt-1.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v14-deadbolt-2.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v14-deadbolt-3.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v14-deadbolt-4.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-1.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-2.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-3.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-4.webp',
     ]),
   }),
 });
@@ -84,21 +84,22 @@ const LOOTBOX_CASE_GEOMETRY = Object.freeze({
     shellInset: '15.3%', innerLidInset: '9.7%', innerLidWidth: '80.6%',
     badgeClipFront: 'ellipse(5.7% 12.8% at 50% 59.4%)',
     badgeClipTop: 'ellipse(7.4% 6.5% at 50% 68.1%)',
-    priceTop: '28%', priceHeight: '18%', priceWidth: '44%',
+    // priceTop is the panel CENTER because CSS translates the label by -50%.
+    priceTop: '36.7%', priceHeight: '20%', priceWidth: '44%',
   }),
   medium: Object.freeze({
     seam: '37.1%', badgeTop: '61.6%', badgeSize: '12.35%',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
     badgeClipFront: 'ellipse(6.3% 14% at 50% 61.6%)',
     badgeClipTop: 'ellipse(7.5% 6.3% at 50% 77.9%)',
-    priceTop: '27%', priceHeight: '19%', priceWidth: '45%',
+    priceTop: '37.2%', priceHeight: '25%', priceWidth: '45%',
   }),
   large: Object.freeze({
     seam: '43.8%', badgeTop: '61.8%', badgeSize: '11.85%',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
     badgeClipFront: 'ellipse(6.1% 13.5% at 50% 61.8%)',
     badgeClipTop: 'ellipse(7.3% 6.4% at 50% 72.5%)',
-    priceTop: '20%', priceHeight: '19%', priceWidth: '42%',
+    priceTop: '28.7%', priceHeight: '23%', priceWidth: '42%',
   }),
 });
 
