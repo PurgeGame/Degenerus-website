@@ -1887,8 +1887,14 @@ describe('reveal-overlay element', () => {
       'the matching lower crop preserves the physical opening beat');
     assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-clasp\s*\{[^}]*display:\s*none;/s,
       'the opener uses the complete medallion in the case art without a second circular overlay');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-body::after\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*clip-path:\s*ellipse\(10% 25% at 50% 43\.2%\)/s,
+      'the opener restores the built-in red-black-white medallion above the tier wash');
     assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp/s,
       'small pending boxes reuse the same recognizable silhouette');
+    assert.match(APP_CSS,
+      /\.bxs-chip-art::before\s*\{[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*clip-path:\s*ellipse\(10% 16\.5% at 50% 63\.5%\)/s,
+      'the compact box strip keeps the standard Degenerus medallion untinted too');
     assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
       'ticket-price bands publish visibly distinct case colors');
     assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid::before\s*\{[^}]*mix-blend-mode:\s*color[^}]*mask:/s,

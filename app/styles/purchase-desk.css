@@ -2320,6 +2320,19 @@ body.layout-basic .app-decimator-panel .dec-box-card__art::after {
   mask: url('/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp') center / contain no-repeat;
 }
 
+/* Repaint the case's own medallion above the tier wash. This is the exact
+   source crop, not a second badge: the shell can read green/purple/gold while
+   the front always keeps the standard red / black / white Degenerus mark. */
+body.layout-basic .app-decimator-panel .dec-box-card__art::before {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  background: url('/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp') center / contain no-repeat;
+  clip-path: ellipse(11.8% 6.8% at 50% 78.9%);
+  content: '';
+  pointer-events: none;
+}
+
 body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value {
   position: absolute;
   z-index: 4;

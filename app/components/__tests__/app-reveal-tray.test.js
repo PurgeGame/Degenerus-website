@@ -273,6 +273,9 @@ describe('<app-reveal-tray>', () => {
     assert.doesNotMatch(css,
       /\.rrt-lootbox-mini::before\s*\{[^}]*flame-logo\.svg/s,
       'the tiny front view uses the medallion already baked into the case art');
+    assert.match(css,
+      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*clip-path:\s*ellipse\(10% 16\.5% at 50% 63\.5%\)/s,
+      'Pending restores the original red-black-white medallion above the value-tier wash');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 

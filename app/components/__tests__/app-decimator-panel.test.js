@@ -2700,6 +2700,9 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-box-card__art::before\s*\{[^}]*flame-logo\.svg/s,
       'the case keeps its built-in front medallion instead of stacking a second logo over it');
     assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card__art::before\s*\{[^}]*z-index:\s*3;[^}]*degenerus-lootbox-case-v5-top\.webp[^}]*clip-path:\s*ellipse\(11\.8% 6\.8% at 50% 78\.9%\)/s,
+      'the buy widget restores the case art over its own medallion so tier color never tints the red-black-white logo');
+    assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-card__art > \.dec-box-value\s*\{[^}]*top:\s*37\.25%;[^}]*display:\s*grid;[^}]*width:\s*44%;[^}]*height:\s*20%;[^}]*place-items:\s*center;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
       'the live price sits inside the broad display engineered into the top lid');
     assert.match(PURCHASE_DESK_CSS,
