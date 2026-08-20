@@ -339,10 +339,10 @@ test('the Daily Drawing is a responsive branded attraction rather than an empty 
   assert.match(INDEX_SRC, /styles\/daily-drawing\.css/);
   assert.match(
     INDEX_SRC,
-    /jackpot-hero__draw-mark[^>]*flame-center-silver\.svg[^>]*width="38" height="54"/s,
+    /jackpot-hero__draw-mark[^>]*\/app\/assets\/jackpot\/flame-center-silver\.svg[^>]*width="38" height="54"/s,
   );
   assert.equal(
-    existsSync(new URL('../../../whitepaper/flame-center-silver.svg', import.meta.url)),
+    existsSync(new URL('../../assets/jackpot/flame-center-silver.svg', import.meta.url)),
     true,
     'the marquee uses the real protocol flame instead of a second custom emblem',
   );
