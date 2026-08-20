@@ -64,6 +64,7 @@ const {
   start,
   stop,
   refreshForDayShift,
+  refreshJackpotAfterChainCompletion,
   abortAllInflight,
   handleVisibilityChange,
   _testing,
@@ -564,6 +565,77 @@ describe('abortAllInflight stub for Phase 58', () => {
 // ===========================================================================
 
 describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
+  test('a completion-triggered read bypasses browser HTTP cache', async () => {
+    let captured = null;
+    fetchImpl = async (url, opts) => {
+      captured = { url, opts };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          day: 9,
+          level: 2,
+          summary: null,
+          winners: [],
+          roll1: { day: 9, level: 2, purchaseLevel: null, wins: [] },
+          roll2: { day: 9, level: 2, purchaseLevel: null, wins: [] },
+          status: 'resolved-no-winners',
+        }),
+      };
+    };
+
+    await _testing.pollLastDay(new AbortController().signal, { force: true });
+
+    assert.ok(captured.url.endsWith('/game/jackpot/last-day'));
+    assert.equal(captured.opts.cache, 'no-store');
+  });
+
+  test('the chain completion edge coalesces to one result request per day', async () => {
+    let jackpotDay = 20;
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url.endsWith('/game/jackpot/last-day')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: jackpotDay,
+            level: 4,
+            summary: null,
+            winners: [],
+            roll1: { day: jackpotDay, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: jackpotDay, level: 4, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    fetchCalls = [];
+    jackpotDay = 21;
+
+    const first = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
+    const duplicate = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
+    assert.equal(duplicate, first, 'same-day callers share one completion promise');
+    const payload = await first;
+    const resultCalls = fetchCalls.filter((call) => call.url.endsWith('/game/jackpot/last-day'));
+
+    assert.equal(payload.day, 21);
+    assert.equal(resultCalls.length, 1);
+    assert.equal(resultCalls[0].opts.cache, 'no-store');
+    assert.equal(storeMod.get('app.lastDay').day, 21);
+    assert.equal(_testing.jackpotCompletionDay, 21);
+
+    await refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
+    assert.equal(
+      fetchCalls.filter((call) => call.url.endsWith('/game/jackpot/last-day')).length,
+      1,
+      'a repeated completion notification cannot create another request',
+    );
+  });
+
   test('successful fetch writes payload to app.lastDay store path', async () => {
     fetchImpl = async (url) => {
       if (url.endsWith('/game/jackpot/last-day')) {

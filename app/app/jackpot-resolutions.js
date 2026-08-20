@@ -18,6 +18,7 @@ const DECIMATOR_RESOLUTION_ABI = [
   'error DecAlreadyClaimed()',
   'error DecNotWinner()',
   'error RngNotReady()',
+  'error NoWork()',
 ];
 
 const BAF_RESOLUTION_ABI = [
@@ -46,12 +47,13 @@ export function __resetResolutionFactoriesForTest() {
 }
 
 function _readerProvider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
   if (!_readProvider) {
     _readProvider = sharedReadProvider();  // C15: shared batched read stream
   }
-  return _readProvider;
+  // These are permissionless, explicit-player reads. Keep expected claim
+  // reverts off the injected wallet's console; the wallet remains a fallback
+  // only when no public reader is configured.
+  return _readProvider || getProvider();
 }
 
 function _decimatorContract(runner) {
@@ -175,6 +177,7 @@ export async function readDecimatorClaimState({ player, level } = {}) {
   if (name === 'DecNotWinner') return { state: 'lost', errorName: name };
   if (name === 'DecClaimInactive') return { state: 'pending', errorName: name };
   if (name === 'RngNotReady') return { state: 'waiting', errorName: name };
+  if (name === 'NoWork') return { state: 'pending', errorName: name };
   return { state: 'unknown', errorName: name };
 }
 

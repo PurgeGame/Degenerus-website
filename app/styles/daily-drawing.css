@@ -32,6 +32,72 @@ body.layout-basic .jackpot-hero__machine {
     #03100b;
 }
 
+/* The live board-current layer mirrors only the four copper traces that leave
+   the LED key and terminate beneath the draw widget. It stays page-owned and
+   inline so the rolling state and reduced-motion preference can control the
+   packets directly; no isolated SVG document is left animating after a roll.
+   Every path is authored key-first, so a decreasing dash offset sends current
+   upward from the button into the board. */
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 2px rgba(111, 168, 255, 0.24));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current use {
+  fill: none;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__rail {
+  opacity: 0.24;
+}
+
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__rail use {
+  stroke-width: 2.1;
+}
+
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__packet use {
+  stroke-width: 2.6;
+  stroke-opacity: 0.92;
+  stroke-dasharray: 7 27;
+}
+
+body.layout-basic .jackpot-hero__machine:has(
+  replay-panel .replay-reveal-btn.is-spinning
+) > .jackpot-board-current {
+  opacity: 0.62;
+}
+
+body.layout-basic .jackpot-hero__machine:has(
+  replay-panel .replay-reveal-btn.is-spinning
+) > .jackpot-board-current .jackpot-board-current__packet use {
+  animation: jackpot-board-current-flow 1.44s linear infinite;
+}
+
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__packet use:nth-child(2) {
+  animation-delay: -90ms;
+}
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__packet use:nth-child(3) {
+  animation-delay: -180ms;
+}
+body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__packet use:nth-child(4) {
+  animation-delay: -270ms;
+}
+
+@keyframes jackpot-board-current-flow {
+  to { stroke-dashoffset: -34; }
+}
+
 /* The board is a ticket lying on the machine, so it needs contact with it: a
    hard dark rim, a warm bounce off the plate, and a shadow under its lower
    edge. Colour inside the quadrants is game state and is left alone. */
@@ -49,53 +115,6 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-ticket.replay-tick
     0 0 0 2px rgba(255, 233, 163, 0.22),
     0 0 30px rgba(212, 175, 55, 0.42),
     0 12px 22px -12px rgba(0, 0, 0, 0.95);
-}
-
-/* One state-selected current sheet sits over the static copper. At rest it is
-   dark. During a spin, power travels from the lit VRF module into the physical
-   key and then fans up all four lanes into the jackpot processor. Ticket work
-   uses only the short module-to-key sheet. */
-body.layout-basic .jackpot-hero__machine::before {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  background: url('/app/assets/jackpot/daily-drawing-board-current-v6.svg') center / 100% 100% no-repeat;
-  content: '';
-  filter: drop-shadow(0 0 3px rgba(103, 232, 249, 0.2));
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 180ms ease;
-}
-
-body.layout-basic .jackpot-hero__machine:has(
-  replay-panel .replay-reveal-btn.is-processing[data-jp-rng-requested]
-)::before {
-  background-image: url('/app/assets/jackpot/daily-drawing-button-current-v1.svg');
-  opacity: 0.5;
-  animation: jackpot-board-current-breathe 2.4s ease-in-out infinite;
-}
-
-/* The drawing itself is the one moment the main board is under load, and the
-   load is randomness the VRF module just delivered. The current is strongest
-   here; it visibly enters the key before the key distributes it through all
-   four processor lanes, so the light reads as one physical power sequence.
-
-   "Strongest" is still 0.5-0.66, not the old 0.82-1.0. The extra motion comes
-   from direction and staging rather than a brighter glow, so the circuitry
-   reads as the machine working without becoming louder than the reels or key. */
-body.layout-basic .jackpot-hero__machine:has(replay-panel .replay-reveal-btn.is-spinning)::before {
-  background-image: url('/app/assets/jackpot/daily-drawing-board-current-v6.svg');
-  opacity: 0.58;
-  animation: jackpot-board-current-drive 2.6s ease-in-out infinite;
-}
-
-@keyframes jackpot-board-current-breathe {
-  50% { opacity: 0.46; filter: drop-shadow(0 0 4px rgba(103, 232, 249, 0.2)); }
-}
-
-@keyframes jackpot-board-current-drive {
-  0%, 100% { opacity: 0.5; filter: drop-shadow(0 0 3px rgba(120, 172, 255, 0.2)); }
-  50% { opacity: 0.66; filter: drop-shadow(0 0 5px rgba(120, 172, 255, 0.32)); }
 }
 
 body.layout-basic .jackpot-hero__draw-title {
@@ -175,12 +194,7 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls {
   border-radius: 5px;
   outline: 1px solid rgba(160, 119, 45, 0.42);
   outline-offset: 1px;
-  background:
-    radial-gradient(circle at 6px 6px, #858c88 0 1px, #171a18 1.2px 2px, transparent 2.2px),
-    radial-gradient(circle at calc(100% - 6px) 6px, #858c88 0 1px, #171a18 1.2px 2px, transparent 2.2px),
-    radial-gradient(circle at 6px calc(100% - 6px), #858c88 0 1px, #171a18 1.2px 2px, transparent 2.2px),
-    radial-gradient(circle at calc(100% - 6px) calc(100% - 6px), #858c88 0 1px, #171a18 1.2px 2px, transparent 2.2px),
-    linear-gradient(180deg, #343936 0%, #171b19 19%, #080a09 58%, #1a1e1b 100%);
+  background: linear-gradient(180deg, #343936 0%, #171b19 19%, #080a09 58%, #1a1e1b 100%);
   box-shadow:
     inset 0 1px 0 rgba(225, 232, 228, 0.18),
     inset 0 -1px 0 #010201,
@@ -232,71 +246,117 @@ body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink {
   box-sizing: border-box;
   width: var(--jp-chainlink-size);
   height: var(--jp-chainlink-size);
-  border: 1px solid #3e4b42;
-  border-radius: 2px;
-  /* A matte IC/power package, not another UI tile. The faint diagonal grain is
-     moulded epoxy; the pin frame below physically solders it into the board.
-     It stays opaque because the routed copper terminates under the package. */
+  border: 1px solid #2a312e;
+  border-radius: 7px;
+  /* A smooth satin-plastic face, not another UI tile. One very soft lift at
+     the upper edge describes the shell without turning its top into a glossy
+     hotspot. It stays opaque because the routed copper terminates under the
+     package. */
   background:
-    repeating-linear-gradient(135deg, rgba(201, 218, 207, 0.018) 0 1px, transparent 1px 4px),
-    linear-gradient(180deg, #101713 0%, #050906 100%);
+    radial-gradient(110% 38% at 22% -18%, rgba(255, 255, 255, 0.04), transparent 72%),
+    linear-gradient(155deg, #151816 0%, #090c0b 48%, #020303 100%);
   box-shadow:
-    inset 0 1px 0 rgba(204, 220, 209, 0.07),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.92),
-    0 1px 2px rgba(0, 0, 0, 0.82);
+    inset 0 1px 0 rgba(240, 248, 244, 0.055),
+    inset 1px 0 0 rgba(223, 233, 228, 0.02),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.95),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(0, 0, 0, 0.72),
+    0 3px 6px -2px rgba(0, 0, 0, 0.92);
   pointer-events: none;
   filter: none;
   transform: translateY(-50%);
   transition: border-color 180ms ease, filter 220ms ease;
 }
 
-/* Short pewter solder contacts mount the package without drawing an orange
-   sunburst around the logo. Two contacts per edge are enough to read as real
-   hardware at phone scale; the left pair lands on the source-to-key nets. */
+/* Short gunmetal solder contacts mount the package without drawing an orange
+   sunburst around the logo. A shared metal ramp makes them catch the same light
+   as one physical lead frame instead of reading as flat grey tabs. Two contacts
+   per edge are enough at phone scale; the left pair lands on the source-to-key
+   nets. */
 body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__pins {
   position: absolute;
   z-index: -1;
-  inset: -0.12rem;
-  background:
-    repeating-linear-gradient(90deg, transparent 0 18%, #5e6a64 18% 26%, transparent 26% 50%) top / 100% 0.15rem no-repeat,
-    repeating-linear-gradient(90deg, transparent 0 18%, #5e6a64 18% 26%, transparent 26% 50%) bottom / 100% 0.15rem no-repeat,
-    repeating-linear-gradient(180deg, transparent 0 18%, #5e6a64 18% 26%, transparent 26% 50%) left / 0.15rem 100% no-repeat,
-    repeating-linear-gradient(180deg, transparent 0 18%, #5e6a64 18% 26%, transparent 26% 50%) right / 0.15rem 100% no-repeat;
+  inset: -0.11rem;
+  background: linear-gradient(145deg, #8a948f 0%, #46504b 38%, #171d1a 100%);
+  -webkit-mask:
+    repeating-linear-gradient(90deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) top / 100% 0.13rem no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) bottom / 100% 0.13rem no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) left / 0.13rem 100% no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) right / 0.13rem 100% no-repeat;
+  mask:
+    repeating-linear-gradient(90deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) top / 100% 0.13rem no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) bottom / 100% 0.13rem no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) left / 0.13rem 100% no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 18%, #000 18% 27%, transparent 27% 50%) right / 0.13rem 100% no-repeat;
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.78));
-  opacity: 0.52;
+  opacity: 0.68;
   pointer-events: none;
   transition: filter 180ms ease, opacity 180ms ease;
 }
 
-/* Two quiet copper nets bridge the physical gap from the VRF module back into
-   the key bezel. Each lane has one small plated node at either end; midpoint
-   vias made this short connection read like a second control. Ticket work
-   lights only this bridge. A jackpot spin launches through it first, before
-   the four board lanes above the key pick up the same pulse. */
-body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink::after {
+/* Exactly two dot-free PCB traces span the exposed gap between the devices.
+   This component-relative pair replaces the old fixed-coordinate SVG feed,
+   which drifted away from the module at narrow widths and left two orphaned
+   stubs beside the button. The colour, opacity and quiet halo are copied from
+   the rest of the board copper. Both traces disappear beneath the opaque
+   housings between the module's square mounting contacts rather than plugging
+   visibly into those contacts or crossing the button face. */
+body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__lead {
   position: absolute;
   z-index: -2;
-  top: 50%;
-  right: calc(100% - 0.1rem);
-  width: calc(var(--jp-chainlink-gap) + 0.48rem);
-  height: 1rem;
-  background:
-    radial-gradient(circle at 0.14rem 25%, #ad833d 0 0.045rem, #07100c 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at calc(100% - 0.14rem) 25%, #ad833d 0 0.045rem, #07100c 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at 0.14rem 75%, #ad833d 0 0.045rem, #07100c 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at calc(100% - 0.14rem) 75%, #ad833d 0 0.045rem, #07100c 0.055rem 0.09rem, transparent 0.1rem),
-    linear-gradient(90deg, transparent 0.1rem, rgba(190, 139, 55, 0.38) 0.1rem calc(100% - 0.1rem), transparent calc(100% - 0.1rem)) 0 25% / 100% 1px no-repeat,
-    linear-gradient(90deg, transparent 0.1rem, rgba(190, 139, 55, 0.38) 0.1rem calc(100% - 0.1rem), transparent calc(100% - 0.1rem)) 0 75% / 100% 1px no-repeat;
-  content: '';
-  opacity: 0.46;
+  right: 100%;
+  width: var(--jp-chainlink-gap);
+  height: 1px;
+  background: #b98a38;
+  box-shadow: 0 0 3px rgba(208, 163, 76, 0.05);
+  opacity: 0.27;
   pointer-events: none;
   transform: translateY(-50%);
+  transition: filter 180ms ease, background-color 180ms ease, opacity 180ms ease;
+}
+
+body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__lead--top {
+  top: 38%;
+}
+
+body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__lead--bottom {
+  top: 62%;
+}
+
+/* Waiting for VRF is dormant copper. Only the live roll energises this pair:
+   one blue-white packet travels from the right-hand Chainlink package toward
+   the key, with a soft tail that reads as current rather than marching dots. */
+body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
+  > .replay-reveal-btn.is-spinning
+) .jackpot-chainlink__lead {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(52, 79, 137, 0.46) 0 8px,
+      rgba(96, 148, 255, 0.72) 8px 12px,
+      #eef5ff 12px 14px,
+      #8bb5ff 14px 18px,
+      rgba(52, 79, 137, 0.46) 18px 28px
+    ) 0 0 / 28px 1px;
+  filter: drop-shadow(0 0 1.8px rgba(126, 170, 255, 0.54));
+  opacity: 0.82;
+  animation: jackpot-chainlink-lead-flow 720ms linear infinite;
+}
+
+body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
+  > .replay-reveal-btn.is-spinning
+) .jackpot-chainlink__lead--bottom {
+  animation-delay: -180ms;
+}
+
+@keyframes jackpot-chainlink-lead-flow {
+  to { background-position: -28px 0; }
 }
 
 /* The standby mark: the whole hexagon, dim, always legible as the logo. */
 body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink::before {
   position: absolute;
-  inset: 0;
+  inset: 5%;
   /* Flat, for the same reason the lit cells are. A top-to-bottom ramp made the
      upper sides of the resting mark about four times brighter than the lower
      ones, which is more spread than lit-vs-dim itself carries, so an unlit top
@@ -306,6 +366,9 @@ body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink::before
   -webkit-mask: url('/symbols/crypto_05_chainlink_blue.svg') center / contain no-repeat;
   mask: url('/symbols/crypto_05_chainlink_blue.svg') center / contain no-repeat;
   opacity: 0.68;
+  filter:
+    drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.88))
+    drop-shadow(0 1px 0 rgba(77, 105, 166, 0.14));
 }
 
 /* The letters themselves are the module's white LED — no badge or white disc
@@ -391,7 +454,7 @@ body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink--right 
    The fill is flat so a link reads equally bright wherever it sits. */
 body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__cell {
   position: absolute;
-  inset: 0;
+  inset: 5%;
   box-sizing: border-box;
   width: auto;
   height: auto;
@@ -512,16 +575,11 @@ body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__cell--
   --jp-link-b-stop: 51.82%;
 }
 
-/* One self-contained shorthand per link, delay included. A shared rule that
-   set `animation` on all five and then handed each link its delay separately
-   never worked: `.jackpot-chainlink__cell:not(.jackpot-chainlink__cell--6)`
-   outspecifies `.jackpot-chainlink__cell--N`, so the shorthand's implicit
-   `animation-delay: 0s` won every time and all five links lit at once. The
-   chase is the whole point of the instrument, so the delay now travels with
-   the animation it belongs to and cannot be overridden out from under it.
-   Five links across the expected ~20s ten-confirmation wait; the sixth is
-   never on this clock. `data-jp-stage='rng'` alone begins at the day boundary,
-   so the independent request-evidence hook is mandatory: no request, no chase. */
+/* Restore the original pending-RNG fill: a real request assembles five sides
+   once, in clockwise order, across the expected confirmation window. Each
+   completed side stays on; this is elapsed-wait progress, not an endless
+   spinner. The sixth side belongs to the arrival event and cannot be filled
+   merely because more time passed. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   > .replay-reveal-btn.is-processing[data-jp-rng-requested][data-jp-stage='rng']
 ) .jackpot-chainlink__cell--1 { animation: jackpot-chainlink-cell-charge 240ms ease-out 0s both; }
@@ -538,14 +596,9 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   > .replay-reveal-btn.is-processing[data-jp-rng-requested][data-jp-stage='rng']
 ) .jackpot-chainlink__cell--5 { animation: jackpot-chainlink-cell-charge 240ms ease-out 16s both; }
 
-/* The sixth link joins once randomness has actually landed, closing the ring.
-   Elapsed time can never light it: only a real rng-arrived stage or the live
-   jackpot drawing completes the mark. Later ticket work leaves it dormant.
-   The lamp stays deliberately below the SPIN key: the key is the only thing on
-   this board allowed to read as the bright control.
-   Mere clickability never closes the ring: an enabled idle key is not a VRF
-   load, and an armed Mine FLIP crank must not falsely report that randomness
-   has landed while its stage is still `rng`. */
+/* Arrival closes the sixth side. While the resolved word is being consumed,
+   the logo remains fully lit beside the white VRF legend; motion belongs to
+   the two outbound leads and the board routes, not to another ring spinner. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   > .replay-reveal-btn.is-processing[data-jp-stage='rng-arrived']
 ) .jackpot-chainlink__cell,
@@ -554,6 +607,8 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
 ) .jackpot-chainlink__cell {
   background: radial-gradient(circle at 49.82% 49.64%, #a8c2fb 0%, #4d75df 62%, #24499f 100%);
   opacity: 1;
+  filter: none;
+  animation: none;
 }
 
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
@@ -579,49 +634,12 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
     0 0 2px #fff,
     0 0 6px rgba(255, 255, 255, 0.96),
     0 0 12px rgba(92, 143, 255, 0.9);
-  animation: jackpot-vrf-core 900ms ease-in-out infinite alternate;
+  animation: jackpot-vrf-core 1.44s cubic-bezier(0.2, 0.72, 0.26, 1) infinite;
 }
 
-/* Ticket processing terminates at the key; jackpot time passes through it.
-   Both states energise the same restrained one-pixel bridge, while only the
-   jackpot state continues into the four-way processor fanout. */
-body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
-  > .replay-reveal-btn.is-processing[data-jp-rng-requested]
-) .jackpot-chainlink::after,
-body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
-  > .replay-reveal-btn.is-spinning
-) .jackpot-chainlink::after {
-  background:
-    radial-gradient(circle at 0.14rem 25%, #eef5ff 0 0.045rem, #668bd4 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at calc(100% - 0.14rem) 25%, #eef5ff 0 0.045rem, #668bd4 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at 0.14rem 75%, #eef5ff 0 0.045rem, #668bd4 0.055rem 0.09rem, transparent 0.1rem),
-    radial-gradient(circle at calc(100% - 0.14rem) 75%, #eef5ff 0 0.045rem, #668bd4 0.055rem 0.09rem, transparent 0.1rem),
-    linear-gradient(270deg, rgba(238, 245, 255, 0.8), rgba(111, 155, 242, 0.68) 48%, rgba(240, 200, 90, 0.58)) 0 25% / 100% 1px no-repeat,
-    linear-gradient(270deg, rgba(238, 245, 255, 0.8), rgba(111, 155, 242, 0.68) 48%, rgba(240, 200, 90, 0.58)) 0 75% / 100% 1px no-repeat;
-  filter: drop-shadow(0 0 1.5px rgba(126, 170, 255, 0.52));
-  opacity: 0.72;
-}
-
-body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
-  > .replay-reveal-btn.is-processing[data-jp-rng-requested]
-) .jackpot-chainlink::after {
-  animation: jackpot-vrf-key-bus 1.45s ease-in-out infinite alternate;
-}
-
-/* At jackpot time the bridge reveals from its module-side edge toward the key.
-   Its 2.6s clock is shared with the SVG current sheet: the reveal completes
-   just before the four upward lanes begin their fanout beat. */
-body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
-  > .replay-reveal-btn.is-spinning
-) .jackpot-chainlink::after {
-  animation: jackpot-vrf-key-launch 2.6s linear infinite;
-  will-change: clip-path, opacity;
-}
-
-/* Closing the ring is the moment randomness landed, and it is the only beat in
-   this pipeline a player waits on. It used to pop on the key's Chainlink icon;
-   the icon is gone, so the beat belongs to the instrument that now carries the
-   signal. One shot, then straight back to the resting lit state. */
+/* The response closes the pending fill with one restrained acknowledgement.
+   The processing stage holds this state briefly, then removes it as the
+   pipeline moves on, so this cannot turn into another ambient loop. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   > .replay-reveal-btn.is-processing[data-jp-stage='rng-arrived']
 ) .jackpot-chainlink {
@@ -629,7 +647,9 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
 }
 
 /* While the reels are actually turning, this module is the board's power
-   source, not a status light. It holds the closed ring and breathes.
+   source, not a request status light. Its shell answers on the same 1.44s
+   clock as the white VRF core and the four upward board routes while the
+   completed blue mark itself stays steadily lit.
    The old pair used to BLOOM: a 30px halo on the plate plus a 5px drop-shadow, pulsing
    on a 1.05s clock. During a draw that is the brightest thing on the board and
    it competes with the reels and the SPIN key for the eye, which is backwards —
@@ -641,11 +661,14 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   > .replay-reveal-btn.is-spinning
 ) .jackpot-chainlink {
   box-shadow:
-    inset 0 1px 0 rgba(204, 220, 209, 0.07),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.92),
-    0 1px 2px rgba(0, 0, 0, 0.82);
+    inset 0 1px 0 rgba(240, 248, 244, 0.055),
+    inset 1px 0 0 rgba(223, 233, 228, 0.02),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.95),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(0, 0, 0, 0.72),
+    0 3px 6px -2px rgba(0, 0, 0, 0.92);
   filter: none;
-  animation: jackpot-chainlink-source 2.4s ease-in-out infinite;
+  animation: jackpot-chainlink-source 1.44s ease-in-out infinite;
 }
 
 @keyframes jackpot-chainlink-cell-charge {
@@ -670,40 +693,30 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
   0%, 100% {
     filter: brightness(1);
   }
-  50% {
-    filter: brightness(1.08);
+  18% {
+    filter: brightness(1.1);
+  }
+  46% {
+    filter: brightness(1.03);
   }
 }
 
 @keyframes jackpot-vrf-core {
-  to {
-    filter: brightness(1.25);
+  0%, 100% {
+    opacity: 0.58;
+    filter: brightness(0.9);
+  }
+  16% {
+    opacity: 1;
+    filter: brightness(1.32);
     text-shadow:
       0 0 3px #fff,
       0 0 8px #fff,
       0 0 16px rgba(92, 143, 255, 0.98);
   }
-}
-
-@keyframes jackpot-vrf-key-bus {
-  to {
-    filter: drop-shadow(0 0 2.5px rgba(155, 194, 255, 0.66));
-    opacity: 0.5;
-  }
-}
-
-@keyframes jackpot-vrf-key-launch {
-  0%, 6% {
-    clip-path: inset(0 0 0 100%);
-    opacity: 0.14;
-  }
-  30% {
-    clip-path: inset(0);
-    opacity: 0.82;
-  }
-  42%, 100% {
-    clip-path: inset(0);
-    opacity: 0.42;
+  44% {
+    opacity: 0.76;
+    filter: brightness(1.04);
   }
 }
 
@@ -1195,10 +1208,11 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded {
    live jackpot reels express the scoring rule directly — symbol match wakes
    only the badge; symbol + color wakes both the badge and quadrant metal.
 
-   A dark pseudo-layer holds dormant/symbol-only metal down without filtering
-   the child badge. This separation is load-bearing: putting the grayscale on
-   the cell would also grayscale its badge, making a badge-only lamp impossible.
-   It also keeps misses identical regardless of what neighbouring quadrants do. */
+   Every seated face starts dormant. A dark pseudo-layer holds the metal down
+   without filtering the child badge; symbol and exact match classes then lift
+   only the layers they earn. This separation is load-bearing: putting the
+   grayscale on the cell would also grayscale its badge, making a badge-only
+   lamp impossible. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded .ldj-foil-machine-ticket {
   filter: none;
   opacity: 1;
@@ -1223,11 +1237,23 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
 }
 
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
+  .ldj-foil-machine-cell:is(.is-no-match, .is-symbol-match)::after {
+  background: rgba(2, 5, 7, 0.76);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.78);
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
   .ldj-foil-machine-cell img {
   z-index: 2;
   opacity: 0.36;
   filter: grayscale(0.86) saturate(0.26) brightness(0.56);
   transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease;
+}
+
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
+  .ldj-foil-machine-cell.is-no-match img {
+  opacity: 0.36;
+  filter: grayscale(0.86) saturate(0.26) brightness(0.56);
 }
 
 /* +1: the symbol badge is the only lamp. The quadrant metal stays under the
@@ -1262,9 +1288,9 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
     drop-shadow(0 0 8px rgba(34, 197, 94, 1));
 }
 
-/* The progress event arrives as each jackpot reel stops. Its short lock-on pop
-   accents the newly earned lamp; clearing this class leaves the durable
-   symbol/full match state illuminated for the rest of the spin and settle. */
+/* Progress follows every painted jackpot frame. A reel stop starts this short
+   lock-on pop; clearing the class leaves the durable symbol/full match state
+   illuminated for the rest of the spin and settle. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded
   .ldj-foil-machine-cell.is-match-flash img {
   animation: ldj-foil-badge-lock 640ms cubic-bezier(0.2, 0.82, 0.24, 1) both;
@@ -1442,7 +1468,10 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.layout-basic .jackpot-hero__machine::before { animation: none !important; }
+  body.layout-basic .jackpot-hero__machine > .jackpot-board-current .jackpot-board-current__packet use {
+    stroke-dasharray: none;
+    animation: none !important;
+  }
   /* Which sockets are being fed is state, not decoration, so the occupied
      lanes stay lit at full strength. Only the motion goes: the sheet stops
      breathing and the dashes close up into solid traces. This is exactly why
@@ -1455,15 +1484,34 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
   body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell.is-match-flash img,
   body.layout-basic .jackpot-hero__machine
     .ldj-foil-machine-cell.is-color-match.is-match-flash::after { animation: none; }
+  body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell::after {
+    transition: none !important;
+  }
+  body.layout-basic .jackpot-hero__machine .ldj-foil-machine-cell img {
+    transition: none !important;
+  }
   body.layout-basic .jackpot-hero__machine .ldj-foil-lane path {
     stroke-dasharray: none;
     animation: none;
   }
-  /* The VRF chase is a progress report, not decoration: killing the animation
-     outright would hide how far the request has actually got. Keep the staged
-     reveal, drop only the fade. */
+  /* Keep active state visible without travelling packets or staged fades. */
+  body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__lead {
+    animation: none !important;
+  }
+  body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
+    > .replay-reveal-btn.is-processing[data-jp-rng-requested][data-jp-stage='rng']
+  ) .jackpot-chainlink__cell,
+  body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
+    > .replay-reveal-btn.is-processing[data-jp-stage='rng-arrived']
+  ) .jackpot-chainlink__cell,
+  body.layout-basic .jackpot-hero__machine replay-panel .replay-controls:has(
+    > .replay-reveal-btn.is-spinning
+  ) .jackpot-chainlink__cell {
+    animation: none !important;
+    opacity: 1;
+    filter: none;
+  }
   body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__cell {
-    animation-duration: 1ms !important;
     transition: none !important;
   }
   /* The source pulse is atmosphere, not state: the module stays lit, the
@@ -1472,9 +1520,6 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
     animation: none !important;
   }
   body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink__core {
-    animation: none !important;
-  }
-  body.layout-basic .jackpot-hero__machine replay-panel .jackpot-chainlink::after {
     animation: none !important;
   }
   /* The armed key's attract loop is invitation, not state: the LED bank stays

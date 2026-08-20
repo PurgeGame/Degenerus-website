@@ -315,6 +315,8 @@ describe('app.css LOC budget', () => {
     // existing blocks, over half of it the state rules and their comments.
     // 23850 → 24075 covers the compact quest reward rail, familiar state
     // glyphs, and persistent victory treatment. This refines one surface.
-    assert.ok(cssLines.length <= 24075, `total <=24075, got ${cssLines.length}`);
+    // 24075 → 24150 covers the grouped multi-Luckbox receipt: its per-box
+    // sections and the shared combo-rewards section refine the reveal summary.
+    assert.ok(cssLines.length <= 24150, `total <=24150, got ${cssLines.length}`);
   });
 });

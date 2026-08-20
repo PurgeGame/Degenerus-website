@@ -92,6 +92,7 @@ const DECIMATOR_CLAIM_ABI = [
 // for the createAffiliateCode/Customize-CTA path, NOT this claim path.)
 const AFFILIATE_DGNRS_ABI = [
   'function claimAffiliateDgnrs(address player) external',
+  'error AlreadyClaimed()',
 ];
 
 const AFFILIATE_DGNRS_BATCH_ABI = [

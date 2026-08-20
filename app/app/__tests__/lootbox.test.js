@@ -17,6 +17,7 @@ import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import { decodeRevertReason } from '../reason-map.js';
+import { CONTRACTS } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness
@@ -199,6 +200,38 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(locked.middayRequestInFlight, false,
       'a daily RNG lock is not mislabeled as the mid-day request');
     assert.deepEqual(reads, [[33n, 901], [0n, 901]], 'both slots share one block tag');
+  });
+
+  test('reads the active player century-bonus usage from the deployment-pinned mapping', async () => {
+    const reads = [];
+    const provider = {
+      getBlockNumber: async () => 902,
+      getStorage: async (address, slot, blockTag) => {
+        reads.push([address, slot, blockTag]);
+        return (100n << 224n) | 1_234n;
+      },
+    };
+    assert.equal(
+      await lootboxMod.readCenturyBonusUsed({
+        player: CONNECTED,
+        targetLevel: 100,
+        provider,
+      }),
+      1_234n,
+    );
+    assert.equal(
+      await lootboxMod.readCenturyBonusUsed({
+        player: CONNECTED,
+        targetLevel: 200,
+        provider,
+      }),
+      0n,
+      'a usage word stamped for an older century is fresh allowance at the new one',
+    );
+    assert.equal(reads.length, 2);
+    assert.equal(reads[0][0], CONTRACTS.GAME);
+    assert.match(String(reads[0][1]), /^0x[0-9a-f]{64}$/i);
+    assert.equal(reads[0][2], 902);
   });
 
   test('foil delegatecall errors decode by ABI name and raw selector', () => {

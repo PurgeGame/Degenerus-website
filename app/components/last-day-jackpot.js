@@ -152,13 +152,13 @@ class LastDayJackpot extends HTMLElement {
   #foilClaimBusy = false; // one in-flight foil claim at a time
   #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
   #foilMainActivated = false;  // this tab has landed Roll 1 for the pinned day
-  #foilBonusActivated = false; // this tab has landed Roll 2 for the pinned day
   #foilMainClaimReady = false;  // Roll 1 scratch gate cleared in this tab
   #foilBonusClaimReady = false; // Roll 2 scratch gate cleared in this tab
-  // The reels' own committed faces for the spin currently on screen, as
-  // published by replay:spin-progress: { day, traits } with a trait per
-  // CONTRACT quadrant and null wherever the reel is still turning. This is
-  // presentation, never a record — nothing here opens a spoiler or claim gate.
+  // The reels' presentation for the spin currently on screen, as published by
+  // replay:spin-progress. `traits` reports reel locks; only main-draw locks are
+  // durable foil grades. `liveTraits` holds the exact current frame and is
+  // replaced as the reels cycle. This is presentation, never a record —
+  // nothing here opens a spoiler or claim gate.
   #foilPresentation = null;
   #foilFlashQuadrants = new Set();
   #foilFlashTimers = new Map();
@@ -435,8 +435,12 @@ class LastDayJackpot extends HTMLElement {
     const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
     const mainActive = (claimableOnly ? this.#foilMainClaimReady : this.#foilMainActivated)
       || (!replayFresh && this.#hasSpunPinnedDay());
-    const bonusActive = (claimableOnly ? this.#foilBonusClaimReady : this.#foilBonusActivated)
-      || (!replayFresh && this.#hasCompletedPinnedDay());
+    // Roll 2 can create a claim after its scratch gate, but it never becomes a
+    // durable cabinet lamp. Bonus faces are display-only live overlays; only
+    // Roll 1 contributes a settled grade to #renderFoilBackdrop.
+    const bonusActive = claimableOnly && (
+      this.#foilBonusClaimReady || (!replayFresh && this.#hasCompletedPinnedDay())
+    );
     const summary = this.#lastPayload?.summary;
     const levelLocked = this.#foilLevelLocked();
     return {
@@ -455,12 +459,11 @@ class LastDayJackpot extends HTMLElement {
     return resolvedLevel != null && foilLevel === resolvedLevel;
   }
 
-  // Grade one foil line against the faces the spin presentation has actually
-  // stopped on. Returns null — dormant — whenever there is no presentation, it
-  // belongs to another day, the pack is off-level, or no reel has committed
-  // yet. `committed` is a quadrant bitmask: a quadrant whose reel is still
-  // turning is not a miss, it is not yet information, so its cell gets neither
-  // a match class nor the graded miss class.
+  // Grade one foil line against the current reel presentation. A committed
+  // main face wins over its live counterpart and remains durable; every bonus
+  // face and every unlocked main face uses the replaceable live grade. Returns null
+  // whenever there is no valid presentation, it belongs to another day, or the
+  // pack is off-level.
   //
   // Grading is gradeLine, unmodified. The presentation shows the real draw, so
   // these faces are the same faces the settled render arrives at; merging the
@@ -468,28 +471,35 @@ class LastDayJackpot extends HTMLElement {
   // a repaint.
   #foilPresentationGrade(line) {
     const presentation = this.#foilPresentation;
-    const traits = presentation?.traits;
-    if (!Array.isArray(traits)) return null;
+    const traits = Array.isArray(presentation?.traits) ? presentation.traits : [];
+    const liveTraits = Array.isArray(presentation?.liveTraits) ? presentation.liveTraits : [];
+    if (traits.length === 0 && liveTraits.length === 0) return null;
     if (Number(presentation.day) !== Number(this.#pinnedDay)) return null;
     if (!this.#foilLevelLocked()) return null;
     let committed = 0;
+    let visible = 0;
     let packed = 0;
+    const validTrait = (trait) => typeof trait === 'number'
+      && Number.isInteger(trait) && trait >= 0 && trait <= 255;
     for (let quadrant = 0; quadrant < 4; quadrant += 1) {
-      const trait = traits[quadrant];
-      // Deliberately typeof-strict rather than Number()-coerced: an
-      // uncommitted quadrant publishes null, and Number(null) is 0 — a
-      // perfectly valid trait byte. Coercing here would grade every reel that
-      // has NOT stopped as if it had stopped on quadrant 0, colour 0, symbol 0.
-      if (typeof trait !== 'number' || !Number.isInteger(trait)
-        || trait < 0 || trait > 255) continue;
+      // Main locks are durable. Bonus locks describe where the bonus reel
+      // stopped, but the foil contract treats every Roll 2 face as a transient
+      // overlay, so only its exact currently displayed live face may grade.
+      const lockedTrait = presentation?.bonusPhase === true ? null : traits[quadrant];
+      const trait = validTrait(lockedTrait) ? lockedTrait : liveTraits[quadrant];
+      // Deliberately typeof-strict rather than Number()-coerced: null means no
+      // painted/committed face, while Number(null) is a valid trait byte (0).
+      if (!validTrait(trait)) continue;
       packed |= trait << (quadrant * 8);
-      committed |= 1 << quadrant;
+      visible |= 1 << quadrant;
+      if (validTrait(lockedTrait)) committed |= 1 << quadrant;
     }
-    if (committed === 0) return null;
+    if (visible === 0) return null;
     const { faces } = gradeLine(line, packed >>> 0);
     return {
       committed,
-      faces: faces.map((face, quadrant) => (((committed >> quadrant) & 1) ? face : 0)),
+      visible,
+      faces: faces.map((face, quadrant) => (((visible >> quadrant) & 1) ? face : 0)),
     };
   }
 
@@ -1043,21 +1053,24 @@ class LastDayJackpot extends HTMLElement {
     this.#bridgeTimer = handle;
   }
 
-  // The reels committed another quadrant. Repaint the seated foils against
-  // what is on the board RIGHT NOW, so a player watching their pack sees a
-  // quadrant light as its reel stops instead of four at once at the end.
+  // Repaint the seated foils against what is on the board RIGHT NOW. Cycling
+  // faces contribute replaceable transient lamps; newly committed quadrants
+  // become durable and receive the one-shot lock pop.
   //
   // Presentation only. It opens no gate, writes no key, and publishes no
   // claim; #onPanelSpinComplete below is still what powers the settled state,
-  // and scratch completion is still the spoiler/claim gate. A malformed or
-  // absent traits array fails closed to dormant.
+  // and scratch completion is still the spoiler/claim gate. Malformed or
+  // absent arrays fail closed to dormant.
   #onPanelSpinProgress(e) {
     const d = e?.detail;
     const eventDay = Number(d?.day);
     if (!Number.isInteger(eventDay) || eventDay <= 0
       || eventDay !== Number(this.#pinnedDay)) return;
     const traits = Array.isArray(d?.traits) ? d.traits.slice(0, 4) : null;
+    const liveTraits = Array.isArray(d?.liveTraits) ? d.liveTraits.slice(0, 4) : null;
+    const bonusPhase = d?.bonusPhase === true;
     const prior = Number(this.#foilPresentation?.day) === eventDay
+      && this.#foilPresentation?.bonusPhase === bonusPhase
       && Array.isArray(this.#foilPresentation?.traits)
       ? this.#foilPresentation.traits
       : [];
@@ -1069,21 +1082,30 @@ class LastDayJackpot extends HTMLElement {
       ))
       : [];
     if (!traits || !traits.some(validTrait)) this.#clearFoilMatchFlashes();
-    this.#foilPresentation = traits ? { day: eventDay, traits } : null;
+    this.#foilPresentation = traits || liveTraits
+      ? { day: eventDay, bonusPhase, traits: traits || [], liveTraits: liveTraits || [] }
+      : null;
     this.#startFoilMatchFlashes(newlyCommitted);
     this.#renderFoilBackdrop();
   }
 
-  // A completed spin powers only its matching foil lane. This is deliberately
-  // visual-only: claims, persistence, and follow-on UI remain gated behind the
-  // player's scratch completion below.
+  // A completed main spin powers its durable foil lane. Bonus completion is
+  // also the terminal boundary for Roll 2's live-only presentation: the panel
+  // intentionally ends on its final painted frame, so no synthetic null-live
+  // progress event follows to clear that face or its one-shot lock pop.
+  // Claims, persistence, and follow-on UI remain gated behind the player's
+  // scratch completion below.
   #onPanelSpinComplete(e) {
     const d = e?.detail;
     const eventDay = Number(d?.day);
     if (!Number.isInteger(eventDay) || eventDay <= 0
       || eventDay !== Number(this.#pinnedDay)) return;
-    if (d?.bonusPhase === true) this.#foilBonusActivated = true;
-    else this.#foilMainActivated = true;
+    if (d?.bonusPhase === true) {
+      this.#foilPresentation = null;
+      this.#clearFoilMatchFlashes();
+    } else {
+      this.#foilMainActivated = true;
+    }
     this.#renderFoilBackdrop();
   }
 
@@ -1109,7 +1131,6 @@ class LastDayJackpot extends HTMLElement {
       // that do not emit replay:spin-complete.
       this.#foilMainActivated = true;
       this.#foilMainClaimReady = true;
-      if (d?.bonusPhase === true) this.#foilBonusActivated = true;
       if (d?.bonusPhase === true) this.#foilBonusClaimReady = true;
       this.#renderFoil();
     }
@@ -1176,7 +1197,6 @@ class LastDayJackpot extends HTMLElement {
     this.#boardDone = false;
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
-    this.#foilBonusActivated = false;
     this.#foilMainClaimReady = false;
     this.#foilBonusClaimReady = false;
     this.#foilPresentation = null;
@@ -1209,7 +1229,6 @@ class LastDayJackpot extends HTMLElement {
     this.#boardDone = false;
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
-    this.#foilBonusActivated = false;
     this.#foilMainClaimReady = false;
     this.#foilBonusClaimReady = false;
     this.#foilPresentation = null;
@@ -1655,8 +1674,9 @@ class LastDayJackpot extends HTMLElement {
         return faces.map((value, quadrant) => Math.max(value, Number(revealed[quadrant]) || 0));
       }, presented ? [...presented.faces] : [0, 0, 0, 0]);
       // Which quadrants carry information at all. A revealed draw grades all
-      // four; a spin in progress grades only the reels that have stopped.
-      const faceMask = (grade ? 0b1111 : 0) | (presented ? presented.committed : 0);
+      // four; a spin in progress includes both replaceable live faces and
+      // durable locks.
+      const faceMask = (grade ? 0b1111 : 0) | (presented ? presented.visible : 0);
       const locked = Boolean(grade && grade.score >= FOIL_CLAIM_THRESHOLD);
       slot.classList.add('is-loaded');
       if (grade) slot.classList.add('is-graded');

@@ -42,6 +42,7 @@ import {
   requestLootboxRng,
 } from '../app/lootbox.js';
 import { subscribe as subscribeStore } from '../app/store.js';
+import { applyLootboxCasePresentation } from '../app/lootbox-value-tone.js';
 
 const REVEAL_KINDS = new Set([
   'lootbox',
@@ -661,7 +662,7 @@ function _kindLabel(kind) {
   if (kind === 'baf') return 'BAF CONSOLATION';
   if (kind === 'bingo') return 'BINGO';
   if (kind === 'foil-match') return 'FOIL TICKET MATCH';
-  if (kind === 'affiliate-bonus') return 'AFFILIATE BONUS';
+  if (kind === 'affiliate-bonus') return 'REFERRAL BONUS';
   if (kind === 'wwxrp-draw') return 'WWXRP DRAW';
   if (kind === 'foil-gold') return 'FOIL GOLD';
   if (kind === 'mass-resolution' || kind === 'batch-resolution') return 'PROTOCOL RESOLUTION';
@@ -1366,6 +1367,7 @@ class AppRevealTray extends HTMLElement {
           'data-lootbox-value-tone',
           item.lootboxValueTone || 'unknown',
         );
+        applyLootboxCasePresentation(button, item.lootboxCaseModel);
       }
       const actionVerb = _actionVerb(item, { busy, waiting });
       button.setAttribute('aria-label', compact
@@ -1475,6 +1477,7 @@ class AppRevealTray extends HTMLElement {
         const box = document.createElement('span');
         box.className = 'rrt-lootbox-mini';
         box.setAttribute('data-lootbox-value-tone', item.lootboxValueTone || 'unknown');
+        applyLootboxCasePresentation(box, item.lootboxCaseModel);
         box.setAttribute('aria-hidden', 'true');
         art.appendChild(box);
       } else if (item.kind === 'decimator') {

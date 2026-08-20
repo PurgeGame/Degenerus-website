@@ -15,15 +15,17 @@
 
     v7 makes the power story match the physical controls. The VRF module no
     longer takes a visual shortcut straight into the draw processor. Its two
-    lanes enter the LED key first; four separate lanes then fan upward from the
-    key into the main jackpot processor. This also removes the long horizontal
-    bridge at y=1006 that hugged the processor's lower edge like an accidental
-    underline. Every bend remains 45 degrees and every exposed route ends under
-    named hardware.
+    component-relative lanes enter the LED key first; four separate lanes then
+    fan upward from the key into the main jackpot processor. The compact input
+    pair lives with the module in daily-drawing.css because fixed viewBox
+    coordinates drift away from that module between desktop and phone. Keeping
+    that pair out of this stretched sheet prevents two orphaned copper stubs.
+    Every route left here ends under named hardware.
 
-    The complete jackpot-time sequence is mirrored into
-    daily-drawing-board-current-v6.svg. Ticket-only processing still uses the
-    two input lanes in daily-drawing-button-current-v1.svg.
+    During a live roll the component-relative input pair lights in
+    daily-drawing.css, then the inline .jackpot-board-current sheet in
+    app/index.html mirrors exactly these four processor branches. Waiting for
+    VRF leaves both layers dormant, and no unrelated route appears powered.
   -->
   <defs>
     <filter id="traceGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -56,8 +58,9 @@
     <path d="M240 128H130L84 174V1176L110 1202H1170L1196 1176V174L1150 128H1040"/>
   </g>
 
-  <!-- The complete signal tree: title and sockets into the processor, then
-       VRF -> LED key -> four-way jackpot processor fanout. -->
+  <!-- The fixed signal tree: title and sockets into the processor, then the
+       LED key's four-way jackpot processor fanout. The responsive VRF-to-key
+       pair is owned by the module instead of this stretched coordinate space. -->
   <g fill="none" stroke="#b98a38" stroke-opacity="0.27" stroke-width="2"
      stroke-linecap="square" stroke-linejoin="miter" vector-effect="non-scaling-stroke">
     <!-- Title controller into the processor's upper contacts. -->
@@ -69,10 +72,6 @@
     <path d="M148 718H222L260 680H292"/>
     <path d="M1132 300H1058L1020 338H988"/>
     <path d="M1132 718H1058L1020 680H988"/>
-
-    <!-- The two physical randomness-module outputs terminate beneath the key. -->
-    <path d="M994 1116H930"/>
-    <path d="M994 1158H930"/>
 
     <!-- Four independent lanes leave the LED key and fan into the main jackpot
          processor. They are authored source-first for the live current sheet. -->
@@ -93,20 +92,17 @@
   <g fill="none" stroke="#d0a34c" stroke-opacity="0.05" stroke-width="6"
      stroke-linecap="square" stroke-linejoin="miter" filter="url(#traceGlow)"
      vector-effect="non-scaling-stroke">
-    <path d="M994 1116H930"/>
     <path d="M456 1098V1018L438 1000H432L414 982V915"/>
     <path d="M548 1098V1038L530 1020H524L506 1002V915"/>
     <path d="M732 1098V1038L750 1020H756L774 1002V915"/>
     <path d="M824 1098V1018L842 1000H848L866 982V915"/>
   </g>
 
-  <!-- Plated contacts live only at hardware anchors or real bus junctions. -->
+  <!-- Plated contacts live only at exposed anchors or real bus junctions. -->
   <g>
     <use href="#via" x="240" y="128"/><use href="#via" x="1040" y="128"/>
     <use href="#via" x="456" y="1098"/><use href="#via" x="548" y="1098"/>
     <use href="#via" x="732" y="1098"/><use href="#via" x="824" y="1098"/>
-    <use href="#via" x="930" y="1116"/><use href="#via" x="930" y="1158"/>
-    <use href="#via" x="994" y="1116"/><use href="#via" x="994" y="1158"/>
     <use href="#via" x="110" y="512"/><use href="#via" x="110" y="612"/>
     <use href="#via" x="1170" y="512"/><use href="#via" x="1170" y="612"/>
     <use href="#via" x="330" y="1202"/><use href="#via" x="640" y="1202"/>

@@ -1444,10 +1444,10 @@ body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel {
 body.layout-basic .app-decimator-panel .panel-header {
   display: grid;
   min-height: 3.65rem;
-  grid-template-columns: minmax(0, 1fr) 7.4rem;
+  grid-template-columns: minmax(0, 1fr) 8rem;
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 0.22rem 0.42rem;
+  gap: 0.22rem 0.24rem;
   padding: 0.38rem 0.46rem;
   overflow: visible;
   border: 0;
@@ -1482,13 +1482,49 @@ body.layout-basic .app-decimator-panel .dec-purchase-help {
 }
 
 body.layout-basic .app-decimator-panel .dec-price {
+  display: grid;
   width: 100%;
   min-width: 0;
   grid-column: 1;
   grid-row: 2;
-  padding: 0.24rem 0.26rem;
-  font-size: 0.48rem;
+  grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch minmax(10ch, max-content);
+  align-content: center;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.1rem;
+  column-gap: 0;
+  padding: 0.22rem 0.26rem;
+  font-size: 0.45rem;
   letter-spacing: 0.01em;
+  line-height: 1.04;
+}
+
+body.layout-basic .app-decimator-panel .dec-price > .dec-price__row {
+  display: contents;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__count {
+  grid-column: 1;
+  text-align: left;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__kind {
+  grid-column: 3;
+  text-align: right;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__equals {
+  grid-column: 5;
+  text-align: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__value {
+  grid-column: 7;
+  min-width: 0;
+  overflow: visible;
+  text-align: left;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 body.layout-basic .app-decimator-panel .dec-flip-credit--header {
@@ -1502,7 +1538,7 @@ body.layout-basic .app-decimator-panel .dec-flip-credit--header {
   grid-row: 1 / 3;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
-  align-self: center;
+  align-self: end;
   align-content: center;
   gap: 0.08rem;
   overflow: hidden;
@@ -1689,6 +1725,15 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-pie
   transform: translate(-50%, -50%);
 }
 
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
+  top: 0.28rem;
+  left: 50%;
+  box-sizing: border-box;
+  width: min(3.2rem, calc(100% - 0.32rem));
+  padding: 0.27rem 0.46rem 0.24rem;
+  transform: translateX(-50%);
+}
+
 body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
   .dec-ticket-piece--foil:not([hidden])
 ) .dec-ticket-piece--ticket .dec-ticket-piece__copy {
@@ -1829,9 +1874,7 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-entry-face 
   place-items: center;
   overflow: hidden;
   border: 0;
-  border-radius: 7px 2px 2px 2px;
   background: var(--ticket-line-color);
-  clip-path: polygon(0 0, 100% 0, 100% 71.5%, 71.5% 100%, 0 100%);
 }
 
 body.layout-basic .app-decimator-panel .dec-entry-face .dec-ticket-trait {
@@ -1954,21 +1997,6 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected {
     0 0 24px rgba(255, 225, 128, 0.12);
 }
 
-body.layout-basic .app-decimator-panel .dec-ticket-piece--foil .dec-ticket-piece__copy {
-  top: 0.18rem;
-  left: 0.14rem;
-  max-width: calc(100% - 0.28rem);
-  padding: 0.15rem 0.2rem 0.14rem;
-}
-
-body.layout-basic .app-decimator-panel .dec-ticket-piece--foil .dec-ticket-piece__copy > strong {
-  overflow: visible;
-  font-size: 0.39rem;
-  letter-spacing: 0.045em;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
 body.layout-basic .app-decimator-panel .dec-foil-pack-face,
 body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-foil-pack-face {
   width: auto;
@@ -1994,6 +2022,12 @@ body.layout-basic .app-decimator-panel .dec-foil-pack-face::after {
   background: linear-gradient(90deg, #56e0ff, #ff89c8, #ffe180, #69f0c0);
 }
 
+/* Suppress only the unclassified legacy mark during a mixed-cache refresh;
+   the current badge is deliberately layered behind the LIMIT 1 stamp. */
+body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-mark:not(.dec-foil-pack-badge) {
+  display: none;
+}
+
 body.layout-basic .app-decimator-panel .dec-pack-shine {
   position: absolute;
   z-index: 2;
@@ -2010,6 +2044,7 @@ body.layout-basic .app-decimator-panel .dec-pack-shine {
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-level {
+  grid-row: 2;
   border-color: #fff7cd;
   background: linear-gradient(180deg, #fff1a8, #d7a728);
   color: #1a1206;
@@ -2018,35 +2053,58 @@ body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-level {
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-count {
+  grid-row: 3;
   box-sizing: border-box;
   width: calc(100% + 0.18rem);
   padding-inline: 0.04rem;
-  font-size: 0.39rem;
-  letter-spacing: -0.02em;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#090615, #110a19) padding-box,
+    linear-gradient(90deg, #56e0ff, #b694ff 24%, #ff89c8 50%, #ffe180 74%, #69f0c0) border-box;
+  color: #fffbe8;
+  box-shadow:
+    inset 0 0 7px rgba(182, 148, 255, 0.3),
+    0 0 7px rgba(86, 224, 255, 0.28),
+    0 0 10px rgba(255, 137, 200, 0.2);
+  font-size: 0.52rem;
+  letter-spacing: 0.055em;
   text-align: center;
+  text-shadow:
+    0 0 3px rgba(86, 224, 255, 0.9),
+    0 0 6px rgba(255, 137, 200, 0.72),
+    0 1px 1px #000;
+  white-space: nowrap;
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-limit-stamp,
 body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-foil-limit-stamp {
   position: absolute;
   z-index: 13;
-  top: 1.18rem;
-  right: -0.12rem;
+  top: 0.18rem;
+  left: 0.14rem;
   display: inline-flex;
+  box-sizing: border-box;
   width: auto;
+  min-width: 2.9rem;
   height: auto;
   align-items: baseline;
+  justify-content: center;
   gap: 0.1rem;
-  padding: 0.17rem 0.24rem 0.14rem;
+  padding: 0.17rem 0.18rem 0.14rem;
+  overflow: visible;
   border: 2px solid #ff3542;
   border-radius: 3px;
-  background: rgba(38, 5, 10, 0.92);
+  background: #26050a;
   color: #ff3542;
   box-shadow: inset 0 0 0 1px rgba(255, 53, 66, 0.28), 0 2px 5px rgba(0, 0, 0, 0.58), 0 0 8px rgba(255, 34, 48, 0.26);
+  clip-path: none;
+  filter: none;
   font-family: "Roboto Mono", ui-monospace, monospace;
   line-height: 1;
+  opacity: 1;
   text-shadow: 0 0 5px rgba(255, 45, 58, 0.54);
   transform: rotate(8deg);
+  white-space: nowrap;
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-limit-stamp strong {
@@ -2090,8 +2148,8 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-
 body.layout-basic .app-decimator-panel .dec-ticket-piece--foil > quest-objective-indicator {
   position: absolute;
   z-index: 14;
-  top: 0.12rem;
-  right: 0.12rem;
+  top: -0.52rem;
+  right: -0.52rem;
   bottom: auto;
 }
 
@@ -2187,8 +2245,10 @@ body.layout-basic .app-decimator-panel .dec-presale-toggle.has-selection {
 
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
   grid-column: 3;
+  min-height: 1.52rem;
   justify-self: end;
-  margin: 0;
+  margin: 0.14rem 0 0;
+  padding: 0.14rem 0.38rem;
   text-align: center;
 }
 
@@ -2259,6 +2319,7 @@ body.layout-basic .app-decimator-panel .dec-box-card.is-selected {
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card__add {
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -2271,18 +2332,21 @@ body.layout-basic .app-decimator-panel .dec-box-card__art {
   height: 100%;
   aspect-ratio: 1;
   --box-price-size: 0.96rem;
+  --box-unit-size: 0.7rem;
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card--small .dec-box-card__art {
   width: 100%;
   height: 100%;
   --box-price-size: 0.82rem;
+  --box-unit-size: 0.6rem;
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card--medium .dec-box-card__art {
   width: 100%;
   height: 100%;
   --box-price-size: 0.89rem;
+  --box-unit-size: 0.65rem;
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card--large .dec-box-card__art {
@@ -2305,8 +2369,7 @@ body.layout-basic .app-decimator-panel .dec-box-card--large .dec-box-card__art i
   width: 100%;
 }
 
-/* Match the opening animation: tier color belongs to the case shell, while
-   the Degenerus flame remains a separate, canonical brand layer. */
+/* Match the opening animation: tier color belongs to the case shell. */
 body.layout-basic .app-decimator-panel .dec-box-card__art::after {
   position: absolute;
   z-index: 2;
@@ -2316,19 +2379,19 @@ body.layout-basic .app-decimator-panel .dec-box-card__art::after {
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: url('/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp') center / contain no-repeat;
-  mask: url('/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp') center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-top-art) center / contain no-repeat;
+  mask: var(--lootbox-case-top-art) center / contain no-repeat;
 }
 
-/* Repaint the case's own medallion above the tier wash. This is the exact
-   source crop, not a second badge: the shell can read green/purple/gold while
-   the front always keeps the standard red / black / white Degenerus mark. */
+/* Restore only the badge pixels above the tier wash. The badge is baked into
+   the case texture, so this layer cannot drift, cast a sticker shadow, or expose
+   a second repair shape around it. */
 body.layout-basic .app-decimator-panel .dec-box-card__art::before {
   position: absolute;
   z-index: 3;
   inset: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp') center / contain no-repeat;
-  clip-path: ellipse(11.8% 6.8% at 50% 78.9%);
+  background: var(--lootbox-case-top-art) center / contain no-repeat;
+  clip-path: var(--lootbox-top-badge-clip);
   content: '';
   pointer-events: none;
 }
@@ -2336,14 +2399,16 @@ body.layout-basic .app-decimator-panel .dec-box-card__art::before {
 body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value {
   position: absolute;
   z-index: 4;
-  top: 37.25%;
+  top: var(--lootbox-price-top, 27%);
   right: auto;
   left: 50%;
-  display: grid;
+  display: flex;
   min-width: 0;
-  width: 44%;
-  height: 20%;
-  place-items: center;
+  width: var(--lootbox-price-width, 45%);
+  height: var(--lootbox-price-height, 19%);
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
   padding: 0;
   overflow: visible;
   border: 0;
@@ -2364,6 +2429,19 @@ body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value > str
   color: #fff6d8;
   font: 900 var(--box-price-size)/1 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  -webkit-text-stroke: 0.02em rgba(39, 23, 8, 0.98);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0.075em 0 rgba(105, 65, 18, 0.98),
+    0 0.16em 0.16em rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value > small {
+  flex: 0 0 auto;
+  color: #fff6d8;
+  font: 900 var(--box-unit-size)/1 "Roboto Mono", ui-monospace, monospace;
   letter-spacing: -0.045em;
   -webkit-text-stroke: 0.02em rgba(39, 23, 8, 0.98);
   paint-order: stroke fill;
@@ -2836,7 +2914,8 @@ body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting {
 
 @container (max-width: 330px) {
   body.layout-basic .app-decimator-panel .panel-header {
-    grid-template-columns: minmax(0, 1fr) 6.7rem;
+    grid-template-columns: minmax(0, 1fr) 7rem;
+    column-gap: 0.14rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-pieces {

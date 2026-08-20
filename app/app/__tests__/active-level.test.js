@@ -171,13 +171,21 @@ describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
     })), 46);
   });
 
-  test('purchase phase still previews the incoming level pack', () => {
+  test('same-level purchase cadence keeps the seated current-level pack visible', () => {
     assert.equal(foilPackDisplayLevel({
       level: 45,
       phase: 'PURCHASE',
       jackpotPhaseFlag: false,
       phaseTransitionActive: false,
-    }), 46);
+    }), 45);
+  });
+
+  test('a direct purchase snapshot also keeps the current numeric level', () => {
+    assert.equal(foilPackDisplayLevel(null, {
+      level: 45,
+      jackpot: false,
+      rngLocked: false,
+    }), 45);
   });
 
   test('explicit live jackpot state wins over a stale same-level side poll', () => {

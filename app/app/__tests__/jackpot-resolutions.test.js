@@ -109,6 +109,7 @@ describe('chain-authoritative resolution probes', () => {
       ['DecNotWinner', 'lost'],
       ['DecClaimInactive', 'pending'],
       ['RngNotReady', 'waiting'],
+      ['NoWork', 'pending'],
     ]) {
       const error = new Error(name);
       error.revert = { name };

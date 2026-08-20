@@ -31,7 +31,14 @@ function makeFakeElement(tag = 'div') {
     disabled: false,
     className: '',
     dataset: {},
-    style: {},
+    style: {
+      _props: {},
+      setProperty(name, value) {
+        this._props[String(name)] = String(value);
+        this[String(name)] = String(value);
+      },
+      getPropertyValue(name) { return this._props[String(name)] ?? ''; },
+    },
     classList: {
       _set: new Set(),
       add(...cs) { for (const c of cs) this._set.add(c); },
@@ -384,6 +391,32 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('a packed combo order survives Pending so its reveal can offer combined or individual views', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    const comboOrder = 1n | (1n << 8n) | (2n << 16n);
+
+    fireTxConfirmed([{ index: 27, day: 5 }], {
+      player: ADDR,
+      transactionHash: '0xcombo',
+      boxOrder: comboOrder,
+    });
+    await tick();
+
+    const stored = JSON.parse(localStorage.getItem(KEY));
+    assert.deepEqual(stored[0].boxOrders, [String(comboOrder)],
+      'the exact Small/Medium/Large counts remain attached to the shared RNG row');
+
+    el.disconnectedCallback();
+    const restored = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    assert.deepEqual(JSON.parse(localStorage.getItem(KEY))[0].boxOrders, [String(comboOrder)],
+      'reloading does not collapse the combo into one anonymous aggregate box');
+    restored.disconnectedCallback();
+  });
+
   test('regular and presale purchases sharing one RNG index merge into one complete open action', async () => {
     const el = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);
@@ -498,8 +531,13 @@ describe('app-box-strip', () => {
       .find((action) => action.id === 'lootbox:8');
     assert.equal(waiting.compact, true, 'the waiting purchase is a compact receipt');
     assert.equal(waiting.lootboxValueTone, 'green', 'one ticket-price unit has the green case');
+    assert.equal(waiting.lootboxCaseModel, 'small',
+      'the pending manifest carries the same physical model into every later surface');
     assert.equal(waiting.lootboxTicketUnitsLabel, '1×');
     assert.equal(el.querySelector('.bxs-chip').getAttribute('data-lootbox-value-tone'), 'green');
+    assert.equal(el.querySelector('.bxs-chip').getAttribute('data-lootbox-case-model'), 'small');
+    assert.equal(el.querySelector('.bxs-chip-art').getAttribute('data-lootbox-case-model'), 'small',
+      'the legacy strip art and shared Pending manifest resolve to the same SMALL model');
     const storedBeforeOpen = JSON.parse(localStorage.getItem(KEY));
     assert.equal(storedBeforeOpen[0].ticketPriceWei, '10000000000',
       'the purchase-time ticket price survives reloads and later level changes');

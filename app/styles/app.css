@@ -1670,12 +1670,6 @@ account-switcher[hidden] {
   cursor: not-allowed;
 }
 
-.deg-state {
-  font-size: 0.9rem;
-  color: var(--text-secondary, #aaa);
-  min-height: 1.2em;
-}
-
 .deg-outcome {
   font-size: 1rem;
   color: var(--accent, #4caf50);
@@ -2150,7 +2144,32 @@ body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel {
     border-top: none;
   }
   body.layout-basic .jackpot-hero__draw {
-    border-left: 1px solid rgba(245, 166, 35, 0.30);
+    border-left: none;
+  }
+  /* The drawing backplate already carries a substantial rounded metal edge.
+     A second full-height divider beside BUY IN created two competing lines and
+     a hard notch at both corners. Let one softly capped cabinet rail own that
+     join instead. */
+  body.layout-basic .jackpot-hero__draw::before {
+    position: absolute;
+    z-index: 6;
+    top: 0.55rem;
+    bottom: 0.55rem;
+    left: -0.24rem;
+    width: 0.36rem;
+    border: 1px solid rgba(211, 160, 72, 0.24);
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      rgba(12, 5, 8, 0.96),
+      rgba(117, 73, 31, 0.5) 48%,
+      rgba(5, 4, 6, 0.96)
+    );
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 0 10px rgba(245, 166, 35, 0.07);
+    content: '';
+    pointer-events: none;
   }
 }
 
@@ -5898,7 +5917,6 @@ body.layout-basic .deg-blurb { margin: 0 0 0.45rem; font-size: 0.78rem; line-hei
 body.layout-basic .dgn-selector { margin: 0.35rem 0; gap: 0.6rem; }
 body.layout-basic .deg-controls { gap: 0.4rem; margin-bottom: 0.2rem; }
 body.layout-basic .deg-actions { gap: 0.4rem; margin-top: 0.5rem; }
-body.layout-basic .deg-state { margin-top: 0.35rem; }
 
 /* Activity panel: smaller streak tiles + breakdown, muted inline sub. */
 body.layout-basic .act-score-sub {
@@ -6545,7 +6563,7 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini {
   display: block;
   width: 2.2rem;
   height: 2rem;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
+  background: var(--lootbox-case-art) center / contain no-repeat;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
 }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
@@ -6557,15 +6575,15 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
-  mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
+  mask: var(--lootbox-case-art) center / contain no-repeat;
 }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   position: absolute;
   z-index: 2;
   inset: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
-  clip-path: ellipse(10% 16.5% at 50% 63.5%);
+  background: var(--lootbox-case-art) center / contain no-repeat;
+  clip-path: var(--lootbox-badge-clip);
   content: '';
   pointer-events: none;
 }
@@ -7660,193 +7678,6 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   100% { transform: scale(1.7); opacity: 0; filter: brightness(3); }
 }
 
-/* Lootbox anticipation. The lid stays closed through most of the riser, the
-   clasp visibly unlocks, and only then does the light seam crack open. */
-.rvl-charging .rvl-vessel--lootbox .rvl-chest {
-  animation: rvl-lootbox-charge 1.18s cubic-bezier(0.36, 0.02, 0.16, 1) both;
-  filter: drop-shadow(0 19px 18px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 42px rgba(255, 82, 64, 0.62));
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid {
-  animation: rvl-lootbox-lid-prime 1.18s cubic-bezier(0.34, 0.1, 0.18, 1) both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-clasp {
-  animation: rvl-lootbox-unlock 1.18s ease-in both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-seam {
-  animation: rvl-lootbox-seam-charge 1.18s ease-in both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-body {
-  animation: rvl-lootbox-body-charge 1.18s ease-in both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-aura {
-  animation: rvl-lootbox-aura-charge 1.18s ease-in both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-beam {
-  animation: rvl-lootbox-beam-charge 1.18s ease-in both;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-ring--outer {
-  animation: rvl-lootbox-ring-charge 0.58s ease-in-out infinite;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-ring--inner {
-  animation: rvl-lootbox-ring-charge 0.58s ease-in-out 0.16s infinite reverse;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark {
-  animation: rvl-lootbox-spark-charge 0.58s ease-out infinite;
-}
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--2,
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--6 { animation-delay: 0.12s; }
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--3,
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--7 { animation-delay: 0.24s; }
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--4,
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark--8 { animation-delay: 0.36s; }
-
-@keyframes rvl-lootbox-charge {
-  0% { transform: translateY(0) scale(1); }
-  16% { transform: translateY(2px) scale(1.015, 0.985) rotate(-0.35deg); }
-  31% { transform: translate(-1px, -1px) scale(1.01) rotate(0.45deg); }
-  47% { transform: translate(1px, 1px) scale(1.025, 0.98) rotate(-0.5deg); }
-  62% { transform: translate(-2px, -1px) scale(1.02) rotate(0.6deg); }
-  75% { transform: translateY(4px) scale(1.045, 0.95); }
-  88% { transform: translateY(-5px) scale(0.985, 1.055); }
-  100% { transform: translateY(-7px) scale(1.035); }
-}
-@keyframes rvl-lootbox-lid-prime {
-  0%, 68% { transform: translateY(0) rotateX(0); }
-  78% { transform: translateY(1px) rotateX(3deg); }
-  89% { transform: translateY(-2px) rotateX(-8deg); }
-  100% { transform: translateY(-8px) rotateX(-28deg); }
-}
-@keyframes rvl-lootbox-unlock {
-  0%, 62% { opacity: 1; transform: translateX(-50%) rotate(0); }
-  72% { opacity: 1; transform: translateX(-50%) rotate(-7deg) scale(1.08); }
-  82% { opacity: 1; transform: translateX(-50%) rotate(8deg) scale(1.12); }
-  100% { opacity: 0; transform: translate(-50%, 20px) rotate(15deg) scale(0.86); }
-}
-@keyframes rvl-lootbox-seam-charge {
-  0%, 58% { background: #170806; box-shadow: 0 1px 0 rgba(255, 213, 111, 0.4); transform: scaleX(0.9); }
-  78% { background: #ed0e11; box-shadow: 0 0 10px 2px rgba(237, 14, 17, 0.68); }
-  100% { background: #fff3b6; box-shadow: 0 0 22px 7px rgba(255, 213, 111, 0.9), 0 0 42px 12px rgba(237, 14, 17, 0.6); transform: scaleX(1.02); }
-}
-@keyframes rvl-lootbox-body-charge {
-  0%, 60% { filter: brightness(1); }
-  82% { filter: brightness(1.16); }
-  100% { filter: brightness(1.44); }
-}
-@keyframes rvl-lootbox-aura-charge {
-  0% { opacity: 0.46; transform: scale(0.92); }
-  72% { opacity: 0.78; transform: scale(1.06); }
-  100% { opacity: 1; transform: scale(1.26); }
-}
-@keyframes rvl-lootbox-beam-charge {
-  0%, 46% { opacity: 0; transform: translateX(-50%) scaleY(0.3); }
-  100% { opacity: 0.56; transform: translateX(-50%) scaleY(1); }
-}
-@keyframes rvl-lootbox-ring-charge {
-  0% { opacity: 0.15; transform: translate(-50%, -50%) scale(0.92); }
-  70% { opacity: 0.68; }
-  100% { opacity: 0.08; transform: translate(-50%, -50%) scale(1.06); }
-}
-@keyframes rvl-lootbox-spark-charge {
-  0% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-64px) scale(0.2); }
-  36% { opacity: 0.9; }
-  100% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-112px) scale(0.85); }
-}
-
-/* Release. Unlike the old generic burst, the light rig remains in place while
-   the lid clears the box, so the following reward appears to come out of it. */
-.rvl-bursting .rvl-vessel--lootbox { animation: none; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest {
-  animation: rvl-lootbox-release 0.52s cubic-bezier(0.22, 0.7, 0.2, 1) both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid {
-  opacity: 1;
-  animation: rvl-lootbox-lid-burst 0.52s cubic-bezier(0.2, 0.72, 0.16, 1) both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-body {
-  animation: rvl-lootbox-body-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam {
-  animation: rvl-lootbox-seam-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-clasp { opacity: 0; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-aura {
-  animation: rvl-lootbox-aura-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam {
-  animation: rvl-lootbox-beam-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-fx::before {
-  animation: rvl-lootbox-flash-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-rays {
-  animation: rvl-lootbox-rays-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-ring {
-  animation: rvl-lootbox-ring-burst 0.52s ease-out both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark {
-  animation: rvl-lootbox-spark-burst 0.52s cubic-bezier(0.12, 0.65, 0.28, 1) both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--2,
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--6 { animation-delay: 0.025s; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--3,
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--7 { animation-delay: 0.05s; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--4,
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark--8 { animation-delay: 0.075s; }
-
-@keyframes rvl-lootbox-release {
-  0% { opacity: 1; transform: translateY(-7px) scale(1.035); filter: brightness(1.25); }
-  52% { opacity: 1; transform: translateY(2px) scale(1.055, 0.96); filter: brightness(1.8); }
-  76% { opacity: 1; transform: translateY(-3px) scale(1.075); filter: brightness(2.35); }
-  100% { opacity: 0; transform: translateY(-7px) scale(1.12); filter: brightness(3); }
-}
-@keyframes rvl-lootbox-lid-burst {
-  0% { opacity: 1; transform: translateY(-8px) rotateX(-28deg); }
-  36% { opacity: 1; transform: translateY(-30px) rotateX(-76deg) scale(1.025); }
-  76% { opacity: 1; transform: translateY(-77px) rotateX(-112deg) rotate(-3deg) scale(1.06); }
-  100% { opacity: 0; transform: translateY(-102px) rotateX(-126deg) rotate(-5deg) scale(1.08); }
-}
-@keyframes rvl-lootbox-body-burst {
-  0% { filter: brightness(1.4); transform: scale(1); }
-  58% { filter: brightness(2.15); transform: scale(1.045, 0.96); }
-  100% { filter: brightness(3); transform: scale(1.08); }
-}
-@keyframes rvl-lootbox-seam-burst {
-  0% { opacity: 1; background: #fff8d6; transform: scaleX(1); box-shadow: 0 0 24px 8px rgba(255, 213, 111, 0.95); }
-  52% { opacity: 1; background: #fff; transform: scale(1.12, 4); box-shadow: 0 0 38px 16px rgba(255, 244, 202, 0.98); }
-  100% { opacity: 0; background: #fff; transform: scale(1.3, 8); }
-}
-@keyframes rvl-lootbox-aura-burst {
-  0% { opacity: 1; transform: scale(1.22); }
-  55% { opacity: 1; transform: scale(1.55); }
-  100% { opacity: 0; transform: scale(2); }
-}
-@keyframes rvl-lootbox-beam-burst {
-  0% { opacity: 0.5; transform: translateX(-50%) scaleY(0.95); }
-  48% { opacity: 1; transform: translateX(-50%) scale(1.45, 1.24); }
-  100% { opacity: 0; transform: translateX(-50%) scale(1.8, 1.42); }
-}
-@keyframes rvl-lootbox-flash-burst {
-  0% { opacity: 0; transform: scale(0.42); }
-  28% { opacity: 1; transform: scale(1.18); }
-  62% { opacity: 0.72; transform: scale(1.55); }
-  100% { opacity: 0; transform: scale(2.15); }
-}
-@keyframes rvl-lootbox-rays-burst {
-  0% { opacity: 0; transform: scale(0.42) rotate(-8deg); }
-  34% { opacity: 0.88; }
-  100% { opacity: 0; transform: scale(1.16) rotate(13deg); }
-}
-@keyframes rvl-lootbox-ring-burst {
-  0% { opacity: 0.75; transform: translate(-50%, -50%) scale(0.65); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.34); }
-}
-@keyframes rvl-lootbox-spark-burst {
-  0% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-72px) scale(0.25); }
-  22% { opacity: 1; }
-  100% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-190px) scale(1); }
-}
-
 /* The matched front-view case is cropped across the animated lid/body layers,
    so the detailed purchase crate still physically cracks open. */
 [data-lootbox-value-tone="steel"] { --lootbox-tone: #779ab8; --lootbox-tone-rgb: 119 154 184; }
@@ -7859,16 +7690,18 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox {
   --rvl-box-w: min(520px, 88vw, 68dvh);
   --rvl-box-fx: min(560px, 96vw, 76dvh);
-  --rvl-box-charge: 0.82s;
-  --rvl-box-burst: 0.36s;
+  --rvl-box-charge: 1.35s;
+  --rvl-box-burst: 0.92s;
+  --rvl-card-flight: 0.66s;
   box-sizing: border-box;
   width: min(96vw, 960px);
   min-height: min(480px, 94dvh);
   overflow: visible;
 }
 .rvl-stage--lootbox.rvl-stage--auto-lootbox {
-  --rvl-box-charge: 0.56s;
-  --rvl-box-burst: 0.26s;
+  --rvl-box-charge: 0.88s;
+  --rvl-box-burst: 0.66s;
+  --rvl-card-flight: 0.46s;
 }
 .rvl-stage--lootbox .rvl-title { margin-bottom: -0.35rem; }
 .rvl-vessel--lootbox {
@@ -7932,49 +7765,122 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   border-radius: 42%;
   background: radial-gradient(ellipse, rgb(var(--lootbox-tone-rgb) / 0.34), rgba(255, 195, 74, 0.12) 42%, transparent 70%);
   opacity: 0.56;
+  transform: scale(0.98);
   animation: rvl-case-aura 2.8s ease-in-out infinite;
 }
 .rvl-vessel--lootbox .rvl-chest-lid {
   top: 0;
   right: 0;
   left: 0;
-  height: 36.5%;
+  z-index: 7;
+  height: var(--lootbox-case-seam, 37.1%);
   border: 0;
   border-radius: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center top / 100% auto no-repeat;
+  background: none;
   box-shadow: none;
+  transform-origin: 50% 96%;
+  transform-style: preserve-3d;
 }
-.rvl-vessel--lootbox .rvl-chest-lid::before {
-  content: '';
+.rvl-vessel--lootbox :is(.rvl-chest-lid__front, .rvl-chest-lid__inner, .rvl-chest-lid__edge) {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__front {
+  z-index: 3;
+  inset: 0;
+  background: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
+  transform: translateZ(2px);
+}
+.rvl-vessel--lootbox .rvl-chest-lid__front::before {
   position: absolute;
   inset: 0;
   background: var(--lootbox-tone);
+  content: '';
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center top / 100% auto no-repeat;
-  mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center top / 100% auto no-repeat;
+  -webkit-mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
+  mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__inner {
+  z-index: 1;
+  bottom: 0;
+  left: var(--lootbox-inner-lid-inset, 0%);
+  width: var(--lootbox-inner-lid-width, 100%);
+  height: auto;
+  aspect-ratio: 1200 / 540;
+  background: var(--lootbox-case-inner-lid-art) center / 100% 100% no-repeat;
+  backface-visibility: visible;
+  filter: drop-shadow(0 0 10px rgba(50, 255, 108, 0.28));
+  transform: rotateX(90deg) translateZ(-1px);
+  transform-origin: 50% 100%;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__edge {
+  z-index: 2;
+  right: calc(3% + var(--lootbox-case-shell-inset, 0%));
+  bottom: -4px;
+  left: calc(3% + var(--lootbox-case-shell-inset, 0%));
+  height: 9px;
+  border: 1px solid rgba(255, 218, 124, 0.7);
+  background: linear-gradient(#2d2417, #090b0d 48%, #9b6b22 52%, #18140e);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.88);
+  transform: rotateX(32deg) translateZ(1px);
+  transform-origin: 50% 0;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__edge::after {
+  position: absolute;
+  right: 0;
+  top: 4px;
+  left: 0;
+  height: 21px;
+  border-radius: 0 0 50% 50%;
+  border-top: 1px solid rgba(222, 255, 226, 0.9);
+  background: linear-gradient(180deg, #174d2b 0, rgba(93, 255, 132, 0.9) 18%, rgba(22, 193, 79, 0.2) 58%, transparent 100%);
+  box-shadow:
+    0 0 12px 2px rgba(93, 255, 132, 0.76),
+    0 13px 36px 9px rgba(34, 255, 100, 0.32);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.72);
+  transform-origin: 50% 0;
 }
 .rvl-vessel--lootbox .rvl-chest-lid-mark {
   display: none;
 }
 .rvl-vessel--lootbox .rvl-chest-seam {
-  top: 36%;
-  right: 3%;
-  left: 3%;
-  height: 3px;
-  background: #08080e;
+  top: calc(var(--lootbox-case-seam, 37.1%) - 0.4%);
+  right: calc(3% + var(--lootbox-case-shell-inset, 0%));
+  left: calc(3% + var(--lootbox-case-shell-inset, 0%));
+  height: 2px;
+  background: linear-gradient(90deg, transparent 2%, #08080e 11% 89%, transparent 98%);
   box-shadow: 0 1px 0 rgba(255, 213, 111, 0.44);
   transform: none;
 }
+.rvl-vessel--lootbox .rvl-chest-seam::after {
+  position: absolute;
+  top: 50%;
+  right: 4%;
+  left: 4%;
+  height: 86px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(190, 255, 199, 0.86), rgba(44, 255, 105, 0.32) 35%, transparent 70%);
+  content: '';
+  filter: blur(5px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-42%);
+}
 .rvl-vessel--lootbox .rvl-chest-body {
-  top: 36%;
+  top: var(--lootbox-case-seam, 37.1%);
   right: 0;
   bottom: 0;
   left: 0;
   border: 0;
   border-radius: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center bottom / 100% auto no-repeat;
+  background: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
   box-shadow: none;
 }
 .rvl-vessel--lootbox .rvl-chest-body::before {
@@ -7985,17 +7891,176 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center bottom / 100% auto no-repeat;
-  mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center bottom / 100% auto no-repeat;
+  -webkit-mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
+  mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
 }
-.rvl-vessel--lootbox .rvl-chest-body::after {
+.rvl-lootbox-badge { display: none; }
+.rvl-vessel--lootbox .rvl-lootbox-badge {
   position: absolute;
-  z-index: 2;
-  inset: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center bottom / 100% auto no-repeat;
-  clip-path: ellipse(10% 25% at 50% 43.2%);
-  content: '';
+  top: var(--lootbox-case-badge-top, 61.6%);
+  left: 50%;
+  z-index: 6;
+  display: block;
+  width: var(--lootbox-case-badge-size, 12.35%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
   pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring,
+.rvl-vessel--lootbox .rvl-lootbox-badge__center,
+.rvl-vessel--lootbox .rvl-lootbox-badge__face {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring {
+  inset: 5.2%;
+  overflow: hidden;
+  background: radial-gradient(circle at 34% 25%, #72f043 0 10%, #30d100 43%, #219b08 74%, #126006 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.48),
+    inset 0 -2px 2px rgba(9, 48, 3, 0.72),
+    0 0 0 1px rgba(28, 5, 7, 0.94);
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring::before,
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring::before {
+  background: radial-gradient(circle at 34% 25%, #ff5559 0 8%, #ed0e11 43%, #b8090c 76%, #770508 100%);
+  -webkit-mask: conic-gradient(from 45deg, #000 0 180deg, transparent 180deg);
+  mask: conic-gradient(from 45deg, #000 0 180deg, transparent 180deg);
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
+  background: radial-gradient(circle at 34% 25%, #ff5559 0 8%, #ed0e11 43%, #b8090c 76%, #770508 100%);
+  filter: drop-shadow(-1px 0 1px rgba(255, 224, 183, 0.72));
+  -webkit-mask: conic-gradient(from 225deg, #000 0 180deg, transparent 180deg);
+  mask: conic-gradient(from 225deg, #000 0 180deg, transparent 180deg);
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+/* The canonical mark uses black diameter = 75% and white diameter = 58.333%
+   of the colored ring. These insets preserve those ratios at every size. */
+.rvl-vessel--lootbox .rvl-lootbox-badge__center {
+  z-index: 1;
+  inset: 16.4%;
+  overflow: hidden;
+  background: radial-gradient(circle at 36% 27%, #292b30, #111 58%, #050506 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(0, 0, 0, 0.8);
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__face {
+  inset: 11.111%;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: linear-gradient(145deg, #fff 0 58%, #f5f6f6 78%, #e6e8e8 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.96),
+    inset 0 -1px 1px rgba(41, 45, 48, 0.22);
+}
+.rvl-vessel--lootbox .rvl-lootbox-badge__face img {
+  display: block;
+  width: 60%;
+  height: 82%;
+  object-fit: contain;
+}
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
+  animation: rvl-lootbox-badge-red-uncover var(--rvl-box-charge) cubic-bezier(0.42, 0, 0.18, 1) both;
+}
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__center {
+  animation: rvl-lootbox-badge-center-turn var(--rvl-box-charge) cubic-bezier(0.42, 0, 0.18, 1) both;
+}
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after { transform: rotate(180deg); }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__center { transform: rotate(360deg); }
+@keyframes rvl-lootbox-badge-red-uncover {
+  0%, 6% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(180deg); }
+}
+@keyframes rvl-lootbox-badge-center-turn {
+  0%, 6% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(360deg); }
+}
+
+/* Art-backed deadbolts live inside the baked receivers. SMALL and MEDIUM use
+   two channels; the reinforced LARGE case exposes its full four-lock bank. */
+.rvl-vault-lockwork {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+.rvl-vault-interlock {
+  position: absolute;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+.rvl-vault-deadbolt {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.82));
+  transform: translateY(0);
+  will-change: transform;
+}
+.rvl-stage[data-lootbox-case-model="small"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
+  top: 34.3%;
+  display: block;
+  width: 4%;
+  height: 15.3%;
+}
+.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 { left: 31.3%; }
+.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 { right: 31.3%; }
+.rvl-stage[data-lootbox-case-model="medium"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
+  top: 20.2%;
+  display: block;
+  width: 4.2%;
+  height: 30.8%;
+}
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 { left: 26.15%; }
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 { right: 26.15%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock {
+  top: 31.5%;
+  display: block;
+  width: 3.7%;
+  height: 44.6%;
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 { left: 22.8%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 33.7%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 62.6%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 { left: 73.5%; }
+.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-1); }
+.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-2); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-3); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-4); }
+.rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
+  animation: rvl-vault-deadbolt-retract var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
+}
+.rvl-bursting .rvl-vessel--lootbox .rvl-vault-deadbolt {
+  visibility: hidden;
+  transform: translateY(-72%);
+}
+@keyframes rvl-vault-deadbolt-retract {
+  0%, 71% { filter: brightness(1); transform: translateY(0); }
+  77% { filter: brightness(1.34); transform: translateY(-5%); }
+  100% { filter: brightness(1.08); transform: translateY(-72%); }
 }
 .rvl-vessel--lootbox .rvl-chest-brand {
   display: none;
@@ -8005,9 +8070,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-vessel--lootbox .rvl-chest-rivet { display: none; }
 .rvl-vessel--lootbox .rvl-chest-platform {
-  right: -2%;
+  right: calc(-2% + var(--lootbox-case-shell-inset, 0%));
   bottom: 0;
-  left: -2%;
+  left: calc(-2% + var(--lootbox-case-shell-inset, 0%));
   height: 7%;
   border: 1px solid rgba(218, 179, 90, 0.58);
   background: radial-gradient(ellipse, rgb(var(--lootbox-tone-rgb) / 0.3), rgba(9, 8, 16, 0.84) 68%);
@@ -8021,52 +8086,58 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 
 @keyframes rvl-case-arrive {
-  from { opacity: 1; transform: translateY(18px) scale(0.93); }
-  72% { opacity: 1; transform: translateY(-2px) scale(1.012); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 1; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-@keyframes rvl-case-idle { 50% { transform: translateY(-2px); } }
-@keyframes rvl-case-aura { 50% { opacity: 0.78; transform: scale(1.04); } }
+@keyframes rvl-case-idle { from, to { transform: none; } }
+@keyframes rvl-case-aura { 50% { opacity: 0.7; transform: scale(0.98); } }
 @keyframes rvl-case-lock-pulse { 50% { filter: brightness(1.22); transform: scale(1.06); } }
 
 .rvl-charging .rvl-vessel--lootbox .rvl-chest {
-  animation: rvl-case-charge var(--rvl-box-charge) cubic-bezier(0.34, 0.04, 0.16, 1) both;
-  filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 28px rgb(var(--lootbox-tone-rgb) / 0.56));
+  animation: rvl-case-charge var(--rvl-box-charge) ease-in-out both;
+  filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 18px rgb(var(--lootbox-tone-rgb) / 0.32));
 }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-prime var(--rvl-box-charge) ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-clasp { animation: rvl-case-unlock var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-prime var(--rvl-box-charge) ease-in-out both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid__edge::after { animation: rvl-case-lid-glow-prime var(--rvl-box-charge) ease-in-out both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-charge var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-seam::after { animation: rvl-case-interior-glow-prime var(--rvl-box-charge) ease-in-out both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-charge var(--rvl-box-charge) ease-in both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-charge var(--rvl-box-charge) ease-in both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-charge var(--rvl-box-charge) ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-charge 0.62s ease-out infinite; }
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark { opacity: 0; animation: none; }
 
 @keyframes rvl-case-charge {
-  0%, 18% { transform: none; }
-  38% { transform: translateX(-1px) rotate(-0.25deg); }
-  52% { transform: translateX(1px) rotate(0.25deg); }
-  66% { transform: translateY(1px) scale(1.008); }
-  82% { transform: translateY(3px) scale(1.02, 0.985); }
-  100% { transform: translateY(-3px) scale(1.018); }
+  from { transform: none; }
+  to { transform: none; }
 }
 @keyframes rvl-case-lid-prime {
-  0%, 72% { transform: none; }
-  86% { transform: translateY(-1px) rotateX(-5deg); }
-  100% { transform: translateY(-4px) rotateX(-20deg); }
+  from { transform: none; }
+  to { transform: none; }
 }
-@keyframes rvl-case-unlock {
-  0%, 68% { opacity: 1; transform: translateX(-50%); }
-  82% { opacity: 1; transform: translateX(-50%) scale(1.08); }
-  100% { opacity: 0; transform: translate(-50%, 12px) scale(0.9); }
+@keyframes rvl-case-lid-glow-prime {
+  0%, 68% { opacity: 0; transform: scaleX(0.7); }
+  86% { opacity: 0.18; transform: scaleX(0.9); }
+  100% { opacity: 0.42; transform: scaleX(1); }
+}
+@keyframes rvl-case-interior-glow-prime {
+  0%, 62% { opacity: 0; }
+  86% { opacity: 0.26; }
+  100% { opacity: 0.58; }
 }
 @keyframes rvl-case-seam-charge {
-  0%, 60% { background: #08080e; box-shadow: 0 1px 0 rgba(255, 213, 111, 0.4); }
-  82% { background: var(--lootbox-tone); box-shadow: 0 0 10px rgb(var(--lootbox-tone-rgb) / 0.68); }
-  100% { background: #fff3be; box-shadow: 0 0 18px 5px rgba(255, 222, 132, 0.88); }
+  0%, 62% { background: #08080e; box-shadow: 0 1px 0 rgba(255, 213, 111, 0.3); }
+  86% { background: #17843e; box-shadow: 0 0 7px 1px rgba(46, 230, 103, 0.44); }
+  100% { background: #caffd1; box-shadow: 0 0 13px 3px rgba(74, 255, 123, 0.76); }
 }
-@keyframes rvl-case-body-charge { to { filter: brightness(1.28); } }
-@keyframes rvl-case-aura-charge { to { opacity: 1; transform: scale(1.14); } }
-@keyframes rvl-case-beam-charge { 0%, 54% { opacity: 0; transform: translateX(-50%) scaleY(0.3); } to { opacity: 0.42; transform: translateX(-50%) scaleY(1); } }
+@keyframes rvl-case-body-charge { from { filter: brightness(1); } to { filter: brightness(1.1); } }
+@keyframes rvl-case-aura-charge {
+  from { opacity: 0.34; transform: scale(0.98); }
+  to { opacity: 0.62; transform: scale(0.98); }
+}
+@keyframes rvl-case-beam-charge {
+  0%, 72% { opacity: 0; transform: translateX(-50%) scaleY(0.72); }
+  to { opacity: 0.14; transform: translateX(-50%) scaleY(0.72); }
+}
 @keyframes rvl-case-spark-charge {
   from { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-58px) scale(0.2); }
   38% { opacity: 0.8; }
@@ -8074,36 +8145,68 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 
 .rvl-bursting .rvl-vessel--lootbox { opacity: 1; transform: none; filter: none; animation: none; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.16, 0.72, 0.18, 1) both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-in-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.32, 0, 0.2, 1) both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid__edge::after { animation: rvl-case-lid-glow-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam::after { animation: rvl-case-interior-glow-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-release var(--rvl-box-burst) ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam {
+  background: linear-gradient(180deg, transparent, rgba(172, 255, 188, 0.22) 58%, rgba(54, 255, 108, 0.5));
+  animation: rvl-case-beam-release var(--rvl-box-burst) ease-out both;
+}
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-fx::before { animation: rvl-case-flash var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-rays { animation: rvl-case-rays var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-release var(--rvl-box-burst) ease-out both; }
 
 @keyframes rvl-case-release {
-  0%, 62% { opacity: 1; transform: translateY(-3px) scale(1.018); }
-  82% { opacity: 1; transform: translateY(-3px) scale(1.04); filter: brightness(1.6); }
-  to { opacity: 0; transform: translateY(-5px) scale(1.07); filter: brightness(2.25); }
+  from { opacity: 1; transform: none; filter: brightness(1.1); }
+  to { opacity: 1; transform: none; filter: brightness(1.04); }
 }
 @keyframes rvl-case-lid-open {
-  from { opacity: 1; transform: translateY(-4px) rotateX(-20deg); }
-  72% { opacity: 1; transform: translateY(-24px) rotateX(-86deg); }
-  to { opacity: 0; transform: translateY(-38px) rotateX(-104deg); }
+  0%, 10% { opacity: 1; transform: rotateX(0); }
+  70%, 100% { opacity: 1; transform: rotateX(-80deg); }
 }
-@keyframes rvl-case-body-release { 0%, 62% { filter: brightness(1.25); } to { filter: brightness(2.2); } }
+@keyframes rvl-case-lid-glow-release {
+  0%, 10% { opacity: 0.42; transform: scaleX(1); }
+  48% { opacity: 1; transform: scaleX(1.03); }
+  100% { opacity: 0.78; transform: scaleX(1); }
+}
+@keyframes rvl-case-interior-glow-release {
+  from { opacity: 0.64; }
+  55% { opacity: 1; }
+  to { opacity: 0.78; }
+}
+@keyframes rvl-case-body-release {
+  0% { filter: brightness(1.1); transform: none; }
+  56% { filter: brightness(1.24); transform: none; }
+  100% { filter: brightness(1.08); transform: none; }
+}
 @keyframes rvl-case-seam-release {
-  from { opacity: 1; background: #fff8de; box-shadow: 0 0 18px 6px rgba(255, 222, 132, 0.9); }
-  58% { opacity: 1; transform: scaleY(3); }
-  to { opacity: 0; transform: scale(1.08, 6); }
+  from { opacity: 1; background: #caffd1; box-shadow: 0 0 13px 3px rgba(74, 255, 123, 0.76); transform: scaleX(0.92); }
+  48% { opacity: 1; background: #effff1; box-shadow: 0 0 24px 7px rgba(64, 255, 116, 0.86); transform: scaleX(1); }
+  to { opacity: 0.48; background: #9dffad; box-shadow: 0 0 16px 4px rgba(46, 237, 100, 0.62); transform: scaleX(0.96); }
 }
-@keyframes rvl-case-aura-release { from { opacity: 1; transform: scale(1.12); } to { opacity: 0; transform: scale(1.55); } }
-@keyframes rvl-case-beam-release { from { opacity: 0.4; transform: translateX(-50%) scaleY(1); } 46% { opacity: 0.85; } to { opacity: 0; transform: translateX(-50%) scale(1.18, 1.22); } }
-@keyframes rvl-case-flash { 0% { opacity: 0; transform: scale(0.5); } 32% { opacity: 0.82; transform: scale(1.05); } to { opacity: 0; transform: scale(1.7); } }
-@keyframes rvl-case-rays { from { opacity: 0; transform: scale(0.62) rotate(-5deg); } 36% { opacity: 0.65; } to { opacity: 0; transform: scale(1.02) rotate(8deg); } }
+@keyframes rvl-case-aura-release {
+  from { opacity: 0.62; transform: scale(0.98); }
+  to { opacity: 0.18; transform: scale(0.98); }
+}
+@keyframes rvl-case-beam-release {
+  from { opacity: 0.12; transform: translateX(-50%) scaleY(0.25); }
+  58% { opacity: 0.62; transform: translateX(-50%) scaleY(1); }
+  to { opacity: 0.24; transform: translateX(-50%) scaleY(1); }
+}
+@keyframes rvl-case-flash {
+  0% { opacity: 0; transform: scale(1); }
+  38% { opacity: 0.58; transform: scale(1); }
+  to { opacity: 0; transform: scale(1); }
+}
+@keyframes rvl-case-rays {
+  from { opacity: 0; transform: none; }
+  42% { opacity: 0.34; transform: none; }
+  to { opacity: 0; transform: none; }
+}
 @keyframes rvl-case-spark-release {
   from { opacity: 0; transform: rotate(var(--spark-angle)) translateY(-62px) scale(0.2); }
   28% { opacity: 0.9; }
@@ -8311,9 +8414,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .sdgnrs-badge > .sdgnrs-badge__mark {
   position: relative;
+  top: -0.22%;
   z-index: 2;
   width: 33%;
-  height: 34%;
+  height: 35.16%;
   object-fit: contain;
 }
 .rvl-card-icon--sdgnrs {
@@ -9088,6 +9192,32 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: min(94vw, 920px);
   max-height: 84dvh;
   padding: 0.35rem;
+  animation: none;
+}
+.rvl-lootbox-flight[hidden] { display: none !important; }
+.rvl-vessel--lootbox .rvl-lootbox-flight {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  z-index: 9;
+  width: min(94vw, 920px);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.rvl-vessel--lootbox .rvl-lootbox-flight::before {
+  position: absolute;
+  inset: 30% 20%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(220,255,224,0.86), rgba(41,255,103,0.38) 38%, transparent 72%);
+  content: '';
+  filter: blur(9px);
+  animation: rvl-lootbox-flight-glow var(--rvl-box-burst) ease-out both;
+}
+@keyframes rvl-lootbox-flight-glow {
+  from { opacity: 0; transform: scale(0.24); }
+  42% { opacity: 0.92; }
+  to { opacity: 0.18; transform: scale(1.15); }
 }
 .rvl-stage--lootbox .rvl-summary-grid {
   display: grid;
@@ -9126,7 +9256,52 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(5) {
   grid-column: 2 / span 2;
 }
+.rvl-lootbox-box-breakdown {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.rvl-lootbox-box-group {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.58rem;
+  padding: 0.72rem;
+  border: 1px solid rgba(232, 213, 163, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(155deg, rgba(255,255,255,0.045), rgba(17,16,30,0.7));
+}
+.rvl-lootbox-box-group--shared {
+  border-color: rgba(186, 133, 255, 0.34);
+  background: linear-gradient(155deg, rgba(141,78,219,0.12), rgba(17,16,30,0.76));
+}
+.rvl-lootbox-box-group__title {
+  color: #e8d5a3;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: uppercase;
+}
+.rvl-lootbox-box-group--shared .rvl-lootbox-box-group__title { color: #d8b5ff; }
+.rvl-lootbox-box-group__empty {
+  padding: 0.5rem;
+  color: rgba(226,222,239,0.62);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.rvl-lootbox-box-group > .rvl-summary-grid { width: 100%; }
 .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini {
+  --rvl-card-launch-x: 0%;
+  --rvl-card-launch-mid-x: 0%;
+  --rvl-card-launch-tilt: 0deg;
+  --rvl-card-launch-mid-tilt: 0deg;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -9139,6 +9314,71 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
     linear-gradient(145deg, rgba(255,255,255,0.065), transparent 38%),
     linear-gradient(165deg, #25213c, #11101e 74%);
   box-shadow: 0 14px 30px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(255,255,255,0.04);
+  transform-origin: 50% 50%;
+  animation: none;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="2"] > .rvl-card--mini:first-child {
+  --rvl-card-launch-x: 55%;
+  --rvl-card-launch-mid-x: 26%;
+  --rvl-card-launch-tilt: -7deg;
+  --rvl-card-launch-mid-tilt: -3deg;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="2"] > .rvl-card--mini:last-child {
+  --rvl-card-launch-x: -55%;
+  --rvl-card-launch-mid-x: -26%;
+  --rvl-card-launch-tilt: 7deg;
+  --rvl-card-launch-mid-tilt: 3deg;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="3"] > .rvl-card--mini:first-child,
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="6"] > .rvl-card--mini:nth-child(3n+1) {
+  --rvl-card-launch-x: 112%;
+  --rvl-card-launch-mid-x: 52%;
+  --rvl-card-launch-tilt: -9deg;
+  --rvl-card-launch-mid-tilt: -4deg;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="3"] > .rvl-card--mini:last-child,
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="6"] > .rvl-card--mini:nth-child(3n) {
+  --rvl-card-launch-x: -112%;
+  --rvl-card-launch-mid-x: -52%;
+  --rvl-card-launch-tilt: 9deg;
+  --rvl-card-launch-mid-tilt: 4deg;
+}
+.rvl-stage--lootbox .rvl-summary-grid:is([data-card-count="4"], [data-card-count="8"]) > .rvl-card--mini:nth-child(4n+1),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:first-child { --rvl-card-launch-x: 165%; --rvl-card-launch-mid-x: 76%; --rvl-card-launch-tilt: -10deg; --rvl-card-launch-mid-tilt: -4deg; }
+.rvl-stage--lootbox .rvl-summary-grid:is([data-card-count="4"], [data-card-count="8"]) > .rvl-card--mini:nth-child(4n+2),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(2) { --rvl-card-launch-x: 55%; --rvl-card-launch-mid-x: 26%; --rvl-card-launch-tilt: -4deg; --rvl-card-launch-mid-tilt: -2deg; }
+.rvl-stage--lootbox .rvl-summary-grid:is([data-card-count="4"], [data-card-count="8"]) > .rvl-card--mini:nth-child(4n+3),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(3) { --rvl-card-launch-x: -55%; --rvl-card-launch-mid-x: -26%; --rvl-card-launch-tilt: 4deg; --rvl-card-launch-mid-tilt: 2deg; }
+.rvl-stage--lootbox .rvl-summary-grid:is([data-card-count="4"], [data-card-count="8"]) > .rvl-card--mini:nth-child(4n),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(4) { --rvl-card-launch-x: -165%; --rvl-card-launch-mid-x: -76%; --rvl-card-launch-tilt: 10deg; --rvl-card-launch-mid-tilt: 4deg; }
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(1),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(5) { --rvl-card-launch-x: 112%; --rvl-card-launch-mid-x: 52%; --rvl-card-launch-tilt: -8deg; --rvl-card-launch-mid-tilt: -3deg; }
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(3),
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(7) { --rvl-card-launch-x: -112%; --rvl-card-launch-mid-x: -52%; --rvl-card-launch-tilt: 8deg; --rvl-card-launch-mid-tilt: 3deg; }
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(4) { --rvl-card-launch-x: 55%; --rvl-card-launch-mid-x: 26%; --rvl-card-launch-tilt: -5deg; --rvl-card-launch-mid-tilt: -2deg; }
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(5) { --rvl-card-launch-x: -55%; --rvl-card-launch-mid-x: -26%; --rvl-card-launch-tilt: 5deg; --rvl-card-launch-mid-tilt: 2deg; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini {
+  animation: rvl-lootbox-card-rise var(--rvl-card-flight) cubic-bezier(0.18, 0.72, 0.24, 1) 0.1s both;
+}
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(2) { animation-delay: 0.12s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(3) { animation-delay: 0.14s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(4) { animation-delay: 0.16s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(5) { animation-delay: 0.18s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(n+6) { animation-delay: 0.2s; }
+@keyframes rvl-lootbox-card-rise {
+  0% {
+    opacity: 0;
+    filter: brightness(2.2) saturate(0.7);
+    transform: translate(var(--rvl-card-launch-x), 12px) scale(0.08) rotate(var(--rvl-card-launch-tilt));
+  }
+  24% {
+    opacity: 1;
+    filter: brightness(1.72) saturate(1.08);
+    transform: translate(var(--rvl-card-launch-x), -12px) scale(0.24) rotate(var(--rvl-card-launch-tilt));
+  }
+  66% { transform: translate(var(--rvl-card-launch-mid-x), -28px) scale(0.82) rotate(var(--rvl-card-launch-mid-tilt)); }
+  88% { transform: translate(0, 3px) scale(1.025) rotate(0deg); }
+  to { opacity: 1; filter: brightness(1) saturate(1); transform: translate(0, 0) scale(1) rotate(0deg); }
 }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner {
   box-sizing: border-box;
@@ -9205,6 +9445,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   .rvl-stage--lootbox .rvl-summary-grid[data-card-count] > .rvl-card--mini {
     grid-column: auto !important;
   }
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count]:not([data-card-count="1"]) > .rvl-card--mini:nth-child(odd) { --rvl-card-launch-x: 55%; --rvl-card-launch-mid-x: 26%; --rvl-card-launch-tilt: -6deg; --rvl-card-launch-mid-tilt: -2deg; }
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count]:not([data-card-count="1"]) > .rvl-card--mini:nth-child(even) { --rvl-card-launch-x: -55%; --rvl-card-launch-mid-x: -26%; --rvl-card-launch-tilt: 6deg; --rvl-card-launch-mid-tilt: 2deg; }
+  .rvl-stage--lootbox .rvl-summary-grid:is([data-card-count="3"], [data-card-count="5"], [data-card-count="7"]) > .rvl-card--mini:last-child { --rvl-card-launch-x: 0%; --rvl-card-launch-mid-x: 0%; --rvl-card-launch-tilt: 0deg; --rvl-card-launch-mid-tilt: 0deg; width: calc(50% - 0.33rem); grid-column: 1 / -1 !important; justify-self: center; }
   .rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] {
     grid-template-columns: minmax(0, 260px);
   }
@@ -9218,6 +9461,14 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   .rvl-stage--lootbox .rvl-summary-grid,
   .rvl-stage--lootbox .rvl-summary-grid[data-card-count] {
     grid-template-columns: minmax(0, 226px);
+  }
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count]:not([data-card-count="0"]) > .rvl-card--mini {
+    --rvl-card-launch-x: 0% !important;
+    --rvl-card-launch-mid-x: 0% !important;
+    --rvl-card-launch-tilt: 0deg !important;
+    --rvl-card-launch-mid-tilt: 0deg !important;
+    width: 100% !important;
+    grid-column: auto !important;
   }
 }
 
@@ -10003,8 +10254,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   .rvl-spin-row, .rvl-spin-score, .rvl-spin-total, .rvl-summary {
     animation: none !important;
   }
-  .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-body, .rvl-chest-seam,
-  .rvl-chest-clasp, .rvl-chest-aura {
+  .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-lid__edge::after,
+  .rvl-chest-body, .rvl-chest-seam, .rvl-chest-seam::after,
+  .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-badge__ring,
+  .rvl-lootbox-badge__ring::before, .rvl-lootbox-badge__ring::after, .rvl-lootbox-badge__center {
     animation: none !important;
     transition: none !important;
   }
@@ -10067,7 +10320,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: 36px;
   height: 22px;
   flex: 0 0 auto;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
+  background: var(--lootbox-case-art) center / contain no-repeat;
 }
 .bxs-chip-art::after {
   content: '';
@@ -10078,16 +10331,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
-  mask: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
+  mask: var(--lootbox-case-art) center / contain no-repeat;
 }
 .bxs-chip-art::before {
   content: '';
   position: absolute;
   z-index: 2;
   inset: 0;
-  background: url('/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp') center / contain no-repeat;
-  clip-path: ellipse(10% 16.5% at 50% 63.5%);
+  background: var(--lootbox-case-art) center / contain no-repeat;
+  clip-path: var(--lootbox-badge-clip);
   pointer-events: none;
 }
 
@@ -13474,8 +13727,7 @@ body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-bonus { borde
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn.is-processing { border-color: rgba(231,188,89,0.76); background: linear-gradient(110deg, rgba(47,12,15,0.98), rgba(28,12,15,0.98) 54%, rgba(12,8,10,0.98)); color: #fff0bd; cursor: wait; opacity: 1; }
 body.layout-basic .jackpot-hero replay-panel .replay-reveal-btn:disabled { opacity: 0.62; }
 
-/* Only the compact no-bonus status lives here in single-button mode; keep it
-   tight under the button rather than a full row of padding below the board. */
+/* Keep the original board geometry without putting status copy in this row. */
 body.layout-basic .jackpot-hero replay-panel .replay-bonus-section {
   order: 3;
   box-sizing: border-box;
@@ -13485,9 +13737,6 @@ body.layout-basic .jackpot-hero replay-panel .replay-bonus-section {
   justify-content: center;
   margin: 0.22rem 0 0;
 }
-/* In the embedded single-button board this row only ever holds the compact
-   "No bonus" status. Keep its footprint while hidden so the whole three-panel
-   instrument does not move a few pixels when that status appears. */
 body.layout-basic .jackpot-hero replay-panel[single-button] .replay-bonus-section[hidden] {
   display: flex !important;
   visibility: hidden;
@@ -16724,24 +16973,6 @@ body.layout-basic .deg-header__info:focus-visible {
   background: rgba(99, 102, 241, 0.25);
   color: #fff;
 }
-body.layout-basic .deg-header .deg-state {
-  flex: 0 0 auto;
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
-  min-height: 0;
-  margin: 0;
-  padding: 0.24rem 0.48rem;
-  border: 1px solid rgba(165, 180, 252, 0.32);
-  border-radius: 999px;
-  background: rgba(99, 102, 241, 0.09);
-  color: #c7d2fe;
-  font-size: 0.62rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-body.layout-basic .deg-header .deg-state:empty { display: none; }
-
 /* All three lower widgets use one real header rail. This overrides the beta
    panel-header divider/padding inherited by Side Bets and Degenerette, which
    otherwise moved their labels off the Quests baseline. */

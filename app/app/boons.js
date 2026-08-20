@@ -1,4 +1,5 @@
 import { ETH_DIVISOR } from './chain-config.js';
+import { lootboxCaseAssets } from './lootbox-value-tone.js';
 
 // Compact product mapping for the player-facing active-boon indicators.
 // The DB feed carries the contract boon type; this table deliberately uses the
@@ -48,7 +49,7 @@ const BOON_UI = Object.freeze({
    boons keep the exact ETH / FLIP / WWXRP badge players already recognize. */
 export const BOON_PRODUCT_ICONS = Object.freeze({
   purchase: null,
-  lootbox: '/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp',
+  lootbox: lootboxCaseAssets('medium').lockedFront,
   coinflip: '/whitepaper/flame-logo-split.svg',
   quests: '/app/assets/boons/boon-quest-micro.svg',
   decimator: '/app/assets/decimator-draw-mark.svg',

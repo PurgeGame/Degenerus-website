@@ -198,9 +198,10 @@ function _paintQuestIcon(host, icon) {
 }
 
 // Every setup-oriented quest has a matching form listener. Affiliate rewards
-// are earned by other players' purchases, so there is no honest amount field
-// to prefill for type 3 and its card remains informational.
+// are earned by other players' purchases, so type 3 copies the player's
+// shareable referral link instead of opening an amount form.
 const QUEST_SETUP_TYPES = new Set([1, 2, 4, 5, 6, 7, 8, 9]);
+const REFERRAL_QUEST_TYPE = 3;
 
 function _parseDgnQuestAmount(value, questType) {
   const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
@@ -773,6 +774,28 @@ class AppQuestPanel extends HTMLElement {
         : (type === 4 || type === 9) ? 1n : 0n;
     if (remaining < floor) remaining = floor;
     return remaining;
+  }
+
+  #dispatchReferralCopy(model, trigger) {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const detail = {
+      product: 'affiliate',
+      trigger,
+      quests: [{
+        questType: REFERRAL_QUEST_TYPE,
+        role: String(model?.role || '').toUpperCase(),
+      }],
+    };
+    try {
+      let activation;
+      if (typeof CustomEvent === 'function') {
+        activation = new CustomEvent('quest:open', { detail });
+      } else {
+        activation = new Event('quest:open');
+        Object.defineProperty(activation, 'detail', { configurable: true, value: detail });
+      }
+      document.dispatchEvent(activation);
+    } catch (_e) { /* detached/headless document */ }
   }
 
   #questAdjustConfig(model = this.#questDialogModel) {
@@ -1717,13 +1740,14 @@ class AppQuestPanel extends HTMLElement {
       ? `${identity}:level:${Number(level?.level ?? -1)}:type:${levelType}`
       : null;
     if (levelKey) {
-      // The card may read COMPLETE as soon as banked progress reaches target,
-      // even while the eligibility gate delays the actual contract payout.
-      // The completion toast is a reward receipt, so only the authoritative
-      // completed flag may establish its false -> true transition. Treating
-      // goalMet as paid swallowed the later 800-FLIP level reward and left a
-      // combined banner totaling only its 100-FLIP daily rows.
-      observe(levelKey, Boolean(level?.completed));
+      // The target-crossing action is the player-facing completion boundary
+      // used by the level card and published quest objectives. The auxiliary
+      // completed flag can arrive much later; treating that lagging projection
+      // as a fresh transition lets an old level quest hitchhike on an unrelated
+      // daily/bonus toast.
+      const goalMet = level?.progressAvailable !== false
+        && questGoalMet(level?.progress ?? 0, level?.target ?? 0);
+      observe(levelKey, Boolean(level?.completed) || goalMet);
     }
     return { dailyKeys, levelKey, newlyCompleted };
   }
@@ -2163,15 +2187,17 @@ class AppQuestPanel extends HTMLElement {
     if (model.isUnstarted) slotDiv.classList.add('qst-slot--unstarted');
     if (model.isGated) slotDiv.classList.add('qst-slot--gated');
     this.#questCards.push({ model, element: slotDiv });
+    const isReferral = Number(model.questType) === REFERRAL_QUEST_TYPE;
     const interactive = !model.isDone
-      && QUEST_SETUP_TYPES.has(Number(model.questType));
-    const actionable = interactive && !model.isGated;
+      && (isReferral || QUEST_SETUP_TYPES.has(Number(model.questType)));
+    const actionable = interactive && (isReferral || !model.isGated);
     if (interactive) {
       slotDiv.classList.add(actionable ? 'qst-slot--actionable' : 'qst-slot--explainable');
       slotDiv.setAttribute('role', 'button');
       slotDiv.setAttribute('tabindex', '0');
       const activate = () => {
-        this.#openQuestDialog(model, slotDiv);
+        if (isReferral) this.#dispatchReferralCopy(model, slotDiv);
+        else this.#openQuestDialog(model, slotDiv);
       };
       slotDiv.addEventListener('click', activate);
       slotDiv.addEventListener('keydown', (event) => {
@@ -2259,7 +2285,10 @@ class AppQuestPanel extends HTMLElement {
     meterEl.appendChild(fillEl);
     slotDiv.appendChild(meterEl);
 
-    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${interactive ? ' Click to complete.' : ''}`;
+    const actionLabel = isReferral
+      ? ' Click to copy your referral link.'
+      : interactive ? ' Click to complete.' : '';
+    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${actionLabel}`;
     slotDiv.setAttribute('aria-label', aria);
     // Keep the complete state description available to assistive tech without
     // turning it into an oversized native mouse tooltip. Cards can opt into a

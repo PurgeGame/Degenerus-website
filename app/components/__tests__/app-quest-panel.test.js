@@ -718,6 +718,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
   });
 
   test('quest-facing copy calls type 3 Referral, never Affiliate', async () => {
+    const shortcuts = [];
+    document.addEventListener('quest:open', (event) => shortcuts.push(event.detail));
     _fetchHandler = async () => makeQuestsPayload({
       quests: [
         { day: 1, slot: 0, questType: 3, progress: 0, target: 2, completed: false },
@@ -732,6 +734,13 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.match(primary.textContent, /Referral/);
     assert.doesNotMatch(primary.textContent, /Affiliate/i);
     assert.match(primary.getAttribute('aria-label') || '', /Referral/);
+    assert.match(primary.getAttribute('aria-label') || '', /copy your referral link/i);
+    assert.equal(primary.getAttribute('role'), 'button');
+    assert.equal(primary.getAttribute('tabindex'), '0');
+    primary.dispatchEvent({ type: 'click' });
+    assert.equal(shortcuts.length, 1, 'clicking the referral quest requests a link copy');
+    assert.equal(shortcuts[0]?.product, 'affiliate');
+    assert.deepEqual(shortcuts[0]?.quests, [{ questType: 3, role: 'DAILY' }]);
     el.disconnectedCallback();
   });
 
@@ -1033,6 +1042,76 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(indicator.getAttribute('product'), 'lootbox');
     assert.equal(el.querySelector('[data-bind="qst-action-boon-label"]').textContent, '25% BIGGER LUCKBOX');
     assert.equal(el.querySelector('[data-bind="qst-action-boon-value"]').textContent, '+0.01 ETH VALUE');
+    el.disconnectedCallback();
+  });
+
+  test('an open purchase sheet refreshes its bonus area without changing base quotes', async () => {
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/game/quests/day/')) {
+        return { day: 1, quests: [{ slot: 0, questType: 1, target: '40000000000' }] };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: '0', target: '40000000000', completed: false },
+        ],
+        levelQuest: null,
+      });
+    };
+    storeMod.update('app.lastDay', { day: 1 });
+
+    const el = instantiate();
+    await settle(40);
+    el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
+
+    const boon = el.querySelector('[data-bind="qst-action-boon"]');
+    const indicator = el.querySelector('[data-bind="qst-action-boon-indicator"]');
+    const label = el.querySelector('[data-bind="qst-action-boon-label"]');
+    const requirement = el.querySelector('[data-bind="qst-action-requirement"]');
+    const confirm = el.querySelector('[data-bind="qst-action-confirm"]');
+    assert.equal(boon.hidden, true);
+
+    const ticketRequirement = requirement.textContent;
+    const ticketConfirm = confirm.textContent;
+    storeMod.update('app.boons', {
+      day: 1,
+      boons: [
+        { boonType: 9, consumed: false },
+        { boonType: 22, consumed: false },
+      ],
+    });
+    await settle();
+
+    assert.equal(boon.hidden, false);
+    assert.equal(indicator.getAttribute('product'), 'purchase');
+    assert.equal(label.textContent, '25% MORE TICKETS');
+    assert.equal(requirement.textContent, ticketRequirement);
+    assert.equal(confirm.textContent, ticketConfirm);
+
+    storeMod.update('app.boons', { day: 1, boons: [] });
+    await settle();
+    assert.equal(boon.hidden, true);
+    el.querySelector('[data-bind="qst-action-lootbox"]').dispatchEvent({ type: 'click' });
+    const lootboxRequirement = requirement.textContent;
+    const lootboxConfirm = confirm.textContent;
+
+    storeMod.update('app.boons', {
+      day: 1,
+      boons: [
+        { boonType: 9, consumed: false },
+        { boonType: 22, consumed: false },
+      ],
+    });
+    await settle();
+
+    assert.equal(boon.hidden, false);
+    assert.equal(indicator.getAttribute('product'), 'lootbox');
+    assert.equal(label.textContent, '25% BIGGER LUCKBOX');
+    assert.equal(requirement.textContent, lootboxRequirement);
+    assert.equal(confirm.textContent, lootboxConfirm);
     el.disconnectedCallback();
   });
 
@@ -1643,29 +1722,37 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('a delayed level payout contributes 800 FLIP even when its target was already met', async () => {
-    let paid = false;
+  test('a bonus completion does not replay a level quest whose target was already met', async () => {
+    let bonusComplete = false;
     _fetchHandler = async () => makeQuestsPayload({
       quests: [
         {
           day: 1,
           slot: 0,
           questType: 1,
-          progress: paid ? 3 : 1,
+          progress: 3,
           target: 3,
-          completed: paid,
+          completed: true,
         },
-        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+        {
+          day: 1,
+          slot: 1,
+          questType: 2,
+          progress: bonusComplete ? 100 : 0,
+          target: 100,
+          completed: bonusComplete,
+        },
       ],
+      questStreak: { baseStreak: bonusComplete ? 11 : 10, lastCompletedDay: 1 },
       levelQuest: {
         level: 7,
         questType: 6,
-        // Progress can bank past target before the eligibility gate permits
-        // LevelQuestCompleted and its actual 800-FLIP credit.
+        // The card has correctly shown COMPLETE since the target-crossing
+        // action. A lagging authoritative flag must not re-announce it later.
         progress: '1800000000000',
         target: '1600000000000',
-        completed: paid,
-        eligible: paid,
+        completed: bonusComplete,
+        eligible: bonusComplete,
       },
     });
     const el = instantiate();
@@ -1675,28 +1762,34 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       el.querySelectorAll('.qst-slot')[2]
         .querySelector('.qst-slot-status')?.textContent,
       'COMPLETE',
-      'target-met presentation remains complete while the payout is gated',
+      'the target-met level quest is already complete before today\'s bonus action',
     );
     assert.equal(el.querySelector('[data-bind="qst-complete-toast"]').hidden, true,
-      'banked progress alone is not presented as an 800-FLIP receipt');
+      'loading the existing level completion remains quiet');
 
-    paid = true;
+    bonusComplete = true;
     storeMod.update('connected.address', CONNECTED);
     await settle(60);
 
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
-      'DAILY + LEVEL QUESTS COMPLETE',
+      'DAILY QUEST COMPLETE',
+      'the old level completion is not folded into the new bonus notification',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
+      'Coinflip',
     );
     assert.equal(
       el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
-      '+900 FLIP · +6 STREAK',
-      'the authoritative level completion adds 800 instead of being mistaken for another daily',
+      '+100 FLIP · +1 STREAK',
+      'the notification includes only the bonus reward actually completed now',
     );
-    assert.ok(
+    assert.equal(
       el.querySelectorAll('.qst-slot')[2]
         .classList.contains('qst-slot--just-completed'),
-      'the already-full card pulses when its reward is actually credited',
+      false,
+      'the already-complete level card does not pulse again',
     );
     el.disconnectedCallback();
   });

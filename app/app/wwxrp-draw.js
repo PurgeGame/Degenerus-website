@@ -6,6 +6,7 @@ import { CHAIN, CONTRACTS } from './chain-config.js';
 import { ethers, getProvider, sendTx } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
+import { sharedReadProvider } from './read-provider.js';
 
 const DRAW_ABI = [
   'event DrawEntered(uint24 indexed day, address indexed player, uint8 bucket, uint32 entryIndex, uint256 burnAmount, uint256 effectiveScore, uint256 cumulativeScore)',
@@ -21,6 +22,12 @@ const MAX_SCAN_CHUNKS = 12;
 const CACHE_VERSION = 1;
 const _memoryCache = new Map();
 let _contractFactory = null;
+let _readProvider = null;
+
+function _readerProvider() {
+  if (!_readProvider) _readProvider = sharedReadProvider();
+  return _readProvider || getProvider();
+}
 
 function _contract(runner) {
   if (_contractFactory) return _contractFactory(runner);
@@ -80,7 +87,7 @@ function _structured(error, fallback) {
  * on the next refresh instead of silently skipping a range.
  */
 export async function readPlayerWwxrpDrawDays({ player } = {}) {
-  const provider = getProvider();
+  const provider = _readerProvider();
   if (!player || !provider || !CONTRACTS.WWXRP) return { days: [], complete: false };
   const cache = _readCache(player);
   let head;
@@ -137,7 +144,7 @@ export async function readPlayerWwxrpDrawDays({ player } = {}) {
 
 /** Reduce one immutable day to the only UI facts we need. */
 export async function readWwxrpDrawOutcome({ day } = {}) {
-  const provider = getProvider();
+  const provider = _readerProvider();
   const drawDay = Number(day);
   if (!provider || !Number.isInteger(drawDay) || drawDay < 0) return null;
   try {
@@ -200,6 +207,6 @@ export function __setWwxrpDrawContractFactoryForTest(factory) {
 
 export function __resetWwxrpDrawForTest() {
   _contractFactory = null;
+  _readProvider = null;
   _memoryCache.clear();
 }
-

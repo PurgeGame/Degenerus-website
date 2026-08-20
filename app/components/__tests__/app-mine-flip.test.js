@@ -73,6 +73,7 @@ globalThis.document = {
 
 const store = await import('../../app/store.js');
 const contracts = await import('../../app/contracts.js');
+const readProvider = await import('../../app/read-provider.js');
 const mineFlip = await import('../../app/mine-flip.js');
 const pending = await import('../../app/pending-actions.js');
 const module = await import('../app-mine-flip.js');
@@ -87,6 +88,10 @@ function stubProbe({
   contracts.setProvider({
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    getBalance: async () => balanceWei,
+    getFeeData: async () => ({ maxFeePerGas }),
+  });
+  readProvider._setSharedReadProviderForTests({
     getBalance: async () => balanceWei,
     getFeeData: async () => ({ maxFeePerGas }),
   });
@@ -128,6 +133,7 @@ beforeEach(() => {
   store.__resetForTest();
   mineFlip.__resetContractFactoryForTest();
   contracts.clearProvider();
+  readProvider._resetSharedReadProviderForTests();
   body.children = [];
   store.update('ui.mode', 'self');
 });
@@ -264,7 +270,7 @@ describe('single-surface mounting', () => {
       'the direct RNG fulfillment edge immediately re-probes the crank');
     assert.match(src, /if \(seq !== this\.#loadSeq\) return/);
     assert.match(src, /clearPendingActions\(RESOLVER_SOURCE\)/);
-    assert.match(src, /refreshForDayShift\(\{ includePlayer: true \}\)/,
-      'a completed Mine FLIP immediately reconciles the jackpot feeds');
+    assert.match(src, /refreshDayRollover\(\)/,
+      'a completed Mine FLIP rechecks the chain before requesting jackpot feeds');
   });
 });

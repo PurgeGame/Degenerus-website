@@ -190,6 +190,20 @@ describe('<quest-objective-indicator>', () => {
     globalThis.document = previousDocument;
   });
 
+  test('the referral marker describes its copy action', () => {
+    const el = new QuestObjectiveIndicator();
+    el.setAttribute('product', 'affiliate');
+    el.connectedCallback();
+    storeMod.update('ui.questObjectives', {
+      quests: [
+        { questType: 3, role: 'DAILY', label: 'Referral', completed: false },
+      ],
+    });
+    assert.match(el.title, /copy your referral link/i);
+    assert.match(el.getAttribute('aria-label'), /copy your referral link/i);
+    el.disconnectedCallback();
+  });
+
   test('uses a distinct quest-waypoint symbol, not boon or bounty language', () => {
     assert.match(STATUS_CSS, /url\('\/app\/assets\/quest-objective\.svg'\)/);
     assert.match(STATUS_CSS,

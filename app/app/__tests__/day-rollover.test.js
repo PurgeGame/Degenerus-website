@@ -134,6 +134,70 @@ describe('authoritative day rollover reducer', () => {
     assert.equal(shifted.rngRequested, false);
   });
 
+  test('advanceDue falling false after RNG evidence marks processing complete', () => {
+    let state = apply(null, {
+      day: 41,
+      blockNumber: 110,
+      coinflip: null,
+      rngLocked: false,
+      rngFulfilled: true,
+      advanceDue: true,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, false, 'pending keeper work keeps the API quiet');
+
+    state = apply(state, {
+      day: 41,
+      blockNumber: 111,
+      coinflip: null,
+      rngLocked: false,
+      rngFulfilled: false,
+      advanceDue: false,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, true,
+      'the drained predicate combines with the latched fulfilled word');
+    assert.equal(state.advanceDue, false);
+
+    state = apply(state, {
+      day: 41,
+      blockNumber: 112,
+      coinflip: null,
+      advanceDue: null,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, true, 'an RPC miss cannot undo completion');
+  });
+
+  test('an idle false predicate is not completion, and a new day clears the latch', () => {
+    const idle = apply(null, {
+      day: 41,
+      blockNumber: 110,
+      coinflip: null,
+      rngLocked: false,
+      rngFulfilled: false,
+      advanceDue: false,
+    }, null);
+    assert.equal(idle.processingComplete, false,
+      'advanceDue is also false before a request and needs RNG evidence');
+
+    const complete = apply(idle, {
+      day: 41,
+      blockNumber: 111,
+      coinflip: win(41),
+      advanceDue: false,
+    }, null);
+    assert.equal(complete.processingComplete, true,
+      'the permanent coinflip result proves a cold-loaded day was processed');
+
+    const shifted = apply(complete, {
+      day: 42,
+      blockNumber: 120,
+      coinflip: null,
+      rngFulfilled: false,
+      advanceDue: true,
+    }, { day: 41, status: 'resolved' });
+    assert.equal(shifted.processingComplete, false);
+    assert.equal(shifted.advanceDue, true);
+  });
+
   test('stale and duplicate responses cannot regress a ready target', () => {
     const ready = apply(null, { day: 52, blockNumber: 500, coinflip: win(52, 99) }, {
       day: 52, status: 'resolved',
@@ -188,6 +252,10 @@ describe('authoritative day rollover reducer', () => {
 
   test('probe cadence tightens while warming', () => {
     assert.equal(nextDayProbeDelay({ day: 9, ready: false }, 0), 1_500);
+  });
+
+  test('chain probing backs off once processing is complete and only the indexer remains', () => {
+    assert.equal(nextDayProbeDelay({ day: 9, ready: false, processingComplete: true }, 0), 15_000);
   });
 
   test('probe cadence stays fast immediately after the wall-clock boundary', () => {

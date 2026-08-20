@@ -31,6 +31,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
 import { getActingAddress } from './store.js';
+import { sharedReadProvider } from './read-provider.js';
 
 // Verified: DegenerusGame.sol:398 and a live eth_call (see header). Declaring
 // `error NoWork()` here is what lets ethers decode the empty-queue revert by
@@ -162,22 +163,37 @@ async function _mineFlipGasBudget(contract, signer, provider) {
  *   error?: Error, gasLimit?: bigint, balanceWei?: bigint, requiredWei?: bigint}>}
  */
 export async function probeMineFlip({ player } = {}) {
-  const provider = getProvider();
-  if (!provider) return { hasWork: false, known: false };
+  const walletProvider = getProvider();
+  if (!walletProvider) return { hasWork: false, known: false };
 
   let signer = null;
   try {
-    signer = await provider.getSigner();
+    signer = await walletProvider.getSigner();
   } catch (_e) {
     // Read-only browsing (no wallet): the crank is a write, so there is nothing
     // to offer. Report "unknown" rather than "no work" — they are different.
     return { hasWork: false, known: false };
   }
 
-  const contract = _buildGameContract(signer);
-  const sim = await requireStaticCall(contract, CRANK_NAME, [], signer);
+  // Work discovery is a pure, permissionless eth_call. Route it through the
+  // shared public reader so an expected NoWork revert does not surface as a
+  // MetaMask -32603. Preserve msg.sender semantics with an explicit `from`.
+  const readProvider = sharedReadProvider() || walletProvider;
+  const contract = _buildGameContract(readProvider);
+  let from = player || null;
+  if (!from) {
+    try { from = await signer.getAddress(); } catch (_e) { from = null; }
+  }
+  const sim = await requireStaticCall(
+    contract,
+    CRANK_NAME,
+    from ? [{ from }] : [],
+  );
   if (sim.ok) {
-    const budget = await _mineFlipGasBudget(contract, signer, provider);
+    // Fee and balance are public chain reads. Keep passive affordability
+    // discovery off the injected wallet (which may not implement every fee
+    // RPC), while the signer-connected estimate and actual send stay intact.
+    const budget = await _mineFlipGasBudget(contract, signer, readProvider);
     if (budget && !budget.affordable) {
       return {
         hasWork: false,

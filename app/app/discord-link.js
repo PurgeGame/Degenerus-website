@@ -42,6 +42,7 @@ let _busy = false;
 let _discordUser = null;   // /auth/discord/me session user (null = not connected)
 let _sessionPlayer = null; // /api/player row once the session holds a wallet
 let _focusListener = null;
+let _sessionChecked = false;
 
 function _toHex(str) {
   const bytes = new TextEncoder().encode(str);
@@ -160,6 +161,15 @@ function _openDiscordGuide() {
 
 async function _onClick() {
   if (_busy) return;
+  // Lazy by contract: do not turn every anonymous page load into two expected
+  // 401s. The first trusted interaction still discovers an existing session,
+  // so returning users keep the same Link/Disconnect behavior.
+  if (!_sessionChecked) {
+    _busy = true; _render();
+    try { await _refresh(); } catch (_e) { /* disconnected/offline is ordinary here */ }
+    _sessionChecked = true;
+    _busy = false; _render();
+  }
   const addr = get('connected.address');
 
   // Not discord-connected: bind the wallet first when we have one, so the
@@ -230,9 +240,13 @@ function _mount() {
   if (!_focusListener && typeof window !== 'undefined'
     && typeof window.addEventListener === 'function') {
     _focusListener = () => {
-      if (!_btn) return;
+      // Focus is a passive lifecycle event. Keep anonymous tabs request-free
+      // until a trusted click has begun session discovery; after that, focus
+      // remains the OAuth-return signal that refreshes the linked state.
+      if (!_btn || !_sessionChecked) return;
       _refresh()
         .then(() => {
+          _sessionChecked = true;
           _render();
           _announceProfileRefresh(get('connected.address'));
         })
@@ -240,7 +254,7 @@ function _mount() {
     };
     window.addEventListener('focus', _focusListener);
   }
-  _refresh().then(_render).catch(() => _render());
+  _render();
   return true;
 }
 
@@ -259,4 +273,5 @@ export function __resetForTest() {
   }
   _focusListener = null;
   _btn = null; _busy = false; _discordUser = null; _sessionPlayer = null;
+  _sessionChecked = false;
 }

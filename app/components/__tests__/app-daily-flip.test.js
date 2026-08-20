@@ -3094,7 +3094,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(el.innerHTML, /class="df-funds__title"[^>]*>CASH OUT</,
       'the clickable corner tray is plainly labeled as the Cash Out surface');
     assert.match(el.innerHTML, /class="df-funds__box-label"[^>]*>AVAILABLE FUNDS</,
-      'the FLIP balance box is titled like the ETH Available Funds fixture');
+      'the coinflip balance box is plainly titled AVAILABLE FUNDS');
     assert.doesNotMatch(el.innerHTML, />OTHER COINS</,
       'the discarded utility drawer caption stays gone');
     assert.match(APP_CSS,

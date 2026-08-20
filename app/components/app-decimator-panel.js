@@ -75,13 +75,18 @@ import {
   // both the quote and the call go through these (see lootbox.js UNITS note).
   // These mirror the click-time funding split for the bonus preview, including
   // the Claimable allocation that protects a regular mint beside a presale box.
-  ticketCostFromTickets, ENTRIES_PER_TICKET, purchaseFundingPayment,
+  ticketCostFromTickets, entriesScaledFromTickets, ENTRIES_PER_TICKET,
+  purchaseFundingPayment, readCenturyBonusUsed,
   preserveMintBonusWithPresale, MINT_PAYMENT_KIND_CLAIMABLE,
   readPurchaseFundingPriority as _readFundingPriority,
   writePurchaseFundingPriority as _writeFundingPriority,
   readPurchaseUseAfking as _readUseAfking,
   writePurchaseUseAfking as _writeUseAfking,
 } from '../app/lootbox.js';
+import {
+  applyLootboxCasePresentation,
+  lootboxCaseAssets,
+} from '../app/lootbox-value-tone.js';
 // Reveal plumbing: ticket purchases queue a pack-opening reveal; lootbox legs
 // found in the BUY receipt itself (afking idx-0 auto-opens) reveal instantly.
 // Boxes that need a separate openBox call go to the app-root
@@ -168,8 +173,28 @@ export function purchaseTicketTraitsFromWords(randomWords) {
   });
 }
 
-function randomPurchaseTicketTraits() {
-  const words = new Uint32Array(8);
+/**
+ * Build one standalone entry from independent random words. Quadrant and
+ * symbol are uniform; color keeps the contract's heavy-tail odds. Every one
+ * of the 256 canonical trait IDs therefore remains reachable.
+ */
+export function purchaseEntryTraitFromWords(randomWords) {
+  const words = Array.from(randomWords || [], (word) => Number(word) >>> 0);
+  if (words.length < 3) throw new RangeError('Three uint32 words are required for an entry sample.');
+  const q = words[0] & 3;
+  const col = purchaseTicketColorBucket(words[1]);
+  const sym = words[2] & 7;
+  return Object.freeze({
+    q,
+    quadrant: q,
+    col,
+    sym,
+    byte: (q << 6) | (col << 3) | sym,
+  });
+}
+
+function randomPurchaseWords(length) {
+  const words = new Uint32Array(length);
   if (typeof globalThis.crypto?.getRandomValues === 'function') {
     globalThis.crypto.getRandomValues(words);
   } else {
@@ -177,7 +202,15 @@ function randomPurchaseTicketTraits() {
       words[index] = Math.floor(Math.random() * 0x1_0000_0000);
     }
   }
-  return purchaseTicketTraitsFromWords(words);
+  return words;
+}
+
+function randomPurchaseTicketTraits() {
+  return purchaseTicketTraitsFromWords(randomPurchaseWords(8));
+}
+
+function randomPurchaseEntryTrait() {
+  return purchaseEntryTraitFromWords(randomPurchaseWords(3));
 }
 // Purchase quotes are controls, not accounting tables: fixed-width values such
 // as "0.0400" add noise and can make an input step look more precise than it
@@ -198,6 +231,26 @@ function groupAllInNumber(raw) {
   if (!match) return original;
   const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${match[1]}${grouped}${match[3] || ''}`;
+}
+
+// Keep both rate quotes byte-for-byte identical while giving CSS real cells
+// for the label, equals sign, and value. This lets ENTRY and TICKET share one
+// visual price column without padding either quote with display characters.
+function renderPurchasePriceRow(host, kind, value) {
+  if (!host) return;
+  host.textContent = '';
+  for (const [className, text] of [
+    ['dec-price__count', '1'],
+    ['dec-price__kind', ` ${kind}`],
+    ['dec-price__equals', ' = '],
+    ['dec-price__value', value],
+  ]) {
+    const part = document.createElement('span');
+    part.className = className;
+    part.textContent = text;
+    host.appendChild(part);
+  }
+  host.setAttribute('aria-label', `1 ${kind} = ${value}`);
 }
 
 /** Compact the visible buy-bonus tally without ever rounding the reward up. */
@@ -227,6 +280,100 @@ export function formatPurchaseBonusFlip(value) {
     .padStart(decimals, '0')
     .replace(/0+$/, '');
   return `${sign}${integer}${fraction ? `.${fraction}` : ''}${suffix}`;
+}
+
+const PURCHASE_UNITS_PER_TICKET = 400n;
+const PURCHASE_BOON_MAX_VALUE_WEI = (10n * (10n ** 18n)) / ETH_DIVISOR;
+const CENTURY_BONUS_MAX_VALUE_WEI = (20n * (10n ** 18n)) / ETH_DIVISOR;
+
+/** Exact ActivityCurveLib.centuryBps port (whole activity points -> bps). */
+export function centuryBonusBps(score) {
+  let points;
+  try {
+    points = typeof score === 'number'
+      ? BigInt(Number.isFinite(score) ? Math.trunc(score) : 0)
+      : BigInt(score ?? 0);
+  } catch (_e) {
+    points = 0n;
+  }
+  if (points <= 0n) return 0n;
+  if (points <= 305n) return (points * 9_000n) / 305n;
+  if (points <= 500n) return 9_000n + ((points - 305n) * 800n) / 195n;
+  if (points >= 30_000n) return 10_000n;
+  return 9_800n + ((points - 500n) * 200n) / 29_500n;
+}
+
+/** Exact purchase-unit formatter: 400 units = one ticket, no float rounding. */
+export function formatPurchaseTicketUnits(value) {
+  let units;
+  try { units = BigInt(value ?? 0n); } catch (_e) { return '0'; }
+  if (units <= 0n) return '0';
+  const whole = units / PURCHASE_UNITS_PER_TICKET;
+  const remainder = units % PURCHASE_UNITS_PER_TICKET;
+  const fraction = ((remainder * 10_000n) / PURCHASE_UNITS_PER_TICKET)
+    .toString()
+    .padStart(4, '0')
+    .replace(/0+$/, '');
+  return `${whole.toLocaleString('en-US')}${fraction ? `.${fraction}` : ''}`;
+}
+
+/**
+ * Contract-parity x00 purchase bonus in scaled entry units.
+ * The curve consumes the ticket-boon-adjusted quantity and then applies the
+ * player's remaining 20-ETH-equivalent allowance for this century.
+ */
+export function purchaseCenturyBonus({
+  targetLevel = null,
+  tickets = 0,
+  priceWei = 0n,
+  activityScore = 0,
+  ticketBoonBps = 0,
+  usedUnits = 0n,
+} = {}) {
+  const level = Number(targetLevel);
+  if (!Number.isInteger(level) || level <= 0 || level % 100 !== 0) return null;
+  let price;
+  let used;
+  try {
+    price = BigInt(priceWei ?? 0n);
+    used = BigInt(usedUnits ?? 0n);
+  } catch (_e) {
+    return null;
+  }
+  if (price <= 0n) return null;
+  if (used < 0n) used = 0n;
+  const baseUnits = entriesScaledFromTickets(tickets);
+  if (baseUnits <= 0n) return null;
+
+  let adjustedUnits = baseUnits;
+  const parsedBoonBps = Number(ticketBoonBps);
+  const boostBps = Number.isFinite(parsedBoonBps) && parsedBoonBps > 0
+    ? BigInt(Math.trunc(parsedBoonBps))
+    : 0n;
+  if (boostBps > 0n) {
+    const costWei = (price * baseUnits) / PURCHASE_UNITS_PER_TICKET;
+    const eligibleWei = costWei > PURCHASE_BOON_MAX_VALUE_WEI
+      ? PURCHASE_BOON_MAX_VALUE_WEI
+      : costWei;
+    const eligibleUnits = (eligibleWei * PURCHASE_UNITS_PER_TICKET) / price;
+    adjustedUnits += (eligibleUnits * boostBps) / 10_000n;
+  }
+
+  const bps = centuryBonusBps(activityScore);
+  const grossBonusUnits = (adjustedUnits * bps) / 10_000n;
+  const maxBonusUnits = (CENTURY_BONUS_MAX_VALUE_WEI * PURCHASE_UNITS_PER_TICKET) / price;
+  const remainingUnits = maxBonusUnits > used ? maxBonusUnits - used : 0n;
+  const bonusUnits = grossBonusUnits > remainingUnits ? remainingUnits : grossBonusUnits;
+  return {
+    level,
+    bps,
+    baseUnits,
+    adjustedUnits,
+    grossBonusUnits,
+    maxBonusUnits,
+    remainingUnits,
+    bonusUnits,
+  };
 }
 
 // The active testnet displays ETH in the protocol's /1M-normalized units,
@@ -635,6 +782,10 @@ class AppDecimatorPanel extends HTMLElement {
   #claimableKnown = false;
   #degenScore = null;
   #degenScoreAddress = null;
+  #centuryUsedUnits = 0n;
+  #centuryUsageAddress = null;
+  #centuryUsageLevel = null;
+  #centuryUsageKnown = false;
   #flipBalanceWei = null;      // Acting player's spendable FLIP balance.
   #flipBalanceAddress = null;
   #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
@@ -812,7 +963,11 @@ class AppDecimatorPanel extends HTMLElement {
                aria-label="Learn about tickets, Luckbox, and foil packs"
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
-          <span class="dec-price" data-bind="dec-price">1 TICKET = —</span>
+          <div class="dec-price" data-bind="dec-price"
+               aria-label="Current entry and ticket prices">
+            <span class="dec-price__row" data-bind="dec-entry-price">1 ENTRY = —</span>
+            <span class="dec-price__row" data-bind="dec-ticket-price">1 TICKET = —</span>
+          </div>
           <div class="dec-flip-credit dec-flip-credit--header is-idle"
                data-bind="dec-flip-credit"
                aria-label="Play to earn bonus FLIP with tickets">
@@ -848,8 +1003,9 @@ class AppDecimatorPanel extends HTMLElement {
                       title="Click to add 0.25 ticket · right-click to remove">
                 <span class="dec-ticket-piece__copy"><strong>ENTRY</strong></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
-                  <span class="dec-entry-face" data-bind="dec-entry-face">
-                    <span class="dec-ticket-trait"><img data-bind="dec-entry-badge" alt=""></span>
+                  <span class="dec-entry-face ticket-entry-card tc-small"
+                        data-bind="dec-entry-face" data-quadrant="0">
+                    <span class="dec-ticket-trait trait-quadrant"><img data-bind="dec-entry-badge" alt=""></span>
                   </span>
                 </span>
               </button>
@@ -870,7 +1026,6 @@ class AppDecimatorPanel extends HTMLElement {
               <button type="button" class="dec-ticket-piece dec-ticket-piece--pack"
                       data-bind="dec-ticket-add-pack" aria-label="Add one pack, 10 tickets"
                       title="Click to add 10 tickets · right-click to remove">
-                <span class="dec-ticket-piece__copy"><strong>PACK</strong></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
                   <span class="dec-pack-face">
                     <span class="dec-pack-mark"><img src="/whitepaper/flame-logo.svg" alt=""></span>
@@ -883,15 +1038,14 @@ class AppDecimatorPanel extends HTMLElement {
                      aria-label="Toggle one foil pack, limit one" hidden>
                 <input type="checkbox" name="dec-foil" class="dec-foil-check"
                        data-bind="dec-foil-check">
-                <span class="dec-ticket-piece__copy"><strong>FOIL PACK</strong></span>
+                <span class="dec-foil-limit-stamp"><strong>LIMIT</strong><small>1</small></span>
                 <span class="dec-ticket-piece__art" aria-hidden="true">
                   <span class="dec-pack-face dec-foil-pack-face">
                     <span class="dec-pack-shine"></span>
-                    <span class="dec-pack-mark"><img src="/whitepaper/flame-logo.svg" alt=""></span>
+                    <span class="dec-pack-mark dec-foil-pack-badge"><img src="/whitepaper/flame-logo.svg" alt=""></span>
                     <span class="dec-pack-level" data-bind="dec-foil-level">LEVEL —</span>
-                    <span class="dec-pack-count">4 TICKETS</span>
+                    <span class="dec-pack-count">4 FOILS</span>
                   </span>
-                  <span class="dec-foil-limit-stamp"><strong>LIMIT</strong><small>1</small></span>
                   <span class="dec-foil-selected-check">✓</span>
                 </span>
                 <quest-objective-indicator product="foil"></quest-objective-indicator>
@@ -922,14 +1076,16 @@ class AppDecimatorPanel extends HTMLElement {
             </div>
 
             <div class="dec-box-grid">
-              <article class="dec-box-card dec-box-card--small" data-tone="green">
+              <article class="dec-box-card dec-box-card--small" data-tone="green"
+                       data-lootbox-case-model="small">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-small"
                         aria-label="Add one small Luckbox"
                         title="Click to add one small Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
+                    <img src="${lootboxCaseAssets('small').top}" alt="">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-small">—</strong>
+                      <small class="dec-box-value__unit" data-bind="dec-box-price-small-unit" hidden>ETH</small>
                     </span>
                   </span>
                 </button>
@@ -943,14 +1099,16 @@ class AppDecimatorPanel extends HTMLElement {
                 </span>
               </article>
 
-              <article class="dec-box-card dec-box-card--medium" data-tone="purple">
+              <article class="dec-box-card dec-box-card--medium" data-tone="purple"
+                       data-lootbox-case-model="medium">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-medium"
                         aria-label="Add one medium Luckbox"
                         title="Click to add one medium Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
+                    <img src="${lootboxCaseAssets('medium').top}" alt="">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-medium">—</strong>
+                      <small class="dec-box-value__unit" data-bind="dec-box-price-medium-unit" hidden>ETH</small>
                     </span>
                   </span>
                 </button>
@@ -964,14 +1122,16 @@ class AppDecimatorPanel extends HTMLElement {
                 </span>
               </article>
 
-              <article class="dec-box-card dec-box-card--large" data-tone="gold">
+              <article class="dec-box-card dec-box-card--large" data-tone="gold"
+                       data-lootbox-case-model="large">
                 <button type="button" class="dec-box-card__add" data-bind="dec-box-add-large"
                         aria-label="Add one large Luckbox"
                         title="Click to add one large Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt="">
+                    <img src="${lootboxCaseAssets('large').top}" alt="">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-large">—</strong>
+                      <small class="dec-box-value__unit" data-bind="dec-box-price-large-unit" hidden>ETH</small>
                     </span>
                   </span>
                 </button>
@@ -1039,8 +1199,8 @@ class AppDecimatorPanel extends HTMLElement {
             </header>
             <div class="dec-presale__offer">
               <div class="dec-presale__label">
-                <span class="dec-presale__art" aria-hidden="true">
-                  <img src="/app/assets/lootbox/degenerus-lootbox-case-v5-top.webp" alt=""><b>PRESALE</b>
+                <span class="dec-presale__art" aria-hidden="true" data-lootbox-case-model="medium">
+                  <img src="${lootboxCaseAssets('medium').top}" alt=""><b>PRESALE</b>
                 </span>
                 <span><strong>PRESALE BOX</strong><small data-bind="dec-presale-available">— ETH AVAILABLE</small></span>
               </div>
@@ -1195,6 +1355,9 @@ class AppDecimatorPanel extends HTMLElement {
         </div>
       </div>
     `;
+    this.querySelectorAll?.('[data-lootbox-case-model]').forEach((element) => {
+      applyLootboxCasePresentation(element, element.getAttribute('data-lootbox-case-model'));
+    });
   }
 
   #startTicketSample() {
@@ -1212,7 +1375,11 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderTicketSample() {
     let traits;
-    try { traits = randomPurchaseTicketTraits(); }
+    let entryTrait;
+    try {
+      traits = randomPurchaseTicketTraits();
+      entryTrait = randomPurchaseEntryTrait();
+    }
     catch (_e) { return; }
     const ticket = this.querySelector('[data-bind="dec-ticket-sample"]');
     const entry = this.querySelector('[data-bind="dec-entry-face"]');
@@ -1228,14 +1395,16 @@ class AppDecimatorPanel extends HTMLElement {
       } catch (_e) { /* visual enhancement only */ }
     };
     setAccent(ticket, traits);
-    setAccent(entry, [traits[0]]);
+    setAccent(entry, [entryTrait]);
+    entry?.setAttribute?.('data-quadrant', String(entryTrait.q));
+    entry?.setAttribute?.('data-trait-id', String(entryTrait.byte));
     traits.forEach((trait, quadrant) => {
       const image = this.querySelector(`[data-bind="dec-ticket-badge-${quadrant}"]`);
       image?.setAttribute?.('src', dgnBadgePath(quadrant, trait.sym, trait.col));
     });
     this.querySelector('[data-bind="dec-entry-badge"]')?.setAttribute?.(
       'src',
-      dgnBadgePath(0, traits[0].sym, traits[0].col),
+      dgnBadgePath(entryTrait.q, entryTrait.sym, entryTrait.col),
     );
   }
 
@@ -2797,6 +2966,10 @@ class AppDecimatorPanel extends HTMLElement {
       preferClaimable: this.#preferClaimable,
       useAfking: this.#useAfking,
       bountyWei: recordBountyWei ?? 0n,
+      targetLevel: this.#targetLevel(),
+      activityScore: this.#degenScore,
+      centuryUsedUnits: this.#centuryUsedUnits,
+      centuryUsageKnown: this.#centuryUsageKnown,
     });
     if (this.#buyInDialogOpen) this.#renderBuyInDialog();
   }
@@ -2857,6 +3030,7 @@ class AppDecimatorPanel extends HTMLElement {
     const parts = args ? purchaseFlipCreditBreakdown(args) : null;
     const boonPayload = get('app.boons');
     const boonEffects = [];
+    const centuryEffects = [];
     const ticketBps = boonBoostBps(boonPayload, 'purchase');
     const ticketCount = Number(args?.tickets || 0);
     if (ticketBps > 0 && Number.isFinite(ticketCount) && ticketCount > 0) {
@@ -2868,10 +3042,26 @@ class AppDecimatorPanel extends HTMLElement {
     if (luckboxDelta > 0n) {
       boonEffects.push(`+${formatPurchaseEth(luckboxDelta)} ETH BOON`);
     }
+    const activityKnown = args?.activityScore != null
+      && Number.isFinite(Number(args.activityScore));
+    const century = activityKnown ? purchaseCenturyBonus({
+      targetLevel: args?.targetLevel,
+      tickets: ticketCount,
+      priceWei: args?.priceWei,
+      activityScore: args.activityScore,
+      ticketBoonBps: ticketBps,
+      usedUnits: args?.centuryUsedUnits ?? 0n,
+    }) : null;
+    if (century?.bonusUnits > 0n) {
+      const formatted = formatPurchaseTicketUnits(century.bonusUnits);
+      const ticketWord = century.bonusUnits === PURCHASE_UNITS_PER_TICKET ? 'TICKET' : 'TICKETS';
+      centuryEffects.push(`${args?.centuryUsageKnown === false ? '~' : ''}+${formatted} LVL ${century.level} ${ticketWord}`);
+    }
+    const detailEffects = [...centuryEffects, ...boonEffects];
     const boonEffect = this.querySelector('[data-bind="dec-purchase-boon-effect"]');
     if (boonEffect) {
-      boonEffect.textContent = boonEffects.join(' · ');
-      boonEffect.hidden = boonEffects.length === 0;
+      boonEffect.textContent = detailEffects.join(' · ');
+      boonEffect.hidden = detailEffects.length === 0;
     }
     const bounty = parts?.bounty ?? 0n;
     const includesBounty = bounty > 0n;
@@ -2892,7 +3082,7 @@ class AppDecimatorPanel extends HTMLElement {
       && args.priceWei != null
       && args.totalCostWei > 0n
       && parts
-      && (parts.total > 0n || boonEffects.length > 0)
+      && (parts.total > 0n || detailEffects.length > 0)
     );
     box.hidden = false;
     box.removeAttribute?.('hidden');
@@ -2918,7 +3108,10 @@ class AppDecimatorPanel extends HTMLElement {
     const summary = includesBounty
       ? `Bonus total ${formatFlip(parts.total.toString())} FLIP, including ${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`
       : `Bonus total ${formatFlip(parts.total.toString())} FLIP.`;
-    box.setAttribute('aria-label', `${summary}${boonEffects.length
+    const centurySummary = century?.bonusUnits > 0n
+      ? ` Level ${century.level} bonus: +${formatPurchaseTicketUnits(century.bonusUnits)} tickets${args?.centuryUsageKnown === false ? ' estimated from current activity score' : ''}.`
+      : '';
+    box.setAttribute('aria-label', `${summary}${centurySummary}${boonEffects.length
       ? ` Purchase boon: ${boonEffects.join(', ')}.`
       : ''}`);
   }
@@ -3083,6 +3276,37 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableWei = 0n;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = false;
+    }
+    const centuryTarget = this.#targetLevel();
+    const centuryScopeMatches = this.#centuryUsageAddress === actingLower
+      && this.#centuryUsageLevel === centuryTarget;
+    if (!centuryScopeMatches) {
+      this.#centuryUsedUnits = 0n;
+      this.#centuryUsageAddress = actingLower;
+      this.#centuryUsageLevel = centuryTarget;
+      this.#centuryUsageKnown = false;
+    }
+    if (actingLower && Number.isInteger(centuryTarget) && centuryTarget % 100 === 0) {
+      try {
+        const used = await readCenturyBonusUsed({
+          player: actingLower,
+          targetLevel: centuryTarget,
+          provider,
+        });
+        if (signal.aborted) return;
+        if (used != null
+          && this.#centuryUsageAddress === actingLower
+          && this.#centuryUsageLevel === centuryTarget) {
+          this.#centuryUsedUnits = BigInt(used);
+          this.#centuryUsageKnown = true;
+        }
+      } catch (_e) {
+        // Preserve a same-player/same-century answer through a transient RPC
+        // failure. A new scope was already cleared above and stays estimated.
+      }
+    } else {
+      this.#centuryUsedUnits = 0n;
+      this.#centuryUsageKnown = false;
     }
     // Adopt wallet, claimable, and carry-inclusive backing together. They were
     // read at one block, so the left FLIP balance cannot show one side of a
@@ -4096,29 +4320,34 @@ class AppDecimatorPanel extends HTMLElement {
   #renderSnapshot() {
     // Phase 64: price renders from /game/state into the header slot.
     const priceEl = this.querySelector('[data-bind="dec-price"]');
-    if (!priceEl) return;
+    const entryPriceEl = this.querySelector('[data-bind="dec-entry-price"]');
+    const ticketPriceEl = this.querySelector('[data-bind="dec-ticket-price"]');
+    if (!priceEl || !entryPriceEl || !ticketPriceEl) return;
     const priceWei = this.#ticketPriceWei();
     const targetLevel = this.#targetLevel();
     const levelText = targetLevel == null ? 'LEVEL —' : `LEVEL ${targetLevel}`;
-    let priceText = '1 TICKET = —';
+    let entryPriceText = '—';
+    let ticketPriceText = '—';
     if (this.#flipModeEnabled()) {
       try {
-        const price = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
-        priceText = `1 TICKET = ${price}`;
-      } catch (_e) { priceText = '1 TICKET = —'; }
+        entryPriceText = `${formatFlip(flipCostFromTickets(1 / ENTRIES_PER_TICKET).toString())} FLIP`;
+        ticketPriceText = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
+      } catch (_e) { /* keep unavailable prices */ }
     } else if (priceWei != null) {
       try {
-        const price = `${formatPurchaseEth(priceWei)} ETH`;
-        priceText = `1 TICKET = ${price}`;
-      } catch (_e) { priceText = '1 TICKET = —'; }
+        entryPriceText = `${formatPurchaseEth(ticketCostFromTickets(priceWei, 1 / ENTRIES_PER_TICKET))} ETH`;
+        ticketPriceText = `${formatPurchaseEth(priceWei)} ETH`;
+      } catch (_e) { /* keep unavailable prices */ }
     }
-    priceEl.textContent = priceText;
+    renderPurchasePriceRow(entryPriceEl, 'ENTRY', entryPriceText);
+    renderPurchasePriceRow(ticketPriceEl, 'TICKET', ticketPriceText);
     for (const bind of ['dec-pack-level', 'dec-foil-level']) {
       const level = this.querySelector(`[data-bind="${bind}"]`);
       if (level) level.textContent = levelText;
     }
     // Preset cases carry the exact 1x / 5x / 25x ABI tier prices in their art.
-    // The fixed ETH suffix lives in the shell, so only write the compact amount.
+    // Fractional amounts already read as prices. Whole amounts need the compact
+    // ETH suffix so a lone "1" or "3" cannot be mistaken for the old tier ID.
     // The contract freezes those prices for a player's active box period; the
     // static call remains authoritative if an older frozen order crosses a level.
     for (const [bind, multiple] of [
@@ -4127,13 +4356,24 @@ class AppDecimatorPanel extends HTMLElement {
       ['dec-box-price-large', BOX_ORDER_LARGE_MULTIPLE],
     ]) {
       const label = this.querySelector(`[data-bind="${bind}"]`);
+      const unit = this.querySelector(`[data-bind="${bind}-unit"]`);
       if (!label) continue;
       if (priceWei == null) {
         label.textContent = '—';
+        if (unit) unit.hidden = true;
         continue;
       }
-      try { label.textContent = formatPurchaseEth(priceWei * multiple); }
-      catch (_e) { label.textContent = '—'; }
+      try {
+        const amount = formatPurchaseEth(priceWei * multiple);
+        label.textContent = amount;
+        if (unit) {
+          unit.textContent = 'ETH';
+          unit.hidden = !/^[1-9]\d*$/.test(amount);
+        }
+      } catch (_e) {
+        label.textContent = '—';
+        if (unit) unit.hidden = true;
+      }
     }
     this.#renderFundsFooter();
     // Price is now known — refresh the Buy button's total-cost label.

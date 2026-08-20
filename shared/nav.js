@@ -537,9 +537,13 @@
       container.appendChild(nav);
     }
 
-    // Check existing sessions
-    checkDiscord();
-    checkSession();
+    // Pages that use this nav's session-backed wallet discover existing
+    // sessions eagerly. /app/ owns a separate backend-free wallet stack and
+    // opts out; its Discord bridge discovers the session on first interaction.
+    if (config.sessionChecks !== false) {
+      checkDiscord();
+      checkSession();
+    }
   };
 
   window.openScoreInfo = function () {

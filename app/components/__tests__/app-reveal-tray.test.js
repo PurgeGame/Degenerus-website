@@ -16,7 +16,14 @@ function makeElement(tag = 'div') {
     hidden: false,
     disabled: false,
     className: '',
-    style: {},
+    style: {
+      _props: {},
+      setProperty(name, value) {
+        this._props[String(name)] = String(value);
+        this[String(name)] = String(value);
+      },
+      getPropertyValue(name) { return this._props[String(name)] ?? ''; },
+    },
     classList: {
       _set: new Set(),
       add(...names) { names.forEach((name) => this._set.add(name)); },
@@ -258,6 +265,12 @@ describe('<app-reveal-tray>', () => {
     assert.ok(lootboxIcon);
     assert.equal(lootboxIcon.getAttribute('data-lootbox-value-tone'), 'purple',
       'the miniature receives the same ticket-price color tier as the full lootbox');
+    assert.equal(lootboxIcon.getAttribute('data-lootbox-case-model'), 'medium');
+    assert.match(
+      lootboxIcon.style.getPropertyValue('--lootbox-case-art'),
+      /degenerus-lootbox-case-medium-v14-locked-front\.webp/,
+      'an unknown legacy amount receives the canonical neutral case family',
+    );
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
     assert.match(action.title, /4× ticket price/);
@@ -268,14 +281,14 @@ describe('<app-reveal-tray>', () => {
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.match(css,
-      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*url\('\/app\/assets\/lootbox\/degenerus-lootbox-case-v6-front\.webp'\)/s,
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*var\(--lootbox-case-art\)/s,
       'the mini case uses the value-tier tone through the same case silhouette mask');
     assert.doesNotMatch(css,
       /\.rrt-lootbox-mini::before\s*\{[^}]*flame-logo\.svg/s,
       'the tiny front view uses the medallion already baked into the case art');
     assert.match(css,
-      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*degenerus-lootbox-case-v6-front\.webp[^}]*clip-path:\s*ellipse\(10% 16\.5% at 50% 63\.5%\)/s,
-      'Pending restores the original red-black-white medallion above the value-tier wash');
+      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*background:\s*var\(--lootbox-case-art\)[^}]*clip-path:\s*var\(--lootbox-badge-clip\)/s,
+      'Pending restores the metallic red-black-silver emblem above the value-tier wash');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 
@@ -314,6 +327,25 @@ describe('<app-reveal-tray>', () => {
       'the whale pass uses a real line icon instead of an emoji fallback');
     assert.equal(action.querySelector('.rrt-action__label').textContent, 'WHALE PASS · 2');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
+    assert.notEqual(action.getAttribute('data-write'), null);
+    el.disconnectedCallback();
+  });
+
+  test('the compact referral reward names the bonus instead of leading with DGNRS', () => {
+    pending.publishPendingActions('launch-claims', [{
+      id: 'referral-bonus:0xabc:90', kind: 'affiliate-bonus',
+      kindLabel: 'REFERRAL BONUS', label: 'L90 REFERRAL BONUS',
+      shortLabel: 'Claim Referral Bonus', compact: true,
+      state: 'ready', write: true, run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--affiliate-bonus');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'L90 REFERRAL BONUS');
+    assert.doesNotMatch(action.textContent, /DGNRS/i);
+    assert.equal(action.getAttribute('aria-label'), 'L90 REFERRAL BONUS');
     assert.notEqual(action.getAttribute('data-write'), null);
     el.disconnectedCallback();
   });
@@ -745,7 +777,7 @@ describe('<app-reveal-tray>', () => {
 
     pending.publishPendingActions('degenerette', [{
       ...base,
-      shortLabel: 'Resolve degen', detail: 'RNG ready · FLIP result locked',
+      shortLabel: 'Degenerette spin', detail: 'RNG ready · FLIP result locked',
       state: 'ready', phase: 'result-ready', run: async () => {},
     }]);
     assert.equal(pendingSurfaceVisible(el), true,

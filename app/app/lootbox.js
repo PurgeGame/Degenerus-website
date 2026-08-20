@@ -70,6 +70,11 @@ const PREWARM_TTL_MS = 30_000;
 // threshold [112:175], max basefee [176:183], pending FLIP [184:223].
 const LOOTBOX_RNG_STORAGE_SLOT = 33n;
 const GAME_TIMING_STORAGE_SLOT = 0n;
+// DegenerusGameStorage.centuryBonusUsed. This is deployment-pinned for the
+// same reason as the operational RNG slots above: the mapping is deliberately
+// internal, while its remaining allowance changes the tickets a buy receives.
+const CENTURY_BONUS_USED_STORAGE_SLOT = 46n;
+const CENTURY_BONUS_USED_MASK = (1n << 224n) - 1n;
 const UINT48_MASK = (1n << 48n) - 1n;
 const UINT64_MASK = (1n << 64n) - 1n;
 const UINT40_MASK = (1n << 40n) - 1n;
@@ -439,6 +444,52 @@ export async function readPurchaseQuote() {
   } catch (_e) {
     return null;
   }
+}
+
+/** Storage position for centuryBonusUsed[player] in the deployed GAME. */
+export function centuryBonusUsedStorageSlot(player) {
+  if (!ethers.isAddress(String(player || ''))) return null;
+  try {
+    return ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+      ['address', 'uint256'],
+      [player, CENTURY_BONUS_USED_STORAGE_SLOT],
+    ));
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Decode `(level << 224) | used`; an older stamp means a fresh allowance. */
+export function decodeCenturyBonusUsed(packedValue, targetLevel) {
+  let packed;
+  let level;
+  try {
+    packed = BigInt(packedValue ?? 0n);
+    level = BigInt(targetLevel);
+  } catch (_e) {
+    return null;
+  }
+  if (level <= 0n) return null;
+  return (packed >> 224n) === level ? packed & CENTURY_BONUS_USED_MASK : 0n;
+}
+
+/**
+ * Read the player's already-consumed x00 allowance at one chain head.
+ * Returns purchase units (400 = one ticket), matching the mint module.
+ */
+export async function readCenturyBonusUsed({ player, targetLevel, provider = null } = {}) {
+  const slot = centuryBonusUsedStorageSlot(player);
+  const level = Number(targetLevel);
+  if (!slot || !Number.isInteger(level) || level <= 0 || level % 100 !== 0) return null;
+  const reader = provider || _publicLootboxReadProvider() || getProvider();
+  if (!reader || !CONTRACTS.GAME) return null;
+  let blockNumber = null;
+  try {
+    const head = Number(await reader.getBlockNumber?.());
+    if (Number.isInteger(head) && head >= 0) blockNumber = head;
+  } catch (_e) { /* an unpinned latest read is still useful */ }
+  const packed = await _readGameStorage(reader, slot, blockNumber);
+  return decodeCenturyBonusUsed(packed, level);
 }
 
 /**
@@ -1293,9 +1344,12 @@ async function _readGameStorage(provider, slot, blockNumber) {
     const blockTag = Number.isInteger(blockNumber)
       ? `0x${blockNumber.toString(16)}`
       : 'latest';
+    const storageSlot = typeof slot === 'string' && slot.startsWith('0x')
+      ? slot
+      : `0x${BigInt(slot).toString(16)}`;
     return provider.send('eth_getStorageAt', [
       CONTRACTS.GAME,
-      `0x${slot.toString(16)}`,
+      storageSlot,
       blockTag,
     ]);
   }

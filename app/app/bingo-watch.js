@@ -551,7 +551,12 @@ export function refreshBingoWatch() {
     try {
       await _loadIndexedBingos(address);
     } catch (error) {
-      console.warn?.('[bingo-watch] indexed Bingo read failed; keeping last known state', error);
+      // Visibility/account/transaction invalidation deliberately aborts stale
+      // broker flights. That is lifecycle control flow, not an indexed-read
+      // failure. Keep genuine transport/API failures visible.
+      if (error?.name !== 'AbortError') {
+        console.warn?.('[bingo-watch] indexed Bingo read failed; keeping last known state', error);
+      }
     }
     if (_lower(_getAddress?.()) === address) await _publish(address, seq);
   })().finally(() => {

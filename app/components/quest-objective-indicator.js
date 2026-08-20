@@ -74,8 +74,11 @@ class QuestObjectiveIndicator extends HTMLElement {
       this.removeAttribute?.('role');
       return;
     }
-    this.title = `${model.title} · Click to complete`;
-    this.setAttribute?.('aria-label', `${model.title}. Click to complete.`);
+    const actionLabel = product === 'affiliate'
+      ? 'Click to copy your referral link'
+      : 'Click to complete';
+    this.title = `${model.title} · ${actionLabel}`;
+    this.setAttribute?.('aria-label', `${model.title}. ${actionLabel}.`);
     this.setAttribute?.('role', 'button');
     this.setAttribute?.('data-quest-product', product);
     this.setAttribute?.('data-quest-count', String(model.count));

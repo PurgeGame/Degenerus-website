@@ -93,10 +93,10 @@ export function activeTicketLevel(gameState, contractPhase = null) {
 /**
  * Level whose foil pack belongs in the Daily Drawing cabinet.
  *
- * This deliberately differs from `activeTicketLevel()` during the sealed
- * final-RNG window. New buys may already route forward there, but the cabinet
- * is still presenting the current level's jackpot and must keep that level's
- * foil tickets visible until the end-phase transition actually starts.
+ * This deliberately differs from `activeTicketLevel()`. New buys may already
+ * route forward during a sealed RNG window or a purchase cadence, but the
+ * cabinet is current-level history: it keeps that level's foil tickets seated
+ * until the end-phase transition actually starts.
  */
 export function foilPackDisplayLevel(gameState, contractPhase = null) {
   const level = Number(gameState?.level ?? contractPhase?.level);
@@ -106,22 +106,8 @@ export function foilPackDisplayLevel(gameState, contractPhase = null) {
   // onward the old level has no remaining jackpot presentation.
   if (gameState?.phaseTransitionActive === true) return level + 1;
 
-  // Prefer the explicit /game/state phase. A slower side-bet contract poll can
-  // otherwise hide the live level's foils by briefly reporting the adjacent
-  // purchase cadence for the same numeric level.
-  const hasGamePhase = typeof gameState?.jackpotPhaseFlag === 'boolean'
-    || typeof gameState?.phase === 'string';
-  if (hasGamePhase) {
-    const jackpot = Boolean(
-      gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
-    );
-    return jackpot ? level : level + 1;
-  }
-
-  const directLevel = Number(contractPhase?.level);
-  const directIsCurrent = typeof contractPhase?.jackpot === 'boolean'
-    && (!Number.isFinite(directLevel) || directLevel === level);
-  if (directIsCurrent) return contractPhase.jackpot ? level : level + 1;
-
-  return activeTicketLevel(gameState, contractPhase);
+  // Purchase routing and cabinet ownership are separate clocks. In
+  // particular, a same-level JACKPOT -> PURCHASE refresh after a spin must not
+  // swap the seated current-level pack for an unowned level + 1 pack.
+  return level;
 }

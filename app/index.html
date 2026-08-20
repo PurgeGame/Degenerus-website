@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus App</title>
+  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
   <!-- First-paint signal for skeleton.css: no persisted wallet session means
        the disconnected protocol-wallet banner WILL appear, so its footprint
        can be reserved before it mounts (wallet.js sets/clears lastWalletRdns
@@ -252,6 +253,35 @@
                can grow when another column opens a disclosure without
                stretching this backplate or moving its four foil modules. -->
           <div class="jackpot-hero__machine">
+            <!-- Live current for the four real button-to-board traces. This is
+                 inline so the page can start it only while the resolved random
+                 word is driving the reels, and can stop its travelling packets
+                 for reduced-motion users. Every path is copied verbatim from
+                 daily-drawing-board-routing-v7.svg; the overlay cannot invent
+                 circuitry that is absent from the copper layer. -->
+            <svg class="jackpot-board-current" viewBox="0 0 1280 1280"
+                 preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="jackpotBoardCurrentUp" gradientUnits="userSpaceOnUse"
+                                x1="640" y1="1098" x2="640" y2="915">
+                  <stop stop-color="#a5cbff"/>
+                  <stop offset="0.42" stop-color="#6799ff"/>
+                  <stop offset="1" stop-color="#73e8b0"/>
+                </linearGradient>
+                <path id="jackpotBoardRoute1" d="M456 1098V1018L438 1000H432L414 982V915"/>
+                <path id="jackpotBoardRoute2" d="M548 1098V1038L530 1020H524L506 1002V915"/>
+                <path id="jackpotBoardRoute3" d="M732 1098V1038L750 1020H756L774 1002V915"/>
+                <path id="jackpotBoardRoute4" d="M824 1098V1018L842 1000H848L866 982V915"/>
+              </defs>
+              <g class="jackpot-board-current__rail" stroke="url(#jackpotBoardCurrentUp)">
+                <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+                <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+              </g>
+              <g class="jackpot-board-current__packet" stroke="url(#jackpotBoardCurrentUp)">
+                <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+                <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+              </g>
+            </svg>
             <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
               <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/flame-center-silver.svg"
                    width="38" height="54" alt="" aria-hidden="true">
@@ -396,7 +426,7 @@
   </div>
 
   <script src="/shared/nav.js"></script>
-  <script>initNav({ currentPage: 'app' });</script>
+  <script>initNav({ currentPage: 'app', sessionChecks: false });</script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/app/main.js"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>

@@ -255,17 +255,6 @@ const STATE = Object.freeze({
   RESOLVED: 'resolved',
 });
 
-const STATE_LABELS = Object.freeze({
-  idle: '',
-  placing: 'Placing…',
-  awaitingRng: 'Awaiting RNG…',
-  requestingRng: 'Requesting RNG…',
-  ready: 'Ready to resolve.',
-  resolving: 'Resolving…',
-  indexing: 'Loading spins…',
-  resolved: 'Resolved.',
-});
-
 export function pendingDegeneretteKey(address) {
   // Bet ids and queue indexes restart on every deployment. Chain id alone is
   // therefore not a safe namespace on testnet: an old run can leave a valid-
@@ -993,6 +982,10 @@ class AppDegenerettePanel extends HTMLElement {
     }
     this.#applyQuestPreset(detail);
   };
+  #referralQuestListener = (event) => {
+    if (String(event?.detail?.product || '') !== 'affiliate') return;
+    void this.#copyReferralLink(event);
+  };
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -1006,6 +999,7 @@ class AppDegenerettePanel extends HTMLElement {
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       document.addEventListener(DGN_TICKET_COPY_EVENT, this.#ticketCopyListener);
       document.addEventListener('quest:activate', this.#questActivateListener);
+      document.addEventListener('quest:open', this.#referralQuestListener);
     }
     this.#startPolling();
     this.#restorePendingBet();
@@ -1042,6 +1036,8 @@ class AppDegenerettePanel extends HTMLElement {
       catch (_) { /* defensive */ }
       try { document.removeEventListener('quest:activate', this.#questActivateListener); }
       catch (_) { /* defensive */ }
+      try { document.removeEventListener('quest:open', this.#referralQuestListener); }
+      catch (_) { /* defensive */ }
     }
     clearPendingActions(PENDING_SOURCE);
     if (this.#errorTimer != null) {
@@ -1077,7 +1073,6 @@ class AppDegenerettePanel extends HTMLElement {
             <button type="button" class="deg-header__info" data-bind="deg-basics-info"
                     aria-haspopup="dialog" aria-label="How Degenerette works">i</button>
           </div>
-          <span class="deg-state" data-bind="deg-state"></span>
         </header>
 
         <div class="deg-setup" data-bind="deg-setup">
@@ -1850,8 +1845,6 @@ class AppDegenerettePanel extends HTMLElement {
     this.#pickerTouched = true;
     this.#defaultTicketKey = null;
     this.#renderPicker();
-    const state = this.querySelector('[data-bind="deg-state"]');
-    if (state && this.#state === STATE.IDLE) state.textContent = 'Ticket copied';
   }
 
   // ---------------------------------------------------------------------
@@ -2546,7 +2539,9 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // State machine — drives the compact status and the shared pending tray.
+  // State machine — drives the form and the shared pending tray. The tray is
+  // the only visible owner of RNG / resolution progress; the Degenerette
+  // header remains a stable title rail.
   // ---------------------------------------------------------------------
 
   #persistPendingBet() {
@@ -2598,17 +2593,6 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   #renderState() {
-    const stateEl = this.querySelector('[data-bind="deg-state"]');
-    // idle → '' (STATE_LABELS.idle is empty): no dead "Idle" line. ?? keeps the
-    // empty label instead of falling through to a default.
-    if (stateEl) {
-      // The fixed pending-action tray owns the whole RNG wait lifecycle. Keep
-      // the main wager form still after placement instead of echoing that
-      // state in a second bubble above it.
-      stateEl.textContent = this.#state === STATE.AWAITING_RNG
-        ? ''
-        : (STATE_LABELS[this.#state] ?? '');
-    }
     const placeBtn = this.querySelector('[data-bind="deg-place-cta"]');
     if (placeBtn) {
       // Placing another bet is safe while an earlier bet waits on RNG or its
@@ -2673,7 +2657,7 @@ class AppDegenerettePanel extends HTMLElement {
             ? 'Request RNG'
             : this.#state === STATE.INDEXING
               ? 'Open spins'
-            : 'Resolve degen',
+            : 'Degenerette spin',
       detail: this.#currentBetId == null
         ? 'Bet confirmed · syncing RNG queue'
         : this.#state === STATE.READY

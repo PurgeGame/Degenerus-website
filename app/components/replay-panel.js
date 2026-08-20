@@ -478,7 +478,7 @@ class ReplayPanel extends HTMLElement {
   #spinning = false;            // true while spin animation is running
   #scratched = [false, false, false, false];  // per-quadrant scratch completion
   #scratchGrids = [null, null, null, null];   // per-quadrant Uint8Array scratch grids
-  #greenRevealed = [false, false, false, false]; // per-quadrant first-badge green flash
+  #greenRevealed = [false, false, false, false]; // per-quadrant first-badge win surface
   #badgesRevealed = [[], [], [], []];         // per-badge tracking within each quadrant
   #quadBadgeBounds = [null, null, null, null]; // per-quadrant badge hit circles
   #quadOwned = [false, false, false, false];  // per-quadrant win presence (from playerRoll1Wins)
@@ -594,6 +594,8 @@ class ReplayPanel extends HTMLElement {
             SPIN JACKPOT
           </button>
           <div class="jackpot-chainlink jackpot-chainlink--right" aria-hidden="true">
+            <span class="jackpot-chainlink__lead jackpot-chainlink__lead--top"></span>
+            <span class="jackpot-chainlink__lead jackpot-chainlink__lead--bottom"></span>
             <span class="jackpot-chainlink__pins"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--1"></span>
             <span class="jackpot-chainlink__cell jackpot-chainlink__cell--2"></span>
@@ -638,13 +640,12 @@ class ReplayPanel extends HTMLElement {
           </div>
         </div>
 
-        <p class="replay-hint" data-bind="hint"></p>
+        <p class="replay-hint" aria-hidden="true"></p>
 
         <div class="replay-bonus-section" data-bind="bonus-section" hidden>
           <button class="btn-primary replay-bonus-btn" data-bind="bonus-btn">
             BONUS SPIN
           </button>
-          <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus round</p>
         </div>
 
         <!-- Plan 39-10: compact day summary mounted between card grid and winners list -->
@@ -1735,7 +1736,7 @@ class ReplayPanel extends HTMLElement {
         quads[i]?.classList.remove(
           'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets',
           'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
-          'q-owned-miss', 'q-player-win',
+          'q-owned-miss', 'q-player-win', 'q-solo-eth-win',
           'q-gold-trait', 'q-scratch-underlay', 'q-result-pending', 'q-result-revealed',
         );
         const shownTrait = contractQ * 64 + col * 8 + sym;
@@ -3004,20 +3005,17 @@ class ReplayPanel extends HTMLElement {
   #showBonusSection() {
     const section = this.querySelector('[data-bind="bonus-section"]');
     const btn = this.querySelector('[data-bind="bonus-btn"]');
-    const noBonus = this.querySelector('[data-bind="no-bonus"]');
     if (!section) return;
 
-    // Single-button mode: the main Spin button already became "Bonus Spin",
-    // so this section is only ever the no-bonus note.
+    // Single-button mode keeps every actionable state on the shared LCD.
     if (this.#singleButton()) {
       if (btn) btn.hidden = true;
-      if (noBonus) noBonus.hidden = this.#hasBonus;
-      section.hidden = this.#hasBonus;
+      section.hidden = true;
       return;
     }
 
-    // Only show after Roll 1 is done
-    section.hidden = false;
+    // Standalone replay needs a second control only when Roll 2 exists.
+    section.hidden = !this.#hasBonus;
     if (this.#hasBonus) {
       btn.hidden = false;
       btn.disabled = !this.#mainReadyForBonus();
@@ -3025,10 +3023,8 @@ class ReplayPanel extends HTMLElement {
       btn.title = this.#mainReadyForBonus()
         ? ''
         : 'Scratch blue and gold panels first';
-      noBonus.hidden = true;
     } else {
       btn.hidden = true;
-      noBonus.hidden = false;
     }
   }
 
@@ -3062,9 +3058,6 @@ class ReplayPanel extends HTMLElement {
     // unavailable (legacy DB / first day) so the widget still animates.
     const displayTraits = this.#displayTraitsForRoll(true);
 
-    // Reset canvases / scratch state so the main widget is fresh for Roll 2
-    this.#resetMainWidget();
-
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     if (btn) {
       btn.disabled = true;
@@ -3075,6 +3068,10 @@ class ReplayPanel extends HTMLElement {
     // Colouring for this roll comes from the future-level holdings.
     await this.#loadFutureTraits();
     if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+    // Keep the settled main board painted during an uncached trait request.
+    // Once hydration finishes, clear it immediately before #runSpin paints
+    // the bonus reel's first frame, leaving no blank intermediate board.
+    this.#resetMainWidget();
     const completed = await this.#runSpin(displayTraits);
     if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
     this.#bonusSpinComplete = true;
@@ -3223,7 +3220,7 @@ class ReplayPanel extends HTMLElement {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
-        'q-owned-miss', 'q-player-win', 'q-gold-trait', 'q-scratch-underlay',
+        'q-owned-miss', 'q-player-win', 'q-solo-eth-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',
       );
       const img = q.querySelector('.badge-img');
@@ -3258,8 +3255,6 @@ class ReplayPanel extends HTMLElement {
     this.#centerScratched = false;
     this.#centerScratchGrid = null;
 
-    const hint = this.querySelector('[data-bind="hint"]');
-    if (hint) hint.textContent = '';
   }
 
   async #runSpin(displayTraits, { instant = false, announce = true } = {}) {
@@ -3270,8 +3265,6 @@ class ReplayPanel extends HTMLElement {
     this.#skipSpinId = null;
     this.#spinning = true;
     const quads = this.querySelectorAll('.replay-tq');
-    const hint = this.querySelector('[data-bind="hint"]');
-
     // Track the viewed player's result in each quadrant. The main draw now lets
     // every quadrant scratch; this ownership state still drives the reel colours
     // and win sound. Roll 2 keeps its player-eligible-only scratch behavior.
@@ -3322,7 +3315,6 @@ class ReplayPanel extends HTMLElement {
     this.#hideCenterScratch();
 
     // Clear canvases and prizes
-    if (hint) hint.textContent = '';
     this.#clearScatteredBadges();
     const mainBadges = this.querySelectorAll('.replay-ticket .badge-img');
     for (const mb of mainBadges) {
@@ -3376,7 +3368,7 @@ class ReplayPanel extends HTMLElement {
           img.style.opacity = '1';
         }
       }
-      this.#afterSpin(displayTraits, targets, quads, hint, { announce });
+      this.#afterSpin(displayTraits, targets, quads, { announce });
       for (let i = 0; i < 4; i++) {
         this.#revealQuadrant(i, { instant: true, silent: true });
       }
@@ -3392,32 +3384,22 @@ class ReplayPanel extends HTMLElement {
     let idleCount = 2 + Math.floor(Math.random() * 3);
     let finalLockSettling = false;
 
-    // Phase 64 (app embed): publish the reels' own committed faces while they
-    // are still turning, so a host shell can grade seated foil tickets against
-    // what the player is actually looking at. A quadrant counts as committed
-    // only once BOTH its colour and its symbol are locked — the frame loop
-    // treats that same pair as "fully locked" when it commits the quadrant's
-    // ownership colour, and a symbol-locked quadrant still shows a random
-    // colour, which would grade as a colour miss against the real draw.
-    // Uncommitted quadrants publish null, never a placeholder trait.
-    // The event fires only when the committed COUNT changes, so a spin emits
-    // at most five of them; it is spin presentation, not a data feed. The
-    // opening emit publishes four nulls, which is how a host drops the
-    // previous roll's presentation before this one starts.
-    let announcedCommits = -1;
-    const emitSpinProgress = () => {
+    // Phase 64 (app embed): publish two separate views of the reel state.
+    // `traits` contains durable locks only: a quadrant commits once BOTH its
+    // colour and symbol stop. `liveTraits` is the exact badge painted on this
+    // frame, including still-cycling reels. Hosts can therefore replace a
+    // transient lamp on every frame without losing already-committed locks.
+    // The opening emit contains four nulls in both arrays and clears the prior
+    // roll before the first new frame is painted.
+    const emitSpinProgress = (liveTraits = [null, null, null, null]) => {
       const traits = [null, null, null, null];
-      let commits = 0;
       for (let i = 0; i < 4; i++) {
         if (!lockedSymbols[i] || !lockedColors[i]) continue;
         if (displayTraits[i] == null) continue;
         const { contractQ, col, sym } = targets[i];
         if (!(contractQ >= 0 && contractQ < 4)) continue;
         traits[contractQ] = (contractQ * 64) + (col * 8) + sym;
-        commits += 1;
       }
-      if (commits === announcedCommits) return;
-      announcedCommits = commits;
       if (!announce) return;
       try {
         this.dispatchEvent(new CustomEvent('replay:spin-progress', {
@@ -3426,6 +3408,7 @@ class ReplayPanel extends HTMLElement {
             player: this.#selectedPlayer,
             bonusPhase: this.#bonusPhase,
             traits,
+            liveTraits,
           },
           bubbles: true,
         }));
@@ -3462,7 +3445,7 @@ class ReplayPanel extends HTMLElement {
             const img = quads[i].querySelector('.badge-img');
             if (img) { img.src = path; img.style.opacity = '1'; }
           }
-          this.#afterSpin(displayTraits, targets, quads, hint);
+          this.#afterSpin(displayTraits, targets, quads);
           // Auto-reveal all quadrants and center
           for (let i = 0; i < 4; i++) this.#revealQuadrant(i);
           this.#revealCenter();
@@ -3480,7 +3463,7 @@ class ReplayPanel extends HTMLElement {
             const img = quads[i].querySelector('.badge-img');
             if (img) img.src = badgeCircularPath(category, targets[i].sym, targets[i].col);
           }
-          this.#afterSpin(displayTraits, targets, quads, hint);
+          this.#afterSpin(displayTraits, targets, quads);
           settle(true);
           return;
         }
@@ -3507,13 +3490,17 @@ class ReplayPanel extends HTMLElement {
           idleCount--;
         }
 
-        // Render random or locked badges
+        // Render random or locked badges and capture the exact four traits
+        // shown by this painted frame in contract-quadrant order.
         let frameWinnableCount = 0;
         let frameHasGoldWinnable = false;
+        const liveTraits = [null, null, null, null];
         for (let i = 0; i < 4; i++) {
           const contractQ = DISPLAY_ORDER[i];
           const sym = lockedSymbols[i] ? targets[i].sym : Math.floor(Math.random() * 8);
           const col = lockedColors[i] ? targets[i].col : Math.floor(Math.random() * 8);
+          const shownTrait = contractQ * 64 + col * 8 + sym;
+          liveTraits[contractQ] = shownTrait;
           const category = BADGE_QUADRANTS[contractQ];
           const path = badgeCircularPath(category, sym, col);
 
@@ -3555,9 +3542,6 @@ class ReplayPanel extends HTMLElement {
             }
           } else {
             quads[i].classList.remove('q-win-impossible-lock');
-            // Mid-spin: the shown trait is quadrant/colour/symbol packed the
-            // same way the contract packs it ([QQ][CCC][SSS]).
-            const shownTrait = contractQ * 64 + col * 8 + sym;
             const ownsShown = spinOwned.has(shownTrait);
             quads[i].classList.add(ownsShown ? 'q-has-trait' : 'q-no-tickets');
             if (ownsShown) frameWinnableCount += 1;
@@ -3568,7 +3552,7 @@ class ReplayPanel extends HTMLElement {
           }
         }
         this.#syncOwnedGoldState(quads);
-        emitSpinProgress();
+        emitSpinProgress(liveTraits);
         // Ordinary frames get one terse digital pulse whose pitch/volume
         // follows the blue count. A lock frame substitutes its red/blue/gold
         // cue instead of stacking both sounds on the same animation frame.
@@ -3600,7 +3584,7 @@ class ReplayPanel extends HTMLElement {
     });
   }
 
-  #afterSpin(displayTraits, targets, quads, hint, { announce = true } = {}) {
+  #afterSpin(displayTraits, targets, quads, { announce = true } = {}) {
     // Stop flame spinning
     const center = this.querySelector('[data-bind="center"]');
     if (center) center.classList.remove('spinning');
@@ -3630,9 +3614,13 @@ class ReplayPanel extends HTMLElement {
         'q-scratch-underlay',
         'q-result-pending',
         'q-result-revealed',
+        'q-solo-eth-win',
       );
       const hasPlayerWin = this.#quadWinArrays[i]
         .some((d) => d.awardType !== 'overflow');
+      const isSoloEthWin = hasPlayerWin
+        && !this.#bonusPhase
+        && this.#isSoloEthWinner(i);
       const heldTraits = this.#bonusPhase ? this.#futureTraitIds : this.#playerTraitIds;
       const winnerProvesDisplayedOwnership = this.#quadWinArrays[i]
         .some((d) => d.traitId != null && Number(d.traitId) === Number(displayTraits[i]));
@@ -3668,6 +3656,7 @@ class ReplayPanel extends HTMLElement {
       // pink paper before the completion threshold.
       quads[i].classList.add('q-scratchable');
       quads[i].classList.add('q-scratch-underlay');
+      if (isSoloEthWin) quads[i].classList.add('q-solo-eth-win');
       if (ownsDisplayedGold) {
         quads[i].classList.add('q-gold-trait');
       } else if (hasPlayerWin) {
@@ -3762,26 +3751,7 @@ class ReplayPanel extends HTMLElement {
 
     // Blue/gold already identifies possible wins. Require those covers even
     // when they hide an owned miss; red guaranteed-loss results stay optional.
-    const mainPotentialRemaining = !this.#bonusPhase
-      ? this.#refreshMainPotentialScratchGate()
-      : null;
-
-    if (!this.#bonusPhase) {
-      if (hint) {
-        if (this.#hasBonus && !this.#bonusSpinComplete) {
-          hint.textContent = mainPotentialRemaining === 0
-            ? 'Bonus round ready'
-            : (mainPotentialRemaining + ' possible-win panel'
-              + (mainPotentialRemaining !== 1 ? 's' : '') + ' remaining');
-        } else {
-          hint.textContent = (4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining';
-        }
-      }
-    } else if (anyScratchable) {
-      if (hint) hint.textContent = (4 + (this.#centerWins.length > 0 ? 1 : 0)) + ' panels remaining';
-    } else {
-      if (hint) hint.textContent = '';
-    }
+    if (!this.#bonusPhase) this.#refreshMainPotentialScratchGate();
 
     // Phase 64 (app embed): announce spin completion so host shells can sync
     // post-spin visuals such as foil match lighting. Scratch completion below
@@ -4168,7 +4138,7 @@ class ReplayPanel extends HTMLElement {
       if (!this.#scratchGrids[qIdx]) this.#scratchGrids[qIdx] = makeScratchGrid(GRID_RES);
       markGridCells(this.#scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
 
-      // Check if scratch stroke reveals a win badge (green flash like demo)
+      // Check if the scratch stroke reveals a paid badge and its win surface.
       if (this.#quadWinArrays[qIdx].length > 0 && this.#quadBadgeBounds[qIdx]) {
         const pctX = (cx / canvas.width) * 100;
         const pctY = (cy / canvas.height) * 100;
@@ -4483,12 +4453,9 @@ class ReplayPanel extends HTMLElement {
   }
 
   #checkAllScratched({ silent = false } = {}) {
-    const hint = this.querySelector('[data-bind="hint"]');
     const centerPending = this.#centerWins.length > 0 && !this.#centerScratched;
     const allDone = this.#scratched.every(s => s) && !centerPending;
-    const mainPotentialRemaining = !this.#bonusPhase
-      ? this.#refreshMainPotentialScratchGate()
-      : null;
+    if (!this.#bonusPhase) this.#refreshMainPotentialScratchGate();
     if (allDone) {
       if (!this.#bonusPhase) {
         this.#mainScratchComplete = true;
@@ -4496,28 +4463,10 @@ class ReplayPanel extends HTMLElement {
       } else {
         this.#bonusScratchComplete = true;
       }
-      if (hint) {
-        hint.textContent = !this.#bonusPhase && this.#hasBonus && !this.#bonusSpinComplete
-          ? 'Bonus round ready'
-          : '';
-      }
       const anyWon = this.#quadWinArrays.some(w => w.some(d => d.awardType !== 'overflow')) || this.#centerWins.length > 0;
       if (!silent) {
         if (anyWon) this.#celebrate({ sound: !this.#soloEthCuePlayed });
         this.#dispatchScratchComplete();
-      }
-    } else {
-      let remaining = this.#scratched.filter(s => !s).length;
-      if (centerPending) remaining++;
-      if (hint) {
-        if (!this.#bonusPhase && this.#hasBonus && !this.#bonusSpinComplete) {
-          hint.textContent = mainPotentialRemaining === 0
-            ? 'Bonus round ready'
-            : (mainPotentialRemaining + ' possible-win panel'
-              + (mainPotentialRemaining !== 1 ? 's' : '') + ' remaining');
-        } else {
-          hint.textContent = remaining + ' panel' + (remaining !== 1 ? 's' : '') + ' remaining';
-        }
       }
     }
     if (!this.#bonusPhase) {
@@ -4616,19 +4565,12 @@ class ReplayPanel extends HTMLElement {
     const defaultBadge = traitToBadge(traitId);
     const defaultPath = defaultBadge ? defaultBadge.path : '';
     const allBounds = [];
-    // Solo-bucket entry (ETH + whale_pass + dgnrs merged) gets a dominant badge.
-    // Scale up more aggressively when the solo ETH slice is large — main
-    // jackpot wins on final days pay 60% of the trait pool, so the badge
-    // should read as the centerpiece of the quadrant.
-    const soloIdx = realWins.findIndex(w => w.isSolo);
-    const soloEthFloatEth = soloIdx >= 0
-      ? Number(BigInt(realWins[soloIdx].ethTotal || '0') / 10n**15n) / 1000  // wei → ETH
-      : 0;
-    const soloSize = soloIdx < 0 ? 0
-      : soloEthFloatEth >= 5 ? 95
-      : soloEthFloatEth >= 1 ? 85
-      : soloEthFloatEth >= 0.1 ? 75
-      : 65;
+    // Solo-bucket entry (ETH + whale_pass + dgnrs merged) is the main draw's
+    // marquee prize, so its badge fills nearly the entire winning quadrant.
+    const soloIdx = !this.#bonusPhase && this.#isSoloEthWinner(qIdx)
+      ? Math.max(0, realWins.findIndex((win) => win.isSolo))
+      : -1;
+    const soloSize = soloIdx < 0 ? 0 : 92;
     // Pack badges into stable cells inside the art band, then apply bounded
     // deterministic scatter. That preserves every result while keeping large
     // winning reveals loose and celebratory instead of grid-like.
@@ -4641,9 +4583,15 @@ class ReplayPanel extends HTMLElement {
     for (let w = 0; w < realWins.length; w++) {
       const position = layout[w];
       if (!position) continue;
-      const sizePct = position.size;
-      const bestLeft = position.left;
-      const bestTop = position.top;
+      const isSoloBadge = w === soloIdx;
+      const sizePct = isSoloBadge ? soloSize : position.size;
+      const growth = (sizePct - position.size) / 2;
+      const bestLeft = isSoloBadge
+        ? Math.max(0, Math.min(100 - sizePct, position.left - growth))
+        : position.left;
+      const bestTop = isSoloBadge
+        ? Math.max(0, Math.min(100 - sizePct, position.top - growth))
+        : position.top;
       allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
 
       // Use each win's own traitId for its badge; fall back to quadrant default
@@ -4651,13 +4599,15 @@ class ReplayPanel extends HTMLElement {
       const winPath = winBadge ? winBadge.path : defaultPath;
 
       const wrap = document.createElement('div');
-      wrap.className = 'replay-badge-wrap';
+      wrap.className = isSoloBadge
+        ? 'replay-badge-wrap replay-badge-wrap--solo'
+        : 'replay-badge-wrap';
       wrap.tabIndex = -1;
       wrap.style.width = sizePct + '%';
       wrap.style.left = bestLeft + '%';
       wrap.style.top = bestTop + '%';
       wrap.style.setProperty('--replay-badge-rotation', `${position.rotation || 0}deg`);
-      wrap.style.setProperty('--replay-badge-layer', String(position.layer || 1));
+      wrap.style.setProperty('--replay-badge-layer', String(isSoloBadge ? 0 : (position.layer || 1)));
       const img = document.createElement('img');
       img.src = winPath; img.className = 'replay-scattered-badge'; img.alt = '';
       wrap.appendChild(img);
@@ -4737,7 +4687,7 @@ class ReplayPanel extends HTMLElement {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
-        'q-owned-miss', 'q-player-win', 'q-gold-trait', 'q-scratch-underlay',
+        'q-owned-miss', 'q-player-win', 'q-solo-eth-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',
       );
       const img = q.querySelector('.badge-img');
@@ -4811,11 +4761,6 @@ class ReplayPanel extends HTMLElement {
       bonusBtn.textContent = BONUS_SPIN_LOCKED_LABEL;
       bonusBtn.title = 'Scratch blue and gold panels first';
     }
-    const noBonus = this.querySelector('[data-bind="no-bonus"]');
-    if (noBonus) noBonus.hidden = true;
-
-    const hint = this.querySelector('[data-bind="hint"]');
-    if (hint) hint.textContent = '';
   }
 
   #celebrate({ sound = true } = {}) {

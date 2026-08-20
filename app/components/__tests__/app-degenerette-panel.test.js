@@ -578,6 +578,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.ok(placeCta, 'Place CTA rendered');
     assert.equal(el.querySelector('.deg-resolve-cta'), null,
       'RNG and resolve controls live only in the shared pending tray');
+    assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
+      'the header has no duplicate RNG or resolution status outlet');
+    assert.doesNotMatch(PANEL_SRC,
+      /const STATE_LABELS|class="deg-state"|data-bind="deg-state"/,
+      'Degenerette lifecycle updates have no panel-local renderer');
     assert.doesNotMatch(el.innerHTML, /data-bind="deg-actions"/);
   });
 
@@ -760,7 +765,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'Hero spikes inherit the exact color of their badge');
     assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
       'copying an inventory ticket keeps the manual trait picker closed');
-    assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, 'Ticket copied');
+    assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
+      'copying a ticket does not recreate the removed header status pill');
     el.disconnectedCallback();
   });
 
@@ -1070,9 +1076,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(recordedArgs[6].value, fullWagerWei - spendableClaimableWei,
       'the default checked preference spends claimable first and sends only the wallet remainder');
     // State transitions to awaitingRng, but the bottom tray is its only visible surface.
-    const stateEl = el.querySelector('.deg-state');
-    assert.ok(stateEl, 'state display element rendered');
-    assert.equal(stateEl.textContent, '', 'main card does not duplicate the RNG wait bubble');
+    assert.equal(el.querySelector('.deg-state'), null,
+      'main card has no duplicate RNG lifecycle surface');
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.id, 'degenerette:42');
     assert.equal(pending.state, 'waiting');
@@ -1137,7 +1142,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending.ticketPacked, '13', 'the exact submitted ticket feeds the pending-card art');
     assert.equal(pending.heroQuadrant, 2);
     assert.equal(pending.state, 'waiting');
-    assert.equal(el.querySelector('.deg-state').textContent, '',
+    assert.equal(el.querySelector('.deg-state'), null,
       'the bottom pending row is the sole RNG-wait surface');
     const stored = JSON.parse(localStorage.getItem(
       `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`,
@@ -1256,9 +1261,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending?.phase, 'awaitingRng');
     assert.equal(pending?.pinned, true,
       'the bottom panel cannot drop a bet while its RNG state catches up');
-    assert.equal(pending?.shortLabel, 'Resolve degen');
+    assert.equal(pending?.shortLabel, 'Degenerette spin');
     assert.equal(pending?.detail, 'Waiting for Chainlink RNG');
-    assert.equal(el.querySelector('.deg-state').textContent, '',
+    assert.equal(el.querySelector('.deg-state'), null,
       'the main widget does not duplicate the pinned RNG wait');
     assert.doesNotMatch(pending?.detail, /verified spin/i,
       'the UI does not claim result indexing before an RNG word exists');
@@ -1337,7 +1342,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.phase, 'waiting-rng',
       'polling cannot overwrite the receipt-backed wait with a stale requestable read');
-    assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, '',
+    assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
       'the bottom tray remains the sole RNG waiting surface');
     let stored = JSON.parse(localStorage.getItem(storageKey));
     assert.equal(stored.rngRequestPending, true);
@@ -1352,7 +1357,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending.phase, 'waiting-rng', 'refresh restores the submitted request card');
     assert.equal(pending.pinned, true);
     assert.equal(pending.rngRequestBlock, 120, 'refresh preserves the real request block');
-    assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, '');
+    assert.equal(el.querySelector('[data-bind="deg-state"]'), null);
     el.disconnectedCallback();
 
     useDegeneretteFeed(readyFeedItem({ currency: 1 }));
@@ -2105,8 +2110,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       link.dispatchEvent({ type: 'click', preventDefault() {} });
       await settle(80);
       assert.equal(copied.length, 4);
+      document.dispatchEvent(new CustomEvent('quest:open', {
+        detail: { product: 'affiliate', quests: [{ questType: 3, role: 'DAILY' }] },
+      }));
+      await settle(80);
+      assert.equal(copied.length, 5,
+        'the referral quest logo uses the same copy action as the referral controls');
       assert.ok(copied.every((value) => value === copied[0]),
-        'every coin, button, and URL route copies the same resolved referral link');
+        'every quest, coin, button, and URL route copies the same resolved referral link');
     } finally {
       el.disconnectedCallback();
       affiliateMod.__setFetchJSONForTest(null);

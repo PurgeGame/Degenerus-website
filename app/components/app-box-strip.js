@@ -47,7 +47,10 @@ import {
   reportPendingActionError,
 } from '../app/pending-actions.js';
 import { recordLootboxTicketPacks } from '../app/pack-watch.js';
-import { lootboxValuePresentation } from '../app/lootbox-value-tone.js';
+import {
+  applyLootboxCasePresentation,
+  lootboxValuePresentation,
+} from '../app/lootbox-value-tone.js';
 import {
   queueReveal,
   LOOTBOX_REVEAL_QUEUED_EVENT,
@@ -94,6 +97,20 @@ function _boxKey(box) {
   if (box?.resultKey != null && String(box.resultKey)) return String(box.resultKey);
   const index = Number(box?.index);
   return Number.isFinite(index) ? String(index) : '';
+}
+
+function _boxOrders(values, fallback = null) {
+  const raw = Array.isArray(values) && values.length > 0
+    ? values
+    : fallback == null ? [] : [fallback];
+  const orders = [];
+  for (const value of raw) {
+    try {
+      const order = BigInt(value ?? 0);
+      if (order > 0n) orders.push(String(order));
+    } catch (_e) { /* old/malformed cache row */ }
+  }
+  return orders;
 }
 
 function _firstPositiveAmount(...values) {
@@ -261,6 +278,7 @@ function _readPending(addr) {
           ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
           e.transactionHash,
         ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
+        boxOrders: _boxOrders(e.boxOrders, e.boxOrder),
         ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
         day: e.day != null ? Number(e.day) : null,
         // Old cache rows predate this flag and were all receipt-sourced.
@@ -297,6 +315,7 @@ function _writePending(addr, entries) {
         ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
         e.transactionHash,
       ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
+      boxOrders: _boxOrders(e.boxOrders, e.boxOrder),
       ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
       day: e.day,
       fromReceipt: e.fromReceipt !== false,
@@ -544,6 +563,7 @@ class AppBoxStrip extends HTMLElement {
         resultKey,
         transactionHash,
         transactionHashes: [transactionHash],
+        boxOrders: _boxOrders(null, detail.boxOrder),
         day: null,
         ready: false,
         resolved: false,
@@ -616,6 +636,7 @@ class AppBoxStrip extends HTMLElement {
         const incomingHash = String(
           detail.transactionHash || submitted?.transactionHash || submittedHash || '',
         ).toLowerCase();
+        const incomingBoxOrders = _boxOrders(b?.boxOrders, b?.boxOrder ?? detail.boxOrder);
         const existing = this.#boxes.find((x) => _boxKey(x) === String(index));
         if (existing) {
           // A regular lootbox and a presale box intentionally share the same
@@ -647,6 +668,15 @@ class AppBoxStrip extends HTMLElement {
             existing.transactionHash ||= incomingHash;
           }
           existing.transactionHashes = [...knownHashes];
+          if (addsPurchase && incomingBoxOrders.length > 0) {
+            existing.boxOrders = [
+              ..._boxOrders(existing.boxOrders, existing.boxOrder),
+              ...incomingBoxOrders,
+            ];
+          } else if (_boxOrders(existing.boxOrders, existing.boxOrder).length === 0
+            && submitted?.boxOrders?.length > 0) {
+            existing.boxOrders = _boxOrders(submitted.boxOrders);
+          }
           if (b?.ticketPriceWei != null || detail.ticketPriceWei != null) {
             existing.ticketPriceWei = String(b?.ticketPriceWei ?? detail.ticketPriceWei);
           }
@@ -662,6 +692,9 @@ class AppBoxStrip extends HTMLElement {
           resultKey: String(index),
           transactionHash: incomingHash || null,
           transactionHashes: incomingHash ? [incomingHash] : [],
+          boxOrders: incomingBoxOrders.length > 0
+            ? incomingBoxOrders
+            : _boxOrders(submitted?.boxOrders, submitted?.boxOrder),
           day: b?.day != null ? Number(b.day) : null,
           ready: false,
           resolved: false,
@@ -1389,6 +1422,7 @@ class AppBoxStrip extends HTMLElement {
       lootboxIndex: box.index,
       amountWei: box.amountWei,
       ticketPriceWei: box.ticketPriceWei,
+      boxOrders: _boxOrders(box.boxOrders, box.boxOrder),
       legs,
       settledExpected,
       lootboxRelease: {
@@ -1465,6 +1499,7 @@ class AppBoxStrip extends HTMLElement {
       amountLabel: _boxAmountLabel(box),
       ticketPriceWei: value.ticketPriceWei == null ? null : String(value.ticketPriceWei),
       lootboxValueTone: value.tone,
+      lootboxCaseModel: value.model,
       lootboxTicketUnitsLabel: value.unitsLabel,
       label: _boxLabel(box),
       lootboxLabel: _boxLabel(box, true),
@@ -1532,11 +1567,13 @@ class AppBoxStrip extends HTMLElement {
       chip.className = `bxs-chip${box.ready ? ' bxs-chip--ready' : ''}`
         + (box.opening ? ' bxs-chip--opening' : '');
       chip.setAttribute('data-lootbox-value-tone', value.tone);
+      applyLootboxCasePresentation(chip, value.model);
       if (value.unitsLabel) chip.title = `${value.unitsLabel} ticket-price box`;
 
       const art = document.createElement('span');
       art.className = 'bxs-chip-art';
       art.setAttribute('data-lootbox-value-tone', value.tone);
+      applyLootboxCasePresentation(art, value.model);
       chip.appendChild(art);
 
       const copy = document.createElement('span');

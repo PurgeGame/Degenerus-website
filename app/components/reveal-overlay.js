@@ -80,12 +80,15 @@ import {
 import { degenerettePayoutTable } from '../app/degenerette.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import {
+  applyLootboxCasePresentation,
+  lootboxCaseAssets,
   lootboxTicketPriceForLevel,
   lootboxValuePresentation,
 } from '../app/lootbox-value-tone.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
 import { appendCoinFaces } from '../app/coin-faces.js';
 import { flipPileLevel, flipPileArt, flipPileVariant } from '../app/flip-piles.js';
+import { unpackBoxOrder } from '../app/lootbox.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
@@ -97,6 +100,7 @@ let _lootboxPresentationSeq = 0;
 let _queuedLootboxPresentationIds = new Set();
 let _queuedBingoPresentationIds = new Set();
 let _queuedPariPresentationIds = new Set();
+let _queuedReferralBonusPresentationIds = new Set();
 
 // Ticket inventory listens for these lifecycle events so newly indexed cards
 // remain behind their wrapper until the corresponding presentation is actually
@@ -149,6 +153,14 @@ function _withPariPresentationId(seq) {
   return { ...seq, presentationId: `pari-reveal:${player}:${market}:${round}` };
 }
 
+function _withReferralBonusPresentationId(seq) {
+  if (seq?.kind !== 'referral-bonus' || seq.presentationId) return seq;
+  const player = String(seq.player || seq.address || '').toLowerCase();
+  const level = Number(seq.level);
+  if (!player || !Number.isInteger(level) || level <= 0) return seq;
+  return { ...seq, presentationId: `referral-bonus:${player}:${level}` };
+}
+
 function _emitLootboxQueued(seq) {
   const id = seq?.kind === 'lootbox' ? String(seq.presentationId || '') : '';
   if (!id || _queuedLootboxPresentationIds.has(id)) return;
@@ -177,8 +189,10 @@ function _emitLootboxQueued(seq) {
  */
 export function queueReveal(seq) {
   if (!seq || typeof seq !== 'object') return false;
-  const queued = _withPariPresentationId(
-    _withBingoPresentationId(_withLootboxPresentationId(seq)),
+  const queued = _withReferralBonusPresentationId(
+    _withPariPresentationId(
+      _withBingoPresentationId(_withLootboxPresentationId(seq)),
+    ),
   );
   const presentationId = String(queued?.presentationId || '');
   // Live receipt parsing and the indexed pending tray can discover the same
@@ -192,6 +206,8 @@ export function queueReveal(seq) {
     && presentationId && _queuedBingoPresentationIds.has(presentationId)) return false;
   if (queued?.kind === 'pari'
     && presentationId && _queuedPariPresentationIds.has(presentationId)) return false;
+  if (queued?.kind === 'referral-bonus'
+    && presentationId && _queuedReferralBonusPresentationIds.has(presentationId)) return false;
   // Bingo ids are session tombstones, not merely active-queue locks. A claimed
   // Bingo is immutable, so aborting or completing its visual must not let a
   // delayed indexer refresh present the same prize again.
@@ -202,6 +218,11 @@ export function queueReveal(seq) {
   // it twice, but the player should only see one result presentation.
   if (queued?.kind === 'pari' && presentationId) {
     _queuedPariPresentationIds.add(presentationId);
+  }
+  // A referral payout is also immutable for one player and level. Keep a
+  // stale read and the local transaction receipt from opening it twice.
+  if (queued?.kind === 'referral-bonus' && presentationId) {
+    _queuedReferralBonusPresentationIds.add(presentationId);
   }
   _emitLootboxQueued(queued);
   if (_instance) {
@@ -220,6 +241,7 @@ export function __resetForTest() {
   _queuedLootboxPresentationIds = new Set();
   _queuedBingoPresentationIds = new Set();
   _queuedPariPresentationIds = new Set();
+  _queuedReferralBonusPresentationIds = new Set();
 }
 
 /**
@@ -250,7 +272,9 @@ const ICONS = Object.freeze({
   flame: '/specials/special_none.svg',
 });
 
-const LOOTBOX_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp';
+// Generic reward/boon receipts deliberately use the neutral MEDIUM case. Live
+// purchased boxes are selected from amount + frozen ticket price below.
+const LOOTBOX_CASE_ART = lootboxCaseAssets('medium').lockedFront;
 
 /**
  * A pile-scale FLIP win lands as a physical chip pile (the same wager ladder
@@ -295,10 +319,10 @@ const BOX_ESTIMATE_SPLIT_THRESHOLD = (TOKEN_WEI / 2n) / BigInt(ETH_DIVISOR);
 // Keep batched boxes moving, but spend the saved time where the player can
 // actually read what came out. Manual receipts remain tap-to-dismiss.
 const LOOTBOX_AUTO_START_MS = 480;
-const LOOTBOX_MANUAL_CHARGE_MS = 820;
-const LOOTBOX_AUTO_CHARGE_MS = 560;
-const LOOTBOX_MANUAL_BURST_MS = 360;
-const LOOTBOX_AUTO_BURST_MS = 260;
+const LOOTBOX_MANUAL_CHARGE_MS = 1_350;
+const LOOTBOX_AUTO_CHARGE_MS = 880;
+const LOOTBOX_MANUAL_BURST_MS = 920;
+const LOOTBOX_AUTO_BURST_MS = 660;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 // The denomination lock uses the Daily Flip's complete 3.3s airborne track
@@ -451,6 +475,7 @@ export function revealTerminalActionLabel(sequence = null, board = null) {
     return shouldCelebrateDegenerette(boardResult) ? 'TAKE THE WIN' : 'BACK TO GAME';
   }
   if (seq.daySummary) return 'BACK TO GAME';
+  if (seq.kind === 'referral-bonus') return 'TAKE THE WIN';
   if (seq.kind === 'pari') {
     const paid = Array.isArray(seq.cards) && seq.cards.some((card) => card?.type === 'flip');
     return paid ? 'TAKE THE WIN' : 'BACK TO GAME';
@@ -992,6 +1017,9 @@ function _settledBoxSpinSummaryCard(card, resultLabel) {
     ? _safeBigInt(card?.spin?.ethShare)
     : _safeBigInt(card?.spin?.payout));
   const won = credited > 0n;
+  // Daily Summary is a payout receipt, not a historical spin log. The live
+  // reveal already showed a zero result, so repeating it here only adds noise.
+  if (!won) return null;
   const rows = Array.isArray(board?.rows) ? board.rows : [];
   const hits = rows.filter((row) => row?.won).length;
   const resultDetail = rows.length > 0
@@ -1021,24 +1049,115 @@ function _settledBoxSpinSummaryCard(card, resultLabel) {
   };
 }
 
+function _normalizedLootboxOrders(seq) {
+  const values = Array.isArray(seq?.boxOrders) && seq.boxOrders.length > 0
+    ? seq.boxOrders
+    : seq?.boxOrder == null ? [] : [seq.boxOrder];
+  const orders = [];
+  for (const value of values) {
+    try {
+      const order = BigInt(value ?? 0);
+      if (order > 0n) orders.push(String(order));
+    } catch (_e) { /* old reveal payload */ }
+  }
+  return orders;
+}
+
+function _lootboxSpecsFromOrders(boxOrders, ticketPriceWei) {
+  const specs = [];
+  const price = _safeBigInt(ticketPriceWei);
+  for (const packed of Array.isArray(boxOrders) ? boxOrders : []) {
+    let order;
+    try { order = unpackBoxOrder(packed); } catch (_e) { continue; }
+    const append = (count, label, amountWei) => {
+      for (let index = 0; index < Number(count || 0); index += 1) {
+        specs.push({ label, amountWei });
+      }
+    };
+    append(order.small, 'SMALL LUCKBOX', price > 0n ? price : null);
+    append(order.medium, 'MEDIUM LUCKBOX', price > 0n ? price * 5n : null);
+    append(order.large, 'LARGE LUCKBOX', price > 0n ? price * 25n : null);
+    append(order.customCount, 'CUSTOM LUCKBOX', order.customSizeWei || null);
+  }
+  return specs;
+}
+
+function _lootboxGroupLabel(spec, leg, ticketPriceWei) {
+  if (leg?.source === 'presale') return 'PRESALE BOX';
+  if (spec?.label) return spec.label;
+  const model = lootboxValuePresentation(leg?.amount, ticketPriceWei).model;
+  return `${String(model || 'medium').toUpperCase()} LUCKBOX`;
+}
+
+function _lootboxCardBreakdown(legs, boxOrders, ticketPriceWei) {
+  const specs = _lootboxSpecsFromOrders(boxOrders, ticketPriceWei);
+  const cards = [];
+  const groups = [];
+  const sharedCards = [];
+
+  for (const leg of Array.isArray(legs) ? legs : []) {
+    const legCards = _cardsFromLeg(leg);
+    cards.push(...legCards);
+    if (leg?.legType === 'opened' || leg?.legType === 'spin') {
+      const spec = specs[groups.length] || null;
+      groups.push({
+        label: _lootboxGroupLabel(spec, leg, ticketPriceWei),
+        amountWei: leg?.amount ?? spec?.amountWei ?? null,
+        cards: legCards,
+      });
+    } else {
+      // Current counted orders settle DGNRS and boon families for the complete
+      // entry. The event does not prove which duplicate-size box produced one,
+      // so the individual view keeps these in an honest combo-rewards section.
+      sharedCards.push(...legCards);
+    }
+  }
+
+  while (groups.length < specs.length) {
+    const spec = specs[groups.length];
+    groups.push({ label: spec.label, amountWei: spec.amountWei, cards: [] });
+  }
+  if (groups.length === 1 && sharedCards.length > 0) {
+    groups[0].cards.push(...sharedCards);
+    sharedCards.length = 0;
+  }
+  const boxCount = Math.max(groups.length, specs.length);
+  groups.forEach((group, index) => {
+    group.boxNumber = index + 1;
+    group.boxCount = boxCount;
+  });
+  return { cards, groups, sharedCards, boxCount };
+}
+
 /** Normalize any accepted sequence shape. Returns null if nothing to show. */
 export function normalizeSequence(seq) {
   if (!seq || typeof seq !== 'object') return null;
   const kind = seq.kind;
   if (kind === 'lootbox') {
     const legs = Array.isArray(seq.legs) ? seq.legs : [];
-    let cards = legs.flatMap(_cardsFromLeg);
     const openedLegs = legs.filter((leg) => leg?.legType === 'opened');
+    const opened = openedLegs.find((leg) => leg?.lootboxIndex != null) ?? openedLegs[0];
+    const amountWei = seq.amountWei ?? opened?.amount ?? null;
+    const routedPriceWei = seq.ticketPriceWei
+      ?? (opened?.source === 'presale'
+        ? null
+        : lootboxTicketPriceForLevel(opened?.futureLevel));
+    const boxOrders = _normalizedLootboxOrders(seq);
+    const breakdown = _lootboxCardBreakdown(legs, boxOrders, routedPriceWei);
+    let cards = breakdown.cards;
     // Legacy feed rows may omit the scaled fractional-ticket fields. An
     // index-bearing LootBoxOpened still tells us the concrete empty main-prize
     // result; settlement timing is not box content and is never shown as one.
     if (cards.length === 0 && openedLegs.length > 0) {
-      cards = [{
+      const emptyCard = {
         type: 'nowin', rarity: 'common', icon: ICONS.flame, glyph: null,
         label: 'LUCKBOX RESULT', value: '0 TICKETS · 0 FLIP',
         sub: 'No main-prize payout landed',
         countText: null, spin: null,
-      }];
+      };
+      cards = [emptyCard];
+      if (breakdown.groups.length === 1) breakdown.groups[0].cards.push(emptyCard);
+      else breakdown.sharedCards.push(emptyCard);
     }
     if (cards.length === 0) return null;
     const big = cards.some((c) => (
@@ -1055,12 +1174,6 @@ export function normalizeSequence(seq) {
     const wwxrpOnly = cards.some(isWwxrpResult)
       && cards.every((card) => isWwxrpResult(card) || isEmptyResult(card));
     const unlucky = cards.every((card) => isWwxrpResult(card) || isEmptyResult(card));
-    const opened = openedLegs.find((leg) => leg?.lootboxIndex != null) ?? openedLegs[0];
-    const amountWei = seq.amountWei ?? opened?.amount ?? null;
-    const routedPriceWei = seq.ticketPriceWei
-      ?? (opened?.source === 'presale'
-        ? null
-        : lootboxTicketPriceForLevel(opened?.futureLevel));
     const boxValue = routedPriceWei == null
       ? lootboxValuePresentation(amountWei)
       : lootboxValuePresentation(amountWei, routedPriceWei);
@@ -1120,7 +1233,13 @@ export function normalizeSequence(seq) {
       amountWei: boxValue.amountWei,
       ticketPriceWei: boxValue.ticketPriceWei,
       lootboxValueTone: boxValue.tone,
+      lootboxCaseModel: boxValue.model,
       lootboxTicketUnitsLabel: boxValue.unitsLabel,
+      boxOrders,
+      lootboxBoxCount: breakdown.boxCount,
+      lootboxBoxGroups: breakdown.groups,
+      lootboxSharedCards: breakdown.sharedCards,
+      lootboxView: breakdown.boxCount > 1 ? null : 'combined',
       lootboxRelease: validLootboxRelease,
       cards,
     };
@@ -1347,6 +1466,33 @@ export function normalizeSequence(seq) {
       autoStart: true,
       noVessel: true,
       cards: [matchCard, ...rewardCards],
+    };
+  }
+  if (kind === 'referral-bonus') {
+    const level = Number(seq.level);
+    const amount = _safeBigInt(seq.amountWei ?? seq.amount);
+    if (!Number.isInteger(level) || level <= 0 || amount <= 0n) return null;
+    const amountText = _tokenText(amount);
+    return {
+      kind,
+      presentationId: seq.presentationId == null ? null : String(seq.presentationId),
+      title: 'REFERRAL BONUS',
+      big: true,
+      autoStart: true,
+      noVessel: true,
+      cards: [{
+        type: 'dgnrs',
+        outcome: 'win',
+        rarity: 'epic',
+        icon: ICONS.dgnrs,
+        glyph: null,
+        label: `LEVEL ${level} REFERRAL BONUS`,
+        value: `${amountText} DGNRS`,
+        sub: 'Paid to your DGNRS balance',
+        summaryDetail: true,
+        countText: `${amountText} DGNRS`,
+        spin: null,
+      }],
     };
   }
   if (kind === 'bingo') {
@@ -1698,7 +1844,8 @@ export function normalizeSequence(seq) {
               // show the reward immediately without replaying a second box flow.
               summaryDetail: true,
               sub: [card.sub, resultLabel].filter(Boolean).join(' · '),
-            }));
+            }))
+        .filter(Boolean);
       cards.push(...resultCards);
     }
     if (cards.length === 0) return null;
@@ -1999,14 +2146,42 @@ class RevealOverlay extends HTMLElement {
             </div>
             <div class="rvl-chest" data-bind="rvl-chest">
               <div class="rvl-chest-aura"></div>
-              <div class="rvl-chest-lid"></div>
+              <div class="rvl-chest-lid">
+                <span class="rvl-chest-lid__inner"></span>
+                <span class="rvl-chest-lid__front"></span>
+                <span class="rvl-chest-lid__edge"></span>
+              </div>
               <div class="rvl-chest-seam"></div>
               <div class="rvl-chest-body"></div>
+              <div class="rvl-vault-lockwork" aria-hidden="true">
+                <span class="rvl-vault-interlock rvl-vault-interlock--1">
+                  <span class="rvl-vault-deadbolt"></span>
+                </span>
+                <span class="rvl-vault-interlock rvl-vault-interlock--2">
+                  <span class="rvl-vault-deadbolt"></span>
+                </span>
+                <span class="rvl-vault-interlock rvl-vault-interlock--3">
+                  <span class="rvl-vault-deadbolt"></span>
+                </span>
+                <span class="rvl-vault-interlock rvl-vault-interlock--4">
+                  <span class="rvl-vault-deadbolt"></span>
+                </span>
+              </div>
+              <div class="rvl-lootbox-badge" aria-hidden="true">
+                <span class="rvl-lootbox-badge__ring"></span>
+                <span class="rvl-lootbox-badge__center">
+                  <span class="rvl-lootbox-badge__face">
+                    <img src="/whitepaper/flame-center.svg" alt="">
+                  </span>
+                </span>
+              </div>
               <div class="rvl-chest-clasp">
                 <img class="rvl-chest-q rvl-chest-logo" src="/whitepaper/flame-logo.svg" alt="">
               </div>
               <div class="rvl-chest-platform"></div>
             </div>
+            <div class="rvl-lootbox-flight" data-bind="rvl-lootbox-flight"
+                 aria-hidden="true" hidden></div>
             <div class="rvl-pack" data-bind="rvl-pack">
               <div class="rvl-pack-shine"></div>
               <div class="rvl-pack-brand">
@@ -2073,13 +2248,16 @@ class RevealOverlay extends HTMLElement {
     if (openPack) openPack.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (this.#currentSequence?.kind === 'pack') this.#tap('open-pack');
-      else if (this.#currentSequence?.kind === 'lootbox') this.#tap('open-one-box');
+      else if (this.#canChooseLootboxBoxView(this.#currentSequence)) {
+        this.#tap('view-boxes-individually');
+      } else if (this.#currentSequence?.kind === 'lootbox') this.#tap('open-one-box');
     });
     const openAll = this.#bind('rvl-open-all');
     if (openAll) openAll.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       const seq = this.#currentSequence;
-      if (seq?.kind === 'lootbox') void this.#startOpenAllLootboxes(seq);
+      if (this.#canChooseLootboxBoxView(seq)) this.#tap('combine-boxes');
+      else if (seq?.kind === 'lootbox') void this.#startOpenAllLootboxes(seq);
       else this.#startOpenAll(seq);
     });
     const skipPack = this.#bind('rvl-skip-pack');
@@ -2402,6 +2580,15 @@ class RevealOverlay extends HTMLElement {
   #pendingMatchesLootboxRelease(item, release) {
     if (!release?.key || item?.kind !== 'lootbox') return false;
     return String(item.id || '') === `lootbox:${String(release.key)}`;
+  }
+
+  #canChooseLootboxBoxView(seq) {
+    return Boolean(
+      seq?.kind === 'lootbox'
+      && Number(seq.lootboxBoxCount) > 1
+      && !seq.autoStart
+      && !seq.lootboxView
+    );
   }
 
   #readyPendingLootboxes(excludeRelease = null) {
@@ -2890,6 +3077,11 @@ class RevealOverlay extends HTMLElement {
     if (openAll) openAll.hidden = true;
     const packActions = this.#bind('rvl-pack-actions');
     if (packActions) packActions.hidden = true;
+    const lootboxFlight = this.#bind('rvl-lootbox-flight');
+    if (lootboxFlight) {
+      lootboxFlight.hidden = true;
+      lootboxFlight.textContent = '';
+    }
     const stage = this.#bind('rvl-stage');
     if (stage && stage.classList) {
       stage.classList.remove(
@@ -2908,6 +3100,7 @@ class RevealOverlay extends HTMLElement {
         'rvl-stage--foil-match',
       );
       stage.setAttribute?.('data-lootbox-value-tone', 'unknown');
+      applyLootboxCasePresentation(stage, 'medium');
     }
   }
 
@@ -2954,6 +3147,10 @@ class RevealOverlay extends HTMLElement {
       rootStage.setAttribute?.(
         'data-lootbox-value-tone',
         seq.kind === 'lootbox' ? seq.lootboxValueTone || 'unknown' : 'unknown',
+      );
+      applyLootboxCasePresentation(
+        rootStage,
+        seq.kind === 'lootbox' ? seq.lootboxCaseModel : 'medium',
       );
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
@@ -3070,6 +3267,17 @@ class RevealOverlay extends HTMLElement {
           'data-lootbox-value-tone',
           isLootbox ? seq.lootboxValueTone || 'unknown' : 'unknown',
         );
+        const casePresentation = applyLootboxCasePresentation(
+          vessel,
+          isLootbox ? seq.lootboxCaseModel : 'medium',
+        );
+        if (isLootbox) {
+          [
+            casePresentation.assets.retractedFront,
+            casePresentation.assets.innerLid,
+            ...casePresentation.assets.deadbolts,
+          ].forEach(_preloadImage);
+        }
         vessel.setAttribute(
           'title',
           isLootbox && seq.lootboxTicketUnitsLabel
@@ -3106,10 +3314,13 @@ class RevealOverlay extends HTMLElement {
       const readyLootboxes = isLootbox && !seq.autoStart
         ? this.#readyPendingLootboxes(seq.lootboxRelease)
         : [];
-      const canChooseLootboxBatch = readyLootboxes.length > 0
+      const canChooseLootboxBoxView = this.#canChooseLootboxBoxView(seq)
+        && !openingAll;
+      const canChooseLootboxBatch = !canChooseLootboxBoxView && readyLootboxes.length > 0
         && !openingAll && !seq.autoStart;
+      const canChooseLootboxAction = canChooseLootboxBoxView || canChooseLootboxBatch;
       if (hint) {
-        hint.hidden = isPack || canChooseLootboxBatch;
+        hint.hidden = isPack || canChooseLootboxAction;
         hint.textContent = isPack
           ? ''
           : openingAll ? 'OPENING ALL…'
@@ -3123,21 +3334,25 @@ class RevealOverlay extends HTMLElement {
       if (packActions) {
         packActions.classList?.toggle(
           'rvl-vessel-pack-actions--lootboxes',
-          canChooseLootboxBatch,
+          canChooseLootboxAction,
         );
         packActions.hidden = !(
           (isPack && !openingAll && !seq.autoStart && !seq.ticketLesson)
-          || canChooseLootboxBatch
+          || canChooseLootboxAction
         );
       }
       const canOpenAllPacks = isPack && this.#canOpenAllPacks(seq)
         && !openingAll && !seq.autoStart;
-      const canOpenAllLootboxes = isLootbox && canChooseLootboxBatch;
+      const canOpenAllLootboxes = isLootbox && canChooseLootboxAction;
       if (openAll) {
         openAll.hidden = !canOpenAllPacks && !canOpenAllLootboxes;
         if (canOpenAllPacks) {
           openAll.textContent = this.#openAllPacksLabel(seq, { includeCurrent: true });
           openAll.setAttribute('aria-label', openAll.textContent);
+        } else if (canChooseLootboxBoxView) {
+          const total = Number(seq.lootboxBoxCount);
+          openAll.textContent = `COMBINE ${total} BOXES`;
+          openAll.setAttribute('aria-label', `Open ${total} luckboxes as one combined receipt`);
         } else if (canOpenAllLootboxes) {
           const total = readyLootboxes.length + 1;
           openAll.textContent = `OPEN ALL ${total}`;
@@ -3155,10 +3370,14 @@ class RevealOverlay extends HTMLElement {
       if (openPack) {
         const canOpenPack = isPack && !this.#canOpenAllPacks(seq)
           && !openingAll && !seq.autoStart && !seq.ticketLesson;
-        openPack.hidden = !canOpenPack && !canChooseLootboxBatch;
+        openPack.hidden = !canOpenPack && !canChooseLootboxAction;
         if (canOpenPack) {
           openPack.textContent = 'OPEN PACK';
           openPack.setAttribute('aria-label', 'Open this ticket pack');
+        } else if (canChooseLootboxBoxView) {
+          const total = Number(seq.lootboxBoxCount);
+          openPack.textContent = 'VIEW INDIVIDUALLY';
+          openPack.setAttribute('aria-label', `View each of the ${total} luckboxes individually`);
         } else if (canChooseLootboxBatch) {
           openPack.textContent = 'OPEN ONE';
           openPack.setAttribute('aria-label', 'Open only this luckbox');
@@ -3175,6 +3394,11 @@ class RevealOverlay extends HTMLElement {
           if (packActions) packActions.hidden = true;
           return action;
         }
+        if (canChooseLootboxBoxView && isLootbox) {
+          seq.lootboxView = action === 'view-boxes-individually'
+            ? 'individual'
+            : 'combined';
+        }
         openingAll = action === 'open-all' || action === 'open-all-boxes'
           || this.#isOpeningAll(seq);
       }
@@ -3187,8 +3411,11 @@ class RevealOverlay extends HTMLElement {
       if (openingAll) {
         // The player explicitly chose a batch fast path. Packs keep each 3×3
         // hand, while luckboxes keep each receipt; both skip repeated charging.
+        if (isLootbox) this.#stageLootboxRewardFlight(seq);
         if (stage && stage.classList) stage.classList.add('rvl-bursting');
-        await this.#wait(140);
+        // Let the physical latch/lid release finish before the cards replace
+        // the case. Cutting this beat short made batched boxes blink away.
+        await this.#wait(isLootbox ? LOOTBOX_AUTO_BURST_MS : 140);
       } else {
         // --- charging: lock, energy build, then the crack ---
         if (stage && stage.classList) stage.classList.add('rvl-charging');
@@ -3202,6 +3429,7 @@ class RevealOverlay extends HTMLElement {
         // --- burst ---
         if (stage && stage.classList) {
           stage.classList.remove('rvl-charging');
+          if (isLootbox) this.#stageLootboxRewardFlight(seq);
           stage.classList.add('rvl-bursting');
         }
         // Burst fires BEFORE the cards are turned, so it has to consult the
@@ -5752,6 +5980,37 @@ class RevealOverlay extends HTMLElement {
     tray.appendChild(this.#buildCard(card, true));
   }
 
+  // Mount the real reward art and values before the lid moves. This flight
+  // deck overlaps the case for the mechanical handoff; the settled receipt
+  // replaces it at the same size after the lid-open beat completes.
+  #stageLootboxRewardFlight(seq) {
+    const flight = this.#bind('rvl-lootbox-flight');
+    if (!flight) return;
+    flight.textContent = '';
+    const cards = seq.cards.filter((item) => item?.type !== 'foil-match');
+    const grid = document.createElement('div');
+    grid.className = 'rvl-summary-grid rvl-lootbox-flight__grid';
+    grid.setAttribute('data-card-count', String(cards.length));
+    for (const card of cards) {
+      const displayCard = card.spin ? {
+        ...card,
+        revealedLabel: null,
+        revealedValue: null,
+        revealedRarity: null,
+      } : card;
+      const el = this.#buildCard(displayCard, true);
+      const value = el.querySelector('.rvl-card-value');
+      if (value) value.textContent = displayCard.revealedValue || displayCard.value || '';
+      if (!card.packOnly && !card.spin && card.sub) {
+        const inner = el.querySelector('.rvl-card-inner');
+        if (inner) inner.appendChild(this.#buildCardSub(card));
+      }
+      grid.appendChild(el);
+    }
+    flight.appendChild(grid);
+    flight.hidden = false;
+  }
+
   #buildShareButton(seq) {
     if (!canShareWin(seq)) return null;
     const share = document.createElement('button');
@@ -5788,15 +6047,12 @@ class RevealOverlay extends HTMLElement {
       summary.classList.toggle('rvl-summary--bingo', seq.kind === 'bingo');
     }
 
-    const grid = document.createElement('div');
-    grid.className = `rvl-summary-grid${seq.kind === 'bingo' ? ' rvl-summary-grid--bingo' : ''}`;
     // A foil comparison already held on its own explicit GOOD LUCK frame. The
     // terminal receipt should contain its rewards, not redraw the same board.
-    const summaryCards = seq.cards.filter((item) => (
+    const visibleCards = (cards) => (Array.isArray(cards) ? cards : []).filter((item) => (
       includeFoilMatch || item?.type !== 'foil-match'
     ));
-    grid.setAttribute('data-card-count', String(summaryCards.length));
-    for (const card of summaryCards) {
+    const appendSummaryCard = (target, card) => {
       const displayCard = spinGrant && card.spin
         ? {
             ...card,
@@ -5854,9 +6110,56 @@ class RevealOverlay extends HTMLElement {
         const inner = el.querySelector('.rvl-card-inner');
         if (inner) inner.appendChild(outcome);
       }
-      grid.appendChild(el);
+      target.appendChild(el);
+    };
+    const buildGrid = (cards) => {
+      const grid = document.createElement('div');
+      grid.className = `rvl-summary-grid${seq.kind === 'bingo' ? ' rvl-summary-grid--bingo' : ''}`;
+      const shown = visibleCards(cards);
+      grid.setAttribute('data-card-count', String(shown.length));
+      for (const card of shown) appendSummaryCard(grid, card);
+      return grid;
+    };
+
+    const individualLootboxes = seq.kind === 'lootbox'
+      && seq.lootboxView === 'individual'
+      && Array.isArray(seq.lootboxBoxGroups)
+      && seq.lootboxBoxGroups.length > 1;
+    if (individualLootboxes) {
+      const breakdown = document.createElement('div');
+      breakdown.className = 'rvl-lootbox-box-breakdown';
+      const appendGroup = (label, cards, modifier = '') => {
+        const group = document.createElement('section');
+        group.className = `rvl-lootbox-box-group${modifier}`;
+        const title = document.createElement('div');
+        title.className = 'rvl-lootbox-box-group__title';
+        title.textContent = label;
+        group.appendChild(title);
+        const shown = visibleCards(cards);
+        if (shown.length > 0) {
+          group.appendChild(buildGrid(shown));
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'rvl-lootbox-box-group__empty';
+          empty.textContent = 'Reward included in combo totals';
+          group.appendChild(empty);
+        }
+        breakdown.appendChild(group);
+      };
+      for (const group of seq.lootboxBoxGroups) {
+        appendGroup(
+          `${group.label} · ${group.boxNumber} OF ${group.boxCount}`,
+          group.cards,
+        );
+      }
+      const sharedCards = visibleCards(seq.lootboxSharedCards);
+      if (sharedCards.length > 0) {
+        appendGroup('COMBO REWARDS', sharedCards, ' rvl-lootbox-box-group--shared');
+      }
+      summary.appendChild(breakdown);
+    } else {
+      summary.appendChild(buildGrid(seq.cards));
     }
-    summary.appendChild(grid);
 
     const cta = document.createElement('button');
     cta.type = 'button';

@@ -114,6 +114,19 @@ const LOOTBOX_BOON_MAX_BUDGET = FULL_ETH_WEI / BigInt(ETH_DIVISOR);
 const LOOTBOX_BOON_UTILIZATION_BPS = 5_000n;
 const BOON_PPM_SCALE = 1_000_000n;
 const BOON_WEIGHT_TOTAL = 2_608n;
+const LB_LEVEL_MASK = 0xFFFFFFn;
+const LB_SCORE_SHIFT = 24n;
+const LB_SCORE_MASK = 0x7FFFn;
+const LB_BOOST_SHIFT = 39n;
+const LB_ADJ_SHIFT = 67n;
+const LB_BPS_MASK = 0x3FFFn;
+const LB_COUNT_MASK = 0xFFn;
+const LB_CUSTOM_SIZE_SHIFT = 113n;
+const LB_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFFn;
+const LB_COVER_SHIFT = 161n;
+const LB_COVER_MASK = 0xFFFFFFFFFFFFn;
+const LB_CUSTOM_SCALE = 1_000_000_000_000n;
+const CURRENT_BOX_COUNT_SHIFTS = Object.freeze([81n, 89n, 97n, 105n]);
 const LOOTBOX_SPLIT_THRESHOLD = (FULL_ETH_WEI / 2n) / BigInt(ETH_DIVISOR);
 const LOOTBOX_FLIP_SPINS_STAKE_BPS = 7_060n;
 // DegenerusGameDegeneretteModule.sol:1763 / FlipRoundLib.sol:21-27. A surviving
@@ -231,12 +244,110 @@ function _humanBoxBoonAverageMaxValue(currentLevel) {
   return weightedMax / BOON_WEIGHT_TOTAL;
 }
 
+function _earlyBoonType(weightedRoll) {
+  const steps = [
+    [200n, 1], [40n, 2], [8n, 3],
+    [200n, 5], [30n, 6], [8n, 22],
+    [400n, 7], [80n, 8], [16n, 9],
+  ];
+  let cursor = 0n;
+  for (const [weight, boonType] of steps) {
+    cursor += weight;
+    if (weightedRoll < cursor) return boonType;
+  }
+  return null;
+}
+
+function _boonTypeFromSeed(seed, scaledAmount, expectedPerBoon) {
+  let boonBudget = (BigInt(scaledAmount) * LOOTBOX_BOON_BUDGET_BPS) / 10_000n;
+  if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) boonBudget = LOOTBOX_BOON_MAX_BUDGET;
+  if (boonBudget <= 0n || expectedPerBoon <= 0n) return null;
+  let totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon;
+  if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
+  if (totalChance <= 0n) return null;
+  const roll = ((BigInt(seed) >> 120n) & U32) % BOON_PPM_SCALE;
+  if (roll >= totalChance) return null;
+  return _earlyBoonType((roll * BOON_WEIGHT_TOTAL) / totalChance);
+}
+
 /**
- * Recover the exact shared-family boon drawn by a stored human Luckbox. The
- * return value is needed only through the purchase band; later table entries
- * cannot have emitted compact reward IDs 4/5/6.
+ * Replay the current counted lootboxOrder's boon draws in event order. Null
+ * means the word is not a counted order (and may be a legacy amount word);
+ * an empty array means a valid current order drew no early-table boon.
  */
-export function deriveHumanLootboxBoonType({
+function _deriveCurrentHumanLootboxBoonTypes({
+  player,
+  rngWord,
+  packedBox,
+  currentLevel,
+} = {}) {
+  let word;
+  let packed;
+  try {
+    word = BigInt(rngWord ?? 0);
+    packed = BigInt(packedBox ?? 0);
+  } catch (_e) {
+    return null;
+  }
+  if (!player || word === 0n || packed === 0n) return null;
+  const counts = CURRENT_BOX_COUNT_SHIFTS.map((shift) => (
+    Number((packed >> shift) & LB_COUNT_MASK)
+  ));
+  const customSize = ((packed >> LB_CUSTOM_SIZE_SHIFT) & LB_CUSTOM_SIZE_MASK)
+    * LB_CUSTOM_SCALE;
+  const coverSize = ((packed >> LB_COVER_SHIFT) & LB_COVER_MASK) * LB_CUSTOM_SCALE;
+  if (counts.every((count) => count === 0) && coverSize === 0n) return null;
+
+  const orderLevel = Number(packed & LB_LEVEL_MASK);
+  const openLevel = Number(currentLevel);
+  // A counted order freezes the routed buy level, which cannot be ahead of
+  // the level at which that order opens. Legacy amount words can coincidentally
+  // set count/cover bits; their low 24 wei bits do not satisfy this invariant.
+  if (!Number.isInteger(openLevel) || openLevel < 1 || orderLevel > openLevel) return null;
+  const price = scaledTicketPriceWei(orderLevel);
+  if (price <= 0n) return [];
+  const score = (packed >> LB_SCORE_SHIFT) & LB_SCORE_MASK;
+  const boostBps = (packed >> LB_BOOST_SHIFT) & LB_BPS_MASK;
+  const adjBps = (packed >> LB_ADJ_SHIFT) & LB_BPS_MASK;
+  const evBps = _lootboxEvMultiplierBps(score);
+  const expectedPerBoon = (
+    _humanBoxBoonAverageMaxValue(currentLevel) * LOOTBOX_BOON_UTILIZATION_BPS
+  ) / 10_000n;
+  if (expectedPerBoon <= 0n) return [];
+
+  const lanes = [
+    [counts[0], price],
+    [counts[1], price * 5n],
+    [counts[2], price * 25n],
+    [counts[3], customSize],
+    [coverSize > 0n ? 1 : 0, coverSize],
+  ];
+  let boonSeed;
+  try { boonSeed = _entropyHash2(word, BigInt(player)); }
+  catch (_e) { return []; }
+  let nonce = 0n;
+  const boonTypes = [];
+  for (const [count, size] of lanes) {
+    if (count <= 0 || size <= 0n) continue;
+    const boosted = size + (size * boostBps) / 10_000n;
+    const adjWei = (size * adjBps) / 10_000n;
+    const scaled = evBps <= 10_000n
+      ? (boosted * evBps) / 10_000n
+      : (adjWei * evBps) / 10_000n + (boosted - adjWei);
+    for (let i = 0; i < count; i += 1) {
+      const boonType = _boonTypeFromSeed(
+        _entropyHash2(boonSeed, nonce),
+        scaled,
+        expectedPerBoon,
+      );
+      if (boonType != null) boonTypes.push(boonType);
+      nonce += 1n;
+    }
+  }
+  return boonTypes;
+}
+
+function _deriveLegacyHumanLootboxBoonType({
   player,
   rngWord,
   packedBox,
@@ -260,34 +371,28 @@ export function deriveHumanLootboxBoonType({
   const scaledAmount = evBps <= 10_000n
     ? (amount * evBps) / 10_000n
     : (adjusted * evBps) / 10_000n + (amount - adjusted);
-  let boonBudget = (scaledAmount * LOOTBOX_BOON_BUDGET_BPS) / 10_000n;
-  if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) boonBudget = LOOTBOX_BOON_MAX_BUDGET;
-  if (boonBudget <= 0n) return null;
-
   const avgMaxValue = _humanBoxBoonAverageMaxValue(currentLevel);
   const expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000n;
-  if (expectedPerBoon <= 0n) return null;
-  let totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon;
-  if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
-  if (totalChance <= 0n) return null;
-
   let seed;
   try { seed = _humanBoxRootSeed(word, player, amount); }
   catch (_e) { return null; }
-  const roll = ((seed >> 120n) & U32) % BOON_PPM_SCALE;
-  if (roll >= totalChance) return null;
-  const weightedRoll = (roll * BOON_WEIGHT_TOTAL) / totalChance;
-  const steps = [
-    [200n, 1], [40n, 2], [8n, 3],
-    [200n, 5], [30n, 6], [8n, 22],
-    [400n, 7], [80n, 8], [16n, 9],
-  ];
-  let cursor = 0n;
-  for (const [weight, boonType] of steps) {
-    cursor += weight;
-    if (weightedRoll < cursor) return boonType;
-  }
-  return null;
+  return _boonTypeFromSeed(seed, scaledAmount, expectedPerBoon);
+}
+
+function _deriveHumanLootboxBoonTypes(args = {}) {
+  const current = _deriveCurrentHumanLootboxBoonTypes(args);
+  if (current != null) return current;
+  const legacy = _deriveLegacyHumanLootboxBoonType(args);
+  return legacy == null ? [] : [legacy];
+}
+
+/**
+ * Recover the first exact early-table boon drawn by a stored human Luckbox.
+ * Kept singular for callers that only need one roll; enrichment uses the full
+ * ordered draw list so multi-box entries retain per-event family identity.
+ */
+export function deriveHumanLootboxBoonType(args = {}) {
+  return _deriveHumanLootboxBoonTypes(args)[0] ?? null;
 }
 
 function _packedPlayerTicket(reel) {
@@ -920,7 +1025,7 @@ export async function enrichLootboxBoonLegs(legs, {
     if (activeFamilies.length === 1) sharedFamilyIndex = activeFamilies[0].index;
   }
 
-  let drawnBoonType = null;
+  let drawnBoonTypes = [];
   if (hasCoinflipReward || (hasSharedReward && sharedFamilyIndex == null)) {
     let exactContext = context;
     if (!exactContext) {
@@ -931,25 +1036,38 @@ export async function enrichLootboxBoonLegs(legs, {
       });
     }
     if (exactContext) {
-      drawnBoonType = deriveHumanLootboxBoonType({ player, ...exactContext });
+      drawnBoonTypes = _deriveHumanLootboxBoonTypes({ player, ...exactContext });
+      const drawnBoonType = drawnBoonTypes[0] ?? null;
       if (SHARED_BOON_FAMILIES[0].includes(drawnBoonType)) sharedFamilyIndex = 0;
       else if (SHARED_BOON_FAMILIES[1].includes(drawnBoonType)) sharedFamilyIndex = 1;
     }
   }
+  const drawnCoinflipTypes = drawnBoonTypes.filter((boonType) => [1, 2, 3].includes(boonType));
+  const drawnSharedTypes = drawnBoonTypes.filter((boonType) => (
+    SHARED_BOON_FAMILIES.some((family) => family.includes(boonType))
+  ));
+  let coinflipDrawIndex = 0;
+  let sharedDrawIndex = 0;
   return rows.map((leg) => {
     if (leg?.legType !== 'reward') return leg;
     if (leg?.boonType != null) return leg;
     const rewardType = Number(leg?.rewardType);
     if (rewardType === 2) {
-      const boonType = [1, 2, 3].includes(drawnBoonType)
-        ? drawnBoonType
+      const exactDraw = drawnCoinflipTypes[coinflipDrawIndex++];
+      const boonType = [1, 2, 3].includes(exactDraw)
+        ? exactDraw
         : [3, 2, 1].find((candidate) => activeTypes.has(candidate));
       const boonBps = COINFLIP_BOON_BPS[boonType] || null;
       return boonBps == null ? leg : { ...leg, boonType, boonBps };
     }
     const candidates = SHARED_BOON_TYPES[rewardType];
-    if (candidates && sharedFamilyIndex != null) {
-      return { ...leg, boonType: candidates[sharedFamilyIndex] };
+    if (candidates) {
+      const exactDraw = drawnSharedTypes[sharedDrawIndex++];
+      const exactFamilyIndex = SHARED_BOON_FAMILIES.findIndex((family) => (
+        family.includes(exactDraw)
+      ));
+      const familyIndex = exactFamilyIndex >= 0 ? exactFamilyIndex : sharedFamilyIndex;
+      if (familyIndex != null) return { ...leg, boonType: candidates[familyIndex] };
     }
     return leg;
   });

@@ -309,6 +309,50 @@ describe('enrichLootboxBoonLegs', () => {
     ).label, 'TICKET BOON');
   });
 
+  test('decodes the current counted-order storage word when naming a shared boon', () => {
+    assert.equal(deriveHumanLootboxBoonType({
+      player: '0x1111111111111111111111111111111111111111',
+      rngWord: 98n,
+      packedBox: 0n,
+      currentLevel: 45,
+    }), null, 'an empty order has no boon draw');
+
+    // Contract-derived vector from the current lootboxOrder layout:
+    // level 44, score 60, one small box, no boost/distress/EV adjustment.
+    // rngWord 98 produces weighted boon roll 301 => type 5 (Luckbox +5%).
+    const packedOrder = 44n | (60n << 24n) | (1n << 81n);
+    assert.equal(deriveHumanLootboxBoonType({
+      player: '0x1111111111111111111111111111111111111111',
+      rngWord: 98n,
+      packedBox: packedOrder,
+      currentLevel: 45,
+    }), 5);
+  });
+
+  test('keeps Ticket and Luckbox family identity per event in a counted two-box order', async () => {
+    pollingTesting.setBoonStateReader(async () => {
+      throw new Error('historical boon state unavailable');
+    });
+    // Current contract vector: two small boxes at level 44. Nonces 0 and 1
+    // draw type 7 (Ticket +5%) then type 6 (Luckbox +15%) from rngWord 48273.
+    const packedOrder = 44n | (60n << 24n) | (2n << 81n);
+    const enriched = await enrichLootboxBoonLegs([
+      { legType: 'reward', rewardType: 4, amount: 500n },
+      { legType: 'reward', rewardType: 5, amount: 1_500n },
+    ], {
+      player: '0x1111111111111111111111111111111111111111',
+      blockNumber: 12_351,
+      context: { rngWord: 48_273n, packedBox: packedOrder, currentLevel: 45 },
+    });
+
+    assert.deepEqual(enriched.map((leg) => leg.boonType), [7, 6]);
+    assert.deepEqual(enriched.map((leg) => lootboxRewardPresentation(
+      leg.rewardType,
+      leg.amount,
+      { boonType: leg.boonType },
+    ).label), ['TICKET BOON', 'LUCKBOX BOON']);
+  });
+
   test('still derives the exact product when the optional packed-state read fails', async () => {
     const amount = 100_000_000_000n;
     const context = {

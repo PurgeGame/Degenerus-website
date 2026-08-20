@@ -133,6 +133,40 @@ describe('bingo event watcher', () => {
     assert.doesNotMatch(source, /setInterval/, 'no clock; refreshBingoWatch is event-driven');
   });
 
+  test('cache-invalidation AbortError is quiet and retains the last published state', async () => {
+    const abort = new Error('The operation was aborted');
+    abort.name = 'AbortError';
+    const warnings = [];
+    const priorWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try {
+      bingo.__setBingoReadersForTest({ index: async () => { throw abort; } });
+      bingo.startBingoWatch({ getAddress: () => PLAYER });
+      await bingo.refreshBingoWatch();
+      assert.equal(warnings.length, 0, 'expected lifecycle cancellation is not a console failure');
+    } finally {
+      console.warn = priorWarn;
+    }
+  });
+
+  test('a genuine indexed Bingo read failure remains visible', async () => {
+    const warnings = [];
+    const priorWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try {
+      bingo.__setBingoReadersForTest({
+        index: async () => { throw new Error('indexer unavailable'); },
+      });
+      bingo.startBingoWatch({ getAddress: () => PLAYER });
+      await bingo.refreshBingoWatch();
+      assert.equal(warnings.length, 1, 'real failures retain one actionable warning');
+      assert.match(String(warnings[0][0]), /indexed Bingo read failed/);
+      assert.match(String(warnings[0][1]?.message), /indexer unavailable/);
+    } finally {
+      console.warn = priorWarn;
+    }
+  });
+
   test('publishes one durable reveal, then a repeat API read cannot reopen it', async () => {
     // The indexed `claimed` row is the same receipt the chain used to supply,
     // and the API keeps returning it forever — so the consumed set, not a scan

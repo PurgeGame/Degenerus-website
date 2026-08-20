@@ -435,6 +435,12 @@ export function _resetSharedReadProviderForTests() {
   invalidateReadCache();
 }
 
+/** Test hook: inject a public-reader double for modules that route through the singleton. */
+export function _setSharedReadProviderForTests(provider) {
+  _shared = provider ?? null;
+  invalidateReadCache();
+}
+
 /** Test hook: cache occupancy, for assertions about what was retained. */
 export function _readCacheStatsForTests() {
   return { recent: recentCalls.size, pinned: pinnedCalls.size, inflight: inflightCalls.size };
