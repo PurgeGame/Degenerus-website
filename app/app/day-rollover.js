@@ -23,6 +23,10 @@ const GAME_DAY_ABI = [
   // minimal fragments, and this one was verified by raw eth_call against the
   // live Base Sepolia GAME (0xe57d3910…, selector 0xabd9f3da -> 0x00…00).
   'function isRngFulfilled() external view returns (bool)',
+  // O(1) keeper-work predicate. Once the day's RNG has arrived, the falling
+  // edge to false is the chain-authoritative signal that the jackpot advance
+  // pipeline has drained; no indexer/API polling is needed to discover it.
+  'function advanceDue() external view returns (bool)',
   'function rngNudgeQuote() external view returns (uint256 queued, uint256 cost)',
 ];
 const COINFLIP_DAY_ABI = [
@@ -36,9 +40,9 @@ const POST_BOUNDARY_POLL_SECONDS = Math.max(
 );
 const NEAR_BOUNDARY_POLL_MS = 1_000;
 const WARMING_POLL_MS = 1_500;
+const INDEXER_WAIT_POLL_MS = 15_000;
 const TESTNET_STEADY_POLL_MS = 10_000;
 const MAINNET_STEADY_POLL_MS = 30_000;
-const API_REFRESH_MIN_MS = 2_500;
 
 let _provider = null;
 let _snapshotReader = null;
@@ -48,7 +52,6 @@ let _probeInFlight = null;
 let _lastDayUnsub = null;
 let _visibilityListener = null;
 let _onRefreshNeeded = null;
-let _lastRefreshPromptAt = 0;
 
 function _positiveDay(value) {
   const day = Number(value);
@@ -133,6 +136,21 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
     || indexedJackpotResolved
     || Boolean(coinflipResult?.resolved)
     || Boolean(sameTarget && previous?.rngRequested);
+  const advanceDue = typeof snapshot?.advanceDue === 'boolean'
+    ? snapshot.advanceDue
+    : (sameTarget && typeof previous?.advanceDue === 'boolean'
+      ? previous.advanceDue
+      : null);
+  // `advanceDue === false` also describes an idle pre-request day, so require
+  // proof that this day's RNG arrived/resolved before treating it as the
+  // completion edge. The positive latch survives the contract zeroing its
+  // transient RNG word and makes cold loads after completion work via the
+  // permanent exact-day coinflip result.
+  const completionEvidence = rngFulfilled
+    || Boolean(coinflipResult?.resolved)
+    || indexedJackpotResolved;
+  const processingComplete = Boolean(sameTarget && previous?.processingComplete)
+    || Boolean(rngRequested && completionEvidence && advanceDue === false);
   let incomingReverseQueued = null;
   try {
     if (snapshot?.reverseQueued != null) incomingReverseQueued = BigInt(snapshot.reverseQueued);
@@ -164,6 +182,8 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
     rngLocked,
     rngFulfilled,
     rngRequested,
+    advanceDue,
+    processingComplete,
     reverseQueued: reverseQueued == null ? null : reverseQueued.toString(),
     ready,
     phase: _phase(jackpotReady, coinflipReady),
@@ -180,6 +200,8 @@ function _materialKey(state) {
     state.rngLocked ? 1 : 0,
     state.rngFulfilled ? 1 : 0,
     state.rngRequested ? 1 : 0,
+    state.advanceDue == null ? '' : (state.advanceDue ? 1 : 0),
+    state.processingComplete ? 1 : 0,
     state.reverseQueued ?? '',
     state.coinflipResult?.win ? 1 : 0,
     state.coinflipResult?.rewardPercent ?? '',
@@ -202,10 +224,11 @@ async function _readSnapshot() {
   const overrides = blockNumber == null ? [] : [{ blockTag: blockNumber }];
   const day = _positiveDay(await game.currentDayView(...overrides));
   if (day == null) throw new Error('Invalid chain day');
-  const [coinflipResult, lockResult, fulfilledResult, nudgeResult] = await Promise.allSettled([
+  const [coinflipResult, lockResult, fulfilledResult, advanceResult, nudgeResult] = await Promise.allSettled([
     coinflip.getCoinflipDayResult(day, ...overrides),
     game.rngLocked(...overrides),
     game.isRngFulfilled(...overrides),
+    game.advanceDue(...overrides),
     game.rngNudgeQuote(...overrides),
   ]);
   if (coinflipResult.status !== 'fulfilled') throw coinflipResult.reason;
@@ -218,6 +241,7 @@ async function _readSnapshot() {
     // null, never false, when the read failed: an absent answer must not be
     // reducible to "the word is not in".
     rngFulfilled: fulfilledResult.status === 'fulfilled' ? Boolean(fulfilledResult.value) : null,
+    advanceDue: advanceResult.status === 'fulfilled' ? Boolean(advanceResult.value) : null,
     reverseQueued: nudgeResult.status === 'fulfilled'
       ? String(nudgeResult.value?.queued ?? nudgeResult.value?.[0] ?? 0)
       : null,
@@ -242,6 +266,10 @@ function _secondsSinceBoundary(nowMs = Date.now()) {
 }
 
 export function nextDayProbeDelay(state = get('app.daySync'), nowMs = Date.now()) {
+  // Once the chain says the advance pipeline drained, more rapid chain reads
+  // cannot make the indexer catch up faster. The completion handler owns its
+  // one bounded API retry; leave only a slow safety probe behind it.
+  if (state?.processingComplete && !state.ready) return INDEXER_WAIT_POLL_MS;
   if (state && !state.ready) return WARMING_POLL_MS;
   // A boundary probe can land before the first block carrying the new day. Do
   // not immediately fall back to the steady cadence at elapsed=0: keep probing
@@ -272,13 +300,19 @@ function _promptRefresh(previous, next) {
   const dayChanged = Boolean(previous && Number(previous.day) !== Number(next.day));
   const readyChanged = Boolean(previous && previous.ready !== next.ready);
   const requestChanged = Boolean(previous && previous.rngRequested !== next.rngRequested);
-  const now = Date.now();
-  if (!dayChanged && !readyChanged && !requestChanged
-    && (next.ready || now - _lastRefreshPromptAt < API_REFRESH_MIN_MS)) {
-    return;
+  const processingCompleteChanged = Boolean(
+    next.processingComplete && previous?.processingComplete !== true,
+  );
+  if (!dayChanged && !readyChanged && !requestChanged && !processingCompleteChanged) return;
+  try {
+    _onRefreshNeeded({
+      dayChanged,
+      readyChanged,
+      requestChanged,
+      processingCompleteChanged,
+      state: next,
+    });
   }
-  _lastRefreshPromptAt = now;
-  try { _onRefreshNeeded({ dayChanged, readyChanged, requestChanged, state: next }); }
   catch (_e) { /* normal cadence remains armed */ }
 }
 
@@ -321,7 +355,6 @@ export function startDayRollover({ onRefreshNeeded = null } = {}) {
   stopDayRollover();
   _running = true;
   _onRefreshNeeded = typeof onRefreshNeeded === 'function' ? onRefreshNeeded : null;
-  _lastRefreshPromptAt = 0;
   _lastDayUnsub = subscribe('app.lastDay', () => {
     const current = get('app.daySync');
     if (!current?.day) return;
@@ -331,6 +364,7 @@ export function startDayRollover({ onRefreshNeeded = null } = {}) {
       coinflip: current.coinflipResult,
       rngLocked: current.rngLocked,
       rngFulfilled: current.rngFulfilled,
+      advanceDue: current.advanceDue,
       reverseQueued: current.reverseQueued,
     });
   });
@@ -368,7 +402,6 @@ export const _testing = {
     _snapshotReader = null;
     _provider = null;
     _probeInFlight = null;
-    _lastRefreshPromptAt = 0;
   },
   normalizedCoinflip: _normalizedCoinflip,
   secondsToBoundary: _secondsToBoundary,

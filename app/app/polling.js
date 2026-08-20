@@ -1,10 +1,10 @@
 // /app/app/polling.js — Phase 56 Plan 56-03 (APP-04 + APP-06).
 //
-// 5-timer polling hierarchy; the first four at LOCKED cadence (D-04):
+// Three timed API cycles plus two event-driven shared reads (D-04):
 //   - gameTimer     15s
 //   - playerTimer   30s
 //   - healthTimer   60s
-//   - lastDayTimer  15s   (jackpot/flip rollover is player-facing and time-sensitive)
+//   - lastDay       eager + chain-completion/day-mismatch only (no timer)
 //   - goldRushTimer  5s   (direct-chain headline ticker — see POLL_INTERVALS.goldRush)
 //
 // AbortController-per-cycle (D-06): each timer firing creates a new AbortController;
@@ -62,9 +62,9 @@ export const POLL_INTERVALS = {
   // identical bytes every tick — 83% of everything the client transferred, for a
   // value that changes once a day. It is fetched eagerly at start() and then only
   // when the day actually moves: publishGameState() fires it whenever the resolved
-  // day runs ahead of the displayed one (and keeps retrying each game tick until
-  // the indexer catches up at rollover), and refreshForDayShift() forces it from
-  // the direct chain-day watcher.
+  // day runs ahead of the displayed one (and keeps a low-rate 15s fallback until
+  // the indexer catches up). The fast path is refreshJackpotAfterChainCompletion:
+  // it waits for GAME.advanceDue() to drain, then requests the result once.
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
   // interval (see GOLD_RUSH_CADENCE). Each tick is one same-block Multicall3 read
   // through the player's wallet RPC, or a keyless public RPC when no compatible
@@ -103,6 +103,9 @@ let _activePlayerAddress = null;
 let _forceGameCycle = null;
 let _forceLastDayCycle = null;
 let _forcePlayerCycle = null;
+let _jackpotCompletionDay = null;
+let _jackpotCompletionPromise = null;
+const JACKPOT_INDEXER_GRACE_MS = 4_000;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
 // at the floor rather than inheriting a backed-off delay from before it was hidden.
@@ -389,8 +392,8 @@ function jittered(ms) {
   return Math.round(ms * (0.8 + Math.random() * 0.4));
 }
 
-function fetchJSONWithSignal(path, { signal } = {}) {
-  return sharedFetchJSON(path, { signal });
+function fetchJSONWithSignal(path, { signal, force = false, cache } = {}) {
+  return sharedFetchJSON(path, { signal, force, cache });
 }
 
 // ---------------------------------------------------------------------------
@@ -500,14 +503,18 @@ export function lastDayMatchesDeployment(payload) {
   catch (_e) { return false; }
 }
 
-async function pollLastDay(signal) {
+async function pollLastDay(signal, { force = false } = {}) {
   // Phase 57 ships /game/jackpot/last-day. On 404 / network error, soft-fail returns null
   // (UI panel — Phase 59 widget — renders cold-start state by default).
   // Phase 59 Plan 59-02: write payload to store on success so the widget's
   // subscribe('app.lastDay', ...) subscriber fires per polling cycle.
   try {
     const payload = normalizeLastDayPayload(
-      await fetchJSONWithSignal('/game/jackpot/last-day', { signal }),
+      await fetchJSONWithSignal('/game/jackpot/last-day', {
+        signal,
+        force,
+        cache: force ? 'no-store' : undefined,
+      }),
     );
     if (!lastDayMatchesDeployment(payload)) {
       const observedStartBlock = payload?.summary?.blockRange?.start
@@ -792,16 +799,69 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
  * watcher. These are the same abort-per-cycle functions as normal polling;
  * rollover does not create a second fetching implementation or timer stack.
  */
-export function refreshForDayShift({ includePlayer = false } = {}) {
+export function refreshForDayShift({ includePlayer = false, includeLastDay = true } = {}) {
   const cycles = [];
   // The day watcher itself is chain-direct. Refresh the phase-bearing chain
   // snapshot immediately as well, so a stalled indexer cannot hold the strip on
   // yesterday's purchase day until the adaptive ticker's next (up to 60s) poll.
   cycles.push(runGoldRushCycle());
   if (typeof _forceGameCycle === 'function') cycles.push(_forceGameCycle());
-  if (typeof _forceLastDayCycle === 'function') cycles.push(_forceLastDayCycle());
+  if (includeLastDay && typeof _forceLastDayCycle === 'function') cycles.push(_forceLastDayCycle());
   if (includePlayer && typeof _forcePlayerCycle === 'function') cycles.push(_forcePlayerCycle());
   return Promise.allSettled(cycles);
+}
+
+function waitForJackpotIndexer(ms) {
+  return new Promise((resolve) => {
+    const handle = setTimeout(resolve, ms);
+    try { handle?.unref?.(); } catch (_e) { /* browser timer */ }
+  });
+}
+
+/**
+ * Fetch the sealed jackpot only after GAME.advanceDue() has fallen to false.
+ * Every tab makes at most two endpoint requests for a completed day: one on the
+ * exact chain edge and one after a short indexer grace period if the first raced
+ * the seal. The API coalesces the crowd behind one pointer read/day build.
+ */
+export function refreshJackpotAfterChainCompletion({ day, includePlayer = true } = {}) {
+  const targetDay = Number(day);
+  if (!Number.isInteger(targetDay) || targetDay <= 0) return Promise.resolve(null);
+  if (typeof _forceLastDayCycle !== 'function') return Promise.resolve(null);
+  if (_jackpotCompletionDay === targetDay && _jackpotCompletionPromise) {
+    return _jackpotCompletionPromise;
+  }
+
+  let request;
+  request = (async () => {
+    const fetchTarget = async () => {
+      if (typeof _forceLastDayCycle !== 'function') return null;
+      await _forceLastDayCycle({ force: true, includeBoons: false });
+      return get('app.lastDay') || null;
+    };
+
+    let payload = await fetchTarget();
+    if (Number(payload?.day) !== targetDay
+      && _jackpotCompletionDay === targetDay
+      && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) {
+      await waitForJackpotIndexer(JACKPOT_INDEXER_GRACE_MS);
+      payload = get('app.lastDay') || null;
+      if (_jackpotCompletionDay === targetDay && Number(payload?.day) !== targetDay) {
+        payload = await fetchTarget();
+      }
+    }
+
+    if (Number(payload?.day) === targetDay
+      && includePlayer
+      && typeof _forcePlayerCycle === 'function') {
+      await _forcePlayerCycle();
+    }
+    return payload;
+  })();
+
+  _jackpotCompletionDay = targetDay;
+  _jackpotCompletionPromise = request;
+  return request;
 }
 
 // ---------------------------------------------------------------------------
@@ -824,9 +884,9 @@ export function start({ playerAddress = null } = {}) {
   pauseAllTimers();
   // A new sealed day zeroes the previous day's boons (playerBoonState is keyed
   // on player+day), so the day-change fan-out carries boons with it.
-  const lastDay  = () => {
-    void refreshBoons();
-    return runCycle('lastDay', [(s) => pollLastDay(s)]);
+  const lastDay  = ({ force = false, includeBoons = true } = {}) => {
+    if (includeBoons) void refreshBoons();
+    return runCycle('lastDay', [(s) => pollLastDay(s, { force })]);
   };
   const game     = () => runCycle('game',     [
     (s) => pollGame(s).then((payload) => publishGameState(payload, lastDay)),
@@ -865,6 +925,8 @@ export function stop() {
   _forceGameCycle = null;
   _forceLastDayCycle = null;
   _forcePlayerCycle = null;
+  _jackpotCompletionDay = null;
+  _jackpotCompletionPromise = null;
 }
 
 export function abortAllInflight() {
@@ -930,6 +992,7 @@ export const _testing = {
   publishGameState,
   resolvedDayFromGameState,
   pollLastDay,
+  get jackpotCompletionDay() { return _jackpotCompletionDay; },
   lastDayMatchesDeployment,
   pollGoldRush,
   readGoldRushSnapshot,

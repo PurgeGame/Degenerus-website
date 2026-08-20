@@ -14,7 +14,11 @@
 
 import './chain-config.js';
 import { CONTRACTS } from './chain-config.js';
-import { start as startPolling, refreshForDayShift } from './polling.js';
+import {
+  start as startPolling,
+  refreshForDayShift,
+  refreshJackpotAfterChainCompletion,
+} from './polling.js';
 import { startDayRollover } from './day-rollover.js';
 import { warmBadgeStore } from './badge-sprite.js';
 import { initRouter, getViewedAddress } from './router.js';
@@ -325,9 +329,24 @@ async function boot() {
   // reveals. Jackpot and coinflip consumers each unlock from their own exact-
   // day lane; app.daySync.ready only reports when the whole handoff is done.
   startDayRollover({
-    onRefreshNeeded: ({ dayChanged, readyChanged, requestChanged }) => {
-      void refreshForDayShift({ includePlayer: dayChanged || readyChanged || requestChanged });
-      if (dayChanged || readyChanged || requestChanged) {
+    onRefreshNeeded: ({
+      dayChanged,
+      readyChanged,
+      requestChanged,
+      processingCompleteChanged,
+      state,
+    }) => {
+      // The boundary/request edges update chain-derived UI only. Do not ask the
+      // jackpot API while Mine FLIP work is still pending. `advanceDue()` gives
+      // us the exact completion edge; that path performs one forced result read
+      // plus one bounded retry if the indexer loses the block race.
+      if (dayChanged || requestChanged) {
+        void refreshForDayShift({ includePlayer: true, includeLastDay: false });
+      }
+      if (processingCompleteChanged && state?.processingComplete && !state?.jackpotReady) {
+        void refreshJackpotAfterChainCompletion({ day: state.day, includePlayer: true });
+      }
+      if (dayChanged || readyChanged || requestChanged || processingCompleteChanged) {
         refreshPackWatch();
         refreshBingoWatch();
         refreshWhalePassClaims();

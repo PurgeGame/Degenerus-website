@@ -17,7 +17,7 @@ import { VOLUME_WINDOW } from '../app/chain-config.js';
 import { loadWorkQueue, nextAction } from '../app/work-queue.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { registerComponentPoll } from '../app/component-poll.js';
-import { refreshForDayShift } from '../app/polling.js';
+import { refreshDayRollover } from '../app/day-rollover.js';
 
 const POLL_INTERVAL_MS = 30_000;
 const RESOLVER_SOURCE = 'mine-flip-resolver';
@@ -169,10 +169,10 @@ class AppMineFlipResolver extends HTMLElement {
       shouldReconcile = true;
     } finally {
       this.#busy = false;
-      // A confirmed Mine FLIP can finish the exact jackpot stage. Do not wait
-      // for the next 15-second game poll before asking the chain/indexer feeds
-      // for the board that receipt just made possible.
-      if (shouldReconcile) void refreshForDayShift({ includePlayer: true });
+      // A confirmed Mine FLIP can finish the exact jackpot stage. Re-read the
+      // chain immediately; day-rollover requests the indexed result only when
+      // advanceDue() proves the advance pipeline has actually drained.
+      if (shouldReconcile) void refreshDayRollover();
       await this.#refresh();
     }
   }
