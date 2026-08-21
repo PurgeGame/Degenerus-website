@@ -647,8 +647,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(PANEL_SRC, /setInterval\([\s\S]*?#renderTicketSample\(\)[\s\S]*?PURCHASE_TICKET_SAMPLE_REFRESH_MS,\s*\)/);
     assert.match(PANEL_SRC, /dgnBadgePath\(quadrant, trait\.sym, trait\.col\)/);
     assert.match(PANEL_SRC, /randomPurchaseEntryTrait\(\)/);
-    assert.match(PANEL_SRC, /setAttribute\?\.\('data-quadrant', String\(entryTrait\.q\)\)/);
-    assert.match(PANEL_SRC, /dgnBadgePath\(entryTrait\.q, entryTrait\.sym, entryTrait\.col\)/);
+    assert.match(PANEL_SRC, /setAttribute\?\.\('data-quadrant', String\(nextTrait\.q\)\)/);
+    assert.match(PANEL_SRC, /dgnBadgePath\(nextTrait\.q, nextTrait\.sym, nextTrait\.col\)/);
     assert.match(PANEL_SRC, /dgnTicketAccent\(sampleTraits\)/);
   });
 
@@ -776,7 +776,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     }
     assert.match(
       el.innerHTML,
-      /degenerus-lootbox-case-small-v14-top\.webp[\s\S]*degenerus-lootbox-case-medium-v14-top\.webp[\s\S]*degenerus-lootbox-case-large-v16-top\.webp/,
+      /degenerus-lootbox-case-small-v14-top\.webp[\s\S]*degenerus-lootbox-case-medium-v14-top\.webp[\s\S]*degenerus-lootbox-case-large-v23-top\.webp/,
       'preset cards use their distinct canonical top-down case models',
     );
     assert.doesNotMatch(
@@ -834,6 +834,21 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /\.dec-ticket-piece__art > \.dec-ticket-face\s*\{[^}]*max-width:\s*100%;[^}]*height:\s*100%;/s,
       'the real ticket face fills the button instead of inheriting the old thumbnail size',
     );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-face > \.dec-ticket-trait:nth-child\(-n\+2\) img\s*\{[^}]*top:\s*42%;/s,
+      'the top ticket badges sit farther above the center flame',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-face > \.dec-ticket-trait:nth-child\(n\+3\) img\s*\{[^}]*top:\s*58%;/s,
+      'the bottom ticket badges sit farther below the center flame',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-entry-face \.dec-ticket-trait img\s*\{[^}]*top:\s*54%;/s,
+      'the Entry badge is nudged slightly lower in its quarter-ticket',
+    );
     assert.match(el.innerHTML,
       /class="dec-entry-face ticket-entry-card tc-small"[\s\S]*?data-quadrant="0"[\s\S]*?class="dec-ticket-trait trait-quadrant"/,
       'Entry reuses the canonical oriented quarter-ticket component');
@@ -847,7 +862,22 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-ticket-piece\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*4\.75rem;/s,
-      'button and label-backed ticket tiles share identical outer dimensions',
+      'button and label-backed ticket art keeps identical accessible hit-target dimensions',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /The rendered ticket and pack art is the control[\s\S]*?\.dec-ticket-piece:hover,[\s\S]*?\.dec-ticket-piece:focus-visible\s*\{[^}]*border-color:\s*transparent;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;[^}]*outline:\s*none;[^}]*transform:\s*none;/s,
+      'ticket controls do not repaint visible button tiles on hover or keyboard focus',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece:hover \.dec-ticket-piece__art,[\s\S]*?\.dec-ticket-piece:focus-visible \.dec-ticket-piece__art\s*\{[^}]*brightness\(1\.08\)[^}]*transform:\s*translateY\(-1px\) scale\(1\.025\);/s,
+      'hover and focus feedback moves with the artwork that acts as the button',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--foil\.is-selected\s*\{[^}]*border-color:\s*transparent;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s,
+      'the selected foil pack glows without restoring an outer button tile',
     );
     assert.doesNotMatch(
       PURCHASE_DESK_CSS,
@@ -856,20 +886,30 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece--ticket \.dec-ticket-piece__copy\s*\{[^}]*top:\s*50%;[^}]*left:\s*50%;[^}]*width:\s*min\(3\.2rem, calc\(100% - 0\.32rem\)\);[^}]*padding:\s*0\.27rem 0\.46rem 0\.24rem;[^}]*translate\(-50%, -50%\)/s,
-      'TICKET uses a substantial centered bubble over its full-ticket art',
+      /\.dec-ticket-piece__copy\s*\{[^}]*border-radius:\s*999px;[^}]*background:\s*#0a0709;[^}]*backdrop-filter:\s*none;/s,
+      'both labels use one solid plaque without a displaced backdrop-blur artifact',
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece--entry \.dec-ticket-piece__copy\s*\{[^}]*top:\s*0\.28rem;[^}]*left:\s*50%;[^}]*width:\s*min\(3\.2rem, calc\(100% - 0\.32rem\)\);[^}]*transform:\s*translateX\(-50%\)/s,
+      /\.dec-ticket-piece--ticket \.dec-ticket-piece__copy,\s*body\.layout-basic \.app-decimator-panel \.dec-ticket-piece--entry \.dec-ticket-piece__copy\s*\{[^}]*left:\s*50%;[^}]*width:\s*min\(3\.2rem, calc\(100% - 0\.32rem\)\);[^}]*padding:\s*0\.27rem 0\.46rem 0\.24rem;/s,
+      'ENTRY and TICKET share exactly the same plaque dimensions',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--ticket \.dec-ticket-piece__copy\s*\{[^}]*top:\s*50%;[^}]*transform:\s*translate\(-50%, -50%\)/s,
+      'TICKET centers the shared plaque over its full-ticket art',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--entry \.dec-ticket-piece__copy\s*\{[^}]*top:\s*0\.28rem;[^}]*transform:\s*translateX\(-50%\)/s,
       'the ENTRY label stays horizontally centered without covering its art',
     );
     assert.equal(pack.querySelector('.dec-ticket-piece__copy'), null,
       'the wrapper already says 10 TICKETS, so Pack has no redundant overlay label');
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\) \.dec-ticket-piece--ticket \.dec-ticket-piece__copy\s*\{[^}]*padding:\s*0\.24rem 0\.3rem 0\.22rem;/s,
-      'the TICKET bubble contracts to fit the four-item Foil shelf',
+      /\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\) \.dec-ticket-piece--ticket \.dec-ticket-piece__copy,[\s\S]*?\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--entry \.dec-ticket-piece__copy\s*\{[^}]*padding:\s*0\.24rem 0\.3rem 0\.22rem;/s,
+      'both plaques contract identically to fit the four-item Foil shelf',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -2822,6 +2862,76 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('adding an Entry or Ticket rerolls only the clicked source artwork', async () => {
+    const el = instantiate();
+    await settle(60);
+
+    const entry = el.querySelector('[data-bind="dec-ticket-add-entry"]');
+    const ticket = el.querySelector('[data-bind="dec-ticket-add-ticket"]');
+    const entryFace = el.querySelector('[data-bind="dec-entry-face"]');
+    const ticketBadges = Array.from({ length: 4 }, (_unused, quadrant) => (
+      el.querySelector(`[data-bind="dec-ticket-badge-${quadrant}"]`)
+    ));
+    const entryBefore = entryFace.getAttribute('data-trait-id');
+    const ticketBefore = ticketBadges.map((badge) => badge.getAttribute('src'));
+
+    entry.dispatchEvent({ type: 'click' });
+    assert.notEqual(entryFace.getAttribute('data-trait-id'), entryBefore,
+      'the shelf entry changes after its original artwork has been added');
+    assert.deepEqual(ticketBadges.map((badge) => badge.getAttribute('src')), ticketBefore,
+      'adding an entry does not also replace the four-symbol ticket');
+
+    const entryAfter = entryFace.getAttribute('data-trait-id');
+    ticket.dispatchEvent({ type: 'click' });
+    assert.notDeepEqual(ticketBadges.map((badge) => badge.getAttribute('src')), ticketBefore,
+      'the shelf ticket changes to a fresh four-symbol combination after it is added');
+    assert.equal(entryFace.getAttribute('data-trait-id'), entryAfter,
+      'adding a ticket does not also replace the entry symbol');
+    el.disconnectedCallback();
+  });
+
+  test('a shelf add flies its actual artwork into the TIX receipt and confirms the landing', async () => {
+    const el = instantiate();
+    await settle(60);
+
+    const panel = el.querySelector('.app-decimator-panel');
+    const target = el.querySelector('.dec-ticket-total__field');
+    const entry = el.querySelector('[data-bind="dec-ticket-add-entry"]');
+    const artwork = makeFakeElement('span');
+    artwork.classList.add('dec-ticket-piece__art');
+    artwork.getBoundingClientRect = () => ({ left: 30, top: 40, width: 40, height: 40 });
+    artwork.cloneNode = () => {
+      const clone = makeFakeElement('span');
+      clone.classList.add('dec-ticket-piece__art');
+      return clone;
+    };
+    entry.querySelector = (selector) => selector === '.dec-ticket-piece__art' ? artwork : null;
+    panel.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 300 });
+    target.getBoundingClientRect = () => ({ left: 110, top: 180, width: 80, height: 40 });
+
+    entry.dispatchEvent({ type: 'click' });
+    const flyer = panel.querySelector('.dec-purchase-flyer');
+    assert.ok(flyer, 'the click mounts one transient copy inside the purchase desk');
+    assert.equal(flyer.getAttribute('aria-hidden'), 'true');
+    assert.equal(flyer.querySelector('.dec-purchase-flyer__quantity').textContent, '+¼');
+    assert.equal(flyer.style.left, '20px');
+    assert.equal(flyer.style.getPropertyValue('--dec-flight-x'), '100px',
+      'the flight terminates at the center of the TIX field');
+
+    flyer.dispatchEvent({ type: 'animationend' });
+    assert.equal(panel.querySelector('.dec-purchase-flyer'), null,
+      'the decorative clone is removed as soon as it lands');
+    assert.equal(target.classList.contains('is-receiving'), true,
+      'the TIX receipt confirms the handoff only after landing');
+    assert.match(PURCHASE_DESK_CSS,
+      /@keyframes dec-purchase-flight[\s\S]*?var\(--dec-flight-mid-x\)[\s\S]*?var\(--dec-flight-x\)/,
+      'the route has a visible arc rather than a straight fade');
+    assert.match(PURCHASE_DESK_CSS,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.dec-purchase-flyer\s*\{\s*display:\s*none;/,
+      'motion preferences suppress the decorative flight');
+    el.disconnectedCallback();
+  });
+
   test('Luckbox presets integrate clean prices into the case art and keep independent quantities', async () => {
     const el = instantiate();
     await settle(60);
@@ -2838,7 +2948,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-box-price-large-unit"]').hidden, false,
       'a whole-number gold-box price reads as 1 ETH instead of an old tier number');
     for (const tier of ['small', 'medium', 'large']) {
-      const version = tier === 'large' ? 'v16' : 'v14';
+      const version = tier === 'large' ? 'v22' : 'v14';
       assert.match(
         el.innerHTML,
         new RegExp(`dec-box-card--${tier}[\\s\\S]*?data-lootbox-case-model="${tier}"[\\s\\S]*?degenerus-lootbox-case-${tier}-${version}-top\\.webp`),
@@ -2883,6 +2993,9 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-card__art::after\s*\{[^}]*background:\s*var\(--box-tone\);[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0\.82;/s,
       'the case shell uses the same value-tier color wash as the opening animation');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card\[data-lootbox-case-model="large"\] \.dec-box-card__art::after\s*\{[^}]*opacity:\s*0;/s,
+      'the finished gold, gunmetal, and red-enamel top render keeps its authored material separation');
     const badgeLayer = PURCHASE_DESK_CSS.match(/\.dec-box-card__art::before\s*\{([^}]*)\}/s)?.[1] || '';
     assert.match(badgeLayer,
       /inset:\s*0;[\s\S]*?var\(--lootbox-case-top-art\)[\s\S]*?clip-path:\s*var\(--lootbox-top-badge-clip\)/s,
@@ -2898,6 +3011,9 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-value > small\s*\{[^}]*color:\s*#fff6d8;[^}]*font:\s*900 var\(--box-unit-size\)\/1[^}]*letter-spacing:\s*-0\.045em;[^}]*-webkit-text-stroke:\s*0\.02em[^}]*text-shadow:/s,
       'the conditional ETH suffix uses the same face, color, and embossed treatment as its price');
+    assert.doesNotMatch(PURCHASE_DESK_CSS,
+      /\.dec-box-card\[data-lootbox-case-model="large"\] \.dec-box-value > :is\(strong, small\)/,
+      'the gold box inherits the same ivory embossed price treatment as the other two boxes');
     assert.equal(el.querySelector('[data-bind="dec-box-summary"]').textContent, 'Choose any mix of boxes.');
     el.disconnectedCallback();
   });
@@ -2919,13 +3035,17 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('Custom Box opens a quantity-and-size drawer that can collapse without losing its draft', async () => {
+  test('Custom Box starts at one box with its amount selected and preserves the draft', async () => {
     const el = instantiate();
     await settle(60);
     const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
     const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
     const count = el.querySelector('[name="dec-box-custom-count"]');
     const size = el.querySelector('[name="dec-box-custom-eth"]');
+    let amountFocuses = 0;
+    let amountSelections = 0;
+    size.focus = () => { amountFocuses += 1; };
+    size.select = () => { amountSelections += 1; };
 
     assert.match(
       PURCHASE_DESK_CSS,
@@ -2936,9 +3056,11 @@ describe('combined ticket + lootbox buy', () => {
     toggle.dispatchEvent({ type: 'click' });
     assert.equal(fields.hidden, false);
     assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(count.value, '0', 'opening the popup does not silently add a box');
-    count.value = '1';
-    count.dispatchEvent({ type: 'input' });
+    assert.equal(count.value, '1', 'opening the popup starts with one custom box');
+    assert.equal(size.value, '0.01');
+    assert.equal(amountFocuses, 1, 'the amount field receives focus');
+    assert.equal(amountSelections, 1, 'typing immediately replaces the selected amount');
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.01 ETH/);
     size.value = '0.02';
     size.dispatchEvent({ type: 'input' });
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.02 ETH/);
@@ -2948,6 +3070,16 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(count.value, '1', 'collapsing preserves the selected box');
     assert.equal(size.value, '0.02', 'collapsing preserves the per-box size');
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.app-decimator-panel:has\(> \.dec-builder-popover:not\(\[hidden\]\)\)[^{]*\{[^}]*isolation:\s*auto;[^}]*overflow:\s*visible;/s,
+      'the active popup escapes the clipped BUY IN panel instead of exposing Degenerette below it',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-builder-popover__backdrop\s*\{[^}]*background:\s*#030205;/s,
+      'the modal backdrop is opaque so the page cannot show through',
+    );
     el.disconnectedCallback();
   });
 
@@ -3403,6 +3535,58 @@ describe('Foil pack buy leg', () => {
     assert.match(PURCHASE_DESK_CSS,
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.dec-foil-pack-face,[\s\S]*?\.dec-pack-shine,[\s\S]*?animation:\s*none/s,
       'foil motion respects reduced-motion preferences');
+    el.disconnectedCallback();
+  });
+
+  test('selecting the foil pack jumps its wrapper into BUY IN and deselecting stays quiet', async () => {
+    const el = instantiate();
+    await settle(60);
+
+    const panel = el.querySelector('.app-decimator-panel');
+    const foil = el.querySelector('[data-bind="dec-foil-row"]');
+    const check = el.querySelector('[data-bind="dec-foil-check"]');
+    const buy = el.querySelector('[data-bind="dec-buy-cta"]');
+    const artwork = makeFakeElement('span');
+    artwork.classList.add('dec-ticket-piece__art');
+    artwork.getBoundingClientRect = () => ({ left: 30, top: 40, width: 40, height: 40 });
+    let cloneCount = 0;
+    artwork.cloneNode = () => {
+      cloneCount += 1;
+      const clone = makeFakeElement('span');
+      clone.classList.add('dec-ticket-piece__art');
+      return clone;
+    };
+    foil.querySelector = (selector) => selector === '.dec-ticket-piece__art' ? artwork : null;
+    panel.getBoundingClientRect = () => ({ left: 10, top: 20, width: 360, height: 360 });
+    buy.getBoundingClientRect = () => ({ left: 210, top: 260, width: 100, height: 40 });
+
+    check.checked = true;
+    check.dispatchEvent({ type: 'change' });
+    const flyer = panel.querySelector('.dec-purchase-flyer');
+    assert.ok(flyer, 'selecting foil mounts a transient copy of its wrapper');
+    assert.equal(flyer.classList.contains('dec-purchase-flyer--foil'), true);
+    assert.equal(flyer.querySelector('.dec-purchase-flyer__quantity').textContent, '+FOIL');
+    assert.equal(flyer.style.getPropertyValue('--dec-flight-x'), '210px',
+      'the foil flight terminates at the center of BUY IN');
+
+    flyer.dispatchEvent({ type: 'animationend', target: makeFakeElement('span') });
+    assert.equal(panel.querySelector('.dec-purchase-flyer'), flyer,
+      'an animated detail inside the wrapper cannot end the flight early');
+    flyer.dispatchEvent({ type: 'animationend', target: flyer });
+    assert.equal(panel.querySelector('.dec-purchase-flyer'), null);
+    assert.equal(buy.classList.contains('is-receiving'), true,
+      'BUY IN flashes when the foil wrapper lands');
+
+    check.checked = false;
+    check.dispatchEvent({ type: 'change' });
+    assert.equal(cloneCount, 1, 'turning foil off does not play an add animation');
+    assert.equal(panel.querySelector('.dec-purchase-flyer'), null);
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-purchase-flyer--foil \.dec-purchase-flyer__quantity\s*\{[\s\S]*?#56e0ff[\s\S]*?#ff89c8/,
+      'the in-flight foil marker keeps the wrapper holographic palette');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-buy-cta\[data-write\]\.is-receiving\s*\{[^}]*dec-buy-foil-catch/,
+      'BUY IN has a dedicated foil landing response');
     el.disconnectedCallback();
   });
 

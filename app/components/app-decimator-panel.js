@@ -828,6 +828,7 @@ class AppDecimatorPanel extends HTMLElement {
   // --- Exact zero-value purchase.staticCall result for the acting buyer.
   #foilStatus = null;
   #foilSeq = 0;
+  #purchasePulseTimers = new WeakMap();
   // Presale is a live contract latch. The same-tx purchase leg can add 25%
   // credit before its attached box consumes it, so the rendered maximum also
   // depends on the current ticket/lootbox draft.
@@ -1373,12 +1374,14 @@ class AppDecimatorPanel extends HTMLElement {
     this.#ticketSampleTimer?.unref?.();
   }
 
-  #renderTicketSample() {
-    let traits;
-    let entryTrait;
+  #renderTicketSample(piece = 'all') {
+    const refreshTicket = piece === 'all' || piece === 'ticket';
+    const refreshEntry = piece === 'all' || piece === 'entry';
+    let traits = null;
+    let entryTrait = null;
     try {
-      traits = randomPurchaseTicketTraits();
-      entryTrait = randomPurchaseEntryTrait();
+      if (refreshTicket) traits = randomPurchaseTicketTraits();
+      if (refreshEntry) entryTrait = randomPurchaseEntryTrait();
     }
     catch (_e) { return; }
     const ticket = this.querySelector('[data-bind="dec-ticket-sample"]');
@@ -1394,18 +1397,53 @@ class AppDecimatorPanel extends HTMLElement {
         }
       } catch (_e) { /* visual enhancement only */ }
     };
-    setAccent(ticket, traits);
-    setAccent(entry, [entryTrait]);
-    entry?.setAttribute?.('data-quadrant', String(entryTrait.q));
-    entry?.setAttribute?.('data-trait-id', String(entryTrait.byte));
-    traits.forEach((trait, quadrant) => {
-      const image = this.querySelector(`[data-bind="dec-ticket-badge-${quadrant}"]`);
-      image?.setAttribute?.('src', dgnBadgePath(quadrant, trait.sym, trait.col));
-    });
-    this.querySelector('[data-bind="dec-entry-badge"]')?.setAttribute?.(
-      'src',
-      dgnBadgePath(entryTrait.q, entryTrait.sym, entryTrait.col),
-    );
+    if (refreshTicket && traits) {
+      const images = traits.map((_trait, quadrant) => (
+        this.querySelector(`[data-bind="dec-ticket-badge-${quadrant}"]`)
+      ));
+      const currentPaths = images.map((image) => image?.getAttribute?.('src') || '');
+      let nextTraits = traits;
+      let nextPaths = nextTraits.map((trait, quadrant) => (
+        dgnBadgePath(quadrant, trait.sym, trait.col)
+      ));
+      // A fresh random draw can theoretically repeat the complete ticket.
+      // Force one quadrant forward so every accepted click visibly replaces
+      // the source artwork instead of occasionally appearing to do nothing.
+      if (currentPaths.length > 0
+        && nextPaths.every((path, quadrant) => path === currentPaths[quadrant])) {
+        const first = nextTraits[0];
+        const sym = (Number(first.sym) + 1) & 7;
+        nextTraits = [{
+          ...first,
+          sym,
+          byte: (Number(first.q) << 6) | (Number(first.col) << 3) | sym,
+        }, ...nextTraits.slice(1)];
+        nextPaths = nextTraits.map((trait, quadrant) => (
+          dgnBadgePath(quadrant, trait.sym, trait.col)
+        ));
+      }
+      setAccent(ticket, nextTraits);
+      images.forEach((image, quadrant) => image?.setAttribute?.('src', nextPaths[quadrant]));
+    }
+    if (refreshEntry && entryTrait) {
+      const entryBadge = this.querySelector('[data-bind="dec-entry-badge"]');
+      const currentPath = entryBadge?.getAttribute?.('src') || '';
+      let nextTrait = entryTrait;
+      let nextPath = dgnBadgePath(nextTrait.q, nextTrait.sym, nextTrait.col);
+      if (nextPath === currentPath) {
+        const sym = (Number(nextTrait.sym) + 1) & 7;
+        nextTrait = {
+          ...nextTrait,
+          sym,
+          byte: (Number(nextTrait.q) << 6) | (Number(nextTrait.col) << 3) | sym,
+        };
+        nextPath = dgnBadgePath(nextTrait.q, nextTrait.sym, nextTrait.col);
+      }
+      setAccent(entry, [nextTrait]);
+      entry?.setAttribute?.('data-quadrant', String(nextTrait.q));
+      entry?.setAttribute?.('data-trait-id', String(nextTrait.byte));
+      entryBadge?.setAttribute?.('src', nextPath);
+    }
   }
 
   #renderBuilderPopovers() {
@@ -1597,10 +1635,23 @@ class AppDecimatorPanel extends HTMLElement {
       const adjust = (dir) => {
         const input = this.querySelector('[name="dec-tickets"]');
         if (!input) return;
+        const before = Number(input.value) || 0;
         this.#stepInput(input, dir, amount);
         this.#updateTotalLabel();
+        return Number(input.value) !== before;
       };
-      control?.addEventListener?.('click', () => adjust(1));
+      control?.addEventListener?.('click', () => {
+        if (adjust(1)) {
+          this.#animatePurchaseAddition(control, {
+            label: amount === 0.25 ? '+¼' : `+${amount}`,
+          });
+          // #animatePurchaseAddition snapshots the clicked artwork
+          // synchronously. Reroll only after that clone exists so the piece
+          // flying into TIX keeps the symbols the player actually selected.
+          if (amount === 0.25) this.#renderTicketSample('entry');
+          else if (amount === 1) this.#renderTicketSample('ticket');
+        }
+      });
       control?.addEventListener?.('contextmenu', (event) => {
         event?.preventDefault?.();
         if (!control.disabled) adjust(-1);
@@ -1636,12 +1687,20 @@ class AppDecimatorPanel extends HTMLElement {
     customToggle?.addEventListener?.('click', () => {
       this.#customBoxOpen = !this.#customBoxOpen;
       this.#presaleBoxOpen = false;
-      this.#renderBuilderPopovers();
       if (this.#customBoxOpen) {
-        try { this.querySelector('[name="dec-box-custom-count"]')?.focus?.({ preventScroll: true }); }
-        catch (_e) { /* focus is progressive enhancement */ }
+        const count = this.querySelector('[name="dec-box-custom-count"]');
+        const current = Number(count?.value ?? 0);
+        if (count && (!Number.isInteger(current) || current <= 0)) count.value = '1';
       }
+      this.#renderBuilderPopovers();
       this.#updateTotalLabel();
+      if (this.#customBoxOpen) {
+        const amount = this.querySelector('[name="dec-box-custom-eth"]');
+        try {
+          amount?.focus?.({ preventScroll: true });
+          amount?.select?.();
+        } catch (_e) { /* focus and selection are progressive enhancement */ }
+      }
     });
     for (const close of Array.from(
       this.querySelectorAll?.('[data-bind="dec-custom-box-close"]') || [],
@@ -1721,6 +1780,13 @@ class AppDecimatorPanel extends HTMLElement {
         foilRow?.setAttribute?.('aria-pressed', String(Boolean(foilCheck.checked)));
         this.#renderBuilderPopovers();
         this.#updateTotalLabel();
+        if (foilCheck.checked) {
+          this.#animatePurchaseAddition(foilRow, {
+            targetSelector: '[data-bind="dec-buy-cta"]',
+            label: '+FOIL',
+            tone: 'foil',
+          });
+        }
       });
     }
     const presaleMax = this.querySelector('[data-bind="dec-presale-max"]');
@@ -2164,6 +2230,97 @@ class AppDecimatorPanel extends HTMLElement {
     if (!input || typeof input.dispatchEvent !== 'function') return;
     try { input.dispatchEvent(new Event(type, { bubbles: true })); }
     catch (_e) { try { input.dispatchEvent({ type, bubbles: true }); } catch (_e2) {} }
+  }
+
+  #pulsePurchaseTarget(target) {
+    if (!target?.classList) return;
+    const priorTimer = this.#purchasePulseTimers.get(target);
+    if (priorTimer != null) clearTimeout(priorTimer);
+    target.classList.remove('is-receiving');
+    void target.offsetWidth;
+    target.classList.add('is-receiving');
+    const timer = setTimeout(() => {
+      target.classList.remove('is-receiving');
+      this.#purchasePulseTimers.delete(target);
+    }, 460);
+    this.#purchasePulseTimers.set(target, timer);
+    timer?.unref?.();
+  }
+
+  #animatePurchaseAddition(source, {
+    targetSelector = '.dec-ticket-total__field',
+    label = '',
+    tone = 'ticket',
+  } = {}) {
+    const target = this.querySelector(targetSelector);
+    const panel = this.querySelector('.app-decimator-panel');
+    const artwork = source?.querySelector?.('.dec-ticket-piece__art');
+    if (!target || !panel || !artwork) return;
+    if (typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+    if (typeof artwork.cloneNode !== 'function'
+      || typeof artwork.getBoundingClientRect !== 'function'
+      || typeof target.getBoundingClientRect !== 'function'
+      || typeof panel.getBoundingClientRect !== 'function') return;
+
+    const sourceRect = artwork.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    if (!(sourceRect.width > 0 && sourceRect.height > 0 && targetRect.width > 0)) return;
+
+    const scale = Math.min(1, 54 / Math.max(sourceRect.width, sourceRect.height));
+    const width = sourceRect.width * scale;
+    const height = sourceRect.height * scale;
+    const startX = sourceRect.left - panelRect.left + (sourceRect.width - width) / 2;
+    const startY = sourceRect.top - panelRect.top + (sourceRect.height - height) / 2;
+    const endX = targetRect.left - panelRect.left + (targetRect.width - width) / 2;
+    const endY = targetRect.top - panelRect.top + (targetRect.height - height) / 2;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const arc = Math.min(42, Math.max(18, Math.abs(dy) * 0.18));
+
+    const flyer = artwork.cloneNode(true);
+    flyer.classList?.add('dec-purchase-flyer', `dec-purchase-flyer--${tone}`);
+    flyer.setAttribute?.('aria-hidden', 'true');
+    flyer.removeAttribute?.('data-bind');
+    for (const bound of Array.from(flyer.querySelectorAll?.('[data-bind]') || [])) {
+      bound.removeAttribute?.('data-bind');
+    }
+    const quantity = document.createElement?.('strong');
+    if (quantity) {
+      quantity.className = 'dec-purchase-flyer__quantity';
+      quantity.textContent = label;
+      flyer.appendChild?.(quantity);
+    }
+    flyer.style.left = `${startX}px`;
+    flyer.style.top = `${startY}px`;
+    flyer.style.width = `${width}px`;
+    flyer.style.height = `${height}px`;
+    flyer.style.setProperty?.('--dec-flight-x', `${dx}px`);
+    flyer.style.setProperty?.('--dec-flight-y', `${dy}px`);
+    flyer.style.setProperty?.('--dec-flight-mid-x', `${dx * 0.56}px`);
+    flyer.style.setProperty?.('--dec-flight-mid-y', `${dy * 0.46 - arc}px`);
+    panel.appendChild?.(flyer);
+
+    let finished = false;
+    let fallbackTimer = null;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (fallbackTimer != null) clearTimeout(fallbackTimer);
+      flyer.remove?.();
+      this.#pulsePurchaseTarget(target);
+    };
+    const onAnimationEnd = (event) => {
+      // Animated foil details can emit their own bubbling animation events;
+      // only the wrapper's flight marks the handoff complete.
+      if (event?.target && event.target !== flyer) return;
+      flyer.removeEventListener?.('animationend', onAnimationEnd);
+      finish();
+    };
+    flyer.addEventListener?.('animationend', onAnimationEnd);
+    fallbackTimer = setTimeout(finish, 900);
+    fallbackTimer?.unref?.();
   }
 
   async #applyQuestPreset(detail) {

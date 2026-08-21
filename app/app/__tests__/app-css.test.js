@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-24075 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-24275 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -317,6 +317,8 @@ describe('app.css LOC budget', () => {
     // glyphs, and persistent victory treatment. This refines one surface.
     // 24075 → 24150 covers the grouped multi-Luckbox receipt: its per-box
     // sections and the shared combo-rewards section refine the reveal summary.
-    assert.ok(cssLines.length <= 24150, `total <=24150, got ${cssLines.length}`);
+    // 24150 → 24275 replaces the raw utility-style cash-out popup with two
+    // responsive asset cards, compact balance readouts, and complete control states.
+    assert.ok(cssLines.length <= 24275, `total <=24275, got ${cssLines.length}`);
   });
 });

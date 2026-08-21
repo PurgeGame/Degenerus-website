@@ -64,7 +64,8 @@ export const POLL_INTERVALS = {
   // when the day actually moves: publishGameState() fires it whenever the resolved
   // day runs ahead of the displayed one (and keeps a low-rate 15s fallback until
   // the indexer catches up). The fast path is refreshJackpotAfterChainCompletion:
-  // it waits for GAME.advanceDue() to drain, then requests the result once.
+  // it waits on Cloudflare's tiny same-origin token and then downloads the
+  // immutable result from the edge. No browser parks a request on Fly.
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
   // interval (see GOLD_RUSH_CADENCE). Each tick is one same-block Multicall3 read
   // through the player's wallet RPC, or a keyless public RPC when no compatible
@@ -106,7 +107,10 @@ let _forcePlayerCycle = null;
 let _jackpotCompletionDay = null;
 let _jackpotCompletionPromise = null;
 let _jackpotCompletionPending = false;
-const JACKPOT_INDEXER_WAIT_MS = 60_000;
+let _jackpotCompletionController = null;
+const JACKPOT_EDGE_WAIT_MS = 60_000;
+const JACKPOT_EDGE_POLL_MS = 1_000;
+const JACKPOT_PLAYER_REFRESH_SPREAD_MS = 15_000;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
 // at the floor rather than inheriting a backed-off delay from before it was hidden.
@@ -509,6 +513,26 @@ export function lastDayMatchesDeployment(payload) {
   catch (_e) { return false; }
 }
 
+function publishLastDayPayload(rawPayload) {
+  const payload = normalizeLastDayPayload(rawPayload);
+  if (!lastDayMatchesDeployment(payload)) {
+    const observedStartBlock = payload?.summary?.blockRange?.start
+      ?? payload?.blockRange?.start
+      ?? null;
+    update('app.deploymentMismatch', {
+      surface: 'jackpot',
+      expectedDeployBlock: Number(CHAIN.deployBlock || 0),
+      observedStartBlock: observedStartBlock == null ? null : String(observedStartBlock),
+      observedDay: payload?.day ?? null,
+    });
+    if (get('app.lastDay') != null) update('app.lastDay', null);
+    return null;
+  }
+  if (get('app.deploymentMismatch') != null) update('app.deploymentMismatch', null);
+  update('app.lastDay', payload);
+  return payload;
+}
+
 async function pollLastDay(
   signal,
   { force = false, targetDay = null, waitMs = 0 } = {},
@@ -524,30 +548,13 @@ async function pollLastDay(
       && Number.isFinite(requestedWait) && requestedWait > 0
       ? `?targetDay=${requestedDay}&waitMs=${Math.trunc(requestedWait)}`
       : '';
-    const payload = normalizeLastDayPayload(
+    const payload = publishLastDayPayload(
       await fetchJSONWithSignal(`/game/jackpot/last-day${waitQuery}`, {
         signal,
         force,
         cache: force ? 'no-store' : undefined,
       }),
     );
-    if (!lastDayMatchesDeployment(payload)) {
-      const observedStartBlock = payload?.summary?.blockRange?.start
-        ?? payload?.blockRange?.start
-        ?? null;
-      // Never let a reused logical day from a previous deployment drive the
-      // jackpot/replay/FLIP surfaces. Publish a precise sync state instead.
-      update('app.deploymentMismatch', {
-        surface: 'jackpot',
-        expectedDeployBlock: Number(CHAIN.deployBlock || 0),
-        observedStartBlock: observedStartBlock == null ? null : String(observedStartBlock),
-        observedDay: payload?.day ?? null,
-      });
-      if (get('app.lastDay') != null) update('app.lastDay', null);
-      return null;
-    }
-    if (get('app.deploymentMismatch') != null) update('app.deploymentMismatch', null);
-    update('app.lastDay', payload);  // Plan 59-02 — single new LOC vs Phase 56 baseline
     return payload;
   } catch (_e) {
     return null;  // catch branch unchanged: no store write on failure
@@ -826,34 +833,104 @@ export function refreshForDayShift({ includePlayer = false, includeLastDay = tru
   return Promise.allSettled(cycles);
 }
 
+function abortableDelay(ms, signal) {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const finish = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function validJackpotPointer(pointer) {
+  const day = Number(pointer?.day);
+  const digest = String(pointer?.digest ?? '');
+  return pointer?.schemaVersion === 1
+    && Number.isInteger(day) && day > 0
+    && /^[0-9a-f]{16}$/.test(digest)
+    && pointer?.resultPath === `/jackpots/results/${day}-${digest}.json`;
+}
+
+async function waitForJackpotEdgeSnapshot(targetDay, signal) {
+  const deadline = Date.now() + JACKPOT_EDGE_WAIT_MS;
+  while (!signal?.aborted && Date.now() < deadline) {
+    try {
+      // Deliberately use a same-origin fetch rather than API_BASE. The browser
+      // cache may retain the one-second pointer, while Cloudflare collapses the
+      // synchronized jackpot audience before anything reaches Fly.
+      const tokenResponse = await fetch('/jackpots/latest.json', {
+        signal,
+        headers: { accept: 'application/json' },
+      });
+      if (tokenResponse.ok) {
+        const pointer = await tokenResponse.json();
+        if (validJackpotPointer(pointer) && Number(pointer.day) >= targetDay) {
+          const resultResponse = await fetch(pointer.resultPath, {
+            signal,
+            headers: { accept: 'application/json' },
+          });
+          if (resultResponse.ok) {
+            const payload = publishLastDayPayload(await resultResponse.json());
+            if (Number(payload?.day) === Number(pointer.day)
+              && Number(payload?.day) >= targetDay) return payload;
+          }
+        }
+      }
+    } catch (error) {
+      if (signal?.aborted || error?.name === 'AbortError') return null;
+      // A Pages rollout/R2 transient is retried against the CDN only. The
+      // ordinary jittered game cycle remains the eventual API fallback.
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    try {
+      await abortableDelay(Math.min(remaining, jittered(JACKPOT_EDGE_POLL_MS)), signal);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Fetch the sealed jackpot only after GAME.advanceDue() has fallen to false.
- * Every tab makes exactly one completion request. The API holds it until the
- * target seal indexes (bounded to 30s), while all tabs share one server-side
- * pointer waiter/day. That avoids both the too-early +4s miss and a retry wave.
+ * Tabs check a ~150-byte token on Cloudflare, then fetch one content-addressed
+ * immutable result from the edge. Fly receives neither held connections nor
+ * the synchronized result fan-out.
  */
 export function refreshJackpotAfterChainCompletion({ day, includePlayer = true } = {}) {
   const targetDay = Number(day);
   if (!Number.isInteger(targetDay) || targetDay <= 0) return Promise.resolve(null);
-  if (typeof _forceLastDayCycle !== 'function') return Promise.resolve(null);
   if (_jackpotCompletionDay === targetDay && _jackpotCompletionPromise) {
     return _jackpotCompletionPromise;
   }
 
+  _jackpotCompletionController?.abort();
+  const controller = new AbortController();
+  _jackpotCompletionController = controller;
+
   let request;
   request = (async () => {
-    await _forceLastDayCycle({
-      force: true,
-      includeBoons: false,
-      targetDay,
-      waitMs: JACKPOT_INDEXER_WAIT_MS,
-    });
-    const payload = get('app.lastDay') || null;
+    const payload = await waitForJackpotEdgeSnapshot(targetDay, controller.signal);
 
     if (Number(payload?.day) === targetDay
       && includePlayer
       && typeof _forcePlayerCycle === 'function') {
-      await _forcePlayerCycle();
+      // Player data is personalized and cannot be shared through the CDN.
+      // Spread those smaller refreshes instead of replacing one global herd
+      // with a synchronized personalized one.
+      const playerRefreshTimer = setTimeout(() => { void _forcePlayerCycle?.(); }, Math.floor(
+        Math.random() * JACKPOT_PLAYER_REFRESH_SPREAD_MS,
+      ));
+      playerRefreshTimer?.unref?.();
     }
     return payload;
   })();
@@ -862,7 +939,10 @@ export function refreshJackpotAfterChainCompletion({ day, includePlayer = true }
   _jackpotCompletionPromise = request;
   _jackpotCompletionPending = true;
   const clearPending = () => {
-    if (_jackpotCompletionPromise === request) _jackpotCompletionPending = false;
+    if (_jackpotCompletionPromise === request) {
+      _jackpotCompletionPending = false;
+      if (_jackpotCompletionController === controller) _jackpotCompletionController = null;
+    }
   };
   void request.then(clearPending, clearPending);
   return request;
@@ -938,6 +1018,8 @@ export function stop() {
   _forceGameCycle = null;
   _forceLastDayCycle = null;
   _forcePlayerCycle = null;
+  _jackpotCompletionController?.abort();
+  _jackpotCompletionController = null;
   _jackpotCompletionDay = null;
   _jackpotCompletionPromise = null;
   _jackpotCompletionPending = false;
@@ -955,6 +1037,11 @@ function pauseAllTimers() {
     TIMER_HANDLES[k] = null;
   }
   abortAllInflight();
+  _jackpotCompletionController?.abort();
+  _jackpotCompletionController = null;
+  _jackpotCompletionDay = null;
+  _jackpotCompletionPromise = null;
+  _jackpotCompletionPending = false;
   // Visibility return is an explicit eager-refresh boundary. Do not let a
   // sub-second response from immediately before the tab hid suppress it.
   invalidateJSONCache();
@@ -1006,6 +1093,9 @@ export const _testing = {
   publishGameState,
   resolvedDayFromGameState,
   pollLastDay,
+  publishLastDayPayload,
+  validJackpotPointer,
+  waitForJackpotEdgeSnapshot,
   get jackpotCompletionDay() { return _jackpotCompletionDay; },
   get jackpotCompletionPending() { return _jackpotCompletionPending; },
   lastDayMatchesDeployment,

@@ -2011,7 +2011,18 @@ export function buildIndividualLootboxSequences(seq) {
   if (seq?.kind !== 'lootbox' || !Array.isArray(seq.lootboxBoxGroups)
     || seq.lootboxBoxGroups.length < 2) return [];
   const total = seq.lootboxBoxGroups.length;
-  const parts = seq.lootboxBoxGroups.map((group, index) => {
+  // A combo can mix ordinary prizes and playable BoxSpins. Run every spin
+  // box first so its reel choreography is not interrupted by unrelated prize
+  // reveals, while retaining the contract order inside both partitions.
+  const groups = [
+    ...seq.lootboxBoxGroups.filter((group) => (
+      Array.isArray(group?.cards) && group.cards.some((card) => Boolean(card?.spin))
+    )),
+    ...seq.lootboxBoxGroups.filter((group) => (
+      !Array.isArray(group?.cards) || !group.cards.some((card) => Boolean(card?.spin))
+    )),
+  ];
+  const parts = groups.map((group, index) => {
     const cards = Array.isArray(group?.cards) ? group.cards : [];
     const value = lootboxValuePresentation(group?.amountWei, seq.ticketPriceWei);
     const flags = _individualLootboxFlags(cards);
@@ -3387,13 +3398,17 @@ class RevealOverlay extends HTMLElement {
         await this.#playTicketGrid(seq, { openingAll: this.#isOpeningAll(seq) });
         return;
       }
-      // A BoxSpin is a child reward of this lootbox. Show the parent receipt
-      // first (with the currency still sealed), then let the player continue
-      // into each verified reel exactly once.
+      // Reduced motion keeps an explicit grant receipt so it does not replace
+      // the player's tap with an automatic animated transition.
       const boxSpinCards = seq.cards.filter((card) => Boolean(card.spin));
       if (boxSpinCards.length > 0) {
+        const hasPostSpinRewards = seq.kind === 'lootbox'
+          && seq.cards.some((card) => !card?.spin);
         const playedSpin = await this.#playLootboxSpinGrant(seq, boxSpinCards, {
           reducedMotion: true,
+          // A mixed receipt still keeps its authored phase order when motion
+          // is reduced: settle the spins first, then show the other rewards.
+          directFromLootbox: hasPostSpinRewards,
         });
         if (playedSpin) return;
       }
@@ -3721,14 +3736,13 @@ class RevealOverlay extends HTMLElement {
       return;
     }
 
-    // A BoxSpin is always a child presentation, including when it is replayed
-    // from a DAY SUMMARY. Motion mode used to special-case only a live
-    // lootbox, so historical reward cards were dealt into the carry-forward
-    // tray and remained underneath the full reel. Use the same receipt ->
-    // isolated reel flow for every sequence that contains a BoxSpin.
+    // A live Luckbox hands its playable child directly to the reel surface;
+    // non-box historical presentations retain the explicit grant receipt.
     const boxSpinCards = seq.cards.filter((card) => Boolean(card.spin));
     if (boxSpinCards.length > 0) {
-      const playedSpin = await this.#playLootboxSpinGrant(seq, boxSpinCards);
+      const playedSpin = await this.#playLootboxSpinGrant(seq, boxSpinCards, {
+        directFromLootbox: seq.kind === 'lootbox',
+      });
       if (playedSpin) return;
     }
     if (seq.kind !== 'lootbox') {
@@ -4285,33 +4299,79 @@ class RevealOverlay extends HTMLElement {
     return this.#playSpinBoard(board);
   }
 
-  async #playLootboxSpinGrant(seq, spinCards, { reducedMotion = false } = {}) {
+  async #playLootboxSpinGrant(seq, spinCards, {
+    reducedMotion = false,
+    directFromLootbox = false,
+  } = {}) {
     const boards = (Array.isArray(spinCards) ? spinCards : [])
       .map((card) => buildBoxSpinBoard(card?.spin))
       .filter(Boolean);
     if (boards.length === 0) return false;
+    const postSpinCards = directFromLootbox && Array.isArray(seq?.cards)
+      ? seq.cards.filter((card) => !card?.spin)
+      : [];
+    const hasPostSpinRewards = postSpinCards.length > 0;
 
-    // This parent reveal names the granted BOX SPIN while keeping its
-    // denomination and outcome hidden. The next screen is the one actual
-    // spin, not a replay of a result already shown here.
-    this.#renderSummary(seq, {
-      spinGrant: true,
-      spinCount: boards.length,
-      includeFoilMatch: reducedMotion && seq.kind === 'foil-match',
-    });
-    await this.#waitTap();
-    if (this.#aborted) return true;
     const summary = this.#bind('rvl-summary');
-    if (summary) summary.hidden = true;
+    const flight = this.#bind('rvl-lootbox-flight');
+    if (directFromLootbox) {
+      // The board itself replaces the case. Remove the transient launch deck
+      // at the same handoff so there is no BOX SPIN card or PLAY SPIN gate
+      // between the glowing seam and reel one.
+      if (summary) summary.hidden = true;
+      if (flight) {
+        flight.hidden = true;
+        flight.textContent = '';
+      }
+    } else {
+      this.#renderSummary(seq, {
+        spinGrant: true,
+        spinCount: boards.length,
+        includeFoilMatch: reducedMotion && seq.kind === 'foil-match',
+      });
+      await this.#waitTap();
+      if (this.#aborted) return true;
+      if (summary) summary.hidden = true;
+    }
 
     for (let i = 0; i < boards.length; i++) {
       const isLast = i === boards.length - 1;
       await this.#playSpinBoard(boards[i], {
         reducedMotion,
+        autoStartFirst: directFromLootbox && !reducedMotion,
+        launchFromLootbox: directFromLootbox && !reducedMotion && i === 0,
         sequence: isLast ? seq : null,
-        finalLabel: isLast ? this.#queuedContinuationLabel() : 'NEXT SPIN ▸',
+        finalLabel: isLast
+          ? (hasPostSpinRewards ? 'CONTINUE ▸' : this.#queuedContinuationLabel())
+          : 'NEXT SPIN ▸',
       });
       if (this.#aborted) return true;
+    }
+    if (hasPostSpinRewards) {
+      const zone = this.#bind('rvl-card-zone');
+      const spinZone = this.#bind('rvl-spin-zone');
+      const tray = this.#bind('rvl-tray');
+      if (zone) zone.hidden = true;
+      if (spinZone) spinZone.hidden = true;
+      if (tray) tray.textContent = '';
+
+      const flags = _individualLootboxFlags(postSpinCards);
+      const rewardSeq = {
+        ...seq,
+        cards: postSpinCards,
+        boxSpinCount: 0,
+        big: flags.big,
+        unlucky: flags.unlucky,
+        wwxrpOnly: flags.wwxrpOnly,
+      };
+      this.#renderSummary(rewardSeq);
+      if (rewardSeq.big) {
+        sfxFanfare(true);
+        this.#celebrateWin(true);
+      } else {
+        sfxRollDone(true);
+      }
+      await this.#waitAfterSummary(rewardSeq);
     }
     return true;
   }
@@ -4521,11 +4581,15 @@ class RevealOverlay extends HTMLElement {
     return { el, grid, center, cells, images };
   }
 
-  #renderFullSpinStage(board, { speedEnabled = true } = {}) {
+  #renderFullSpinStage(board, {
+    speedEnabled = true,
+    launchFromLootbox = false,
+  } = {}) {
     const zone = this.#bind('rvl-spin-zone');
     if (!zone) return null;
     zone.textContent = '';
     zone.hidden = false;
+    zone.classList?.toggle('rvl-spin-zone--lootbox-launch', Boolean(launchFromLootbox));
 
     const head = document.createElement('div');
     head.className = 'rvl-spin-head';
@@ -5570,7 +5634,10 @@ class RevealOverlay extends HTMLElement {
       // applies the shared reveal preference. Giving that child its own local
       // multiplier as well turns 2× into 4×. Only a standalone Degenerette
       // resolution owns and applies the local speed control.
-      const rendered = this.#renderFullSpinStage(board, { speedEnabled: !board.boxSpin });
+      const rendered = this.#renderFullSpinStage(board, {
+        speedEnabled: !board.boxSpin,
+        launchFromLootbox: Boolean(options.launchFromLootbox),
+      });
       if (!rendered) return board.total > 0n;
       const firstRow = board.rows[0];
       let pair = this.#mountFullSpinPair(
@@ -5610,7 +5677,13 @@ class RevealOverlay extends HTMLElement {
         rendered.skipCta.hidden = !allowAcceleration || autoSpinning;
         rendered.skipCta.disabled = !allowAcceleration;
 
-        let action = null;
+        let action = options.autoStartFirst && i === 0 ? 'spin' : null;
+        if (action === 'spin') {
+          // Opening the case is the player's authorization for reel one. Hide
+          // the redundant first-spin control before the launch frame paints.
+          rendered.cta.disabled = true;
+          rendered.cta.hidden = true;
+        }
         while (!this.#aborted && !acceptedActions.includes(action)) {
           if (autoSpinning) {
             const queuedAction = await this.#wait(this.#scaledDgnDelay(rendered, autoPauseMs));
@@ -6208,7 +6281,18 @@ class RevealOverlay extends HTMLElement {
     const flight = this.#bind('rvl-lootbox-flight');
     if (!flight) return;
     flight.textContent = '';
-    const cards = seq.cards.filter((item) => item?.type !== 'foil-match');
+    // A mixed combo belongs to two explicit phases. Do not flash its ordinary
+    // rewards behind the case just before the BoxSpin surface covers them;
+    // #playLootboxSpinGrant mounts their readable receipt after every spin.
+    if (seq.cards.some((item) => Boolean(item?.spin))) {
+      flight.hidden = true;
+      return;
+    }
+    const cards = seq.cards.filter((item) => item?.type !== 'foil-match' && !item?.spin);
+    if (cards.length === 0) {
+      flight.hidden = true;
+      return;
+    }
     const grid = document.createElement('div');
     grid.className = 'rvl-summary-grid rvl-lootbox-flight__grid';
     grid.setAttribute('data-card-count', String(cards.length));

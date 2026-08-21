@@ -495,7 +495,7 @@ export function lootboxPendingSummary(item) {
     }));
   if (stacks.length > 0) {
     const total = stacks.reduce((sum, stack) => sum + stack.count, 0);
-    const unit = `${total}× LUCKBOX`;
+    const unit = total === 1 ? 'LUCKBOX' : `${total}× LUCKBOX`;
     return {
       amount,
       unit,
@@ -1327,6 +1327,7 @@ class AppRevealTray extends HTMLElement {
         || compactDecimator || compactBingo;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
       const lootboxStacks = compactLootbox ? lootboxPendingSummary(item).stacks : [];
+      const lootboxStackTotal = lootboxStacks.reduce((sum, stack) => sum + stack.count, 0);
       const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
       const waitingFeedback = compactLootbox && waiting && !busy;
       const passive = item.passive === true;
@@ -1409,7 +1410,10 @@ class AppRevealTray extends HTMLElement {
         ? foilMatchPendingSummary(item).text
         : compactLootbox ? lootboxPendingSummary(item).text
         : _luckboxUiText(`${item.label}${item.detail ? ` · ${item.detail}` : ''}`)}`
-        + (item.lootboxTicketUnitsLabel ? ` · ${item.lootboxTicketUnitsLabel} ticket price` : '');
+        + (item.lootboxTicketUnitsLabel
+          && !/^1\s*[×x]$/i.test(String(item.lootboxTicketUnitsLabel).trim())
+          ? ` · ${item.lootboxTicketUnitsLabel} ticket price`
+          : '');
 
       const art = document.createElement('span');
       art.className = `rrt-action__art rrt-action__art--${item.kind}`;
@@ -1518,10 +1522,12 @@ class AppRevealTray extends HTMLElement {
             );
             group.appendChild(box);
           }
-          const count = document.createElement('span');
-          count.className = 'rrt-lootbox-stack__count';
-          count.textContent = `×${stack.count}`;
-          group.appendChild(count);
+          if (lootboxStackTotal > 1) {
+            const count = document.createElement('span');
+            count.className = 'rrt-lootbox-stack__count';
+            count.textContent = `×${stack.count}`;
+            group.appendChild(count);
+          }
           manifest.appendChild(group);
         }
         art.appendChild(manifest);

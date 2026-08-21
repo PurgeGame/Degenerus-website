@@ -310,6 +310,29 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
+  test('one Pending luckbox omits every redundant 1x marker', () => {
+    pending.publishPendingActions('lootboxes', [{
+      id: 'lootbox:single', kind: 'lootbox', label: 'Luckbox purchase',
+      amountLabel: '0.01 ETH', lootboxValueTone: 'green',
+      lootboxTicketUnitsLabel: '1×', compact: true,
+      lootboxStacks: [{
+        label: 'SMALL', count: 1, lootboxCaseModel: 'small', lootboxValueTone: 'green',
+      }],
+      state: 'waiting', pinned: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--lootbox-summary');
+    assert.equal(action.querySelector('.rrt-lootbox-summary__unit').textContent, 'LUCKBOX');
+    assert.equal(action.querySelector('.rrt-lootbox-stack__count'), null,
+      'a single case does not need a quantity badge');
+    assert.doesNotMatch(action.textContent, /1\s*[×x]/i);
+    assert.doesNotMatch(action.title, /1\s*[×x]/i,
+      'the redundant ticket-price multiplier is absent from hover copy too');
+    el.disconnectedCallback();
+  });
+
   test('a combo luckbox uses one total while preserving each model stack and count', () => {
     pending.publishPendingActions('lootboxes', [{
       id: 'lootbox:combo', kind: 'lootbox', label: 'Luckbox combo',

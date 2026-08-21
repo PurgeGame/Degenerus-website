@@ -10,9 +10,11 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { get } from './store.js';
+import { sharedReadProvider } from './read-provider.js';
 
 const SDGNRS_ABI = [
   'function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)',
+  'function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)',
   'function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut)',
   'function pendingRedemptions(address player, uint24 periodIndex) external view returns (uint96 ethValueOwed, uint16 activityScore, uint96 flipEscrow)',
   'function redemptionPeriods(uint24 periodIndex) external view returns (uint16)',
@@ -33,7 +35,10 @@ const SDGNRS_ABI = [
 ];
 
 export const MIN_SDGNRS_BURN_WEI = 10n ** 18n;
+export const MIN_DGNRS_BURN_WEI = MIN_SDGNRS_BURN_WEI;
 export const SDGNRS_REDEMPTION_SUBMITTED_EVENT = 'degenerus:sdgnrs-redemption-submitted';
+export const SDGNRS_BURN_DIALOG_REQUEST_EVENT = 'degenerus:open-sdgnrs-burn';
+export const SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT = 'degenerus:open-sdgnrs-charity-vote';
 export const SDGNRS_REDEMPTION_LOOKBACK_BLOCKS = 120_000;
 const SDGNRS_LOG_CHUNK_BLOCKS = 5_000;
 
@@ -332,16 +337,16 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
  * `flipOut` is contingent backing and pays only when the resolving coinflip
  * wins, so callers should not fold it into the ETH expectation.
  *
- * @param {{amount: bigint|string|number}} args
+ * @param {{amount: bigint|string|number, publicRead?: boolean}} args
  * @returns {Promise<{ethOut: bigint, flipOut: bigint}|null>}
  */
-export async function previewSdgnrsBurn({ amount } = {}) {
+export async function previewSdgnrsBurn({ amount, publicRead = false } = {}) {
   let amountWei;
   try { amountWei = BigInt(amount); }
   catch (_e) { return null; }
   if (amountWei <= 0n) return null;
 
-  const provider = getProvider();
+  const provider = getProvider() || (publicRead ? sharedReadProvider() : null);
   if (!provider) return null;
   const result = await _buildContract(provider).previewBurnValue(amountWei);
   return {
@@ -382,6 +387,49 @@ export async function burnSdgnrs({ amount } = {}) {
     const receipt = await sendTx(
       (freshSigner) => _buildContract(freshSigner).burn(amountWei),
       'Burn sDGNRS',
+    );
+    const { submissions } = parseSdgnrsRedemptionReceipt(receipt, connected);
+    return { receipt, amount: amountWei, submissions };
+  } catch (error) {
+    if (error?.revert?.name || error?.errorName) throw _burnError(error);
+    throw error;
+  }
+}
+
+/**
+ * Burn transferable DGNRS through the same sDGNRS redemption backing.
+ * DGNRS and sDGNRS are one-for-one supply claims, but the live-game wrapper
+ * path must burn the connected signer's DGNRS before the backing sDGNRS.
+ *
+ * @param {{amount: bigint|string|number}} args
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt, amount: bigint}>}
+ */
+export async function burnDgnrs({ amount } = {}) {
+  const connected = get('connected.address');
+  if (!connected) throw new Error('Connect a wallet first.');
+  const viewed = get('viewing.address');
+  if (viewed && String(viewed).toLowerCase() !== String(connected).toLowerCase()) {
+    throw new Error("DGNRS burns must be signed from the token owner's view.");
+  }
+
+  let amountWei;
+  try { amountWei = BigInt(amount); }
+  catch (_e) { throw new Error('Enter a valid DGNRS amount.'); }
+  if (amountWei < MIN_DGNRS_BURN_WEI) {
+    throw new Error('Minimum burn is 1 DGNRS.');
+  }
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const sim = await requireStaticCall(_buildContract(signer), 'burnWrapped', [amountWei], signer);
+    if (!sim.ok) throw _burnError(sim.error);
+  }
+
+  try {
+    const receipt = await sendTx(
+      (freshSigner) => _buildContract(freshSigner).burnWrapped(amountWei),
+      'Burn DGNRS',
     );
     const { submissions } = parseSdgnrsRedemptionReceipt(receipt, connected);
     return { receipt, amount: amountWei, submissions };

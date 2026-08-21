@@ -1609,7 +1609,9 @@ class AppBoxStrip extends HTMLElement {
         + (box.opening ? ' bxs-chip--opening' : '');
       chip.setAttribute('data-lootbox-value-tone', value.tone);
       applyLootboxCasePresentation(chip, value.model);
-      if (value.unitsLabel) chip.title = `${value.unitsLabel} ticket-price box`;
+      if (value.unitsLabel && !/^1\s*[×x]$/i.test(String(value.unitsLabel).trim())) {
+        chip.title = `${value.unitsLabel} ticket-price box`;
+      }
 
       const art = document.createElement('span');
       art.className = 'bxs-chip-art';

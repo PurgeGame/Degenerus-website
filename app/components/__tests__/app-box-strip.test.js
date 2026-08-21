@@ -548,6 +548,8 @@ describe('app-box-strip', () => {
     assert.equal(waiting.lootboxCaseModel, 'small',
       'the pending manifest carries the same physical model into every later surface');
     assert.equal(waiting.lootboxTicketUnitsLabel, '1×');
+    assert.doesNotMatch(String(el.querySelector('.bxs-chip').title || ''), /1\s*[×x]/i,
+      'the legacy Pending chip keeps the value tone without a redundant 1x tooltip');
     assert.equal(el.querySelector('.bxs-chip').getAttribute('data-lootbox-value-tone'), 'green');
     assert.equal(el.querySelector('.bxs-chip').getAttribute('data-lootbox-case-model'), 'small');
     assert.equal(el.querySelector('.bxs-chip-art').getAttribute('data-lootbox-case-model'), 'small',

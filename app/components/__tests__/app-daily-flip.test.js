@@ -18,6 +18,7 @@ import * as coinflipMod from '../../app/coinflip.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as charityVoteMod from '../../app/charity-vote.js';
+import * as sdgnrsMod from '../../app/sdgnrs.js';
 import * as jackpotSfxMod from '../../app/jackpot-sfx.js';
 import { invalidateJSONCache } from '../../app/api.js';
 import {
@@ -306,6 +307,7 @@ function dashboardPayload() {
     flipBalance: '987654000000000000000000',       // 987,654 FLIP
     wwxrpBalance: '12345000000000000000000',        // 12,345 WWXRP
     sdgnrsBalance: '123450000000000000000000000',   // 123,450,000 sDGNRS
+    dgnrsBalance: '126000000000000000000',           // 126 DGNRS
     coinflip: {
       depositedAmount: '43844000000000000000000',     // 43,844 FLIP
       claimablePreview: '4526397000000000000000000',  // 4,526,397 FLIP
@@ -1959,7 +1961,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.deepEqual(openedModes, ['cashout'],
       'the table CASH OUT control opens the combined withdrawal popup');
 
-    await import('../app-player-funds-dialog.js');
+    const fundsDialogMod = await import('../app-player-funds-dialog.js');
     const FundsDialog = customElements.get('app-player-funds-dialog');
     const fundsDialog = new FundsDialog();
     _docBody.appendChild(fundsDialog);
@@ -1972,6 +1974,19 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(fundsDialog.querySelector('[data-bind="pfd-link-section"]').hidden, true,
       'LINK funding remains outside the cash-out surface');
     assert.equal(fundsDialog.querySelector('[data-bind="pfd-title"]').textContent, 'Cash out');
+    assert.equal(
+      fundsDialog.querySelector('[data-bind="pfd-subtitle"]').textContent,
+      'Move claimable funds to your wallet.',
+      'the combined mode explains the destination once instead of repeating card notes',
+    );
+    assert.equal(fundsDialog.querySelectorAll('.pfd-asset__icon').length, 2,
+      'ETH and FLIP have distinct visual identities');
+    assert.equal(fundsDialog.querySelectorAll('.pfd-amount-field').length, 3,
+      'each exact transaction input owns a short visible unit suffix');
+    assert.equal(fundsDialogMod.formatCompactFundsLabel('987654.123456', 'FLIP'), '987.65K FLIP',
+      'large readout balances compact without changing transaction precision');
+    assert.equal(fundsDialogMod.formatCompactFundsLabel('0.00000001', 'ETH'), '<0.0001 ETH',
+      'nonzero dust is not visually rounded down to zero');
     fundsDialog.disconnectedCallback();
     el.disconnectedCallback();
   });
@@ -2868,7 +2883,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(todaySurface.getAttribute('aria-expanded'), 'true');
     assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, false,
       'a later activation uses the whole promoted Today surface as Add Bet');
-    assert.equal(el.querySelector('[data-bind="df-add-bet-title"]').textContent, "ADD TO TODAY'S BET");
+    assert.equal(el.querySelector('[data-bind="df-add-bet-title"]').textContent, 'BET MORE');
     assert.equal(
       el.querySelector('[data-bind="df-add-bet-number"]').getAttribute('aria-label'),
       "FLIP to add to today's bet",
@@ -4578,6 +4593,45 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'the felt fixture has no secondary-currency headings or rows');
     assert.equal(el.querySelectorAll('.df-funds__display').length, 1,
       'the rack has only its FLIP number beneath it');
+    el.disconnectedCallback();
+  });
+
+  test('the DGNRS rail requests the existing burn and charity vote dialogs', async () => {
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('viewing.address', TEST_ADDR);
+    charityVoteMod.__setCharityVoteDepsForTest({
+      readState: async () => ({
+        level: 67,
+        votingPower: dashboardPayload().sdgnrsBalance,
+        candidates: [],
+      }),
+    });
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const burnTrigger = { focused: false, focus() { this.focused = true; } };
+    document.dispatchEvent({
+      type: sdgnrsMod.SDGNRS_BURN_DIALOG_REQUEST_EVENT,
+      detail: { trigger: burnTrigger, preferredAsset: 'dgnrs' },
+    });
+    assert.equal(el.querySelector('[data-bind="df-burn-dialog"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="df-burn-title"]').textContent, 'Burn DGNRS');
+    assert.equal(
+      el.querySelector('[data-bind="df-burn-asset-dgnrs"]').getAttribute('aria-pressed'),
+      'true',
+    );
+    el.querySelector('[data-bind="df-burn-cancel"]').dispatchEvent({ type: 'click' });
+    assert.equal(burnTrigger.focused, true, 'closing restores focus to the rail Burn button');
+
+    const voteTrigger = { focused: false, focus() { this.focused = true; } };
+    document.dispatchEvent({
+      type: sdgnrsMod.SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT,
+      detail: { trigger: voteTrigger },
+    });
+    assert.equal(el.querySelector('[data-bind="df-charity-dialog"]').hidden, false);
+    el.querySelector('[data-bind="df-charity-close"]').dispatchEvent({ type: 'click' });
+    assert.equal(voteTrigger.focused, true, 'closing restores focus to the rail Vote button');
     el.disconnectedCallback();
   });
 

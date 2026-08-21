@@ -77,6 +77,7 @@
   <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/sdgnrs-burn-rail.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css">
   <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css" media="print" onload="this.media='all';this.onload=null">
@@ -379,6 +380,10 @@
         </div>
       </details>
 
+      <!-- Compact equity utility: both token balances, their combined backing
+           preview, and entry points into the existing burn and charity dialogs. -->
+      <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
+
       <!-- Full activity history stays collapsed and does not touch the indexer
            until this dropdown opens. -->
       <app-transaction-history></app-transaction-history>
@@ -481,6 +486,7 @@
       '/app/components/app-decimator-burn.js',
       '/app/components/app-baf-eve.js',
       '/app/components/app-tickets-inventory.js',
+      '/app/components/app-sdgnrs-burn-rail.js',
       '/app/components/app-reveal-tray.js',
       '/app/components/app-box-strip.js',
       '/app/components/app-transaction-history.js',

@@ -49,6 +49,7 @@ describe('index.html basic-mode skeleton', () => {
       '<app-tickets-inventory>',
       'class="more-ways section-disclosure"',
       '<app-pass-section>',
+      '<app-sdgnrs-burn-rail>',
       '<footer>',
     ];
     let prev = -1;
@@ -131,6 +132,17 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
+  });
+
+  test('the compact DGNRS rail sits immediately below AFKING PASSES', () => {
+    const passesEnd = html.indexOf('</details>', html.indexOf('id="afking-passes"'));
+    const rail = html.indexOf('<app-sdgnrs-burn-rail>', passesEnd);
+    const history = html.indexOf('<app-transaction-history>', rail);
+    assert.ok(passesEnd >= 0 && rail > passesEnd && history > rail,
+      'balance, burn, and charity vote actions follow the pass drawer');
+    assert.doesNotMatch(html.slice(passesEnd, rail), /<app-[a-z-]+>/,
+      'no other component is inserted between AFKING PASSES and the DGNRS rail');
+    assert.match(html, /href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
   });
 
   test('Tickets, AFKING PASSES, Transaction History, and Referrals share one disclosure-bar treatment', () => {
@@ -257,6 +269,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-decimator-burn.js',
       '/app/components/app-baf-eve.js',
       '/app/components/app-tickets-inventory.js',
+      '/app/components/app-sdgnrs-burn-rail.js',
       '/app/components/app-reveal-tray.js',
       '/app/components/app-box-strip.js',
       // Telemetry client (2026-08-15): zero-importer, idle by design.

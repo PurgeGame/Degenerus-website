@@ -45,16 +45,18 @@ describe('lootbox value tone', () => {
   test('publishes the complete art family from the same canonical selector', () => {
     for (const model of ['small', 'medium', 'large']) {
       const assets = lootboxCaseAssets(model);
-      const version = model === 'large' ? 'v16' : 'v14';
-      assert.match(assets.lockedFront, new RegExp(`case-${model}-${version}-locked-front\\.webp$`));
-      assert.match(assets.retractedFront, new RegExp(`case-${model}-${version}-retracted-front\\.webp$`));
-      assert.match(assets.top, new RegExp(`case-${model}-${version}-top\\.webp$`));
-      assert.match(assets.innerLid, new RegExp(`case-${model}-${version}-inner-lid\\.webp$`));
-      assert.equal(assets.deadbolts.length, model === 'large' ? 4 : 2);
+      const frontVersion = model === 'large' ? 'v23' : 'v14';
+      const topVersion = model === 'large' ? 'v23' : 'v14';
+      const innerVersion = model === 'large' ? 'v16' : 'v14';
+      assert.match(assets.lockedFront, new RegExp(`case-${model}-${frontVersion}-locked-front\\.webp$`));
+      assert.match(assets.retractedFront, new RegExp(`case-${model}-${frontVersion}-retracted-front\\.webp$`));
+      assert.match(assets.top, new RegExp(`case-${model}-${topVersion}-top\\.webp$`));
+      assert.match(assets.innerLid, new RegExp(`case-${model}-${innerVersion}-inner-lid\\.webp$`));
+      assert.equal(assets.deadbolts.length, 2);
       if (model === 'large') {
         assets.deadbolts.forEach((deadbolt) => {
-          assert.match(deadbolt, /case-large-v15-deadbolt-[1-4]\.webp$/,
-            'the v16 shell preserves the aligned v15 mechanical bolt sprites');
+          assert.match(deadbolt, /case-large-v23-deadbolt-(?:left|right)\.webp$/,
+            'the large shell exposes its exact two cylindrical lock-pin sprites');
         });
       }
     }
@@ -70,7 +72,7 @@ describe('lootbox value tone', () => {
       [
         ['36.7%', '20%', '44%'],
         ['37.2%', '25%', '45%'],
-        ['28.7%', '23%', '42%'],
+        ['28.5%', '23.5%', '42%'],
       ],
     );
   });

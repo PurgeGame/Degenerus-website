@@ -35,11 +35,49 @@ function _parseTokenInput(value) {
   catch (_e) { return null; }
 }
 
-function _wholeTokenLabel(raw, unit) {
-  const value = BigInt(raw || 0);
-  const whole = value / (10n ** 18n);
-  const fraction = String(value % (10n ** 18n)).padStart(18, '0').slice(0, 4).replace(/0+$/, '');
-  return `${whole.toLocaleString('en-US')}${fraction ? `.${fraction}` : ''} ${unit}`;
+const COMPACT_SCALES = [
+  [1_000_000_000_000n, 'T'],
+  [1_000_000_000n, 'B'],
+  [1_000_000n, 'M'],
+  [1_000n, 'K'],
+];
+
+function _compactAmountLabel(amount, unit) {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(String(amount ?? '').trim());
+  if (!match) return `0 ${unit}`;
+  const whole = BigInt(match[1] || 0);
+  const fraction = match[2] || '';
+  let scaleIndex = COMPACT_SCALES.findIndex(([scale]) => whole >= scale);
+  if (scaleIndex >= 0) {
+    const micros = (whole * 1_000_000n)
+      + BigInt((fraction + '000000').slice(0, 6));
+    let [scale, suffix] = COMPACT_SCALES[scaleIndex];
+    let hundredths = ((micros * 100n) + (scale * 500_000n)) / (scale * 1_000_000n);
+    if (hundredths >= 100_000n && scaleIndex > 0) {
+      [scale, suffix] = COMPACT_SCALES[--scaleIndex];
+      hundredths = ((micros * 100n) + (scale * 500_000n)) / (scale * 1_000_000n);
+    }
+    const major = hundredths / 100n;
+    const minor = String(hundredths % 100n).padStart(2, '0').replace(/0+$/, '');
+    return `${major.toLocaleString('en-US')}${minor ? `.${minor}` : ''}${suffix} ${unit}`;
+  }
+  const visibleFraction = fraction.slice(0, 4).replace(/0+$/, '');
+  if (whole === 0n && !visibleFraction && /[1-9]/.test(fraction)) return `<0.0001 ${unit}`;
+  return `${whole.toLocaleString('en-US')}${visibleFraction ? `.${visibleFraction}` : ''} ${unit}`;
+}
+
+function _paintBalance(node, amount, unit) {
+  if (!node) return;
+  if (amount == null) {
+    node.textContent = '—';
+    node.removeAttribute('title');
+    node.removeAttribute('aria-label');
+    return;
+  }
+  const exact = `${amount} ${unit}`;
+  node.textContent = _compactAmountLabel(amount, unit);
+  node.setAttribute('title', `Exact balance: ${exact}`);
+  node.setAttribute('aria-label', `Available balance: ${exact}`);
 }
 
 class AppPlayerFundsDialog extends HTMLElement {
@@ -101,30 +139,50 @@ class AppPlayerFundsDialog extends HTMLElement {
         <section class="pfd-card" role="dialog" aria-modal="true" aria-labelledby="pfd-title">
           <button type="button" class="pfd-close" data-bind="pfd-close" aria-label="Close funds popup">×</button>
           <header class="pfd-head">
-            <img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
-            <span><small data-bind="pfd-kicker">PROTOCOL FUNDS</small><h2 id="pfd-title" data-bind="pfd-title">Claim FLIP</h2></span>
+            <span class="pfd-head__mark"><img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true"></span>
+            <span class="pfd-head__copy">
+              <small data-bind="pfd-kicker">PROTOCOL FUNDS</small>
+              <h2 id="pfd-title" data-bind="pfd-title">Claim FLIP</h2>
+              <p data-bind="pfd-subtitle">Move settled winnings to your wallet.</p>
+            </span>
           </header>
           <div class="pfd-section" data-bind="pfd-eth-section" hidden>
             <article class="pfd-balance pfd-balance--eth">
-              <header><span>CLAIMABLE ETH</span><strong data-bind="pfd-eth-balance">—</strong></header>
+              <header class="pfd-asset-head">
+                <span class="pfd-asset">
+                  <span class="pfd-asset__icon"><img src="/shared/eth-blue.svg" alt="" aria-hidden="true"></span>
+                  <span class="pfd-asset__name"><strong>ETH</strong><small>ACTIVITY RULES APPLY</small></span>
+                </span>
+                <span class="pfd-available"><small>AVAILABLE</small><strong data-bind="pfd-eth-balance">—</strong></span>
+              </header>
               <div class="pfd-input-row">
-                <input type="text" inputmode="decimal" name="pfd-eth" value="0" aria-label="ETH amount to claim">
+                <label class="pfd-amount-field">
+                  <input type="text" inputmode="decimal" name="pfd-eth" value="0" autocomplete="off" spellcheck="false" aria-label="ETH amount to claim">
+                  <span aria-hidden="true">ETH</span>
+                </label>
                 <button type="button" data-bind="pfd-eth-max">MAX</button>
                 <button type="button" data-write data-bind="pfd-eth-claim">CLAIM ETH</button>
               </div>
             </article>
-            <p class="pfd-note">ETH cashouts use the normal activity-curse rules.</p>
           </div>
           <div class="pfd-section" data-bind="pfd-flip-section">
             <article class="pfd-balance pfd-balance--flip">
-              <header><span>CLAIMABLE FLIP</span><strong data-bind="pfd-flip-balance">—</strong></header>
+              <header class="pfd-asset-head">
+                <span class="pfd-asset">
+                  <span class="pfd-asset__icon"><img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true"></span>
+                  <span class="pfd-asset__name"><strong>FLIP</strong><small>SETTLED COINFLIP WINS</small></span>
+                </span>
+                <span class="pfd-available"><small>AVAILABLE</small><strong data-bind="pfd-flip-balance">—</strong></span>
+              </header>
               <div class="pfd-input-row">
-                <input type="text" inputmode="decimal" name="pfd-flip" value="0" aria-label="FLIP amount to claim">
+                <label class="pfd-amount-field">
+                  <input type="text" inputmode="decimal" name="pfd-flip" value="0" autocomplete="off" spellcheck="false" aria-label="FLIP amount to claim">
+                  <span aria-hidden="true">FLIP</span>
+                </label>
                 <button type="button" data-bind="pfd-flip-max">MAX</button>
                 <button type="button" data-write data-bind="pfd-flip-claim">CLAIM FLIP</button>
               </div>
             </article>
-            <p class="pfd-note">Moves settled coinflip winnings into your wallet.</p>
           </div>
           <div class="pfd-section pfd-link" data-bind="pfd-link-section" hidden>
             <div class="pfd-link__stats">
@@ -133,7 +191,10 @@ class AppPlayerFundsDialog extends HTMLElement {
             </div>
             <p>Donated LINK goes straight to the Chainlink subscription and gives you equal mid-day RNG credit.</p>
             <div class="pfd-input-row">
-              <input type="text" inputmode="decimal" name="pfd-link" value="0" aria-label="LINK amount to donate">
+              <label class="pfd-amount-field">
+                <input type="text" inputmode="decimal" name="pfd-link" value="0" autocomplete="off" spellcheck="false" aria-label="LINK amount to donate">
+                <span aria-hidden="true">LINK</span>
+              </label>
               <button type="button" data-bind="pfd-link-max">MAX</button>
               <button type="button" data-write data-bind="pfd-link-donate">DONATE LINK</button>
             </div>
@@ -222,24 +283,26 @@ class AppPlayerFundsDialog extends HTMLElement {
     if (flip) flip.hidden = !cashout && this.#mode !== 'flip';
     if (link) link.hidden = this.#mode !== 'link';
     const titles = {
-      cashout: ['PROTOCOL FUNDS', 'Cash out'],
-      eth: ['ETH CASHOUT', 'Claim ETH'],
-      flip: ['COINFLIP FUNDS', 'Claim FLIP'],
-      link: ['CHAINLINK RNG', 'Fund RNG'],
+      cashout: ['WITHDRAWAL DESK', 'Cash out', 'Move claimable funds to your wallet.'],
+      eth: ['ETH CASHOUT', 'Claim ETH', 'Move claimable ETH to your wallet.'],
+      flip: ['COINFLIP FUNDS', 'Claim FLIP', 'Move settled winnings to your wallet.'],
+      link: ['CHAINLINK RNG', 'Fund RNG', 'Top up the protocol RNG subscription.'],
     };
-    const [kicker, title] = titles[this.#mode] || titles.flip;
+    const [kicker, title, subtitle] = titles[this.#mode] || titles.flip;
     const kickerNode = this.querySelector('[data-bind="pfd-kicker"]');
     const titleNode = this.querySelector('[data-bind="pfd-title"]');
+    const subtitleNode = this.querySelector('[data-bind="pfd-subtitle"]');
     if (kickerNode) kickerNode.textContent = kicker;
     if (titleNode) titleNode.textContent = title;
+    if (subtitleNode) subtitleNode.textContent = subtitle;
     const ethLabel = this.querySelector('[data-bind="pfd-eth-balance"]');
     const flipLabel = this.querySelector('[data-bind="pfd-flip-balance"]');
     const linkBalance = this.querySelector('[data-bind="pfd-link-balance"]');
     const linkCredit = this.querySelector('[data-bind="pfd-link-credit"]');
-    if (ethLabel) ethLabel.textContent = this.#ethWei == null ? '—' : `${_ethInput(this.#ethWei)} ETH`;
-    if (flipLabel) flipLabel.textContent = this.#flipWei == null ? '—' : _wholeTokenLabel(this.#flipWei, 'FLIP');
-    if (linkBalance) linkBalance.textContent = this.#linkState == null ? '—' : _wholeTokenLabel(this.#linkState.balanceWei, 'LINK');
-    if (linkCredit) linkCredit.textContent = this.#linkState == null ? '—' : _wholeTokenLabel(this.#linkState.creditWei, 'LINK');
+    _paintBalance(ethLabel, this.#ethWei == null ? null : _ethInput(this.#ethWei), 'ETH');
+    _paintBalance(flipLabel, this.#flipWei == null ? null : _tokenInput(this.#flipWei), 'FLIP');
+    _paintBalance(linkBalance, this.#linkState == null ? null : _tokenInput(this.#linkState.balanceWei), 'LINK');
+    _paintBalance(linkCredit, this.#linkState == null ? null : _tokenInput(this.#linkState.creditWei), 'LINK');
     this.#renderButtons();
   }
 
@@ -291,4 +354,8 @@ if (typeof customElements !== 'undefined' && !customElements.get('app-player-fun
   customElements.define('app-player-funds-dialog', AppPlayerFundsDialog);
 }
 
-export { _ethInput as formatClaimEthInput, _parseEthInput as parseClaimEthInput };
+export {
+  _compactAmountLabel as formatCompactFundsLabel,
+  _ethInput as formatClaimEthInput,
+  _parseEthInput as parseClaimEthInput,
+};

@@ -661,6 +661,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       /\.deg-spin-shell\s*\{[^}]*grid-template-columns:\s*1\.25rem minmax\(2\.1rem, 1fr\) 1\.25rem/s,
       'the spin number keeps enough width for two digits',
     );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.deg-amount-shell \.deg-amount-input\s*\{[^}]*border-radius:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s,
+      'the amount value does not inherit a second rounded gold field inside its stepper shell',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.deg-spin-shell \.deg-ticket-count-select\s*\{[^}]*border-radius:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s,
+      'the spin value does not inherit a second rounded gold field inside its stepper shell',
+    );
     assert.doesNotMatch(PANEL_SRC, /className = 'dgn-editor-label'/,
       'color and symbol captions are removed from the compact picker');
     assert.match(

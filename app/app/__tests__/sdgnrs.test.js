@@ -41,6 +41,20 @@ function makeFakeContract({
       },
     },
   );
+  const burnWrapped = Object.assign(
+    async (...args) => {
+      calls.push(['wrapped', ...args]);
+      order.push('wrapped-send');
+      return { hash: '0xd6e7', wait: async () => ({ status: 1, logs: [] }) };
+    },
+    {
+      staticCall: async (...args) => {
+        calls.push(['wrapped-static', ...args]);
+        order.push('wrapped-static');
+        if (staticError) throw staticError;
+      },
+    },
+  );
   const claimRedemption = Object.assign(
     async (...args) => {
       calls.push(['claim', ...args]);
@@ -57,6 +71,7 @@ function makeFakeContract({
   );
   return {
     burn,
+    burnWrapped,
     claimRedemption,
     previewBurnValue: async (amount) => {
       calls.push(['preview', amount]);
@@ -95,6 +110,20 @@ describe('burnSdgnrs', () => {
     assert.deepEqual(fake._order, ['static', 'send']);
     assert.deepEqual(fake._calls[0], ['static', amount]);
     assert.deepEqual(fake._calls[1], [amount]);
+    assert.equal(result.receipt.status, 1);
+  });
+
+  test('burns transferable DGNRS through the wrapped redemption path', async () => {
+    const fake = makeFakeContract();
+    sdgnrsMod.__setContractFactoryForTest(() => fake);
+    const amount = 12n * TOKEN;
+
+    const result = await sdgnrsMod.burnDgnrs({ amount });
+
+    assert.equal(result.amount, amount);
+    assert.deepEqual(fake._order, ['wrapped-static', 'wrapped-send']);
+    assert.deepEqual(fake._calls[0], ['wrapped-static', amount]);
+    assert.deepEqual(fake._calls[1], ['wrapped', amount]);
     assert.equal(result.receipt.status, 1);
   });
 

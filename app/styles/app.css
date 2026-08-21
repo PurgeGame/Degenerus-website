@@ -6579,6 +6579,10 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
   -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
   mask: var(--lootbox-case-art) center / contain no-repeat;
 }
+body.layout-basic .rrt-action--lootbox-summary
+  .rrt-lootbox-mini[data-lootbox-case-model="large"]::after {
+  opacity: 0;
+}
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   position: absolute;
   z-index: 2;
@@ -7761,7 +7765,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   aspect-ratio: 1200 / 539;
   perspective: 900px;
   perspective-origin: 50% var(--lootbox-case-seam, 37.1%);
-  filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.64)) drop-shadow(0 0 20px rgb(var(--lootbox-tone-rgb) / 0.34));
+  filter: drop-shadow(0 0 12px rgb(var(--lootbox-tone-rgb) / 0.24));
   animation: rvl-case-arrive 0.48s cubic-bezier(0.2, 0.78, 0.24, 1.08) both,
     rvl-case-idle 3.2s ease-in-out 0.48s infinite;
 }
@@ -7818,31 +7822,21 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   -webkit-mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
   mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
 }
-.rvl-vessel--lootbox .rvl-chest-lid__inner {
-  z-index: 1;
-  bottom: 0;
-  left: var(--lootbox-inner-lid-inset, 0%);
-  width: var(--lootbox-inner-lid-width, 100%);
-  height: auto;
-  aspect-ratio: 1200 / 540;
-  background: var(--lootbox-case-inner-lid-art) center / 100% var(--rvl-inner-art-fill) no-repeat;
-  backface-visibility: visible;
-  filter: drop-shadow(0 0 10px rgba(50, 255, 108, 0.28));
+.rvl-stage[data-lootbox-case-model="large"]
+  .rvl-vessel--lootbox .rvl-chest-lid__front::before {
   opacity: 0;
-  transform: translateZ(calc(-1 * var(--rvl-lid-depth))) rotateX(var(--rvl-lid-closed-pitch));
-  transform-origin: 50% 100%;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__inner {
+  /* A nine-degree crack never exposes enough underside to justify projecting
+     the full inner-lid plane. That plane created the green shelf/overhang the
+     player saw above the case. The body-mounted aperture below supplies the
+     opaque interior and light without extending beyond the shell. */
+  display: none;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__edge {
-  z-index: 2;
-  right: calc(3% + var(--lootbox-case-shell-inset, 0%));
-  top: 0;
-  left: calc(3% + var(--lootbox-case-shell-inset, 0%));
-  height: 9px;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  transform: rotateX(-90deg);
-  transform-origin: 50% 0;
+  /* The old projected edge became a bright shelf above a shallow opening.
+     All interior light now comes from the aperture inside the case. */
+  display: none;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__edge::after {
   position: absolute;
@@ -7873,6 +7867,24 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: linear-gradient(90deg, transparent 2%, #08080e 11% 89%, transparent 98%);
   box-shadow: 0 1px 0 rgba(255, 213, 111, 0.44);
   transform: none;
+}
+.rvl-vessel--lootbox .rvl-chest-seam::before {
+  position: absolute;
+  right: 1%;
+  bottom: 0;
+  left: 1%;
+  height: clamp(14px, calc(var(--rvl-box-w) * 0.052), 28px);
+  border-radius: 50% 50% 8% 8% / 34% 34% 8% 8%;
+  background:
+    linear-gradient(180deg, #020604 0 16%, #07170d 42%, #0f6f31 78%, #8dffac 100%);
+  box-shadow:
+    inset 0 -2px rgba(196, 255, 207, 0.72),
+    0 0 18px 4px rgba(43, 255, 103, 0.4);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.94);
+  transform-origin: 50% 100%;
 }
 .rvl-vessel--lootbox .rvl-chest-seam::after {
   position: absolute;
@@ -7909,6 +7921,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   -webkit-mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
   mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
 }
+.rvl-stage[data-lootbox-case-model="large"]
+  .rvl-vessel--lootbox .rvl-chest-body::before {
+  opacity: 0;
+}
 .rvl-lootbox-badge { display: none; }
 .rvl-vessel--lootbox .rvl-lootbox-badge {
   position: absolute;
@@ -7919,7 +7935,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: var(--lootbox-case-badge-size, 12.35%);
   aspect-ratio: 1;
   border-radius: 50%;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+  filter: none;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
@@ -8006,8 +8022,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   70%, 100% { transform: rotate(360deg); }
 }
 
-/* Art-backed deadbolts live inside the baked receivers. SMALL and MEDIUM use
-   two channels; the reinforced LARGE case exposes its full four-lock bank. */
+/* Art-backed deadbolts live inside the baked receivers. Every case exposes a
+   matched left/right pair. LARGE uses two round piston pins spanning only the
+   narrow gap between its upper and lower rail sockets. */
 .rvl-vault-lockwork {
   position: absolute;
   inset: 0;
@@ -8047,24 +8064,20 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 { left: 26.15%; }
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 { right: 26.15%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock {
-  top: 31.5%;
+.rvl-stage[data-lootbox-case-model="large"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
+  top: 26.53%;
   display: block;
-  width: 3.67%;
-  height: 44.53%;
+  width: 4.333%;
+  height: 19.666%;
 }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 { left: 20.83%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 32.75%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 63.58%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 { left: 75.17%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 24.75%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 70.5%; }
 .rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--1 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-1); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-1); }
 .rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-2); }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-3); }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--4 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-4); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-2); }
 .rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
   animation: rvl-vault-deadbolt-retract var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
 }
@@ -8072,10 +8085,21 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   visibility: hidden;
   transform: translateY(-72%);
 }
+.rvl-stage[data-lootbox-case-model="large"].rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
+  animation-name: rvl-vault-bridge-retract;
+}
+.rvl-stage[data-lootbox-case-model="large"].rvl-bursting .rvl-vessel--lootbox .rvl-vault-deadbolt {
+  transform: translateY(-105%);
+}
 @keyframes rvl-vault-deadbolt-retract {
   0%, 71% { filter: brightness(1); transform: translateY(0); }
   77% { filter: brightness(1.34); transform: translateY(-5%); }
   100% { filter: brightness(1.08); transform: translateY(-72%); }
+}
+@keyframes rvl-vault-bridge-retract {
+  0%, 71% { filter: brightness(1); transform: translateY(0); }
+  77% { filter: brightness(1.42); transform: translateY(-8%); }
+  100% { filter: brightness(1.1); transform: translateY(-105%); }
 }
 .rvl-vessel--lootbox .rvl-chest-brand {
   display: none;
@@ -8085,13 +8109,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-vessel--lootbox .rvl-chest-rivet { display: none; }
 .rvl-vessel--lootbox .rvl-chest-platform {
-  right: calc(-2% + var(--lootbox-case-shell-inset, 0%));
-  bottom: 0;
-  left: calc(-2% + var(--lootbox-case-shell-inset, 0%));
-  height: 7%;
-  border: 1px solid rgba(218, 179, 90, 0.58);
-  background: radial-gradient(ellipse, rgb(var(--lootbox-tone-rgb) / 0.3), rgba(9, 8, 16, 0.84) 68%);
-  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.56), 0 0 13px rgb(var(--lootbox-tone-rgb) / 0.2);
+  display: none;
 }
 .rvl-vessel--lootbox .rvl-vessel-hint {
   margin-top: 0.1rem;
@@ -8110,11 +8128,11 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 
 .rvl-charging .rvl-vessel--lootbox .rvl-chest {
   animation: rvl-case-charge var(--rvl-box-charge) ease-in-out both;
-  filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 18px rgb(var(--lootbox-tone-rgb) / 0.32));
+  filter: drop-shadow(0 0 15px rgb(var(--lootbox-tone-rgb) / 0.3));
 }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-prime var(--rvl-box-charge) ease-in-out both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid__edge::after { animation: rvl-case-lid-glow-prime var(--rvl-box-charge) ease-in-out both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-charge var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-seam::before { animation: rvl-case-aperture-prime var(--rvl-box-charge) ease-in-out both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-seam::after { animation: rvl-case-interior-glow-prime var(--rvl-box-charge) ease-in-out both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-charge var(--rvl-box-charge) ease-in both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-charge var(--rvl-box-charge) ease-in both; }
@@ -8139,6 +8157,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   86% { opacity: 0.26; }
   100% { opacity: 0.58; }
 }
+@keyframes rvl-case-aperture-prime {
+  0%, 76% { opacity: 0; transform: scaleX(0.88); }
+  100% { opacity: 0.72; transform: scaleX(0.94); }
+}
 @keyframes rvl-case-seam-charge {
   0%, 62% { background: #08080e; box-shadow: 0 1px 0 rgba(255, 213, 111, 0.3); }
   86% { background: #17843e; box-shadow: 0 0 7px 1px rgba(46, 230, 103, 0.44); }
@@ -8162,10 +8184,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-bursting .rvl-vessel--lootbox { opacity: 1; transform: none; filter: none; animation: none; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-in-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.32, 0, 0.2, 1) both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid__inner { animation: rvl-case-inner-reveal var(--rvl-box-burst) ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid__edge::after { animation: rvl-case-lid-glow-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam::before { animation: rvl-case-aperture-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam::after { animation: rvl-case-interior-glow-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam {
@@ -8182,9 +8203,12 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 @keyframes rvl-case-lid-open {
   0%, 10% { opacity: 1; transform: rotateX(0); }
-  58%, 100% { opacity: 1; transform: rotateX(24deg); }
+  46%, 100% { opacity: 1; transform: rotateX(9deg); }
 }
-@keyframes rvl-case-inner-reveal { 0%, 10% { opacity: 0; } 10.01%, 100% { opacity: 1; } }
+@keyframes rvl-case-aperture-release {
+  0%, 10% { opacity: 0.72; transform: scaleX(0.94); }
+  46%, 100% { opacity: 1; transform: scaleX(0.98); }
+}
 @keyframes rvl-case-lid-glow-release {
   0%, 10% { opacity: 0.42; transform: scaleX(1); }
   48% { opacity: 1; transform: scaleX(1.03); }
@@ -9356,6 +9380,27 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   88% { transform: translate(0, 3px) scale(1.025) rotate(0deg); }
   to { opacity: 1; filter: brightness(1) saturate(1); transform: translate(0, 0) scale(1) rotate(0deg); }
 }
+.rvl-spin-zone--lootbox-launch {
+  transform-origin: 50% 72%;
+  animation: rvl-lootbox-spin-board-launch 0.42s cubic-bezier(0.16, 0.78, 0.24, 1) both;
+}
+@keyframes rvl-lootbox-spin-board-launch {
+  0% {
+    opacity: 0;
+    filter: brightness(2.1) saturate(0.72);
+    transform: translateY(clamp(72px, 14dvh, 132px)) scale(0.16);
+  }
+  58% {
+    opacity: 1;
+    filter: brightness(1.28) saturate(1.08);
+    transform: translateY(-8px) scale(1.025);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner {
   box-sizing: border-box;
   min-height: 238px;
@@ -10309,6 +10354,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   pointer-events: none;
   -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
   mask: var(--lootbox-case-art) center / contain no-repeat;
+}
+.bxs-chip-art[data-lootbox-case-model="large"]::after {
+  opacity: 0;
 }
 .bxs-chip-art::before {
   content: '';
@@ -17133,7 +17181,9 @@ body.layout-basic .deg-block .deg-amount-shell .deg-amount-input {
   min-height: 34px;
   padding-inline: 0.35rem;
   border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
   font-size: 0.88rem;
   font-weight: 800;
 }
@@ -17164,6 +17214,7 @@ body.layout-basic .deg-block .deg-spin-shell .deg-ticket-count-select {
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
   font-size: 0.88rem;
   font-weight: 800;
   text-align: center;
@@ -23840,132 +23891,228 @@ body.layout-basic .pfd-backdrop {
   display: grid;
   place-items: center;
   padding: max(1rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
-  background: rgba(3, 1, 1, 0.78);
-  backdrop-filter: blur(7px);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(146, 64, 14, 0.16), transparent 36rem),
+    rgba(3, 2, 3, 0.82);
+  backdrop-filter: blur(9px) saturate(0.8);
 }
 body.layout-basic .pfd-backdrop[hidden],
 body.layout-basic .pfd-section[hidden] { display: none !important; }
 body.layout-basic .pfd-card {
+  --pfd-accent: #fbbf24;
+  --pfd-rgb: 251, 191, 36;
   position: relative;
+  isolation: isolate;
   box-sizing: border-box;
-  width: min(31rem, 100%);
+  width: min(34rem, 100%);
   max-height: min(42rem, calc(100dvh - 2rem));
   overflow: auto;
-  padding: 1rem;
-  border: 1px solid rgba(251, 191, 36, 0.44);
-  border-radius: 12px;
+  padding: 1.05rem;
+  border: 1px solid rgba(251, 191, 36, 0.34);
+  border-radius: 16px;
   background:
-    radial-gradient(circle at 12% 0%, rgba(245, 158, 11, 0.11), transparent 35%),
-    linear-gradient(145deg, #1b0908, #0d0608 70%);
-  box-shadow: 0 24px 75px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+    radial-gradient(circle at 10% -10%, rgba(251, 191, 36, 0.15), transparent 38%),
+    linear-gradient(155deg, #1a0d0c 0%, #10090b 58%, #09070a 100%);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.76), inset 0 1px rgba(255, 255, 255, 0.04);
   color: #fff7ed;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 191, 36, 0.3) transparent;
+}
+body.layout-basic .pfd-card::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 1.4rem;
+  left: 1.4rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(253, 230, 138, 0.65), transparent);
+  content: "";
 }
 body.layout-basic .pfd-close {
   position: absolute;
-  top: 0.55rem;
-  right: 0.62rem;
-  width: 1.75rem;
-  height: 1.75rem;
+  top: 0.7rem;
+  right: 0.72rem;
+  width: 1.9rem;
+  height: 1.9rem;
   padding: 0;
   border: 1px solid rgba(254, 202, 202, 0.18);
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.24);
-  color: rgba(254, 226, 226, 0.72);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(254, 226, 226, 0.68);
   font: 700 1.1rem/1 sans-serif;
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
+body.layout-basic .pfd-close:hover { border-color: rgba(253, 230, 138, 0.5); background: rgba(251, 191, 36, 0.08); color: #fff7ed; }
+body.layout-basic .pfd-close:focus-visible { outline: 2px solid rgba(251, 191, 36, 0.7); outline-offset: 2px; }
 body.layout-basic .pfd-head {
   display: flex;
   align-items: center;
-  gap: 0.58rem;
-  padding-right: 2rem;
+  min-width: 0;
+  gap: 0.72rem;
+  padding-right: 2.15rem;
 }
-body.layout-basic .pfd-head img { width: 1.75rem; height: 1.75rem; object-fit: contain; }
-body.layout-basic .pfd-head small {
+body.layout-basic .pfd-head__mark {
+  display: grid;
+  flex: 0 0 2.55rem;
+  width: 2.55rem;
+  height: 2.55rem;
+  place-items: center;
+  border: 1px solid rgba(251, 191, 36, 0.36);
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.13), rgba(69, 26, 3, 0.18));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+body.layout-basic .pfd-head__mark img { width: 1.75rem; height: 1.75rem; object-fit: contain; }
+body.layout-basic .pfd-head__copy { display: block; min-width: 0; }
+body.layout-basic .pfd-head__copy > small {
   display: block;
-  color: rgba(253, 230, 138, 0.58);
-  font: 900 0.48rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.18em;
+  color: rgba(253, 230, 138, 0.62);
+  font: 900 0.47rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.2em;
 }
-body.layout-basic .pfd-head h2 { margin: 0.18rem 0 0; color: #fde68a; font: 900 1.05rem/1 "Inter", system-ui, sans-serif; }
-body.layout-basic .pfd-section { display: grid; gap: 0.55rem; margin-top: 0.85rem; }
+body.layout-basic .pfd-head h2 { margin: 0.2rem 0 0; color: #fff3c4; font: 900 1.18rem/1 "Inter", system-ui, sans-serif; letter-spacing: -0.02em; }
+body.layout-basic .pfd-head p { margin: 0.28rem 0 0; overflow: hidden; color: rgba(254, 226, 226, 0.5); font: 600 0.58rem/1.25 "Inter", system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .pfd-section { display: grid; gap: 0.55rem; margin-top: 0.72rem; }
 body.layout-basic .pfd-balance {
-  padding: 0.65rem;
-  border: 1px solid rgba(254, 202, 202, 0.16);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  position: relative;
+  overflow: hidden;
+  padding: 0.76rem;
+  border: 1px solid rgba(var(--pfd-rgb), 0.22);
+  border-radius: 12px;
+  background:
+    linear-gradient(110deg, rgba(var(--pfd-rgb), 0.075), transparent 47%),
+    rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
-body.layout-basic .pfd-balance > header,
-body.layout-basic .pfd-link__stats {
+body.layout-basic .pfd-balance::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--pfd-accent), transparent);
+  content: "";
+  opacity: 0.8;
+}
+body.layout-basic .pfd-balance--eth { --pfd-accent: #4ade80; --pfd-rgb: 74, 222, 128; }
+body.layout-basic .pfd-balance--flip { --pfd-accent: #fbbf24; --pfd-rgb: 251, 191, 36; }
+body.layout-basic .pfd-asset-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.65rem;
-  margin-bottom: 0.45rem;
+  min-width: 0;
+  gap: 0.8rem;
+  margin-bottom: 0.65rem;
 }
-body.layout-basic .pfd-balance > header span,
+body.layout-basic .pfd-asset { display: flex; align-items: center; min-width: 0; gap: 0.55rem; }
+body.layout-basic .pfd-asset__icon {
+  display: grid;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(var(--pfd-rgb), 0.28);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+}
+body.layout-basic .pfd-asset__icon img { width: 1.55rem; height: 1.55rem; object-fit: contain; }
+body.layout-basic .pfd-asset__name { display: grid; min-width: 0; gap: 0.22rem; }
+body.layout-basic .pfd-asset__name strong { color: #fff7ed; font: 900 0.8rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.05em; }
+body.layout-basic .pfd-asset__name small,
+body.layout-basic .pfd-available small,
 body.layout-basic .pfd-link__stats small {
-  color: rgba(254, 202, 202, 0.52);
-  font: 900 0.48rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.12em;
+  overflow: hidden;
+  color: rgba(254, 226, 226, 0.46);
+  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-body.layout-basic .pfd-balance > header strong,
+body.layout-basic .pfd-available { display: grid; min-width: 0; max-width: 56%; gap: 0.22rem; text-align: right; }
+body.layout-basic .pfd-available > strong,
 body.layout-basic .pfd-link__stats strong {
-  color: #fde68a;
-  font: 800 0.74rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  display: block;
+  overflow: hidden;
+  color: var(--pfd-accent);
+  font: 800 0.92rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-body.layout-basic .pfd-balance--eth > header strong { color: #86efac; }
 body.layout-basic .pfd-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 3.5rem 6.5rem;
   gap: 0.32rem;
 }
-body.layout-basic .pfd-input-row input {
+body.layout-basic .pfd-amount-field {
+  display: flex;
   box-sizing: border-box;
-  width: 100%;
   min-width: 0;
   height: 2.2rem;
-  padding: 0 0.62rem;
-  border: 1px solid rgba(254, 202, 202, 0.24);
-  border-radius: 6px;
-  outline: 0;
+  align-items: center;
+  border: 1px solid rgba(254, 202, 202, 0.2);
+  border-radius: 7px;
   background: rgba(0, 0, 0, 0.34);
+}
+body.layout-basic .pfd-amount-field:focus-within { border-color: rgba(var(--pfd-rgb), 0.72); box-shadow: 0 0 0 2px rgba(var(--pfd-rgb), 0.09); }
+body.layout-basic .pfd-input-row input {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0.35rem 0 0.62rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: #fff7ed;
   font: 800 0.78rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   text-align: right;
+  text-overflow: ellipsis;
 }
-body.layout-basic .pfd-input-row input:focus { border-color: rgba(251, 191, 36, 0.7); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.08); }
+body.layout-basic .pfd-amount-field > span { flex: 0 0 auto; padding-right: 0.55rem; color: rgba(254, 226, 226, 0.38); font: 900 0.44rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.08em; }
 body.layout-basic .pfd-input-row button {
   min-height: 2.2rem;
   padding: 0 0.62rem;
-  border: 1px solid rgba(253, 230, 138, 0.36);
-  border-radius: 6px;
-  background: rgba(245, 158, 11, 0.1);
-  color: #fde68a;
+  border: 1px solid rgba(var(--pfd-rgb), 0.3);
+  border-radius: 7px;
+  background: rgba(var(--pfd-rgb), 0.075);
+  color: var(--pfd-accent);
   font: 900 0.53rem/1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.07em;
   white-space: nowrap;
   cursor: pointer;
+  transition: translate 100ms ease, border-color 120ms ease, filter 120ms ease;
 }
+body.layout-basic .pfd-input-row button:hover:not(:disabled) { border-color: rgba(var(--pfd-rgb), 0.66); filter: brightness(1.08); }
+body.layout-basic .pfd-input-row button:focus-visible { outline: 2px solid rgba(var(--pfd-rgb), 0.64); outline-offset: 2px; }
+body.layout-basic .pfd-input-row button:active:not(:disabled) { translate: 0 1px; }
 body.layout-basic .pfd-input-row button[data-write] {
   box-sizing: border-box;
   width: 6.5rem;
   min-width: 6.5rem;
   max-width: 6.5rem;
-  border-color: rgba(253, 230, 138, 0.68);
+  border-color: rgba(253, 230, 138, 0.62);
   background: linear-gradient(180deg, #fde68a, #f59e0b);
   color: #291108;
+  box-shadow: 0 5px 14px rgba(120, 53, 15, 0.18), inset 0 1px rgba(255, 255, 255, 0.42);
 }
+body.layout-basic .pfd-balance--eth .pfd-input-row button[data-write] { border-color: rgba(134, 239, 172, 0.6); background: linear-gradient(180deg, #a7f3d0, #22c55e); color: #052e16; }
 body.layout-basic .pfd-input-row button:disabled { opacity: 0.34; cursor: default; filter: saturate(0.35); }
-body.layout-basic .pfd-note,
-body.layout-basic .pfd-link > p {
-  margin: 0.08rem 0 0;
-  color: rgba(254, 226, 226, 0.5);
-  font: 600 0.58rem/1.45 "Inter", system-ui, sans-serif;
+body.layout-basic .pfd-link {
+  --pfd-accent: #93c5fd;
+  --pfd-rgb: 96, 165, 250;
+  padding: 0.76rem;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(110deg, rgba(59, 130, 246, 0.07), transparent 48%), rgba(0, 0, 0, 0.2);
 }
 body.layout-basic .pfd-link__stats {
+  display: flex;
   align-items: stretch;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 0.75rem;
   margin: 0;
 }
 body.layout-basic .pfd-link__stats > span {
@@ -23974,7 +24121,7 @@ body.layout-basic .pfd-link__stats > span {
   gap: 0.25rem;
 }
 body.layout-basic .pfd-link__stats > span:last-child { text-align: right; }
-body.layout-basic .pfd-link__stats strong { overflow: hidden; color: #93c5fd; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .pfd-link > p { margin: 0.5rem 0 0.62rem; color: rgba(219, 234, 254, 0.48); font: 600 0.56rem/1.4 "Inter", system-ui, sans-serif; }
 body.layout-basic .pfd-error {
   margin: 0.65rem 0 0;
   padding: 0.5rem 0.58rem;
@@ -23987,7 +24134,14 @@ body.layout-basic .pfd-error {
 body.layout-basic .pfd-error[hidden] { display: none !important; }
 
 @media (max-width: 520px) {
-  body.layout-basic .pfd-card { padding: 0.8rem 0.7rem; }
+  body.layout-basic .pfd-card { max-height: calc(100dvh - 1rem); padding: 0.84rem 0.72rem; border-radius: 14px; }
+  body.layout-basic .pfd-head { gap: 0.58rem; }
+  body.layout-basic .pfd-head__mark { flex-basis: 2.25rem; width: 2.25rem; height: 2.25rem; }
+  body.layout-basic .pfd-head__mark img { width: 1.5rem; height: 1.5rem; }
+  body.layout-basic .pfd-asset-head { gap: 0.5rem; }
+  body.layout-basic .pfd-asset__name small { max-width: 8.7rem; }
+  body.layout-basic .pfd-available { max-width: 52%; }
+  body.layout-basic .pfd-available > strong { font-size: 0.82rem; }
   body.layout-basic .pfd-input-row { grid-template-columns: minmax(0, 1fr) auto; }
   body.layout-basic .pfd-input-row button[data-write] {
     width: 100%;
@@ -24051,6 +24205,19 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 .rvl-dgn-actions:is(.rvl-dgn-actions--box, .rvl-dgn-actions--result-exit, .rvl-dgn-actions--result-ready) {
   width: min(15rem, calc(100vw - 1.7rem));
 }
+/* A Box Spin grows downward as reels, payout history, and the survival result
+   arrive. Its action must remain the last item in that flow; the shared fixed
+   reveal dock otherwise lands over the ticket board or result card. */
+.rvl-dgn-actions.rvl-dgn-actions--box {
+  position: static;
+  z-index: auto;
+  bottom: auto;
+  left: auto;
+  order: 100;
+  width: min(15rem, calc(100vw - 1.7rem));
+  margin: 0.28rem auto 0;
+  translate: none;
+}
 .rvl-ticket-actions > .rvl-open-all-cta {
   position: absolute; right: 0.35rem; bottom: 50%;
   max-width: calc(50% - 8rem);
@@ -24062,6 +24229,9 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 }
 .rvl-stage.rvl-stage--degenerette:has(.rvl-dgn-actions:not([hidden])) {
   padding-bottom: calc(3.7rem + var(--rvl-action-bottom));
+}
+.rvl-stage.rvl-stage--degenerette:has(.rvl-dgn-actions--box:not([hidden])) {
+  padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
 }
 
 @media (max-width: 620px) {

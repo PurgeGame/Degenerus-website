@@ -28,6 +28,7 @@ function payload(addr, over = {}) {
     claimableEth: '0',
     flipBalance: '0',
     dgnrsBalance: '0',
+    sdgnrsBalance: '0',
     currentStreak: 3,            // identity
     quests: [{ day: 1 }],        // identity
     questStreak: { baseStreak: 5 }, // identity
@@ -43,14 +44,25 @@ function payload(addr, over = {}) {
 }
 
 describe('mergePlayerPayloads — SUM wei balances', () => {
-  test('sums claimableEth / flipBalance / dgnrsBalance as BigInt decimal strings', () => {
+  test('sums claimableEth / flipBalance / DGNRS balances as BigInt decimal strings', () => {
     const merged = mergePlayerPayloads([
-      payload(A, { claimableEth: BIG, flipBalance: '100', dgnrsBalance: '7' }),
-      payload(B, { claimableEth: BIG, flipBalance: '250', dgnrsBalance: '0' }),
+      payload(A, {
+        claimableEth: BIG,
+        flipBalance: '100',
+        dgnrsBalance: '7',
+        sdgnrsBalance: '11',
+      }),
+      payload(B, {
+        claimableEth: BIG,
+        flipBalance: '250',
+        dgnrsBalance: '0',
+        sdgnrsBalance: '13',
+      }),
     ]);
     assert.equal(merged.claimableEth, '2000000000000000000000');
     assert.equal(merged.flipBalance, '350');
     assert.equal(merged.dgnrsBalance, '7');
+    assert.equal(merged.sdgnrsBalance, '24');
     assert.equal(typeof merged.claimableEth, 'string');
   });
 

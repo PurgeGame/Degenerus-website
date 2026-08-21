@@ -65,15 +65,13 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   large: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-locked-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-retracted-front.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-top.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-locked-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-retracted-front.webp',
+    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-top.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-inner-lid.webp',
     deadbolts: Object.freeze([
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-1.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-2.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-3.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-4.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-left.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-right.webp',
     ]),
   }),
 });
@@ -95,11 +93,11 @@ const LOOTBOX_CASE_GEOMETRY = Object.freeze({
     priceTop: '37.2%', priceHeight: '25%', priceWidth: '45%',
   }),
   large: Object.freeze({
-    seam: '43.8%', badgeTop: '61.8%', badgeSize: '11.85%',
+    seam: '38%', badgeTop: '62.15%', badgeSize: '11.85%',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
-    badgeClipFront: 'ellipse(6.1% 13.5% at 50% 61.8%)',
-    badgeClipTop: 'ellipse(7.3% 6.4% at 50% 72.5%)',
-    priceTop: '28.7%', priceHeight: '23%', priceWidth: '42%',
+    badgeClipFront: 'ellipse(6.1% 13.5% at 50% 62.15%)',
+    badgeClipTop: 'ellipse(7.3% 6.4% at 50% 76%)',
+    priceTop: '28.5%', priceHeight: '23.5%', priceWidth: '42%',
   }),
 });
 

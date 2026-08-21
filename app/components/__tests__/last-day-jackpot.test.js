@@ -335,6 +335,16 @@ test('only live scratch covers show the custom coin cursor', () => {
   );
 });
 
+test('the jackpot scratch coin clears a generous hover area', () => {
+  assert.match(REPLAY_PANEL_SRC, /const BRUSH_R = 28;/,
+    'ordinary mouse movement clears a forgiving 56px-wide path');
+  assert.match(
+    REPLAY_PANEL_SRC,
+    /const brushR = BRUSH_R \* dpr;[\s\S]{0,300}markGridCells\([^;]*brushR\);/,
+    'scratch completion measures the same enlarged path that is visibly erased',
+  );
+});
+
 test('the Daily Drawing is a responsive branded attraction rather than an empty full-width cabinet', () => {
   assert.match(INDEX_SRC, /styles\/daily-drawing\.css/);
   assert.match(

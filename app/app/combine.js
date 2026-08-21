@@ -9,7 +9,8 @@
 //
 // Payload shape verified against database/src/api/routes/player.ts `GET /player/:address`
 // (the response builder at the bottom of the handler):
-//   - claimableEth / flipBalance / dgnrsBalance          → top-level string WEI
+//   - claimableEth / flipBalance / dgnrsBalance / sdgnrsBalance
+//                                                        → top-level string WEI
 //   - coinflip.depositedAmount / coinflip.claimablePreview → string WEI (nested)
 //   - decimator.claimablePerLevel[]                       → [{level, ethAmount:strWei, lootboxAmount:strWei|null, claimed:bool}]
 //   - decimator.futurePoolTotal                          → GLOBAL string WEI (NOT per-account)
@@ -80,7 +81,7 @@ function _get(obj, path) {
  * @returns {{
  *   addresses: string[],
  *   perAddress: Record<string, object>,
- *   claimableEth: string, flipBalance: string, dgnrsBalance: string,
+ *   claimableEth: string, flipBalance: string, dgnrsBalance: string, sdgnrsBalance: string,
  *   coinflip: {depositedAmount: string, claimablePreview: string} | null,
  *   decimator: {claimablePerLevel: Array<{level:any, ethAmount:string, lootboxAmount:string|null, claimed:boolean}>, futurePoolTotal: string},
  *   terminal: {burns: Array<object & {owner:string}>} | null,
@@ -104,6 +105,7 @@ export function mergePlayerPayloads(payloads) {
   const claimableEth = _sumWeiStr(list.map((p) => p.claimableEth));
   const flipBalance = _sumWeiStr(list.map((p) => p.flipBalance));
   const dgnrsBalance = _sumWeiStr(list.map((p) => p.dgnrsBalance));
+  const sdgnrsBalance = _sumWeiStr(list.map((p) => p.sdgnrsBalance));
 
   // --- SUM: coinflip nested wei (omit autoRebuy* / biggestFlip* / bounty — identity) ---
   const anyCoinflip = list.some((p) => p.coinflip != null);
@@ -179,6 +181,7 @@ export function mergePlayerPayloads(payloads) {
     claimableEth,
     flipBalance,
     dgnrsBalance,
+    sdgnrsBalance,
     coinflip,
     decimator,
     terminal,

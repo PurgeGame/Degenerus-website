@@ -293,7 +293,7 @@ function isGoldTrait(traitId) {
 
 // --- Module-level scratch helpers ---
 
-const BRUSH_R = 22;
+const BRUSH_R = 28;
 const REVEAL_THRESHOLD = 0.5;
 const KNOWN_LOSER_REVEAL_THRESHOLD = 0.4;
 const GRID_RES = 40;

@@ -63,10 +63,14 @@ import {
 } from '../app/coinflip.js';
 import { openPlayerFundsDialog } from '../app/player-funds.js';
 import {
+  burnDgnrs,
   burnSdgnrs,
   formatSdgnrsRedemptionAmount,
+  MIN_DGNRS_BURN_WEI,
   MIN_SDGNRS_BURN_WEI,
   previewSdgnrsBurn,
+  SDGNRS_BURN_DIALOG_REQUEST_EVENT,
+  SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT,
   SDGNRS_REDEMPTION_SUBMITTED_EVENT,
 } from '../app/sdgnrs.js';
 import { readCharityVoteState, voteForCharity } from '../app/charity-vote.js';
@@ -1015,6 +1019,8 @@ class AppDailyFlip extends HTMLElement {
   #resultRetryHandle = null;
   #visibilityListener = null;
   #txConfirmedListener = null;
+  #burnDialogRequestListener = null;
+  #charityDialogRequestListener = null;
   #postTxRefreshHandle = null;
   #landing = false;        // coin is mid-landing animation
   #revealRequestedDay = null; // click accepted while a rollover result is still loading
@@ -1059,6 +1065,9 @@ class AppDailyFlip extends HTMLElement {
   #sdgnrsQuoteAmount = null;
   #sdgnrsQuotePending = false;
   #sdgnrsQuoteSeq = 0;
+  #burnAsset = 'sdgnrs';
+  #externalBurnTrigger = null;
+  #externalCharityTrigger = null;
   #charityVoteState = null;
   #charityVoteLoading = false;
   #charityVoteBusySlot = null;
@@ -1489,6 +1498,26 @@ class AppDailyFlip extends HTMLElement {
         }
       };
       document.addEventListener(TX_CONFIRMED_EVENT, this.#txConfirmedListener);
+      this.#burnDialogRequestListener = (event) => {
+        this.#externalBurnTrigger = event?.detail?.trigger || null;
+        const opened = this.#openSdgnrsBurnDialog({
+          preferredAsset: event?.detail?.preferredAsset,
+        });
+        if (!opened) this.#externalBurnTrigger = null;
+      };
+      this.#charityDialogRequestListener = (event) => {
+        this.#externalCharityTrigger = event?.detail?.trigger || null;
+        const opened = this.#openCharityVoteDialog();
+        if (!opened) this.#externalCharityTrigger = null;
+      };
+      document.addEventListener(
+        SDGNRS_BURN_DIALOG_REQUEST_EVENT,
+        this.#burnDialogRequestListener,
+      );
+      document.addEventListener(
+        SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT,
+        this.#charityDialogRequestListener,
+      );
     }
     this.#scheduleRefresh();
   }
@@ -1533,6 +1562,18 @@ class AppDailyFlip extends HTMLElement {
       if (this.#txConfirmedListener) {
         document.removeEventListener(TX_CONFIRMED_EVENT, this.#txConfirmedListener);
       }
+      if (this.#burnDialogRequestListener) {
+        document.removeEventListener(
+          SDGNRS_BURN_DIALOG_REQUEST_EVENT,
+          this.#burnDialogRequestListener,
+        );
+      }
+      if (this.#charityDialogRequestListener) {
+        document.removeEventListener(
+          SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT,
+          this.#charityDialogRequestListener,
+        );
+      }
       if (this.#daySelectionListener) {
         document.removeEventListener('replay:day-selected', this.#daySelectionListener);
       }
@@ -1543,6 +1584,10 @@ class AppDailyFlip extends HTMLElement {
     this.#jackpotRevealListener = null;
     this.#visibilityListener = null;
     this.#txConfirmedListener = null;
+    this.#burnDialogRequestListener = null;
+    this.#charityDialogRequestListener = null;
+    this.#externalBurnTrigger = null;
+    this.#externalCharityTrigger = null;
     this.#daySelectionListener = null;
     this.#activeLootboxRevealIds.clear();
     this.#pendingLootboxCount = 0;
@@ -2794,7 +2839,7 @@ class AppDailyFlip extends HTMLElement {
                     data-bind="df-add-bet-close" aria-label="Close add bet">×</button>
             <header class="df-add-bet-dialog__head">
               <span class="df-add-bet-dialog__heading-copy">
-                <h3 id="df-add-bet-title" data-bind="df-add-bet-title">ADD TO TOMORROW'S BET</h3>
+                <h3 id="df-add-bet-title" data-bind="df-add-bet-title">BET MORE</h3>
               </span>
               <span class="df-add-bet-dialog__chip-scene" aria-hidden="true">
                 <img class="df-add-bet-dialog__chip-pile"
@@ -2911,12 +2956,18 @@ class AppDailyFlip extends HTMLElement {
              role="dialog" aria-modal="true" aria-labelledby="df-burn-title">
           <div class="df-reverse-dialog__card df-burn-dialog__card">
             <button type="button" class="df-reverse-dialog__close" data-bind="df-burn-cancel"
-                    aria-label="Close sDGNRS burn">×</button>
-            <h3 id="df-burn-title">Burn sDGNRS</h3>
+                    aria-label="Close DGNRS burn">×</button>
+            <h3 id="df-burn-title" data-bind="df-burn-title">Burn sDGNRS</h3>
             <p class="df-reverse-dialog__copy">
               <span>Live-game burns settle on the next daily RNG at 25%–175% of the previewed ETH value.</span>
               <span>The payout normally splits between claimable ETH and a luckbox; FLIP backing pays only if the next flip wins.</span>
             </p>
+            <div class="df-burn-dialog__asset" aria-label="Token to burn">
+              <button type="button" data-bind="df-burn-asset-sdgnrs"
+                      aria-pressed="true">sDGNRS</button>
+              <button type="button" data-bind="df-burn-asset-dgnrs"
+                      aria-pressed="false">DGNRS</button>
+            </div>
             <label class="df-burn-dialog__amount">
               <span>Amount</span>
               <span class="df-burn-dialog__field">
@@ -2928,7 +2979,7 @@ class AppDailyFlip extends HTMLElement {
                 <input type="range" min="0" max="1000" step="1" value="0"
                        data-bind="df-burn-slider" aria-label="Choose sDGNRS burn amount">
                 <span class="df-burn-dialog__slider-ends" aria-hidden="true">
-                  <span>1 sDGNRS</span><span>MAX</span>
+                  <span data-bind="df-burn-slider-min">1 sDGNRS</span><span>MAX</span>
                 </span>
               </span>
             </label>
@@ -3129,7 +3180,7 @@ class AppDailyFlip extends HTMLElement {
     if (!dialog || !slider || !number || !confirm) return;
 
     const dayName = this.#betPositionsShifted() ? 'today' : 'tomorrow';
-    if (title) title.textContent = `ADD TO ${dayName.toUpperCase()}'S BET`;
+    if (title) title.textContent = 'BET MORE';
     number.setAttribute('aria-label', `FLIP to add to ${dayName}'s bet`);
     slider.setAttribute('aria-label', `FLIP to add to ${dayName}'s bet`);
 
@@ -3627,6 +3678,46 @@ class AppDailyFlip extends HTMLElement {
     return this.#asWei(this.#dashboard.sdgnrsBalance);
   }
 
+  #dgnrsBalanceWei() {
+    if (this.#liveBalancesAddress === this.#dashboardAddress
+      && this.#liveBalances?.dgnrsBalance != null) {
+      return this.#asWei(this.#liveBalances.dgnrsBalance);
+    }
+    if (this.#dashboard?.dgnrsBalance == null) return null;
+    return this.#asWei(this.#dashboard.dgnrsBalance);
+  }
+
+  #burnAssetLabel(asset = this.#burnAsset) {
+    return asset === 'dgnrs' ? 'DGNRS' : 'sDGNRS';
+  }
+
+  #burnMinimumWei(asset = this.#burnAsset) {
+    return asset === 'dgnrs' ? MIN_DGNRS_BURN_WEI : MIN_SDGNRS_BURN_WEI;
+  }
+
+  #burnBalanceWei(asset = this.#burnAsset) {
+    return asset === 'dgnrs' ? this.#dgnrsBalanceWei() : this.#sdgnrsBalanceWei();
+  }
+
+  #selectBurnAsset(asset) {
+    const next = asset === 'dgnrs' ? 'dgnrs' : 'sdgnrs';
+    if (next === this.#burnAsset) return;
+    this.#burnAsset = next;
+    this.#sdgnrsQuoteSeq += 1;
+    this.#sdgnrsQuote = null;
+    this.#sdgnrsQuoteAmount = null;
+    this.#sdgnrsQuotePending = false;
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const balance = this.#burnBalanceWei();
+    const minimum = this.#burnMinimumWei();
+    const amount = parseTokenAmount(input?.value);
+    if (input && (amount == null || amount < minimum || balance == null || amount > balance)) {
+      input.value = '1';
+    }
+    this.#renderSdgnrsBurn();
+    this.#refreshSdgnrsBurnQuote();
+  }
+
   #ownsDisplayedSdgnrs() {
     const connected = get('connected.address');
     return Boolean(connected && this.#dashboardAddress
@@ -3637,15 +3728,40 @@ class AppDailyFlip extends HTMLElement {
     const button = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
     const accept = this.querySelector('[data-bind="df-burn-accept"]');
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
-    const balance = this.#sdgnrsBalanceWei();
+    const label = this.#burnAssetLabel();
+    const minimum = this.#burnMinimumWei();
+    const balance = this.#burnBalanceWei();
     const ownsBalance = this.#ownsDisplayedSdgnrs();
-    const hasMinimum = balance != null && balance >= MIN_SDGNRS_BURN_WEI;
+    const hasMinimum = balance != null && balance >= minimum;
     const amount = parseTokenAmount(input?.value);
     const validAmount = amount != null
-      && amount >= MIN_SDGNRS_BURN_WEI
+      && amount >= minimum
       && balance != null
       && amount <= balance;
     this.#syncSdgnrsBurnSliderFromInput();
+
+    const title = this.querySelector('[data-bind="df-burn-title"]');
+    const sliderMin = this.querySelector('[data-bind="df-burn-slider-min"]');
+    const slider = this.querySelector('[data-bind="df-burn-slider"]');
+    if (title) title.textContent = `Burn ${label}`;
+    if (input) input.setAttribute('aria-label', `${label} to burn`);
+    if (slider) slider.setAttribute('aria-label', `Choose ${label} burn amount`);
+    if (sliderMin) sliderMin.textContent = `1 ${label}`;
+
+    for (const asset of ['sdgnrs', 'dgnrs']) {
+      const assetButton = this.querySelector(`[data-bind="df-burn-asset-${asset}"]`);
+      if (!assetButton) continue;
+      const assetBalance = this.#burnBalanceWei(asset);
+      const assetMinimum = this.#burnMinimumWei(asset);
+      const active = asset === this.#burnAsset;
+      assetButton.classList?.toggle('is-active', active);
+      assetButton.setAttribute('aria-pressed', String(active));
+      assetButton.disabled = this.#busy || !ownsBalance
+        || assetBalance == null || assetBalance < assetMinimum;
+      assetButton.title = assetButton.disabled && !this.#busy
+        ? `No burnable ${this.#burnAssetLabel(asset)} balance`
+        : '';
+    }
 
     if (button) {
       const locked = this.#busy || !ownsBalance || !hasMinimum;
@@ -3655,8 +3771,8 @@ class AppDailyFlip extends HTMLElement {
         const reason = this.#busy
           ? 'Transaction in progress'
           : !ownsBalance
-            ? 'Open your own wallet view to burn sDGNRS'
-            : 'Minimum burn is 1 sDGNRS';
+            ? `Open your own wallet view to burn ${label}`
+            : `Minimum burn is 1 ${label}`;
         button.setAttribute('data-write-locked', '');
         button.setAttribute('data-write-lock-title', reason);
         button.title = reason;
@@ -3674,29 +3790,30 @@ class AppDailyFlip extends HTMLElement {
         accept.setAttribute('data-write-locked', '');
         accept.setAttribute('data-write-lock-title', this.#busy
           ? 'Transaction in progress'
-          : 'Enter an amount from 1 through your sDGNRS balance');
+          : `Enter an amount from 1 through your ${label} balance`);
       } else {
         accept.removeAttribute('data-write-locked');
         accept.removeAttribute('data-write-lock-title');
       }
     }
-    const slider = this.querySelector('[data-bind="df-burn-slider"]');
     if (slider) slider.disabled = this.#busy || !ownsBalance || !hasMinimum;
   }
 
   #syncSdgnrsBurnSliderFromInput() {
     const slider = this.querySelector('[data-bind="df-burn-slider"]');
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
-    const balance = this.#sdgnrsBalanceWei();
+    const balance = this.#burnBalanceWei();
+    const minimum = this.#burnMinimumWei();
+    const label = this.#burnAssetLabel();
     if (!slider) return;
     let position = 0n;
     const amount = parseTokenAmount(input?.value);
-    if (balance != null && balance > MIN_SDGNRS_BURN_WEI && amount != null) {
-      const clamped = amount < MIN_SDGNRS_BURN_WEI
-        ? MIN_SDGNRS_BURN_WEI
+    if (balance != null && balance > minimum && amount != null) {
+      const clamped = amount < minimum
+        ? minimum
         : amount > balance ? balance : amount;
-      const span = balance - MIN_SDGNRS_BURN_WEI;
-      position = ((clamped - MIN_SDGNRS_BURN_WEI) * SDGNRS_BURN_SLIDER_STEPS
+      const span = balance - minimum;
+      position = ((clamped - minimum) * SDGNRS_BURN_SLIDER_STEPS
         + (span / 2n)) / span;
     }
     slider.value = String(position);
@@ -3706,24 +3823,25 @@ class AppDailyFlip extends HTMLElement {
     } else if (slider.style) {
       slider.style['--df-burn-slider-progress'] = `${progress}%`;
     }
-    const exact = amount == null ? 'Invalid amount' : `${tokenAmountInput(amount)} sDGNRS`;
+    const exact = amount == null ? 'Invalid amount' : `${tokenAmountInput(amount)} ${label}`;
     slider.setAttribute?.('aria-valuetext', exact);
   }
 
   #setSdgnrsBurnFromSlider() {
     const slider = this.querySelector('[data-bind="df-burn-slider"]');
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
-    const balance = this.#sdgnrsBalanceWei();
-    if (!slider || !input || balance == null || balance < MIN_SDGNRS_BURN_WEI) return;
+    const balance = this.#burnBalanceWei();
+    const minimum = this.#burnMinimumWei();
+    if (!slider || !input || balance == null || balance < minimum) return;
     const numeric = Math.max(0, Math.min(
       Number(SDGNRS_BURN_SLIDER_STEPS),
       Math.round(Number(slider.value) || 0),
     ));
     const position = BigInt(numeric);
-    const span = balance - MIN_SDGNRS_BURN_WEI;
+    const span = balance - minimum;
     const amount = position >= SDGNRS_BURN_SLIDER_STEPS
       ? balance
-      : MIN_SDGNRS_BURN_WEI
+      : minimum
         + ((span * position) / SDGNRS_BURN_SLIDER_STEPS);
     input.value = tokenAmountInput(amount);
     this.#renderSdgnrsBurn();
@@ -3737,10 +3855,12 @@ class AppDailyFlip extends HTMLElement {
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
     const amount = parseTokenAmount(input?.value);
     const sameAmount = amount != null && amount === this.#sdgnrsQuoteAmount;
+    const minimum = this.#burnMinimumWei();
+    const label = this.#burnAssetLabel();
 
-    if (!sameAmount || amount < MIN_SDGNRS_BURN_WEI) {
+    if (!sameAmount || amount < minimum) {
       expected.textContent = '—';
-      flip.textContent = 'Enter at least 1 sDGNRS';
+      flip.textContent = `Enter at least 1 ${label}`;
       return;
     }
     if (this.#sdgnrsQuotePending) {
@@ -3767,9 +3887,10 @@ class AppDailyFlip extends HTMLElement {
   #refreshSdgnrsBurnQuote() {
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
     const amount = parseTokenAmount(input?.value);
-    const balance = this.#sdgnrsBalanceWei();
+    const balance = this.#burnBalanceWei();
+    const minimum = this.#burnMinimumWei();
     const valid = amount != null
-      && amount >= MIN_SDGNRS_BURN_WEI
+      && amount >= minimum
       && balance != null
       && amount <= balance;
     const seq = ++this.#sdgnrsQuoteSeq;
@@ -3792,24 +3913,42 @@ class AppDailyFlip extends HTMLElement {
     });
   }
 
-  #openSdgnrsBurnDialog() {
-    if (!this.#ownsDisplayedSdgnrs()) return;
-    const balance = this.#sdgnrsBalanceWei();
-    if (balance == null || balance < MIN_SDGNRS_BURN_WEI) return;
+  #openSdgnrsBurnDialog({ preferredAsset = null } = {}) {
+    if (!this.#ownsDisplayedSdgnrs()) return false;
+    const choices = [
+      preferredAsset,
+      this.#burnAsset,
+      'sdgnrs',
+      'dgnrs',
+    ].filter((asset, index, list) => (
+      (asset === 'sdgnrs' || asset === 'dgnrs') && list.indexOf(asset) === index
+    ));
+    const selected = choices.find((asset) => {
+      const balance = this.#burnBalanceWei(asset);
+      return balance != null && balance >= this.#burnMinimumWei(asset);
+    });
+    if (!selected) return false;
+    this.#burnAsset = selected;
+    const balance = this.#burnBalanceWei();
+    const minimum = this.#burnMinimumWei();
     const dialog = this.querySelector('[data-bind="df-burn-dialog"]');
-    if (!dialog) return;
+    if (!dialog) return false;
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
-    if (input && (parseTokenAmount(input.value) ?? 0n) > balance) input.value = '1';
+    const amount = parseTokenAmount(input?.value);
+    if (input && (amount == null || amount < minimum || amount > balance)) input.value = '1';
     dialog.hidden = false;
     this.#renderSdgnrsBurn();
     this.#refreshSdgnrsBurnQuote();
     try { input?.focus?.({ preventScroll: true }); } catch (_e) { /* headless */ }
+    return true;
   }
 
   #closeSdgnrsBurnDialog() {
     const dialog = this.querySelector('[data-bind="df-burn-dialog"]');
     if (dialog) dialog.hidden = true;
-    const button = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    const button = this.#externalBurnTrigger
+      || this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    this.#externalBurnTrigger = null;
     try { button?.focus?.(); } catch (_e) { /* headless */ }
   }
 
@@ -4024,7 +4163,7 @@ class AppDailyFlip extends HTMLElement {
 
   #openCharityVoteDialog() {
     const dialog = this.querySelector('[data-bind="df-charity-dialog"]');
-    if (!dialog) return;
+    if (!dialog) return false;
     dialog.hidden = false;
     this.#charityVoteState = null;
     this.#charityVoteMessage = '';
@@ -4032,6 +4171,7 @@ class AppDailyFlip extends HTMLElement {
     this.#loadCharityVote();
     try { dialog.querySelector('[data-bind="df-charity-close"]')?.focus?.({ preventScroll: true }); }
     catch (_e) { /* headless */ }
+    return true;
   }
 
   #closeCharityVoteDialog() {
@@ -4040,7 +4180,9 @@ class AppDailyFlip extends HTMLElement {
     if (dialog) dialog.hidden = true;
     this.#charityVoteLoading = false;
     this.#charityVoteBusySlot = null;
-    const button = this.querySelector('[data-bind="df-charity-vote-cta"]');
+    const button = this.#externalCharityTrigger
+      || this.querySelector('[data-bind="df-charity-vote-cta"]');
+    this.#externalCharityTrigger = null;
     try { button?.focus?.(); } catch (_e) { /* headless */ }
   }
 
@@ -4087,7 +4229,7 @@ class AppDailyFlip extends HTMLElement {
   }
 
   #setMaxSdgnrsBurn() {
-    const balance = this.#sdgnrsBalanceWei();
+    const balance = this.#burnBalanceWei();
     const input = this.querySelector('[name="df-sdgnrs-amount"]');
     if (!input || balance == null) return;
     input.value = tokenAmountInput(balance);
@@ -5968,6 +6110,14 @@ class AppDailyFlip extends HTMLElement {
     if (claimFlip) claimFlip.addEventListener('click', () => openPlayerFundsDialog('cashout'));
     const burn = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
     if (burn) burn.addEventListener('click', () => this.#openSdgnrsBurnDialog());
+    const burnSdgnrsAsset = this.querySelector('[data-bind="df-burn-asset-sdgnrs"]');
+    if (burnSdgnrsAsset) {
+      burnSdgnrsAsset.addEventListener('click', () => this.#selectBurnAsset('sdgnrs'));
+    }
+    const burnDgnrsAsset = this.querySelector('[data-bind="df-burn-asset-dgnrs"]');
+    if (burnDgnrsAsset) {
+      burnDgnrsAsset.addEventListener('click', () => this.#selectBurnAsset('dgnrs'));
+    }
     const burnInput = this.querySelector('[name="df-sdgnrs-amount"]');
     if (burnInput) burnInput.addEventListener('input', () => {
       this.#renderSdgnrsBurn();
@@ -6157,14 +6307,19 @@ class AppDailyFlip extends HTMLElement {
       } else if (kind === 'burn-sdgnrs') {
         const input = this.querySelector('[name="df-sdgnrs-amount"]');
         const amount = parseTokenAmount(input?.value);
-        const balance = this.#sdgnrsBalanceWei();
-        if (amount == null || amount < MIN_SDGNRS_BURN_WEI) {
-          throw new Error('Minimum burn is 1 sDGNRS.');
+        const asset = this.#burnAsset;
+        const label = this.#burnAssetLabel(asset);
+        const minimum = this.#burnMinimumWei(asset);
+        const balance = this.#burnBalanceWei(asset);
+        if (amount == null || amount < minimum) {
+          throw new Error(`Minimum burn is 1 ${label}.`);
         }
         if (balance == null || amount > balance) {
-          throw new Error('Not enough sDGNRS for that burn.');
+          throw new Error(`Not enough ${label} for that burn.`);
         }
-        const redemption = await burnSdgnrs({ amount });
+        const redemption = asset === 'dgnrs'
+          ? await burnDgnrs({ amount })
+          : await burnSdgnrs({ amount });
         for (const submission of Array.isArray(redemption?.submissions)
           ? redemption.submissions : []) {
           try {

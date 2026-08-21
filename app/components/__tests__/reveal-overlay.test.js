@@ -532,6 +532,46 @@ describe('normalizeSequence', () => {
       'the purchase retires only after the final individual receipt');
   });
 
+  test('individual combo presentation runs every BoxSpin before ordinary box reveals', () => {
+    const ticketCard = { type: 'tickets', value: '1', spin: null };
+    const firstSpinCard = {
+      type: 'spins',
+      spin: { spinType: 'wwxrp', reels: [{ score: 1 }] },
+    };
+    const flipCard = { type: 'flip', value: '25', spin: null };
+    const secondSpinCard = {
+      type: 'spins',
+      spin: { spinType: 'flip', reels: [{ score: 2 }] },
+    };
+    const seq = {
+      kind: 'lootbox',
+      presentationId: 'combo:spins-first',
+      lootboxRelease: { address: '0xab', key: 'spins-first' },
+      ticketPriceWei: 10_000_000_000n,
+      lootboxBoxGroups: [
+        { label: 'SMALL LUCKBOX', amountWei: 10_000_000_000n, cards: [ticketCard] },
+        { label: 'MEDIUM LUCKBOX', amountWei: 50_000_000_000n, cards: [firstSpinCard] },
+        { label: 'LARGE LUCKBOX', amountWei: 250_000_000_000n, cards: [flipCard] },
+        { label: 'CUSTOM LUCKBOX', amountWei: 90_000_000_000n, cards: [secondSpinCard] },
+      ],
+      lootboxSharedCards: [{ type: 'dgnrs', value: '7', spin: null }],
+    };
+
+    const individual = buildIndividualLootboxSequences(seq);
+    assert.deepEqual(individual.map((part) => part.title), [
+      'MEDIUM LUCKBOX · 1 OF 4',
+      'CUSTOM LUCKBOX · 2 OF 4',
+      'SMALL LUCKBOX · 3 OF 4',
+      'LARGE LUCKBOX · 4 OF 4',
+      'COMBO REWARDS',
+    ]);
+    assert.deepEqual(individual.map((part) => part.cards[0]?.type), [
+      'spins', 'spins', 'tickets', 'flip', 'dgnrs',
+    ]);
+    assert.equal(individual.at(-1).lootboxRelease.key, 'spins-first');
+    assert.ok(individual.slice(0, -1).every((part) => part.lootboxRelease == null));
+  });
+
   test('a combo BoxSpin estimate uses its physical box value, not the aggregate order', () => {
     const price = 10_000_000_000n;
     const seq = normalizeSequence({
@@ -1636,8 +1676,8 @@ describe('buildBoxSpinBoard', () => {
       'the old short single-image survival motion is gone');
     assert.match(
       REVEAL_SRC,
-      /#renderFullSpinStage\(board, \{ speedEnabled: !board\.boxSpin \}\)/,
-      'a bonus BoxSpin inherits the enclosing reveal speed instead of multiplying it a second time',
+      /#renderFullSpinStage\(board,\s*\{[\s\S]*?speedEnabled:\s*!board\.boxSpin,[\s\S]*?launchFromLootbox:\s*Boolean\(options\.launchFromLootbox\)/,
+      'a bonus BoxSpin inherits reveal speed and can enter through the one-time box-launch transition',
     );
   });
 });
@@ -2007,9 +2047,9 @@ describe('reveal-overlay element', () => {
     assert.ok(el.querySelector('.rvl-lootbox-badge__center'),
       'the opener badge has an independently rotating center medallion');
     assert.equal(el.querySelectorAll('.rvl-vault-interlock').length, 4,
-      'one shell carries the complete reinforced four-lock bank');
+      'one reusable shell carries both two-lock and legacy receiver positions');
     assert.equal(el.querySelectorAll('.rvl-vault-deadbolt').length, 4,
-      'each possible recessed channel contains its own retracting deadbolt tongue');
+      'CSS activates only the selected model\'s matched retracting pair');
     assert.ok(el.querySelector('[data-bind="rvl-lootbox-flight"]'),
       'the actual reward-card flight deck is mounted with the case');
     assert.match(el.innerHTML, /rvl-lootbox-badge__face[\s\S]*flame-center\.svg/,
@@ -2032,8 +2072,10 @@ describe('reveal-overlay element', () => {
       'the neutral case includes its paired retracted receiver art');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp', import.meta.url)),
       'the opener includes a real inner-lid surface');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v15-deadbolt-4.webp', import.meta.url)),
-      'the reinforced large case ships all four deadbolts');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v23-locked-front.webp', import.meta.url)),
+      'the premium gold case ships its locked two-cylinder front');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-right.webp', import.meta.url)),
+      'the premium case ships both art-backed cylindrical lock pins');
     assert.match(REVEAL_SRC, /const LOOTBOX_CASE_ART = lootboxCaseAssets\('medium'\)\.lockedFront/);
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
       'the case is bounded by both viewport axes');
@@ -2045,8 +2087,14 @@ describe('reveal-overlay element', () => {
       /\.rvl-vessel--lootbox \.rvl-chest-clasp\s*\{[^}]*display:\s*none;/s,
       'the opener suppresses the standalone clasp and its sticker-like shadow');
     assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-platform\s*\{[^}]*display:\s*none/s,
+      'the case has no oval floor shadow that makes it look like it is hovering');
+    assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mask:\s*var\(--lootbox-case-retracted-art\)/s,
       'the value wash follows the selected case while preserving its physical detail');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\][\s\S]*?\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*opacity:\s*0;/s,
+      'the authored gold/enamel opener keeps the large case material separation intact');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%/s,
       'the animated badge preserves the canonical thick-ring proportions');
@@ -2078,28 +2126,34 @@ describe('reveal-overlay element', () => {
       /\.rvl-stage\[data-lootbox-case-model="medium"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*display:\s*block/s,
       'the medium case exposes only its matched inner pair');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--4 \.rvl-vault-deadbolt\s*\{[^}]*var\(--lootbox-deadbolt-4\)/s,
-      'the large case exposes its fourth case-matched lock component');
+      /\.rvl-stage\[data-lootbox-case-model="large"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*height:\s*19\.666%/s,
+      'the gold case activates exactly its matched left/right cylindrical lock pair');
+    assert.doesNotMatch(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--(?:1|4)\s*\{[^}]*display:\s*block/s,
+      'the large case cannot resurrect the discarded four-lock layout');
+    assert.match(APP_CSS,
+      /@keyframes rvl-vault-bridge-retract\s*\{[\s\S]*0%, 71%[^}]*translateY\(0\)[\s\S]*100%[^}]*translateY\(-105%\)/,
+      'the two cylindrical pins withdraw fully into their upper sockets');
     assert.doesNotMatch(APP_CSS, /rvl-lootbox-latch|rvl-lootbox-catch/,
       'surface-mounted clasp hardware is completely removed from the opener');
     assert.match(APP_CSS,
       /@keyframes rvl-case-charge\s*\{\s*from\s*\{\s*transform:\s*none;\s*\}\s*to\s*\{\s*transform:\s*none;\s*\}/s,
       'the case itself remains still while its internal seam glows');
     assert.match(APP_CSS,
-      /@keyframes rvl-case-lid-open\s*\{[\s\S]*opacity:\s*1[^}]*rotateX\(24deg\)/,
+      /@keyframes rvl-case-lid-open\s*\{[\s\S]*opacity:\s*1[^}]*rotateX\(9deg\)/,
       'the unlocked lid cracks open from its rear hinge without flying upright');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-lid\s*\{[^}]*transform-origin:\s*50% 100% calc\(-1 \* var\(--rvl-lid-depth\)\)[^}]*preserve-3d/s,
       'the rigid lid volume pivots around the recessed rear axis at the body seam');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-chest-lid__inner\s*\{[^}]*bottom:\s*0[^}]*translateZ\(calc\(-1 \* var\(--rvl-lid-depth\)\)\) rotateX\(var\(--rvl-lid-closed-pitch\)\)/s,
-      'the opaque inner panel is a fixed second surface running from the rear hinge to the front lip');
+      /\.rvl-vessel--lootbox \.rvl-chest-lid__inner\s*\{[^}]*display:\s*none/s,
+      'the shallow crack does not project a full inner-lid shelf beyond the case silhouette');
     assert.match(APP_CSS,
-      /@keyframes rvl-case-inner-reveal\s*\{\s*0%, 10%\s*\{\s*opacity:\s*0;\s*\}\s*10\.01%, 100%\s*\{\s*opacity:\s*1;\s*\}\s*\}/s,
-      'the solid underside appears with the first visible separation so the fascia never floats alone');
+      /\.rvl-vessel--lootbox \.rvl-chest-seam::before\s*\{[^}]*height:\s*clamp\([^}]*background:[^}]*#0f6f31/s,
+      'an opaque body-mounted aperture fills the crack and contains the green interior light');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-chest-lid__edge::after\s*\{[^}]*rgba\(93, 255, 132,[^}]*box-shadow/s,
-      'a vivid green interior light remains attached to the underside of the lid');
+      /\.rvl-vessel--lootbox \.rvl-chest-lid__edge\s*\{[^}]*display:\s*none/s,
+      'the shallow lift has no projected fascia or glowing shelf hanging beyond the lid');
     assert.match(APP_CSS,
       /@keyframes rvl-case-release\s*\{[\s\S]*to\s*\{[^}]*opacity:\s*1[^}]*transform:\s*none/,
       'the box neither expands nor fades during the handoff');
@@ -2203,8 +2257,13 @@ describe('reveal-overlay element', () => {
       'a seven-reward receipt resolves as a balanced four-plus-three grid',
     );
     assert.match(REVEAL_SRC,
-      /const boxSpinCards = seq\.cards\.filter[\s\S]*?#playLootboxSpinGrant\(seq, boxSpinCards\)/,
-      'every motion receipt isolates a granted child spin instead of retaining dealt cards');
+      /const boxSpinCards = seq\.cards\.filter[\s\S]*?#playLootboxSpinGrant\(seq, boxSpinCards,\s*\{[\s\S]*?directFromLootbox:\s*seq\.kind === 'lootbox'/,
+      'a live Luckbox spin moves straight from the opened case into its full reel board');
+    assert.match(REVEAL_SRC,
+      /let action = options\.autoStartFirst && i === 0 \? 'spin' : null/,
+      'opening the box starts reel one without a redundant PLAY SPIN gate');
+    assert.match(APP_CSS, /@keyframes rvl-lootbox-spin-board-launch/,
+      'the real reel board launches from the open case position');
 
     summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -3331,10 +3390,16 @@ describe('reveal-overlay element', () => {
       'summary and explicit comparison advances share one coordinate');
     assert.match(APP_CSS,
       /\.rvl-ticket-actions,[\s\S]*?\.rvl-dgn-actions,[\s\S]*?\.rvl-vessel-pack-actions\s*\{[^}]*position:\s*fixed[^}]*bottom:\s*calc\(var\(--rvl-action-bottom\) \+ 0\.28rem\)/s,
-      'pack and reel primary-action rows stay on the same dock');
+      'pack and standalone reel primary-action rows stay on the same dock');
     assert.match(APP_CSS,
       /\.rvl-dgn-actions:is\([^}]*rvl-dgn-actions--box[^}]*\)[^{]*\{[^}]*width:\s*min\(15rem/s,
-      'single-action reel states keep a button-sized dock instead of stretching fullscreen');
+      'single-action reel states keep a button-sized control instead of stretching fullscreen');
+    assert.match(APP_CSS,
+      /\.rvl-dgn-actions\.rvl-dgn-actions--box\s*\{[^}]*position:\s*static;[^}]*order:\s*100;[^}]*margin:\s*0\.28rem auto 0;[^}]*translate:\s*none;/s,
+      'Box Spin controls stay after the live board and survival result instead of covering them');
+    assert.match(APP_CSS,
+      /\.rvl-stage\.rvl-stage--degenerette:has\(\.rvl-dgn-actions--box:not\(\[hidden\]\)\)\s*\{[^}]*padding-bottom:\s*max\(0\.8rem, env\(safe-area-inset-bottom\)\)/s,
+      'an in-flow Box Spin control does not retain the fixed-dock spacer');
     assert.doesNotMatch(REVEAL_SRC, /rvl-dgn-result-details|rvl-dgn-facts--result/,
       'Degenerette ends at its primary action instead of repeating stats below it');
   });
@@ -3693,6 +3758,57 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('.rvl-dgn-skip-cta').hidden, true);
 
     el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('a combined lootbox finishes its spins before presenting ordinary rewards', async () => {
+    queueReveal({
+      kind: 'lootbox',
+      lootboxIndex: 77,
+      legs: [
+        {
+          legType: 'opened',
+          wholeTickets: 2,
+          futureLevel: 63,
+          flip: 25n * 10n ** 18n,
+        },
+        {
+          legType: 'spin',
+          spinType: 'wwxrp',
+          payout: 2n * 10n ** 18n,
+          reels: [{
+            spinIndex: 0,
+            playerTicket: 0xC3824100n,
+            resultTicket: 0xC7864504n,
+            score: 4,
+          }],
+        },
+      ],
+    });
+    const el = instantiate();
+    await tick();
+
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    const spinZone = el.querySelector('[data-bind="rvl-spin-zone"]');
+    assert.equal(summary.hidden, true,
+      'tickets and FLIP remain withheld while the BoxSpin owns the reveal surface');
+    assert.equal(spinZone.hidden, false, 'the spin is the first visible result phase');
+
+    const spinDone = spinZone.querySelector('.rvl-dgn-spin-cta');
+    assert.equal(spinDone.textContent, 'CONTINUE ▸',
+      'the last spin leads into the unread ordinary rewards instead of exiting');
+    spinDone.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    assert.equal(summary.hidden, false,
+      'ordinary rewards receive their own readable receipt after every spin settles');
+    assert.ok(summary.querySelector('.rvl-card--tickets'));
+    assert.ok(summary.querySelector('.rvl-card--flip'));
+    assert.equal(summary.querySelector('.rvl-card--spins'), null,
+      'the already-played spin is not duplicated in the follow-up receipt');
+
+    summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -4418,18 +4534,19 @@ describe('reveal-overlay element', () => {
       await tick();
 
       const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
-      let grant = el.querySelector('[data-bind="rvl-summary"]')?.querySelector('.rvl-collect-cta');
-      for (let i = 0; i < 10 && grant?.textContent !== 'PLAY SPIN'; i++) {
+      let stage = el.querySelector('.rvl-dgn-stage');
+      for (let i = 0; i < 20 && !stage; i++) {
         backdrop.dispatchEvent({ type: 'click' });
         await tick();
-        grant = el.querySelector('[data-bind="rvl-summary"]')?.querySelector('.rvl-collect-cta');
+        stage = el.querySelector('.rvl-dgn-stage');
       }
-      assert.equal(grant?.textContent, 'PLAY SPIN', 'the opened box presents its child spin');
-      grant.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-
-      const stage = el.querySelector('.rvl-dgn-stage');
-      assert.ok(stage, 'the full BoxSpin reel stage is reached');
+      assert.ok(stage, 'the opened case hands directly to the full BoxSpin reel stage');
+      const summary = el.querySelector('[data-bind="rvl-summary"]');
+      assert.equal(summary.hidden, true, 'there is no intermediate BOX SPIN receipt');
+      assert.doesNotMatch(summary.textContent, /PLAY SPIN/);
+      const spinZone = el.querySelector('[data-bind="rvl-spin-zone"]');
+      assert.ok(spinZone.classList.contains('rvl-spin-zone--lootbox-launch'),
+        'the populated reel board flies out from the case opening');
       assert.equal(stage.querySelectorAll('.rvl-gamepiece').length, 2);
       assert.equal(stage.querySelectorAll('.rvl-rq').length, 8);
       assert.equal(stage.querySelector('.rvl-box-currency-reveal'), null,
@@ -4450,9 +4567,8 @@ describe('reveal-overlay element', () => {
         /\.rvl-dgn-actions--box\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
         'the remaining manual control owns a centered one-column action rail',
       );
-      cta.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-      assert.equal(cta.hidden, true);
+      assert.equal(cta.hidden, true,
+        'opening the case has already started reel one without another click');
 
       let sealed = stage.querySelector('.rvl-box-currency-reveal');
       for (let i = 0; i < 100 && !sealed; i++) {
@@ -4493,7 +4609,6 @@ describe('reveal-overlay element', () => {
 
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
-      const summary = el.querySelector('[data-bind="rvl-summary"]');
       assert.equal(summary.hidden, true,
         'the acknowledged full result is not redrawn as the same compact spin');
       assert.equal(backdrop.hidden, true);

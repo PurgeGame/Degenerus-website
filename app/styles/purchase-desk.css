@@ -1029,7 +1029,8 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:d
 /* Empty BUY IN chooser. The normal panel is an isolated, overflow-hidden
    felt surface; release only that boundary while its direct-child modal is
    live so the full-page dimmer can sample the other two jackpot columns. */
-body.layout-basic .jackpot-hero .app-decimator-panel:has(> .dec-buy-dialog:not([hidden])) {
+body.layout-basic .jackpot-hero .app-decimator-panel:has(> .dec-buy-dialog:not([hidden])),
+body.layout-basic .jackpot-hero .app-decimator-panel:has(> .dec-builder-popover:not([hidden])) {
   isolation: auto;
   overflow: visible;
 }
@@ -1385,6 +1386,7 @@ body.layout-basic .app-decimator-panel .dec-foil {
   body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
   body.layout-basic .app-decimator-panel .dec-purchase-help,
   body.layout-basic .app-decimator-panel .dec-ticket-piece,
+  body.layout-basic .app-decimator-panel .dec-ticket-piece__art,
   body.layout-basic .app-decimator-panel .dec-box-card,
   body.layout-basic .app-decimator-panel .dec-custom-box-toggle__chevron {
     transition: none;
@@ -1675,6 +1677,7 @@ body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
 body.layout-basic .app-decimator-panel .dec-ticket-piece {
   position: relative;
   display: grid;
+  appearance: none;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -1682,6 +1685,11 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece {
   padding: 0.16rem;
   place-items: center;
   overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
 }
 
 /* The header already carries the purchase-bonus readout. Do not paint its
@@ -1702,9 +1710,9 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece__copy {
   place-items: center;
   border: 1px solid rgba(239, 202, 130, 0.44);
   border-radius: 999px;
-  background: rgba(10, 7, 9, 0.78);
+  background: #0a0709;
   box-shadow: 0 2px 7px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 243, 216, 0.08);
-  backdrop-filter: blur(3px);
+  backdrop-filter: none;
   pointer-events: none;
 }
 
@@ -1716,27 +1724,30 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece__copy > strong {
   text-shadow: 0 1px 2px #000, 0 0 5px rgba(226, 181, 94, 0.22);
 }
 
-body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy {
-  top: 50%;
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
   left: 50%;
   box-sizing: border-box;
   width: min(3.2rem, calc(100% - 0.32rem));
   padding: 0.27rem 0.46rem 0.24rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy {
+  top: 50%;
   transform: translate(-50%, -50%);
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
   top: 0.28rem;
-  left: 50%;
-  box-sizing: border-box;
-  width: min(3.2rem, calc(100% - 0.32rem));
-  padding: 0.27rem 0.46rem 0.24rem;
   transform: translateX(-50%);
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
   .dec-ticket-piece--foil:not([hidden])
-) .dec-ticket-piece--ticket .dec-ticket-piece__copy {
+) .dec-ticket-piece--ticket .dec-ticket-piece__copy,
+body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+  .dec-ticket-piece--foil:not([hidden])
+) .dec-ticket-piece--entry .dec-ticket-piece__copy {
   padding: 0.24rem 0.3rem 0.22rem;
 }
 
@@ -1770,6 +1781,41 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--foil .dec-ticket-piece
   background: none;
   box-shadow: none;
   transform: none;
+}
+
+/* The rendered ticket and pack art is the control. Keep the semantic button
+   as the full, accessible hit target without painting a second tile around
+   it; interaction feedback belongs to the art itself. */
+body.layout-basic .app-decimator-panel .dec-ticket-piece:hover,
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art {
+  transform-origin: center;
+  transition: filter 0.14s ease, transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:hover .dec-ticket-piece__art,
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible .dec-ticket-piece__art {
+  filter:
+    brightness(1.08)
+    drop-shadow(0 5px 6px rgba(0, 0, 0, 0.52))
+    drop-shadow(0 0 6px rgba(248, 211, 141, 0.28));
+  transform: translateY(-1px) scale(1.025);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible .dec-ticket-piece__art {
+  outline: 2px solid rgba(248, 211, 141, 0.94);
+  outline-offset: 1px;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:active .dec-ticket-piece__art {
+  transform: translateY(1px) scale(0.985);
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__art::after {
@@ -1837,6 +1883,21 @@ body.layout-basic .app-decimator-panel .dec-ticket-trait img {
   object-fit: contain;
   object-position: 50% 50%;
   transform: translate(-50%, -50%);
+}
+
+/* Give the four ticket traits more breathing room around the center flame.
+   Entry keeps its single trait centered horizontally, with a smaller downward
+   nudge so the badge sits visually inside the quarter-ticket silhouette. */
+body.layout-basic .app-decimator-panel .dec-ticket-face > .dec-ticket-trait:nth-child(-n+2) img {
+  top: 42%;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face > .dec-ticket-trait:nth-child(n+3) img {
+  top: 58%;
+}
+
+body.layout-basic .app-decimator-panel .dec-entry-face .dec-ticket-trait img {
+  top: 54%;
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-center {
@@ -1982,19 +2043,21 @@ body.layout-basic .app-decimator-panel .dec-foil-check {
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--foil {
-  border-color: rgba(210, 197, 231, 0.32);
+  border-color: transparent;
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected {
-  border-color: rgba(255, 241, 168, 0.86);
-  background:
-    linear-gradient(125deg, rgba(34, 211, 238, 0.13), rgba(236, 72, 153, 0.13) 52%, rgba(234, 179, 8, 0.15)),
-    rgba(8, 7, 9, 0.72);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 10px rgba(103, 232, 249, 0.28),
-    0 0 18px rgba(244, 114, 182, 0.2),
-    0 0 24px rgba(255, 225, 128, 0.12);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-ticket-piece__art {
+  filter:
+    brightness(1.08)
+    drop-shadow(0 4px 5px rgba(0, 0, 0, 0.48))
+    drop-shadow(0 0 8px rgba(103, 232, 249, 0.42))
+    drop-shadow(0 0 12px rgba(244, 114, 182, 0.3));
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-pack-face,
@@ -2383,6 +2446,14 @@ body.layout-basic .app-decimator-panel .dec-box-card__art::after {
   mask: var(--lootbox-case-top-art) center / contain no-repeat;
 }
 
+/* LARGE ships with its polished-gold, gunmetal, and red-enamel palette baked
+   into the primary top render. A tier wash would collapse that intentional
+   material separation back into a single gold mass. */
+body.layout-basic .app-decimator-panel
+  .dec-box-card[data-lootbox-case-model="large"] .dec-box-card__art::after {
+  opacity: 0;
+}
+
 /* Restore only the badge pixels above the tier wash. The badge is baked into
    the case texture, so this layer cannot drift, cast a sticker shadow, or expose
    a second repair shape around it. */
@@ -2531,9 +2602,8 @@ body.layout-basic .app-decimator-panel .dec-builder-popover__backdrop {
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(3, 2, 5, 0.78);
+  background: #030205;
   cursor: default;
-  backdrop-filter: blur(4px);
 }
 
 body.layout-basic .app-decimator-panel .dec-builder-dialog {
@@ -2912,6 +2982,112 @@ body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting {
   75% { transform: translateX(-1px); }
 }
 
+/* A purchase-piece tap sends a small copy of its actual artwork to the field
+   it changes: Entry / Ticket / Pack land in TIX, while Foil lands on BUY IN.
+   The transaction amount still changes synchronously; this is only a short
+   physical handoff ending in a destination confirmation. */
+body.layout-basic .app-decimator-panel .dec-purchase-flyer.dec-ticket-piece__art {
+  position: absolute;
+  z-index: 40;
+  inset: auto;
+  margin: 0;
+  pointer-events: none;
+  transition: none;
+  transform-origin: center;
+  animation: dec-purchase-flight 0.66s cubic-bezier(0.2, 0.78, 0.24, 1) forwards;
+  will-change: transform, opacity;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-flyer__quantity {
+  position: absolute;
+  z-index: 20;
+  top: 0.08rem;
+  right: 0.08rem;
+  display: grid;
+  min-width: 1.28rem;
+  height: 1.28rem;
+  padding: 0 0.18rem;
+  place-items: center;
+  border: 1px solid rgba(187, 247, 208, 0.88);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #86efac, #22c55e);
+  color: #052e16;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5), 0 0 9px rgba(74, 222, 128, 0.44);
+  font: 950 0.56rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-flyer--foil .dec-purchase-flyer__quantity {
+  min-width: 2.48rem;
+  border-color: transparent;
+  background:
+    linear-gradient(180deg, #24122e, #0c111f) padding-box,
+    linear-gradient(90deg, #56e0ff, #b694ff, #ff89c8, #ffe180, #69f0c0) border-box;
+  color: #fffbe8;
+  box-shadow:
+    0 2px 7px rgba(0, 0, 0, 0.56),
+    0 0 11px rgba(182, 148, 255, 0.58);
+  letter-spacing: 0.025em;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.55);
+}
+
+@keyframes dec-purchase-flight {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.62) rotate(-5deg); }
+  12% { opacity: 1; transform: translate3d(0, 0, 0) scale(0.9) rotate(-2deg); }
+  58% { opacity: 1; transform: translate3d(var(--dec-flight-mid-x), var(--dec-flight-mid-y), 0) scale(0.78) rotate(4deg); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--dec-flight-x), var(--dec-flight-y), 0) scale(0.24) rotate(9deg); }
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field {
+  position: relative;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving {
+  animation: dec-ticket-total-catch 0.42s ease-out;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(134, 239, 172, 0.34), transparent 72%);
+  content: '';
+  pointer-events: none;
+  animation: dec-ticket-total-flash 0.42s ease-out forwards;
+}
+
+@keyframes dec-ticket-total-catch {
+  42% {
+    border-color: rgba(134, 239, 172, 0.94);
+    box-shadow: inset 0 0 14px rgba(74, 222, 128, 0.18), 0 0 12px rgba(74, 222, 128, 0.3);
+    transform: scale(1.025);
+  }
+}
+
+@keyframes dec-ticket-total-flash {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].is-receiving {
+  animation: dec-buy-foil-catch 0.44s ease-out;
+}
+
+@keyframes dec-buy-foil-catch {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  42% {
+    border-color: #fff5bf;
+    box-shadow:
+      inset 0 0 16px rgba(255, 255, 255, 0.34),
+      0 0 10px rgba(86, 224, 255, 0.52),
+      0 0 18px rgba(255, 137, 200, 0.45),
+      0 0 25px rgba(255, 225, 128, 0.32);
+    filter: brightness(1.24);
+    transform: scale(1.025);
+  }
+}
+
 @container (max-width: 330px) {
   body.layout-basic .app-decimator-panel .panel-header {
     grid-template-columns: minmax(0, 1fr) 7rem;
@@ -3033,7 +3209,11 @@ body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting {
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .app-decimator-panel .dec-foil-pack-face,
   body.layout-basic .app-decimator-panel .dec-pack-shine,
-  body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting {
+  body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting,
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].is-receiving,
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving,
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving::after {
     animation: none;
   }
+  body.layout-basic .app-decimator-panel .dec-purchase-flyer { display: none; }
 }

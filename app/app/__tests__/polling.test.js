@@ -591,20 +591,35 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
   });
 
   test('the chain completion edge coalesces to one result request per day', async () => {
-    let jackpotDay = 20;
     fetchImpl = async (url, opts) => {
       fetchCalls.push({ url, opts });
-      if (url.includes('/game/jackpot/last-day')) {
+      if (url === '/jackpots/latest.json') {
         return {
           ok: true,
           status: 200,
           json: async () => ({
-            day: jackpotDay,
+            schemaVersion: 1,
+            day: 21,
+            digest: '0123456789abcdef',
+            resultPath: '/jackpots/results/21-0123456789abcdef.json',
+          }),
+        };
+      }
+      if (url === '/jackpots/results/21-0123456789abcdef.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 21,
             level: 4,
-            summary: null,
+            summary: {
+              blockRange: { start: '45710000', end: '45710001' },
+              rollOne: { eth: [], tickets: [], solo: null },
+              rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
+            },
             winners: [],
-            roll1: { day: jackpotDay, level: 4, purchaseLevel: null, wins: [] },
-            roll2: { day: jackpotDay, level: 4, purchaseLevel: null, wins: [] },
+            roll1: { day: 21, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 21, level: 4, purchaseLevel: null, wins: [] },
             status: 'resolved-no-winners',
           }),
         };
@@ -614,49 +629,68 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     start();
     await new Promise((resolve) => setTimeout(resolve, 30));
     fetchCalls = [];
-    jackpotDay = 21;
 
     const first = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
     const duplicate = refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
     assert.equal(duplicate, first, 'same-day callers share one completion promise');
     const payload = await first;
-    const resultCalls = fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day'));
+    const tokenCalls = fetchCalls.filter((call) => call.url === '/jackpots/latest.json');
+    const resultCalls = fetchCalls.filter((call) => call.url === '/jackpots/results/21-0123456789abcdef.json');
 
     assert.equal(payload.day, 21);
+    assert.equal(tokenCalls.length, 1);
     assert.equal(resultCalls.length, 1);
-    assert.equal(resultCalls[0].opts.cache, 'no-store');
-    assert.match(resultCalls[0].url, /targetDay=21/);
-    assert.match(resultCalls[0].url, /waitMs=60000/);
+    assert.equal(
+      fetchCalls.filter((call) => call.url.includes('targetDay=21')).length,
+      0,
+      'no browser holds a target-day request on Fly',
+    );
     assert.equal(storeMod.get('app.lastDay').day, 21);
     assert.equal(_testing.jackpotCompletionDay, 21);
 
     await refreshJackpotAfterChainCompletion({ day: 21, includePlayer: false });
     assert.equal(
       fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day')).length,
-      1,
-      'a repeated completion notification cannot create another request',
+      0,
+      'a repeated completion notification creates no result API request',
     );
   });
 
-  test('the 15s game fallback cannot abort a parked target-day result request', async () => {
+  test('the 15s game fallback cannot race a pending Cloudflare token wait', async () => {
     let releaseTarget;
     let targetStarted;
     const started = new Promise((resolve) => { targetStarted = resolve; });
     fetchImpl = async (url, opts) => {
       fetchCalls.push({ url, opts });
-      if (url.includes('targetDay=21')) {
+      if (url === '/jackpots/latest.json') {
         targetStarted();
         await new Promise((resolve) => { releaseTarget = resolve; });
         return {
           ok: true,
           status: 200,
           json: async () => ({
-            day: 20,
+            schemaVersion: 1,
+            day: 21,
+            digest: '0123456789abcdef',
+            resultPath: '/jackpots/results/21-0123456789abcdef.json',
+          }),
+        };
+      }
+      if (url === '/jackpots/results/21-0123456789abcdef.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 21,
             level: 4,
-            summary: null,
+            summary: {
+              blockRange: { start: '45710000', end: '45710001' },
+              rollOne: { eth: [], tickets: [], solo: null },
+              rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
+            },
             winners: [],
-            roll1: { day: 20, level: 4, purchaseLevel: null, wins: [] },
-            roll2: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+            roll1: { day: 21, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 21, level: 4, purchaseLevel: null, wins: [] },
             status: 'resolved-no-winners',
           }),
         };
@@ -694,7 +728,7 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(fallbackCalls, 0, 'the normal game tick leaves the parked request alone');
     assert.equal(
       fetchCalls.filter((call) => call.url.includes('/game/jackpot/last-day')).length,
-      1,
+      0,
     );
 
     releaseTarget();
@@ -704,7 +738,7 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
       { dailyRng: { day: 21 } },
       () => { fallbackCalls += 1; },
     );
-    assert.equal(fallbackCalls, 1, 'a timed-out stale wait restores the low-rate fallback');
+    assert.equal(fallbackCalls, 0, 'the edge result already satisfies the displayed day');
   });
 
   test('successful fetch writes payload to app.lastDay store path', async () => {
