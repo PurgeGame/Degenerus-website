@@ -14,7 +14,7 @@ const REPLAY_CSS = readFileSync(new URL('../../styles/replay.css', import.meta.u
 const PROCESSING_CSS = readFileSync(new URL('../../styles/jackpot-processing.css', import.meta.url), 'utf8');
 const DRAWING_CSS = readFileSync(new URL('../../styles/daily-drawing.css', import.meta.url), 'utf8');
 const FOIL_ROUTING_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-foil-routing-v5.svg', import.meta.url), 'utf8');
-const BOARD_ROUTING_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-routing-v8.svg', import.meta.url), 'utf8');
+const BOARD_ROUTING_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-routing-v9.svg', import.meta.url), 'utf8');
 const SILKSCREEN_SVG = readFileSync(new URL('../../assets/jackpot/daily-drawing-board-silkscreen-v3.svg', import.meta.url), 'utf8');
 const CANONICAL_FLAME_SVG = readFileSync(new URL('../../../whitepaper/flame-center.svg', import.meta.url), 'utf8');
 const CANONICAL_CHAINLINK_SVG = readFileSync(new URL('../../../symbols/crypto_05_chainlink_blue.svg', import.meta.url), 'utf8');
@@ -2415,7 +2415,7 @@ describe('foil match pending action', () => {
     );
     assert.match(
       DRAWING_CSS,
-      /daily-drawing-board-routing-v8\.svg[^}]*daily-drawing-backplate-v9\.webp/s,
+      /daily-drawing-board-routing-v9\.svg[^}]*daily-drawing-backplate-v9\.webp/s,
       'a second connected routing layer sits over the substrate and beneath all hardware',
     );
     assert.match(BOARD_ROUTING_SVG,

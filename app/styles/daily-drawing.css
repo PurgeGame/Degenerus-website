@@ -28,7 +28,7 @@ body.layout-basic .jackpot-hero__machine {
     radial-gradient(118% 58% at 50% -6%, rgba(255, 226, 163, 0.05), transparent 62%),
     radial-gradient(128% 118% at 50% 46%, transparent 54%, rgba(0, 0, 0, 0.52) 100%),
     url('/app/assets/jackpot/daily-drawing-board-silkscreen-v3.svg') center / 100% 100% no-repeat,
-    url('/app/assets/jackpot/daily-drawing-board-routing-v8.svg') center / 100% 100% no-repeat,
+    url('/app/assets/jackpot/daily-drawing-board-routing-v9.svg') center / 100% 100% no-repeat,
     repeating-linear-gradient(45deg, rgba(216, 232, 220, 0.013) 0 1px, transparent 1px 5px),
     repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.17) 0 1px, transparent 1px 5px),
     url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,

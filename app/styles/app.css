@@ -5040,7 +5040,7 @@ body.layout-basic .jackpot-hero__machine {
   box-sizing: border-box; width: 100%; flex: 0 0 auto; overflow: hidden;
   padding: 0.4rem 0.45rem 0.48rem;
   background:
-    url('/app/assets/jackpot/daily-drawing-board-routing-v8.svg') center / 100% 100% no-repeat,
+    url('/app/assets/jackpot/daily-drawing-board-routing-v9.svg') center / 100% 100% no-repeat,
     url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,
     #090203;
 }
