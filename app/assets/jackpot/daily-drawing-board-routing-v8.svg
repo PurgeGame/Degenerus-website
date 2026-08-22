@@ -13,7 +13,7 @@
       LED key / LCD     301,1069 -> 979,1195    218,1009 -> 1062,1171
       VRF module        992,1093 -> 1084,1185   1074,1045 -> 1180,1145
 
-    v7 makes the power story match the physical controls. The VRF module no
+    v8 keeps the cleaned power story under a fresh immutable asset URL. The VRF module no
     longer takes a visual shortcut straight into the draw processor. Its two
     component-relative lanes enter the LED key first; four separate lanes then
     fan upward from the key into the main jackpot processor. The compact input
