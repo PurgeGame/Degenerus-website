@@ -30,6 +30,7 @@ import {
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
 import { openDecimatorDraw } from './app-decimator-draw-overlay.js';
 import { openBafResolution } from './app-baf-resolution-overlay.js';
+import { formatBafWhalePassHalves } from './app-baf-resolution-overlay.js';
 
 const PENDING_SOURCE = 'jackpot-resolutions';
 const POLL_MS = 15_000;
@@ -168,6 +169,7 @@ export function bafResolutionView({ outcome, consolation, awards, currentLevel, 
   const score = _big(outcome.score);
   const eth = _big(awards?.eth);
   const tickets = _big(awards?.tickets);
+  const whalePassHalves = _big(awards?.whalePassHalves);
   const claimable = consolation == null ? null : _big(consolation);
 
   if (status === 'open') {
@@ -198,19 +200,24 @@ export function bafResolutionView({ outcome, consolation, awards, currentLevel, 
   }
 
   if (status === 'closed') {
-    if (eth > 0n || tickets > 0n) {
-      const pieces = [];
-      if (eth > 0n) pieces.push(`${_formatEth(eth)} ETH`);
-      if (tickets > 0n) pieces.push(`${tickets.toString()} ticket${tickets === 1n ? '' : 's'}`);
+    if (eth > 0n || tickets > 0n || whalePassHalves > 0n) {
+      const automatic = [];
+      if (eth > 0n) automatic.push(`${_formatEth(eth)} ETH`);
+      if (tickets > 0n) automatic.push(`${tickets.toString()} ticket${tickets === 1n ? '' : 's'}`);
+      const clauses = [];
+      if (automatic.length > 0) clauses.push(`${automatic.join(' + ')} paid automatically`);
+      if (whalePassHalves > 0n) {
+        clauses.push(`${formatBafWhalePassHalves(whalePassHalves)} ready to claim`);
+      }
       return {
         status: 'BAF WINNER', tone: 'won',
-        message: `${pieces.join(' + ')} paid automatically.`,
+        message: `${clauses.join(' · ')}.`,
         actionable: false,
       };
     }
     return {
-      status: 'RESOLVED', tone: 'lost',
-      message: `Level ${lvl} BAF paid automatically; this account did not receive a payout.`,
+      status: 'RESOLVED', tone: 'muted',
+      message: `Level ${lvl} BAF is resolved. View the final draw for this wallet's exact result.`,
       actionable: false,
     };
   }

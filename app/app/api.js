@@ -34,10 +34,24 @@ const MAX_RECENT_JSON = 256;
 // the remaining widgets fill progressively. Shared/global reads bypass this
 // lane so health and game state never sit behind wallet history.
 const MAX_PERSONALIZED_FETCHES = 3;
+// Keep one of those slots available for reads that gate an explicit user
+// action. Background panels may use two slots; an interaction can immediately
+// take the third instead of waiting behind unrelated wallet hydration.
+const MAX_BACKGROUND_PERSONALIZED_FETCHES = 2;
+// A fetch with no deadline is not a slow read, it is a permanent one: the
+// browser can hold a stalled connection open indefinitely, and every hung
+// personalized read keeps its lane slot (released only in the finally below),
+// so three of them wedge MAX_PERSONALIZED_FETCHES for the life of the tab.
+// That is what stranded replay-panel's bonus spin at "BONUS SPINNING…" — its
+// future-trait hydration never settled, so the flow never reached its reel.
+// Well past any healthy p99, short enough that a wedged socket surfaces as a
+// failed read the caller can retry.
+const REQUEST_TIMEOUT_MS = 20_000;
 const inflightJSON = new Map();
 const recentJSON = new Map();
 const personalizedQueue = [];
 let personalizedActive = 0;
+let personalizedBackgroundActive = 0;
 let cacheGeneration = 0;
 
 function abortError(signal) {
@@ -78,49 +92,94 @@ function isPersonalizedKey(key) {
     || /(?:^|[?&])player=0x[0-9a-f]{40}(?:&|$)/i.test(url.search);
 }
 
-function openPersonalizedSlot() {
+function isInteractionPriority(priority) {
+  return priority === 'interaction';
+}
+
+function canOpenPersonalizedSlot(priority) {
+  if (personalizedActive >= MAX_PERSONALIZED_FETCHES) return false;
+  return isInteractionPriority(priority)
+    || personalizedBackgroundActive < MAX_BACKGROUND_PERSONALIZED_FETCHES;
+}
+
+function openPersonalizedSlot(priority) {
+  const background = !isInteractionPriority(priority);
   personalizedActive += 1;
+  if (background) personalizedBackgroundActive += 1;
   let released = false;
   return () => {
     if (released) return;
     released = true;
     personalizedActive = Math.max(0, personalizedActive - 1);
+    if (background) {
+      personalizedBackgroundActive = Math.max(0, personalizedBackgroundActive - 1);
+    }
     drainPersonalizedQueue();
   };
 }
 
 function drainPersonalizedQueue() {
   while (personalizedActive < MAX_PERSONALIZED_FETCHES && personalizedQueue.length > 0) {
-    const entry = personalizedQueue.shift();
-    if (!entry || entry.settled || entry.signal.aborted) continue;
+    let nextIndex = -1;
+    let backgroundIndex = -1;
+    for (let index = 0; index < personalizedQueue.length; index += 1) {
+      const candidate = personalizedQueue[index];
+      if (!candidate || candidate.settled || candidate.signal.aborted) {
+        personalizedQueue.splice(index, 1);
+        index -= 1;
+        continue;
+      }
+      if (isInteractionPriority(candidate.priority)) {
+        nextIndex = index;
+        break;
+      }
+      if (backgroundIndex === -1 && canOpenPersonalizedSlot(candidate.priority)) {
+        backgroundIndex = index;
+      }
+    }
+    if (nextIndex === -1) nextIndex = backgroundIndex;
+    if (nextIndex === -1) break;
+
+    const [entry] = personalizedQueue.splice(nextIndex, 1);
     entry.settled = true;
     entry.signal.removeEventListener('abort', entry.onAbort);
-    entry.resolve(openPersonalizedSlot());
+    entry.setPromoter(null);
+    entry.resolve(openPersonalizedSlot(entry.priority));
   }
 }
 
-function acquirePersonalizedSlot(signal) {
+function acquirePersonalizedSlot(signal, priority, setPromoter) {
   if (signal.aborted) throw abortError(signal);
   // Preserve the transport's existing same-turn start semantics when a slot is
   // free. Only saturated address traffic pays a queue/microtask hop.
-  if (personalizedActive < MAX_PERSONALIZED_FETCHES) return openPersonalizedSlot();
+  if (canOpenPersonalizedSlot(priority)) return openPersonalizedSlot(priority);
   return new Promise((resolve, reject) => {
     const entry = {
       signal,
+      priority,
       resolve,
       reject,
+      setPromoter,
       settled: false,
       onAbort: null,
+      promote: null,
+    };
+    entry.promote = () => {
+      if (entry.settled || isInteractionPriority(entry.priority)) return;
+      entry.priority = 'interaction';
+      drainPersonalizedQueue();
     };
     entry.onAbort = () => {
       if (entry.settled) return;
       entry.settled = true;
       const index = personalizedQueue.indexOf(entry);
       if (index !== -1) personalizedQueue.splice(index, 1);
+      entry.setPromoter(null);
       reject(abortError(signal));
     };
     signal.addEventListener('abort', entry.onAbort, { once: true });
     personalizedQueue.push(entry);
+    entry.setPromoter(entry.promote);
     drainPersonalizedQueue();
   });
 }
@@ -134,7 +193,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-function createFlight(key, { cache } = {}) {
+function createFlight(key, { cache, priority = 'background' } = {}) {
   const controller = new AbortController();
   const generation = cacheGeneration;
   const flight = {
@@ -142,21 +201,37 @@ function createFlight(key, { cache } = {}) {
     consumers: 0,
     settled: false,
     promise: null,
+    priority: isInteractionPriority(priority) ? 'interaction' : 'background',
+    promoteQueued: null,
   };
 
+  // The deadline is wall-clock time visible to the caller, so it includes
+  // admission wait as well as response headers and body parsing.
+  let timeoutTimer = setTimeout(() => {
+    const timeout = new Error(`API request timed out: ${key}`);
+    timeout.name = 'TimeoutError';
+    try { controller.abort(timeout); } catch { /* already settled */ }
+  }, REQUEST_TIMEOUT_MS);
+  try { timeoutTimer?.unref?.(); } catch { /* browser timer */ }
+
   flight.promise = (async () => {
-    // Shared with polling.js via this broker. Without this, a shedding API
-    // stopped the timers but every panel kept knocking on its own schedule.
-    const personalized = isPersonalizedKey(key);
-    const cooldownScope = personalized ? 'personalized' : 'global';
-    if (isCoolingDown(cooldownScope)) throw new Error(`API cooling down: ${key}`);
-    const acquired = personalized
-      ? acquirePersonalizedSlot(controller.signal)
-      : null;
-    const releaseSlot = acquired && typeof acquired.then === 'function'
-      ? await acquired
-      : acquired;
+    let releaseSlot = null;
     try {
+      // Shared with polling.js via this broker. Without this, a shedding API
+      // stopped the timers but every panel kept knocking on its own schedule.
+      const personalized = isPersonalizedKey(key);
+      const cooldownScope = personalized ? 'personalized' : 'global';
+      if (isCoolingDown(cooldownScope)) throw new Error(`API cooling down: ${key}`);
+      const acquired = personalized
+        ? acquirePersonalizedSlot(
+            controller.signal,
+            flight.priority,
+            (promote) => { flight.promoteQueued = promote; },
+          )
+        : null;
+      releaseSlot = acquired && typeof acquired.then === 'function'
+        ? await acquired
+        : acquired;
       // A different flight may have armed cooldown while this request waited
       // in the per-tab lane. Honor it before touching the network.
       if (isCoolingDown(cooldownScope)) throw new Error(`API cooling down: ${key}`);
@@ -185,6 +260,11 @@ function createFlight(key, { cache } = {}) {
       if (generation === cacheGeneration) recentSet(key, value);
       return value;
     } finally {
+      if (timeoutTimer != null) {
+        try { clearTimeout(timeoutTimer); } catch { /* defensive */ }
+        timeoutTimer = null;
+      }
+      flight.promoteQueued = null;
       releaseSlot?.();
     }
   })().finally(() => {
@@ -247,7 +327,12 @@ export function invalidateJSONCache() {
  * Each caller gets independent AbortSignal semantics. The underlying fetch is
  * aborted only when every consumer has gone away.
  */
-export function fetchJSON(path, { signal, force = false, cache } = {}) {
+export function fetchJSON(path, {
+  signal,
+  force = false,
+  cache,
+  priority = 'background',
+} = {}) {
   const key = String(path);
   if (signal?.aborted) return Promise.reject(abortError(signal));
 
@@ -258,8 +343,16 @@ export function fetchJSON(path, { signal, force = false, cache } = {}) {
 
   let flight = inflightJSON.get(key);
   if (!flight) {
-    flight = createFlight(key, { cache: cache ?? (force ? 'no-store' : undefined) });
+    flight = createFlight(key, {
+      cache: cache ?? (force ? 'no-store' : undefined),
+      priority,
+    });
     inflightJSON.set(key, flight);
+  } else if (isInteractionPriority(priority) && !isInteractionPriority(flight.priority)) {
+    // Coalescing is URL-keyed. Promote an already-queued background flight when
+    // a user action attaches so first-caller order cannot defeat priority.
+    flight.priority = 'interaction';
+    flight.promoteQueued?.();
   }
   return attachConsumer(flight, signal);
 }

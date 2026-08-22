@@ -140,10 +140,12 @@ describe('standalone ALL IN chooser', () => {
     assert.match(INDEX_SRC, /'\/app\/components\/app-all-in-dialog\.js'/);
     assert.match(DIALOG_SRC, /import \{ lock, unlock \} from '\.\.\/app\/scroll-lock\.js'/);
     assert.match(DIALOG_SRC, /app-all-in:open/);
-    assert.match(DIALOG_SRC, /void this\.#refreshCurrency\('FLIP'\)/,
-      'opening the chooser warms the real FLIP quote without requiring the privacy blur to be lifted');
+    assert.match(DIALOG_SRC, /void this\.#refreshCurrencies\(\['ETH', 'FLIP'\]\)/,
+      'opening the chooser warms both real quotes without requiring the privacy spoiler to be lifted');
     assert.match(DIALOG_SRC, /detail\.refreshCurrency\(currency\)/,
-      'switching to FLIP refreshes the hidden balance source and re-renders the quote');
+      'currency refreshes use the hidden balance source and re-render the quote');
+    assert.match(DIALOG_SRC, /void this\.#refreshCurrency\(next\)/,
+      'switching back to ETH refreshes it just as switching to FLIP does');
     assert.match(APP_CSS, /\.allin-confirm\s*\{[^}]*min-height:\s*3\.25rem[^}]*#ef4444[^}]*font-size:/s);
     assert.match(APP_CSS, /\.allin-currencies\s*\{[^}]*repeat\(2, minmax\(0, 7\.5rem\)\)[^}]*justify-content:\s*center/s,
       'ETH and FLIP stay tall enough to tap but no longer stretch across the dialog');

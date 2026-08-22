@@ -759,6 +759,22 @@ describe('day-wide reveal planning', () => {
     ]);
   });
 
+  test('a complete summary needs no immutable per-day startup fan-out', async () => {
+    const paths = [];
+    const recent = Array.from({ length: 26 }, (_, index) => ({
+      day: 80 - index,
+      win: index % 2 === 0,
+      rewardPercent: index % 2 === 0 ? 100 : 80,
+    }));
+    const stats = await revealPlanning.loadProtocolCoinflipStats(80, async (path) => {
+      paths.push(path);
+      if (path === '/game/coinflip/stats') return { wins: 40, losses: 40, recent };
+      throw new Error(`Unexpected per-day fetch ${path}`);
+    });
+    assert.deepEqual(stats, { wins: 40, losses: 40, recent });
+    assert.deepEqual(paths, ['/game/coinflip/stats']);
+  });
+
   test('holds the newest global result outside the board until that reveal lands', () => {
     const indexed = { wins: 28, losses: 19, recent: [{ day: 67, win: true }, { day: 66, win: false }] };
     assert.deepEqual(revealPlanning.protocolCoinflipStatsForReveal(indexed, {
@@ -2396,6 +2412,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       assert.match(el.querySelector('[data-position="today"]').textContent, /WIN/);
       assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
         'the exact bankroll opens on the same completion event as the final result');
+      assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').hidden, false,
+        'AVAILABLE FUNDS keeps FLIP after a multi-million amount');
       const bankroll = el.querySelector('[data-bind="df-bankroll-rack"]');
       assertBankrollChipCounts(bankroll, { claimable: 16, liquid: 4, total: 23 },
         'reveal completion releases claim-side and combined physical chips together');

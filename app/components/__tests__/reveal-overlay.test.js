@@ -175,6 +175,7 @@ globalThis.localStorage = {
 
 const {
   queueReveal, normalizeSequence, buildIndividualLootboxSequences,
+  combineLootboxSequences, daySummaryAnimatedCards,
   buildDegeneretteSpinFrames,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   boxSpinScorePays, settleBoxSpinPayoutPresentation,
@@ -182,7 +183,7 @@ const {
   shouldCelebrateDegenerette, isUnluckyDegenerette,
   ticketGridSizeClass, revealTerminalActionLabel,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
-  REVEAL_OVERLAY_IDLE_EVENT,
+  REVEAL_OVERLAY_IDLE_EVENT, LOOTBOX_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
 const { dgnUnpackTicket } = await import('../../app/dgn-traits.js');
@@ -382,7 +383,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.boonStrength),
       ['mid', 'high', 'mid', 'high', 'high']);
     assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3]);
-    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-locked-front.webp');
+    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp');
     assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
     assert.equal(seq.cards[2].icon, null,
       'rating is already named on the card and needs no invented pictogram');
@@ -530,6 +531,38 @@ describe('normalizeSequence', () => {
     assert.equal(individual.at(-1).presentationId, 'combo:27');
     assert.equal(individual.at(-1).lootboxRelease.key, '27',
       'the purchase retires only after the final individual receipt');
+  });
+
+  test('OPEN ALL combines settled Pending lootboxes into one large physical case', () => {
+    const makeBox = (index) => normalizeSequence({
+      kind: 'lootbox',
+      presentationId: `pending-box:${index}`,
+      lootboxRelease: {
+        address: '0x00000000000000000000000000000000000000ab',
+        key: String(index),
+        lootboxIndex: index,
+      },
+      amountWei: BigInt(index) * 10_000_000_000n,
+      ticketPriceWei: 10_000_000_000n,
+      legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+    });
+    const combined = combineLootboxSequences([makeBox(2), makeBox(3)]);
+
+    assert.equal(combined.title, 'ALL LUCKBOXES · 2 BOXES');
+    assert.equal(combined.lootboxCaseModel, 'large',
+      'OPEN ALL always uses the visibly large case rather than the first child case');
+    assert.equal(combined.lootboxView, 'combined');
+    assert.equal(combined.autoAdvance, false,
+      'one combined receipt replaces the old case-by-case auto-advance queue');
+    assert.deepEqual(combined.cards.map((card) => card.value), ['2', '3'],
+      'every exact child reward comes out of the one case together');
+    assert.deepEqual(combined.lootboxCompletions.map((entry) => ({
+      presentationId: entry.presentationId,
+      key: entry.release?.key,
+    })), [
+      { presentationId: 'pending-box:2', key: '2' },
+      { presentationId: 'pending-box:3', key: '3' },
+    ], 'the one visual still retires both original Pending rows');
   });
 
   test('individual combo presentation runs every BoxSpin before ordinary box reveals', () => {
@@ -973,6 +1006,55 @@ describe('normalizeSequence', () => {
       'pack-only daily rewards fit the same visual stage as currency badges');
   });
 
+  test('daily summary reserves solo card animation for epic and legendary wins', () => {
+    const small = normalizeSequence({
+      kind: 'jackpot',
+      day: 15,
+      prizes: [
+        { type: 'tickets', amount: 2, level: 3 },
+        { type: 'flip', amount: 25n * 10n ** 18n },
+      ],
+      activity: {
+        hasCoinflipBet: true,
+        coinflipWon: false,
+        coinflipStakeAmount: String(250n * 10n ** 18n),
+      },
+    });
+    assert.deepEqual(small.cards.map((card) => card.type), [
+      'tickets', 'flip', 'coinflip-result',
+    ]);
+    assert.deepEqual(daySummaryAnimatedCards(small.cards), [],
+      'a coinflip loss, a rare FLIP line, and two common tickets go straight to the grid');
+    assert.equal(small.big, false,
+      'minor receipt rows cannot trigger the big-win fanfare or share treatment');
+
+    const mixed = normalizeSequence({
+      kind: 'jackpot', day: 15,
+      prizes: [
+        { type: 'eth', amount: 5n * 10n ** 15n },
+        { type: 'tickets', amount: 2, level: 3 },
+      ],
+    });
+    assert.deepEqual(daySummaryAnimatedCards(mixed.cards).map((card) => card.type), ['eth'],
+      'only the epic ETH win receives a solo beat; tickets remain for the final grid');
+    assert.equal(mixed.big, true);
+
+    const flipWin = normalizeSequence({
+      kind: 'jackpot', day: 15, prizes: [],
+      activity: {
+        hasCoinflipBet: true,
+        coinflipWon: true,
+        coinflipStakeAmount: String(250n * 10n ** 18n),
+        coinflipRewardPercent: 82,
+      },
+    });
+    assert.deepEqual(
+      daySummaryAnimatedCards(flipWin.cards).map((card) => card.type),
+      ['coinflip-result'],
+      'a settled coinflip win remains a headline result',
+    );
+  });
+
   test('daily summary renders Decimator direct and lootbox ETH as one clear result', () => {
     const seq = normalizeSequence({
       kind: 'jackpot',
@@ -1017,7 +1099,8 @@ describe('normalizeSequence', () => {
       noWin: null,
       consolationOnly: true,
     });
-    assert.equal(seq.big, true);
+    assert.equal(seq.big, false,
+      'a consolation receipt is not promoted to a big-win sequence');
     assert.equal(seq.consolationOnly, true);
     assert.equal(seq.cards.length, 1);
     assert.equal(seq.cards[0].type, 'wwxrp');
@@ -2083,6 +2166,20 @@ describe('reveal-overlay element', () => {
 
   test('lootbox shell carries the viewport-safe branded staged opener', () => {
     const el = instantiate();
+    const flightStageStart = REVEAL_SRC.indexOf('  #stageLootboxRewardFlight(seq) {');
+    const flightFaceStart = REVEAL_SRC.indexOf('  #mountLootboxRewardFaces(seq) {');
+    const flightFinishStart = REVEAL_SRC.indexOf('  async #finishLootboxRewardFlight(seq, settleMs) {');
+    const flightStageMethod = REVEAL_SRC.slice(flightStageStart, flightFaceStart);
+    const flightFaceMethod = REVEAL_SRC.slice(flightFaceStart, flightFinishStart);
+    const flightFinishMethod = REVEAL_SRC.slice(
+      flightFinishStart,
+      REVEAL_SRC.indexOf('  #buildShareButton(seq) {', flightFinishStart),
+    );
+    const cardRiseStart = APP_CSS.indexOf('@keyframes rvl-lootbox-card-rise');
+    const cardRiseKeyframes = APP_CSS.slice(
+      cardRiseStart,
+      APP_CSS.indexOf('@keyframes', cardRiseStart + 1),
+    );
     assert.ok(el.querySelector('.rvl-chest-logo'), 'generic chest markup remains available');
     assert.match(el.innerHTML, /rvl-chest-q rvl-chest-logo[^>]*flame-logo\.svg/,
       'the generic fallback still carries the authentic protocol mark');
@@ -2100,8 +2197,19 @@ describe('reveal-overlay element', () => {
       'one reusable shell carries both two-lock and legacy receiver positions');
     assert.equal(el.querySelectorAll('.rvl-vault-deadbolt').length, 4,
       'CSS activates only the selected model\'s matched retracting pair');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--lid').length, 2,
+      'each compact latch keeps an upper plate attached to the lid');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--body').length, 2,
+      'each compact latch keeps a lower plate attached to the body');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--bridge').length, 2,
+      'only one narrow seam bridge joins each pair of fixed plates');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-catch').length, 0,
+      'the compact opening has no separate receiver layer in the lid gap');
     assert.ok(el.querySelector('[data-bind="rvl-lootbox-flight"]'),
       'the actual reward-card flight deck is mounted with the case');
+    assert.match(REVEAL_SRC,
+      /<div class="rvl-chest-seam"><\/div>\s*<div class="rvl-lootbox-flight"[\s\S]*?<div class="rvl-chest-body">/,
+      'the reward flight is physically mounted at the opening between lid and body');
     assert.match(el.innerHTML, /rvl-lootbox-badge__face[\s\S]*flame-center\.svg/,
       'the animated center uses the canonical Degenerus flame geometry');
     assert.ok(el.querySelector('.rvl-lootbox-beam'), 'reward beam is mounted behind the box');
@@ -2116,16 +2224,16 @@ describe('reveal-overlay element', () => {
       'the seamless opener case with an integrated badge ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v12-front.webp', import.meta.url)),
       'the machined-metal opener case ships with the app');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-small-v14-locked-front.webp', import.meta.url)),
-      'the generated small case ships with the app');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-retracted-front.webp', import.meta.url)),
-      'the neutral case includes its paired retracted receiver art');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v6-top.webp', import.meta.url)),
+      'the housing-free detailed top-down case with its price panel ships with the app');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v6-front.webp', import.meta.url)),
+      'the matching detailed opener front ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp', import.meta.url)),
       'the opener includes a real inner-lid surface');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v29-locked-front.png', import.meta.url)),
-      'the premium gold case ships its locked two-cylinder front');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v29-deadbolt-right.png', import.meta.url)),
-      'the premium case ships both art-backed cylindrical lock pins');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v32-locked-front.png', import.meta.url)),
+      'the premium gold briefcase ships its matching locked front');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v31-deadbolt-right.png', import.meta.url)),
+      'the premium case ships the exact steel latch bridges used by its front art');
     assert.match(REVEAL_SRC, /const LOOTBOX_CASE_ART = lootboxCaseAssets\('medium'\)\.lockedFront/);
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
       'the case is bounded by both viewport axes');
@@ -2140,11 +2248,11 @@ describe('reveal-overlay element', () => {
       /\.rvl-vessel--lootbox \.rvl-chest-platform\s*\{[^}]*display:\s*none/s,
       'the case has no oval floor shadow that makes it look like it is hovering');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mask:\s*var\(--lootbox-case-retracted-art\)/s,
-      'the value wash follows the selected case while preserving its physical detail');
+      /\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-case-retracted-art\)/s,
+      'the base opener rule preserves the authored gold briefcase palette');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="large"\][\s\S]*?\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*opacity:\s*0;/s,
-      'the authored gold/enamel opener keeps the large case material separation intact');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-chest-body::before,[^{]*\{\s*opacity:\s*0\.82;/s,
+      'the shared detailed small and medium opener front is palette shifted by tier');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%/s,
       'the animated badge preserves the canonical thick-ring proportions');
@@ -2179,34 +2287,64 @@ describe('reveal-overlay element', () => {
       /\.rvl-vault-interlock\s*\{[^}]*overflow:\s*hidden/s,
       'the moving deadbolt art remains mechanically occluded by its baked receiver channel');
     assert.match(APP_CSS,
-      /\.rvl-vault-deadbolt::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mix-blend-mode:\s*color[^}]*mask:\s*var\(--lootbox-deadbolt-art\)/s,
-      'animated deadbolt sprites inherit the selected case tone instead of flashing their source-art gold');
+      /\.rvl-vault-deadbolt::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-deadbolt-art\)/s,
+      'animated hardware keeps its authored metal instead of flashing a multiplier tint');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="medium"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*display:\s*block/s,
-      'the medium case exposes only its matched inner pair');
+      /\.rvl-lootbox-latch\s*\{[^}]*width:\s*4%;[^}]*background-color:\s*transparent;[^}]*background-size:\s*100% 100%;[^}]*clip-path:\s*none;/s,
+      'both compact cases register the authored clasp sprites at the compact hardware scale');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="large"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*height:\s*19\.666%/s,
-      'the gold case activates exactly its matched left/right cylindrical lock pair');
+      /\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--lid\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-lid\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--bridge\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-bridge\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--body\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-body\.png/s,
+      'small uses the three losslessly sliced bronze sections of one authored clasp');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--2\s*\{\s*left:\s*24\.08%;\s*\}/s,
-      'the left lock pin stays registered inside the new receiver art');
+      /\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--lid\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-lid\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--bridge\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-bridge\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--body\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-body\.png/s,
+      'medium uses the geometry-identical silver clasp slices');
+    assert.doesNotMatch(APP_CSS, /rvl-lootbox-catch/,
+      'no synthetic catch hardware remains between the compact body and lid');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--3\s*\{\s*left:\s*71\.42%;\s*\}/s,
-      'the right lock pin stays registered inside the new receiver art');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-vault-interlock\s*\{[^}]*display:\s*none;/s,
+      'the shared legacy case does not receive mismatched model-specific deadbolts');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*top:\s*22\.82%;[^}]*width:\s*4\.5%;[^}]*height:\s*2\.23%/s,
+      'the gold case registers its exact two steel bridges over the baked briefcase latches');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--2\s*\{\s*left:\s*25\.25%;\s*\}/s,
+      'the left bridge stays registered inside its matching latch art');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--3\s*\{\s*left:\s*70\.25%;\s*\}/s,
+      'the right bridge stays registered inside its matching latch art');
     assert.doesNotMatch(APP_CSS,
       /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--(?:1|4)\s*\{[^}]*display:\s*block/s,
       'the large case cannot resurrect the discarded four-lock layout');
     assert.match(APP_CSS,
-      /@keyframes rvl-vault-bridge-retract\s*\{[\s\S]*0%, 71%[^}]*translateY\(0\)[\s\S]*100%[^}]*translateY\(-105%\)/,
-      'the two cylindrical pins withdraw fully into their upper sockets');
-    assert.doesNotMatch(APP_CSS, /rvl-lootbox-latch|rvl-lootbox-catch/,
-      'surface-mounted clasp hardware is completely removed from the opener');
+      /@keyframes rvl-vault-bridge-retract-left\s*\{[\s\S]*0%, 71%[^}]*translateX\(0\)[\s\S]*100%[^}]*translateX\(-102%\)/,
+      'each steel bridge stays put through the badge turn, then retracts into its left housing');
+    assert.match(APP_CSS,
+      /@keyframes rvl-vault-bridge-retract-right\s*\{[\s\S]*0%, 71%[^}]*translateX\(0\)[\s\S]*100%[^}]*translateX\(102%\)/,
+      'the matching bridge half retracts symmetrically into its right housing');
+    assert.match(APP_CSS,
+      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-latch--bridge\s*\{[^}]*rvl-lootbox-latch-disconnect[^}]*steps\(1, end\)/s,
+      'only the narrow seam bridge uses the discrete disconnect');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-latch--lid\s*\{[^}]*top:\s*73\.2%;[^}]*height:\s*21\.65%;[\s\S]*?\.rvl-lootbox-latch--body\s*\{[^}]*top:\s*2\.9%;[^}]*height:\s*12\.17%;[\s\S]*?\.rvl-lootbox-latch--bridge\s*\{[^}]*1\.855%[^}]*height:\s*3\.71%;/s,
+      'the three authored slices meet exactly across the case seam');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-latch--bridge::before,[\s\S]*?\.rvl-lootbox-latch--bridge::after\s*\{\s*content:\s*none;/s,
+      'the authored bridge surface is not covered by synthetic CSS hardware');
+    assert.doesNotMatch(APP_CSS,
+      /\.rvl-lootbox-latch--bridge\.rvl-lootbox-latch--(?:left|right)/,
+      'the middle section uses the exact same horizontal registration as the fixed clasp ends');
+    assert.match(APP_CSS,
+      /@keyframes rvl-lootbox-latch-disconnect\s*\{[\s\S]*?0%, 73%[^}]*translateY\(0\) scaleY\(1\)[\s\S]*?74%, 77%[^}]*translateY\(-42%\) scaleY\(0\.58\)[\s\S]*?78%, 100%[^}]*opacity:\s*0;[^}]*translateY\(-72%\) scaleY\(0\.12\)/,
+      'the middle section clicks upward into the lid for one discrete beat, then disappears before lift');
     assert.match(APP_CSS,
       /@keyframes rvl-case-charge\s*\{\s*from\s*\{\s*transform:\s*none;\s*\}\s*to\s*\{\s*transform:\s*none;\s*\}/s,
       'the case itself remains still while its internal seam glows');
     assert.match(APP_CSS,
       /@keyframes rvl-case-lid-open\s*\{[\s\S]*opacity:\s*1[^}]*rotateX\(9deg\)/,
-      'the unlocked lid cracks open from its rear hinge without flying upright');
+      'the gold case retains its existing shallow hinge opening');
+    assert.match(APP_CSS,
+      /@keyframes rvl-compact-case-lid-lift\s*\{[\s\S]*?0%, 10%[^}]*translateY\(0\)[\s\S]*?46%, 100%[^}]*translateY\(calc\(-1 \* clamp\(16px, 4vw, 30px\)\)\)/,
+      'the separate compact lid simply lifts after its connectors disappear');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-lid\s*\{[^}]*transform-origin:\s*50% 100% calc\(-1 \* var\(--rvl-lid-depth\)\)[^}]*preserve-3d/s,
       'the rigid lid volume pivots around the recessed rear axis at the body seam');
@@ -2214,34 +2352,98 @@ describe('reveal-overlay element', () => {
       /\.rvl-vessel--lootbox \.rvl-chest-lid__inner\s*\{[^}]*display:\s*none/s,
       'the shallow crack does not project a full inner-lid shelf beyond the case silhouette');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-chest-seam::before\s*\{[^}]*height:\s*clamp\([^}]*background:[^}]*#0f6f31/s,
-      'an opaque body-mounted aperture fills the crack and contains the green interior light');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-chest-seam::before\s*\{[^}]*height:\s*4px;[^}]*background:\s*color-mix\(in srgb, var\(--lootbox-tone\) 78%, white\);[^}]*filter:\s*blur\(0\.5px\)/s,
+      'the compact crack contains only a thin roll-colored glow, not an opaque shelf');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-lid__edge\s*\{[^}]*display:\s*none/s,
       'the shallow lift has no projected fascia or glowing shelf hanging beyond the lid');
     assert.match(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-chest-lid::after\s*\{[^}]*display:\s*none;/s,
+      'compact lids also suppress the extra metal rail beneath the lifted top');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-chest-lid::after\s*\{[^}]*display:\s*none;/s,
+      'the restored gold opener has no synthetic rail hanging beneath its lid');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-chest-seam::before\s*\{[^}]*height:\s*3px;[^}]*background:\s*color-mix\(in srgb, var\(--lootbox-tone\) 64%, #fff0b0\);[^}]*filter:\s*blur\(0\.35px\)/s,
+      'the gold opening restores its clean narrow glow instead of a dark interior shelf');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\]\.rvl-bursting \.rvl-vessel--lootbox \.rvl-vault-deadbolt\s*\{[^}]*visibility:\s*hidden;/s,
+      'the gold bridge overlays do not remain as floating bars once its lid opens');
+    assert.match(APP_CSS,
+      /@keyframes rvl-compact-case-seam-release\s*\{[\s\S]*var\(--lootbox-tone\)[\s\S]*var\(--lootbox-tone-rgb\)/,
+      'the seam release glow resolves from the actual roll color');
+    assert.match(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
+      'compact cases scale the gold case dimensional lock to their clean center panel');
+    assert.doesNotMatch(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__(?:ring|face)\s*\{[^}]*(?:display:\s*none|flame-logo\.svg)/s,
+      'compact cases do not replace the dimensional lock with a flat circular logo');
+    assert.match(APP_CSS,
+      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*rvl-lootbox-badge-red-uncover[\s\S]*?@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*?rotate\(180deg\)/s,
+      'the copied lock uncovers the green half as its red cover turns');
+    assert.match(APP_CSS,
       /@keyframes rvl-case-release\s*\{[\s\S]*to\s*\{[^}]*opacity:\s*1[^}]*transform:\s*none/,
       'the box neither expands nor fades during the handoff');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-card-rise\s*\{[\s\S]*translate\(var\(--rvl-card-launch-x\), 12px\) scale\(0\.08\)[\s\S]*translate\(0, 0\) scale\(1\)/,
-      'the actual information cards fan out from the box position and replace it');
-    assert.match(REVEAL_SRC, /if \(isLootbox\) this\.#stageLootboxRewardFlight\(seq\)/,
-      'the populated flight deck is mounted before the lid-open class starts');
+      /\.rvl-lootbox-flight__grid > \.rvl-lootbox-flight__card\s*\{[^}]*transform-origin:\s*50% 100%/s,
+      'flight cards grow from their lower edge at the open case');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-lootbox-flight\s*\{[^}]*top:\s*var\(--lootbox-case-seam[^}]*z-index:\s*9;[^}]*translate\(-50%, -68%\)/s,
+      'the reward deck stays registered to the physical case seam on one continuous layer');
+    assert.doesNotMatch(APP_CSS, /rvl-lootbox-flight-layer|rvl-lootbox-flight[^}]*steps\(/s,
+      'the card flight has no discrete layer switch that can pop between frames');
+    assert.match(cardRiseKeyframes,
+      /@keyframes rvl-lootbox-card-rise\s*\{\s*from\s*\{[^}]*translate3d\(var\(--rvl-card-launch-x\), clamp\(82px, 17dvh, 104px\), 0\) scale\(0\.08\)[^}]*\}\s*to\s*\{[^}]*translate3d\(0, -24px, 0\) scale\(1\)/s,
+      'the lightweight backs use one uninterrupted compositor transform from seam to fan');
+    assert.doesNotMatch(cardRiseKeyframes, /\d+%\s*\{/,
+      'the card flight has no intermediate transform stop that can jerk between poses');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight__back::after\s*\{[^}]*flame-logo\.svg/s,
+      'every in-flight reward uses the same cheap branded back');
     assert.match(REVEAL_SRC,
-      /await this\.#wait\(isLootbox \? LOOTBOX_AUTO_BURST_MS : 140\)/,
-      'open-all still gives the deadbolts and lid enough time to finish');
+      /slot\.className = 'rvl-card--mini rvl-lootbox-flight__card';[\s\S]*?turn\.className = 'rvl-lootbox-flight__turn';[\s\S]*?back\.className = 'rvl-lootbox-flight__back';[\s\S]*?front\.className = 'rvl-lootbox-flight__front'/,
+      'the opening builds lightweight two-sided shells before the case moves');
+    assert.doesNotMatch(flightStageMethod, /this\.#buildCard\(/,
+      'the real card DOM does not compete with the flight animation');
+    assert.match(flightFaceMethod, /const el = this\.#buildCard\(card, true\)/,
+      'the actual reward card is mounted on the hidden face after flight settles');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight__front\s*\{[^}]*rotateY\(180deg\)/s,
+      'the real reward starts concealed on the reverse face');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight--revealing \.rvl-lootbox-flight__turn\s*\{[^}]*rvl-lootbox-card-turn/s,
+      'a dedicated end-of-flight state turns each settled card');
+    assert.match(APP_CSS,
+      /@keyframes rvl-lootbox-card-turn\s*\{\s*from\s*\{[^}]*rotateY\(0deg\)[^}]*\}\s*to\s*\{[^}]*rotateY\(180deg\)/s,
+      'the reveal is a physical half-turn rather than a content transform');
+    assert.match(flightFinishMethod,
+      /await this\.#wait\(settleMs\)[\s\S]*this\.#mountLootboxRewardFaces\(seq\)[\s\S]*await this\.#wait\(LOOTBOX_CARD_FACE_READY_MS\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealing'\)[\s\S]*await this\.#wait\(LOOTBOX_CARD_FLIP_MS\)/,
+      'the flight settles, real faces mount, and the receipt waits for the flip to finish');
+    assert.match(APP_CSS,
+      /\.rvl-stage--lootbox\s*\{[^}]*--rvl-card-flight:\s*0\.78s;/s,
+      'manual openings give the smooth card flight enough time to read');
+    assert.match(APP_CSS,
+      /\.rvl-stage--lootbox\.rvl-stage--auto-lootbox\s*\{[^}]*--rvl-card-flight:\s*0\.52s;/s,
+      'batch openings keep the lightweight flight brisk');
+    assert.match(REVEAL_SRC, /if \(isLootbox\) this\.#stageLootboxRewardFlight\(seq\)/,
+      'the placeholder flight deck is mounted before the lid-open class starts');
+    assert.match(REVEAL_SRC,
+      /if \(isLootbox\) await this\.#finishLootboxRewardFlight\(seq, LOOTBOX_AUTO_BURST_MS\)/,
+      'open-all also completes the card flight and face turn before advancing');
     assert.doesNotMatch(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-logo\s*\{[^}]*drop-shadow/s,
       'the opener has no independently lit logo hovering above the box texture');
     assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*var\(--lootbox-case-art\)/s,
       'small pending boxes reuse the same recognizable silhouette');
     assert.match(APP_CSS,
-      /\.bxs-chip-art::before\s*\{[^}]*var\(--lootbox-case-art\)[^}]*clip-path:\s*var\(--lootbox-badge-clip\)/s,
-      'the compact box strip keeps the metallic Degenerus emblem untinted too');
+      /\.bxs-chip-art::before\s*\{[^}]*top:\s*var\(--lootbox-case-badge-top, 63\.5%\);[^}]*width:\s*var\(--lootbox-static-badge-size, 16%\);[^}]*flame-logo\.svg/s,
+      'the compact box strip keeps one complete official Degenerus emblem untinted too');
     assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
       'ticket-price bands publish visibly distinct case colors');
-    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid__front::before\s*\{[^}]*mix-blend-mode:\s*color[^}]*mask:/s,
-      'the value color tints the detailed case while preserving its luminance and alpha');
+    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid__front::before\s*\{[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;[^}]*mask:/s,
+      'the base opening lid leaves the authored gold palette intact');
+    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-seam::after\s*\{[^}]*--lootbox-tone-rgb/s,
+      'the multiplier tier remains visible as contained interior light');
     assert.match(REVEAL_SRC, /rvl-reward-lootbox__art[\s\S]*art\.src = LOOTBOX_CASE_ART/,
       'lootbox reward cards also reuse the protocol case asset');
     assert.match(APP_CSS, /@keyframes rvl-lootbox-flight-glow/);
@@ -2251,6 +2453,10 @@ describe('reveal-overlay element', () => {
       'a single box gives the slower mechanical badge sweep time to read');
     assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_CHARGE_MS = 880/,
       'batched boxes retain a faster but still legible automatic unlock');
+    assert.match(REVEAL_SRC, /const LOOTBOX_CARD_FACE_READY_MS = 60/,
+      'the mounted face gets a layout frame before the turn begins');
+    assert.match(REVEAL_SRC, /const LOOTBOX_CARD_FLIP_MS = 470/,
+      'the sequence reserves enough time for the staggered card turns');
     assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_RESULT_MS = 1_750/,
       'auto mode spends the recovered time on the readable result');
     assert.match(APP_CSS, /--rvl-box-charge:\s*1\.35s/,
@@ -2481,7 +2687,11 @@ describe('reveal-overlay element', () => {
     );
   });
 
-  test('OPEN ALL BOXES queues every ready box and pauses on the final receipt', async () => {
+  test('OPEN ALL BOXES opens every ready reward from one large combined case', async (t) => {
+    const completions = [];
+    const onComplete = (event) => completions.push(event?.detail?.presentationId);
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete));
     for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
       pendingActionsMod.publishPendingActions(source, [{
         id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
@@ -2489,14 +2699,14 @@ describe('reveal-overlay element', () => {
         run: async () => {
           pendingActionsMod.clearPendingActions(source);
           queueReveal({
-            kind: 'lootbox', lootboxIndex: index,
+            kind: 'lootbox', lootboxIndex: index, presentationId: `open-all-box:${index}`,
             legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
           });
         },
       }]);
     }
     queueReveal({
-      kind: 'lootbox', lootboxIndex: 1,
+      kind: 'lootbox', lootboxIndex: 1, presentationId: 'open-all-box:1',
       legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
     });
     const el = instantiate();
@@ -2510,20 +2720,24 @@ describe('reveal-overlay element', () => {
     await new Promise((resolve) => setTimeout(resolve, 240));
     await tick();
 
-    const lingeringSummary = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(lingeringSummary.querySelector('.rvl-card-value').textContent, '2',
-      'auto mode leaves the intermediate reward readable instead of flashing past it');
-    assert.equal(lingeringSummary.querySelector('.rvl-collect-cta').textContent, 'OPENING NEXT LUCKBOX…');
-
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
-    await tick();
-
     const finalSummary = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(finalSummary.querySelector('.rvl-card-value').textContent, '3');
+    assert.deepEqual(
+      finalSummary.querySelectorAll('.rvl-card-value').map((node) => node.textContent),
+      ['2', '3'],
+      'both child rewards land together instead of pausing on an intermediate box receipt',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="rvl-stage"]').getAttribute('data-lootbox-case-model'),
+      'large',
+      'the combined reward is presented as one large case',
+    );
     assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
     finalSummary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+    assert.deepEqual(completions, [
+      'open-all-box:1', 'open-all-box:2', 'open-all-box:3',
+    ], 'the one combined receipt completes every original box exactly once');
   });
 
   test('the sealed luckbox offers OPEN ONE or every ready box in Pending', async (t) => {
@@ -2567,6 +2781,12 @@ describe('reveal-overlay element', () => {
     for (let i = 0; i < 5; i += 1) await tick();
     assert.deepEqual(opened, [2, 3],
       'OPEN ALL resolves every ready luckbox in the tray before presentation advances');
+    assert.equal(
+      el.querySelector('[data-bind="rvl-vessel"]').getAttribute('data-lootbox-case-model'),
+      'large',
+      'the current case is upgraded in place to the one combined large box',
+    );
+    assert.equal(el.querySelector('[data-bind="rvl-title"]').textContent, 'ALL LUCKBOXES · 3 BOXES');
 
     el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -3563,6 +3783,73 @@ describe('reveal-overlay element', () => {
     assert.equal(collect.textContent, 'UNLUCKY');
     assert.ok(collect.classList.contains('rvl-collect-cta--unlucky'));
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+  });
+
+  test('motion Day Summary takes minor receipts straight to the combined grid', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    queueReveal({
+      kind: 'jackpot', day: 9,
+      prizes: [{ type: 'tickets', amount: 2, level: 10 }],
+      activity: {
+        hasCoinflipBet: true,
+        coinflipWon: false,
+        coinflipStakeAmount: String(250n * 10n ** 18n),
+      },
+    });
+    const el = instantiate();
+    await tick();
+
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(summary.hidden, false);
+    assert.deepEqual(
+      summary.querySelectorAll('.rvl-card').map((card) => (
+        String(card.className).includes('rvl-card--tickets') ? 'tickets' : 'coinflip-result'
+      )),
+      ['tickets', 'coinflip-result'],
+      'the two tickets and coinflip loss arrive together on the final receipt',
+    );
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, true,
+      'neither minor row entered the full-size individual card lane');
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('motion Day Summary deals only its big win before retaining every card in the grid', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    queueReveal({
+      kind: 'jackpot', day: 9,
+      prizes: [
+        { type: 'eth', amount: 5n * 10n ** 15n },
+        { type: 'tickets', amount: 2, level: 10 },
+      ],
+    });
+    const el = instantiate();
+    await tick();
+
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    assert.equal(zone.hidden, false);
+    assert.ok(zone.querySelector('.rvl-card--eth'), 'the epic ETH win receives the solo card beat');
+    assert.equal(zone.querySelector('.rvl-card--tickets'), null,
+      'the two-ticket row waits for the final combined grid');
+    assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true);
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
 

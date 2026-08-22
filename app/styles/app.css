@@ -6619,23 +6619,24 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
   content: '';
   background: var(--lootbox-tone, #ed0e11);
   mix-blend-mode: color;
-  opacity: 0.82;
+  /* Case model owns the shell palette. Multiplier color belongs to the aura,
+     not a repaint that makes Pending look like a different physical box. */
+  opacity: 0;
   pointer-events: none;
   -webkit-mask: var(--lootbox-case-top-art) center / contain no-repeat;
   mask: var(--lootbox-case-top-art) center / contain no-repeat;
 }
-body.layout-basic .rrt-action--lootbox-summary
-  .rrt-lootbox-mini[data-lootbox-case-model="large"]::after {
-  opacity: 0;
-}
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   position: absolute;
   z-index: 2;
-  inset: 0;
-  background: var(--lootbox-case-top-art) center / contain no-repeat;
-  clip-path: var(--lootbox-top-badge-clip);
+  top: var(--lootbox-top-badge-top, 77.5%);
+  left: 50%;
+  width: var(--lootbox-top-badge-size, 16.8%);
+  aspect-ratio: 1;
+  background: url('/whitepaper/flame-logo.svg') center / contain no-repeat;
   content: '';
   pointer-events: none;
+  transform: translate(-50%, -50%) scaleY(var(--lootbox-top-badge-scale-y, 0.78));
 }
 body.layout-basic .rrt-lootbox-summary { display: grid; grid-template-columns: auto; align-items: center; justify-content: center; row-gap: 0.06rem; line-height: 0.96; white-space: nowrap; }
 body.layout-basic .rrt-lootbox-summary__amount { grid-column: 1 / -1; color: #f1f5f9; font-size: 0.66rem; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -7742,7 +7743,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   --rvl-box-fx: min(560px, 96vw, 76dvh);
   --rvl-box-charge: 1.35s;
   --rvl-box-burst: 0.92s;
-  --rvl-card-flight: 0.66s;
+  --rvl-card-flight: 0.78s;
   box-sizing: border-box;
   width: min(96vw, 960px);
   min-height: min(480px, 94dvh);
@@ -7751,7 +7752,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox.rvl-stage--auto-lootbox {
   --rvl-box-charge: 0.88s;
   --rvl-box-burst: 0.66s;
-  --rvl-card-flight: 0.46s;
+  --rvl-card-flight: 0.52s;
 }
 .rvl-stage--lootbox .rvl-title { margin-bottom: -0.35rem; }
 .rvl-vessel--lootbox {
@@ -7804,6 +7805,11 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   --rvl-lid-depth: calc(var(--rvl-box-w) * 0.418);
   --rvl-lid-closed-pitch: -68.3deg;
   --rvl-inner-art-fill: 135%;
+  --rvl-case-trim-rgb: 238 190 82;
+  --rvl-case-track-dark: #16140f;
+  --rvl-case-track-mid: #b7791f;
+  --rvl-case-track-bright: #f3c55b;
+  --rvl-case-track-base: #2b2419;
   z-index: 1;
   width: var(--rvl-box-w);
   height: auto;
@@ -7817,7 +7823,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-vessel--lootbox .rvl-chest-aura {
   inset: -22% -7%;
   border-radius: 42%;
-  background: radial-gradient(ellipse, rgb(var(--lootbox-tone-rgb) / 0.34), rgba(255, 195, 74, 0.12) 42%, transparent 70%);
+  background: radial-gradient(ellipse, rgb(var(--lootbox-tone-rgb) / 0.34), rgb(var(--rvl-case-trim-rgb) / 0.12) 42%, transparent 70%);
   opacity: 0.56;
   transform: scale(0.98);
   animation: rvl-case-aura 2.8s ease-in-out infinite;
@@ -7836,14 +7842,27 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-vessel--lootbox .rvl-chest-lid::after {
   position: absolute;
   right: 17%; bottom: -3px; left: 17%; z-index: 5;
-  height: 7px; border: 1px solid rgba(238, 190, 82, 0.78); border-radius: 999px;
-  background: repeating-linear-gradient(90deg, #16140f 0 9%, #b7791f 9% 12%, #f3c55b 12% 14%, #2b2419 14% 25%);
+  height: 7px; border: 1px solid rgb(var(--rvl-case-trim-rgb) / 0.78); border-radius: 999px;
+  background: repeating-linear-gradient(90deg, var(--rvl-case-track-dark) 0 9%, var(--rvl-case-track-mid) 9% 12%, var(--rvl-case-track-bright) 12% 14%, var(--rvl-case-track-base) 14% 25%);
   box-shadow: inset 0 1px rgba(255, 235, 169, 0.5), 0 2px 4px rgba(0, 0, 0, 0.72);
   content: ''; pointer-events: none;
   transform: translateZ(calc(-1 * var(--rvl-lid-depth)));
 }
 .rvl-stage[data-lootbox-case-model="small"] .rvl-chest { --rvl-lid-depth: calc(var(--rvl-box-w) * 0.3135); --rvl-lid-closed-pitch: -59.8deg; --rvl-inner-art-fill: 154%; }
 .rvl-stage[data-lootbox-case-model="large"] .rvl-chest { --rvl-lid-depth: calc(var(--rvl-box-w) * 0.4047); --rvl-lid-closed-pitch: -64.1deg; --rvl-inner-art-fill: 113%; }
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest {
+  --rvl-case-trim-rgb: 190 201 216;
+  --rvl-case-track-dark: #11161c;
+  --rvl-case-track-mid: #596572;
+  --rvl-case-track-bright: #d8e1eb;
+  --rvl-case-track-base: #232c35;
+}
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-lid::after {
+  display: none;
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-chest-lid::after {
+  display: none;
+}
 .rvl-vessel--lootbox :is(.rvl-chest-lid__front, .rvl-chest-lid__inner, .rvl-chest-lid__edge) {
   position: absolute;
   display: block;
@@ -7862,14 +7881,11 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: var(--lootbox-tone);
   content: '';
   mix-blend-mode: color;
-  opacity: 0.82;
+  /* Preserve the authored SMALL / MEDIUM / LARGE materials during opening. */
+  opacity: 0;
   pointer-events: none;
   -webkit-mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
   mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
-}
-.rvl-stage[data-lootbox-case-model="large"]
-  .rvl-vessel--lootbox .rvl-chest-lid__front::before {
-  opacity: 0;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__inner {
   /* A nine-degree crack never exposes enough underside to justify projecting
@@ -7910,7 +7926,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   left: calc(3% + var(--lootbox-case-shell-inset, 0%));
   height: 2px;
   background: linear-gradient(90deg, transparent 2%, #08080e 11% 89%, transparent 98%);
-  box-shadow: 0 1px 0 rgba(255, 213, 111, 0.44);
+  box-shadow: 0 1px 0 rgb(var(--rvl-case-trim-rgb) / 0.44);
   transform: none;
 }
 .rvl-vessel--lootbox .rvl-chest-seam::before {
@@ -7920,11 +7936,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   left: 1%;
   height: clamp(14px, calc(var(--rvl-box-w) * 0.052), 28px);
   border-radius: 50% 50% 8% 8% / 34% 34% 8% 8%;
-  background:
-    linear-gradient(180deg, #020604 0 16%, #07170d 42%, #0f6f31 78%, #8dffac 100%);
+  background: linear-gradient(
+    180deg,
+    #020604 0 16%,
+    rgb(var(--lootbox-tone-rgb) / 0.12) 42%,
+    rgb(var(--lootbox-tone-rgb) / 0.66) 78%,
+    color-mix(in srgb, var(--lootbox-tone) 62%, white) 100%
+  );
   box-shadow:
-    inset 0 -2px rgba(196, 255, 207, 0.72),
-    0 0 18px 4px rgba(43, 255, 103, 0.4);
+    inset 0 -2px rgb(var(--lootbox-tone-rgb) / 0.72),
+    0 0 18px 4px rgb(var(--lootbox-tone-rgb) / 0.42);
   content: '';
   opacity: 0;
   pointer-events: none;
@@ -7938,12 +7959,69 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   left: 4%;
   height: 86px;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(190, 255, 199, 0.86), rgba(44, 255, 105, 0.32) 35%, transparent 70%);
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--lootbox-tone) 36%, white),
+    rgb(var(--lootbox-tone-rgb) / 0.34) 35%,
+    transparent 70%
+  );
   content: '';
   filter: blur(5px);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-42%);
+}
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-seam::before {
+  right: 8%;
+  bottom: -2px;
+  left: 8%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lootbox-tone) 78%, white);
+  box-shadow:
+    0 0 8px 2px rgb(var(--lootbox-tone-rgb) / 0.72),
+    0 0 22px 7px rgb(var(--lootbox-tone-rgb) / 0.34);
+  filter: blur(0.5px);
+  transform: scaleX(0.68);
+}
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-seam::after {
+  top: 50%;
+  right: 9%;
+  left: 9%;
+  height: clamp(28px, calc(var(--rvl-box-w) * 0.09), 48px);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--lootbox-tone) 42%, white),
+    rgb(var(--lootbox-tone-rgb) / 0.4) 34%,
+    transparent 72%
+  );
+  filter: blur(8px);
+  transform: translateY(-50%);
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-chest-seam::before {
+  right: 8%;
+  bottom: -1px;
+  left: 8%;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lootbox-tone) 64%, #fff0b0);
+  box-shadow:
+    0 0 9px 2px rgb(var(--lootbox-tone-rgb) / 0.7),
+    0 0 22px 6px rgb(var(--lootbox-tone-rgb) / 0.28);
+  filter: blur(0.35px);
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-chest-seam::after {
+  right: 10%;
+  left: 10%;
+  height: 48px;
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--lootbox-tone) 34%, #fff0b0),
+    rgb(var(--lootbox-tone-rgb) / 0.3) 34%,
+    transparent 72%
+  );
+  filter: blur(9px);
 }
 .rvl-vessel--lootbox .rvl-chest-body {
   top: var(--lootbox-case-seam, 37.1%);
@@ -7961,14 +8039,11 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   inset: 0;
   background: var(--lootbox-tone);
   mix-blend-mode: color;
-  opacity: 0.82;
+  /* The reward tier colors the contained light, never the case skin. */
+  opacity: 0;
   pointer-events: none;
   -webkit-mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
   mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
-}
-.rvl-stage[data-lootbox-case-model="large"]
-  .rvl-vessel--lootbox .rvl-chest-body::before {
-  opacity: 0;
 }
 .rvl-lootbox-badge { display: none; }
 .rvl-vessel--lootbox .rvl-lootbox-badge {
@@ -8050,8 +8125,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-vessel--lootbox .rvl-lootbox-badge__face img {
   display: block;
-  width: 60%;
-  height: 82%;
+  width: 70%;
+  height: 92%;
   object-fit: contain;
 }
 .rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
@@ -8081,77 +8156,145 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   70%, 100% { transform: rotate(402deg); }
 }
 
-/* Art-backed deadbolts live inside the baked receivers. Every case exposes a
-   matched left/right pair. LARGE uses two round piston pins spanning only the
-   narrow gap between its upper and lower rail sockets. */
-.rvl-vault-lockwork {
-  position: absolute;
-  inset: 0;
-  z-index: 8;
-  pointer-events: none;
+/* Compact cases use the same dimensional red-to-green lock as the gold case,
+   scaled to sit directly on the front-panel convergence without an extra
+   backing disc or a second flat logo. */
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge {
+  width: 10.5%;
 }
-.rvl-vault-interlock {
+
+/* Each compact clasp reads as one continuous piece. Its upper and lower ends
+   belong to the lid and body; only the notched middle section at the seam can
+   retract into the lid before it lifts. */
+.rvl-lootbox-latch {
   position: absolute;
+  z-index: 4;
   display: none;
-  overflow: hidden;
-  pointer-events: none;
-}
-.rvl-vault-deadbolt {
-  position: absolute;
-  inset: 0;
-  display: block;
+  box-sizing: border-box;
+  width: 4%;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
   background-position: center;
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.82));
-  transform: translateY(0);
-  will-change: transform;
+  box-shadow: none;
+  clip-path: none;
+  filter: drop-shadow(0 1px 0.7px rgba(0, 0, 0, 0.88));
+  pointer-events: none;
 }
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-latch {
+  display: block;
+}
+.rvl-lootbox-latch::before,
+.rvl-lootbox-latch::after { content: none; }
+.rvl-lootbox-latch--lid {
+  top: 73.2%;
+  height: 21.65%;
+}
+.rvl-lootbox-latch--body {
+  top: 2.9%;
+  height: 12.17%;
+}
+.rvl-lootbox-latch--bridge {
+  top: calc(var(--lootbox-case-seam, 37.1%) - 1.855%);
+  z-index: 8;
+  height: 3.71%;
+}
+.rvl-lootbox-latch--bridge::before,
+.rvl-lootbox-latch--bridge::after { content: none; }
+.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--lid {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-lid.png');
+}
+.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--bridge {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-bridge.png');
+}
+.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--body {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-body.png');
+}
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--lid {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-lid.png');
+}
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--bridge {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-bridge.png');
+}
+.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--body {
+  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-body.png');
+}
+.rvl-lootbox-latch--left { left: 31.9%; }
+.rvl-lootbox-latch--right { right: 31.9%; }
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-latch--bridge {
+  animation: rvl-lootbox-latch-disconnect var(--rvl-box-charge) steps(1, end) both;
+}
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-latch--bridge {
+  opacity: 0;
+  transform: translateY(-72%) scaleY(0.12);
+}
+@keyframes rvl-lootbox-latch-disconnect {
+  0%, 73% { opacity: 1; transform: translateY(0) scaleY(1); }
+  74%, 77% { opacity: 1; transform: translateY(-42%) scaleY(0.58); }
+  78%, 100% { opacity: 0; transform: translateY(-72%) scaleY(0.12); }
+}
+
+/* LARGE keeps its exact briefcase bridges; the smaller pair uses clasps. */
+.rvl-vault-lockwork { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.rvl-vault-interlock { position: absolute; display: none; overflow: hidden; pointer-events: none; }
+.rvl-vault-deadbolt { position: absolute; inset: 0; display: block; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; filter: drop-shadow(0 2px 1px rgba(0,0,0,.82)); transform: translateY(0); will-change: transform; }
 .rvl-vault-deadbolt::before {
   position: absolute;
   inset: 0;
   background: var(--lootbox-tone);
   content: '';
   mix-blend-mode: color;
+  opacity: 0;
   pointer-events: none;
   -webkit-mask: var(--lootbox-deadbolt-art) center / 100% 100% no-repeat;
   mask: var(--lootbox-deadbolt-art) center / 100% 100% no-repeat;
 }
-.rvl-stage[data-lootbox-case-model="small"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
-  top: 34.3%;
-  display: block;
-  width: 4%;
-  height: 15.3%;
-}
-.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 { left: 31.3%; }
-.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 { right: 31.3%; }
-.rvl-stage[data-lootbox-case-model="medium"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
-  top: 20.2%;
-  display: block;
-  width: 4.2%;
-  height: 30.8%;
-}
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 { left: 26.15%; }
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 { right: 26.15%; }
 .rvl-stage[data-lootbox-case-model="large"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
-  top: 16.88%;
+  top: 22.82%;
   display: block;
-  width: 4.333%;
-  height: 19.666%;
+  width: 4.5%;
+  height: 2.23%;
 }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 24.08%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 71.42%; }
-.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 25.25%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 70.25%; }
 .rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt {
   --lootbox-deadbolt-art: var(--lootbox-deadbolt-1);
   background-image: var(--lootbox-deadbolt-art);
 }
-.rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt {
   --lootbox-deadbolt-art: var(--lootbox-deadbolt-2);
   background-image: var(--lootbox-deadbolt-art);
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-deadbolt {
+  background-image: none;
+  filter: none;
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-deadbolt::before,
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-deadbolt::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background-image: var(--lootbox-deadbolt-art);
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  content: '';
+  mix-blend-mode: normal;
+  opacity: 1;
+  pointer-events: none;
+  -webkit-mask: none;
+  mask: none;
+  will-change: transform;
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-deadbolt::before {
+  left: 0;
+  background-position: left center;
+}
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-deadbolt::after {
+  right: 0;
+  background-position: right center;
 }
 .rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
   animation: rvl-vault-deadbolt-retract var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
@@ -8161,20 +8304,37 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   transform: translateY(-72%);
 }
 .rvl-stage[data-lootbox-case-model="large"].rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
-  animation-name: rvl-vault-bridge-retract;
+  animation: none;
 }
 .rvl-stage[data-lootbox-case-model="large"].rvl-bursting .rvl-vessel--lootbox .rvl-vault-deadbolt {
-  transform: translateY(-105%);
+  visibility: hidden;
+}
+.rvl-stage[data-lootbox-case-model="large"].rvl-charging .rvl-vault-deadbolt::before {
+  animation: rvl-vault-bridge-retract-left var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
+}
+.rvl-stage[data-lootbox-case-model="large"].rvl-charging .rvl-vault-deadbolt::after {
+  animation: rvl-vault-bridge-retract-right var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
+}
+.rvl-stage[data-lootbox-case-model="large"].rvl-bursting .rvl-vault-deadbolt::before {
+  transform: translateX(-102%);
+}
+.rvl-stage[data-lootbox-case-model="large"].rvl-bursting .rvl-vault-deadbolt::after {
+  transform: translateX(102%);
 }
 @keyframes rvl-vault-deadbolt-retract {
   0%, 71% { filter: brightness(1); transform: translateY(0); }
   77% { filter: brightness(1.34); transform: translateY(-5%); }
   100% { filter: brightness(1.08); transform: translateY(-72%); }
 }
-@keyframes rvl-vault-bridge-retract {
-  0%, 71% { filter: brightness(1); transform: translateY(0); }
-  77% { filter: brightness(1.42); transform: translateY(-8%); }
-  100% { filter: brightness(1.1); transform: translateY(-105%); }
+@keyframes rvl-vault-bridge-retract-left {
+  0%, 71% { filter: brightness(1); transform: translateX(0); }
+  77% { filter: brightness(1.3); transform: translateX(-8%); }
+  100% { filter: brightness(1.08); transform: translateX(-102%); }
+}
+@keyframes rvl-vault-bridge-retract-right {
+  0%, 71% { filter: brightness(1); transform: translateX(0); }
+  77% { filter: brightness(1.3); transform: translateX(8%); }
+  100% { filter: brightness(1.08); transform: translateX(102%); }
 }
 .rvl-vessel--lootbox .rvl-chest-brand {
   display: none;
@@ -8237,7 +8397,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   100% { opacity: 0.72; transform: scaleX(0.94); }
 }
 @keyframes rvl-case-seam-charge {
-  0%, 62% { background: #08080e; box-shadow: 0 1px 0 rgba(255, 213, 111, 0.3); }
+  0%, 62% { background: #08080e; box-shadow: 0 1px 0 rgb(var(--rvl-case-trim-rgb) / 0.3); }
   86% { background: #17843e; box-shadow: 0 0 7px 1px rgba(46, 230, 103, 0.44); }
   100% { background: #caffd1; box-shadow: 0 0 13px 3px rgba(74, 255, 123, 0.76); }
 }
@@ -8259,6 +8419,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-bursting .rvl-vessel--lootbox { opacity: 1; transform: none; filter: none; animation: none; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-in-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.32, 0, 0.2, 1) both; }
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]).rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid {
+  animation-name: rvl-compact-case-lid-lift;
+}
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam::before { animation: rvl-case-aperture-release var(--rvl-box-burst) ease-out both; }
@@ -8268,9 +8431,58 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: linear-gradient(180deg, transparent, rgba(172, 255, 188, 0.22) 58%, rgba(54, 255, 108, 0.5));
   animation: rvl-case-beam-release var(--rvl-box-burst) ease-out both;
 }
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]).rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(var(--lootbox-tone-rgb) / 0.22) 58%,
+    rgb(var(--lootbox-tone-rgb) / 0.5)
+  );
+}
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-fx::before { animation: rvl-case-flash var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-rays { animation: rvl-case-rays var(--rvl-box-burst) ease-out both; }
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-release var(--rvl-box-burst) ease-out both; }
+
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]).rvl-charging .rvl-vessel--lootbox .rvl-chest-seam {
+  animation: rvl-compact-case-seam-charge var(--rvl-box-charge) ease-in both;
+}
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]).rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam {
+  animation: rvl-compact-case-seam-release var(--rvl-box-burst) ease-out both;
+}
+@keyframes rvl-compact-case-seam-charge {
+  0%, 62% {
+    background: #08080e;
+    box-shadow: 0 1px 0 rgb(var(--rvl-case-trim-rgb) / 0.3);
+  }
+  86% {
+    background: color-mix(in srgb, var(--lootbox-tone) 68%, white);
+    box-shadow: 0 0 7px 1px rgb(var(--lootbox-tone-rgb) / 0.44);
+  }
+  100% {
+    background: color-mix(in srgb, var(--lootbox-tone) 42%, white);
+    box-shadow: 0 0 13px 3px rgb(var(--lootbox-tone-rgb) / 0.76);
+  }
+}
+@keyframes rvl-compact-case-seam-release {
+  from {
+    opacity: 1;
+    background: color-mix(in srgb, var(--lootbox-tone) 42%, white);
+    box-shadow: 0 0 13px 3px rgb(var(--lootbox-tone-rgb) / 0.76);
+    transform: scaleX(0.92);
+  }
+  48% {
+    opacity: 1;
+    background: color-mix(in srgb, var(--lootbox-tone) 22%, white);
+    box-shadow: 0 0 24px 7px rgb(var(--lootbox-tone-rgb) / 0.86);
+    transform: scaleX(1);
+  }
+  to {
+    opacity: 0.48;
+    background: color-mix(in srgb, var(--lootbox-tone) 55%, white);
+    box-shadow: 0 0 16px 4px rgb(var(--lootbox-tone-rgb) / 0.62);
+    transform: scaleX(0.96);
+  }
+}
 
 @keyframes rvl-case-release {
   from { opacity: 1; transform: none; filter: brightness(1.1); }
@@ -8279,6 +8491,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 @keyframes rvl-case-lid-open {
   0%, 10% { opacity: 1; transform: rotateX(0); }
   46%, 100% { opacity: 1; transform: rotateX(9deg); }
+}
+@keyframes rvl-compact-case-lid-lift {
+  0%, 10% { opacity: 1; transform: translateY(0); }
+  46%, 100% { opacity: 1; transform: translateY(calc(-1 * clamp(16px, 4vw, 30px))); }
 }
 @keyframes rvl-case-aperture-release {
   0%, 10% { opacity: 0.72; transform: scaleX(0.94); }
@@ -9119,6 +9335,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: 100%;
   height: auto;
 }
+.rvl-reward-lootbox::after {
+  position: absolute; top: var(--lootbox-case-badge-top, 63.5%); left: 50%; width: var(--lootbox-static-badge-size, 16%); aspect-ratio: 1;
+  background: url('/whitepaper/flame-logo.svg') center / contain no-repeat; content: ''; pointer-events: none; transform: translate(-50%, -50%);
+}
 @keyframes rvl-reward-art-in {
   from { opacity: 0; transform: translateY(8px) scale(0.92); }
   to { opacity: 1; transform: none; }
@@ -9313,12 +9533,14 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-lootbox-flight[hidden] { display: none !important; }
 .rvl-vessel--lootbox .rvl-lootbox-flight {
   position: absolute;
-  top: 48%;
+  top: var(--lootbox-case-seam, 37.1%);
   left: 50%;
+  /* The card keyframe clips each reward at the slot edge while it emerges;
+     keeping one layer throughout avoids a visible foreground pop. */
   z-index: 9;
   width: min(94vw, 920px);
   pointer-events: none;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -68%);
 }
 .rvl-vessel--lootbox .rvl-lootbox-flight::before {
   position: absolute;
@@ -9392,6 +9614,82 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   transform-origin: 50% 50%;
   animation: none;
 }
+.rvl-lootbox-flight__grid > .rvl-lootbox-flight__card {
+  position: relative;
+  transform-origin: 50% 100%;
+  will-change: opacity, transform;
+  contain: layout style;
+  min-height: 272px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  perspective: 900px;
+}
+.rvl-lootbox-flight__turn,
+.rvl-lootbox-flight__back,
+.rvl-lootbox-flight__front {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: 18px;
+}
+.rvl-lootbox-flight__turn {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.rvl-lootbox-flight__back,
+.rvl-lootbox-flight__front {
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.rvl-lootbox-flight__back {
+  border: 2px solid rgba(157, 135, 214, 0.76);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.09), transparent 34%),
+    repeating-linear-gradient(135deg, rgba(150,125,210,0.08) 0 2px, transparent 2px 12px),
+    linear-gradient(160deg, #29233f, #11101c 74%);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.rvl-lootbox-flight__back::after {
+  position: absolute;
+  inset: 22%;
+  background: url('/whitepaper/flame-logo.svg') center / contain no-repeat;
+  content: '';
+  filter: grayscale(0.35) saturate(0.78);
+  opacity: 0.7;
+}
+.rvl-lootbox-flight__front {
+  transform: rotateY(180deg);
+}
+.rvl-lootbox-flight__front > .rvl-card--mini {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 1rem 0.85rem;
+  border-width: 2px;
+  border-radius: 18px;
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+.rvl-lootbox-flight__front > .rvl-card--pack-only { padding: 0.7rem; }
+.rvl-lootbox-flight--revealing .rvl-lootbox-flight__turn {
+  animation: rvl-lootbox-card-turn 0.38s cubic-bezier(0.38, 0, 0.2, 1) both;
+}
+.rvl-lootbox-flight--revealing .rvl-lootbox-flight__card:nth-child(2) .rvl-lootbox-flight__turn { animation-delay: 0.025s; }
+.rvl-lootbox-flight--revealing .rvl-lootbox-flight__card:nth-child(3) .rvl-lootbox-flight__turn { animation-delay: 0.05s; }
+.rvl-lootbox-flight--revealing .rvl-lootbox-flight__card:nth-child(n+4) .rvl-lootbox-flight__turn { animation-delay: 0.075s; }
+@keyframes rvl-lootbox-card-turn {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(180deg); }
+}
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="2"] > .rvl-card--mini:first-child {
   --rvl-card-launch-x: 55%;
   --rvl-card-launch-mid-x: 26%;
@@ -9433,27 +9731,22 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(4) { --rvl-card-launch-x: 55%; --rvl-card-launch-mid-x: 26%; --rvl-card-launch-tilt: -5deg; --rvl-card-launch-mid-tilt: -2deg; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(5) { --rvl-card-launch-x: -55%; --rvl-card-launch-mid-x: -26%; --rvl-card-launch-tilt: 5deg; --rvl-card-launch-mid-tilt: 2deg; }
 .rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini {
-  animation: rvl-lootbox-card-rise var(--rvl-card-flight) cubic-bezier(0.18, 0.72, 0.24, 1) 0.1s both;
+  animation: rvl-lootbox-card-rise var(--rvl-card-flight) cubic-bezier(0.32, 0, 0.2, 1) 0.04s both;
 }
-.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(2) { animation-delay: 0.12s; }
-.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(3) { animation-delay: 0.14s; }
-.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(4) { animation-delay: 0.16s; }
-.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(5) { animation-delay: 0.18s; }
-.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(n+6) { animation-delay: 0.2s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(2) { animation-delay: 0.065s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(3) { animation-delay: 0.09s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(4) { animation-delay: 0.115s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(5) { animation-delay: 0.14s; }
+.rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(n+6) { animation-delay: 0.165s; }
 @keyframes rvl-lootbox-card-rise {
-  0% {
+  from {
     opacity: 0;
-    filter: brightness(2.2) saturate(0.7);
-    transform: translate(var(--rvl-card-launch-x), 12px) scale(0.08) rotate(var(--rvl-card-launch-tilt));
+    transform: translate3d(var(--rvl-card-launch-x), clamp(82px, 17dvh, 104px), 0) scale(0.08) rotate(var(--rvl-card-launch-tilt));
   }
-  24% {
+  to {
     opacity: 1;
-    filter: brightness(1.72) saturate(1.08);
-    transform: translate(var(--rvl-card-launch-x), -12px) scale(0.24) rotate(var(--rvl-card-launch-tilt));
+    transform: translate3d(0, -24px, 0) scale(1) rotate(0deg);
   }
-  66% { transform: translate(var(--rvl-card-launch-mid-x), -28px) scale(0.82) rotate(var(--rvl-card-launch-mid-tilt)); }
-  88% { transform: translate(0, 3px) scale(1.025) rotate(0deg); }
-  to { opacity: 1; filter: brightness(1) saturate(1); transform: translate(0, 0) scale(1) rotate(0deg); }
 }
 .rvl-spin-zone--lootbox-launch {
   transform-origin: 50% 72%;
@@ -10352,7 +10645,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   }
   .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-lid__inner, .rvl-chest-lid__edge::after,
   .rvl-chest-body, .rvl-chest-seam, .rvl-chest-seam::after,
-  .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-badge__ring,
+  .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-latch, .rvl-lootbox-badge__ring,
   .rvl-lootbox-badge__ring::before, .rvl-lootbox-badge__ring::after, .rvl-lootbox-badge__center {
     animation: none !important;
     transition: none !important;
@@ -10425,22 +10718,26 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   inset: 0;
   background: var(--lootbox-tone, #ed0e11);
   mix-blend-mode: color;
-  opacity: 0.82;
+  /* Compact rows retain the same authored shell as purchase and opening. */
+  opacity: 0;
   pointer-events: none;
   -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
   mask: var(--lootbox-case-art) center / contain no-repeat;
 }
-.bxs-chip-art[data-lootbox-case-model="large"]::after {
-  opacity: 0;
-}
+body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::after, .rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-lid__front::before,
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-body::before, .bxs-chip-art:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::after { opacity: 0.82; }
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-vault-interlock { display: none; }
 .bxs-chip-art::before {
-  content: '';
   position: absolute;
   z-index: 2;
-  inset: 0;
-  background: var(--lootbox-case-art) center / contain no-repeat;
-  clip-path: var(--lootbox-badge-clip);
+  top: var(--lootbox-case-badge-top, 63.5%);
+  left: 50%;
+  width: var(--lootbox-static-badge-size, 16%);
+  aspect-ratio: 1;
+  background: url('/whitepaper/flame-logo.svg') center / contain no-repeat;
+  content: '';
   pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 /* Waiting: slow breathe. */

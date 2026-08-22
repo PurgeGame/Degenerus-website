@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-24275 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-24700 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -319,6 +319,12 @@ describe('app.css LOC budget', () => {
     // sections and the shared combo-rewards section refine the reveal summary.
     // 24150 → 24275 replaces the raw utility-style cash-out popup with two
     // responsive asset cards, compact balance readouts, and complete control states.
-    assert.ok(cssLines.length <= 24275, `total <=24275, got ${cssLines.length}`);
+    // 24275 → 24400 registers the canonical Small, Medium, and Large
+    // Luckbox cases across Buy In, Pending, and the full-screen opener. This
+    // refines one existing product family and keeps only six lines of headroom.
+    // 24400 → 24700 covers the completed cash-out asset sheet plus the shared
+    // fixed reveal-action dock and its responsive two-choice Luckbox controls.
+    // These refine existing transaction and reveal surfaces; ~68 lines remain.
+    assert.ok(cssLines.length <= 24700, `total <=24700, got ${cssLines.length}`);
   });
 });

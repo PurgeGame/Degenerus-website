@@ -115,6 +115,36 @@ function _contextProvider() {
   return _readProvider;
 }
 
+function _activityScoreNumber(value) {
+  if (value == null) return null;
+  try {
+    const parsed = BigInt(value);
+    if (parsed >= 0n && parsed <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(parsed);
+  } catch (_e) { /* malformed reads remain unknown */ }
+  return null;
+}
+
+/** Read only the live GAME score used by player-facing Degen Rating gates. */
+export async function readPlayerActivityScore(player) {
+  if (!player) return null;
+  if (_contextReaderForTest) {
+    try {
+      const context = await _contextReaderForTest(player, null, { scoreOnly: true });
+      return _activityScoreNumber(context?.activityScore);
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  try {
+    const provider = _contextProvider();
+    const game = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_CONTEXT_ABI, provider);
+    return _activityScoreNumber(await game.playerActivityScore(player));
+  } catch (_e) {
+    return null;
+  }
+}
+
 async function _storageAt(provider, slot) {
   const position = typeof slot === 'string' && slot.startsWith('0x')
     ? slot
@@ -566,13 +596,9 @@ export async function readDecimatorContext(player, targetLevel = null, options =
       : readDecimatorRawBurnTotal({ level: targetLevel, sinceTimestamp: options.sinceTimestamp }),
   ]);
 
-  let activityScore = null;
-  if (scoreRead.status === 'fulfilled') {
-    try {
-      const parsed = BigInt(scoreRead.value);
-      if (parsed >= 0n && parsed <= BigInt(Number.MAX_SAFE_INTEGER)) activityScore = Number(parsed);
-    } catch (_e) { /* malformed read stays unknown */ }
-  }
+  const activityScore = scoreRead.status === 'fulfilled'
+    ? _activityScoreNumber(scoreRead.value)
+    : null;
 
   let lastPurchaseDay = null;
   if (purchaseRead.status === 'fulfilled') {

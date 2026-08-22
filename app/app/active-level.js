@@ -93,21 +93,41 @@ export function activeTicketLevel(gameState, contractPhase = null) {
 /**
  * Level whose foil pack belongs in the Daily Drawing cabinet.
  *
- * This deliberately differs from `activeTicketLevel()`. New buys may already
- * route forward during a sealed RNG window or a purchase cadence, but the
- * cabinet is current-level history: it keeps that level's foil tickets seated
- * until the end-phase transition actually starts.
+ * This deliberately differs from `activeTicketLevel()` during the final
+ * sealed RNG window. New buys may already route forward before that level's
+ * last jackpot has actually run, but the cabinet must keep the current pack
+ * seated through that draw. Once end-phase starts OR the same numeric level
+ * has reached purchase cadence, the final jackpot is over and the cabinet
+ * belongs to level + 1. Keeping purchase cadence on `level` made the handoff
+ * move 311 -> 312 -> 311 and hid a real level-312 foil pack.
  */
 export function foilPackDisplayLevel(gameState, contractPhase = null) {
   const level = Number(gameState?.level ?? contractPhase?.level);
   if (!Number.isFinite(level)) return null;
 
-  // _endPhase is the exact hand-off requested by the cabinet: from this point
-  // onward the old level has no remaining jackpot presentation.
+  // _endPhase is the first exact hand-off requested by the cabinet: from this
+  // point onward the old level has no remaining jackpot presentation.
   if (gameState?.phaseTransitionActive === true) return level + 1;
 
-  // Purchase routing and cabinet ownership are separate clocks. In
-  // particular, a same-level JACKPOT -> PURCHASE refresh after a spin must not
-  // swap the seated current-level pack for an unowned level + 1 pack.
+  // Prefer the explicit /game/state cadence over the independently-polled
+  // contract snapshot. If either API field still says JACKPOT, fail closed on
+  // the current pack; this is what prevents a stale side poll from deleting it
+  // before the final draw runs.
+  const phase = String(gameState?.phase || '').toUpperCase();
+  const apiSaysJackpot = gameState?.jackpotPhaseFlag === true || phase === 'JACKPOT';
+  if (apiSaysJackpot) return level;
+
+  const apiSaysPurchase = gameState?.jackpotPhaseFlag === false
+    || phase === 'PURCHASE'
+    || phase === 'MINT';
+  if (apiSaysPurchase) return level + 1;
+
+  // A direct phase snapshot is the fallback only when /game/state has no
+  // cadence yet. Unknown state stays on the current level rather than ejecting
+  // a pack speculatively.
+  const directLevel = Number(contractPhase?.level);
+  const directIsCurrent = typeof contractPhase?.jackpot === 'boolean'
+    && (!Number.isFinite(directLevel) || directLevel === level);
+  if (directIsCurrent && contractPhase.jackpot === false) return level + 1;
   return level;
 }

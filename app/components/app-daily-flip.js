@@ -5300,7 +5300,7 @@ class AppDailyFlip extends HTMLElement {
     });
     if (flipUnit) {
       flipUnit.textContent = 'FLIP';
-      flipUnit.hidden = this.#fmtWhole(protocolFlipWei).length > 7;
+      flipUnit.hidden = false;
     }
     if (flipTotal) {
       updateBalanceDisplay(flipTotal, {

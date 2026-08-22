@@ -63,7 +63,7 @@ import { buildDaySummaryPrizes } from '../app/day-summary-prizes.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 const FOIL_MATCH_FLASH_MS = 640;
-const DAY_SUMMARY_RECEIPT_REVISION = 'v2';
+const DAY_SUMMARY_RECEIPT_REVISION = 'v3';
 
 function _terminalFoilClaimError(error) {
   const seen = new Set();
@@ -159,13 +159,15 @@ class LastDayJackpot extends HTMLElement {
   #foilClaimBusy = false; // one in-flight foil claim at a time
   #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
   #foilMainActivated = false;  // this tab has landed Roll 1 for the pinned day
+  #foilBonusActivated = false; // this tab has landed Roll 2 for the pinned day
   #foilMainClaimReady = false;  // Roll 1 scratch gate cleared in this tab
   #foilBonusClaimReady = false; // Roll 2 scratch gate cleared in this tab
   // The reels' presentation for the spin currently on screen, as published by
-  // replay:spin-progress. `traits` reports reel locks; only main-draw locks are
-  // durable foil grades. `liveTraits` holds the exact current frame and is
-  // replaced as the reels cycle. This is presentation, never a record —
-  // nothing here opens a spoiler or claim gate.
+  // replay:spin-progress. `traits` reports reel locks; while a spin is active,
+  // only main-draw locks are durable foil grades. `liveTraits` holds the exact
+  // current frame and is replaced as the reels cycle. Bonus completion promotes
+  // the authoritative packed set separately. This presentation is never a
+  // record — nothing here opens a spoiler or claim gate.
   #foilPresentation = null;
   #foilFlashQuadrants = new Set();
   #foilFlashTimers = new Map();
@@ -182,6 +184,13 @@ class LastDayJackpot extends HTMLElement {
   // this.querySelector() lookup stops finding it — hold the node instead.
   #resultsCtaEl = null;
   #summaryBusy = false;
+  // DAY SUMMARY becomes available only after the board and flip are complete.
+  // Use the post-spin scratch window (or the visible CTA on a restored board)
+  // to warm immutable exact-day activity, then let the eventual click share the
+  // same flight/value instead of starting the player's history walk from zero.
+  #summaryActivityKey = null;
+  #summaryActivityValue = undefined;
+  #summaryActivityPromise = null;
   // A deliberate day pick is a request to watch that day's presentation again,
   // even when durable spoiler keys say it was played in an earlier session.
   // This is an in-memory override only: balances/claims keep their honest
@@ -257,7 +266,15 @@ class LastDayJackpot extends HTMLElement {
       && slottedLevel > 0
       && Number.isInteger(liveFoilLevel)
       && liveFoilLevel > slottedLevel;
-    if (levelPassedSlottedPack) {
+    // A phase handoff can land while the fullscreen foil pack is still open.
+    // Finish that release and its seating frame before retiring the old level;
+    // the next routine game-state poll completes the rollover. Without this
+    // guard the PURCHASE update deletes the very pack the player is watching.
+    const armedLevel = Number(this.#foilSlottingArmed);
+    const slottingInFlight = (Number.isInteger(armedLevel) && armedLevel > 0)
+      || this.#foilSlottingPending === true;
+    const deferSlottedRollover = levelPassedSlottedPack && slottingInFlight;
+    if (levelPassedSlottedPack && !deferSlottedRollover) {
       // A completed reveal may pin its exact pack while the same numeric level
       // changes cadence. That protection ends at the real cabinet rollover:
       // old-level foil tickets must vacate before the new level's read lands.
@@ -268,7 +285,8 @@ class LastDayJackpot extends HTMLElement {
       this.#renderFoil();
     }
     this.#syncReplayProcessingState();
-    if (levelPassedSlottedPack || this.#foilTargetLevel() !== priorFoilLevel) {
+    if (!deferSlottedRollover
+      && (levelPassedSlottedPack || this.#foilTargetLevel() !== priorFoilLevel)) {
       void this.#refreshFoil();
     }
   }
@@ -463,12 +481,11 @@ class LastDayJackpot extends HTMLElement {
     const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
     const mainActive = (claimableOnly ? this.#foilMainClaimReady : this.#foilMainActivated)
       || (!replayFresh && this.#hasSpunPinnedDay());
-    // Roll 2 can create a claim after its scratch gate, but it never becomes a
-    // durable cabinet lamp. Bonus faces are display-only live overlays; only
-    // Roll 1 contributes a settled grade to #renderFoilBackdrop.
-    const bonusActive = claimableOnly && (
-      this.#foilBonusClaimReady || (!replayFresh && this.#hasCompletedPinnedDay())
-    );
+    // The landed bonus result lights the cabinet immediately, just like Roll 1.
+    // Its claim tuple remains independently hidden until the bonus scratch gate
+    // opens, so lighting the foils cannot spoil or publish the covered payout.
+    const bonusActive = (claimableOnly ? this.#foilBonusClaimReady : this.#foilBonusActivated)
+      || (!replayFresh && this.#hasCompletedPinnedDay());
     const summary = this.#lastPayload?.summary;
     const levelLocked = this.#foilLevelLocked();
     return {
@@ -510,9 +527,10 @@ class LastDayJackpot extends HTMLElement {
     const validTrait = (trait) => typeof trait === 'number'
       && Number.isInteger(trait) && trait >= 0 && trait <= 255;
     for (let quadrant = 0; quadrant < 4; quadrant += 1) {
-      // Main locks are durable. Bonus locks describe where the bonus reel
-      // stopped, but the foil contract treats every Roll 2 face as a transient
-      // overlay, so only its exact currently displayed live face may grade.
+      // Main locks are durable. While Roll 2 is still moving, its locks only
+      // describe where a reel stopped, so only the exact currently displayed
+      // live face may grade. Completion swaps this presentation for the packed
+      // bonus set in #onPanelSpinComplete.
       const lockedTrait = presentation?.bonusPhase === true ? null : traits[quadrant];
       const trait = validTrait(lockedTrait) ? lockedTrait : liveTraits[quadrant];
       // Deliberately typeof-strict rather than Number()-coerced: null means no
@@ -1117,10 +1135,9 @@ class LastDayJackpot extends HTMLElement {
     this.#renderFoilBackdrop();
   }
 
-  // A completed main spin powers its durable foil lane. Bonus completion is
-  // also the terminal boundary for Roll 2's live-only presentation: the panel
-  // intentionally ends on its final painted frame, so no synthetic null-live
-  // progress event follows to clear that face or its one-shot lock pop.
+  // A completed spin promotes its settled draw into a durable foil lane. Bonus
+  // completion also replaces Roll 2's live presentation with the authoritative
+  // packed result, so its final lights remain on instead of disappearing.
   // Claims, persistence, and follow-on UI remain gated behind the player's
   // scratch completion below.
   #onPanelSpinComplete(e) {
@@ -1128,7 +1145,13 @@ class LastDayJackpot extends HTMLElement {
     const eventDay = Number(d?.day);
     if (!Number.isInteger(eventDay) || eventDay <= 0
       || eventDay !== Number(this.#pinnedDay)) return;
+    // The reel has landed, but the player still has scratch work (and possibly
+    // Roll 2) before DAY SUMMARY can appear. Warm the immutable activity now so
+    // even an immediate press after the last scratch does not begin a history
+    // scan from zero. A bonus completion shares this same keyed flight/value.
+    void this.#dayActivity(d?.player || getViewedAddress(), eventDay);
     if (d?.bonusPhase === true) {
+      this.#foilBonusActivated = true;
       this.#foilPresentation = null;
       this.#clearFoilMatchFlashes();
     } else {
@@ -1159,7 +1182,10 @@ class LastDayJackpot extends HTMLElement {
       // that do not emit replay:spin-complete.
       this.#foilMainActivated = true;
       this.#foilMainClaimReady = true;
-      if (d?.bonusPhase === true) this.#foilBonusClaimReady = true;
+      if (d?.bonusPhase === true) {
+        this.#foilBonusActivated = true;
+        this.#foilBonusClaimReady = true;
+      }
       this.#renderFoil();
     }
     // The replay board itself knows whether THIS scratch phase contained an
@@ -1225,6 +1251,7 @@ class LastDayJackpot extends HTMLElement {
     this.#boardDone = false;
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
+    this.#foilBonusActivated = false;
     this.#foilMainClaimReady = false;
     this.#foilBonusClaimReady = false;
     this.#foilPresentation = null;
@@ -1254,9 +1281,11 @@ class LastDayJackpot extends HTMLElement {
   }
 
   #resetDayGates() {
+    this.#clearSummaryActivityCache();
     this.#boardDone = false;
     this.#sawScratchEvent = false;
     this.#foilMainActivated = false;
+    this.#foilBonusActivated = false;
     this.#foilMainClaimReady = false;
     this.#foilBonusClaimReady = false;
     this.#foilPresentation = null;
@@ -1297,9 +1326,9 @@ class LastDayJackpot extends HTMLElement {
     if (this.#pinnedDay == null) return null;
     const viewed = getViewedAddress();
     const player = viewed ? String(viewed).toLowerCase() : 'no-player';
-    // v2 re-arms receipts consumed while the sealed rollover snapshot still
-    // omitted late-indexed BAF / Decimator results. The existing deployment
-    // cleanup prefix still covers both revisions.
+    // v3 re-arms receipts whose coinflip card may have inherited a level-scoped
+    // outcome from another day. The existing deployment cleanup prefix still
+    // covers every revision.
     return `day_summary_${CHAIN.id}_${this.#pinnedDay}_${player}_${DAY_SUMMARY_RECEIPT_REVISION}`;
   }
 
@@ -1374,6 +1403,45 @@ class LastDayJackpot extends HTMLElement {
       && !this.#hasOpenedSummary()
     );
     this.#setResultsCtaVisible(cta, show);
+    if (show) void this.#dayActivity(getViewedAddress(), this.#pinnedDay);
+  }
+
+  #clearSummaryActivityCache() {
+    this.#summaryActivityKey = null;
+    this.#summaryActivityValue = undefined;
+    this.#summaryActivityPromise = null;
+  }
+
+  #dayActivity(viewed, day) {
+    const player = viewed ? String(viewed).toLowerCase() : '';
+    const numericDay = Number(day);
+    if (!player || !Number.isInteger(numericDay) || numericDay <= 0) {
+      return Promise.resolve(null);
+    }
+    const key = `${player}|${numericDay}`;
+    if (this.#summaryActivityKey === key) {
+      if (this.#summaryActivityValue !== undefined) {
+        return Promise.resolve(this.#summaryActivityValue);
+      }
+      if (this.#summaryActivityPromise) return this.#summaryActivityPromise;
+    }
+
+    this.#summaryActivityKey = key;
+    this.#summaryActivityValue = undefined;
+    let flight;
+    flight = this.#loadDayActivity(player, numericDay)
+      .catch(() => null)
+      .then((activity) => {
+        if (this.#summaryActivityKey === key) this.#summaryActivityValue = activity;
+        return activity;
+      })
+      .finally(() => {
+        if (this.#summaryActivityKey === key && this.#summaryActivityPromise === flight) {
+          this.#summaryActivityPromise = null;
+        }
+      });
+    this.#summaryActivityPromise = flight;
+    return flight;
   }
 
   async #loadDayActivity(viewed, day) {
@@ -1381,14 +1449,14 @@ class LastDayJackpot extends HTMLElement {
     const player = String(viewed).toLowerCase();
     const address = encodeURIComponent(player);
     const dayParam = encodeURIComponent(String(day));
-    const read = (path) => fetchJSON(path);
+    const read = (path) => fetchJSON(path, { priority: 'interaction' });
     const [packsResult, viewerResult, resolvedStakeResult] = await Promise.allSettled([
       read(`/player/${address}/packs?day=${dayParam}`),
       read(`/viewer/player/${address}/day/${dayParam}`),
       // The viewer day snapshot currently resolves its coinflip lookup through
-      // the jackpot level. A level can span several flip days, so that value can
-      // belong to a different result. Use the same immutable exact-day event
-      // read as the flip widget and retain the viewer row only as a fallback.
+      // the jackpot level. A level can span several flip days, so none of that
+      // row's coinflip fields are authoritative for this day. Use the immutable
+      // exact-day event read for the player's stake and fail closed if unreadable.
       readResolvedCoinflipStake({ player, day }),
     ]);
     // Both APIs have an all-time mode. Treat their echoed day as part of the
@@ -1432,7 +1500,7 @@ class LastDayJackpot extends HTMLElement {
       )).length;
     const lootboxResults = viewer && packs
       ? await loadDayLootboxResults({
-          player, day, snapshot: viewer, dayPacks: packs,
+          player, day, snapshot: viewer, dayPacks: packs, priority: 'interaction',
         }).catch(() => [])
       : [];
     const resolvedStake = resolvedStakeResult.status === 'fulfilled'
@@ -1442,26 +1510,18 @@ class LastDayJackpot extends HTMLElement {
     let coinflipStakeAmount = '0';
     let hasCoinflipBet = false;
     try {
-      coinflipStakeAmount = BigInt(
-        resolvedStake == null ? (activity?.coinflip?.stakeAmount || '0') : resolvedStake,
-      ).toString();
+      coinflipStakeAmount = BigInt(resolvedStake ?? 0).toString();
       hasCoinflipBet = BigInt(coinflipStakeAmount) > 0n;
     } catch { /* malformed row */ }
     const exactDayResult = this.#flipFetchedDay === day ? this.#flipResult : null;
     const coinflipWon = exactDayResult?.win === true
       ? true
-      : exactDayResult?.win === false
-        ? false
-        : activity?.coinflip?.win === true
-          ? true
-          : activity?.coinflip?.win === false ? false : null;
+      : exactDayResult?.win === false ? false : null;
     const dayRewardRaw = exactDayResult?.rewardPercent;
-    const activityRewardRaw = activity?.coinflip?.rewardPercent;
-    const activityReward = activityRewardRaw == null ? NaN : Number(activityRewardRaw);
     const dayReward = dayRewardRaw == null ? NaN : Number(dayRewardRaw);
     const coinflipRewardPercent = Number.isFinite(dayReward)
       ? Math.max(0, Math.trunc(dayReward))
-      : Number.isFinite(activityReward) ? Math.max(0, Math.trunc(activityReward)) : 0;
+      : 0;
     return {
       // PACKS-V2 batches every ten revealed tickets for presentation. Those
       // tickets may have been purchased, won, or otherwise awarded, so only
@@ -1475,6 +1535,39 @@ class LastDayJackpot extends HTMLElement {
       coinflipStakeAmount,
       coinflipRewardPercent,
     };
+  }
+
+  // The exact global day row is the sole authority for the flip outcome. The
+  // viewer activity row is level-derived and can describe a different flip day.
+  // Re-read on the one-shot summary click so an early cached no-row cannot turn
+  // into a stale WIN/LOSS claim later.
+  async #loadExactSummaryCoinflip(day) {
+    const numericDay = Number(day);
+    if (!Number.isInteger(numericDay) || numericDay <= 0 || typeof fetch !== 'function') {
+      return null;
+    }
+    try {
+      const exact = await fetchJSON(
+        `/game/coinflip/day/${encodeURIComponent(numericDay)}`,
+        { force: true, priority: 'interaction' },
+      );
+      if (Number(exact?.day) !== numericDay
+        || (exact?.win !== true && exact?.win !== false)) return null;
+      const reward = Number(exact?.rewardPercent);
+      const normalized = {
+        coinflipWon: exact.win,
+        coinflipRewardPercent: Number.isFinite(reward)
+          ? Math.max(0, Math.trunc(reward))
+          : 0,
+      };
+      if (Number(this.#pinnedDay) === numericDay) {
+        this.#flipResult = exact;
+        this.#flipFetchedDay = numericDay;
+      }
+      return normalized;
+    } catch {
+      return null;
+    }
   }
 
   // Build + queue the viewed player's full day summary. Winner → prize cards;
@@ -1491,18 +1584,25 @@ class LastDayJackpot extends HTMLElement {
     try {
       const viewed = getViewedAddress();
       const target = viewed ? String(viewed).toLowerCase() : null;
+      const summaryDay = this.#pinnedDay;
+      // Both reads are independent. Starting activity first also attaches the
+      // click to the CTA-time prefetch when one is already in flight.
+      const activityPromise = this.#dayActivity(viewed, summaryDay);
+      const exactCoinflipPromise = target
+        ? this.#loadExactSummaryCoinflip(summaryDay)
+        : Promise.resolve(null);
 
       // The rollover payload is published at the day seal, but Decimator
       // claims and BAF aggregates can land in the exact-day endpoint moments
       // later. A Day Summary is one-shot, so refresh that authoritative row at
       // click time instead of permanently consuming the early composition.
-      if (target && this.#pinnedDay != null) {
+      if (target && summaryDay != null) {
         try {
           const exact = await fetchJSON(
-            `/game/jackpot/day/${encodeURIComponent(this.#pinnedDay)}/winners`,
+            `/game/jackpot/day/${encodeURIComponent(summaryDay)}/winners`,
             { force: true },
           );
-          if (Number(exact?.day) === Number(this.#pinnedDay)
+          if (Number(exact?.day) === Number(summaryDay)
             && Array.isArray(exact?.winners)
             && (exact.winners.length > 0 || this.#winners.length === 0)) {
             this.#winners = exact.winners;
@@ -1516,7 +1616,18 @@ class LastDayJackpot extends HTMLElement {
         (winner) => String(winner?.address || '').toLowerCase() === target,
       ) : null;
       const prizes = buildDaySummaryPrizes(winnerRow);
-      const activity = await this.#loadDayActivity(viewed, this.#pinnedDay);
+      const [cachedActivity, exactCoinflip] = await Promise.all([
+        activityPromise,
+        exactCoinflipPromise,
+      ]);
+      // Always overwrite the cached composition. If the click-time exact read
+      // is unavailable, make no outcome claim instead of resurrecting a stale
+      // level-derived result from an earlier viewer response.
+      const activity = cachedActivity == null ? null : {
+        ...cachedActivity,
+        coinflipWon: exactCoinflip?.coinflipWon ?? null,
+        coinflipRewardPercent: exactCoinflip?.coinflipRewardPercent ?? 0,
+      };
       // The 1 WWXRP card is the losing-coinflip consolation, not a generic
       // participation award. Requiring an explicit false also prevents a
       // missing/pending outcome from being presented as a loss.
@@ -1527,8 +1638,8 @@ class LastDayJackpot extends HTMLElement {
       }
       queueReveal({
         kind: 'jackpot',
-        title: this.#pinnedDay != null ? `DAY ${this.#pinnedDay} SUMMARY` : 'DAY SUMMARY',
-        day: this.#pinnedDay,
+        title: summaryDay != null ? `DAY ${summaryDay} SUMMARY` : 'DAY SUMMARY',
+        day: summaryDay,
         prizes,
         consolationOnly,
         activity,
@@ -1588,8 +1699,9 @@ class LastDayJackpot extends HTMLElement {
       return;
     }
     const addr = getViewedAddress();
-    // Show the pack a buy reaches NOW. During L38 purchase phase that is L39,
-    // not the already-resolved L38 pack still represented by the main board.
+    // Keep the resolving level through its final jackpot, then show the pack a
+    // buy reaches once purchase cadence begins. During L38 purchase phase that
+    // is L39, not the already-resolved L38 pack still represented by the board.
     const level = this.#foilTargetLevel();
     if (!addr || level == null || typeof fetch !== 'function') {
       this.#foilData = null;
@@ -2113,6 +2225,7 @@ class LastDayJackpot extends HTMLElement {
     // Viewed-player changes re-target both the spin panel and the foil strip.
     this.#unsubs.push(
       subscribe('viewing.address', () => {
+        this.#clearSummaryActivityCache();
         this.#resetFoilSlotting();
         this.#syncReplayPanel();
         this.#refreshFoil();
@@ -2121,6 +2234,7 @@ class LastDayJackpot extends HTMLElement {
     );
     this.#unsubs.push(
       subscribe('connected.address', () => {
+        this.#clearSummaryActivityCache();
         this.#resetFoilSlotting();
         this.#syncReplayPanel();
         this.#refreshFoil();
@@ -2186,6 +2300,7 @@ class LastDayJackpot extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.#clearSummaryActivityCache();
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
     // Invalidate any foil read still in flight BEFORE clearing the tray.

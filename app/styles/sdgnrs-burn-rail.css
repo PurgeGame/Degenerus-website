@@ -254,14 +254,16 @@ body.layout-basic .sdgnrs-rail__burn {
 
 body.layout-basic .sdgnrs-rail__vote {
   display: grid;
-  grid-template-columns: 1rem auto;
-  gap: 0.3rem;
-  padding: 0.32rem 0.62rem 0.32rem 0.48rem;
+  grid-template-columns: 0.78rem minmax(0, 1fr);
+  gap: 0.2rem;
+  padding: 0.28rem 0.34rem;
   border: 1px solid rgba(209, 174, 255, 0.74);
   background:
     radial-gradient(circle at 65% -45%, rgba(232, 211, 255, 0.36), transparent 68%),
     linear-gradient(180deg, #8f58cc, #603095 52%, #351a58);
   color: #f8f0ff;
+  font-size: 0.58rem;
+  letter-spacing: 0.075em;
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.2),
     inset 0 -2px rgba(28, 8, 50, 0.72),
@@ -271,12 +273,13 @@ body.layout-basic .sdgnrs-rail__vote {
 
 body.layout-basic .sdgnrs-rail__vote > span {
   color: #f0d8ff;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   text-shadow: 0 0 7px rgba(224, 183, 255, 0.62);
 }
 
 body.layout-basic .sdgnrs-rail__vote-label {
   display: grid;
+  min-width: 0;
   gap: 0.08rem;
   line-height: 0.88;
   text-align: left;

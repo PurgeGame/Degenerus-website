@@ -171,21 +171,45 @@ describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
     })), 46);
   });
 
-  test('same-level purchase cadence keeps the seated current-level pack visible', () => {
+  test('purchase cadence advances after the current level final jackpot is over', () => {
     assert.equal(foilPackDisplayLevel({
       level: 45,
       phase: 'PURCHASE',
       jackpotPhaseFlag: false,
       phaseTransitionActive: false,
-    }), 45);
+    }), 46);
   });
 
-  test('a direct purchase snapshot also keeps the current numeric level', () => {
+  test('a direct purchase snapshot also advances to the next pack', () => {
     assert.equal(foilPackDisplayLevel(null, {
       level: 45,
       jackpot: false,
       rngLocked: false,
-    }), 45);
+    }), 46);
+  });
+
+  test('the final lock, transition, and purchase handoff never move backwards', () => {
+    const levels = [
+      foilPackDisplayLevel(state({
+        level: 45,
+        rngLockedFlag: true,
+        jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+        phaseTransitionActive: false,
+      })),
+      foilPackDisplayLevel(state({
+        level: 45,
+        rngLockedFlag: true,
+        jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+        phaseTransitionActive: true,
+      })),
+      foilPackDisplayLevel({
+        level: 45,
+        phase: 'PURCHASE',
+        jackpotPhaseFlag: false,
+        phaseTransitionActive: false,
+      }),
+    ];
+    assert.deepEqual(levels, [45, 46, 46]);
   });
 
   test('explicit live jackpot state wins over a stale same-level side poll', () => {

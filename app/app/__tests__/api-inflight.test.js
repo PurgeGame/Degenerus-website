@@ -5,7 +5,7 @@
 // completed-response window collapses a render wave that outlives localhost's
 // very short response time; transaction invalidation remains a hard boundary.
 
-import { test, after, afterEach } from 'node:test';
+import { test, after, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 const priorDocument = globalThis.document;
@@ -54,7 +54,7 @@ test('identical concurrent JSON reads share one network request', async () => {
   ]);
 });
 
-test('one tab admits only three distinct personalized reads at once', async () => {
+test('background wallet reads leave one personalized slot reserved for interactions', async () => {
   const cooldown = await import('../api-cooldown.js');
   cooldown.clearApiCooldown();
   let calls = 0;
@@ -74,15 +74,124 @@ test('one tab admits only three distinct personalized reads at once', async () =
     api.fetchJSON(`/player/0x${String(index + 1).padStart(40, '0')}/boons/1`)
   ));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(calls, 3, 'the remaining address-scoped reads wait client-side');
+  assert.equal(calls, 2, 'background hydration cannot consume the interaction reserve');
 
-  for (let expected = 4; expected <= 6; expected += 1) {
+  for (let expected = 3; expected <= 6; expected += 1) {
     finishes.shift()();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(calls, expected, 'each completion admits exactly one queued read');
   }
   for (const finish of finishes.splice(0)) finish();
   await Promise.all(requests);
+});
+
+test('an interaction starts in the reserved slot while background work is saturated', async () => {
+  const pending = [];
+  const urls = [];
+  globalThis.fetch = (url) => {
+    urls.push(String(url));
+    return new Promise((resolve) => {
+      pending.push(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }));
+    });
+  };
+
+  const background = Array.from({ length: 3 }, (_, index) => (
+    api.fetchJSON(`/player/0x${String(index + 30).padStart(40, '0')}`)
+  ));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 2);
+
+  const interactionPath = `/player/0x${'7'.repeat(40)}/tickets/by-trait?level=258`;
+  const interaction = api.fetchJSON(interactionPath, { priority: 'interaction' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 3);
+  assert.ok(urls[2].endsWith(interactionPath), 'the user action takes the reserved slot');
+
+  while (pending.length > 0) {
+    pending.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await Promise.all([...background, interaction]);
+});
+
+test('queued interactions drain before queued background reads', async () => {
+  const pending = [];
+  const urls = [];
+  globalThis.fetch = (url) => {
+    urls.push(String(url));
+    return new Promise((resolve) => {
+      pending.push(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }));
+    });
+  };
+
+  const bg1 = api.fetchJSON(`/player/0x${'1'.repeat(40)}/boons/1`);
+  const bg2 = api.fetchJSON(`/player/0x${'2'.repeat(40)}/boons/1`);
+  const activeInteraction = api.fetchJSON(`/player/0x${'3'.repeat(40)}/packs?day=5`, {
+    priority: 'interaction',
+  });
+  const queuedBackgroundPath = `/player/0x${'4'.repeat(40)}/boons/1`;
+  const queuedBackground = api.fetchJSON(queuedBackgroundPath);
+  const queuedInteractionPath = `/viewer/player/0x${'5'.repeat(40)}/day/5`;
+  const queuedInteraction = api.fetchJSON(queuedInteractionPath, { priority: 'interaction' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 3, 'the lane begins full');
+
+  pending.shift()();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 4);
+  assert.ok(urls[3].endsWith(queuedInteractionPath), 'the queued user action goes first');
+  assert.ok(!urls.some((url) => url.endsWith(queuedBackgroundPath)));
+
+  while (pending.length > 0) {
+    pending.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await Promise.all([bg1, bg2, activeInteraction, queuedBackground, queuedInteraction]);
+});
+
+test('an interaction consumer promotes its already-queued shared flight', async () => {
+  const pending = [];
+  const urls = [];
+  globalThis.fetch = (url) => {
+    urls.push(String(url));
+    return new Promise((resolve) => {
+      pending.push(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ shared: true }),
+      }));
+    });
+  };
+
+  const blockers = [
+    api.fetchJSON(`/player/0x${'6'.repeat(40)}`),
+    api.fetchJSON(`/player/0x${'7'.repeat(40)}`),
+  ];
+  const sharedPath = `/player/0x${'8'.repeat(40)}/tickets/by-trait?level=258`;
+  const backgroundConsumer = api.fetchJSON(sharedPath);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 2, 'the shared flight begins queued as background');
+
+  const interactionConsumer = api.fetchJSON(sharedPath, { priority: 'interaction' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 3, 'attaching the interaction promotes the queued flight');
+  assert.equal(urls.filter((url) => url.endsWith(sharedPath)).length, 1,
+    'promotion preserves URL coalescing');
+
+  while (pending.length > 0) {
+    pending.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const values = await Promise.all([...blockers, backgroundConsumer, interactionConsumer]);
+  assert.deepEqual(values.slice(-2), [{ shared: true }, { shared: true }]);
 });
 
 test('shared reads bypass a full personalized lane', async () => {
@@ -106,12 +215,12 @@ test('shared reads bypass a full personalized lane', async () => {
   ));
   const shared = api.fetchJSON('/game/state');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(urls.length, 4);
+  assert.equal(urls.length, 3);
   assert.ok(urls.some((url) => url.endsWith('/game/state')), 'shared state starts immediately');
   assert.equal(
     urls.filter((url) => url.includes('/player/')).length,
-    3,
-    'the fourth personalized read remains queued',
+    2,
+    'background reads preserve the reserved interaction slot',
   );
 
   for (const finish of finishes.splice(0)) finish();
@@ -338,5 +447,45 @@ test('a recovered personalized read resets an expired global backoff ladder', as
     Date.now = realNow;
     Math.random = realRandom;
     cooldown.clearApiCooldown();
+  }
+});
+
+// A fetch with no deadline is not a slow read, it is a permanent one. The lane
+// slot above is handed back only in createFlight's finally, so stalled
+// personalized reads used to wedge every wallet-scoped request for the life of
+// the tab — the failure that stranded replay-panel's bonus spin at
+// "BONUS SPINNING…" with the previous roll still on the board.
+test('a stalled read is abandoned instead of holding its lane slot forever', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const urls = [];
+    globalThis.fetch = (url, opts) => {
+      urls.push(String(url));
+      // A real fetch rejects when its signal aborts. A stub that ignores the
+      // signal cannot show what the deadline actually buys.
+      return new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          reject(opts.signal.reason ?? new Error('network aborted'));
+        });
+      });
+    };
+
+    const stalled = Array.from({ length: 4 }, (_unused, index) => (
+      api.fetchJSON(`/player/0x${String(index + 20).padStart(40, '0')}`)
+    ));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(urls.length, 2, 'two reads are active and two wait client-side');
+
+    mock.timers.tick(20_000);
+    for (const request of stalled) {
+      await assert.rejects(request, { name: 'TimeoutError' },
+        'active and queued work share one wall-clock deadline');
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(urls.length, 2, 'expired queued work never reaches the network');
+  } finally {
+    mock.timers.reset();
   }
 });

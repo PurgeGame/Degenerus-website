@@ -7,6 +7,9 @@ body.layout-basic .jackpot-hero__machine {
   --jp-foil-size: clamp(2.75rem, 11.8cqi, 5.65rem);
   --jp-side-gap: clamp(0.2rem, 0.85cqi, 0.42rem);
   --jp-stage-top: 3.18rem;
+  --jp-action-width: min(var(--jp-board-size), 18rem);
+  --jp-chainlink-size: clamp(2.3rem, 7.6cqi, 2.9rem);
+  --jp-chainlink-gap: clamp(1.15rem, 4.2cqi, 1.8rem);
   width: min(100%, 48rem);
   margin-inline: auto;
   padding: 0.24rem 0.34rem 0.38rem;
@@ -30,6 +33,157 @@ body.layout-basic .jackpot-hero__machine {
     repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.17) 0 1px, transparent 1px 5px),
     url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,
     #03100b;
+}
+
+/* One permanent cabinet fitting owns the lower-left circle. Ineligible players
+   see the untouched board through a faint placement ring and a small keyed
+   motherboard-style port; eligibility replaces it with the red ALL IN key. */
+body.layout-basic .jackpot-hero__machine > app-all-in-machine-control {
+  position: absolute;
+  z-index: 8;
+  left: calc(50% - (var(--jp-action-width) / 2) - var(--jp-chainlink-gap) - var(--jp-chainlink-size));
+  bottom: var(--jp-chainlink-size);
+  display: grid;
+  width: var(--jp-chainlink-size);
+  aspect-ratio: 1;
+  place-items: stretch;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket,
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-area: 1 / 1;
+  place-items: center;
+  border-radius: 50%;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket {
+  border: 1px solid rgba(235, 229, 201, 0.2);
+  background: rgba(255, 255, 255, 0.012);
+  box-shadow:
+    inset 0 0 0 1px rgba(3, 7, 5, 0.24),
+    0 0 6px rgba(222, 202, 139, 0.035);
+  pointer-events: none;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__port {
+  position: relative;
+  display: grid;
+  width: 34%;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid #404343;
+  border-radius: 13%;
+  background: linear-gradient(145deg, #202323, #050606 68%);
+  box-shadow:
+    inset 1px 1px 2px rgba(255, 255, 255, 0.09),
+    inset -2px -2px 3px #000,
+    0 0 0 1px rgba(116, 113, 102, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.72);
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__pins {
+  display: grid;
+  width: 72%;
+  height: 72%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 8%;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__pin {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(101, 103, 99, 0.66);
+  border-radius: 16%;
+  background:
+    radial-gradient(circle at 48% 50%,
+      #c1a55f 0 12%, #71633e 16%, #090a0a 23% 57%, #3a3d3b 64% 100%);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__pin:nth-child(2),
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__pin:nth-child(3) {
+  clip-path: polygon(22% 0, 78% 0, 100% 22%, 100% 100%, 0 100%, 0 22%);
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-socket__port::after {
+  position: absolute;
+  top: 28%;
+  right: -13%;
+  width: 13%;
+  height: 44%;
+  border-radius: 0 2px 2px 0;
+  background: #090a0a;
+  box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08), 1px 0 1px rgba(0, 0, 0, 0.7);
+  content: "";
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  filter: none;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: filter 130ms ease;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button:hover:not(:disabled),
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button:focus-visible:not(:disabled) {
+  outline: none;
+  filter:
+    drop-shadow(0 0 4px rgba(255, 74, 74, 0.88))
+    drop-shadow(0 0 9px rgba(239, 38, 38, 0.58));
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button:focus-visible {
+  box-shadow: 0 0 0 2px #fff7d6, 0 0 0 4px rgba(239, 68, 68, 0.72);
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button:active:not(:disabled) {
+  filter: brightness(0.88) drop-shadow(0 0 4px rgba(239, 38, 38, 0.42));
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button:disabled {
+  cursor: default;
+  filter: grayscale(0.45) brightness(0.72) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.62));
+}
+
+body.layout-basic .jackpot-hero__machine .jackpot-all-in-button.is-cued {
+  animation: jackpot-all-in-cue 0.25s ease-out both;
+}
+
+body.layout-basic .jackpot-hero__machine :is(.jackpot-all-in-socket, .jackpot-all-in-button)[hidden] {
+  display: none !important;
+}
+
+@keyframes jackpot-all-in-cue {
+  0%, 100% { filter: brightness(1) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.72)); }
+  38% { filter: brightness(1.48) drop-shadow(0 0 8px rgba(255, 221, 123, 0.76)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .jackpot-hero__machine .jackpot-all-in-button {
+    transition: none;
+  }
+  body.layout-basic .jackpot-hero__machine .jackpot-all-in-button.is-cued {
+    animation: none;
+  }
 }
 
 /* The live board-current layer mirrors only the four copper traces that leave
@@ -181,11 +335,9 @@ body.layout-basic .jackpot-hero__machine replay-panel .panel {
 /* A real, opaque arcade key lives on the PCB. The bezel never changes; its
    three-colour LED bank lights when it is actionable or carrying information. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls {
-  --jp-chainlink-size: clamp(2.3rem, 7.6cqi, 2.9rem);
-  --jp-chainlink-gap: clamp(1.15rem, 4.2cqi, 1.8rem);
   position: relative;
   box-sizing: border-box;
-  width: min(var(--jp-board-size, 18.75rem), 18rem);
+  width: var(--jp-action-width);
   height: 3.24rem;
   min-height: 3.24rem;
   flex: 0 0 3.24rem;

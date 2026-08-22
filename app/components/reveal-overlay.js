@@ -325,8 +325,10 @@ const BOX_ESTIMATE_SPLIT_THRESHOLD = (TOKEN_WEI / 2n) / BigInt(ETH_DIVISOR);
 const LOOTBOX_AUTO_START_MS = 480;
 const LOOTBOX_MANUAL_CHARGE_MS = 1_350;
 const LOOTBOX_AUTO_CHARGE_MS = 880;
-const LOOTBOX_MANUAL_BURST_MS = 920;
-const LOOTBOX_AUTO_BURST_MS = 660;
+const LOOTBOX_MANUAL_BURST_MS = 1_000;
+const LOOTBOX_AUTO_BURST_MS = 740;
+const LOOTBOX_CARD_FACE_READY_MS = 60;
+const LOOTBOX_CARD_FLIP_MS = 470;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 // The denomination lock uses the Daily Flip's complete 3.3s airborne track
@@ -393,6 +395,25 @@ function _tokenText(wei) {
 
 function _safeBigInt(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
+}
+
+/**
+ * Daily Summary only gives the full-size solo beat to an established
+ * epic/legendary win. Common and rare receipts still remain in the final grid,
+ * but losses, consolations, and small ticket/token awards do not make the
+ * player sit through one animation per line item.
+ */
+export function isDaySummaryBigWinCard(card) {
+  if (!card || typeof card !== 'object') return false;
+  if (card.outcome === 'loss' || card.outcome === 'skipped') return false;
+  if (card.type === 'nowin' || card.type === 'wwxrp') return false;
+  if (card.type === 'coinflip-result' && card.outcome !== 'win') return false;
+  const rarity = String(card.revealedRarity || card.rarity || '').toLowerCase();
+  return rarity === 'epic' || rarity === 'legendary';
+}
+
+export function daySummaryAnimatedCards(cards) {
+  return (Array.isArray(cards) ? cards : []).filter(isDaySummaryBigWinCard);
 }
 
 function _ticketQuantityText(value) {
@@ -2012,10 +2033,11 @@ export function normalizeSequence(seq) {
       || (card.type === 'coinflip-result' && card.outcome === 'loss')
     ));
     const fullLoss = hasSettledLoss && !hasNonConsolationWin;
+    const bigWinCards = daySummaryAnimatedCards(cards);
     return {
       kind,
       title: seq.title || (seq.day != null ? `DAY ${seq.day} SUMMARY` : 'DAY SUMMARY'),
-      big: won,
+      big: bigWinCards.length > 0,
       consolationOnly: Boolean(seq.consolationOnly || fullLoss),
       unlucky: Boolean(seq.consolationOnly || fullLoss),
       autoStart: true,
@@ -2079,6 +2101,94 @@ function _individualLootboxFlags(cards) {
       && list.every((card) => isWwxrp(card) || isEmpty(card)),
     unlucky: list.length > 0
       && list.every((card) => isWwxrp(card) || isEmpty(card)),
+  };
+}
+
+function _lootboxCompletionEntries(seq) {
+  if (seq?.kind !== 'lootbox') return [];
+  const supplied = Array.isArray(seq.lootboxCompletions)
+    ? seq.lootboxCompletions
+    : [{ presentationId: seq.presentationId, release: seq.lootboxRelease }];
+  const seen = new Set();
+  const entries = [];
+  for (const entry of supplied) {
+    const presentationId = entry?.presentationId == null
+      ? null
+      : String(entry.presentationId);
+    const release = entry?.release && typeof entry.release === 'object'
+      ? { ...entry.release }
+      : null;
+    if (!presentationId && !release) continue;
+    const identity = presentationId || `release:${String(release?.key || '')}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    entries.push({ presentationId, release });
+  }
+  return entries;
+}
+
+/**
+ * Merge several already-settled Pending lootboxes into one presentation-only
+ * large case. Their cards retain exact event order and every original release
+ * remains independently completable/abortable after the single receipt.
+ */
+export function combineLootboxSequences(sequences, { autoStart = true } = {}) {
+  const boxes = (Array.isArray(sequences) ? sequences : [])
+    .filter((seq) => seq?.kind === 'lootbox' && Array.isArray(seq.cards));
+  if (boxes.length === 0) return null;
+
+  const cards = boxes.flatMap((seq) => seq.cards);
+  if (cards.length === 0) return null;
+  const flags = _individualLootboxFlags(cards);
+  const amountWei = boxes.reduce((sum, seq) => sum + _safeBigInt(seq.amountWei), 0n);
+  const ticketPriceWei = boxes
+    .map((seq) => _safeBigInt(seq.ticketPriceWei))
+    .find((price) => price > 0n) || 0n;
+  const aggregate = lootboxValuePresentation(
+    amountWei > 0n ? amountWei : null,
+    ticketPriceWei > 0n ? ticketPriceWei : null,
+  );
+  const physicalBoxCount = boxes.reduce(
+    (sum, seq) => sum + Math.max(1, Math.trunc(Number(seq.lootboxBoxCount) || 0)),
+    0,
+  );
+
+  return {
+    ...boxes[0],
+    title: `ALL LUCKBOXES · ${physicalBoxCount} BOXES`,
+    hideTitle: false,
+    big: flags.big,
+    unlucky: flags.unlucky,
+    wwxrpOnly: flags.wwxrpOnly,
+    noVessel: false,
+    autoStart: Boolean(autoStart),
+    autoAdvance: false,
+    amountWei: aggregate.amountWei,
+    ticketPriceWei: aggregate.ticketPriceWei,
+    lootboxValueTone: aggregate.tone,
+    // OPEN ALL is deliberately one visibly large physical case even when the
+    // selected set happened to contain only several small purchases.
+    lootboxCaseModel: 'large',
+    lootboxTicketUnitsLabel: aggregate.unitsLabel,
+    boxOrders: [],
+    lootboxBoxCount: physicalBoxCount,
+    lootboxBoxGroups: boxes.flatMap((seq) => (
+      Array.isArray(seq.lootboxBoxGroups) ? seq.lootboxBoxGroups : []
+    )),
+    lootboxSharedCards: [],
+    lootboxView: 'combined',
+    comboBoxNumber: null,
+    comboBoxCount: physicalBoxCount,
+    comboRewards: false,
+    cards,
+    boxSpinCount: boxes.reduce((sum, seq) => sum + Math.max(
+      0,
+      Math.trunc(Number(seq.boxSpinCount) || 0),
+    ), 0),
+    presentationId: null,
+    lootboxRelease: null,
+    lootboxCompletions: boxes.flatMap(_lootboxCompletionEntries),
+    suppressLootboxComplete: false,
   };
 }
 
@@ -2410,9 +2520,18 @@ class RevealOverlay extends HTMLElement {
                 <span class="rvl-chest-lid__inner"></span>
                 <span class="rvl-chest-lid__front"></span>
                 <span class="rvl-chest-lid__edge"></span>
+                <span class="rvl-lootbox-latch rvl-lootbox-latch--lid rvl-lootbox-latch--left" aria-hidden="true"></span>
+                <span class="rvl-lootbox-latch rvl-lootbox-latch--lid rvl-lootbox-latch--right" aria-hidden="true"></span>
               </div>
               <div class="rvl-chest-seam"></div>
-              <div class="rvl-chest-body"></div>
+              <div class="rvl-lootbox-flight" data-bind="rvl-lootbox-flight"
+                   aria-hidden="true" hidden></div>
+              <div class="rvl-chest-body">
+                <span class="rvl-lootbox-latch rvl-lootbox-latch--body rvl-lootbox-latch--left" aria-hidden="true"></span>
+                <span class="rvl-lootbox-latch rvl-lootbox-latch--body rvl-lootbox-latch--right" aria-hidden="true"></span>
+              </div>
+              <span class="rvl-lootbox-latch rvl-lootbox-latch--bridge rvl-lootbox-latch--left" aria-hidden="true"></span>
+              <span class="rvl-lootbox-latch rvl-lootbox-latch--bridge rvl-lootbox-latch--right" aria-hidden="true"></span>
               <div class="rvl-vault-lockwork" aria-hidden="true">
                 <span class="rvl-vault-interlock rvl-vault-interlock--1">
                   <span class="rvl-vault-deadbolt"></span>
@@ -2440,8 +2559,6 @@ class RevealOverlay extends HTMLElement {
               </div>
               <div class="rvl-chest-platform"></div>
             </div>
-            <div class="rvl-lootbox-flight" data-bind="rvl-lootbox-flight"
-                 aria-hidden="true" hidden></div>
             <div class="rvl-pack" data-bind="rvl-pack">
               <div class="rvl-pack-shine"></div>
               <div class="rvl-pack-brand">
@@ -2851,13 +2968,8 @@ class RevealOverlay extends HTMLElement {
     );
   }
 
-  #beginIndividualLootboxPresentation(seq) {
-    const parts = buildIndividualLootboxSequences(seq);
-    if (parts.length < 2) return false;
-    const [first, ...remaining] = parts;
-    Object.assign(seq, first);
-    this.#queue.unshift(...remaining);
-
+  #applyLootboxSequencePresentation(seq) {
+    if (seq?.kind !== 'lootbox') return;
     const title = this.#bind('rvl-title');
     if (title) {
       title.hidden = false;
@@ -2869,26 +2981,34 @@ class RevealOverlay extends HTMLElement {
       applyLootboxCasePresentation(stage, seq.lootboxCaseModel, { fullResolution: true });
     }
     const vessel = this.#bind('rvl-vessel');
-    if (vessel) {
-      vessel.setAttribute?.('data-lootbox-value-tone', seq.lootboxValueTone || 'unknown');
-      vessel.setAttribute?.('aria-label', `Open ${seq.title.toLowerCase()}`);
-      vessel.setAttribute?.(
-        'title',
-        seq.lootboxTicketUnitsLabel
-          ? `${seq.lootboxTicketUnitsLabel} ticket-price luckbox`
-          : '',
-      );
-      const presentation = applyLootboxCasePresentation(
-        vessel,
-        seq.lootboxCaseModel,
-        { fullResolution: true },
-      );
-      [
-        presentation.assets.retractedFront,
-        presentation.assets.innerLid,
-        ...presentation.assets.deadbolts,
-      ].forEach(_preloadImage);
-    }
+    if (!vessel) return;
+    vessel.setAttribute?.('data-lootbox-value-tone', seq.lootboxValueTone || 'unknown');
+    vessel.setAttribute?.('aria-label', `Open ${String(seq.title || 'luckbox').toLowerCase()}`);
+    vessel.setAttribute?.(
+      'title',
+      seq.lootboxTicketUnitsLabel
+        ? `${seq.lootboxTicketUnitsLabel} ticket-price luckbox`
+        : '',
+    );
+    const presentation = applyLootboxCasePresentation(
+      vessel,
+      seq.lootboxCaseModel,
+      { fullResolution: true },
+    );
+    [
+      presentation.assets.retractedFront,
+      presentation.assets.innerLid,
+      ...presentation.assets.deadbolts,
+    ].forEach(_preloadImage);
+  }
+
+  #beginIndividualLootboxPresentation(seq) {
+    const parts = buildIndividualLootboxSequences(seq);
+    if (parts.length < 2) return false;
+    const [first, ...remaining] = parts;
+    Object.assign(seq, first);
+    this.#queue.unshift(...remaining);
+    this.#applyLootboxSequencePresentation(seq);
     return true;
   }
 
@@ -3005,7 +3125,7 @@ class RevealOverlay extends HTMLElement {
     // Keep non-box work at its original tail while making OPEN NEXT literal.
     this.#queue.unshift(...boxes);
     this.#queue.push(...unrelated);
-    return boxes.length;
+    return boxes;
   }
 
   async #openPendingLootboxes(seq, { all = false } = {}) {
@@ -3016,9 +3136,9 @@ class RevealOverlay extends HTMLElement {
     const close = this.#bind('rvl-close');
     if (close) close.disabled = true;
 
-    let queued = 0;
+    let boxes = [];
     try {
-      queued = await this.#queuePendingLootboxes({
+      boxes = await this.#queuePendingLootboxes({
         all,
         excludeRelease: seq?.lootboxRelease,
       });
@@ -3027,7 +3147,15 @@ class RevealOverlay extends HTMLElement {
       if (close) close.disabled = false;
     }
     if (this.#aborted) return;
-    if (queued > 0) {
+    if (all && boxes.length > 0) {
+      const combined = combineLootboxSequences(boxes, { autoStart: true });
+      if (combined) {
+        const selected = new Set(boxes);
+        this.#queue = this.#queue.filter((candidate) => !selected.has(candidate));
+        this.#queue.unshift(combined);
+      }
+    }
+    if (boxes.length > 0) {
       this.#tap(all ? 'open-all-boxes' : 'next-box');
       return;
     }
@@ -3039,9 +3167,9 @@ class RevealOverlay extends HTMLElement {
 
   // The first selected box is already honestly settled (or replayed) by its
   // Pending owner before the overlay receives it. Hold its sealed-case gate
-  // while the remaining READY rows do the same work, then use the existing
-  // auto-advance path for one uninterrupted batch presentation. Waiting/RNG
-  // rows are deliberately absent from #readyPendingLootboxes and stay put.
+  // while the remaining READY rows do the same work, then fold every settled
+  // child into this one large case. Waiting/RNG rows are deliberately absent
+  // from #readyPendingLootboxes and stay put.
   async #startOpenAllLootboxes(seq) {
     if (this.#controlsOnly || seq?.kind !== 'lootbox') return false;
     const ready = this.#readyPendingLootboxes(seq.lootboxRelease);
@@ -3062,9 +3190,9 @@ class RevealOverlay extends HTMLElement {
     }
     if (close) close.disabled = true;
 
-    let queued = 0;
+    let boxes = [];
     try {
-      queued = await this.#queuePendingLootboxes({
+      boxes = await this.#queuePendingLootboxes({
         all: true,
         excludeRelease: seq.lootboxRelease,
       });
@@ -3076,10 +3204,21 @@ class RevealOverlay extends HTMLElement {
     if (this.#aborted) return false;
 
     // Failed/rejected rows remain in Pending and reappear on the final receipt.
-    // Every successfully queued sibling now advances without another click.
-    seq.autoAdvance = queued > 0;
-    this.#tap(queued > 0 ? 'open-all-boxes' : 'open-one-box');
-    return queued > 0;
+    // Successful siblings become cards inside the current large case, not a
+    // queue of cases that opens one after another.
+    if (boxes.length > 0) {
+      const combined = combineLootboxSequences([seq, ...boxes], {
+        autoStart: seq.autoStart,
+      });
+      if (combined) {
+        const selected = new Set(boxes);
+        this.#queue = this.#queue.filter((candidate) => !selected.has(candidate));
+        Object.assign(seq, combined);
+        this.#applyLootboxSequencePresentation(seq);
+      }
+    }
+    this.#tap(boxes.length > 0 ? 'open-all-boxes' : 'open-one-box');
+    return boxes.length > 0;
   }
 
   // -------------------------------------------------------------------------
@@ -3267,27 +3406,29 @@ class RevealOverlay extends HTMLElement {
     if (seq?.kind !== 'lootbox' || seq?.suppressLootboxComplete
       || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
       || typeof CustomEvent !== 'function') return;
-    const release = seq?.lootboxRelease;
-    try {
-      document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_COMPLETE_EVENT, {
-        detail: {
-          ...(release || {}),
-          presentationId: seq.presentationId == null ? null : String(seq.presentationId),
-        },
-      }));
-    } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
+    for (const completion of _lootboxCompletionEntries(seq)) {
+      try {
+        document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_COMPLETE_EVENT, {
+          detail: {
+            ...(completion.release || {}),
+            presentationId: completion.presentationId,
+          },
+        }));
+      } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
+    }
   }
 
   #emitLootboxAbort(sequences) {
     if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
       || typeof CustomEvent !== 'function') return;
-    const releases = (Array.isArray(sequences) ? sequences : [])
-      .map((seq) => seq?.lootboxRelease)
-      .filter(Boolean)
-      .map((release) => ({ ...release }));
-    const presentationIds = (Array.isArray(sequences) ? sequences : [])
-      .filter((seq) => seq?.kind === 'lootbox' && seq?.presentationId != null)
-      .map((seq) => String(seq.presentationId));
+    const completions = (Array.isArray(sequences) ? sequences : [])
+      .flatMap(_lootboxCompletionEntries);
+    const releases = completions
+      .map((entry) => entry.release)
+      .filter(Boolean);
+    const presentationIds = [...new Set(completions
+      .map((entry) => entry.presentationId)
+      .filter(Boolean))];
     if (releases.length === 0 && presentationIds.length === 0) return;
     try {
       document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_ABORT_EVENT, {
@@ -3385,6 +3526,7 @@ class RevealOverlay extends HTMLElement {
     if (packActions) packActions.hidden = true;
     const lootboxFlight = this.#bind('rvl-lootbox-flight');
     if (lootboxFlight) {
+      lootboxFlight.classList?.remove('rvl-lootbox-flight--revealing');
       lootboxFlight.hidden = true;
       lootboxFlight.textContent = '';
     }
@@ -3522,6 +3664,9 @@ class RevealOverlay extends HTMLElement {
     // win effect over a sequence of pure losses.
     let hasSpins = seq.cards.some((c) => Boolean(c.spin));
     const hasTicketGrid = Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0;
+    const daySummaryHighlights = seq.daySummary
+      ? daySummaryAnimatedCards(seq.cards)
+      : null;
     const sequenceAllNoWin = () => seq.cards.every((c) => {
       if (c.type === 'nowin') return true;
       if (!c.spin) return false;
@@ -3708,14 +3853,17 @@ class RevealOverlay extends HTMLElement {
           return action;
         }
         if (canChooseLootboxBoxView && isLootbox) {
-          if (action === 'view-boxes-individually'
-            && this.#beginIndividualLootboxPresentation(seq)) {
-            hasSpins = seq.cards.some((card) => Boolean(card.spin));
-            allNoWin = sequenceAllNoWin();
-          } else {
+          const showingIndividualBoxes = action === 'view-boxes-individually'
+            && this.#beginIndividualLootboxPresentation(seq);
+          if (!showingIndividualBoxes) {
             seq.lootboxView = 'combined';
           }
         }
+        // OPEN ALL can replace the sealed sequence with a combined case after
+        // this method's initial flags were calculated. Re-read the contents so
+        // added BoxSpins and no-win cards follow the correct reveal path.
+        hasSpins = seq.cards.some((card) => Boolean(card.spin));
+        allNoWin = sequenceAllNoWin();
         openingAll = action === 'open-all' || action === 'open-all-boxes'
           || this.#isOpeningAll(seq);
       }
@@ -3730,9 +3878,10 @@ class RevealOverlay extends HTMLElement {
         // hand, while luckboxes keep each receipt; both skip repeated charging.
         if (isLootbox) this.#stageLootboxRewardFlight(seq);
         if (stage && stage.classList) stage.classList.add('rvl-bursting');
-        // Let the physical latch/lid release finish before the cards replace
-        // the case. Cutting this beat short made batched boxes blink away.
-        await this.#wait(isLootbox ? LOOTBOX_AUTO_BURST_MS : 140);
+        // Let the physical latch/lid release and lightweight card flight
+        // finish, then turn those same cards to their real reward faces.
+        if (isLootbox) await this.#finishLootboxRewardFlight(seq, LOOTBOX_AUTO_BURST_MS);
+        else await this.#wait(140);
       } else {
         // --- charging: lock, energy build, then the crack ---
         if (stage && stage.classList) stage.classList.add('rvl-charging');
@@ -3757,10 +3906,12 @@ class RevealOverlay extends HTMLElement {
           this.#celebrateWin(false);
         }
         if (isLootbox) sfxRollDone(true);
-        const burstMs = isLootbox
-          ? (seq.autoStart ? LOOTBOX_AUTO_BURST_MS : LOOTBOX_MANUAL_BURST_MS)
-          : 320;
-        await this.#wait(burstMs);
+        if (isLootbox) {
+          const burstMs = seq.autoStart ? LOOTBOX_AUTO_BURST_MS : LOOTBOX_MANUAL_BURST_MS;
+          await this.#finishLootboxRewardFlight(seq, burstMs);
+        } else {
+          await this.#wait(320);
+        }
       }
       if (vessel) vessel.hidden = true;
       if (stage && stage.classList) stage.classList.remove('rvl-bursting');
@@ -3788,15 +3939,16 @@ class RevealOverlay extends HTMLElement {
       return;
     }
 
-    // A one-card day summary used to deal the result full-size, wait for a
-    // tap, then redraw the identical card in the receipt. There is nothing to
-    // summarize in that case: render the settled card once with its terminal
-    // action and keep multi-card summaries on the normal reveal sequence.
-    if (seq.daySummary && seq.cards.length === 1) {
+    // Minor day receipts arrive together: coinflip losses, consolations, small
+    // ticket/FLIP awards, and ordinary history belong in the final grid, not a
+    // procession of full-screen cards. A summary with a real epic/legendary win
+    // continues below, where only those headline cards receive solo beats.
+    if (seq.daySummary && daySummaryHighlights.length === 0) {
       this.#renderSummary(seq);
       if (seq.consolationOnly) sfxLoserHorn();
       else if (seq.big) sfxFanfare(true);
-      else sfxNoWin();
+      else if (allNoWin) sfxNoWin();
+      else sfxRollDone(true);
       await this.#waitAfterSummary(seq);
       return;
     }
@@ -3835,9 +3987,10 @@ class RevealOverlay extends HTMLElement {
     }
     if (seq.kind !== 'lootbox') {
       // --- cards, one at a time ---
-      for (let i = 0; i < seq.cards.length; i++) {
+      const animatedCards = seq.daySummary ? daySummaryHighlights : seq.cards;
+      for (let i = 0; i < animatedCards.length; i++) {
         if (this.#aborted) return;
-        const card = seq.cards[i];
+        const card = animatedCards[i];
         await this.#playCard(card, i);
         if (card.spin) {
           const spinWon = await this.#playSpin(card.spin);
@@ -6362,12 +6515,13 @@ class RevealOverlay extends HTMLElement {
     tray.appendChild(this.#buildCard(card, true));
   }
 
-  // Mount the real reward art and values before the lid moves. This flight
-  // deck overlaps the case for the mechanical handoff; the settled receipt
-  // replaces it at the same size after the lid-open beat completes.
+  // Mount cheap, anonymous card backs before the lid moves. Constructing the
+  // real reward cards here made their images and nested layouts compete with
+  // the case animation; their front faces are mounted only after flight ends.
   #stageLootboxRewardFlight(seq) {
     const flight = this.#bind('rvl-lootbox-flight');
     if (!flight) return;
+    flight.classList?.remove('rvl-lootbox-flight--revealing');
     flight.textContent = '';
     // A mixed combo belongs to two explicit phases. Do not flash its ordinary
     // rewards behind the case just before the BoxSpin surface covers them;
@@ -6385,23 +6539,61 @@ class RevealOverlay extends HTMLElement {
     grid.className = 'rvl-summary-grid rvl-lootbox-flight__grid';
     grid.setAttribute('data-card-count', String(cards.length));
     for (const card of cards) {
-      const displayCard = card.spin ? {
-        ...card,
-        revealedLabel: null,
-        revealedValue: null,
-        revealedRarity: null,
-      } : card;
-      const el = this.#buildCard(displayCard, true);
-      const value = el.querySelector('.rvl-card-value');
-      if (value) value.textContent = displayCard.revealedValue || displayCard.value || '';
-      if (!card.packOnly && !card.spin && card.sub) {
-        const inner = el.querySelector('.rvl-card-inner');
-        if (inner) inner.appendChild(this.#buildCardSub(card));
-      }
-      grid.appendChild(el);
+      if (card?.icon) _preloadImage(card.icon);
+    }
+    for (let index = 0; index < cards.length; index += 1) {
+      const slot = document.createElement('div');
+      slot.className = 'rvl-card--mini rvl-lootbox-flight__card';
+      slot.setAttribute('aria-hidden', 'true');
+      const turn = document.createElement('div');
+      turn.className = 'rvl-lootbox-flight__turn';
+      const back = document.createElement('div');
+      back.className = 'rvl-lootbox-flight__back';
+      const front = document.createElement('div');
+      front.className = 'rvl-lootbox-flight__front';
+      turn.appendChild(back);
+      turn.appendChild(front);
+      slot.appendChild(turn);
+      grid.appendChild(slot);
     }
     flight.appendChild(grid);
     flight.hidden = false;
+  }
+
+  #mountLootboxRewardFaces(seq) {
+    const flight = this.#bind('rvl-lootbox-flight');
+    if (!flight || flight.hidden) return null;
+    const cards = seq.cards.filter((item) => item?.type !== 'foil-match' && !item?.spin);
+    const slots = Array.from(flight.querySelectorAll('.rvl-lootbox-flight__card'));
+    if (cards.length === 0 || slots.length !== cards.length) return null;
+    cards.forEach((card, index) => {
+      const front = slots[index].querySelector('.rvl-lootbox-flight__front');
+      if (!front) return;
+      front.textContent = '';
+      const el = this.#buildCard(card, true);
+      const value = el.querySelector('.rvl-card-value');
+      if (value) value.textContent = card.revealedValue || card.value || '';
+      if (!card.packOnly && card.sub) {
+        const inner = el.querySelector('.rvl-card-inner');
+        if (inner) inner.appendChild(this.#buildCardSub(card));
+      }
+      front.appendChild(el);
+    });
+    // Commit the face layout while the cards are stationary; the following
+    // class change then owns only one compositor rotation.
+    void flight.offsetWidth;
+    return flight;
+  }
+
+  async #finishLootboxRewardFlight(seq, settleMs) {
+    await this.#wait(settleMs);
+    if (this.#aborted) return;
+    const flight = this.#mountLootboxRewardFaces(seq);
+    if (!flight) return;
+    await this.#wait(LOOTBOX_CARD_FACE_READY_MS);
+    if (this.#aborted) return;
+    flight.classList?.add('rvl-lootbox-flight--revealing');
+    await this.#wait(LOOTBOX_CARD_FLIP_MS);
   }
 
   #buildShareButton(seq) {

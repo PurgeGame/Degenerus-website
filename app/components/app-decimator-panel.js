@@ -48,6 +48,7 @@ import {
 import {
   purchaseEth,
   scaledTicketPriceWei,
+  readPlayerActivityScore,
   burnForDecimator,
   DECIMATOR_MIN_FLIP_WEI,
   decimatorWindowIsOpen,
@@ -106,6 +107,7 @@ import { dgnBadgePath, dgnTicketAccent } from '../app/dgn-traits.js';
 // whether the current player can afford one whole ticket.
 import {
   claimEth,
+  readClaimableEth,
   redeemFlip,
   probeRedeemFlipWindow,
   flipCostFromTickets,
@@ -139,6 +141,31 @@ const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const PURCHASE_TICKET_SAMPLE_REFRESH_MS = 60_000;
+// Buy In deliberately keeps dedicated static card renders even if a reveal
+// surface changes its animation art later. The medium render is perspective-
+// matched to the green and gold cases solely for this three-box row.
+const BUY_IN_COMPACT_CASE_ART = Object.freeze({
+  small: '/app/assets/lootbox/degenerus-lootbox-case-small-v19-buy-in-card.webp',
+  medium: '/app/assets/lootbox/degenerus-lootbox-case-medium-v22-buy-in-card.webp',
+});
+// The large Buy In card deliberately uses the taller historical top-down
+// render with the four-part front panel. Reveal/opening art stays on the
+// current animation set.
+const BUY_IN_GOLD_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-large-v36-buy-in-card.webp';
+const BUY_IN_COMPACT_CASE_GEOMETRY = Object.freeze({
+  small: Object.freeze({
+    priceTop: '36.7%', priceHeight: '20%', priceWidth: '44%',
+    badgeClip: 'ellipse(7.4% 6.5% at 50% 68.1%)',
+  }),
+  medium: Object.freeze({
+    priceTop: '36.4%', priceHeight: '21.7%', priceWidth: '45%',
+    badgeClip: 'ellipse(7.5% 6.8% at 50% 78.5%)',
+  }),
+});
+const BUY_IN_GOLD_CASE_GEOMETRY = Object.freeze({
+  priceTop: '25.4%', priceHeight: '21.5%', priceWidth: '42%',
+  badgeTop: '66.5%', badgeSize: '12.2%', badgeScaleY: '0.92',
+});
 
 /** Contract-exact heavy-tail color bucket used by DegenerusTraitUtils.traitFromWord. */
 export function purchaseTicketColorBucket(randomWord) {
@@ -1059,7 +1086,16 @@ class AppDecimatorPanel extends HTMLElement {
                    data-bind="dec-lootbox-group" aria-labelledby="dec-box-builder-title">
             <div class="dec-builder-head">
               <span class="dec-builder-title">
-                <strong id="dec-box-builder-title">LUCKBOXES</strong>
+                <button type="button" class="dec-custom-box-toggle" data-bind="dec-custom-box-toggle"
+                        aria-expanded="false" aria-controls="dec-custom-box-fields">
+                  <span class="dec-custom-box-logo" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M4.5 8.5 7.2 5.8h9.6l2.7 2.7v9.7h-15Z"></path>
+                      <path d="M4.5 10.3h15M8.2 8.2V6M15.8 8.2V6M12 12v4M10 14h4"></path>
+                    </svg>
+                  </span>
+                  <strong id="dec-box-builder-title">CUSTOM LUCKBOXES</strong>
+                </button>
                 <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
                   <quest-objective-indicator product="lootbox"></quest-objective-indicator>
                   <boon-product-indicator product="lootbox"
@@ -1070,10 +1106,6 @@ class AppDecimatorPanel extends HTMLElement {
                       aria-expanded="false" aria-controls="dec-presale-box-dialog" hidden>
                 <span aria-hidden="true">▣</span><strong>PRESALE</strong>
               </button>
-              <button type="button" class="dec-custom-box-toggle" data-bind="dec-custom-box-toggle"
-                      aria-expanded="false" aria-controls="dec-custom-box-fields">
-                <span aria-hidden="true">◇</span><strong>CUSTOM</strong>
-              </button>
             </div>
 
             <div class="dec-box-grid">
@@ -1083,7 +1115,8 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one small Luckbox"
                         title="Click to add one small Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('small').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <img class="dec-box-card__image" src="${BUY_IN_COMPACT_CASE_ART.small}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <span class="dec-box-card__quickload"></span>
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-small">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-small-unit" hidden>ETH</small>
@@ -1106,7 +1139,8 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one medium Luckbox"
                         title="Click to add one medium Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('medium').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <img class="dec-box-card__image" src="${BUY_IN_COMPACT_CASE_ART.medium}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <span class="dec-box-card__quickload"></span>
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-medium">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-medium-unit" hidden>ETH</small>
@@ -1129,7 +1163,8 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one large Luckbox"
                         title="Click to add one large Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('large').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <img class="dec-box-card__image" src="${BUY_IN_GOLD_CASE_ART}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <span class="dec-box-card__quickload"></span>
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-large">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-large-unit" hidden>ETH</small>
@@ -1358,6 +1393,32 @@ class AppDecimatorPanel extends HTMLElement {
     `;
     this.querySelectorAll?.('[data-lootbox-case-model]').forEach((element) => {
       applyLootboxCasePresentation(element, element.getAttribute('data-lootbox-case-model'));
+      const model = element.getAttribute('data-lootbox-case-model');
+      if (model === 'small' || model === 'medium') {
+        const geometry = BUY_IN_COMPACT_CASE_GEOMETRY[model];
+        element.style.setProperty('--lootbox-case-purchase-art', `url("${BUY_IN_COMPACT_CASE_ART[model]}")`);
+        element.style.setProperty('--lootbox-price-top', geometry.priceTop);
+        element.style.setProperty('--lootbox-price-height', geometry.priceHeight);
+        element.style.setProperty('--lootbox-price-width', geometry.priceWidth);
+        element.style.setProperty('--lootbox-top-badge-clip', geometry.badgeClip);
+      } else if (model === 'large') {
+        element.style.setProperty('--lootbox-case-purchase-art', `url("${BUY_IN_GOLD_CASE_ART}")`);
+        element.style.setProperty('--lootbox-price-top', BUY_IN_GOLD_CASE_GEOMETRY.priceTop);
+        element.style.setProperty('--lootbox-price-height', BUY_IN_GOLD_CASE_GEOMETRY.priceHeight);
+        element.style.setProperty('--lootbox-price-width', BUY_IN_GOLD_CASE_GEOMETRY.priceWidth);
+        element.style.setProperty('--lootbox-top-badge-top', BUY_IN_GOLD_CASE_GEOMETRY.badgeTop);
+        element.style.setProperty('--lootbox-top-badge-size', BUY_IN_GOLD_CASE_GEOMETRY.badgeSize);
+        element.style.setProperty('--lootbox-top-badge-scale-y', BUY_IN_GOLD_CASE_GEOMETRY.badgeScaleY);
+      }
+    });
+    // A CSS-only case silhouette paints immediately. Keep the image, latches,
+    // badge, and live price together behind it until the authored bitmap has
+    // fully loaded; otherwise a cold cache briefly leaves the price floating
+    // by itself in an empty grid track.
+    this.querySelectorAll?.('.dec-box-card__image').forEach((image) => {
+      const revealArt = () => image.classList?.add('is-art-ready');
+      if (image.complete && Number(image.naturalWidth) > 0) revealArt();
+      else image.addEventListener?.('load', revealArt, { once: true });
     });
   }
 
@@ -2696,8 +2757,9 @@ class AppDecimatorPanel extends HTMLElement {
     if (!this.#claimableKnown || this.#claimableAddress !== actingLower) return null;
     let available = allInWalletAfterGasReserveWei(this.#walletEthWei)
       + (this.#claimableWei > 1n ? this.#claimableWei - 1n : 0n);
-    if (includeAfking) {
-      if (!this.#afkingFundingKnown || this.#afkingFundingAddress !== actingLower) return null;
+    if (includeAfking
+      && this.#afkingFundingKnown
+      && this.#afkingFundingAddress === actingLower) {
       available += this.#afkingFundingWei;
     }
     return available;
@@ -2771,6 +2833,56 @@ class AppDecimatorPanel extends HTMLElement {
     this.#renderFundsFooter();
   }
 
+  async #refreshAllInEthSources() {
+    const acting = getActingAddress();
+    const connected = get('connected.address');
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const connectedLower = connected ? String(connected).toLowerCase() : null;
+    if (!actingLower || actingLower !== connectedLower || get('ui.mode') !== 'self') return;
+    const provider = getProvider();
+    const [walletResult, claimableResult, afkingResult] = await Promise.allSettled([
+      typeof provider?.getBalance === 'function'
+        ? provider.getBalance(connectedLower)
+        : Promise.resolve(null),
+      readClaimableEth({ player: actingLower }),
+      readAfkingFunding(actingLower),
+    ]);
+    // Do not let an answer started for a prior wallet cross an account switch.
+    if (String(getActingAddress() || '').toLowerCase() !== actingLower
+      || String(get('connected.address') || '').toLowerCase() !== connectedLower
+      || get('ui.mode') !== 'self') return;
+    if (walletResult.status === 'fulfilled' && walletResult.value != null) {
+      try {
+        this.#walletEthWei = BigInt(walletResult.value);
+        this.#walletEthAddress = connectedLower;
+      } catch (_error) { /* preserve the last known wallet value */ }
+    }
+    if (claimableResult.status === 'fulfilled' && claimableResult.value != null) {
+      try {
+        this.#claimableWei = BigInt(claimableResult.value);
+        this.#claimableAddress = actingLower;
+        this.#claimableKnown = true;
+      } catch (_error) { /* preserve the indexed fallback */ }
+    }
+    let afkingAdopted = false;
+    if (afkingResult.status === 'fulfilled' && afkingResult.value != null) {
+      try {
+        this.#afkingFundingWei = BigInt(afkingResult.value);
+        this.#afkingFundingAddress = actingLower;
+        this.#afkingFundingKnown = true;
+        afkingAdopted = true;
+      } catch (_error) { /* optional source; Wallet + Claimable stay usable */ }
+    }
+    if (!afkingAdopted) {
+      // Unknown optional funding must be excluded, not allowed to keep a stale
+      // amount or invalidate the independently known Wallet + Claimable quote.
+      this.#afkingFundingWei = 0n;
+      this.#afkingFundingAddress = actingLower;
+      this.#afkingFundingKnown = false;
+    }
+    this.#renderFundsFooter();
+  }
+
   #allInGasReady() {
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
@@ -2829,11 +2941,11 @@ class AppDecimatorPanel extends HTMLElement {
       },
       quote: (selection) => this.#allInQuote(selection),
       // Balance visibility is a privacy preference, not an eligibility gate.
-      // The dialog refreshes these direct values behind the blur before it
-      // decides whether a FLIP route is affordable.
+      // The dialog refreshes direct values behind the spoiler before deciding
+      // whether either currency route is affordable.
       refreshCurrency: (currency) => String(currency).toUpperCase() === 'FLIP'
         ? this.#refreshAllInFlipSources()
-        : Promise.resolve(),
+        : this.#refreshAllInEthSources(),
       confirm: (selection, fingerprint) => this.#confirmAllIn(selection, fingerprint),
     };
     try {
@@ -2845,6 +2957,8 @@ class AppDecimatorPanel extends HTMLElement {
     if (this.#busy) throw new Error('Another purchase is already in progress.');
     if (String(selection?.currency).toUpperCase() === 'FLIP') {
       await this.#refreshAllInFlipSources();
+    } else {
+      await this.#refreshAllInEthSources();
     }
     if (String(selection?.target) === 'decimator') {
       try {
@@ -3359,6 +3473,7 @@ class AppDecimatorPanel extends HTMLElement {
       gameResult,
       purchaseResult,
       playerResult,
+      liveScoreResult,
       flipLedgerResult,
       walletResult,
       afkingFundingResult,
@@ -3371,6 +3486,7 @@ class AppDecimatorPanel extends HTMLElement {
       readGameState(),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
+      actingLower ? readPlayerActivityScore(actingLower) : Promise.resolve(null),
       actingLower
         ? readCoinflipDisplaySnapshot({ player: actingLower })
         : Promise.resolve(null),
@@ -3387,18 +3503,31 @@ class AppDecimatorPanel extends HTMLElement {
     this.#purchaseQuote = purchaseResult.status === 'fulfilled'
       ? purchaseResult.value
       : null;
+    const indexedScore = playerResult.status === 'fulfilled' && playerResult.value
+      ? Number(
+        playerResult.value.scoreBreakdown?.totalBps
+        ?? playerResult.value.activityScore,
+      )
+      : null;
+    const liveScore = liveScoreResult.status === 'fulfilled'
+      && liveScoreResult.value != null
+      ? Number(liveScoreResult.value)
+      : null;
+    const selectedScore = Number.isFinite(liveScore)
+      ? liveScore
+      : Number.isFinite(indexedScore) ? indexedScore : null;
+    if (actingLower && selectedScore != null) {
+      // GAME is the same authoritative score source used by the quest HUD.
+      // The indexed row remains a resilient fallback during RPC degradation.
+      this.#degenScore = selectedScore;
+      this.#degenScoreAddress = actingLower;
+    }
     if (playerResult.status === 'fulfilled' && playerResult.value && actingLower) {
       let claimable = 0n;
       try { claimable = BigInt(playerResult.value.claimableEth || '0'); } catch (_e) { claimable = 0n; }
       this.#claimableWei = claimable;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = true;
-      const score = Number(
-        playerResult.value.scoreBreakdown?.totalBps
-        ?? playerResult.value.activityScore,
-      );
-      this.#degenScore = Number.isFinite(score) ? score : null;
-      this.#degenScoreAddress = actingLower;
       try {
         this.#flipBalanceWei = BigInt(playerResult.value.flipBalance ?? 0n);
         this.#flipBalanceAddress = actingLower;

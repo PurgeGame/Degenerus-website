@@ -207,10 +207,10 @@ class AppAllInDialog extends HTMLElement {
     dialog.hidden = false;
     dialog.removeAttribute?.('hidden');
     this.#render();
-    // Privacy blur belongs only to presentation. Warm the real FLIP sources
-    // as soon as the chooser opens so switching currency cannot strand the
-    // quote at "balance loading" until the player reveals the number.
-    void this.#refreshCurrency('FLIP');
+    // Privacy spoilers belong only to presentation. Warm both real balances
+    // together so the initial ETH quote and a later FLIP switch cannot remain
+    // stranded at "balance loading" behind a hidden display value.
+    void this.#refreshCurrencies(['ETH', 'FLIP']);
     try { this.querySelector('[data-currency="ETH"]')?.focus?.({ preventScroll: true }); }
     catch (_e) { /* focus is progressive enhancement */ }
   }
@@ -267,17 +267,26 @@ class AppAllInDialog extends HTMLElement {
     this.#target = this.#firstTarget(next, this.#targetByCurrency[next]);
     this.#targetByCurrency[next] = this.#target;
     this.#render();
-    if (next === 'FLIP') void this.#refreshCurrency(next);
+    void this.#refreshCurrency(next);
   }
 
   async #refreshCurrency(currency) {
+    return this.#refreshCurrencies([currency]);
+  }
+
+  async #refreshCurrencies(currencies) {
     const detail = this.#detail;
     if (!detail || typeof detail.refreshCurrency !== 'function') return;
     const seq = ++this.#refreshSeq;
-    try { await detail.refreshCurrency(currency); }
-    catch (_error) { /* the existing indexed quote remains a valid fallback */ }
-    if (!this.#open || this.#detail !== detail || seq !== this.#refreshSeq) return;
-    this.#render();
+    const unique = [...new Set((Array.isArray(currencies) ? currencies : []).filter(Boolean))];
+    await Promise.allSettled(unique.map(async (currency) => {
+      try { await detail.refreshCurrency(currency); }
+      catch (_error) { /* the existing indexed quote remains a valid fallback */ }
+      // Paint each balance as soon as it settles. A slow FLIP RPC must not
+      // hold the initial ETH quote at "balance loading" (or vice versa).
+      if (!this.#open || this.#detail !== detail || seq !== this.#refreshSeq) return;
+      this.#render();
+    }));
   }
 
   #selectTarget(target) {

@@ -79,6 +79,9 @@ describe('<app-sdgnrs-burn-rail>', () => {
     assert.match(CSS,
       /\.sdgnrs-rail__vote\s*\{\s*grid-column:\s*6;\s*grid-row:\s*1;/,
       'Charity Vote owns its independent first-row right-hand column');
+    assert.match(CSS,
+      /\.sdgnrs-rail__vote\s*\{[^}]*grid-template-columns:\s*0\.78rem minmax\(0, 1fr\);[^}]*padding:\s*0\.28rem 0\.34rem;[^}]*font-size:\s*0\.58rem;[^}]*letter-spacing:\s*0\.075em;/s,
+      'the two-line CHARITY label fits without clipping inside the fixed-width action');
     assert.match(CSS, /\.sdgnrs-rail__vote,[\s\S]*?\.sdgnrs-rail__burn\s*\{[^}]*width:\s*5\.3rem/s,
       'Vote and Burn have matching desktop widths');
     assert.match(CSS, /@media \(max-width: 620px\)/);

@@ -50,7 +50,7 @@ function _formatDrawWeight(value) {
   return amount.toLocaleString('en-US');
 }
 
-function _formatWhalePassHalves(value) {
+export function formatBafWhalePassHalves(value) {
   const halves = _big(value);
   if (halves > 0n && halves % 2n === 0n) {
     const passes = halves / 2n;
@@ -275,7 +275,7 @@ function _paintPlayerResults(overlay, snapshot) {
     } else {
       grid.appendChild(_resultCard({
         eyebrow: `PRIZE RESULT ${index + 1}${suffix}`,
-        value: _formatWhalePassHalves(hit.amount),
+        value: formatBafWhalePassHalves(hit.amount),
         detail: 'DEFERRED BAF TICKET VALUE',
         kind: 'whale-pass',
         icon: '/app/assets/baf-mark.svg',
@@ -450,7 +450,7 @@ function _paintPayout(overlay, snapshot) {
       );
     }
     if (_big(snapshot.player.whalePassHalves) > 0n) {
-      addReward(_formatWhalePassHalves(snapshot.player.whalePassHalves), 'whale-pass', '/app/assets/baf-mark.svg');
+      addReward(formatBafWhalePassHalves(snapshot.player.whalePassHalves), 'whale-pass', '/app/assets/baf-mark.svg');
     }
     if (!rewards.childElementCount && snapshot.player.leaderSlicePct > 0) {
       addReward(`${snapshot.player.leaderSlicePct}% LEADER PRIZE · SYNCING`, 'leader');

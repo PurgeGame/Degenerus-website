@@ -268,12 +268,12 @@ describe('<app-reveal-tray>', () => {
     assert.equal(lootboxIcon.getAttribute('data-lootbox-case-model'), 'medium');
     assert.match(
       lootboxIcon.style.getPropertyValue('--lootbox-case-art'),
-      /degenerus-lootbox-case-medium-v14-locked-front\.webp/,
+      /degenerus-lootbox-case-v6-front\.webp/,
       'an unknown legacy amount receives the canonical neutral case family',
     );
     assert.match(
       lootboxIcon.style.getPropertyValue('--lootbox-case-top-art'),
-      /degenerus-lootbox-case-medium-v14-top\.webp/,
+      /degenerus-lootbox-case-v6-top\.webp/,
       'Pending receives the matching top-down render for the selected case family',
     );
     assert.equal(action.querySelector('.rrt-action__cta'), null);
@@ -292,14 +292,14 @@ describe('<app-reveal-tray>', () => {
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.match(css,
-      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*var\(--lootbox-case-top-art\)/s,
-      'the mini case uses the value-tier tone through the top-down case silhouette mask');
-    assert.doesNotMatch(css,
-      /\.rrt-lootbox-mini::before\s*\{[^}]*flame-logo\.svg/s,
-      'the tiny front view uses the medallion already baked into the case art');
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-case-top-art\)/s,
+      'the base mini rule leaves the authored gold case untouched');
     assert.match(css,
-      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*background:\s*var\(--lootbox-case-top-art\)[^}]*clip-path:\s*var\(--lootbox-top-badge-clip\)/s,
-      'Pending restores the top-down metallic emblem above the value-tier wash');
+      /\.rrt-lootbox-mini:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\)::after,[^{]*\{\s*opacity:\s*0\.82;/s,
+      'small and medium Pending art retains the shared case palette shift');
+    assert.match(css,
+      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*top:\s*var\(--lootbox-top-badge-top, 77\.5%\);[^}]*width:\s*var\(--lootbox-top-badge-size, 16\.8%\);[^}]*flame-logo\.svg[^}]*scaleY\(var\(--lootbox-top-badge-scale-y, 0\.78\)\)/s,
+      'Pending restores one complete canonical badge above the value-tier wash');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 

@@ -45,32 +45,39 @@ describe('lootbox value tone', () => {
   test('publishes the complete art family from the same canonical selector', () => {
     for (const model of ['small', 'medium', 'large']) {
       const assets = lootboxCaseAssets(model);
-      const frontVersion = model === 'large' ? 'v29' : 'v14';
-      const topVersion = model === 'large' ? 'v29' : 'v14';
       const innerVersion = model === 'large' ? 'v16' : 'v14';
-      const shellExtension = model === 'large' ? 'png' : 'webp';
-      assert.match(assets.lockedFront, new RegExp(`case-${model}-${frontVersion}-locked-front\\.${shellExtension}$`));
-      assert.match(assets.retractedFront, new RegExp(`case-${model}-${frontVersion}-retracted-front\\.${shellExtension}$`));
-      assert.match(assets.top, new RegExp(`case-${model}-${topVersion}-top\\.${shellExtension}$`));
       assert.ok(assets.cardTop, `${model} exposes a purchase-card asset`);
       assert.ok(assets.purchaseTop, `${model} exposes authored Buy In artwork`);
       assert.match(assets.innerLid, new RegExp(`case-${model}-${innerVersion}-inner-lid\\.webp$`));
       assert.equal(assets.deadbolts.length, 2);
       if (model === 'large') {
-        assert.match(assets.cardTop, /case-large-v29-card\.webp$/,
+        assert.match(assets.lockedFront, /case-large-v32-locked-front\.png$/);
+        assert.match(assets.retractedFront, /case-large-v32-retracted-front\.png$/);
+        assert.match(assets.top, /case-large-v32-top\.png$/);
+        assert.match(assets.cardTop, /case-large-v33-card\.webp$/,
           'the purchase card does not eagerly download the full-resolution reveal top');
         assets.deadbolts.forEach((deadbolt) => {
-          assert.match(deadbolt, /case-large-v29-deadbolt-(?:left|right)\.png$/,
-            'the large shell exposes its exact two cylindrical lock-pin sprites');
+          assert.match(deadbolt, /case-large-v31-deadbolt-(?:left|right)\.png$/,
+            'the large shell exposes the exact steel bridges from its briefcase latches');
+        });
+      } else {
+        assert.match(assets.lockedFront, /case-v6-front\.webp$/);
+        assert.match(assets.retractedFront, /case-v7-front\.webp$/);
+        assert.match(assets.top, /case-v6-top\.webp$/);
+        assert.match(assets.cardTop, /case-v6-top\.webp$/);
+        assert.match(assets.purchaseTop, /case-v6-top\.webp$/);
+        const deadboltVersion = model === 'small' ? 'v18' : 'v17';
+        assets.deadbolts.forEach((deadbolt) => {
+          assert.match(deadbolt, new RegExp(`case-${model}-${deadboltVersion}-deadbolt-(?:left|right)\\.webp$`));
         });
       }
     }
-    assert.match(lootboxCaseAssets('small').purchaseTop, /case-small-v15-buy-in-top\.webp$/);
-    assert.match(lootboxCaseAssets('medium').purchaseTop, /case-medium-v15-buy-in-top\.webp$/);
-    assert.match(lootboxCaseAssets('large').purchaseTop, /case-large-v29-card\.webp$/);
+    assert.equal(lootboxCaseAssets('small').purchaseTop, lootboxCaseAssets('medium').purchaseTop,
+      'small and medium share the original detailed top-down case before palette shifting');
+    assert.match(lootboxCaseAssets('large').purchaseTop, /case-large-v33-card\.webp$/);
     assert.match(
       lootboxCasePresentation('small').css['--lootbox-case-purchase-art'],
-      /case-small-v15-buy-in-top\.webp/,
+      /case-v6-top\.webp/,
     );
     assert.equal(lootboxCaseAssets('unknown'), lootboxCaseAssets('medium'));
   });
@@ -82,8 +89,8 @@ describe('lootbox value tone', () => {
         return [css['--lootbox-price-top'], css['--lootbox-price-height'], css['--lootbox-price-width']];
       }),
       [
-        ['36.7%', '20%', '44%'],
-        ['37.2%', '25%', '45%'],
+        ['37.25%', '20%', '44%'],
+        ['37.25%', '20%', '44%'],
         ['25.4%', '21.5%', '42%'],
       ],
     );
@@ -92,8 +99,8 @@ describe('lootbox value tone', () => {
   test('defers the full large top until a reveal asks for full resolution', () => {
     const card = lootboxCasePresentation('large');
     const reveal = lootboxCasePresentation('large', { fullResolution: true });
-    assert.match(card.css['--lootbox-case-top-art'], /case-large-v29-card\.webp/);
-    assert.match(reveal.css['--lootbox-case-top-art'], /case-large-v29-top\.png/);
+    assert.match(card.css['--lootbox-case-top-art'], /case-large-v33-card\.webp/);
+    assert.match(reveal.css['--lootbox-case-top-art'], /case-large-v32-top\.png/);
   });
 
   test('all dynamic luckbox surfaces consume the shared model presentation', () => {

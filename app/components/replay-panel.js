@@ -488,6 +488,8 @@ class ReplayPanel extends HTMLElement {
   // that cannot have rolled traits yet).
   #futureTraitIds = new Set();
   #futureTraitsCacheKey = null;
+  #futureTraitsInflight = null; // shared flight: the warm-up and the bonus press
+                                // must await the same hydration, never two.
   #animId = 0;                  // spin cancellation token (increment to cancel running spin)
   #spinning = false;            // true while spin animation is running
   #scratched = [false, false, false, false];  // per-quadrant scratch completion
@@ -1390,7 +1392,12 @@ class ReplayPanel extends HTMLElement {
       btn.classList?.remove('is-decimator');
       btn.classList?.toggle('is-bonus', saved.isBonus);
       btn.classList?.toggle('is-processing', saved.isProcessing);
-      btn.classList?.toggle('is-spinning', saved.isSpinning);
+      // Only re-apply the spin latch over a reel that is still turning. The
+      // snapshot can outlive its spin, and #syncSpinControlState() refuses to
+      // repaint a button carrying `is-spinning`, so restoring a stale one
+      // locks the control for the rest of the day. A latch dropped a beat
+      // early is cosmetic; the owning flow relabels when it lands.
+      btn.classList?.toggle('is-spinning', saved.isSpinning && this.#spinning);
       if (saved.jpProgress) btn.style?.setProperty?.('--jp-progress', saved.jpProgress);
       else btn.style?.removeProperty?.('--jp-progress');
       if (saved.jpStage == null) btn.removeAttribute?.('data-jp-stage');
@@ -2034,12 +2041,12 @@ class ReplayPanel extends HTMLElement {
       .filter(w => String(w?.winner || '').toLowerCase() === norm);
     this.#playerRoll2Wins = (this.#dayRoll2?.wins || [])
       .filter(w => String(w?.winner || '').toLowerCase() === norm);
-    // The bonus draw is public just like Roll 1. Show it whenever Roll 2 has a
-    // recorded outcome, even when this player held no eligible ticket; their
-    // own holdings still control the cover colour and personal payout.
-    this.#hasBonus = this.#playerRoll2Wins.length > 0
-      || (this.#playerHasFutureTickets === true)
-      || (Array.isArray(this.#dayRoll2?.wins) && this.#dayRoll2.wins.length > 0);
+    // The bonus draw is public just like Roll 1. An exact Roll 2 payload is the
+    // authoritative witness even when its valid public result has zero winners;
+    // player holdings control only cover colour and personal payout.
+    const hasResolvedRoll2 = Number(this.#dayRoll2?.day) === Number(this.#selectedDay)
+      && Array.isArray(this.#dayRoll2?.wins);
+    this.#hasBonus = hasResolvedRoll2;
   }
 
   // Pulled by #onDayChange/#onPlayerChange after fetching player.tickets.
@@ -2087,7 +2094,20 @@ class ReplayPanel extends HTMLElement {
   // Traits the player holds ABOVE the day's level — what Roll 2 grades against.
   // Bounded by FAR_FUTURE_HORIZON: levels past it have no rolled traits, so
   // fetching them would cost a request per level to learn nothing.
-  async #loadFutureTraits() {
+  //
+  // Shared flight: the warm-up the main spin starts and the bonus press itself
+  // await one hydration instead of racing two identical waves through the
+  // transport's three-slot personalized lane.
+  #loadFutureTraits() {
+    if (this.#futureTraitsInflight) return this.#futureTraitsInflight;
+    const flight = this.#hydrateFutureTraits().finally(() => {
+      if (this.#futureTraitsInflight === flight) this.#futureTraitsInflight = null;
+    });
+    this.#futureTraitsInflight = flight;
+    return flight;
+  }
+
+  async #hydrateFutureTraits() {
     if (this.#tutorialFixture) {
       this.#futureTraitIds = new Set(this.#tutorialFixture.futureTraits);
       this.#futureTraitsCacheKey = `${this.#tutorialFixture.player}|${this.#tutorialFixture.purchaseLevel}`;
@@ -2119,7 +2139,13 @@ class ReplayPanel extends HTMLElement {
         }
       }
       this.#futureTraitIds = owned;
-      this.#futureTraitsCacheKey = cacheKey;
+      // Each level catches its own rejection, so a shed/cooldown burst that
+      // failed every request still arrives here as an empty set. Caching that
+      // as the answer painted every bonus quadrant red for the rest of the
+      // session with no retry. An answer needs at least one real payload.
+      this.#futureTraitsCacheKey = payloads.some((data) => data != null)
+        ? cacheKey
+        : null;
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load future-level traits:', err);
       // Fail-closed, like #loadPlayerTraits: an empty set spins red rather than
@@ -2162,7 +2188,10 @@ class ReplayPanel extends HTMLElement {
     try {
       // No &day= param — the endpoint 404s on days without an indexed
       // daily_rng row (same gotcha as app-tickets-inventory).
-      const data = await fetchJSON(`/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`);
+      const data = await fetchJSON(
+        `/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`,
+        { priority: 'interaction' },
+      );
       const owned = new Set();
       for (const card of (Array.isArray(data?.cards) ? data.cards : [])) {
         for (const entry of (Array.isArray(card?.entries) ? card.entries : [])) {
@@ -2710,6 +2739,21 @@ class ReplayPanel extends HTMLElement {
 
   // --- Reveal / Spin ---
 
+  /**
+   * The main reveal carries the same hard latch as the bonus roll: it adds
+   * `is-spinning` before two network reads, and #syncSpinControlState() will
+   * not repaint a button that carries one. Clear it on any path that never
+   * reaches the reel — #resetCards() only clears it once the flow gets that
+   * far, which the selection-changed bail above it does not.
+   */
+  #releaseMainSpinLatch() {
+    const btn = this.querySelector('[data-bind="reveal-btn"]');
+    if (!btn) return;
+    btn.classList?.remove('is-spinning');
+    btn.removeAttribute?.('aria-busy');
+    this.#syncSpinControlState();
+  }
+
   async #triggerReveal({ instant = false, persisted = false } = {}) {
     if (!this.#selectedDay || !this.#selectedPlayer) return;
     // The RNG row can arrive before its roll/bucket endpoints. Never construct
@@ -2735,52 +2779,68 @@ class ReplayPanel extends HTMLElement {
       btn.classList?.add('is-spinning');
       btn.textContent = 'PREPARING SPIN…';
     }
-    await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
-    await this.#refreshPlayerEligibility(); // populate #playerHasFutureTickets
-    if (this.#selectionKey() !== selectionKey) return false;
 
-    // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
-    this.#filterPlayerWins(this.#selectedPlayer);
+    let settled = false;
+    try {
+      await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
+      if (this.#selectionKey() !== selectionKey) return false;
 
-    const displayTraits = this.#displayTraitsForRoll(false);
+      // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
+      this.#filterPlayerWins(this.#selectedPlayer);
 
-    // Map per-player roll1 wins to quadrant prize arrays.
-    this.#distributePrizesFromRoll1();
+      const displayTraits = this.#displayTraitsForRoll(false);
 
-    // Keep the existing attract/result face painted during the asynchronous
-    // trait reads above. Clear it only when #runSpin is ready to take ownership
-    // of the very next frame.
-    this.#resetCards();
-    if (!instant) btn.textContent = 'SPINNING…';
+      // Map per-player roll1 wins to quadrant prize arrays.
+      this.#distributePrizesFromRoll1();
 
-    const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
-    if (!completed || this.#selectionKey() !== selectionKey) return false;
-    this.#mainSpinComplete = true;
-    btn.classList?.remove('is-spinning');
-    btn.removeAttribute?.('aria-busy');
+      // Keep the existing attract/result face painted during the asynchronous
+      // trait reads above. Clear it only when #runSpin is ready to take ownership
+      // of the very next frame.
+      this.#resetCards();
+      if (!instant) btn.textContent = 'SPINNING…';
 
-    if (this.#singleButton()) {
-      // Same button carries Roll 2; with no bonus ahead the day is played out.
-      if (this.#hasBonus) {
-        this.#btnMode = 'bonus';
-        btn.classList?.add('is-bonus');
-        btn.disabled = !this.#mainReadyForBonus();
-        btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
-        btn.title = this.#mainReadyForBonus()
-          ? ''
-          : 'Scratch blue and gold panels first';
+      // Warm Roll 2's colouring set while the main reel plays. #triggerBonusRoll
+      // used to be the only caller, so every first bonus press of a session paid
+      // four uncached /tickets/by-trait reads — queued three-at-a-time behind
+      // every other panel's wallet traffic — while its button already read
+      // "BONUS SPINNING…" over the settled Roll 1 board. Fire and forget: the
+      // press awaits this same flight, and a failure still fails closed there.
+      if (this.#hasBonus) void this.#loadFutureTraits();
+
+      const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
+      if (!completed || this.#selectionKey() !== selectionKey) return false;
+      this.#mainSpinComplete = true;
+      settled = true;
+      btn.classList?.remove('is-spinning');
+      btn.removeAttribute?.('aria-busy');
+
+      if (this.#singleButton()) {
+        // Same button carries Roll 2; with no bonus ahead the day is played out.
+        if (this.#hasBonus) {
+          this.#btnMode = 'bonus';
+          btn.classList?.add('is-bonus');
+          btn.disabled = !this.#mainReadyForBonus();
+          btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
+          btn.title = this.#mainReadyForBonus()
+            ? ''
+            : 'Scratch blue and gold panels first';
+        } else {
+          this.#syncSpinControlState();
+        }
       } else {
-        this.#syncSpinControlState();
+        btn.disabled = false;
+        btn.textContent = SPIN_AGAIN_LABEL;
       }
-    } else {
-      btn.disabled = false;
-      btn.textContent = SPIN_AGAIN_LABEL;
-    }
 
-    // After Roll 1 spin: show bonus section
-    this.#showBonusSection();
-    if (this.#primaryDecimatorAction) this.#syncSpinControlState();
-    return true;
+      // After Roll 1 spin: show bonus section
+      this.#showBonusSection();
+      if (this.#primaryDecimatorAction) this.#syncSpinControlState();
+      return true;
+    } finally {
+      // A bail between the latch and the reel would otherwise leave the button
+      // stuck at "PREPARING SPIN…" with nothing able to repaint it.
+      if (!instant && !settled) this.#releaseMainSpinLatch();
+    }
   }
 
   /**
@@ -3064,6 +3124,66 @@ class ReplayPanel extends HTMLElement {
     }
   }
 
+  /**
+   * Drop the bonus press's busy latch on every path that leaves
+   * #triggerBonusRoll without a finished reel.
+   *
+   * `is-spinning` is a hard lock, not a decoration: #syncSpinControlState()
+   * returns early on any button carrying it, so that a background processing
+   * poll cannot repaint a live spin. Nothing else ever removed it except
+   * #resetCards() — day change, player change, a fresh main reveal — so a bail
+   * between the latch and the reel stranded the control at "BONUS SPINNING…"
+   * over the settled Roll 1 board until the day rolled or the page reloaded.
+   */
+  async #releaseBonusSpinLatch(selectionKey, boardCleared) {
+    const btn = this.querySelector('[data-bind="reveal-btn"]');
+    btn?.classList?.remove('is-spinning');
+    btn?.removeAttribute?.('aria-busy');
+    // A day/player change, or a spin that has since taken the widget over,
+    // already owns both the control and the board. Releasing the latch is the
+    // only thing this path may still do.
+    if (this.#selectionKey() !== selectionKey || this.#spinning) return;
+
+    // Re-open the gate at the top of #triggerBonusRoll so the press retries.
+    this.#bonusPhase = false;
+    this.#bonusScratchComplete = false;
+    this.#syncDrawToggleAffordance();
+
+    // A reel that never ran leaves the blank board #resetMainWidget() made for
+    // it. Put the settled main draw back underneath the retry offer.
+    if (boardCleared) {
+      try {
+        this.#distributePrizesFromRoll1();
+        this.#resetMainWidget();
+        await this.#runSpin(this.#displayTraitsForRoll(false), {
+          instant: true,
+          announce: false,
+        });
+      } catch (err) {
+        // A board that will not repaint must not also cost the player the
+        // button: the release below is the part that has to happen.
+        console.warn('[ReplayPanel] Failed to restore the main draw:', err);
+      }
+    }
+
+    if (this.#singleButton()) {
+      this.#btnMode = 'bonus';
+      if (btn) {
+        btn.hidden = false;
+        btn.classList?.add('is-bonus');
+        btn.disabled = false;
+        btn.textContent = BONUS_SPIN_LABEL;
+        btn.title = '';
+      }
+    } else {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = SPIN_AGAIN_LABEL;
+      }
+      this.#showBonusSection();
+    }
+  }
+
   async #triggerBonusRoll() {
     // Public Roll 2 results remain viewable even for a player with no eligible
     // future ticket. The button is hidden only when no bonus draw exists.
@@ -3101,31 +3221,42 @@ class ReplayPanel extends HTMLElement {
       btn.textContent = 'BONUS SPINNING…';
     }
 
-    // Colouring for this roll comes from the future-level holdings.
-    await this.#loadFutureTraits();
-    if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
-    // Keep the settled main board painted during an uncached trait request.
-    // Once hydration finishes, clear it immediately before #runSpin paints
-    // the bonus reel's first frame, leaving no blank intermediate board.
-    this.#resetMainWidget();
-    const completed = await this.#runSpin(displayTraits);
-    if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
-    this.#bonusSpinComplete = true;
-    btn?.classList?.remove('is-spinning');
-    btn?.removeAttribute?.('aria-busy');
+    let boardCleared = false;
+    let settled = false;
+    try {
+      // Colouring for this roll comes from the future-level holdings.
+      await this.#loadFutureTraits();
+      if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+      // Keep the settled main board painted during an uncached trait request.
+      // Once hydration finishes, clear it immediately before #runSpin paints
+      // the bonus reel's first frame, leaving no blank intermediate board.
+      this.#resetMainWidget();
+      boardCleared = true;
+      const completed = await this.#runSpin(displayTraits);
+      if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+      this.#bonusSpinComplete = true;
+      settled = true;
+      btn?.classList?.remove('is-spinning');
+      btn?.removeAttribute?.('aria-busy');
 
-    if (btn) {
-      if (this.#singleButton()) {
-        // Both rolls are done — nothing left to fire until the day changes.
-        this.#btnMode = 'reveal';
-        this.#syncSpinControlState();
-      } else {
-        btn.disabled = false;
-        btn.textContent = SPIN_AGAIN_LABEL;
+      if (btn) {
+        if (this.#singleButton()) {
+          // Both rolls are done — nothing left to fire until the day changes.
+          this.#btnMode = 'reveal';
+          this.#syncSpinControlState();
+        } else {
+          btn.disabled = false;
+          btn.textContent = SPIN_AGAIN_LABEL;
+        }
       }
+      if (this.#primaryDecimatorAction) this.#syncSpinControlState();
+      return true;
+    } finally {
+      // Every early return above leaves the latch on, and no other code path
+      // in this panel can take it off. Release it here or the control is dead
+      // for the rest of the day.
+      if (!settled) await this.#releaseBonusSpinLatch(selectionKey, boardCleared);
     }
-    if (this.#primaryDecimatorAction) this.#syncSpinControlState();
-    return true;
   }
 
   #syncDrawToggleAffordance() {

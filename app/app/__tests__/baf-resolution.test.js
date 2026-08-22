@@ -104,6 +104,31 @@ describe('BAF resolution model', () => {
     ]);
   });
 
+  test('a seven-pass BAF row is a win and retains exact half-pass units', () => {
+    const snapshot = model({
+      player: '0x5555555555555555555555555555555555555555',
+      rank: 20,
+      history: [
+        { level: 0, day: 9, awardType: 'whale_pass_baf', amount: '14', halfPassCount: 14 },
+      ],
+    });
+    assert.equal(snapshot.player.whalePassHalves, '14');
+    assert.equal(snapshot.player.wonAny, true);
+    assert.deepEqual(snapshot.player.prizeHits, [
+      { kind: 'whale-pass', amount: '14', count: 1 },
+    ]);
+
+    assert.deepEqual(normalizeBafPrizeHits([
+      { level: 0, day: 9, awardType: 'whale_pass_baf', amount: '0', halfPassCount: 0 },
+      { level: 0, day: 9, awardType: 'whale_pass_baf', amount: '1', halfPassCount: 1 },
+      { level: 0, day: 9, awardType: 'whale_pass_baf', amount: '2', halfPassCount: 2 },
+      { level: 0, day: 8, awardType: 'whale_pass_baf', amount: '14', halfPassCount: 14 },
+    ], 40, 9), [
+      { kind: 'whale-pass', amount: '1', count: 1 },
+      { kind: 'whale-pass', amount: '2', count: 1 },
+    ]);
+  });
+
   test('rank four survives, rank three is killed, and the player payout is retained', () => {
     const snapshot = model({ history: [
       { level: 40, awardType: 'eth_baf', amount: '25' },

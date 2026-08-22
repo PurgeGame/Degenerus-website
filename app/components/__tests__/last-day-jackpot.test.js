@@ -304,6 +304,10 @@ import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as foilClaimMod from '../../app/foil-claim.js';
+import {
+  daySummaryLootboxPacks,
+  loadDayLootboxResults,
+} from '../../app/day-lootbox-results.js';
 import { CHAIN } from '../../app/chain-config.js';
 import { traitToBadge } from '../../app/jackpot-data.js';
 
@@ -982,6 +986,113 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     }
   });
 
+  test('a bonus press that never reaches the reel releases its own busy latch', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #triggerBonusRoll()');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  #syncDrawToggleAffordance()', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+
+    // `is-spinning` is a hard lock: #syncSpinControlState() returns early on
+    // any button carrying it, so a background processing poll cannot repaint a
+    // live spin. Nothing else removes it, so a bail between the latch and the
+    // reel left the control reading "BONUS SPINNING…" over the settled Roll 1
+    // board until the day rolled over.
+    const latchAt = flow.indexOf("btn.classList?.add('is-bonus', 'is-spinning')");
+    // The WebAudio resume above is also a `try {`; anchor on the block form.
+    const guardAt = flow.indexOf('\n    try {\n');
+    assert.ok(latchAt >= 0 && guardAt > latchAt,
+      'the busy latch goes on, then the whole async flow is guarded');
+    assert.equal(
+      (flow.slice(latchAt, guardAt).match(/return false;/g) || []).length,
+      0,
+      'no bail sits between the latch and the guard that releases it',
+    );
+    assert.ok((flow.slice(guardAt).match(/return false;/g) || []).length >= 2,
+      'the guarded region is the one that carries the selection/phase bails');
+    assert.match(
+      flow,
+      /\} finally \{[\s\S]*?if \(!settled\) await this\.#releaseBonusSpinLatch\(selectionKey, boardCleared\);/,
+      'every path out of that region releases the latch',
+    );
+  });
+
+  test('the released bonus latch leaves a pressable control over a painted board', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #releaseBonusSpinLatch(');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  async #triggerBonusRoll()', start);
+    assert.ok(start >= 0 && end > start, 'the release path exists');
+    const release = REPLAY_PANEL_SRC.slice(start, end);
+
+    assert.match(release, /classList\?\.remove\('is-spinning'\)/,
+      'the lock comes off');
+    assert.match(release, /this\.#selectionKey\(\) !== selectionKey \|\| this\.#spinning\) return;/,
+      'a day\/player change or a spin that took over owns the control instead');
+    assert.match(release, /this\.#bonusPhase = false;/,
+      'the gate at the top of #triggerBonusRoll re-opens so the press retries');
+    assert.match(release, /if \(boardCleared\) \{[\s\S]*?#distributePrizesFromRoll1\(\)[\s\S]*?instant: true/,
+      'a board already blanked for a reel that never ran gets the main draw back');
+    assert.match(release, /textContent = BONUS_SPIN_LABEL/,
+      'and the button offers the bonus spin again rather than a dead label');
+  });
+
+  test('the main reveal releases its latch on a bail too', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+    // #resetCards() clears the latch, but only once the flow reaches it — the
+    // selection-changed bail above it does not, and that read is a network one.
+    assert.match(
+      flow,
+      /\} finally \{[\s\S]*?if \(!instant && !settled\) this\.#releaseMainSpinLatch\(\);/,
+      '"PREPARING SPIN…" cannot outlive the flow that set it',
+    );
+    const releaseAt = REPLAY_PANEL_SRC.indexOf('#releaseMainSpinLatch() {');
+    const release = REPLAY_PANEL_SRC.slice(releaseAt, releaseAt + 400);
+    assert.match(release, /remove\('is-spinning'\)[\s\S]*?this\.#syncSpinControlState\(\)/,
+      'and the freed button is repainted by the state machine that owns it');
+  });
+
+  test('a decimator restore cannot resurrect a finished spin\'s latch', () => {
+    // #setPrimaryDecimatorAction snapshots the button it displaces and puts it
+    // back when the action clears. The snapshot can outlive its spin, and a
+    // restored `is-spinning` locks the control exactly like a stranded roll.
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /toggle\('is-spinning', saved\.isSpinning && this\.#spinning\)/,
+      'the latch is restored only over a reel that is still turning',
+    );
+  });
+
+  test('Roll 2 colouring is warmed while the main reel plays, not on the bonus press', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+    const warmAt = flow.indexOf('void this.#loadFutureTraits()');
+    const spinAt = flow.indexOf('await this.#runSpin(');
+    assert.ok(warmAt >= 0, 'the main spin warms the bonus roll\'s future-level holdings');
+    assert.ok(warmAt < spinAt,
+      'the four /tickets/by-trait reads overlap the reel instead of the bonus press');
+
+    // One hydration, not two: the warm-up and the press share a flight.
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#loadFutureTraits\(\) \{\s*if \(this\.#futureTraitsInflight\) return this\.#futureTraitsInflight;/,
+      'a press landing mid-warm awaits the running hydration rather than starting a second',
+    );
+  });
+
+  test('a future-trait hydration that failed every level is not cached as an answer', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #hydrateFutureTraits()');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  async #loadPlayerTraits()', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+    // Each level catches its own rejection, so a shed burst reaches the cache
+    // write as an empty set — indistinguishable from "holds nothing" and, once
+    // cached, red bonus quadrants for the rest of the session with no retry.
+    assert.match(
+      flow,
+      /this\.#futureTraitsCacheKey = payloads\.some\(\(data\) => data != null\)\s*\?\s*cacheKey\s*:\s*null;/,
+      'an answer needs at least one real payload behind it',
+    );
+  });
+
   test('bonus trait hydration cannot blank the board before the reel loop owns it', () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerBonusRoll()');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #syncDrawToggleAffordance()', start);
@@ -1012,6 +1123,44 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'the attract/result face remains painted while main traits hydrate');
     assert.ok(clearAt < spinAt,
       'the main board clears only when the real reel is ready to paint');
+  });
+
+  test('JP interaction reads bypass background traffic and the click has one network gate', () => {
+    const traitsStart = REPLAY_PANEL_SRC.indexOf('async #loadPlayerTraits()');
+    const traitsEnd = REPLAY_PANEL_SRC.indexOf('\n  // --- Event Handlers ---', traitsStart);
+    const traitsFlow = REPLAY_PANEL_SRC.slice(traitsStart, traitsEnd);
+    assert.match(
+      traitsFlow,
+      /tickets\/by-trait\?level=\$\{level\}`,[\s\S]*?priority:\s*'interaction'/,
+      'the read that gates readiness and click-to-reel owns the reserved slot',
+    );
+
+    const revealStart = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const revealEnd = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', revealStart);
+    const revealFlow = REPLAY_PANEL_SRC.slice(revealStart, revealEnd);
+    assert.doesNotMatch(
+      revealFlow,
+      /#refreshPlayerEligibility\(/,
+      'the click no longer waits for a redundant full player payload',
+    );
+
+    const filterStart = REPLAY_PANEL_SRC.indexOf('#filterPlayerWins(addr)');
+    const filterEnd = REPLAY_PANEL_SRC.indexOf('\n  // Pulled by', filterStart);
+    const filterFlow = REPLAY_PANEL_SRC.slice(filterStart, filterEnd);
+    assert.match(
+      filterFlow,
+      /Number\(this\.#dayRoll2\?\.day\) === Number\(this\.#selectedDay\)[\s\S]*?Array\.isArray\(this\.#dayRoll2\?\.wins\)[\s\S]*?this\.#hasBonus = hasResolvedRoll2/,
+      'an exact empty Roll 2 payload remains a valid public bonus draw',
+    );
+  });
+
+  test('DAY SUMMARY wallet reads use the reserved interaction lane', () => {
+    const activityStart = LAST_DAY_SRC.indexOf('async #loadDayActivity(viewed, day)');
+    const activityEnd = LAST_DAY_SRC.indexOf('\n  #', activityStart + 10);
+    const activityFlow = LAST_DAY_SRC.slice(activityStart, activityEnd);
+    assert.match(activityFlow, /fetchJSON\(path, \{ priority: 'interaction' \}\)/);
+    assert.match(activityFlow, /read\(`\/player\/\$\{address\}\/packs\?day=\$\{dayParam\}`\)/);
+    assert.match(activityFlow, /read\(`\/viewer\/player\/\$\{address\}\/day\/\$\{dayParam\}`\)/);
   });
 
   test('a reloaded DAY SUMMARY owns the LCD before a loading repaint can claim it', async () => {
@@ -2946,7 +3095,7 @@ describe('foil match pending action', () => {
     }
   });
 
-  test('only the main set powers durably while bonus settlement remains claim-only', async () => {
+  test('bonus completion powers its foil result while its claim waits for scratch', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const lineTraits = [1, 70, 130, 200];
     const bonusTraits = [2, 70, 130, 200];
@@ -3008,13 +3157,13 @@ describe('foil match pending action', () => {
         detail: { day: 45, player, bonusPhase: true, bonusAvailable: false },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      assert.equal(slot.classList.contains('is-match'), false,
-        'the settled bonus set cannot become a durable foil lamp');
-      assert.equal(slot.getAttribute('data-draw-kind'), null);
+      assert.equal(slot.classList.contains('is-match'), true,
+        'the settled bonus set becomes a durable foil match');
+      assert.equal(slot.getAttribute('data-draw-kind'), '1');
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'bonus spin completion alone cannot publish the still-covered claim');
-      assert.equal(slot.querySelectorAll('.is-color-match').length, 1,
-        'bonus settlement leaves the earlier main face as the only durable exact match');
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 4,
+        'the landed bonus result adds its exact matches to the durable main lamps');
       storeMod.update('viewing.address', player);
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
@@ -3027,16 +3176,16 @@ describe('foil match pending action', () => {
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
       assert.equal(pendingActionsMod.getPendingActions()[0]?.drawKind, 1,
         'the matching claim publishes only after the bonus scratch completes');
-      assert.equal(slot.classList.contains('is-match'), false,
-        'claim eligibility does not promote the bonus result into the display');
+      assert.equal(slot.classList.contains('is-match'), true,
+        'the bonus match stays lit after its claim gate opens');
       assert.equal(slot.classList.contains('is-claimable'), true,
-        'a bonus-only payout still glows as actionable without locking bonus quadrants');
+        'a bonus-only payout becomes actionable without disturbing its settled lamps');
       const bonusClaimTicket = slot.querySelector('.ldj-foil-machine-ticket--claimable');
       assert.equal(bonusClaimTicket?.tagName, 'BUTTON');
       assert.match(bonusClaimTicket?.getAttribute('aria-label') || '', /bonus spin foil match/);
       assert.equal(slot.querySelector('.ldj-foil-claim-marker')?.tagName, 'BUTTON');
-      assert.equal(slot.querySelectorAll('.is-color-match').length, 1,
-        'the main grade remains the sole durable visual after bonus scratch');
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 4,
+        'bonus scratch leaves the already-settled foil lamps unchanged');
       el.disconnectedCallback();
     } finally {
       globalThis.fetch = priorFetch;
@@ -3229,9 +3378,10 @@ describe('foil match pending action', () => {
     );
   });
 
-  test('a same-level post-spin phase refresh keeps the seated foil pack visible', async () => {
+  test('the final jackpot keeps its pack until purchase phase, then seats the next level', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
+    const nextTraits = [7, 79, 143, 207];
     const packed = traits.reduce((word, trait, quadrant) => (
       word | ((trait & 0xff) << (quadrant * 8))
     ), 0) >>> 0;
@@ -3249,10 +3399,10 @@ describe('foil match pending action', () => {
         json: async () => ({
           address: player,
           level,
-          present: level === 38,
+          present: level === 38 || level === 39,
           lines: level === 38
             ? [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]]
-            : [],
+            : [nextTraits, [6, 78, 142, 206], [5, 77, 141, 205], [0, 76, 140, 204]],
           claims: [],
         }),
       };
@@ -3263,6 +3413,8 @@ describe('foil match pending action', () => {
         level: 38,
         phase: 'JACKPOT',
         jackpotPhaseFlag: true,
+        rngLockedFlag: true,
+        jackpotCounter: 4,
         phaseTransitionActive: false,
       });
       storeMod.update('app.lastDay', {
@@ -3293,9 +3445,11 @@ describe('foil match pending action', () => {
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
 
-      // The daily draw settling can refresh phase state before the numeric
-      // level advances. That is not a level boundary and cannot eject the
-      // pack that still belongs to level 38.
+      assert.deepEqual([...new Set(requestedLevels)], [38],
+        'the final locked jackpot still owns the level 38 cabinet');
+
+      // Once the final jackpot is over, the same numeric game level enters
+      // purchase cadence and every new ticket/foil purchase belongs to 39.
       storeMod.update('app.gameState', {
         level: 38,
         phase: 'PURCHASE',
@@ -3304,10 +3458,15 @@ describe('foil match pending action', () => {
       });
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
 
-      assert.deepEqual([...new Set(requestedLevels)], [38],
-        'same-level cadence changes never retarget the cabinet to level 39');
+      assert.deepEqual([...new Set(requestedLevels)], [38, 39],
+        'purchase cadence retargets the cabinet to the level 39 pack');
       assert.equal(slot.classList.contains('is-loaded'), true,
-        'the seated current-level pack remains visible after the spin');
+        'the next-level pack is seated after the final jackpot handoff');
+      assert.equal(
+        slot.querySelector('.ldj-foil-machine-cell')?.querySelector('img')?.src || '',
+        traitToBadge(nextTraits[0])?.path,
+        'the visible ticket comes from level 39 rather than the retired level 38 pack',
+      );
       el.disconnectedCallback();
     } finally {
       globalThis.fetch = priorFetch;
@@ -3639,9 +3798,9 @@ describe('foil match pending action', () => {
 // still turning: each quadrant lights the moment its own reel stops, instead
 // of all four landing at once when the board settles. The panel publishes what
 // it is displaying (replay:spin-progress); the cabinet grades it with the same
-// gradeLine the settled path uses and paints the same faces. Only Roll 1 locks
-// persist: Roll 2 is a transient overlay even after its reels stop. Nothing
-// here is a record: no claim, no key, no gate.
+// gradeLine the settled path uses and paints the same faces. In-flight Roll 2
+// faces are transient; its authoritative packed result becomes durable when
+// the bonus spin completes. Nothing here opens a claim, key, or spoiler gate.
 // ===========================================================================
 
 describe('foil faces track the spin presentation', () => {
@@ -3781,12 +3940,12 @@ describe('foil faces track the spin presentation', () => {
     }
   });
 
-  test('bonus faces remain transient through final lock and completion while main locks persist', async () => {
+  test('bonus faces stay transient in flight and become durable on completion', async () => {
     const priorFetch = globalThis.fetch;
     globalThis.fetch = foilFetch();
     let el = null;
     try {
-      const bonusDraw = [2, 69, 130, 201];
+      const bonusDraw = [2, 70, 130, 200];
       el = await mount({ bonusDraw });
       await progress(DRAW);
       document.dispatchEvent({
@@ -3822,8 +3981,8 @@ describe('foil faces track the spin presentation', () => {
         detail: { day: 45, player: PLAYER, bonusPhase: true, bonusAvailable: false },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2],
-        'spin completion alone clears the final bonus overlay and restores durable main faces');
+      assert.deepEqual(faces(el), [HIT2, HIT2, HIT2, HIT2],
+        'spin completion replaces the overlay with the settled bonus result and keeps its lamps on');
       assert.deepEqual(flashes(el), [false, false, false, false],
         'the bonus lock pop cannot visually outlive spin completion');
     } finally {
@@ -4129,7 +4288,7 @@ describe('foil faces track the spin presentation', () => {
   });
 
   test('reduced motion keeps the lanes lit and stops them moving', () => {
-    const reduced = DRAWING_CSS.slice(DRAWING_CSS.indexOf('@media (prefers-reduced-motion: reduce)'));
+    const reduced = DRAWING_CSS.slice(DRAWING_CSS.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
     assert.match(reduced, /\.ldj-foil-machine-current \{\s*animation: none !important;/,
       'the sheet stops breathing');
     assert.match(reduced,
@@ -4351,6 +4510,173 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     el.disconnectedCallback();
   });
 
+  test('DAY SUMMARY warms one activity flight and loads exact winners alongside it', async () => {
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const day = 905;
+    const address = '0x9050000000000000000000000000000000000001';
+    const deferred = () => {
+      let resolve;
+      const promise = new Promise((done) => { resolve = done; });
+      return { promise, resolve };
+    };
+    const packsGate = deferred();
+    const viewerGate = deferred();
+    const priorFetch = globalThis.fetch;
+    const requested = [];
+    const response = (value) => ({
+      ok: true,
+      status: 200,
+      json: async () => value,
+    });
+    globalThis.fetch = (url) => {
+      const path = String(url);
+      requested.push(path);
+      if (path.includes(`/player/${address}/packs?day=${day}`)) {
+        return packsGate.promise.then(response);
+      }
+      if (path.includes(`/viewer/player/${address}/day/${day}`)) {
+        return viewerGate.promise.then(response);
+      }
+      if (path.includes(`/game/jackpot/day/${day}/winners`)) {
+        return Promise.resolve(response({ day, level: 2, winners: [] }));
+      }
+      if (path.includes(`/game/coinflip/day/${day}`)) return Promise.resolve(response(null));
+      return Promise.resolve(response(null));
+    };
+
+    let el = null;
+    try {
+      storeMod.update('connected.address', address);
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_${day}`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', {
+        ...RESOLVED_PAYLOAD_DAY5,
+        day,
+        winners: [],
+        roll1: { ...RESOLVED_PAYLOAD_DAY5.roll1, day },
+        roll2: { ...RESOLVED_PAYLOAD_DAY5.roll2, day },
+      });
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day, player: address, bonusPhase: false },
+      });
+      await flushMicrotasks();
+
+      const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+      assert.equal(cta.hidden, true, 'activity warms while scratch work is still ahead');
+      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
+        'spin completion starts one pack prefetch');
+      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
+        'spin completion starts one viewer prefetch');
+
+      globalThis.document.dispatchEvent(scratchEvent({
+        day, player: address, bonusPhase: false, bonusAvailable: false,
+      }));
+      await flushMicrotasks();
+
+      assert.equal(cta.hidden, false, 'the summary action is visible');
+      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
+        'CTA visibility shares the spin-time pack prefetch');
+      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
+        'CTA visibility shares the spin-time viewer prefetch');
+
+      cta.dispatchEvent({ type: 'click' });
+      await Promise.resolve();
+      assert.ok(requested.some((url) => url.includes(`/game/jackpot/day/${day}/winners`)),
+        'the exact winner refresh starts while activity is still unresolved');
+      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
+        'the click shares the visible CTA pack flight');
+      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
+        'the click shares the visible CTA viewer flight');
+
+      packsGate.resolve({
+        address, day, ticketRevealPacks: [], lootboxPacks: [],
+      });
+      viewerGate.resolve({
+        address, day, activity: { lootboxPurchases: [], lootboxResults: [], coinflip: null },
+      });
+      await flushMicrotasks();
+      await new Promise((resolve) => setImmediate(resolve));
+      await flushMicrotasks();
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.equal(queued?.day, day, 'the shared flight finishes the clicked summary');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('DAY SUMMARY seeks only the newest eight itemizable manual lootboxes', async () => {
+    const day = 906;
+    const address = '0x9060000000000000000000000000000000000001';
+    const manual = Array.from({ length: 12 }, (_, index) => {
+      const transactionHash = `0x${(index + 1).toString(16).padStart(64, '0')}`;
+      return {
+        packId: `lootbox-${transactionHash}-1`,
+        lootboxIndex: index + 1,
+        revealBlock: String(100 + index),
+      };
+    });
+    const catchup = Array.from({ length: 60 }, (_, index) => ({
+      packId: `lootbox-0x${(100 + index).toString(16).padStart(64, '0')}-1`,
+      lootboxIndex: 0,
+      revealBlock: String(200 + index),
+    }));
+    const dayPacks = { address, day, lootboxPacks: [...manual, ...catchup] };
+    const bounded = daySummaryLootboxPacks(dayPacks, day);
+    assert.deepEqual(
+      bounded.lootboxPacks.map((pack) => Number(pack.lootboxIndex)),
+      [12, 11, 10, 9, 8, 7, 6, 5],
+      'deferred index zero and the four manual cards beyond the UI limit are not query targets',
+    );
+
+    const priorFetch = globalThis.fetch;
+    const requested = [];
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      requested.push(path);
+      const items = bounded.lootboxPacks.map((pack) => ({
+        uid: `open-${pack.lootboxIndex}`,
+        source: 'result',
+        legType: 'opened',
+        rewardType: 'opened',
+        player: address,
+        lootboxIndex: pack.lootboxIndex,
+        transactionHash: pack.packId.slice('lootbox-'.length, -2),
+        blockNumber: pack.revealBlock,
+        logIndex: 1,
+        ord: Number(pack.revealBlock) * 1_000_000 + 1,
+        levelAtOpen: 2,
+        rewardData: { amount: '1', futureTickets: 0, flip: '0' },
+      }));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items, nextCursor: 103_000_001 }),
+      };
+    };
+    try {
+      const results = await loadDayLootboxResults({
+        player: address,
+        day,
+        snapshot: { address, day, startBlock: 1, endBlock: 999, activity: {} },
+        dayPacks,
+        priority: 'interaction',
+      });
+      assert.equal(requested.length, 1,
+        'finding the eight presentable transactions ends the history walk after one page');
+      assert.match(requested[0], /before=112000000(?:&|$)/,
+        'the cursor starts immediately after the newest selected opening block');
+      assert.deepEqual(results.map((row) => Number(row.lootboxIndex)), [5, 6, 7, 8, 9, 10, 11, 12],
+        'the newest bounded set is still presented in chronological order');
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
   test('DAY SUMMARY reads the day-scoped pack and player feeds before queuing the reveal', async () => {
     const { CHAIN } = await import('../../app/chain-config.js');
     const revealMod = await import('../reveal-overlay.js');
@@ -4529,7 +4855,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'the summary loads the full indexed reward legs, not just opened counts');
       assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');
       assert.equal(
-        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}_v2`),
+        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}_v3`),
         '1',
         'the consumed state survives a refresh for this player and day',
       );
@@ -4796,13 +5122,20 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     }
   });
 
-  test('an otherwise empty day with a lost DB-recorded coinflip bet awards the 1 WWXRP summary card', async () => {
+  test('a cached no-row cannot turn an exact-day coinflip loss into the viewer level win', async () => {
     const { CHAIN } = await import('../../app/chain-config.js');
     const revealMod = await import('../reveal-overlay.js');
     revealMod.__resetForTest();
     const address = '0x1111000000000000000000000000000000000001';
+    const exactStake = 250n * 10n ** 18n;
+    coinflipMod.__setResolvedStakeReaderForTest(async ({ player, day }) => {
+      assert.equal(player, address);
+      assert.equal(day, 5);
+      return exactStake;
+    });
     storeMod.update('connected.address', address);
     const priorFetch = globalThis.fetch;
+    let exactReads = 0;
     globalThis.fetch = async (url) => {
       const path = String(url);
       if (path.includes('/packs?day=5')) {
@@ -4810,6 +5143,18 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ok: true,
           status: 200,
           json: async () => ({ address, day: 5, ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes('/game/coinflip/day/5')) {
+        exactReads += 1;
+        return {
+          ok: true,
+          status: 200,
+          // Simulate the widget's early pre-index probe, followed by the exact
+          // result available when the player opens their one-shot summary.
+          json: async () => exactReads === 1
+            ? null
+            : ({ day: 5, win: false, rewardPercent: 103 }),
         };
       }
       if (path.includes(`/viewer/player/${address}/day/5`)) {
@@ -4822,7 +5167,13 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
             activity: {
               lootboxPurchases: [],
               lootboxResults: [],
-              coinflip: { stakeAmount: '250000000000000000000', win: false },
+              // Deliberately wrong level-derived row: this was rendered as WIN
+              // even though the exact day resolved as a loss.
+              coinflip: {
+                stakeAmount: '654600000000000000000000',
+                win: true,
+                rewardPercent: 80,
+              },
             },
           }),
         };
@@ -4849,8 +5200,13 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'the reveal layer can play the consolation horn instead of a winner effect');
       assert.equal(queued.activity.hasCoinflipBet, true);
       assert.equal(queued.activity.coinflipWon, false);
-      assert.equal(queued.activity.coinflipStakeAmount, '250000000000000000000');
-      assert.equal(queued.activity.coinflipRewardPercent, 0);
+      assert.equal(queued.activity.coinflipStakeAmount, String(exactStake));
+      assert.equal(queued.activity.coinflipRewardPercent, 103);
+      assert.ok(exactReads >= 2, 'the click retries after the widget cached an early no-row');
+      const normalized = revealMod.normalizeSequence(queued);
+      const flipCard = normalized.cards.find((card) => card.type === 'coinflip-result');
+      assert.equal(flipCard.outcome, 'loss');
+      assert.equal(flipCard.value, '-250 FLIP');
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;

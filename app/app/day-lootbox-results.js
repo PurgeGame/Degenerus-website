@@ -109,6 +109,56 @@ export function lootboxTransactionsForDayPacks(packs, day) {
   return _transactionSet(rows.map(_packTransaction));
 }
 
+/**
+ * Keep only exact manual openings the fullscreen summary can actually show.
+ *
+ * PACKS-V2 can contain hundreds of deferred index-0 openings and more manual
+ * boxes than the eight-card summary limit. The historical reader used to seek
+ * every one of those transaction hashes before discarding index 0 and slicing
+ * to eight. For a high-activity wallet that meant as many as forty sequential
+ * 200-row pages after the player pressed DAY SUMMARY.
+ *
+ * Newest openings are selected so the newest-first leg feed can satisfy the
+ * bounded set without walking past results that will never be presented. The
+ * final replay rows are still sorted chronologically for presentation.
+ */
+export function daySummaryLootboxPacks(packs, day) {
+  const expected = _number(day);
+  const actual = _number(packs?.day);
+  if (!Number.isInteger(expected) || actual !== expected) return null;
+  const rows = Array.isArray(packs?.lootboxPacks) ? packs.lootboxPacks : [];
+  const unique = new Map();
+  rows.forEach((pack, position) => {
+    const lootboxIndex = _number(pack?.lootboxIndex);
+    const transactionHash = _packTransaction(pack);
+    const logIndex = _packLogIndex(pack);
+    // Index zero is the deferred afking/catch-up lane and is represented by an
+    // aggregate activity count, never an itemized summary card. Missing indexes
+    // likewise cannot survive the final replay filter, so do not seek them.
+    if (!Number.isInteger(lootboxIndex) || lootboxIndex <= 0
+      || !transactionHash || logIndex == null) return;
+    const key = `${transactionHash}:${logIndex}`;
+    if (unique.has(key)) return;
+    unique.set(key, {
+      pack,
+      position,
+      block: _number(pack?.revealBlock ?? pack?.blockNumber),
+      logIndex,
+    });
+  });
+  const selected = Array.from(unique.values())
+    .sort((a, b) => {
+      if (a.block != null && b.block != null && a.block !== b.block) return b.block - a.block;
+      if (a.block != null && b.block == null) return -1;
+      if (a.block == null && b.block != null) return 1;
+      if (a.logIndex !== b.logIndex) return b.logIndex - a.logIndex;
+      return b.position - a.position;
+    })
+    .slice(0, MAX_DAY_SUMMARY_LOOTBOX_RESULTS)
+    .map((entry) => entry.pack);
+  return { ...packs, lootboxPacks: selected };
+}
+
 export function lootboxIndexesForSnapshot(snapshot) {
   const activity = snapshot?.activity || {};
   const purchases = Array.isArray(activity.lootboxPurchases)
@@ -241,6 +291,7 @@ export function historicalLootboxReplayRows(rows, {
 
 export async function fetchHistoricalLootboxRows(player, snapshot, {
   wantedTransactions = new Set(),
+  priority = 'background',
 } = {}) {
   const start = _number(snapshot?.startBlock);
   const end = _number(snapshot?.endBlock);
@@ -254,6 +305,7 @@ export async function fetchHistoricalLootboxRows(player, snapshot, {
     const cursor = before == null ? '' : `&before=${encodeURIComponent(String(before))}`;
     const response = await fetchJSON(
       `/lootbox/legs?limit=${PAGE_LIMIT}&player=${encodeURIComponent(player)}${cursor}`,
+      { priority },
     );
     const rows = Array.isArray(response?.items) ? response.items : [];
     collected.push(...rows);
@@ -278,25 +330,52 @@ export async function fetchHistoricalLootboxRows(player, snapshot, {
   return collected;
 }
 
-export async function loadDayLootboxResults({ player, day, snapshot, dayPacks } = {}) {
+export async function loadDayLootboxResults({
+  player,
+  day,
+  snapshot,
+  dayPacks,
+  priority = 'background',
+} = {}) {
   // The daily summary supplies its exact PACKS-V2 payload. If that response is
   // missing, all-time, or has no transaction anchors, fail closed instead of
   // using a recurring lootboxIndex to admit results from other levels.
   let wantedTransactions = new Set();
   let wantedAnchors = new Map();
+  let boundedSnapshot = snapshot;
   if (dayPacks !== undefined) {
-    const scoped = lootboxTransactionsForDayPacks(dayPacks, day);
+    const summaryPacks = daySummaryLootboxPacks(dayPacks, day);
+    if (!summaryPacks || summaryPacks.lootboxPacks.length === 0) return [];
+    const scoped = lootboxTransactionsForDayPacks(summaryPacks, day);
     if (!(scoped instanceof Set) || scoped.size === 0) return [];
     wantedTransactions = scoped;
-    wantedAnchors = lootboxAnchorsForDayPacks(dayPacks, day) || new Map();
+    wantedAnchors = lootboxAnchorsForDayPacks(summaryPacks, day) || new Map();
+
+    // Every companion reward for an opening is emitted in the same transaction
+    // (therefore the same block) as its PACKS-V2 anchor. When every selected pack
+    // carries a reveal block, narrow the history window to those eight exact
+    // blocks instead of scanning the rest of the player's day/all-time feed.
+    const blocks = summaryPacks.lootboxPacks.map(
+      (pack) => _number(pack?.revealBlock ?? pack?.blockNumber),
+    );
+    if (blocks.length > 0 && blocks.every((block) => block != null)) {
+      boundedSnapshot = {
+        ...(snapshot || {}),
+        startBlock: Math.min(...blocks),
+        endBlock: Math.max(...blocks),
+      };
+    }
   }
-  const rows = await fetchHistoricalLootboxRows(player, snapshot, { wantedTransactions });
+  const rows = await fetchHistoricalLootboxRows(player, boundedSnapshot, {
+    wantedTransactions,
+    priority,
+  });
   return historicalLootboxReplayRows(rows, {
     player,
     day,
-    startBlock: snapshot?.startBlock,
-    endBlock: snapshot?.endBlock,
-    wantedIndexes: lootboxIndexesForSnapshot(snapshot),
+    startBlock: boundedSnapshot?.startBlock,
+    endBlock: boundedSnapshot?.endBlock,
+    wantedIndexes: lootboxIndexesForSnapshot(boundedSnapshot),
     wantedTransactions,
     wantedAnchors,
   })

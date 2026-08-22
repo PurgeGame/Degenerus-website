@@ -99,6 +99,49 @@ describe('BAF resolution presentation', () => {
     assert.match(view.message, /2 tickets/);
   });
 
+  test('whale-only BAF awards are wins, while unknown exact awards never claim a loss', () => {
+    const sevenPasses = bafResolutionView({
+      currentLevel: 40,
+      level: 40,
+      consolation: 0n,
+      awards: { eth: 0n, tickets: 0n, whalePassHalves: 14n },
+      outcome: { roundStatus: 'closed', score: '1000000000000000000' },
+    });
+    assert.equal(sevenPasses.status, 'BAF WINNER');
+    assert.equal(sevenPasses.tone, 'won');
+    assert.equal(sevenPasses.actionable, false);
+    assert.match(sevenPasses.message, /7 WHALE PASSES/);
+
+    const oneHalf = bafResolutionView({
+      currentLevel: 40,
+      level: 40,
+      consolation: 0n,
+      awards: { eth: 0n, tickets: 0n, whalePassHalves: 1n },
+      outcome: { roundStatus: 'closed', score: '1000000000000000000' },
+    });
+    assert.match(oneHalf.message, /1 HALF-PASS/);
+
+    const onePass = bafResolutionView({
+      currentLevel: 40,
+      level: 40,
+      consolation: 0n,
+      awards: { eth: 0n, tickets: 0n, whalePassHalves: 2n },
+      outcome: { roundStatus: 'closed', score: '1000000000000000000' },
+    });
+    assert.match(onePass.message, /1 WHALE PASS(?!ES)/);
+
+    const exactAwardsUnknown = bafResolutionView({
+      currentLevel: 40,
+      level: 40,
+      consolation: 0n,
+      awards: { eth: 0n, tickets: 0n },
+      outcome: { roundStatus: 'closed', score: '1000000000000000000' },
+    });
+    assert.equal(exactAwardsUnknown.status, 'RESOLVED');
+    assert.notEqual(exactAwardsUnknown.tone, 'lost');
+    assert.doesNotMatch(exactAwardsUnknown.message, /did not receive a payout/i);
+  });
+
   test('only a losing bracket with exact on-chain consolation becomes actionable', () => {
     const ready = bafResolutionView({
       currentLevel: 20,
