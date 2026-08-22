@@ -859,21 +859,33 @@ function validJackpotPointer(pointer) {
     && pointer?.resultPath === `/jackpots/results/${day}-${digest}.json`;
 }
 
+/**
+ * Pages Functions do not exist behind the local static-file server. Keep the
+ * production site same-origin, but let localhost consume the exact same public
+ * edge token/result pair instead of falling through a stream of local 404s.
+ */
+export function jackpotEdgeUrl(path, locationLike = globalThis.location) {
+  const hostname = String(locationLike?.hostname ?? '').toLowerCase();
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return `https://degener.us${path}`;
+  }
+  return path;
+}
+
 async function waitForJackpotEdgeSnapshot(targetDay, signal) {
   const deadline = Date.now() + JACKPOT_EDGE_WAIT_MS;
   while (!signal?.aborted && Date.now() < deadline) {
     try {
-      // Deliberately use a same-origin fetch rather than API_BASE. The browser
-      // cache may retain the one-second pointer, while Cloudflare collapses the
-      // synchronized jackpot audience before anything reaches Fly.
-      const tokenResponse = await fetch('/jackpots/latest.json', {
+      // Production remains same-origin. The local static server has no Pages
+      // Function, so localhost reads the same public Cloudflare endpoint.
+      const tokenResponse = await fetch(jackpotEdgeUrl('/jackpots/latest.json'), {
         signal,
         headers: { accept: 'application/json' },
       });
       if (tokenResponse.ok) {
         const pointer = await tokenResponse.json();
         if (validJackpotPointer(pointer) && Number(pointer.day) >= targetDay) {
-          const resultResponse = await fetch(pointer.resultPath, {
+          const resultResponse = await fetch(jackpotEdgeUrl(pointer.resultPath), {
             signal,
             headers: { accept: 'application/json' },
           });

@@ -4,15 +4,19 @@ import { onRequest } from '../../../functions/jackpots/[[path]].js';
 
 const originalFetch = globalThis.fetch;
 const originalCaches = globalThis.caches;
+const originalDateNow = Date.now;
 
 let stored;
 let originCalls;
 let waits;
+let now;
 
 beforeEach(() => {
   stored = new Map();
   originCalls = [];
   waits = [];
+  now = 1_700_000_000_000;
+  Date.now = () => now;
   globalThis.caches = {
     default: {
       async match(request) {
@@ -35,6 +39,7 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.caches = originalCaches;
+  Date.now = originalDateNow;
 });
 
 function context(path, method = 'GET') {
@@ -53,9 +58,27 @@ test('latest token is fetched once from Fly and then served by the edge cache', 
   assert.equal(first.headers.get('x-jackpot-edge'), 'MISS');
   assert.equal(second.headers.get('x-jackpot-edge'), 'HIT');
   assert.match(first.headers.get('cache-control'), /max-age=1/);
+  assert.match(first.headers.get('cache-control'), /s-maxage=30/);
   assert.equal(originCalls.length, 1);
   assert.equal(originCalls[0].url, 'https://degenerus-db.fly.dev/game/jackpot/cdn/latest.json');
   assert.equal(originCalls[0].init.cf.cacheTtl, 1);
+});
+
+test('stale latest token returns immediately while one background refresh replaces it', async () => {
+  const first = await onRequest(context('/jackpots/latest.json'));
+  await Promise.all(waits);
+  assert.equal(first.headers.get('x-jackpot-edge'), 'MISS');
+
+  waits = [];
+  now += 1_001;
+  const stale = await onRequest(context('/jackpots/latest.json'));
+  assert.equal(stale.headers.get('x-jackpot-edge'), 'STALE');
+  assert.equal(originCalls.length, 2);
+  await Promise.all(waits);
+
+  const refreshed = await onRequest(context('/jackpots/latest.json'));
+  assert.equal(refreshed.headers.get('x-jackpot-edge'), 'HIT');
+  assert.equal(originCalls.length, 2);
 });
 
 test('immutable result receives a year-long edge cache policy', async () => {

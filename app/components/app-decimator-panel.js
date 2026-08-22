@@ -1083,7 +1083,7 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one small Luckbox"
                         title="Click to add one small Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('small').top}" alt="">
+                    <img src="${lootboxCaseAssets('small').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-small">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-small-unit" hidden>ETH</small>
@@ -1106,7 +1106,7 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one medium Luckbox"
                         title="Click to add one medium Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('medium').top}" alt="">
+                    <img src="${lootboxCaseAssets('medium').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-medium">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-medium-unit" hidden>ETH</small>
@@ -1129,7 +1129,7 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Add one large Luckbox"
                         title="Click to add one large Luckbox · right-click to remove">
                   <span class="dec-box-card__art" aria-hidden="true">
-                    <img src="${lootboxCaseAssets('large').top}" alt="">
+                    <img src="${lootboxCaseAssets('large').purchaseTop}" alt="" loading="lazy" decoding="async" fetchpriority="low">
                     <span class="dec-box-value">
                       <strong data-bind="dec-box-price-large">—</strong>
                       <small class="dec-box-value__unit" data-bind="dec-box-price-large-unit" hidden>ETH</small>
@@ -1201,7 +1201,7 @@ class AppDecimatorPanel extends HTMLElement {
             <div class="dec-presale__offer">
               <div class="dec-presale__label">
                 <span class="dec-presale__art" aria-hidden="true" data-lootbox-case-model="medium">
-                  <img src="${lootboxCaseAssets('medium').top}" alt=""><b>PRESALE</b>
+                  <img src="${lootboxCaseAssets('medium').cardTop}" alt="" loading="lazy" decoding="async" fetchpriority="low"><b>PRESALE</b>
                 </span>
                 <span><strong>PRESALE BOX</strong><small data-bind="dec-presale-available">— ETH AVAILABLE</small></span>
               </div>

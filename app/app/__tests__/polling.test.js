@@ -65,10 +65,26 @@ const {
   stop,
   refreshForDayShift,
   refreshJackpotAfterChainCompletion,
+  jackpotEdgeUrl,
   abortAllInflight,
   handleVisibilityChange,
   _testing,
 } = polling;
+
+test('localhost jackpot reads use the deployed edge while production stays same-origin', () => {
+  assert.equal(
+    jackpotEdgeUrl('/jackpots/latest.json', { hostname: '127.0.0.1' }),
+    'https://degener.us/jackpots/latest.json',
+  );
+  assert.equal(
+    jackpotEdgeUrl('/jackpots/results/21-0123456789abcdef.json', { hostname: 'localhost' }),
+    'https://degener.us/jackpots/results/21-0123456789abcdef.json',
+  );
+  assert.equal(
+    jackpotEdgeUrl('/jackpots/latest.json', { hostname: 'degener.us' }),
+    '/jackpots/latest.json',
+  );
+});
 
 beforeEach(() => {
   fetchCalls = [];

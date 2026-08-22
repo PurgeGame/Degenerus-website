@@ -776,9 +776,17 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     }
     assert.match(
       el.innerHTML,
-      /degenerus-lootbox-case-small-v14-top\.webp[\s\S]*degenerus-lootbox-case-medium-v14-top\.webp[\s\S]*degenerus-lootbox-case-large-v23-top\.webp/,
-      'preset cards use their distinct canonical top-down case models',
+      /degenerus-lootbox-case-small-v15-buy-in-top\.webp[\s\S]*degenerus-lootbox-case-medium-v15-buy-in-top\.webp[\s\S]*degenerus-lootbox-case-large-v29-card\.webp/,
+      'preset cards use their authored Buy In variants',
     );
+    assert.equal(
+      (PANEL_SRC.match(/<img src="\$\{lootboxCaseAssets\('(small|medium|large)'\)\.purchaseTop\}" alt="" loading="lazy" decoding="async" fetchpriority="low">/g) ?? []).length,
+      3,
+      'the three presets use their purchase-specific case art',
+    );
+    assert.match(PANEL_SRC,
+      /lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?<b>PRESALE<\/b>/,
+      'the hidden presale control keeps the neutral compact case art');
     assert.doesNotMatch(
       STATUS_CSS,
       /\.dec-input-group\.has-active-boon\s*\{[^}]*display:\s*grid/s,
@@ -2948,11 +2956,13 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-box-price-large-unit"]').hidden, false,
       'a whole-number gold-box price reads as 1 ETH instead of an old tier number');
     for (const tier of ['small', 'medium', 'large']) {
-      const version = tier === 'large' ? 'v22' : 'v14';
+      const asset = tier === 'large'
+        ? 'degenerus-lootbox-case-large-v29-card\\.webp'
+        : `degenerus-lootbox-case-${tier}-v15-buy-in-top\\.webp`;
       assert.match(
         el.innerHTML,
-        new RegExp(`dec-box-card--${tier}[\\s\\S]*?data-lootbox-case-model="${tier}"[\\s\\S]*?degenerus-lootbox-case-${tier}-${version}-top\\.webp`),
-        `${tier} purchase art comes from the canonical cross-surface selector`,
+        new RegExp(`dec-box-card--${tier}[\\s\\S]*?data-lootbox-case-model="${tier}"[\\s\\S]*?${asset}`),
+        `${tier} purchase art comes from the canonical purchase-art selector`,
       );
       const input = el.querySelector(`[name="dec-box-${tier}"]`);
       el.querySelector(`[data-bind="dec-box-add-${tier}"]`).dispatchEvent({ type: 'click' });
@@ -2976,29 +2986,32 @@ describe('combined ticket + lootbox buy', () => {
     assert.doesNotMatch(el.innerHTML, />SMALL<|>MEDIUM<|>LARGE</,
       'the box art communicates tier without redundant labels');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card__add\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*padding:\s*0;/s,
-      'each case fills its compact square hit area without wasted vertical space');
+      /\.dec-box-card__add\s*\{[^}]*appearance:\s*none;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;[^}]*cursor:\s*pointer;/s,
+      'the case image owns the complete button hit area without visible button chrome');
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-input-group--lootbox\.dec-purchase-builder\s*\{[^}]*padding:\s*0 0\.4rem;/s,
       'the Luckbox builder keeps only horizontal frame padding');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card\s*\{[^}]*width:\s*min\(6\.2rem, 100%\);[^}]*aspect-ratio:\s*1;[^}]*justify-self:\s*center;[^}]*align-self:\s*center;/s,
-      'each outlined button wraps its square case instead of stretching across its grid column');
+      /\.dec-box-card\s*\{[^}]*width:\s*min\(6\.2rem, 100%\);[^}]*aspect-ratio:\s*1;[^}]*justify-self:\s*center;[^}]*align-self:\s*center;[^}]*border:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
+      'each layout shell is invisible so only the square case itself reads as clickable');
+    assert.match(PURCHASE_DESK_CSS,
+      /\.dec-box-card\.is-selected\s*\{[^}]*border:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
+      'selecting a case does not restore the old rectangular shell');
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*width:\s*min\(5\.4rem, 100%\);[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*width:\s*min\(5\.8rem, 100%\);/s,
-      'the compact buttons preserve the stepped Small, Medium, and Large scale');
+      'the bare case buttons preserve the stepped Small, Medium, and Large scale');
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-card__art\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*aspect-ratio:\s*1;/s,
-      'the top-down case fills the complete square button');
+      'the top-down case fills the complete image-shaped button');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card__art::after\s*\{[^}]*background:\s*var\(--box-tone\);[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0\.82;/s,
-      'the case shell uses the same value-tier color wash as the opening animation');
+      /\.dec-box-card__add:hover \.dec-box-card__art,[\s\S]*?\.dec-box-card\.is-selected \.dec-box-card__art\s*\{[^}]*filter:\s*brightness\(1\.08\) drop-shadow\([^}]*transform:\s*translateY\(-1px\) scale\(1\.02\);/s,
+      'hover, keyboard focus, and selection light the case art instead of repainting a surrounding card');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card\[data-lootbox-case-model="large"\] \.dec-box-card__art::after\s*\{[^}]*opacity:\s*0;/s,
-      'the finished gold, gunmetal, and red-enamel top render keeps its authored material separation');
+      /\.dec-box-card__art::after\s*\{[^}]*background:\s*var\(--box-tone\);[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;/s,
+      'authored purchase art keeps bronze, silver, and gunmetal hardware out of the shell wash');
     const badgeLayer = PURCHASE_DESK_CSS.match(/\.dec-box-card__art::before\s*\{([^}]*)\}/s)?.[1] || '';
     assert.match(badgeLayer,
-      /inset:\s*0;[\s\S]*?var\(--lootbox-case-top-art\)[\s\S]*?clip-path:\s*var\(--lootbox-top-badge-clip\)/s,
+      /inset:\s*0;[\s\S]*?var\(--lootbox-case-purchase-art\)[\s\S]*?clip-path:\s*var\(--lootbox-top-badge-clip\)/s,
       'the source-aligned crop restores the baked official badge above the tier wash');
     assert.doesNotMatch(badgeLayer, /flame-logo\.svg|drop-shadow|transform:/,
       'the case uses no detached logo layer, cast shadow, or independent transform');
@@ -3051,6 +3064,21 @@ describe('combined ticket + lootbox buy', () => {
       PURCHASE_DESK_CSS,
       /\.dec-custom-box-toggle\s*\{[^}]*min-height:\s*1\.52rem;[^}]*margin:\s*0\.14rem 0 0;[^}]*padding:\s*0\.14rem 0\.38rem;/s,
       'the compact Custom trigger clears the Luckboxes section border',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-input-group--lootbox \.dec-builder-head\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s,
+      'the Luckboxes header uses balanced side columns around its title',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-input-group--lootbox \.dec-builder-title\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;[^}]*text-align:\s*center;/s,
+      'the Luckboxes title owns the true center column',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-custom-box-toggle\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1;[^}]*justify-self:\s*start;/s,
+      'Custom sits in the upper-left header slot',
     );
 
     toggle.dispatchEvent({ type: 'click' });

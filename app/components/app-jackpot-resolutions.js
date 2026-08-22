@@ -17,6 +17,7 @@ import {
 } from '../app/store.js';
 import { claimDecimatorLevels } from '../app/claims.js';
 import {
+  bafFinalIsNews,
   bafResolutionLevel,
   claimBafConsolation,
   decimatorResolutionLevel,
@@ -68,6 +69,14 @@ export function decimatorResolutionView({ outcome, claimState, currentLevel, lev
   const current = Number(currentLevel);
   const future = Number.isInteger(lvl) && Number.isInteger(current) && lvl > current;
   if (!outcome) {
+    if (claimState === 'ready' || claimState === 'claimed') {
+      return {
+        status: claimState === 'ready' ? 'READY TO RESOLVE' : 'RESOLVED',
+        tone: claimState === 'ready' ? 'ready' : 'won',
+        message: 'Winning Decimator details are still syncing; the resolved wheel is available.',
+        actionable: claimState === 'ready',
+      };
+    }
     return future
       ? { status: 'UPCOMING', tone: 'waiting', message: `Resolves when Level ${lvl} starts.`, actionable: false }
       : { status: 'SYNCING', tone: 'waiting', message: 'Loading the latest Decimator result.', actionable: false };
@@ -110,6 +119,18 @@ export function decimatorResolutionView({ outcome, claimState, currentLevel, lev
       status: 'WINNING SUBBUCKET', tone: 'won',
       message: `${_formatEth(payout)} ETH estimated pool share.`,
       actionable: false,
+    };
+  }
+
+  // The permissionless claim probe is chain-authoritative and can finish one
+  // indexer write before the player endpoint gains its bucket/payout fields.
+  // Do not turn that short gap into a permanent NO ENTRY result.
+  if (status === 'closed' && (claimState === 'ready' || claimState === 'claimed')) {
+    return {
+      status: claimState === 'ready' ? 'READY TO RESOLVE' : 'RESOLVED',
+      tone: claimState === 'ready' ? 'ready' : 'won',
+      message: 'Winning Decimator details are still syncing; the resolved wheel is available.',
+      actionable: claimState === 'ready',
     };
   }
 
@@ -333,9 +354,6 @@ class AppJackpotResolutions extends HTMLElement {
       ? historyResult.value.wins
       : [];
 
-    if (this.#decimator && ['closed', 'skipped'].includes(String(this.#decimator.roundStatus || ''))) {
-      this.#settled.dec = { level: decLevel, value: this.#decimator };
-    }
     if (this.#baf && ['closed', 'skipped'].includes(String(this.#baf.roundStatus || ''))) {
       this.#settled.baf = { level: bafLevel, value: this.#baf };
     }
@@ -353,6 +371,22 @@ class AppJackpotResolutions extends HTMLElement {
     this.#bafConsolation = consolationProbe.status === 'fulfilled'
       ? consolationProbe.value
       : null;
+
+    // A terminal global round can reach /player/:addr/decimator before that
+    // player's DecBurn/claim row. Latching a bucket-less terminal response at
+    // the x5/x00 boundary made a real winner disappear for the whole round.
+    // Keep probing during the boundary, and indefinitely when the direct chain
+    // claim proves this player won; stable no-entry rows may latch afterwards.
+    const decTerminal = this.#decimator
+      && ['closed', 'skipped'].includes(String(this.#decimator.roundStatus || ''));
+    const decChainWinner = ['ready', 'claimed'].includes(this.#decimatorClaimState);
+    if (decTerminal && (
+      hasDecimatorPosition(this.#decimator)
+      || _wasSeen('decimator', this.#address, decLevel)
+      || (Number(currentLevel) !== Number(decLevel) && !decChainWinner)
+    )) {
+      this.#settled.dec = { level: decLevel, value: this.#decimator };
+    }
     this.#publish();
     this.#armPoll();
   }
@@ -377,8 +411,9 @@ class AppJackpotResolutions extends HTMLElement {
       currentLevel: current,
       level: decLevel,
     });
-    const decFinal = this.#decimator?.roundStatus === 'closed';
-    const decHasPosition = hasDecimatorPosition(this.#decimator);
+    const decChainWinner = ['ready', 'claimed'].includes(this.#decimatorClaimState);
+    const decFinal = this.#decimator?.roundStatus === 'closed' || decChainWinner;
+    const decHasPosition = hasDecimatorPosition(this.#decimator) || decChainWinner;
     const decSeen = _wasSeen('decimator', this.#address, decLevel);
     // Keep the latest unseen fullscreen receipt through the levels after its
     // transition. Opening or clearing it retires the row; the next Decimator
@@ -438,13 +473,21 @@ class AppJackpotResolutions extends HTMLElement {
       level: bafLevel,
     });
     const bafFinal = ['closed', 'skipped'].includes(String(this.#baf?.roundStatus || ''));
-    // A BAF final is transition chrome only at its x10 boundary. Do not revive
-    // an older unseen x10 receipt during a later x5 Decimator takeover; that
-    // reads as a BAF button opening the Decimator even though they are two
-    // separate resolved draws. Actionable consolation remains available below.
-    const bafUnseen = Number(bafLevel) === current
-      && bafFinal
-      && !_wasSeen('baf', this.#address, bafLevel);
+    const bafParticipated = _big(this.#baf?.score) > 0n
+      || Number(this.#baf?.rank) > 0
+      || _big(awards.eth) > 0n
+      || _big(awards.tickets) > 0n
+      || _big(this.#bafConsolation) > 0n;
+    // Indexing can finish just after the x10 boundary. Keep that player's
+    // latest receipt through the bracket; Decimator still owns the main
+    // jackpot button and BAF remains its separately labelled Pending action.
+    const bafUnseen = bafFinalIsNews({
+      closed: bafFinal,
+      seen: _wasSeen('baf', this.#address, bafLevel),
+      currentLevel: current,
+      level: bafLevel,
+      participated: bafParticipated,
+    });
     const bafCanResolve = canAct && bafView.actionable;
     if (bafUnseen || bafCanResolve) {
       const willWrite = bafCanResolve;
@@ -492,12 +535,29 @@ class AppJackpotResolutions extends HTMLElement {
   }
 
   async #queueBaf(level, consolation = this.#bafConsolation) {
+    // Terminal player/round state and award history are indexed by different
+    // event streams. Refresh both at the click boundary so the fullscreen
+    // receipt cannot reuse the pre-payout history that first armed its row.
+    const addr = encodeURIComponent(this.#address);
+    const encodedLevel = encodeURIComponent(level);
+    const [outcomeResult, historyResult] = await Promise.allSettled([
+      fetchJSON(`/player/${addr}/baf?level=${encodedLevel}`, { force: true }),
+      fetchJSON(`/player/${addr}/jackpot-history`, { force: true }),
+    ]);
+    if (outcomeResult.status === 'fulfilled'
+      && ['closed', 'skipped'].includes(String(outcomeResult.value?.roundStatus || ''))) {
+      this.#baf = outcomeResult.value;
+      this.#settled.baf = { level: Number(level), value: outcomeResult.value };
+    }
+    if (historyResult.status === 'fulfilled' && Array.isArray(historyResult.value?.wins)) {
+      this.#history = historyResult.value.wins;
+    }
     const opened = await openBafResolution({
       level,
       player: this.#address,
       consolation: _big(consolation),
-      // Reuse the watcher data that made the notification actionable. This
-      // keeps a slow duplicate player/history request from holding the final.
+      // Pass the click-boundary reconciliation through so the overlay does not
+      // launch its own duplicate reads or fall back to the stale watcher copy.
       playerOutcome: this.#baf,
       history: { wins: this.#history },
     });

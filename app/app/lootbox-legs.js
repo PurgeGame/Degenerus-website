@@ -107,6 +107,14 @@ function _entropyHash2(a, b) {
   return BigInt(ethers.keccak256(encoded));
 }
 
+function _entropyHash4(a, b, c, d) {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256', 'uint256', 'uint256', 'uint256'],
+    [BigInt(a), BigInt(b), BigInt(c), BigInt(d)],
+  );
+  return BigInt(ethers.keccak256(encoded));
+}
+
 const FULL_ETH_WEI = 10n ** 18n;
 const PRICE_COIN_UNIT = 1_000n * FULL_ETH_WEI;
 const LOOTBOX_BOON_BUDGET_BPS = 1_000n;
@@ -127,6 +135,7 @@ const LB_COVER_SHIFT = 161n;
 const LB_COVER_MASK = 0xFFFFFFFFFFFFn;
 const LB_CUSTOM_SCALE = 1_000_000_000_000n;
 const CURRENT_BOX_COUNT_SHIFTS = Object.freeze([81n, 89n, 97n, 105n]);
+const LOOTBOX_AURA_TIER_CUTOFFS = Object.freeze([100n, 500n, 2_500n, 7_000n]);
 const LOOTBOX_SPLIT_THRESHOLD = (FULL_ETH_WEI / 2n) / BigInt(ETH_DIVISOR);
 const LOOTBOX_FLIP_SPINS_STAKE_BPS = 7_060n;
 // DegenerusGameDegeneretteModule.sol:1763 / FlipRoundLib.sol:21-27. A surviving
@@ -141,6 +150,16 @@ const LOOTBOX_EV_NEUTRAL_POINTS = 60n;
 const LOOTBOX_EV_MAX_POINTS = 400n;
 const ACTIVITY_SEG_B_KNEE_POINTS = 500n;
 const ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000n;
+
+/** Contract ticket-variance tier from bits [96..119] of one physical box seed. */
+function _lootboxAuraTier(seed) {
+  const roll = ((BigInt(seed) >> 96n) & 0xFFFFFFn) % 10_000n;
+  if (roll < LOOTBOX_AURA_TIER_CUTOFFS[0]) return 't1';
+  if (roll < LOOTBOX_AURA_TIER_CUTOFFS[1]) return 't2';
+  if (roll < LOOTBOX_AURA_TIER_CUTOFFS[2]) return 't3';
+  if (roll < LOOTBOX_AURA_TIER_CUTOFFS[3]) return 't4';
+  return 't5';
+}
 
 function _lootboxEvMultiplierBps(scoreRaw) {
   const score = BigInt(scoreRaw ?? 0);
@@ -268,6 +287,93 @@ function _boonTypeFromSeed(seed, scaledAmount, expectedPerBoon) {
   const roll = ((BigInt(seed) >> 120n) & U32) % BOON_PPM_SCALE;
   if (roll >= totalChance) return null;
   return _earlyBoonType((roll * BOON_WEIGHT_TOTAL) / totalChance);
+}
+
+/**
+ * Derive the latent ticket-multiplier aura for every physical box in a human
+ * counted order. This intentionally runs for every reward branch: path bits
+ * [40..55] choose tickets/DGNRS/WWXRP/FLIP/spins, while independent bits
+ * [96..119] always define the variance tell.
+ *
+ * Returns `null` when `packedBox` is not a current counted-order word, allowing
+ * the public wrapper to fall back to the historical one-amount layout.
+ */
+function _deriveCurrentHumanLootboxAuraTiers({
+  player,
+  rngWord,
+  packedBox,
+  currentLevel,
+} = {}) {
+  let word;
+  let packed;
+  let playerWord;
+  try {
+    word = BigInt(rngWord ?? 0);
+    packed = BigInt(packedBox ?? 0);
+    playerWord = BigInt(player);
+  } catch (_e) {
+    return null;
+  }
+  if (!player || word === 0n || packed === 0n) return null;
+
+  const counts = CURRENT_BOX_COUNT_SHIFTS.map((shift) => (
+    Number((packed >> shift) & LB_COUNT_MASK)
+  ));
+  const customSize = ((packed >> LB_CUSTOM_SIZE_SHIFT) & LB_CUSTOM_SIZE_MASK)
+    * LB_CUSTOM_SCALE;
+  const coverSize = ((packed >> LB_COVER_SHIFT) & LB_COVER_MASK) * LB_CUSTOM_SCALE;
+  if (counts.every((count) => count === 0) && coverSize === 0n) return null;
+
+  const orderLevel = Number(packed & LB_LEVEL_MASK);
+  const openLevel = Number(currentLevel);
+  if (!Number.isInteger(openLevel) || openLevel < 1 || orderLevel > openLevel) return [];
+  const price = scaledTicketPriceWei(orderLevel);
+  if (price <= 0n) return [];
+
+  const lanes = [
+    [counts[0], price],
+    [counts[1], price * 5n],
+    [counts[2], price * 25n],
+    [counts[3], customSize],
+    [coverSize > 0n ? 1 : 0, coverSize],
+  ];
+  let nonce = 0n;
+  const tiers = [];
+  for (const [count, size] of lanes) {
+    if (count <= 0 || size <= 0n) continue;
+    for (let index = 0; index < count; index += 1) {
+      // DegenerusGameLootboxModule._rollTier uses ++nonce in this exact lane
+      // order before hash4(rngWord, uint160(player), size, nonce).
+      nonce += 1n;
+      tiers.push(_lootboxAuraTier(_entropyHash4(word, playerWord, size, nonce)));
+    }
+  }
+  return tiers;
+}
+
+/**
+ * Public deterministic aura decoder. T1..T5 describe only the committed
+ * ticket-multiplier tier; they are never inferred from prize type or quality.
+ */
+export function deriveHumanLootboxAuraTiers(args = {}) {
+  const current = _deriveCurrentHumanLootboxAuraTiers(args);
+  if (current != null) return current;
+  if (!args?.player) return [];
+  let packed;
+  let word;
+  try {
+    packed = BigInt(args.packedBox ?? 0);
+    word = BigInt(args.rngWord ?? 0);
+  } catch (_e) {
+    return [];
+  }
+  const amount = packed & ((1n << 128n) - 1n);
+  if (amount <= 0n || word === 0n) return [];
+  try {
+    return [_lootboxAuraTier(_humanBoxRootSeed(word, args.player, amount))];
+  } catch (_e) {
+    return [];
+  }
 }
 
 /**
@@ -608,6 +714,29 @@ async function _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber }) {
   if (!publicProvider || publicProvider === connected) return null;
   try { return await readContext(publicProvider); }
   catch (_e) { return null; }
+}
+
+/**
+ * Read the pre-settlement committed order and return one multiplier aura per
+ * physical box. Historical storage is the authority because the settlement
+ * clears the order before emitting reward events.
+ */
+export async function readHumanLootboxAuraTiers({
+  player,
+  lootboxIndex,
+  blockNumber = null,
+  context = null,
+} = {}) {
+  let exactContext = context;
+  if (!exactContext) {
+    try {
+      exactContext = await _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber });
+    } catch (_e) {
+      return [];
+    }
+  }
+  if (!exactContext) return [];
+  return deriveHumanLootboxAuraTiers({ player, ...exactContext });
 }
 
 /** True for any human-box FLIP spin whose pre-flip sum is still unnamed. */

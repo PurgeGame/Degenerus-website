@@ -60,3 +60,18 @@ test('BAF remains in the lower-left green field inside the rail', () => {
     /\.df-table-watermark\s*\{[^}]*left:\s*(?:38|39)%;/s,
   );
 });
+
+test('today payout chips can cross the auto-rebuy spot without clipping', () => {
+  assert.match(
+    CHIPSET_CSS,
+    /\.jackpot-hero \.df-bet-oval\s*\{[^}]*overflow:\s*visible;/s,
+  );
+  assert.match(
+    CHIPSET_CSS,
+    /\.jackpot-hero \.df-auto-rebuy-cta\s*\{[^}]*z-index:\s*2;/s,
+  );
+  assert.match(
+    CHIPSET_CSS,
+    /\.jackpot-hero \.df-bet-table\s*\{[^}]*z-index:\s*3;/s,
+  );
+});

@@ -48,6 +48,8 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-locked-front.webp',
     retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-retracted-front.webp',
     top: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-top.webp',
+    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-top.webp',
+    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-small-v15-buy-in-top.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-inner-lid.webp',
     deadbolts: Object.freeze([
       '/app/assets/lootbox/degenerus-lootbox-case-small-v14-deadbolt-left.webp',
@@ -58,6 +60,8 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-locked-front.webp',
     retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-retracted-front.webp',
     top: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-top.webp',
+    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-top.webp',
+    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-medium-v15-buy-in-top.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp',
     deadbolts: Object.freeze([
       '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-deadbolt-left.webp',
@@ -65,13 +69,18 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   large: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-locked-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-retracted-front.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v23-top.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v29-locked-front.png',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v29-retracted-front.png',
+    top: '/app/assets/lootbox/degenerus-lootbox-case-large-v29-top.png',
+    // The 1280px top remains the reveal asset, but the purchase card only
+    // needs a 480px derivative. This keeps ~1.85 MiB off startup and defers the
+    // full-resolution image until a player actually opens a large Luckbox.
+    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-large-v29-card.webp',
+    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-large-v29-card.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-large-v16-inner-lid.webp',
     deadbolts: Object.freeze([
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-left.webp',
-      '/app/assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-right.webp',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v29-deadbolt-left.png',
+      '/app/assets/lootbox/degenerus-lootbox-case-large-v29-deadbolt-right.png',
     ]),
   }),
 });
@@ -93,11 +102,11 @@ const LOOTBOX_CASE_GEOMETRY = Object.freeze({
     priceTop: '37.2%', priceHeight: '25%', priceWidth: '45%',
   }),
   large: Object.freeze({
-    seam: '38%', badgeTop: '62.15%', badgeSize: '11.85%',
+    seam: '25.6%', badgeTop: '57.4%', badgeSize: '14.5%',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
-    badgeClipFront: 'ellipse(6.1% 13.5% at 50% 62.15%)',
-    badgeClipTop: 'ellipse(7.3% 6.4% at 50% 76%)',
-    priceTop: '28.5%', priceHeight: '23.5%', priceWidth: '42%',
+    badgeClipFront: 'ellipse(7.4% 16.6% at 50% 57.4%)',
+    badgeClipTop: 'ellipse(7.2% 6.8% at 50% 78%)',
+    priceTop: '25.4%', priceHeight: '21.5%', priceWidth: '42%',
   }),
 });
 
@@ -125,7 +134,7 @@ export function lootboxCaseAssets(model = 'medium') {
  * both art and model-specific registration geometry here prevents a custom box
  * from becoming SMALL in the tray but MEDIUM in the opener, for example.
  */
-export function lootboxCasePresentation(model = 'medium') {
+export function lootboxCasePresentation(model = 'medium', { fullResolution = false } = {}) {
   const normalizedModel = LOOTBOX_CASE_MODELS.includes(model) ? model : 'medium';
   const assets = LOOTBOX_CASE_ASSETS[normalizedModel];
   const geometry = LOOTBOX_CASE_GEOMETRY[normalizedModel];
@@ -134,7 +143,8 @@ export function lootboxCasePresentation(model = 'medium') {
     '--lootbox-case-art': image(assets.lockedFront),
     '--lootbox-case-locked-art': image(assets.lockedFront),
     '--lootbox-case-retracted-art': image(assets.retractedFront),
-    '--lootbox-case-top-art': image(assets.top),
+    '--lootbox-case-top-art': image(fullResolution ? assets.top : assets.cardTop),
+    '--lootbox-case-purchase-art': image(assets.purchaseTop),
     '--lootbox-case-inner-lid-art': image(assets.innerLid),
     '--lootbox-case-seam': geometry.seam,
     '--lootbox-case-badge-top': geometry.badgeTop,
@@ -155,8 +165,8 @@ export function lootboxCasePresentation(model = 'medium') {
 }
 
 /** Apply the canonical family selection without replacing unrelated styles. */
-export function applyLootboxCasePresentation(element, model = 'medium') {
-  const presentation = lootboxCasePresentation(model);
+export function applyLootboxCasePresentation(element, model = 'medium', options) {
+  const presentation = lootboxCasePresentation(model, options);
   element?.setAttribute?.('data-lootbox-case-model', presentation.model);
   if (element?.style?.setProperty) {
     Object.entries(presentation.css).forEach(([name, value]) => {

@@ -51,6 +51,19 @@ describe('Decimator resolution presentation', () => {
     assert.match(view.message, /1 ETH estimated pool share/);
   });
 
+  test('chain winner evidence survives a bucket-less indexer snapshot', () => {
+    const view = decimatorResolutionView({
+      currentLevel: 200,
+      level: 200,
+      claimState: 'ready',
+      outcome: { roundStatus: 'closed', bucket: null, payoutAmount: '0' },
+    });
+    assert.equal(view.status, 'READY TO RESOLVE');
+    assert.equal(view.tone, 'ready');
+    assert.equal(view.actionable, true);
+    assert.match(view.message, /still syncing/);
+  });
+
   test('claimed winners and losing entries remain visible without stale actions', () => {
     const claimed = decimatorResolutionView({
       currentLevel: 26, level: 25, claimState: 'claimed',
@@ -154,8 +167,8 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
     'opening the takeover re-arms the ordinary jackpot underneath it');
   assert.match(resolutions,
-    /const bafUnseen = Number\(bafLevel\) === current[\s\S]*?&& bafFinal/,
-    'a stale prior BAF cannot interrupt a later Decimator takeover');
+    /const bafUnseen = bafFinalIsNews\(\{[\s\S]*?participated: bafParticipated/,
+    'a participating player keeps a late-indexed BAF receipt after the x10 boundary');
   assert.match(replay, /subscribePendingActions[\s\S]*?#setPrimaryDecimatorAction/);
   assert.match(replay, /'RUN DECIMATOR DRAW'/);
   assert.match(replay,
@@ -189,9 +202,15 @@ test('a due BAF opens its dedicated staged fullscreen final', () => {
   assert.match(resolutions, /import \{ openBafResolution \}/);
   assert.match(resolutions, /await openBafResolution\(\{[\s\S]*?level,[\s\S]*?player: this\.\#address/);
   assert.match(resolutions, /playerOutcome:\s*this\.\#baf/,
-    'the final reuses the already-fetched terminal player result');
+    'the final uses the freshly reconciled terminal player result');
+  assert.match(resolutions,
+    /fetchJSON\(`\/player\/\$\{addr\}\/baf\?level=\$\{encodedLevel\}`,[\s\S]{0,80}?force:\s*true/,
+    'opening the final refreshes player outcome at the click boundary');
+  assert.match(resolutions,
+    /fetchJSON\(`\/player\/\$\{addr\}\/jackpot-history`,[\s\S]{0,80}?force:\s*true/,
+    'opening the final refreshes late-indexed BAF awards at the click boundary');
   assert.match(resolutions, /history:\s*\{ wins: this\.\#history \}/,
-    'the final reuses the already-fetched award history');
+    'the final receives the reconciled award history');
   assert.match(resolutions, /const revealConsolation = this\.\#bafConsolation/,
     'a claim-before-view keeps the consolation amount in the ceremony');
   assert.match(overlay, /ONE FLIP DECIDES THE WHOLE BAF/);
@@ -235,7 +254,7 @@ test('the Decimator position read is gated on the window being open', () => {
   assert.match(block, /decimatorLevel != null/);
 });
 
-test('a settled Decimator/BAF round is latched and not refetched', () => {
+test('stable settled Decimator/BAF rounds are latched and not refetched', () => {
   const src = readFileSync(
     new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
   assert.match(src, /#settled = \{ dec: null, baf: null \}/,
@@ -244,6 +263,9 @@ test('a settled Decimator/BAF round is latched and not refetched', () => {
     'the cache is keyed on level, so a new round still reads fresh');
   assert.match(src, /\['closed', 'skipped'\]\.includes/,
     "only terminal statuses latch — an 'open' round keeps polling");
+  assert.match(src,
+    /const decChainWinner = \['ready', 'claimed'\]\.includes\(this\.\#decimatorClaimState\);[\s\S]{0,500}?if \(decTerminal && \([\s\S]{0,220}?hasDecimatorPosition\(this\.\#decimator\)/,
+    'a bucket-less terminal snapshot is not frozen before chain winner evidence catches up');
   assert.match(src, /if \(nextAddress !== this\.#address\) this\.#settled =/,
     'switching accounts invalidates the latch');
 });

@@ -311,6 +311,10 @@ const BOX_SPIN_CURRENCIES = Object.freeze({ eth: 0, flip: 1, record: 1, wwxrp: 3
 // collapsed onto a whole 100-FLIP multiple, so halving it is an estimate.
 const FLIP_ROUND_THRESHOLD = 1_000n * (10n ** 18n);
 const TOKEN_WEI = 10n ** 18n;
+// FoilPackModule._payFoilTier sends `faces * 1,000 FLIP` into its three-reel
+// FLIP lane. The final BoxSpin payout is zero when survival loses, but this
+// fixed source stake still lets the reveal name an honest reel-payout estimate.
+const FOIL_FLIP_STAKE_PER_FACE = 1_000n * TOKEN_WEI;
 const BOX_ESTIMATE_VARIANCE_BPS = 12_448n;
 const BOX_ESTIMATE_MAIN_BPS = 9_000n;
 const BOX_ESTIMATE_STAKE_BPS = 7_060n;
@@ -610,14 +614,15 @@ function _allocateBoxSpinPreview(rows, amount, approximate = false) {
 }
 
 // A losing survival draw publishes a final payout of zero, so the BoxSpin
-// event alone cannot say how much the three record reels produced first. The
-// parent Degenerette bet does retain both inputs needed by the contract's
-// payout formula: the whole-FLIP bounty stake and its snapshotted activity
-// score. Re-evaluate every hero interpretation compatible with the emitted
-// score; differing candidates are averaged and explicitly presented as an
-// estimate rather than hiding the stake altogether.
-function _recordSpinPayoutAtRisk(spin, rows) {
-  const totalStake = _safeBigInt(spin?.recordStake);
+// event alone cannot say how much its three reels produced first. Record
+// bounties and foil rewards both retain a fixed source stake; combine it with
+// the frozen activity score (or its marked estimate) and the emitted reel
+// scores. Differing hero candidates are averaged rather than hiding the stake.
+function _fixedStakeSpinPayoutAtRisk(spin, rows) {
+  const recordStake = _safeBigInt(spin?.recordStake);
+  const totalStake = recordStake > 0n
+    ? recordStake
+    : _safeBigInt(spin?.fixedStake);
   const suppliedActivityScore = Number(spin?.activityScore);
   const activityKnown = spin?.activityScore != null
     && Number.isInteger(suppliedActivityScore)
@@ -626,12 +631,12 @@ function _recordSpinPayoutAtRisk(spin, rows) {
   const activityScore = activityKnown ? suppliedActivityScore : 0;
   if (totalStake <= 0n) return null;
 
-  // The protocol's record chain is authored as exactly three FLIP spins. Its
+  // Both fixed-stake paths are authored as exactly three FLIP spins. Their
   // integer remainder is deliberately unstaked, matching totalStake / 3 here.
   const perSpin = totalStake / 3n;
   if (perSpin <= 0n) return null;
   let amount = 0n;
-  let approximate = !activityKnown;
+  let approximate = !activityKnown || spin?.activityScoreApproximate === true;
   for (const row of rows) {
     if (!boxSpinScorePays(row?.score)) continue;
     const candidates = [];
@@ -659,6 +664,39 @@ function _recordSpinPayoutAtRisk(spin, rows) {
     }
   }
   return amount > 0n ? { amount, approximate } : null;
+}
+
+// FoilPackBought publishes the deterministic ActivityCurveLib boost rather
+// than the raw frozen score. Invert the same three segments so a claim receipt
+// can use a close activity estimate without another network read. The final
+// near-flat segment maps several scores to one bps value, so those results keep
+// the approximation marker.
+function _foilActivityScoreFromBoost(multBps) {
+  const boost = Number(multBps);
+  if (!Number.isInteger(boost) || boost < 20_000 || boost > 60_000) return null;
+  if (boost === 20_000) return { score: 0, approximate: false };
+  if (boost <= 50_000) {
+    const scaled = (boost - 20_000) * 300;
+    return {
+      score: Math.round(scaled / 30_000),
+      approximate: scaled % 30_000 !== 0,
+    };
+  }
+  if (boost < 55_000) {
+    const scaled = (boost - 50_000) * 200;
+    return {
+      score: 300 + Math.round(scaled / 5_000),
+      approximate: scaled % 5_000 !== 0,
+    };
+  }
+  if (boost === 60_000) return { score: 30_000, approximate: false };
+  const delta = boost - 55_000;
+  const low = Math.ceil((delta * 29_500) / 5_000);
+  const high = Math.ceil(((delta + 1) * 29_500) / 5_000) - 1;
+  return {
+    score: 500 + Math.floor((low + high) / 2),
+    approximate: true,
+  };
 }
 
 /**
@@ -726,8 +764,8 @@ export function buildBoxSpinBoard(spin) {
   const explicitAtRisk = _safeBigInt(
     spin?.preSurvivalPayout ?? spin?.survivalPayout ?? spin?.payoutAtRisk,
   );
-  const reconstructedAtRisk = spinType === 'record'
-    ? _recordSpinPayoutAtRisk(spin, rows)
+  const reconstructedAtRisk = spinType === 'record' || _safeBigInt(spin?.fixedStake) > 0n
+    ? _fixedStakeSpinPayoutAtRisk(spin, rows)
     : null;
   const estimatedAtRisk = flipLike
     ? _humanBoxSpinPayoutEstimate(spin, rows)
@@ -1043,6 +1081,9 @@ function _cardsFromLeg(leg) {
             ?? leg.payoutAtRisk
             ?? null,
           survivalWinPayout: leg.survivalWinPayout ?? null,
+          fixedStake: leg.fixedStake ?? null,
+          activityScore: leg.activityScore ?? null,
+          activityScoreApproximate: leg.activityScoreApproximate === true,
           estimateBoxAmountWei: leg.estimateBoxAmountWei ?? null,
           estimateTicketPriceWei: leg.estimateTicketPriceWei ?? null,
           boxOrigin: Boolean(leg.boxOrigin),
@@ -1521,7 +1562,26 @@ export function normalizeSequence(seq) {
         matchFaces,
       },
     };
-    const rewardCards = (Array.isArray(seq.legs) ? seq.legs : []).flatMap(_cardsFromLeg);
+    const suppliedActivityScore = Number(seq.foilActivityScore);
+    const hasSuppliedActivityScore = seq.foilActivityScore != null
+      && Number.isInteger(suppliedActivityScore)
+      && suppliedActivityScore >= 0
+      && suppliedActivityScore <= 0xFFFF;
+    const estimatedActivity = hasSuppliedActivityScore
+      ? { score: suppliedActivityScore, approximate: false }
+      : _foilActivityScoreFromBoost(seq.foilMultBps);
+    const foilFlipStake = BigInt(rewardFaces) * FOIL_FLIP_STAKE_PER_FACE;
+    const rewardCards = (Array.isArray(seq.legs) ? seq.legs : []).flatMap((leg) => {
+      const isFoilFlip = leg?.legType === 'spin'
+        && String(leg?.spinType || '').toLowerCase() === 'flip';
+      return _cardsFromLeg(isFoilFlip ? {
+        ...leg,
+        fixedStake: _safeBigInt(leg.fixedStake) > 0n ? leg.fixedStake : foilFlipStake,
+        activityScore: leg.activityScore ?? estimatedActivity?.score ?? null,
+        activityScoreApproximate: leg.activityScore == null
+          && (estimatedActivity?.approximate ?? true),
+      } : leg);
+    });
     return {
       kind,
       title: `FOIL MATCH · T${score}`,
@@ -1785,6 +1845,28 @@ export function normalizeSequence(seq) {
           sub: 'Claim from your winnings tile',
           winningTraitIds: _winningTraitIds(p.winningTraitIds),
           countText: _ethText(p.amount), spin: null,
+        });
+      } else if (p.type === 'baf' && BigInt(p.amount ?? 0) > 0n) {
+        const level = Number(p.level);
+        cards.push({
+          type: 'baf', rarity: 'epic', icon: '/app/assets/baf-mark.svg', glyph: null,
+          label: Number.isInteger(level) && level > 0 ? `LEVEL ${level} BAF WIN` : 'BAF WIN',
+          value: `${_ethText(p.amount)} ETH`,
+          sub: 'Paid to your claimable balance',
+          summaryDetail: true,
+          countText: null, spin: null,
+        });
+      } else if (p.type === 'baf-tickets' && BigInt(p.amount ?? 0) > 0n) {
+        const level = Number(p.level);
+        const quantity = _ticketQuantityText(p.amount);
+        cards.push({
+          type: 'baf-tickets', rarity: 'rare', icon: '/app/assets/baf-mark.svg', glyph: null,
+          label: 'BAF TICKETS', value: quantity,
+          sub: Number.isInteger(level) && level > 0
+            ? `First award targets Level ${level}`
+            : 'Future ticket payout',
+          summaryDetail: true,
+          countText: quantity, spin: null,
         });
       } else if (p.type === 'flip' && BigInt(p.amount ?? 0) > 0n) {
         const art = _flipPrizeArt(p.amount);
@@ -2784,7 +2866,7 @@ class RevealOverlay extends HTMLElement {
     const stage = this.#bind('rvl-stage');
     if (stage) {
       stage.setAttribute?.('data-lootbox-value-tone', seq.lootboxValueTone || 'unknown');
-      applyLootboxCasePresentation(stage, seq.lootboxCaseModel);
+      applyLootboxCasePresentation(stage, seq.lootboxCaseModel, { fullResolution: true });
     }
     const vessel = this.#bind('rvl-vessel');
     if (vessel) {
@@ -2796,7 +2878,11 @@ class RevealOverlay extends HTMLElement {
           ? `${seq.lootboxTicketUnitsLabel} ticket-price luckbox`
           : '',
       );
-      const presentation = applyLootboxCasePresentation(vessel, seq.lootboxCaseModel);
+      const presentation = applyLootboxCasePresentation(
+        vessel,
+        seq.lootboxCaseModel,
+        { fullResolution: true },
+      );
       [
         presentation.assets.retractedFront,
         presentation.assets.innerLid,
@@ -3371,6 +3457,7 @@ class RevealOverlay extends HTMLElement {
       applyLootboxCasePresentation(
         rootStage,
         seq.kind === 'lootbox' ? seq.lootboxCaseModel : 'medium',
+        { fullResolution: seq.kind === 'lootbox' },
       );
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
@@ -3495,6 +3582,7 @@ class RevealOverlay extends HTMLElement {
         const casePresentation = applyLootboxCasePresentation(
           vessel,
           isLootbox ? seq.lootboxCaseModel : 'medium',
+          { fullResolution: isLootbox },
         );
         if (isLootbox) {
           [

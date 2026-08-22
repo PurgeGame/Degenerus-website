@@ -1,5 +1,7 @@
 const ORIGIN = 'https://degenerus-db.fly.dev';
 const inflight = new Map();
+const POINTER_FRESH_MS = 1_000;
+const POINTER_EDGE_TTL_SECONDS = 30;
 
 function routeKind(pathname) {
   if (pathname === '/jackpots/latest.json') return 'pointer';
@@ -42,9 +44,12 @@ async function loadAndCache(context, cache, cacheKey, kind, pathname) {
   headers.set(
     'Cache-Control',
     kind === 'pointer'
-      ? 'public, max-age=1, s-maxage=1, must-revalidate'
+      ? `public, max-age=1, s-maxage=${POINTER_EDGE_TTL_SECONDS}, stale-while-revalidate=${POINTER_EDGE_TTL_SECONDS - 1}`
       : 'public, max-age=31536000, immutable',
   );
+  if (kind === 'pointer' && upstream.ok) {
+    headers.set('X-Jackpot-Cached-At', String(Date.now()));
+  }
   if (!upstream.ok) headers.set('Cache-Control', 'no-store');
 
   const response = new Response(upstream.body, {
@@ -75,7 +80,23 @@ export async function onRequest(context) {
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) {
-    const hit = responseWithEdgeState(cached, 'HIT');
+    const cachedAt = Number(cached.headers.get('X-Jackpot-Cached-At'));
+    const pointerIsStale = kind === 'pointer'
+      && (!Number.isFinite(cachedAt) || Date.now() - cachedAt > POINTER_FRESH_MS);
+    if (pointerIsStale) {
+      // Never make the synchronized jackpot audience wait on Fly. Return the
+      // tiny prior token; their one-second poll will see the refreshed token on
+      // its next pass. Cache API's 30s residency makes this true stale-while-
+      // revalidate rather than a hard one-second cache cliff.
+      let flight = inflight.get(cacheKey.url);
+      if (!flight) {
+        flight = loadAndCache(context, cache, cacheKey, kind, url.pathname)
+          .finally(() => inflight.delete(cacheKey.url));
+        inflight.set(cacheKey.url, flight);
+      }
+      context.waitUntil(flight.catch(() => {}));
+    }
+    const hit = responseWithEdgeState(cached, pointerIsStale ? 'STALE' : 'HIT');
     return context.request.method === 'HEAD'
       ? new Response(null, { status: hit.status, headers: hit.headers })
       : hit;

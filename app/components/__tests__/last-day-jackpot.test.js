@@ -998,6 +998,22 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'the board clears only when the reel loop is ready to paint its first frame');
   });
 
+  test('main trait hydration cannot blank the board before the reel loop owns it', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+    const hydrateAt = flow.indexOf('await this.#loadPlayerTraits()');
+    const clearAt = flow.indexOf('this.#resetCards()');
+    const spinAt = flow.indexOf('await this.#runSpin(displayTraits');
+
+    assert.ok(hydrateAt >= 0 && clearAt >= 0 && spinAt >= 0,
+      'the main flow contains hydration, board reset, and reel start');
+    assert.ok(hydrateAt < clearAt,
+      'the attract/result face remains painted while main traits hydrate');
+    assert.ok(clearAt < spinAt,
+      'the main board clears only when the real reel is ready to paint');
+  });
+
   test('a reloaded DAY SUMMARY owns the LCD before a loading repaint can claim it', async () => {
     await import('../replay-panel.js');
     const Ctor = customElements.get('replay-panel');
@@ -1042,7 +1058,23 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       /await this\.#loadPlayerTraits\(\);[\s\S]*const rollDataReady/,
       'loading colors hydrate from the target purchase-level holdings before the gate clears',
     );
-    const { replayHoldingsLevel } = await import('../replay-panel.js');
+    const { replayAttractShouldRun, replayHoldingsLevel } = await import('../replay-panel.js');
+    assert.equal(replayAttractShouldRun({ revealCleared: null }), true,
+      'cold startup spins while persisted reveal state is still unknown');
+    assert.equal(replayAttractShouldRun({ revealCleared: true, dayLoading: true }), true,
+      'an already-cleared prior day still spins while replacement data loads');
+    assert.equal(replayAttractShouldRun({ revealCleared: true, dayWarming: true }), true,
+      'the chain/indexer handoff cannot expose a static grey board');
+    assert.equal(replayAttractShouldRun({ revealCleared: true }), false,
+      'a stable cleared result owns the board once loading finishes');
+    assert.equal(replayAttractShouldRun({ revealCleared: null, spinning: true }), false,
+      'the quiet attract reel yields to the real jackpot spin');
+    assert.match(REPLAY_PANEL_SRC,
+      /this\.#startIdleSpin\(\);\s*\n\s*this\.refreshDays\(\)/,
+      'the first attract frame is painted before the initial jackpot request');
+    assert.match(dayChange,
+      /this\.#setDayDataLoading\(dayNum, true\);[\s\S]*?this\.#startIdleSpin\(\);/,
+      'every exact-day loading reset immediately hands the board back to the attract reel');
     assert.equal(replayHoldingsLevel({
       selectedDay: 81,
       processingDay: 81,
@@ -1101,6 +1133,16 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       REPLAY_PANEL_SRC,
       /const soloSize = soloIdx < 0 \? 0 : 92[\s\S]*?const sizePct = isSoloBadge \? soloSize : position\.size[\s\S]*?replay-badge-wrap--solo/,
       'the solo bucket badge expands to fill nearly the entire quadrant',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-badge-wrap--solo \.replay-scattered-badge\s*\{[^}]*opacity:\s*1/s,
+      'the marquee solo badge is fully opaque',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-tq\.q-solo-eth-win\s+\.replay-prize-reveal\.replay-player-win-reveal\s*\{[^}]*z-index:\s*7/s,
+      'the solo badge stays behind its quadrant YOU WON label',
     );
     assert.match(
       REPLAY_PANEL_SRC,
@@ -2732,6 +2774,7 @@ describe('foil match pending action', () => {
         ok: true,
         json: async () => ({
           address: player, level: 12, present: true,
+          multBps: 50_000,
           lines: [[traits[2], traits[0], traits[3], traits[1]], [1, 78, 131, 201], [3, 68, 133, 206], [4, 69, 134, 207]],
           claims: [],
         }),
@@ -2887,8 +2930,11 @@ describe('foil match pending action', () => {
         'the quest marker disappears with the settled tuple');
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'the direct ticket claim and Pending stay reconciled');
-      assert.equal(revealMod.__takeQueuedForTest()[0]?.kind, 'foil-match',
+      const [foilReveal] = revealMod.__takeQueuedForTest();
+      assert.equal(foilReveal?.kind, 'foil-match',
         'the direct claim enters the same foil reward reveal as Pending');
+      assert.equal(foilReveal?.foilMultBps, 50_000,
+        'the reward reveal receives the pack boost needed for its loss estimate');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'detaching the owner cannot leave a stale foil reminder');
@@ -3451,6 +3497,92 @@ describe('foil match pending action', () => {
     }
   });
 
+  test('a numeric level advance ejects a previously seated foil pack from its slots', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const level39Lines = [
+      [1, 70, 130, 200],
+      [2, 71, 131, 201],
+      [3, 72, 132, 202],
+      [4, 73, 133, 203],
+    ];
+    const requestedLevels = [];
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      if (!parsedUrl.pathname.endsWith('/foil')) {
+        return { ok: true, json: async () => null };
+      }
+      const level = Number(parsedUrl.searchParams.get('level'));
+      requestedLevels.push(level);
+      return {
+        ok: true,
+        json: async () => ({
+          address: player,
+          level,
+          present: level === 39,
+          lines: level === 39 ? level39Lines : [],
+          claims: [],
+        }),
+      };
+    };
+    try {
+      storeMod.update('connected.address', player);
+      storeMod.update('app.gameState', {
+        level: 39,
+        phase: 'JACKPOT',
+        jackpotPhaseFlag: true,
+        phaseTransitionActive: false,
+      });
+      storeMod.update('app.lastDay', {
+        day: 238, level: 39, summary: {}, winners: [],
+        roll1: { day: 238, level: 39, purchaseLevel: 39, wins: [] },
+        roll2: { day: 238, level: 39, purchaseLevel: 39, wins: [] },
+        status: 'resolved',
+      });
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      document.dispatchEvent({
+        type: 'degenerus:pack-reveal-complete',
+        detail: { address: player, level: 39, foilPack: true },
+      });
+      document.dispatchEvent({
+        type: 'degenerus:reveal-overlay-idle',
+        detail: { aborted: false },
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-slot')
+          .filter((slot) => slot.classList.contains('is-loaded')).length,
+        4,
+        'the completed level 39 foil pack is seated before rollover',
+      );
+
+      storeMod.update('app.gameState', {
+        level: 40,
+        phase: 'JACKPOT',
+        jackpotPhaseFlag: true,
+        phaseTransitionActive: false,
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      assert.equal(requestedLevels.at(-1), 40,
+        'the cabinet follows the new numeric level instead of its reveal pin');
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-slot')
+          .filter((slot) => slot.classList.contains('is-loaded')).length,
+        0,
+        'the prior-level foil tickets leave their slots immediately at rollover',
+      );
+      el.disconnectedCallback();
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
   test('a same-day empty catch-up response cannot retract a verified foil match', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
@@ -3537,6 +3669,7 @@ describe('foil faces track the spin presentation', () => {
       ok: true,
       json: async () => ({
         address: PLAYER, level, present: true,
+        multBps: 50_000,
         lines: [LINE, [3, 68, 132, 202], [4, 71, 133, 203], [5, 72, 134, 204]],
         claims: [],
       }),
@@ -4396,7 +4529,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'the summary loads the full indexed reward legs, not just opened counts');
       assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');
       assert.equal(
-        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}`),
+        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}_v2`),
         '1',
         'the consumed state survives a refresh for this player and day',
       );
@@ -4412,7 +4545,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     }
   });
 
-  test('DAY SUMMARY includes the already-loaded Decimator payout without another endpoint', async () => {
+  test('DAY SUMMARY uses a composed Decimator payout without a separate Decimator endpoint', async () => {
     const revealMod = await import('../reveal-overlay.js');
     revealMod.__resetForTest();
     const address = '0xab12000000000000000000000000000000000000';
@@ -4480,6 +4613,108 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       }]);
       assert.equal(requested.some((path) => /\/decimator(?:\?|\/)/.test(path)), false,
         'the composed last-day winner row is reused instead of adding a DB request');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('DAY SUMMARY reconciles late level-200 BAF and Decimator payouts from the exact day', async () => {
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    const requested = [];
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      requested.push(path);
+      if (path.includes('/game/jackpot/day/5/winners')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 5,
+            level: 200,
+            winners: [{
+              address,
+              totalEth: '0',
+              ticketCount: 0,
+              coinTotal: '0',
+              winningLevel: 200,
+              bafPrize: { eth: '0', tickets: 0 },
+              decimatorPrize: {
+                regularEth: '2000',
+                lootboxEth: '500',
+                terminalEth: '1000',
+              },
+              breakdown: [{
+                awardType: 'eth_baf',
+                amount: '4000',
+                count: 3,
+                traitId: 420,
+                level: 200,
+              }],
+            }],
+          }),
+        };
+      }
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ address, day: 5, ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: 5,
+            activity: { lootboxPurchases: [], lootboxResults: [], coinflip: null },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      // The sealed rollover copy is the reported failure shape: no BAF or
+      // Decimator aggregate yet, despite those rows arriving moments later.
+      storeMod.update('app.lastDay', {
+        ...RESOLVED_PAYLOAD_DAY5,
+        winners: [{
+          ...RESOLVED_PAYLOAD_DAY5.winners[0],
+          totalEth: '0', ticketCount: 0, coinTotal: '0', breakdown: [],
+          bafPrize: { eth: '0', tickets: 0 },
+          decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+        }],
+      });
+      await flushMicrotasks();
+      document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.prizes, [
+        { type: 'baf', amount: 12_000n, level: 200 },
+        {
+          type: 'decimator',
+          amount: 3_000n,
+          lootboxAmount: 500n,
+          terminalAmount: 1_000n,
+        },
+      ]);
+      assert.ok(requested.some((path) => path.includes('/game/jackpot/day/5/winners')),
+        'the one-shot receipt refreshes the exact-day winner row before it is consumed');
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;
@@ -4968,7 +5203,7 @@ describe('the LCD key turns the Mine FLIP crank while results are pending', () =
       'a pressable key alone must not light the ring or its source module');
   });
 
-  test('physical pointer hit-testing reaches only an armed warming/loading Mine FLIP key', () => {
+  test('physical pointer hit-testing reaches Day Summary and an armed warming/loading Mine FLIP key', () => {
     assert.match(
       APP_CSS,
       /replay-panel\[data-day-warming\] \.panel > \*,\s*body[^\n]*replay-panel\[data-day-loading\] \.panel > \* \{\s*pointer-events:\s*none;/,
@@ -4981,6 +5216,16 @@ describe('the LCD key turns the Mine FLIP crank while results are pending', () =
       'the physical-input exception is kept as one auditable cascade block');
     const pointerOverride = DRAWING_CSS.slice(overrideStart, overrideEnd);
     for (const state of ['warming', 'loading']) {
+      assert.match(
+        pointerOverride,
+        new RegExp(
+          `replay-panel\\[data-day-${state}\\][\\s\\S]*?`
+          + `replay-controls:has\\([\\s\\S]*?`
+          + `ldj-results-cta:not\\(\\[hidden\\]\\)`
+          + `[\\s\\S]*?pointer-events:\\s*auto`,
+        ),
+        `${state} keeps the completed day's visible summary action clickable`,
+      );
       assert.match(
         pointerOverride,
         new RegExp(

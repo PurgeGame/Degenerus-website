@@ -111,6 +111,20 @@ export function decimatorFinalIsNews({ closed, seen } = {}) {
 }
 
 /**
+ * Keep a player's latest BAF receipt available when indexing finishes after
+ * the exact x10 boundary. Everyone may watch it at the boundary; afterwards
+ * only a wallet with participation/payout evidence carries the receipt forward
+ * through the rest of that same ten-level bracket.
+ */
+export function bafFinalIsNews({ closed, seen, currentLevel, level, participated } = {}) {
+  if (closed !== true || seen === true) return false;
+  const current = Number(currentLevel);
+  const target = Number(level);
+  return (Number.isInteger(current) && Number.isInteger(target) && current === target)
+    || participated === true;
+}
+
+/**
  * Pick the round a live player-resolution display should show.
  *
  * During x4/x99 the burn targets the following x5/x00 round. Otherwise the
@@ -231,8 +245,12 @@ export function summarizeBafAwards(wins, level) {
   let eth = 0n;
   let ticketEntries = 0n;
   for (const row of Array.isArray(wins) ? wins : []) {
-    if (Number(row?.level) !== lvl) continue;
     const kind = String(row?.awardType || '');
+    const rowLevel = Number(row?.level);
+    const sourceLevel = Number(row?.sourceLevel);
+    const matchesRound = rowLevel === lvl
+      || (kind === 'tickets_baf' && (sourceLevel === lvl || sourceLevel === lvl + 1));
+    if (!matchesRound) continue;
     try {
       if (kind === 'eth_baf') eth += BigInt(row?.amount ?? 0);
       // JackpotTicketWin.entryCount is stored verbatim by the current indexer.

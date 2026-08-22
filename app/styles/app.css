@@ -6555,16 +6555,61 @@ body.layout-basic .rrt-degenerette-summary { display: grid; grid-template-column
 body.layout-basic .rrt-degenerette-summary__amount { grid-column: 1 / -1; color: #f1f5f9; font-size: 0.66rem; font-variant-numeric: tabular-nums; line-height: 1; }
 body.layout-basic .rrt-degenerette-summary__count { color: #fde68a; font-variant-numeric: tabular-nums; }
 body.layout-basic .rrt-degenerette-summary__unit { margin-left: -0.08rem; }
-body.layout-basic .rrt-action--lootbox-summary { grid-template-columns: 2.2rem auto; padding: 0.28rem 0.72rem 0.28rem 0.42rem; }
-body.layout-basic .rrt-action--lootbox-summary .rrt-action__art--lootbox { width: 2.2rem; height: 2rem; overflow: visible; background: transparent; box-shadow: none; }
-body.layout-basic .rrt-action--lootbox-stacks { grid-template-columns: auto minmax(0,auto); } body.layout-basic .rrt-action--lootbox-stacks .rrt-action__art--lootbox { width: auto; min-width: 2.2rem; height: 1.75rem; } body.layout-basic .rrt-lootbox-stacks { display: flex; height: 1.75rem; align-items: flex-start; gap: .08rem; } body.layout-basic .rrt-lootbox-stack { position: relative; display: block; width: 1.72rem; height: 1.75rem; } body.layout-basic .rrt-lootbox-stack__case { position: absolute !important; top: var(--rrt-lootbox-stack-y); left: var(--rrt-lootbox-stack-x); width: 1.58rem !important; height: 1.5rem !important; } body.layout-basic .rrt-lootbox-stack[data-box-size="small"] .rrt-lootbox-stack__case { width: 1.42rem !important; } body.layout-basic .rrt-lootbox-stack[data-box-size="large"] { width: 1.92rem; } body.layout-basic .rrt-lootbox-stack[data-box-size="large"] .rrt-lootbox-stack__case { width: 1.78rem !important; } body.layout-basic .rrt-lootbox-stack__count { position: absolute; z-index: 5; top: -.02rem; right: -.02rem; min-width: .82rem; padding: .09rem .14rem; border: 1px solid rgba(253,230,138,.72); border-radius: 999px; background: #160b13; color: #fde68a; font-size: .46rem; font-variant-numeric: tabular-nums; font-weight: 950; line-height: 1; text-align: center; } body.layout-basic .rrt-action--lootbox-stacks .rrt-lootbox-summary { max-width: 11rem; white-space: normal; }
+/* Luckboxes are the receipt's hero, so let the case art use nearly the full
+   row height instead of floating as a small icon inside a large card. */
+body.layout-basic .rrt-action--lootbox-summary {
+  grid-template-columns: 2.8rem auto;
+  gap: 0.38rem;
+  padding: 0.18rem 0.72rem 0.18rem 0.28rem;
+}
+body.layout-basic .rrt-action--lootbox-summary .rrt-action__art--lootbox {
+  width: 2.8rem;
+  height: 2.8rem;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+body.layout-basic .rrt-action--lootbox-stacks { grid-template-columns: auto minmax(0, auto); }
+body.layout-basic .rrt-action--lootbox-stacks .rrt-action__art--lootbox {
+  width: auto;
+  min-width: 2.8rem;
+  height: 2.5rem;
+}
+body.layout-basic .rrt-lootbox-stacks {
+  display: flex;
+  height: 2.5rem;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+body.layout-basic .rrt-lootbox-stack {
+  position: relative;
+  display: block;
+  width: 2.18rem;
+  height: 2.5rem;
+}
+body.layout-basic .rrt-lootbox-stack__case {
+  position: absolute !important;
+  top: var(--rrt-lootbox-stack-y);
+  left: var(--rrt-lootbox-stack-x);
+  width: 2rem !important;
+  height: 2.2rem !important;
+}
+body.layout-basic .rrt-lootbox-stack[data-box-size="small"] .rrt-lootbox-stack__case {
+  width: 1.8rem !important;
+}
+body.layout-basic .rrt-lootbox-stack[data-box-size="large"] { width: 2.42rem; }
+body.layout-basic .rrt-lootbox-stack[data-box-size="large"] .rrt-lootbox-stack__case {
+  width: 2.24rem !important;
+}
+body.layout-basic .rrt-lootbox-stack__count { position: absolute; z-index: 5; top: -.02rem; right: -.02rem; min-width: .82rem; padding: .09rem .14rem; border: 1px solid rgba(253,230,138,.72); border-radius: 999px; background: #160b13; color: #fde68a; font-size: .46rem; font-variant-numeric: tabular-nums; font-weight: 950; line-height: 1; text-align: center; }
+body.layout-basic .rrt-action--lootbox-stacks .rrt-lootbox-summary { max-width: 11rem; white-space: normal; }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini {
   position: relative;
   isolation: isolate;
   display: block;
-  width: 2.2rem;
-  height: 2rem;
-  background: var(--lootbox-case-art) center / contain no-repeat;
+  width: 2.8rem;
+  height: 2.8rem;
+  background: var(--lootbox-case-top-art) center / contain no-repeat;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
 }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
@@ -6576,8 +6621,8 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
   mix-blend-mode: color;
   opacity: 0.82;
   pointer-events: none;
-  -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
-  mask: var(--lootbox-case-art) center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-top-art) center / contain no-repeat;
+  mask: var(--lootbox-case-top-art) center / contain no-repeat;
 }
 body.layout-basic .rrt-action--lootbox-summary
   .rrt-lootbox-mini[data-lootbox-case-model="large"]::after {
@@ -6587,8 +6632,8 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   position: absolute;
   z-index: 2;
   inset: 0;
-  background: var(--lootbox-case-art) center / contain no-repeat;
-  clip-path: var(--lootbox-badge-clip);
+  background: var(--lootbox-case-top-art) center / contain no-repeat;
+  clip-path: var(--lootbox-top-badge-clip);
   content: '';
   pointer-events: none;
 }
@@ -7939,6 +7984,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
+/* LARGE's retracted raster deliberately contains only a recessed socket.
+   This animated mechanism is the one and only badge painted into that socket. */
 .rvl-vessel--lootbox .rvl-lootbox-badge__ring,
 .rvl-vessel--lootbox .rvl-lootbox-badge__center,
 .rvl-vessel--lootbox .rvl-lootbox-badge__face {
@@ -7960,21 +8007,23 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  background: radial-gradient(circle at 34% 25%, #ff5559 0 8%, #ed0e11 43%, #b8090c 76%, #770508 100%);
   content: '';
 }
 .rvl-vessel--lootbox .rvl-lootbox-badge__ring::before {
-  background: radial-gradient(circle at 34% 25%, #ff5559 0 8%, #ed0e11 43%, #b8090c 76%, #770508 100%);
   -webkit-mask: conic-gradient(from 45deg, #000 0 180deg, transparent 180deg);
   mask: conic-gradient(from 45deg, #000 0 180deg, transparent 180deg);
 }
+/* A second red half covers the green substrate while the case is locked, so
+   the first frame is the all-red Degenerus mark. During the dial turn this
+   half physically rotates over the fixed red half, uncovering green and
+   leaving the canonical red/green FLIP split only after unlock. */
 .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
-  background: radial-gradient(circle at 34% 25%, #ff5559 0 8%, #ed0e11 43%, #b8090c 76%, #770508 100%);
   filter: drop-shadow(-1px 0 1px rgba(255, 224, 183, 0.72));
   -webkit-mask: conic-gradient(from 225deg, #000 0 180deg, transparent 180deg);
   mask: conic-gradient(from 225deg, #000 0 180deg, transparent 180deg);
   transform: rotate(0deg);
   transform-origin: 50% 50%;
-  will-change: transform;
 }
 /* The canonical mark uses black diameter = 75% and white diameter = 58.333%
    of the colored ring. These insets preserve those ratios at every size. */
@@ -8011,15 +8060,25 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__center {
   animation: rvl-lootbox-badge-center-turn var(--rvl-box-charge) cubic-bezier(0.42, 0, 0.18, 1) both;
 }
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__face {
+  animation: rvl-lootbox-badge-face-turn var(--rvl-box-charge) cubic-bezier(0.42, 0, 0.18, 1) both;
+}
 .rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after { transform: rotate(180deg); }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__center { transform: rotate(360deg); }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__center { transform: rotate(-42deg); }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__face { transform: rotate(402deg); }
 @keyframes rvl-lootbox-badge-red-uncover {
   0%, 6% { transform: rotate(0deg); }
   70%, 100% { transform: rotate(180deg); }
 }
 @keyframes rvl-lootbox-badge-center-turn {
   0%, 6% { transform: rotate(0deg); }
-  70%, 100% { transform: rotate(360deg); }
+  70%, 100% { transform: rotate(-42deg); }
+}
+/* 402deg inside the -42deg black hub is one exact net revolution of the
+   white flame face while the hub counter-rotates subtly beneath it. */
+@keyframes rvl-lootbox-badge-face-turn {
+  0%, 6% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(402deg); }
 }
 
 /* Art-backed deadbolts live inside the baked receivers. Every case exposes a
@@ -8048,6 +8107,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   transform: translateY(0);
   will-change: transform;
 }
+.rvl-vault-deadbolt::before {
+  position: absolute;
+  inset: 0;
+  background: var(--lootbox-tone);
+  content: '';
+  mix-blend-mode: color;
+  pointer-events: none;
+  -webkit-mask: var(--lootbox-deadbolt-art) center / 100% 100% no-repeat;
+  mask: var(--lootbox-deadbolt-art) center / 100% 100% no-repeat;
+}
 .rvl-stage[data-lootbox-case-model="small"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
   top: 34.3%;
   display: block;
@@ -8065,19 +8134,25 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 { left: 26.15%; }
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 { right: 26.15%; }
 .rvl-stage[data-lootbox-case-model="large"] :is(.rvl-vault-interlock--2, .rvl-vault-interlock--3) {
-  top: 26.53%;
+  top: 16.88%;
   display: block;
   width: 4.333%;
   height: 19.666%;
 }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 24.75%; }
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 70.5%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 { left: 24.08%; }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 { left: 71.42%; }
 .rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--2 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-1); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--2 .rvl-vault-deadbolt {
+  --lootbox-deadbolt-art: var(--lootbox-deadbolt-1);
+  background-image: var(--lootbox-deadbolt-art);
+}
 .rvl-stage[data-lootbox-case-model="small"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
 .rvl-stage[data-lootbox-case-model="medium"] .rvl-vault-interlock--3 .rvl-vault-deadbolt,
-.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt { background-image: var(--lootbox-deadbolt-2); }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-vault-interlock--3 .rvl-vault-deadbolt {
+  --lootbox-deadbolt-art: var(--lootbox-deadbolt-2);
+  background-image: var(--lootbox-deadbolt-art);
+}
 .rvl-charging .rvl-vessel--lootbox .rvl-vault-deadbolt {
   animation: rvl-vault-deadbolt-retract var(--rvl-box-charge) cubic-bezier(0.4, 0, 0.18, 1) both;
 }
@@ -18458,7 +18533,7 @@ body.layout-basic .dbb__live img { width: 0.9rem; height: 0.9rem; flex: 0 0 auto
 body.layout-basic .dbb__stats {
   grid-area: stats;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   min-width: 0;
 }
@@ -18741,7 +18816,6 @@ body.layout-basic .dbb__feedback.is-error { color: #fca5a5; }
 
 @media (max-width: 540px) {
   body.layout-basic .dbb { grid-template-areas: "identity" "stats" "entry" "score"; grid-template-columns: minmax(0, 1fr); padding: 0.62rem; }
-  body.layout-basic .dbb__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.layout-basic .dbb-stat--score > span:last-child { width: 100%; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.8rem; }
   body.layout-basic .dbb-stat--score strong { justify-content: flex-end; text-align: right; }
   body.layout-basic .dbb__entry-controls { grid-template-columns: minmax(0, 1fr); }

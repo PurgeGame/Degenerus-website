@@ -81,6 +81,20 @@ export function replayHoldingsLevel({
   return Number.isInteger(settled) && settled >= 0 ? settled + 1 : null;
 }
 
+/** Keep a live reel on screen anywhere the board does not yet own a final face. */
+export function replayAttractShouldRun({
+  revealCleared = null,
+  dayLoading = false,
+  dayWarming = false,
+  spinning = false,
+} = {}) {
+  return !spinning && (
+    revealCleared !== true
+    || Boolean(dayLoading)
+    || Boolean(dayWarming)
+  );
+}
+
 function ticketWinIdentity(win) {
   const traitId = win?.traitId == null ? '' : Number(win.traitId);
   const level = win?.level == null ? '' : Number(win.level);
@@ -739,6 +753,10 @@ class ReplayPanel extends HTMLElement {
       this.#setMineFlipAction(items);
     });
     this.#syncSpinControlState();
+    // Paint the first attract frame synchronously. The replay/day and persisted
+    // reveal reads arrive independently, so waiting for either one used to
+    // expose the neutral grey reset board during a cold load.
+    this.#startIdleSpin();
     this.refreshDays();
     void this.#preloadBadges(); // decode-warm every badge in the background
   }
@@ -746,6 +764,8 @@ class ReplayPanel extends HTMLElement {
   attributeChangedCallback(name, oldValue, newValue) {
     if (oldValue === newValue) return;
     if (name === 'data-day-loading' || name === 'data-day-warming') {
+      if (newValue !== null && this.hasAttribute(name)) this.#startIdleSpin();
+      else if (!this.#idleSpinWanted()) this.#stopIdleSpin();
       this.#syncSpinControlState();
     }
   }
@@ -1695,16 +1715,24 @@ class ReplayPanel extends HTMLElement {
     this.#syncSpinControlState();
   }
 
+  #idleSpinWanted() {
+    return replayAttractShouldRun({
+      revealCleared: this.#hostRevealCleared,
+      dayLoading: this.hasAttribute('data-day-loading'),
+      dayWarming: this.hasAttribute('data-day-warming'),
+      spinning: this.#spinning,
+    });
+  }
+
   #startIdleSpin() {
     // Starting an attract reel that is already running is a no-op. This is the
     // final safety boundary around the visible ticket: even if a future host
     // refresh produces a different request key, it cannot clear four painted
     // badges merely to restart the same timer loop.
-    if (this.#idleSpinTimer != null
-      && this.#hostRevealCleared === false
-      && !this.#spinning) return;
+    if (this.#idleSpinTimer != null && this.#idleSpinWanted()) return;
     this.#stopIdleSpin();
-    if (this.#hostRevealCleared !== false || this.#spinning) return;
+    if (!this.#idleSpinWanted()) return;
+    if (this.querySelectorAll('.replay-tq').length < 4) return;
 
     // Always enter the attract loop from one clean main-draw face. A previous
     // bonus scratch can leave transparent canvases, revealed prize paper, and
@@ -1720,7 +1748,10 @@ class ReplayPanel extends HTMLElement {
 
     const tick = () => {
       this.#idleSpinTimer = null;
-      if (this.#hostRevealCleared !== false || this.#spinning) return;
+      if (!this.#idleSpinWanted()) {
+        this.querySelector('[data-bind="center"]')?.classList.remove('spinning');
+        return;
+      }
       const quads = this.querySelectorAll('.replay-tq');
       for (let i = 0; i < 4; i++) {
         const contractQ = DISPLAY_ORDER[i];
@@ -2229,7 +2260,9 @@ class ReplayPanel extends HTMLElement {
     this.#traitsCacheAddress = null;
     this.#resetCards();
     this.#setDayDataLoading(dayNum, true);
-    if (this.#hostRevealCleared === false) this.#startIdleSpin();
+    // Loading is itself enough reason to run the reel. The persisted reveal
+    // bit commonly lands later than these exact-day requests.
+    this.#startIdleSpin();
 
     const rngEntry = this.#rngDays.find(d => d.day === dayNum);
     const hasRng = rngEntry && rngEntry.finalWord && rngEntry.finalWord !== '0';
@@ -2368,7 +2401,7 @@ class ReplayPanel extends HTMLElement {
     this.#playerTraitIds = new Set();
     this.#traitsCacheAddress = null;
     this.#resetCards();
-    if (this.#hostRevealCleared === false) this.#startIdleSpin();
+    this.#startIdleSpin();
     // Publish replay-player selection so sibling widgets (status-bar activity
     // score) can react without coupling to this panel.
     update('replay.player', this.#selectedPlayer);
@@ -2696,7 +2729,6 @@ class ReplayPanel extends HTMLElement {
       try { this.#getAudio(); } catch (_error) { /* visuals remain authoritative */ }
     }
 
-    this.#resetCards();
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     btn.disabled = true;
     if (!instant) {
@@ -2715,6 +2747,10 @@ class ReplayPanel extends HTMLElement {
     // Map per-player roll1 wins to quadrant prize arrays.
     this.#distributePrizesFromRoll1();
 
+    // Keep the existing attract/result face painted during the asynchronous
+    // trait reads above. Clear it only when #runSpin is ready to take ownership
+    // of the very next frame.
+    this.#resetCards();
     if (!instant) btn.textContent = 'SPINNING…';
 
     const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });

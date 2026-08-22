@@ -113,6 +113,7 @@ body.coinflip-felt-demo-page {
 
 /* Deterministic headless screenshots: ?noanim=1 freezes arrival choreography. */
 body.demo-no-anim .df-bet-chip,
+body.demo-no-anim .df-payout-chip-stack,
 body.demo-no-anim .df-bankroll__roll {
   animation: none !important;
 }

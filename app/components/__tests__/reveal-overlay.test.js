@@ -746,6 +746,39 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[0].foilMatch.rewardFaces, 6);
   });
 
+  test('a foil FLIP survival loss estimates its reel payout from the face stake', () => {
+    const oneFlip = 10n ** 18n;
+    const seq = normalizeSequence({
+      kind: 'foil-match', day: 44, level: 12, ticketIndex: 2, drawKind: 0,
+      score: 4, rewardFaces: 2, foilMultBps: 50_000,
+      lineTraits: [1, 70, 130, 200],
+      winningTraits: [1, 78, 131, 201],
+      matchFaces: [2, 1, 0, 1],
+      legs: [{
+        legType: 'spin', spinType: 'flip', survived: false, payout: 0n,
+        reels: [
+          { spinIndex: 0, playerTicket: 0x04030201n, resultTicket: 0x07060509n, score: 2 },
+          { spinIndex: 1, playerTicket: 5n, resultTicket: 6n, score: 1 },
+          { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
+        ],
+      }],
+    });
+    const spin = seq.cards.find((card) => card.spin)?.spin;
+    assert.equal(spin.fixedStake, 2_000n * oneFlip,
+      'T4 contributes its contract-fixed two faces at 1,000 FLIP each');
+    assert.equal(spin.activityScore, 300,
+      'the frozen 5x foil boost recovers the matching activity-score point');
+    const board = buildBoxSpinBoard(spin);
+    assert.ok(board.payoutAtRisk > 0n,
+      'a zero final payout no longer degrades to a bare paying-reel count');
+    assert.equal(
+      board.rows.reduce((sum, row) => sum + row.previewPayout, 0n),
+      board.payoutAtRisk,
+    );
+    assert.ok(board.rows[0].previewPayout > 0n,
+      'the first paying reel can show its estimate as soon as it lands');
+  });
+
   test('pack with real tickets deals one card per ticket, carrying its trait ids', () => {
     // The deferred reveal (app/app/pack-watch.js): once the draw rolls, the
     // popup shows the actual four-symbol tickets rather than a sealed pack.
@@ -957,6 +990,23 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[0].icon, '/shared/coinflip-face-eth.svg');
     assert.equal(seq.cards[0].value, '2 ETH');
     assert.equal(seq.cards[0].sub, '0.5 ETH LUCKBOX');
+  });
+
+  test('daily summary identifies BAF ETH and ticket payouts instead of folding them into generic prizes', () => {
+    const seq = normalizeSequence({
+      kind: 'jackpot',
+      day: 243,
+      prizes: [
+        { type: 'baf', level: 200, amount: 144_234_510_017_250n },
+        { type: 'baf-tickets', level: 204, amount: 50n },
+      ],
+    });
+    assert.deepEqual(seq.cards.map((card) => card.type), ['baf', 'baf-tickets']);
+    assert.equal(seq.cards[0].label, 'LEVEL 200 BAF WIN');
+    assert.equal(seq.cards[0].icon, '/app/assets/baf-mark.svg');
+    assert.match(seq.cards[0].value, /ETH$/);
+    assert.equal(seq.cards[1].label, 'BAF TICKETS');
+    assert.equal(seq.cards[1].value, '50');
   });
 
   test('an empty-draw coinflip participant gets a full 1 WWXRP reward card', () => {
@@ -2043,7 +2093,7 @@ describe('reveal-overlay element', () => {
       'the case does not claim an unexplained verification state');
     assert.ok(el.querySelector('.rvl-chest-seam'), 'the light seam has its own crack beat');
     assert.ok(el.querySelector('.rvl-lootbox-badge__ring'),
-      'the opener badge has an independently rotating outer ring');
+      'the opener badge has a fixed canonical split ring');
     assert.ok(el.querySelector('.rvl-lootbox-badge__center'),
       'the opener badge has an independently rotating center medallion');
     assert.equal(el.querySelectorAll('.rvl-vault-interlock').length, 4,
@@ -2072,9 +2122,9 @@ describe('reveal-overlay element', () => {
       'the neutral case includes its paired retracted receiver art');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp', import.meta.url)),
       'the opener includes a real inner-lid surface');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v23-locked-front.webp', import.meta.url)),
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v29-locked-front.png', import.meta.url)),
       'the premium gold case ships its locked two-cylinder front');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v23-deadbolt-right.webp', import.meta.url)),
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v29-deadbolt-right.png', import.meta.url)),
       'the premium case ships both art-backed cylindrical lock pins');
     assert.match(REVEAL_SRC, /const LOOTBOX_CASE_ART = lootboxCaseAssets\('medium'\)\.lockedFront/);
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
@@ -2099,22 +2149,28 @@ describe('reveal-overlay element', () => {
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%/s,
       'the animated badge preserves the canonical thick-ring proportions');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*rotate\(180deg\)/,
-      'one red half physically turns 180 degrees over the fixed final half');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge\s*\{[^}]*filter:\s*none;/s,
+      'the animated mechanism sits inside the baked recess without a sticker-like outer shadow');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*rotate\(360deg\)/,
-      'the center medallion completes a full turn');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*conic-gradient\(from 225deg, #000 0 180deg, transparent 180deg\)[^}]*rotate\(0deg\)/s,
+      'the locked clasp has a second red half covering the green substrate');
+    assert.match(APP_CSS,
+      /@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*rotate\(180deg\)/,
+      'unlocking rotates one red half away to reveal the final FLIP split');
+    assert.match(APP_CSS,
+      /@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*rotate\(402deg\)/,
+      'the flame face completes one net revolution inside its counter-rotating hub');
+    assert.match(APP_CSS,
+      /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*rotate\(-42deg\)/,
+      'the black center hub counter-rotates subtly beneath the flame');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::before\s*\{[\s\S]*conic-gradient\(from 45deg, #000 0 180deg, transparent 180deg\)/,
       'the fixed red half preserves the final lower-right FLIP split');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[\s\S]*conic-gradient\(from 225deg, #000 0 180deg, transparent 180deg\)/,
-      'the moving red half initially covers the green upper-left underlayer');
+      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after[^}]*animation/s,
+      'the red cover moves only after the player starts the unlock');
     assert.match(APP_CSS,
-      /\.rvl-bursting \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*rotate\(180deg\)/s,
-      'the burst holds both red halves together over the final lower-right side');
-    assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*70%, 100%[^}]*rotate\(360deg\)/,
+      /@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*70%, 100%[^}]*rotate\(402deg\)/,
       'the badge finishes before either deadbolt starts moving');
     assert.match(APP_CSS,
       /@keyframes rvl-vault-deadbolt-retract\s*\{[\s\S]*0%, 71%[^}]*translateY\(0\)[\s\S]*100%[^}]*translateY\(-72%\)/,
@@ -2123,11 +2179,20 @@ describe('reveal-overlay element', () => {
       /\.rvl-vault-interlock\s*\{[^}]*overflow:\s*hidden/s,
       'the moving deadbolt art remains mechanically occluded by its baked receiver channel');
     assert.match(APP_CSS,
+      /\.rvl-vault-deadbolt::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mix-blend-mode:\s*color[^}]*mask:\s*var\(--lootbox-deadbolt-art\)/s,
+      'animated deadbolt sprites inherit the selected case tone instead of flashing their source-art gold');
+    assert.match(APP_CSS,
       /\.rvl-stage\[data-lootbox-case-model="medium"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*display:\s*block/s,
       'the medium case exposes only its matched inner pair');
     assert.match(APP_CSS,
       /\.rvl-stage\[data-lootbox-case-model="large"\] :is\(\.rvl-vault-interlock--2, \.rvl-vault-interlock--3\)\s*\{[^}]*height:\s*19\.666%/s,
       'the gold case activates exactly its matched left/right cylindrical lock pair');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--2\s*\{\s*left:\s*24\.08%;\s*\}/s,
+      'the left lock pin stays registered inside the new receiver art');
+    assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--3\s*\{\s*left:\s*71\.42%;\s*\}/s,
+      'the right lock pin stays registered inside the new receiver art');
     assert.doesNotMatch(APP_CSS,
       /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-vault-interlock--(?:1|4)\s*\{[^}]*display:\s*block/s,
       'the large case cannot resurrect the discarded four-lock layout');

@@ -559,6 +559,19 @@
   transition: transform 150ms ease, filter 150ms ease, opacity 150ms ease;
 }
 
+/* The solo bucket's marquee badge is presentation art, not a faded member of
+   the ordinary scattered-badge field. Keep it fully opaque at rest. */
+.replay-badge-wrap--solo .replay-scattered-badge {
+  opacity: 1;
+}
+
+/* Its 92% badge intentionally reaches into the receipt lane. The quadrant's
+   YOU WON label must remain the foreground layer once that receipt appears. */
+.replay-tq.q-solo-eth-win
+  .replay-prize-reveal.replay-player-win-reveal {
+  z-index: 7;
+}
+
 .replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"]:hover .replay-scattered-badge,
 .replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"]:focus-visible .replay-scattered-badge {
   opacity: 1;

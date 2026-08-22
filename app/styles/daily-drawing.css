@@ -204,10 +204,19 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls {
 }
 
 /* app.css makes the warming/loading board inert so stale scratch cards cannot
-   be touched. Mine FLIP is the deliberate exception: once the resolver arms
-   this LED key, the player advances that still-pending pipeline with it.
-   Without this override the button looked enabled and said MINE FLIP while its
-   parent discarded every pointer event. */
+   be touched. The shared action row has two deliberate exceptions:
+   - a visible Day Summary still belongs to the already-completed day and must
+     remain usable while replay data refreshes behind it;
+   - once the resolver arms Mine FLIP, the player advances that still-pending
+     pipeline with it.
+   Without these overrides the buttons look enabled while their parent
+   discards every pointer event. */
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .panel > .replay-controls:has(
+  > .ldj-results-cta:not([hidden])
+),
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .panel > .replay-controls:has(
+  > .ldj-results-cta:not([hidden])
+),
 body.layout-basic .jackpot-hero replay-panel[data-day-warming] .panel > .replay-controls:has(
   > .replay-reveal-btn[data-replay-action='mine-flip']:not(:disabled)
 ),

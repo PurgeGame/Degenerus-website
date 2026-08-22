@@ -76,6 +76,21 @@ describe('resolution level routing', () => {
     assert.equal(resolutions.bafResolutionLevel(19), 10);
     assert.equal(resolutions.bafResolutionLevel(20), 20);
   });
+
+  test('a participating wallet keeps a late-indexed BAF final after the x10 boundary', () => {
+    assert.equal(resolutions.bafFinalIsNews({
+      closed: true, seen: false, currentLevel: 200, level: 200, participated: false,
+    }), true, 'the global final is visible at the boundary');
+    assert.equal(resolutions.bafFinalIsNews({
+      closed: true, seen: false, currentLevel: 201, level: 200, participated: true,
+    }), true, 'a player result survives indexer lag into the next level');
+    assert.equal(resolutions.bafFinalIsNews({
+      closed: true, seen: false, currentLevel: 201, level: 200, participated: false,
+    }), false, 'non-participants do not inherit old global ceremony chrome');
+    assert.equal(resolutions.bafFinalIsNews({
+      closed: true, seen: true, currentLevel: 201, level: 200, participated: true,
+    }), false, 'viewing the receipt retires it');
+  });
 });
 
 describe('chain-authoritative resolution probes', () => {
@@ -170,9 +185,10 @@ test('summarizeBafAwards keeps BAF award types and the requested level only', ()
       { level: 20, awardType: 'eth_baf', amount: '10' },
       { level: 20, awardType: 'eth_baf', amount: '15' },
       { level: 20, awardType: 'tickets_baf', amount: '12' },
+      { level: 24, sourceLevel: 20, awardType: 'tickets_baf', amount: '8' },
       { level: 20, awardType: 'eth', amount: '999' },
       { level: 10, awardType: 'eth_baf', amount: '500' },
     ], 20),
-    { eth: 25n, tickets: 3n },
+    { eth: 25n, tickets: 5n },
   );
 });

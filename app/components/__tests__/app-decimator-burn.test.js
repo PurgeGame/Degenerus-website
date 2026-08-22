@@ -121,8 +121,8 @@ describe('<app-decimator-burn>', () => {
       'the wide layout puts accumulated score beyond the input and Degen Rating context');
     assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*6\.1rem/s,
       'the desktop event rail stays compact without shrinking its primary values');
-    assert.match(CSS, /\.dbb__stats\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'prize and burned FLIP remain grouped before the entry controls');
+    assert.match(CSS, /\.dbb__stats\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      'prize and burned FLIP stack at every width so both totals keep the full stats track');
     assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-area:\s*score/s,
       'the player score owns the far-side grid slot');
     assert.match(CSS, /\.dbb__entry-meta\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)[^}]*min-height:\s*2\.82rem/s,

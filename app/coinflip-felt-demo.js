@@ -9,7 +9,6 @@ import {
   coinflipBetPresentation,
   coinflipRackChipCount,
   coinflipWinChipPiles,
-  coinflipWinPileFrame,
 } from '/app/components/app-daily-flip.js';
 import { flipPileVariant } from '/app/app/flip-piles.js';
 
@@ -48,30 +47,67 @@ const fmt = (flip) => flip.toLocaleString('en-US');
 
 // --- mirrors of the component's private renderers -------------------------
 
-function renderChipStrip({ host, rack, amountWei, growToWei = null, pileCounts = null, emptyCopy }) {
+function renderChipStrip({
+  host,
+  rack,
+  amountWei,
+  pileCounts = null,
+  payoutOverlay = false,
+  emptyCopy,
+}) {
   rack.textContent = '';
+  rack.removeAttribute('data-payout-layout');
+  rack.removeAttribute('style');
   const piles = pileCounts
     ?? (amountWei == null ? [] : coinflipBetChipPiles(amountWei));
   if (piles.length === 0) {
     rack.textContent = emptyCopy;
     return;
   }
+  if (payoutOverlay) {
+    const columns = Math.max(1, Math.min(10, piles.length));
+    const rows = Math.ceil(piles.length / columns);
+    rack.setAttribute('data-payout-layout', 'pile');
+    rack.setAttribute('style', `--df-payout-columns:${columns};--df-payout-rows:${rows}`);
+    piles.forEach((count, stackIndex) => {
+      const row = Math.floor(stackIndex / columns);
+      const countInRow = Math.min(columns, piles.length - (row * columns));
+      const firstColumn = Math.floor((columns - countInRow) / 2) + 1;
+      const stackNode = document.createElement('img');
+      stackNode.className = 'df-payout-chip-stack';
+      stackNode.src = count === 1
+        ? '/shared/flip-chips/coin.svg'
+        : `/shared/flip-chips/stack-${count}.svg`;
+      stackNode.width = count === 1 ? 120 : 128;
+      stackNode.height = count === 1 ? 64 : 55 + (16 * count);
+      stackNode.alt = '';
+      stackNode.setAttribute('aria-hidden', 'true');
+      stackNode.setAttribute('data-chip-count', String(count));
+      stackNode.setAttribute('data-payout-turn', stackIndex % 2 === 0 ? 'face' : 'mirror');
+      stackNode.setAttribute(
+        'data-payout-layer',
+        rows > 1 && row === 0 ? 'behind' : 'front',
+      );
+      stackNode.setAttribute(
+        'style',
+        `--df-payout-column:${firstColumn + (stackIndex % columns)};`
+          + `--df-payout-row:${row + 1};`
+          + `--df-payout-delay:${Math.min(0.62, (row * 0.1) + ((stackIndex % columns) * 0.035)).toFixed(3)}s`,
+      );
+      rack.appendChild(stackNode);
+    });
+    return;
+  }
   const presentation = pileCounts ? 0 : coinflipBetPresentation(amountWei);
   if (presentation > 0) {
     const pile = document.createElement('i');
-    pile.className = `df-bet-pile${growToWei != null ? ' df-bet-pile--held' : ''}`;
+    pile.className = 'df-bet-pile';
     pile.setAttribute('data-pile', String(presentation));
     pile.setAttribute('data-variant', flipPileVariant(amountWei));
-    if (growToWei != null) {
-      const add = document.createElement('i');
-      add.className = 'df-bet-pile-add';
-      add.setAttribute('data-pay', String(coinflipWinPileFrame(amountWei, growToWei)));
-      pile.appendChild(add);
-    }
     rack.appendChild(pile);
     return;
   }
-  for (const count of piles) {
+  piles.forEach((count, stackIndex) => {
     const stackNode = document.createElement('span');
     stackNode.className = 'df-bet-chip-stack';
     stackNode.setAttribute('data-chip-count', String(count));
@@ -82,11 +118,12 @@ function renderChipStrip({ host, rack, amountWei, growToWei = null, pileCounts =
         'df-bet-chip',
         index === count - 1 ? 'is-top' : '',
       ].filter(Boolean).join(' ');
+      chip.setAttribute('data-chip-turn', String((stackIndex * 2 + index) % 4));
       chip.setAttribute('style', `--df-chip-rise:calc(var(--df-chip-height) * ${(index * riseStep).toFixed(3)})`);
       stackNode.appendChild(chip);
     }
     rack.appendChild(stackNode);
-  }
+  });
   void host;
 }
 
@@ -207,21 +244,21 @@ function renderToday() {
     host: $('df-bet-oval'),
     rack: $('df-bet-chip-rack'),
     amountWei: state.todayLost || state.todayFlip === 0n ? null : stakeWei,
-    growToWei: won && totalWei != null && coinflipBetPresentation(stakeWei) > 0
-      ? totalWei
-      : null,
     emptyCopy: state.todayLost ? '' : 'NO BET',
   });
   const row = $('df-today-winnings-row');
-  const winPile = won && totalWei != null && coinflipBetPresentation(stakeWei) > 0;
-  const addedWei = !winPile && totalWei != null && totalWei > stakeWei ? totalWei - stakeWei : null;
+  const addedWei = totalWei != null && totalWei > stakeWei ? totalWei - stakeWei : null;
   const winPiles = addedWei == null ? [] : coinflipWinChipPiles(stakeWei, totalWei);
+  const payoutOverlay = winPiles.length > 0
+    && (coinflipBetPresentation(stakeWei) > 0 || winPiles.length > 6);
   row.dataset.state = winPiles.length === 0 ? 'empty' : 'win';
+  row.dataset.layout = payoutOverlay ? 'pile' : 'row';
   renderChipStrip({
     host: row,
     rack: $('df-today-winnings-rack'),
     amountWei: addedWei,
     pileCounts: winPiles,
+    payoutOverlay,
     emptyCopy: '',
   });
   const slot = $('df-position-today');

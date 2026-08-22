@@ -45,21 +45,33 @@ describe('lootbox value tone', () => {
   test('publishes the complete art family from the same canonical selector', () => {
     for (const model of ['small', 'medium', 'large']) {
       const assets = lootboxCaseAssets(model);
-      const frontVersion = model === 'large' ? 'v23' : 'v14';
-      const topVersion = model === 'large' ? 'v23' : 'v14';
+      const frontVersion = model === 'large' ? 'v29' : 'v14';
+      const topVersion = model === 'large' ? 'v29' : 'v14';
       const innerVersion = model === 'large' ? 'v16' : 'v14';
-      assert.match(assets.lockedFront, new RegExp(`case-${model}-${frontVersion}-locked-front\\.webp$`));
-      assert.match(assets.retractedFront, new RegExp(`case-${model}-${frontVersion}-retracted-front\\.webp$`));
-      assert.match(assets.top, new RegExp(`case-${model}-${topVersion}-top\\.webp$`));
+      const shellExtension = model === 'large' ? 'png' : 'webp';
+      assert.match(assets.lockedFront, new RegExp(`case-${model}-${frontVersion}-locked-front\\.${shellExtension}$`));
+      assert.match(assets.retractedFront, new RegExp(`case-${model}-${frontVersion}-retracted-front\\.${shellExtension}$`));
+      assert.match(assets.top, new RegExp(`case-${model}-${topVersion}-top\\.${shellExtension}$`));
+      assert.ok(assets.cardTop, `${model} exposes a purchase-card asset`);
+      assert.ok(assets.purchaseTop, `${model} exposes authored Buy In artwork`);
       assert.match(assets.innerLid, new RegExp(`case-${model}-${innerVersion}-inner-lid\\.webp$`));
       assert.equal(assets.deadbolts.length, 2);
       if (model === 'large') {
+        assert.match(assets.cardTop, /case-large-v29-card\.webp$/,
+          'the purchase card does not eagerly download the full-resolution reveal top');
         assets.deadbolts.forEach((deadbolt) => {
-          assert.match(deadbolt, /case-large-v23-deadbolt-(?:left|right)\.webp$/,
+          assert.match(deadbolt, /case-large-v29-deadbolt-(?:left|right)\.png$/,
             'the large shell exposes its exact two cylindrical lock-pin sprites');
         });
       }
     }
+    assert.match(lootboxCaseAssets('small').purchaseTop, /case-small-v15-buy-in-top\.webp$/);
+    assert.match(lootboxCaseAssets('medium').purchaseTop, /case-medium-v15-buy-in-top\.webp$/);
+    assert.match(lootboxCaseAssets('large').purchaseTop, /case-large-v29-card\.webp$/);
+    assert.match(
+      lootboxCasePresentation('small').css['--lootbox-case-purchase-art'],
+      /case-small-v15-buy-in-top\.webp/,
+    );
     assert.equal(lootboxCaseAssets('unknown'), lootboxCaseAssets('medium'));
   });
 
@@ -72,9 +84,16 @@ describe('lootbox value tone', () => {
       [
         ['36.7%', '20%', '44%'],
         ['37.2%', '25%', '45%'],
-        ['28.5%', '23.5%', '42%'],
+        ['25.4%', '21.5%', '42%'],
       ],
     );
+  });
+
+  test('defers the full large top until a reveal asks for full resolution', () => {
+    const card = lootboxCasePresentation('large');
+    const reveal = lootboxCasePresentation('large', { fullResolution: true });
+    assert.match(card.css['--lootbox-case-top-art'], /case-large-v29-card\.webp/);
+    assert.match(reveal.css['--lootbox-case-top-art'], /case-large-v29-top\.png/);
   });
 
   test('all dynamic luckbox surfaces consume the shared model presentation', () => {

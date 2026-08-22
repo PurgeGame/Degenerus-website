@@ -12,6 +12,10 @@ const PRIOR = '0x1111111111111111111111111111111111111111';
 const ACTIVE = '0x2222222222222222222222222222222222222222';
 const TOKEN = 10n ** 18n;
 
+function encodedUint(value) {
+  return `0x${BigInt(value).toString(16).padStart(64, '0')}`;
+}
+
 function makeProvider() {
   const signer = { getAddress: async () => CONNECTED };
   return {
@@ -78,6 +82,46 @@ describe('GNRUS charity approval voting', () => {
     for (const call of calls) {
       assert.deepEqual(call.at(-1), { blockTag: 888 }, `${call[0]} uses the pinned block`);
     }
+  });
+
+  test('sums every GNRUS yield share once and replaces the recent reorg tail', async () => {
+    const deploy = 45_702_811;
+    let head = deploy + 50_100;
+    let events = [
+      { blockNumber: deploy + 10, index: 1, transactionHash: '0xaaa', data: encodedUint(5n) },
+      { blockNumber: deploy + 50_000, index: 2, transactionHash: '0xbbb', data: encodedUint(7n) },
+    ];
+    const calls = [];
+    const provider = {
+      getBlockNumber: async () => head,
+      getLogs: async (filter) => {
+        calls.push(filter);
+        return events.filter((event) => (
+          event.blockNumber >= Number(filter.fromBlock)
+          && event.blockNumber <= Number(filter.toBlock)
+        ));
+      },
+    };
+    const values = new Map();
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+
+    assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 12n);
+    assert.equal(calls.length, 2, 'the initial history uses bounded 50,000-block reads');
+    assert.ok(calls.every((call) => call.address && call.topics?.length === 1));
+
+    head += 10;
+    events = [
+      events[0],
+      { blockNumber: deploy + 50_000, index: 2, transactionHash: '0xbbb2', data: encodedUint(9n) },
+      { blockNumber: head, index: 0, transactionHash: '0xccc', data: encodedUint(3n) },
+    ];
+    assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 17n,
+      'the cached old event is retained while the overlapping tail is replaced, not duplicated');
+    assert.equal(calls.length, 3, 'a refresh reads only the short reorg tail');
+    assert.match(charityVoteMod.gnrusLifetimeFundingCacheKey(), /84532:45702811:/);
   });
 
   test('preflights and sends the selected approval through the connected signer', async () => {

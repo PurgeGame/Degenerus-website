@@ -32,6 +32,7 @@
 import { CHAIN, VOLUME_WINDOW } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import {
+  flipPileChipCount,
   flipPileLevel,
   flipPileVariant,
   flipWagerPreview,
@@ -317,10 +318,10 @@ export function coinflipBetChipCount(stakeWei) {
   return Math.max(1, Math.min(24, Math.round(commonRangeCurve)));
 }
 
-/** Even table piles of at most seven chips, inside a stack budget. */
-function _chipPiles(total, maxStacks) {
+/** Even table stacks capped at a readable physical height. */
+function _chipPiles(total, maxHeight = 7) {
   if (!(total > 0)) return [];
-  const stacks = Math.max(1, Math.min(maxStacks, Math.ceil(total / 7)));
+  const stacks = Math.max(1, Math.ceil(total / Math.max(1, maxHeight)));
   const base = Math.floor(total / stacks);
   return Array.from({ length: stacks }, (_, index) => (
     base + (index < total % stacks ? 1 : 0)
@@ -329,7 +330,7 @@ function _chipPiles(total, maxStacks) {
 
 /** Split a wager's chips into table piles: at most seven chips per stack. */
 export function coinflipBetChipPiles(stakeWei) {
-  return _chipPiles(coinflipBetChipCount(stakeWei), 4);
+  return _chipPiles(coinflipBetChipCount(stakeWei));
 }
 
 /**
@@ -347,7 +348,10 @@ export function coinflipWinChipCount(stakeWei, totalWei) {
     total = BigInt(totalWei ?? 0);
   } catch (_error) { return 0; }
   if (stake <= 0n || total <= stake) return 0;
-  const staked = coinflipBetChipCount(stake);
+  // Small wagers use the compact logarithmic rack. At mound scale, count the
+  // chips in the exact level/variant artwork the player already sees so the
+  // payout remains proportional to that physical pile.
+  const staked = flipPileChipCount(stake) || coinflipBetChipCount(stake);
   if (staked === 0) return 0;
   // The contract pays 150%-256% of the stake, so this rides in [0.5, 1.56].
   // The clamp only guards against a malformed feed, never a real result.
@@ -356,39 +360,14 @@ export function coinflipWinChipCount(stakeWei, totalWei) {
 }
 
 /**
- * Payout piles. The budget is five stacks because the wager owns at most
- * three and the spot's chip lane holds eight of them at full table scale.
+ * Payout stacks. Compact wagers use dealer stacks no taller than seven chips.
+ * Mound-scale wins use ten-high barrels over/around the old pile, retaining
+ * every abstract payout chip without turning a whale win into hundreds of
+ * loose DOM coins.
  */
 export function coinflipWinChipPiles(stakeWei, totalWei) {
-  return _chipPiles(coinflipWinChipCount(stakeWei, totalWei), 5);
-}
-
-// Cumulative growth frames baked into every pile-N-add.svg sprite, as shares
-// of the base pile. MUST match WIN_FRACTIONS in shared/flip-chips/build-piles.py.
-const WIN_PILE_FRACTIONS = [0.5, 1.0, 1.56];
-
-/**
- * Which sprite frame a pile-scale win grows into. The three frames are the
- * payout classes the contract actually rolls — the unlucky 150% day, the
- * normal band, and the lucky 250% — so a whale's mound grows by what the day
- * paid instead of by a fixed amount.
- */
-export function coinflipWinPileFrame(stakeWei, totalWei) {
-  let stake;
-  let total;
-  try {
-    stake = BigInt(stakeWei ?? 0);
-    total = BigInt(totalWei ?? 0);
-  } catch (_error) { return 0; }
-  if (stake <= 0n || total <= stake) return 0;
-  const paid = Number(((total - stake) * 1_000n) / stake) / 1_000;
-  let frame = 0;
-  // Nearest frame: the boundaries sit halfway between the baked fractions.
-  while (frame < WIN_PILE_FRACTIONS.length - 1
-    && paid >= (WIN_PILE_FRACTIONS[frame] + WIN_PILE_FRACTIONS[frame + 1]) / 2) {
-    frame += 1;
-  }
-  return frame;
+  const count = coinflipWinChipCount(stakeWei, totalWei);
+  return _chipPiles(count, coinflipBetPresentation(stakeWei) > 0 ? 10 : 7);
 }
 
 /**
@@ -2850,8 +2829,6 @@ class AppDailyFlip extends HTMLElement {
             </header>
             <div class="df-add-bet-dialog__wager-deck">
               <label class="df-add-bet-dialog__value">
-                <img class="df-add-bet-dialog__value-chip"
-                     src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
                 <input type="text" name="df-amount" data-bind="df-add-bet-number"
                        min="100" step="100" value="1000" inputmode="numeric" autocomplete="off"
                        pattern="[0-9,]*"
@@ -3357,7 +3334,8 @@ class AppDailyFlip extends HTMLElement {
     queueMicrotask(() => {
       try {
         number?.focus?.({ preventScroll: true });
-        number?.select?.();
+        const caret = String(number?.value || '').length;
+        number?.setSelectionRange?.(caret, caret);
       } catch (_e) { /* headless */ }
     });
   }
@@ -5051,24 +5029,10 @@ class AppDailyFlip extends HTMLElement {
 
   #renderTodayBetOval(stakeWei, state = 'stake', totalWei = null) {
     const lost = state === 'lost';
-    // A pile-scale win presents the whole payout as one bigger pile that owns
-    // the entire spot; covering the stake lane and divider is deliberate.
-    if (!lost && totalWei != null
-      && coinflipBetPresentation(stakeWei) > 0
-      && coinflipBetPresentation(totalWei) > 0) {
-      this.#renderChipStrip({
-        hostBind: 'df-bet-oval',
-        rackBind: 'df-bet-chip-rack',
-        renderKey: `win-pile:${stakeWei}:${totalWei}`,
-        amountWei: stakeWei,
-        growToWei: totalWei,
-        emptyCopy: '',
-        emptyAria: "Today's bet",
-        valueLabel: "Today's payout",
-      });
-      this.#renderTodayWinningsRow(null, null);
-      return;
-    }
+    // Keep the wager exactly where it was when a win resolves. New chips are
+    // paid separately into dealer-neat stacks; at mound scale those stacks
+    // layer over/around this original pile instead of replacing it with a
+    // larger, freshly scattered composition.
     this.#renderChipStrip({
       hostBind: 'df-bet-oval',
       rackBind: 'df-bet-chip-rack',
@@ -5092,11 +5056,15 @@ class AppDailyFlip extends HTMLElement {
       if (totalWei != null && total > stake) addedWei = total - stake;
     } catch (_error) { /* loading/invalid amounts leave the row empty */ }
     // Winnings are measured against the stake that earned them, so the payout
-    // lane grows and shrinks with the day's multiplier. The chips decide the
-    // lane: an empty rack must never open a row for the oval to grow into.
+    // lane grows and shrinks with the day's multiplier. Pile-scale and
+    // unusually large payouts become a layered field of complete stack art;
+    // ordinary payouts retain the quiet upper rack.
     const winPiles = addedWei == null ? [] : coinflipWinChipPiles(stakeWei, totalWei);
+    const payoutOverlay = winPiles.length > 0
+      && (coinflipBetPresentation(stakeWei) > 0 || winPiles.length > 6);
     if (host) {
       host.dataset.state = winPiles.length === 0 ? 'empty' : 'win';
+      host.dataset.layout = payoutOverlay ? 'pile' : 'row';
       host.setAttribute('aria-hidden', String(winPiles.length === 0));
     }
     this.#renderChipStrip({
@@ -5105,6 +5073,7 @@ class AppDailyFlip extends HTMLElement {
       renderKey: winPiles.length === 0 ? 'empty' : `${stakeWei}:${totalWei}`,
       amountWei: addedWei,
       pileCounts: winPiles,
+      payoutOverlay,
       emptyCopy: '',
       emptyAria: 'Winnings appear here after a win',
       valueLabel: 'Additional coinflip winnings',
@@ -5181,8 +5150,8 @@ class AppDailyFlip extends HTMLElement {
     rackBind,
     renderKey,
     amountWei,
-    growToWei = null,
     pileCounts = null,
+    payoutOverlay = false,
     emptyCopy,
     emptyAria,
     valueLabel,
@@ -5192,6 +5161,8 @@ class AppDailyFlip extends HTMLElement {
     if (!host || !rack || host.getAttribute('data-chip-key') === renderKey) return;
     host.setAttribute('data-chip-key', renderKey);
     rack.textContent = '';
+    rack.removeAttribute('data-payout-layout');
+    rack.removeAttribute('style');
     const piles = pileCounts
       ?? (amountWei == null ? [] : coinflipBetChipPiles(amountWei));
     if (piles.length === 0) {
@@ -5199,34 +5170,70 @@ class AppDailyFlip extends HTMLElement {
       host.setAttribute('aria-label', emptyAria);
       return;
     }
-    // The wager decides how the whole spot presents. A payout counted in the
-    // wager's own chips stays in that lane even when the added FLIP alone
-    // would rate a mound, so the two racks are never different currencies.
+    if (payoutOverlay) {
+      // Large payouts use one pre-baked, dealer-neat SVG per stack rather
+      // than one DOM node per chip. Ten chips is the tallest barrel; rows
+      // overlap in depth, so even a whale payout preserves its chip ratio
+      // without shrinking the coins or dissolving into a loose scatter.
+      const columns = Math.max(1, Math.min(10, piles.length));
+      const rows = Math.ceil(piles.length / columns);
+      rack.setAttribute('data-payout-layout', 'pile');
+      rack.setAttribute(
+        'style',
+        `--df-payout-columns:${columns};--df-payout-rows:${rows}`,
+      );
+      piles.forEach((count, stackIndex) => {
+        const row = Math.floor(stackIndex / columns);
+        const countInRow = Math.min(columns, piles.length - (row * columns));
+        const firstColumn = Math.floor((columns - countInRow) / 2) + 1;
+        const stackNode = document.createElement('img');
+        stackNode.className = 'df-payout-chip-stack';
+        stackNode.setAttribute('src', count === 1
+          ? '/shared/flip-chips/coin.svg'
+          : `/shared/flip-chips/stack-${count}.svg`);
+        stackNode.setAttribute('width', String(count === 1 ? 120 : 128));
+        stackNode.setAttribute('height', String(count === 1 ? 64 : 55 + (16 * count)));
+        stackNode.setAttribute('alt', '');
+        stackNode.setAttribute('aria-hidden', 'true');
+        stackNode.setAttribute('data-chip-count', String(count));
+        stackNode.setAttribute('data-payout-turn', stackIndex % 2 === 0 ? 'face' : 'mirror');
+        stackNode.setAttribute(
+          'data-payout-layer',
+          rows > 1 && row === 0 ? 'behind' : 'front',
+        );
+        stackNode.setAttribute(
+          'style',
+          `--df-payout-column:${firstColumn + (stackIndex % columns)};`
+            + `--df-payout-row:${row + 1};`
+            + `--df-payout-delay:${Math.min(0.62, (row * 0.1) + ((stackIndex % columns) * 0.035)).toFixed(3)}s`,
+        );
+        rack.appendChild(stackNode);
+      });
+      host.setAttribute(
+        'aria-label',
+        `${valueLabel}: ${this.#fmtWhole(amountWei)} FLIP.`,
+      );
+      return;
+    }
+    // The wager decides how the base spot presents. Payouts always arrive in
+    // their own neat-stack lane/field, so this branch only draws the original
+    // mound the player put down.
     const presentation = pileCounts ? 0 : coinflipBetPresentation(amountWei);
     if (presentation > 0) {
-      // The pile keeps the wager's own composition; a win GROWS it in place
-      // with the matching add-overlay instead of switching graphics, and how
-      // far it grows is the day's own multiplier.
       const pile = document.createElement('i');
-      pile.className = `df-bet-pile${growToWei != null ? ' df-bet-pile--held' : ''}`;
+      pile.className = 'df-bet-pile';
       pile.setAttribute('data-pile', String(presentation));
       // Same rung, different mound: the composition is picked from the stake,
       // so it holds all day and two players at one rung are not twins.
       pile.setAttribute('data-variant', flipPileVariant(amountWei));
-      if (growToWei != null) {
-        const add = document.createElement('i');
-        add.className = 'df-bet-pile-add';
-        add.setAttribute('data-pay', String(coinflipWinPileFrame(amountWei, growToWei)));
-        pile.appendChild(add);
-      }
       rack.appendChild(pile);
       host.setAttribute(
         'aria-label',
-        `${valueLabel}: ${this.#fmtWhole(growToWei ?? amountWei)} FLIP.`,
+        `${valueLabel}: ${this.#fmtWhole(amountWei)} FLIP.`,
       );
       return;
     }
-    for (const count of piles) {
+    piles.forEach((count, stackIndex) => {
       const stackNode = document.createElement('span');
       stackNode.className = 'df-bet-chip-stack';
       stackNode.setAttribute('data-chip-count', String(count));
@@ -5240,11 +5247,12 @@ class AppDailyFlip extends HTMLElement {
           'df-bet-chip',
           index === count - 1 ? 'is-top' : '',
         ].filter(Boolean).join(' ');
+        chip.setAttribute('data-chip-turn', String((stackIndex * 2 + index) % 4));
         chip.setAttribute('style', `--df-chip-rise:calc(var(--df-chip-height) * ${(index * riseStep).toFixed(3)})`);
         stackNode.appendChild(chip);
       }
       rack.appendChild(stackNode);
-    }
+    });
     host.setAttribute(
       'aria-label',
       `${valueLabel}: ${this.#fmtWhole(amountWei)} FLIP.`,

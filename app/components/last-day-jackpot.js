@@ -59,9 +59,11 @@ import { compactUiError } from '../app/ui-error.js';
 import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 import { normalizeLastDayPayload } from '../app/last-day-state.js';
 import { foilPackDisplayLevel } from '../app/active-level.js';
+import { buildDaySummaryPrizes } from '../app/day-summary-prizes.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 const FOIL_MATCH_FLASH_MS = 640;
+const DAY_SUMMARY_RECEIPT_REVISION = 'v2';
 
 function _terminalFoilClaimError(error) {
   const seen = new Set();
@@ -246,8 +248,29 @@ class LastDayJackpot extends HTMLElement {
   #onGameState(state) {
     const priorFoilLevel = this.#foilTargetLevel();
     this.#gameState = state && typeof state === 'object' ? state : null;
+    const slottedLevel = Number(this.#slottedFoilLevel);
+    const liveFoilLevel = foilPackDisplayLevel(
+      this.#gameState,
+      this.#poolBenchmarks?.contractPhase,
+    );
+    const levelPassedSlottedPack = Number.isInteger(slottedLevel)
+      && slottedLevel > 0
+      && Number.isInteger(liveFoilLevel)
+      && liveFoilLevel > slottedLevel;
+    if (levelPassedSlottedPack) {
+      // A completed reveal may pin its exact pack while the same numeric level
+      // changes cadence. That protection ends at the real cabinet rollover:
+      // old-level foil tickets must vacate before the new level's read lands.
+      this.#resetFoilSlotting();
+      this.#foilSeq += 1;
+      this.#foilData = null;
+      this.#foilDataKey = null;
+      this.#renderFoil();
+    }
     this.#syncReplayProcessingState();
-    if (this.#foilTargetLevel() !== priorFoilLevel) void this.#refreshFoil();
+    if (levelPassedSlottedPack || this.#foilTargetLevel() !== priorFoilLevel) {
+      void this.#refreshFoil();
+    }
   }
 
   #onPoolBenchmarks(benchmarks) {
@@ -1274,7 +1297,10 @@ class LastDayJackpot extends HTMLElement {
     if (this.#pinnedDay == null) return null;
     const viewed = getViewedAddress();
     const player = viewed ? String(viewed).toLowerCase() : 'no-player';
-    return `day_summary_${CHAIN.id}_${this.#pinnedDay}_${player}`;
+    // v2 re-arms receipts consumed while the sealed rollover snapshot still
+    // omitted late-indexed BAF / Decimator results. The existing deployment
+    // cleanup prefix still covers both revisions.
+    return `day_summary_${CHAIN.id}_${this.#pinnedDay}_${player}_${DAY_SUMMARY_RECEIPT_REVISION}`;
   }
 
   #hasOpenedSummary() {
@@ -1456,74 +1482,6 @@ class LastDayJackpot extends HTMLElement {
   // revealed tickets plus lootboxes the player bought/opened during the round.
   async #onResultsCtaClick() {
     if (this.#summaryBusy || this.#hasOpenedSummary()) return;
-    const viewed = getViewedAddress();
-    const target = viewed ? String(viewed).toLowerCase() : null;
-    const winnerRow = target ? (this.#winners || []).find(
-      (w) => String(w.address || '').toLowerCase() === target,
-    ) : null;
-    // Winner row units: totalEth = scaled ETH-wei, coinTotal = FLIP-wei,
-    // ticketCount = ENTRIES (4 = 1 whole ticket).
-    const prizes = [];
-    if (winnerRow) {
-      try {
-        const breakdown = Array.isArray(winnerRow.breakdown) ? winnerRow.breakdown : [];
-        const winningTraits = (...awardTypes) => {
-          const accepted = new Set(awardTypes.map((type) => String(type).toLowerCase()));
-          const traits = new Set();
-          for (const row of breakdown) {
-            if (!accepted.has(String(row?.awardType || '').toLowerCase())) continue;
-            // Far-future FLIP is a center prize and intentionally has no
-            // traitId. Number(null) is 0, which used to turn that missing
-            // value into the pink XRP badge in the Day Summary. Only actual
-            // trait values belong in the winning-badge strip.
-            const rawTraitId = row?.traitId;
-            if (rawTraitId == null || String(rawTraitId).trim() === '') continue;
-            const traitId = Number(rawTraitId);
-            if (Number.isInteger(traitId) && traitId >= 0 && traitId <= 255) traits.add(traitId);
-          }
-          return [...traits];
-        };
-        if (BigInt(winnerRow.totalEth || '0') > 0n) {
-          prizes.push({
-            type: 'eth', amount: BigInt(winnerRow.totalEth),
-            winningTraitIds: winningTraits('eth', 'eth_baf'),
-          });
-        }
-        if (BigInt(winnerRow.coinTotal || '0') > 0n) {
-          prizes.push({
-            type: 'flip', amount: BigInt(winnerRow.coinTotal),
-            winningTraitIds: winningTraits('flip', 'flip_baf', 'farFutureCoin'),
-          });
-        }
-        // The composed last-day winner row already includes Decimator claims,
-        // including players whose only payout that day was Decimator. Reuse it
-        // here so the summary gains the missing result without another API or
-        // database lookup.
-        const decimator = winnerRow.decimatorPrize || {};
-        const decimatorRegular = BigInt(decimator.regularEth || '0');
-        const decimatorLootbox = BigInt(decimator.lootboxEth || '0');
-        const decimatorTerminal = BigInt(decimator.terminalEth || '0');
-        if (decimatorRegular > 0n || decimatorLootbox > 0n || decimatorTerminal > 0n) {
-          prizes.push({
-            type: 'decimator',
-            amount: decimatorRegular + decimatorTerminal,
-            lootboxAmount: decimatorLootbox,
-            terminalAmount: decimatorTerminal,
-          });
-        }
-        const wholeTickets = Math.round(Number(winnerRow.ticketCount || 0) / 4);
-        if (wholeTickets > 0) {
-          // Ticket awards land at the winning trait's award level when the
-          // breakdown carries one (award rows are next-level).
-          const ticketRow = Array.isArray(winnerRow.breakdown)
-            ? winnerRow.breakdown.find((b) => b && b.awardType === 'tickets') : null;
-          prizes.push({
-            type: 'tickets', amount: wholeTickets, level: ticketRow?.level,
-            winningTraitIds: winningTraits('tickets', 'ticket', 'tickets_baf'),
-          });
-        }
-      } catch { /* malformed row — falls through to the NO HIT summary */ }
-    }
     const cta = this.#resultsCta();
     this.#summaryBusy = true;
     if (cta) {
@@ -1531,6 +1489,33 @@ class LastDayJackpot extends HTMLElement {
       cta.textContent = 'LOADING DAY SUMMARY…';
     }
     try {
+      const viewed = getViewedAddress();
+      const target = viewed ? String(viewed).toLowerCase() : null;
+
+      // The rollover payload is published at the day seal, but Decimator
+      // claims and BAF aggregates can land in the exact-day endpoint moments
+      // later. A Day Summary is one-shot, so refresh that authoritative row at
+      // click time instead of permanently consuming the early composition.
+      if (target && this.#pinnedDay != null) {
+        try {
+          const exact = await fetchJSON(
+            `/game/jackpot/day/${encodeURIComponent(this.#pinnedDay)}/winners`,
+            { force: true },
+          );
+          if (Number(exact?.day) === Number(this.#pinnedDay)
+            && Array.isArray(exact?.winners)
+            && (exact.winners.length > 0 || this.#winners.length === 0)) {
+            this.#winners = exact.winners;
+            const exactLevel = Number(exact?.level);
+            if (Number.isInteger(exactLevel) && exactLevel > 0) this.#pinnedLevel = exactLevel;
+          }
+        } catch { /* retain the already-loaded sealed row on a transient */ }
+      }
+
+      const winnerRow = target ? (this.#winners || []).find(
+        (winner) => String(winner?.address || '').toLowerCase() === target,
+      ) : null;
+      const prizes = buildDaySummaryPrizes(winnerRow);
       const activity = await this.#loadDayActivity(viewed, this.#pinnedDay);
       // The 1 WWXRP card is the losing-coinflip consolation, not a generic
       // participation award. Requiring an explicit false also prevents a
@@ -1675,6 +1660,7 @@ class LastDayJackpot extends HTMLElement {
           player: String(player),
           day,
           level: Number.isFinite(level) ? level : null,
+          foilMultBps: Number.isInteger(Number(d.multBps)) ? Number(d.multBps) : null,
           ticketIndex,
           lineTraits: [...line],
           winningTraits: unpackWinSet(grade.packedSet),
@@ -1927,6 +1913,7 @@ class LastDayJackpot extends HTMLElement {
         winningTraits: candidate.winningTraits,
         matchFaces: grade.faces,
         rewardFaces,
+        foilMultBps: candidate.foilMultBps,
         legs,
       });
       this.#renderFoil();

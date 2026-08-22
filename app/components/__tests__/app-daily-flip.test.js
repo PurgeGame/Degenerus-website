@@ -25,6 +25,11 @@ import {
   __resetHeldBalancesForTest,
   heldBalanceValue,
 } from '../../app/balance-hold.js';
+import {
+  flipPileChipCount,
+  flipPileLevel,
+  flipPileVariant,
+} from '../../app/flip-piles.js';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const CHIPSET_CSS = readFileSync(new URL('../../styles/coinflip-chipset.css', import.meta.url), 'utf8');
@@ -459,13 +464,6 @@ describe('day-wide reveal planning', () => {
       [0, 5, 6, 7, 9, 11, 15, 20],
       'sub-100K wagers remain stacks before the mound ladder opens',
     );
-    for (const flip of [100_000n, 500_000n, 5_000_000n]) {
-      assert.ok(
-        revealPlanning.coinflipBetPresentation(flip * 3n * unit / 2n)
-          > revealPlanning.coinflipBetPresentation(flip * unit),
-        'a minimum x1.5 win always lands on a strictly bigger pile graphic',
-      );
-    }
   });
 
   test('the payout racks the wager\'s own coins, scaled by the day\'s multiplier', () => {
@@ -489,7 +487,7 @@ describe('day-wide reveal planning', () => {
     assert.deepEqual(payout(43_844n, 150), [24, [6, 6, 6, 6]],
       'the lucky 250% day pays half again more coins than the wager');
     assert.equal(payout(43_844n, 156)[1].length, 4,
-      'the biggest payout stays inside the spot: five stacks is the budget');
+      'the biggest ordinary payout stays in four balanced seven-high-or-shorter stacks');
 
     // The wager holds its own count no matter what the payout does — the
     // logarithmic curve prices the bet, never the win beside it.
@@ -500,6 +498,48 @@ describe('day-wide reveal planning', () => {
       'no wager, no payout coins');
     assert.equal(revealPlanning.coinflipWinChipCount(20n * unit, 50n * unit), 2,
       'the smallest wagers still show a physically bigger payout than their coin');
+
+    const moundStake = 100_000n * unit;
+    assert.equal(flipPileChipCount(moundStake), 37,
+      'pile-scale arithmetic starts from the exact chips in the displayed mound variant');
+    assert.deepEqual(payout(100_000n, 96), [36, [9, 9, 9, 9]],
+      'a 96% mound win pays 36 neat chips against its 37-chip original pile');
+
+    const whaleStake = 1_000_000_000n * unit;
+    const whaleTotal = whaleStake + ((whaleStake * 156n) / 100n);
+    const whalePiles = revealPlanning.coinflipWinChipPiles(whaleStake, whaleTotal);
+    assert.equal(flipPileChipCount(whaleStake), 169);
+    assert.equal(revealPlanning.coinflipWinChipCount(whaleStake, whaleTotal), 264,
+      'a lucky whale payout remains proportional to its exact baked pile');
+    assert.equal(whalePiles.reduce((sum, count) => sum + count, 0), 264);
+    assert.ok(whalePiles.every((count) => count >= 9 && count <= 10),
+      'even the whale payout resolves into complete, balanced ten-high-or-shorter stacks');
+  });
+
+  test('baked pile chip counts stay synchronized with every level and variant asset', () => {
+    const unit = 10n ** 18n;
+    for (let level = 5; level <= 20; level += 1) {
+      const wholeFlip = level === 20
+        ? 1_000_000_000n
+        : BigInt(Math.ceil(101_000 * (1.45 ** (level - 5))));
+      for (const [variantIndex, variant] of ['a', 'b', 'c'].entries()) {
+        let amount = wholeFlip * unit;
+        amount += BigInt((variantIndex - Number(amount % 3n) + 3) % 3);
+        assert.equal(flipPileLevel(amount), level);
+        assert.equal(flipPileVariant(amount), variant);
+        const suffix = variant === 'a' ? '' : `-${variant}`;
+        const svg = readFileSync(
+          new URL(`../../../shared/flip-chips/pile-${level}${suffix}.svg`, import.meta.url),
+          'utf8',
+        );
+        const physicalChips = (svg.match(/<use href="#c\d+"/g) || []).length;
+        assert.equal(
+          flipPileChipCount(amount),
+          physicalChips,
+          `pile ${level}${suffix} payout arithmetic counts its rendered chips`,
+        );
+      }
+    }
   });
 
   test('the claim tray derives bounded ratio and one-chip-per-doubling amount counts', () => {
@@ -2750,6 +2790,61 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('a pile-scale win keeps the original mound and deals proportional neat stacks over it', async () => {
+    const unit = 10n ** 18n;
+    _resolvedStakeWei = String(100_000n * unit);
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+
+    const wagerRack = el.querySelector('[data-bind="df-bet-chip-rack"]');
+    const originalPile = wagerRack.querySelector('.df-bet-pile');
+    assert.ok(originalPile, 'the original 100K wager remains its baked pile');
+    assert.equal(originalPile.getAttribute('data-pile'), '5');
+    assert.equal(originalPile.children.length, 0,
+      'the win does not cover the old wager with a scattered growth sprite');
+    assert.equal(el.querySelector('.df-bet-pile-add'), null);
+    assert.match(
+      el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
+      /Today's bet: 100,000 FLIP/,
+      'the base pile continues to announce the stake rather than masquerading as the payout',
+    );
+
+    const winningsRow = el.querySelector('[data-bind="df-today-winnings-row"]');
+    const winningsRack = el.querySelector('[data-bind="df-today-winnings-rack"]');
+    const payoutStacks = Array.from(winningsRack.children);
+    assert.equal(winningsRow.dataset.state, 'win');
+    assert.equal(winningsRow.dataset.layout, 'pile');
+    assert.equal(winningsRack.getAttribute('data-payout-layout'), 'pile');
+    assert.deepEqual(
+      payoutStacks.map((stack) => stack.getAttribute('data-chip-count')),
+      ['9', '9', '9', '9'],
+      '36 new chips arrive as four balanced stacks against the 37-chip original',
+    );
+    assert.ok(payoutStacks.every((stack) => stack.className === 'df-payout-chip-stack'));
+    assert.ok(payoutStacks.every((stack) => stack.getAttribute('src') === '/shared/flip-chips/stack-9.svg'));
+    assert.deepEqual(
+      payoutStacks.map((stack) => stack.getAttribute('data-payout-turn')),
+      ['face', 'mirror', 'face', 'mirror'],
+      'identical two-tone chips expose alternating red/green rotations without inventing denominations',
+    );
+    assert.match(CHIPSET_CSS,
+      /\.df-today-winnings-row\[data-layout="pile"\][\s\S]*?position:\s*absolute[\s\S]*?\.df-bet-chip-rack\[data-payout-layout="pile"\][\s\S]*?display:\s*grid/,
+      'pile payouts overlap the old composition in shallow dealer rows');
+    assert.match(CHIPSET_CSS,
+      /\.df-payout-chip-stack\[data-payout-layer="behind"\][\s\S]*?z-index:\s*2/,
+      'the far payout row is allowed to tuck behind the original mound');
+    assert.match(CHIPSET_CSS,
+      /\.df-payout-chip-stack\s*\{[\s\S]*?z-index:\s*4/,
+      'near payout rows keep their neat tops in front of the mound');
+    el.disconnectedCallback();
+  });
+
   test("Today's Bet colors only the 150% and 250%+ multiplier number", async () => {
     const cases = [
       { rewardPercent: 50, text: '150%', tone: 'low' },
@@ -3628,16 +3723,30 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(el.innerHTML,
       /df-add-bet-dialog__chip-scene[\s\S]*?src="\/shared\/flip-chips\/coin\.svg"[\s\S]*?data-bind="df-add-bet-chip-pile"/,
       'the popup header starts with one canonical FLIP coin');
-    assert.match(el.innerHTML,
-      /df-add-bet-dialog__value[\s\S]*?src="\/whitepaper\/flame-logo-split\.svg"[\s\S]*?data-bind="df-add-bet-number"/,
-      'the editable betting spot uses the flat FLIP mark without replacing its input');
+    assert.equal(el.querySelector('.df-add-bet-dialog__value-chip'), null,
+      'the editable betting spot does not repeat the FLIP emblem beside its input');
+    assert.match(CHIPSET_CSS,
+      /\.df-add-bet-dialog__value input\s*\{[^}]*padding:\s*0 4\.3rem;/s,
+      'the amount stays centered after removing the emblem lane');
     assert.doesNotMatch(el.querySelector('.df-add-bet-dialog__head').textContent,
       /COMMUNITY COINFLIP/,
       'the popup has one direct bet instruction instead of a second header label');
     const dialog = el.querySelector('[data-bind="df-add-bet-dialog"]');
     assert.equal(dialog.hidden, true, 'the slider stays out of the Tomorrow row until requested');
+    let selectedAll = false;
+    amount.focus = () => {};
+    amount.select = () => { selectedAll = true; };
+    amount.setSelectionRange = (start, end) => {
+      amount.selectionStart = start;
+      amount.selectionEnd = end;
+    };
     flip.dispatchEvent({ type: 'click' });
     assert.equal(dialog.hidden, false, 'Add Bet opens its amount dialog without sending a transaction');
+    await flushMicrotasks();
+    assert.equal(selectedAll, false,
+      'opening Add Bet does not create a full-value selection highlight');
+    assert.deepEqual([amount.selectionStart, amount.selectionEnd], [5, 5],
+      'opening Add Bet leaves a collapsed caret after the formatted default amount');
     const reuse = el.querySelector('[data-bind="df-add-bet-reuse"]');
     const chipPile = el.querySelector('[data-bind="df-add-bet-chip-pile"]');
     assert.equal(chipPile.getAttribute('data-pile-count'), '4');

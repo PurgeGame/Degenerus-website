@@ -29,11 +29,18 @@ const SDGNRS_VOTE_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
 ];
 
+const GNRUS_FUNDING_EVENT = 'YieldSurplusDistributed(uint256)';
+const GNRUS_FUNDING_TOPIC = ethers.id(GNRUS_FUNDING_EVENT);
+const GNRUS_FUNDING_CACHE_VERSION = 1;
+const GNRUS_FUNDING_LOG_CHUNK_BLOCKS = 50_000;
+const GNRUS_FUNDING_REORG_BLOCKS = 128;
+
 let _gnrusContractFactory = null;
 let _sdgnrsContractFactory = null;
 let _stateReader = null;
 let _voteWriter = null;
 let _publicProvider = null;
+let _gnrusFundingCache = null;
 
 /** Test-only contract seams. */
 export function __setContractFactoriesForTest({ gnrus, sdgnrs } = {}) {
@@ -54,6 +61,150 @@ export function __resetCharityVoteForTest() {
   _stateReader = null;
   _voteWriter = null;
   _publicProvider = null;
+  _gnrusFundingCache = null;
+}
+
+export function gnrusLifetimeFundingCacheKey() {
+  return [
+    'gnrus-lifetime-funding-v1',
+    Number(CHAIN.id) || 0,
+    Number(CHAIN.deployBlock) || 0,
+    String(CONTRACTS.GAME || '').toLowerCase(),
+  ].join(':');
+}
+
+function _fundingStorage(storage) {
+  if (storage !== undefined) return storage;
+  try { return globalThis.localStorage || null; }
+  catch (_e) { return null; }
+}
+
+function _emptyFundingCache(key) {
+  return {
+    key,
+    version: GNRUS_FUNDING_CACHE_VERSION,
+    throughBlock: Math.max(0, Number(CHAIN.deployBlock) || 0) - 1,
+    events: [],
+  };
+}
+
+function _normalizeFundingEvent(row) {
+  try {
+    const blockNumber = Number(row?.blockNumber);
+    const logIndex = Number(row?.logIndex ?? row?.index ?? 0);
+    const amount = BigInt(row?.amount ?? row?.data ?? 0);
+    if (!Number.isInteger(blockNumber) || blockNumber < 0
+      || !Number.isInteger(logIndex) || logIndex < 0 || amount < 0n) return null;
+    return {
+      blockNumber,
+      logIndex,
+      transactionHash: String(row?.transactionHash || '').toLowerCase(),
+      amount: amount.toString(),
+    };
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _loadFundingCache(storage) {
+  const key = gnrusLifetimeFundingCacheKey();
+  if (_gnrusFundingCache?.key === key) return _gnrusFundingCache;
+  let parsed = null;
+  try { parsed = JSON.parse(storage?.getItem?.(key) || 'null'); }
+  catch (_e) { /* unavailable or stale browser storage */ }
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+  const events = Array.isArray(parsed?.events)
+    ? parsed.events.map(_normalizeFundingEvent).filter(Boolean)
+    : [];
+  _gnrusFundingCache = parsed?.version === GNRUS_FUNDING_CACHE_VERSION
+    && Number.isInteger(Number(parsed?.throughBlock))
+    && Number(parsed.throughBlock) >= deployBlock - 1
+    ? {
+        key,
+        version: GNRUS_FUNDING_CACHE_VERSION,
+        throughBlock: Number(parsed.throughBlock),
+        events,
+      }
+    : _emptyFundingCache(key);
+  return _gnrusFundingCache;
+}
+
+function _saveFundingCache(storage, cache) {
+  _gnrusFundingCache = cache;
+  try {
+    storage?.setItem?.(cache.key, JSON.stringify({
+      version: cache.version,
+      throughBlock: cache.throughBlock,
+      events: cache.events,
+    }));
+  } catch (_e) { /* private mode or quota pressure */ }
+}
+
+function _fundingAmountFromLog(log) {
+  const data = String(log?.data || '');
+  if (!/^0x[0-9a-f]{64}$/i.test(data)) return null;
+  try { return BigInt(data); }
+  catch (_e) { return null; }
+}
+
+/**
+ * Cumulative ETH-equivalent credited to GNRUS by every yield distribution in
+ * this deployment. A short tail is replaced on each read so shallow reorgs do
+ * not double-count or strand an orphaned event; older events stay cached.
+ */
+export async function readGnrusLifetimeFunding({ provider, storage } = {}) {
+  if (!CONTRACTS.GAME) throw new Error('GNRUS funding is unavailable on this network.');
+  const reader = provider || sharedReadProvider();
+  if (!reader || typeof reader.getBlockNumber !== 'function'
+    || typeof reader.getLogs !== 'function') {
+    throw new Error('GNRUS funding needs a public chain reader.');
+  }
+
+  const head = Number(await reader.getBlockNumber());
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+  if (!Number.isInteger(head) || head < deployBlock) return 0n;
+
+  const targetStorage = _fundingStorage(storage);
+  let cache = _loadFundingCache(targetStorage);
+  if (cache.throughBlock > head) cache = _emptyFundingCache(cache.key);
+
+  const fromBlock = cache.throughBlock >= deployBlock
+    ? Math.max(deployBlock, cache.throughBlock - GNRUS_FUNDING_REORG_BLOCKS + 1)
+    : deployBlock;
+  const retained = cache.events.filter((event) => event.blockNumber < fromBlock);
+  const refreshed = [];
+  for (let from = fromBlock; from <= head; from += GNRUS_FUNDING_LOG_CHUNK_BLOCKS) {
+    const to = Math.min(head, from + GNRUS_FUNDING_LOG_CHUNK_BLOCKS - 1);
+    const logs = await reader.getLogs({
+      address: CONTRACTS.GAME,
+      topics: [GNRUS_FUNDING_TOPIC],
+      fromBlock: from,
+      toBlock: to,
+    });
+    for (const log of Array.isArray(logs) ? logs : []) {
+      const amount = _fundingAmountFromLog(log);
+      if (amount == null) continue;
+      const event = _normalizeFundingEvent({
+        blockNumber: log?.blockNumber,
+        logIndex: log?.index ?? log?.logIndex,
+        transactionHash: log?.transactionHash,
+        amount,
+      });
+      if (event) refreshed.push(event);
+    }
+  }
+
+  const events = [...retained, ...refreshed].sort((a, b) => (
+    a.blockNumber - b.blockNumber || a.logIndex - b.logIndex
+  ));
+  cache = {
+    key: cache.key,
+    version: GNRUS_FUNDING_CACHE_VERSION,
+    throughBlock: head,
+    events,
+  };
+  _saveFundingCache(targetStorage, cache);
+  return events.reduce((sum, event) => sum + BigInt(event.amount), 0n);
 }
 
 function _readerProvider() {

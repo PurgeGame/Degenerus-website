@@ -9,10 +9,9 @@ const FLIP_WEI_UNIT = 10n ** 18n;
  * Ladder level (5-20) for a FLIP amount in wei; 0 below pile scale. Most real
  * wagers live between 1K and 50K FLIP, so that whole band stays readable as
  * increasingly tall and numerous dealer stacks. Level 5 opens the loose
- * mound ladder at 100K. Its x1.45 rungs guarantee that any pile-scale win
- * (>=x1.5 payout) lands on a strictly bigger pile. Rungs 1-4 remain unserved
- * because their shallow scatters read as less money than the tidy stacks they
- * would replace.
+ * mound ladder at 100K. Its x1.45 rungs keep the large-wager progression
+ * legible without flooding the felt. Rungs 1-4 remain unserved because their
+ * shallow scatters read as less money than the tidy stacks they would replace.
  */
 const FIRST_PILE_LEVEL = 5;
 const FIRST_PILE_FLIP = 100_000;
@@ -58,10 +57,36 @@ export function flipWagerPreview(amountWei) {
 // Interchangeable compositions baked per rung. Same size, different pile.
 const PILE_VARIANTS = ['a', 'b', 'c'];
 
+// Physical chip counts in the baked pile art, keyed by ladder level and
+// variant. Payout stacks use the count from the exact mound the player saw,
+// so a 96% win adds roughly 96% as many visible chips instead of falling back
+// to the 24-chip cap used by the compact, sub-100K wager lane.
+//
+// Keep this table in sync with pile-N[-b|-c].svg when build-piles.py is run.
+// Each value is the number of rendered `<use href="#c...">` coin instances.
+const PILE_CHIP_COUNTS = Object.freeze({
+  5: Object.freeze({ a: 37, b: 37, c: 37 }),
+  6: Object.freeze({ a: 46, b: 42, c: 46 }),
+  7: Object.freeze({ a: 50, b: 52, c: 52 }),
+  8: Object.freeze({ a: 56, b: 57, c: 59 }),
+  9: Object.freeze({ a: 90, b: 80, c: 82 }),
+  10: Object.freeze({ a: 103, b: 93, c: 105 }),
+  11: Object.freeze({ a: 97, b: 93, c: 95 }),
+  12: Object.freeze({ a: 98, b: 100, c: 115 }),
+  13: Object.freeze({ a: 126, b: 164, c: 168 }),
+  14: Object.freeze({ a: 141, b: 179, c: 152 }),
+  15: Object.freeze({ a: 150, b: 150, c: 158 }),
+  16: Object.freeze({ a: 150, b: 151, c: 144 }),
+  17: Object.freeze({ a: 142, b: 149, c: 153 }),
+  18: Object.freeze({ a: 148, b: 156, c: 144 }),
+  19: Object.freeze({ a: 148, b: 153, c: 149 }),
+  20: Object.freeze({ a: 180, b: 169, c: 176 }),
+});
+
 /**
  * Which of a rung's compositions this wager shows. Keyed off the stake, so a
- * bet keeps ONE pile all day — the reveal holds it and grows it in place —
- * while two players at the same rung are not staring at the same mound.
+ * bet keeps ONE pile all day and its payout arithmetic can count that exact
+ * composition, while two players at the same rung do not stare at twins.
  */
 export function flipPileVariant(amountWei) {
   let wei;
@@ -69,6 +94,13 @@ export function flipPileVariant(amountWei) {
   catch (_error) { return PILE_VARIANTS[0]; }
   if (wei < 0n) wei = -wei;
   return PILE_VARIANTS[Number(wei % BigInt(PILE_VARIANTS.length))];
+}
+
+/** Number of physical chips visible in this wager's exact baked pile. */
+export function flipPileChipCount(amountWei) {
+  const level = flipPileLevel(amountWei);
+  if (level === 0) return 0;
+  return PILE_CHIP_COUNTS[level]?.[flipPileVariant(amountWei)] ?? 0;
 }
 
 /** The baked pile art for a ladder level and composition. */

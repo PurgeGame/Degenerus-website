@@ -144,6 +144,19 @@ describe('burnSdgnrs', () => {
     assert.deepEqual(fake._calls.at(-1), ['preview', 25n * TOKEN]);
   });
 
+  test('can preview through the public read path without a connected wallet', async () => {
+    contractsMod.clearProvider();
+    const fake = makeFakeContract({ preview: [17n, 33n] });
+    sdgnrsMod.__setContractFactoryForTest(() => fake);
+
+    const result = await sdgnrsMod.previewSdgnrsBurn({
+      amount: TOKEN,
+      publicRead: true,
+    });
+
+    assert.deepEqual(result, { ethOut: 17n, flipOut: 33n });
+  });
+
   test('rejects a sub-token burn before constructing a contract', async () => {
     let builds = 0;
     sdgnrsMod.__setContractFactoryForTest(() => { builds += 1; return makeFakeContract(); });
@@ -174,6 +187,18 @@ describe('burnSdgnrs', () => {
       sdgnrsMod.burnSdgnrs({ amount: TOKEN }),
       (caught) => caught.code === 'BurnsBlockedDuringRng'
         && /after rng settles/i.test(caught.userMessage),
+    );
+  });
+
+  test('uses DGNRS copy for wrapped burn failures', async () => {
+    const error = new Error('reverted');
+    error.revert = { name: 'Insufficient' };
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
+
+    await assert.rejects(
+      sdgnrsMod.burnDgnrs({ amount: TOKEN }),
+      (caught) => /not enough DGNRS/i.test(caught.userMessage)
+        && !/sDGNRS/i.test(caught.userMessage),
     );
   });
 

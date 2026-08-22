@@ -119,6 +119,21 @@ body.layout-basic :is(.df-bet-oval, .df-tomorrow-bet-oval) {
     0 0 0 1px rgba(10, 4, 4, 0.5);
 }
 
+/* Payout mounds intentionally spill past Today's printed oval toward the
+   side betting fixtures. Keep those physical chips whole, and let them pass
+   in front of the auto-rebuy spot instead of being sliced at the blue line. */
+body.layout-basic .jackpot-hero .df-bet-oval {
+  overflow: visible;
+}
+
+body.layout-basic .jackpot-hero .df-auto-rebuy-cta {
+  z-index: 2;
+}
+
+body.layout-basic .jackpot-hero .df-bet-table {
+  z-index: 3;
+}
+
 /* Both live and staged wagers use the same blue table paint and label ink. */
 body.layout-basic :is(.df-bet-table__today-label, .df-tomorrow-layout__felt-label) {
   color: #9db8ee;
@@ -389,20 +404,21 @@ body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) > .
 @keyframes df-chip-arrive {
   0% {
     opacity: 0;
-    transform: translateX(-50%) translateY(-0.5rem) scale(0.85);
+    transform: translateX(-50%) translateY(-0.5rem) scale(0.85) scaleX(var(--df-chip-mirror, 1));
   }
   62% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0.06rem) scale(1.02);
+    transform: translateX(-50%) translateY(0.06rem) scale(1.02) scaleX(var(--df-chip-mirror, 1));
   }
   100% {
     opacity: 1;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scaleX(var(--df-chip-mirror, 1));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .df-bet-chip,
+  body.layout-basic .df-payout-chip-stack,
   body.layout-basic .df-bet-table.is-add-bet {
     animation: none;
   }
@@ -483,6 +499,97 @@ body.layout-basic .df-today-winnings-row[data-state="win"] {
   background: radial-gradient(92% 100% at 50% 100%, rgba(127, 163, 240, 0.08), transparent 70%);
 }
 
+/* Once the wager itself is a mound, winnings become a physical field over
+   that same footprint. Each item is a complete dealer-neat stack; shallow
+   grid rows overlap like table depth instead of shrinking 100+ payout chips
+   into one tiny flex row. The first depth row can sit behind the old pile,
+   while every nearer row and its clean top stays visible in front. */
+body.layout-basic .df-today-winnings-row[data-layout="pile"] {
+  position: absolute;
+  inset: -0.34rem 0 0.78rem;
+  display: block;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.layout-basic .df-today-winnings-row[data-layout="pile"]
+  .df-bet-chip-rack[data-payout-layout="pile"] {
+  --df-payout-stack-width: 1.42rem;
+  position: absolute;
+  inset: 0 -2.6rem;
+  display: grid;
+  width: auto;
+  max-width: none;
+  height: auto;
+  grid-template-columns: repeat(var(--df-payout-columns), var(--df-payout-stack-width));
+  grid-template-rows: repeat(var(--df-payout-rows), 0.38rem);
+  place-content: end center;
+  gap: 0 0.03rem;
+  overflow: visible;
+}
+
+body.layout-basic .df-payout-chip-stack {
+  --df-payout-mirror: 1;
+  z-index: 4;
+  display: block;
+  width: var(--df-payout-stack-width);
+  max-width: none;
+  height: auto;
+  align-self: end;
+  justify-self: center;
+  grid-column: var(--df-payout-column);
+  grid-row: var(--df-payout-row);
+  filter: drop-shadow(0 0.07rem 0.07rem rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  transform: scaleX(var(--df-payout-mirror));
+  transform-origin: center bottom;
+  animation: df-payout-stack-arrive 0.42s cubic-bezier(0.2, 0.84, 0.3, 1)
+    var(--df-payout-delay, 0s) backwards;
+}
+
+body.layout-basic .df-payout-chip-stack[data-payout-turn="mirror"] {
+  --df-payout-mirror: -1;
+}
+
+body.layout-basic .df-payout-chip-stack[data-payout-layer="behind"] {
+  z-index: 2;
+  filter: brightness(0.84) drop-shadow(0 0.05rem 0.06rem rgba(0, 0, 0, 0.5));
+}
+
+@keyframes df-payout-stack-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.52rem) scale(0.88) scaleX(var(--df-payout-mirror));
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(0.05rem) scale(1.02) scaleX(var(--df-payout-mirror));
+  }
+  100% {
+    opacity: 1;
+    transform: scaleX(var(--df-payout-mirror));
+  }
+}
+
+@media (min-width: 521px) {
+  body.layout-basic .df-today-winnings-row[data-layout="pile"] {
+    inset: -0.52rem 0 0.78rem;
+  }
+
+  body.layout-basic .df-today-winnings-row[data-layout="pile"]
+    .df-bet-chip-rack[data-payout-layout="pile"] {
+    --df-payout-stack-width: 1.58rem;
+    right: -3.2rem;
+    left: -3.2rem;
+    grid-template-rows: repeat(var(--df-payout-rows), 0.42rem);
+  }
+}
+
 /* ------------------------------------------------ *
  *  Wager chip stacks — face-on casino chip columns  *
  * ------------------------------------------------ */
@@ -535,11 +642,12 @@ body.layout-basic .df-bet-chip-rack {
   max-width: 100%;
 }
 
-/* Every wager coin is the canonical /shared/flip-chips/ art: piles alternate
-   the red and green coin bodies, and the split-logo face is baked into the
-   asset itself. Buried coins hide their faces behind the coin above (the
+/* Every wager coin is the canonical /shared/flip-chips/ art. Face turns and
+   mirrors vary how much red/green edge is exposed without inventing chip
+   denominations. Buried coins hide their faces behind the coin above (the
    asset's wall band is >=28% of its height; rise never exceeds 26%). */
 body.layout-basic .df-bet-chip {
+  --df-chip-mirror: 1;
   box-sizing: border-box;
   width: min(var(--df-chip-width), 100%);
   overflow: visible;
@@ -550,8 +658,15 @@ body.layout-basic .df-bet-chip {
   filter: drop-shadow(0 0.05rem 0.05rem rgba(0, 0, 0, 0.45));
 }
 
-body.layout-basic .df-bet-chip-stack:nth-child(2n) .df-bet-chip {
+body.layout-basic .df-bet-chip[data-chip-turn="1"],
+body.layout-basic .df-bet-chip[data-chip-turn="3"],
+body.layout-basic .df-bet-chip-stack:nth-child(2n) .df-bet-chip:not([data-chip-turn]) {
   background-image: url('/shared/flip-chips/coin-spun.svg');
+}
+
+body.layout-basic .df-bet-chip[data-chip-turn="2"],
+body.layout-basic .df-bet-chip[data-chip-turn="3"] {
+  --df-chip-mirror: -1;
 }
 
 /* AUTO-PILES begin — generated by shared/flip-chips/build-piles.py */
@@ -1167,7 +1282,7 @@ body.layout-basic .df-bet-oval {
 body.layout-basic .df-bet-chip:nth-child(2n),
 body.layout-basic .df-bet-chip:nth-child(2n + 1),
 body.layout-basic .df-bet-chip.is-top {
-  transform: translateX(-50%);
+  transform: translateX(-50%) scaleX(var(--df-chip-mirror, 1));
 }
 
 body.layout-basic .df-bet-chip.is-top::after {
@@ -1739,8 +1854,7 @@ body.layout-basic .df-add-bet-dialog__chip-scene {
   pointer-events: none;
 }
 
-body.layout-basic .df-add-bet-dialog__chip-pile,
-body.layout-basic .df-add-bet-dialog__value-chip {
+body.layout-basic .df-add-bet-dialog__chip-pile {
   display: block;
   max-width: none;
   object-fit: contain;
@@ -1824,7 +1938,7 @@ body.layout-basic .df-add-bet-dialog__value input {
   min-width: 0;
   height: 100%;
   box-sizing: border-box;
-  padding: 0 4.3rem 0 3.25rem;
+  padding: 0 4.3rem;
   border: 0;
   outline: 0;
   background: transparent;
@@ -1857,17 +1971,6 @@ body.layout-basic .df-add-bet-dialog__value b {
   font: inherit;
   letter-spacing: 0.015em;
   text-shadow: 0 0 7px rgba(245, 158, 11, 0.48);
-  transform: translateY(-50%);
-}
-
-body.layout-basic .df-add-bet-dialog__value-chip {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  left: 0.6rem;
-  width: 1.95rem;
-  height: 1.95rem;
-  filter: drop-shadow(0 0 0.3rem rgba(245, 158, 11, 0.2));
   transform: translateY(-50%);
 }
 
@@ -2073,15 +2176,8 @@ body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:disabled {
   }
 
   body.layout-basic .df-add-bet-dialog__value input {
-    padding-right: 3.9rem;
-    padding-left: 2.95rem;
+    padding-inline: 3.9rem;
     font-size: var(--hero-box-currency-font-size, 0.92rem);
-  }
-
-  body.layout-basic .df-add-bet-dialog__value-chip {
-    left: 0.5rem;
-    width: 1.8rem;
-    height: 1.8rem;
   }
 }
 

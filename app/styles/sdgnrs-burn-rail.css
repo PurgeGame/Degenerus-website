@@ -1,12 +1,12 @@
 /* Compact DGNRS utility rail below AFKING PASSES. */
 
 body.layout-basic #afking-passes {
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.65rem;
 }
 
 body.layout-basic app-sdgnrs-burn-rail {
   display: block;
-  margin: 0 0 clamp(1rem, 3vw, 1.5rem);
+  margin: 0 0 0.65rem;
 }
 
 body.layout-basic app-sdgnrs-burn-rail[hidden],
@@ -20,9 +20,9 @@ body.layout-basic .sdgnrs-rail {
   display: grid;
   box-sizing: border-box;
   min-height: 3.15rem;
-  grid-template-columns: 2.8rem minmax(14.25rem, 1.12fr) minmax(13rem, 0.88fr) auto;
+  grid-template-columns: 2.8rem minmax(0, 1.2fr) 5.3rem minmax(0, 1fr) minmax(0, 1fr) 5.3rem;
   align-items: stretch;
-  gap: 0;
+  column-gap: 0.3rem;
   overflow: hidden;
   padding: 0.2rem 0.22rem 0.2rem 0.3rem;
   border: 1px solid rgba(170, 124, 221, 0.48);
@@ -62,6 +62,8 @@ body.layout-basic .sdgnrs-rail::after {
 body.layout-basic .sdgnrs-rail__logo {
   position: relative;
   z-index: 1;
+  grid-column: 1;
+  grid-row: 1;
   width: 2.55rem;
   height: 2.55rem;
   align-self: center;
@@ -115,6 +117,21 @@ body.layout-basic .sdgnrs-rail__logo + .sdgnrs-rail__metric,
 body.layout-basic .sdgnrs-rail__metric + .sdgnrs-rail__metric {
   border-left: 1px solid rgba(192, 156, 215, 0.17);
 }
+
+body.layout-basic .sdgnrs-rail__metric--balances { grid-column: 2; grid-row: 1; }
+body.layout-basic .sdgnrs-rail__burn { grid-column: 3; grid-row: 1; }
+body.layout-basic .sdgnrs-rail__metric--value {
+  grid-column: 4;
+  grid-row: 1;
+  border-left: 1px solid rgba(192, 156, 215, 0.17);
+}
+body.layout-basic .sdgnrs-rail__metric--gnrus { grid-column: 5; grid-row: 1; }
+body.layout-basic .sdgnrs-rail__vote { grid-column: 6; grid-row: 1; }
+
+/* Keep the stable action wrapper for cached component markup, but let its two
+   buttons occupy the rail grid independently instead of collapsing together
+   in one far-right cell. */
+body.layout-basic .sdgnrs-rail__actions { display: contents; }
 
 body.layout-basic .sdgnrs-rail__metric > small {
   overflow: hidden;
@@ -199,18 +216,32 @@ body.layout-basic .sdgnrs-rail__flip {
   text-shadow: 0 0 9px rgba(178, 119, 238, 0.16);
 }
 
-body.layout-basic .sdgnrs-rail__actions {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
+body.layout-basic .sdgnrs-rail__metric--gnrus > small {
+  color: #ac91ba;
+}
+
+body.layout-basic .sdgnrs-rail__gnrus {
+  gap: 0.2rem;
+}
+
+body.layout-basic .sdgnrs-rail__gnrus > b:first-child {
+  color: #ddbcff;
+  text-shadow: 0 0 9px rgba(183, 124, 238, 0.18);
+}
+
+body.layout-basic .sdgnrs-rail__gnrus > em {
+  color: #9e8aaa;
+  font: 800 0.47rem/1 "Inter", system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.04em;
 }
 
 body.layout-basic .sdgnrs-rail__vote,
 body.layout-basic .sdgnrs-rail__burn {
   position: relative;
   box-sizing: border-box;
+  min-width: 0;
+  width: 5.3rem;
   min-height: 2.55rem;
   align-items: center;
   overflow: hidden;
@@ -223,7 +254,6 @@ body.layout-basic .sdgnrs-rail__burn {
 
 body.layout-basic .sdgnrs-rail__vote {
   display: grid;
-  min-width: 4.75rem;
   grid-template-columns: 1rem auto;
   gap: 0.3rem;
   padding: 0.32rem 0.62rem 0.32rem 0.48rem;
@@ -245,9 +275,17 @@ body.layout-basic .sdgnrs-rail__vote > span {
   text-shadow: 0 0 7px rgba(224, 183, 255, 0.62);
 }
 
+body.layout-basic .sdgnrs-rail__vote-label {
+  display: grid;
+  gap: 0.08rem;
+  line-height: 0.88;
+  text-align: left;
+}
+
+body.layout-basic .sdgnrs-rail__vote-label > span { display: block; }
+
 body.layout-basic .sdgnrs-rail__burn {
   display: grid;
-  min-width: 5.65rem;
   grid-template-columns: 1.34rem auto;
   gap: 0.42rem;
   padding: 0.32rem 0.72rem 0.32rem 0.48rem;
@@ -302,8 +340,15 @@ body.layout-basic .sdgnrs-rail__burn:disabled {
 body.layout-basic .sdgnrs-rail__burn:disabled img { filter: grayscale(1) opacity(0.35); }
 body.layout-basic .sdgnrs-rail.is-readonly { border-style: dashed; }
 
-body.layout-basic .sdgnrs-rail.is-loading :is(.sdgnrs-rail__balances, .sdgnrs-rail__value) {
+body.layout-basic .sdgnrs-rail.is-loading :is(
+  .sdgnrs-rail__balances,
+  .sdgnrs-rail__metric--value .sdgnrs-rail__value
+) {
   opacity: 0.5;
+}
+
+body.layout-basic .sdgnrs-rail.is-gnrus-loading .sdgnrs-rail__gnrus {
+  opacity: 0.62;
 }
 
 /* DGNRS/sDGNRS chooser inside the existing redemption dialog. */
@@ -342,10 +387,28 @@ body.layout-basic .df-burn-dialog__asset button:disabled {
 @media (max-width: 620px) {
   body.layout-basic .sdgnrs-rail {
     min-height: 3.2rem;
-    grid-template-columns: 2.38rem minmax(0, 0.98fr) minmax(0, 1.12fr) auto;
+    grid-template-columns: 2.38rem minmax(0, 1fr) 3.3rem minmax(0, 1fr) 3.3rem;
+    grid-template-rows: 3.2rem 2.55rem;
+    column-gap: 0.22rem;
     padding: 0.2rem;
   }
-  body.layout-basic .sdgnrs-rail__logo { width: 2.28rem; height: 2.28rem; }
+  body.layout-basic .sdgnrs-rail__logo {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    width: 2.28rem;
+    height: 2.28rem;
+  }
+  body.layout-basic .sdgnrs-rail__metric--balances { grid-column: 2; grid-row: 1; }
+  body.layout-basic .sdgnrs-rail__burn { grid-column: 3; grid-row: 1; }
+  body.layout-basic .sdgnrs-rail__metric--value { grid-column: 4 / 6; grid-row: 1; }
+  body.layout-basic .sdgnrs-rail__metric--gnrus {
+    display: flex;
+    grid-column: 2 / 5;
+    grid-row: 2;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid rgba(192, 156, 215, 0.13);
+  }
   body.layout-basic .sdgnrs-rail__metric { gap: 0.12rem; padding: 0.12rem 0.18rem; }
   body.layout-basic .sdgnrs-rail__metric > small { font-size: 0.34rem; letter-spacing: 0.055em; }
   body.layout-basic .sdgnrs-rail__balances { gap: 0.12rem; font-size: 0.56rem; }
@@ -355,9 +418,10 @@ body.layout-basic .df-burn-dialog__asset button:disabled {
   body.layout-basic .sdgnrs-rail__value { gap: 0.14rem; font-size: 0.56rem; }
   body.layout-basic .sdgnrs-rail__value > i { font-size: 0.44rem; }
   body.layout-basic .sdgnrs-rail__flip { font-size: 0.5rem !important; }
-  body.layout-basic .sdgnrs-rail__actions { gap: 0.22rem; }
+  body.layout-basic .sdgnrs-rail__vote { grid-column: 5; grid-row: 2; }
   body.layout-basic .sdgnrs-rail__vote,
   body.layout-basic .sdgnrs-rail__burn {
+    width: 3.3rem;
     min-height: 2.55rem;
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
@@ -365,10 +429,9 @@ body.layout-basic .df-burn-dialog__asset button:disabled {
     font-size: 0.56rem;
     letter-spacing: 0.07em;
   }
-  body.layout-basic .sdgnrs-rail__vote { min-width: 3.05rem; }
-  body.layout-basic .sdgnrs-rail__burn { min-width: 3.55rem; }
   body.layout-basic .sdgnrs-rail__vote > span,
   body.layout-basic .sdgnrs-rail__burn-emblem { display: none; }
+  body.layout-basic .sdgnrs-rail__vote-label { text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

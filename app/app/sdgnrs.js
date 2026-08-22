@@ -96,32 +96,32 @@ function _buildContract(signerOrProvider) {
   return new ethers.Contract(CONTRACTS.SDGNRS, SDGNRS_ABI, signerOrProvider);
 }
 
-function _burnError(error) {
+function _burnError(error, asset = 'sDGNRS') {
   const name = error?.revert?.name || error?.errorName || null;
   const local = {
     Insufficient: {
       code: 'Insufficient',
-      userMessage: 'Not enough sDGNRS for that burn.',
+      userMessage: `Not enough ${asset} for that burn.`,
       recoveryAction: 'Lower the burn amount.',
     },
     BurnTooSmall: {
       code: 'BurnTooSmall',
-      userMessage: 'Minimum burn is 1 sDGNRS.',
-      recoveryAction: 'Enter at least 1 sDGNRS.',
+      userMessage: `Minimum burn is 1 ${asset}.`,
+      recoveryAction: `Enter at least 1 ${asset}.`,
     },
     BurnsBlockedDuringRng: {
       code: 'BurnsBlockedDuringRng',
-      userMessage: 'sDGNRS burns reopen after RNG settles.',
+      userMessage: `${asset} burns reopen after RNG settles.`,
       recoveryAction: 'Wait for the current RNG request.',
     },
     BurnsBlockedBeforeDailyRng: {
       code: 'BurnsBlockedBeforeDailyRng',
-      userMessage: "Wait for today's draw before burning sDGNRS.",
+      userMessage: `Wait for today's draw before burning ${asset}.`,
       recoveryAction: 'Try again after the daily RNG lands.',
     },
     BurnsBlockedDuringLiveness: {
       code: 'BurnsBlockedDuringLiveness',
-      userMessage: 'sDGNRS burns are paused during the game-over check.',
+      userMessage: `${asset} burns are paused during the game-over check.`,
       recoveryAction: 'Wait for the game state to settle.',
     },
     PriorDayUnresolved: {
@@ -136,7 +136,7 @@ function _burnError(error) {
     },
   }[name];
   const decoded = local || decodeRevertReason(error);
-  const wrapped = new Error(decoded.userMessage || 'sDGNRS burn failed.');
+  const wrapped = new Error(decoded.userMessage || `${asset} burn failed.`);
   wrapped.code = decoded.code;
   wrapped.userMessage = decoded.userMessage;
   wrapped.recoveryAction = decoded.recoveryAction;
@@ -423,7 +423,7 @@ export async function burnDgnrs({ amount } = {}) {
   const signer = provider ? await provider.getSigner() : null;
   if (signer) {
     const sim = await requireStaticCall(_buildContract(signer), 'burnWrapped', [amountWei], signer);
-    if (!sim.ok) throw _burnError(sim.error);
+    if (!sim.ok) throw _burnError(sim.error, 'DGNRS');
   }
 
   try {
@@ -434,7 +434,7 @@ export async function burnDgnrs({ amount } = {}) {
     const { submissions } = parseSdgnrsRedemptionReceipt(receipt, connected);
     return { receipt, amount: amountWei, submissions };
   } catch (error) {
-    if (error?.revert?.name || error?.errorName) throw _burnError(error);
+    if (error?.revert?.name || error?.errorName) throw _burnError(error, 'DGNRS');
     throw error;
   }
 }

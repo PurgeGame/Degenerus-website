@@ -9,6 +9,7 @@ import { fetchJSON } from '../app/api.js';
 import { registerComponentPoll } from '../app/component-poll.js';
 import { TX_CONFIRMED_EVENT } from '../app/contracts.js';
 import { displayEth } from '../app/scaling.js';
+import { readGnrusLifetimeFunding } from '../app/charity-vote.js';
 import {
   formatSdgnrsRedemptionAmount,
   previewSdgnrsBurn,
@@ -54,6 +55,20 @@ export function formatBurnRailEth(value) {
   return formatBurnRailSignificant(displayEth(_wei(value), 12));
 }
 
+/** Format the protocol-wide GNRUS allocation without throwing away useful cents. */
+export function formatGnrusLifetimeFunding(value) {
+  if (value == null) return '—';
+  try {
+    const raw = BigInt(value);
+    if (raw < 0n) return '—';
+    const [whole, fraction = ''] = displayEth(raw, 3).split('.');
+    const trimmed = fraction.replace(/0+$/, '');
+    return `${BigInt(whole).toLocaleString('en-US')}${trimmed ? `.${trimmed}` : ''}`;
+  } catch (_e) {
+    return '—';
+  }
+}
+
 /** Pure balance extraction shared by render code and tests. */
 export function burnRailBalances(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -91,6 +106,9 @@ export class AppSdgnrsBurnRail extends HTMLElement {
   #quote = null;
   #quoteAmount = null;
   #quotePending = false;
+  #gnrusFunding = null;
+  #gnrusFundingPending = false;
+  #gnrusFundingSeq = 0;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -131,13 +149,15 @@ export class AppSdgnrsBurnRail extends HTMLElement {
     this.#refreshQueued = false;
     this.#fetchSeq += 1;
     this.#quoteSeq += 1;
+    this.#gnrusFundingSeq += 1;
+    this.#gnrusFundingPending = false;
     this.#initialized = false;
   }
 
   #renderShell() {
     this.innerHTML = `
       <section class="sdgnrs-rail" data-bind="sdr-shell"
-               aria-label="sDGNRS and DGNRS balances with combined expected burn value">
+               aria-label="sDGNRS and DGNRS balances, expected burn value, and all-time GNRUS funding">
         <span class="sdgnrs-rail__logo" role="img" aria-label="sDGNRS">
           <img class="sdgnrs-rail__logo-frame"
                src="/badges-circular/crypto_06_ethereum_purple.svg" alt="">
@@ -169,10 +189,19 @@ export class AppSdgnrsBurnRail extends HTMLElement {
           </strong>
         </span>
 
+        <span class="sdgnrs-rail__metric sdgnrs-rail__metric--gnrus"
+              title="Cumulative stETH yield credited to GNRUS since this deployment began">
+          <small>GNRUS DONATIONS</small>
+          <strong class="sdgnrs-rail__value sdgnrs-rail__gnrus">
+            <b data-bind="sdr-gnrus">—</b><em>ETH</em>
+          </strong>
+        </span>
+
         <span class="sdgnrs-rail__actions">
           <button type="button" class="sdgnrs-rail__vote" data-bind="sdr-vote"
                   aria-haspopup="dialog" title="Open charity vote">
-            <span aria-hidden="true">♥</span><b>VOTE</b>
+            <span aria-hidden="true">♥</span>
+            <b class="sdgnrs-rail__vote-label"><span>CHARITY</span><span>VOTE</span></b>
           </button>
           <button type="button" class="sdgnrs-rail__burn" data-bind="sdr-burn"
                   data-write data-write-locked data-write-lock-title="Balance is loading"
@@ -222,7 +251,7 @@ export class AppSdgnrsBurnRail extends HTMLElement {
     }
     this.#render();
     if (combined) this.#refreshQuote();
-    else this.#queueRefresh();
+    this.#queueRefresh();
   }
 
   #queueRefresh() {
@@ -235,6 +264,7 @@ export class AppSdgnrsBurnRail extends HTMLElement {
   }
 
   async #refresh() {
+    void this.#refreshGnrusFunding();
     if (get('ui.mode') === 'combined') {
       this.#payload = get('app.playerCombined');
       this.#address = null;
@@ -262,6 +292,26 @@ export class AppSdgnrsBurnRail extends HTMLElement {
       this.#refreshQuote();
     } catch (_e) {
       if (seq === this.#fetchSeq && !this.#payload) this.#render();
+    }
+  }
+
+  async #refreshGnrusFunding() {
+    if (this.#gnrusFundingPending) return;
+    const seq = ++this.#gnrusFundingSeq;
+    this.#gnrusFundingPending = true;
+    this.#render();
+    try {
+      const amount = await readGnrusLifetimeFunding();
+      if (!this.#initialized || seq !== this.#gnrusFundingSeq) return;
+      this.#gnrusFunding = _wei(amount);
+    } catch (_e) {
+      // Preserve the previous total through a transient RPC miss. The next
+      // ordinary panel poll retries the reorg tail.
+    } finally {
+      if (this.#initialized && seq === this.#gnrusFundingSeq) {
+        this.#gnrusFundingPending = false;
+        this.#render();
+      }
     }
   }
 
@@ -312,6 +362,7 @@ export class AppSdgnrsBurnRail extends HTMLElement {
     const eth = this.querySelector('[data-bind="sdr-eth"]');
     const flip = this.querySelector('[data-bind="sdr-flip"]');
     const plus = this.querySelector('[data-bind="sdr-plus"]');
+    const gnrus = this.querySelector('[data-bind="sdr-gnrus"]');
 
     if (sdgnrs) {
       sdgnrs.textContent = balances.known
@@ -343,8 +394,14 @@ export class AppSdgnrsBurnRail extends HTMLElement {
       }
     }
     if (plus) plus.hidden = !showFlip;
+    if (gnrus) {
+      gnrus.textContent = this.#gnrusFundingPending && this.#gnrusFunding == null
+        ? '…'
+        : formatGnrusLifetimeFunding(this.#gnrusFunding);
+    }
 
     shell.classList?.toggle('is-loading', !balances.known || this.#quotePending);
+    shell.classList?.toggle('is-gnrus-loading', this.#gnrusFundingPending);
     shell.classList?.toggle('is-readonly', get('ui.mode') !== 'self');
     const burn = this.querySelector('[data-bind="sdr-burn"]');
     const hasMinimum = balances.sdgnrs >= TOKEN_WEI || balances.dgnrs >= TOKEN_WEI;

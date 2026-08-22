@@ -271,24 +271,35 @@ describe('<app-reveal-tray>', () => {
       /degenerus-lootbox-case-medium-v14-locked-front\.webp/,
       'an unknown legacy amount receives the canonical neutral case family',
     );
+    assert.match(
+      lootboxIcon.style.getPropertyValue('--lootbox-case-top-art'),
+      /degenerus-lootbox-case-medium-v14-top\.webp/,
+      'Pending receives the matching top-down render for the selected case family',
+    );
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
     assert.match(action.title, /4× ticket price/);
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
-    assert.match(css, /\.rrt-action--lootbox-summary\s*\{[^}]*grid-template-columns:\s*2\.2rem auto/s,
-      'the compact receipt reserves a dedicated left icon lane');
+    assert.match(css, /\.rrt-action--lootbox-summary\s*\{[^}]*grid-template-columns:\s*2\.8rem auto/s,
+      'the compact receipt gives the case art a full-height left lane');
+    assert.match(css,
+      /\.rrt-action--lootbox-summary \.rrt-lootbox-mini\s*\{[^}]*width:\s*2\.8rem;[^}]*height:\s*2\.8rem;/s,
+      'a single Pending luckbox fills its artwork slot instead of floating inside it');
+    assert.match(css,
+      /\.rrt-lootbox-stack__case\s*\{[^}]*width:\s*2rem !important;[^}]*height:\s*2\.2rem !important;/s,
+      'multi-box Pending receipts enlarge each visible case too');
     assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto(?:;|\s)/s,
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.match(css,
-      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*var\(--lootbox-case-art\)/s,
-      'the mini case uses the value-tier tone through the same case silhouette mask');
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*var\(--lootbox-case-top-art\)/s,
+      'the mini case uses the value-tier tone through the top-down case silhouette mask');
     assert.doesNotMatch(css,
       /\.rrt-lootbox-mini::before\s*\{[^}]*flame-logo\.svg/s,
       'the tiny front view uses the medallion already baked into the case art');
     assert.match(css,
-      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*background:\s*var\(--lootbox-case-art\)[^}]*clip-path:\s*var\(--lootbox-badge-clip\)/s,
-      'Pending restores the metallic red-black-silver emblem above the value-tier wash');
+      /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*background:\s*var\(--lootbox-case-top-art\)[^}]*clip-path:\s*var\(--lootbox-top-badge-clip\)/s,
+      'Pending restores the top-down metallic emblem above the value-tier wash');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 
