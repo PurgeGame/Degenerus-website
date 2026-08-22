@@ -32,6 +32,7 @@ class AppAllInMachineControl extends HTMLElement {
             <span class="jackpot-all-in-socket__pin"></span>
           </span>
         </span>
+        <span class="jackpot-all-in-socket__label" aria-hidden="true">AI</span>
       </span>
       <button type="button" class="jackpot-all-in-button"
               data-bind="all-in-machine-button" aria-label="Open ALL IN choices"

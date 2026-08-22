@@ -59,6 +59,12 @@ describe('cabinet-mounted ALL IN control', () => {
       4,
       'the header exposes a real 2×2 four-pin layout',
     );
+    assert.match(component,
+      /jackpot-all-in-socket__label" aria-hidden="true">AI<\/span>/,
+      'the no-button fitting carries its AI board designator');
+    assert.match(drawingCss,
+      /\.jackpot-all-in-socket__label\s*\{[^}]*top:\s*calc\(100% \+ clamp\([^}]*color:\s*rgba\(207, 184, 116, 0\.38\)[^}]*ui-monospace/s,
+      'AI is faint board silkscreen positioned below the power connector');
     assert.match(drawingCss,
       /\.jackpot-all-in-socket__pins\s*\{[^}]*grid-template-columns:\s*repeat\(2,[^}]*grid-template-rows:\s*repeat\(2,/s,
       'the four contacts stay arranged like an ATX12V motherboard socket');
