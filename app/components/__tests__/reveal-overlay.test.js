@@ -2374,13 +2374,16 @@ describe('reveal-overlay element', () => {
       'the seam release glow resolves from the actual roll color');
     assert.match(APP_CSS,
       /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
-      'compact cases scale the gold case dimensional lock to their clean center panel');
-    assert.doesNotMatch(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__(?:ring|face)\s*\{[^}]*(?:display:\s*none|flame-logo\.svg)/s,
-      'compact cases do not replace the dimensional lock with a flat circular logo');
+      'compact cases keep the accepted proportional badge size on their clean center panel');
     assert.match(APP_CSS,
-      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*rvl-lootbox-badge-red-uncover[\s\S]*?@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*?rotate\(180deg\)/s,
-      'the copied lock uncovers the green half as its red cover turns');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__ring\s*\{\s*display:\s*none;/s,
+      'compact cases remove the generated concentric ring that looked like a backing plate');
+    assert.match(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__face img\s*\{[^}]*content:\s*url\('\/whitepaper\/flame-logo\.svg'\)/s,
+      'compact reveals reuse the exact canonical badge shown on the buy-in cards');
+    assert.match(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge::after\s*\{[^}]*flame-logo-split\.svg[\s\S]*?@keyframes rvl-compact-lootbox-badge-split\s*\{[\s\S]*?opacity:\s*1/s,
+      'the real badge still resolves to its red/green split while it turns');
     assert.match(APP_CSS,
       /@keyframes rvl-case-release\s*\{[\s\S]*to\s*\{[^}]*opacity:\s*1[^}]*transform:\s*none/,
       'the box neither expands nor fades during the handoff');

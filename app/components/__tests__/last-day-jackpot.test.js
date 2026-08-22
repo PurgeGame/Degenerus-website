@@ -277,6 +277,7 @@ globalThis.localStorage = {
 globalThis.fetch = async () => { throw new Error('fetch should not be called in Plan 59-01 tests'); };
 
 function resetDom() {
+  componentPollMod._resetComponentPollsForTests();
   _docBody = makeFakeElement('body');
   globalThis.document.body = _docBody;
   globalThis.document.querySelector = (sel) => _docBody.querySelector(sel);
@@ -302,6 +303,7 @@ async function flushMicrotasks() {
 import * as storeMod from '../../app/store.js';
 import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as componentPollMod from '../../app/component-poll.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as foilClaimMod from '../../app/foil-claim.js';
 import {
@@ -3091,6 +3093,71 @@ describe('foil match pending action', () => {
       contractsMod.clearProvider();
       foilClaimMod.__resetContractFactoryForTest();
       revealMod.__resetForTest();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('a foil pack indexed after the first cabinet read seats on the shared poll catch-up', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const lines = [
+      [1, 70, 130, 200],
+      [2, 71, 131, 201],
+      [3, 72, 132, 202],
+      [4, 73, 133, 203],
+    ];
+    let indexed = false;
+    let foilReads = 0;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      if (!parsed.pathname.endsWith('/foil')) {
+        return { ok: true, json: async () => null };
+      }
+      foilReads += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          address: player,
+          level: 12,
+          present: indexed,
+          multBps: indexed ? 50_000 : null,
+          lines: indexed ? lines : null,
+          claims: [],
+        }),
+      };
+    };
+    try {
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      storeMod.update('app.lastDay', {
+        day: 44,
+        level: 12,
+        summary: {},
+        winners: [],
+        roll1: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+        roll2: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+        status: 'resolved',
+      });
+      await flushMicrotasks();
+
+      const slots = el.querySelectorAll('.ldj-foil-machine-slot');
+      assert.equal(slots.filter((slot) => slot.classList.contains('is-loaded')).length, 0,
+        'the first pre-index response correctly leaves the sockets empty');
+
+      indexed = true;
+      componentPollMod._onVisibilityChangeForTests();
+      await flushMicrotasks();
+
+      assert.ok(foilReads >= 2, 'the cabinet rechecks the same player and level');
+      assert.equal(slots.filter((slot) => slot.classList.contains('is-loaded')).length, 4,
+        'the later authoritative pack seats without a day, level, address, or reload event');
+      el.disconnectedCallback();
+      assert.equal(componentPollMod._componentPollStatsForTests().registered, 0,
+        'detaching the cabinet removes its background refresh');
+    } finally {
       globalThis.fetch = priorFetch;
     }
   });

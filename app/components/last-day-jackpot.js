@@ -60,9 +60,11 @@ import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 import { normalizeLastDayPayload } from '../app/last-day-state.js';
 import { foilPackDisplayLevel } from '../app/active-level.js';
 import { buildDaySummaryPrizes } from '../app/day-summary-prizes.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 const FOIL_MATCH_FLASH_MS = 640;
+const FOIL_REFRESH_INTERVAL_MS = 60_000;
 const DAY_SUMMARY_RECEIPT_REVISION = 'v3';
 
 function _terminalFoilClaimError(error) {
@@ -142,6 +144,7 @@ class LastDayJackpot extends HTMLElement {
   #foilData = null;
   #foilDataKey = null;
   #foilSeq = 0;
+  #foilPollHandle = null;
   #bridgeTimer = null;
   #bridgeAttempts = 0;
   #spinCompleteListener = null;
@@ -1691,7 +1694,7 @@ class LastDayJackpot extends HTMLElement {
   // revealed and publishes the best unclaimed tuple into the shared tray.
   // ---------------------------------------------------------------------------
 
-  async #refreshFoil() {
+  async #refreshFoil({ force = false } = {}) {
     if (this.#viewingPastDay()) {
       this.#foilData = null;
       this.#foilDataKey = null;
@@ -1718,7 +1721,7 @@ class LastDayJackpot extends HTMLElement {
     }
     const seq = ++this.#foilSeq;
     try {
-      const data = await fetchJSON(`/player/${addr}/foil?level=${level}`);
+      const data = await fetchJSON(`/player/${addr}/foil?level=${level}`, { force });
       if (seq !== this.#foilSeq) return; // superseded by a newer refresh
       // A foil record cannot disappear for the same player/level/day. Keep the
       // last indexed pack through a transient empty catch-up response, while
@@ -2242,6 +2245,18 @@ class LastDayJackpot extends HTMLElement {
       })
     );
 
+    // A foil purchase can become visible in the player projection after every
+    // day/level/address signal above has already fired. The Tickets inventory
+    // has always polled that projection, but the cabinet used to read it only
+    // on those signals, so Tickets could show all four foils while these four
+    // sockets stayed empty for the rest of the session. Follow the same quiet
+    // one-minute cadence (and the shared scheduler's immediate visible-tab
+    // catch-up) so an indexed pack seats without requiring a page reload.
+    this.#foilPollHandle = registerComponentPoll(
+      () => { void this.#refreshFoil({ force: true }); },
+      FOIL_REFRESH_INTERVAL_MS,
+    );
+
     // Spin completion powers each foil bank as soon as its four winning
     // quadrants land. Scratch completion separately opens the spoiler/claim
     // gates and feeds the results-CTA "whole board done" state.
@@ -2303,6 +2318,10 @@ class LastDayJackpot extends HTMLElement {
     this.#clearSummaryActivityCache();
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
+    if (typeof this.#foilPollHandle === 'function') {
+      try { this.#foilPollHandle(); } catch { /* defensive */ }
+      this.#foilPollHandle = null;
+    }
     // Invalidate any foil read still in flight BEFORE clearing the tray.
     // #refreshFoil checks this sequence after its await and bails, so a
     // response that lands after teardown cannot render into a detached board
