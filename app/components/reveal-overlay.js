@@ -1263,6 +1263,24 @@ function _normalizedLootboxOrders(seq) {
   return orders;
 }
 
+function _normalizedTicketPackRelease(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const address = String(raw.address || '').toLowerCase();
+  const packs = (Array.isArray(raw.packs) ? raw.packs : [])
+    .map((pack) => ({
+      level: Number(pack?.level),
+      count: Math.max(0, Math.floor(Number(pack?.count) || 0)),
+    }))
+    .filter((pack) => Number.isInteger(pack.level) && pack.level >= 0 && pack.count > 0);
+  if (!address || packs.length === 0) return null;
+  return {
+    address,
+    sourceKey: raw.sourceKey == null ? null : String(raw.sourceKey),
+    settledExpected: Boolean(raw.settledExpected),
+    packs,
+  };
+}
+
 function _lootboxSpecsFromOrders(boxOrders, ticketPriceWei) {
   const specs = [];
   const price = _safeBigInt(ticketPriceWei);
@@ -1457,6 +1475,7 @@ export function normalizeSequence(seq) {
       lootboxSharedCards: breakdown.sharedCards,
       lootboxView: breakdown.boxCount > 1 ? null : 'combined',
       lootboxRelease: validLootboxRelease,
+      ticketPackRelease: _normalizedTicketPackRelease(seq.ticketPackRelease),
       cards,
     };
   }
@@ -2197,7 +2216,11 @@ function _lootboxCompletionEntries(seq) {
   if (seq?.kind !== 'lootbox') return [];
   const supplied = Array.isArray(seq.lootboxCompletions)
     ? seq.lootboxCompletions
-    : [{ presentationId: seq.presentationId, release: seq.lootboxRelease }];
+    : [{
+        presentationId: seq.presentationId,
+        release: seq.lootboxRelease,
+        ticketPackRelease: seq.ticketPackRelease,
+      }];
   const seen = new Set();
   const entries = [];
   for (const entry of supplied) {
@@ -2207,11 +2230,12 @@ function _lootboxCompletionEntries(seq) {
     const release = entry?.release && typeof entry.release === 'object'
       ? { ...entry.release }
       : null;
+    const ticketPackRelease = _normalizedTicketPackRelease(entry?.ticketPackRelease);
     if (!presentationId && !release) continue;
     const identity = presentationId || `release:${String(release?.key || '')}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    entries.push({ presentationId, release });
+    entries.push({ presentationId, release, ticketPackRelease });
   }
   return entries;
 }
@@ -2269,6 +2293,10 @@ export function combineLootboxSequences(sequences, { autoStart = true } = {}) {
     comboBoxNumber: null,
     comboBoxCount: physicalBoxCount,
     comboRewards: false,
+    // A mass-open has one readable grant receipt between the combined case
+    // and any playable BoxSpins. The player's next click launches that whole
+    // verified spin batch; ordinary single-box reveals keep their direct path.
+    massOpenLootboxes: true,
     cards,
     boxSpinCount: boxes.reduce((sum, seq) => sum + Math.max(
       0,
@@ -3530,6 +3558,9 @@ class RevealOverlay extends HTMLElement {
           detail: {
             ...(completion.release || {}),
             presentationId: completion.presentationId,
+            ...(completion.ticketPackRelease
+              ? { ticketPackRelease: completion.ticketPackRelease }
+              : {}),
           },
         }));
       } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
@@ -3785,7 +3816,8 @@ class RevealOverlay extends HTMLElement {
           reducedMotion: true,
           // A mixed receipt still keeps its authored phase order when motion
           // is reduced: settle the spins first, then show the other rewards.
-          directFromLootbox: hasPostSpinRewards,
+          directFromLootbox: !seq.massOpenLootboxes
+            && (seq.autoStart || hasPostSpinRewards),
         });
         if (playedSpin) return;
       }
@@ -4129,7 +4161,7 @@ class RevealOverlay extends HTMLElement {
     const boxSpinCards = seq.cards.filter((card) => Boolean(card.spin));
     if (boxSpinCards.length > 0) {
       const playedSpin = await this.#playLootboxSpinGrant(seq, boxSpinCards, {
-        directFromLootbox: seq.kind === 'lootbox',
+        directFromLootbox: seq.kind === 'lootbox' && !seq.massOpenLootboxes,
       });
       if (playedSpin) return;
     }
@@ -4713,9 +4745,13 @@ class RevealOverlay extends HTMLElement {
         flight.textContent = '';
       }
     } else {
+      const totalSpins = boards.reduce(
+        (sum, board) => sum + Math.max(1, Number(board?.rows?.length) || 0),
+        0,
+      );
       this.#renderSummary(seq, {
         spinGrant: true,
-        spinCount: boards.length,
+        spinCount: seq.massOpenLootboxes ? totalSpins : boards.length,
         includeFoilMatch: reducedMotion && seq.kind === 'foil-match',
       });
       await this.#waitTap();
@@ -4727,7 +4763,10 @@ class RevealOverlay extends HTMLElement {
       const isLast = i === boards.length - 1;
       await this.#playSpinBoard(boards[i], {
         reducedMotion,
-        autoStartFirst: directFromLootbox && !reducedMotion,
+        // The case itself authorizes a direct child. A grant receipt supplies
+        // that authorization explicitly, so neither path needs another
+        // redundant SPIN 1 gate after the player chooses PLAY SPINS.
+        autoStartFirst: !reducedMotion,
         launchFromLootbox: directFromLootbox && !reducedMotion && i === 0,
         sequence: isLast ? seq : null,
         finalLabel: isLast
@@ -6812,9 +6851,29 @@ class RevealOverlay extends HTMLElement {
 
     // A foil comparison already held on its own explicit GOOD LUCK frame. The
     // terminal receipt should contain its rewards, not redraw the same board.
-    const visibleCards = (cards) => (Array.isArray(cards) ? cards : []).filter((item) => (
-      includeFoilMatch || item?.type !== 'foil-match'
-    ));
+    const visibleCards = (cards) => {
+      const shown = (Array.isArray(cards) ? cards : []).filter((item) => (
+        includeFoilMatch || item?.type !== 'foil-match'
+      ));
+      if (!spinGrant || !seq.massOpenLootboxes) return shown;
+      const spinCards = shown.filter((item) => Boolean(item?.spin));
+      if (spinCards.length === 0) return shown;
+      const count = Math.max(1, Math.floor(Number(spinCount) || 0));
+      return [
+        ...shown.filter((item) => !item?.spin),
+        {
+          type: 'spins',
+          rarity: 'rare',
+          icon: ICONS.flame,
+          glyph: null,
+          label: count === 1 ? 'BOX SPIN' : 'BOX SPINS',
+          value: `×${count}`,
+          sub: `${count} verified ${count === 1 ? 'reel' : 'reels'} ready`,
+          countText: null,
+          spin: null,
+        },
+      ];
+    };
     const appendSummaryCard = (target, card) => {
       const displayCard = spinGrant && card.spin
         ? {

@@ -2339,8 +2339,8 @@ describe('reveal-overlay element', () => {
       'the burst has a balanced particle ring');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v6-front.webp', import.meta.url)),
       'the generated alpha WebP ships with the app');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v7-front.webp', import.meta.url)),
-      'the housing-free opener case ships with the app');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp', import.meta.url)),
+      'the housing-free, lens-ghost-free opener case ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v8-front.webp', import.meta.url)),
       'the seamless opener case with an integrated badge ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v12-front.webp', import.meta.url)),
@@ -2491,8 +2491,11 @@ describe('reveal-overlay element', () => {
       /@keyframes rvl-compact-case-seam-release\s*\{[\s\S]*var\(--lootbox-tone\)[\s\S]*var\(--lootbox-tone-rgb\)/,
       'the seam release glow resolves from the actual roll color');
     assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
-      'compact cases keep the accepted proportional badge size on their clean center panel');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge,\s*\.rvl-vessel--lootbox:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
+      'compact cases keep the accepted proportional badge size through every reveal handoff');
+    assert.doesNotMatch(APP_CSS,
+      /rvl-compact-badge-green-turn|data-lootbox-case-model="small"[^{}]*\.rvl-lootbox-badge__ring/,
+      'compact cases reuse the accepted badge turn instead of replacing its ring states');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__center\s*\{[^}]*inset:\s*16\.4%;[^}]*background:\s*radial-gradient/s,
       'the accepted gold badge proportions remain the base mechanism');
@@ -2825,9 +2828,16 @@ describe('reveal-overlay element', () => {
 
   test('OPEN ALL BOXES opens every ready reward from one large combined case', async (t) => {
     const completions = [];
-    const onComplete = (event) => completions.push(event?.detail?.presentationId);
+    const onComplete = (event) => completions.push(event?.detail);
     document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
     t.after(() => document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete));
+    const ticketAddress = '0x00000000000000000000000000000000000000ab';
+    const ticketPackRelease = (index) => ({
+      address: ticketAddress,
+      sourceKey: `lootbox:${index}`,
+      settledExpected: true,
+      packs: [{ level: 12, count: index }],
+    });
     for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
       pendingActionsMod.publishPendingActions(source, [{
         id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
@@ -2837,6 +2847,7 @@ describe('reveal-overlay element', () => {
           queueReveal({
             kind: 'lootbox', lootboxIndex: index, presentationId: `open-all-box:${index}`,
             legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+            ticketPackRelease: ticketPackRelease(index),
           });
         },
       }]);
@@ -2844,6 +2855,7 @@ describe('reveal-overlay element', () => {
     queueReveal({
       kind: 'lootbox', lootboxIndex: 1, presentationId: 'open-all-box:1',
       legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+      ticketPackRelease: ticketPackRelease(1),
     });
     const el = instantiate();
     await tick();
@@ -2871,9 +2883,134 @@ describe('reveal-overlay element', () => {
     finalSummary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
-    assert.deepEqual(completions, [
+    assert.deepEqual(completions.map((detail) => detail.presentationId), [
       'open-all-box:1', 'open-all-box:2', 'open-all-box:3',
     ], 'the one combined receipt completes every original box exactly once');
+    assert.deepEqual(
+      completions.map((detail) => detail.ticketPackRelease?.sourceKey),
+      ['lootbox:1', 'lootbox:2', 'lootbox:3'],
+      'each child ticket award remains attached to its own parent completion',
+    );
+  });
+
+  test('OPEN ALL aggregates selected BoxSpins behind one play action and retires every box once', async (t) => {
+    const address = '0x00000000000000000000000000000000000000ab';
+    const completions = [];
+    const onComplete = (event) => {
+      const key = String(event?.detail?.key || '');
+      completions.push(key);
+      if (key === '2' || key === '3') {
+        pendingActionsMod.clearPendingActions(`open-all-spin-box:${key}`);
+      }
+    };
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete));
+
+    const pendingBoxes = [{
+      key: '2',
+      spin: {
+        legType: 'spin',
+        spinType: 'wwxrp',
+        payout: 2n * 10n ** 18n,
+        reels: [{
+          spinIndex: 0,
+          playerTicket: 0xC3824100n,
+          resultTicket: 0xC7864504n,
+          score: 4,
+        }],
+      },
+    }, {
+      key: '3',
+      spin: {
+        legType: 'spin',
+        betId: 11_026_022_280_916_248_713n,
+        spinType: 'flip',
+        survived: true,
+        payout: 170_100n * 10n ** 18n,
+        reels: [
+          { spinIndex: 0, playerTicket: 4_203_172_354n, resultTicket: 4_136_200_202n, score: 2 },
+          { spinIndex: 1, playerTicket: 3_835_317_537n, resultTicket: 3_380_768_558n, score: 2 },
+          { spinIndex: 2, playerTicket: 3_968_814_117n, resultTicket: 3_937_362_177n, score: 2 },
+        ],
+      },
+    }];
+    for (const box of pendingBoxes) {
+      const source = `open-all-spin-box:${box.key}`;
+      pendingActionsMod.publishPendingActions(source, [{
+        id: `lootbox:${box.key}`,
+        kind: 'lootbox',
+        label: `Luckbox #${box.key}`,
+        state: 'ready',
+        order: Number(box.key),
+        run: async () => {
+          queueReveal({
+            kind: 'lootbox',
+            lootboxIndex: Number(box.key),
+            lootboxRelease: {
+              address,
+              key: box.key,
+              lootboxIndex: Number(box.key),
+            },
+            legs: [box.spin],
+          });
+        },
+      }]);
+    }
+    queueReveal({
+      kind: 'lootbox',
+      lootboxIndex: 1,
+      lootboxRelease: { address, key: '1', lootboxIndex: 1 },
+      legs: [{ legType: 'dgnrs', amount: 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    const openAll = summary.querySelector('.rvl-open-all-cta--lootboxes');
+    assert.ok(openAll);
+    openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 20
+      && summary.querySelector('.rvl-collect-cta')?.textContent !== 'PLAY 4 SPINS'; i += 1) {
+      await tick();
+    }
+
+    const spinZone = el.querySelector('[data-bind="rvl-spin-zone"]');
+    const playAll = summary.querySelector('.rvl-collect-cta');
+    const spinGrantCard = summary.querySelector('.rvl-card--spins');
+    assert.equal(summary.hidden, false,
+      'the mass-open lands on one readable grant receipt before any reel runs');
+    assert.equal(summary.querySelectorAll('.rvl-card--spins').length, 1,
+      'every selected BoxSpin is represented by one aggregate grant card');
+    assert.equal(spinGrantCard?.querySelector('.rvl-card-value')?.textContent, '×4');
+    assert.equal(spinGrantCard?.querySelector('.rvl-card-label')?.textContent, 'BOX SPINS');
+    assert.equal(playAll?.textContent, 'PLAY 4 SPINS');
+    assert.equal(spinZone.hidden, true,
+      'the combined grant waits for the deliberate PLAY SPINS click');
+    playAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 20 && spinZone.hidden; i += 1) await tick();
+
+    assert.equal(spinZone.hidden, false,
+      'the one PLAY SPINS confirmation enters the first selected spin');
+    assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /WWXRP BOX SPIN/);
+    assert.equal(spinZone.querySelectorAll('.rvl-dgn-history-chip').length, 1);
+    spinZone.querySelector('.rvl-dgn-spin-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /FLIP BOX SPIN/);
+    assert.equal(spinZone.querySelectorAll('.rvl-dgn-history-chip').length, 3,
+      'the second selected box retains all three verified reels');
+    spinZone.querySelector('.rvl-dgn-spin-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 10 && completions.length < 3; i += 1) await tick();
+
+    assert.deepEqual(completions, ['1', '2', '3'],
+      'the original and both selected siblings complete exactly once');
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((item) => item.kind === 'lootbox'),
+      false,
+      'no successfully selected box remains in Pending after Open All finishes',
+    );
   });
 
   test('a combined luckbox receipt does not offer its already-opened boxes again', async (t) => {

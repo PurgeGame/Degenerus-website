@@ -61,11 +61,11 @@ describe('lootbox value tone', () => {
             'the large shell exposes the exact steel bridges from its briefcase latches');
         });
       } else {
-        assert.match(assets.lockedFront, /case-v7-front\.webp$/,
-          'layered compact fronts contain no baked badge or circular socket');
+        assert.match(assets.lockedFront, /case-v10-straight-center\.webp$/,
+          'layered compact fronts contain no baked badge, socket, or circular lens ghost');
         assert.match(assets.iconFront, /case-v8-front\.webp$/,
           'standalone icons retain the old integrated badge render');
-        assert.match(assets.retractedFront, /case-v7-front\.webp$/);
+        assert.match(assets.retractedFront, /case-v10-straight-center\.webp$/);
         assert.match(assets.top, /case-v6-top\.webp$/);
         assert.match(assets.cardTop, /case-v6-top\.webp$/);
         assert.match(assets.purchaseTop, /case-v6-top\.webp$/);
@@ -96,6 +96,15 @@ describe('lootbox value tone', () => {
         ['37.25%', '20%', '44%'],
         ['25.4%', '21.5%', '42%'],
       ],
+    );
+  });
+
+  test('publishes the compact badge size directly so no reveal path can inflate its housing', () => {
+    assert.deepEqual(
+      ['small', 'medium', 'large'].map((model) => (
+        lootboxCasePresentation(model).css['--lootbox-case-badge-size']
+      )),
+      ['10.5%', '10.5%', '10.35%'],
     );
   });
 

@@ -315,7 +315,7 @@ describe('transaction history composition', () => {
     element.disconnectedCallback();
   });
 
-  test('starts with all five activity filters selected and filters loaded rows locally', async () => {
+  test('starts with all activity visible, then focuses the category that was clicked', async () => {
     const player = '0x2525252525252525252525252525252525252525';
     store.update('connected.address', player);
     let loads = 0;
@@ -348,9 +348,21 @@ describe('transaction history composition', () => {
 
     const buys = element.querySelector('[data-bind="txh-filter-buys"]');
     buys.dispatchEvent({ type: 'click' });
+    assert.equal(buys.getAttribute('aria-pressed'), 'true');
+    assert.ok(element.querySelector('[data-history-id="buy"]'));
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 1);
+    for (const key of ['jackpots', 'pack-opens', 'lootboxes', 'degenerette']) {
+      const button = element.querySelector(`[data-bind="txh-filter-${key}"]`);
+      assert.equal(button.getAttribute('aria-pressed'), 'false', `${key} is cleared`);
+      assert.doesNotMatch(button.className, /is-selected/);
+    }
+
+    const jackpots = element.querySelector('[data-bind="txh-filter-jackpots"]');
+    jackpots.dispatchEvent({ type: 'click' });
+    assert.equal(jackpots.getAttribute('aria-pressed'), 'true');
     assert.equal(buys.getAttribute('aria-pressed'), 'false');
-    assert.equal(element.querySelector('[data-history-id="buy"]'), null);
-    assert.equal(element.querySelectorAll('tbody')[0].children.length, 4);
+    assert.ok(element.querySelector('[data-history-id="jackpot"]'));
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 1);
     assert.equal(loads, 1, 'filtering the loaded page does not refetch history');
 
     assert.equal(history.transactionHistoryCategory({ type: 'afking-purchase' }), 'buys');

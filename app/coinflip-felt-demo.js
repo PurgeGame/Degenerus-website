@@ -6,6 +6,7 @@
 import {
   coinflipAmountLabel,
   coinflipBetChipCount,
+  coinflipBetChipLayout,
   coinflipBetChipPiles,
   coinflipBetPresentation,
   coinflipPayoutStackArt,
@@ -117,21 +118,27 @@ function renderChipStrip({
     rack.appendChild(pile);
     return;
   }
-  piles.forEach((count, stackIndex) => {
+  coinflipBetChipLayout(amountWei).forEach(({ chips, count, variant }) => {
     const stackNode = document.createElement('span');
     stackNode.className = 'df-bet-chip-stack';
     stackNode.setAttribute('data-chip-count', String(count));
-    const riseStep = Math.min(0.25, 1.15 / Math.max(1, count - 1));
-    for (let index = 0; index < count; index += 1) {
+    stackNode.setAttribute('data-stack-variant', String(variant));
+    chips.forEach(({ rise, scale, shift, tilt, turn }, index) => {
       const chip = document.createElement('i');
       chip.className = [
         'df-bet-chip',
         index === count - 1 ? 'is-top' : '',
       ].filter(Boolean).join(' ');
-      chip.setAttribute('data-chip-turn', String((stackIndex * 2 + index) % 4));
-      chip.setAttribute('style', `--df-chip-rise:calc(var(--df-chip-height) * ${(index * riseStep).toFixed(3)})`);
+      chip.setAttribute('data-chip-turn', String(turn));
+      chip.setAttribute(
+        'style',
+        `--df-chip-rise:calc(var(--df-chip-height) * ${rise.toFixed(3)});`
+          + `--df-chip-shift:${shift.toFixed(2)}%;`
+          + `--df-chip-tilt:${tilt.toFixed(2)}deg;`
+          + `--df-chip-scale:${scale.toFixed(3)}`,
+      );
       stackNode.appendChild(chip);
-    }
+    });
     rack.appendChild(stackNode);
   });
   void host;

@@ -435,7 +435,7 @@ describe('day-wide reveal planning', () => {
     }), 0n, 'an independently proven zero-payout Roll 2 exposes ordinary deposits');
   });
 
-  test('wager piles grow logarithmically: identical FLIP coins, more of them', () => {
+  test('wager piles grow logarithmically into stable, non-repeating messy stacks', () => {
     const unit = 10n ** 18n;
     const count = (amount) => revealPlanning.coinflipBetChipCount(amount * unit);
 
@@ -448,8 +448,8 @@ describe('day-wide reveal planning', () => {
     assert.equal(count(1_000_000_000n), 24,
       'a whale bet caps the spot instead of flooding it');
 
-    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [6, 5, 5],
-      'coins split into table piles of at most seven, near-even heights');
+    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [4, 7, 5],
+      'a representative five-digit wager has three deliberately uneven silhouettes');
     assert.deepEqual(revealPlanning.coinflipBetChipPiles(0n), [],
       'an empty wager has no piles');
     assert.equal(
@@ -458,6 +458,44 @@ describe('day-wide reveal planning', () => {
       revealPlanning.coinflipBetChipCount(43_844n * unit),
       'the piles are exactly the logarithmic coin count, split up',
     );
+    for (const flip of [10_000n, 15_000n, 20_000n, 30_000n, 43_844n, 50_000n, 75_000n, 99_999n]) {
+      const amount = flip * unit;
+      const piles = revealPlanning.coinflipBetChipPiles(amount);
+      assert.equal(
+        piles.reduce((sum, pile) => sum + pile, 0),
+        revealPlanning.coinflipBetChipCount(amount),
+        `${flip} FLIP preserves its complete physical chip count`,
+      );
+      assert.ok(piles.every((pile) => pile >= 1 && pile <= 7),
+        `${flip} FLIP keeps every messy stack inside the felt height`);
+      for (let index = 1; index < piles.length; index += 1) {
+        assert.notEqual(piles[index], piles[index - 1],
+          `${flip} FLIP never places matching-height stacks next to each other`);
+      }
+    }
+    const layout = revealPlanning.coinflipBetChipLayout(43_844n * unit);
+    assert.deepEqual(layout, revealPlanning.coinflipBetChipLayout(43_844n * unit),
+      'the wager seed holds every loose chip still across refreshes');
+    assert.equal(
+      revealPlanning.coinflipBetChipCount(9_000n * unit),
+      revealPlanning.coinflipBetChipCount(10_000n * unit),
+      'the comparison wagers intentionally share one physical chip count',
+    );
+    assert.notDeepEqual(
+      revealPlanning.coinflipBetChipLayout(9_000n * unit),
+      revealPlanning.coinflipBetChipLayout(10_000n * unit),
+      'different wagers can compose the same number of chips differently',
+    );
+    assert.deepEqual(layout.map((stack) => stack.count), [4, 7, 5]);
+    for (let index = 1; index < layout.length; index += 1) {
+      assert.notEqual(layout[index].variant, layout[index - 1].variant,
+        'neighboring stacks always receive different physical mess profiles');
+      assert.notEqual(
+        JSON.stringify(layout[index].chips),
+        JSON.stringify(layout[index - 1].chips),
+        'neighboring stacks never clone the same offsets, pitches, turns, and rises',
+      );
+    }
     assert.deepEqual(
       [99_999n, 100_000n, 150_000n, 250_000n, 500_000n, 1_000_000n, 5_000_000n, 1_000_000_000n]
         .map((flip) => revealPlanning.coinflipBetPresentation(flip * unit)),
@@ -491,7 +529,7 @@ describe('day-wide reveal planning', () => {
 
     // The wager holds its own count no matter what the payout does — the
     // logarithmic curve prices the bet, never the win beside it.
-    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [6, 5, 5]);
+    assert.deepEqual(revealPlanning.coinflipBetChipPiles(43_844n * unit), [4, 7, 5]);
     assert.equal(revealPlanning.coinflipWinChipCount(43_844n * unit, 43_844n * unit), 0,
       'a returned stake is not a payout');
     assert.deepEqual(revealPlanning.coinflipWinChipPiles(0n, 100n * unit), [],
@@ -1698,10 +1736,22 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.deepEqual(
       wagerStacks.map((stack) => stack.getAttribute('data-chip-count')),
-      ['6', '5', '5'],
-      'a common 43K wager remains three substantial dealer stacks',
+      ['4', '7', '5'],
+      'a common 43K wager lands as three substantial uneven stacks',
     );
     assert.ok(wagerStacks.every((stack) => stack.className.includes('df-bet-chip-stack')));
+    for (let index = 1; index < wagerStacks.length; index += 1) {
+      assert.notEqual(
+        wagerStacks[index].getAttribute('data-stack-variant'),
+        wagerStacks[index - 1].getAttribute('data-stack-variant'),
+        'adjacent wager stacks render different mess profiles',
+      );
+      const signature = (stack) => stack.children
+        .map((chip) => `${chip.getAttribute('data-chip-turn')}:${chip.getAttribute('style')}`)
+        .join('|');
+      assert.notEqual(signature(wagerStacks[index]), signature(wagerStacks[index - 1]),
+        'adjacent wager stacks have different chip-by-chip geometry');
+    }
     assert.match(el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
       /Today’s bet|Today's bet: 43,844 FLIP/);
     assert.match(APP_CSS,
@@ -2794,7 +2844,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.deepEqual(
       wagerStacks.map((stack) => stack.getAttribute('data-chip-count')),
-      ['6', '5', '5'],
+      ['4', '7', '5'],
       'the won stake remains in its original three-stack composition',
     );
     const winningsRow = el.querySelector('[data-bind="df-today-winnings-row"]');

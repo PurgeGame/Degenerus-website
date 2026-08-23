@@ -63,7 +63,7 @@ export function transactionHistoryCategory(row) {
   }
   if (type === 'lootbox-result' || type.includes('lootbox-open')) return 'lootboxes';
   // Purchase rows—including lootbox and recurring AFKing orders—belong to
-  // BUYS. Keeping categories exclusive makes switching one button off honest.
+  // BUYS. Exclusive row categories keep the one-button focus behavior honest.
   return 'buys';
 }
 
@@ -1208,8 +1208,8 @@ class AppTransactionHistory extends HTMLElement {
     });
     for (const [key] of HISTORY_FILTERS) {
       this.querySelector(`[data-bind="txh-filter-${key}"]`)?.addEventListener('click', () => {
-        if (this.#filters.has(key)) this.#filters.delete(key);
-        else this.#filters.add(key);
+        this.#filters.clear();
+        this.#filters.add(key);
         this.#paint();
       });
     }

@@ -8059,8 +8059,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
-/* The retracted case raster supplies the recessed socket; this is the one
-   animated lock painted into it. */
+/* The compact raster supplies an uninterrupted center panel. This animated
+   lock is the only circular object mounted over it. */
 .rvl-vessel--lootbox .rvl-lootbox-badge__ring,
 .rvl-vessel--lootbox .rvl-lootbox-badge__center,
 .rvl-vessel--lootbox .rvl-lootbox-badge__face {
@@ -8137,15 +8137,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-charging .rvl-vessel--lootbox .rvl-lootbox-badge__face {
   animation: rvl-lootbox-badge-face-turn var(--rvl-box-charge) cubic-bezier(0.42, 0, 0.18, 1) both;
 }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after {
-  transform: rotate(180deg);
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__center {
-  transform: rotate(-42deg);
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__face {
-  transform: rotate(402deg);
-}
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__ring::after { transform: rotate(180deg); }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__center { transform: rotate(-42deg); }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-badge__face { transform: rotate(402deg); }
 @keyframes rvl-lootbox-badge-red-uncover {
   0%, 6% { transform: rotate(0deg); }
   70%, 100% { transform: rotate(180deg); }
@@ -8161,11 +8155,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   70%, 100% { transform: rotate(402deg); }
 }
 
-/* Compact cases use the accepted proportional red-to-green lock directly on
-   the clean center panel. The badge itself is identical to the gold lock. */
-.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge {
-  width: 10.5%;
-}
+/* Compact cases keep the accepted lock size through every reveal handoff. */
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge,
+.rvl-vessel--lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge { width: 10.5%; }
 
 /* Each compact clasp reads as one continuous piece. Its upper and lower ends
    belong to the lid and body; only the notched middle section at the seam can

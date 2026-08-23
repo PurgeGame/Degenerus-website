@@ -69,7 +69,7 @@ import {
   openLegsFromDegenerettePayouts,
   parseOpenLegsFromReceipt,
 } from '../app/lootbox-legs.js';
-import { recordLootboxTicketPacks } from '../app/pack-watch.js';
+import { lootboxTicketPackRelease } from '../app/pack-watch.js';
 import { compactUiError } from '../app/ui-error.js';
 import {
   readDegeneretteBetSize,
@@ -3460,12 +3460,12 @@ class AppDegenerettePanel extends HTMLElement {
     }
     if (directBoxLegs.length > 0) {
       const address = this.#pendingAddress || getActingAddress();
-      recordLootboxTicketPacks({
+      const ticketPackRelease = lootboxTicketPackRelease({
         address,
         legs: directBoxLegs,
         sourceKey: `degenerette:${String(resolvedBetId ?? '')}`,
         settledExpected: true,
-      }).catch(() => {});
+      });
       // The contract has already settled this recirculated box in the resolve
       // transaction. Keep its contents sealed in presentation, directly after
       // the reels, so OPEN LOOTBOX reveals the real emitted rewards without a
@@ -3475,6 +3475,7 @@ class AppDegenerettePanel extends HTMLElement {
         title: 'DEGENERETTE LUCKBOX',
         legs: directBoxLegs,
         settledExpected: true,
+        ...(ticketPackRelease ? { ticketPackRelease } : {}),
         // OPEN LOOTBOX on the finished Degenerette board arms this already
         // settled sequence's autoStart path. It plays the case animation once,
         // then reveals the emitted rewards without another click or wallet tx.

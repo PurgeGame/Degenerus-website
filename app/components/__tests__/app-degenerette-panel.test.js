@@ -2826,6 +2826,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       lootboxIndex: 0,
       transactionHash: '0xdegenerettebox',
     }, 'the direct box and pending tray share one settlement identity');
+    assert.deepEqual(lootboxSequence?.ticketPackRelease, {
+      address: CONNECTED.toLowerCase(),
+      sourceKey: 'degenerette:42',
+      settledExpected: true,
+      packs: [{ level: 8, count: 2 }],
+    }, 'settled ticket awards wait on the direct parent Luckbox completion');
     assert.deepEqual(lootboxSequence?.legs?.map((leg) => leg.legType), ['opened'],
       'types 0-2 and real opened rewards remain in the genuine Luckbox sequence');
     assert.equal(el.querySelector('.deg-error').hidden, true,

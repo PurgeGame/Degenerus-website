@@ -122,7 +122,7 @@ import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countu
 import { heldBalanceValue } from '../app/balance-hold.js';
 import { degeneretteLimits } from '../app/degenerette.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
-import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
+import { recordPendingPack, lootboxTicketPackRelease } from '../app/pack-watch.js';
 import { BASE_SEPOLIA_FAUCET_URL, isBaseSepolia } from './testnet-beta-banner.js';
 import {
   candidateRecordPayoutWei,
@@ -5004,17 +5004,20 @@ class AppDecimatorPanel extends HTMLElement {
           // reuse it so receipt completion retires that exact indexed action.
           const transactionHash = receipt?.hash || receipt?.transactionHash || null;
           const releaseKey = lootboxPresentationKey(autoBoxIndex, transactionHash);
-          recordLootboxTicketPacks({
+          const ticketPackRelease = lootboxTicketPackRelease({
             address: buyer,
             legs: autoLegs,
-            sourceKey: releaseKey ? `lootbox:${releaseKey}` : null,
-          }).catch(() => {});
+            sourceKey: releaseKey
+              ? `lootbox:${releaseKey}`
+              : transactionHash ? `lootbox-tx:${String(transactionHash).toLowerCase()}` : null,
+          });
           queueReveal({
             kind: 'lootbox',
             lootboxIndex: autoBoxIndex,
             amountWei: lootBoxAmountWei + presaleBoxAmountWei,
             ticketPriceWei: purchaseTicketPriceWei,
             legs: autoLegs,
+            ...(ticketPackRelease ? { ticketPackRelease } : {}),
             lootboxRelease: releaseKey ? {
               address: buyer,
               key: releaseKey,

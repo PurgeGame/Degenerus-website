@@ -184,6 +184,7 @@ const storeMod = await import('../../app/store.js');
 const contractsMod = await import('../../app/contracts.js');
 const lootboxMod = await import('../../app/lootbox.js');
 const pendingActionsMod = await import('../../app/pending-actions.js');
+const packWatchMod = await import('../../app/pack-watch.js');
 const revealMod = await import('../reveal-overlay.js');
 const { pendingBoxesKey, revealedBoxesKey } = await import('../app-box-strip.js');
 const { CHAIN, CONTRACTS } = await import('../../app/chain-config.js');
@@ -277,6 +278,7 @@ describe('app-box-strip', () => {
   afterEach(() => {
     for (const el of activeElements) el.disconnectedCallback();
     activeElements.clear();
+    packWatchMod.stopPackWatch();
     lootboxMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
     globalThis.fetch = ORIGINAL_FETCH;
@@ -1502,6 +1504,80 @@ describe('app-box-strip', () => {
     );
     assert.equal(remounted.querySelectorAll('.bxs-chip').length, 0);
     remounted.disconnectedCallback();
+  });
+
+  test('does not publish settled ticket packs before their parent lootbox is opened', async () => {
+    const transactionHash = '0xpack-after-parent';
+    const resultKey = '91';
+    globalThis.fetch = async (url) => {
+      const href = String(url);
+      let body = { items: [] };
+      if (href.includes('/lootbox/legs')) {
+        body = {
+          items: [{
+            uid: 'settled-ticket-leg',
+            player: ADDR_LC,
+            legType: 'opened',
+            lootboxIndex: Number(resultKey),
+            transactionHash,
+            blockNumber: '230',
+            logIndex: 9,
+            ord: 230_000_009,
+            rewardData: {
+              amount: '10000000000000000',
+              futureLevel: 12,
+              futureTickets: 100,
+              roundedUp: false,
+              flip: '0',
+            },
+          }],
+        };
+      } else if (href.includes('/tickets/by-trait')) {
+        body = {
+          address: ADDR_LC,
+          level: 12,
+          cards: [{
+            cardIndex: 0,
+            status: 'pending',
+            entries: [0, 1, 2, 3].map((entryId) => ({ entryId, traitId: null })),
+          }],
+        };
+      } else if (href.includes('/game/state')) {
+        body = { level: 12, jackpotPhaseFlag: true };
+      }
+      return { ok: true, status: 200, json: async () => body };
+    };
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    packWatchMod.startPackWatch({ getAddress: () => ADDR });
+    for (let i = 0; i < 20
+      && !pendingActionsMod.getPendingActions().some((action) => action.id === `lootbox:${resultKey}`);
+      i += 1) {
+      await tick();
+    }
+
+    const parent = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === `lootbox:${resultKey}`);
+    assert.ok(parent, 'the settled parent remains the only Pending action before presentation');
+    await parent.run();
+    for (let i = 0; i < 10 && packWatchMod.pendingPacks().length === 0; i += 1) await tick();
+    const [queuedParent] = revealMod.__takeQueuedForTest();
+    assert.ok(queuedParent, 'the authoritative parent result is queued but still unopened');
+    assert.equal(packWatchMod.pendingPacks().length, 0,
+      'the child ticket pack stays causally sealed behind its unopened parent');
+
+    document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_COMPLETE_EVENT, {
+      detail: {
+        ...(queuedParent.lootboxRelease || {}),
+        presentationId: queuedParent.presentationId,
+        ticketPackRelease: queuedParent.ticketPackRelease,
+      },
+    }));
+    for (let i = 0; i < 10 && packWatchMod.pendingPacks().length === 0; i += 1) await tick();
+    assert.equal(packWatchMod.pendingPacks().length, 1,
+      'the same genuinely settled ticket award publishes after parent completion');
+    el.disconnectedCallback();
   });
 
   test('persists pending boxes to chainId+address-scoped localStorage', async () => {

@@ -50,7 +50,7 @@ import {
   clearPendingActions,
   reportPendingActionError,
 } from '../app/pending-actions.js';
-import { recordLootboxTicketPacks } from '../app/pack-watch.js';
+import { lootboxTicketPackRelease } from '../app/pack-watch.js';
 import {
   applyLootboxCasePresentation,
   lootboxValuePresentation,
@@ -1535,12 +1535,12 @@ class AppBoxStrip extends HTMLElement {
     const address = this.#addr;
     const key = _boxKey(box);
     if (!address || !key || !Array.isArray(legs) || legs.length === 0) return false;
-    recordLootboxTicketPacks({
+    const ticketPackRelease = lootboxTicketPackRelease({
       address,
       legs,
       sourceKey: `lootbox:${key}`,
       settledExpected,
-    }).catch(() => {});
+    });
     const accepted = queueReveal({
       kind: 'lootbox',
       ...(title ? { title } : {}),
@@ -1550,6 +1550,7 @@ class AppBoxStrip extends HTMLElement {
       boxOrders: _boxOrders(box.boxOrders, box.boxOrder),
       legs,
       settledExpected,
+      ...(ticketPackRelease ? { ticketPackRelease } : {}),
       lootboxRelease: {
         address,
         key,

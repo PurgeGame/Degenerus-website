@@ -47,9 +47,9 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
   small: Object.freeze({
     // Layered UI surfaces use the completely clean panel and add exactly one
     // official badge. The standalone boon icon keeps the old integrated art.
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v7-front.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
     iconFront: '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v7-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
     top: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
     cardTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
     purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
@@ -60,9 +60,9 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   medium: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v7-front.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
     iconFront: '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v7-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
     top: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
     cardTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
     purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
@@ -91,7 +91,7 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
 
 const LOOTBOX_CASE_GEOMETRY = Object.freeze({
   small: Object.freeze({
-    seam: '36%', badgeTop: '63.5%', badgeSize: '13%', badgeStaticSize: '10.5%',
+    seam: '36%', badgeTop: '63.5%', badgeSize: '10.5%', badgeStaticSize: '10.5%',
     topBadgeTop: '77.5%', topBadgeSize: '16.8%', topBadgeScaleY: '0.78',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
     badgeClipFront: 'ellipse(10% 16.5% at 50% 63.5%)',
@@ -100,7 +100,7 @@ const LOOTBOX_CASE_GEOMETRY = Object.freeze({
     priceTop: '37.25%', priceHeight: '20%', priceWidth: '44%',
   }),
   medium: Object.freeze({
-    seam: '36%', badgeTop: '63.5%', badgeSize: '13%', badgeStaticSize: '10.5%',
+    seam: '36%', badgeTop: '63.5%', badgeSize: '10.5%', badgeStaticSize: '10.5%',
     topBadgeTop: '77.5%', topBadgeSize: '16.8%', topBadgeScaleY: '0.78',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
     badgeClipFront: 'ellipse(10% 16.5% at 50% 63.5%)',

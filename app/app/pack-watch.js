@@ -39,6 +39,7 @@ import {
   queueReveal,
   PACK_REVEAL_COMPLETE_EVENT,
   PACK_REVEAL_ABORT_EVENT,
+  LOOTBOX_REVEAL_COMPLETE_EVENT,
 } from '../components/reveal-overlay.js';
 
 // Local reveal state is contract-deployment state, not merely chain state.
@@ -111,6 +112,7 @@ let _refreshQueued = false;
 const _activePackCards = new Map();
 let _completeListener = null;
 let _abortListener = null;
+let _lootboxCompleteListener = null;
 let _jackpotRevealListener = null;
 const _revealedJackpotDays = new Set();
 
@@ -673,13 +675,18 @@ export async function recordPendingPack({
   return true;
 }
 
-/** Register whole-ticket awards carried by a lootbox result. */
-export async function recordLootboxTicketPacks({
+/**
+ * Sanitize the whole-ticket awards carried by one authoritative lootbox
+ * result so they can cross the presentation boundary without publishing yet.
+ */
+export function lootboxTicketPackRelease({
   address,
   legs = [],
   sourceKey = null,
   settledExpected = false,
 } = {}) {
+  const addr = _lower(address);
+  if (!addr) return null;
   const grouped = new Map();
   for (const leg of Array.isArray(legs) ? legs : []) {
     if (leg?.legType !== 'opened') continue;
@@ -688,16 +695,41 @@ export async function recordLootboxTicketPacks({
     if (!Number.isInteger(level) || level < 0 || count <= 0) continue;
     grouped.set(level, (grouped.get(level) || 0) + count);
   }
-  const results = await Promise.all([...grouped.entries()].map(([level, count]) => (
+  if (grouped.size === 0) return null;
+  return {
+    address: addr,
+    sourceKey: sourceKey == null ? null : String(sourceKey),
+    settledExpected: Boolean(settledExpected),
+    packs: [...grouped.entries()].map(([level, count]) => ({ level, count })),
+  };
+}
+
+/** Publish a sanitized ticket-pack release after its parent presentation. */
+export async function recordLootboxTicketPackRelease(release = null) {
+  const addr = _lower(release?.address);
+  if (!addr) return 0;
+  const sourceKey = release?.sourceKey == null ? null : String(release.sourceKey);
+  const packs = (Array.isArray(release?.packs) ? release.packs : [])
+    .map((pack) => ({
+      level: Number(pack?.level),
+      count: _expectedTickets(pack?.count),
+    }))
+    .filter((pack) => Number.isInteger(pack.level) && pack.level >= 0 && pack.count > 0);
+  const results = await Promise.all(packs.map(({ level, count }) => (
     recordPendingPack({
-      address,
+      address: addr,
       level,
       expectedTickets: count,
       sourceKey: sourceKey == null ? null : `${sourceKey}:L${level}`,
-      settledExpected,
+      settledExpected: Boolean(release?.settledExpected),
     })
   )));
   return results.filter(Boolean).length;
+}
+
+/** Register whole-ticket awards carried by a lootbox result immediately. */
+export async function recordLootboxTicketPacks(args = {}) {
+  return recordLootboxTicketPackRelease(lootboxTicketPackRelease(args));
 }
 
 function _jackpotAwardLedgerKey(address) {
@@ -1721,6 +1753,11 @@ export function startPackWatch({ getAddress } = {}) {
       try { addr = _getAddress ? _getAddress() : null; } catch (_e) { addr = null; }
       if (addr) refreshPackWatch();
     };
+    _lootboxCompleteListener = (event) => {
+      const release = event?.detail?.ticketPackRelease;
+      if (!release) return;
+      void recordLootboxTicketPackRelease(release).catch(() => {});
+    };
     _jackpotRevealListener = (event) => {
       if (event?.detail?.complete === false) return;
       const day = Number(event?.detail?.day);
@@ -1729,6 +1766,7 @@ export function startPackWatch({ getAddress } = {}) {
     };
     document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     document.addEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, _lootboxCompleteListener);
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
   }
   _timer = setInterval(refreshPackWatch, WATCH_INTERVAL_MS);
@@ -1790,10 +1828,14 @@ export function stopPackWatch() {
   if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
     if (_completeListener) document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     if (_abortListener) document.removeEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
+    if (_lootboxCompleteListener) {
+      document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, _lootboxCompleteListener);
+    }
     if (_jackpotRevealListener) document.removeEventListener('jackpot:revealed', _jackpotRevealListener);
   }
   _completeListener = null;
   _abortListener = null;
+  _lootboxCompleteListener = null;
   _jackpotRevealListener = null;
   clearSettledCardCache();
   _revealedJackpotDays.clear();
