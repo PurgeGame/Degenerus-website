@@ -186,7 +186,7 @@ const lootboxMod = await import('../../app/lootbox.js');
 const pendingActionsMod = await import('../../app/pending-actions.js');
 const revealMod = await import('../reveal-overlay.js');
 const { pendingBoxesKey, revealedBoxesKey } = await import('../app-box-strip.js');
-const { CHAIN } = await import('../../app/chain-config.js');
+const { CHAIN, CONTRACTS } = await import('../../app/chain-config.js');
 const ORIGINAL_FETCH = globalThis.fetch;
 
 const ADDR = '0xAbCd00000000000000000000000000000000AbCd';
@@ -892,6 +892,212 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('a targeted competing openBox settles the box even though the sweep frontier never moves', async () => {
+    // Someone else called openBox(player, 8) directly (or the sweep opened this
+    // player's entry then ran out of budget mid-index). The boxes are settled
+    // and the rewards are credited, but boxCursorIndex has NOT passed 8, so
+    // boxIndexComplete(8) stays false indefinitely. Only the revert REASON
+    // (NothingToClaim) distinguishes "already opened" from "still waiting".
+    let raced = false;
+    const calls = { complete: 0, staticCall: 0, open: 0 };
+    const nothingToClaim = () => {
+      const err = new Error('execution reverted (unknown custom error)');
+      err.code = 'CALL_EXCEPTION';
+      err.data = '0x969bf728';
+      err.revert = { name: 'NothingToClaim', signature: 'NothingToClaim()', args: [] };
+      return err;
+    };
+    const fake = {
+      // The frontier is stuck below this index: another player's box at 8 is
+      // still unopened, so the sweep has not advanced past it.
+      boxIndexComplete: async () => { calls.complete += 1; return false; },
+      openBox: Object.assign(
+        async () => { calls.open += 1; throw nothingToClaim(); },
+        {
+          staticCall: async () => {
+            calls.staticCall += 1;
+            if (raced) throw nothingToClaim();
+          },
+        },
+      ),
+      queryFilter: async () => [],
+      filters: {},
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    // The indexer has not caught up with the competitor's settlement yet.
+    globalThis.fetch = async () => ({
+      ok: true, status: 200, json: async () => ({ items: [] }),
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+
+    const armed = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.equal(armed.state, 'ready', 'the RNG-ready box is armed to open');
+
+    // The competitor lands between the readiness probe and this click.
+    raced = true;
+    assert.equal(await armed.run(), false, 'the doomed write is not sent');
+    assert.equal(calls.open, 0, 'the pre-flight catches the race before the wallet write');
+
+    const after = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.ok(after, 'the receipt-backed box stays present');
+    assert.equal(after.resolved, true,
+      'NothingToClaim proves settlement even with the sweep frontier behind the index');
+    assert.equal(after.shortLabel, 'Syncing result');
+    assert.equal(after.detail, 'Settlement confirmed · loading the reveal receipt');
+    assert.equal(after.write, false, 'a settled box never offers another wallet write');
+    assert.equal(after.run, null, 'no repeatable doomed action is published');
+
+    // The poll must not demote it back to a dead "Waiting for RNG" row.
+    await el.__pollForTest();
+    const polled = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.ok(polled, 'the box survives the poll');
+    assert.equal(polled.resolved, true,
+      'the poll cannot un-settle a box the chain has stopped accepting');
+    assert.equal(polled.shortLabel, 'Syncing result',
+      'a settled box never regresses to the RNG wait it already cleared');
+    assert.equal(revealMod.__takeQueuedForTest().length, 0,
+      'no popup is fabricated before indexed result legs arrive');
+    el.disconnectedCallback();
+  });
+
+  test('a competitor landing between the probe and the write is recovered from the wrapped revert', async () => {
+    // The tightest window: our readiness probe passes, then the competitor's
+    // openBox mines before our wallet broadcast. openLootBox's own pre-flight
+    // catches it and rethrows through _structuredRevertError, so the raw ethers
+    // error is only reachable on `.cause` — and boxIndexComplete never moves.
+    let clicked = false;
+    let probesAfterClick = 0;
+    let indexed = false;
+    const calls = { open: 0 };
+    const settledLeg = {
+      uid: 'raced-leg-8',
+      player: ADDR_LC,
+      legType: 'spin',
+      lootboxIndex: 8,
+      transactionHash: '0xcompetitoropen',
+      blockNumber: '202',
+      logIndex: 3,
+      ord: 220,
+      spin: {
+        spinType: 'wwxrp', spinCount: 1, payout: '0', ethShare: '0',
+        reels: [{ spinIndex: 0, score: 0, playerTraits: [], resultTraits: [] }],
+      },
+    };
+    const fake = {
+      boxIndexComplete: async () => false,
+      openBox: Object.assign(
+        async () => { calls.open += 1; throw new Error('must not be written'); },
+        {
+          staticCall: async () => {
+            if (!clicked) return undefined; // background polls: the box is still live
+            probesAfterClick += 1;
+            // The strip's readiness probe still sees a live box; openLootBox's
+            // own pre-flight, one RPC later, is already too late.
+            if (probesAfterClick === 1) return undefined;
+            // The competitor's settlement legs index while our write is rejected.
+            indexed = true;
+            const err = new Error('execution reverted (unknown custom error)');
+            err.code = 'CALL_EXCEPTION';
+            err.revert = { name: 'NothingToClaim', signature: 'NothingToClaim()', args: [] };
+            throw err;
+          },
+        },
+      ),
+      queryFilter: async () => [],
+      filters: {},
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => (indexed && String(url).includes('lootboxIndex=8')
+        ? { items: [settledLeg] }
+        : { items: [] }),
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+
+    const action = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    clicked = true;
+    assert.equal(await action.run(), true,
+      'the wrapped NothingToClaim replays the competitor-settled result');
+    assert.equal(probesAfterClick, 2, 'the race opened between the two pre-flights');
+    assert.equal(calls.open, 0, 'no doomed wallet write is broadcast');
+    assert.equal(revealMod.__takeQueuedForTest()[0]?.lootboxIndex, 8,
+      'the player still sees the prizes the competitor credited to them');
+    el.disconnectedCallback();
+  });
+
+  test('the background poll settles a raced box without waiting for a click', async () => {
+    // Same race, but the player never clicks: the periodic readiness probe is
+    // what must notice, so the chip stops advertising an open that can only fail.
+    const nothingToClaim = () => {
+      const err = new Error('execution reverted');
+      err.code = 'CALL_EXCEPTION';
+      err.data = '0x969bf728';
+      return err; // no revert.name — selector-only decoding path
+    };
+    const fake = {
+      boxIndexComplete: async () => false,
+      openBox: Object.assign(
+        async () => { throw new Error('must not be written'); },
+        { staticCall: async () => { throw nothingToClaim(); } },
+      ),
+      queryFilter: async () => [],
+      filters: {},
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    globalThis.fetch = async () => ({
+      ok: true, status: 200, json: async () => ({ items: [] }),
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    await el.__pollForTest();
+
+    const settled = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.ok(settled, 'the purchase receipt is never discarded');
+    assert.equal(settled.resolved, true,
+      'the raw NothingToClaim selector settles the box without an ABI-named revert');
+    assert.equal(settled.shortLabel, 'Syncing result');
+    assert.equal(settled.write, false);
+    el.disconnectedCallback();
+  });
+
   test('tray-only open failures report a visible Pending reason', async () => {
     const failure = new Error('User rejected the request');
     failure.code = 'ACTION_REJECTED';
@@ -1144,6 +1350,66 @@ describe('app-box-strip', () => {
     assert.equal(el.querySelector('.bxs-chip-title').textContent, 'LUCKBOX');
     assert.equal(el.querySelector('.bxs-open-cta').getAttribute('aria-label'),
       'View result for luckbox');
+    el.disconnectedCallback();
+  });
+
+  test('does not publish a Degenerette child box before its awarding result', async () => {
+    const transactionHash = `0x${'de'.repeat(32)}`;
+    const resolvedTopic = contractsMod.ethers.id(
+      'DegeneretteResolved(address,uint64,uint8,uint256,uint32)',
+    );
+    contractsMod.setProvider({
+      getTransactionReceipt: async (hash) => String(hash).toLowerCase() === transactionHash
+        ? {
+            logs: [{
+              address: CONTRACTS.GAME,
+              topics: [
+                resolvedTopic,
+                contractsMod.ethers.zeroPadValue(ADDR, 32),
+              ],
+            }],
+          }
+        : null,
+    });
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => String(url).includes('/lootbox/legs')
+        ? {
+            items: [{
+              uid: 'degenerette-child',
+              player: ADDR_LC,
+              legType: 'opened',
+              lootboxIndex: 0,
+              transactionHash,
+              blockNumber: '210',
+              logIndex: 35,
+              ord: 210_000_035,
+              rewardData: {
+                amount: '14219600000000',
+                futureTickets: 21760,
+                roundedUp: true,
+                flip: '0',
+              },
+            }],
+          }
+        : { items: [] },
+    });
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    for (let i = 0; i < 10; i += 1) await tick();
+
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((action) => (
+        action.id === `lootbox:tx:${transactionHash}`
+      )),
+      false,
+      'the parent Degenerette controller remains the only producer and queues parent then child',
+    );
+    assert.equal(revealMod.__takeQueuedForTest().length, 0,
+      'auto-open cannot start a child-only reveal while the awarding reels are still indexing');
     el.disconnectedCallback();
   });
 

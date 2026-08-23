@@ -23,13 +23,16 @@
 //
 // Class palette: .bxs-* (non-colliding).
 
-import { CHAIN } from '../app/chain-config.js';
+import { CHAIN, CONTRACTS } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { get, subscribe } from '../app/store.js';
+import { ethers, getProvider } from '../app/contracts.js';
 import { fetchJSON } from '../app/api.js';
 import {
   openLootBox,
   canOpenLootbox,
+  openBoxRevertName,
+  probeOpenLootbox,
   readLootboxIndexCompletion,
   readLootboxPurchaseReceipt,
   unpackBoxOrder,
@@ -63,6 +66,41 @@ import { registerComponentPoll } from '../app/component-poll.js';
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const PENDING_SOURCE = 'lootboxes';
+const DEGENERETTE_RESOLVED_TOPIC = ethers.id(
+  'DegeneretteResolved(address,uint64,uint8,uint256,uint32)',
+).toLowerCase();
+
+function _samePlayerDegeneretteResolution(receipt, player) {
+  let playerTopic;
+  try { playerTopic = ethers.zeroPadValue(String(player), 32).toLowerCase(); }
+  catch (_e) { return false; }
+  const game = String(CONTRACTS.GAME || '').toLowerCase();
+  return (Array.isArray(receipt?.logs) ? receipt.logs : []).some((log) => (
+    String(log?.address || '').toLowerCase() === game
+    && String(log?.topics?.[0] || '').toLowerCase() === DEGENERETTE_RESOLVED_TOPIC
+    && String(log?.topics?.[1] || '').toLowerCase() === playerTopic
+  ));
+}
+
+async function _degeneretteChildResultKeys(rows, player) {
+  const provider = getProvider();
+  if (!provider || typeof provider.getTransactionReceipt !== 'function') return new Set();
+  const candidates = (Array.isArray(rows) ? rows : []).filter((row) => (
+    Number(row?.index) === 0 && row?.transactionHash
+  ));
+  const byHash = new Map(candidates.map((row) => [
+    String(row.transactionHash).toLowerCase(),
+    row,
+  ]));
+  const excluded = new Set();
+  await Promise.all([...byHash.entries()].map(async ([hash, row]) => {
+    try {
+      const receipt = await provider.getTransactionReceipt(hash);
+      if (_samePlayerDegeneretteResolution(receipt, player)) excluded.add(_boxKey(row));
+    } catch (_e) { /* an unclassified direct result remains on its existing path */ }
+  }));
+  return excluded;
+}
 
 /** chainId+address-scoped storage key. */
 export function pendingBoxesKey(chainId, address) {
@@ -925,10 +963,26 @@ class AppBoxStrip extends HTMLElement {
 
       const local = new Map(this.#boxes.map((box) => [_boxKey(box), box]));
       const tracked = new Set(local.keys());
-      const resolvedRows = applyAfkingRawPurchaseAmounts(
+      const allResolvedRows = applyAfkingRawPurchaseAmounts(
         resolvedBoxRowsFromLegs(legsResponse?.items, owner),
         response?.items,
       );
+      const priorCursor = _readResultCursor(owner);
+      const newlyDiscoveredRows = priorCursor == null
+        ? allResolvedRows.slice(0, 1)
+        : allResolvedRows.filter((row) => Number(row.ord) > priorCursor);
+      const rowsNeedingCausalClassification = allResolvedRows.filter((row) => (
+        tracked.has(_boxKey(row)) || newlyDiscoveredRows.includes(row)
+      ));
+      const degeneretteChildKeys = await _degeneretteChildResultKeys(
+        rowsNeedingCausalClassification,
+        owner,
+      );
+      if (this.#addr !== owner) return;
+      for (const key of degeneretteChildKeys) local.delete(key);
+      const resolvedRows = allResolvedRows.filter((row) => (
+        !degeneretteChildKeys.has(_boxKey(row))
+      ));
       const resolvedByKey = new Map(resolvedRows.map((row) => [_boxKey(row), row]));
 
       // If receipt parsing could not recover the index, the indexed purchase
@@ -951,8 +1005,7 @@ class AppBoxStrip extends HTMLElement {
           hasPresaleLeg: Boolean(submitted.hasPresaleLeg || feed.hasPresaleLeg),
         });
       }
-      const priorCursor = _readResultCursor(owner);
-      const newestOrd = resolvedRows.reduce(
+      const newestOrd = allResolvedRows.reduce(
         (highest, row) => Math.max(highest, Number(row.ord) || 0),
         priorCursor ?? 0,
       );
@@ -1016,9 +1069,9 @@ class AppBoxStrip extends HTMLElement {
       // First visit establishes a history baseline and offers only the newest
       // result. After that, EVERY result newer than the durable cursor is kept,
       // so several boxes settling between polls cannot collapse into one chip.
-      const discovered = priorCursor == null
-        ? resolvedRows.slice(0, 1)
-        : resolvedRows.filter((row) => Number(row.ord) > priorCursor);
+      const discovered = newlyDiscoveredRows.filter((row) => (
+        !degeneretteChildKeys.has(_boxKey(row))
+      ));
       for (const settled of discovered) {
         const key = _boxKey(settled);
         if (!key || revealed.has(key)) continue;
@@ -1088,6 +1141,11 @@ class AppBoxStrip extends HTMLElement {
           }
         }
         let chainReady = false;
+        // A competitor's targeted openBox settles THIS player's entry while the
+        // shared sweep frontier stays put, so NothingToClaim is the only read
+        // that proves the slot is gone. Without it the row kept failing the
+        // readiness probe and re-rendering as "waiting for RNG" forever.
+        let chainSettled = false;
         // Re-probe a box that has actually failed. `ready` used to latch: once
         // true it was never checked again, so a box the chain had stopped
         // accepting stayed armed forever and every click failed the same way.
@@ -1096,22 +1154,25 @@ class AppBoxStrip extends HTMLElement {
         const suspect = Number(box.openFailures) > 0;
         const receiptBacked = Boolean(box.fromReceipt);
         if (completion !== true && (!receiptBacked || !box.ready || suspect)) {
-          chainReady = await canOpenLootbox({
+          const probe = await probeOpenLootbox({
             player: owner,
             lootboxIndex: box.index,
-          }).catch(() => false);
+          }).catch(() => ({ ok: false, settled: false }));
+          chainReady = Boolean(probe.ok);
+          chainSettled = Boolean(probe.settled);
         }
+        const settled = completion === true || chainSettled;
         return {
           key: _boxKey(box),
           index: box.index,
           candidate: box,
-          completionKnown: completion != null,
-          complete: completion === true,
+          completionKnown: completion != null || chainSettled,
+          complete: settled,
           chainReady,
           hasLootboxLeg,
           hasPresaleLeg,
           receiptAmountWei,
-          ready: completion !== true && (
+          ready: !settled && (
             receiptBacked && !suspect ? Boolean(box.ready || chainReady) : chainReady
           ),
         };
@@ -1238,22 +1299,32 @@ class AppBoxStrip extends HTMLElement {
       // The indexer can learn about a settlement between polling cycles (or
       // while the connected RPC is still serving the pre-settlement block).
       // Prefer that immutable result before consulting the exact write probe.
-      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return;
+      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return true;
       // Never open from a stale UI snapshot. This exact-player static call is
       // the only current GAME read that proves the box is ready and pending.
-      const actionable = await canOpenLootbox({
+      const probe = await probeOpenLootbox({
         player: this.#addr,
         lootboxIndex: box.index,
-      }).catch(() => false);
-      if (!actionable) {
-        const complete = await readLootboxIndexCompletion(box.index);
+      }).catch(() => ({ ok: false, settled: false }));
+      if (!probe.ok) {
+        // openBox has four revert sources and only NothingToClaim means "this
+        // player's boxes at this index are already resolved". The sweep
+        // frontier alone cannot see that: a competitor opening THIS entry (or a
+        // sweep that spent its budget mid-index) leaves boxIndexComplete false
+        // indefinitely, so a settled box used to fall back to the RNG wait it
+        // had already cleared and could never leave — it stopped opening for
+        // good. Trust the revert reason first, the frontier only as a fallback.
+        const complete = probe.settled
+          ? true
+          : await readLootboxIndexCompletion(box.index);
+        const settled = complete === true;
         box.opening = false;
         box.ready = false;
-        box.resolved = complete === true;
-        box.resultSyncing = complete === true;
+        box.resolved = settled;
+        box.resultSyncing = settled;
         if (this.#addr) _writePending(this.#addr, this.#boxes);
         this.#render();
-        if (complete === true) void this.#runPollCycle();
+        if (settled) void this.#runPollCycle();
         return false;
       }
 
@@ -1295,7 +1366,11 @@ class AppBoxStrip extends HTMLElement {
     } catch (error) {
       box.opening = false;
       const rawMsg = error?.userMessage || error?.message || '';
-      const complete = await readLootboxIndexCompletion(box.index);
+      // The decoded revert name is the authoritative race signal; the frontier
+      // read and the message sniff are fallbacks for a provider that strips
+      // revert data.
+      const raced = openBoxRevertName(error) === 'NothingToClaim';
+      const complete = raced ? true : await readLootboxIndexCompletion(box.index);
       // A competitor can land between the read and our wallet broadcast. Treat
       // an advanced sweep frontier or an explicit race signal as settlement:
       // recover the indexed result without dropping the purchase receipt.

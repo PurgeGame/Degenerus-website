@@ -259,30 +259,60 @@ describe('pack-watch — deferred ticket reveals', () => {
       'without a snapshot the watcher must fall back to asking');
   });
 
-  test('a settled level is read once, then served from the cache', async () => {
-    // jackpotPhaseFlag at level 12 puts the unresolved floor at 12, so level 5
-    // has drawn and drained: its by-trait answer can no longer change.
+  test('a completed level is discarded without reading its tickets', async () => {
+    // Jackpot at level 12 makes level 5 historical. Its local receipt is not
+    // inventory anymore and must not create a back-catalogue API scan.
     const seen = [];
     _routes['/tickets/by-trait'] = countingByTrait(seen, [card(0, false)]);
-    await packWatch.recordPendingPack({ address: ADDR, level: 5, expectedTickets: 1 });
-    packWatch.clearSettledCardCache();   // recording already inspects once
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: 5,
+      expectedTickets: 1,
+      publish: false,
+    });
     seen.length = 0;
 
     packWatch.startPackWatch({ getAddress: () => ADDR });
     await new Promise((r) => setTimeout(r, 10));
-    assert.deepEqual(seen, [5], 'first inspection still reads the endpoint');
+    assert.deepEqual(seen, [], 'the completed level never reaches by-trait');
+    assert.equal(packWatch.pendingPacks().length, 0, 'its durable UI receipt is pruned');
 
     packWatch.refreshPackWatch();
     await new Promise((r) => setTimeout(r, 10));
-    packWatch.refreshPackWatch();
-    await new Promise((r) => setTimeout(r, 10));
-    assert.deepEqual(seen, [5], 'a finished level is not re-asked every cycle');
+    assert.deepEqual(seen, [], 'later refreshes cannot resurrect the old request');
+  });
 
-    packWatch.clearSettledCardCache();
+  test('the current level survives until its unresolved jackpot reveal completes', async () => {
+    const day = 333;
+    _routes['/game/state'] = {
+      level: LEVEL,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      phaseTransitionActive: true,
+      rngLockedFlag: true,
+      dailyRng: { day, finalWord: '1' },
+    };
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen, [card(0, false)]);
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      expectedTickets: 1,
+      publish: false,
+    });
+    seen.length = 0;
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [LEVEL], 'the still-covered jackpot may inspect its pack');
+    assert.equal(packWatch.pendingPacks().length, 1,
+      'phase transition alone cannot remove the last eligible pack');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_${day}`, '1');
     packWatch.refreshPackWatch();
     await new Promise((r) => setTimeout(r, 10));
-    assert.deepEqual(seen, [5, 5],
-      'dropping the cache (confirmed write, day shift) re-reads it');
+    assert.deepEqual(seen, [LEVEL], 'completion prunes without one final ticket request');
+    assert.equal(packWatch.pendingPacks().length, 0);
   });
 
   test('a live level is re-read every cycle', async () => {

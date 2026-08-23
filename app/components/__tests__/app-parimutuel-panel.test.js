@@ -980,6 +980,41 @@ describe('app-parimutuel-panel', () => {
       'viewing a loss retires that result from the widget');
   });
 
+  test('closing the overlay puts an unwatched settled loss back on the rail', async () => {
+    installContract({
+      growth: {
+        [LEVEL]: { openRound: LEVEL, over: 1n, under: 1n },
+        [LEVEL - 1]: { side: 1, outcome: 2, payout: 0n },
+      },
+    });
+    const el = await mount();
+    const [pending] = pendingActionsMod.getPendingActions();
+    await pending.run();
+    const [result] = revealMod.__takeQueuedForTest();
+    assert.deepEqual(result.revealRelease, { address: TEST_ADDR.toLowerCase(), id: `growth:${LEVEL - 1}` },
+      'the sequence carries the identity the overlay hands back');
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the result is retired while its presentation is staged');
+
+    // The player hits the X before the round ever plays.
+    document.dispatchEvent(new CustomEvent(revealMod.RESULT_REVEAL_ABORT_EVENT, {
+      detail: {
+        released: [{
+          kind: 'pari',
+          presentationId: result.presentationId,
+          release: result.revealRelease,
+        }],
+      },
+    }));
+    await flush();
+
+    const [restored] = pendingActionsMod.getPendingActions();
+    assert.ok(restored, 'an unwatched result comes back instead of being marked seen forever');
+    assert.equal(restored.kind, 'pari');
+    assert.equal(restored.state, 'ready');
+    el.disconnectedCallback();
+  });
+
   test('a settled loss alone does not leave a ghost growth card behind', async () => {
     installContract({
       growth: {

@@ -499,21 +499,33 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.coinflipWinChipCount(20n * unit, 50n * unit), 2,
       'the smallest wagers still show a physically bigger payout than their coin');
 
+    // The wager may sprawl into a 169-coin mound, but the house counts its own
+    // push out: one even rank, at most seven columns, none over a full barrel.
     const moundStake = 100_000n * unit;
-    assert.equal(flipPileChipCount(moundStake), 37,
-      'pile-scale arithmetic starts from the exact chips in the displayed mound variant');
-    assert.deepEqual(payout(100_000n, 96), [36, [9, 9, 9, 9]],
-      'a 96% mound win pays 36 neat chips against its 37-chip original pile');
+    assert.equal(revealPlanning.coinflipBetPresentation(moundStake), 5,
+      'the mound lane opens at 100K');
+    assert.deepEqual(payout(100_000n, 50), [12, [6, 6]],
+      'the leanest mound win is still two stacks the player can count by eye');
+    assert.deepEqual(payout(100_000n, 96), [23, [8, 8, 7]],
+      'a 96% mound win is three even barrels, never a second mound');
+    assert.deepEqual(payout(100_000n, 156), [37, [10, 9, 9, 9]],
+      'the lucky mound day grows the rank instead of scattering more coins');
 
     const whaleStake = 1_000_000_000n * unit;
     const whaleTotal = whaleStake + ((whaleStake * 156n) / 100n);
     const whalePiles = revealPlanning.coinflipWinChipPiles(whaleStake, whaleTotal);
-    assert.equal(flipPileChipCount(whaleStake), 169);
-    assert.equal(revealPlanning.coinflipWinChipCount(whaleStake, whaleTotal), 264,
-      'a lucky whale payout remains proportional to its exact baked pile');
-    assert.equal(whalePiles.reduce((sum, count) => sum + count, 0), 264);
-    assert.ok(whalePiles.every((count) => count >= 9 && count <= 10),
-      'even the whale payout resolves into complete, balanced ten-high-or-shorter stacks');
+    assert.equal(flipPileChipCount(whaleStake), 169,
+      'the top-rung wager itself remains a 169-coin sprawl');
+    assert.equal(revealPlanning.coinflipWinChipCount(whaleStake, whaleTotal), 70,
+      'the luckiest top-rung day fills the rank exactly and stops there');
+    assert.deepEqual(whalePiles, [10, 10, 10, 10, 10, 10, 10],
+      'a whale payout is a full rank of complete barrels, never a loose field');
+    assert.equal(whalePiles.length, revealPlanning.COINFLIP_PAYOUT_MAX_STACKS,
+      'no wager and no multiplier can push the dealer past one rank');
+    assert.deepEqual(
+      revealPlanning.coinflipWinChipPiles(whaleStake, whaleStake + ((whaleStake * 50n) / 100n)),
+      [8, 8, 7],
+      'the same whale on a 150% day gets a visibly shorter push');
   });
 
   test('baked pile chip counts stay synchronized with every level and variant asset', () => {
@@ -2808,7 +2820,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('a pile-scale win keeps the original mound and deals proportional neat stacks over it', async () => {
+  test('a pile-scale win keeps the original mound and pays it off in one even dealer rank', async () => {
     const unit = 10n ** 18n;
     _resolvedStakeWei = String(100_000n * unit);
     _fetchResponses = {
@@ -2837,29 +2849,50 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const winningsRack = el.querySelector('[data-bind="df-today-winnings-rack"]');
     const payoutStacks = Array.from(winningsRack.children);
     assert.equal(winningsRow.dataset.state, 'win');
-    assert.equal(winningsRow.dataset.layout, 'pile');
-    assert.equal(winningsRack.getAttribute('data-payout-layout'), 'pile');
+    assert.equal(winningsRow.dataset.layout, 'front',
+      'a mound leaves no clear felt behind it, so the rank comes down in front');
+    assert.equal(winningsRack.getAttribute('data-payout-layout'), 'rank');
     assert.deepEqual(
       payoutStacks.map((stack) => stack.getAttribute('data-chip-count')),
-      ['9', '9', '9', '9'],
-      '36 new chips arrive as four balanced stacks against the 37-chip original',
+      ['8', '8', '7'],
+      'the 96% day is counted out as three even columns, not a second mound',
     );
     assert.ok(payoutStacks.every((stack) => stack.className === 'df-payout-chip-stack'));
-    assert.ok(payoutStacks.every((stack) => stack.getAttribute('src') === '/shared/flip-chips/stack-9.svg'));
     assert.deepEqual(
-      payoutStacks.map((stack) => stack.getAttribute('data-payout-turn')),
-      ['face', 'mirror', 'face', 'mirror'],
-      'identical two-tone chips expose alternating red/green rotations without inventing denominations',
+      payoutStacks.map((stack) => stack.getAttribute('src')),
+      [
+        '/shared/flip-chips/stack-8.svg',
+        '/shared/flip-chips/stack-8-b.svg',
+        '/shared/flip-chips/stack-7-c.svg',
+      ],
+      'columns are baked seam-aligned stack art, cycling the three dealer turns',
     );
+    assert.deepEqual(
+      payoutStacks.map((stack) => stack.getAttribute('style')?.match(/--df-payout-column:(\d+)/)?.[1]),
+      ['1', '2', '3'],
+      'the rank is one row of adjacent columns',
+    );
+    assert.doesNotMatch(CHIPSET_CSS, /data-payout-turn/,
+      'mirroring retired with the turn variants baked into the art itself');
     assert.match(CHIPSET_CSS,
-      /\.df-today-winnings-row\[data-layout="pile"\][\s\S]*?position:\s*absolute[\s\S]*?\.df-bet-chip-rack\[data-payout-layout="pile"\][\s\S]*?display:\s*grid/,
-      'pile payouts overlap the old composition in shallow dealer rows');
+      /\.df-today-winnings-row\[data-layout\]\s*\{[\s\S]*?position:\s*absolute/,
+      'the payout is an overlay at every wager size, never a row in the oval grid');
     assert.match(CHIPSET_CSS,
-      /\.df-payout-chip-stack\[data-payout-layer="behind"\][\s\S]*?z-index:\s*2/,
-      'the far payout row is allowed to tuck behind the original mound');
+      /\.df-payout-chip-stack\s*\{[\s\S]*?grid-row:\s*1/,
+      'every payout column shares the one rank — there are no depth rows to stack into a wall');
+    assert.doesNotMatch(CHIPSET_CSS, /data-payout-layer/,
+      'the behind/front depth split retired with the multi-row field');
+    // Winning must not reflow, resize, or shove what the player already put
+    // down: the wager rack and the receipt rail own fixed rows regardless.
+    assert.doesNotMatch(CHIPSET_CSS,
+      /data-state="win"\]\)\s*\.df-bet-chip-rack\s*\{[\s\S]*?--df-chip-stack-height/,
+      'a win no longer re-mints the wager at a shorter stack height');
     assert.match(CHIPSET_CSS,
-      /\.df-payout-chip-stack\s*\{[\s\S]*?z-index:\s*4/,
-      'near payout rows keep their neat tops in front of the mound');
+      /body\.layout-basic \.df-bet-oval \{\s*\n\s*grid-template-rows: minmax\(0, 1fr\) \.78rem;/,
+      'the oval keeps one row template whether or not a payout landed');
+    assert.match(CHIPSET_CSS,
+      /body\.layout-basic \.df-bet-oval \.df-bet-chip-rack \{[\s\S]*?align-self: end;[\s\S]*?margin-bottom: 0\.34rem;/,
+      'the wager rests on the felt in the same place in every state');
     el.disconnectedCallback();
   });
 
@@ -3862,6 +3895,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(CHIPSET_CSS,
       /\.df-add-bet-dialog__value\s*\{[^}]*border:\s*0\.14rem solid var\(--df-add-bet-blue\)[^}]*border-radius:\s*999px[^}]*linear-gradient\(180deg, #2a3d75/s,
       'the amount input is presented in the same painted blue oval language as the table');
+    assert.match(CHIPSET_CSS,
+      /\.df-add-bet-dialog__value input\s*\{[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;/s,
+      'the inner text field clears shared form chrome instead of drawing a second oval');
     assert.match(CHIPSET_CSS,
       /input\[type="range"\]::-(?:webkit-slider-thumb|moz-range-thumb)\s*\{[^}]*background:\s*url\('\/shared\/flip-chips\/face\.svg'\) center \/ contain no-repeat/s,
       'the quick slider uses a canonical FLIP chip for its physical thumb');

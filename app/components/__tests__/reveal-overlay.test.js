@@ -182,7 +182,7 @@ const {
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
   shouldCelebrateDegenerette, isUnluckyDegenerette,
   ticketGridSizeClass, revealTerminalActionLabel,
-  __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
+  __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT, RESULT_REVEAL_ABORT_EVENT,
   REVEAL_OVERLAY_IDLE_EVENT, LOOTBOX_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -1618,6 +1618,41 @@ describe('buildBoxSpinBoard', () => {
       'the large rounded survival mint keeps its estimate qualifier on the reel');
   });
 
+  test('marks the contract-derived Hero independently on each FLIP reel', () => {
+    const oneFlip = 10n ** 18n;
+    const board = buildBoxSpinBoard({
+      betId: 11_026_022_280_916_248_713n,
+      spinType: 'flip',
+      survived: true,
+      payout: 170_100n * oneFlip,
+      reels: [
+        { spinIndex: 0, playerTicket: 4_203_172_354n, resultTicket: 4_136_200_202n, score: 2 },
+        { spinIndex: 1, playerTicket: 3_835_317_537n, resultTicket: 3_380_768_558n, score: 2 },
+        { spinIndex: 2, playerTicket: 3_968_814_117n, resultTicket: 3_937_362_177n, score: 2 },
+      ],
+    });
+
+    assert.equal(board.heroIdx, null,
+      'a three-reel FLIP chain has no truthful board-wide Hero quadrant');
+    assert.deepEqual(board.rows.map((row) => row.heroIdx), [0, 2, 2],
+      'each sole symbol match is visibly marked as the Hero +2 that produced its S2 payout');
+    assert.equal(board.total, 170_100n * oneFlip,
+      'correcting Hero attribution does not discard the verified group payout');
+
+    const ambiguous = buildBoxSpinBoard({
+      spinType: 'flip',
+      survived: false,
+      payout: 0n,
+      reels: [{
+        playerTicket: 4_103_754_283n,
+        resultTicket: 3_853_144_853n,
+        score: 1,
+      }],
+    });
+    assert.equal(ambiguous.rows[0].heroIdx, null,
+      'an S1 whose Hero cannot be reconstructed does not invent a misleading marker');
+  });
+
   test('a one-symbol box win carries the seed-selected hero into the board', () => {
     const board = buildBoxSpinBoard({
       betId: 9_350_854_869_760_465_101n,
@@ -1981,6 +2016,57 @@ describe('reveal-overlay element', () => {
     assert.equal(__takeQueuedForTest().length, 1);
   });
 
+  test('closing the overlay hands a queued Bingo back instead of burning it', async () => {
+    const aborts = [];
+    const onAbort = (event) => aborts.push(event.detail);
+    document.addEventListener(RESULT_REVEAL_ABORT_EVENT, onAbort);
+    try {
+      const bingo = {
+        kind: 'bingo', player: '0x00000000000000000000000000000000000000ab',
+        level: 31, symbol: 18, quadrant: 2,
+        flipReward: 1_000n * 10n ** 18n, dgnrsPaid: 0n,
+        revealRelease: { address: '0x00000000000000000000000000000000000000ab', id: 'bingo-row-7' },
+      };
+      assert.equal(queueReveal(bingo), true);
+      const el = instantiate();
+      await tick();
+
+      // The player hits the X before the prize plays.
+      el.querySelector('[data-bind="rvl-close"]').dispatchEvent({ type: 'click' });
+      await tick();
+
+      assert.equal(aborts.length, 1, 'the publisher is told its prize never played');
+      const [entry] = aborts[0].released;
+      assert.equal(entry.kind, 'bingo');
+      assert.equal(entry.presentationId, 'bingo-reveal:0x00000000000000000000000000000000000000ab:31:2');
+      assert.deepEqual(entry.release, {
+        address: '0x00000000000000000000000000000000000000ab', id: 'bingo-row-7',
+      });
+      assert.equal(queueReveal(bingo), true,
+        'the released id lets the restored row present the Bingo again');
+    } finally {
+      document.removeEventListener(RESULT_REVEAL_ABORT_EVENT, onAbort);
+    }
+  });
+
+  test('a completed prize stays tombstoned so a late indexer refresh cannot replay it', async () => {
+    const pari = {
+      kind: 'pari',
+      player: '0x00000000000000000000000000000000000000ab',
+      market: 'volume', round: 31, side: 1, outcome: 1,
+      payout: 0n, voided: false,
+      revealRelease: { address: '0x00000000000000000000000000000000000000ab', id: 'volume:31' },
+    };
+    assert.equal(queueReveal(pari), true);
+    const el = instantiate();
+    await tick();
+    // Play it through rather than closing it.
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+    assert.equal(queueReveal({ ...pari }), false,
+      'a watched result is still a one-time presentation');
+  });
+
   test('queueReveal before mount buffers; connect drains and shows summary (reduced motion)', async () => {
     assert.equal(queueReveal({ kind: 'pack', count: 3, level: 2, pending: true }), true);
     const el = instantiate();
@@ -2190,9 +2276,9 @@ describe('reveal-overlay element', () => {
       'the case does not claim an unexplained verification state');
     assert.ok(el.querySelector('.rvl-chest-seam'), 'the light seam has its own crack beat');
     assert.ok(el.querySelector('.rvl-lootbox-badge__ring'),
-      'the opener badge has a fixed canonical split ring');
+      'the opener keeps a structural ring slot for its lock-state artwork');
     assert.ok(el.querySelector('.rvl-lootbox-badge__center'),
-      'the opener badge has an independently rotating center medallion');
+      'the opener keeps a structural center for the canonical lock face');
     assert.equal(el.querySelectorAll('.rvl-vault-interlock').length, 4,
       'one reusable shell carries both two-lock and legacy receiver positions');
     assert.equal(el.querySelectorAll('.rvl-vault-deadbolt').length, 4,
@@ -2254,32 +2340,29 @@ describe('reveal-overlay element', () => {
       /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-chest-body::before,[^{]*\{\s*opacity:\s*0\.82;/s,
       'the shared detailed small and medium opener front is palette shifted by tier');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%/s,
-      'the animated badge preserves the canonical thick-ring proportions');
-    assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge\s*\{[^}]*filter:\s*none;/s,
       'the animated mechanism sits inside the baked recess without a sticker-like outer shadow');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*conic-gradient\(from 225deg, #000 0 180deg, transparent 180deg\)[^}]*rotate\(0deg\)/s,
-      'the locked clasp has a second red half covering the green substrate');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%;[^}]*#30d100/s,
+      'the lock keeps one registered green substrate inside its baked socket');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*rotate\(180deg\)/,
-      'unlocking rotates one red half away to reveal the final FLIP split');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*conic-gradient\(from 225deg[^}]*rotate\(0deg\)/s,
+      'a discrete red half covers the green half while the lock is closed');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*rotate\(402deg\)/,
-      'the flame face completes one net revolution inside its counter-rotating hub');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__face img\s*\{[^}]*width:\s*70%;[^}]*height:\s*92%/s,
+      'the canonical flame stays proportional inside the turning white face');
     assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*rotate\(-42deg\)/,
-      'the black center hub counter-rotates subtly beneath the flame');
+      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*rvl-lootbox-badge-red-uncover/s,
+      'unlocking rotates the covering red half instead of fading another badge over it');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::before\s*\{[\s\S]*conic-gradient\(from 45deg, #000 0 180deg, transparent 180deg\)/,
-      'the fixed red half preserves the final lower-right FLIP split');
-    assert.match(APP_CSS,
-      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after[^}]*animation/s,
-      'the red cover moves only after the player starts the unlock');
+      /@keyframes rvl-lootbox-badge-red-uncover\s*\{[\s\S]*70%, 100%[^}]*rotate\(180deg\)/,
+      'the red cover physically uncovers exactly one green half before release');
     assert.match(APP_CSS,
       /@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*70%, 100%[^}]*rotate\(402deg\)/,
-      'the badge finishes before either deadbolt starts moving');
+      'the flame face completes one clean net revolution over its counter-turning hub');
+    assert.doesNotMatch(APP_CSS,
+      /\.rvl-lootbox-badge::after\s*\{[^}]*flame-logo-split\.svg/s,
+      'the unlock never cross-fades two complete badge SVGs');
     assert.match(APP_CSS,
       /@keyframes rvl-vault-deadbolt-retract\s*\{[\s\S]*0%, 71%[^}]*translateY\(0\)[\s\S]*100%[^}]*translateY\(-72%\)/,
       'the image-backed deadbolts withdraw upward only after the badge settles');
@@ -2376,14 +2459,11 @@ describe('reveal-overlay element', () => {
       /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
       'compact cases keep the accepted proportional badge size on their clean center panel');
     assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__ring\s*\{\s*display:\s*none;/s,
-      'compact cases remove the generated concentric ring that looked like a backing plate');
+      /\.rvl-vessel--lootbox \.rvl-lootbox-badge__center\s*\{[^}]*inset:\s*16\.4%;[^}]*background:\s*radial-gradient/s,
+      'all case sizes share one proportional inset hub without an outside mounting plate');
     assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__face img\s*\{[^}]*content:\s*url\('\/whitepaper\/flame-logo\.svg'\)/s,
-      'compact reveals reuse the exact canonical badge shown on the buy-in cards');
-    assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge::after\s*\{[^}]*flame-logo-split\.svg[\s\S]*?@keyframes rvl-compact-lootbox-badge-split\s*\{[\s\S]*?opacity:\s*1/s,
-      'the real badge still resolves to its red/green split while it turns');
+      /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*rotate\(-42deg\)[\s\S]*@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*rotate\(402deg\)/,
+      'every reveal uses the accepted counter-turning badge mechanism');
     assert.match(APP_CSS,
       /@keyframes rvl-case-release\s*\{[\s\S]*to\s*\{[^}]*opacity:\s*1[^}]*transform:\s*none/,
       'the box neither expands nor fades during the handoff');
@@ -2420,8 +2500,23 @@ describe('reveal-overlay element', () => {
       /@keyframes rvl-lootbox-card-turn\s*\{\s*from\s*\{[^}]*rotateY\(0deg\)[^}]*\}\s*to\s*\{[^}]*rotateY\(180deg\)/s,
       'the reveal is a physical half-turn rather than a content transform');
     assert.match(flightFinishMethod,
-      /await this\.#wait\(settleMs\)[\s\S]*this\.#mountLootboxRewardFaces\(seq\)[\s\S]*await this\.#wait\(LOOTBOX_CARD_FACE_READY_MS\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealing'\)[\s\S]*await this\.#wait\(LOOTBOX_CARD_FLIP_MS\)/,
-      'the flight settles, real faces mount, and the receipt waits for the flip to finish');
+      /const settleAction = await this\.#wait\(settleMs, \{ fixedSpeed: true \}\)[\s\S]*if \(settleAction\) stagedFlight\.classList\?\.add\('rvl-lootbox-flight--settled'\)[\s\S]*this\.#mountLootboxRewardFaces\(seq\)[\s\S]*await _prepareLootboxRewardFaces\(flight\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealing'\)[\s\S]*const flipAction = await this\.#wait\(LOOTBOX_CARD_FLIP_MS, \{ fixedSpeed: true \}\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealed'\)/,
+      'card flight, face preparation, and turn stay synchronized at normal speed and when explicitly skipped');
+    assert.match(REVEAL_SRC,
+      /async function _prepareLootboxRewardFaces\(flight\)[\s\S]*querySelectorAll[\s\S]*Promise\.allSettled\(waits\)[\s\S]*_waitForTwoPaintFrames\(\)/,
+      'the physical turn waits for the actual face images, fonts, layout, and compositor paint');
+    assert.match(REVEAL_SRC,
+      /async function _waitForImageReady\(image\)[\s\S]*image\.decode\(\)[\s\S]*image\.addEventListener\('load'[\s\S]*image\.addEventListener\('error'/,
+      'cold and broken face images both settle without a blank mid-turn swap');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight__front \.rvl-reward-pack\.rvl-pack,[\s\S]*?\.rvl-lootbox-flight__front \.rvl-reward-lootbox\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*none;[^}]*animation:\s*none;/s,
+      'nested pack and case artwork does not run a second fade-and-slide inside the card turn');
+    assert.match(APP_CSS,
+      /\.rvl-bursting \.rvl-lootbox-flight--settled \.rvl-lootbox-flight__grid > \.rvl-card--mini\s*\{[^}]*opacity:\s*1;[^}]*translate3d\(0, -24px, 0\)[^}]*animation:\s*none;/s,
+      'skipping the flight commits every card to the same settled pose');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight--revealing\.rvl-lootbox-flight--revealed \.rvl-lootbox-flight__turn\s*\{[^}]*rotateY\(180deg\)[^}]*animation:\s*none;/s,
+      'skipping the turn commits the already-painted real face');
     assert.match(APP_CSS,
       /\.rvl-stage--lootbox\s*\{[^}]*--rvl-card-flight:\s*0\.78s;/s,
       'manual openings give the smooth card flight enough time to read');
@@ -2456,8 +2551,8 @@ describe('reveal-overlay element', () => {
       'a single box gives the slower mechanical badge sweep time to read');
     assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_CHARGE_MS = 880/,
       'batched boxes retain a faster but still legible automatic unlock');
-    assert.match(REVEAL_SRC, /const LOOTBOX_CARD_FACE_READY_MS = 60/,
-      'the mounted face gets a layout frame before the turn begins');
+    assert.doesNotMatch(REVEAL_SRC, /LOOTBOX_CARD_FACE_READY_MS/,
+      'face readiness is paint-driven rather than an unreliable fixed delay');
     assert.match(REVEAL_SRC, /const LOOTBOX_CARD_FLIP_MS = 470/,
       'the sequence reserves enough time for the staggered card turns');
     assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_RESULT_MS = 1_750/,
@@ -2743,6 +2838,97 @@ describe('reveal-overlay element', () => {
     ], 'the one combined receipt completes every original box exactly once');
   });
 
+  test('a combined luckbox receipt does not offer its already-opened boxes again', async (t) => {
+    const address = '0x00000000000000000000000000000000000000ab';
+    const runs = new Map();
+    for (const [source, index] of [['stale-box-two', 2], ['stale-box-three', 3]]) {
+      t.after(() => pendingActionsMod.clearPendingActions(source));
+      pendingActionsMod.publishPendingActions(source, [{
+        id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
+        state: 'ready', order: index,
+        run: async () => {
+          runs.set(index, (runs.get(index) || 0) + 1);
+          queueReveal({
+            kind: 'lootbox', lootboxIndex: index,
+            presentationId: `combined-stale-box:${index}`,
+            lootboxRelease: { address, key: String(index), lootboxIndex: index },
+            legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+          });
+        },
+      }]);
+    }
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1, presentationId: 'combined-stale-box:1',
+      lootboxRelease: { address, key: '1', lootboxIndex: 1 },
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const firstSummary = el.querySelector('[data-bind="rvl-summary"]');
+    firstSummary.querySelector('.rvl-open-all-cta--lootboxes')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    await tick();
+
+    const finalCta = el.querySelector('[data-bind="rvl-summary"]')
+      .querySelector('.rvl-collect-cta');
+    assert.equal(finalCta.textContent, 'GOOD LUCK',
+      'the selected Pending rows stay owned until completion without becoming a dead continuation');
+    assert.deepEqual([...runs.entries()], [[2, 1], [3, 1]]);
+  });
+
+  test('COMBINE BOXES ends on a working terminal action, not its own Pending row', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+    const source = 'current-combo-box';
+    let staleRuns = 0;
+    pendingActionsMod.publishPendingActions(source, [{
+      id: 'lootbox:27', kind: 'lootbox', label: 'Luckbox #27',
+      state: 'ready', order: 27,
+      run: async () => { staleRuns += 1; },
+    }]);
+    t.after(() => pendingActionsMod.clearPendingActions(source));
+
+    queueReveal({
+      kind: 'lootbox',
+      lootboxRelease: {
+        address: '0x00000000000000000000000000000000000000ab',
+        key: '27', lootboxIndex: 27,
+      },
+      boxOrders: [String(1n | (1n << 8n))],
+      ticketPriceWei: 10_000_000_000n,
+      legs: [{
+        legType: 'opened', amount: 10_000_000_000n,
+        wholeTickets: 1, futureLevel: 12, flip: 0n,
+      }, {
+        legType: 'opened', amount: 50_000_000_000n,
+        wholeTickets: 0, futureTickets: 0, futureLevel: 14,
+        flip: 25n * 10n ** 18n,
+      }],
+    });
+    const el = instantiate();
+    const combine = el.querySelector('[data-bind="rvl-open-all"]');
+    for (let i = 0; i < 5 && !combine.textContent; i += 1) await tick();
+    assert.equal(combine.textContent, 'COMBINE 2 BOXES');
+    combine.dispatchEvent({ type: 'click', stopPropagation() {} });
+
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    for (let i = 0; i < 12 && summary.hidden; i += 1) {
+      await tick();
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
+    }
+    const cta = summary.querySelector('.rvl-collect-cta');
+    assert.equal(cta.textContent, 'GOOD LUCK');
+    cta.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    assert.equal(staleRuns, 0, 'the current combined box is never opened a second time');
+    assert.equal(backdrop.hidden, true, 'the terminal action dismisses the completed receipt');
+  });
+
   test('the sealed luckbox offers OPEN ONE or every ready box in Pending', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
@@ -2794,6 +2980,82 @@ describe('reveal-overlay element', () => {
     el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+  });
+
+  test('OPEN ALL cannot be preempted by tapping the case while sibling results load', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+    const address = '0x00000000000000000000000000000000000000ab';
+    let releaseSibling;
+    const siblingReady = new Promise((resolve) => { releaseSibling = resolve; });
+    const opened = [];
+    for (const [source, index] of [['slow-choice-two', 2], ['slow-choice-three', 3]]) {
+      t.after(() => pendingActionsMod.clearPendingActions(source));
+      pendingActionsMod.publishPendingActions(source, [{
+        id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
+        state: 'ready', order: index,
+        run: async () => {
+          if (index === 2) await siblingReady;
+          opened.push(index);
+          pendingActionsMod.clearPendingActions(source);
+          queueReveal({
+            kind: 'lootbox', lootboxIndex: index,
+            presentationId: `slow-open-all:${index}`,
+            lootboxRelease: { address, key: String(index), lootboxIndex: index },
+            legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+          });
+        },
+      }]);
+    }
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      presentationId: 'slow-open-all:1',
+      lootboxRelease: { address, key: '1', lootboxIndex: 1 },
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const actions = el.querySelector('[data-bind="rvl-pack-actions"]');
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    const vessel = el.querySelector('[data-bind="rvl-vessel"]');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    for (let i = 0; i < 5 && !openAll.textContent; i += 1) await tick();
+    assert.equal(openAll.textContent, 'OPEN ALL 3');
+    openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(actions.classList.contains('is-loading'), true,
+      'the sealed case visibly owns the in-flight OPEN ALL request');
+    assert.equal(openAll.textContent, 'OPENING ALL 3…',
+      'the selected control acknowledges the click while sibling results load');
+
+    // This is the live regression: a case tap used to resolve the original
+    // one-box gate while OPEN ALL was still collecting its siblings.
+    vessel.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(summary.hidden, true,
+      'the case cannot escape into a one-box receipt during OPEN ALL');
+    assert.equal(actions.hidden, false,
+      'the loading OPEN ALL gate remains mounted until every sibling is collected');
+
+    releaseSibling();
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+    for (let i = 0; i < 14 && summary.hidden; i += 1) {
+      await tick();
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
+    }
+    await tick();
+
+    assert.deepEqual(opened, [2, 3]);
+    assert.deepEqual(
+      summary.querySelectorAll('.rvl-card-value').map((node) => node.textContent),
+      ['1', '2', '3'],
+      'the original and both siblings land in one combined receipt',
+    );
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
+    assert.equal(summary.querySelector('.rvl-open-all-cta--lootboxes'), null,
+      'the combined receipt cannot offer its already-consumed siblings again');
   });
 
   test('VIEW INDIVIDUALLY runs a fresh case animation for every combo box', async (t) => {
@@ -4246,6 +4508,51 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
+  test('the live FLIP BoxSpin marks each selected reel with its own Hero', async () => {
+    const oneFlip = 10n ** 18n;
+    queueReveal({
+      kind: 'lootbox',
+      lootboxIndex: 32_404,
+      legs: [{
+        legType: 'spin',
+        betId: 11_026_022_280_916_248_713n,
+        spinType: 'flip',
+        survived: true,
+        payout: 170_100n * oneFlip,
+        reels: [
+          { spinIndex: 0, playerTicket: 4_203_172_354n, resultTicket: 4_136_200_202n, score: 2 },
+          { spinIndex: 1, playerTicket: 3_835_317_537n, resultTicket: 3_380_768_558n, score: 2 },
+          { spinIndex: 2, playerTicket: 3_968_814_117n, resultTicket: 3_937_362_177n, score: 2 },
+        ],
+      }],
+    });
+    const el = instantiate();
+    await tick();
+
+    el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
+    const history = zone.querySelectorAll('.rvl-dgn-history-chip');
+    const visibleHero = () => zone.querySelectorAll('.rvl-gamepiece')[0]
+      .querySelectorAll('.rvl-rq')
+      .findIndex((cell) => cell.classList.contains('rvl-rq--hero'));
+    const visibleHeroes = [];
+    for (const chip of history) {
+      chip.dispatchEvent({ type: 'click', stopPropagation() {} });
+      visibleHeroes.push(visibleHero());
+    }
+    assert.deepEqual(visibleHeroes, [0, 2, 2],
+      'selecting each reel renders the contract-consistent per-reel Hero marker');
+    assert.match(zone.querySelector('.rvl-spin-total').textContent, /170,100 FLIP/,
+      'the verified group payout remains attached to the same three-reel board');
+
+    zone.querySelector('.rvl-dgn-spin-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
   test('motion DAY SUMMARY omits a completed zero BoxSpin without replaying it', async () => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
@@ -4671,8 +4978,8 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.rvl-gamepiece \.rvl-rq\.q-lock-color-hit\s*\{[^}]*background:\s*rgba\(34, 211, 238, 0\.24\)[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(34, 211, 238, 0\.72\)/s,
-      'a matching locked color has its own provisional cyan state',
+      /\.rvl-gamepiece \.rvl-rq\.q-lock-color-hit\s*\{[^}]*background:\s*rgba\(139, 92, 246, 0\.36\)[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(167, 139, 250, 0\.82\)/s,
+      'a matching locked color has its own provisional purple state',
     );
     assert.match(
       APP_CSS,

@@ -2097,17 +2097,33 @@ class ReplayPanel extends HTMLElement {
   //
   // Shared flight: the warm-up the main spin starts and the bonus press itself
   // await one hydration instead of racing two identical waves through the
-  // transport's three-slot personalized lane.
-  #loadFutureTraits() {
-    if (this.#futureTraitsInflight) return this.#futureTraitsInflight;
-    const flight = this.#hydrateFutureTraits().finally(() => {
+  // transport's three-slot personalized lane. If the player reaches Bonus Spin
+  // before that background warm finishes, attach interaction-priority consumers
+  // to the same URL-keyed requests so queued levels are promoted, not duplicated.
+  #promoteFutureTraitReads() {
+    const dayLevel = Number(this.#dayRoll1?.purchaseLevel ?? this.#selectedLevel);
+    if (!this.#selectedPlayer || !Number.isFinite(dayLevel)) return;
+    for (let level = dayLevel + 1; level <= dayLevel + FAR_FUTURE_HORIZON; level += 1) {
+      void fetchJSON(
+        `/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`,
+        { priority: 'interaction' },
+      ).catch(() => null);
+    }
+  }
+
+  #loadFutureTraits({ priority = 'background' } = {}) {
+    if (this.#futureTraitsInflight) {
+      if (priority === 'interaction') this.#promoteFutureTraitReads();
+      return this.#futureTraitsInflight;
+    }
+    const flight = this.#hydrateFutureTraits(priority).finally(() => {
       if (this.#futureTraitsInflight === flight) this.#futureTraitsInflight = null;
     });
     this.#futureTraitsInflight = flight;
     return flight;
   }
 
-  async #hydrateFutureTraits() {
+  async #hydrateFutureTraits(priority = 'background') {
     if (this.#tutorialFixture) {
       this.#futureTraitIds = new Set(this.#tutorialFixture.futureTraits);
       this.#futureTraitsCacheKey = `${this.#tutorialFixture.player}|${this.#tutorialFixture.purchaseLevel}`;
@@ -2128,7 +2144,10 @@ class ReplayPanel extends HTMLElement {
     try {
       const payloads = await Promise.all(levels.map(async (l) => {
         // No &day= param — same 404 gotcha as #loadPlayerTraits.
-        return fetchJSON(`/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${l}`)
+        return fetchJSON(
+          `/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${l}`,
+          { priority },
+        )
           .catch(() => null);
       }));
       for (const data of payloads) {
@@ -2782,7 +2801,26 @@ class ReplayPanel extends HTMLElement {
 
     let settled = false;
     try {
-      await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
+      // Everything needed by the later Bonus Spin and DAY SUMMARY is already
+      // knowable here. Start those reads with the main trait read so the reel
+      // and scratch interaction provide their loading window; later buttons
+      // only consume the shared result.
+      const playerTraitsPromise = this.#loadPlayerTraits();
+      if (this.#hasBonus) void this.#loadFutureTraits();
+      if (!instant && !persisted) {
+        try {
+          this.dispatchEvent(new CustomEvent('replay:spin-start', {
+            detail: {
+              day: this.#selectedDay,
+              player: this.#selectedPlayer,
+              bonusPhase: false,
+            },
+            bubbles: true,
+          }));
+        } catch { /* headless / CustomEvent shim absent */ }
+      }
+
+      await playerTraitsPromise; // ensure traits loaded for spin coloring
       if (this.#selectionKey() !== selectionKey) return false;
 
       // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
@@ -2798,14 +2836,6 @@ class ReplayPanel extends HTMLElement {
       // of the very next frame.
       this.#resetCards();
       if (!instant) btn.textContent = 'SPINNING…';
-
-      // Warm Roll 2's colouring set while the main reel plays. #triggerBonusRoll
-      // used to be the only caller, so every first bonus press of a session paid
-      // four uncached /tickets/by-trait reads — queued three-at-a-time behind
-      // every other panel's wallet traffic — while its button already read
-      // "BONUS SPINNING…" over the settled Roll 1 board. Fire and forget: the
-      // press awaits this same flight, and a failure still fails closed there.
-      if (this.#hasBonus) void this.#loadFutureTraits();
 
       const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
       if (!completed || this.#selectionKey() !== selectionKey) return false;
@@ -3225,7 +3255,7 @@ class ReplayPanel extends HTMLElement {
     let settled = false;
     try {
       // Colouring for this roll comes from the future-level holdings.
-      await this.#loadFutureTraits();
+      await this.#loadFutureTraits({ priority: 'interaction' });
       if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
       // Keep the settled main board painted during an uncached trait request.
       // Once hydration finishes, clear it immediately before #runSpin paints
@@ -3296,7 +3326,7 @@ class ReplayPanel extends HTMLElement {
       this.#bonusPhase = showBonus;
       if (showBonus) {
         this.#prepareRoll2Prizes();
-        await this.#loadFutureTraits();
+        await this.#loadFutureTraits({ priority: 'interaction' });
       } else {
         this.#distributePrizesFromRoll1();
       }

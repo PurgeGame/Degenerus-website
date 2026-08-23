@@ -1,7 +1,11 @@
 const ORIGIN = 'https://degenerus-db.fly.dev';
 const inflight = new Map();
 const POINTER_FRESH_MS = 1_000;
-const POINTER_EDGE_TTL_SECONDS = 30;
+// Cache API keeps the last known-good pointer resident for a full day. Its
+// X-Jackpot-Cached-At timestamp still starts a background refresh after one
+// second, so this extends outage tolerance rather than pointer freshness.
+const POINTER_EDGE_TTL_SECONDS = 86_400;
+const ORIGIN_TIMEOUT_MS = 3_000;
 
 function routeKind(pathname) {
   if (pathname === '/jackpots/latest.json') return 'pointer';
@@ -23,19 +27,27 @@ async function loadAndCache(context, cache, cacheKey, kind, pathname) {
   const originUrl = new URL(ORIGIN);
   originUrl.pathname = `/game/jackpot/cdn${pathname.slice('/jackpots'.length)}`;
 
-  const upstream = await fetch(originUrl.toString(), {
-    headers: { accept: 'application/json', 'accept-encoding': 'identity' },
-    // Pages Functions run on Cloudflare Workers. This turns the external Fly
-    // subrequest into an edge-cacheable object even before Cache API storage
-    // finishes, reducing simultaneous cold-miss fan-out between isolates.
-    cf: {
-      cacheEverything: true,
-      // Keep the subrequest cache under the Fly origin URL. Reusing the
-      // incoming Pages URL here can collide with the function route itself.
-      cacheKey: originUrl.toString(),
-      cacheTtl: kind === 'pointer' ? 1 : 31_536_000,
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ORIGIN_TIMEOUT_MS);
+  let upstream;
+  try {
+    upstream = await fetch(originUrl.toString(), {
+      signal: controller.signal,
+      headers: { accept: 'application/json', 'accept-encoding': 'identity' },
+      // Pages Functions run on Cloudflare Workers. This turns the external Fly
+      // subrequest into an edge-cacheable object even before Cache API storage
+      // finishes, reducing simultaneous cold-miss fan-out between isolates.
+      cf: {
+        cacheEverything: true,
+        // Keep the subrequest cache under the Fly origin URL. Reusing the
+        // incoming Pages URL here can collide with the function route itself.
+        cacheKey: originUrl.toString(),
+        cacheTtl: kind === 'pointer' ? 1 : 31_536_000,
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   const headers = new Headers(upstream.headers);
   headers.delete('set-cookie');
@@ -86,8 +98,8 @@ export async function onRequest(context) {
     if (pointerIsStale) {
       // Never make the synchronized jackpot audience wait on Fly. Return the
       // tiny prior token; their one-second poll will see the refreshed token on
-      // its next pass. Cache API's 30s residency makes this true stale-while-
-      // revalidate rather than a hard one-second cache cliff.
+      // its next pass. Cache API's last-good residency makes this true stale-
+      // while-revalidate rather than a hard one-second cache cliff.
       let flight = inflight.get(cacheKey.url);
       if (!flight) {
         flight = loadAndCache(context, cache, cacheKey, kind, url.pathname)
@@ -108,7 +120,27 @@ export async function onRequest(context) {
       .finally(() => inflight.delete(cacheKey.url));
     inflight.set(cacheKey.url, flight);
   }
-  const miss = responseWithEdgeState((await flight).clone(), 'MISS');
+  let originResponse;
+  try {
+    originResponse = await flight;
+  } catch (_error) {
+    const unavailable = new Response(
+      context.request.method === 'HEAD'
+        ? null
+        : JSON.stringify({ error: 'Jackpot edge origin unavailable' }),
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Retry-After': '2',
+          'X-Jackpot-Edge': 'ERROR',
+        },
+      },
+    );
+    return unavailable;
+  }
+  const miss = responseWithEdgeState(originResponse.clone(), 'MISS');
   return context.request.method === 'HEAD'
     ? new Response(null, { status: miss.status, headers: miss.headers })
     : miss;

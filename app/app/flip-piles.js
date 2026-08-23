@@ -58,9 +58,10 @@ export function flipWagerPreview(amountWei) {
 const PILE_VARIANTS = ['a', 'b', 'c'];
 
 // Physical chip counts in the baked pile art, keyed by ladder level and
-// variant. Payout stacks use the count from the exact mound the player saw,
-// so a 96% win adds roughly 96% as many visible chips instead of falling back
-// to the 24-chip cap used by the compact, sub-100K wager lane.
+// variant. Coinflip payouts no longer count against these: the dealer pays a
+// bounded rank of clean stacks, not a coin-for-coin match of a 180-coin
+// sprawl. The table remains the integrity check on the shipped art, and the
+// honest source for any surface that needs to know what a mound actually holds.
 //
 // Keep this table in sync with pile-N[-b|-c].svg when build-piles.py is run.
 // Each value is the number of rendered `<use href="#c...">` coin instances.

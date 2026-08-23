@@ -40,8 +40,8 @@ describe('index.html basic-mode skeleton', () => {
       'class="jackpot-hero__machine"',
       '<last-day-jackpot>',
       '<replay-panel',
-      '<app-daily-flip>',
       '<app-decimator-panel>',
+      '<app-daily-flip>',
       'class="play-grid"',
       '<app-quest-panel>',
       '<app-degenerette-panel>',
@@ -67,7 +67,7 @@ describe('index.html basic-mode skeleton', () => {
 
   test('day summary CTA has a landing slot beneath the middle draw', () => {
     const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
-    const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
+    const drawEnd = html.indexOf('<app-decimator-panel>', drawStart);
     assert.ok(drawStart >= 0 && drawEnd > drawStart, 'middle draw block present');
     const draw = html.slice(drawStart, drawEnd);
     assert.match(draw, /<last-day-jackpot>/);
@@ -79,6 +79,15 @@ describe('index.html basic-mode skeleton', () => {
       'the landing slot consumes no height until the summary unlocks');
     assert.match(draw, /class="jackpot-day-history"[^>]*hidden/,
       'past-day controls consume no height during the live day');
+  });
+
+  test('mobile hero follows jackpot, buy in, coinflip while desktop keeps its columns', () => {
+    assert.match(appCss,
+      /body\.layout-basic \.jackpot-hero\s*\{[^}]*grid-template-areas:\s*"draw"\s*"purchase"\s*"flip"/s,
+      'the single-column cabinet puts Buy In between the draw and Community Coinflip');
+    assert.match(appCss,
+      /@media \(min-width:\s*1100px\)\s*\{\s*body\.layout-basic \.jackpot-hero\s*\{[^}]*grid-template-areas:\s*"purchase draw flip"/s,
+      'the desktop three-column cabinet remains Buy In, draw, Community Coinflip');
   });
 
   test('global address / affiliate search is removed', () => {

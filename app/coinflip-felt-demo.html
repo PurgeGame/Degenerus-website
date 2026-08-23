@@ -50,6 +50,27 @@
         <button type="button" data-today="5000000">5M</button>
         <button type="button" data-today="43844" data-today-lost="true">LOST</button>
       </fieldset>
+      <fieldset data-group="custom" class="coinflip-felt-demo__custom">
+        <legend>ANY BET</legend>
+        <label class="coinflip-felt-demo__field">
+          <span>FLIP</span>
+          <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false"
+                 data-bind="demo-custom-amount" value="43,844"
+                 aria-label="Bet size in FLIP. Accepts 250k, 1.5m, 2b.">
+        </label>
+        <label class="coinflip-felt-demo__field coinflip-felt-demo__field--pct">
+          <span>REWARD&nbsp;+%</span>
+          <input type="number" min="0" max="400" step="1" autocomplete="off"
+                 data-bind="demo-custom-percent" value="96"
+                 aria-label="Reward percent on top of the stake. The contract pays 50 to 156.">
+        </label>
+        <input type="range" class="coinflip-felt-demo__slider" min="0" max="200" step="1"
+               data-bind="demo-custom-slider" value="96" aria-label="Reward percent">
+        <button type="button" data-custom="bet" class="is-active">BET</button>
+        <button type="button" data-custom="win">WIN</button>
+        <button type="button" data-custom="loss">LOSS</button>
+        <output class="coinflip-felt-demo__readout" data-bind="demo-custom-readout"></output>
+      </fieldset>
       <fieldset data-group="tomorrow">
         <legend>TOMORROW'S BET</legend>
         <button type="button" data-tomorrow="0">NO BET</button>

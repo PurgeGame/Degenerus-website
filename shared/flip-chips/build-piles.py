@@ -551,8 +551,18 @@ def build_level(level, min_total=0, attempt=0, grown_cap_rem=None, variant=0, wr
         xml.dom.minidom.parse(add_path)
     return W, H, total, base_h_rem, width_rem, k_fixed, H_add
 
-def build_stack(n, messy):
-    """One free-standing column of n coins: stack-{n}.svg is dealer-neat,
+# A dealer's stack is one chip design racked face-forward, so every coin in a
+# neat column shares ONE rotation and the red/green wall seams line up into
+# continuous vertical lines. Randomizing rotation per coin is precisely what
+# makes a column read as a pile someone shoved together. Three orientations
+# ship per height so a rank of stacks is not a row of identical twins:
+# `a` is the canonical logo turn (red wall, green sliver), `b` splits the wall
+# down the middle, `c` is its green counterpart.
+NEAT_TURNS = {'': 0, 'b': 45, 'c': 180}
+
+def build_stack(n, messy, turn=''):
+    """One free-standing column of n coins: stack-{n}[-b|-c].svg is
+    dealer-neat — every coin at the same rotation, seams aligned — and
     stack-{n}-messy.svg drifts sideways coin to coin and leans a few faces so
     the column reads hand-cut, not machine-racked. Bottom-tight viewBox (any
     dead band under the base coin floats the stack off whatever it sits on);
@@ -566,7 +576,9 @@ def build_stack(n, messy):
         lean = 0.0
         if messy and (i == n - 1 or rng.random() < 0.3):
             lean = round(rng.uniform(-4.5, 4.5), 1)
-        coins.append((drift, -16.0 * i, THETAS[rng.randrange(16)], lean))
+        # The messy column keeps its per-coin turns; that jumble is the point.
+        theta = THETAS[rng.randrange(16)] if messy else NEAT_TURNS[turn]
+        coins.append((drift, -16.0 * i, theta, lean))
     margins = [abs(l) * 1.3 + 1 for (_x, _y, _t, l) in coins]
     tx = -min(x - m for (x, _y, _t, _l), m in zip(coins, margins)) + 3
     ty = 16.0 * (n - 1) + 3
@@ -577,7 +589,7 @@ def build_stack(n, messy):
         + (f' rotate({l} 60 44)' if l else '') + '"/>'
         for (x, y, t, l) in coins)
     used = '\n'.join(coin_def(t) for t in sorted({t for (_x, _y, t, _l) in coins}))
-    name = f'stack-{n}-messy' if messy else f'stack-{n}'
+    name = f'stack-{n}-messy' if messy else f'stack-{n}{"-" + turn if turn else ""}'
     out = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
            f'viewBox="0 0 {W} {H}" width="{W}" height="{H}">\n'
            f'<!-- {name}.svg: {n}-coin FLIP stack{" with hand-cut drift and lean" if messy else ""}. '
@@ -753,6 +765,7 @@ open(f'{ROOT}/pile-ladder.css', 'w').write('\n\n'.join(css) + '\n')
 print('wrote pile-ladder.css')
 
 for n in range(2, 11):
-    W, H = build_stack(n, False)
+    sizes = {turn: build_stack(n, False, turn) for turn in NEAT_TURNS}
     mw, mh = build_stack(n, True)
-    print(f'stack-{n}: {W}x{H} neat, {mw}x{mh} messy')
+    neat = ' '.join(f'{turn or "a"}={w}x{h}' for turn, (w, h) in sizes.items())
+    print(f'stack-{n}: neat {neat}, messy {mw}x{mh}')

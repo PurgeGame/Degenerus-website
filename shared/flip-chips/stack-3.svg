@@ -28,43 +28,26 @@
 <filter id="dim1" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="linear" slope="0.82"/><feFuncG type="linear" slope="0.82"/><feFuncB type="linear" slope="0.86"/></feComponentTransfer></filter>
 <filter id="dim2" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="linear" slope="0.62"/><feFuncG type="linear" slope="0.62"/><feFuncB type="linear" slope="0.7"/></feComponentTransfer></filter>
 <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3"/></filter>
-<g id="c112">
+<g id="c0">
 <path d="M2,23 a58,21 0 0 1 116,0 l0,16 a58,21 0 0 1 -116,0 z" fill="url(#wr)"/>
 <g clip-path="url(#wallc)">
-<rect x="2.0" y="23" width="111.4" height="38" fill="url(#wg)"/>
-<line x1="113.4" y1="23" x2="113.4" y2="60.8" stroke="#0a0a0c" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="2.0" y="23" width="17.0" height="38" fill="url(#wg)"/>
+<line x1="19.0" y1="23" x2="19.0" y2="60.8" stroke="#0a0a0c" stroke-opacity="0.5" stroke-width="1.5"/>
 <rect x="2" y="23" width="116" height="38" fill="url(#mill)"/>
 <path d="M2,23 l0,16 a58,21 0 0 0 116,0 l0,-16 a58,21 0 0 0 -116,0 z" fill="url(#curve)"/>
 <path d="M2,24.6 a58,21 0 0 0 116,0" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.4"/>
 </g>
 <ellipse cx="60" cy="23" rx="58" ry="21" fill="#16181d"/>
 <g transform="translate(60,23) scale(1.02778,0.37216) translate(-60,-60)">
-<use href="#logoart" xlink:href="#logoart" transform="rotate(-112 60 60)"/>
-</g>
-<g clip-path="url(#facec)"><rect x="2" y="2" width="116" height="42" fill="url(#gloss)"/></g>
-<path d="M10.9,12.9 A56.7,20.2 0 0 1 109.1,12.9" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.2"/>
-<path d="M2,23 a58,21 0 0 1 116,0 l0,16 a58,21 0 0 1 -116,0 z" fill="none" stroke="#150d08" stroke-width="2.8" stroke-linejoin="round"/>
-</g>
-<g id="c202">
-<path d="M2,23 a58,21 0 0 1 116,0 l0,16 a58,21 0 0 1 -116,0 z" fill="url(#wr)"/>
-<g clip-path="url(#wallc)">
-<rect x="37.3" y="23" width="80.7" height="38" fill="url(#wg)"/>
-<line x1="37.3" y1="23" x2="37.3" y2="60.8" stroke="#0a0a0c" stroke-opacity="0.5" stroke-width="1.5"/>
-<rect x="2" y="23" width="116" height="38" fill="url(#mill)"/>
-<path d="M2,23 l0,16 a58,21 0 0 0 116,0 l0,-16 a58,21 0 0 0 -116,0 z" fill="url(#curve)"/>
-<path d="M2,24.6 a58,21 0 0 0 116,0" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.4"/>
-</g>
-<ellipse cx="60" cy="23" rx="58" ry="21" fill="#16181d"/>
-<g transform="translate(60,23) scale(1.02778,0.37216) translate(-60,-60)">
-<use href="#logoart" xlink:href="#logoart" transform="rotate(-202 60 60)"/>
+<use href="#logoart" xlink:href="#logoart" transform="rotate(0 60 60)"/>
 </g>
 <g clip-path="url(#facec)"><rect x="2" y="2" width="116" height="42" fill="url(#gloss)"/></g>
 <path d="M10.9,12.9 A56.7,20.2 0 0 1 109.1,12.9" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.2"/>
 <path d="M2,23 a58,21 0 0 1 116,0 l0,16 a58,21 0 0 1 -116,0 z" fill="none" stroke="#150d08" stroke-width="2.8" stroke-linejoin="round"/>
 </g></defs>
 <g>
-<use href="#c112" xlink:href="#c112" transform="translate(4.0 35.0)"/>
-<use href="#c112" xlink:href="#c112" transform="translate(4.0 19.0)"/>
-<use href="#c202" xlink:href="#c202" transform="translate(4.0 3.0)"/>
+<use href="#c0" xlink:href="#c0" transform="translate(4.0 35.0)"/>
+<use href="#c0" xlink:href="#c0" transform="translate(4.0 19.0)"/>
+<use href="#c0" xlink:href="#c0" transform="translate(4.0 3.0)"/>
 </g>
 </svg>

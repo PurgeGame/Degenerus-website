@@ -1063,26 +1063,37 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
   });
 
-  test('Roll 2 colouring is warmed while the main reel plays, not on the bonus press', () => {
+  test('the main spin press starts Roll 2 colouring before waiting on its own traits', () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
     const flow = REPLAY_PANEL_SRC.slice(start, end);
+    const mainReadAt = flow.indexOf('const playerTraitsPromise = this.#loadPlayerTraits()');
     const warmAt = flow.indexOf('void this.#loadFutureTraits()');
+    const summaryWarmAt = flow.indexOf("new CustomEvent('replay:spin-start'");
+    const mainAwaitAt = flow.indexOf('await playerTraitsPromise');
     const spinAt = flow.indexOf('await this.#runSpin(');
-    assert.ok(warmAt >= 0, 'the main spin warms the bonus roll\'s future-level holdings');
-    assert.ok(warmAt < spinAt,
-      'the four /tickets/by-trait reads overlap the reel instead of the bonus press');
+    assert.ok(mainReadAt >= 0 && warmAt > mainReadAt,
+      'the current trait read gets first access, then the bonus warm begins');
+    assert.ok(summaryWarmAt > warmAt && mainAwaitAt > summaryWarmAt,
+      'both later-button preloads begin before the main spin waits on the network');
+    assert.ok(mainAwaitAt < spinAt,
+      'the preloads overlap preparation, the reel, and the scratch interaction');
 
     // One hydration, not two: the warm-up and the press share a flight.
     assert.match(
       REPLAY_PANEL_SRC,
-      /#loadFutureTraits\(\) \{\s*if \(this\.#futureTraitsInflight\) return this\.#futureTraitsInflight;/,
-      'a press landing mid-warm awaits the running hydration rather than starting a second',
+      /#loadFutureTraits\(\{ priority = 'background' \} = \{\}\) \{[\s\S]*?if \(this\.#futureTraitsInflight\) \{[\s\S]*?priority === 'interaction'[\s\S]*?return this\.#futureTraitsInflight;/,
+      'a bonus press landing mid-warm promotes and awaits the running hydration',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#triggerBonusRoll\(\)[\s\S]*?await this\.#loadFutureTraits\(\{ priority: 'interaction' \}\)/,
+      'the bonus press promotes any unusually slow queued trait levels',
     );
   });
 
   test('a future-trait hydration that failed every level is not cached as an answer', () => {
-    const start = REPLAY_PANEL_SRC.indexOf('async #hydrateFutureTraits()');
+    const start = REPLAY_PANEL_SRC.indexOf("async #hydrateFutureTraits(priority = 'background')");
     const end = REPLAY_PANEL_SRC.indexOf('\n  async #loadPlayerTraits()', start);
     const flow = REPLAY_PANEL_SRC.slice(start, end);
     // Each level catches its own rejection, so a shed burst reaches the cache
@@ -1099,7 +1110,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerBonusRoll()');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #syncDrawToggleAffordance()', start);
     const flow = REPLAY_PANEL_SRC.slice(start, end);
-    const hydrateAt = flow.indexOf('await this.#loadFutureTraits()');
+    const hydrateAt = flow.indexOf("await this.#loadFutureTraits({ priority: 'interaction' })");
     const clearAt = flow.indexOf('this.#resetMainWidget()');
     const spinAt = flow.indexOf('await this.#runSpin(displayTraits)');
 
@@ -1115,7 +1126,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
     const flow = REPLAY_PANEL_SRC.slice(start, end);
-    const hydrateAt = flow.indexOf('await this.#loadPlayerTraits()');
+    const hydrateAt = flow.indexOf('await playerTraitsPromise');
     const clearAt = flow.indexOf('this.#resetCards()');
     const spinAt = flow.indexOf('await this.#runSpin(displayTraits');
 
@@ -1163,6 +1174,22 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.match(activityFlow, /fetchJSON\(path, \{ priority: 'interaction' \}\)/);
     assert.match(activityFlow, /read\(`\/player\/\$\{address\}\/packs\?day=\$\{dayParam\}`\)/);
     assert.match(activityFlow, /read\(`\/viewer\/player\/\$\{address\}\/day\/\$\{dayParam\}`\)/);
+  });
+
+  test('the jackpot spin-start signal warms every DAY SUMMARY input', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /new CustomEvent\('replay:spin-start',[\s\S]*?day: this\.#selectedDay,[\s\S]*?player: this\.#selectedPlayer/,
+      'replay-panel announces the loading window as soon as the main press starts',
+    );
+    const start = LAST_DAY_SRC.indexOf('#warmDaySummary(viewed, day)');
+    const end = LAST_DAY_SRC.indexOf('\n  #onPanelSpinStart(', start);
+    const warm = LAST_DAY_SRC.slice(start, end);
+    assert.match(warm, /#dayActivity\(viewed, day\)/);
+    assert.match(warm, /#daySummaryWinners\(day\)/);
+    assert.match(warm, /#loadExactSummaryCoinflip\(day\)/);
+    assert.match(LAST_DAY_SRC, /addEventListener\('replay:spin-start', this\.#spinStartListener\)/);
+    assert.match(LAST_DAY_SRC, /removeEventListener\('replay:spin-start', this\.#spinStartListener\)/);
   });
 
   test('a reloaded DAY SUMMARY owns the LCD before a loading repaint can claim it', async () => {
@@ -2742,6 +2769,23 @@ describe('foil match pending action', () => {
     assert.match(DRAWING_CSS,
       /\.ldj-foil-machine-cell\.is-color-match::after\s*\{[^}]*background:[^}]*box-shadow:/s,
       'the durable +2 state additionally lights the quadrant background');
+    const fullMatchSurface = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded\\s*\\n?\\s*\\.ldj-foil-machine-cell\\.is-color-match::after',
+    );
+    assert.match(declarationOf(fullMatchSurface, 'background') || '', /transparent/,
+      'a full match lifts the dormant mask so the ticket\'s foil colour remains visible');
+    assert.match(declarationOf(fullMatchSurface, 'box-shadow') || '',
+      /var\(--foil-metal-bright[^;]*var\(--foil-metal-glow/s,
+      'the full-match edge and glow come from that quadrant\'s foil palette');
+    assert.doesNotMatch(fullMatchSurface,
+      /rgba\((?:34,\s*197,\s*94|74,\s*222,\s*128|134,\s*239,\s*172|20,\s*83,\s*45)/,
+      'an exact match is not repainted with a fixed green success colour');
+    const fullMatchBadge = ruleFor(
+      '\\.ldj-foil-machine-slot\\.is-loaded\\s*\\n?\\s*\\.ldj-foil-machine-cell\\.is-color-match img',
+    );
+    assert.match(declarationOf(fullMatchBadge, 'filter') || '',
+      /var\(--foil-metal-pale[^;]*var\(--foil-metal-bright/s,
+      'the exact-match badge lamp follows the same foil palette as its quadrant');
 
     // The centre states its muting unconditionally — no match state at all.
     const centreRule = ruleFor(
@@ -2889,8 +2933,8 @@ describe('foil match pending action', () => {
   test('source publishes the contract tuple and sends its receipt to the reveal engine', () => {
     const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
     assert.equal(/renderDayResults/.test(src), false, 'results renderer removed');
-    assert.match(src, /#renderFoilBackdrop\(\)[\s\S]*bestGrade\(line, mainSet, bonusSet\)[\s\S]*traitToBadge\(traitId\)/,
-      'the cabinet paints real foil traits and grades them only through the spoiler-gated model');
+    assert.match(src, /#renderFoilBackdrop\(\)[\s\S]*gradeLine\(line, bonusSet\)[\s\S]*gradeLine\(line, mainSet\)[\s\S]*traitToBadge\(traitId\)/,
+      'the cabinet paints real foil traits and grades each spoiler-gated draw independently');
     assert.match(src, /claimableDrawGrades\(/,
       'main and bonus draw claims are graded independently');
     assert.match(src, /publishPendingActions\(FOIL_MATCH_ACTION_SOURCE/);
@@ -3229,8 +3273,8 @@ describe('foil match pending action', () => {
       assert.equal(slot.getAttribute('data-draw-kind'), '1');
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'bonus spin completion alone cannot publish the still-covered claim');
-      assert.equal(slot.querySelectorAll('.is-color-match').length, 4,
-        'the landed bonus result adds its exact matches to the durable main lamps');
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 3,
+        'the landed bonus result replaces the non-paying main lamps');
       storeMod.update('viewing.address', player);
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
@@ -3251,7 +3295,7 @@ describe('foil match pending action', () => {
       assert.equal(bonusClaimTicket?.tagName, 'BUTTON');
       assert.match(bonusClaimTicket?.getAttribute('aria-label') || '', /bonus spin foil match/);
       assert.equal(slot.querySelector('.ldj-foil-claim-marker')?.tagName, 'BUTTON');
-      assert.equal(slot.querySelectorAll('.is-color-match').length, 4,
+      assert.equal(slot.querySelectorAll('.is-color-match').length, 3,
         'bonus scratch leaves the already-settled foil lamps unchanged');
       el.disconnectedCallback();
     } finally {
@@ -3445,7 +3489,7 @@ describe('foil match pending action', () => {
     );
   });
 
-  test('the final jackpot keeps its pack until purchase phase, then seats the next level', async () => {
+  test('the final jackpot keeps its eligible pack through presentation and an outstanding payout', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
     const nextTraits = [7, 79, 143, 207];
@@ -3453,6 +3497,7 @@ describe('foil match pending action', () => {
       word | ((trait & 0xff) << (quadrant * 8))
     ), 0) >>> 0;
     const requestedLevels = [];
+    let claims = [];
     const priorFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
       const parsedUrl = new URL(String(url), 'http://localhost');
@@ -3470,7 +3515,7 @@ describe('foil match pending action', () => {
           lines: level === 38
             ? [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]]
             : [nextTraits, [6, 78, 142, 206], [5, 77, 141, 205], [0, 76, 140, 204]],
-          claims: [],
+          claims: level === 38 ? claims : [],
         }),
       };
     };
@@ -3507,16 +3552,18 @@ describe('foil match pending action', () => {
         'the current-level pack is seated before the spin');
 
       document.dispatchEvent({
-        type: 'replay:spin-complete',
-        detail: { day: 190, player, bonusPhase: false, bonusAvailable: false },
+        type: 'replay:spin-progress',
+        detail: {
+          day: 190,
+          player,
+          bonusPhase: false,
+          traits: [traits[0], null, null, null],
+          liveTraits: [traits[0], null, null, null],
+        },
       });
-      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
 
-      assert.deepEqual([...new Set(requestedLevels)], [38],
-        'the final locked jackpot still owns the level 38 cabinet');
-
-      // Once the final jackpot is over, the same numeric game level enters
-      // purchase cadence and every new ticket/foil purchase belongs to 39.
+      // Contract cadence can advance while the player's final drawing is
+      // visibly still spinning. That must not replace its eligible pack.
       storeMod.update('app.gameState', {
         level: 38,
         phase: 'PURCHASE',
@@ -3525,10 +3572,35 @@ describe('foil match pending action', () => {
       });
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
 
+      assert.deepEqual([...new Set(requestedLevels)], [38],
+        'purchase cadence cannot eject the level 38 pack mid-spin');
+      assert.match(
+        slot.querySelector('.ldj-foil-machine-cell')?.querySelector('img')?.src || '',
+        /crypto_01_tron_pink\.svg$/,
+      );
+
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 190, player, bonusPhase: false, bonusAvailable: false },
+      });
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 190, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      assert.deepEqual([...new Set(requestedLevels)], [38],
+        'the resolved pack remains while its T8 payout is still unclaimed');
+      assert.equal(slot.classList.contains('is-claimable'), true);
+
+      claims = [{ day: 190, ticketIndex: 0, drawKind: 0 }];
+      componentPollMod._onVisibilityChangeForTests();
+      for (let i = 0; i < 12; i += 1) await flushMicrotasks();
+
       assert.deepEqual([...new Set(requestedLevels)], [38, 39],
-        'purchase cadence retargets the cabinet to the level 39 pack');
+        'after the old payout is indexed, the cabinet can follow the buy level');
       assert.equal(slot.classList.contains('is-loaded'), true,
-        'the next-level pack is seated after the final jackpot handoff');
+        'the next-level pack is seated only after the final jackpot handoff is safe');
       assert.equal(
         slot.querySelector('.ldj-foil-machine-cell')?.querySelector('img')?.src || '',
         traitToBadge(nextTraits[0])?.path,
@@ -3540,7 +3612,7 @@ describe('foil match pending action', () => {
     }
   });
 
-  test('level 45 foils stay visible through its final jackpot lock and move only at transition', async () => {
+  test('level 45 foils survive the chain transition until their final presentation completes', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
     const requestedLevels = [];
@@ -3601,8 +3673,16 @@ describe('foil match pending action', () => {
         phaseTransitionActive: true,
       });
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.deepEqual([...new Set(requestedLevels)], [45],
+        'end-phase cannot pre-empt the still-unplayed level 45 drawing');
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 245, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 12; i += 1) await flushMicrotasks();
       assert.deepEqual([...new Set(requestedLevels)], [45, 46],
-        'the cabinet switches to level 46 only when level 45 enters end-phase');
+        'the cabinet switches to level 46 only after the final presentation completes');
       el.disconnectedCallback();
     } finally {
       globalThis.fetch = priorFetch;
@@ -3723,7 +3803,7 @@ describe('foil match pending action', () => {
     }
   });
 
-  test('a numeric level advance ejects a previously seated foil pack from its slots', async () => {
+  test('a numeric level advance waits for the previously eligible pack to finish', async () => {
     const player = '0xab12000000000000000000000000000000000000';
     const level39Lines = [
       [1, 70, 130, 200],
@@ -3795,13 +3875,28 @@ describe('foil match pending action', () => {
       });
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
 
+      assert.equal(requestedLevels.at(-1), 39,
+        'the new numeric level cannot replace a pack whose last drawing is unfinished');
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-slot')
+          .filter((slot) => slot.classList.contains('is-loaded')).length,
+        4,
+        'the prior-level foil tickets remain seated throughout their last presentation',
+      );
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 238, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 12; i += 1) await flushMicrotasks();
+
       assert.equal(requestedLevels.at(-1), 40,
-        'the cabinet follows the new numeric level instead of its reveal pin');
+        'the cabinet follows the new numeric level after presentation completion');
       assert.equal(
         el.querySelectorAll('.ldj-foil-machine-slot')
           .filter((slot) => slot.classList.contains('is-loaded')).length,
         0,
-        'the prior-level foil tickets leave their slots immediately at rollover',
+        'the retired level-39 tickets leave only after their final drawing is complete',
       );
       el.disconnectedCallback();
     } finally {
@@ -3902,7 +3997,7 @@ describe('foil faces track the spin presentation', () => {
     });
   }
 
-  async function mount({ level = 12, day = 45, bonusDraw = null } = {}) {
+  async function mount({ level = 12, day = 45, mainDraw = DRAW, bonusDraw = null } = {}) {
     storeMod.update('connected.address', PLAYER);
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
@@ -3911,7 +4006,7 @@ describe('foil faces track the spin presentation', () => {
     storeMod.update('app.lastDay', {
       day, level,
       summary: {
-        rollOne: { mainTraitsPacked: pack(DRAW) },
+        rollOne: { mainTraitsPacked: pack(mainDraw) },
         rollTwo: { bonusTraitsPacked: bonusDraw ? pack(bonusDraw) : null },
       },
       winners: [],
@@ -4007,35 +4102,43 @@ describe('foil faces track the spin presentation', () => {
     }
   });
 
-  test('bonus faces stay transient in flight and become durable on completion', async () => {
+  test('bonus replaces non-paying main lamps in flight and becomes durable on completion', async () => {
     const priorFetch = globalThis.fetch;
     globalThis.fetch = foilFetch();
     let el = null;
     try {
+      const mainDraw = [2, 69, 131, 201];
       const bonusDraw = [2, 70, 130, 200];
-      el = await mount({ bonusDraw });
-      await progress(DRAW);
+      el = await mount({ mainDraw, bonusDraw });
+      await progress(mainDraw);
       document.dispatchEvent({
         type: 'replay:spin-complete',
         detail: { day: 45, player: PLAYER, bonusPhase: false, bonusAvailable: true },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2],
-        'the settled main draw is durable before bonus starts');
+      assert.deepEqual(faces(el), [MISS, MISS, MISS, MISS],
+        'the settled non-paying main draw remains graded before bonus starts');
+
+      await progress([null, null, null, null], {
+        bonusPhase: true,
+        liveTraits: [null, null, null, null],
+      });
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, DORMANT, DORMANT],
+        'the opening bonus frame clears every old main lamp immediately');
 
       await progress([null, null, null, null], {
         bonusPhase: true,
         liveTraits: [null, null, 130, null],
       });
-      assert.deepEqual(faces(el), [HIT2, HIT1, HIT2, HIT2],
-        'a live bonus match layers over the durable main result');
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, HIT2, DORMANT],
+        'the first live bonus face clears every old main lamp');
 
       await progress([null, null, null, null], {
         bonusPhase: true,
         liveTraits: [null, null, 132, null],
       });
-      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2],
-        'changing the bonus face clears only its transient contribution');
+      assert.deepEqual(faces(el), [DORMANT, DORMANT, MISS, DORMANT],
+        'changing the bonus face updates only the current draw');
 
       await progress([null, null, 130, null], {
         bonusPhase: true,
@@ -4048,10 +4151,47 @@ describe('foil faces track the spin presentation', () => {
         detail: { day: 45, player: PLAYER, bonusPhase: true, bonusAvailable: false },
       });
       for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      assert.deepEqual(faces(el), [HIT2, HIT2, HIT2, HIT2],
+      assert.deepEqual(faces(el), [MISS, HIT2, HIT2, HIT2],
         'spin completion replaces the overlay with the settled bonus result and keeps its lamps on');
       assert.deepEqual(flashes(el), [false, false, false, false],
         'the bonus lock pop cannot visually outlive spin completion');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('an unclaimed paying main result stays lit when the bonus starts', async () => {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount({ bonusDraw: [2, 70, 130, 200] });
+      await progress(DRAW);
+      document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day: 45, player: PLAYER, bonusPhase: false, bonusAvailable: true },
+      });
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 45, player: PLAYER, bonusPhase: false, bonusAvailable: true },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+
+      const slot = el.querySelectorAll('.ldj-foil-machine-slot')[0];
+      assert.equal(slot.classList.contains('is-claimable'), true);
+      assert.equal(slot.getAttribute('data-claim-score'), 'T5');
+      assert.equal(slot.getAttribute('data-claim-draw-kind'), '0');
+
+      await progress([null, null, null, null], {
+        bonusPhase: true,
+        liveTraits: [null, null, 130, null],
+      });
+      assert.deepEqual(faces(el), [HIT2, HIT1, MISS, HIT2],
+        'the outstanding T5 main tuple remains intact rather than mixing with Roll 2');
+      assert.equal(slot.classList.contains('is-claimable'), true,
+        'the old lamps remain only because their payout is still actionable');
+      assert.equal(slot.getAttribute('data-draw-kind'), '0');
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;
@@ -4577,7 +4717,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     el.disconnectedCallback();
   });
 
-  test('DAY SUMMARY warms one activity flight and loads exact winners alongside it', async () => {
+  test('DAY SUMMARY spin-start warms one complete snapshot reused by the click', async () => {
     const revealMod = await import('../reveal-overlay.js');
     revealMod.__resetForTest();
     const day = 905;
@@ -4589,6 +4729,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     };
     const packsGate = deferred();
     const viewerGate = deferred();
+    const winnersGate = deferred();
     const priorFetch = globalThis.fetch;
     const requested = [];
     const response = (value) => ({
@@ -4606,7 +4747,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         return viewerGate.promise.then(response);
       }
       if (path.includes(`/game/jackpot/day/${day}/winners`)) {
-        return Promise.resolve(response({ day, level: 2, winners: [] }));
+        return winnersGate.promise.then(response);
       }
       if (path.includes(`/game/coinflip/day/${day}`)) return Promise.resolve(response(null));
       return Promise.resolve(response(null));
@@ -4626,17 +4767,19 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       });
       await flushMicrotasks();
       globalThis.document.dispatchEvent({
-        type: 'replay:spin-complete',
+        type: 'replay:spin-start',
         detail: { day, player: address, bonusPhase: false },
       });
       await flushMicrotasks();
 
       const cta = el.querySelector('[data-bind="ldj-results-cta"]');
-      assert.equal(cta.hidden, true, 'activity warms while scratch work is still ahead');
+      assert.equal(cta.hidden, true, 'the entire summary warms while the first reel is starting');
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
-        'spin completion starts one pack prefetch');
+        'spin start launches one pack prefetch');
       assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
-        'spin completion starts one viewer prefetch');
+        'spin start launches one viewer prefetch');
+      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
+        'spin start launches the authoritative winner prefetch too');
 
       globalThis.document.dispatchEvent(scratchEvent({
         day, player: address, bonusPhase: false, bonusAvailable: false,
@@ -4648,15 +4791,17 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'CTA visibility shares the spin-time pack prefetch');
       assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
         'CTA visibility shares the spin-time viewer prefetch');
+      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
+        'CTA visibility shares the spin-time winner prefetch');
 
       cta.dispatchEvent({ type: 'click' });
       await Promise.resolve();
-      assert.ok(requested.some((url) => url.includes(`/game/jackpot/day/${day}/winners`)),
-        'the exact winner refresh starts while activity is still unresolved');
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
-        'the click shares the visible CTA pack flight');
+        'the click does not launch a replacement pack request');
       assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
-        'the click shares the visible CTA viewer flight');
+        'the click does not launch a replacement viewer request');
+      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
+        'the click does not launch a replacement winner request');
 
       packsGate.resolve({
         address, day, ticketRevealPacks: [], lootboxPacks: [],
@@ -4664,6 +4809,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       viewerGate.resolve({
         address, day, activity: { lootboxPurchases: [], lootboxResults: [], coinflip: null },
       });
+      winnersGate.resolve({ day, level: 2, winners: [] });
       await flushMicrotasks();
       await new Promise((resolve) => setImmediate(resolve));
       await flushMicrotasks();

@@ -744,6 +744,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.deg-block \.dgn-colors\s*\{[^}]*grid-template-columns:\s*repeat\(8, 1\.25rem\) 1\.3rem[^}]*gap:\s*0\.12rem[^}]*\}[\s\S]*?\.deg-block \.dgn-color-btn\s*\{[^}]*width:\s*1\.25rem[^}]*height:\s*1\.25rem[^}]*min-width:\s*0[^}]*min-height:\s*0[^}]*padding:\s*0\.265rem[^}]*background-clip:\s*content-box !important/s,
+      'phones render small color dots without shrinking the surrounding choice buttons to the same size',
+    );
+    assert.match(
+      APP_CSS,
       /\.deg-block--wager \.deg-place-cta\s*\{[^}]*font-size:\s*0\.74rem/s,
       'the amount-bearing Place Bet label stays comfortably readable',
     );
@@ -755,6 +760,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       APP_CSS,
       /\.dgn-inline-spin \.dgn-rq\.q-sym,[\s\S]*?\.dgn-inline-spin \.dgn-rq\.q-col\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(126, 176, 255, 0\.78\)/s,
       'one-trait match cells use a blue inset edge instead of the old warm outline',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dgn-inline-spin \.dgn-rq\.q-lock-hit\.dgn-lock-color\s*\{[^}]*background:\s*rgba\(139, 92, 246, 0\.36\)[^}]*box-shadow:\s*inset 0 0 0 3px rgba\(167, 139, 250, 0\.82\)/s,
+      'a locked color hit is purple instead of reusing the green symbol-lock state',
     );
   });
 

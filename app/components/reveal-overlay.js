@@ -102,6 +102,26 @@ let _queuedBingoPresentationIds = new Set();
 let _queuedPariPresentationIds = new Set();
 let _queuedReferralBonusPresentationIds = new Set();
 
+/**
+ * The abort identity of a single-presentation prize (Bingo, settled side bet,
+ * referral bonus), read from either a raw queued sequence or the normalized one
+ * the queue holds. Null for every other kind.
+ */
+function _resultPresentationOf(seq) {
+  if (seq?.resultPresentation) return seq.resultPresentation;
+  const presentationId = String(seq?.presentationId || '');
+  if (!presentationId || !_tombstoneSet(seq?.kind)) return null;
+  return { kind: seq.kind, presentationId, release: seq?.revealRelease || null };
+}
+
+/** The session tombstone set for a single-presentation prize kind, else null. */
+function _tombstoneSet(kind) {
+  if (kind === 'bingo') return _queuedBingoPresentationIds;
+  if (kind === 'pari') return _queuedPariPresentationIds;
+  if (kind === 'referral-bonus') return _queuedReferralBonusPresentationIds;
+  return null;
+}
+
 // Ticket inventory listens for these lifecycle events so newly indexed cards
 // remain behind their wrapper until the corresponding presentation is actually
 // consumed. Pack-watch owns the durable pending/revealed bookkeeping.
@@ -115,6 +135,12 @@ export const REVEAL_OVERLAY_IDLE_EVENT = 'degenerus:reveal-overlay-idle';
 export const LOOTBOX_REVEAL_COMPLETE_EVENT = 'degenerus:lootbox-reveal-complete';
 export const LOOTBOX_REVEAL_ABORT_EVENT = 'degenerus:lootbox-reveal-abort';
 export const LOOTBOX_REVEAL_QUEUED_EVENT = 'degenerus:lootbox-reveal-queued';
+// Bingo / side-bet / referral results are single-presentation prizes whose
+// publishers mark them seen the moment they queue. When the player closes the
+// overlay their sequences are dropped with the rest of the queue, so the abort
+// has to hand the id back — otherwise the prize is marked seen, tombstoned,
+// and can never be presented again. Mirrors LOOTBOX_REVEAL_ABORT_EVENT.
+export const RESULT_REVEAL_ABORT_EVENT = 'degenerus:result-reveal-abort';
 
 function _withLootboxPresentationId(seq) {
   if (seq?.kind !== 'lootbox') return seq;
@@ -202,28 +228,16 @@ export function queueReveal(seq) {
   // the id so a presentation the player never finished can be retried.
   if (queued?.kind === 'lootbox'
     && presentationId && _queuedLootboxPresentationIds.has(presentationId)) return false;
-  if (queued?.kind === 'bingo'
-    && presentationId && _queuedBingoPresentationIds.has(presentationId)) return false;
-  if (queued?.kind === 'pari'
-    && presentationId && _queuedPariPresentationIds.has(presentationId)) return false;
-  if (queued?.kind === 'referral-bonus'
-    && presentationId && _queuedReferralBonusPresentationIds.has(presentationId)) return false;
+  if (presentationId && _tombstoneSet(queued?.kind)?.has(presentationId)) return false;
   // Bingo ids are session tombstones, not merely active-queue locks. A claimed
-  // Bingo is immutable, so aborting or completing its visual must not let a
-  // delayed indexer refresh present the same prize again.
-  if (queued?.kind === 'bingo' && presentationId) {
-    _queuedBingoPresentationIds.add(presentationId);
-  }
-  // A settled side-bet round is immutable too. Claim/read races can discover
-  // it twice, but the player should only see one result presentation.
-  if (queued?.kind === 'pari' && presentationId) {
-    _queuedPariPresentationIds.add(presentationId);
-  }
-  // A referral payout is also immutable for one player and level. Keep a
-  // stale read and the local transaction receipt from opening it twice.
-  if (queued?.kind === 'referral-bonus' && presentationId) {
-    _queuedReferralBonusPresentationIds.add(presentationId);
-  }
+  // Bingo is immutable, so COMPLETING its visual must not let a delayed indexer
+  // refresh present the same prize again. An abort is the opposite case: the
+  // player never saw it, so #emitResultAbort hands the id back below.
+  //
+  // A settled side-bet round and a referral payout are immutable for the same
+  // reason — one player, one round/level, one presentation.
+  const tombstones = _tombstoneSet(queued?.kind);
+  if (tombstones && presentationId) tombstones.add(presentationId);
   _emitLootboxQueued(queued);
   if (_instance) {
     _instance.enqueue(queued);
@@ -298,6 +312,61 @@ function _preloadImage(src) {
   } catch (_e) { /* a cold swap still paints, just a frame later */ }
 }
 
+// A preload request is only a hint: it neither proves that the image decoded
+// nor that the newly mounted face reached the compositor. Wait on the actual
+// images used by the reward face, then give the browser two paint frames before
+// turning that face toward the player. Broken images resolve through their
+// error event and cannot strand the reveal.
+async function _waitForImageReady(image) {
+  if (!image) return;
+  try {
+    image.decoding = 'sync';
+    if (typeof image.decode === 'function') {
+      await image.decode();
+      return;
+    }
+  } catch (_e) {
+    // Some engines reject decode() for SVGs they still render successfully.
+    // Fall through to the real load state before deciding the face is ready.
+  }
+  if (typeof image.complete !== 'boolean' || image.complete) return;
+  await new Promise((resolve) => {
+    if (typeof image.addEventListener !== 'function') { resolve(); return; }
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    image.addEventListener('load', done, { once: true });
+    image.addEventListener('error', done, { once: true });
+  });
+}
+
+function _waitForTwoPaintFrames() {
+  const browserScope = typeof window !== 'undefined' ? window : null;
+  const scope = typeof browserScope?.requestAnimationFrame === 'function'
+    ? browserScope
+    : globalThis;
+  const raf = scope?.requestAnimationFrame;
+  if (typeof raf !== 'function') return Promise.resolve();
+  return new Promise((resolve) => {
+    raf.call(scope, () => raf.call(scope, resolve));
+  });
+}
+
+async function _prepareLootboxRewardFaces(flight) {
+  const images = Array.from(flight?.querySelectorAll?.('img') || []);
+  const waits = images.map(_waitForImageReady);
+  const fontsReady = typeof document !== 'undefined' ? document.fonts?.ready : null;
+  if (fontsReady && typeof fontsReady.then === 'function') waits.push(fontsReady);
+  await Promise.allSettled(waits);
+  // Layout flush + two rAFs: the compositor receives the complete front-face
+  // texture before rotateY exposes it, rather than rasterizing mid-turn.
+  void flight?.offsetWidth;
+  await _waitForTwoPaintFrames();
+}
+
 const SPIN_LABELS = Object.freeze({
   wwxrp: 'WWXRP SPIN', flip: 'FLIP SPINS', eth: 'ETH SPIN', record: 'RECORD BOUNTY',
 });
@@ -327,7 +396,6 @@ const LOOTBOX_MANUAL_CHARGE_MS = 1_350;
 const LOOTBOX_AUTO_CHARGE_MS = 880;
 const LOOTBOX_MANUAL_BURST_MS = 1_000;
 const LOOTBOX_AUTO_BURST_MS = 740;
-const LOOTBOX_CARD_FACE_READY_MS = 60;
 const LOOTBOX_CARD_FLIP_MS = 470;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
@@ -573,6 +641,24 @@ function _boxSpinScoreForHero(row, heroQuadrant) {
   return score;
 }
 
+// FLIP and record chains hash a fresh Hero quadrant for every reel, but their
+// event payload retains only the packed tickets and final score. Recover the
+// Hero when those values admit exactly one contract-consistent quadrant. An
+// ambiguous row deliberately carries no marker rather than displaying a
+// confidently wrong Hero.
+function _boxSpinHeroForRow(reel, row) {
+  const supplied = Number(reel?.heroQuadrant);
+  if (reel?.heroQuadrant != null && Number.isInteger(supplied)) {
+    const hero = supplied & 3;
+    return _boxSpinScoreForHero(row, hero) === Number(row?.score) ? hero : null;
+  }
+  const candidates = [];
+  for (let hero = 0; hero < 4; hero += 1) {
+    if (_boxSpinScoreForHero(row, hero) === Number(row?.score)) candidates.push(hero);
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 // The BoxSpin event publishes the final group payout rather than three row
 // payouts. FLIP rows all share one stake and one ROI, so their relative payout
 // weights are still recoverable exactly from the emitted ticket + score table.
@@ -759,9 +845,13 @@ export function buildBoxSpinBoard(spin) {
   if (currency == null) return null;
   const reels = (Array.isArray(spin?.reels) ? spin.reels : []).slice(0, 3);
   if (reels.length === 0) return null;
+  const decodedHero = spin?.heroQuadrant == null
+    ? boxSpinHeroQuadrant(spin?.betId)
+    : Number(spin.heroQuadrant);
+  const boardHeroIdx = Number.isInteger(decodedHero) ? (decodedHero & 3) : null;
   const rows = reels.map((reel, i) => {
     const score = Number.isFinite(Number(reel?.score)) ? Number(reel.score) : 0;
-    return {
+    const row = {
       spinIndex: Number.isFinite(Number(reel?.spinIndex)) ? Number(reel.spinIndex) : i,
       playerTraits: _reelTicket(reel, 'player') ?? 0,
       houseTraits: _reelTicket(reel, 'result'),
@@ -771,13 +861,12 @@ export function buildBoxSpinBoard(spin) {
       previewPayout: 0n,
       previewApproximate: false,
     };
+    row.heroIdx = flipLike ? _boxSpinHeroForRow(reel, row) : boardHeroIdx;
+    return row;
   });
   const grossPayout = _safeBigInt(spin?.payout);
   const total = spinType === 'eth' ? _safeBigInt(spin?.ethShare) : grossPayout;
-  const decodedHero = spin?.heroQuadrant == null
-    ? boxSpinHeroQuadrant(spin?.betId)
-    : Number(spin.heroQuadrant);
-  const heroIdx = Number.isInteger(decodedHero) ? (decodedHero & 3) : null;
+  const heroIdx = flipLike ? null : boardHeroIdx;
   // FLIP's score table pays from S2 upward. The packed survival bit is false
   // both when all three reels miss and when a real preliminary payout loses
   // its double-or-nothing draw, so preserve that distinction for the reveal.
@@ -2305,8 +2394,14 @@ function _reducedMotion() {
 function _animateCount(el, text, ms = 750) {
   if (!el) return;
   const m = /^([\d,]+(?:\.\d+)?)/.exec(String(text));
-  const hasRaf = typeof requestAnimationFrame === 'function'
-    && typeof performance !== 'undefined';
+  const browserScope = typeof window !== 'undefined' ? window : null;
+  const rafScope = typeof browserScope?.requestAnimationFrame === 'function'
+    ? browserScope
+    : globalThis;
+  // Capture the callable for the whole count. Test/embedded environments can
+  // replace their global shim while a final frame is still queued.
+  const raf = rafScope?.requestAnimationFrame;
+  const hasRaf = typeof raf === 'function' && typeof performance !== 'undefined';
   const duration = Number(ms);
   if (!m || !hasRaf || _reducedMotion() || !Number.isFinite(duration) || duration <= 0) {
     el.textContent = String(text);
@@ -2321,10 +2416,10 @@ function _animateCount(el, text, ms = 750) {
     const t = Math.min((now - start) / duration, 1);
     const eased = 1 - Math.pow(1 - t, 3);
     el.textContent = _groupAmountText((target * eased).toFixed(decimals)) + suffix;
-    if (t < 1) requestAnimationFrame(step);
+    if (t < 1) raf.call(rafScope, step);
     else el.textContent = String(text);
   };
-  requestAnimationFrame(step);
+  raf.call(rafScope, step);
 }
 
 // ---------------------------------------------------------------------------
@@ -2954,9 +3049,22 @@ class RevealOverlay extends HTMLElement {
     return true;
   }
 
-  #pendingMatchesLootboxRelease(item, release) {
-    if (!release?.key || item?.kind !== 'lootbox') return false;
-    return String(item.id || '') === `lootbox:${String(release.key)}`;
+  #pendingMatchesLootboxSequence(item, sequenceOrRelease) {
+    if (item?.kind !== 'lootbox') return false;
+    // A single reveal owns one release, while OPEN ALL deliberately clears
+    // that field and carries every selected release in lootboxCompletions.
+    // Until the terminal acknowledgement emits completion, none of those
+    // still-published Pending rows is a valid "next" box.
+    const releases = sequenceOrRelease?.kind === 'lootbox'
+      ? [
+        sequenceOrRelease.lootboxRelease,
+        ..._lootboxCompletionEntries(sequenceOrRelease).map((entry) => entry.release),
+      ]
+      : [sequenceOrRelease];
+    const pendingId = String(item.id || '');
+    return releases.some((release) => (
+      release?.key && pendingId === `lootbox:${String(release.key)}`
+    ));
   }
 
   #canChooseLootboxBoxView(seq) {
@@ -3012,16 +3120,16 @@ class RevealOverlay extends HTMLElement {
     return true;
   }
 
-  #readyPendingLootboxes(excludeRelease = null) {
+  #readyPendingLootboxes(excludeSequence = null) {
     return getPendingActions().filter((item) => (
       item?.kind === 'lootbox'
       && item?.state === 'ready'
       && typeof item.run === 'function'
-      && !this.#pendingMatchesLootboxRelease(item, excludeRelease)
+      && !this.#pendingMatchesLootboxSequence(item, excludeSequence)
     ));
   }
 
-  #nextReadyPendingAction(excludeRelease = null) {
+  #nextReadyPendingAction(excludeSequence = null) {
     return getPendingActions().find((item) => (
       item?.state === 'ready' && typeof item.run === 'function'
       // Mine FLIP is permissionless maintenance, not part of a player's
@@ -3029,7 +3137,7 @@ class RevealOverlay extends HTMLElement {
       // not let a reveal popup chain into it automatically.
       && item?.source !== 'mine-flip-resolver'
       && !String(item?.id || '').startsWith('mine-flip:')
-      && !this.#pendingMatchesLootboxRelease(item, excludeRelease)
+      && !this.#pendingMatchesLootboxSequence(item, excludeSequence)
     )) || null;
   }
 
@@ -3103,8 +3211,8 @@ class RevealOverlay extends HTMLElement {
   // receipt parsing. This helper only collects the normalized reveals that
   // those honest actions append, then moves them directly behind the box the
   // player is currently viewing.
-  async #queuePendingLootboxes({ all = false, excludeRelease = null } = {}) {
-    const actions = this.#readyPendingLootboxes(excludeRelease);
+  async #queuePendingLootboxes({ all = false, excludeSequence = null } = {}) {
+    const actions = this.#readyPendingLootboxes(excludeSequence);
     const boxes = [];
     const unrelated = [];
     for (const action of actions) {
@@ -3140,7 +3248,7 @@ class RevealOverlay extends HTMLElement {
     try {
       boxes = await this.#queuePendingLootboxes({
         all,
-        excludeRelease: seq?.lootboxRelease,
+        excludeSequence: seq,
       });
     } finally {
       this.#controlsOnly = false;
@@ -3172,7 +3280,7 @@ class RevealOverlay extends HTMLElement {
   // from #readyPendingLootboxes and stay put.
   async #startOpenAllLootboxes(seq) {
     if (this.#controlsOnly || seq?.kind !== 'lootbox') return false;
-    const ready = this.#readyPendingLootboxes(seq.lootboxRelease);
+    const ready = this.#readyPendingLootboxes(seq);
     if (ready.length === 0) {
       this.#tap('open-one-box');
       return false;
@@ -3180,10 +3288,12 @@ class RevealOverlay extends HTMLElement {
 
     this.#controlsOnly = true;
     const actions = this.#bind('rvl-pack-actions');
+    const openAll = this.#bind('rvl-open-all');
     const hint = this.#bind('rvl-hint');
     const close = this.#bind('rvl-close');
     actions?.classList?.add('is-loading');
     for (const button of actions?.querySelectorAll?.('button') || []) button.disabled = true;
+    if (openAll) openAll.textContent = `OPENING ALL ${ready.length + 1}…`;
     if (hint) {
       hint.hidden = false;
       hint.textContent = `OPENING ALL ${ready.length + 1}…`;
@@ -3194,7 +3304,7 @@ class RevealOverlay extends HTMLElement {
     try {
       boxes = await this.#queuePendingLootboxes({
         all: true,
-        excludeRelease: seq.lootboxRelease,
+        excludeSequence: seq,
       });
     } finally {
       this.#controlsOnly = false;
@@ -3231,8 +3341,14 @@ class RevealOverlay extends HTMLElement {
     const seq = normalizeSequence(queued);
     if (!seq) {
       this.#emitLootboxAbort([queued]);
+      this.#emitResultAbort([queued]);
       return;
     }
+    // normalizeSequence rebuilds the object per kind and does not carry the
+    // presentation identity for every one. Stamp it explicitly so an abort can
+    // hand a single-presentation prize back to its publisher.
+    const resultPresentation = _resultPresentationOf(queued);
+    if (resultPresentation) seq.resultPresentation = resultPresentation;
     this.#queue.push(seq);
     // Same-tick pack releases are ordered before the runner claims the first
     // item. This prevents a foil-only record from becoming the current pack
@@ -3302,6 +3418,7 @@ class RevealOverlay extends HTMLElement {
       // Never let a reveal error strand the scroll lock.
       this.#emitPackAbort([this.#currentSequence, ...this.#queue]);
       this.#emitLootboxAbort([this.#currentSequence, ...this.#queue]);
+      this.#emitResultAbort([this.#currentSequence, ...this.#queue]);
       this.#aborted = true;
       this.#queue = [];
     } finally {
@@ -3328,6 +3445,7 @@ class RevealOverlay extends HTMLElement {
   #abort() {
     this.#emitPackAbort([this.#currentSequence, ...this.#queue]);
     this.#emitLootboxAbort([this.#currentSequence, ...this.#queue]);
+    this.#emitResultAbort([this.#currentSequence, ...this.#queue]);
     this.#aborted = true;
     this.#queue = [];
     this.#currentSequence = null;
@@ -3418,6 +3536,30 @@ class RevealOverlay extends HTMLElement {
     }
   }
 
+  // A dropped single-presentation prize must un-tombstone itself and tell its
+  // publisher, which has already persisted "seen" against the queue attempt.
+  // Without this, closing the overlay burns a Bingo, a settled side bet, or a
+  // referral bonus permanently — the row is gone and queueReveal refuses it.
+  #emitResultAbort(sequences) {
+    const released = [];
+    for (const seq of Array.isArray(sequences) ? sequences : []) {
+      const identity = _resultPresentationOf(seq);
+      if (!identity) continue;
+      const tombstones = _tombstoneSet(identity.kind);
+      if (!tombstones || !tombstones.has(identity.presentationId)) continue;
+      tombstones.delete(identity.presentationId);
+      released.push({ ...identity });
+    }
+    if (released.length === 0) return;
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
+      || typeof CustomEvent !== 'function') return;
+    try {
+      document.dispatchEvent(new CustomEvent(RESULT_REVEAL_ABORT_EVENT, {
+        detail: { released },
+      }));
+    } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
+  }
+
   #emitLootboxAbort(sequences) {
     if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
       || typeof CustomEvent !== 'function') return;
@@ -3440,6 +3582,12 @@ class RevealOverlay extends HTMLElement {
 
   #tap(value = 'tap') {
     if (this.#tapLocked) return;
+    // Control-owned handoffs (notably OPEN ALL while sibling lootbox results
+    // are still being collected) must not be preempted by a generic tap on
+    // the physical case. Only the named control that owns the handoff may
+    // resolve the gate; otherwise the original one-box reveal can escape
+    // underneath it and strand stale OPEN NEXT / OPEN ALL buttons.
+    if (this.#controlsOnly && value === 'tap') return;
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(value); }
   }
 
@@ -3770,7 +3918,7 @@ class RevealOverlay extends HTMLElement {
       }
       const hint = this.#bind('rvl-hint');
       const readyLootboxes = isLootbox && !seq.autoStart
-        ? this.#readyPendingLootboxes(seq.lootboxRelease)
+        ? this.#readyPendingLootboxes(seq)
         : [];
       const canChooseLootboxBoxView = this.#canChooseLootboxBoxView(seq)
         && !openingAll;
@@ -4651,11 +4799,12 @@ class RevealOverlay extends HTMLElement {
   #boxSpinRowPresentation(row, board, currencyRevealed) {
     const won = boxSpinScorePays(row?.score);
     const number = `#${Number(row?.spinIndex ?? 0) + 1}`;
-    const hero = board?.heroIdx != null && Number.isInteger(Number(board.heroIdx))
-      ? dgnUnpackTicket(row?.playerTraits)?.[Number(board.heroIdx) & 3]
+    const heroIdx = row?.heroIdx ?? board?.heroIdx;
+    const hero = heroIdx != null && Number.isInteger(Number(heroIdx))
+      ? dgnUnpackTicket(row?.playerTraits)?.[Number(heroIdx) & 3]
       : null;
     const houseHero = hero && row?.houseTraits != null
-      ? dgnUnpackTicket(row.houseTraits)?.[Number(board.heroIdx) & 3]
+      ? dgnUnpackTicket(row.houseTraits)?.[Number(heroIdx) & 3]
       : null;
     const heroPoints = hero && houseHero && hero.sym === houseHero.sym
       ? 2 + (hero.col === houseHero.col ? 1 : 0)
@@ -4934,7 +5083,10 @@ class RevealOverlay extends HTMLElement {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (cta.dataset.mode === 'pending-action' && cta.__rvlPendingAction) {
         void this.#runPendingContinuation(cta.__rvlPendingAction, cta, () => {
-          this.#setPendingContinuation(cta, this.#nextReadyPendingAction());
+          this.#setPendingContinuation(
+            cta,
+            this.#nextReadyPendingAction(cta.__rvlSequence),
+          );
         });
         return;
       }
@@ -4985,7 +5137,9 @@ class RevealOverlay extends HTMLElement {
   #mountFullSpinPair(rendered, row, houseTraits, board) {
     rendered.compare.textContent = '';
     const playerTraits = dgnUnpackTicket(row.playerTraits);
-    const player = this.#buildFullGamepiece(playerTraits, 'YOURS', board.heroIdx);
+    const player = this.#buildFullGamepiece(
+      playerTraits, 'YOURS', row?.heroIdx ?? board.heroIdx,
+    );
     const vs = document.createElement('span');
     vs.className = 'rvl-spin-vs rvl-dgn-vs';
     vs.textContent = 'vs';
@@ -5579,8 +5733,9 @@ class RevealOverlay extends HTMLElement {
       }
     }
 
+    rendered.cta.__rvlSequence = sequence;
     const pendingAction = sequence && !finalLabel && this.#queue.length === 0
-      ? this.#nextReadyPendingAction(sequence?.lootboxRelease)
+      ? this.#nextReadyPendingAction(sequence)
       : null;
     const terminalLabel = revealTerminalActionLabel(sequence, board);
     const unlucky = terminalLabel === 'UNLUCKY' && !finalLabel && !pendingAction;
@@ -5712,7 +5867,7 @@ class RevealOverlay extends HTMLElement {
       el.appendChild(n);
 
       const mine = this.#buildTicket(
-        dgnUnpackTicket(row.playerTraits), null, 'YOURS', board.heroIdx,
+        dgnUnpackTicket(row.playerTraits), null, 'YOURS', row?.heroIdx ?? board.heroIdx,
       );
       el.appendChild(mine);
 
@@ -6521,7 +6676,11 @@ class RevealOverlay extends HTMLElement {
   #stageLootboxRewardFlight(seq) {
     const flight = this.#bind('rvl-lootbox-flight');
     if (!flight) return;
-    flight.classList?.remove('rvl-lootbox-flight--revealing');
+    flight.classList?.remove(
+      'rvl-lootbox-flight--revealing',
+      'rvl-lootbox-flight--settled',
+      'rvl-lootbox-flight--revealed',
+    );
     flight.textContent = '';
     // A mixed combo belongs to two explicit phases. Do not flash its ordinary
     // rewards behind the case just before the BoxSpin surface covers them;
@@ -6586,14 +6745,33 @@ class RevealOverlay extends HTMLElement {
   }
 
   async #finishLootboxRewardFlight(seq, settleMs) {
-    await this.#wait(settleMs);
+    const stagedFlight = this.#bind('rvl-lootbox-flight');
+    // BoxSpin-only cases intentionally do not stage reward cards. Do not make
+    // them sit through an invisible card-flight timer.
+    if (!stagedFlight || stagedFlight.hidden) return;
+    // Reduced-motion mode has no physical turn to synchronize. Mount the final
+    // face directly so accessibility mode remains immediate and deterministic.
+    if (_reducedMotion()) {
+      const flight = this.#mountLootboxRewardFaces(seq);
+      flight?.classList?.add('rvl-lootbox-flight--revealing');
+      return;
+    }
+    // Keep JS synchronized to the fixed-duration CSS choreography. A backdrop
+    // tap may still skip an authored wait, but it also commits that animation's
+    // final pose before the next phase starts, so no half-flight or blank face
+    // can leak through.
+    const settleAction = await this.#wait(settleMs, { fixedSpeed: true });
     if (this.#aborted) return;
+    if (settleAction) stagedFlight.classList?.add('rvl-lootbox-flight--settled');
     const flight = this.#mountLootboxRewardFaces(seq);
     if (!flight) return;
-    await this.#wait(LOOTBOX_CARD_FACE_READY_MS);
+    await _prepareLootboxRewardFaces(flight);
     if (this.#aborted) return;
     flight.classList?.add('rvl-lootbox-flight--revealing');
-    await this.#wait(LOOTBOX_CARD_FLIP_MS);
+    const flipAction = await this.#wait(LOOTBOX_CARD_FLIP_MS, { fixedSpeed: true });
+    if (flipAction && !this.#aborted) {
+      flight.classList?.add('rvl-lootbox-flight--revealed');
+    }
   }
 
   #buildShareButton(seq) {
@@ -6724,7 +6902,7 @@ class RevealOverlay extends HTMLElement {
     const hasMorePacks = this.#hasMorePacks(seq);
     const openingNextPack = hasMorePacks && this.#isOpeningAll(seq);
     const readyLootboxes = seq.kind === 'lootbox'
-      ? this.#readyPendingLootboxes(seq.lootboxRelease)
+      ? this.#readyPendingLootboxes(seq)
       : [];
     const hasMoreLootboxes = readyLootboxes.length > 0;
     const autoNextLootbox = Boolean(
@@ -6733,7 +6911,7 @@ class RevealOverlay extends HTMLElement {
     const queuedLabel = this.#queuedContinuationLabel();
     const pendingAction = !hasMorePacks && !hasMoreLootboxes && !autoNextLootbox
       && !queuedLabel
-      ? this.#nextReadyPendingAction(seq.lootboxRelease)
+      ? this.#nextReadyPendingAction(seq)
       : null;
     const unlucky = Boolean(
       (seq.unlucky || seq.consolationOnly)

@@ -5,16 +5,20 @@
 
 import {
   coinflipAmountLabel,
+  coinflipBetChipCount,
   coinflipBetChipPiles,
   coinflipBetPresentation,
+  coinflipPayoutStackArt,
   coinflipRackChipCount,
+  coinflipWinChipCount,
   coinflipWinChipPiles,
 } from '/app/components/app-daily-flip.js';
-import { flipPileVariant } from '/app/app/flip-piles.js';
+import { flipPileChipCount, flipPileVariant } from '/app/app/flip-piles.js';
 
 const UNIT = 10n ** 18n;
 
 const state = {
+  customMode: 'win',
   todayFlip: 43_844n,
   todayWinPercent: null,
   todayLost: false,
@@ -45,6 +49,26 @@ if (params.has('width')) {
 const $ = (bind) => document.querySelector(`[data-bind="${bind}"]`);
 const fmt = (flip) => flip.toLocaleString('en-US');
 
+/**
+ * Any wager the operator can type: plain digits, grouped digits, or a k/m/b/t
+ * suffix ("250k", "1.5m", "2b"). Returns null when the text is not a wager
+ * yet, so a half-typed value leaves the felt alone instead of blanking it.
+ */
+const SUFFIX_ZEROS = { '': 0, k: 3, m: 6, b: 9, t: 12 };
+
+function parseFlip(text) {
+  const raw = String(text ?? '').trim().toLowerCase().replace(/[\s,_]/g, '');
+  if (raw === '') return 0n;
+  const match = raw.match(/^(\d*)(?:\.(\d*))?([kmbt]?)$/);
+  if (!match || (!match[1] && !match[2])) return null;
+  const zeros = SUFFIX_ZEROS[match[3]];
+  const whole = match[1] || '0';
+  const frac = match[2] || '';
+  return BigInt(whole + (frac.length > zeros
+    ? frac.slice(0, zeros)
+    : frac.padEnd(zeros, '0')));
+}
+
 // --- mirrors of the component's private renderers -------------------------
 
 function renderChipStrip({
@@ -52,7 +76,6 @@ function renderChipStrip({
   rack,
   amountWei,
   pileCounts = null,
-  payoutOverlay = false,
   emptyCopy,
 }) {
   rack.textContent = '';
@@ -64,41 +87,28 @@ function renderChipStrip({
     rack.textContent = emptyCopy;
     return;
   }
-  if (payoutOverlay) {
-    const columns = Math.max(1, Math.min(10, piles.length));
-    const rows = Math.ceil(piles.length / columns);
-    rack.setAttribute('data-payout-layout', 'pile');
-    rack.setAttribute('style', `--df-payout-columns:${columns};--df-payout-rows:${rows}`);
+  if (pileCounts) {
+    rack.setAttribute('data-payout-layout', 'rank');
+    rack.setAttribute('style', `--df-payout-columns:${piles.length}`);
     piles.forEach((count, stackIndex) => {
-      const row = Math.floor(stackIndex / columns);
-      const countInRow = Math.min(columns, piles.length - (row * columns));
-      const firstColumn = Math.floor((columns - countInRow) / 2) + 1;
       const stackNode = document.createElement('img');
       stackNode.className = 'df-payout-chip-stack';
-      stackNode.src = count === 1
-        ? '/shared/flip-chips/coin.svg'
-        : `/shared/flip-chips/stack-${count}.svg`;
+      stackNode.src = coinflipPayoutStackArt(count, stackIndex);
       stackNode.width = count === 1 ? 120 : 128;
       stackNode.height = count === 1 ? 64 : 55 + (16 * count);
       stackNode.alt = '';
       stackNode.setAttribute('aria-hidden', 'true');
       stackNode.setAttribute('data-chip-count', String(count));
-      stackNode.setAttribute('data-payout-turn', stackIndex % 2 === 0 ? 'face' : 'mirror');
-      stackNode.setAttribute(
-        'data-payout-layer',
-        rows > 1 && row === 0 ? 'behind' : 'front',
-      );
       stackNode.setAttribute(
         'style',
-        `--df-payout-column:${firstColumn + (stackIndex % columns)};`
-          + `--df-payout-row:${row + 1};`
-          + `--df-payout-delay:${Math.min(0.62, (row * 0.1) + ((stackIndex % columns) * 0.035)).toFixed(3)}s`,
+        `--df-payout-column:${stackIndex + 1};`
+          + `--df-payout-delay:${(stackIndex * 0.045).toFixed(3)}s`,
       );
       rack.appendChild(stackNode);
     });
     return;
   }
-  const presentation = pileCounts ? 0 : coinflipBetPresentation(amountWei);
+  const presentation = coinflipBetPresentation(amountWei);
   if (presentation > 0) {
     const pile = document.createElement('i');
     pile.className = 'df-bet-pile';
@@ -249,16 +259,13 @@ function renderToday() {
   const row = $('df-today-winnings-row');
   const addedWei = totalWei != null && totalWei > stakeWei ? totalWei - stakeWei : null;
   const winPiles = addedWei == null ? [] : coinflipWinChipPiles(stakeWei, totalWei);
-  const payoutOverlay = winPiles.length > 0
-    && (coinflipBetPresentation(stakeWei) > 0 || winPiles.length > 6);
   row.dataset.state = winPiles.length === 0 ? 'empty' : 'win';
-  row.dataset.layout = payoutOverlay ? 'pile' : 'row';
+  row.dataset.layout = coinflipBetPresentation(stakeWei) > 0 ? 'front' : 'behind';
   renderChipStrip({
     host: row,
     rack: $('df-today-winnings-rack'),
     amountWei: addedWei,
     pileCounts: winPiles,
-    payoutOverlay,
     emptyCopy: '',
   });
   const slot = $('df-position-today');
@@ -435,6 +442,107 @@ function renderRecent() {
   }
 }
 
+/**
+ * What the presentation code actually decided for the wager on the felt: the
+ * lane it picked, the exact stack split, and the physical chip counts. The
+ * bench is only useful if you can read the numbers behind the picture.
+ */
+function renderCustomReadout() {
+  const out = $('demo-custom-readout');
+  if (!out) return;
+  out.textContent = '';
+  const stakeWei = state.todayFlip * UNIT;
+  const level = coinflipBetPresentation(stakeWei);
+  const line = (label, body, tone) => {
+    const row = document.createElement('span');
+    const tag = document.createElement('b');
+    tag.textContent = `${label} `;
+    row.appendChild(tag);
+    if (tone) {
+      const hot = document.createElement('i');
+      hot.textContent = tone;
+      row.appendChild(hot);
+      row.appendChild(document.createTextNode(' '));
+    }
+    row.appendChild(document.createTextNode(body));
+    row.appendChild(document.createElement('br'));
+    out.appendChild(row);
+  };
+
+  if (state.todayFlip === 0n) {
+    line('BET', 'no bet — the spot prints NO BET');
+    return;
+  }
+  if (level > 0) {
+    const variant = flipPileVariant(stakeWei);
+    line(
+      'BET',
+      `mound rung ${level}${variant === 'a' ? '' : `-${variant}`}, `
+        + `${flipPileChipCount(stakeWei)} coins in the baked art`,
+      `${fmt(state.todayFlip)} FLIP`,
+    );
+  } else {
+    const piles = coinflipBetChipPiles(stakeWei);
+    line(
+      'BET',
+      `composed stacks [${piles.join(', ')}] = ${coinflipBetChipCount(stakeWei)} chips`,
+      `${fmt(state.todayFlip)} FLIP`,
+    );
+  }
+
+  if (state.todayLost) {
+    line('RESULT', 'loss — the spot clears and the receipt prints the stake back in red');
+    return;
+  }
+  if (state.todayWinPercent == null) {
+    line('RESULT', 'unresolved — the wager sits alone on the spot');
+    return;
+  }
+  const pct = BigInt(state.todayWinPercent);
+  const totalWei = stakeWei + ((stakeWei * pct) / 100n);
+  const piles = coinflipWinChipPiles(stakeWei, totalWei);
+  const chips = coinflipWinChipCount(stakeWei, totalWei);
+  line(
+    'PAYOUT',
+    piles.length === 0
+      ? 'nothing added'
+      : `dealer rank ${piles.length} × [${piles.join(', ')}] = ${chips} chips`,
+    `+${fmt((totalWei - stakeWei) / UNIT)} FLIP at ${100 + state.todayWinPercent}%`,
+  );
+}
+
+function syncCustomFields() {
+  const amount = $('demo-custom-amount');
+  const percent = $('demo-custom-percent');
+  const slider = $('demo-custom-slider');
+  if (amount && document.activeElement !== amount) amount.value = fmt(state.todayFlip);
+  const shown = state.todayWinPercent == null ? Number(percent?.value || 96) : state.todayWinPercent;
+  if (percent && document.activeElement !== percent) percent.value = String(shown);
+  if (slider) slider.value = String(Math.min(Number(slider.max), shown));
+  document.querySelectorAll('[data-custom]').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.custom === state.customMode);
+  });
+  // A preset stays lit only while it still describes what is on the felt, so
+  // typing a wager cannot leave two controls claiming the same spot.
+  document.querySelectorAll('[data-today]').forEach((button) => {
+    const win = button.dataset.todayWin ? Number(button.dataset.todayWin) : null;
+    button.classList.toggle('is-active',
+      BigInt(button.dataset.today) === state.todayFlip
+      && win === state.todayWinPercent
+      && (button.dataset.todayLost === 'true') === state.todayLost);
+  });
+}
+
+/** Apply the typed wager under the bench's current BET / WIN / LOSS mode. */
+function applyCustom() {
+  state.shifted = false;
+  state.todayLost = state.customMode === 'loss';
+  state.todayWinPercent = state.customMode === 'win'
+    ? Number($('demo-custom-percent')?.value || 0)
+    : null;
+  renderAll();
+}
+
 function renderAll() {
   if (state.shifted) renderShiftedPositions();
   else {
@@ -443,6 +551,8 @@ function renderAll() {
   }
   renderPositionChrome();
   renderBankroll();
+  syncCustomFields();
+  renderCustomReadout();
 }
 
 $('demo-today-surface').addEventListener('click', () => {
@@ -482,11 +592,19 @@ document.querySelector('.coinflip-felt-demo__controls').addEventListener('click'
       .style.setProperty('--demo-width', `${button.dataset.width}px`);
     return;
   }
+  if (button.dataset.custom != null) {
+    state.customMode = button.dataset.custom;
+    applyCustom();
+    return;
+  }
   if (button.dataset.today != null) {
     state.shifted = false;
     state.todayFlip = BigInt(button.dataset.today);
     state.todayWinPercent = button.dataset.todayWin ? Number(button.dataset.todayWin) : null;
     state.todayLost = button.dataset.todayLost === 'true';
+    // The presets and the free-form bench drive the same wager, so a preset
+    // click leaves the typed fields telling the truth about what is on felt.
+    state.customMode = state.todayLost ? 'loss' : state.todayWinPercent == null ? 'bet' : 'win';
   }
   if (button.dataset.tomorrow != null) {
     state.shifted = false;
@@ -501,6 +619,41 @@ document.querySelector('.coinflip-felt-demo__controls').addEventListener('click'
   }
   renderAll();
 });
+
+// --- free-form wager bench ------------------------------------------------
+
+const customAmount = $('demo-custom-amount');
+const customPercent = $('demo-custom-percent');
+const customSlider = $('demo-custom-slider');
+
+customAmount?.addEventListener('input', () => {
+  const parsed = parseFlip(customAmount.value);
+  // A half-typed value ("1.", "") is not a wager yet: hold the felt steady
+  // rather than flashing it to NO BET between keystrokes.
+  if (parsed == null) return;
+  state.todayFlip = parsed;
+  applyCustom();
+});
+
+// Normalize to grouped digits only once the operator is done typing.
+customAmount?.addEventListener('change', () => {
+  customAmount.value = fmt(state.todayFlip);
+});
+
+const setPercent = (value, source) => {
+  const percent = Math.max(0, Math.round(Number(value) || 0));
+  if (customPercent && source !== customPercent) customPercent.value = String(percent);
+  if (customSlider && source !== customSlider) {
+    customSlider.value = String(Math.min(Number(customSlider.max), percent));
+  }
+  state.customMode = 'win';
+  applyCustom();
+};
+
+customPercent?.addEventListener('input', () => setPercent(customPercent.value, customPercent));
+customSlider?.addEventListener('input', () => setPercent(customSlider.value, customSlider));
+
+state.customMode = state.todayLost ? 'loss' : state.todayWinPercent == null ? 'bet' : 'win';
 
 renderRecent();
 renderAll();

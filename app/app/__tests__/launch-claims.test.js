@@ -10,10 +10,21 @@ globalThis.customElements = globalThis.customElements || {
   define(name, ctor) { this._registry.set(name, ctor); },
   get(name) { return this._registry.get(name); },
 };
+// A real (tiny) dispatcher: launch-claims listens for the overlay's abort event
+// to un-tombstone an unseen referral bonus, and a no-op stub would hide that.
 globalThis.document = globalThis.document || {
-  addEventListener() {},
-  removeEventListener() {},
-  dispatchEvent() { return true; },
+  _listeners: new Map(),
+  addEventListener(type, fn) {
+    if (!this._listeners.has(type)) this._listeners.set(type, new Set());
+    this._listeners.get(type).add(fn);
+  },
+  removeEventListener(type, fn) { this._listeners.get(type)?.delete(fn); },
+  dispatchEvent(event) {
+    for (const fn of [...(this._listeners.get(event?.type) || [])]) {
+      try { fn(event); } catch (_e) { /* listeners are independent */ }
+    }
+    return true;
+  },
 };
 globalThis.localStorage = {
   _values: new Map(),
@@ -83,6 +94,37 @@ describe('launch referral bonus action', () => {
     assert.equal(sequences.length, 1);
     assert.equal(sequences[0].kind, 'referral-bonus');
     assert.equal(sequences[0].amountWei, 89_400n * UNIT);
+  });
+
+  test('closing the overlay un-tombstones a referral bonus the player never saw', async () => {
+    const sequences = [];
+    const action = launch.buildReferralBonusPendingAction({
+      address: PLAYER,
+      bonus: { level: LEVEL, amountWei: 89_400n * UNIT, claimed: true },
+      claimBonus: async () => {},
+      reveal: (sequence) => { sequences.push(sequence); return true; },
+      refresh: async () => {},
+      getAddress: () => PLAYER,
+    });
+    assert.equal(await action.run(), true);
+    const [sequence] = sequences;
+    assert.deepEqual(sequence.revealRelease, { address: PLAYER, level: LEVEL },
+      'the sequence carries the identity the overlay hands back');
+    assert.equal(launch.__referralBonusRevealedForTest(PLAYER, LEVEL), true,
+      'queuing marks it revealed so a poll cannot double-present it');
+
+    launch.startLaunchClaims({ getAddress: () => PLAYER, getLevel: () => LEVEL });
+    document.dispatchEvent(new CustomEvent(revealOverlay.RESULT_REVEAL_ABORT_EVENT, {
+      detail: {
+        released: [{
+          kind: 'referral-bonus',
+          presentationId: sequence.presentationId,
+          release: sequence.revealRelease,
+        }],
+      },
+    }));
+    assert.equal(launch.__referralBonusRevealedForTest(PLAYER, LEVEL), false,
+      'a bonus the player never watched is offered again instead of being lost');
   });
 
   test('unclaimed state submits one player claim and reveals the receipt amount', async () => {

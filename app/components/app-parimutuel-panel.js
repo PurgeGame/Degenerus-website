@@ -54,7 +54,7 @@ export { decimatorWindowIsOpen };
 import { degenScoreLootTier } from '../app/activity-score.js';
 import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
-import { queueReveal } from './reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from './reveal-overlay.js';
 import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';
 import './app-wwxrp-burn.js';
@@ -82,6 +82,21 @@ function _seenResults(address) {
   } catch (_e) {
     return new Set();
   }
+}
+
+/**
+ * Un-see a result the player never actually watched. The overlay hands the id
+ * back when its queue is dropped by the close button, and a settled round is
+ * only ever offered once — without this it is marked seen and tombstoned
+ * against a presentation that never played.
+ */
+function _unmarkResultSeen(address, id) {
+  if (!address) return;
+  try {
+    const seen = _seenResults(address);
+    if (!seen.delete(String(id))) return;
+    localStorage.setItem(_seenKey(address), JSON.stringify(Array.from(seen).slice(-100)));
+  } catch (_e) { /* private mode: the result reappears next session anyway */ }
 }
 
 function _markResultSeen(address, id) {
@@ -256,6 +271,7 @@ class AppParimutuelPanel extends HTMLElement {
   #decimatorDraft = '1000';
   #questActivateListener = null;
   #decimatorBurnListener = null;
+  #resultAbortListener = null;
   #pollHandle = null;
   #tickHandle = null;
   #postActionRefreshHandle = null;
@@ -277,6 +293,20 @@ class AppParimutuelPanel extends HTMLElement {
       document.addEventListener('quest:activate', this.#questActivateListener);
       this.#decimatorBurnListener = () => this.#refresh();
       document.addEventListener('app-decimator:burn-confirmed', this.#decimatorBurnListener);
+      this.#resultAbortListener = (event) => {
+        const released = Array.isArray(event?.detail?.released) ? event.detail.released : [];
+        let restored = false;
+        for (const entry of released) {
+          if (entry?.kind !== 'pari') continue;
+          const address = entry?.release?.address;
+          const id = entry?.release?.id;
+          if (!address || !id) continue;
+          _unmarkResultSeen(address, id);
+          restored = true;
+        }
+        if (restored) this.#refresh();
+      };
+      document.addEventListener(RESULT_REVEAL_ABORT_EVENT, this.#resultAbortListener);
     }
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
@@ -298,6 +328,11 @@ class AppParimutuelPanel extends HTMLElement {
       try { document.removeEventListener('app-decimator:burn-confirmed', this.#decimatorBurnListener); }
       catch (_e) { /* defensive */ }
       this.#decimatorBurnListener = null;
+    }
+    if (this.#resultAbortListener && typeof document !== 'undefined') {
+      try { document.removeEventListener(RESULT_REVEAL_ABORT_EVENT, this.#resultAbortListener); }
+      catch (_e) { /* defensive */ }
+      this.#resultAbortListener = null;
     }
     for (const h of [
       this.#pollHandle,
@@ -1000,6 +1035,9 @@ class AppParimutuelPanel extends HTMLElement {
       kind: 'pari',
       player: this.#player,
       presentationId: `pari-reveal:${this.#player}:${kind}:${result.round}`,
+      // Echoed back by RESULT_REVEAL_ABORT_EVENT so a closed overlay restores
+      // this exact round instead of retiring it unseen.
+      revealRelease: { address: this.#player, id },
       market: kind,
       round: result.round,
       side: result.side,

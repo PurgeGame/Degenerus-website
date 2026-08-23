@@ -672,6 +672,66 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     );
   });
 
+  test('an unavailable edge immediately falls back to the ordinary last-day route', async () => {
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url === '/jackpots/latest.json') {
+        return { ok: false, status: 503, json: async () => ({}) };
+      }
+      if (String(url).endsWith('/game/jackpot/last-day')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 22,
+            level: 4,
+            summary: null,
+            winners: [],
+            roll1: { day: 22, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 22, level: 4, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    };
+
+    const payload = await refreshJackpotAfterChainCompletion({
+      day: 22,
+      includePlayer: false,
+    });
+
+    assert.equal(payload?.day, 22);
+    assert.equal(fetchCalls.filter((call) => call.url === '/jackpots/latest.json').length, 1);
+    assert.equal(
+      fetchCalls.filter((call) => String(call.url).endsWith('/game/jackpot/last-day')).length,
+      1,
+      'the UI does not wait for the next 15-second game poll',
+    );
+    assert.equal(storeMod.get('app.lastDay')?.day, 22);
+  });
+
+  test('a hung edge attempt has its own deadline', async () => {
+    fetchImpl = async (_url, opts) => new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => {
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        reject(error);
+      }, { once: true });
+    });
+    const startedAt = Date.now();
+
+    const payload = await _testing.waitForJackpotEdgeSnapshot(
+      23,
+      new AbortController().signal,
+      { waitMs: 100, fetchTimeoutMs: 10 },
+    );
+
+    assert.equal(payload, null);
+    assert.ok(Date.now() - startedAt < 100,
+      'one stalled subrequest cannot consume the whole edge polling window');
+  });
+
   test('the 15s game fallback cannot race a pending Cloudflare token wait', async () => {
     let releaseTarget;
     let targetStarted;

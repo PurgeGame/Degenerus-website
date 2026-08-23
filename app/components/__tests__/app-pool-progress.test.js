@@ -720,7 +720,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
 
   test('center draw has the requested Degenerus Daily Drawing machine marquee', () => {
     const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
-    const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
+    const drawEnd = html.indexOf('<app-decimator-panel>', drawStart);
     const draw = html.slice(drawStart, drawEnd);
     assert.match(draw,
       /<div class="jackpot-hero__machine">[\s\S]*?<last-day-jackpot>[\s\S]*?<replay-panel single-button>[\s\S]*?<\/div>[\s\S]*?<nav class="jackpot-day-history"/,

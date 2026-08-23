@@ -24,7 +24,7 @@
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { sharedReadProvider } from './read-provider.js';
-import { getProvider, ethers, TX_CONFIRMED_EVENT } from './contracts.js';
+import { getProvider, ethers } from './contracts.js';
 import { fetchJSON } from './api.js';
 import { get } from './store.js';
 import { readGameState } from './game-state.js';
@@ -81,6 +81,11 @@ const INDEXED_AWARD_SEED_GRACE_MS = 2_000;
 // of leaving a processed pack painted as Pending until the ordinary 45s watch.
 const INDEX_CATCHUP_RETRY_MS = 2_500;
 const INDEX_CATCHUP_WINDOW_MS = 120_000;
+// A wallet can retain several durable pack receipts, but opening one network
+// request per receipt at once turns a reconnect/day boundary into an API burst.
+// Two workers match the REST broker's background lane and leave its interaction
+// lane free for the jackpot button and other explicit player actions.
+const PACK_INSPECTION_CONCURRENCY = 2;
 
 // A record older than this is dropped unopened. Generous on purpose: tickets can
 // be bought for a FUTURE level whose traits do not roll until that level goes
@@ -98,6 +103,8 @@ let _entriesOwedFallbackProvider = null;
 const _historyBackfilled = new Set();
 let _awardSeedTimer = null;
 let _indexCatchupTimer = null;
+let _refreshFlight = null;
+let _refreshQueued = false;
 // In-memory only: a reload deliberately forgets the active presentation while
 // the durable pending record remains, so the tray offers the unopened pack
 // again instead of hiding its tickets forever.
@@ -105,7 +112,6 @@ const _activePackCards = new Map();
 let _completeListener = null;
 let _abortListener = null;
 let _jackpotRevealListener = null;
-let _settledResetListener = null;
 const _revealedJackpotDays = new Set();
 
 /** Test-only: pin the clock used for TTL expiry. */
@@ -314,15 +320,13 @@ function _openedPieces(payload) {
 }
 
 // A level under the unresolved floor has finished its draw and drained its
-// ticket queue, so no further entry can be filed against it: its by-trait
-// payload is final. The watcher was re-asking for every such level every 45s,
-// and a wallet holding unopened packs across a dozen past levels made this the
-// most requested endpoint in the app. Cache the settled answer for the page
-// session; a confirmed write or a day shift drops it, so even a wrong
-// immutability assumption self-heals within one player action.
+// ticket queue, so no further entry can be filed against it. Pack inspection
+// now discards those completed-level receipts before touching the endpoint;
+// retain this small session cache for callers that inspect without a usable
+// game-state boundary.
 const _settledCards = new Map();   // `${addr}:${level}` -> by-trait payload
 
-/** Drop the settled-level payloads (confirmed write, day shift, teardown). */
+/** Drop the settled-level payloads (test seam + teardown). */
 export function clearSettledCardCache() {
   _settledCards.clear();
 }
@@ -1144,7 +1148,23 @@ async function _inspectOne(address, rec, sweep = null, { jackpotCovered = false 
     };
   }
   const settledBelow = Number(sweep?.settledBelow ?? NaN);
-  const settled = Number.isInteger(settledBelow) && level < settledBelow;
+  // A completed level is not ticket inventory anymore. Do this before the
+  // by-trait read so old durable receipts cannot turn one browser into a scan
+  // of its entire level history. The still-covered jackpot window wins over
+  // the phase boundary: its foil/ticket pack must survive through the final
+  // eligible spin and reveal.
+  if (Number.isInteger(settledBelow) && level < settledBelow && !jackpotCovered) {
+    return {
+      level,
+      over: true,
+      ready: false,
+      fresh: [],
+      unseen: [],
+      rec,
+      pendingEntries: 0,
+    };
+  }
+  const settled = Number.isInteger(settledBelow) && level < settledBelow && !jackpotCovered;
   let payload;
   try {
     payload = await _fetchCards(address, level, { settled });
@@ -1323,17 +1343,41 @@ async function _inspectOne(address, rec, sweep = null, { jackpotCovered = false 
 }
 
 /**
- * Read-only readiness snapshot for the unified pending widget.
- * No reveal is queued and no record is retired here.
+ * Readiness snapshot for the unified pending widget. No reveal is queued; a
+ * receipt whose level is definitively over is retired without an API read.
  */
 export async function inspectPendingPacks({ address, sweep = null, jackpotContext = null } = {}) {
   const addr = _lower(address);
   if (!addr) return [];
   const mine = pendingPacks().filter((rec) => rec && _lower(rec.address) === addr);
-  const inspected = await Promise.all(mine.map((rec) => _inspectOne(addr, rec, sweep, {
-    jackpotCovered: jackpotProcessingCoversLevel(rec?.level, jackpotContext),
-  })));
-  return inspected.filter(Boolean);
+  const inspected = new Array(mine.length);
+  let cursor = 0;
+  const inspectNext = async () => {
+    while (cursor < mine.length) {
+      const index = cursor;
+      cursor += 1;
+      const rec = mine[index];
+      inspected[index] = await _inspectOne(addr, rec, sweep, {
+        jackpotCovered: jackpotProcessingCoversLevel(rec?.level, jackpotContext),
+      });
+    }
+  };
+  await Promise.all(Array.from(
+    { length: Math.min(PACK_INSPECTION_CONCURRENCY, mine.length) },
+    () => inspectNext(),
+  ));
+
+  const over = new Set(inspected
+    .filter((row) => row?.over)
+    .map((row) => Number(row.level)));
+  if (over.size > 0) {
+    _write(PENDING_KEY, pendingPacks().filter((rec) => !(
+      rec
+      && _lower(rec.address) === addr
+      && over.has(Number(rec.level))
+    )));
+  }
+  return inspected.filter((row) => row && !row.over);
 }
 
 async function _publishPackActions(address, publishSeq = null) {
@@ -1539,15 +1583,23 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
   const done = new Set();
   // Store-only: this is a click path and must not add a /game/state fetch of
   // its own. An empty store yields a null sweep, which gates nothing.
-  const sweep = packInspectionWindow(get('app.gameState'));
+  const gameState = get('app.gameState');
+  const sweep = packInspectionWindow(gameState);
+  const jackpotContext = unresolvedJackpotContext({
+    daySync: get('app.daySync'),
+    gameState,
+    lastDay: get('app.lastDay'),
+  });
 
   for (const rec of mine) {
     const lvl = Number(rec.level);
     const activeKey = _packKey(addr, lvl);
     if (_activePackCards.has(activeKey)) continue;
-    const inspected = await _inspectOne(addr, rec, sweep);
+    const inspected = await _inspectOne(addr, rec, sweep, {
+      jackpotCovered: jackpotProcessingCoversLevel(lvl, jackpotContext),
+    });
     if (!inspected) continue;
-    if (inspected.expired) {
+    if (inspected.expired || inspected.over) {
       done.add(`${lvl}`);
       continue;
     }
@@ -1657,7 +1709,7 @@ export function startPackWatch({ getAddress } = {}) {
       const detail = event?.detail;
       completePackReveal(detail).finally(() => {
         const addr = _lower(detail?.address);
-        if (addr) _publishPackActions(addr, ++_publishSeq).catch(() => {});
+        if (addr) refreshPackWatch();
       });
     };
     _abortListener = (event) => {
@@ -1667,7 +1719,7 @@ export function startPackWatch({ getAddress } = {}) {
       }
       let addr = null;
       try { addr = _getAddress ? _getAddress() : null; } catch (_e) { addr = null; }
-      if (addr) _publishPackActions(addr, ++_publishSeq).catch(() => {});
+      if (addr) refreshPackWatch();
     };
     _jackpotRevealListener = (event) => {
       if (event?.detail?.complete === false) return;
@@ -1675,16 +1727,9 @@ export function startPackWatch({ getAddress } = {}) {
       if (Number.isInteger(day) && day > 0) _revealedJackpotDays.add(day);
       refreshPackWatch();
     };
-    // The settled-level cache assumes a drawn level's entries are final. A
-    // confirmed write or a day shift are the only moments that assumption is
-    // worth re-testing, so drop it there rather than living with a page-long
-    // window where a surprise could not be seen.
-    _settledResetListener = () => clearSettledCardCache();
     document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     document.addEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
-    document.addEventListener(TX_CONFIRMED_EVENT, _settledResetListener);
-    document.addEventListener('game:day-shift', _settledResetListener);
   }
   _timer = setInterval(refreshPackWatch, WATCH_INTERVAL_MS);
   if (_timer && typeof _timer.unref === 'function') {
@@ -1696,14 +1741,33 @@ export function startPackWatch({ getAddress } = {}) {
 /** Re-check immediately (wallet switch + successful purchase). */
 export function refreshPackWatch() {
   if (!_running) return;
-  let addr = null;
-  try { addr = _getAddress ? _getAddress() : null; } catch (_e) { addr = null; }
-  const seq = ++_publishSeq;
-  if (!addr) {
-    clearPendingActions(PENDING_SOURCE);
-    return;
-  }
-  _publishPackActions(addr, seq).catch(() => {});
+  // Invalidate any older result immediately, then collapse every refresh that
+  // arrives while it unwinds into one latest-state rerun. Day/game/last-day
+  // subscriptions often fire together at a jackpot boundary; they should not
+  // each start their own six-level inspection wave.
+  _publishSeq += 1;
+  _refreshQueued = true;
+  if (_refreshFlight) return;
+
+  const flight = Promise.resolve().then(async () => {
+    while (_running && _refreshQueued) {
+      _refreshQueued = false;
+      let addr = null;
+      try { addr = _getAddress ? _getAddress() : null; } catch (_e) { addr = null; }
+      const seq = _publishSeq;
+      if (!addr) {
+        clearPendingActions(PENDING_SOURCE);
+        continue;
+      }
+      try { await _publishPackActions(addr, seq); } catch (_e) { /* next refresh retries */ }
+    }
+  });
+  _refreshFlight = flight;
+  void flight.finally(() => {
+    if (_refreshFlight !== flight) return;
+    _refreshFlight = null;
+    if (_running && _refreshQueued) refreshPackWatch();
+  });
 }
 
 /** Stop the loop (tests + teardown). */
@@ -1721,20 +1785,16 @@ export function stopPackWatch() {
   }
   _indexCatchupTimer = null;
   _running = false;
+  _refreshQueued = false;
   _getAddress = null;
   if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
     if (_completeListener) document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     if (_abortListener) document.removeEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
     if (_jackpotRevealListener) document.removeEventListener('jackpot:revealed', _jackpotRevealListener);
-    if (_settledResetListener) {
-      document.removeEventListener(TX_CONFIRMED_EVENT, _settledResetListener);
-      document.removeEventListener('game:day-shift', _settledResetListener);
-    }
   }
   _completeListener = null;
   _abortListener = null;
   _jackpotRevealListener = null;
-  _settledResetListener = null;
   clearSettledCardCache();
   _revealedJackpotDays.clear();
   _activePackCards.clear();

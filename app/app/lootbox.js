@@ -127,6 +127,13 @@ export const GAME_ABI = [
   'error FoilAlreadyBought()',
   'error Insolvent()',
   'error StaleAdvance()',
+  // openBox's four revert sources (DegenerusGameLootboxModule.openBox:1259-1269).
+  // Without these fragments ethers cannot name them, every failure decodes to
+  // UNKNOWN, and "already opened by someone else" is indistinguishable from
+  // "still waiting for RNG" — which is what stranded raced boxes.
+  'error NothingToClaim()',
+  'error RngNotReady()',
+  'error RngLocked()',
   // Events
   // Current deploy: the queue index moved directly onto LootBoxBuy and the
   // redundant LootBoxIdx event was removed. Keep LootBoxIdx below solely so a
@@ -1252,22 +1259,68 @@ export function parseTraitsGeneratedFromReceipt(receipt, contract) {
 // signal that the permissionless sweep has already passed an index.
 // ---------------------------------------------------------------------------
 
+// openBox's own revert surface, by 4-byte selector. The names come straight
+// from DegenerusGameLootboxModule.openBox (module:1259-1269) and are ALSO in
+// GAME_ABI, so ethers normally fills error.revert.name; this table is the
+// fallback for a provider that only hands back raw revert data.
+const OPEN_BOX_REVERTS = new Map([
+  ['0x969bf728', 'NothingToClaim'], // no leg resolved: already opened, or nothing queued
+  ['0xbb3e844f', 'RngNotReady'],    // queued, but the committed RNG word has not landed
+  ['0xe5477470', 'RngLocked'],      // daily RNG lock — clears within the day
+  ['0x92bbf6e8', 'E'],              // liveness triggered: the game is terminal, opens are closed
+]);
+
+/**
+ * The openBox revert name behind a failure, or null when undecodable. Walks the
+ * bounded cause chain because the write path rethrows through
+ * _structuredRevertError, which keeps the ethers error on `.cause`.
+ */
+export function openBoxRevertName(error) {
+  let current = error;
+  for (let depth = 0; current && depth < 8; depth += 1) {
+    const named = current.revert?.name;
+    if (typeof named === 'string' && named) return named;
+    const selector = current.revert?.selector
+      || (typeof current.data === 'string' && current.data.startsWith('0x')
+        ? current.data.slice(0, 10)
+        : null);
+    if (selector && OPEN_BOX_REVERTS.has(selector)) return OPEN_BOX_REVERTS.get(selector);
+    current = current.cause;
+  }
+  return null;
+}
+
+/**
+ * Simulate openBox and KEEP the revert reason. `ok:false` alone is ambiguous —
+ * three of openBox's four reverts mean "wait" and one (NothingToClaim) means
+ * "this box is already settled", which no other read can prove while the sweep
+ * frontier still sits below the index.
+ *
+ * @param {{player?: string, lootboxIndex: bigint | number}} args
+ * @returns {Promise<{ok: boolean, reason: string|null, settled: boolean, error: Error|null}>}
+ */
+export async function probeOpenLootbox({ player, lootboxIndex } = {}) {
+  const provider = getProvider();
+  const owner = player || getActingAddress();
+  const unavailable = { ok: false, reason: null, settled: false, error: null };
+  if (!provider || !owner || lootboxIndex == null) return unavailable;
+  const contract = _buildContract(provider);
+  if (typeof contract?.openBox?.staticCall !== 'function') return unavailable;
+  try {
+    await contract.openBox.staticCall(owner, BigInt(lootboxIndex));
+    return { ok: true, reason: null, settled: false, error: null };
+  } catch (error) {
+    const reason = openBoxRevertName(error);
+    return { ok: false, reason, settled: reason === 'NothingToClaim', error };
+  }
+}
+
 /**
  * @param {{player?: string, lootboxIndex: bigint | number}} args
  * @returns {Promise<boolean>}
  */
 export async function canOpenLootbox({ player, lootboxIndex } = {}) {
-  const provider = getProvider();
-  const owner = player || getActingAddress();
-  if (!provider || !owner || lootboxIndex == null) return false;
-  const contract = _buildContract(provider);
-  if (typeof contract?.openBox?.staticCall !== 'function') return false;
-  try {
-    await contract.openBox.staticCall(owner, BigInt(lootboxIndex));
-    return true;
-  } catch (_e) {
-    return false;
-  }
+  return (await probeOpenLootbox({ player, lootboxIndex })).ok;
 }
 
 /**

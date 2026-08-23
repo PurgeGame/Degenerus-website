@@ -856,6 +856,7 @@ class AppDecimatorPanel extends HTMLElement {
   #foilStatus = null;
   #foilSeq = 0;
   #purchasePulseTimers = new WeakMap();
+  #lastRenderedBonusFlip = 0n;
   // Presale is a live contract latch. The same-tx purchase leg can add 25%
   // credit before its attached box consumes it, so the rendered maximum also
   // depends on the current ticket/lootbox draft.
@@ -902,6 +903,7 @@ class AppDecimatorPanel extends HTMLElement {
   disconnectedCallback() {
     this.#closeBuyInDialog({ restoreFocus: false });
     this.#closeBuilderPopovers({ restoreFocus: false });
+    this.#clearPurchaseTargetPulse(this.querySelector('[data-bind="dec-flip-credit"]'));
     if (this.#ticketSampleTimer != null) {
       try { clearInterval(this.#ticketSampleTimer); } catch (_) { /* defensive */ }
       this.#ticketSampleTimer = null;
@@ -2293,17 +2295,25 @@ class AppDecimatorPanel extends HTMLElement {
     catch (_e) { try { input.dispatchEvent({ type, bubbles: true }); } catch (_e2) {} }
   }
 
-  #pulsePurchaseTarget(target) {
+  #clearPurchaseTargetPulse(target) {
     if (!target?.classList) return;
     const priorTimer = this.#purchasePulseTimers.get(target);
-    if (priorTimer != null) clearTimeout(priorTimer);
+    if (priorTimer != null) {
+      try { clearTimeout(priorTimer); } catch (_e) { /* defensive */ }
+      this.#purchasePulseTimers.delete(target);
+    }
     target.classList.remove('is-receiving');
+  }
+
+  #pulsePurchaseTarget(target, durationMs = 460) {
+    if (!target?.classList) return;
+    this.#clearPurchaseTargetPulse(target);
     void target.offsetWidth;
     target.classList.add('is-receiving');
     const timer = setTimeout(() => {
       target.classList.remove('is-receiving');
       this.#purchasePulseTimers.delete(target);
-    }, 460);
+    }, durationMs);
     this.#purchasePulseTimers.set(target, timer);
     timer?.unref?.();
   }
@@ -3360,6 +3370,8 @@ class AppDecimatorPanel extends HTMLElement {
     box.classList?.toggle('is-idle', !active);
     const total = this.querySelector('[data-bind="dec-flip-credit-total"]');
     if (!active) {
+      this.#lastRenderedBonusFlip = 0n;
+      this.#clearPurchaseTargetPulse(box);
       if (label) label.textContent = 'PLAY TO EARN';
       if (total) {
         total.textContent = 'BONUS FLIP';
@@ -3374,8 +3386,15 @@ class AppDecimatorPanel extends HTMLElement {
 
     if (label) label.textContent = includesBounty ? 'BONUS + BOUNTY' : 'BONUS';
     if (!total) return;
+    const previousBonusFlip = this.#lastRenderedBonusFlip;
+    this.#lastRenderedBonusFlip = parts.total;
     total.textContent = `+${formatPurchaseBonusFlip(parts.total)} FLIP`;
     total.classList?.toggle('is-zero', parts.total === 0n);
+    if (parts.total > previousBonusFlip) {
+      this.#pulsePurchaseTarget(box, 660);
+    } else if (parts.total < previousBonusFlip) {
+      this.#clearPurchaseTargetPulse(box);
+    }
     const summary = includesBounty
       ? `Bonus total ${formatFlip(parts.total.toString())} FLIP, including ${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`
       : `Bonus total ${formatFlip(parts.total.toString())} FLIP.`;

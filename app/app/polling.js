@@ -64,8 +64,9 @@ export const POLL_INTERVALS = {
   // when the day actually moves: publishGameState() fires it whenever the resolved
   // day runs ahead of the displayed one (and keeps a low-rate 15s fallback until
   // the indexer catches up). The fast path is refreshJackpotAfterChainCompletion:
-  // it waits on Cloudflare's tiny same-origin token and then downloads the
-  // immutable result from the edge. No browser parks a request on Fly.
+  // it waits briefly on Cloudflare's tiny same-origin token and then downloads
+  // the immutable result from the edge. A single ordinary read recovers when
+  // the pointer's storage origin is unavailable; nothing is held open on Fly.
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
   // interval (see GOLD_RUSH_CADENCE). Each tick is one same-block Multicall3 read
   // through the player's wallet RPC, or a keyless public RPC when no compatible
@@ -108,8 +109,9 @@ let _jackpotCompletionDay = null;
 let _jackpotCompletionPromise = null;
 let _jackpotCompletionPending = false;
 let _jackpotCompletionController = null;
-const JACKPOT_EDGE_WAIT_MS = 60_000;
+const JACKPOT_EDGE_WAIT_MS = 6_000;
 const JACKPOT_EDGE_POLL_MS = 1_000;
+const JACKPOT_EDGE_FETCH_TIMEOUT_MS = 2_500;
 const JACKPOT_PLAYER_REFRESH_SPREAD_MS = 15_000;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
@@ -434,10 +436,9 @@ function publishGameState(payload, refreshLastDay) {
       || displayedDay <= 0
       || nextDay !== displayedDay
       || lastDayPayloadNeedsRecheck(displayedPayload))
-    // The completion path already has one target-day request parked at the
-    // API. Do not let the 15s game fallback abort it and replace it with an
-    // early non-waiting request. If the bounded wait times out stale, this
-    // flag clears and the next game sample resumes the ordinary fallback.
+    // The completion path already owns the bounded edge-first/direct-fallback
+    // attempt. Do not let the 15s game fallback abort and duplicate it. Once
+    // that attempt settles, this flag clears and ordinary retries can resume.
     && !(_jackpotCompletionPending && _jackpotCompletionDay === nextDay)) {
     try { refreshLastDay?.(); } catch { /* the fallback timer is still armed */ }
   }
@@ -872,34 +873,76 @@ export function jackpotEdgeUrl(path, locationLike = globalThis.location) {
   return path;
 }
 
-async function waitForJackpotEdgeSnapshot(targetDay, signal) {
-  const deadline = Date.now() + JACKPOT_EDGE_WAIT_MS;
+async function fetchJackpotEdgeJSON(path, signal, timeoutMs) {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+  }
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+  timer?.unref?.();
+  try {
+    const response = await fetch(jackpotEdgeUrl(path), {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    });
+    return {
+      response,
+      payload: response.ok ? await response.json() : null,
+    };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+async function waitForJackpotEdgeSnapshot(
+  targetDay,
+  signal,
+  {
+    waitMs = JACKPOT_EDGE_WAIT_MS,
+    fetchTimeoutMs = JACKPOT_EDGE_FETCH_TIMEOUT_MS,
+  } = {},
+) {
+  const deadline = Date.now() + Math.max(1, Number(waitMs) || JACKPOT_EDGE_WAIT_MS);
   while (!signal?.aborted && Date.now() < deadline) {
     try {
       // Production remains same-origin. The local static server has no Pages
       // Function, so localhost reads the same public Cloudflare endpoint.
-      const tokenResponse = await fetch(jackpotEdgeUrl('/jackpots/latest.json'), {
+      const remaining = Math.max(1, deadline - Date.now());
+      const token = await fetchJackpotEdgeJSON(
+        '/jackpots/latest.json',
         signal,
-        headers: { accept: 'application/json' },
-      });
-      if (tokenResponse.ok) {
-        const pointer = await tokenResponse.json();
+        Math.min(remaining, fetchTimeoutMs),
+      );
+      if (token.response.ok) {
+        const pointer = token.payload;
         if (validJackpotPointer(pointer) && Number(pointer.day) >= targetDay) {
-          const resultResponse = await fetch(jackpotEdgeUrl(pointer.resultPath), {
+          const result = await fetchJackpotEdgeJSON(
+            pointer.resultPath,
             signal,
-            headers: { accept: 'application/json' },
-          });
-          if (resultResponse.ok) {
-            const payload = publishLastDayPayload(await resultResponse.json());
+            Math.min(Math.max(1, deadline - Date.now()), fetchTimeoutMs),
+          );
+          if (result.response.ok) {
+            const payload = publishLastDayPayload(result.payload);
             if (Number(payload?.day) === Number(pointer.day)
               && Number(payload?.day) >= targetDay) return payload;
           }
+          // A failed immutable-result read is an edge outage, not an
+          // unpublished token. Let the direct last-day fallback take over now.
+          return null;
         }
+      } else {
+        // A cold edge miss can surface the origin's R2 failure as a 5xx. Do not
+        // retry that same path for a minute while the board says processing.
+        return null;
       }
     } catch (error) {
-      if (signal?.aborted || error?.name === 'AbortError') return null;
-      // A Pages rollout/R2 transient is retried against the CDN only. The
-      // ordinary jittered game cycle remains the eventual API fallback.
+      if (signal?.aborted) return null;
+      // Includes the per-attempt timeout. A hung edge read is precisely when
+      // the ordinary last-day route should take over immediately.
+      return null;
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -915,8 +958,8 @@ async function waitForJackpotEdgeSnapshot(targetDay, signal) {
 /**
  * Fetch the sealed jackpot only after GAME.advanceDue() has fallen to false.
  * Tabs check a ~150-byte token on Cloudflare, then fetch one content-addressed
- * immutable result from the edge. Fly receives neither held connections nor
- * the synchronized result fan-out.
+ * immutable result from the edge. A bounded direct read is retained as the
+ * recovery path when the edge token's storage origin is unavailable.
  */
 export function refreshJackpotAfterChainCompletion({ day, includePlayer = true } = {}) {
   const targetDay = Number(day);
@@ -931,9 +974,13 @@ export function refreshJackpotAfterChainCompletion({ day, includePlayer = true }
 
   let request;
   request = (async () => {
-    const payload = await waitForJackpotEdgeSnapshot(targetDay, controller.signal);
+    let payload = await waitForJackpotEdgeSnapshot(targetDay, controller.signal);
+    if (!(Number(payload?.day) >= targetDay) && !controller.signal.aborted) {
+      const direct = await pollLastDay(controller.signal, { force: true });
+      payload = Number(direct?.day) >= targetDay ? direct : null;
+    }
 
-    if (Number(payload?.day) === targetDay
+    if (Number(payload?.day) >= targetDay
       && includePlayer
       && typeof _forcePlayerCycle === 'function') {
       // Player data is personalized and cannot be shared through the CDN.

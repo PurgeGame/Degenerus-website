@@ -17,7 +17,7 @@ import {
   dgnDisplaySymbol,
 } from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
-import { queueReveal } from '../components/reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
 import { claimBingo } from './bingo.js';
 import {
   currentUnresolvedJackpotContext,
@@ -43,6 +43,7 @@ const BINGO_INTERFACE = new ethers.Interface(BINGO_ABI);
 
 let _onTxConfirmed = null;
 let _onJackpotRevealed = null;
+let _onResultAbort = null;
 let _running = false;
 let _getAddress = null;
 let _refreshInFlight = null;
@@ -335,13 +336,43 @@ function _tierLabel(tier) {
   return 'BINGO';
 }
 
+/** Retire rows and tombstone their ids. Returns the rows it removed. */
 function _consume(address, ids) {
   const state = _readState(address);
   const remove = new Set((Array.isArray(ids) ? ids : [ids]).map(String));
+  const removed = state.rows.filter((row) => remove.has(String(row?.id)));
   state.rows = state.rows.filter((row) => !remove.has(String(row?.id)));
   const consumed = [...new Set([...state.consumed.map(String), ...remove])];
   state.consumed = consumed.slice(-MAX_CONSUMED_IDS);
   _writeState(address, state);
+  return removed;
+}
+
+/**
+ * Rows handed to the overlay, keyed by presentation id, so an abort can put the
+ * exact row back. A local claim receipt exists only in this module's state, so
+ * losing it to an unwatched presentation loses the Bingo for good. Bounded: one
+ * entry per staged reveal, dropped as soon as it is restored.
+ */
+const _stagedRevealRows = new Map();
+
+/**
+ * Undo a _consume. The overlay hands the identity back when the player closes
+ * it before the Bingo actually played, and a Bingo is a prize: both the row and
+ * its tombstone have to come back or it is gone for good.
+ */
+function _restoreConsumed(address, presentationId) {
+  const staged = _stagedRevealRows.get(String(presentationId));
+  if (!staged || staged.address !== _lower(address)) return false;
+  _stagedRevealRows.delete(String(presentationId));
+  const ids = new Set(staged.rows.map((row) => String(row?.id)).filter(Boolean));
+  if (ids.size === 0) return false;
+  const state = _readState(address);
+  const known = new Set(state.rows.map((row) => String(row?.id)));
+  state.rows = [...state.rows, ...staged.rows.filter((row) => !known.has(String(row?.id)))];
+  state.consumed = state.consumed.map(String).filter((id) => !ids.has(id));
+  _writeState(address, state);
+  return true;
 }
 
 function _bingoClaimErrorName(error) {
@@ -431,18 +462,26 @@ async function _publish(address, seq = null) {
           const payload = await _fetchTicketChart(addr, receipt.level);
           counts = bingoQuadrantEntryCounts(payload, quadrant);
         } catch (_e) { /* claim itself proves the highlighted eight cells */ }
+        const presentationId = `bingo-reveal:${addr}:${Number(receipt.level)}:${quadrant}`;
         queueReveal({
           kind: 'bingo',
           ...receipt,
           quadrant,
           sym: Number(receipt.symbol) & 7,
           counts,
-          presentationId: `bingo-reveal:${addr}:${Number(receipt.level)}:${quadrant}`,
+          presentationId,
+          // Echoed back by RESULT_REVEAL_ABORT_EVENT so a closed overlay can
+          // restore this exact row.
+          revealRelease: { address: addr, id: receipt.id },
         });
         // A local claim receipt and the indexed event may race into this same
         // action. A rejected duplicate is already staged, so consume this row
-        // instead of leaving it around to produce a second reveal attempt.
-        _consume(addr, receipt.id);
+        // either way instead of leaving it around to produce a second reveal
+        // attempt; an abort restores it through the release above.
+        const removed = _consume(addr, receipt.id);
+        if (removed.length > 0) {
+          _stagedRevealRows.set(presentationId, { address: addr, rows: removed });
+        }
         await _publish(addr, ++_publishSeq);
       },
     };
@@ -590,8 +629,20 @@ export function startBingoWatch({ getAddress } = {}) {
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     _onTxConfirmed = () => { void refreshBingoWatch(); };
     _onJackpotRevealed = () => { void refreshBingoWatch(); };
+    _onResultAbort = (event) => {
+      const released = Array.isArray(event?.detail?.released) ? event.detail.released : [];
+      let restored = false;
+      for (const entry of released) {
+        if (entry?.kind !== 'bingo') continue;
+        const address = entry?.release?.address;
+        if (!address || !entry?.presentationId) continue;
+        if (_restoreConsumed(address, entry.presentationId)) restored = true;
+      }
+      if (restored) void refreshBingoWatch();
+    };
     document.addEventListener(TX_CONFIRMED_EVENT, _onTxConfirmed);
     document.addEventListener('jackpot:revealed', _onJackpotRevealed);
+    document.addEventListener(RESULT_REVEAL_ABORT_EVENT, _onResultAbort);
   }
   refreshBingoWatch();
 }
@@ -607,6 +658,11 @@ export function stopBingoWatch() {
     catch (_e) { /* defensive */ }
   }
   _onJackpotRevealed = null;
+  if (_onResultAbort && typeof document !== 'undefined') {
+    try { document.removeEventListener(RESULT_REVEAL_ABORT_EVENT, _onResultAbort); }
+    catch (_e) { /* defensive */ }
+  }
+  _onResultAbort = null;
   _running = false;
   _getAddress = null;
   _refreshAgain = false;

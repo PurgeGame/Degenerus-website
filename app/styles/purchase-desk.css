@@ -1617,6 +1617,75 @@ body.layout-basic .app-decimator-panel .dec-flip-credit--header > strong {
   text-shadow: 0 1px 2px #031109, 0 0 6px rgba(74, 222, 128, 0.38);
 }
 
+/* An earned total is the live payoff preview, not more header metadata. Keep
+   ordinary bonus FLIP cyan so it separates from the idle mint copy and from
+   the separate gold Biggest Bounty state. */
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header:not(.is-idle):not(.dec-flip-credit--bounty) > strong {
+  color: #a5f3fc;
+  font-size: 0.68rem;
+  text-shadow:
+    0 1px 2px #031109,
+    0 0 5px rgba(103, 232, 249, 0.74),
+    0 0 11px rgba(34, 211, 238, 0.32);
+}
+
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header.dec-flip-credit--bounty > span {
+  color: #fde68a;
+}
+
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header.dec-flip-credit--bounty > strong {
+  color: #facc15;
+  font-size: 0.68rem;
+  text-shadow: 0 1px 2px #140d02, 0 0 9px rgba(250, 204, 21, 0.62);
+}
+
+/* JS adds is-receiving only when the numeric FLIP total rises. Re-renders at
+   the same value stay still; the short instrument flash confirms the delta. */
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving {
+  animation: dec-bonus-flip-panel-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > strong {
+  transform-origin: left center;
+  animation: dec-bonus-flip-value-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > img {
+  animation: dec-bonus-flip-mark-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+@keyframes dec-bonus-flip-panel-increase {
+  0%, 100% { filter: brightness(1); }
+  42% {
+    border-color: rgba(165, 243, 252, 0.96);
+    box-shadow:
+      inset 0 0 16px rgba(255, 255, 255, 0.18),
+      0 0 8px rgba(103, 232, 249, 0.72),
+      0 0 18px rgba(244, 114, 182, 0.42);
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes dec-bonus-flip-value-increase {
+  0% { opacity: 0.68; transform: translateY(0.12rem) scale(0.88); }
+  46% {
+    color: #fff3b0;
+    opacity: 1;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.9), 0 0 14px rgba(250, 204, 21, 0.8);
+    transform: translateY(-0.04rem) scale(1.1);
+  }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dec-bonus-flip-mark-increase {
+  0% { transform: translateY(-50%) rotate(-8deg) scale(0.82); }
+  48% { transform: translateY(-50%) rotate(4deg) scale(1.16); }
+  100% { transform: translateY(-50%) rotate(-8deg) scale(1); }
+}
+
 body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-idle {
   border-color: rgba(192, 132, 252, 0.58);
   background:
@@ -3313,10 +3382,71 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
 
 }
 
-@media (max-width: 520px) {
+@media (max-width: 1099px) {
   body.layout-basic .app-decimator-panel .panel-header {
-    min-height: 3.9rem;
-    padding: 0.4rem 0.46rem;
+    min-height: 3.15rem;
+    grid-template-columns: 4.9rem minmax(0, 1fr) 6.45rem;
+    grid-template-rows: 2.55rem;
+    gap: 0 0.2rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-header-title {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: flex-start;
+    padding-right: 1.08rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-header-title::before,
+  body.layout-basic .app-decimator-panel .dec-header-title::after {
+    display: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-heading {
+    font-size: 0.88rem;
+    letter-spacing: 0.12em;
+    text-indent: 0.12em;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-help {
+    right: 0;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* Once the hero becomes one column, it has enough horizontal room for one
+     instrument rail. Keep both quotes in their screen, but place that screen
+     between BUY IN and BONUS instead of spending a second header row on it. */
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: 1ch max-content 1.5ch minmax(max-content, 1fr);
+    justify-content: stretch;
+    gap: 0.09rem 0.08rem;
+    padding: 0.22rem 0.18rem;
+    font-size: clamp(0.43rem, 2vw, 0.5rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__count {
+    grid-column: 1;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__kind {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__equals {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__value {
+    grid-column: 4;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 3;
+    grid-row: 1;
   }
 
   body.layout-basic .jackpot-hero .app-decimator-panel .dec-purchase-builder {
@@ -3326,7 +3456,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-piece {
-    min-height: 4.65rem;
+    min-height: 6.25rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity {
@@ -3364,13 +3494,15 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-buy-row {
-    grid-template-columns: 3.35rem minmax(0, 1fr);
-    gap: 0.4rem;
+    grid-template-columns: 3rem minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+    gap: 0.3rem;
+    margin-top: 0;
+    padding-top: 0.3rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-total__field {
-    min-height: 3.8rem;
-    grid-template-columns: minmax(0, 1fr) auto 2.8rem;
+    min-height: 3rem;
+    grid-template-columns: minmax(0, 1fr) auto 2.35rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input {
@@ -3378,7 +3510,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-stepper {
-    min-width: 2.8rem;
+    min-width: 2.35rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step::before {
@@ -3387,16 +3519,33 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-clear {
-    min-height: 3.8rem;
+    min-height: 3rem;
   }
 
   body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
   body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-write] {
-    grid-column: 1 / -1;
-    height: 3.35rem;
-    min-height: 3.35rem;
-    max-height: 3.35rem;
+    grid-column: 3;
+    grid-row: 1;
+    height: 3rem;
+    min-height: 3rem;
+    max-height: 3rem;
     font-size: 0.76rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row--flip {
+    grid-template-columns: 3rem minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+  }
+
+  /* Below the three-column desktop hero, the order controls are one compact
+     line and Available Funds is the second. Retire the decorative felt spacer,
+     then spend part of that recovered height on the clickable ticket artwork. */
+  body.layout-basic .app-decimator-panel .dec-desk-cage {
+    display: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-funds-stack {
+    margin-top: 0;
+    padding-top: 0;
   }
 }
 
@@ -3412,6 +3561,8 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   body.layout-basic .app-decimator-panel .dec-foil-pack-face,
   body.layout-basic .app-decimator-panel .dec-pack-shine,
   body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > :is(strong, img),
   body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].is-receiving,
   body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving,
   body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving::after {

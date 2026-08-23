@@ -58,10 +58,12 @@ test('latest token is fetched once from Fly and then served by the edge cache', 
   assert.equal(first.headers.get('x-jackpot-edge'), 'MISS');
   assert.equal(second.headers.get('x-jackpot-edge'), 'HIT');
   assert.match(first.headers.get('cache-control'), /max-age=1/);
-  assert.match(first.headers.get('cache-control'), /s-maxage=30/);
+  assert.match(first.headers.get('cache-control'), /s-maxage=86400/);
   assert.equal(originCalls.length, 1);
   assert.equal(originCalls[0].url, 'https://degenerus-db.fly.dev/game/jackpot/cdn/latest.json');
   assert.equal(originCalls[0].init.cf.cacheTtl, 1);
+  assert.equal(originCalls[0].init.signal instanceof AbortSignal, true,
+    'a cold origin request always has a deadline');
 });
 
 test('stale latest token returns immediately while one background refresh replaces it', async () => {
@@ -95,4 +97,19 @@ test('rejects arbitrary paths and methods without touching Fly', async () => {
   assert.equal(path.status, 404);
   assert.equal(method.status, 405);
   assert.equal(originCalls.length, 0);
+});
+
+test('a failed cold origin returns a quick, uncacheable 503', async () => {
+  globalThis.fetch = async (url, init) => {
+    originCalls.push({ url: String(url), init });
+    throw new Error('R2 unavailable');
+  };
+
+  const response = await onRequest(context('/jackpots/latest.json'));
+
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('x-jackpot-edge'), 'ERROR');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('retry-after'), '2');
+  assert.equal(stored.size, 0, 'an origin failure never replaces a last-good pointer');
 });

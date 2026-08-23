@@ -424,9 +424,10 @@ body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) > .
   }
 }
 
-/* An empty winnings lane surrenders its row: the wager stack owns the space
-   above the amount rail until a win physically fills the upper rack. */
-body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) {
+/* The wager owns the spot and the receipt owns the bottom rail, ALWAYS. The
+   payout never takes a row of its own — it is an overlay — so winning cannot
+   reflow, shrink, or shove the chips the player already put down. */
+body.layout-basic .df-bet-oval {
   grid-template-rows: minmax(0, 1fr) .78rem;
 }
 
@@ -474,19 +475,11 @@ body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) {
     0 0 1.4rem rgba(250, 204, 21, 0.12);
 }
 
-body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
-  --df-chip-stack-height: 1.58rem;
-}
-
 @media (min-width: 521px) {
   body.layout-basic .df-bet-oval .df-bet-chip-rack {
     --df-chip-width: 1.8rem;
     --df-chip-height: 0.96rem;
     --df-chip-stack-height: 2.6rem;
-  }
-
-  body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) .df-bet-chip-rack {
-    --df-chip-stack-height: 1.78rem;
   }
 }
 
@@ -495,18 +488,20 @@ body.layout-basic .df-today-winnings-row {
   box-shadow: none;
 }
 
-body.layout-basic .df-today-winnings-row[data-state="win"] {
-  background: radial-gradient(92% 100% at 50% 100%, rgba(127, 163, 240, 0.08), transparent 70%);
-}
-
-/* Once the wager itself is a mound, winnings become a physical field over
-   that same footprint. Each item is a complete dealer-neat stack; shallow
-   grid rows overlap like table depth instead of shrinking 100+ payout chips
-   into one tiny flex row. The first depth row can sit behind the old pile,
-   while every nearer row and its clean top stays visible in front. */
-body.layout-basic .df-today-winnings-row[data-layout="pile"] {
+/* Once the wager itself is a mound, the payout is the one thing on the table
+   that stays counted out: a single even rank of dealer stacks set down along
+   the near edge of the spot, in front of the player's sprawl and clear of the
+   printed receipt rail. It never becomes a second mound. */
+/* The payout is an OVERLAY at every wager size — never a row in the oval's
+   grid — so the chips the player put down keep the exact position and size
+   they had before the day resolved. The dealer sets its rank down beside
+   them: standing BEHIND a compact rack, where there is clear felt and its
+   clean tops read over the wager, and IN FRONT of a mound, which is far too
+   wide and tall to see past. Either way nothing on the spot moves. */
+body.layout-basic .df-today-winnings-row[data-layout] {
   position: absolute;
-  inset: -0.34rem 0 0.78rem;
+  right: 0;
+  left: 0;
   display: block;
   width: auto;
   height: auto;
@@ -517,25 +512,45 @@ body.layout-basic .df-today-winnings-row[data-layout="pile"] {
   pointer-events: none;
 }
 
-body.layout-basic .df-today-winnings-row[data-layout="pile"]
-  .df-bet-chip-rack[data-payout-layout="pile"] {
+/* Behind the wager: baseline set further up the felt, painting under the
+   player's own rack, so what shows is a ridge of even stack tops. The rank
+   is nudged off the wager's centre line as well — squarely behind it, the two
+   groups read as one clump instead of as the player's bet and the dealer's
+   answer to it. */
+body.layout-basic .df-today-winnings-row[data-layout="behind"] {
+  z-index: 2;
+  top: auto;
+  bottom: 2.4rem;
+  transform: translateX(0.92rem);
+}
+
+/* In front of the mound: baseline on the near edge of the spot, just clear
+   of the printed receipt rail. */
+body.layout-basic .df-today-winnings-row[data-layout="front"] {
+  z-index: 4;
+  top: auto;
+  bottom: 1.05rem;
+}
+
+body.layout-basic .df-today-winnings-row[data-layout]
+  .df-bet-chip-rack[data-payout-layout="rank"] {
   --df-payout-stack-width: 1.42rem;
-  position: absolute;
-  inset: 0 -2.6rem;
+  position: relative;
   display: grid;
   width: auto;
   max-width: none;
   height: auto;
+  margin-bottom: 0;
   grid-template-columns: repeat(var(--df-payout-columns), var(--df-payout-stack-width));
-  grid-template-rows: repeat(var(--df-payout-rows), 0.38rem);
   place-content: end center;
   gap: 0 0.03rem;
   overflow: visible;
 }
 
+/* Column variety is baked into the art now — the three seam turns of
+   stack-N[-b|-c].svg — so nothing here mirrors a stack and reverses the
+   milling and gloss that give the coin its light direction. */
 body.layout-basic .df-payout-chip-stack {
-  --df-payout-mirror: 1;
-  z-index: 4;
   display: block;
   width: var(--df-payout-stack-width);
   max-width: none;
@@ -543,50 +558,41 @@ body.layout-basic .df-payout-chip-stack {
   align-self: end;
   justify-self: center;
   grid-column: var(--df-payout-column);
-  grid-row: var(--df-payout-row);
+  grid-row: 1;
   filter: drop-shadow(0 0.07rem 0.07rem rgba(0, 0, 0, 0.55));
   pointer-events: none;
-  transform: scaleX(var(--df-payout-mirror));
   transform-origin: center bottom;
   animation: df-payout-stack-arrive 0.42s cubic-bezier(0.2, 0.84, 0.3, 1)
     var(--df-payout-delay, 0s) backwards;
 }
 
-body.layout-basic .df-payout-chip-stack[data-payout-turn="mirror"] {
-  --df-payout-mirror: -1;
-}
-
-body.layout-basic .df-payout-chip-stack[data-payout-layer="behind"] {
-  z-index: 2;
-  filter: brightness(0.84) drop-shadow(0 0.05rem 0.06rem rgba(0, 0, 0, 0.5));
-}
-
 @keyframes df-payout-stack-arrive {
   0% {
     opacity: 0;
-    transform: translateY(-0.52rem) scale(0.88) scaleX(var(--df-payout-mirror));
+    transform: translateY(-0.52rem) scale(0.88);
   }
   68% {
     opacity: 1;
-    transform: translateY(0.05rem) scale(1.02) scaleX(var(--df-payout-mirror));
+    transform: translateY(0.05rem) scale(1.02);
   }
   100% {
     opacity: 1;
-    transform: scaleX(var(--df-payout-mirror));
+    transform: none;
   }
 }
 
 @media (min-width: 521px) {
-  body.layout-basic .df-today-winnings-row[data-layout="pile"] {
-    inset: -0.52rem 0 0.78rem;
+  body.layout-basic .df-today-winnings-row[data-layout="behind"] {
+    bottom: 3rem;
   }
 
-  body.layout-basic .df-today-winnings-row[data-layout="pile"]
-    .df-bet-chip-rack[data-payout-layout="pile"] {
+  body.layout-basic .df-today-winnings-row[data-layout="front"] {
+    bottom: 1.15rem;
+  }
+
+  body.layout-basic .df-today-winnings-row[data-layout]
+    .df-bet-chip-rack[data-payout-layout="rank"] {
     --df-payout-stack-width: 1.58rem;
-    right: -3.2rem;
-    left: -3.2rem;
-    grid-template-rows: repeat(var(--df-payout-rows), 0.42rem);
   }
 }
 
@@ -613,8 +619,11 @@ body.layout-basic .df-bet-chip-rack {
 }
 
 /* Wagers rest ON the felt: the rack settles low in the box and every pile
-   casts a contact shadow instead of hovering. */
-body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="empty"]) .df-bet-chip-rack {
+   casts a contact shadow instead of hovering. This is the wager's ONLY
+   resting place — a payout arriving beside it changes nothing here. */
+body.layout-basic .df-bet-oval .df-bet-chip-rack {
+  position: relative;
+  z-index: 3;
   align-self: end;
   margin-bottom: 0.34rem;
 }
@@ -1940,8 +1949,10 @@ body.layout-basic .df-add-bet-dialog__value input {
   box-sizing: border-box;
   padding: 0 4.3rem;
   border: 0;
+  border-radius: 0;
   outline: 0;
   background: transparent;
+  box-shadow: none;
   color: var(--df-add-bet-yellow);
   font: inherit;
   font-variant-numeric: tabular-nums;

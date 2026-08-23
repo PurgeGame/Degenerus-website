@@ -158,6 +158,10 @@ describe('standalone ALL IN chooser', () => {
     assert.doesNotMatch(DIALOG_SRC, /qst-action-dialog__close/,
       'the TOO RISKY action replaces the redundant top-right close button');
     assert.match(APP_CSS, /\.allin-too-risky\s*\{[^}]*min-height:\s*3\.05rem[^}]*#ec4899/s);
+    assert.match(APP_CSS, /\.allin-too-risky\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*0\.52rem/s,
+      'the pink exit action reserves the same leading marker position as ALL IN');
+    assert.match(APP_CSS, /\.allin-too-risky::before\s*\{[^}]*content:\s*'🐔'/s,
+      'the pink exit action uses a chicken instead of copying the Degenerus flame');
     assert.match(APP_CSS, /\.allin-spins\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)[^}]*margin-top:\s*-0\.2rem/s);
     assert.match(APP_CSS, /\.allin-spins__range\s*\{[^}]*appearance:\s*none[^}]*cursor:\s*ew-resize/s);
   });

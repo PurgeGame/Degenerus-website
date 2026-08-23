@@ -91,22 +91,23 @@ export function activeTicketLevel(gameState, contractPhase = null) {
 }
 
 /**
- * Level whose foil pack belongs in the Daily Drawing cabinet.
+ * Contract-cadence level the Daily Drawing cabinet may advance to.
  *
  * This deliberately differs from `activeTicketLevel()` during the final
  * sealed RNG window. New buys may already route forward before that level's
- * last jackpot has actually run, but the cabinet must keep the current pack
- * seated through that draw. Once end-phase starts OR the same numeric level
- * has reached purchase cadence, the final jackpot is over and the cabinet
- * belongs to level + 1. Keeping purchase cadence on `level` made the handoff
- * move 311 -> 312 -> 311 and hid a real level-312 foil pack.
+ * last jackpot has actually run. This helper reports the cadence handoff once
+ * end-phase starts or the same numeric level reaches purchase cadence. The
+ * cabinet host applies its additional local presentation/claim lock before it
+ * actually ejects the resolved pack. Keeping raw purchase cadence on `level`
+ * made the handoff move 311 -> 312 -> 311 and hid a real level-312 foil pack.
  */
 export function foilPackDisplayLevel(gameState, contractPhase = null) {
   const level = Number(gameState?.level ?? contractPhase?.level);
   if (!Number.isFinite(level)) return null;
 
-  // _endPhase is the first exact hand-off requested by the cabinet: from this
-  // point onward the old level has no remaining jackpot presentation.
+  // _endPhase is the first exact contract-cadence handoff. A client already
+  // presenting the old level may deliberately defer this answer until that
+  // presentation and its outstanding claims are complete.
   if (gameState?.phaseTransitionActive === true) return level + 1;
 
   // Prefer the explicit /game/state cadence over the independently-polled

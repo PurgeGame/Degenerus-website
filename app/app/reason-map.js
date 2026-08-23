@@ -235,6 +235,16 @@ register('AfKingLockActive', {
   recoveryAction: 'Try again in a few minutes.',
 });
 
+// openBox / requestLootboxRng during the daily RNG lock
+// (DegenerusGameLootboxModule.openBox:1264, `error RngLocked()` at
+// storage/DegenerusGameStorage.sol:246). Unmapped, this read as the UNKNOWN
+// catch-all's "unexpected error" for a lock that always clears within the day.
+register('RngLocked', {
+  code: 'RngLocked',
+  userMessage: 'Box opening is locked while today\'s draw settles.',
+  recoveryAction: 'Try again once the lock clears later today.',
+});
+
 register('NotApproved', {
   code: 'NotApproved',
   userMessage: "You're not approved to act on behalf of this player.",

@@ -117,3 +117,60 @@ body.demo-no-anim .df-payout-chip-stack,
 body.demo-no-anim .df-bankroll__roll {
   animation: none !important;
 }
+
+/* Free-form wager bench: type any size, scrub any reward percent, and read
+   back exactly what the presentation code decided to put on the felt. */
+.coinflip-felt-demo__custom {
+  align-items: center;
+}
+
+.coinflip-felt-demo__field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #64748b;
+  font: 900 0.52rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.14em;
+}
+
+.coinflip-felt-demo__field input {
+  width: 6.4rem;
+  padding: 0.32rem 0.45rem;
+  border: 1px solid #334155;
+  border-radius: 7px;
+  background: #0d121b;
+  color: #fde68a;
+  font: 800 0.68rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+.coinflip-felt-demo__field--pct input {
+  width: 3.4rem;
+}
+
+.coinflip-felt-demo__field input:focus-visible {
+  border-color: #f59e0b;
+  outline: 0;
+}
+
+.coinflip-felt-demo__slider {
+  width: 8rem;
+  accent-color: #f59e0b;
+}
+
+.coinflip-felt-demo__readout {
+  flex: 1 0 100%;
+  padding-top: 0.1rem;
+  color: #7f95b0;
+  font: 700 0.58rem/1.35 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.01em;
+}
+
+.coinflip-felt-demo__readout b {
+  color: #cbd5e1;
+}
+
+.coinflip-felt-demo__readout i {
+  color: #f59e0b;
+  font-style: normal;
+}

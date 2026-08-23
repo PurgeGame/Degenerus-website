@@ -18,7 +18,7 @@ import {
 import { clearPendingActions, publishPendingActions } from './pending-actions.js';
 import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
 import { sharedReadProvider } from './read-provider.js';
-import { queueReveal } from '../components/reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
 
 const SOURCE = 'launch-claims';
 const POLL_MS = 30_000;
@@ -52,6 +52,7 @@ let _getLevel = null;
 let _refreshSeq = 0;
 let _jackpotRevealListener = null;
 let _txConfirmedListener = null;
+let _resultAbortListener = null;
 let _contractFactory = null;
 let _readProvider = null;
 const _foilCache = new Map();
@@ -109,6 +110,20 @@ function _markReferralBonusRevealed(player, level) {
   try {
     if (typeof localStorage !== 'undefined') localStorage.setItem(key, '1');
   } catch (_e) { /* memory tombstone remains available */ }
+}
+
+/**
+ * Drop the revealed tombstone for a reward the player never actually saw. This
+ * marker is written to localStorage the moment the reveal is queued, so a
+ * closed overlay would otherwise retire a paid referral bonus permanently —
+ * across refreshes, not just for the session.
+ */
+function _clearReferralBonusRevealed(player, level) {
+  const key = _referralRevealKey(player, level);
+  _revealedReferralBonuses.delete(key);
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+  } catch (_e) { /* private mode: the memory tombstone is already cleared */ }
 }
 
 /** Whether an ethers/provider error says this one-per-level reward is settled. */
@@ -184,6 +199,9 @@ export function referralBonusRevealSequence({ player, level, amountWei } = {}) {
   return {
     kind: 'referral-bonus',
     presentationId: `referral-bonus:${address}:${lvl}`,
+    // Echoed back by RESULT_REVEAL_ABORT_EVENT so a closed overlay restores
+    // this bonus instead of tombstoning it unseen.
+    revealRelease: { address, level: lvl },
     player: address,
     level: lvl,
     amountWei: amount,
@@ -556,8 +574,22 @@ export function startLaunchClaims({ getAddress, getLevel } = {}) {
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     _jackpotRevealListener = () => { void refreshLaunchClaims(); };
     _txConfirmedListener = () => { void refreshLaunchClaims(); };
+    _resultAbortListener = (event) => {
+      const released = Array.isArray(event?.detail?.released) ? event.detail.released : [];
+      let restored = false;
+      for (const entry of released) {
+        if (entry?.kind !== 'referral-bonus') continue;
+        const address = entry?.release?.address;
+        const level = Number(entry?.release?.level);
+        if (!address || !Number.isInteger(level) || level <= 0) continue;
+        _clearReferralBonusRevealed(address, level);
+        restored = true;
+      }
+      if (restored) void refreshLaunchClaims();
+    };
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
     document.addEventListener(TX_CONFIRMED_EVENT, _txConfirmedListener);
+    document.addEventListener(RESULT_REVEAL_ABORT_EVENT, _resultAbortListener);
   }
   void refreshLaunchClaims();
 }
@@ -571,15 +603,24 @@ export function stopLaunchClaims() {
   if (_txConfirmedListener && typeof document !== 'undefined') {
     document.removeEventListener?.(TX_CONFIRMED_EVENT, _txConfirmedListener);
   }
+  if (_resultAbortListener && typeof document !== 'undefined') {
+    document.removeEventListener?.(RESULT_REVEAL_ABORT_EVENT, _resultAbortListener);
+  }
   _timer = null;
   _fastRetry = null;
   _jackpotRevealListener = null;
   _txConfirmedListener = null;
+  _resultAbortListener = null;
   _running = false;
   _getAddress = null;
   _getLevel = null;
   _refreshSeq += 1;
   clearPendingActions(SOURCE);
+}
+
+/** Test seam: whether a referral bonus is tombstoned as already presented. */
+export function __referralBonusRevealedForTest(player, level) {
+  return _referralBonusWasRevealed(player, level);
 }
 
 export function __setLaunchClaimsContractFactoryForTest(factory) {

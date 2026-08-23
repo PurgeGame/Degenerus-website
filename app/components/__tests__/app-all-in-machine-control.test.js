@@ -63,8 +63,8 @@ describe('cabinet-mounted ALL IN control', () => {
       /jackpot-all-in-socket__label" aria-hidden="true">AI<\/span>/,
       'the no-button fitting carries its AI board designator');
     assert.match(drawingCss,
-      /\.jackpot-all-in-socket__label\s*\{[^}]*top:\s*calc\(100% \+ clamp\([^}]*color:\s*rgba\(207, 184, 116, 0\.38\)[^}]*ui-monospace/s,
-      'AI is faint board silkscreen positioned below the power connector');
+      /\.jackpot-all-in-socket__label\s*\{[^}]*top:\s*81%[^}]*color:\s*rgba\(207, 217, 209, 0\.15\)[^}]*font:\s*700[^}]*ui-monospace[^}]*SFMono-Regular[^}]*Menlo[^}]*DejaVu Sans Mono[^}]*letter-spacing:\s*0\.067em[^}]*translate\(-50%, -50%\)/s,
+      'AI sits low inside the circle and matches the board-bottom fab legend');
     assert.match(drawingCss,
       /\.jackpot-all-in-socket__pins\s*\{[^}]*grid-template-columns:\s*repeat\(2,[^}]*grid-template-rows:\s*repeat\(2,/s,
       'the four contacts stay arranged like an ATX12V motherboard socket');

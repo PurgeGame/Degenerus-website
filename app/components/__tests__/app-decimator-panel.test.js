@@ -960,6 +960,9 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
   });
 
   test('purchase surface uses the tightened compact rhythm without collapsing its controls', () => {
+    const compactHeroCss = PURCHASE_DESK_CSS.slice(
+      PURCHASE_DESK_CSS.lastIndexOf('@media (max-width: 1099px)'),
+    );
     assert.match(
       APP_CSS,
       /\.jackpot-hero > app-decimator-panel > \.app-decimator-panel\s*\{[^}]*padding:\s*clamp\(0\.68rem,[^;]*0\.82rem\);[^}]*gap:\s*0\.5rem;/s,
@@ -1014,6 +1017,41 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       PURCHASE_DESK_CSS,
       /\.dec-buy-row--flip\s*\{[^}]*grid-template-columns:\s*3\.1rem minmax\(0, 1fr\);[^}]*\}[\s\S]*?\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s,
       'FLIP mode gives its detailed burn quote a full-width row beneath Clear and TIX',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*3rem minmax\(6\.2rem, 0\.9fr\) minmax\(6\.25rem, 1\.1fr\)[^}]*padding-top:\s*0\.3rem/s,
+      'mobile and medium Clear, TIX, and Buy share one compact control line',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-buy-row > \.dec-buy-cta\[data-write\],[\s\S]*?\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*1;[^}]*height:\s*3rem/s,
+      'the compact Buy key no longer consumes a separate full-width row',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.panel-header\s*\{[^}]*min-height:\s*3\.15rem;[^}]*grid-template-columns:\s*4\.9rem minmax\(0, 1fr\) 6\.45rem;[^}]*grid-template-rows:\s*2\.55rem/s,
+      'mobile and medium BUY IN, price screen, and bonus share one instrument row',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-price\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;[^}]*grid-template-columns:\s*1ch max-content 1\.5ch minmax\(max-content, 1fr\);[^}]*font-size:\s*clamp\(0\.43rem, 2vw, 0\.5rem\)/s,
+      'the compact rate screen uses its width instead of a separate header row',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-flip-credit--header\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*1/s,
+      'the bonus readout stays in the same compact instrument row',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-ticket-piece\s*\{[^}]*min-height:\s*6\.25rem/s,
+      'recovered height enlarges the clickable ticket shelf',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-desk-cage\s*\{\s*display:\s*none;[^}]*\}[\s\S]*?\.dec-funds-stack\s*\{[^}]*margin-top:\s*0;[^}]*padding-top:\s*0;/s,
+      'mobile and medium remove the decorative blank spacer before Available Funds',
     );
     assert.match(
       APP_CSS,
@@ -2829,6 +2867,8 @@ describe('combined ticket + lootbox buy', () => {
       el.querySelector('[data-bind="dec-flip-credit-total"]').textContent,
       '+1.5K FLIP',
     );
+    assert.equal(tally.classList.contains('is-receiving'), true,
+      'the reserved bonus instrument pulses when its numeric FLIP total rises');
     assert.equal(el.querySelectorAll('[data-bind="dec-flip-credit-total"]').length, 1);
     assert.doesNotMatch(tally.textContent, /purchase|bulk|rebuy/i, 'no detailed breakdown');
     assert.match(PANEL_SRC, /\/whitepaper\/flame-logo-split\.svg/);
@@ -2882,13 +2922,45 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-flip-credit--header\s*\{[^}]*radial-gradient\([^}]*linear-gradient\(130deg,/s,
       'the bonus slot has the approved splashy layered background',
     );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header:not\(\.is-idle\):not\(\.dec-flip-credit--bounty\) > strong\s*\{[^}]*color:\s*#a5f3fc;[^}]*font-size:\s*0\.68rem;/s,
+      'ordinary earned bonus FLIP gets a brighter cyan readout without replacing the bounty gold',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header\.dec-flip-credit--bounty > strong\s*\{[^}]*color:\s*#facc15;[^}]*font-size:\s*0\.68rem;/s,
+      'a bounty-enhanced bonus retains its separate gold value treatment in the final stylesheet',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header\.is-receiving\s*\{[^}]*dec-bonus-flip-panel-increase 640ms[\s\S]*?@keyframes dec-bonus-flip-value-increase/s,
+      'an increase gives the instrument and its number one short authored pulse',
+    );
+
+    tally.classList.remove('is-receiving');
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(tally.classList.contains('is-receiving'), false,
+      'an unchanged render does not replay the increase animation');
+    input.value = '11.75';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(tally.classList.contains('is-receiving'), true,
+      'a subsequent real increase restarts the pulse');
+    assert.equal(el.querySelector('[data-bind="dec-flip-credit-total"]').textContent, '+1.65K FLIP');
 
     input.value = '0.75';
     input.dispatchEvent({ type: 'input' });
+    assert.equal(tally.classList.contains('is-receiving'), false,
+      'lowering the draft cancels an in-flight increase cue');
     assert.equal(tally.hidden, false, 'the reserved bonus slot never disappears');
     assert.equal(tally.classList.contains('is-idle'), true);
     assert.equal(el.querySelector('[data-bind="dec-flip-credit-label"]').textContent, 'PLAY TO EARN');
     assert.equal(el.querySelector('[data-bind="dec-flip-credit-total"]').textContent, 'BONUS FLIP');
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.dec-flip-credit--header\.is-receiving[\s\S]*?animation:\s*none;/s,
+      'the stronger steady color remains while reduced motion suppresses the pulse',
+    );
     el.disconnectedCallback();
   });
 

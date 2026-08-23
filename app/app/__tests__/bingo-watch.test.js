@@ -8,8 +8,21 @@ globalThis.customElements = globalThis.customElements || {
   define(name, ctor) { this._registry.set(name, ctor); },
   get(name) { return this._registry.get(name); },
 };
+// A real (tiny) dispatcher: the watcher listens for the overlay's abort event,
+// so a no-op stub would silently pass every restore assertion.
 globalThis.document = globalThis.document || {
-  addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
+  _listeners: new Map(),
+  addEventListener(type, fn) {
+    if (!this._listeners.has(type)) this._listeners.set(type, new Set());
+    this._listeners.get(type).add(fn);
+  },
+  removeEventListener(type, fn) { this._listeners.get(type)?.delete(fn); },
+  dispatchEvent(event) {
+    for (const fn of [...(this._listeners.get(event?.type) || [])]) {
+      try { fn(event); } catch (_e) { /* listeners are independent */ }
+    }
+    return true;
+  },
 };
 globalThis.localStorage = {
   _values: new Map(),
@@ -373,6 +386,68 @@ describe('bingo event watcher', () => {
     assert.equal(queued.length, 1);
     assert.equal(queued[0].kind, 'bingo');
     assert.deepEqual(queued[0].counts.filter(Boolean), Array(8).fill(1));
+  });
+
+  test('closing the overlay restores a Bingo reveal row instead of consuming it unseen', async () => {
+    const claimReceiptLogs = [
+      log('FirstQuadrantBingo', [PLAYER, 35, 18], { index: 8, tx: '0xcafe' }),
+      log('BingoClaimed', [PLAYER, 35, 18, 5_000n * 10n ** 18n, 99n], {
+        index: 9, tx: '0xcafe',
+      }),
+    ];
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER, level: 35, quadrant: 2, symbol: 18,
+          slots: [2, 4, 6, 8, 10, 12, 14, 16],
+        }],
+        claimed: [],
+      }),
+      claim: async () => ({ receipt: { logs: claimReceiptLogs } }),
+      tickets: async () => ({
+        cards: Array.from({ length: 8 }, (_unused, color) => ({
+          entries: [{ traitId: (2 << 6) | (color << 3) | 2 }],
+        })),
+      }),
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    await pending.getPendingActions()
+      .find((row) => row.kind === 'bingo' && row.shortLabel === 'Claim Bingo')
+      .run();
+
+    const receipt = pending.getPendingActions()
+      .find((row) => row.kind === 'bingo' && row.shortLabel === 'Reveal Bingo');
+    assert.ok(receipt, 'the confirmed claim receipt becomes a reveal row');
+
+    await receipt.run();
+    const [queued] = reveal.__takeQueuedForTest();
+    assert.ok(queued?.revealRelease?.id, 'the sequence carries its restore identity');
+    assert.equal(
+      pending.getPendingActions().some((row) => row.shortLabel === 'Reveal Bingo'),
+      false,
+      'the row is consumed while its presentation is staged',
+    );
+
+    // The player closes the overlay before the Bingo ever plays.
+    document.dispatchEvent(new CustomEvent(reveal.RESULT_REVEAL_ABORT_EVENT, {
+      detail: {
+        released: [{
+          kind: 'bingo',
+          presentationId: queued.presentationId,
+          release: queued.revealRelease,
+        }],
+      },
+    }));
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    const restored = pending.getPendingActions()
+      .find((row) => row.kind === 'bingo' && row.shortLabel === 'Reveal Bingo');
+    assert.ok(restored, 'an unseen Bingo comes back instead of being lost for good');
   });
 
   test('CLEAR durably consumes an unclaimed Bingo proof instead of republishing it', async () => {
