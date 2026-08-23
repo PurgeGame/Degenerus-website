@@ -99,9 +99,9 @@ describe('lootboxRewardPresentation', () => {
     assert.equal(REWARD_TYPE_LABELS[13], 'Degenerette boon');
   });
 
-  test('honestly names the one event family whose product category is not encoded', () => {
+  test('keeps an unencoded purchase-boon product concise without listing both guesses', () => {
     const boost = lootboxRewardPresentation(6, 2_500n);
-    assert.equal(boost.label, 'LUCKBOX / TICKET BOON');
+    assert.equal(boost.label, 'PURCHASE BOON');
     assert.equal(boost.value, '+25%');
     assert.equal(boost.detail, '');
 
@@ -272,7 +272,7 @@ describe('enrichLootboxBoonLegs', () => {
       enriched.rewardType,
       enriched.amount,
       { boonType: enriched.boonType },
-    ).label, 'LUCKBOX / TICKET BOON');
+    ).label, 'PURCHASE BOON');
   });
 
   test('uses the committed human-box RNG to name an ignored lower Ticket roll exactly', async () => {

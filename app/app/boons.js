@@ -49,7 +49,8 @@ const BOON_UI = Object.freeze({
    boons keep the exact ETH / FLIP / WWXRP badge players already recognize. */
 export const BOON_PRODUCT_ICONS = Object.freeze({
   purchase: null,
-  lootbox: lootboxCaseAssets('medium').lockedFront,
+  lootbox: lootboxCaseAssets('medium').iconFront
+    || lootboxCaseAssets('medium').lockedFront,
   coinflip: '/whitepaper/flame-logo-split.svg',
   quests: '/app/assets/boons/boon-quest-micro.svg',
   decimator: '/app/assets/decimator-draw-mark.svg',

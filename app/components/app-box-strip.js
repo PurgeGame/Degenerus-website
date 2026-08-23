@@ -24,9 +24,9 @@
 // Class palette: .bxs-* (non-colliding).
 
 import { CHAIN, CONTRACTS } from '../app/chain-config.js';
+import { ethers, getProvider } from '../app/contracts.js';
 import { displayEth } from '../app/scaling.js';
 import { get, subscribe } from '../app/store.js';
-import { ethers, getProvider } from '../app/contracts.js';
 import { fetchJSON } from '../app/api.js';
 import {
   openLootBox,
@@ -71,11 +71,9 @@ const DEGENERETTE_RESOLVED_TOPIC = ethers.id(
 ).toLowerCase();
 
 function _samePlayerDegeneretteResolution(receipt, player) {
-  let playerTopic;
-  try { playerTopic = ethers.zeroPadValue(String(player), 32).toLowerCase(); }
-  catch (_e) { return false; }
+  const playerTopic = `0x${String(player || '').toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
   const game = String(CONTRACTS.GAME || '').toLowerCase();
-  return (Array.isArray(receipt?.logs) ? receipt.logs : []).some((log) => (
+  return Array.isArray(receipt?.logs) && receipt.logs.some((log) => (
     String(log?.address || '').toLowerCase() === game
     && String(log?.topics?.[0] || '').toLowerCase() === DEGENERETTE_RESOLVED_TOPIC
     && String(log?.topics?.[1] || '').toLowerCase() === playerTopic
@@ -83,21 +81,20 @@ function _samePlayerDegeneretteResolution(receipt, player) {
 }
 
 async function _degeneretteChildResultKeys(rows, player) {
-  const provider = getProvider();
-  if (!provider || typeof provider.getTransactionReceipt !== 'function') return new Set();
   const candidates = (Array.isArray(rows) ? rows : []).filter((row) => (
-    Number(row?.index) === 0 && row?.transactionHash
+    Number(row?.index) === 0 && String(row?.transactionHash || '')
   ));
-  const byHash = new Map(candidates.map((row) => [
-    String(row.transactionHash).toLowerCase(),
-    row,
-  ]));
+  if (candidates.length === 0) return new Set();
+  let provider;
+  try { provider = getProvider(); } catch (_e) { return new Set(); }
   const excluded = new Set();
-  await Promise.all([...byHash.entries()].map(async ([hash, row]) => {
+  await Promise.all(candidates.map(async (row) => {
     try {
-      const receipt = await provider.getTransactionReceipt(hash);
+      const receipt = await provider.getTransactionReceipt(row.transactionHash);
       if (_samePlayerDegeneretteResolution(receipt, player)) excluded.add(_boxKey(row));
-    } catch (_e) { /* an unclassified direct result remains on its existing path */ }
+    } catch (_e) {
+      // A transient RPC failure must not hide an otherwise actionable result.
+    }
   }));
   return excluded;
 }
@@ -505,6 +502,10 @@ class AppBoxStrip extends HTMLElement {
   #initialized = false;
   #pollHandle = null;
   #pollBusy = false;
+  // Resolves when the cycle currently running finishes. The address
+  // subscription starts a cycle of its own, so a caller that needs settled
+  // state has to wait for that one rather than race its 7s successor.
+  #pollInFlight = null;
   #errorTimer = null;
   #docListener = null;
   #submittedListener = null;
@@ -892,6 +893,8 @@ class AppBoxStrip extends HTMLElement {
 
   async #runPollCycle() {
     if (this.#pollBusy) return;
+    let settle;
+    this.#pollInFlight = new Promise((resolve) => { settle = resolve; });
     if (typeof document !== 'undefined'
       && document.visibilityState
       && document.visibilityState !== 'visible') return;
@@ -971,6 +974,11 @@ class AppBoxStrip extends HTMLElement {
       const newlyDiscoveredRows = priorCursor == null
         ? allResolvedRows.slice(0, 1)
         : allResolvedRows.filter((row) => Number(row.ord) > priorCursor);
+      // Degenerette's owning panel reconstructs the awarding spin and appends
+      // its child Luckbox after that parent. The generic index-zero result
+      // watcher can otherwise observe the shared receipt first and publish the
+      // child independently, reversing causal reveal order. Receipt topics are
+      // authoritative and keep unrelated AFKing index-zero results eligible.
       const rowsNeedingCausalClassification = allResolvedRows.filter((row) => (
         tracked.has(_boxKey(row)) || newlyDiscoveredRows.includes(row)
       ));
@@ -980,9 +988,9 @@ class AppBoxStrip extends HTMLElement {
       );
       if (this.#addr !== owner) return;
       for (const key of degeneretteChildKeys) local.delete(key);
-      const resolvedRows = allResolvedRows.filter((row) => (
-        !degeneretteChildKeys.has(_boxKey(row))
-      ));
+      const resolvedRows = allResolvedRows.filter(
+        (row) => !degeneretteChildKeys.has(_boxKey(row)),
+      );
       const resolvedByKey = new Map(resolvedRows.map((row) => [_boxKey(row), row]));
 
       // If receipt parsing could not recover the index, the indexed purchase
@@ -1069,9 +1077,9 @@ class AppBoxStrip extends HTMLElement {
       // First visit establishes a history baseline and offers only the newest
       // result. After that, EVERY result newer than the durable cursor is kept,
       // so several boxes settling between polls cannot collapse into one chip.
-      const discovered = newlyDiscoveredRows.filter((row) => (
-        !degeneretteChildKeys.has(_boxKey(row))
-      ));
+      const discovered = newlyDiscoveredRows.filter(
+        (row) => !degeneretteChildKeys.has(_boxKey(row)),
+      );
       for (const settled of discovered) {
         const key = _boxKey(settled);
         if (!key || revealed.has(key)) continue;
@@ -1252,6 +1260,8 @@ class AppBoxStrip extends HTMLElement {
       // API/indexer blip — keep the last honest state and retry next tick.
     } finally {
       this.#pollBusy = false;
+      this.#pollInFlight = null;
+      settle();
     }
   }
 
@@ -1739,8 +1749,15 @@ class AppBoxStrip extends HTMLElement {
     return true;
   }
 
-  /** Test-only deterministic polling seam. */
-  async __pollForTest() { await this.#runPollCycle(); }
+  /**
+   * Test-only deterministic polling seam. Drains the cycle the connect/address
+   * subscription may already have started before running a guaranteed fresh
+   * one, so a caller never asserts against a half-applied poll.
+   */
+  async __pollForTest() {
+    await this.#pollInFlight;
+    await this.#runPollCycle();
+  }
 
   #renderError(msg) {
     const errEl = this.#bind('bxs-error');

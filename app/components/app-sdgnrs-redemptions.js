@@ -20,7 +20,11 @@ import {
 } from '../app/sdgnrs.js';
 import { enrichLootboxBoonLegs, parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
-import { LOOTBOX_REVEAL_COMPLETE_EVENT, queueReveal } from './reveal-overlay.js';
+import {
+  LOOTBOX_REVEAL_ABORT_EVENT,
+  LOOTBOX_REVEAL_COMPLETE_EVENT,
+  queueReveal,
+} from './reveal-overlay.js';
 
 const PENDING_SOURCE = 'sdgnrs-redemptions';
 const POLL_MS = 12_000;
@@ -63,6 +67,26 @@ function _writePeriods(address, periods) {
 
 function _readSeen(address) {
   return new Set(_readJsonArray(revealedSdgnrsRedemptionsKey(CHAIN.id, address)).map(String));
+}
+
+/**
+ * Un-see a redemption the player never actually watched. The claim already
+ * paid, so the only thing left is its presentation: once `tx:<hash>` is in the
+ * seen set, discovery filters the row out for good. The overlay hands the id
+ * back when its queue is dropped by the close button.
+ */
+function _unmarkSeen(address, ...keys) {
+  if (!address) return;
+  try {
+    const seen = _readSeen(address);
+    let changed = false;
+    for (const key of keys) if (key && seen.delete(String(key))) changed = true;
+    if (!changed) return;
+    localStorage.setItem(
+      revealedSdgnrsRedemptionsKey(CHAIN.id, address),
+      JSON.stringify([...seen]),
+    );
+  } catch (_e) { /* private mode: the row returns next session anyway */ }
 }
 
 function _markSeen(address, ...keys) {
@@ -127,6 +151,10 @@ class AppSdgnrsRedemptions extends HTMLElement {
   #poll = null;
   #unsubscribe = null;
   #submissionListener = null;
+  #revealAbortListener = null;
+  // Seen-keys handed to the overlay, by presentation id, so an abort can put
+  // the redemption back on the tray. Cleared as soon as it is restored.
+  #stagedSeenKeys = new Map();
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -134,6 +162,20 @@ class AppSdgnrsRedemptions extends HTMLElement {
     this.hidden = true;
     this.#submissionListener = (event) => this.#onSubmission(event?.detail);
     document.addEventListener(SDGNRS_REDEMPTION_SUBMITTED_EVENT, this.#submissionListener);
+    this.#revealAbortListener = (event) => {
+      const ids = Array.isArray(event?.detail?.presentationIds)
+        ? event.detail.presentationIds : [];
+      let restored = false;
+      for (const id of ids) {
+        const staged = this.#stagedSeenKeys.get(String(id));
+        if (!staged) continue;
+        this.#stagedSeenKeys.delete(String(id));
+        _unmarkSeen(staged.address, ...staged.keys);
+        restored = true;
+      }
+      if (restored) void this.#refresh();
+    };
+    document.addEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener);
     this.#unsubscribe = subscribe('connected.address', (address) => {
       this.#address = address ? String(address).toLowerCase() : null;
       this.#rows = this.#address
@@ -156,6 +198,11 @@ class AppSdgnrsRedemptions extends HTMLElement {
     try { this.#unsubscribe?.(); } catch (_e) { /* defensive */ }
     this.#unsubscribe = null;
     if (this.#submissionListener) {
+      if (this.#revealAbortListener) {
+        try { document.removeEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener); }
+        catch (_e) { /* defensive */ }
+        this.#revealAbortListener = null;
+      }
       try { document.removeEventListener(SDGNRS_REDEMPTION_SUBMITTED_EVENT, this.#submissionListener); }
       catch (_e) { /* defensive */ }
     }
@@ -291,17 +338,22 @@ class AppSdgnrsRedemptions extends HTMLElement {
       const transactionHash = String(
         receipt?.hash || receipt?.transactionHash || claim?.transactionHash || row.transactionHash || '',
       ).toLowerCase();
+      const seenKeys = [_rowKey(row)];
+      if (row.type === 'period') seenKeys.push(`period:${row.periodIndex}`);
+      if (transactionHash) seenKeys.push(`tx:${transactionHash}`);
+      const presentationId = `sdgnrs-redemption:${owner}:${_rowKey(row)}`;
       const accepted = queueReveal({
         kind: 'lootbox',
         title: 'sDGNRS REDEMPTION',
         lootboxIndex: 0,
         legs,
+        presentationId,
+        // Echoed back by LOOTBOX_REVEAL_ABORT_EVENT so a closed overlay can
+        // un-see this redemption instead of retiring it unwatched.
+        lootboxRelease: { address: owner, key: _rowKey(row) },
       });
       if (!accepted) throw new Error('The sDGNRS result could not be displayed.');
-
-      const seenKeys = [_rowKey(row)];
-      if (row.type === 'period') seenKeys.push(`period:${row.periodIndex}`);
-      if (transactionHash) seenKeys.push(`tx:${transactionHash}`);
+      this.#stagedSeenKeys.set(presentationId, { address: owner, keys: seenKeys });
       _markSeen(owner, ...seenKeys);
       _reserveClaimResult(owner, transactionHash);
       const periods = _readPeriods(owner).filter((period) => period !== Number(row.periodIndex));

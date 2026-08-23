@@ -8161,8 +8161,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   70%, 100% { transform: rotate(402deg); }
 }
 
-/* Compact cases use the same dimensional red-to-green lock as the gold case,
-   scaled directly onto the clean center panel. */
+/* Compact cases use the accepted proportional red-to-green lock directly on
+   the clean center panel. The badge itself is identical to the gold lock. */
 .rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge {
   width: 10.5%;
 }
@@ -9339,8 +9339,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   width: 100%;
   height: auto;
 }
+/* The old integrated front supplies the clean registration; the official
+   vector badge sits exactly over that small inset without a separate mount. */
 .rvl-reward-lootbox::after {
-  position: absolute; top: var(--lootbox-case-badge-top, 63.5%); left: 50%; width: var(--lootbox-static-badge-size, 16%); aspect-ratio: 1;
+  position: absolute; top: var(--lootbox-case-badge-top, 63.5%); left: 50%; width: var(--lootbox-static-badge-size, 10.5%); aspect-ratio: 1;
   background: url('/whitepaper/flame-logo.svg') center / contain no-repeat; content: ''; pointer-events: none; transform: translate(-50%, -50%);
 }
 @keyframes rvl-reward-art-in {
@@ -10755,7 +10757,7 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini:is([data-lootbo
   z-index: 2;
   top: var(--lootbox-case-badge-top, 63.5%);
   left: 50%;
-  width: var(--lootbox-static-badge-size, 16%);
+  width: var(--lootbox-static-badge-size, 10.5%);
   aspect-ratio: 1;
   background: url('/whitepaper/flame-logo.svg') center / contain no-repeat;
   content: '';

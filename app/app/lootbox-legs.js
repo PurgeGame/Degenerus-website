@@ -904,10 +904,11 @@ function _exactBoonReveal(boonType) {
 
 /**
  * Turn the compact LootBoxReward event into useful player-facing copy.
- * Types 4/5/6 intentionally combine the two purchase-boost categories because
- * the deployed event records strength, but not whether the draw landed in the
- * lootbox or ETH-ticket field. Everything else can be named exactly from its
- * type + amount.
+ * Types 4/5/6 share two purchase-boost categories because the deployed event
+ * records strength, but not whether the draw landed in the Luckbox or Ticket
+ * field. Enrichment names the exact product whenever evidence exists; the
+ * genuinely unknowable legacy fallback stays concise instead of printing both
+ * possible products on the reward card.
  */
 export function lootboxRewardPresentation(
   rewardType,
@@ -932,7 +933,7 @@ export function lootboxRewardPresentation(
   if (type >= 4 && type <= 6) {
     const pct = _bpsPercent(amount, ({ 4: 5, 5: 15, 6: 25 })[type]);
     return {
-      label: 'LUCKBOX / TICKET BOON',
+      label: 'PURCHASE BOON',
       value: `+${pct}%`,
       detail: '',
     };

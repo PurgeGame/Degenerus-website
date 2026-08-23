@@ -61,7 +61,10 @@ describe('lootbox value tone', () => {
             'the large shell exposes the exact steel bridges from its briefcase latches');
         });
       } else {
-        assert.match(assets.lockedFront, /case-v6-front\.webp$/);
+        assert.match(assets.lockedFront, /case-v7-front\.webp$/,
+          'layered compact fronts contain no baked badge or circular socket');
+        assert.match(assets.iconFront, /case-v8-front\.webp$/,
+          'standalone icons retain the old integrated badge render');
         assert.match(assets.retractedFront, /case-v7-front\.webp$/);
         assert.match(assets.top, /case-v6-top\.webp$/);
         assert.match(assets.cardTop, /case-v6-top\.webp$/);

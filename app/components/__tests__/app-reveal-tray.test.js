@@ -268,7 +268,7 @@ describe('<app-reveal-tray>', () => {
     assert.equal(lootboxIcon.getAttribute('data-lootbox-case-model'), 'medium');
     assert.match(
       lootboxIcon.style.getPropertyValue('--lootbox-case-art'),
-      /degenerus-lootbox-case-v6-front\.webp/,
+      /degenerus-lootbox-case-v7-front\.webp/,
       'an unknown legacy amount receives the canonical neutral case family',
     );
     assert.match(

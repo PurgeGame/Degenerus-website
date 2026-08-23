@@ -762,23 +762,21 @@ describe('rail wiring', () => {
       'the portrait is intentionally the largest live element on the card');
     assert.match(CSS, /records-rail__bounty-sight\s*\{[^}]*position:\s*absolute[^}]*right:\s*8%[^}]*bottom:\s*0[^}]*left:\s*7%[^}]*display:\s*flex[^}]*width:\s*auto[^}]*height:\s*20%[^}]*justify-content:\s*center[^}]*padding:\s*0 0\.5%[^}]*overflow:\s*hidden/s,
       'the crosshair and bounty amount fill the lower well beneath the avatar');
-    assert.match(CSS, /records-rail__leader\s*\{[^}]*container-name:\s*records-leader[^}]*container-type:\s*inline-size/s,
-      'each ticket establishes the sizing context for its live overlay');
-    assert.match(CSS, /records-rail__leader-bounty-amount\s*\{[^}]*3\.05cqw\/1[^}]*text-overflow:\s*clip/s,
-      'the compact bounty scales with its ticket and still clips cleanly');
-    assert.match(CSS, /records-rail__leader-title\s*\{[^}]*position:\s*absolute[^}]*top:\s*8%[^}]*right:\s*4\.2%[^}]*bottom:\s*44%[^}]*left:\s*29%[^}]*flex-direction:\s*column[^}]*padding:\s*0 2%[^}]*4\.5cqw\/1\.08/s,
-      'the flat live title scales from its ticket without entering the name row');
+    assert.match(CSS, /records-rail__leader-bounty-amount\s*\{[^}]*clamp\(0\.4rem, 0\.64vw, 0\.62rem\)[^}]*text-overflow:\s*clip/s,
+      'the bounded compact bounty always fits its left well without an ellipsis');
+    assert.match(CSS, /records-rail__leader-title\s*\{[^}]*position:\s*absolute[^}]*top:\s*8%[^}]*right:\s*4\.2%[^}]*bottom:\s*44%[^}]*left:\s*29%[^}]*flex-direction:\s*column[^}]*padding:\s*0 2%[^}]*clamp\(0\.62rem, 0\.95vw, 0\.9rem\)\/1\.08/s,
+      'the flat live title has enough line box for the category without entering the name row');
     assert.match(CSS, /records-rail__leader-title :is\(span, strong\)\s*\{[^}]*overflow:\s*visible/s,
       'both title lines keep unclipped glyph metrics');
     assert.match(CSS,
-      /records-rail__leader-title > span\s*\{[^}]*5cqw\/0\.9 "Arial Black"[^}]*-webkit-text-stroke:\s*0\.35px currentColor/s,
+      /records-rail__leader-title > span\s*\{[^}]*clamp\(0\.7rem, 1\.06vw, 1rem\)\/0\.9 "Arial Black"[^}]*-webkit-text-stroke:\s*0\.35px currentColor/s,
       'THE BIGGEST uses the fat headline treatment from the main bounty sign');
     assert.match(CSS,
-      /records-rail__leader-title > strong\s*\{[^}]*3\.75cqw\/1 "Rockwell"[^}]*letter-spacing:\s*0\.085em/s,
+      /records-rail__leader-title > strong\s*\{[^}]*clamp\(0\.54rem, 0\.78vw, 0\.75rem\)\/1 "Rockwell"[^}]*letter-spacing:\s*0\.085em/s,
       'the category contrasts with a narrower western sign face');
     assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*26\.5%[^}]*bottom:\s*7%[^}]*left:\s*29%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*background:\s*transparent/s,
       'the holder owns the complete lower black area without entering the amount box');
-    assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*right:\s*0[^}]*left:\s*0[^}]*height:\s*100%[^}]*3\.1cqw[^}]*overflow-wrap:\s*anywhere[^}]*text-overflow:\s*clip[^}]*white-space:\s*normal/s,
+    assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*right:\s*0[^}]*left:\s*0[^}]*height:\s*100%[^}]*clamp\(0\.42rem, 0\.65vw, 0\.62rem\)[^}]*overflow-wrap:\s*anywhere[^}]*text-overflow:\s*clip[^}]*white-space:\s*normal/s,
       'long Discord names get two centered lines instead of being ellipsized');
     assert.doesNotMatch(CSS, /records-rail__leader-holder\s*\{[^}]*text-overflow:\s*ellipsis/s);
     assert.match(CSS, /records-rail__leader-bet\s*\{[^}]*position:\s*absolute[^}]*top:\s*58%[^}]*right:\s*2\.2%[^}]*bottom:\s*5\.5%[^}]*left:\s*73\.5%[^}]*display:\s*block[^}]*overflow:\s*hidden[^}]*clip-path:\s*polygon\(0 0, 100% 0, 100% 68%, 87% 100%, 0 100%\)/s,
@@ -787,19 +785,19 @@ describe('rail wiring', () => {
       /records-rail__leader-bet\s*\{[^}]*border:\s*0[^}]*border-left:\s*1px solid rgba\(var\(--rec-gold\), 0\.34\)[^}]*background:\s*linear-gradient\(/s,
       'the value is one integrated right-hand lane rather than a second inset plaque');
     assert.match(CSS,
-      /records-rail__leader-value :is\(em, i\)\s*\{[^}]*2\.25cqw\/1/s,
+      /records-rail__leader-value :is\(em, i\)\s*\{[^}]*clamp\(0\.32rem, 0\.48vw, 0\.44rem\)\/1/s,
       'the currency remains readable beneath the compact amount');
     assert.doesNotMatch(CSS, /records-rail__leader-kind-icon\s*\{/,
       'the removed game icon has no leftover styling');
-    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*position:\s*absolute[^}]*top:\s*0[^}]*height:\s*100%[^}]*flex-direction:\s*column[^}]*gap:\s*0\.04rem[^}]*padding:\s*1% 9% 1% 3%[^}]*4cqw/s,
+    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*position:\s*absolute[^}]*top:\s*0[^}]*height:\s*100%[^}]*flex-direction:\s*column[^}]*gap:\s*0\.04rem[^}]*padding:\s*1% 9% 1% 3%[^}]*clamp\(0\.56rem, 0\.85vw, 0\.78rem\)/s,
       'the bet amount and its currency stack as two prominent centered lines');
     assert.match(COMPONENT, /data-amount-fit="\$\{amountFit\}"/,
       'record amounts publish a deterministic fit tier instead of clipping unpredictably');
-    assert.match(CSS, /data-amount-fit="compact"[^}]*3\.65cqw/s,
+    assert.match(CSS, /data-amount-fit="compact"[^}]*clamp\(0\.52rem, 0\.76vw, 0\.71rem\)/s,
       'five-character compact values such as 5.51M get a readable fitted type size');
-    assert.match(CSS, /data-amount-fit="tight"[^}]*3\.2cqw/s,
+    assert.match(CSS, /data-amount-fit="tight"[^}]*clamp\(0\.44rem, 0\.66vw, 0\.62rem\)/s,
       'exceptionally long small-decimal values also stay inside the lane');
-    assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*2\.25cqw[^}]*"Inter"/s,
+    assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*clamp\(0\.32rem, 0\.48vw, 0\.44rem\)[^}]*"Inter"/s,
       'the currency gets its own smaller label line instead of sharing the numeric row');
     assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*clip/s,
       'compact record formatting avoids a visible ellipsis in the wide value well');
@@ -900,6 +898,15 @@ describe('rail wiring', () => {
       'responsive sizing follows the widget width, not only the browser viewport');
     assert.match(CSS, /@container records-rail \(max-width: 840px\)[\s\S]*?"leaders leaders leaders"/,
       'the records wrap only when the one-line rail no longer fits');
+    assert.match(CSS,
+      /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leaders\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+      'compact rails use two substantial ticket columns instead of squeezing all four into one row');
+    assert.match(CSS,
+      /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leader\s*\{[^}]*container-name:\s*records-leader[^}]*container-type:\s*inline-size/,
+      'only wrapped compact tickets establish the ticket-relative sizing context');
+    assert.match(CSS,
+      /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leader-title > span\s*\{[^}]*font-size:\s*clamp\(0\.78rem, 5cqw, 1\.25rem\)[\s\S]*?records-rail__leader-value\s*\{[^}]*font-size:\s*clamp\(0\.6rem, 3\.8cqw, 0\.98rem\)/,
+      'mobile title and right-side record value grow with each ticket while desktop keeps its bounded sizing');
     assert.match(CSS, /records-rail__summary\s*\{[^}]*grid-template-columns:\s*10rem minmax\(26rem, 1fr\) 11\.5rem 1\.25rem/s,
       'fixed side tracks keep the record group evenly spaced between the wordmark and pool');
     assert.match(CSS, /records-rail__leaders\s*\{[^}]*max-width:\s*none[^}]*justify-self:\s*stretch/s,

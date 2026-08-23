@@ -183,6 +183,7 @@ const {
   shouldCelebrateDegenerette, isUnluckyDegenerette,
   ticketGridSizeClass, revealTerminalActionLabel,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT, RESULT_REVEAL_ABORT_EVENT,
+  LOOTBOX_REVEAL_ABORT_EVENT,
   REVEAL_OVERLAY_IDLE_EVENT, LOOTBOX_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -383,11 +384,21 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.boonStrength),
       ['mid', 'high', 'mid', 'high', 'high']);
     assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3]);
-    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v6-front.webp');
+    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp');
     assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
     assert.equal(seq.cards[2].icon, null,
       'rating is already named on the card and needs no invented pictogram');
     assert.equal(seq.cards[4].icon, '/whitepaper/flame-logo-split.svg');
+  });
+
+  test('an unencoded shared purchase boon never prints two possible products', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      legs: [{ legType: 'reward', rewardType: 5, amount: 1_500n }],
+    });
+    assert.equal(seq.cards[0].label, 'PURCHASE BOON');
+    assert.equal(seq.cards[0].value, '+15%');
+    assert.doesNotMatch(seq.cards[0].label, /LUCKBOX\s*\/\s*TICKET/i);
   });
 
   test('a pile-scale FLIP prize swaps the flame logo for its baked chip pile', () => {
@@ -2049,6 +2060,30 @@ describe('reveal-overlay element', () => {
     }
   });
 
+  test('a closed lootbox presentation reports its id so caller-owned seen marks can be undone', async () => {
+    // app-sdgnrs-redemptions marks its claim seen the moment the reveal is
+    // accepted, and only this id lets it un-mark one the player never watched.
+    const aborts = [];
+    const onAbort = (event) => aborts.push(event.detail);
+    document.addEventListener(LOOTBOX_REVEAL_ABORT_EVENT, onAbort);
+    try {
+      assert.equal(queueReveal({
+        kind: 'lootbox',
+        presentationId: 'sdgnrs-redemption:0xab:period:4',
+        lootboxRelease: { address: '0xab', key: 'period:4' },
+        legs: [{ legType: 'eth', amount: 10n ** 18n, claimable: true }],
+      }), true);
+      const el = instantiate();
+      await tick();
+      el.querySelector('[data-bind="rvl-close"]').dispatchEvent({ type: 'click' });
+      await tick();
+      assert.equal(aborts.length, 1);
+      assert.deepEqual(aborts[0].presentationIds, ['sdgnrs-redemption:0xab:period:4']);
+    } finally {
+      document.removeEventListener(LOOTBOX_REVEAL_ABORT_EVENT, onAbort);
+    }
+  });
+
   test('a completed prize stays tombstoned so a late indexer refresh cannot replay it', async () => {
     const pari = {
       kind: 'pari',
@@ -2460,7 +2495,7 @@ describe('reveal-overlay element', () => {
       'compact cases keep the accepted proportional badge size on their clean center panel');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__center\s*\{[^}]*inset:\s*16\.4%;[^}]*background:\s*radial-gradient/s,
-      'all case sizes share one proportional inset hub without an outside mounting plate');
+      'the accepted gold badge proportions remain the base mechanism');
     assert.match(APP_CSS,
       /@keyframes rvl-lootbox-badge-center-turn\s*\{[\s\S]*rotate\(-42deg\)[\s\S]*@keyframes rvl-lootbox-badge-face-turn\s*\{[\s\S]*rotate\(402deg\)/,
       'every reveal uses the accepted counter-turning badge mechanism');
@@ -2534,8 +2569,11 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*var\(--lootbox-case-art\)/s,
       'small pending boxes reuse the same recognizable silhouette');
     assert.match(APP_CSS,
-      /\.bxs-chip-art::before\s*\{[^}]*top:\s*var\(--lootbox-case-badge-top, 63\.5%\);[^}]*width:\s*var\(--lootbox-static-badge-size, 16%\);[^}]*flame-logo\.svg/s,
-      'the compact box strip keeps one complete official Degenerus emblem untinted too');
+      /\.bxs-chip-art::before\s*\{[^}]*width:\s*var\(--lootbox-static-badge-size, 10\.5%\);[^}]*flame-logo\.svg/s,
+      'the compact box strip restores the accepted official badge at its integrated size');
+    assert.match(APP_CSS,
+      /\.rvl-reward-lootbox::after\s*\{[^}]*width:\s*var\(--lootbox-static-badge-size, 10\.5%\);[^}]*flame-logo\.svg/s,
+      'revealed-box cards restore the official badge without the oversized mounting plate');
     assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
       'ticket-price bands publish visibly distinct case colors');
     assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid__front::before\s*\{[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;[^}]*mask:/s,
