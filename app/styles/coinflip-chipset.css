@@ -404,15 +404,15 @@ body.layout-basic .df-bet-oval:has(.df-today-winnings-row[data-state="win"]) > .
 @keyframes df-chip-arrive {
   0% {
     opacity: 0;
-    transform: translateX(-50%) translateX(var(--df-chip-shift, 0%)) translateY(-0.5rem) rotate(var(--df-chip-tilt, 0deg)) scale(0.85) scale(var(--df-chip-scale, 1)) scaleX(var(--df-chip-mirror, 1));
+    transform: translateX(-50%) translateY(-0.5rem) scale(0.85) scaleX(var(--df-chip-mirror, 1));
   }
   62% {
     opacity: 1;
-    transform: translateX(-50%) translateX(var(--df-chip-shift, 0%)) translateY(0.06rem) rotate(var(--df-chip-tilt, 0deg)) scale(1.02) scale(var(--df-chip-scale, 1)) scaleX(var(--df-chip-mirror, 1));
+    transform: translateX(-50%) translateY(0.06rem) scale(1.02) scaleX(var(--df-chip-mirror, 1));
   }
   100% {
     opacity: 1;
-    transform: translateX(-50%) translateX(var(--df-chip-shift, 0%)) rotate(var(--df-chip-tilt, 0deg)) scale(var(--df-chip-scale, 1)) scaleX(var(--df-chip-mirror, 1));
+    transform: translateX(-50%) scaleX(var(--df-chip-mirror, 1));
   }
 }
 
@@ -657,9 +657,6 @@ body.layout-basic .df-bet-chip-rack {
    asset's wall band is >=28% of its height; rise never exceeds 26%). */
 body.layout-basic .df-bet-chip {
   --df-chip-mirror: 1;
-  --df-chip-scale: 1;
-  --df-chip-shift: 0%;
-  --df-chip-tilt: 0deg;
   box-sizing: border-box;
   width: min(var(--df-chip-width), 100%);
   overflow: visible;
@@ -1290,13 +1287,12 @@ body.layout-basic .df-bet-oval {
   overflow: visible;
 }
 
-/* Each wager stack keeps its own hand-pitched silhouette; the inline values
-   are deterministic, so refreshes do not make already-placed chips jump. */
+/* Stacks stay physically straight. Their only disorder is each chip's seeded
+   rotational turn, expressed by the face asset and its mirrored orientation. */
 body.layout-basic .df-bet-chip:nth-child(2n),
 body.layout-basic .df-bet-chip:nth-child(2n + 1),
 body.layout-basic .df-bet-chip.is-top {
-  transform: translateX(-50%) translateX(var(--df-chip-shift, 0%)) rotate(var(--df-chip-tilt, 0deg)) scale(var(--df-chip-scale, 1)) scaleX(var(--df-chip-mirror, 1));
-  transform-origin: 50% 68%;
+  transform: translateX(-50%) scaleX(var(--df-chip-mirror, 1));
 }
 
 body.layout-basic .df-bet-chip.is-top::after {

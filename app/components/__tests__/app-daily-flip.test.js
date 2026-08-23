@@ -435,7 +435,7 @@ describe('day-wide reveal planning', () => {
     }), 0n, 'an independently proven zero-payout Roll 2 exposes ordinary deposits');
   });
 
-  test('wager piles grow logarithmically into stable, non-repeating messy stacks', () => {
+  test('wager piles use varied vertical stacks with stable random chip rotations', () => {
     const unit = 10n ** 18n;
     const count = (amount) => revealPlanning.coinflipBetChipCount(amount * unit);
 
@@ -487,13 +487,27 @@ describe('day-wide reveal planning', () => {
       'different wagers can compose the same number of chips differently',
     );
     assert.deepEqual(layout.map((stack) => stack.count), [4, 7, 5]);
+    for (const stack of layout) {
+      assert.deepEqual(stack.turns, stack.chips.map((chip) => chip.turn),
+        'the stack signature records each rendered chip rotation in order');
+      assert.ok(stack.turns.every((turn) => Number.isInteger(turn) && turn >= 0 && turn <= 3),
+        'every chip selects one of the four physically drawn turns');
+      assert.ok(stack.count === 1 || new Set(stack.turns).size > 1,
+        'a multi-chip stack always shows more than one rotational orientation');
+      const riseStep = Math.min(0.25, 1.15 / Math.max(1, stack.count - 1));
+      stack.chips.forEach((chip, index) => {
+        assert.deepEqual(Object.keys(chip).sort(), ['rise', 'turn'],
+          'rotation and uniform rise are the only per-chip variations');
+        assert.ok(Math.abs(chip.rise - (index * riseStep)) < 1e-12,
+          'chips remain centered on a perfectly regular vertical stack');
+      });
+    }
     for (let index = 1; index < layout.length; index += 1) {
-      assert.notEqual(layout[index].variant, layout[index - 1].variant,
-        'neighboring stacks always receive different physical mess profiles');
-      assert.notEqual(
-        JSON.stringify(layout[index].chips),
-        JSON.stringify(layout[index - 1].chips),
-        'neighboring stacks never clone the same offsets, pitches, turns, and rises',
+      const current = layout[index];
+      const previous = layout[index - 1];
+      assert.ok(
+        current.count !== previous.count || current.turns.join('') !== previous.turns.join(''),
+        'neighboring stacks never clone both the same height and rotation sequence',
       );
     }
     assert.deepEqual(
@@ -1741,17 +1755,18 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.ok(wagerStacks.every((stack) => stack.className.includes('df-bet-chip-stack')));
     for (let index = 1; index < wagerStacks.length; index += 1) {
-      assert.notEqual(
-        wagerStacks[index].getAttribute('data-stack-variant'),
-        wagerStacks[index - 1].getAttribute('data-stack-variant'),
-        'adjacent wager stacks render different mess profiles',
+      const current = wagerStacks[index];
+      const previous = wagerStacks[index - 1];
+      assert.ok(
+        current.getAttribute('data-chip-count') !== previous.getAttribute('data-chip-count')
+          || current.getAttribute('data-stack-turns') !== previous.getAttribute('data-stack-turns'),
+        'adjacent wager stacks never clone both height and rotation sequence',
       );
-      const signature = (stack) => stack.children
-        .map((chip) => `${chip.getAttribute('data-chip-turn')}:${chip.getAttribute('style')}`)
-        .join('|');
-      assert.notEqual(signature(wagerStacks[index]), signature(wagerStacks[index - 1]),
-        'adjacent wager stacks have different chip-by-chip geometry');
     }
+    assert.ok(wagerStacks.every((stack) => stack.children.every((chip) => (
+      /--df-chip-rise:/.test(chip.getAttribute('style'))
+        && !/shift|tilt|scale/.test(chip.getAttribute('style'))
+    ))), 'chips vary only by turn while every stack keeps possible vertical geometry');
     assert.match(el.querySelector('[data-bind="df-bet-oval"]').getAttribute('aria-label'),
       /Today’s bet|Today's bet: 43,844 FLIP/);
     assert.match(APP_CSS,

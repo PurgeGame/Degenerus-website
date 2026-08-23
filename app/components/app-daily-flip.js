@@ -317,7 +317,7 @@ export function coinflipBetChipCount(stakeWei) {
   return Math.max(1, Math.min(24, Math.round(commonRangeCurve)));
 }
 
-/** Even dealer stacks capped at a readable physical height. */
+/** Even table stacks capped at a readable physical height. */
 function _chipPiles(total, maxHeight = 7) {
   if (!(total > 0)) return [];
   const stacks = Math.max(1, Math.ceil(total / Math.max(1, maxHeight)));
@@ -347,7 +347,7 @@ function _wagerChipSeed(stakeWei) {
   return seed >>> 0;
 }
 
-function _messyPileOptions(total, stackCount, maxHeight) {
+function _wagerPileOptions(total, stackCount, maxHeight) {
   const average = total / stackCount;
   const minHeight = Math.max(1, Math.floor(average) - 1);
   const tallest = Math.min(maxHeight, Math.ceil(average) + 1);
@@ -375,10 +375,9 @@ function _messyPileOptions(total, stackCount, maxHeight) {
 }
 
 /**
- * Split a wager into deliberately uneven table stacks. The amount seeds the
- * choice, so a rack is stable across renders but wagers with the same physical
- * chip count can still land in different arrangements. Adjacent columns never
- * share a height when another readable split is possible.
+ * Split a wager into varied but ordinary vertical stacks, each at most seven
+ * chips tall. The wager seed chooses the height composition, so it stays put
+ * across renders while neighboring columns avoid the same silhouette.
  */
 export function coinflipBetChipPiles(stakeWei) {
   const total = coinflipBetChipCount(stakeWei);
@@ -387,7 +386,7 @@ export function coinflipBetChipPiles(stakeWei) {
 
   const fewestStacks = Math.ceil(total / maxHeight);
   for (let stackCount = fewestStacks; stackCount <= Math.min(total, fewestStacks + 2); stackCount += 1) {
-    const options = _messyPileOptions(total, stackCount, maxHeight);
+    const options = _wagerPileOptions(total, stackCount, maxHeight);
     if (options.length === 0) continue;
     const choice = _mixChipSeed(_wagerChipSeed(stakeWei), total + stackCount);
     return options[choice % options.length];
@@ -395,69 +394,39 @@ export function coinflipBetChipPiles(stakeWei) {
   return _chipPiles(total, maxHeight);
 }
 
-const WAGER_STACK_VARIANTS = 12;
-
-function _chipSeedFraction(seed, salt) {
-  return _mixChipSeed(seed, salt) / 0x1_0000_0000;
-}
-
 /**
- * Stable physical choreography for every chip in a wager rack. Variant IDs
- * are forced apart for neighboring stacks, while each chip gets a small
- * independent x-offset, table-plane pitch, scale, edge turn, and rise. This
- * keeps the chips countable without cloning one straight stack and mirroring
- * it across the felt.
+ * Stable random rotations for the chips in a wager rack. Each stack remains
+ * physically ordinary: centered chips and uniform rises, even when neighboring
+ * columns have different heights. Only the chip's four physical turns vary.
+ * Same-height neighbors can never reuse the complete turn sequence.
  */
 export function coinflipBetChipLayout(stakeWei) {
   const seed = _wagerChipSeed(stakeWei);
-  let previousVariant = -1;
+  let previousTurns = null;
   return coinflipBetChipPiles(stakeWei).map((count, stackIndex) => {
-    let variant = _mixChipSeed(seed, 100 + stackIndex) % WAGER_STACK_VARIANTS;
-    if (variant === previousVariant) {
-      variant = (variant + 1 + (_mixChipSeed(seed, 200 + stackIndex) % (WAGER_STACK_VARIANTS - 1)))
-        % WAGER_STACK_VARIANTS;
-    }
-    previousVariant = variant;
-
-    const gaps = Array.from({ length: Math.max(0, count - 1) }, (_, index) => (
-      0.72 + (0.56 * _chipSeedFraction(seed, 300 + (variant * 17) + index))
+    const riseStep = Math.min(0.25, 1.15 / Math.max(1, count - 1));
+    const turns = Array.from({ length: count }, (_, index) => (
+      _mixChipSeed(seed, 100 + (stackIndex * 31) + index) % 4
     ));
-    const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0) || 1;
-    const topRise = count <= 1
-      ? 0
-      : Math.min(1.15, (count - 1) * (0.19 + (0.02 * (variant % 3))));
-    const stackLean = ((variant % 5) - 2) * 2.1;
-    let cumulativeGap = 0;
-    let previousTurn = -1;
-
-    const chips = Array.from({ length: count }, (_, index) => {
-      if (index > 0) cumulativeGap += gaps[index - 1];
-      let turn = _mixChipSeed(seed, 400 + (stackIndex * 31) + index) % 4;
-      if (turn === previousTurn) turn = (turn + 1 + (variant % 3)) % 4;
-      previousTurn = turn;
-      const progress = count <= 1 ? 0 : index / (count - 1);
-      const shift = Math.max(-16, Math.min(
-        16,
-        (stackLean * progress)
-          + ((_chipSeedFraction(seed, 500 + (stackIndex * 37) + index) - 0.5) * 18),
-      ));
-      const tilt = Math.max(-6, Math.min(
-        6,
-        ((_chipSeedFraction(seed, 600 + (stackIndex * 41) + index) - 0.5) * 10)
-          + ((variant % 3) - 1) * 0.6,
-      ));
-      const scale = 0.965
-        + (0.07 * _chipSeedFraction(seed, 700 + (stackIndex * 43) + index));
-      return {
-        rise: topRise * (cumulativeGap / gapTotal),
-        scale,
-        shift,
-        tilt,
-        turn,
-      };
-    });
-
-    return { chips, count, variant };
+    if (count > 1 && turns.every((turn) => turn === turns[0])) {
+      const changeIndex = _mixChipSeed(seed, 180 + stackIndex) % count;
+      turns[changeIndex] = (turns[changeIndex]
+        + 1
+        + (_mixChipSeed(seed, 190 + stackIndex) % 3)) % 4;
+    }
+    if (previousTurns?.length === turns.length
+      && turns.every((turn, index) => turn === previousTurns[index])) {
+      const changeIndex = _mixChipSeed(seed, 200 + stackIndex) % count;
+      turns[changeIndex] = (turns[changeIndex]
+        + 1
+        + (_mixChipSeed(seed, 300 + stackIndex) % 3)) % 4;
+    }
+    previousTurns = turns;
+    return {
+      chips: turns.map((turn, index) => ({ rise: index * riseStep, turn })),
+      count,
+      turns,
+    };
   });
 }
 
@@ -5384,12 +5353,12 @@ class AppDailyFlip extends HTMLElement {
       );
       return;
     }
-    coinflipBetChipLayout(amountWei).forEach(({ chips, count, variant }) => {
+    coinflipBetChipLayout(amountWei).forEach(({ chips, count, turns }) => {
       const stackNode = document.createElement('span');
       stackNode.className = 'df-bet-chip-stack';
       stackNode.setAttribute('data-chip-count', String(count));
-      stackNode.setAttribute('data-stack-variant', String(variant));
-      chips.forEach(({ rise, scale, shift, tilt, turn }, index) => {
+      stackNode.setAttribute('data-stack-turns', turns.join(''));
+      chips.forEach(({ rise, turn }, index) => {
         const chip = document.createElement('i');
         chip.className = [
           'df-bet-chip',
@@ -5398,10 +5367,7 @@ class AppDailyFlip extends HTMLElement {
         chip.setAttribute('data-chip-turn', String(turn));
         chip.setAttribute(
           'style',
-          `--df-chip-rise:calc(var(--df-chip-height) * ${rise.toFixed(3)});`
-            + `--df-chip-shift:${shift.toFixed(2)}%;`
-            + `--df-chip-tilt:${tilt.toFixed(2)}deg;`
-            + `--df-chip-scale:${scale.toFixed(3)}`,
+          `--df-chip-rise:calc(var(--df-chip-height) * ${rise.toFixed(3)})`,
         );
         stackNode.appendChild(chip);
       });

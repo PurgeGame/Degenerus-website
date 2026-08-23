@@ -118,12 +118,12 @@ function renderChipStrip({
     rack.appendChild(pile);
     return;
   }
-  coinflipBetChipLayout(amountWei).forEach(({ chips, count, variant }) => {
+  coinflipBetChipLayout(amountWei).forEach(({ chips, count, turns }) => {
     const stackNode = document.createElement('span');
     stackNode.className = 'df-bet-chip-stack';
     stackNode.setAttribute('data-chip-count', String(count));
-    stackNode.setAttribute('data-stack-variant', String(variant));
-    chips.forEach(({ rise, scale, shift, tilt, turn }, index) => {
+    stackNode.setAttribute('data-stack-turns', turns.join(''));
+    chips.forEach(({ rise, turn }, index) => {
       const chip = document.createElement('i');
       chip.className = [
         'df-bet-chip',
@@ -132,10 +132,7 @@ function renderChipStrip({
       chip.setAttribute('data-chip-turn', String(turn));
       chip.setAttribute(
         'style',
-        `--df-chip-rise:calc(var(--df-chip-height) * ${rise.toFixed(3)});`
-          + `--df-chip-shift:${shift.toFixed(2)}%;`
-          + `--df-chip-tilt:${tilt.toFixed(2)}deg;`
-          + `--df-chip-scale:${scale.toFixed(3)}`,
+        `--df-chip-rise:calc(var(--df-chip-height) * ${rise.toFixed(3)})`,
       );
       stackNode.appendChild(chip);
     });
