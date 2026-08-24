@@ -3356,8 +3356,6 @@ describe('combined ticket + lootbox buy', () => {
     await settle(60);
     const preview = el.querySelector('[data-bind="dec-custom-box-preview"]');
     const art = el.querySelector('[data-bind="dec-custom-box-preview-art"]');
-    const title = el.querySelector('[data-bind="dec-custom-box-preview-title"]');
-    const detail = el.querySelector('[data-bind="dec-custom-box-preview-detail"]');
     const size = el.querySelector('[name="dec-box-custom-eth"]');
     const count = el.querySelector('[name="dec-box-custom-count"]');
 
@@ -3367,31 +3365,35 @@ describe('combined ticket + lootbox buy', () => {
     // The fixture ticket price is 0.04 ETH, so silver starts at the 1x/5x
     // midpoint (3x = 0.12) and gold at 16x (0.64) — lootbox-value-tone.js:46.
     assert.equal(preview.hidden, false, 'opening with one box previews that box');
-    assert.equal(title.textContent, 'SMALL LUCKBOX');
-    assert.equal(detail.textContent, '1 BOX · 0.01 ETH');
     const smallArt = art.getAttribute('src');
     assert.match(smallArt, /case-small/, 'the small case render is shown');
+    assert.equal(art.parentElement.getAttribute('data-lootbox-case-model'), 'small');
 
     // The tier is a threshold on the ticket price, not a free choice: silver
     // starts at the 1x/5x midpoint and gold at 16x (lootbox-value-tone.js:46).
     size.value = '0.11';
     size.dispatchEvent({ type: 'input' });
-    assert.equal(title.textContent, 'SMALL LUCKBOX', 'just under the midpoint is still bronze');
+    assert.equal(art.parentElement.getAttribute('data-lootbox-case-model'), 'small',
+      'just under the midpoint is still bronze');
 
     size.value = '0.12';
     size.dispatchEvent({ type: 'input' });
-    assert.equal(title.textContent, 'MEDIUM LUCKBOX', '3x the ticket price crosses into silver');
+    assert.equal(art.parentElement.getAttribute('data-lootbox-case-model'), 'medium',
+      '3x the ticket price crosses into silver');
     assert.match(art.getAttribute('src'), /case-medium/);
 
     size.value = '0.64';
     size.dispatchEvent({ type: 'input' });
-    assert.equal(title.textContent, 'LARGE LUCKBOX', '16x the ticket price crosses into gold');
+    assert.equal(art.parentElement.getAttribute('data-lootbox-case-model'), 'large',
+      '16x the ticket price crosses into gold');
     assert.match(art.getAttribute('src'), /case-large/);
 
     count.value = '3';
     count.dispatchEvent({ type: 'input' });
-    assert.equal(detail.textContent, '3 BOXES · 0.64 ETH EACH',
-      'the caption follows the quantity as well as the size');
+    assert.equal(preview.getAttribute('aria-label'), 'Custom Luckbox preview');
+    assert.doesNotMatch(el.innerHTML,
+      /dec-custom-box-preview-(?:title|detail)|>(?:SMALL|MEDIUM|LARGE) LUCKBOX</,
+      'the chooser relies on the case art instead of visible size descriptors');
 
     count.value = '0';
     count.dispatchEvent({ type: 'input' });
@@ -3401,6 +3403,16 @@ describe('combined ticket + lootbox buy', () => {
       PURCHASE_DESK_CSS,
       /\.dec-box-preview\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s,
       'the author display rule needs its own [hidden] companion to ever hide',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-box-preview__art\s*\{[^}]*--preview-visible-aspect:\s*1\.2663;[^}]*--preview-canvas-width:\s*119\.05%;[^}]*overflow:\s*hidden;/s,
+      'the preview crops the transparent source canvas to the visible box bounds',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-box-preview__art\[data-lootbox-case-model="large"\]\s*\{[^}]*--preview-visible-aspect:\s*1\.3693;[^}]*width:\s*min\(7rem, 100%\);/s,
+      'the gold case also remains fully contained in the shared preview slot',
     );
     el.disconnectedCallback();
   });

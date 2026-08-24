@@ -19814,10 +19814,25 @@ body.layout-basic .df-modifier-meter--settling .df-modifier-meter__marker {
 }
 body.layout-basic .df-modifier-meter--settling .df-modifier-meter__pip-bank--peak {
   animation: df-meter-peak-blue var(--df-meter-settle-duration, 1600ms)
-    cubic-bezier(0.18, 0.72, 0.2, 1) forwards;
+    steps(1, end) forwards;
+}
+body.layout-basic .df-modifier-meter--settling.df-modifier-meter--tone-high
+  .df-modifier-meter__pip-bank--peak {
+  animation-name: df-meter-peak-blue-high;
 }
 body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__pip-bank--peak {
-  animation: df-meter-rebound-peak-blue var(--df-meter-rebound-duration, 1150ms) linear forwards;
+  animation: df-meter-rebound-peak-blue var(--df-meter-rebound-duration, 1150ms)
+    steps(1, end) forwards;
+}
+body.layout-basic .df-modifier-meter--rebounding.df-modifier-meter--tone-high
+  .df-modifier-meter__pip-bank--peak {
+  animation-name: df-meter-rebound-peak-blue-high;
+}
+/* Blue is a full-bank verdict, never a traveling fill color. The discrete
+   overlay is visible only on the 25-pip plateaus and on a parked 250% result. */
+body.layout-basic .df-modifier-meter--settled.df-modifier-meter--tone-high:not(.df-modifier-meter--settling):not(.df-modifier-meter--recovery-tail)
+  .df-modifier-meter__pip-bank--peak {
+  opacity: 1;
 }
 @keyframes df-meter-scan {
   from { height: 2%; }
@@ -19825,19 +19840,31 @@ body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__pip-bank--p
 }
 @keyframes df-meter-settle {
   0% { height: 6%; }
-  42% { height: 100%; }
+  40%, 46% { height: 100%; }
   72% { height: 28%; }
   100% { height: var(--df-meter-stop, 50%); }
 }
 @keyframes df-meter-peak-blue {
-  0%, 38% { opacity: 0; }
-  41%, 46% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+  0% { opacity: 0; }
+  40% { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+@keyframes df-meter-peak-blue-high {
+  0% { opacity: 0; }
+  40% { opacity: 1; }
+  46% { opacity: 0; }
+  100% { opacity: 1; }
 }
 @keyframes df-meter-rebound-peak-blue {
-  0%, 35% { opacity: 0; }
-  38%, 43% { opacity: 1; }
-  47%, 100% { opacity: 0; }
+  0% { opacity: 0; }
+  39.130435% { opacity: 1; }
+  43%, 100% { opacity: 0; }
+}
+@keyframes df-meter-rebound-peak-blue-high {
+  0% { opacity: 0; }
+  39.130435% { opacity: 1; }
+  43% { opacity: 0; }
+  100% { opacity: 1; }
 }
 body.layout-basic .df-position,
 body.layout-basic .df-funds {
@@ -24347,6 +24374,8 @@ body.layout-basic .df-auto-rebuy-dialog__actions button {
 }
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .df-modifier-meter__pip-bank--peak { animation: none !important; opacity: 0; }
+  body.layout-basic .df-modifier-meter--settled.df-modifier-meter--tone-high:not(.df-modifier-meter--settling)
+    .df-modifier-meter__pip-bank--peak { opacity: 1; }
   body.layout-basic .df-coinflip-record__score b.is-ticking,
   body.layout-basic .df-coinflip-record__mark.is-new,
   body.layout-basic .df-coinflip-record__group.is-resolving,

@@ -2988,16 +2988,17 @@ body.layout-basic .app-decimator-panel .dec-presale__dialog {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Which physical case the configured ETH-each buys. It shares the presale
-   offer's art-then-copy shape so the chooser reads as one list of options,
-   but keeps the lootbox purple rather than the presale's cyan. */
+/* Which physical case the configured ETH-each buys. The source cards use
+   square transparent canvases, so fit their measured visible bounds instead
+   of shrinking that whole canvas into a shallow slot. */
 body.layout-basic .app-decimator-panel .dec-box-preview {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: 4.7rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.5rem;
+  min-height: 5.35rem;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  padding: 0.28rem 0.5rem;
   border: 1px solid rgba(176, 143, 209, 0.28);
   border-radius: 7px;
   background: linear-gradient(145deg, rgba(139, 108, 255, 0.09), rgba(8, 7, 14, 0.7));
@@ -3010,37 +3011,44 @@ body.layout-basic .app-decimator-panel .dec-box-preview[hidden] {
 }
 
 body.layout-basic .app-decimator-panel .dec-box-preview__art {
-  display: grid;
-  width: 4.7rem;
-  height: 2.7rem;
-  place-items: center;
+  --preview-visible-aspect: 1.2663;
+  --preview-canvas-width: 119.05%;
+  --preview-canvas-left: -8.73%;
+  --preview-canvas-top: -20.24%;
+  position: relative;
+  display: block;
+  width: min(5.6rem, 100%);
+  aspect-ratio: var(--preview-visible-aspect);
+  overflow: hidden;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art[data-lootbox-case-model="medium"] {
+  --preview-visible-aspect: 1.3696;
+  --preview-canvas-width: 119.05%;
+  --preview-canvas-left: -8.73%;
+  --preview-canvas-top: -26.06%;
+  width: min(6.4rem, 100%);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art[data-lootbox-case-model="large"] {
+  --preview-visible-aspect: 1.3693;
+  --preview-canvas-width: 104.96%;
+  --preview-canvas-left: -2.33%;
+  --preview-canvas-top: -13.85%;
+  width: min(7rem, 100%);
 }
 
 body.layout-basic .app-decimator-panel .dec-box-preview__image {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--preview-canvas-width);
+  height: auto;
+  aspect-ratio: 1;
+  margin-top: var(--preview-canvas-top);
+  margin-left: var(--preview-canvas-left);
   object-fit: contain;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 7px rgba(139, 108, 255, 0.22));
-}
-
-body.layout-basic .app-decimator-panel .dec-box-preview__copy {
-  display: grid;
-  min-width: 0;
-  gap: 0.18rem;
-}
-
-body.layout-basic .app-decimator-panel .dec-box-preview__copy strong {
-  color: #e2cff1;
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-body.layout-basic .app-decimator-panel .dec-box-preview__copy small {
-  color: #a992bc;
-  font-size: 0.54rem;
-  font-weight: 750;
-  letter-spacing: 0.04em;
 }
 
 body.layout-basic .app-decimator-panel .dec-presale__offer {

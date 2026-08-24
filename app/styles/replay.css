@@ -337,6 +337,14 @@
   background: rgba(239, 120, 120, 0.5);
 }
 
+/* The new day/player is selected before its level-scoped holdings request can
+   finish. Unknown is not a four-quadrant loss: keep the attract reel on neutral
+   cabinet paper until that request proves the ordinary pink/blue state. */
+.replay-tq.q-traits-pending {
+  background: #bfc2c7;
+  box-shadow: none;
+}
+
 .replay-tq.q-scratchable {
   background: #7ca8c4;
 }

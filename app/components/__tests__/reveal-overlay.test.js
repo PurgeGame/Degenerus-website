@@ -545,6 +545,48 @@ describe('normalizeSequence', () => {
       'the purchase retires only after the final individual receipt');
   });
 
+  test('individual combo presentation skips trailing cardless order placeholders', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      presentationId: 'combo:partial-groups',
+      lootboxRelease: {
+        address: '0x00000000000000000000000000000000000000ab',
+        key: 'partial-groups', lootboxIndex: 31,
+      },
+      // Four physical Small boxes, but only two have independently
+      // attributable main-result events. The remaining rewards are aggregate.
+      boxOrders: ['4'],
+      ticketPriceWei: 10_000_000_000n,
+      legs: [{
+        legType: 'opened', amount: 10_000_000_000n,
+        wholeTickets: 1, futureLevel: 12, flip: 0n,
+      }, {
+        legType: 'opened', amount: 10_000_000_000n,
+        wholeTickets: 0, futureTickets: 0, futureLevel: 12,
+        flip: 25n * 10n ** 18n,
+      }, {
+        legType: 'dgnrs', amount: 7n * 10n ** 18n,
+      }],
+    });
+
+    assert.equal(seq.lootboxBoxCount, 4);
+    assert.deepEqual(seq.lootboxBoxGroups.map((group) => group.cards.length), [1, 1, 0, 0],
+      'normalization retains the physical order without inventing per-box attribution');
+    const individual = buildIndividualLootboxSequences(seq);
+    assert.deepEqual(individual.map((part) => part.title), [
+      'SMALL LUCKBOX · 1 OF 2',
+      'SMALL LUCKBOX · 2 OF 2',
+      'COMBO REWARDS',
+    ]);
+    assert.ok(individual.every((part) => part.cards.length > 0),
+      'spec-only placeholders never become empty reveal screens');
+    assert.deepEqual(individual.map((part) => part.cards[0].type), [
+      'tickets', 'flip', 'dgnrs',
+    ]);
+    assert.equal(individual.at(-1).lootboxRelease.key, 'partial-groups',
+      'skipping visual placeholders does not retire Pending before combo rewards');
+  });
+
   test('OPEN ALL combines settled Pending lootboxes into one large physical case', () => {
     const makeBox = (index) => normalizeSequence({
       kind: 'lootbox',
@@ -3279,21 +3321,23 @@ describe('reveal-overlay element', () => {
       'the combined receipt cannot offer its already-consumed siblings again');
   });
 
-  test('VIEW INDIVIDUALLY runs a fresh case animation for every combo box', async (t) => {
+  test('VIEW INDIVIDUALLY skips cardless combo placeholders before COMBO REWARDS', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
     t.after(() => { window.matchMedia = previousMatchMedia; });
 
     queueReveal({
       kind: 'lootbox',
-      boxOrders: [String(1n | (1n << 8n))],
+      // Four purchased boxes, but only the two attributable opened legs should
+      // become individual reveal screens. DGNRS remains a combo-wide reward.
+      boxOrders: ['4'],
       ticketPriceWei: 10_000_000_000n,
       legs: [{
         legType: 'opened', amount: 10_000_000_000n,
         wholeTickets: 1, futureLevel: 12, flip: 0n,
       }, {
-        legType: 'opened', amount: 50_000_000_000n,
-        wholeTickets: 0, futureTickets: 0, futureLevel: 14,
+        legType: 'opened', amount: 10_000_000_000n,
+        wholeTickets: 0, futureTickets: 0, futureLevel: 12,
         flip: 25n * 10n ** 18n,
       }, {
         legType: 'dgnrs', amount: 7n * 10n ** 18n,
@@ -3305,8 +3349,8 @@ describe('reveal-overlay element', () => {
     for (let i = 0; i < 5 && !individual.textContent; i += 1) await tick();
 
     assert.equal(individual.textContent, 'VIEW INDIVIDUALLY');
-    assert.equal(combined.textContent, 'COMBINE 2 BOXES');
-    assert.match(individual.getAttribute('aria-label'), /each of the 2 luckboxes/i);
+    assert.equal(combined.textContent, 'COMBINE 4 BOXES');
+    assert.match(individual.getAttribute('aria-label'), /2 luckboxes with individual results/i);
 
     individual.dispatchEvent({ type: 'click', stopPropagation() {} });
     const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
@@ -3329,11 +3373,11 @@ describe('reveal-overlay element', () => {
     assert.equal(firstNext.textContent, 'OPEN NEXT BOX');
 
     firstNext.dispatchEvent({ type: 'click', stopPropagation() {} });
-    for (let i = 0; i < 6 && title.textContent !== 'MEDIUM LUCKBOX · 2 OF 2'; i += 1) {
+    for (let i = 0; i < 6 && title.textContent !== 'SMALL LUCKBOX · 2 OF 2'; i += 1) {
       await tick();
     }
     assert.equal(vessel.hidden, false, 'the second box mounts the sealed case again');
-    assert.equal(stage.getAttribute('data-lootbox-case-model'), 'medium');
+    assert.equal(stage.getAttribute('data-lootbox-case-model'), 'small');
     for (let i = 0; i < 8 && summary.hidden; i += 1) {
       await tick();
       if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });

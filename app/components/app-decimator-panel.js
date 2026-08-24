@@ -153,7 +153,6 @@ const BUY_IN_COMPACT_CASE_ART = Object.freeze({
 // render with the four-part front panel. Reveal/opening art stays on the
 // current animation set.
 const BUY_IN_GOLD_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-large-v36-buy-in-card.webp';
-const LOOTBOX_CASE_LABELS = Object.freeze({ small: 'SMALL', medium: 'MEDIUM', large: 'LARGE' });
 const BUY_IN_COMPACT_CASE_GEOMETRY = Object.freeze({
   small: Object.freeze({
     priceTop: '31.3%', priceHeight: '18%', priceWidth: '58%',
@@ -1227,19 +1226,14 @@ class AppDecimatorPanel extends HTMLElement {
                 <strong>ETH</strong>
               </span>
             </label>
-            <!-- Which physical case the configured ETH-each buys. The tier is
-                 a threshold on the ticket price, not a free choice, so a player
-                 sizing a custom box cannot otherwise tell which case they are
-                 about to get until it lands in the tray. -->
+            <!-- The configured amount selects the physical case automatically.
+                 Keep this as an art-only preview: count and ETH each are already
+                 stated by the two controls immediately above it. -->
             <div class="dec-box-preview" data-bind="dec-custom-box-preview" hidden>
-              <span class="dec-box-preview__art" aria-hidden="true">
+              <span class="dec-box-preview__art" data-lootbox-case-model="small" aria-hidden="true">
                 <img class="dec-box-preview__image" data-bind="dec-custom-box-preview-art"
                      src="${BUY_IN_COMPACT_CASE_ART.small}" alt=""
                      loading="lazy" decoding="async" fetchpriority="low">
-              </span>
-              <span class="dec-box-preview__copy">
-                <strong data-bind="dec-custom-box-preview-title">SMALL LUCKBOX</strong>
-                <small data-bind="dec-custom-box-preview-detail">—</small>
               </span>
             </div>
 
@@ -2725,21 +2719,9 @@ class AppDecimatorPanel extends HTMLElement {
     if (art) {
       const src = model === 'large' ? BUY_IN_GOLD_CASE_ART : BUY_IN_COMPACT_CASE_ART[model];
       if (src && art.getAttribute?.('src') !== src) art.setAttribute?.('src', src);
+      art.parentElement?.setAttribute?.('data-lootbox-case-model', model);
     }
-    const title = this.querySelector('[data-bind="dec-custom-box-preview-title"]');
-    if (title) title.textContent = `${LOOTBOX_CASE_LABELS[model]} LUCKBOX`;
-    const detail = this.querySelector('[data-bind="dec-custom-box-preview-detail"]');
-    if (detail) {
-      let each = '—';
-      try { each = `${formatPurchaseEth(size)} ETH`; } catch (_e) { each = '—'; }
-      detail.textContent = count === 1
-        ? `1 BOX · ${each}`
-        : `${count} BOXES · ${each} EACH`;
-    }
-    host.setAttribute?.(
-      'aria-label',
-      `${count} ${LOOTBOX_CASE_LABELS[model].toLowerCase()} luckbox${count === 1 ? '' : 'es'}`,
-    );
+    host.setAttribute?.('aria-label', 'Custom Luckbox preview');
   }
 
   #renderBoxDraft(draft = this.#boxDraft()) {

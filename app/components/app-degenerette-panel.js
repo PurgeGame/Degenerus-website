@@ -93,12 +93,14 @@ import {
   dgnScoringMatchStates, dgnTraitIdsToQuadrants,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
-// Per-spin house reels: the chain publishes spin 0's only.
-import {
-  dgnDeriveSpins,
-  dgnRecordBountyHeroQuadrants,
-  dgnScore,
-} from '../app/dgn-reels.js';
+// Per-spin house reels: the chain publishes spin 0's only. Keep the namespace
+// import intentionally: during a rolling static deploy an already-open browser
+// can briefly pair this component with the previous cached dgn-reels module.
+// A newly-added named import makes module linking fail (and leaves the entire
+// <app-degenerette-panel> blank); an optional namespace member degrades only
+// the new record-bounty decoration until the next reload.
+import * as dgnReels from '../app/dgn-reels.js';
+const { dgnDeriveSpins, dgnScore } = dgnReels;
 import {
   publishPendingActions,
   clearPendingActions,
@@ -719,12 +721,14 @@ export function withDegeneretteRecordContext(spins, packedData, {
     const spinType = String(spin?.spinType || '').toLowerCase();
     if (spinType !== 'record' && spinType !== 'unknown_3') return spin;
     const reels = Array.isArray(spin?.reels) ? spin.reels : [];
-    const heroes = dgnRecordBountyHeroQuadrants({
-      rngWord,
-      parentBetId,
-      boxBetId: spin?.betId,
-      spinCount: reels.length,
-    });
+    const heroes = typeof dgnReels.dgnRecordBountyHeroQuadrants === 'function'
+      ? dgnReels.dgnRecordBountyHeroQuadrants({
+          rngWord,
+          parentBetId,
+          boxBetId: spin?.betId,
+          spinCount: reels.length,
+        })
+      : null;
     return {
       ...spin,
       ...(packed.recordBountyStake > 0n

@@ -945,7 +945,7 @@ body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__marker {
 }
 @keyframes df-meter-rebound-from-min {
   0%, 6.086957% { height: 0%; }
-  39.130435% { height: 100%; }
+  39.130435%, 43% { height: 100%; }
   65.217391% { height: 8%; }
   78.26087% { height: var(--df-meter-handoff, 64%); }
   87.826087% { height: var(--df-meter-low, 44%); }

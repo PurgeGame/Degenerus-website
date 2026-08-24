@@ -2431,6 +2431,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
         'the animated fill is a bank of the shared win pips rather than a painted bar',
       );
       assert.equal(
+        meter.querySelector('.df-modifier-meter__pip-bank--fill')
+          .querySelectorAll('.is-roll-250').length,
+        0,
+        'the moving fill stays green; only a completely lit rail may turn blue',
+      );
+      assert.equal(
         meter.querySelector('.df-modifier-meter__pip-bank--peak')
           .querySelectorAll('.df-coinflip-record__mark')
           .filter((pip) => /\bis-roll-250\b/.test(pip.className)).length,
@@ -3001,6 +3007,68 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }
   });
 
+  test('a 250% thermometer stays green in transit and reserves blue for the full rail', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 150 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    const realSetTimeout = globalThis.setTimeout;
+    const realMatchMedia = globalThis.matchMedia;
+    const scheduled = [];
+    try {
+      globalThis.matchMedia = () => ({ matches: false });
+      globalThis.setTimeout = (fn, delay = 0) => {
+        const handle = { fn, delay: Number(delay) || 0, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      };
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      const revealFinish = scheduled.find((entry) => (
+        entry.delay === revealPlanning.selectFlipRevealPlan(67, true).totalMs
+      ));
+      assert.ok(revealFinish, 'the canonical reveal landing is scheduled');
+      revealFinish.fn();
+
+      const meter = el.querySelector('.df-modifier-meter--settling');
+      assert.ok(meter, '250% enters the normal moving high-tone rail');
+      assert.match(meter.className, /df-modifier-meter--tone-high/);
+      assert.equal(
+        meter.querySelector('[data-bind="df-modifier-marker"]').style.height,
+        '100%',
+        'the 250% destination is all twenty-five pips',
+      );
+      assert.equal(
+        meter.querySelector('.df-modifier-meter__pip-bank--fill')
+          .querySelectorAll('.is-roll-250').length,
+        0,
+        'the traveling bank is green even though its destination is 250%',
+      );
+      assert.equal(
+        meter.querySelector('.df-modifier-meter__pip-bank--peak')
+          .querySelectorAll('.is-roll-250').length,
+        25,
+        'blue exists only in the full-rail overlay bank',
+      );
+
+      meter.querySelector('[data-bind="df-modifier-marker"]').dispatchEvent({
+        type: 'animationend',
+        animationName: 'df-meter-settle',
+      });
+      const parked = el.querySelector('.df-modifier-meter--settled');
+      assert.ok(parked, 'the completed 250% rail stays parked at full height');
+      assert.match(parked.className, /df-modifier-meter--tone-high/);
+      assert.equal(el.querySelector('.df-modifier-meter--settling'), null);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (realMatchMedia === undefined) delete globalThis.matchMedia;
+      else globalThis.matchMedia = realMatchMedia;
+      el.disconnectedCallback();
+    }
+  });
+
   test('revealed LOSS day → red face + explicit signed Today result', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: false, rewardPercent: 96 } };
     globalThis.localStorage.setItem('flip_day_84532_67', '1');
@@ -3432,11 +3500,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-modifier-flash\s*\{[^}]*left:\s*calc\(100% \+ 0\.42rem\)[^}]*background:\s*rgba\(3, 24, 13, 0\.92\)[^}]*df-multiplier-flash/s,
       'the exact result still gets its brief digital popout beside the persistent rail');
     assert.match(APP_CSS,
-      /@keyframes df-meter-settle\s*\{[^]*?42%\s*\{\s*height:\s*100%[^]*?100%\s*\{\s*height:\s*var\(--df-meter-stop/s,
+      /@keyframes df-meter-settle\s*\{[^]*?40%, 46%\s*\{\s*height:\s*100%[^]*?100%\s*\{\s*height:\s*var\(--df-meter-stop/s,
       'the moving lights fully fill the rail before returning to the rounded result');
     assert.match(APP_CSS,
-      /\.df-modifier-meter--settling \.df-modifier-meter__pip-bank--peak\s*\{[^}]*df-meter-peak-blue[^]*?@keyframes df-meter-peak-blue\s*\{[^]*?41%, 46%\s*\{\s*opacity:\s*1/s,
-      'a bank of blue 250-roll pips takes over for the fully-filled top beat');
+      /\.df-modifier-meter--settling \.df-modifier-meter__pip-bank--peak\s*\{[^}]*df-meter-peak-blue[^}]*steps\(1, end\)[^]*?@keyframes df-meter-peak-blue\s*\{[^]*?40%\s*\{\s*opacity:\s*1[^]*?46%, 100%\s*\{\s*opacity:\s*0/s,
+      'blue switches on discretely only across the fully-filled top plateau');
+    assert.match(APP_CSS,
+      /\.df-modifier-meter--settled\.df-modifier-meter--tone-high:not\(\.df-modifier-meter--settling\)[^}]*\.df-modifier-meter__pip-bank--peak\s*\{[^}]*opacity:\s*1/s,
+      'a parked 250% result remains blue because every pip is lit');
     assert.match(APP_CSS,
       /\.df-tomorrow-layout\s*\{[^}]*grid-template-areas:\s*"label" "oval" "total"[^}]*grid-template-rows:\s*auto 1\.95rem 1\.2rem/s,
       'Tomorrow uses the same felt-label, chip-strip, and compact value hierarchy as Today');

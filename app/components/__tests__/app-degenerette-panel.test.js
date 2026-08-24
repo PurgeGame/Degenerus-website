@@ -1775,6 +1775,15 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     });
     assert.deepEqual(record.reels.map((reel) => reel.heroQuadrant), [1, 2, 1],
       'the replay carries the contract-derived Hero for each individual bounty reel');
+    assert.match(PANEL_SRC,
+      /import \* as dgnReels from '\.\.\/app\/dgn-reels\.js'/,
+      'rolling deploys link the stable module namespace instead of a newly required export');
+    assert.doesNotMatch(PANEL_SRC,
+      /import\s*\{[^}]*dgnRecordBountyHeroQuadrants[^}]*\}\s*from '\.\.\/app\/dgn-reels\.js'/s,
+      'a cached pre-helper dependency cannot prevent the whole custom element from registering');
+    assert.match(PANEL_SRC,
+      /typeof dgnReels\.dgnRecordBountyHeroQuadrants === 'function'[\s\S]*?\? dgnReels\.dgnRecordBountyHeroQuadrants\(/,
+      'only the new bounty decoration is skipped until the cached dependency catches up');
   });
 
   test('a new placement invalidates an older in-flight result and luckbox replay', () => {

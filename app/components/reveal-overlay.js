@@ -2314,24 +2314,30 @@ export function combineLootboxSequences(sequences, { autoStart = true } = {}) {
 
 /**
  * Turn one already-settled combo receipt into presentation-only child reveals.
- * Each physical child keeps its own case and cards; rewards whose event is
- * aggregate-only land after the cases on one explicit COMBO REWARDS receipt.
+ * Each physical child with attributable cards keeps its own case. Counted
+ * orders can contain trailing spec-only placeholders when their remaining
+ * events are aggregate rewards; those placeholders must not become empty
+ * case reveals. Aggregate-only rewards land after the real cases on one
+ * explicit COMBO REWARDS receipt.
  * The original release identity is attached only to the final child so Pending
  * cannot retire the purchase before every selected animation is acknowledged.
  */
 export function buildIndividualLootboxSequences(seq) {
   if (seq?.kind !== 'lootbox' || !Array.isArray(seq.lootboxBoxGroups)
     || seq.lootboxBoxGroups.length < 2) return [];
-  const total = seq.lootboxBoxGroups.length;
+  const presentableGroups = seq.lootboxBoxGroups.filter((group) => (
+    Array.isArray(group?.cards) && group.cards.length > 0
+  ));
+  const total = presentableGroups.length;
   // A combo can mix ordinary prizes and playable BoxSpins. Run every spin
   // box first so its reel choreography is not interrupted by unrelated prize
   // reveals, while retaining the contract order inside both partitions.
   const groups = [
-    ...seq.lootboxBoxGroups.filter((group) => (
+    ...presentableGroups.filter((group) => (
       Array.isArray(group?.cards) && group.cards.some((card) => Boolean(card?.spin))
     )),
-    ...seq.lootboxBoxGroups.filter((group) => (
-      !Array.isArray(group?.cards) || !group.cards.some((card) => Boolean(card?.spin))
+    ...presentableGroups.filter((group) => (
+      !group.cards.some((card) => Boolean(card?.spin))
     )),
   ];
   const parts = groups.map((group, index) => {
@@ -3185,9 +3191,17 @@ class RevealOverlay extends HTMLElement {
   }
 
   #canChooseLootboxBoxView(seq) {
+    const presentableBoxes = Array.isArray(seq?.lootboxBoxGroups)
+      ? seq.lootboxBoxGroups.filter((group) => (
+          Array.isArray(group?.cards) && group.cards.length > 0
+        )).length
+      : 0;
+    const hasComboRewards = Array.isArray(seq?.lootboxSharedCards)
+      && seq.lootboxSharedCards.length > 0;
     return Boolean(
       seq?.kind === 'lootbox'
       && Number(seq.lootboxBoxCount) > 1
+      && presentableBoxes + (hasComboRewards ? 1 : 0) > 1
       && !seq.autoStart
       && !seq.lootboxView
     );
@@ -4123,8 +4137,16 @@ class RevealOverlay extends HTMLElement {
           openPack.setAttribute('aria-label', 'Open this ticket pack');
         } else if (canChooseLootboxBoxView) {
           const total = Number(seq.lootboxBoxCount);
+          const presentable = seq.lootboxBoxGroups.filter((group) => (
+            Array.isArray(group?.cards) && group.cards.length > 0
+          )).length;
           openPack.textContent = 'VIEW INDIVIDUALLY';
-          openPack.setAttribute('aria-label', `View each of the ${total} luckboxes individually`);
+          openPack.setAttribute(
+            'aria-label',
+            presentable === total
+              ? `View each of the ${total} luckboxes individually`
+              : `View the ${presentable} luckboxes with individual results`,
+          );
         } else if (canChooseLootboxBatch) {
           openPack.textContent = 'OPEN ONE';
           openPack.setAttribute('aria-label', 'Open only this luckbox');

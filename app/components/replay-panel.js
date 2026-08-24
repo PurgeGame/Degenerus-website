@@ -483,6 +483,8 @@ class ReplayPanel extends HTMLElement {
   // Spin + scratch state
   #playerTraitIds = new Set();  // Set<number> of owned trait IDs (for spin coloring)
   #traitsCacheAddress = null;   // address for which #playerTraitIds was fetched
+  #playerTraitsPending = false; // target level/player is known but its holdings are not
+  #playerTraitsLoadSeq = 0;     // prevents an older day/player read settling over a newer one
   // Roll 2 draws against the player's FUTURE-level holdings, not the day's
   // level, so the bonus spin colours off its own set. Union of the traits held
   // at every level above the day's, out to the far-future horizon (levels past
@@ -913,6 +915,8 @@ class ReplayPanel extends HTMLElement {
     this.#distributions = [];
     this.#playerTraitIds = new Set(playerTraits);
     this.#traitsCacheAddress = `${player}|${purchaseLevel}`;
+    this.#playerTraitsPending = false;
+    this.#playerTraitsLoadSeq += 1;
     this.#futureTraitIds = new Set(futureTraits);
     this.#futureTraitsCacheKey = `${player}|${purchaseLevel}`;
     this.#playerHasFutureTickets = futureTraits.size > 0;
@@ -1062,6 +1066,7 @@ class ReplayPanel extends HTMLElement {
       && !hasExactPurchaseLevel) {
       this.#playerTraitIds = new Set();
       this.#traitsCacheAddress = null;
+      this.#playerTraitsPending = true;
       void this.#loadPlayerTraits();
     }
     // Only a day observed while genuinely incomplete replays the full visual
@@ -1255,6 +1260,12 @@ class ReplayPanel extends HTMLElement {
     const processing = control.processing;
     btn.classList?.toggle('is-processing', processing);
     if (processing) {
+      // The processing LCD and a scratched result can never describe the same
+      // selected day. A late persisted restore used to win this render race at
+      // the Mine FLIP step, replacing the live attract reel with yesterday's
+      // pink NO HIT board until the exact roll payload arrived. Retire that
+      // stale result synchronously before painting the processing action.
+      if (sourceProcessing) this.#keepProcessingReelLive();
       btn.hidden = false;
       stage ||= this.#jackpotProcessingStage();
       const rngRequestObserved = this.#jpProcessingSignals?.active === true
@@ -1750,6 +1761,29 @@ class ReplayPanel extends HTMLElement {
     });
   }
 
+  #keepProcessingReelLive() {
+    if (this.#spinning || !this.#idleSpinWanted()) return;
+    const processingDay = Number(this.#jpProcessingSignals?.day);
+    const selectedDay = Number(this.#selectedDay);
+    if (!Number.isInteger(processingDay) || processingDay <= 0
+      || processingDay !== selectedDay) return;
+
+    const staleResult = Array.from(this.querySelectorAll('.replay-tq')).some((quad) => (
+      quad.classList?.contains('q-result-revealed')
+      || quad.classList?.contains('q-public-result')
+      || quad.classList?.contains('q-scratch-underlay')
+      || quad.classList?.contains('q-result-pending')
+      || quad.querySelector?.('.replay-prize-reveal')?.classList?.contains('visible')
+    ));
+    if (!staleResult) return;
+
+    // Force one clean restart even if the attract timer itself survived. The
+    // ordinary #startIdleSpin guard intentionally treats a running timer as a
+    // no-op; here the timer is alive but its visible layers were overwritten.
+    this.#stopIdleSpin();
+    this.#startIdleSpin();
+  }
+
   #startIdleSpin() {
     // Starting an attract reel that is already running is a no-op. This is the
     // final safety boundary around the visible ticket: even if a future host
@@ -1791,15 +1825,19 @@ class ReplayPanel extends HTMLElement {
           img.style.opacity = '1';
         }
         quads[i]?.classList.remove(
-          'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets',
+          'q-has-trait', 'q-no-tickets', 'q-traits-pending', 'q-scratchable', 'q-has-tickets',
           'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
           'q-owned-miss', 'q-player-win', 'q-solo-eth-win',
           'q-gold-trait', 'q-scratch-underlay', 'q-result-pending', 'q-result-revealed',
         );
         const shownTrait = contractQ * 64 + col * 8 + sym;
-        const ownsShown = this.#playerTraitIds.has(shownTrait);
-        quads[i]?.classList.add(ownsShown ? 'q-has-trait' : 'q-no-tickets');
-        if (!this.#bonusPhase && ownsShown && col === 7) {
+        const ownsShown = !this.#playerTraitsPending && this.#playerTraitIds.has(shownTrait);
+        quads[i]?.classList.add(
+          this.#playerTraitsPending
+            ? 'q-traits-pending'
+            : ownsShown ? 'q-has-trait' : 'q-no-tickets',
+        );
+        if (!this.#bonusPhase && !this.#playerTraitsPending && ownsShown && col === 7) {
           quads[i]?.classList.add('q-gold-trait');
         }
       }
@@ -2194,14 +2232,17 @@ class ReplayPanel extends HTMLElement {
   }
 
   async #loadPlayerTraits() {
+    const loadSeq = ++this.#playerTraitsLoadSeq;
     if (this.#tutorialFixture) {
       this.#playerTraitIds = new Set(this.#tutorialFixture.playerTraits);
       this.#traitsCacheAddress = `${this.#tutorialFixture.player}|${this.#tutorialFixture.purchaseLevel}`;
+      this.#playerTraitsPending = false;
       return;
     }
     if (!this.#selectedPlayer) {
       this.#playerTraitIds = new Set();
       this.#traitsCacheAddress = null;
+      this.#playerTraitsPending = false;
       return;
     }
     // Roll 1 samples its winners from tickets at the day's PURCHASE level, so
@@ -2219,17 +2260,27 @@ class ReplayPanel extends HTMLElement {
     if (level == null) {
       this.#playerTraitIds = new Set();
       this.#traitsCacheAddress = null;
+      // The selected day is still resolving its purchase level. This is an
+      // unknown cohort, not proof that the player owns no traits.
+      this.#playerTraitsPending = true;
       return;
     }
-    const cacheKey = `${this.#selectedPlayer.toLowerCase()}|${level}`;
-    if (this.#traitsCacheAddress === cacheKey) return; // cache hit
+    const player = this.#selectedPlayer;
+    const cacheKey = `${player.toLowerCase()}|${level}`;
+    if (this.#traitsCacheAddress === cacheKey) {
+      this.#playerTraitsPending = false;
+      return;
+    }
+    this.#playerTraitsPending = true;
     try {
       // No &day= param — the endpoint 404s on days without an indexed
       // daily_rng row (same gotcha as app-tickets-inventory).
       const data = await fetchJSON(
-        `/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`,
+        `/player/${encodeURIComponent(player)}/tickets/by-trait?level=${level}`,
         { priority: 'interaction' },
       );
+      if (loadSeq !== this.#playerTraitsLoadSeq
+        || String(this.#selectedPlayer || '').toLowerCase() !== player.toLowerCase()) return;
       const owned = new Set();
       for (const card of (Array.isArray(data?.cards) ? data.cards : [])) {
         for (const entry of (Array.isArray(card?.entries) ? card.entries : [])) {
@@ -2238,12 +2289,15 @@ class ReplayPanel extends HTMLElement {
       }
       this.#playerTraitIds = owned;
       this.#traitsCacheAddress = cacheKey;
+      this.#playerTraitsPending = false;
     } catch (err) {
+      if (loadSeq !== this.#playerTraitsLoadSeq) return;
       console.warn('[ReplayPanel] Failed to load player traits:', err);
       // Fail-closed: an empty set renders non-winning quadrants red and
       // unscratchable instead of inviting a scratch that can't pay.
       this.#playerTraitIds = new Set();
       this.#traitsCacheAddress = null;
+      this.#playerTraitsPending = false;
     }
   }
 
@@ -2281,6 +2335,8 @@ class ReplayPanel extends HTMLElement {
     this.#skipSpinId = null;
     this.#loadedDay = null;
     if (!validDay) {
+      this.#playerTraitsLoadSeq += 1;
+      this.#playerTraitsPending = false;
       this.#dayLoadSeq++;
       this.#dayLoadInFlight = null;
       this.#dayReloadAttempt = 0;
@@ -2328,8 +2384,10 @@ class ReplayPanel extends HTMLElement {
     this.#selectedLevel = null;
     this.#dayRoll1 = null;
     this.#dayRoll2 = null;
+    this.#playerTraitsLoadSeq += 1;
     this.#playerTraitIds = new Set();
     this.#traitsCacheAddress = null;
+    this.#playerTraitsPending = Boolean(this.#selectedPlayer);
     this.#resetCards();
     this.#setDayDataLoading(dayNum, true);
     // Loading is itself enough reason to run the reel. The persisted reveal
@@ -2476,8 +2534,10 @@ class ReplayPanel extends HTMLElement {
     this.#interactiveRevealKey = null;
     this.#skipSpinId = null;
     this.#selectedPlayer = nextPlayer;
+    this.#playerTraitsLoadSeq += 1;
     this.#playerTraitIds = new Set();
     this.#traitsCacheAddress = null;
+    this.#playerTraitsPending = Boolean(nextPlayer);
     this.#resetCards();
     this.#startIdleSpin();
     // Publish replay-player selection so sibling widgets (status-bar activity
@@ -3453,7 +3513,7 @@ class ReplayPanel extends HTMLElement {
     const quads = this.querySelectorAll('.replay-tq');
     quads.forEach(q => {
       q.classList.remove(
-        'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
+        'revealed', 'q-has-trait', 'q-no-tickets', 'q-traits-pending', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
         'q-owned-miss', 'q-player-win', 'q-solo-eth-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',
@@ -3750,6 +3810,7 @@ class ReplayPanel extends HTMLElement {
           quads[i].classList.remove(
             'q-has-trait',
             'q-no-tickets',
+            'q-traits-pending',
             'q-scratchable',
             'q-has-tickets',
             'q-gold-trait',
@@ -3840,6 +3901,7 @@ class ReplayPanel extends HTMLElement {
       quads[i].classList.remove(
         'q-has-trait',
         'q-no-tickets',
+        'q-traits-pending',
         'q-public-result',
         'q-win-impossible',
         'q-win-impossible-lock',
@@ -4920,7 +4982,7 @@ class ReplayPanel extends HTMLElement {
     const quads = this.querySelectorAll('.replay-tq');
     quads.forEach(q => {
       q.classList.remove(
-        'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
+        'revealed', 'q-has-trait', 'q-no-tickets', 'q-traits-pending', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
         'q-owned-miss', 'q-player-win', 'q-solo-eth-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',

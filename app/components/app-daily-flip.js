@@ -4665,9 +4665,12 @@ class AppDailyFlip extends HTMLElement {
     if (marker.style && typeof marker.style.setProperty === 'function') {
       marker.style.setProperty('--df-meter-stop', stopHeight);
     }
+    // The moving bank stays green even when its destination is 250%. Blue is
+    // a full-rail signal, supplied by the peak overlay only while all 25 pips
+    // are visible (and on the parked 250% result).
     const pipToneClass = numberTone === 'low'
       ? 'is-win is-roll-150'
-      : (numberTone === 'high' ? 'is-win is-roll-250' : 'is-win');
+      : 'is-win';
     appendPipBank(marker, 'fill', pipToneClass);
     appendPipBank(marker, 'peak', 'is-win is-roll-250');
     track.appendChild(marker);

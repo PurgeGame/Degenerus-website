@@ -1272,7 +1272,12 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'author display rules cannot override the single-control hidden state');
   });
 
-  test('the loading attract reel keeps ownership-aware pink and blue faces', async () => {
+  test('the loading attract reel is neutral while holdings hydrate, then uses pink and blue', async () => {
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-tq\.q-traits-pending\s*\{[^}]*background:\s*#bfc2c7;[^}]*box-shadow:\s*none/s,
+      'an unresolved level/player cohort has a distinct neutral reel face',
+    );
     assert.match(
       APP_CSS,
       /replay-panel\[data-day-loading\] \.replay-tq\.q-has-trait:not\(\.q-gold-trait\)\s*\{[^}]*background:\s*#b8d4e8/s,
@@ -1285,6 +1290,11 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       APP_CSS,
       /replay-panel\[data-day-loading\] \.replay-tq\s*\{[^}]*background:\s*#bfc2c7/s,
       'the loading mask must not flatten the ownership reel to gray',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /this\.#playerTraitsPending\s*\?\s*'q-traits-pending'\s*:\s*ownsShown\s*\?\s*'q-has-trait'\s*:\s*'q-no-tickets'/s,
+      'unknown holdings cannot be rendered as four proven no-ticket losses',
     );
     const dayChange = REPLAY_PANEL_SRC.match(
       /async #onDayChange\(e\)\s*\{([\s\S]*?)\n  #onPlayerChange/,
@@ -5705,6 +5715,70 @@ describe('the LCD key turns the Mine FLIP crank while results are pending', () =
       'the action name replaces the passive pipeline label while the crank owns the key');
     assert.equal(btn.getAttribute('data-jp-stage'), 'rng',
       'and the stage it reports is unchanged, so the ring keeps chasing');
+  });
+
+  test('Mine FLIP processing cannot resurrect a scratched prior-day board', async () => {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    const panel = new Ctor();
+    panel.innerHTML = `
+      <div class="panel">
+        <div class="replay-controls"><button data-bind="reveal-btn"></button></div>
+        <div class="replay-ticket" data-bind="card-grid">
+          <div data-bind="center"></div>
+        </div>
+      </div>`;
+    for (let index = 0; index < 4; index += 1) {
+      const quad = makeFakeElement('div');
+      quad.classList.add('replay-tq');
+      const badge = makeFakeElement('img');
+      badge.classList.add('badge-img');
+      const canvas = makeFakeElement('canvas');
+      canvas.classList.add('replay-scratch-canvas');
+      const prize = makeFakeElement('div');
+      prize.classList.add('replay-prize-reveal');
+      quad.append(badge, canvas, prize);
+      panel.appendChild(quad);
+    }
+    panel.__setSelectedDayForTest(81);
+    panel.setAttribute('data-day-warming', '');
+    panel.attributeChangedCallback('data-day-warming', null, '');
+    panel.setJackpotProcessingState({
+      day: 81,
+      active: true,
+      requested: true,
+      rngReady: true,
+      rngFulfilled: true,
+      coinflipReady: false,
+      ticketsReady: false,
+      jackpotReady: false,
+    });
+
+    const quads = panel.querySelectorAll('.replay-tq');
+    for (const quad of quads) {
+      quad.classList.add('q-result-revealed', 'q-no-tickets', 'q-public-result');
+      const prize = quad.querySelector('.replay-prize-reveal');
+      prize.innerHTML = '<strong>NO HIT</strong>';
+      prize.classList.add('visible');
+    }
+
+    panel.__setPendingActionsForTest([mineFlipRow()]);
+
+    assert.equal(panel.querySelector('[data-bind="reveal-btn"]').textContent,
+      'MINE FLIP · PROCESSING');
+    for (const quad of quads) {
+      assert.equal(quad.classList.contains('q-result-revealed'), false,
+        'the completed-result face is removed');
+      assert.equal(quad.classList.contains('q-public-result'), false,
+        'the previous public bucket result is removed');
+      const prize = quad.querySelector('.replay-prize-reveal');
+      assert.equal(prize.classList.contains('visible'), false,
+        'the scratched-off result copy cannot remain visible');
+      assert.equal(prize.innerHTML, '', 'the old result payload is cleared');
+    }
+    assert.equal(panel.querySelector('[data-bind="center"]').classList.contains('spinning'), true,
+      'the slow incoming-day reel keeps turning under the Mine FLIP key');
+    panel.disconnectedCallback();
   });
 
   test('no crank, or a busy one, falls through to the normal inert key', async () => {
