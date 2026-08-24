@@ -273,6 +273,13 @@ export function dailyFlipMultiplierTone(totalPercent) {
   return null;
 }
 
+/** Keep +2/+6 modifiers from changing a base-150 roll's Last 25 color. */
+function dailyFlipLast25Tone(rewardPercent) {
+  const totalPercent = 100 + Math.max(0, Math.trunc(Number(rewardPercent) || 0));
+  if (totalPercent <= 156) return 'low';
+  return dailyFlipMultiplierTone(totalPercent);
+}
+
 /** Keep the printed table selector on its 150–250 scale; exact bonuses stay in the popup. */
 export function dailyFlipMeterPosition(totalPercent) {
   const value = Number(totalPercent);
@@ -3553,7 +3560,7 @@ class AppDailyFlip extends HTMLElement {
       const markerTone = result?.win
         && result?.rewardPercent != null
         && Number.isFinite(rewardPercent)
-        ? dailyFlipMultiplierTone(100 + Math.max(0, Math.trunc(rewardPercent)))
+        ? dailyFlipLast25Tone(rewardPercent)
         : null;
       const markerToneClass = markerTone === 'low'
         ? ' is-roll-150'

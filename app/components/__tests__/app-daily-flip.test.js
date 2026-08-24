@@ -4561,6 +4561,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
           win: index % 3 === 0,
           ...(index === 0 ? { rewardPercent: 150 } : {}),
           ...(index === 3 ? { rewardPercent: 50 } : {}),
+          ...(index === 6 ? { rewardPercent: 52 } : {}),
+          ...(index === 9 ? { rewardPercent: 56 } : {}),
         })),
       },
     };
@@ -4580,7 +4582,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'a 250% roll receives the blue Last 25 marker');
     assert.match(marks[3].className, /is-win is-roll-150/,
       'a 150% roll receives the yellow Last 25 marker');
-    assert.doesNotMatch(marks[6].className, /is-roll-(?:150|250)/,
+    assert.match(marks[6].className, /is-win is-roll-150/,
+      'a base 150% roll remains yellow after its +2% modifier');
+    assert.match(marks[9].className, /is-win is-roll-150/,
+      'a base 150% roll remains yellow after its +6% modifier');
+    assert.doesNotMatch(marks[12].className, /is-roll-(?:150|250)/,
       'ordinary wins keep the standard green marker');
     assert.equal(
       el.querySelector('.df-coinflip-record__group--score').getAttribute('data-majority'),
