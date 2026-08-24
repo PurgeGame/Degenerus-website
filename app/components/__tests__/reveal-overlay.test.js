@@ -3872,6 +3872,85 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
+  test('a pack with no usable release is not treated as its own external pack', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    const el = instantiate();
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    let pendingRuns = 0;
+    // The level's OWN ready row. queueReveal drops a release carrying neither
+    // card indexes nor item keys, so the level number is the only thing left
+    // that can tell the overlay this row is the hand already on screen.
+    pendingActionsMod.publishPendingActions('own-level', [{
+      id: 'ticket-pack:7', kind: 'tickets', ticketLevel: 7,
+      label: 'Level 7 ticket pack', state: 'ready', order: 10, chronology: 7,
+      run: async () => { pendingRuns += 1; },
+    }]);
+    queueReveal({
+      kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 2,
+      batchId: 'lonely-level-7', packIndex: 1, packCount: 1,
+      tickets: [ticket(1), ticket(2)],
+      packRelease: { address: '0xab12000000000000000000000000000000000000', level: 7 },
+    });
+    await tick();
+
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    assert.equal(openAll.hidden, true,
+      'a lone pack does not advertise OPEN ALL against its own pending row');
+    assert.equal(skip.textContent, 'SKIP',
+      'and its companion stays a single-pack SKIP rather than SKIP ALL');
+
+    skip.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(pendingRuns, 0,
+      'skipping never hands off to a run() for the level it just consumed');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('a stalled Pending handoff releases the overlay instead of freezing it', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    const el = instantiate();
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    // A genuinely external ready pack whose run() never settles — one indexer
+    // request alone can burn the 20s API deadline.
+    pendingActionsMod.publishPendingActions('stalled', [{
+      id: 'ticket-pack:9', kind: 'tickets', ticketLevel: 9,
+      label: 'Level 9 ticket pack', state: 'ready', order: 10, chronology: 9,
+      run: () => new Promise(() => {}),
+    }]);
+    queueReveal({
+      kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 2,
+      batchId: 'current-level-7', packIndex: 1, packCount: 1,
+      tickets: [ticket(1), ticket(2)],
+      packRelease: {
+        address: '0xab12000000000000000000000000000000000000',
+        level: 7, cardIndexes: [1, 2],
+      },
+    });
+    await tick();
+
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    assert.equal(skip.textContent, 'SKIP ALL',
+      'the level-9 row is a real external pack, so the batch scope is offered');
+
+    skip.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-close"]').disabled, true,
+      'the handoff holds the close button while it waits');
+
+    await new Promise((resolve) => { setTimeout(resolve, 4_400); });
+    assert.equal(el.querySelector('[data-bind="rvl-close"]').disabled, false,
+      'the deadline hands the close button back');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'and the reveal ends on the readable hand instead of hanging on the wrapper');
+  });
+
   test('two queued sequences chain under one backdrop', async () => {
     const el = instantiate();
     queueReveal({ kind: 'pack', count: 1, level: 2, pending: true });

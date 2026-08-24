@@ -398,6 +398,10 @@ const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 // currently mounted wrapper. Keep that specific batch intent briefly so a
 // known late sibling cannot reopen the overlay, without affecting later buys.
 const PACK_BATCH_SKIP_TTL_MS = 5 * 60_000;
+// How long OPEN ALL / SKIP ALL will hold the overlay while materializing the
+// next ready Pending pack. A healthy indexer answers well inside this; a slow
+// one must not freeze the wrapper behind a disabled close button.
+const PENDING_PACK_HANDOFF_MS = 4_000;
 // The denomination lock uses the Daily Flip's complete 3.3s airborne track
 // plus 0.7s landing at 1x. The player's reveal-speed preference scales both
 // authored phases together, so the face switch and the wait remain in sync.
@@ -3038,6 +3042,19 @@ class RevealOverlay extends HTMLElement {
     return Number(item?.ticketLevel) === Number(release.level);
   }
 
+  // The hand on screen must never look like a separate ready pack. Its release
+  // carries the level that identifies it, but a sequence can reach the overlay
+  // with no valid release at all (queueReveal drops one that has neither card
+  // indexes nor item keys). Without this fallback the level's own Pending row
+  // reads as external: the wrapper advertises the uncounted OPEN ALL PACKS and
+  // both it and SKIP ALL then hand off to a run() for the level being consumed.
+  #packExclusion(seq) {
+    const release = seq?.packRelease;
+    if (release && Number.isFinite(Number(release.level))) return release;
+    const level = Number(seq?.level);
+    return Number.isFinite(level) ? { level } : null;
+  }
+
   #readyPendingPacks(excludeRelease = null) {
     return getPendingActions().filter((item) => (
       item?.kind === 'tickets'
@@ -3051,7 +3068,7 @@ class RevealOverlay extends HTMLElement {
     return this.#queue.some((queued) => (
       queued?.kind === 'pack' && queued.batchId !== seq?.batchId
     ))
-      || this.#readyPendingPacks(seq?.packRelease).length > 0;
+      || this.#readyPendingPacks(this.#packExclusion(seq)).length > 0;
   }
 
   #canOpenAllPacks(seq) {
@@ -3070,7 +3087,7 @@ class RevealOverlay extends HTMLElement {
   }
 
   async #queueNextPendingPack(seq, { autoStart = true, ordinaryOnly = false } = {}) {
-    const ready = this.#readyPendingPacks(seq?.packRelease);
+    const ready = this.#readyPendingPacks(this.#packExclusion(seq));
     const action = ordinaryOnly
       ? ready.find((candidate) => !candidate.foilPack) || null
       : ready[0] || null;
@@ -3078,14 +3095,36 @@ class RevealOverlay extends HTMLElement {
     const close = this.#bind('rvl-close');
     if (close) close.disabled = true;
     const queueLength = this.#queue.length;
+    let handoffTimer = null;
+    let timedOut = false;
     try {
-      await action.run();
+      // run() reaches the indexer, where a single request can burn the whole
+      // 20s API deadline (app/app/api.js REQUEST_TIMEOUT_MS) and one call can
+      // make several. Awaiting that unbounded holds the overlay on this
+      // wrapper with its close button disabled, which reads as a dead OPEN ALL
+      // / SKIP ALL. Bound the handoff instead: the pack watcher keeps its own
+      // retry state, and anything a late run() queues still reaches the
+      // overlay through the ordinary enqueue path.
+      await Promise.race([
+        action.run(),
+        new Promise((resolve) => {
+          handoffTimer = setTimeout(() => { timedOut = true; resolve(); },
+            PENDING_PACK_HANDOFF_MS);
+          if (handoffTimer && typeof handoffTimer.unref === 'function') {
+            try { handoffTimer.unref(); } catch (_e) { /* browser timer */ }
+          }
+        }),
+      ]);
     } catch (_e) {
       // The pack watcher owns retry state and concise errors. A rejected or
       // stale action simply ends OPEN ALL on the current readable hand.
     } finally {
+      if (handoffTimer) { try { clearTimeout(handoffTimer); } catch (_e) { /* defensive */ } }
       if (close) close.disabled = false;
     }
+    // A handoff that outran its deadline leaves the queue untouched: splicing
+    // here would claim sequences this call never actually added.
+    if (timedOut) return false;
     const added = this.#queue.splice(queueLength);
     const packs = [];
     const unrelated = [];
@@ -3456,7 +3495,7 @@ class RevealOverlay extends HTMLElement {
         if (this.#openAllPacks
           && this.#queue[0]?.kind === 'pack'
           && this.#queue[0]?.foilPack
-          && this.#readyPendingPacks(this.#currentSequence?.packRelease)
+          && this.#readyPendingPacks(this.#packExclusion(this.#currentSequence))
             .some((candidate) => !candidate.foilPack)) {
           await this.#queueNextPendingPack(this.#currentSequence, { ordinaryOnly: true });
           if (this.#aborted) break;
@@ -4395,7 +4434,7 @@ class RevealOverlay extends HTMLElement {
       // cross-Pending OPEN ALL can never strand ordinary packs behind foil.
       const foilIsNext = this.#queue[0]?.kind === 'pack'
         && Boolean(this.#queue[0]?.foilPack);
-      const ordinaryPending = this.#readyPendingPacks(seq?.packRelease)
+      const ordinaryPending = this.#readyPendingPacks(this.#packExclusion(seq))
         .some((candidate) => !candidate.foilPack);
       if (foilIsNext && ordinaryPending) {
         loadingNext = document.createElement('div');

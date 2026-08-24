@@ -1104,7 +1104,10 @@ class AppDecimatorPanel extends HTMLElement {
                       <path d="M4.5 10.3h15M8.2 8.2V6M15.8 8.2V6M12 12v4M10 14h4"></path>
                     </svg>
                   </span>
-                  <strong id="dec-box-builder-title">CUSTOM LUCKBOXES</strong>
+                  <span class="dec-custom-box-toggle__copy">
+                    <strong id="dec-box-builder-title">CUSTOM LUCKBOXES</strong>
+                    <small data-bind="dec-custom-box-selection" hidden></small>
+                  </span>
                 </button>
                 <span class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers">
                   <quest-objective-indicator product="lootbox"></quest-objective-indicator>
@@ -2689,6 +2692,22 @@ class AppDecimatorPanel extends HTMLElement {
     const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
     customToggle?.classList?.toggle('is-selected', customSelected);
     customToggle?.setAttribute?.('aria-expanded', String(this.#customBoxOpen));
+    const customSelection = this.querySelector('[data-bind="dec-custom-box-selection"]');
+    if (customSelection) {
+      const customAmount = formatPurchaseEth(selection.customSizeWei);
+      customSelection.textContent = customSelected
+        ? `${selection.customCount} ${selection.customCount === 1 ? 'BOX' : 'BOXES'} · ${customAmount} ETH EACH`
+        : '';
+      customSelection.hidden = !customSelected;
+      if (customSelected) customSelection.removeAttribute?.('hidden');
+      else customSelection.setAttribute?.('hidden', '');
+      customToggle?.setAttribute?.(
+        'aria-label',
+        customSelected
+          ? `Edit ${selection.customCount} custom ${selection.customCount === 1 ? 'Luckbox' : 'Luckboxes'} at ${customAmount} ETH each`
+          : 'Configure custom Luckboxes',
+      );
+    }
     const customFields = this.querySelector('[data-bind="dec-custom-box-fields"]');
     if (customFields) {
       customFields.hidden = !this.#customBoxOpen;

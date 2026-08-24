@@ -766,7 +766,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
-      /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
+      /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'the custom-chest action labels the section while boon and quest markers keep dedicated slots');
     for (const name of [
       'dec-box-small', 'dec-box-medium', 'dec-box-large',
@@ -3240,6 +3240,7 @@ describe('combined ticket + lootbox buy', () => {
     const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
     const count = el.querySelector('[name="dec-box-custom-count"]');
     const size = el.querySelector('[name="dec-box-custom-eth"]');
+    const selection = el.querySelector('[data-bind="dec-custom-box-selection"]');
     let amountFocuses = 0;
     let amountSelections = 0;
     size.focus = () => { amountFocuses += 1; };
@@ -3265,6 +3266,8 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-custom-box-logo\s*\{[^}]*width:\s*1\.24rem;[^}]*height:\s*1\.24rem;[^}]*place-items:\s*center;[^}]*border:[^}]*background:[^}]*[\s\S]*?\.dec-custom-box-logo > svg\s*\{[^}]*stroke:\s*#ddc8ee;/s,
       'the action carries its own compact custom-chest logo',
     );
+    assert.equal(selection.hidden, true, 'the button has no selection summary before a custom box is chosen');
+    assert.equal(toggle.getAttribute('aria-label'), 'Configure custom Luckboxes');
 
     toggle.dispatchEvent({ type: 'click' });
     assert.equal(fields.hidden, false);
@@ -3273,9 +3276,13 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(size.value, '0.01');
     assert.equal(amountFocuses, 1, 'the amount field receives focus');
     assert.equal(amountSelections, 1, 'typing immediately replaces the selected amount');
+    assert.equal(selection.hidden, false);
+    assert.equal(selection.textContent, '1 BOX · 0.01 ETH EACH');
+    assert.equal(toggle.getAttribute('aria-label'), 'Edit 1 custom Luckbox at 0.01 ETH each');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.01 ETH/);
     size.value = '0.02';
     size.dispatchEvent({ type: 'input' });
+    assert.equal(selection.textContent, '1 BOX · 0.02 ETH EACH');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.02 ETH/);
 
     toggle.dispatchEvent({ type: 'click' });
@@ -3283,6 +3290,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(count.value, '1', 'collapsing preserves the selected box');
     assert.equal(size.value, '0.02', 'collapsing preserves the per-box size');
+    assert.equal(selection.textContent, '1 BOX · 0.02 ETH EACH', 'the collapsed button shows the selected custom box');
     assert.match(
       PURCHASE_DESK_CSS,
       /\.app-decimator-panel:has\(> \.dec-builder-popover:not\(\[hidden\]\)\)[^{]*\{[^}]*isolation:\s*auto;[^}]*overflow:\s*visible;/s,
