@@ -574,22 +574,16 @@ body.layout-basic .records-rail__card-head {
   display: grid;
   min-width: 0;
   min-height: 2.25rem;
-  grid-template-columns: 1.8rem minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.46rem;
 }
 
+/* A mounted custom element can survive a stylesheet-only dev refresh with
+   the former 01-04 badge still in its DOM. Keep that legacy node out of both
+   sight and layout so hot refresh and a clean page load render identically. */
 body.layout-basic .records-rail__number {
-  display: grid;
-  width: 1.8rem;
-  height: 1.8rem;
-  box-sizing: border-box;
-  place-items: center;
-  border: 1px solid rgba(var(--rec-gold), 0.32);
-  border-radius: 6px;
-  background: rgba(var(--rec-gold), 0.07);
-  color: rgba(var(--rec-yellow), 0.76);
-  font: 950 0.64rem/1 "Roboto Mono", ui-monospace, monospace;
+  display: none !important;
 }
 
 body.layout-basic .records-rail__card-title {

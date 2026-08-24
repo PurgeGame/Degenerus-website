@@ -268,13 +268,13 @@ describe('<app-reveal-tray>', () => {
     assert.equal(lootboxIcon.getAttribute('data-lootbox-case-model'), 'medium');
     assert.match(
       lootboxIcon.style.getPropertyValue('--lootbox-case-art'),
-      /degenerus-lootbox-case-v10-straight-center\.webp/,
-      'an unknown legacy amount receives the canonical neutral case family',
+      /degenerus-lootbox-case-medium-v27-approved-locked-front\.webp/,
+      'an unknown legacy amount receives the approved silver medium case',
     );
     assert.match(
       lootboxIcon.style.getPropertyValue('--lootbox-case-top-art'),
-      /degenerus-lootbox-case-v6-top\.webp/,
-      'Pending receives the matching top-down render for the selected case family',
+      /degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card\.webp/,
+      'Pending receives the same approved perspective as the Buy In medium case',
     );
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
@@ -292,14 +292,17 @@ describe('<app-reveal-tray>', () => {
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.match(css,
-      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-case-top-art\)/s,
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*opacity:\s*var\(--lootbox-case-tone-opacity, 0\);[^}]*mask:\s*var\(--lootbox-case-top-tone-mask, var\(--lootbox-case-top-art\)\)/s,
       'the base mini rule leaves the authored gold case untouched');
     assert.match(css,
-      /\.rrt-lootbox-mini:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\)::after,[^{]*\{\s*opacity:\s*0\.82;/s,
-      'small and medium Pending art retains the shared case palette shift');
+      /\[data-lootbox-case-model="medium"\]\[data-lootbox-value-tone="purple"\]\s*\{\s*--lootbox-case-tone-opacity:\s*0;/s,
+      'the approved purple Pending art is not repainted');
     assert.match(css,
       /\.rrt-lootbox-mini::before\s*\{[^}]*z-index:\s*2;[^}]*top:\s*var\(--lootbox-top-badge-top, 77\.5%\);[^}]*width:\s*var\(--lootbox-top-badge-size, 16\.8%\);[^}]*flame-logo\.svg[^}]*scaleY\(var\(--lootbox-top-badge-scale-y, 0\.78\)\)/s,
-      'Pending restores one complete canonical badge above the value-tier wash');
+      'gold Pending art retains its separate canonical badge layer');
+    assert.match(css,
+      /\.rrt-lootbox-mini:is\([\s\S]*?\[data-lootbox-case-model="medium"\][\s\S]*?\)::before\s*\{\s*display:\s*none;/s,
+      'compact Pending art uses the complete badge already baked into its approved render');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 

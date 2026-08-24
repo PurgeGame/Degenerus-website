@@ -145,8 +145,8 @@ const PURCHASE_TICKET_SAMPLE_REFRESH_MS = 60_000;
 // surface changes its animation art later. The medium render is perspective-
 // matched to the green and gold cases solely for this three-box row.
 const BUY_IN_COMPACT_CASE_ART = Object.freeze({
-  small: '/app/assets/lootbox/degenerus-lootbox-case-small-v19-buy-in-card.webp',
-  medium: '/app/assets/lootbox/degenerus-lootbox-case-medium-v22-buy-in-card.webp',
+  small: '/app/assets/lootbox/degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card.webp',
+  medium: '/app/assets/lootbox/degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card.webp',
 });
 // The large Buy In card deliberately uses the taller historical top-down
 // render with the four-part front panel. Reveal/opening art stays on the
@@ -154,11 +154,11 @@ const BUY_IN_COMPACT_CASE_ART = Object.freeze({
 const BUY_IN_GOLD_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-large-v36-buy-in-card.webp';
 const BUY_IN_COMPACT_CASE_GEOMETRY = Object.freeze({
   small: Object.freeze({
-    priceTop: '36.7%', priceHeight: '20%', priceWidth: '44%',
+    priceTop: '31.3%', priceHeight: '18%', priceWidth: '58%',
     badgeClip: 'ellipse(7.4% 6.5% at 50% 68.1%)',
   }),
   medium: Object.freeze({
-    priceTop: '36.4%', priceHeight: '21.7%', priceWidth: '45%',
+    priceTop: '35.4%', priceHeight: '18%', priceWidth: '58%',
     badgeClip: 'ellipse(7.5% 6.8% at 50% 78.5%)',
   }),
 });
@@ -261,23 +261,31 @@ function groupAllInNumber(raw) {
 }
 
 // Keep both rate quotes byte-for-byte identical while giving CSS real cells
-// for the label, equals sign, and value. This lets ENTRY and TICKET share one
-// visual price column without padding either quote with display characters.
-function renderPurchasePriceRow(host, kind, value) {
+// for the label, equals sign, amount, and unit. This lets ENTRY and TICKET
+// share one visual price column without padding either quote with display
+// characters. The separator renders as a dash; the aria-label keeps the equals
+// sign because that is the relation being stated, and a lone dash reads as
+// nothing (or "minus") to a screen reader. The unit is its own cell so
+// ETH/FLIP stays on a single x across
+// both lines however many digits the amount takes; the leading spaces here
+// collapse in the grid cells and exist only to keep the row's text readable
+// when it is copied or read without the aria-label.
+function renderPurchasePriceRow(host, kind, amount, unit) {
   if (!host) return;
   host.textContent = '';
   for (const [className, text] of [
     ['dec-price__count', '1'],
     ['dec-price__kind', ` ${kind}`],
-    ['dec-price__equals', ' = '],
-    ['dec-price__value', value],
+    ['dec-price__sep', ' - '],
+    ['dec-price__amount', amount],
+    ['dec-price__unit', unit ? ` ${unit}` : ''],
   ]) {
     const part = document.createElement('span');
     part.className = className;
     part.textContent = text;
     host.appendChild(part);
   }
-  host.setAttribute('aria-label', `1 ${kind} = ${value}`);
+  host.setAttribute('aria-label', `1 ${kind} = ${amount}${unit ? ` ${unit}` : ''}`);
 }
 
 /** Compact the visible buy-bonus tally without ever rounding the reward up. */
@@ -995,8 +1003,8 @@ class AppDecimatorPanel extends HTMLElement {
           </div>
           <div class="dec-price" data-bind="dec-price"
                aria-label="Current entry and ticket prices">
-            <span class="dec-price__row" data-bind="dec-entry-price">1 ENTRY = —</span>
-            <span class="dec-price__row" data-bind="dec-ticket-price">1 TICKET = —</span>
+            <span class="dec-price__row" data-bind="dec-entry-price">1 ENTRY - —</span>
+            <span class="dec-price__row" data-bind="dec-ticket-price">1 TICKET - —</span>
           </div>
           <div class="dec-flip-credit dec-flip-credit--header is-idle"
                data-bind="dec-flip-credit"
@@ -4633,19 +4641,24 @@ class AppDecimatorPanel extends HTMLElement {
     const levelText = targetLevel == null ? 'LEVEL —' : `LEVEL ${targetLevel}`;
     let entryPriceText = '—';
     let ticketPriceText = '—';
+    // The unit is set only after both amounts resolve, so a throw leaves the
+    // pair on the bare unavailable dash instead of a unit with no number.
+    let priceUnit = '';
     if (this.#flipModeEnabled()) {
       try {
-        entryPriceText = `${formatFlip(flipCostFromTickets(1 / ENTRIES_PER_TICKET).toString())} FLIP`;
-        ticketPriceText = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
+        entryPriceText = formatFlip(flipCostFromTickets(1 / ENTRIES_PER_TICKET).toString());
+        ticketPriceText = formatFlip(flipCostFromTickets(1).toString());
+        priceUnit = 'FLIP';
       } catch (_e) { /* keep unavailable prices */ }
     } else if (priceWei != null) {
       try {
-        entryPriceText = `${formatPurchaseEth(ticketCostFromTickets(priceWei, 1 / ENTRIES_PER_TICKET))} ETH`;
-        ticketPriceText = `${formatPurchaseEth(priceWei)} ETH`;
+        entryPriceText = formatPurchaseEth(ticketCostFromTickets(priceWei, 1 / ENTRIES_PER_TICKET));
+        ticketPriceText = formatPurchaseEth(priceWei);
+        priceUnit = 'ETH';
       } catch (_e) { /* keep unavailable prices */ }
     }
-    renderPurchasePriceRow(entryPriceEl, 'ENTRY', entryPriceText);
-    renderPurchasePriceRow(ticketPriceEl, 'TICKET', ticketPriceText);
+    renderPurchasePriceRow(entryPriceEl, 'ENTRY', entryPriceText, priceUnit);
+    renderPurchasePriceRow(ticketPriceEl, 'TICKET', ticketPriceText, priceUnit);
     for (const bind of ['dec-pack-level', 'dec-foil-level']) {
       const level = this.querySelector(`[data-bind="${bind}"]`);
       if (level) level.textContent = levelText;

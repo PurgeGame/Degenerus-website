@@ -1495,7 +1495,7 @@ body.layout-basic .app-decimator-panel .dec-price {
   min-width: 0;
   grid-column: 1;
   grid-row: 2;
-  grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch minmax(10ch, max-content);
+  grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
   align-content: center;
   align-items: baseline;
   justify-content: center;
@@ -1521,13 +1521,29 @@ body.layout-basic .app-decimator-panel .dec-price__kind {
   text-align: right;
 }
 
-body.layout-basic .app-decimator-panel .dec-price__equals {
+body.layout-basic .app-decimator-panel .dec-price__sep {
   grid-column: 5;
   text-align: center;
 }
 
-body.layout-basic .app-decimator-panel .dec-price__value {
+/* The amount and its unit own separate cells. Both stay left-aligned so the
+   digits read straight down from the equals sign, and the unit gets a column
+   of its own so ETH (or FLIP) sits on one x down both lines however many
+   digits the amount takes -- a longer level-1 entry price widens the shared
+   amount column for both quotes at once rather than pushing its own unit out
+   of line. The amount column is sized to content, not to a reserved width, so
+   the unit lands one space past whichever of the two quotes runs furthest. */
+body.layout-basic .app-decimator-panel .dec-price__amount {
   grid-column: 7;
+  min-width: 0;
+  overflow: visible;
+  text-align: left;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__unit {
+  grid-column: 9;
   min-width: 0;
   overflow: visible;
   text-align: left;
@@ -2473,25 +2489,25 @@ body.layout-basic .app-decimator-panel .dec-box-card {
 body.layout-basic .app-decimator-panel .dec-box-card[data-tone="green"] {
   --box-tone: #34d399;
   --box-tone-rgb: 52 211 153;
-  --box-art-perspective-y: 1.18;
-  --box-visible-aspect: 1.108;
-  --box-art-canvas-width: 135.98%;
-  --box-art-left: -17.85%;
-  --box-art-top: -21.53%;
-  width: min(5rem, 86%);
+  --box-art-perspective-y: 1;
+  --box-visible-aspect: 1.2663;
+  --box-art-canvas-width: 119.05%;
+  --box-art-left: -8.73%;
+  --box-art-top: -20.24%;
+  width: min(4.2rem, 74%);
   translate: 0 -2px;
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card[data-tone="purple"] {
   --box-tone: #a855f7;
   --box-tone-rgb: 168 85 247;
-  --box-art-perspective-y: 1.16;
-  --box-visible-aspect: 1.026;
-  --box-art-canvas-width: 115.94%;
-  --box-art-left: -7.97%;
-  --box-art-top: -10.9%;
+  --box-art-perspective-y: 1;
+  --box-visible-aspect: 1.3696;
+  --box-art-canvas-width: 119.05%;
+  --box-art-left: -8.73%;
+  --box-art-top: -26.06%;
   width: min(6.4rem, 96%);
-  translate: 0 -2px;
+  translate: 0 -3px;
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card[data-tone="gold"] {
@@ -2555,7 +2571,7 @@ body.layout-basic .app-decimator-panel .dec-box-card__add:active .dec-box-card__
 }
 
 body.layout-basic .app-decimator-panel .dec-box-card--small .dec-box-card__art {
-  --box-price-size: 0.82rem;
+  --box-price-size: 0.76rem;
   --box-unit-size: 0.6rem;
 }
 
@@ -3421,7 +3437,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   body.layout-basic .app-decimator-panel .dec-price {
     grid-column: 2;
     grid-row: 1;
-    grid-template-columns: 1ch max-content 1.5ch minmax(max-content, 1fr);
+    grid-template-columns: 1ch max-content 1.5ch max-content 0.5ch minmax(max-content, 1fr);
     justify-content: stretch;
     gap: 0.09rem 0.08rem;
     padding: 0.22rem 0.18rem;
@@ -3436,12 +3452,16 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
     grid-column: 2;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price__equals {
+  body.layout-basic .app-decimator-panel .dec-price__sep {
     grid-column: 3;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price__value {
+  body.layout-basic .app-decimator-panel .dec-price__amount {
     grid-column: 4;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__unit {
+    grid-column: 6;
   }
 
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {

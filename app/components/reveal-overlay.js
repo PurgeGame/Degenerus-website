@@ -81,7 +81,6 @@ import { degenerettePayoutTable } from '../app/degenerette.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import {
   applyLootboxCasePresentation,
-  lootboxCaseAssets,
   lootboxTicketPriceForLevel,
   lootboxValuePresentation,
 } from '../app/lootbox-value-tone.js';
@@ -286,10 +285,6 @@ const ICONS = Object.freeze({
   flame: '/specials/special_none.svg',
 });
 
-// Generic reward/boon receipts deliberately use the neutral MEDIUM case. Live
-// purchased boxes are selected from amount + frozen ticket price below.
-const LOOTBOX_CASE_ART = lootboxCaseAssets('medium').lockedFront;
-
 /**
  * A pile-scale FLIP win lands as a physical chip pile (the same wager ladder
  * the coinflip felt uses); smaller wins keep the flame logo.
@@ -399,6 +394,10 @@ const LOOTBOX_AUTO_BURST_MS = 740;
 const LOOTBOX_CARD_FLIP_MS = 470;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
+// A multi-pack batch can finish indexing just after SKIP ALL drains the
+// currently mounted wrapper. Keep that specific batch intent briefly so a
+// known late sibling cannot reopen the overlay, without affecting later buys.
+const PACK_BATCH_SKIP_TTL_MS = 5 * 60_000;
 // The denomination lock uses the Daily Flip's complete 3.3s airborne track
 // plus 0.7s landing at 1x. The player's reveal-speed preference scales both
 // authored phases together, so the face switch and the wait remain in sync.
@@ -2584,6 +2583,7 @@ class RevealOverlay extends HTMLElement {
   #openAllBatchId = null;
   #openAllPacks = false;
   #skipAllPacks = false;
+  #skippedPackBatches = new Map();
   #packHistory = [];
   #controlsOnly = false;
   #continuationBusy = false;
@@ -2604,6 +2604,7 @@ class RevealOverlay extends HTMLElement {
 
   disconnectedCallback() {
     if (_instance === this) _instance = null;
+    this.#skippedPackBatches.clear();
     this.#clearTimers();
     try { unlockScroll(); } catch (_e) { /* defensive */ }
   }
@@ -2643,18 +2644,12 @@ class RevealOverlay extends HTMLElement {
                 <span class="rvl-chest-lid__inner"></span>
                 <span class="rvl-chest-lid__front"></span>
                 <span class="rvl-chest-lid__edge"></span>
-                <span class="rvl-lootbox-latch rvl-lootbox-latch--lid rvl-lootbox-latch--left" aria-hidden="true"></span>
-                <span class="rvl-lootbox-latch rvl-lootbox-latch--lid rvl-lootbox-latch--right" aria-hidden="true"></span>
               </div>
               <div class="rvl-chest-seam"></div>
               <div class="rvl-lootbox-flight" data-bind="rvl-lootbox-flight"
                    aria-hidden="true" hidden></div>
-              <div class="rvl-chest-body">
-                <span class="rvl-lootbox-latch rvl-lootbox-latch--body rvl-lootbox-latch--left" aria-hidden="true"></span>
-                <span class="rvl-lootbox-latch rvl-lootbox-latch--body rvl-lootbox-latch--right" aria-hidden="true"></span>
-              </div>
-              <span class="rvl-lootbox-latch rvl-lootbox-latch--bridge rvl-lootbox-latch--left" aria-hidden="true"></span>
-              <span class="rvl-lootbox-latch rvl-lootbox-latch--bridge rvl-lootbox-latch--right" aria-hidden="true"></span>
+              <div class="rvl-chest-body"></div>
+              <span class="rvl-lootbox-seam-insert" aria-hidden="true"></span>
               <div class="rvl-vault-lockwork" aria-hidden="true">
                 <span class="rvl-vault-interlock rvl-vault-interlock--1">
                   <span class="rvl-vault-deadbolt"></span>
@@ -2952,6 +2947,61 @@ class RevealOverlay extends HTMLElement {
     return Math.max(0, count - index + (includeCurrent ? 1 : 0));
   }
 
+  #pruneSkippedPackBatches() {
+    const now = Date.now();
+    for (const [batchId, state] of this.#skippedPackBatches) {
+      if (Number(state?.expiresAt || 0) <= now) this.#skippedPackBatches.delete(batchId);
+    }
+  }
+
+  #armSkippedPackBatch(seq) {
+    const batchId = String(seq?.batchId || '');
+    const packIndex = Math.max(1, Number(seq?.packIndex || 1));
+    const packCount = Math.max(packIndex, Number(seq?.packCount || 1));
+    if (!batchId || packCount <= packIndex) return false;
+    this.#pruneSkippedPackBatches();
+    const existing = this.#skippedPackBatches.get(batchId);
+    if (existing) {
+      existing.start = Math.min(existing.start, packIndex);
+      existing.end = Math.max(existing.end, packCount);
+      existing.expiresAt = Date.now() + PACK_BATCH_SKIP_TTL_MS;
+    } else {
+      this.#skippedPackBatches.set(batchId, {
+        start: packIndex,
+        end: packCount,
+        skipped: new Set(),
+        expiresAt: Date.now() + PACK_BATCH_SKIP_TTL_MS,
+      });
+    }
+    return true;
+  }
+
+  #isSkippedPackBatchArmed(seq) {
+    const batchId = String(seq?.batchId || '');
+    if (!batchId) return false;
+    this.#pruneSkippedPackBatches();
+    const state = this.#skippedPackBatches.get(batchId);
+    const packIndex = Math.max(1, Number(seq?.packIndex || 1));
+    return Boolean(
+      state
+      && packIndex >= state.start
+      && packIndex <= state.end
+      && !state.skipped.has(packIndex)
+    );
+  }
+
+  #recordSkippedPack(seq) {
+    const batchId = String(seq?.batchId || '');
+    const state = batchId ? this.#skippedPackBatches.get(batchId) : null;
+    if (!state) return;
+    const packIndex = Math.max(1, Number(seq?.packIndex || 1));
+    if (packIndex >= state.start && packIndex <= state.end) state.skipped.add(packIndex);
+    for (let index = state.start; index <= state.end; index += 1) {
+      if (!state.skipped.has(index)) return;
+    }
+    this.#skippedPackBatches.delete(batchId);
+  }
+
   #sortQueuedPacksFoilLast() {
     const slots = [];
     const packs = [];
@@ -3134,8 +3184,10 @@ class RevealOverlay extends HTMLElement {
     [
       presentation.assets.retractedFront,
       presentation.assets.innerLid,
+      presentation.assets.frontFace,
+      presentation.assets.trimOverlay,
       ...presentation.assets.deadbolts,
-    ].forEach(_preloadImage);
+    ].filter(Boolean).forEach(_preloadImage);
   }
 
   #beginIndividualLootboxPresentation(seq) {
@@ -3411,16 +3463,30 @@ class RevealOverlay extends HTMLElement {
         }
         const seq = this.#queue.shift();
         this.#currentSequence = seq;
+        const resumesSkippedPackBatch = !this.#skipAllPacks
+          && seq?.kind === 'pack'
+          && this.#isSkippedPackBatchArmed(seq);
         // Once SKIP ALL is armed, consume subsequent packs through their
         // normal completion bookkeeping without mounting another wrapper or
         // ticket hand. Non-pack rewards retain their place in the queue.
-        const result = this.#skipAllPacks && seq?.kind === 'pack'
-          ? 'skip-all-packs'
-          : await this.#playSequence(seq);
+        const result = resumesSkippedPackBatch
+          ? 'skip-batch-pack'
+          : this.#skipAllPacks && seq?.kind === 'pack'
+            ? 'skip-all-packs'
+            : await this.#playSequence(seq);
         if (!this.#aborted) {
           this.#emitPackComplete(seq);
           this.#emitLootboxComplete(seq);
+          if (result === 'skip-batch-pack') {
+            // This sibling arrived after the original queue drained. Consume
+            // only the batch promise that armed it; do not let a stale intent
+            // spread into unrelated packs that became ready in the meantime.
+            this.#recordSkippedPack(seq);
+            continue;
+          }
           if (result === 'skip-all-packs') {
+            this.#armSkippedPackBatch(seq);
+            this.#recordSkippedPack(seq);
             this.#skipAllPacks = true;
             let hasMore = this.#hasMorePacks(seq)
               || this.#queue.some((candidate) => candidate?.kind === 'pack');
@@ -3449,6 +3515,7 @@ class RevealOverlay extends HTMLElement {
       this.#emitResultAbort([this.#currentSequence, ...this.#queue]);
       this.#aborted = true;
       this.#queue = [];
+      this.#skippedPackBatches.clear();
     } finally {
       this.#hideAll();
       if (backdrop) backdrop.hidden = true;
@@ -3480,6 +3547,7 @@ class RevealOverlay extends HTMLElement {
     this.#openAllBatchId = null;
     this.#openAllPacks = false;
     this.#skipAllPacks = false;
+    this.#skippedPackBatches.clear();
     this.#clearTimers();
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(); }
   }
@@ -3502,6 +3570,7 @@ class RevealOverlay extends HTMLElement {
     this.#openAllBatchId = null;
     this.#openAllPacks = false;
     this.#skipAllPacks = false;
+    this.#skippedPackBatches.clear();
     this.#clearTimers();
     if (this.#tapResolve) {
       const resolve = this.#tapResolve;
@@ -3913,6 +3982,7 @@ class RevealOverlay extends HTMLElement {
           [
             casePresentation.assets.retractedFront,
             casePresentation.assets.innerLid,
+            casePresentation.assets.trimOverlay,
             ...casePresentation.assets.deadbolts,
           ].forEach(_preloadImage);
         }
@@ -4029,6 +4099,7 @@ class RevealOverlay extends HTMLElement {
       } else {
         const action = await this.#waitTap();
         if ((action === 'skip-pack' || action === 'skip-all-packs') && isPack) {
+          if (action === 'skip-all-packs') this.#armSkippedPackBatch(seq);
           if (packActions) packActions.hidden = true;
           return action;
         }
@@ -6344,9 +6415,11 @@ class RevealOverlay extends HTMLElement {
   #buildRewardLootbox() {
     const box = document.createElement('div');
     box.className = 'rvl-reward-lootbox';
+    // Generic reward receipts deliberately use the neutral MEDIUM shell.
+    const presentation = applyLootboxCasePresentation(box, 'medium');
     const art = document.createElement('img');
     art.className = 'rvl-reward-lootbox__art';
-    art.src = LOOTBOX_CASE_ART;
+    art.src = presentation.assets.lockedFront;
     art.alt = '';
     art.decoding = 'async';
     box.appendChild(art);

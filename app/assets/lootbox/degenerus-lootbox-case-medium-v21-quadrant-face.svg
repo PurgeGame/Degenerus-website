@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 539" width="1200" height="539">
+  <defs>
+    <linearGradient id="panel-depth" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#25282a"/>
+      <stop offset=".5" stop-color="#1b1d1f"/>
+      <stop offset="1" stop-color="#111315"/>
+    </linearGradient>
+    <linearGradient id="silver-bevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#aeb6bc"/>
+      <stop offset=".46" stop-color="#7e8991"/>
+      <stop offset=".56" stop-color="#6e777e"/>
+      <stop offset="1" stop-color="#50585e"/>
+    </linearGradient>
+  </defs>
+  <!-- Neutral facets take on the live case color beneath the hardware layer. -->
+  <path d="M181 224H1019V454H181Z" fill="#0d0f10"/>
+  <path d="M181 248L205 224H995L1019 248V430L995 454H205L181 430Z"
+        fill="url(#panel-depth)"/>
+  <!-- One centered fabricated part: solid diamond plus four divider arms. -->
+  <path d="M600 248L694 342L600 436L506 342Z
+           M181 338H1019V346H181Z
+           M596 224H604V454H596Z"
+        fill="url(#silver-bevel)"/>
+</svg>

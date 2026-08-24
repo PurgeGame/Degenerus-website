@@ -296,7 +296,7 @@ describe('normalizeSequence', () => {
     });
     assert.equal(seq.kind, 'lootbox');
     assert.equal(seq.lootboxValueTone, 'purple');
-    assert.equal(seq.lootboxCaseModel, 'small',
+    assert.equal(seq.lootboxCaseModel, 'medium',
       'the opener keeps the canonical model selected from amount + frozen price');
     assert.equal(seq.lootboxTicketUnitsLabel, '4×');
     assert.equal(seq.amountWei, 400n);
@@ -384,7 +384,8 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.boonStrength),
       ['mid', 'high', 'mid', 'high', 'high']);
     assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3]);
-    assert.equal(seq.cards[0].icon, '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp');
+    assert.equal(seq.cards[0].icon,
+      '/app/assets/lootbox/degenerus-lootbox-case-medium-v27-approved-locked-front.webp');
     assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
     assert.equal(seq.cards[2].icon, null,
       'rating is already named on the card and needs no invented pictogram');
@@ -2301,6 +2302,11 @@ describe('reveal-overlay element', () => {
       cardRiseStart,
       APP_CSS.indexOf('@keyframes', cardRiseStart + 1),
     );
+    const seamInsertStart = APP_CSS.indexOf('@keyframes rvl-lootbox-seam-insert-release');
+    const seamInsertKeyframes = APP_CSS.slice(
+      seamInsertStart,
+      APP_CSS.indexOf('/* LARGE keeps', seamInsertStart + 1),
+    );
     assert.ok(el.querySelector('.rvl-chest-logo'), 'generic chest markup remains available');
     assert.match(el.innerHTML, /rvl-chest-q rvl-chest-logo[^>]*flame-logo\.svg/,
       'the generic fallback still carries the authentic protocol mark');
@@ -2318,14 +2324,10 @@ describe('reveal-overlay element', () => {
       'one reusable shell carries both two-lock and legacy receiver positions');
     assert.equal(el.querySelectorAll('.rvl-vault-deadbolt').length, 4,
       'CSS activates only the selected model\'s matched retracting pair');
-    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--lid').length, 2,
-      'each compact latch keeps an upper plate attached to the lid');
-    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--body').length, 2,
-      'each compact latch keeps a lower plate attached to the body');
-    assert.equal(el.querySelectorAll('.rvl-lootbox-latch--bridge').length, 2,
-      'only one narrow seam bridge joins each pair of fixed plates');
-    assert.equal(el.querySelectorAll('.rvl-lootbox-catch').length, 0,
-      'the compact opening has no separate receiver layer in the lid gap');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-latch').length, 0,
+      'the compact opener no longer mounts paired external clasps');
+    assert.equal(el.querySelectorAll('.rvl-lootbox-seam-insert').length, 1,
+      'one centered recessed insert replaces all compact latch pieces');
     assert.ok(el.querySelector('[data-bind="rvl-lootbox-flight"]'),
       'the actual reward-card flight deck is mounted with the case');
     assert.match(REVEAL_SRC,
@@ -2341,6 +2343,12 @@ describe('reveal-overlay element', () => {
       'the generated alpha WebP ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp', import.meta.url)),
       'the housing-free, lens-ghost-free opener case ships with the app');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-compact-v36-old-panels-clean-lid-continuous-side-rails.webp', import.meta.url)),
+      'both compact openers share the clean, symmetric low-lid front view');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-small-v34-continuous-bronze-side-rails-overlay.webp', import.meta.url)),
+      'the small reveal restores only its clean bronze hardware');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-compact-v36-shell-tone-mask.webp', import.meta.url)),
+      'the compact reveal keeps value tint away from its clean hardware edges');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v8-front.webp', import.meta.url)),
       'the seamless opener case with an integrated badge ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v12-front.webp', import.meta.url)),
@@ -2351,17 +2359,28 @@ describe('reveal-overlay element', () => {
       'the matching detailed opener front ships with the app');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp', import.meta.url)),
       'the opener includes a real inner-lid surface');
-    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v32-locked-front.png', import.meta.url)),
-      'the premium gold briefcase ships its matching locked front');
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v43-side-connected-bracket-locked-front.png', import.meta.url)),
+      'the premium gold briefcase ships its short quadrant bars with the original badge seat intact');
     assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-large-v31-deadbolt-right.png', import.meta.url)),
       'the premium case ships the exact steel latch bridges used by its front art');
-    assert.match(REVEAL_SRC, /const LOOTBOX_CASE_ART = lootboxCaseAssets\('medium'\)\.lockedFront/);
+    assert.match(REVEAL_SRC,
+      /const presentation = applyLootboxCasePresentation\(box, 'medium'\);[\s\S]*art\.src = presentation\.assets\.lockedFront/,
+      'generic reward receipts use the complete neutral medium presentation');
     assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
       'the case is bounded by both viewport axes');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest\s*\{[^}]*width:\s*var\(--lootbox-case-width, var\(--rvl-box-w\)\);[^}]*aspect-ratio:\s*var\(--lootbox-case-aspect, 1200 \/ 539\)/s,
+      'the opener publishes the established wide, front-facing reveal aspect');
     assert.match(APP_CSS, /\.rvl-chest-lid__front\s*\{[^}]*var\(--lootbox-case-retracted-art\)[^}]*center top \/ 100% auto no-repeat/s,
       'the receiver-backed case art is cropped into the animated lid');
     assert.match(APP_CSS, /\.rvl-chest-body\s*\{[^}]*var\(--lootbox-case-retracted-art\)[^}]*center bottom \/ 100% auto no-repeat/s,
       'the matching receiver-backed lower crop preserves the physical opening beat');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-body::after\s*\{[^}]*z-index:\s*2;[^}]*var\(--lootbox-case-trim-overlay, none\)[^}]*center bottom \/ 100% auto no-repeat,[^}]*var\(--lootbox-case-front-face, none\)/s,
+      'the repaired metal trim is registered over the old lower-case crop');
+    assert.match(APP_CSS,
+      /\.rvl-vessel--lootbox \.rvl-chest-lid__front::after\s*\{[^}]*var\(--lootbox-case-trim-overlay, none\)[^}]*center top \/ 100% auto no-repeat/s,
+      'the same trim overlay stays registered on the separately moving lid crop');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-clasp\s*\{[^}]*display:\s*none;/s,
       'the opener suppresses the standalone clasp and its sticker-like shadow');
@@ -2369,17 +2388,20 @@ describe('reveal-overlay element', () => {
       /\.rvl-vessel--lootbox \.rvl-chest-platform\s*\{[^}]*display:\s*none/s,
       'the case has no oval floor shadow that makes it look like it is hovering');
     assert.match(APP_CSS,
-      /\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-case-retracted-art\)/s,
+      /\.rvl-vessel--lootbox \.rvl-chest-body::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*opacity:\s*var\(--lootbox-case-reveal-tone-opacity, var\(--lootbox-case-tone-opacity, 0\)\);[^}]*mask:\s*var\(--lootbox-case-reveal-tone-mask, var\(--lootbox-case-retracted-art\)\)/s,
       'the base opener rule preserves the authored gold briefcase palette');
     assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-chest-body::before,[^{]*\{\s*opacity:\s*0\.82;/s,
-      'the shared detailed small and medium opener front is palette shifted by tier');
+      /--lootbox-case-reveal-tone-opacity/,
+      'compact reveal color is isolated from the unchanged Buy In and Pending artwork');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge\s*\{[^}]*filter:\s*none;/s,
-      'the animated mechanism sits inside the baked recess without a sticker-like outer shadow');
+      'the animated mechanism has no separate circular mount or container shadow');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring\s*\{[^}]*inset:\s*5\.2%;[^}]*#30d100/s,
-      'the lock keeps one registered green substrate inside its baked socket');
+      'the lock keeps the accepted gold-case ring construction');
+    assert.match(APP_CSS,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge__ring,[\s\S]*?0 1\.5px 1px rgba\(0, 0, 0, 0\.72\)/s,
+      'compact badges borrow only the tight machined contact depth without adding a mount');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__ring::after\s*\{[^}]*conic-gradient\(from 225deg[^}]*rotate\(0deg\)/s,
       'a discrete red half covers the green half while the lock is closed');
@@ -2407,17 +2429,17 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS,
       /\.rvl-vault-deadbolt::before\s*\{[^}]*background:\s*var\(--lootbox-tone\)[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;[^}]*mask:\s*var\(--lootbox-deadbolt-art\)/s,
       'animated hardware keeps its authored metal instead of flashing a multiplier tint');
+    assert.doesNotMatch(APP_CSS, /rvl-lootbox-latch/,
+      'no compact latch selector or sprite remains in the opener styling');
     assert.match(APP_CSS,
-      /\.rvl-lootbox-latch\s*\{[^}]*width:\s*4%;[^}]*background-color:\s*transparent;[^}]*background-size:\s*100% 100%;[^}]*clip-path:\s*none;/s,
-      'both compact cases register the authored clasp sprites at the compact hardware scale');
+      /\.rvl-lootbox-seam-insert\s*\{[^}]*top:\s*calc\(var\(--lootbox-case-seam, 36%\) - 1\.175%\);[^}]*left:\s*50%;[^}]*width:\s*3\.2%;[^}]*height:\s*2\.35%;[^}]*#eef2f4[^}]*#33393e[^}]*clip-path:\s*polygon/s,
+      'the replacement is one tiny silver locking bit recessed at the middle lid split');
+    assert.doesNotMatch(APP_CSS,
+      /\.rvl-lootbox-seam-insert\s*\{[^}]*var\(--lootbox-tone\)/s,
+      'the recessed locking bit stays silver instead of inheriting the case color');
     assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--lid\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-lid\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--bridge\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-bridge\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="small"\] \.rvl-lootbox-latch--body\s*\{[^}]*degenerus-reveal-clasp-small-bronze-v1-body\.png/s,
-      'small uses the three losslessly sliced bronze sections of one authored clasp');
-    assert.match(APP_CSS,
-      /\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--lid\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-lid\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--bridge\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-bridge\.png[\s\S]*?\.rvl-stage\[data-lootbox-case-model="medium"\] \.rvl-lootbox-latch--body\s*\{[^}]*degenerus-reveal-clasp-medium-silver-v1-body\.png/s,
-      'medium uses the geometry-identical silver clasp slices');
-    assert.doesNotMatch(APP_CSS, /rvl-lootbox-catch/,
-      'no synthetic catch hardware remains between the compact body and lid');
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-seam-insert,[\s\S]*?display:\s*block;/s,
+      'only compact cases show the single seam insert');
     assert.match(APP_CSS,
       /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-vault-interlock\s*\{[^}]*display:\s*none;/s,
       'the shared legacy case does not receive mismatched model-specific deadbolts');
@@ -2440,20 +2462,13 @@ describe('reveal-overlay element', () => {
       /@keyframes rvl-vault-bridge-retract-right\s*\{[\s\S]*0%, 71%[^}]*translateX\(0\)[\s\S]*100%[^}]*translateX\(102%\)/,
       'the matching bridge half retracts symmetrically into its right housing');
     assert.match(APP_CSS,
-      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-latch--bridge\s*\{[^}]*rvl-lootbox-latch-disconnect[^}]*steps\(1, end\)/s,
-      'only the narrow seam bridge uses the discrete disconnect');
-    assert.match(APP_CSS,
-      /\.rvl-lootbox-latch--lid\s*\{[^}]*top:\s*73\.2%;[^}]*height:\s*21\.65%;[\s\S]*?\.rvl-lootbox-latch--body\s*\{[^}]*top:\s*2\.9%;[^}]*height:\s*12\.17%;[\s\S]*?\.rvl-lootbox-latch--bridge\s*\{[^}]*1\.855%[^}]*height:\s*3\.71%;/s,
-      'the three authored slices meet exactly across the case seam');
-    assert.match(APP_CSS,
-      /\.rvl-lootbox-latch--bridge::before,[\s\S]*?\.rvl-lootbox-latch--bridge::after\s*\{\s*content:\s*none;/s,
-      'the authored bridge surface is not covered by synthetic CSS hardware');
-    assert.doesNotMatch(APP_CSS,
-      /\.rvl-lootbox-latch--bridge\.rvl-lootbox-latch--(?:left|right)/,
-      'the middle section uses the exact same horizontal registration as the fixed clasp ends');
-    assert.match(APP_CSS,
-      /@keyframes rvl-lootbox-latch-disconnect\s*\{[\s\S]*?0%, 73%[^}]*translateY\(0\) scaleY\(1\)[\s\S]*?74%, 77%[^}]*translateY\(-42%\) scaleY\(0\.58\)[\s\S]*?78%, 100%[^}]*opacity:\s*0;[^}]*translateY\(-72%\) scaleY\(0\.12\)/,
-      'the middle section clicks upward into the lid for one discrete beat, then disappears before lift');
+      /\.rvl-charging \.rvl-vessel--lootbox \.rvl-lootbox-seam-insert\s*\{[^}]*rvl-lootbox-seam-insert-release[^}]*steps\(1, end\)/s,
+      'the insert uses one discrete visibility change rather than a motion sequence');
+    assert.match(seamInsertKeyframes,
+      /0%, 69\.99%\s*\{\s*opacity:\s*1;\s*\}[\s\S]*70%, 100%\s*\{\s*opacity:\s*0;/,
+      'the insert disappears on the same 70% frame where the badge turn completes');
+    assert.doesNotMatch(seamInsertKeyframes, /transform|translate|scale/,
+      'the insert never slides, folds, squashes, or retracts');
     assert.match(APP_CSS,
       /@keyframes rvl-case-charge\s*\{\s*from\s*\{\s*transform:\s*none;\s*\}\s*to\s*\{\s*transform:\s*none;\s*\}/s,
       'the case itself remains still while its internal seam glows');
@@ -2462,7 +2477,7 @@ describe('reveal-overlay element', () => {
       'the gold case retains its existing shallow hinge opening');
     assert.match(APP_CSS,
       /@keyframes rvl-compact-case-lid-lift\s*\{[\s\S]*?0%, 10%[^}]*translateY\(0\)[\s\S]*?46%, 100%[^}]*translateY\(calc\(-1 \* clamp\(16px, 4vw, 30px\)\)\)/,
-      'the separate compact lid simply lifts after its connectors disappear');
+      'the separate compact lid simply lifts after the center insert disappears');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-chest-lid\s*\{[^}]*transform-origin:\s*50% 100% calc\(-1 \* var\(--rvl-lid-depth\)\)[^}]*preserve-3d/s,
       'the rigid lid volume pivots around the recessed rear axis at the body seam');
@@ -2485,17 +2500,22 @@ describe('reveal-overlay element', () => {
       /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-chest-seam::before\s*\{[^}]*height:\s*3px;[^}]*background:\s*color-mix\(in srgb, var\(--lootbox-tone\) 64%, #fff0b0\);[^}]*filter:\s*blur\(0\.35px\)/s,
       'the gold opening restores its clean narrow glow instead of a dark interior shelf');
     assert.match(APP_CSS,
+      /\.rvl-stage\[data-lootbox-case-model="large"\] \.rvl-chest-seam\s*\{[^}]*right:\s*calc\(5% \+ var\(--lootbox-case-shell-inset, 0%\)\);[^}]*left:\s*calc\(5% \+ var\(--lootbox-case-shell-inset, 0%\)\)/s,
+      'the gold seam stops at the case silhouette instead of sticking out past both lid sides');
+    assert.match(APP_CSS,
       /\.rvl-stage\[data-lootbox-case-model="large"\]\.rvl-bursting \.rvl-vessel--lootbox \.rvl-vault-deadbolt\s*\{[^}]*visibility:\s*hidden;/s,
       'the gold bridge overlays do not remain as floating bars once its lid opens');
     assert.match(APP_CSS,
       /@keyframes rvl-compact-case-seam-release\s*\{[\s\S]*var\(--lootbox-tone\)[\s\S]*var\(--lootbox-tone-rgb\)/,
       'the seam release glow resolves from the actual roll color');
     assert.match(APP_CSS,
-      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge,\s*\.rvl-vessel--lootbox:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*10\.5%;/s,
+      /\.rvl-stage:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge,\s*\.rvl-vessel--lootbox:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\) \.rvl-lootbox-badge\s*\{[^}]*width:\s*var\(--lootbox-case-badge-size, 10\.5%\);/s,
       'compact cases keep the accepted proportional badge size through every reveal handoff');
+    assert.doesNotMatch(APP_CSS, /rvl-compact-badge-green-turn/,
+      'compact cases do not replace the accepted badge-turn animation');
     assert.doesNotMatch(APP_CSS,
-      /rvl-compact-badge-green-turn|data-lootbox-case-model="small"[^{}]*\.rvl-lootbox-badge__ring/,
-      'compact cases reuse the accepted badge turn instead of replacing its ring states');
+      /data-lootbox-case-model="small"[^{}]*\.rvl-lootbox-badge__ring\s*\{[^}]*background:/s,
+      'the compact depth override cannot replace the accepted red-to-green ring states');
     assert.match(APP_CSS,
       /\.rvl-vessel--lootbox \.rvl-lootbox-badge__center\s*\{[^}]*inset:\s*16\.4%;[^}]*background:\s*radial-gradient/s,
       'the accepted gold badge proportions remain the base mechanism');
@@ -2572,19 +2592,23 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*var\(--lootbox-case-art\)/s,
       'small pending boxes reuse the same recognizable silhouette');
     assert.match(APP_CSS,
-      /\.bxs-chip-art::before\s*\{[^}]*width:\s*var\(--lootbox-static-badge-size, 10\.5%\);[^}]*flame-logo\.svg/s,
-      'the compact box strip restores the accepted official badge at its integrated size');
+      /\.bxs-chip-art:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\)::before\s*\{[^}]*display:\s*none;/s,
+      'compact strip art keeps the complete badge baked into the approved locked render');
     assert.match(APP_CSS,
       /\.rvl-reward-lootbox::after\s*\{[^}]*width:\s*var\(--lootbox-static-badge-size, 10\.5%\);[^}]*flame-logo\.svg/s,
-      'revealed-box cards restore the official badge without the oversized mounting plate');
+      'the gold reward case retains its separate official badge layer');
+    assert.match(APP_CSS,
+      /\.rvl-reward-lootbox:is\(\[data-lootbox-case-model="small"\], \[data-lootbox-case-model="medium"\]\)::after\s*\{[^}]*drop-shadow/s,
+      'the low-angle compact reward front restores its separate official badge');
     assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
       'ticket-price bands publish visibly distinct case colors');
-    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid__front::before\s*\{[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*0;[^}]*mask:/s,
+    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid__front::before\s*\{[^}]*mix-blend-mode:\s*color;[^}]*opacity:\s*var\(--lootbox-case-reveal-tone-opacity, var\(--lootbox-case-tone-opacity, 0\)\);[^}]*mask:\s*var\(--lootbox-case-reveal-tone-mask/s,
       'the base opening lid leaves the authored gold palette intact');
     assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-seam::after\s*\{[^}]*--lootbox-tone-rgb/s,
       'the multiplier tier remains visible as contained interior light');
-    assert.match(REVEAL_SRC, /rvl-reward-lootbox__art[\s\S]*art\.src = LOOTBOX_CASE_ART/,
-      'lootbox reward cards also reuse the protocol case asset');
+    assert.match(REVEAL_SRC,
+      /#buildRewardLootbox\(\)[\s\S]*applyLootboxCasePresentation\(box, 'medium'\)[\s\S]*art\.src = presentation\.assets\.lockedFront/,
+      'lootbox reward cards also reuse the complete neutral protocol case presentation');
     assert.match(APP_CSS, /@keyframes rvl-lootbox-flight-glow/);
     assert.match(APP_CSS, /@keyframes rvl-case-lid-open/);
     assert.match(APP_CSS, /@keyframes rvl-case-rays/);
@@ -3738,6 +3762,60 @@ describe('reveal-overlay element', () => {
       'none of the skipped ticket hands were rendered');
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
       'skipping the batch drains the reveal cleanly');
+  });
+
+  test('SKIP ALL remains armed when a known sibling pack joins the queue late', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    const completed = [];
+    const onComplete = (event) => completed.push(event.detail);
+    document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => {
+      window.matchMedia = previousMatchMedia;
+      document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    });
+
+    const el = instantiate();
+    const address = '0xab12000000000000000000000000000000000000';
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    const pack = (packIndex, firstCardIndex) => ({
+      kind: 'pack', title: 'YOUR TICKETS', level: 8, count: 2,
+      totalCount: 4, batchId: 'batch-late-sibling', packIndex, packCount: 2,
+      tickets: [ticket(firstCardIndex), ticket(firstCardIndex + 1)],
+      packRelease: {
+        address, level: 8, cardIndexes: [firstCardIndex, firstCardIndex + 1],
+      },
+    });
+
+    queueReveal(pack(1, 1));
+    await tick();
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    assert.equal(skip.textContent, 'SKIP ALL',
+      'pack metadata advertises the sibling even before its sequence arrives');
+    skip.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.deepEqual(completed.map((release) => release.cardIndexes), [[1, 2]]);
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+
+    queueReveal(pack(2, 3));
+    await tick();
+    assert.deepEqual(completed.map((release) => release.cardIndexes), [[1, 2], [3, 4]],
+      'the delayed sibling inherits the batch skip instead of mounting another wrapper');
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+
+    queueReveal({
+      ...pack(1, 5),
+      batchId: 'unrelated-later-buy', packCount: 1, totalCount: 2,
+    });
+    await tick();
+    assert.equal(completed.length, 2,
+      'finishing the skipped batch does not consume a later unrelated pack');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="rvl-skip-pack"]').textContent, 'SKIP');
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
   });
 
   test('SKIP ALL follows OPEN ALL PACKS into ready Pending ticket packs', async (t) => {

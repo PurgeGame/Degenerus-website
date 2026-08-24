@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 539" width="1200" height="539">
+  <defs>
+    <linearGradient id="bronze-bevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9823d"/>
+      <stop offset=".46" stop-color="#ad6b31"/>
+      <stop offset=".56" stop-color="#9a5927"/>
+      <stop offset="1" stop-color="#80431c"/>
+    </linearGradient>
+  </defs>
+  <!-- Transparent hardware-only layer: the live case color remains visible below. -->
+  <path d="M600 248L694 342L600 436L506 342Z
+           M181 338H1019V346H181Z
+           M596 224H604V454H596Z"
+        fill="url(#bronze-bevel)"/>
+</svg>

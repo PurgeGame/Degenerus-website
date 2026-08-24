@@ -3,7 +3,6 @@
 // look unrelated. Legacy/indexed rows fall back to the live routed price.
 
 import {
-  BOX_ORDER_LARGE_MULTIPLE,
   BOX_ORDER_MEDIUM_MULTIPLE,
   scaledTicketPriceWei,
 } from './lootbox.js';
@@ -42,17 +41,26 @@ function _unitsLabel(amount, price) {
 }
 
 export const LOOTBOX_CASE_MODELS = Object.freeze(['small', 'medium', 'large']);
+// The physical SMALL and MEDIUM presets are 1x and 5x ticket price. Bronze
+// owns values below their exact midpoint; the midpoint itself starts silver.
+const LOOTBOX_CASE_SILVER_MULTIPLE = (1n + BOX_ORDER_MEDIUM_MULTIPLE) / 2n;
+const LOOTBOX_CASE_GOLD_MULTIPLE = 16n;
 
 const LOOTBOX_CASE_ASSETS = Object.freeze({
   small: Object.freeze({
-    // Layered UI surfaces use the completely clean panel and add exactly one
-    // official badge. The standalone boon icon keeps the old integrated art.
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
-    iconFront: '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
-    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
-    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
+    // Opening keeps the established low-lid, front-facing composition. The
+    // Buy In thumbnail remains the approved taller render; only the reveal
+    // swaps back to the flatter case that was already working in motion.
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-old-panels-clean-lid-continuous-side-rails.webp',
+    iconFront: '/app/assets/lootbox/degenerus-lootbox-case-small-v26-approved-locked-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-old-panels-clean-lid-continuous-side-rails.webp',
+    revealToneMask: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-shell-tone-mask.webp',
+    trimOverlay: '/app/assets/lootbox/degenerus-lootbox-case-small-v34-continuous-bronze-side-rails-overlay.webp',
+    lockedToneMask: '/app/assets/lootbox/degenerus-lootbox-case-small-v26-locked-shell-mask.webp',
+    topToneMask: '/app/assets/lootbox/degenerus-lootbox-case-small-v21-buy-in-shell-mask.webp',
+    top: '/app/assets/lootbox/degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card.webp',
+    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card.webp',
+    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-small-v14-inner-lid.webp',
     deadbolts: Object.freeze([
       '/app/assets/lootbox/degenerus-lootbox-case-small-v18-deadbolt-left.webp',
@@ -60,12 +68,17 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   medium: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
-    iconFront: '/app/assets/lootbox/degenerus-lootbox-case-v8-front.webp',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-v10-straight-center.webp',
-    top: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
-    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
-    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-v6-top.webp',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-old-panels-clean-lid-continuous-side-rails.webp',
+    iconFront: '/app/assets/lootbox/degenerus-lootbox-case-medium-v27-approved-locked-front.webp',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-old-panels-clean-lid-continuous-side-rails.webp',
+    revealToneMask: '/app/assets/lootbox/degenerus-lootbox-case-compact-v36-shell-tone-mask.webp',
+    lockedToneMask: '/app/assets/lootbox/degenerus-lootbox-case-medium-v27-locked-shell-mask.webp',
+    topToneMask: '/app/assets/lootbox/degenerus-lootbox-case-medium-v26-buy-in-shell-mask.webp',
+    // Keep the already-approved animated lid untouched. Priced card surfaces
+    // use the restrained engraving, whose blank center preserves label contrast.
+    top: '/app/assets/lootbox/degenerus-lootbox-case-medium-v26-purple-gold-perspective-buy-in-card.webp',
+    cardTop: '/app/assets/lootbox/degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card.webp',
+    purchaseTop: '/app/assets/lootbox/degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card.webp',
     innerLid: '/app/assets/lootbox/degenerus-lootbox-case-medium-v14-inner-lid.webp',
     deadbolts: Object.freeze([
       '/app/assets/lootbox/degenerus-lootbox-case-medium-v17-deadbolt-left.webp',
@@ -73,8 +86,8 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
     ]),
   }),
   large: Object.freeze({
-    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v32-locked-front.png',
-    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v32-retracted-front.png',
+    lockedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v43-side-connected-bracket-locked-front.png',
+    retractedFront: '/app/assets/lootbox/degenerus-lootbox-case-large-v43-side-connected-bracket-retracted-front.png',
     top: '/app/assets/lootbox/degenerus-lootbox-case-large-v32-top.png',
     // The 1280px top remains the reveal asset, but the purchase card only
     // needs a 480px derivative. This keeps ~1.85 MiB off startup and defers the
@@ -91,23 +104,29 @@ const LOOTBOX_CASE_ASSETS = Object.freeze({
 
 const LOOTBOX_CASE_GEOMETRY = Object.freeze({
   small: Object.freeze({
-    seam: '36%', badgeTop: '63.5%', badgeSize: '10.5%', badgeStaticSize: '10.5%',
+    caseAspect: '1200 / 539', caseWidth: 'min(430px, 76vw, 58dvh)',
+    revealToneOpacity: '1',
+    seam: '36%', badgeTop: '62.06%', badgeSize: '11.1%', badgeStaticSize: '11.1%',
     topBadgeTop: '77.5%', topBadgeSize: '16.8%', topBadgeScaleY: '0.78',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
-    badgeClipFront: 'ellipse(10% 16.5% at 50% 63.5%)',
+    badgeClipFront: 'ellipse(10.6% 17.4% at 50% 62.06%)',
     badgeClipTop: 'ellipse(11.8% 6.8% at 50% 78.9%)',
     // priceTop is the panel CENTER because CSS translates the label by -50%.
     priceTop: '37.25%', priceHeight: '20%', priceWidth: '44%',
   }),
   medium: Object.freeze({
-    seam: '36%', badgeTop: '63.5%', badgeSize: '10.5%', badgeStaticSize: '10.5%',
+    caseAspect: '1200 / 539', caseWidth: 'var(--rvl-box-w)',
+    revealToneOpacity: '1',
+    seam: '36%', badgeTop: '62.06%', badgeSize: '11.1%', badgeStaticSize: '11.1%',
     topBadgeTop: '77.5%', topBadgeSize: '16.8%', topBadgeScaleY: '0.78',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
-    badgeClipFront: 'ellipse(10% 16.5% at 50% 63.5%)',
+    badgeClipFront: 'ellipse(10.6% 17.4% at 50% 62.06%)',
     badgeClipTop: 'ellipse(11.8% 6.8% at 50% 78.9%)',
     priceTop: '37.25%', priceHeight: '20%', priceWidth: '44%',
   }),
   large: Object.freeze({
+    caseAspect: '1200 / 539', caseWidth: 'var(--rvl-box-w)',
+    revealToneOpacity: '0',
     seam: '34%', badgeTop: '61.6%', badgeSize: '10.35%', badgeStaticSize: '11.5%',
     topBadgeTop: '66.5%', topBadgeSize: '12.2%', topBadgeScaleY: '0.92',
     shellInset: '0%', innerLidInset: '0%', innerLidWidth: '100%',
@@ -118,17 +137,17 @@ const LOOTBOX_CASE_GEOMETRY = Object.freeze({
 });
 
 /**
- * The contract's preset prices define the physical case family: 1x SMALL,
- * 5x MEDIUM and 25x LARGE. Custom/indexed amounts stay on the lower model
- * until they reach the next real preset boundary. Unknown legacy values use
- * MEDIUM deliberately as the neutral/generic protocol case.
+ * Bronze SMALL covers values below the midpoint between the physical 1x and
+ * 5x presets. Silver MEDIUM starts at that 3x midpoint, and every amount in
+ * the 16x gold color band uses the authored LARGE gold case. Unknown legacy
+ * values use MEDIUM deliberately.
  */
 export function lootboxCaseModel(amountWei, ticketPriceWei) {
   const amount = _positiveBigInt(amountWei);
   const price = _positiveBigInt(ticketPriceWei);
   if (amount == null || price == null) return 'medium';
-  if (amount >= price * BOX_ORDER_LARGE_MULTIPLE) return 'large';
-  if (amount >= price * BOX_ORDER_MEDIUM_MULTIPLE) return 'medium';
+  if (amount >= price * LOOTBOX_CASE_GOLD_MULTIPLE) return 'large';
+  if (amount >= price * LOOTBOX_CASE_SILVER_MULTIPLE) return 'medium';
   return 'small';
 }
 
@@ -147,12 +166,20 @@ export function lootboxCasePresentation(model = 'medium', { fullResolution = fal
   const geometry = LOOTBOX_CASE_GEOMETRY[normalizedModel];
   const image = (url) => `url("${url}")`;
   const css = {
-    '--lootbox-case-art': image(assets.lockedFront),
+    '--lootbox-case-art': image(assets.iconFront || assets.lockedFront),
     '--lootbox-case-locked-art': image(assets.lockedFront),
     '--lootbox-case-retracted-art': image(assets.retractedFront),
+    '--lootbox-case-reveal-tone-mask': image(assets.revealToneMask || assets.retractedFront),
+    '--lootbox-case-locked-tone-mask': image(assets.lockedToneMask || assets.lockedFront),
+    '--lootbox-case-trim-overlay': assets.trimOverlay ? image(assets.trimOverlay) : 'none',
     '--lootbox-case-top-art': image(fullResolution ? assets.top : assets.cardTop),
+    '--lootbox-case-top-tone-mask': image(assets.topToneMask || (fullResolution ? assets.top : assets.cardTop)),
     '--lootbox-case-purchase-art': image(assets.purchaseTop),
     '--lootbox-case-inner-lid-art': image(assets.innerLid),
+    '--lootbox-case-front-face': assets.frontFace ? image(assets.frontFace) : 'none',
+    '--lootbox-case-aspect': geometry.caseAspect,
+    '--lootbox-case-width': geometry.caseWidth,
+    '--lootbox-case-reveal-tone-opacity': geometry.revealToneOpacity,
     '--lootbox-case-seam': geometry.seam,
     '--lootbox-case-badge-top': geometry.badgeTop,
     '--lootbox-case-badge-size': geometry.badgeSize,

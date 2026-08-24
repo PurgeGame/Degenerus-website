@@ -31,15 +31,22 @@ describe('lootbox value tone', () => {
     assert.equal(lootboxValuePresentation(null, 100n).model, 'medium');
   });
 
-  test('uses the real 1x / 5x / 25x preset boundaries for one canonical case model', () => {
+  test('uses bronze below the 3x midpoint, silver through 16x, then the gold case', () => {
     const price = 100n;
     assert.deepEqual(
-      [25n, 100n, 499n, 500n, 2_499n, 2_500n, 10_000n]
+      [25n, 100n, 299n, 300n, 499n, 500n, 1_599n, 1_600n, 2_499n, 2_500n, 10_000n]
         .map((amount) => lootboxValuePresentation(amount, price).model),
-      ['small', 'small', 'small', 'medium', 'medium', 'large', 'large'],
+      ['small', 'small', 'small', 'medium', 'medium', 'medium', 'medium', 'large', 'large', 'large', 'large'],
     );
-    assert.equal(lootboxCaseModel(500n, price), 'medium');
-    assert.equal(lootboxCaseModel(2_500n, price), 'large');
+    assert.equal(lootboxCaseModel(299n, price), 'small');
+    assert.equal(lootboxCaseModel(300n, price), 'medium');
+    assert.deepEqual(lootboxValuePresentation(1_600n, price), {
+      tone: 'gold',
+      model: 'large',
+      unitsLabel: '16×',
+      amountWei: 1_600n,
+      ticketPriceWei: price,
+    });
   });
 
   test('publishes the complete art family from the same canonical selector', () => {
@@ -51,8 +58,8 @@ describe('lootbox value tone', () => {
       assert.match(assets.innerLid, new RegExp(`case-${model}-${innerVersion}-inner-lid\\.webp$`));
       assert.equal(assets.deadbolts.length, 2);
       if (model === 'large') {
-        assert.match(assets.lockedFront, /case-large-v32-locked-front\.png$/);
-        assert.match(assets.retractedFront, /case-large-v32-retracted-front\.png$/);
+        assert.match(assets.lockedFront, /case-large-v43-side-connected-bracket-locked-front\.png$/);
+        assert.match(assets.retractedFront, /case-large-v43-side-connected-bracket-retracted-front\.png$/);
         assert.match(assets.top, /case-large-v32-top\.png$/);
         assert.match(assets.cardTop, /case-large-v33-card\.webp$/,
           'the purchase card does not eagerly download the full-resolution reveal top');
@@ -60,28 +67,66 @@ describe('lootbox value tone', () => {
           assert.match(deadbolt, /case-large-v31-deadbolt-(?:left|right)\.png$/,
             'the large shell exposes the exact steel bridges from its briefcase latches');
         });
+        assert.equal(assets.frontFace, undefined,
+          'gold keeps its accepted authored front unchanged');
       } else {
-        assert.match(assets.lockedFront, /case-v10-straight-center\.webp$/,
-          'layered compact fronts contain no baked badge, socket, or circular lens ghost');
-        assert.match(assets.iconFront, /case-v8-front\.webp$/,
-          'standalone icons retain the old integrated badge render');
-        assert.match(assets.retractedFront, /case-v10-straight-center\.webp$/);
-        assert.match(assets.top, /case-v6-top\.webp$/);
-        assert.match(assets.cardTop, /case-v6-top\.webp$/);
-        assert.match(assets.purchaseTop, /case-v6-top\.webp$/);
+        const iconVersion = model === 'small' ? 'v26' : 'v27';
+        assert.match(assets.lockedFront,
+          /case-compact-v36-old-panels-clean-lid-continuous-side-rails\.webp$/,
+          'both compact openers share one clean, symmetric low-lid front view');
+        assert.match(assets.iconFront,
+          new RegExp(`case-${model}-${iconVersion}-approved-locked-front\\.webp$`),
+          'standalone Buy In icons retain their approved taller render');
+        assert.equal(assets.retractedFront, assets.lockedFront,
+          'one registered low-angle raster is split into the moving lid and stationary body');
+        assert.match(assets.revealToneMask,
+          /case-compact-v36-shell-tone-mask\.webp$/,
+          'value color is restricted to the shell instead of contaminating hardware edges');
+        if (model === 'small') {
+          assert.match(assets.trimOverlay,
+            /case-small-v34-continuous-bronze-side-rails-overlay\.webp$/,
+            'the small case restores a strict bronze hardware layer');
+        } else {
+          assert.equal(assets.trimOverlay, undefined,
+            'the clean base already supplies silver hardware without an edge overlay');
+        }
+        assert.match(assets.lockedToneMask,
+          new RegExp(`case-${model}-${iconVersion}-locked-shell-mask\\.webp$`));
+        assert.equal(assets.frontFace, undefined,
+          'the complete approved front is a single coherent raster');
+        if (model === 'small') {
+          assert.match(assets.top, /case-small-v21-plain-lid-large-badge-buy-in-card\.webp$/);
+          assert.equal(assets.cardTop, assets.top);
+          assert.equal(assets.purchaseTop, assets.top);
+        } else {
+          assert.match(assets.top, /case-medium-v26-purple-gold-perspective-buy-in-card\.webp$/,
+            'the established opening-animation lid remains unchanged');
+          assert.match(assets.cardTop, /case-medium-v28-quiet-quadrant-buy-in-card\.webp$/,
+            'priced medium cards use the quiet quadrant engraving');
+          assert.equal(assets.purchaseTop, assets.cardTop);
+        }
+        assert.match(assets.topToneMask, /buy-in-shell-mask\.webp$/,
+          'custom colors can tint the shell without repainting bronze or silver hardware');
         const deadboltVersion = model === 'small' ? 'v18' : 'v17';
         assets.deadbolts.forEach((deadbolt) => {
           assert.match(deadbolt, new RegExp(`case-${model}-${deadboltVersion}-deadbolt-(?:left|right)\\.webp$`));
         });
       }
     }
-    assert.equal(lootboxCaseAssets('small').purchaseTop, lootboxCaseAssets('medium').purchaseTop,
-      'small and medium share the original detailed top-down case before palette shifting');
+    assert.notEqual(lootboxCaseAssets('small').purchaseTop, lootboxCaseAssets('medium').purchaseTop,
+      'each compact model keeps the exact Buy In perspective approved for that size');
     assert.match(lootboxCaseAssets('large').purchaseTop, /case-large-v33-card\.webp$/);
     assert.match(
       lootboxCasePresentation('small').css['--lootbox-case-purchase-art'],
-      /case-v6-top\.webp/,
+      /case-small-v21-plain-lid-large-badge-buy-in-card\.webp/,
     );
+    assert.match(lootboxCasePresentation('medium').css['--lootbox-case-reveal-tone-mask'],
+      /case-compact-v36-shell-tone-mask\.webp/);
+    assert.match(lootboxCasePresentation('small').css['--lootbox-case-trim-overlay'],
+      /case-small-v34-continuous-bronze-side-rails-overlay\.webp/);
+    assert.equal(lootboxCasePresentation('small').css['--lootbox-case-front-face'], 'none');
+    assert.equal(lootboxCasePresentation('medium').css['--lootbox-case-front-face'], 'none');
+    assert.equal(lootboxCasePresentation('large').css['--lootbox-case-front-face'], 'none');
     assert.equal(lootboxCaseAssets('unknown'), lootboxCaseAssets('medium'));
   });
 
@@ -104,7 +149,28 @@ describe('lootbox value tone', () => {
       ['small', 'medium', 'large'].map((model) => (
         lootboxCasePresentation(model).css['--lootbox-case-badge-size']
       )),
-      ['10.5%', '10.5%', '10.35%'],
+      ['11.1%', '11.1%', '10.35%'],
+    );
+    assert.deepEqual(
+      ['small', 'medium'].map((model) => (
+        lootboxCasePresentation(model).css['--lootbox-case-badge-top']
+      )),
+      ['62.06%', '62.06%'],
+      'both compact badges return to the exact center of the established low-angle diamond',
+    );
+    assert.deepEqual(
+      ['small', 'medium', 'large'].map((model) => (
+        lootboxCasePresentation(model).css['--lootbox-case-aspect']
+      )),
+      ['1200 / 539', '1200 / 539', '1200 / 539'],
+      'the compact reveal returns to the established front-facing, nearly lidless perspective',
+    );
+    assert.deepEqual(
+      ['small', 'medium', 'large'].map((model) => (
+        lootboxCasePresentation(model).css['--lootbox-case-reveal-tone-opacity']
+      )),
+      ['1', '1', '0'],
+      'compact shells recolor beneath repaired metal trim while gold stays authored',
     );
   });
 

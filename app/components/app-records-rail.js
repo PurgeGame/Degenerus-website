@@ -1203,11 +1203,9 @@ class AppRecordsRail extends HTMLElement {
     const title = record.claimCount > 0
       ? `${record.meta.label} — paid out ${record.claimCount}×`
       : record.meta.label;
-    const number = String(Number(record.kind) + 1).padStart(2, '0');
 
     item.innerHTML = `
       <header class="records-rail__card-head">
-        <span class="records-rail__number" aria-hidden="true">${number}</span>
         <span class="records-rail__card-title">
           <b title="${escapeHtml(title)}">${escapeHtml(record.meta.label)}</b>
         </span>

@@ -680,6 +680,13 @@ describe('rail wiring', () => {
       'the artwork cannot inflate the collapsed rail');
     assert.doesNotMatch(COMPONENT, /4 ALL-TIME RECORDS/,
       'the wordmark stands alone without a redundant record-count subtitle');
+    assert.doesNotMatch(COMPONENT, /records-rail__number/,
+      'expanded bounty titles do not carry meaningless numbered badges');
+    assert.match(CSS, /records-rail__number\s*\{[^}]*display:\s*none\s*!important/s,
+      'a stale mounted badge is removed from sight and layout during hot refresh');
+    assert.match(CSS,
+      /records-rail__card-head\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/s,
+      'the expanded title reclaims the removed badge column');
     for (const label of [
       'CURRENT RECORD', 'HELD BY', 'TARGET TO CLAIM', 'PAYOUT NOW',
       'CURRENT BOUNTY', 'MIN TO HIT',

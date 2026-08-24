@@ -2823,6 +2823,11 @@ class ReplayPanel extends HTMLElement {
       await playerTraitsPromise; // ensure traits loaded for spin coloring
       if (this.#selectionKey() !== selectionKey) return false;
 
+      // Keep the existing attract/result face painted during the asynchronous
+      // trait reads above. Clear it only when the derived player result is
+      // ready to be rebuilt for the very next spin frame.
+      this.#resetCards();
+
       // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
       this.#filterPlayerWins(this.#selectedPlayer);
 
@@ -2830,11 +2835,6 @@ class ReplayPanel extends HTMLElement {
 
       // Map per-player roll1 wins to quadrant prize arrays.
       this.#distributePrizesFromRoll1();
-
-      // Keep the existing attract/result face painted during the asynchronous
-      // trait reads above. Clear it only when #runSpin is ready to take ownership
-      // of the very next frame.
-      this.#resetCards();
       if (!instant) btn.textContent = 'SPINNING…';
 
       const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });

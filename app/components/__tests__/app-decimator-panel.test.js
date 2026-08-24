@@ -776,8 +776,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     }
     assert.match(
       el.innerHTML,
-      /degenerus-lootbox-case-small-v19-buy-in-card\.webp[\s\S]*degenerus-lootbox-case-medium-v22-buy-in-card\.webp[\s\S]*degenerus-lootbox-case-large-v36-buy-in-card\.webp/,
-      'Buy In uses the bronze-latch green card, corrected-perspective purple card, and four-quadrant gold card',
+      /degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card\.webp[\s\S]*degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card\.webp[\s\S]*degenerus-lootbox-case-large-v36-buy-in-card\.webp/,
+      'Buy In uses the plain-lid green/bronze and purple/silver cards with the four-quadrant gold card',
     );
     assert.equal(
       (PANEL_SRC.match(/<img class="dec-box-card__image" src="\$\{(?:BUY_IN_COMPACT_CASE_ART\.(?:small|medium)|BUY_IN_GOLD_CASE_ART)\}" alt="" loading="lazy" decoding="async" fetchpriority="low">/g) ?? []).length,
@@ -1035,7 +1035,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       compactHeroCss,
-      /\.dec-price\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;[^}]*grid-template-columns:\s*1ch max-content 1\.5ch minmax\(max-content, 1fr\);[^}]*font-size:\s*clamp\(0\.43rem, 2vw, 0\.5rem\)/s,
+      /\.dec-price\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;[^}]*grid-template-columns:\s*1ch max-content 1\.5ch max-content 0\.5ch minmax\(max-content, 1fr\);[^}]*font-size:\s*clamp\(0\.43rem, 2vw, 0\.5rem\)/s,
       'the compact rate screen uses its width instead of a separate header row',
     );
     assert.match(
@@ -2889,8 +2889,8 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-price\s*\{[^}]*grid-template-columns:\s*1ch 1ch 6ch 2ch 1ch 2ch minmax\(10ch, max-content\);[^}]*justify-content:\s*center/s,
-      'both quotes share centered count, kind, equals, and content-sized value columns with extra space around equals',
+      /\.dec-price\s*\{[^}]*grid-template-columns:\s*1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;[^}]*justify-content:\s*center/s,
+      'both quotes share centered count, kind, equals, content-sized amount, and unit columns',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -2899,13 +2899,25 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-price__value\s*\{[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;/s,
+      /\.dec-price__amount\s*\{[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;/s,
       'the exact 1,000 FLIP value is not clipped at the old fixed-width boundary',
+    );
+    // The unit owns a column of its own, so ETH/FLIP holds one x down both
+    // quotes no matter how many digits the amount above or below it takes.
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-price__amount\s*\{[^}]*grid-column:\s*7;[^}]*text-align:\s*left;/s,
+      'the amount stays left-aligned in its own content-sized column',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-price__unit\s*\{[^}]*grid-column:\s*9;[^}]*text-align:\s*left;/s,
+      'the unit left-aligns into a separate column shared by both quotes',
     );
     assert.match(
       PANEL_SRC,
-      /renderPurchasePriceRow\(entryPriceEl, 'ENTRY', entryPriceText\);[\s\S]*?renderPurchasePriceRow\(ticketPriceEl, 'TICKET', ticketPriceText\);/,
-      'alignment does not change either quote string',
+      /renderPurchasePriceRow\(entryPriceEl, 'ENTRY', entryPriceText, priceUnit\);[\s\S]*?renderPurchasePriceRow\(ticketPriceEl, 'TICKET', ticketPriceText, priceUnit\);/,
+      'alignment does not change either quote string, and both carry the same unit',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -3074,9 +3086,9 @@ describe('combined ticket + lootbox buy', () => {
     await settle(60);
 
     assert.equal(el.querySelector('[data-bind="dec-entry-price"]').textContent,
-      '1 ENTRY = 0.01 ETH');
+      '1 ENTRY - 0.01 ETH');
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.04 ETH');
+      '1 TICKET - 0.04 ETH');
     assert.equal(el.querySelector('[data-bind="dec-box-price-small"]').textContent, '0.04');
     assert.equal(el.querySelector('[data-bind="dec-box-price-medium"]').textContent, '0.2');
     assert.equal(el.querySelector('[data-bind="dec-box-price-large"]').textContent, '1');
@@ -3086,8 +3098,8 @@ describe('combined ticket + lootbox buy', () => {
       'a whole-number gold-box price reads as 1 ETH instead of an old tier number');
     for (const tier of ['small', 'medium', 'large']) {
       const asset = {
-        small: 'degenerus-lootbox-case-small-v19-buy-in-card\\.webp',
-        medium: 'degenerus-lootbox-case-medium-v22-buy-in-card\\.webp',
+        small: 'degenerus-lootbox-case-small-v21-plain-lid-large-badge-buy-in-card\\.webp',
+        medium: 'degenerus-lootbox-case-medium-v28-quiet-quadrant-buy-in-card\\.webp',
         large: 'degenerus-lootbox-case-large-v36-buy-in-card\\.webp',
       }[tier];
       assert.match(
@@ -3129,13 +3141,13 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-box-card\.is-selected\s*\{[^}]*border:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;/s,
       'selecting a case does not restore the old rectangular shell');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*width:\s*min\(5rem, 86%\);[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*width:\s*min\(6\.4rem, 96%\);/s,
-      'Small and Medium use larger visible bounds while retaining the intended size progression');
+      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*width:\s*min\(4\.2rem, 74%\);[^}]*translate:\s*0 -2px;[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*width:\s*min\(6\.4rem, 96%\);[^}]*translate:\s*0 -3px;/s,
+      'Small is visibly reduced while both compact cases sit clear of the panel floor and preserve their shared baseline');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*--box-art-perspective-y:\s*1\.18;[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*--box-art-perspective-y:\s*1\.16;/s,
-      'the compact cases are made taller so their cameras match the more frontal gold presentation');
+      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*--box-art-perspective-y:\s*1;[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*--box-art-perspective-y:\s*1;/s,
+      'both compact cases use their authored perspective without runtime vertical stretching');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*--box-visible-aspect:\s*1\.108;[^}]*--box-art-canvas-width:\s*135\.98%;[^}]*--box-art-left:\s*-17\.85%;[^}]*--box-art-top:\s*-21\.53%;[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*--box-visible-aspect:\s*1\.026;[^}]*--box-art-canvas-width:\s*115\.94%;[^}]*--box-art-left:\s*-7\.97%;[^}]*--box-art-top:\s*-10\.9%;/s,
+      /\.dec-box-card\[data-tone="green"\]\s*\{[^}]*--box-visible-aspect:\s*1\.2663;[^}]*--box-art-canvas-width:\s*119\.05%;[^}]*--box-art-left:\s*-8\.73%;[^}]*--box-art-top:\s*-20\.24%;[\s\S]*?\.dec-box-card\[data-tone="purple"\]\s*\{[^}]*--box-visible-aspect:\s*1\.3696;[^}]*--box-art-canvas-width:\s*119\.05%;[^}]*--box-art-left:\s*-8\.73%;[^}]*--box-art-top:\s*-26\.06%;/s,
       'each tier uses measured alpha bounds so the visible cases, not their transparent canvases, share the grid baseline');
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-box-card > \.dec-box-quantity\s*\{[^}]*top:\s*-1\.08rem;/s,
@@ -3815,7 +3827,7 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(70);
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.08 ETH');
+      '1 TICKET - 0.08 ETH');
     assert.equal(el.querySelector('[data-bind="dec-foil-price"]').textContent, '0.8 ETH');
 
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -3877,7 +3889,7 @@ describe('Foil pack buy leg', () => {
       'availability is re-probed without trusting the quest level');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.04 ETH');
+      '1 TICKET - 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -3936,7 +3948,7 @@ describe('Foil pack buy leg', () => {
       'the live purchase route offers level 2');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.01 ETH');
+      '1 TICKET - 0.01 ETH');
     el.disconnectedCallback();
   });
 
@@ -3957,7 +3969,7 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(60);
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.04 ETH');
+      '1 TICKET - 0.04 ETH');
     el.disconnectedCallback();
   });
 
@@ -4313,12 +4325,12 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(mode.checked, true);
     assert.equal(
       el.querySelector('[data-bind="dec-entry-price"]').textContent,
-      '1 ENTRY = 250 FLIP',
+      '1 ENTRY - 250 FLIP',
       'FLIP mode shows the entry-sized burn on the first line',
     );
     assert.equal(
       el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 1,000 FLIP',
+      '1 TICKET - 1,000 FLIP',
       'FLIP mode omits the level prefix so the fixed burn rate fits the header',
     );
     assert.equal(flipBalance.hidden, false, 'the FLIP balance does not move or disappear in FLIP mode');
@@ -4333,12 +4345,12 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(mode.checked, false, 'clicking USING FLIP switches back to ETH');
     assert.equal(
       el.querySelector('[data-bind="dec-entry-price"]').textContent,
-      '1 ENTRY = 0.01 ETH',
+      '1 ENTRY - 0.01 ETH',
       'switching back to ETH restores the entry quote',
     );
     assert.equal(
       el.querySelector('[data-bind="dec-ticket-price"]').textContent,
-      '1 TICKET = 0.04 ETH',
+      '1 TICKET - 0.04 ETH',
       'switching back to ETH restores the compact ETH ticket quote',
     );
     assert.equal(useFlip.textContent, 'USE FLIP');

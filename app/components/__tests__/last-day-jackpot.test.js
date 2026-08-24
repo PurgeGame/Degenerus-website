@@ -1052,6 +1052,23 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'and the freed button is repainted by the state machine that owns it');
   });
 
+  test('the main reveal preserves derived player wins through its reset boundary', () => {
+    const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
+    const flow = REPLAY_PANEL_SRC.slice(start, end);
+    const resetAt = flow.indexOf('this.#resetCards()');
+    const filterAt = flow.indexOf('this.#filterPlayerWins(this.#selectedPlayer)');
+    const distributeAt = flow.indexOf('this.#distributePrizesFromRoll1()');
+    const spinAt = flow.indexOf('await this.#runSpin(');
+
+    assert.ok(resetAt >= 0 && filterAt >= 0 && distributeAt >= 0 && spinAt >= 0,
+      'the main reveal contains the reset, exact-player filter, prize distribution, and spin');
+    assert.equal((flow.match(/this\.#resetCards\(\)/g) || []).length, 1,
+      'one destructive reset owns the reveal setup boundary');
+    assert.ok(resetAt < filterAt && filterAt < distributeAt && distributeAt < spinAt,
+      'the reset must happen before player wins are filtered and distributed to the spin');
+  });
+
   test('a decimator restore cannot resurrect a finished spin\'s latch', () => {
     // #setPrimaryDecimatorAction snapshots the button it displaces and puts it
     // back when the action clears. The snapshot can outlive its spin, and a

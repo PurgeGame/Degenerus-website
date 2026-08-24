@@ -6621,10 +6621,10 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::after {
   mix-blend-mode: color;
   /* Case model owns the shell palette. Multiplier color belongs to the aura,
      not a repaint that makes Pending look like a different physical box. */
-  opacity: 0;
+  opacity: var(--lootbox-case-tone-opacity, 0);
   pointer-events: none;
-  -webkit-mask: var(--lootbox-case-top-art) center / contain no-repeat;
-  mask: var(--lootbox-case-top-art) center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-top-tone-mask, var(--lootbox-case-top-art)) center / contain no-repeat;
+  mask: var(--lootbox-case-top-tone-mask, var(--lootbox-case-top-art)) center / contain no-repeat;
 }
 body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   position: absolute;
@@ -6637,6 +6637,12 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini::before {
   content: '';
   pointer-events: none;
   transform: translate(-50%, -50%) scaleY(var(--lootbox-top-badge-scale-y, 0.78));
+}
+body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini:is(
+  [data-lootbox-case-model="small"],
+  [data-lootbox-case-model="medium"]
+)::before {
+  display: none;
 }
 body.layout-basic .rrt-lootbox-summary { display: grid; grid-template-columns: auto; align-items: center; justify-content: center; row-gap: 0.06rem; line-height: 0.96; white-space: nowrap; }
 body.layout-basic .rrt-lootbox-summary__amount { grid-column: 1 / -1; color: #f1f5f9; font-size: 0.66rem; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -7738,6 +7744,15 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 [data-lootbox-value-tone="red"] { --lootbox-tone: #ef4444; --lootbox-tone-rgb: 239 68 68; }
 [data-lootbox-value-tone="gold"] { --lootbox-tone: #f5a623; --lootbox-tone-rgb: 245 166 35; }
 [data-lootbox-value-tone="unknown"] { --lootbox-tone: #ed0e11; --lootbox-tone-rgb: 237 14 17; }
+:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) {
+  --lootbox-case-tone-opacity: 1;
+}
+/* The standard Buy In pair already has its exact approved green and purple
+   shell colors. Only nonstandard value bands need the shell-only tint mask. */
+[data-lootbox-case-model="small"][data-lootbox-value-tone="green"],
+[data-lootbox-case-model="medium"][data-lootbox-value-tone="purple"] {
+  --lootbox-case-tone-opacity: 0;
+}
 .rvl-stage--lootbox {
   --rvl-box-w: min(520px, 88vw, 68dvh);
   --rvl-box-fx: min(560px, 96vw, 76dvh);
@@ -7811,9 +7826,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   --rvl-case-track-bright: #f3c55b;
   --rvl-case-track-base: #2b2419;
   z-index: 1;
-  width: var(--rvl-box-w);
+  width: var(--lootbox-case-width, var(--rvl-box-w));
   height: auto;
-  aspect-ratio: 1200 / 539;
+  aspect-ratio: var(--lootbox-case-aspect, 1200 / 539);
   perspective: 900px;
   perspective-origin: 50% var(--lootbox-case-seam, 37.1%);
   filter: drop-shadow(0 0 12px rgb(var(--lootbox-tone-rgb) / 0.24));
@@ -7882,10 +7897,18 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   content: '';
   mix-blend-mode: color;
   /* Preserve the authored SMALL / MEDIUM / LARGE materials during opening. */
-  opacity: 0;
+  opacity: var(--lootbox-case-reveal-tone-opacity, var(--lootbox-case-tone-opacity, 0));
   pointer-events: none;
-  -webkit-mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
-  mask: var(--lootbox-case-retracted-art) center top / 100% auto no-repeat;
+  -webkit-mask: var(--lootbox-case-reveal-tone-mask, var(--lootbox-case-retracted-art)) center top / 100% auto no-repeat;
+  mask: var(--lootbox-case-reveal-tone-mask, var(--lootbox-case-retracted-art)) center top / 100% auto no-repeat;
+}
+.rvl-vessel--lootbox .rvl-chest-lid__front::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: var(--lootbox-case-trim-overlay, none) center top / 100% auto no-repeat;
+  content: '';
+  pointer-events: none;
 }
 .rvl-vessel--lootbox .rvl-chest-lid__inner {
   /* A nine-degree crack never exposes enough underside to justify projecting
@@ -8011,6 +8034,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
     0 0 22px 6px rgb(var(--lootbox-tone-rgb) / 0.28);
   filter: blur(0.35px);
 }
+.rvl-stage[data-lootbox-case-model="large"] .rvl-chest-seam {
+  right: calc(5% + var(--lootbox-case-shell-inset, 0%));
+  left: calc(5% + var(--lootbox-case-shell-inset, 0%));
+}
 .rvl-stage[data-lootbox-case-model="large"] .rvl-chest-seam::after {
   right: 10%;
   left: 10%;
@@ -8040,10 +8067,20 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: var(--lootbox-tone);
   mix-blend-mode: color;
   /* The reward tier colors the contained light, never the case skin. */
-  opacity: 0;
+  opacity: var(--lootbox-case-reveal-tone-opacity, var(--lootbox-case-tone-opacity, 0));
   pointer-events: none;
-  -webkit-mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
-  mask: var(--lootbox-case-retracted-art) center bottom / 100% auto no-repeat;
+  -webkit-mask: var(--lootbox-case-reveal-tone-mask, var(--lootbox-case-retracted-art)) center bottom / 100% auto no-repeat;
+  mask: var(--lootbox-case-reveal-tone-mask, var(--lootbox-case-retracted-art)) center bottom / 100% auto no-repeat;
+}
+.rvl-vessel--lootbox .rvl-chest-body::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background:
+    var(--lootbox-case-trim-overlay, none) center bottom / 100% auto no-repeat,
+    var(--lootbox-case-front-face, none) center bottom / 100% auto no-repeat;
+  pointer-events: none;
 }
 .rvl-lootbox-badge { display: none; }
 .rvl-vessel--lootbox .rvl-lootbox-badge {
@@ -8059,8 +8096,8 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
-/* The compact raster supplies an uninterrupted center panel. This animated
-   lock is the only circular object mounted over it. */
+/* The compact raster supplies an uninterrupted center panel. The badge has
+   its own shallow machined edge and contact shadow, but no backing circle. */
 .rvl-vessel--lootbox .rvl-lootbox-badge__ring,
 .rvl-vessel--lootbox .rvl-lootbox-badge__center,
 .rvl-vessel--lootbox .rvl-lootbox-badge__face {
@@ -8157,82 +8194,78 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 
 /* Compact cases keep the accepted lock size through every reveal handoff. */
 .rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge,
-.rvl-vessel--lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge { width: 10.5%; }
+.rvl-vessel--lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge {
+  width: var(--lootbox-case-badge-size, 10.5%);
+}
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge__ring,
+.rvl-vessel--lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-badge__ring {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.48),
+    inset 0 -2px 2px rgba(9, 48, 3, 0.72),
+    0 0 0 1px rgba(28, 5, 7, 0.94),
+    0 1.5px 1px rgba(0, 0, 0, 0.72),
+    0 -0.45px 0.35px rgba(255, 255, 255, 0.24);
+}
 
-/* Each compact clasp reads as one continuous piece. Its upper and lower ends
-   belong to the lid and body; only the notched middle section at the seam can
-   retract into the lid before it lifts. */
-.rvl-lootbox-latch {
+/* Compact cases use one recessed seam insert beneath the center lid block.
+   It stays completely still through the badge turn, then disappears on the
+   exact completion frame before the separate lid begins to lift. */
+.rvl-lootbox-seam-insert {
   position: absolute;
-  z-index: 4;
+  top: calc(var(--lootbox-case-seam, 36%) - 1.175%);
+  left: 50%;
+  z-index: 8;
   display: none;
   box-sizing: border-box;
-  width: 4%;
+  width: 3.2%;
+  height: 2.35%;
   border: 0;
-  border-radius: 0;
-  background-color: transparent;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  box-shadow: none;
-  clip-path: none;
-  filter: drop-shadow(0 1px 0.7px rgba(0, 0, 0, 0.88));
+  border-radius: 1px 1px 2px 2px;
+  background:
+    linear-gradient(180deg,
+      #eef2f4 0 16%,
+      #aeb5bb 17% 54%,
+      #6e757b 55% 79%,
+      #33393e 80% 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -1px 0 rgba(18, 22, 25, 0.88),
+    0 1px 1px rgba(0, 0, 0, 0.78);
+  clip-path: polygon(7% 0, 93% 0, 100% 24%, 88% 100%, 12% 100%, 0 24%);
   pointer-events: none;
+  transform: translateX(-50%);
+  transform-origin: 50% 0;
+  will-change: opacity;
 }
-.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-latch {
+.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-seam-insert,
+.rvl-vessel--lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-lootbox-seam-insert {
   display: block;
 }
-.rvl-lootbox-latch::before,
-.rvl-lootbox-latch::after { content: none; }
-.rvl-lootbox-latch--lid {
-  top: 73.2%;
-  height: 21.65%;
+.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-seam-insert,
+.rvl-vessel--lootbox[data-lootbox-case-model="small"] .rvl-lootbox-seam-insert {
+  background:
+    linear-gradient(180deg,
+      #f0c58f 0 16%,
+      #b9783d 17% 54%,
+      #75411f 55% 79%,
+      #321c10 80% 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 232, 196, 0.76),
+    inset 0 -1px 0 rgba(32, 16, 8, 0.9),
+    0 1px 1px rgba(0, 0, 0, 0.78);
 }
-.rvl-lootbox-latch--body {
-  top: 2.9%;
-  height: 12.17%;
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-seam-insert {
+  animation: rvl-lootbox-seam-insert-release var(--rvl-box-charge) steps(1, end) both;
 }
-.rvl-lootbox-latch--bridge {
-  top: calc(var(--lootbox-case-seam, 37.1%) - 1.855%);
-  z-index: 8;
-  height: 3.71%;
-}
-.rvl-lootbox-latch--bridge::before,
-.rvl-lootbox-latch--bridge::after { content: none; }
-.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--lid {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-lid.png');
-}
-.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--bridge {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-bridge.png');
-}
-.rvl-stage[data-lootbox-case-model="small"] .rvl-lootbox-latch--body {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-small-bronze-v1-body.png');
-}
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--lid {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-lid.png');
-}
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--bridge {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-bridge.png');
-}
-.rvl-stage[data-lootbox-case-model="medium"] .rvl-lootbox-latch--body {
-  background-image: url('/app/assets/lootbox/degenerus-reveal-clasp-medium-silver-v1-body.png');
-}
-.rvl-lootbox-latch--left { left: 31.9%; }
-.rvl-lootbox-latch--right { right: 31.9%; }
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-latch--bridge {
-  animation: rvl-lootbox-latch-disconnect var(--rvl-box-charge) steps(1, end) both;
-}
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-latch--bridge {
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-seam-insert {
   opacity: 0;
-  transform: translateY(-72%) scaleY(0.12);
 }
-@keyframes rvl-lootbox-latch-disconnect {
-  0%, 73% { opacity: 1; transform: translateY(0) scaleY(1); }
-  74%, 77% { opacity: 1; transform: translateY(-42%) scaleY(0.58); }
-  78%, 100% { opacity: 0; transform: translateY(-72%) scaleY(0.12); }
+@keyframes rvl-lootbox-seam-insert-release {
+  0%, 69.99% { opacity: 1; }
+  70%, 100% { opacity: 0; }
 }
 
-/* LARGE keeps its exact briefcase bridges; the smaller pair uses clasps. */
+/* LARGE keeps its exact briefcase bridges; compact cases use the seam insert. */
 .rvl-vault-lockwork { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .rvl-vault-interlock { position: absolute; display: none; overflow: hidden; pointer-events: none; }
 .rvl-vault-deadbolt { position: absolute; inset: 0; display: block; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; filter: drop-shadow(0 2px 1px rgba(0,0,0,.82)); transform: translateY(0); will-change: transform; }
@@ -9322,20 +9355,33 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   isolation: isolate;
   width: 132px;
   height: auto;
-  aspect-ratio: 1200 / 539;
+  aspect-ratio: var(--lootbox-case-aspect, 1200 / 539);
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.48));
   animation: rvl-reward-art-in 0.42s cubic-bezier(0.2, 0.82, 0.25, 1.12) both;
 }
 .rvl-reward-lootbox__art {
+  position: relative;
+  z-index: 0;
   display: block;
   width: 100%;
   height: auto;
 }
+.rvl-reward-lootbox::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: var(--lootbox-case-front-face, none) center / contain no-repeat;
+  content: '';
+  pointer-events: none;
+}
 /* The old integrated front supplies the clean registration; the official
    vector badge sits exactly over that small inset without a separate mount. */
 .rvl-reward-lootbox::after {
-  position: absolute; top: var(--lootbox-case-badge-top, 63.5%); left: 50%; width: var(--lootbox-static-badge-size, 10.5%); aspect-ratio: 1;
+  position: absolute; z-index: 2; top: var(--lootbox-case-badge-top, 63.5%); left: 50%; width: var(--lootbox-static-badge-size, 10.5%); aspect-ratio: 1;
   background: url('/whitepaper/flame-logo.svg') center / contain no-repeat; content: ''; pointer-events: none; transform: translate(-50%, -50%);
+}
+.rvl-reward-lootbox:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::after {
+  filter: drop-shadow(0 1px 0.7px rgba(0, 0, 0, 0.72)) drop-shadow(0 -0.35px 0.25px rgba(255, 255, 255, 0.24));
 }
 @keyframes rvl-reward-art-in {
   from { opacity: 0; transform: translateY(8px) scale(0.92); }
@@ -10661,7 +10707,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   }
   .rvl-lootbox-fx *, .rvl-lootbox-fx::before, .rvl-chest-lid, .rvl-chest-lid__inner, .rvl-chest-lid__edge::after,
   .rvl-chest-body, .rvl-chest-seam, .rvl-chest-seam::after,
-  .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-latch,
+  .rvl-chest-clasp, .rvl-chest-aura, .rvl-vault-deadbolt, .rvl-lootbox-seam-insert,
   .rvl-lootbox-badge__ring, .rvl-lootbox-badge__ring::before,
   .rvl-lootbox-badge__ring::after, .rvl-lootbox-badge__center, .rvl-lootbox-badge__face {
     animation: none !important;
@@ -10736,13 +10782,11 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   background: var(--lootbox-tone, #ed0e11);
   mix-blend-mode: color;
   /* Compact rows retain the same authored shell as purchase and opening. */
-  opacity: 0;
+  opacity: var(--lootbox-case-tone-opacity, 0);
   pointer-events: none;
-  -webkit-mask: var(--lootbox-case-art) center / contain no-repeat;
-  mask: var(--lootbox-case-art) center / contain no-repeat;
+  -webkit-mask: var(--lootbox-case-locked-tone-mask, var(--lootbox-case-art)) center / contain no-repeat;
+  mask: var(--lootbox-case-locked-tone-mask, var(--lootbox-case-art)) center / contain no-repeat;
 }
-body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::after, .rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-lid__front::before,
-.rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-chest-body::before, .bxs-chip-art:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::after { opacity: 0.82; }
 .rvl-stage:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"]) .rvl-vault-interlock { display: none; }
 .bxs-chip-art::before {
   position: absolute;
@@ -10755,6 +10799,9 @@ body.layout-basic .rrt-action--lootbox-summary .rrt-lootbox-mini:is([data-lootbo
   content: '';
   pointer-events: none;
   transform: translate(-50%, -50%);
+}
+.bxs-chip-art:is([data-lootbox-case-model="small"], [data-lootbox-case-model="medium"])::before {
+  display: none;
 }
 
 /* Waiting: slow breathe. */
