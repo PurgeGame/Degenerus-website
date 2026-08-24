@@ -1,9 +1,8 @@
-// /app/components/app-onboarding.js — one-time first-visit welcome.
+// /app/components/app-onboarding.js — one-time first-visit choice.
 //
-// A new browser gets one concise choice before play: connect through the app's
-// existing EIP-6963/WalletConnect flow, or learn the app in the fully off-chain
-// scripted tutorial. The dismissal is browser-local; no wallet address or
-// tracking identifier is persisted.
+// A new browser can connect through the app's existing EIP-6963/WalletConnect
+// flow or dismiss into the read-only demo. The dismissal is browser-local; no
+// wallet address or tracking identifier is persisted.
 
 import { get, subscribe } from '../app/store.js';
 import { connectWithPicker } from '../app/wallet.js';
@@ -36,22 +35,11 @@ export class AppOnboarding extends HTMLElement {
     this.hidden = true;
     this.innerHTML = `
       <div class="onb-backdrop" data-bind="onb-dismiss"></div>
-      <section class="onb-dialog" role="dialog" aria-modal="true" aria-labelledby="onb-title" aria-describedby="onb-copy">
-        <button type="button" class="onb-close" data-bind="onb-dismiss" aria-label="Close welcome">×</button>
-        <img class="onb-logo" src="/whitepaper/flame-logo.svg" alt="">
-        <p class="onb-kicker">WELCOME TO DEGENERUS</p>
-        <h2 id="onb-title">Ready to play?</h2>
-        <p id="onb-copy" class="onb-copy">
-          Connect a wallet to buy tickets, open rewards, and resolve your games.
-          Or learn the whole flow first in a safe, scripted training run.
-        </p>
+      <section class="onb-dialog" role="dialog" aria-modal="true" aria-label="Choose how to enter Degenerus">
         <div class="onb-actions">
-          <button type="button" class="onb-connect" data-bind="onb-connect">Connect wallet</button>
-          <a class="onb-tutorial" data-bind="onb-tutorial" href="/learn/tutorial/">
-            Try tutorial
-          </a>
+          <button type="button" class="onb-connect" data-bind="onb-connect">Connect Wallet</button>
+          <button type="button" class="onb-tutorial onb-demo" data-bind="onb-demo">View Demo</button>
         </div>
-        <button type="button" class="onb-later" data-bind="onb-dismiss">Not now</button>
       </section>
     `;
 
@@ -60,8 +48,8 @@ export class AppOnboarding extends HTMLElement {
     }
     const connect = this.querySelector('[data-bind="onb-connect"]');
     if (connect) connect.addEventListener('click', () => this.#connect());
-    const tutorial = this.querySelector('[data-bind="onb-tutorial"]');
-    if (tutorial) tutorial.addEventListener('click', () => rememberOnboarding());
+    const demo = this.querySelector('[data-bind="onb-demo"]');
+    if (demo) demo.addEventListener('click', () => this.dismiss());
     this.addEventListener('keydown', (event) => {
       if (event?.key === 'Escape') this.dismiss();
     });
@@ -136,7 +124,7 @@ export class AppOnboarding extends HTMLElement {
       this.#busy = false;
       if (button) {
         button.disabled = false;
-        button.textContent = 'Connect wallet';
+        button.textContent = 'Connect Wallet';
       }
     }
   }

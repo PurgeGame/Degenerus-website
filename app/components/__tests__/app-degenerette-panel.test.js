@@ -1260,6 +1260,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending.state, 'ready');
     assert.equal(typeof pending.run, 'function',
       'the shared widget delegates to the panel resolve path');
+    const stored = JSON.parse(localStorage.getItem(
+      `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`,
+    ));
+    assert.equal(stored.rngWord, '43981',
+      'the public fulfilled word survives a refresh for an exact bounty Hero replay');
 
     el.disconnectedCallback();
   });
@@ -1729,11 +1734,17 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       partitionDegeneretteRewardLegs,
       withDegeneretteRecordContext,
     } = await import('../app-degenerette-panel.js');
+    const recordBoxBetId = 12_829_128_780_424_407_998n;
     const legs = [
       { legType: 'spin', spinType: 'wwxrp' },
       { legType: 'spin', spinType: 'flip' },
       { legType: 'spin', spinType: 'eth' },
-      { legType: 'spin', spinType: 'record' },
+      {
+        legType: 'spin',
+        spinType: 'record',
+        betId: recordBoxBetId,
+        reels: [{ spinIndex: 0 }, { spinIndex: 1 }, { spinIndex: 2 }],
+      },
       { legType: 'spin', spinType: 'unknown_3' },
     ];
 
@@ -1744,7 +1755,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const packed = (305n << 202n) | (900n << 220n);
     assert.equal(dgnDecodePacked(packed).recordBountyStake, 900n * 10n ** 18n);
     assert.deepEqual(
-      withDegeneretteRecordContext(split.recordBountySpins, packed).map((spin) => ({
+      withDegeneretteRecordContext(split.recordBountySpins, packed, {
+        rngWord: 123_456_789n,
+        parentBetId: 42n,
+      }).map((spin) => ({
         type: spin.spinType,
         stake: spin.recordStake,
         activity: spin.activityScore,
@@ -1755,6 +1769,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       ],
       'indexed replay preserves the parent inputs needed to explain a survival bust',
     );
+    const [record] = withDegeneretteRecordContext(split.recordBountySpins, packed, {
+      rngWord: 123_456_789n,
+      parentBetId: 42n,
+    });
+    assert.deepEqual(record.reels.map((reel) => reel.heroQuadrant), [1, 2, 1],
+      'the replay carries the contract-derived Hero for each individual bounty reel');
   });
 
   test('a new placement invalidates an older in-flight result and luckbox replay', () => {

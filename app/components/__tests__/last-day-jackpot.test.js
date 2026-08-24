@@ -325,6 +325,20 @@ test('the host does not add a day-wide winner effect over a losing scratch phase
     'the replay board is the sole, phase-aware owner of the jackpot winner effect');
 });
 
+test('the opening-level replay rebuilds its synthetic rolls after awards load', () => {
+  const flowStart = REPLAY_PANEL_SRC.indexOf('async #onDayChange(e)');
+  const flowEnd = REPLAY_PANEL_SRC.indexOf('\n  #onPlayerChange(', flowStart);
+  const flow = REPLAY_PANEL_SRC.slice(flowStart, flowEnd);
+  const hydrateAt = flow.indexOf(
+    'this.#distributions = Array.isArray(detail?.distributions) ? detail.distributions : [];',
+  );
+  const rebuildAt = flow.indexOf('this.#repairOpeningFlipRolls(dayNum);', hydrateAt);
+
+  assert.ok(hydrateAt >= 0, 'the exact-day distribution feed hydrates the replay');
+  assert.ok(rebuildAt > hydrateAt,
+    'the level-1 FLIP board is rebuilt after hydration, not only while the feed is empty');
+});
+
 test('only live scratch covers show the custom coin cursor', () => {
   assert.match(
     REPLAY_CSS,
@@ -988,6 +1002,33 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     }
   });
 
+  test('a same-day poll cannot reset a player-started jackpot board', () => {
+    const dayStart = REPLAY_PANEL_SRC.indexOf('async #onDayChange(e)');
+    const dayEnd = REPLAY_PANEL_SRC.indexOf('\n  #onPlayerChange(', dayStart);
+    const dayFlow = REPLAY_PANEL_SRC.slice(dayStart, dayEnd);
+    const ownershipGuard = dayFlow.indexOf('sameDay && this.#interactiveSelectionActive()');
+    const destructiveReset = dayFlow.indexOf('this.#resetCards()');
+    assert.ok(ownershipGuard >= 0 && destructiveReset > ownershipGuard,
+      'same-day polling yields before the full new-day reset');
+
+    const revealStart = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
+    const revealEnd = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', revealStart);
+    const revealFlow = REPLAY_PANEL_SRC.slice(revealStart, revealEnd);
+    assert.match(revealFlow,
+      /#claimInteractiveReveal\(selectionKey\)[\s\S]*?await playerTraitsPromise/,
+      'the click invalidates older persisted work before its own async read');
+    assert.match(revealFlow,
+      /persisted && this\.#interactiveSelectionActive\(selectionKey\)\) return false;[\s\S]*?this\.#resetCards\(\)/,
+      'a stale instant restore yields before it can clear the live reel');
+
+    const persistedStart = REPLAY_PANEL_SRC.indexOf('async #applyPersistedRevealState(');
+    const persistedEnd = REPLAY_PANEL_SRC.indexOf('\n  /**\n   * A completed two-roll day', persistedStart);
+    const persistedFlow = REPLAY_PANEL_SRC.slice(persistedStart, persistedEnd);
+    assert.match(persistedFlow,
+      /await this\.#loadPlayerTraits\(\);[\s\S]*?this\.#interactiveSelectionActive\(\)\) return false;[\s\S]*?this\.#startIdleSpin\(\)/,
+      'an uncleared-state read that loses the race cannot restart attract mode');
+  });
+
   test('a bonus press that never reaches the reel releases its own busy latch', () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerBonusRoll()');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #syncDrawToggleAffordance()', start);
@@ -1264,6 +1305,12 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'a stable cleared result owns the board once loading finishes');
     assert.equal(replayAttractShouldRun({ revealCleared: null, spinning: true }), false,
       'the quiet attract reel yields to the real jackpot spin');
+    assert.equal(replayAttractShouldRun({
+      revealCleared: false,
+      dayLoading: true,
+      dayWarming: true,
+      interactiveReveal: true,
+    }), false, 'same-day polling cannot reclaim a player-started reveal');
     assert.match(REPLAY_PANEL_SRC,
       /this\.#startIdleSpin\(\);\s*\n\s*this\.refreshDays\(\)/,
       'the first attract frame is painted before the initial jackpot request');

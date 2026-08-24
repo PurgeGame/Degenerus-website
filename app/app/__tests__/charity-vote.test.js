@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as charityVoteMod from '../charity-vote.js';
 import * as contractsMod from '../contracts.js';
 import * as storeMod from '../store.js';
+import { CHAIN } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const PRIOR = '0x1111111111111111111111111111111111111111';
@@ -85,7 +86,7 @@ describe('GNRUS charity approval voting', () => {
   });
 
   test('sums every GNRUS yield share once and replaces the recent reorg tail', async () => {
-    const deploy = 45_702_811;
+    const deploy = Number(CHAIN.deployBlock);
     let head = deploy + 50_100;
     let events = [
       { blockNumber: deploy + 10, index: 1, transactionHash: '0xaaa', data: encodedUint(5n) },
@@ -121,7 +122,7 @@ describe('GNRUS charity approval voting', () => {
     assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 17n,
       'the cached old event is retained while the overlapping tail is replaced, not duplicated');
     assert.equal(calls.length, 3, 'a refresh reads only the short reorg tail');
-    assert.match(charityVoteMod.gnrusLifetimeFundingCacheKey(), /84532:45702811:/);
+    assert.ok(charityVoteMod.gnrusLifetimeFundingCacheKey().includes(`:${deploy}:`));
   });
 
   test('preflights and sends the selected approval through the connected signer', async () => {

@@ -1665,6 +1665,23 @@ describe('buildBoxSpinBoard', () => {
       'an S1 whose Hero cannot be reconstructed does not invent a misleading marker');
   });
 
+  test('uses an exact bounty-reel Hero when the packed score is ambiguous', () => {
+    const board = buildBoxSpinBoard({
+      spinType: 'record',
+      payout: 0n,
+      reels: [{
+        spinIndex: 0,
+        playerTicket: 0xC0804000n,
+        resultTicket: 0xC1814100n,
+        score: 2,
+        heroQuadrant: 2,
+      }],
+    });
+
+    assert.equal(board.rows[0].heroIdx, 2,
+      'the exact parent-seed derivation wins where three Hero choices fit S2');
+  });
+
   test('a one-symbol box win carries the seed-selected hero into the board', () => {
     const board = buildBoxSpinBoard({
       betId: 9_350_854_869_760_465_101n,

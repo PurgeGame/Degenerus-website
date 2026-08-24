@@ -72,14 +72,17 @@ const TRANSFER_EVENTS_ABI = [
 ];
 
 /**
- * A BoxSpin's low seed bits are preserved in its synthetic bet id. The
- * contract chooses the hero quadrant with `seed & 3`, so the same two bits are
- * the authoritative explanation for a one-symbol S2 payout in the reveal.
+ * A single-reel BoxSpin's low seed bits are preserved in its synthetic bet id.
+ * WWXRP and ETH choose the hero quadrant with `seed & 3`, so the same two bits
+ * are authoritative there. FLIP and record chains hash a fresh seed per reel;
+ * their Hero cannot be read from the group id.
  */
 export function boxSpinHeroQuadrant(betId) {
   try {
     const id = BigInt(betId ?? 0);
-    return ((id >> 63n) & 1n) === 1n ? Number(id & 3n) : null;
+    if (((id >> 63n) & 1n) !== 1n) return null;
+    const spinType = Number((id >> 60n) & 0x7n);
+    return spinType === 1 || spinType === 3 ? null : Number(id & 3n);
   } catch (_e) {
     return null;
   }
@@ -1207,7 +1210,7 @@ export async function enrichLootboxBoonLegs(legs, {
  * Decode a BoxSpin packedSpins word into reels (indexer-parity).
  * @param {bigint} betId
  * @param {bigint} packed
- * @returns {{boxOrigin: boolean, spinType: string, spinCount: number,
+ * @returns {{betId: bigint, boxOrigin: boolean, spinType: string, spinCount: number,
  *            heroQuadrant: number|null,
  *            survived: boolean|null,
  *            reels: Array<{spinIndex: number, score: number,
@@ -1219,9 +1222,9 @@ export function decodeBoxSpin(betId, packed) {
   const id = BigInt(betId ?? 0);
   const p = BigInt(packed ?? 0);
   const boxOrigin = ((id >> 63n) & 1n) === 1n;
-  const heroQuadrant = boxSpinHeroQuadrant(id);
   const typeCode = Number((id >> 60n) & 0x7n);
   const spinType = SPIN_TYPES[typeCode] ?? `unknown_${typeCode}`;
+  const heroQuadrant = boxSpinHeroQuadrant(id);
   const spinCount = Number((p >> COUNT_SHIFT) & 0xFFn);
   const survived = spinType === 'flip' || spinType === 'record'
     ? ((p >> SURVIVED_SHIFT) & 1n) === 1n
@@ -1241,7 +1244,7 @@ export function decodeBoxSpin(betId, packed) {
       resultTraits: dgnUnpackTicket(resultTicket),
     });
   }
-  return { boxOrigin, spinType, spinCount, heroQuadrant, survived, reels };
+  return { betId: id, boxOrigin, spinType, spinCount, heroQuadrant, survived, reels };
 }
 
 /**

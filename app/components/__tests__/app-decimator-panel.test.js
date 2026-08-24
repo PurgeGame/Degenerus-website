@@ -770,7 +770,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'the custom-chest action labels the section while boon and quest markers keep dedicated slots');
     assert.match(el.innerHTML,
-      /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-presale-row" hidden[\s\S]*?data-bind="dec-custom-box-buy">BUY IN NOW<\/button>/,
+      /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-presale-row" hidden[\s\S]*?data-bind="dec-custom-box-buy"[\s\S]*?data-bind="dec-custom-box-buy-action">BUY IN<\/span>[\s\S]*?data-bind="dec-custom-box-buy-amount" hidden/,
       'custom and eligible presale boxes share one chooser and one purchase action');
     assert.equal(el.querySelector('[data-bind="dec-presale-toggle"]'), null,
       'there is no second presale button competing for the Luckbox header');
@@ -1592,6 +1592,11 @@ describe('combined ticket + lootbox buy', () => {
     luckbox.dispatchEvent({ type: 'input' });
     assert.equal(effect.hidden, false);
     assert.equal(effect.textContent, '+25 TICKETS BOON · +1.25 ETH BOON');
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header > \.dec-flip-credit__boon\s*\{[^}]*position:\s*relative;[^}]*width:\s*100%;[^}]*grid-column:\s*1;[^}]*grid-row:\s*3;[^}]*padding-right:\s*0\.9rem;[^}]*overflow:\s*hidden;/s,
+      'ticket-boon detail occupies a real row fully inside the bonus bubble',
+    );
     assert.match(el.querySelector('[data-bind="dec-flip-credit"]').getAttribute('aria-label'),
       /Purchase boon: \+25 TICKETS BOON, \+1\.25 ETH BOON/);
     el.disconnectedCallback();
@@ -3239,7 +3244,7 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('Custom Box starts at one box, preserves its draft, and buys from the chooser action', async () => {
+  test('Custom Box starts at one box, resets on dismiss, and buys from the chooser action', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
@@ -3286,19 +3291,28 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(amountSelections, 1, 'typing immediately replaces the selected amount');
     assert.equal(selection.hidden, false);
     assert.equal(selection.textContent, '1 CUSTOM · 0.01 ETH EACH');
+    assert.equal(el.querySelector('[data-bind="dec-custom-box-buy-amount"]').textContent, '0.01 ETH',
+      'the chooser action quotes the transaction amount');
     assert.equal(toggle.getAttribute('aria-label'), 'Edit 1 custom Luckbox at 0.01 ETH each');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.01 ETH/);
     size.value = '0.02';
     size.dispatchEvent({ type: 'input' });
     assert.equal(selection.textContent, '1 CUSTOM · 0.02 ETH EACH');
+    assert.equal(el.querySelector('[data-bind="dec-custom-box-buy-amount"]').textContent, '0.02 ETH',
+      'the chooser action follows the edited custom-box total');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.02 ETH/);
 
     el.querySelector('[data-bind="dec-custom-box-close"]').dispatchEvent({ type: 'click' });
     assert.equal(fields.hidden, true, 'the X/backdrop path closes without purchasing');
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(count.value, '1', 'collapsing preserves the selected box');
-    assert.equal(size.value, '0.02', 'collapsing preserves the per-box size');
-    assert.equal(selection.textContent, '1 CUSTOM · 0.02 ETH EACH', 'the collapsed button shows the selected custom box');
+    // Dismissing abandons the draft. These amounts are visible nowhere else, so
+    // carrying them past a cancel would arm the next BUY IN with boxes the
+    // player believed they had thrown away.
+    assert.equal(count.value, '0', 'dismissing resets the box count to zero');
+    assert.equal(size.value, '0.01', 'dismissing resets the per-box size to its default');
+    assert.equal(selection.hidden, true, 'and the collapsed button advertises no selection');
+    assert.doesNotMatch(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box/,
+      'the order summary drops the abandoned box');
     assert.equal(fakeContract._calls.purchase.length, 0, 'cancel never sends a transaction');
     assert.match(
       PURCHASE_DESK_CSS,
@@ -3310,9 +3324,18 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-builder-popover__backdrop\s*\{[^}]*background:\s*#030205;/s,
       'the modal backdrop is opaque so the page cannot show through',
     );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-builder-dialog__done\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto;[^}]*place-content:\s*center;/s,
+      'the popup action keeps its label and live amount together inside the button',
+    );
 
     toggle.dispatchEvent({ type: 'click' });
     assert.equal(fields.hidden, false);
+    assert.equal(count.value, '1', 'reopening starts fresh at one box');
+    assert.equal(size.value, '0.01', 'reopening starts fresh at the default size');
+    size.value = '0.02';
+    size.dispatchEvent({ type: 'input' });
     el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
     await settle(100);
     assert.equal(fields.hidden, true, 'the chooser closes as its purchase is submitted');
@@ -3325,6 +3348,87 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.equal(count.value, '0', 'the mined purchase clears the submitted box count');
     assert.equal(selection.hidden, true, 'the combined header clears after the mined purchase');
+    el.disconnectedCallback();
+  });
+
+  test('the chooser previews which physical case the configured size buys', async () => {
+    const el = instantiate();
+    await settle(60);
+    const preview = el.querySelector('[data-bind="dec-custom-box-preview"]');
+    const art = el.querySelector('[data-bind="dec-custom-box-preview-art"]');
+    const title = el.querySelector('[data-bind="dec-custom-box-preview-title"]');
+    const detail = el.querySelector('[data-bind="dec-custom-box-preview-detail"]');
+    const size = el.querySelector('[name="dec-box-custom-eth"]');
+    const count = el.querySelector('[name="dec-box-custom-count"]');
+
+    assert.equal(preview.hidden, true, 'nothing is previewed before a box is configured');
+
+    el.querySelector('[data-bind="dec-custom-box-toggle"]').dispatchEvent({ type: 'click' });
+    // The fixture ticket price is 0.04 ETH, so silver starts at the 1x/5x
+    // midpoint (3x = 0.12) and gold at 16x (0.64) — lootbox-value-tone.js:46.
+    assert.equal(preview.hidden, false, 'opening with one box previews that box');
+    assert.equal(title.textContent, 'SMALL LUCKBOX');
+    assert.equal(detail.textContent, '1 BOX · 0.01 ETH');
+    const smallArt = art.getAttribute('src');
+    assert.match(smallArt, /case-small/, 'the small case render is shown');
+
+    // The tier is a threshold on the ticket price, not a free choice: silver
+    // starts at the 1x/5x midpoint and gold at 16x (lootbox-value-tone.js:46).
+    size.value = '0.11';
+    size.dispatchEvent({ type: 'input' });
+    assert.equal(title.textContent, 'SMALL LUCKBOX', 'just under the midpoint is still bronze');
+
+    size.value = '0.12';
+    size.dispatchEvent({ type: 'input' });
+    assert.equal(title.textContent, 'MEDIUM LUCKBOX', '3x the ticket price crosses into silver');
+    assert.match(art.getAttribute('src'), /case-medium/);
+
+    size.value = '0.64';
+    size.dispatchEvent({ type: 'input' });
+    assert.equal(title.textContent, 'LARGE LUCKBOX', '16x the ticket price crosses into gold');
+    assert.match(art.getAttribute('src'), /case-large/);
+
+    count.value = '3';
+    count.dispatchEvent({ type: 'input' });
+    assert.equal(detail.textContent, '3 BOXES · 0.64 ETH EACH',
+      'the caption follows the quantity as well as the size');
+
+    count.value = '0';
+    count.dispatchEvent({ type: 'input' });
+    assert.equal(preview.hidden, true, 'clearing the quantity retires the preview');
+
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-box-preview\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s,
+      'the author display rule needs its own [hidden] companion to ever hide',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('the chooser action sends even while the main BUY IN rail is disabled', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(60);
+
+    el.querySelector('[data-bind="dec-custom-box-toggle"]').dispatchEvent({ type: 'click' });
+    const count = el.querySelector('[name="dec-box-custom-count"]');
+    assert.equal(count.value, '1');
+
+    // The chooser's action is its own commit. Deferring to the main rail's
+    // enabled state made a real, fully configured order silently do nothing;
+    // #onBuyClick already owns the in-flight guard and every invalid-order path.
+    const mainBuy = el.querySelector('[data-bind="dec-buy-cta"]');
+    mainBuy.disabled = true;
+
+    el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
+    await settle(100);
+
+    assert.equal(fakeContract._calls.purchase.length, 1,
+      'the configured box still reaches the guarded purchase path');
+    assert.equal(el.querySelector('[data-bind="dec-custom-box-fields"]').hidden, true,
+      'and the chooser closes behind the submitted transaction');
+    assert.equal(count.value, '0', 'the mined purchase clears the submitted box count');
     el.disconnectedCallback();
   });
 

@@ -87,8 +87,9 @@ export function replayAttractShouldRun({
   dayLoading = false,
   dayWarming = false,
   spinning = false,
+  interactiveReveal = false,
 } = {}) {
-  return !spinning && (
+  return !spinning && !interactiveReveal && (
     revealCleared !== true
     || Boolean(dayLoading)
     || Boolean(dayWarming)
@@ -1646,6 +1647,20 @@ class ReplayPanel extends HTMLElement {
     return `${Number(this.#selectedDay)}|${String(this.#selectedPlayer).toLowerCase()}`;
   }
 
+  #interactiveSelectionActive(selectionKey = this.#selectionKey()) {
+    return selectionKey != null && selectionKey === this.#interactiveRevealKey;
+  }
+
+  #claimInteractiveReveal(selectionKey) {
+    if (selectionKey == null) return;
+    this.#interactiveRevealKey = selectionKey;
+    // Invalidate a persisted-state restore that began before the press. Its
+    // network read may finish after the real reel starts; that older task must
+    // not put the attract reel or an instant restored board over the player's
+    // live result.
+    this.#hostRevealSeq += 1;
+  }
+
   #persistedRevealKey(cleared, allRollsCleared) {
     const selection = this.#selectionKey() || 'selection-pending';
     return `${selection}|${cleared ? 'cleared' : 'waiting'}`
@@ -1657,6 +1672,7 @@ class ReplayPanel extends HTMLElement {
       || this.#selectedDay == null
       || !this.#selectedPlayer
       || this.#loadedDay !== this.#selectedDay) return false;
+    if (this.#interactiveSelectionActive()) return false;
 
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
     if (!rngEntry || !rngEntry.finalWord || rngEntry.finalWord === '0') {
@@ -1675,7 +1691,8 @@ class ReplayPanel extends HTMLElement {
 
     if (cleared) {
       this.#stopIdleSpin();
-      await this.#triggerReveal({ instant: true, persisted: true });
+      const restored = await this.#triggerReveal({ instant: true, persisted: true });
+      if (!restored) return false;
       if (seq !== this.#hostRevealSeq
         || day !== this.#selectedDay
         || player !== this.#selectedPlayer) return false;
@@ -1685,7 +1702,8 @@ class ReplayPanel extends HTMLElement {
       if (seq !== this.#hostRevealSeq
         || day !== this.#selectedDay
         || player !== this.#selectedPlayer
-        || this.#hostRevealCleared !== false) return false;
+        || this.#hostRevealCleared !== false
+        || this.#interactiveSelectionActive()) return false;
       this.#startIdleSpin();
     }
 
@@ -1728,6 +1746,7 @@ class ReplayPanel extends HTMLElement {
       dayLoading: this.hasAttribute('data-day-loading'),
       dayWarming: this.hasAttribute('data-day-warming'),
       spinning: this.#spinning,
+      interactiveReveal: this.#interactiveSelectionActive(),
     });
   }
 
@@ -2234,6 +2253,11 @@ class ReplayPanel extends HTMLElement {
     const dayNum = Number.parseInt(e?.target?.value, 10);
     const validDay = Number.isInteger(dayNum) && dayNum > 0;
     const sameDay = validDay && Number(this.#selectedDay) === dayNum;
+    // A same-day bridge/poll event is never a new reveal. Once the player has
+    // started this exact day/address, preserve its landed or in-flight board
+    // even if a transient warming flag makes #dayDataReady() false. The player
+    // could not have started this reveal without complete exact-day data.
+    if (sameDay && this.#interactiveSelectionActive()) return true;
     // Same-day selector refreshes are normally inert. A day whose exact roll
     // payloads failed during rollover is the exception: keep it masked and
     // retry instead of declaring a half-loaded scratch board ready.
@@ -2338,6 +2362,12 @@ class ReplayPanel extends HTMLElement {
       const detail = await this.#loadDayDetail(dayNum);
       if (!loadIsCurrent()) return finishStaleLoad();
       this.#distributions = Array.isArray(detail?.distributions) ? detail.distributions : [];
+      // The opening level has no Roll 1 endpoint, so its main FLIP board is
+      // synthesized from this distribution feed. #repairOpeningFlipRolls()
+      // also runs before the readiness check above to let that 404 path load
+      // the detail payload; rebuild once more now that the awards actually
+      // exist or every public quadrant is permanently rendered as 0 x 0.
+      this.#repairOpeningFlipRolls(dayNum);
       const rng = this.#rngDays.find((entry) => Number(entry?.day) === dayNum);
       this.#dayRoll2 = includeEarlyBirdTicketWins({
         roll1: this.#dayRoll1,
@@ -2783,7 +2813,11 @@ class ReplayPanel extends HTMLElement {
     if (!rngEntry || !rngEntry.finalWord || rngEntry.finalWord === '0') return;
 
     const selectionKey = this.#selectionKey();
-    if (!persisted) this.#interactiveRevealKey = selectionKey;
+    if (persisted) {
+      if (this.#interactiveSelectionActive(selectionKey)) return false;
+    } else {
+      this.#claimInteractiveReveal(selectionKey);
+    }
 
     // Create/resume WebAudio while the reveal click still owns user activation.
     // Jackpot cues are synthesized locally, so the spin never waits on an
@@ -2822,6 +2856,10 @@ class ReplayPanel extends HTMLElement {
 
       await playerTraitsPromise; // ensure traits loaded for spin coloring
       if (this.#selectionKey() !== selectionKey) return false;
+      // A persisted restore can begin before the player's click and finish its
+      // trait read afterward. At that point the click owns the selection; do
+      // not let the older restore clear or instantly replace the live reel.
+      if (persisted && this.#interactiveSelectionActive(selectionKey)) return false;
 
       // Keep the existing attract/result face painted during the asynchronous
       // trait reads above. Clear it only when the derived player result is
@@ -3225,7 +3263,7 @@ class ReplayPanel extends HTMLElement {
     // Resume WebAudio while the bonus click still owns user activation.
     try { this.#getAudio(); } catch (_error) { /* visuals remain authoritative */ }
     const selectionKey = this.#selectionKey();
-    this.#interactiveRevealKey = selectionKey;
+    this.#claimInteractiveReveal(selectionKey);
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
 

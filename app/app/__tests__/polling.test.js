@@ -14,6 +14,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as storeMod from '../store.js';
+import { CHAIN } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Stub document for the node runtime (polling.js gates on `typeof document`).
@@ -629,7 +630,10 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
             day: 21,
             level: 4,
             summary: {
-              blockRange: { start: '45710000', end: '45710001' },
+              blockRange: {
+                start: String(Number(CHAIN.deployBlock) + 100),
+                end: String(Number(CHAIN.deployBlock) + 101),
+              },
               rollOne: { eth: [], tickets: [], solo: null },
               rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
             },
@@ -760,7 +764,10 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
             day: 21,
             level: 4,
             summary: {
-              blockRange: { start: '45710000', end: '45710001' },
+              blockRange: {
+                start: String(Number(CHAIN.deployBlock) + 100),
+                end: String(Number(CHAIN.deployBlock) + 101),
+              },
               rollOne: { eth: [], tickets: [], solo: null },
               rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
             },

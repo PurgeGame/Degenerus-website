@@ -96,21 +96,25 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/player-dropdown.js'), -1, 'search script removed');
   });
 
-  test('first-visit onboarding offers wallet connect and the scripted tutorial', () => {
+  test('first-visit onboarding offers wallet connect and the read-only demo', () => {
     assert.ok(html.includes('<app-onboarding>'), 'onboarding element mounted');
     assert.ok(html.includes('src="/app/components/app-onboarding.js"'),
       'onboarding component script loaded');
   });
 
-  test('the splash tutorial links to the playable training run', () => {
+  test('the splash contains only Connect Wallet and View Demo choices', () => {
     assert.match(onboarding,
-      /<a[^>]*class="onb-tutorial"[^>]*href="\/learn\/tutorial\/"/,
-      'tutorial is a direct link to the training route');
-    assert.doesNotMatch(onboarding, /onb-tutorial--soon|COMING SOON|aria-disabled="true"/,
-      'finished tutorial is not presented as disabled');
+      /<button[^>]*class="onb-connect"[^>]*>Connect Wallet<\/button>/,
+      'the primary choice opens the wallet flow');
+    assert.match(onboarding,
+      /<button[^>]*class="onb-tutorial onb-demo"[^>]*>View Demo<\/button>/,
+      'the secondary choice enters the read-only app');
+    assert.doesNotMatch(onboarding,
+      /\/learn\/tutorial\/|Try tutorial|WELCOME TO DEGENERUS|Ready to play\?|Not now/,
+      'unfinished tutorial and the old splash copy are not advertised');
     assert.match(appCss,
       /\.onb-tutorial\s*\{[^}]*rgba\(245, 166, 35, 0\.55\)[^}]*cursor:\s*pointer/s,
-      'the tutorial link has an active gold treatment');
+      'the demo choice retains the active gold treatment');
   });
 
   test('aggregate claims banner and winnings strip are removed', () => {

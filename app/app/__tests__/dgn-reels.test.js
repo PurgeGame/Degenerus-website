@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 
 import {
   dgnResultSeed, dgnPackedTraits, dgnScore, dgnHouseTraits, dgnDeriveSpins,
+  dgnRecordBountyHeroQuadrants,
 } from '../dgn-reels.js';
 
 const VECTORS = [
@@ -50,6 +51,22 @@ const VECTORS = [
 ];
 
 describe('dgn-reels: contract parity', () => {
+  test('biggest-spin bounty derives one exact Hero per reel from its parent bet', () => {
+    const boxBetId = 12_829_128_780_424_407_998n;
+    assert.deepEqual(dgnRecordBountyHeroQuadrants({
+      rngWord: 123_456_789n,
+      parentBetId: 42n,
+      boxBetId,
+      spinCount: 3,
+    }), [1, 2, 1]);
+    assert.equal(dgnRecordBountyHeroQuadrants({
+      rngWord: 123_456_789n,
+      parentBetId: 42n,
+      boxBetId: boxBetId + 1n,
+      spinCount: 3,
+    }), null, 'a mismatched child event cannot borrow another bet\'s Hero quadrants');
+  });
+
   test('seed, traits, WWXRP rig and score match EVM output on every pinned vector', () => {
     for (const [word, index, spinIdx, pick, hero, seed, traits, rigged, score] of VECTORS) {
       const label = `word=${word.slice(0, 8)}… idx=${index} spin=${spinIdx} hero=${hero}`;

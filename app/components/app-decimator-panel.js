@@ -87,6 +87,7 @@ import {
 import {
   applyLootboxCasePresentation,
   lootboxCaseAssets,
+  lootboxCaseModel,
 } from '../app/lootbox-value-tone.js';
 // Reveal plumbing: ticket purchases queue a pack-opening reveal; lootbox legs
 // found in the BUY receipt itself (afking idx-0 auto-opens) reveal instantly.
@@ -152,6 +153,7 @@ const BUY_IN_COMPACT_CASE_ART = Object.freeze({
 // render with the four-part front panel. Reveal/opening art stays on the
 // current animation set.
 const BUY_IN_GOLD_CASE_ART = '/app/assets/lootbox/degenerus-lootbox-case-large-v36-buy-in-card.webp';
+const LOOTBOX_CASE_LABELS = Object.freeze({ small: 'SMALL', medium: 'MEDIUM', large: 'LARGE' });
 const BUY_IN_COMPACT_CASE_GEOMETRY = Object.freeze({
   small: Object.freeze({
     priceTop: '31.3%', priceHeight: '18%', priceWidth: '58%',
@@ -1225,6 +1227,22 @@ class AppDecimatorPanel extends HTMLElement {
                 <strong>ETH</strong>
               </span>
             </label>
+            <!-- Which physical case the configured ETH-each buys. The tier is
+                 a threshold on the ticket price, not a free choice, so a player
+                 sizing a custom box cannot otherwise tell which case they are
+                 about to get until it lands in the tray. -->
+            <div class="dec-box-preview" data-bind="dec-custom-box-preview" hidden>
+              <span class="dec-box-preview__art" aria-hidden="true">
+                <img class="dec-box-preview__image" data-bind="dec-custom-box-preview-art"
+                     src="${BUY_IN_COMPACT_CASE_ART.small}" alt=""
+                     loading="lazy" decoding="async" fetchpriority="low">
+              </span>
+              <span class="dec-box-preview__copy">
+                <strong data-bind="dec-custom-box-preview-title">SMALL LUCKBOX</strong>
+                <small data-bind="dec-custom-box-preview-detail">—</small>
+              </span>
+            </div>
+
             <!-- Live credit-gated presale appears as an option in this same
                  chooser only while the acting player can use it. -->
             <div class="dec-presale__offer" data-bind="dec-presale-row" hidden>
@@ -1243,7 +1261,10 @@ class AppDecimatorPanel extends HTMLElement {
               </div>
             </div>
             <button type="button" class="dec-builder-dialog__done" data-write
-                    data-bind="dec-custom-box-buy">BUY IN NOW</button>
+                    data-bind="dec-custom-box-buy">
+              <span data-bind="dec-custom-box-buy-action">BUY IN</span>
+              <strong data-bind="dec-custom-box-buy-amount" hidden></strong>
+            </button>
           </section>
         </div>
 
@@ -1513,8 +1534,27 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
-  #closeCustomBoxPopover({ restoreFocus = true } = {}) {
+  // Only the fields this popover owns. The Small / Medium / Large presets live
+  // on the builder cards outside it, so dismissing the chooser must not touch
+  // a selection the player made out there.
+  #resetCustomBoxDraft() {
+    const count = this.querySelector('[name="dec-box-custom-count"]');
+    if (count) count.value = '0';
+    const size = this.querySelector('[name="dec-box-custom-eth"]');
+    if (size) size.value = '0.01';
+    const presale = this.querySelector('[name="dec-presale-box-eth"]');
+    if (presale) presale.value = '0';
+  }
+
+  #closeCustomBoxPopover({ restoreFocus = true, reset = false } = {}) {
     const wasOpen = this.#customBoxOpen;
+    // Dismissing abandons the draft. These amounts are only ever visible inside
+    // this popover, so leaving them armed behind a closed chooser would put
+    // boxes the player thought they had cancelled into the next BUY IN.
+    if (reset && wasOpen) {
+      this.#resetCustomBoxDraft();
+      this.#updateTotalLabel();
+    }
     this.#customBoxOpen = false;
     this.#renderBuilderPopovers();
     if (wasOpen && restoreFocus) {
@@ -1741,22 +1781,21 @@ class AppDecimatorPanel extends HTMLElement {
     for (const close of Array.from(
       this.querySelectorAll?.('[data-bind="dec-custom-box-close"]') || [],
     )) {
-      close.addEventListener?.('click', () => this.#closeCustomBoxPopover());
+      close.addEventListener?.('click', () => this.#closeCustomBoxPopover({ reset: true }));
     }
     this.querySelector('[data-bind="dec-custom-box-fields"]')?.addEventListener?.(
       'keydown', (event) => {
-        if (event?.key === 'Escape') this.#closeCustomBoxPopover();
+        if (event?.key === 'Escape') this.#closeCustomBoxPopover({ reset: true });
       },
     );
     this.querySelector('[data-bind="dec-custom-box-buy"]')?.addEventListener?.(
       'click', (event) => {
+        // This is the chooser's commit, not a hand-off to the main rail: it
+        // closes WITHOUT resetting (the draft is what the tx spends) and always
+        // sends. #onBuyClick owns the in-flight guard and every empty/invalid
+        // order path, so the main CTA being momentarily disabled is not a
+        // reason to swallow the click and leave the player with nothing.
         this.#closeCustomBoxPopover({ restoreFocus: false });
-        const mainBuy = this.querySelector('[data-bind="dec-buy-cta"]');
-        if (!mainBuy || mainBuy.disabled) {
-          try { mainBuy?.focus?.({ preventScroll: true }); }
-          catch (_e) { /* focus is progressive enhancement */ }
-          return;
-        }
         void this.#onBuyClick(event);
       },
     );
@@ -2661,6 +2700,48 @@ class AppDecimatorPanel extends HTMLElement {
     );
   }
 
+  // The case tier is decided by ETH-per-box against the live ticket price
+  // (lootbox-value-tone.js:145), so it moves as the player types. Mirror the
+  // Buy In card renders rather than the reveal art: this is the same three
+  // physical cases the preset cards above already show.
+  #renderCustomBoxPreview(selection = this.#boxSelection()) {
+    const host = this.querySelector('[data-bind="dec-custom-box-preview"]');
+    if (!host) return;
+    const priceWei = this.#ticketPriceWei();
+    const price = priceWei == null ? 0n : BigInt(priceWei);
+    const size = BigInt(selection?.customSizeWei ?? 0n);
+    const count = Number(selection?.customCount ?? 0);
+    // Naming a tier needs a live price. Without one the model resolver falls
+    // back to MEDIUM, which would show the player a case they may not get.
+    const known = price > 0n && size > 0n && Number.isInteger(count) && count > 0;
+    host.hidden = !known;
+    if (known) host.removeAttribute?.('hidden');
+    else {
+      host.setAttribute?.('hidden', '');
+      return;
+    }
+    const model = lootboxCaseModel(size, price);
+    const art = this.querySelector('[data-bind="dec-custom-box-preview-art"]');
+    if (art) {
+      const src = model === 'large' ? BUY_IN_GOLD_CASE_ART : BUY_IN_COMPACT_CASE_ART[model];
+      if (src && art.getAttribute?.('src') !== src) art.setAttribute?.('src', src);
+    }
+    const title = this.querySelector('[data-bind="dec-custom-box-preview-title"]');
+    if (title) title.textContent = `${LOOTBOX_CASE_LABELS[model]} LUCKBOX`;
+    const detail = this.querySelector('[data-bind="dec-custom-box-preview-detail"]');
+    if (detail) {
+      let each = '—';
+      try { each = `${formatPurchaseEth(size)} ETH`; } catch (_e) { each = '—'; }
+      detail.textContent = count === 1
+        ? `1 BOX · ${each}`
+        : `${count} BOXES · ${each} EACH`;
+    }
+    host.setAttribute?.(
+      'aria-label',
+      `${count} ${LOOTBOX_CASE_LABELS[model].toLowerCase()} luckbox${count === 1 ? '' : 'es'}`,
+    );
+  }
+
   #renderBoxDraft(draft = this.#boxDraft()) {
     const { selection, totalBoxes, costWei, pricePending, error } = draft;
     const group = this.querySelector('[data-bind="dec-lootbox-group"]');
@@ -2687,6 +2768,7 @@ class AppDecimatorPanel extends HTMLElement {
       if (this.#customBoxOpen) customFields.removeAttribute?.('hidden');
       else customFields.setAttribute?.('hidden', '');
     }
+    this.#renderCustomBoxPreview(selection);
 
     for (const name of [
       'dec-box-small',
@@ -3164,6 +3246,20 @@ class AppDecimatorPanel extends HTMLElement {
     btn.setAttribute('aria-label', amountText ? `${actionText} ${amountText}` : actionText);
   }
 
+  #setBoxOptionsBuyAmount(amount = '') {
+    const btn = this.querySelector('[data-bind="dec-custom-box-buy"]');
+    const actionEl = this.querySelector('[data-bind="dec-custom-box-buy-action"]');
+    const amountEl = this.querySelector('[data-bind="dec-custom-box-buy-amount"]');
+    if (!btn || !actionEl || !amountEl) return;
+    const amountText = String(amount || '');
+    actionEl.textContent = 'BUY IN';
+    amountEl.textContent = amountText;
+    amountEl.hidden = !amountText;
+    if (amountEl.hidden) amountEl.setAttribute?.('hidden', '');
+    else amountEl.removeAttribute?.('hidden');
+    btn.setAttribute('aria-label', amountText ? `Buy in ${amountText}` : 'Buy in');
+  }
+
   #updateTotalLabel() {
     this.#renderBountyTriggers();
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
@@ -3193,6 +3289,7 @@ class AppDecimatorPanel extends HTMLElement {
       const output = tq > 0
         ? `for ${ticketCount} ${tq === 1 ? 'ticket' : 'tickets'}`
         : 'for tickets';
+      this.#setBoxOptionsBuyAmount('');
       this.#setBuyLabel(burn ? `Burn ${burn}` : 'Burn FLIP', output);
       this.#renderFlipCredit(null);
       return;
@@ -3215,6 +3312,7 @@ class AppDecimatorPanel extends HTMLElement {
       try { amount = `${formatPurchaseEth(totalWei)} ETH`; } catch (_e) { amount = ''; }
     }
     const action = totalWei > 0n ? 'BUY IN' : 'CLICK TO ADD';
+    this.#setBoxOptionsBuyAmount(amount);
     this.#setBuyLabel(action, amount);
     const recordBountyWei = purchaseRecordBountyWei({
       state: get('app.records'),

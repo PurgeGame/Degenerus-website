@@ -1375,27 +1375,44 @@ class AppBoxStrip extends HTMLElement {
       }
     } catch (error) {
       box.opening = false;
-      const rawMsg = error?.userMessage || error?.message || '';
-      // The decoded revert name is the authoritative race signal; the frontier
-      // read and the message sniff are fallbacks for a provider that strips
-      // revert data.
-      const raced = openBoxRevertName(error) === 'NothingToClaim';
-      const complete = raced ? true : await readLootboxIndexCompletion(box.index);
-      // A competitor can land between the read and our wallet broadcast. Treat
-      // an advanced sweep frontier or an explicit race signal as settlement:
-      // recover the indexed result without dropping the purchase receipt.
-      if (complete === true || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
-        return await this.#replayResolvedBox(box);
-      } else {
-        // Record the failure so the next poll RE-PROBES this box instead of
-        // trusting its latched `ready`. A box the chain has stopped accepting
-        // (the terminal liveness gate reverts every openBox, LootboxModule:648)
-        // otherwise stays armed and fails identically on every click.
+      const failureMessage = compactUiError(error, 'Box did not open. Try again.');
+
+      // A cancelled wallet prompt did not race an on-chain opener. Keep the
+      // exact box armed so the player can deliberately try it again.
+      if (failureMessage === 'Transaction cancelled.') {
         box.openFailures = Math.max(0, Number(box.openFailures) || 0) + 1;
-        this.#renderError(compactUiError(error, 'Box did not open. Try again.'));
+        this.#renderError(failureMessage);
         this.#render();
         return false;
       }
+
+      const revertName = openBoxRevertName(error);
+      if (revertName === 'RngNotReady' || revertName === 'RngLocked') {
+        // The readiness window closed between the two exact pre-flights. Return
+        // to passive RNG polling instead of retrying the same doomed write.
+        box.ready = false;
+        box.resolved = false;
+        box.resultSyncing = false;
+        box.openFailures = Math.max(0, Number(box.openFailures) || 0) + 1;
+        if (this.#addr) _writePending(this.#addr, this.#boxes);
+        this.#render();
+        void this.#runPollCycle();
+        return false;
+      }
+
+      // The box passed the exact-player readiness probe immediately before the
+      // write. A non-cancellation failure at that point is the permissionless
+      // opener race: another wallet settled it first. Ask the same immutable
+      // result feed used by background discovery before waiting for indexing;
+      // never publish another openBox action for this already-credited box.
+      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return true;
+      box.ready = false;
+      box.resolved = true;
+      box.resultSyncing = true;
+      if (this.#addr) _writePending(this.#addr, this.#boxes);
+      this.#render();
+      void this.#runPollCycle();
+      return false;
     }
   }
 

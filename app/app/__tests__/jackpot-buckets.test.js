@@ -3,7 +3,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildRoll1BucketSummaries, buildRoll2BucketSummaries } from '../jackpot-buckets.js';
+import {
+  buildRoll1BucketSummaries,
+  buildRoll2BucketSummaries,
+  splitOpeningFlipDraw,
+} from '../jackpot-buckets.js';
 import { joScaledToTickets } from '../jackpot-rolls.js';
 import { formatEthTruncated } from '../../viewer/utils.js';
 
@@ -81,5 +85,42 @@ describe('public jackpot bucket summaries', () => {
 
     assert.equal(summary.ticketEntriesMin, 13n);
     assert.equal(summary.ticketEntriesMax, 14n);
+  });
+
+  test('opening level FLIP distributions rebuild nonzero main quadrants', () => {
+    const mainTraits = [4, 117, 130, 228];
+    const bonusTraits = [42, 106, 152, 248];
+    const distributions = [
+      ...rows(13, { level: 1, traitId: 4, awardType: 'flip', amount: 100n }),
+      ...rows(13, { level: 1, traitId: 117, awardType: 'flip', amount: 100n }),
+      ...rows(12, { level: 1, traitId: 130, awardType: 'flip', amount: 100n }),
+      ...rows(12, { level: 1, traitId: 228, awardType: 'flip', amount: 100n }),
+      ...rows(10, { level: 2, traitId: 42, awardType: 'flip', amount: 100n }),
+      { level: 1, traitId: null, awardType: 'flip', amount: 300n, winner: PLAYER },
+    ];
+
+    const { mainWins, bonusWins } = splitOpeningFlipDraw(
+      distributions,
+      mainTraits,
+      bonusTraits,
+    );
+    const summaries = buildRoll1BucketSummaries(mainWins, mainTraits, 'FLIP');
+
+    assert.deepEqual(
+      summaries.map(({ winnerCount, perWinWei, currency }) => ({
+        winnerCount,
+        perWinWei,
+        currency,
+      })),
+      [
+        { winnerCount: 13, perWinWei: 100n, currency: 'FLIP' },
+        { winnerCount: 13, perWinWei: 100n, currency: 'FLIP' },
+        { winnerCount: 12, perWinWei: 100n, currency: 'FLIP' },
+        { winnerCount: 12, perWinWei: 100n, currency: 'FLIP' },
+      ],
+      'the level-1 board uses its hydrated FLIP rows instead of the empty Roll 1 response',
+    );
+    assert.equal(bonusWins.length, 11,
+      'future-trait and center awards stay on the opening bonus draw');
   });
 });

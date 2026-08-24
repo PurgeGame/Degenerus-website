@@ -894,6 +894,97 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('an undecodable failed open fetches the competing opener result instead of retrying forever', async () => {
+    let competitorOpened = false;
+    let resultIndexed = false;
+    let resultReads = 0;
+    const calls = { open: 0 };
+    const settledLeg = {
+      uid: 'competitor-result-8',
+      player: ADDR_LC,
+      legType: 'opened',
+      lootboxIndex: 8,
+      transactionHash: '0xcompetitor-result',
+      blockNumber: '203',
+      logIndex: 2,
+      ord: 203_000_002,
+      rewardData: {
+        amount: '123', futureLevel: 9, futureTickets: 0,
+        roundedUp: false, flip: '0',
+      },
+    };
+    const fake = {
+      boxIndexComplete: async () => false,
+      openBox: Object.assign(
+        async () => {
+          calls.open += 1;
+          competitorOpened = true;
+          const error = new Error('could not coalesce error');
+          error.code = 'UNKNOWN_ERROR';
+          throw error;
+        },
+        { staticCall: async () => undefined },
+      ),
+      queryFilter: async () => [],
+      filters: {},
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    globalThis.fetch = async (url) => {
+      const exactRead = competitorOpened && String(url).includes('lootboxIndex=8');
+      if (exactRead) resultReads += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => exactRead && resultIndexed
+          ? { items: [settledLeg] }
+          : { items: [] },
+      };
+    };
+    const errors = [];
+    const unsubscribe = pendingActionsMod.subscribePendingActionErrors((message) => {
+      errors.push(message);
+    });
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+
+    const action = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.equal(await action.run(), false,
+      'the failed sender waits honestly while the competing result indexes');
+    assert.equal(calls.open, 1, 'the wallet write lost exactly one opener race');
+    assert.ok(resultReads >= 1, 'the exact box result is fetched after that failure');
+    assert.equal(errors.length, 0, 'a permissionless opener race is not shown as a repeatable error');
+    const syncing = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.equal(syncing?.shortLabel, 'Syncing result');
+    assert.equal(syncing?.write, false, 'the failed transaction is never offered again');
+    assert.equal(syncing?.run, null, 'API catch-up replaces the repeatable wallet action');
+
+    resultIndexed = true;
+    await el.__pollForTest();
+    const ready = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.equal(ready?.shortLabel, 'View result',
+      'the indexed competing result promotes without another transaction');
+    assert.equal(await ready.run(), true);
+    assert.equal(revealMod.__takeQueuedForTest()[0]?.legs?.[0]?.transactionHash,
+      '0xcompetitor-result', 'the competing opener receipt supplies the reveal');
+    assert.equal(pendingActionsMod.getPendingActions().some((item) => item.id === 'lootbox:8'), false,
+      'the failed transaction is never offered again once its result is recovered');
+    unsubscribe();
+    el.disconnectedCallback();
+  });
+
   test('a targeted competing openBox settles the box even though the sweep frontier never moves', async () => {
     // Someone else called openBox(player, 8) directly (or the sweep opened this
     // player's entry then ran out of budget mid-index). The boxes are settled

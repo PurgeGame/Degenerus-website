@@ -606,6 +606,7 @@ describe('decodeBoxSpin', () => {
     // player 0x11223344, result 0x55667788, score 3, count 1
     const packed = packSpin(0x11223344n, 0x55667788n, 3) | (1n << 216n);
     const d = decodeBoxSpin(betId, packed);
+    assert.equal(d.betId, betId, 'the synthetic id remains available for replay verification');
     assert.equal(d.boxOrigin, true);
     assert.equal(d.spinType, 'wwxrp');
     assert.equal(d.heroQuadrant, 1, 'the low seed bits preserve the +2 hero quadrant');
@@ -644,6 +645,8 @@ describe('decodeBoxSpin', () => {
       | (1n << 224n);  // survived
     const d = decodeBoxSpin(betId, packed);
     assert.equal(d.spinType, 'flip');
+    assert.equal(d.heroQuadrant, null,
+      'a three-reel chain has no truthful group-wide Hero quadrant');
     assert.equal(d.spinCount, 3);
     assert.equal(d.survived, true);
     assert.equal(d.reels.length, 3);
@@ -668,6 +671,8 @@ describe('decodeBoxSpin', () => {
     const d = decodeBoxSpin(betId, packed);
 
     assert.equal(d.spinType, 'record');
+    assert.equal(d.heroQuadrant, null,
+      'the record seed is hashed again for each reel');
     assert.equal(d.spinCount, 3);
     assert.equal(d.survived, false);
     assert.deepEqual(d.reels.map((reel) => reel.score), [0, 2, 1]);

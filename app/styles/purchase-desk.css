@@ -1717,14 +1717,21 @@ body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-idle > img {
 }
 
 body.layout-basic .app-decimator-panel .dec-flip-credit--header > .dec-flip-credit__boon {
-  position: absolute;
+  position: relative;
   z-index: 2;
-  right: 0.25rem;
-  bottom: 0.12rem;
-  left: 0.38rem;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 3;
+  align-self: center;
+  padding-right: 0.9rem;
   overflow: hidden;
   color: #f5d0fe;
-  font: 900 0.34rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 900 0.34rem/1.12 "Roboto Mono", ui-monospace, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2942,8 +2949,13 @@ body.layout-basic .app-decimator-panel .dec-builder-dialog .dec-box-quantity > b
 }
 
 body.layout-basic .app-decimator-panel .dec-builder-dialog__done {
+  display: grid;
   grid-column: 1 / -1;
   min-height: 2.55rem;
+  grid-template-columns: auto auto;
+  place-content: center;
+  align-items: baseline;
+  gap: 0.38rem;
   border: 1px solid rgba(205, 174, 231, 0.5);
   border-radius: 5px;
   background: linear-gradient(180deg, #69428a, #3c2352);
@@ -2954,6 +2966,19 @@ body.layout-basic .app-decimator-panel .dec-builder-dialog__done {
   letter-spacing: 0.1em;
 }
 
+body.layout-basic .app-decimator-panel .dec-builder-dialog__done > span {
+  font: 950 0.65rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__done > strong {
+  color: #fff1a8;
+  font: 950 0.72rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  text-shadow: 0 0 8px rgba(253, 230, 138, 0.28);
+}
+
 body.layout-basic .app-decimator-panel .dec-box-options-dialog {
   width: min(100%, 23rem);
 }
@@ -2961,6 +2986,61 @@ body.layout-basic .app-decimator-panel .dec-box-options-dialog {
 body.layout-basic .app-decimator-panel .dec-presale__dialog {
   width: min(100%, 20rem);
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Which physical case the configured ETH-each buys. It shares the presale
+   offer's art-then-copy shape so the chooser reads as one list of options,
+   but keeps the lootbox purple rather than the presale's cyan. */
+body.layout-basic .app-decimator-panel .dec-box-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 4.7rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(176, 143, 209, 0.28);
+  border-radius: 7px;
+  background: linear-gradient(145deg, rgba(139, 108, 255, 0.09), rgba(8, 7, 14, 0.7));
+}
+
+/* The author `display: grid` above outranks the UA [hidden] rule, so the
+   attribute needs its own companion or the preview never hides. */
+body.layout-basic .app-decimator-panel .dec-box-preview[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art {
+  display: grid;
+  width: 4.7rem;
+  height: 2.7rem;
+  place-items: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 7px rgba(139, 108, 255, 0.22));
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__copy strong {
+  color: #e2cff1;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__copy small {
+  color: #a992bc;
+  font-size: 0.54rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
 }
 
 body.layout-basic .app-decimator-panel .dec-presale__offer {

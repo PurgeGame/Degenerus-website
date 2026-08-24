@@ -30,6 +30,10 @@ import { keccak256 } from 'ethers';
 // DegenerusGameDegeneretteModule.sol:245 / :367
 const QUICK_PLAY_SALT = 0x51;               // 'Q'
 const WWXRP_RIG_SALT = 0x52494721n;         // "RIG!"
+const RECORD_SPIN_TAG = 0x5265636f7264n;     // "Record"
+const BOX_BET_ID_SENTINEL = 1n << 63n;
+const BOX_SPIN_TYPE_RECORD = 3n;
+const BOX_BET_ID_ENTROPY_MASK = (1n << 60n) - 1n;
 const CURRENCY_WWXRP = 3;
 
 const MASK64 = 0xFFFFFFFFFFFFFFFFn;
@@ -80,6 +84,51 @@ function _hash2(a, b) {
   _writeWord(buf, 0, a);
   _writeWord(buf, 32, b);
   return _big(keccak256(buf));
+}
+
+/**
+ * Exact per-reel Hero quadrants for the three-spin biggest-spin bounty.
+ *
+ * The bounty does not reuse the placed bet's Hero. The contract derives a
+ * record seed from that bet's fulfilled word and immutable bet id, then hashes
+ * the seed again for each reel. BoxSpin omits those three Hero values, so the
+ * UI must reproduce them from the parent context rather than infer them from
+ * an often-ambiguous final score.
+ *
+ * When the emitted synthetic BoxSpin id is available, verify its retained
+ * seed entropy before returning anything. This prevents a stale parent/feed
+ * fragment from painting a plausible but incorrect Hero.
+ */
+export function dgnRecordBountyHeroQuadrants({
+  rngWord,
+  parentBetId,
+  boxBetId = null,
+  spinCount = 3,
+} = {}) {
+  let word;
+  let parent;
+  try {
+    word = BigInt(rngWord ?? 0);
+    parent = BigInt(parentBetId ?? 0);
+  } catch (_e) {
+    return null;
+  }
+  if (word === 0n || parent <= 0n) return null;
+
+  const seed = _hash2(word, parent ^ RECORD_SPIN_TAG);
+  if (boxBetId != null) {
+    let emitted;
+    try { emitted = BigInt(boxBetId); } catch (_e) { return null; }
+    const expected = BOX_BET_ID_SENTINEL
+      | (BOX_SPIN_TYPE_RECORD << 60n)
+      | (seed & BOX_BET_ID_ENTROPY_MASK);
+    if (emitted !== expected) return null;
+  }
+
+  const count = Math.max(0, Math.min(3, Math.trunc(Number(spinCount) || 0)));
+  return Array.from({ length: count }, (_unused, index) => (
+    Number(_hash2(seed, BigInt(index)) & 3n)
+  ));
 }
 
 /** DegenerusTraitUtils._degTrait — one quadrant's [CCC][SSS] from a 64-bit word. */

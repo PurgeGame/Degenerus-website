@@ -94,7 +94,11 @@ import {
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
 // Per-spin house reels: the chain publishes spin 0's only.
-import { dgnDeriveSpins, dgnScore } from '../app/dgn-reels.js';
+import {
+  dgnDeriveSpins,
+  dgnRecordBountyHeroQuadrants,
+  dgnScore,
+} from '../app/dgn-reels.js';
 import {
   publishPendingActions,
   clearPendingActions,
@@ -277,9 +281,13 @@ function _readPendingBet(address) {
     const row = raw ? JSON.parse(raw) : null;
     if (!row || row.betId == null || row.index == null) return null;
     let packedData = null;
+    let rngWord = 0n;
     try {
       if (row.packedData != null) packedData = BigInt(row.packedData);
     } catch (_e) { packedData = null; }
+    try {
+      if (row.rngWord != null) rngWord = BigInt(row.rngWord);
+    } catch (_e) { rngWord = 0n; }
     return {
       betId: BigInt(row.betId),
       index: BigInt(row.index),
@@ -289,6 +297,7 @@ function _readPendingBet(address) {
       hero: Number(row.hero ?? 0) & 3,
       ticket: row.ticket == null ? null : BigInt(row.ticket),
       packedData,
+      rngWord,
       rngRequestPending: Boolean(row.rngRequestPending),
       rngRequestStartedAt: Math.max(0, Number(row.rngRequestStartedAt ?? 0)),
       rngRequestBlock: Math.max(0, Number(row.rngRequestBlock ?? 0)),
@@ -317,6 +326,7 @@ function _writePendingBet(address, row) {
     };
     if (row.ticket != null) payload.ticket = String(row.ticket);
     if (row.packedData != null) payload.packedData = String(row.packedData);
+    if (BigInt(row.rngWord ?? 0) !== 0n) payload.rngWord = String(row.rngWord);
     // Keep old pending-bet records compact, but persist a submitted shared RNG
     // request so its tray card survives a refresh until the word is ready.
     if (row.rngRequestPending) {
@@ -669,6 +679,7 @@ export function degeneretteRevealSequenceFromFeedItem(item) {
   sequence.recordBountySpins = withDegeneretteRecordContext(
     recordBountySpins,
     merged.packedData,
+    { rngWord: merged.rngWord, parentBetId: merged.betId },
   );
   return sequence;
 }
@@ -697,17 +708,36 @@ export function partitionDegeneretteRewardLegs(legs) {
  * bet's packed record stake and activity snapshot on that child so a losing
  * double-or-nothing can still show what its reels had produced.
  */
-export function withDegeneretteRecordContext(spins, packedData) {
+export function withDegeneretteRecordContext(spins, packedData, {
+  rngWord = 0n,
+  parentBetId = null,
+} = {}) {
   const rows = Array.isArray(spins) ? spins : [];
   const packed = dgnDecodePacked(packedData);
-  if (!packed || packed.recordBountyStake <= 0n) return rows.slice();
+  if (!packed) return rows.slice();
   return rows.map((spin) => {
     const spinType = String(spin?.spinType || '').toLowerCase();
     if (spinType !== 'record' && spinType !== 'unknown_3') return spin;
+    const reels = Array.isArray(spin?.reels) ? spin.reels : [];
+    const heroes = dgnRecordBountyHeroQuadrants({
+      rngWord,
+      parentBetId,
+      boxBetId: spin?.betId,
+      spinCount: reels.length,
+    });
     return {
       ...spin,
-      recordStake: packed.recordBountyStake,
+      ...(packed.recordBountyStake > 0n
+        ? { recordStake: packed.recordBountyStake }
+        : {}),
       activityScore: packed.activityScore,
+      reels: heroes == null ? reels : reels.map((reel, index) => {
+        const spinIndex = Number(reel?.spinIndex ?? index);
+        const heroQuadrant = heroes[spinIndex];
+        return heroQuadrant == null || reel?.heroQuadrant != null
+          ? reel
+          : { ...reel, heroQuadrant };
+      }),
     };
   });
 }
@@ -2141,7 +2171,7 @@ class AppDegenerettePanel extends HTMLElement {
     this.#currentHero = row.hero;
     this.#currentTicket = row.ticket;
     this.#currentPackedData = row.packedData;
-    this.#currentRngWord = 0n;
+    this.#currentRngWord = row.rngWord;
     this.#rngRequestPending = row.rngRequestPending;
     this.#rngRequestStartedAt = row.rngRequestStartedAt;
     this.#rngRequestBlock = row.rngRequestBlock;
@@ -2555,6 +2585,7 @@ class AppDegenerettePanel extends HTMLElement {
       hero: this.#currentHero,
       ticket: this.#currentTicket,
       packedData: this.#currentPackedData,
+      rngWord: this.#currentRngWord,
       rngRequestPending: this.#rngRequestPending,
       rngRequestStartedAt: this.#rngRequestStartedAt,
       rngRequestBlock: this.#rngRequestBlock,
@@ -3003,6 +3034,12 @@ class AppDegenerettePanel extends HTMLElement {
         }
         if (!stillCurrent()) return;
         const results = Array.isArray(bet?.results) ? bet.results : [];
+        let word = 0n;
+        try { word = BigInt(bet?.rngWord ?? 0); } catch (_e) { word = 0n; }
+        if (word !== 0n && word !== this.#currentRngWord) {
+          this.#currentRngWord = word;
+          this.#persistPendingBet();
+        }
         const resolvedInFeed = results.some((row) => row?.resultType === 'resolved');
         if (resolvedInFeed) {
           const opened = await this.#replayIndexedResolution(
@@ -3014,9 +3051,6 @@ class AppDegenerettePanel extends HTMLElement {
           if (!stillCurrent()) return;
           if (opened) return;
         }
-        let word = 0n;
-        try { word = BigInt(bet?.rngWord ?? 0); } catch (_e) { word = 0n; }
-        if (word !== 0n) this.#currentRngWord = word;
 
         // A refresh can restore a bet that another wallet already resolved.
         // Zero is authoritative even if the result feed is a block behind.
@@ -3429,6 +3463,7 @@ class AppDegenerettePanel extends HTMLElement {
     const contextualRecordBountySpins = withDegeneretteRecordContext(
       recordBountySpins,
       this.#currentPackedData,
+      { rngWord: this.#currentRngWord, parentBetId: resolvedBetId },
     );
     sequence.lootboxAwarded = directBoxLegs.length > 0;
     sequence.lootboxLegs = directBoxLegs;
