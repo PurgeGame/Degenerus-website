@@ -6763,6 +6763,17 @@ class RevealOverlay extends HTMLElement {
       }
       const value = document.createElement('div');
       value.className = 'rvl-card-value';
+      // The active card starts with an empty value, then #playCard counts up to
+      // countText. Size long DGNRS totals from that final string now so the
+      // first animated referral-bonus card cannot grow beyond its border when
+      // the count begins. Compact receipts already use their smaller type.
+      const finalValueText = String(card.countText || card.value || '');
+      if (card.type === 'dgnrs' && finalValueText.length >= 12) {
+        value.classList.add('rvl-card-value--long');
+        if (finalValueText.length >= 17) {
+          value.classList.add('rvl-card-value--extra-long');
+        }
+      }
       // Center-stage cards start empty and count up (#playCard drives
       // _animateCount); compact tray/summary cards show the final value.
       value.textContent = (!compact && card.countText)

@@ -8801,6 +8801,20 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   word-break: normal;
 }
 
+/* Full-size cards count up from an empty node, so fit from the final-value
+   class applied before that animation begins. Keep the token and amount on one
+   readable line without letting referral rewards cross the card border. */
+.rvl-card--dgnrs:not(.rvl-card--mini) .rvl-card-value--long {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  letter-spacing: -0.025em;
+}
+.rvl-card--dgnrs:not(.rvl-card--mini) .rvl-card-value--extra-long {
+  font-size: clamp(0.78rem, 3vw, 1rem);
+}
+
 /* Large sDGNRS/DGNRS payouts stay on one line, but compact Luckbox reward
    cards must clip that line inside their value lane instead of spilling into
    the neighboring card. The complete amount remains in the DOM. */

@@ -715,6 +715,93 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(storeMod.get('app.lastDay')?.day, 22);
   });
 
+  test('a prior-deployment edge result cannot reset the live day before direct fallback', async () => {
+    const currentPayload = {
+      day: 20,
+      level: 4,
+      summary: {
+        blockRange: {
+          start: String(Number(CHAIN.deployBlock) + 50),
+          end: String(Number(CHAIN.deployBlock) + 51),
+        },
+      },
+      winners: [],
+      roll1: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+      roll2: { day: 20, level: 4, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    };
+    storeMod.update('app.lastDay', currentPayload);
+
+    const lastDayWrites = [];
+    const mismatchWrites = [];
+    const stopLastDay = storeMod.subscribe('app.lastDay', (value) => {
+      lastDayWrites.push(value?.day ?? null);
+    });
+    const stopMismatch = storeMod.subscribe('app.deploymentMismatch', (value) => {
+      mismatchWrites.push(value);
+    });
+    lastDayWrites.length = 0;
+    mismatchWrites.length = 0;
+
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url === '/jackpots/latest.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            schemaVersion: 1,
+            day: 21,
+            digest: 'fedcba9876543210',
+            resultPath: '/jackpots/results/21-fedcba9876543210.json',
+          }),
+        };
+      }
+      if (url === '/jackpots/results/21-fedcba9876543210.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 21,
+            level: 4,
+            summary: {
+              blockRange: {
+                start: String(Number(CHAIN.deployBlock) - 10),
+                end: String(Number(CHAIN.deployBlock) - 9),
+              },
+            },
+            winners: [],
+            roll1: { day: 21, level: 4, purchaseLevel: null, wins: [] },
+            roll2: { day: 21, level: 4, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      if (String(url).endsWith('/game/jackpot/last-day')) {
+        return { ok: true, status: 200, json: async () => currentPayload };
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    };
+
+    try {
+      const payload = await refreshJackpotAfterChainCompletion({
+        day: 21,
+        includePlayer: false,
+      });
+
+      assert.equal(payload, null, 'the prior deployment cannot satisfy the current day');
+      assert.equal(storeMod.get('app.lastDay')?.day, 20,
+        'the last valid current-deployment day remains mounted');
+      assert.equal(lastDayWrites.includes(null), false,
+        'the stale CDN object never clears the mounted jackpot');
+      assert.deepEqual(mismatchWrites, [],
+        'an optional stale CDN cache is not an authoritative deployment mismatch');
+    } finally {
+      stopLastDay();
+      stopMismatch();
+    }
+  });
+
   test('a hung edge attempt has its own deadline', async () => {
     fetchImpl = async (_url, opts) => new Promise((_resolve, reject) => {
       opts.signal.addEventListener('abort', () => {

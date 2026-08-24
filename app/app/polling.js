@@ -925,9 +925,18 @@ async function waitForJackpotEdgeSnapshot(
             Math.min(Math.max(1, deadline - Date.now()), fetchTimeoutMs),
           );
           if (result.response.ok) {
-            const payload = publishLastDayPayload(result.payload);
-            if (Number(payload?.day) === Number(pointer.day)
-              && Number(payload?.day) >= targetDay) return payload;
+            // The edge pointer can briefly belong to the prior deployment
+            // when a testnet run reuses the same logical day number. Validate
+            // the optional CDN candidate BEFORE publishing it. Calling the
+            // ordinary deployment-mismatch publisher first cleared
+            // app.lastDay and its UI high-water mark, which let the direct
+            // fallback repin yesterday until the current result arrived.
+            const candidate = normalizeLastDayPayload(result.payload);
+            const candidateDay = Number(candidate?.day);
+            if (candidateDay !== Number(pointer.day)
+              || candidateDay < targetDay
+              || !lastDayMatchesDeployment(candidate)) return null;
+            return publishLastDayPayload(candidate);
           }
           // A failed immutable-result read is an edge outage, not an
           // unpublished token. Let the direct last-day fallback take over now.

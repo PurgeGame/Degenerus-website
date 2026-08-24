@@ -2822,6 +2822,48 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  test('the first referral-bonus card fits a 100M DGNRS total before count-up', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    queueReveal({
+      kind: 'referral-bonus',
+      level: 90,
+      amountWei: 100_000_000n * 10n ** 18n,
+    });
+    const el = instantiate();
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+    // Skip only the title beat so the center-stage card is mounted while its
+    // count-up value is still empty.
+    await tick();
+    backdrop.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 4 && !el.querySelector('.rvl-card-value'); i += 1) await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    const card = zone.querySelector('.rvl-card--dgnrs');
+    const value = card?.querySelector('.rvl-card-value');
+    assert.ok(card, 'the referral reward reaches the full-size first display');
+    assert.equal(value?.textContent, '', 'the sizing class precedes the animated count');
+    assert.equal(value?.classList.contains('rvl-card-value--long'), true);
+    assert.equal(value?.classList.contains('rvl-card-value--extra-long'), true,
+      '100,000,000 DGNRS crosses into the smallest full-card value tier');
+    assert.match(
+      APP_CSS,
+      /\.rvl-card--dgnrs:not\(\.rvl-card--mini\) \.rvl-card-value--long\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*font-size:\s*clamp\(1rem, 4vw, 1\.4rem\)/s,
+      'the first display shrinks long DGNRS values within its own value lane',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-card--dgnrs:not\(\.rvl-card--mini\) \.rvl-card-value--extra-long\s*\{[^}]*font-size:\s*clamp\(0\.78rem, 3vw, 1rem\)/s,
+      'nine-digit DGNRS rewards receive the extra-long fitted size',
+    );
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
   test('a lootbox receipt can open the next pending box without returning to the tray', async () => {
     pendingActionsMod.publishPendingActions('next-box', [{
       id: 'lootbox:2', kind: 'lootbox', label: 'Luckbox #2', state: 'ready',
