@@ -2361,7 +2361,6 @@ body.layout-basic .app-decimator-panel .dec-input-group--lootbox
   height: 1.42rem;
 }
 
-body.layout-basic .app-decimator-panel .dec-presale-toggle,
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
   display: inline-flex;
   width: auto;
@@ -2376,26 +2375,6 @@ body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
   color: #cfb9e1;
   cursor: pointer;
   white-space: nowrap;
-}
-
-body.layout-basic .app-decimator-panel .dec-presale-toggle {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
-  border-color: rgba(103, 232, 249, 0.3);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.07), rgba(8, 23, 28, 0.72));
-  color: #b9edf2;
-}
-
-body.layout-basic .app-decimator-panel .dec-presale-toggle[hidden] {
-  display: none !important;
-}
-
-body.layout-basic .app-decimator-panel .dec-presale-toggle.has-selection {
-  border-color: rgba(103, 232, 249, 0.7);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.2), rgba(8, 31, 37, 0.82));
-  color: #ecfeff;
-  box-shadow: 0 0 12px rgba(34, 211, 238, 0.16);
 }
 
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
@@ -2430,14 +2409,11 @@ body.layout-basic .app-decimator-panel .dec-custom-box-logo > svg {
   vector-effect: non-scaling-stroke;
 }
 
-body.layout-basic .app-decimator-panel .dec-presale-toggle strong,
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle strong {
   font-size: 0.57rem;
   letter-spacing: 0.07em;
 }
 
-body.layout-basic .app-decimator-panel .dec-presale-toggle:hover,
-body.layout-basic .app-decimator-panel .dec-presale-toggle:focus-visible,
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle:hover,
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle:focus-visible,
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle.is-selected {
@@ -2455,7 +2431,7 @@ body.layout-basic .jackpot-hero .app-decimator-panel .dec-input-group--lootbox.d
 }
 
 body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-builder-head {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   margin-bottom: 0.12rem;
 }
 
@@ -2978,6 +2954,10 @@ body.layout-basic .app-decimator-panel .dec-builder-dialog__done {
   letter-spacing: 0.1em;
 }
 
+body.layout-basic .app-decimator-panel .dec-box-options-dialog {
+  width: min(100%, 23rem);
+}
+
 body.layout-basic .app-decimator-panel .dec-presale__dialog {
   width: min(100%, 20rem);
   grid-template-columns: minmax(0, 1fr);
@@ -2985,6 +2965,7 @@ body.layout-basic .app-decimator-panel .dec-presale__dialog {
 
 body.layout-basic .app-decimator-panel .dec-presale__offer {
   display: grid;
+  grid-column: 1 / -1;
   gap: 0.45rem;
   padding: 0.5rem;
   border: 1px solid rgba(103, 232, 249, 0.2);

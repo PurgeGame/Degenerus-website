@@ -1732,6 +1732,29 @@ body.layout-basic .jackpot-hero .df-baf-score {
   width: 5.1rem;
 }
 
+/* Keep the active coinflip boon and quest waypoint on open felt instead of
+   under tall wager stacks. They sit together immediately below the red-side
+   BAF cap and above-left of Today's betting oval. */
+body.layout-basic :is(.df-table-boon, .df-table-quest) {
+  z-index: 6;
+  top: calc(var(--df-score-cap-top) + 1.8rem);
+  right: auto;
+  bottom: auto;
+  width: 1.18rem;
+  height: 1.18rem;
+  pointer-events: auto;
+}
+
+body.layout-basic .df-table-boon { left: 0.3rem; }
+body.layout-basic .df-table-quest { left: 1.68rem; scale: 1; }
+
+body.layout-basic .jackpot-hero .df-table-boon {
+  left: calc(var(--df-table-content-inset) + 0.12rem);
+}
+body.layout-basic .jackpot-hero .df-table-quest {
+  left: calc(var(--df-table-content-inset) + 1.5rem);
+}
+
 body.layout-basic .jackpot-hero .df-tomorrow-layout {
   width: min(13.6rem, calc(100% - 1.5rem));
 }

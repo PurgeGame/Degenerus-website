@@ -2742,6 +2742,11 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
+      /\.rvl-stage--lootbox \.rvl-card--dgnrs \.rvl-card-value\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s,
+      'long sDGNRS values truncate inside their allotted Luckbox reward card',
+    );
+    assert.match(
+      APP_CSS,
       /\.rvl-stage--lootbox \.rvl-summary-grid \.rvl-card-inner\s*\{[^}]*min-height:\s*238px;[^}]*justify-content:\s*center/s,
       'lootbox reward contents use the full centered receipt-card stage',
     );

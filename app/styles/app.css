@@ -8800,6 +8800,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   overflow-wrap: normal;
   word-break: normal;
 }
+
+/* Large sDGNRS/DGNRS payouts stay on one line, but compact Luckbox reward
+   cards must clip that line inside their value lane instead of spilling into
+   the neighboring card. The complete amount remains in the DOM. */
+.rvl-stage--lootbox .rvl-card--dgnrs .rvl-card-value {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rvl-card-label {
   font-size: 0.75rem;
   font-weight: 800;
@@ -23921,13 +23931,6 @@ body.layout-basic .df-bet-chip.is-top::after {
 body.layout-basic .df-tomorrow-bet-oval .df-bet-chip-rack {
   width: calc(100% - 1.7rem); justify-self: start; justify-content: center;
 }
-body.layout-basic .df-tomorrow-bet-oval :is(.df-next-bet__quest,.df-next-bet__boon) {
-  top: 50%; bottom: auto; width: 1rem; min-width: 1rem; max-width: 1rem;
-  height: 1rem; min-height: 1rem; max-height: 1rem; padding: 0; scale: .84;
-  translate: 0 -50%;
-}
-body.layout-basic .df-tomorrow-bet-oval .df-next-bet__quest { right: .12rem; left: auto; }
-body.layout-basic .df-tomorrow-bet-oval .df-next-bet__boon { right: auto; left: 1rem; }
 body.layout-basic :is(.df-bet-table__today-label,.df-tomorrow-layout__felt-label) {
   display: flex; min-width: 0; align-items: center; justify-content: center; gap: .28rem;
   color: rgba(246,222,174,.8); font: 950 clamp(.5rem,1.4vw,.56rem)/1 "Inter",system-ui,sans-serif;

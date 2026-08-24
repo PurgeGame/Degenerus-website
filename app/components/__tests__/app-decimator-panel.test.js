@@ -719,8 +719,9 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
 
   test('Buy button has data-write attribute (Phase 58 view-mode disable hook)', () => {
     const el = instantiate();
-    const btn = el.querySelector('[data-write]');
+    const btn = el.querySelector('[data-bind="dec-buy-cta"]');
     assert.ok(btn, '[data-write] CTA button rendered');
+    assert.notEqual(btn.getAttribute('data-write'), null);
     // Source-level assertion — panel literally contains data-write attribute.
     assert.match(
       PANEL_SRC,
@@ -766,8 +767,13 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
-      /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
+      /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'the custom-chest action labels the section while boon and quest markers keep dedicated slots');
+    assert.match(el.innerHTML,
+      /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-presale-row" hidden[\s\S]*?data-bind="dec-custom-box-buy">BUY IN NOW<\/button>/,
+      'custom and eligible presale boxes share one chooser and one purchase action');
+    assert.equal(el.querySelector('[data-bind="dec-presale-toggle"]'), null,
+      'there is no second presale button competing for the Luckbox header');
     for (const name of [
       'dec-box-small', 'dec-box-medium', 'dec-box-large',
       'dec-box-custom-count', 'dec-box-custom-eth',
@@ -788,7 +794,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'every full-resolution box has a zero-request first-paint silhouette');
     assert.match(PANEL_SRC,
       /lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?<b>PRESALE<\/b>/,
-      'the hidden presale control keeps the neutral compact case art');
+      'the conditional presale option keeps the neutral compact case art');
     assert.doesNotMatch(
       STATUS_CSS,
       /\.dec-input-group\.has-active-boon\s*\{[^}]*display:\s*grid/s,
@@ -1159,7 +1165,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     input.value = '5';
 
     // Click Buy.
-    const btn = el.querySelector('[data-write]');
+    const btn = el.querySelector('[data-bind="dec-buy-cta"]');
     btn.dispatchEvent({ type: 'click' });
     await settle(60);
 
@@ -1183,7 +1189,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '3';
 
-    const btn = el.querySelector('[data-write]');
+    const btn = el.querySelector('[data-bind="dec-buy-cta"]');
     // Two rapid clicks — second is rejected by #busy guard.
     btn.dispatchEvent({ type: 'click' });
     btn.dispatchEvent({ type: 'click' });
@@ -1222,7 +1228,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     const balanceEl = el.querySelector('.dec-balance');
     const preClickText = balanceEl ? balanceEl.textContent : '';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     // Allow micro-tasks to flush but NOT the blocked tx.
     await flushMicrotasks();
 
@@ -1269,7 +1275,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '1';
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     const errEl = el.querySelector('.dec-error');
@@ -1342,7 +1348,7 @@ describe('combined ticket + lootbox buy', () => {
     el.querySelector('[name="dec-box-custom-count"]').value = '1';
     el.querySelector('[name="dec-box-custom-eth"]').value = '0.03';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 1, 'single combined tx');
@@ -1378,7 +1384,7 @@ describe('combined ticket + lootbox buy', () => {
     customCount.value = '1';
     luckbox.value = '0.03';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'reverted simulation never sends');
@@ -1397,7 +1403,7 @@ describe('combined ticket + lootbox buy', () => {
     el.querySelector('[name="dec-tickets"]').value = '0';
     el.querySelector('[name="dec-box-large"]').value = '1';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called');
@@ -1443,7 +1449,7 @@ describe('combined ticket + lootbox buy', () => {
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '0';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
@@ -1486,7 +1492,7 @@ describe('combined ticket + lootbox buy', () => {
     el.querySelector('[name="dec-box-custom-count"]').value = '1';
     el.querySelector('[name="dec-box-custom-eth"]').value = '0.005';
 
-    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
@@ -3233,7 +3239,9 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('Custom Box starts at one box with its amount selected and preserves the draft', async () => {
+  test('Custom Box starts at one box, preserves its draft, and buys from the chooser action', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(60);
     const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
@@ -3253,8 +3261,8 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-input-group--lootbox \.dec-builder-head\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s,
-      'the compact header reserves only the custom action and optional presale control',
+      /\.dec-input-group--lootbox \.dec-builder-head\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
+      'the compact header reserves one unified custom and presale action',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -3277,20 +3285,21 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(amountFocuses, 1, 'the amount field receives focus');
     assert.equal(amountSelections, 1, 'typing immediately replaces the selected amount');
     assert.equal(selection.hidden, false);
-    assert.equal(selection.textContent, '1 BOX · 0.01 ETH EACH');
+    assert.equal(selection.textContent, '1 CUSTOM · 0.01 ETH EACH');
     assert.equal(toggle.getAttribute('aria-label'), 'Edit 1 custom Luckbox at 0.01 ETH each');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.01 ETH/);
     size.value = '0.02';
     size.dispatchEvent({ type: 'input' });
-    assert.equal(selection.textContent, '1 BOX · 0.02 ETH EACH');
+    assert.equal(selection.textContent, '1 CUSTOM · 0.02 ETH EACH');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box · 0\.02 ETH/);
 
-    toggle.dispatchEvent({ type: 'click' });
-    assert.equal(fields.hidden, true, 'the detail drawer can collapse');
+    el.querySelector('[data-bind="dec-custom-box-close"]').dispatchEvent({ type: 'click' });
+    assert.equal(fields.hidden, true, 'the X/backdrop path closes without purchasing');
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(count.value, '1', 'collapsing preserves the selected box');
     assert.equal(size.value, '0.02', 'collapsing preserves the per-box size');
-    assert.equal(selection.textContent, '1 BOX · 0.02 ETH EACH', 'the collapsed button shows the selected custom box');
+    assert.equal(selection.textContent, '1 CUSTOM · 0.02 ETH EACH', 'the collapsed button shows the selected custom box');
+    assert.equal(fakeContract._calls.purchase.length, 0, 'cancel never sends a transaction');
     assert.match(
       PURCHASE_DESK_CSS,
       /\.app-decimator-panel:has\(> \.dec-builder-popover:not\(\[hidden\]\)\)[^{]*\{[^}]*isolation:\s*auto;[^}]*overflow:\s*visible;/s,
@@ -3301,6 +3310,21 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-builder-popover__backdrop\s*\{[^}]*background:\s*#030205;/s,
       'the modal backdrop is opaque so the page cannot show through',
     );
+
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(fields.hidden, false);
+    el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
+    await settle(100);
+    assert.equal(fields.hidden, true, 'the chooser closes as its purchase is submitted');
+    assert.equal(fakeContract._calls.purchase.length, 1,
+      'the bottom chooser action reaches the existing guarded purchase path');
+    assert.equal(
+      fakeContract._calls.purchase[0][2],
+      lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: 2n * lootboxMod.LOOTBOX_MIN_WEI }),
+      'the chooser submits the exact custom-box draft',
+    );
+    assert.equal(count.value, '0', 'the mined purchase clears the submitted box count');
+    assert.equal(selection.hidden, true, 'the combined header clears after the mined purchase');
     el.disconnectedCallback();
   });
 
@@ -3430,45 +3454,59 @@ describe('combined ticket + lootbox buy', () => {
     await settle(80);
 
     const row = el.querySelector('[data-bind="dec-presale-row"]');
-    const toggle = el.querySelector('[data-bind="dec-presale-toggle"]');
+    const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
+    const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
+    const title = el.querySelector('[data-bind="dec-box-options-title"]');
+    const selection = el.querySelector('[data-bind="dec-custom-box-selection"]');
     const tickets = el.querySelector('[name="dec-tickets"]');
     const input = el.querySelector('[name="dec-presale-box-eth"]');
     const max = el.querySelector('[data-bind="dec-presale-max"]');
     assert.equal(row.hidden, true, 'zero current/draft credit keeps the presale option out of sight');
-    assert.equal(toggle.hidden, true);
+    assert.equal(toggle.hidden, false, 'the unified custom-box button remains available');
+    assert.equal(title.textContent, 'CUSTOM LUCKBOXES');
+    assert.equal(selection.hidden, true);
 
     tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
     tickets.dispatchEvent({ type: 'input' });
-    assert.equal(toggle.hidden, false, 'an eligible live presale reveals its pinned trigger');
-    assert.equal(row.hidden, true, 'eligibility alone does not select or open a presale box');
+    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES',
+      'an eligible live presale is listed on the unified header button');
+    assert.equal(selection.textContent, 'PRESALE AVAILABLE');
+    assert.equal(row.hidden, false, 'the eligible presale option is ready inside the closed chooser');
+    assert.equal(fields.hidden, true, 'eligibility does not auto-open the chooser');
     assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
       '0.01 ETH AVAILABLE');
     assert.equal(max.disabled, false);
     toggle.dispatchEvent({ type: 'click' });
-    assert.equal(row.hidden, false, 'the player opens the presale popup explicitly');
+    assert.equal(fields.hidden, false, 'the unified button opens custom and presale options together');
+    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '0',
+      'opening for an eligible presale does not silently add a custom box');
 
     const foil = el.querySelector('[data-bind="dec-foil-check"]');
     foil.checked = true;
     foil.dispatchEvent({ type: 'change' });
-    assert.equal(toggle.hidden, true, 'selecting the incompatible foil leg removes the presale trigger');
-    assert.equal(row.hidden, true, 'selecting foil closes the popup');
+    assert.equal(title.textContent, 'CUSTOM LUCKBOXES',
+      'selecting the incompatible foil leg removes Presale from the unified label');
+    assert.equal(row.hidden, true, 'selecting foil removes only the incompatible option');
+    assert.equal(fields.hidden, false, 'the shared custom chooser remains open');
     assert.equal(input.value, '0', 'hiding the presale row also clears its quote');
     foil.checked = false;
     foil.dispatchEvent({ type: 'change' });
-    assert.equal(toggle.hidden, false, 'the presale trigger returns when foil is unchecked');
-    assert.equal(row.hidden, true, 'the popup remains opt-in after returning');
-    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES',
+      'Presale returns to the same button when foil is unchecked');
+    assert.equal(row.hidden, false, 'the option returns inside the already-open chooser');
     max.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.01');
+    assert.equal(selection.textContent, 'PRESALE · 0.01 ETH');
 
     tickets.value = '0';
     tickets.dispatchEvent({ type: 'input' });
-    assert.equal(toggle.hidden, true, 'removing the credit-earning draft hides presale again');
+    assert.equal(title.textContent, 'CUSTOM LUCKBOXES',
+      'removing the credit-earning draft removes Presale from the button');
     assert.equal(row.hidden, true);
     assert.equal(input.value, '0', 'a newly unavailable hidden box cannot remain in the quote');
     tickets.value = '1';
     tickets.dispatchEvent({ type: 'input' });
-    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(row.hidden, false);
     max.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
       'BUY IN');
@@ -3476,9 +3514,10 @@ describe('combined ticket + lootbox buy', () => {
 
     let confirmed = null;
     el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
-    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
     await settle(100);
 
+    assert.equal(fields.hidden, true, 'the combined chooser closes when its action submits');
     assert.equal(fakeContract._calls.purchase.length, 0);
     assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 1,
       'the normal purchase and presale box ride the one deployed combined selector');
@@ -3505,23 +3544,36 @@ describe('combined ticket + lootbox buy', () => {
     await settle(80);
 
     const row = el.querySelector('[data-bind="dec-presale-row"]');
-    const toggle = el.querySelector('[data-bind="dec-presale-toggle"]');
+    const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
+    const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
+    const group = el.querySelector('[data-bind="dec-lootbox-group"]');
+    const title = el.querySelector('[data-bind="dec-box-options-title"]');
+    const selection = el.querySelector('[data-bind="dec-custom-box-selection"]');
     const input = el.querySelector('[name="dec-presale-box-eth"]');
-    assert.equal(toggle.hidden, false, 'banked credit exposes the trigger while presale is live');
-    assert.equal(row.hidden, true, 'the popup does not auto-open');
+    assert.equal(toggle.hidden, false, 'the unified box trigger remains available');
+    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES');
+    assert.equal(selection.textContent, 'PRESALE AVAILABLE');
+    assert.equal(row.hidden, false, 'banked credit exposes Presale inside the shared chooser');
+    assert.equal(fields.hidden, true, 'the chooser does not auto-open');
     toggle.dispatchEvent({ type: 'click' });
+    assert.equal(fields.hidden, false);
+    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '0');
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.02');
+    assert.equal(selection.textContent, 'PRESALE · 0.02 ETH');
     const flip = el.querySelector('[data-bind="dec-flip-check"]');
     flip.checked = true;
     flip.dispatchEvent({ type: 'change' });
-    assert.equal(toggle.hidden, true, 'USE FLIP removes the incompatible presale option');
+    assert.equal(group.hidden, true, 'USE FLIP hides the ETH-only Luckbox builder');
     assert.equal(row.hidden, true);
+    assert.equal(fields.hidden, true, 'entering FLIP closes the now-incompatible chooser');
     assert.equal(input.value, '0', 'entering FLIP cannot retain a hidden presale spend');
     flip.checked = false;
     flip.dispatchEvent({ type: 'change' });
-    assert.equal(toggle.hidden, false, 'returning to ETH restores the available presale trigger');
-    assert.equal(row.hidden, true, 'restoring eligibility does not auto-open the popup');
+    assert.equal(group.hidden, false, 'returning to ETH restores the Luckbox builder');
+    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES');
+    assert.equal(row.hidden, false, 'the available Presale option returns inside the chooser');
+    assert.equal(fields.hidden, true, 'restoring eligibility does not auto-open the chooser');
     toggle.dispatchEvent({ type: 'click' });
     const tickets = el.querySelector('[name="dec-tickets"]');
     tickets.value = '0';
@@ -3534,9 +3586,10 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
     let confirmed = null;
     el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
-    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
     await settle(100);
 
+    assert.equal(fields.hidden, true);
     assert.equal(fakeContract._calls.buyPresaleBox.length, 1);
     assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 0);
     assert.equal(fakeContract._calls.buyPresaleBox[0][1], 2n * min);

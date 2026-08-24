@@ -57,7 +57,23 @@ const PARIMUTUEL_ABI = [
   // volume and `previous` the benchmark it was scored against, both in RAW
   // PURCHASE UNITS — 400 = one whole ticket.
   'event VolumeRoundSealed(uint24 indexed round, uint48 total, uint48 previous)',
+  // Every revert placeBet / placeVolumeBet can produce must be declared here or
+  // ethers cannot name it: error.revert stays null, the registry lookup below is
+  // keyed by NAME, and the real reason collapses into the generic unexpected-error
+  // copy. DegenerusParimutuel.sol:285/290/291/296 (growth) and :468/473/474/480
+  // (volume) are the four; NothingToSettle is the claim path (:370).
+  'error NotApproved()',
+  'error MarketClosed()',
+  'error AlreadyBet()',
+  'error NotEligible()',
   'error NothingToSettle()',
+  // The stake burn crosses into FLIP, so its reverts land here too. Insufficient
+  // is the under-funded bet (FLIP.sol:550 — wallet balance plus coinflip
+  // claimable could not cover the 1,000 FLIP stake, and :543 when an RNG lock
+  // has sealed the claimable leg). OnlyGame is FLIP's caller gate (:582-588): a
+  // parimutuel redeployed without FLIP's address being updated reverts every bet.
+  'error Insufficient()',
+  'error OnlyGame()',
 ];
 
 // GAME view behind the growth book's benchmark. growthState(round) hands back
@@ -524,13 +540,33 @@ export function growthBps(prev, current) {
 }
 
 function _structuredRevertError(error, context) {
-  const decoded = decodeRevertReason(error);
+  // Insufficient is a shared FLIP selector: affiliate.js registers it globally as
+  // a taken referral code and coinflip.js as a short stake, so whichever module
+  // imported last would make the other lie. Keep the betting copy local to this
+  // write path, the way decimator.js does for the same selector. The stake is
+  // fixed at 1,000 FLIP (DegenerusParimutuel.sol:89), so there is no amount to
+  // lower — the only move is to get more FLIP.
+  const name = error?.revert?.name || error?.errorName || null;
+  const local = {
+    Insufficient: {
+      code: 'Insufficient',
+      userMessage: 'A bet costs 1,000 FLIP and you do not have that much.'
+        + ' Wallet FLIP and claimable coinflip winnings both count toward it.',
+      recoveryAction: 'Earn or claim FLIP, then place the bet.',
+    },
+  }[name];
+  const decoded = local || decodeRevertReason(error);
   const wrapped = new Error(decoded.userMessage || `Failed: ${context}`);
   wrapped.code = decoded.code;
   wrapped.userMessage = decoded.userMessage;
   wrapped.recoveryAction = decoded.recoveryAction;
   wrapped.cause = error;
   return wrapped;
+}
+
+/** Test-only — the write path's revert copy, including its local overrides. */
+export function __structuredRevertErrorForTest(error, context) {
+  return _structuredRevertError(error, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -874,4 +910,12 @@ register('NothingToSettle', {
   code: 'NothingToSettle',
   userMessage: 'Nothing to settle on that round.',
   recoveryAction: 'Refresh and check your open positions.',
+});
+
+// FLIP's burn gate, not a betting condition: it can only fire when this
+// contract is not the PARIMUTUEL address FLIP was deployed against.
+register('OnlyGame', {
+  code: 'OnlyGame',
+  userMessage: 'The betting contract is not wired to FLIP on this deployment.',
+  recoveryAction: 'Report this — betting cannot work until it is fixed.',
 });

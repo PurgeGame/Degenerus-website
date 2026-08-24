@@ -808,7 +808,7 @@ class AppDecimatorPanel extends HTMLElement {
   #buyInDialogChoice = 'tickets';
   #buyInDialogReturnFocus = null;
   #customBoxOpen = false;
-  #presaleBoxOpen = false;
+  #presaleOptionAvailable = false;
   // --- Pinned data (server-derived; rendered via textContent) ---
   #gameState = null;   // Phase 64 — /game/state snapshot (level + jackpotPhaseFlag → ticket price)
   #purchaseQuote = null; // Exact purchaseInfo() buy-now route/price.
@@ -1105,7 +1105,7 @@ class AppDecimatorPanel extends HTMLElement {
                     </svg>
                   </span>
                   <span class="dec-custom-box-toggle__copy">
-                    <strong id="dec-box-builder-title">CUSTOM LUCKBOXES</strong>
+                    <strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES</strong>
                     <small data-bind="dec-custom-box-selection" hidden></small>
                   </span>
                 </button>
@@ -1115,10 +1115,6 @@ class AppDecimatorPanel extends HTMLElement {
                                           variant="purchase-control"></boon-product-indicator>
                 </span>
               </span>
-              <button type="button" class="dec-presale-toggle" data-bind="dec-presale-toggle"
-                      aria-expanded="false" aria-controls="dec-presale-box-dialog" hidden>
-                <span aria-hidden="true">▣</span><strong>PRESALE</strong>
-              </button>
             </div>
 
             <div class="dec-box-grid">
@@ -1202,13 +1198,13 @@ class AppDecimatorPanel extends HTMLElement {
         <div id="dec-custom-box-fields" class="dec-builder-popover"
              data-bind="dec-custom-box-fields" hidden>
           <button type="button" class="dec-builder-popover__backdrop"
-                  data-bind="dec-custom-box-close" aria-label="Close custom Luckbox popup"></button>
-          <section class="dec-builder-dialog" role="dialog" aria-modal="true"
+                  data-bind="dec-custom-box-close" aria-label="Close Luckbox options"></button>
+          <section class="dec-builder-dialog dec-box-options-dialog" role="dialog" aria-modal="true"
                    aria-labelledby="dec-custom-box-title">
             <header class="dec-builder-dialog__head">
-              <span><strong id="dec-custom-box-title">CUSTOM LUCKBOX</strong><small>Choose quantity and ETH per box</small></span>
+              <span><strong id="dec-custom-box-title">LUCKBOX OPTIONS</strong><small>Choose custom boxes or available presale credit</small></span>
               <button type="button" class="dec-builder-dialog__close" data-bind="dec-custom-box-close"
-                      aria-label="Close custom Luckbox popup">×</button>
+                      aria-label="Close Luckbox options">×</button>
             </header>
             <label class="dec-builder-dialog__field" for="dec-box-custom-count">
               <span>BOXES</span>
@@ -1229,24 +1225,9 @@ class AppDecimatorPanel extends HTMLElement {
                 <strong>ETH</strong>
               </span>
             </label>
-            <button type="button" class="dec-builder-dialog__done" data-bind="dec-custom-box-done">APPLY CUSTOM BOX</button>
-          </section>
-        </div>
-
-        <!-- Live credit-gated presale. The trigger is rendered only while the
-             contract latch is open and the acting player can meet its minimum. -->
-        <div id="dec-presale-box-dialog" class="dec-builder-popover dec-presale"
-             data-bind="dec-presale-row" hidden>
-          <button type="button" class="dec-builder-popover__backdrop"
-                  data-bind="dec-presale-close" aria-label="Close presale box popup"></button>
-          <section class="dec-builder-dialog dec-presale__dialog" role="dialog" aria-modal="true"
-                   aria-labelledby="dec-presale-title">
-            <header class="dec-builder-dialog__head">
-              <span><strong id="dec-presale-title">PRESALE BOX</strong><small>Use available box credit</small></span>
-              <button type="button" class="dec-builder-dialog__close" data-bind="dec-presale-close"
-                      aria-label="Close presale box popup">×</button>
-            </header>
-            <div class="dec-presale__offer">
+            <!-- Live credit-gated presale appears as an option in this same
+                 chooser only while the acting player can use it. -->
+            <div class="dec-presale__offer" data-bind="dec-presale-row" hidden>
               <div class="dec-presale__label">
                 <span class="dec-presale__art" aria-hidden="true" data-lootbox-case-model="medium">
                   <img src="${lootboxCaseAssets('medium').cardTop}" alt="" loading="lazy" decoding="async" fetchpriority="low"><b>PRESALE</b>
@@ -1261,7 +1242,8 @@ class AppDecimatorPanel extends HTMLElement {
                 <button type="button" data-bind="dec-presale-max">MAX</button>
               </div>
             </div>
-            <button type="button" class="dec-builder-dialog__done" data-bind="dec-presale-done">APPLY PRESALE BOX</button>
+            <button type="button" class="dec-builder-dialog__done" data-write
+                    data-bind="dec-custom-box-buy">BUY IN NOW</button>
           </section>
         </div>
 
@@ -1529,14 +1511,6 @@ class AppDecimatorPanel extends HTMLElement {
       if (custom.hidden) custom.setAttribute?.('hidden', '');
       else custom.removeAttribute?.('hidden');
     }
-
-    const presaleToggle = this.querySelector('[data-bind="dec-presale-toggle"]');
-    const presale = this.querySelector('[data-bind="dec-presale-row"]');
-    presaleToggle?.setAttribute?.('aria-expanded', String(this.#presaleBoxOpen));
-    if (presale && !this.#presaleBoxOpen) {
-      presale.hidden = true;
-      presale.setAttribute?.('hidden', '');
-    }
   }
 
   #closeCustomBoxPopover({ restoreFocus = true } = {}) {
@@ -1549,28 +1523,12 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
-  #closePresaleBoxPopover({ restoreFocus = true } = {}) {
-    const wasOpen = this.#presaleBoxOpen;
-    this.#presaleBoxOpen = false;
-    this.#renderBuilderPopovers();
-    if (wasOpen && restoreFocus) {
-      try { this.querySelector('[data-bind="dec-presale-toggle"]')?.focus?.({ preventScroll: true }); }
-      catch (_e) { /* focus is progressive enhancement */ }
-    }
-  }
-
   #closeBuilderPopovers({ restoreFocus = false } = {}) {
     const customWasOpen = this.#customBoxOpen;
-    const presaleWasOpen = this.#presaleBoxOpen;
     this.#customBoxOpen = false;
-    this.#presaleBoxOpen = false;
     this.#renderBuilderPopovers();
-    if (!restoreFocus) return;
-    const bind = customWasOpen
-      ? 'dec-custom-box-toggle'
-      : presaleWasOpen ? 'dec-presale-toggle' : null;
-    if (!bind) return;
-    try { this.querySelector(`[data-bind="${bind}"]`)?.focus?.({ preventScroll: true }); }
+    if (!restoreFocus || !customWasOpen) return;
+    try { this.querySelector('[data-bind="dec-custom-box-toggle"]')?.focus?.({ preventScroll: true }); }
     catch (_e) { /* focus is progressive enhancement */ }
   }
 
@@ -1760,16 +1718,20 @@ class AppDecimatorPanel extends HTMLElement {
     const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
     customToggle?.addEventListener?.('click', () => {
       this.#customBoxOpen = !this.#customBoxOpen;
-      this.#presaleBoxOpen = false;
       if (this.#customBoxOpen) {
         const count = this.querySelector('[name="dec-box-custom-count"]');
         const current = Number(count?.value ?? 0);
-        if (count && (!Number.isInteger(current) || current <= 0)) count.value = '1';
+        if (count && (!Number.isInteger(current) || current <= 0) && !this.#presaleOptionAvailable) {
+          count.value = '1';
+        }
       }
       this.#renderBuilderPopovers();
       this.#updateTotalLabel();
       if (this.#customBoxOpen) {
-        const amount = this.querySelector('[name="dec-box-custom-eth"]');
+        const customCount = Number(this.querySelector('[name="dec-box-custom-count"]')?.value ?? 0);
+        const amount = customCount > 0
+          ? this.querySelector('[name="dec-box-custom-eth"]')
+          : this.querySelector('[name="dec-presale-box-eth"]');
         try {
           amount?.focus?.({ preventScroll: true });
           amount?.select?.();
@@ -1781,37 +1743,21 @@ class AppDecimatorPanel extends HTMLElement {
     )) {
       close.addEventListener?.('click', () => this.#closeCustomBoxPopover());
     }
-    this.querySelector('[data-bind="dec-custom-box-done"]')?.addEventListener?.(
-      'click', () => this.#closeCustomBoxPopover(),
-    );
     this.querySelector('[data-bind="dec-custom-box-fields"]')?.addEventListener?.(
       'keydown', (event) => {
         if (event?.key === 'Escape') this.#closeCustomBoxPopover();
       },
     );
-    const presaleToggle = this.querySelector('[data-bind="dec-presale-toggle"]');
-    presaleToggle?.addEventListener?.('click', () => {
-      if (presaleToggle.hidden || presaleToggle.disabled) return;
-      this.#presaleBoxOpen = !this.#presaleBoxOpen;
-      this.#customBoxOpen = false;
-      this.#renderBuilderPopovers();
-      this.#renderPresaleRow();
-      if (this.#presaleBoxOpen) {
-        try { this.querySelector('[name="dec-presale-box-eth"]')?.focus?.({ preventScroll: true }); }
-        catch (_e) { /* focus is progressive enhancement */ }
-      }
-    });
-    for (const close of Array.from(
-      this.querySelectorAll?.('[data-bind="dec-presale-close"]') || [],
-    )) {
-      close.addEventListener?.('click', () => this.#closePresaleBoxPopover());
-    }
-    this.querySelector('[data-bind="dec-presale-done"]')?.addEventListener?.(
-      'click', () => this.#closePresaleBoxPopover(),
-    );
-    this.querySelector('[data-bind="dec-presale-row"]')?.addEventListener?.(
-      'keydown', (event) => {
-        if (event?.key === 'Escape') this.#closePresaleBoxPopover();
+    this.querySelector('[data-bind="dec-custom-box-buy"]')?.addEventListener?.(
+      'click', (event) => {
+        this.#closeCustomBoxPopover({ restoreFocus: false });
+        const mainBuy = this.querySelector('[data-bind="dec-buy-cta"]');
+        if (!mainBuy || mainBuy.disabled) {
+          try { mainBuy?.focus?.({ preventScroll: true }); }
+          catch (_e) { /* focus is progressive enhancement */ }
+          return;
+        }
+        void this.#onBuyClick(event);
       },
     );
     // Live total-cost label on the Buy button as quantities change.
@@ -1847,7 +1793,6 @@ class AppDecimatorPanel extends HTMLElement {
         if (foilCheck.checked) {
           const presale = this.querySelector('[name="dec-presale-box-eth"]');
           if (presale) presale.value = '0';
-          this.#presaleBoxOpen = false;
         }
         const foilRow = this.querySelector('[data-bind="dec-foil-row"]');
         foilRow?.classList?.toggle('is-selected', Boolean(foilCheck.checked));
@@ -2671,6 +2616,51 @@ class AppDecimatorPanel extends HTMLElement {
     this.#customBoxOpen = false;
   }
 
+  #renderBoxOptionsButton(selection = this.#boxSelection()) {
+    const toggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
+    const title = this.querySelector('[data-bind="dec-box-options-title"]');
+    const detail = this.querySelector('[data-bind="dec-custom-box-selection"]');
+    if (!toggle || !title || !detail) return;
+
+    const customSelected = Number.isInteger(selection.customCount) && selection.customCount > 0;
+    const presaleAmount = this.#presaleWantedWei();
+    const presaleSelected = presaleAmount > 0n;
+    const parts = [];
+    if (customSelected) {
+      parts.push(
+        `${selection.customCount} CUSTOM · ${formatPurchaseEth(selection.customSizeWei)} ETH EACH`,
+      );
+    }
+    if (presaleSelected) parts.push(`PRESALE · ${formatPurchaseEth(presaleAmount)} ETH`);
+    if (parts.length === 0 && this.#presaleOptionAvailable) parts.push('PRESALE AVAILABLE');
+
+    title.textContent = this.#presaleOptionAvailable
+      ? 'CUSTOM / PRESALE BOXES'
+      : 'CUSTOM LUCKBOXES';
+    detail.textContent = parts.join(' · ');
+    detail.hidden = parts.length === 0;
+    if (detail.hidden) detail.setAttribute?.('hidden', '');
+    else detail.removeAttribute?.('hidden');
+
+    toggle.classList?.toggle('is-selected', customSelected || presaleSelected);
+    toggle.classList?.toggle('has-presale', this.#presaleOptionAvailable);
+    const ariaParts = [];
+    if (customSelected) {
+      ariaParts.push(
+        `${selection.customCount} custom ${selection.customCount === 1 ? 'Luckbox' : 'Luckboxes'} at ${formatPurchaseEth(selection.customSizeWei)} ETH each`,
+      );
+    }
+    if (presaleSelected) ariaParts.push(`presale box at ${formatPurchaseEth(presaleAmount)} ETH`);
+    toggle.setAttribute?.(
+      'aria-label',
+      ariaParts.length > 0
+        ? `Edit ${ariaParts.join(' and ')}`
+        : this.#presaleOptionAvailable
+          ? 'Configure custom Luckboxes or an available presale box'
+          : 'Configure custom Luckboxes',
+    );
+  }
+
   #renderBoxDraft(draft = this.#boxDraft()) {
     const { selection, totalBoxes, costWei, pricePending, error } = draft;
     const group = this.querySelector('[data-bind="dec-lootbox-group"]');
@@ -2688,26 +2678,9 @@ class AppDecimatorPanel extends HTMLElement {
       );
     }
 
-    const customSelected = Number.isInteger(selection.customCount) && selection.customCount > 0;
     const customToggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
-    customToggle?.classList?.toggle('is-selected', customSelected);
     customToggle?.setAttribute?.('aria-expanded', String(this.#customBoxOpen));
-    const customSelection = this.querySelector('[data-bind="dec-custom-box-selection"]');
-    if (customSelection) {
-      const customAmount = formatPurchaseEth(selection.customSizeWei);
-      customSelection.textContent = customSelected
-        ? `${selection.customCount} ${selection.customCount === 1 ? 'BOX' : 'BOXES'} · ${customAmount} ETH EACH`
-        : '';
-      customSelection.hidden = !customSelected;
-      if (customSelected) customSelection.removeAttribute?.('hidden');
-      else customSelection.setAttribute?.('hidden', '');
-      customToggle?.setAttribute?.(
-        'aria-label',
-        customSelected
-          ? `Edit ${selection.customCount} custom ${selection.customCount === 1 ? 'Luckbox' : 'Luckboxes'} at ${customAmount} ETH each`
-          : 'Configure custom Luckboxes',
-      );
-    }
+    this.#renderBoxOptionsButton(selection);
     const customFields = this.querySelector('[data-bind="dec-custom-box-fields"]');
     if (customFields) {
       customFields.hidden = !this.#customBoxOpen;
@@ -3108,7 +3081,7 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderPresaleRow(mintCostWei = this.#draftMintCostWei()) {
     const row = this.querySelector('[data-bind="dec-presale-row"]');
-    const toggle = this.querySelector('[data-bind="dec-presale-toggle"]');
+    const toggle = this.querySelector('[data-bind="dec-custom-box-toggle"]');
     const input = this.querySelector('[name="dec-presale-box-eth"]');
     const availableEl = this.querySelector('[data-bind="dec-presale-available"]');
     const maxButton = this.querySelector('[data-bind="dec-presale-max"]');
@@ -3132,19 +3105,15 @@ class AppDecimatorPanel extends HTMLElement {
     // until the player has enough current or same-purchase credit to buy the
     // contract's minimum box.
     const visible = live && !foilSelected && !flipMode && available >= PRESALE_BOX_MIN_WEI;
-    toggle.hidden = !visible;
-    if (toggle.hidden) toggle.setAttribute?.('hidden', '');
-    else toggle.removeAttribute?.('hidden');
+    this.#presaleOptionAvailable = visible;
     if (!visible) {
-      this.#presaleBoxOpen = false;
-      toggle.setAttribute?.('aria-expanded', 'false');
-      toggle.classList?.remove('has-selection');
       row.hidden = true;
       row.setAttribute?.('hidden', '');
       if (foilSelected || flipMode || (live && available < PRESALE_BOX_MIN_WEI)) input.value = '0';
       if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
         input.value = '0';
       }
+      this.#renderBoxOptionsButton();
       return;
     }
 
@@ -3154,13 +3123,11 @@ class AppDecimatorPanel extends HTMLElement {
     input.disabled = false;
     maxButton.disabled = available < PRESALE_BOX_MIN_WEI;
     const wanted = this.#presaleWantedWei();
-    toggle.classList?.toggle('has-selection', wanted > 0n);
-    toggle.setAttribute?.('aria-expanded', String(this.#presaleBoxOpen));
-    row.hidden = !this.#presaleBoxOpen;
-    if (row.hidden) row.setAttribute?.('hidden', '');
-    else row.removeAttribute?.('hidden');
+    row.hidden = false;
+    row.removeAttribute?.('hidden');
     row.classList?.toggle('dec-presale--selected', wanted > 0n);
     row.classList?.toggle('dec-presale--over-limit', wanted > available);
+    this.#renderBoxOptionsButton();
   }
 
   #setPrimaryFundingSource(source) {

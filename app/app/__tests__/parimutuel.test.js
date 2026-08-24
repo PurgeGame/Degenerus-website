@@ -125,6 +125,67 @@ describe('parimutuel.js reason-map registrations', () => {
     const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
     assert.equal(/register\(\s*['"]NotApproved['"]/.test(SRC), false);
   });
+
+  // The tests above hand decodeRevertReason a pre-named revert, which assumes
+  // work ethers can only do when the error is declared in the ABI this module
+  // builds its Contract with. Undeclared, error.revert stays null, the
+  // name-keyed registry misses, and the real reason collapses into the generic
+  // "Unexpected error" copy. Drive the module's own ABI to prove otherwise.
+  test('every bet revert is declared in the ABI, so none decodes as UNKNOWN', () => {
+    const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
+    const abi = [...SRC.matchAll(/'(error [^']+)'/g)].map((m) => m[1]);
+    const iface = new contractsMod.ethers.Interface(abi);
+    // DegenerusParimutuel.sol — placeBet :285/290/291/296, placeVolumeBet
+    // :468/473/474/480, claim :370, plus FLIP's burn gate (FLIP.sol:587).
+    for (const signature of [
+      'NotApproved()', 'MarketClosed()', 'AlreadyBet()',
+      'NotEligible()', 'NothingToSettle()', 'OnlyGame()',
+    ]) {
+      // Insufficient is deliberately absent: it is a shared selector answered by
+      // the write path's local override, asserted in the next test.
+      const selector = contractsMod.ethers.id(signature).slice(0, 10);
+      let revert = null;
+      try { revert = iface.parseError(selector); } catch (_e) { revert = null; }
+      assert.ok(revert, `${signature} must be declared in PARIMUTUEL_ABI`);
+      const decoded = reasonMapMod.decodeRevertReason({
+        code: 'CALL_EXCEPTION',
+        data: selector,
+        revert: { name: revert.name, selector, args: [] },
+      });
+      assert.notEqual(decoded.code, 'UNKNOWN',
+        `${signature} fell through to the generic unexpected-error copy`);
+      assert.doesNotMatch(decoded.userMessage, /Unexpected error/i,
+        `${signature} must explain itself to the player`);
+    }
+  });
+
+  // Insufficient is a shared FLIP selector. affiliate.js claims it globally for
+  // a taken referral code and coinflip.js for a short stake, and register() is a
+  // plain Map.set — so the global copy depends on import order and can say
+  // "That code is already taken" to someone placing a bet. The betting path must
+  // therefore answer from its own table, and must name the fixed 1,000 stake.
+  test('an under-funded bet names the 1,000 FLIP stake, not shared Insufficient copy', async () => {
+    await import('../affiliate.js');
+    await import('../coinflip.js');
+    const shared = reasonMapMod.decodeRevertReason({ revert: { name: 'Insufficient' } });
+
+    const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
+    const abi = [...SRC.matchAll(/'(error [^']+)'/g)].map((m) => m[1]);
+    const selector = contractsMod.ethers.id('Insufficient()').slice(0, 10);
+    const revert = new contractsMod.ethers.Interface(abi).parseError(selector);
+    assert.ok(revert, 'Insufficient must be declared so ethers can name it');
+
+    const bet = pari.__structuredRevertErrorForTest(
+      { code: 'CALL_EXCEPTION', data: selector, revert: { name: revert.name, selector, args: [] } },
+      'static-call placeBet',
+    );
+    assert.equal(bet.code, 'Insufficient');
+    assert.match(bet.userMessage, /1,000 FLIP/,
+      'the fixed stake is the number the player needs to see');
+    assert.notEqual(bet.userMessage, shared.userMessage,
+      'the betting copy does not inherit whichever module registered Insufficient last');
+    assert.doesNotMatch(bet.userMessage, /code is already taken/i);
+  });
 });
 
 // ===========================================================================

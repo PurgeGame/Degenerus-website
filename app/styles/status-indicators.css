@@ -360,16 +360,6 @@ body.layout-basic .app-decimator-panel .dec-flip-balance__action > .dec-redeem-q
   border-color: rgba(76, 29, 149, 0.62);
 }
 
-body.layout-basic .df-next-bet__quest {
-  z-index: 3;
-  right: auto;
-  bottom: auto;
-  top: 0.12rem;
-  left: 3.65rem;
-  width: 1.18rem;
-  height: 1.18rem;
-}
-
 body.layout-basic .dbb__burn > quest-objective-indicator {
   position: absolute;
   z-index: 3;
@@ -435,16 +425,6 @@ body.layout-basic .df-add-bet-dialog .df-boon-indicator {
   width: 1.42rem;
   height: 1.42rem;
   margin: 0;
-}
-
-body.layout-basic .df-next-bet__boon {
-  z-index: 3;
-  right: auto;
-  bottom: 0.08rem;
-  left: 3.65rem;
-  top: auto;
-  width: 1.12rem;
-  height: 1.12rem;
 }
 
 body.layout-basic .app-pass-section .pass-section-title {

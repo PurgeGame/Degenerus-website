@@ -2874,6 +2874,11 @@ class AppDailyFlip extends HTMLElement {
           </a>
           <strong class="df-baf-score__value" data-bind="df-baf-score">—</strong>
         </div>
+        <boon-product-indicator class="df-table-boon"
+                                product="coinflip"></boon-product-indicator>
+        <quest-objective-indicator class="df-table-quest"
+                                   data-quest-pointer="bottom-left"
+                                   product="coinflip"></quest-objective-indicator>
         <header class="df-title-bar">
           <div class="df-title-bar__heading">
             <h2 class="df-section-title">
@@ -2919,13 +2924,7 @@ class AppDailyFlip extends HTMLElement {
                  aria-label="Tomorrow's bet is loading">
               <span class="df-tomorrow-layout__add-cue" data-bind="df-tomorrow-add-cue" aria-hidden="true">+</span>
               <span class="df-bet-chip-rack" data-bind="df-tomorrow-chip-rack" aria-hidden="true">—</span>
-              <span class="df-flip-group df-next-bet" data-bind="df-add-bet-controls">
-                <quest-objective-indicator class="df-next-bet__quest"
-                                           data-quest-pointer="bottom-left"
-                                           product="coinflip"></quest-objective-indicator>
-                <boon-product-indicator class="df-next-bet__boon"
-                                        product="coinflip"></boon-product-indicator>
-              </span>
+              <span class="df-flip-group df-next-bet" data-bind="df-add-bet-controls"></span>
             </div>
             <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
           </div>
