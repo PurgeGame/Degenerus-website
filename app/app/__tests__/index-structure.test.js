@@ -8,8 +8,8 @@
 //   - body carries layout-basic (PIT later adds layout-pro without rework)
 //   - NO page-header/search block — the nav bar carries logo + Discord + wallet;
 //     content starts at chain chip → jackpot hero (purchase +
-//     draw + coinflip, ONE widget) → quests/degenerette/side-bets grid →
-//     tickets inventory → more-ways → footer
+//     draw + coinflip, ONE widget) → quests/degenerette grid (Craps slot
+//     reserved) → tickets inventory → AFKING Passes → Side Bets rail → footer
 //   - aggregate claims and winnings strips are unmounted
 //   - lootboxes + passes live inside the collapsed <details class="more-ways">
 //   - boons and the legacy coinflip panel remain absent; Referrals is mounted
@@ -45,10 +45,11 @@ describe('index.html basic-mode skeleton', () => {
       'class="play-grid"',
       '<app-quest-panel>',
       '<app-degenerette-panel>',
-      '<app-parimutuel-panel>',
       '<app-tickets-inventory>',
       'class="more-ways section-disclosure"',
       '<app-pass-section>',
+      'class="side-bets-rail"',
+      '<app-parimutuel-panel>',
       '<app-sdgnrs-burn-rail>',
       '<footer>',
     ];
@@ -147,14 +148,23 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
   });
 
-  test('the compact DGNRS rail sits immediately below AFKING PASSES', () => {
+  test('Side Bets is a full-width rail between AFKING PASSES and the compact DGNRS rail', () => {
     const passesEnd = html.indexOf('</details>', html.indexOf('id="afking-passes"'));
-    const rail = html.indexOf('<app-sdgnrs-burn-rail>', passesEnd);
+    const sideBets = html.indexOf('<section class="side-bets-rail"', passesEnd);
+    const pari = html.indexOf('<app-parimutuel-panel>', sideBets);
+    const sideBetsEnd = html.indexOf('</section>', pari);
+    const rail = html.indexOf('<app-sdgnrs-burn-rail>', sideBetsEnd);
     const history = html.indexOf('<app-transaction-history>', rail);
-    assert.ok(passesEnd >= 0 && rail > passesEnd && history > rail,
-      'balance, burn, and charity vote actions follow the pass drawer');
-    assert.doesNotMatch(html.slice(passesEnd, rail), /<app-[a-z-]+>/,
-      'no other component is inserted between AFKING PASSES and the DGNRS rail');
+    assert.ok(passesEnd >= 0 && sideBets > passesEnd && pari > sideBets
+      && sideBetsEnd > pari && rail > sideBetsEnd && history > rail,
+      'Side Bets leaves the play grid and sits immediately after the pass drawer');
+    assert.doesNotMatch(html.slice(passesEnd, sideBets), /<app-[a-z-]+>/,
+      'no component is inserted before the Side Bets rail');
+    assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
+      'the DGNRS rail immediately follows Side Bets');
+    assert.match(appCss,
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(13rem, 0\.42fr\) minmax\(0, 1\.58fr\)/s,
+      'the relocated books use a short two-lane horizontal rail');
     assert.match(html, /href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
   });
 
@@ -189,15 +199,18 @@ describe('index.html basic-mode skeleton', () => {
     );
   });
 
-  test('second three-panel block is Quests left, Degenerette middle, Side Bets right', () => {
+  test('the play grid keeps Quests left and Degenerette middle while reserving the right track for Craps', () => {
     const rowMatch = html.match(/<section class="play-grid"[\s\S]*?<\/section>/);
     assert.ok(rowMatch, '<section class="play-grid"> present');
     const row = rowMatch[0];
     const quest = row.indexOf('<app-quest-panel>');
     const degenerette = row.indexOf('<app-degenerette-panel>');
-    const pari = row.indexOf('<app-parimutuel-panel>');
     assert.ok(quest >= 0 && quest < degenerette, 'quests are left/first');
-    assert.ok(degenerette < pari, 'Degenerette is middle and side bets are right');
+    assert.equal(row.indexOf('<app-parimutuel-panel>'), -1,
+      'Side Bets no longer consumes the future Craps column');
+    assert.match(appCss,
+      /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests degenerette craps"/s,
+      'the desktop right track remains explicitly reserved for Craps');
   });
 
   test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {

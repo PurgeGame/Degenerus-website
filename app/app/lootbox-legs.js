@@ -48,7 +48,12 @@ export const OPEN_EVENTS_ABI = [
   'event LootBoxDgnrsReward(address indexed player, uint256 lootboxAmount, uint256 dgnrsAmount)',
   'event LootBoxWhalePassJackpot(address indexed player, uint256 lootboxAmount, uint24 targetLevel, uint32 entriesPerLevel, uint24 statsBoost, uint24 frozenUntilLevel)',
   'event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount)',
-  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing)',
+  // audit 4a9549e51 appended `normalPasses`/`highPasses`: the FLIP branch tosses a committed
+  // coin and half the boxes denominate the whole roll into Craps day-passes at the regular
+  // box units instead of paying it as coinflip credit. ⚠ THE TOPIC0 CHANGED WITH THEM — the
+  // old signature does not merely lose two fields, it matches NO log at all, and
+  // `encodeFilterTopics` fails closed by returning an empty feed rather than an error.
+  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing, uint32 normalPasses, uint32 highPasses)',
   'event BoxSpin(address indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
 ];
 const OPEN_CALL_ABI = ['function openBox(address player, uint48 index)'];
@@ -1395,6 +1400,13 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
             wholeTickets: 0,
             flip: BigInt(parsed.args.flip),
             closing: Boolean(parsed.args.closing),
+            // Craps day-passes the box paid INSTEAD of coinflip credit (audit 4a9549e51). Carried
+            // on the anchor rather than as legs of their own: a new `legType` would need renderer
+            // support in every consumer, and an unrecognised one renders as an empty row. Note
+            // `flip` is NOT the whole FLIP branch any more — a box that denominated its roll into
+            // passes reports the passes here and a smaller (or zero) `flip`.
+            crapsNormalPasses: Number(parsed.args.normalPasses ?? 0),
+            crapsHighPasses: Number(parsed.args.highPasses ?? 0),
           });
           if (BigInt(parsed.args.dgnrs) > 0n) {
             out.push({ legType: 'dgnrs', amount: BigInt(parsed.args.dgnrs) });

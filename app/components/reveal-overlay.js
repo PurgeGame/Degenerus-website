@@ -2698,18 +2698,18 @@ class RevealOverlay extends HTMLElement {
               <span class="rvl-pack-count" data-bind="rvl-pack-count"></span>
             </div>
             <div class="rvl-vessel-hint" data-bind="rvl-hint">TAP TO OPEN</div>
-            <div class="rvl-vessel-pack-actions" data-bind="rvl-pack-actions" hidden>
-              <button type="button" class="rvl-vessel-open-pack" data-bind="rvl-open-pack" hidden>
-                OPEN PACK
-              </button>
-              <button type="button" class="rvl-vessel-open-all" data-bind="rvl-open-all" hidden>
-                OPEN ALL
-              </button>
-              <button type="button" class="rvl-vessel-skip" data-bind="rvl-skip-pack"
-                      aria-label="Skip this pack reveal">
-                SKIP
-              </button>
-            </div>
+          </div>
+          <div class="rvl-vessel-pack-actions" data-bind="rvl-pack-actions" hidden>
+            <button type="button" class="rvl-vessel-open-pack" data-bind="rvl-open-pack" hidden>
+              OPEN PACK
+            </button>
+            <button type="button" class="rvl-vessel-open-all" data-bind="rvl-open-all" hidden>
+              OPEN ALL
+            </button>
+            <button type="button" class="rvl-vessel-skip" data-bind="rvl-skip-pack"
+                    aria-label="Skip this pack reveal">
+              SKIP
+            </button>
           </div>
           <div class="rvl-card-zone" data-bind="rvl-card-zone" hidden></div>
           <div class="rvl-spin-zone" data-bind="rvl-spin-zone" hidden></div>
@@ -3084,6 +3084,15 @@ class RevealOverlay extends HTMLElement {
     );
   }
 
+  // Once a hand is open, OPEN NEXT already consumes the sole remaining pack.
+  // Keep OPEN ALL as a distinct choice only when it can cover two or more
+  // same-batch packs, or when it intentionally reaches across Pending batches.
+  #hasDistinctOpenAllPacksAction(seq) {
+    if (!this.#canOpenAllPacks(seq)) return false;
+    if (this.#hasExternalPacks(seq)) return true;
+    return this.#remainingPacks(seq) > 1;
+  }
+
   #openAllPacksLabel(seq, { includeCurrent = false } = {}) {
     if (this.#hasExternalPacks(seq)) return 'OPEN ALL PACKS';
     const remaining = this.#remainingPacks(seq, { includeCurrent });
@@ -3262,6 +3271,38 @@ class RevealOverlay extends HTMLElement {
     ));
   }
 
+  // Auto-open and other Pending owners can materialize several honest box
+  // results before the player reaches the first sealed case. Those sequences
+  // already left the tray, but they still belong to the same OPEN ALL choice.
+  // Authored VIEW INDIVIDUALLY parts stay separate so a combo cannot be folded
+  // back together after the player explicitly chose its per-box path.
+  #queuedPendingLootboxes() {
+    return this.#queue.filter((candidate) => (
+      candidate?.kind === 'lootbox'
+      && candidate?.suppressLootboxComplete !== true
+      && candidate?.comboBoxNumber == null
+      && candidate?.comboRewards !== true
+    ));
+  }
+
+  #lootboxSequenceCount(sequences) {
+    return (Array.isArray(sequences) ? sequences : []).reduce(
+      (sum, candidate) => sum + Math.max(
+        1,
+        Math.trunc(Number(candidate?.lootboxBoxCount) || 0),
+      ),
+      0,
+    );
+  }
+
+  #pendingLootboxActionCount(actions) {
+    return (Array.isArray(actions) ? actions : []).reduce((sum, action) => {
+      const stacked = (Array.isArray(action?.lootboxStacks) ? action.lootboxStacks : [])
+        .reduce((count, stack) => count + Math.max(0, Math.trunc(Number(stack?.count) || 0)), 0);
+      return sum + Math.max(1, stacked);
+    }, 0);
+  }
+
   #nextReadyPendingAction(excludeSequence = null) {
     return getPendingActions().find((item) => (
       item?.state === 'ready' && typeof item.run === 'function'
@@ -3345,23 +3386,34 @@ class RevealOverlay extends HTMLElement {
   // those honest actions append, then moves them directly behind the box the
   // player is currently viewing.
   async #queuePendingLootboxes({ all = false, excludeSequence = null } = {}) {
-    const actions = this.#readyPendingLootboxes(excludeSequence);
     const boxes = [];
     const unrelated = [];
-    for (const action of actions) {
-      const queueLength = this.#queue.length;
-      try { await action.run(); } catch (_e) { /* the owner keeps failed rows retryable */ }
-      const added = this.#queue.splice(queueLength);
-      for (const seq of added) {
-        if (seq?.kind === 'lootbox') {
-          seq.autoStart = true;
-          seq.autoAdvance = all;
-          boxes.push(seq);
-        } else {
-          unrelated.push(seq);
+    const attempted = new Set();
+    let foundBox = false;
+    while (!foundBox || all) {
+      const actions = this.#readyPendingLootboxes(excludeSequence).filter((action) => {
+        const identity = `${String(action?.source || '')}:${String(action?.id || '')}`;
+        return !attempted.has(identity);
+      });
+      if (actions.length === 0) break;
+      for (const action of actions) {
+        const identity = `${String(action?.source || '')}:${String(action?.id || '')}`;
+        attempted.add(identity);
+        const queueLength = this.#queue.length;
+        try { await action.run(); } catch (_e) { /* the owner keeps failed rows retryable */ }
+        const added = this.#queue.splice(queueLength);
+        for (const seq of added) {
+          if (seq?.kind === 'lootbox') {
+            seq.autoStart = true;
+            seq.autoAdvance = all;
+            boxes.push(seq);
+            foundBox = true;
+          } else {
+            unrelated.push(seq);
+          }
         }
+        if (!all && foundBox) break;
       }
-      if (!all && boxes.length > 0) break;
     }
     // Keep non-box work at its original tail while making OPEN NEXT literal.
     this.#queue.unshift(...boxes);
@@ -3371,6 +3423,7 @@ class RevealOverlay extends HTMLElement {
 
   async #openPendingLootboxes(seq, { all = false } = {}) {
     if (this.#controlsOnly) return;
+    const queuedBefore = all ? this.#queuedPendingLootboxes() : [];
     this.#controlsOnly = true;
     const summary = this.#bind('rvl-summary');
     for (const button of summary?.querySelectorAll?.('button') || []) button.disabled = true;
@@ -3388,15 +3441,22 @@ class RevealOverlay extends HTMLElement {
       if (close) close.disabled = false;
     }
     if (this.#aborted) return;
-    if (all && boxes.length > 0) {
-      const combined = combineLootboxSequences(boxes, { autoStart: true });
+    const selectedBoxes = all
+      ? [...new Set([
+          ...queuedBefore,
+          ...boxes,
+          ...this.#queuedPendingLootboxes(),
+        ])]
+      : boxes;
+    if (all && selectedBoxes.length > 0) {
+      const combined = combineLootboxSequences(selectedBoxes, { autoStart: true });
       if (combined) {
-        const selected = new Set(boxes);
+        const selected = new Set(selectedBoxes);
         this.#queue = this.#queue.filter((candidate) => !selected.has(candidate));
         this.#queue.unshift(combined);
       }
     }
-    if (boxes.length > 0) {
+    if (selectedBoxes.length > 0) {
       this.#tap(all ? 'open-all-boxes' : 'next-box');
       return;
     }
@@ -3409,15 +3469,21 @@ class RevealOverlay extends HTMLElement {
   // The first selected box is already honestly settled (or replayed) by its
   // Pending owner before the overlay receives it. Hold its sealed-case gate
   // while the remaining READY rows do the same work, then fold every settled
-  // child into this one large case. Waiting/RNG rows are deliberately absent
-  // from #readyPendingLootboxes and stay put.
+  // child into this one large case. Results that auto-open already moved into
+  // the reveal queue, so collect those too instead of playing them one by one.
+  // Waiting/RNG rows cannot be opened yet and stay put.
   async #startOpenAllLootboxes(seq) {
     if (this.#controlsOnly || seq?.kind !== 'lootbox') return false;
     const ready = this.#readyPendingLootboxes(seq);
-    if (ready.length === 0) {
+    const queuedBefore = this.#queuedPendingLootboxes();
+    if (ready.length === 0 && queuedBefore.length === 0) {
       this.#tap('open-one-box');
       return false;
     }
+
+    const openingCount = Math.max(1, Math.trunc(Number(seq.lootboxBoxCount) || 0))
+      + this.#pendingLootboxActionCount(ready)
+      + this.#lootboxSequenceCount(queuedBefore);
 
     this.#controlsOnly = true;
     const actions = this.#bind('rvl-pack-actions');
@@ -3426,10 +3492,10 @@ class RevealOverlay extends HTMLElement {
     const close = this.#bind('rvl-close');
     actions?.classList?.add('is-loading');
     for (const button of actions?.querySelectorAll?.('button') || []) button.disabled = true;
-    if (openAll) openAll.textContent = `OPENING ALL ${ready.length + 1}…`;
+    if (openAll) openAll.textContent = `OPENING ALL ${openingCount}…`;
     if (hint) {
       hint.hidden = false;
-      hint.textContent = `OPENING ALL ${ready.length + 1}…`;
+      hint.textContent = `OPENING ALL ${openingCount}…`;
     }
     if (close) close.disabled = true;
 
@@ -3449,19 +3515,25 @@ class RevealOverlay extends HTMLElement {
     // Failed/rejected rows remain in Pending and reappear on the final receipt.
     // Successful siblings become cards inside the current large case, not a
     // queue of cases that opens one after another.
-    if (boxes.length > 0) {
-      const combined = combineLootboxSequences([seq, ...boxes], {
+    const selectedBoxes = [...new Set([
+      ...queuedBefore,
+      ...boxes,
+      ...this.#queuedPendingLootboxes(),
+    ])];
+    let combined = null;
+    if (selectedBoxes.length > 0) {
+      combined = combineLootboxSequences([seq, ...selectedBoxes], {
         autoStart: seq.autoStart,
       });
       if (combined) {
-        const selected = new Set(boxes);
+        const selected = new Set(selectedBoxes);
         this.#queue = this.#queue.filter((candidate) => !selected.has(candidate));
         Object.assign(seq, combined);
         this.#applyLootboxSequencePresentation(seq);
       }
     }
-    this.#tap(boxes.length > 0 ? 'open-all-boxes' : 'open-one-box');
-    return boxes.length > 0;
+    this.#tap(combined ? 'open-all-boxes' : 'open-one-box');
+    return Boolean(combined);
   }
 
   // -------------------------------------------------------------------------
@@ -4075,9 +4147,13 @@ class RevealOverlay extends HTMLElement {
       const readyLootboxes = isLootbox && !seq.autoStart
         ? this.#readyPendingLootboxes(seq)
         : [];
+      const queuedLootboxes = isLootbox && !seq.autoStart
+        ? this.#queuedPendingLootboxes()
+        : [];
       const canChooseLootboxBoxView = this.#canChooseLootboxBoxView(seq)
         && !openingAll;
-      const canChooseLootboxBatch = !canChooseLootboxBoxView && readyLootboxes.length > 0
+      const canChooseLootboxBatch = !canChooseLootboxBoxView
+        && (readyLootboxes.length > 0 || queuedLootboxes.length > 0)
         && !openingAll && !seq.autoStart;
       const canChooseLootboxAction = canChooseLootboxBoxView || canChooseLootboxBatch;
       if (hint) {
@@ -4115,9 +4191,11 @@ class RevealOverlay extends HTMLElement {
           openAll.textContent = `COMBINE ${total} BOXES`;
           openAll.setAttribute('aria-label', `Open ${total} luckboxes as one combined receipt`);
         } else if (canOpenAllLootboxes) {
-          const total = readyLootboxes.length + 1;
+          const total = Math.max(1, Math.trunc(Number(seq.lootboxBoxCount) || 0))
+            + this.#pendingLootboxActionCount(readyLootboxes)
+            + this.#lootboxSequenceCount(queuedLootboxes);
           openAll.textContent = `OPEN ALL ${total}`;
-          openAll.setAttribute('aria-label', `Open all ${total} ready luckboxes`);
+          openAll.setAttribute('aria-label', `Open all ${total} available luckboxes`);
         }
       }
       if (skipPack) {
@@ -4550,7 +4628,7 @@ class RevealOverlay extends HTMLElement {
       currentIndex: historyIndex,
     });
 
-    if (!openingAll && this.#canOpenAllPacks(seq)) {
+    if (!openingAll && this.#hasDistinctOpenAllPacksAction(seq)) {
       const openAll = document.createElement('button');
       openAll.type = 'button';
       openAll.className = 'rvl-open-all-cta';
@@ -7108,7 +7186,12 @@ class RevealOverlay extends HTMLElement {
     const readyLootboxes = seq.kind === 'lootbox'
       ? this.#readyPendingLootboxes(seq)
       : [];
+    const queuedLootboxes = seq.kind === 'lootbox'
+      ? this.#queuedPendingLootboxes()
+      : [];
     const hasMoreLootboxes = readyLootboxes.length > 0;
+    const openAllLootboxCount = this.#pendingLootboxActionCount(readyLootboxes)
+      + this.#lootboxSequenceCount(queuedLootboxes);
     const autoNextLootbox = Boolean(
       seq.kind === 'lootbox' && seq.autoAdvance && this.#queue[0]?.kind === 'lootbox'
     );
@@ -7170,11 +7253,11 @@ class RevealOverlay extends HTMLElement {
       summary.appendChild(openAll);
     }
 
-    if (hasMoreLootboxes && readyLootboxes.length > 1) {
+    if (openAllLootboxCount > 1) {
       const openAllBoxes = document.createElement('button');
       openAllBoxes.type = 'button';
       openAllBoxes.className = 'rvl-open-all-cta rvl-open-all-cta--lootboxes';
-      openAllBoxes.textContent = `OPEN ALL ${readyLootboxes.length} LUCKBOXES`;
+      openAllBoxes.textContent = `OPEN ALL ${openAllLootboxCount} LUCKBOXES`;
       openAllBoxes.addEventListener('click', (e) => {
         try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
         void this.#openPendingLootboxes(seq, { all: true });

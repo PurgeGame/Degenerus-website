@@ -615,6 +615,8 @@ class DecimatorDrawReplay {
     this.speed = 1;
     this.runToken = 0;
     this.animations = new Set();
+    this.selectionElements = new Map();
+    this.currentPhysical = null;
     this.winnerNames = new Map(Object.entries(snapshot.winnerNames || {}).map(([address, name]) => (
       [String(address).toLowerCase(), String(name)]
     )));
@@ -782,9 +784,11 @@ class DecimatorDrawReplay {
     this.bind('result-pop').hidden = true;
     this.bind('wheel-wrap').classList.remove(
       'is-locking', 'is-drawing', 'is-settled', 'is-complete',
-      'is-combining', 'is-allocation',
+      'is-combining', 'is-allocation', 'is-finalizing',
     );
     this.bind('winner-pie').replaceChildren();
+    this.selectionElements.clear();
+    this.currentPhysical = null;
     this.bind('winner-allocation').hidden = true;
     this.bind('winner-allocation').parentElement?.classList?.remove('has-winner-allocation');
     this.allocationVisible = false;
@@ -1072,7 +1076,7 @@ class DecimatorDrawReplay {
     this.bind('draw-phase').textContent = 'COMBINING';
     this.bind('active-bucket').textContent = 'MERGING WINNING POOLS';
     this.bind('active-detail').textContent = 'BUILDING FINAL PAYOUT PIE';
-    wrap.classList.add('is-combining');
+    wrap.classList.add('is-combining', 'is-finalizing');
     const merge = svg('circle', 'winner-pie__merge');
     merge.setAttribute('cx', '300');
     merge.setAttribute('cy', '300');
@@ -1150,6 +1154,7 @@ class DecimatorDrawReplay {
     mergeFade.cancel();
     this.animations.delete(mergeFade);
     merge.remove();
+    wrap.classList.remove('is-finalizing');
   }
 
   #renderFrame(frame, { phase, current, settled = false }) {
@@ -1206,6 +1211,12 @@ class DecimatorDrawReplay {
     playerShareHost.replaceChildren();
     highlightHost.replaceChildren();
     labelHost.replaceChildren();
+    const selectionElements = new Map();
+    const registerSelectionElement = (physical, element) => {
+      const elements = selectionElements.get(physical) || [];
+      elements.push(element);
+      selectionElements.set(physical, elements);
+    };
     const lockByPhysical = new Map(this.completed.map((lock) => [lock.lockPhysical, lock]));
 
     for (let physical = 0; physical < frame.slotCount; physical += 1) {
@@ -1237,6 +1248,7 @@ class DecimatorDrawReplay {
       if (isPlayer) path.classList.add('is-player');
       if (isPlayerWin) path.classList.add('is-player-win');
       segmentHost.appendChild(path);
+      if (isActive) registerSelectionElement(physical, path);
 
       if (isPlayerSlice && shareBps > 0) {
         const share = svg('path', 'wheel-player-share');
@@ -1250,6 +1262,7 @@ class DecimatorDrawReplay {
         title.textContent = `Your ${formatScore(this.player.score)} score is ${formatSharePercent(shareBps)} of this subbucket`;
         share.appendChild(title);
         playerShareHost.appendChild(share);
+        if (isActive) registerSelectionElement(physical, share);
       }
 
       if (locked || isActive) {
@@ -1260,6 +1273,7 @@ class DecimatorDrawReplay {
         if (locked) sheen.classList.add('is-locked');
         if (isPlayer) sheen.classList.add('is-player');
         highlightHost.appendChild(sheen);
+        if (isActive) registerSelectionElement(physical, sheen);
       }
 
       if (!locked && !isActive) continue;
@@ -1321,7 +1335,11 @@ class DecimatorDrawReplay {
         label.appendChild(playerBadge);
       }
       labelHost.appendChild(label);
+      if (isActive) registerSelectionElement(physical, label);
     }
+
+    this.selectionElements = selectionElements;
+    this.currentPhysical = null;
 
     const wheel = this.bind('draw-wheel');
     wheel.setAttribute(
@@ -1330,19 +1348,15 @@ class DecimatorDrawReplay {
     );
   }
 
-  #setCurrentSelection(frame, physical) {
-    for (const host of [
-      this.bind('wheel-segments'),
-      this.bind('wheel-player-shares'),
-      this.bind('wheel-highlights'),
-      this.bind('wheel-labels'),
-    ]) {
-      for (const element of host.querySelectorAll('[data-physical]')) {
-        const current = Number(element.getAttribute('data-physical')) === physical
-          && element.hasAttribute('data-subbucket');
-        element.classList.toggle('is-current', current);
-      }
+  #setCurrentSelection(_frame, physical) {
+    if (physical === this.currentPhysical) return;
+    for (const element of this.selectionElements.get(this.currentPhysical) || []) {
+      element.classList.remove('is-current');
     }
+    for (const element of this.selectionElements.get(physical) || []) {
+      element.classList.add('is-current');
+    }
+    this.currentPhysical = physical;
   }
 
   #closestActivePhysical(frame, angle) {

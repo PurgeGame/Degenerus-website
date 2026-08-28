@@ -571,8 +571,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.play-grid \.qst-header,\s*body\.layout-basic \.play-grid \.deg-header,\s*body\.layout-basic \.play-grid \.app-parimutuel > \.panel-header\s*\{[^}]*min-height:\s*2\.55rem;[^}]*align-items:\s*center;/s,
-      'Quests, Degenerette, and Side Bets share one vertical label rail',
+      /\.play-grid \.qst-header,\s*body\.layout-basic \.play-grid \.deg-header\s*\{[^}]*min-height:\s*2\.55rem;[^}]*align-items:\s*center;/s,
+      'Quests and Degenerette share one vertical label rail',
     );
     const placeCta = el.querySelector('.deg-place-cta');
     assert.ok(placeCta, 'Place CTA rendered');

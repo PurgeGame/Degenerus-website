@@ -141,7 +141,12 @@ export const GAME_ABI = [
   'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
   'event LootBoxIdx(address indexed buyer, uint32 indexed index, uint32 indexed day)',
   'event PresaleBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount, bool closing)',
-  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing)',
+  // audit 4a9549e51 appended `normalPasses`/`highPasses`: the FLIP branch tosses a committed
+  // coin and half the boxes denominate the whole roll into Craps day-passes at the regular
+  // box units instead of paying it as coinflip credit. ⚠ THE TOPIC0 CHANGED WITH THEM — the
+  // old signature does not merely lose two fields, it matches NO log at all, and
+  // `encodeFilterTopics` fails closed by returning an empty feed rather than an error.
+  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing, uint32 normalPasses, uint32 highPasses)',
   'event TraitsGenerated(address indexed player, uint24 indexed level, uint32 queueIdx, uint32 startIndex, uint32 count, uint256 entropy)',
   'event FoilPackBought(address indexed buyer, uint24 indexed level, uint16 multBps, uint256 weiIn)',
 ];

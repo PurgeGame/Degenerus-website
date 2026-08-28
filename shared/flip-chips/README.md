@@ -14,6 +14,10 @@ coin, never recolors — a coin with red on top does not exist.
 | `face.svg` | 120×120 | Top-down chip icon: the split flame logo with a milled coin rim. Buttons, compact "FLIP as a chip" marks. |
 | `coin.svg` | 120×64 | THE FLIP coin in 3/4 view, logo orientation. Visible wall band = 16/64 = 25% of image height (transparent padding below). |
 | `coin-spun.svg` | 120×64 | The same coin given a spin on the felt (face art rotated −22°, wall seam recomputed to match). Use for pile variety. |
+| `coin-high-red.svg` / `coin-high-green.svg` | 120×90 | The same coin at a higher tabletop angle for readable player markers. `red` and `green` name which half faces the viewer; they are 0°/180° orientations, not recolors. |
+| `stack-2-high-{red,green}.svg` … `stack-10-high-{red,green}.svg` | 120×101 … 120×189 | Matching 2–10 chip dealer stacks at the higher angle. Each column holds one 0° red-facing or 180° green-facing turn, so its face and wall seams align physically from base to top. |
+| `coin-high-{gold,silver}.svg` and `stack-N-high-{gold,silver}.svg` | Same as high-angle set | Temporary shooter-boost skin of the exact table geometry, with brushed faces, directional reflections, polished bevels, and milled gold/silver walls. Gold faces the local rail; silver faces opponents by swapping the material halves while keeping the directional FLIP flame upright. These indicate settled boost eligibility and are never used as ordinary FLIP denominations. |
+| `pile-5-metal-{gold,silver}.svg` … `pile-20-metal-{gold,silver}.svg` | Same as matching pile | Matching minted-metal versions of the mound ladder so escalated boosted shooters never fall back to ordinary colors. |
 | `stack.svg` / `stack-spun.svg` | 120×128 | Pre-baked five-coin stacks at 16-unit rise — every coin, top included, shows the same 25% band. |
 | `stack-2.svg` … `stack-10.svg` (+ `-b`, `-c`) | varies | The stack ladder: free-standing dealer-neat columns of 2–10 coins. **Every coin in a column shares ONE rotation**, so the wall seams run in unbroken vertical lines the way a racked stack of one chip design does — per-coin spins are exactly what makes a column read as a shoved-together pile. Three turns ship per height so a rank of stacks is not a row of twins: unsuffixed is the canonical logo turn (red wall, green sliver), `-b` splits the wall down the middle, `-c` is its green counterpart. Bottom-tight viewBox, so the base coin sits flush on whatever the art is anchored to. |
 | `stack-N-messy.svg` | varies | The same heights hand-cut: coins drift sideways coin to coin, a few faces lean, and each coin keeps its own spin, for spots where a machine-racked column would look staged. |
@@ -54,3 +58,8 @@ load external resources). Derive `coin-spun` by rotating the face group
 `60 + 58·cos(135° + θ_ccw)`; stacks and piles are `<use>` compositions of the
 coin bodies. If the logo ever changes, rebuild from it rather than editing
 the flame path by hand.
+
+The high-angle table markers use that same recipe at a 58×37 face ellipse
+and an 11-unit wall/rise. Regenerate the normal and metallic singles, all four
+2–10 stack ladders, and the metallic table pile derivatives with
+`python3 shared/flip-chips/build-table-coins.py`.

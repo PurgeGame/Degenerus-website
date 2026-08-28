@@ -32,7 +32,7 @@ export const CHAIN = {
   },
 };
 
-// 22 contract slots — populated at v5.0 mainnet cutover.
+// Contract slots — populated at v5.0 mainnet cutover.
 // `null` placeholder keeps the file forward-compatible without introducing
 // hex-address literals (Pitfall 1 grep gate).
 export const CONTRACTS = {
@@ -49,6 +49,7 @@ export const CONTRACTS = {
   AFKING_SUB_TOKEN:        null,
   COIN:                    null,
   COINFLIP:                null,
+  CRAPS:                   null,
   GAME:                    null,
   GAME_LENS:               null,
   WWXRP:                   null,

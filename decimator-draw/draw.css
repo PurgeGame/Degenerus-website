@@ -477,6 +477,11 @@ body.is-demo .draw-kicker [data-bind="round-context"] { color: #ff7583; }
   filter: drop-shadow(0 20px 28px rgba(0, 0, 0, 0.7));
 }
 
+/* Filtering the complete SVG forces the browser to re-rasterize the whole
+   wheel whenever the selector moves. The surrounding reactor shadow keeps
+   the same depth while the active spin stays on the compositor-friendly path. */
+.wheel-wrap:is(.is-drawing, .is-locking, .is-finalizing) .draw-wheel { filter: none; }
+
 .wheel-bed {
   fill: #050507;
   stroke: rgba(237, 14, 17, 0.2);

@@ -85,6 +85,7 @@
   <link rel="stylesheet" href="/app/styles/afking-funding-warning.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
   <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/craps-table.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/baf-eve.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/records-rail.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/baf-resolution.css" media="print" onload="this.media='all';this.onload=null">
@@ -328,12 +329,13 @@
            disk for THE PIT. -->
 
       <!-- Second three-column instrument, aligned to the jackpot hero:
-           quests left, Degenerette center, side bets right. Degenerette owns
-           fresh and historical resolved spins in-panel. -->
-      <section class="play-grid" aria-label="Quests, Degenerette, and side bets">
+           quests left and Degenerette center. The right desktop track stays
+           clear for the upcoming Craps container; Side Bets now has its own
+           full-width rail below AFKING Passes. Degenerette owns fresh and
+           historical resolved spins in-panel. -->
+      <section class="play-grid" aria-label="Quests and Degenerette">
         <app-quest-panel></app-quest-panel>
         <app-degenerette-panel></app-degenerette-panel>
-        <app-parimutuel-panel></app-parimutuel-panel>
       </section>
 
       <!-- The only permanent scoreboard in the game: four all-time marks and
@@ -384,6 +386,13 @@
         </div>
       </details>
 
+      <!-- Side wagers stay available without occupying the future Craps
+           column. Full-width placement lets active books flow horizontally,
+           keeping this rail short even when more than one market is open. -->
+      <section class="side-bets-rail" aria-label="Side bets">
+        <app-parimutuel-panel></app-parimutuel-panel>
+      </section>
+
       <!-- Compact equity utility: both token balances, their combined backing
            preview, and entry points into the existing burn and charity dialogs. -->
       <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
@@ -411,6 +420,10 @@
     <!-- Standalone currency/format chooser for the purchase widget's ALL IN
          action. It quotes and submits without rewriting any ordinary form. -->
     <app-all-in-dialog></app-all-in-dialog>
+
+    <!-- Event-driven pre-roll craps builder. The opener supplies the FLIP
+         balance and submit callback; this host only builds the repeated slip. -->
+    <app-craps-table></app-craps-table>
 
     <!-- Account-scoped runway warning for an active AFKing subscription. The
          pass desk publishes its exact prepaid-day coverage; this popup never
@@ -499,6 +512,7 @@
       '/app/components/app-day-history-replays.js',
       '/app/components/app-jackpot-resolutions.js',
       '/app/components/app-all-in-dialog.js',
+      '/app/components/app-craps-table.js',
       '/app/components/app-player-funds-dialog.js',
       '/app/components/app-afking-funding-warning.js',
       // Telemetry client (2026-08-15): drains the head hook's queue and

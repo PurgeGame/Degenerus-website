@@ -3659,3 +3659,19 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
   body.layout-basic .app-decimator-panel .dec-purchase-flyer { display: none; }
 }
+
+/* Product surfaces use the cart handle as their hotspot, so the custom cursor
+   still points precisely at the item being added. Keep ordinary controls and
+   disabled purchase actions on their native cursors. */
+@media (hover: hover) and (pointer: fine) {
+  body.layout-basic .app-decimator-panel .dec-ticket-piece:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-box-card__add:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-custom-box-toggle:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-buy-cta[data-write]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-builder-dialog__done[data-write]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-buy-dialog__choice:not(:disabled),
+  body.layout-basic .app-decimator-panel [data-bind="dec-buy-dialog-confirm"]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-afking-jump:not(:disabled) {
+    cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3, pointer;
+  }
+}

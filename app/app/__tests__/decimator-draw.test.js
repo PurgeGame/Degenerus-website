@@ -353,6 +353,22 @@ describe('standalone Decimator draw replay', () => {
       'the final exit state is visibly distinct from Skip and Replay');
   });
 
+  test('the moving wheel avoids full SVG scans and whole-wheel re-rasterization', () => {
+    assert.match(drawSource, /this\.selectionElements = new Map\(\)/,
+      'active slice nodes are cached when each wheel frame is built');
+    assert.match(drawSource,
+      /if \(physical === this\.currentPhysical\) return;[\s\S]*?this\.selectionElements\.get\(this\.currentPhysical\)[\s\S]*?this\.selectionElements\.get\(physical\)/,
+      'a selector tick only updates the previous and next physical slice');
+    assert.doesNotMatch(drawSource, /querySelectorAll\('\[data-physical\]'\)/,
+      'the animation frame loop never scans all four SVG layers');
+    assert.match(css,
+      /\.wheel-wrap:is\(\.is-drawing, \.is-locking, \.is-finalizing\) \.draw-wheel\s*\{\s*filter:\s*none;/,
+      'the full SVG drop shadow cannot trigger a complete wheel repaint while pieces move');
+    assert.match(drawSource,
+      /wrap\.classList\.add\('is-combining', 'is-finalizing'\)[\s\S]*?wrap\.classList\.remove\('is-finalizing'\)/,
+      'the final payout animation restores the static wheel shadow only after movement ends');
+  });
+
   test('embedded sound and exit requests cross the same-origin parent bridge', () => {
     const previousWindow = globalThis.window;
     const messages = [];

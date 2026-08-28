@@ -2956,7 +2956,7 @@ describe('reveal-overlay element', () => {
     );
   });
 
-  test('OPEN ALL BOXES opens every ready reward from one large combined case', async (t) => {
+  test('OPEN ALL BOXES absorbs already queued results into one large combined case', async (t) => {
     const completions = [];
     const onComplete = (event) => completions.push(event?.detail);
     document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
@@ -2968,7 +2968,8 @@ describe('reveal-overlay element', () => {
       settledExpected: true,
       packs: [{ level: 12, count: index }],
     });
-    for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
+    for (const [source, index] of [['box-four', 4], ['box-five', 5]]) {
+      t.after(() => pendingActionsMod.clearPendingActions(source));
       pendingActionsMod.publishPendingActions(source, [{
         id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
         state: 'ready', order: index,
@@ -2982,18 +2983,23 @@ describe('reveal-overlay element', () => {
         },
       }]);
     }
-    queueReveal({
-      kind: 'lootbox', lootboxIndex: 1, presentationId: 'open-all-box:1',
-      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
-      ticketPackRelease: ticketPackRelease(1),
-    });
+    // Boxes 2 and 3 model results an auto-open owner already moved out of
+    // Pending before the player reaches box 1's receipt. OPEN ALL must absorb
+    // that reveal-queue tail as well as boxes 4 and 5, which are still ready.
+    for (const index of [1, 2, 3]) {
+      queueReveal({
+        kind: 'lootbox', lootboxIndex: index, presentationId: `open-all-box:${index}`,
+        legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+        ticketPackRelease: ticketPackRelease(index),
+      });
+    }
     const el = instantiate();
     await tick();
 
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     const openAll = summary.querySelector('.rvl-open-all-cta--lootboxes');
     assert.ok(openAll);
-    assert.equal(openAll.textContent, 'OPEN ALL 2 LUCKBOXES');
+    assert.equal(openAll.textContent, 'OPEN ALL 4 LUCKBOXES');
     openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     await new Promise((resolve) => setTimeout(resolve, 240));
     await tick();
@@ -3001,8 +3007,8 @@ describe('reveal-overlay element', () => {
     const finalSummary = el.querySelector('[data-bind="rvl-summary"]');
     assert.deepEqual(
       finalSummary.querySelectorAll('.rvl-card-value').map((node) => node.textContent),
-      ['2', '3'],
-      'both child rewards land together instead of pausing on an intermediate box receipt',
+      ['2', '3', '4', '5'],
+      'queued and still-Pending rewards land together without an individual tail',
     );
     assert.equal(
       el.querySelector('[data-bind="rvl-stage"]').getAttribute('data-lootbox-case-model'),
@@ -3015,12 +3021,17 @@ describe('reveal-overlay element', () => {
     await tick();
     assert.deepEqual(completions.map((detail) => detail.presentationId), [
       'open-all-box:1', 'open-all-box:2', 'open-all-box:3',
+      'open-all-box:4', 'open-all-box:5',
     ], 'the one combined receipt completes every original box exactly once');
     assert.deepEqual(
       completions.map((detail) => detail.ticketPackRelease?.sourceKey),
-      ['lootbox:1', 'lootbox:2', 'lootbox:3'],
+      ['lootbox:1', 'lootbox:2', 'lootbox:3', 'lootbox:4', 'lootbox:5'],
       'each child ticket award remains attached to its own parent completion',
     );
+    for (let i = 0; i < 10
+      && !el.querySelector('[data-bind="rvl-backdrop"]').hidden; i += 1) await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'no already-queued luckbox reopens after the combined receipt');
   });
 
   test('OPEN ALL aggregates selected BoxSpins behind one play action and retires every box once', async (t) => {
@@ -3234,13 +3245,14 @@ describe('reveal-overlay element', () => {
     assert.equal(backdrop.hidden, true, 'the terminal action dismisses the completed receipt');
   });
 
-  test('the sealed luckbox offers OPEN ONE or every ready box in Pending', async (t) => {
+  test('sealed OPEN ALL absorbs queued and ready Pending boxes into the same case', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
     t.after(() => { window.matchMedia = previousMatchMedia; });
 
     const opened = [];
-    for (const [source, index] of [['choice-two', 2], ['choice-three', 3]]) {
+    for (const [source, index] of [['choice-four', 4], ['choice-five', 5]]) {
+      t.after(() => pendingActionsMod.clearPendingActions(source));
       pendingActionsMod.publishPendingActions(source, [{
         id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
         state: 'ready', order: index,
@@ -3254,10 +3266,12 @@ describe('reveal-overlay element', () => {
         },
       }]);
     }
-    queueReveal({
-      kind: 'lootbox', lootboxIndex: 1,
-      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
-    });
+    for (const index of [1, 2, 3]) {
+      queueReveal({
+        kind: 'lootbox', lootboxIndex: index,
+        legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+      });
+    }
     const el = instantiate();
     await tick();
 
@@ -3267,24 +3281,40 @@ describe('reveal-overlay element', () => {
     assert.equal(actions.hidden, false);
     assert.equal(actions.classList.contains('rvl-vessel-pack-actions--lootboxes'), true);
     assert.equal(openOne.textContent, 'OPEN ONE');
-    assert.equal(openAll.textContent, 'OPEN ALL 3');
+    assert.equal(openAll.textContent, 'OPEN ALL 5');
     assert.equal(el.querySelector('[data-bind="rvl-skip-pack"]').hidden, true,
       'luckboxes never inherit the ticket-pack skip control');
 
     openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     for (let i = 0; i < 5; i += 1) await tick();
-    assert.deepEqual(opened, [2, 3],
+    assert.deepEqual(opened, [4, 5],
       'OPEN ALL resolves every ready luckbox in the tray before presentation advances');
     assert.equal(
       el.querySelector('[data-bind="rvl-vessel"]').getAttribute('data-lootbox-case-model'),
       'large',
       'the current case is upgraded in place to the one combined large box',
     );
-    assert.equal(el.querySelector('[data-bind="rvl-title"]').textContent, 'ALL LUCKBOXES · 3 BOXES');
+    assert.equal(el.querySelector('[data-bind="rvl-title"]').textContent, 'ALL LUCKBOXES · 5 BOXES');
 
-    el.querySelector('[data-bind="rvl-close"]')
-      .dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    for (let i = 0; i < 20 && summary.hidden; i += 1) {
+      await tick();
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
+    }
+    assert.deepEqual(
+      summary.querySelectorAll('.rvl-card-value').map((node) => node.textContent),
+      ['1', '2', '3', '4', '5'],
+      'the current, queued, and newly resolved boxes share one receipt',
+    );
+    assert.equal(summary.querySelector('.rvl-open-all-cta--lootboxes'), null,
+      'the combined receipt has no leftover one-by-one boxes');
+    const terminal = summary.querySelector('.rvl-collect-cta');
+    assert.equal(terminal.textContent, 'GOOD LUCK');
+    terminal.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 10 && !backdrop.hidden; i += 1) await tick();
+    assert.equal(backdrop.hidden, true,
+      'the overlay closes after the one combined case instead of opening a queued tail');
   });
 
   test('OPEN ALL cannot be preempted by tapping the case while sibling results load', async (t) => {
@@ -3792,6 +3822,11 @@ describe('reveal-overlay element', () => {
     assert.equal(skip.hidden, false, 'SKIP remains beside the explicit open action');
     assert.equal(skip.textContent, 'SKIP');
     assert.equal(openAll.hidden, true, 'a one-pack reveal does not advertise OPEN ALL');
+    assert.match(
+      REVEAL_SRC,
+      /<div class="rvl-vessel-hint"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<div class="rvl-vessel-pack-actions"/,
+      'pack controls are a sibling hit surface rather than children of the vessel button',
+    );
     const buttons = el.querySelectorAll('button');
     assert.ok(buttons.indexOf(openPack) < buttons.indexOf(skip),
       'the primary OPEN PACK action stays to the left of SKIP');
@@ -3799,6 +3834,16 @@ describe('reveal-overlay element', () => {
       APP_CSS,
       /\.rvl-vessel-open-pack[^\{]*\{[^}]*min-height:\s*44px/s,
       'OPEN PACK has a tactile minimum target',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-vessel-pack-actions\s*\{[^}]*z-index:\s*12;[^}]*pointer-events:\s*auto;/s,
+      'the independent pack action surface remains above the isolated vessel art',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-vessel-pack-actions > button\s*\{[^}]*pointer-events:\s*auto;[^}]*touch-action:\s*manipulation;/s,
+      'each pack action accepts direct touch input',
     );
 
     openPack.dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -4079,6 +4124,43 @@ describe('reveal-overlay element', () => {
     assert.equal(backdrop.hidden, true, 'queue drained');
   });
 
+  test('a sole remaining pack uses one centered OPEN NEXT action', async () => {
+    const el = instantiate();
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+      queueReveal({
+        kind: 'pack',
+        title: 'YOUR TICKETS',
+        level: 7,
+        count: 1,
+        totalCount: 2,
+        batchId: 'batch-one-remaining',
+        packIndex,
+        packCount: 2,
+        tickets: [ticket(packIndex)],
+      });
+    }
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    const next = zone.querySelector('.rvl-collect-cta');
+    assert.equal(next.textContent, 'OPEN NEXT PACK');
+    assert.equal(zone.querySelector('.rvl-open-all-cta'), null,
+      'OPEN ALL 1 REMAINING would duplicate the exact same action');
+    assert.match(
+      APP_CSS,
+      /\.rvl-ticket-actions > \.rvl-collect-cta\s*\{[^}]*width:\s*min\(15rem,[^}]*margin:\s*0;/s,
+      'the sole primary action occupies the centered ticket action row without an offset socket',
+    );
+
+    next.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /PACK 2\/2/);
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+  });
+
   test('ticket batches expose OPEN NEXT + OPEN ALL; open-all advances to the final pack', async () => {
     const el = instantiate();
     const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
@@ -4209,10 +4291,10 @@ describe('reveal-overlay element', () => {
 
     const el = instantiate();
     const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
-    for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+    for (let packIndex = 1; packIndex <= 3; packIndex += 1) {
       queueReveal({
         kind: 'pack', title: 'YOUR TICKETS', level: 7, count: 2,
-        totalCount: 4, batchId: 'batch-no-hand-flash', packIndex, packCount: 2,
+        totalCount: 6, batchId: 'batch-no-hand-flash', packIndex, packCount: 3,
         tickets: [ticket(packIndex * 2 - 1), ticket(packIndex * 2)],
       });
     }

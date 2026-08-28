@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="cart-metal" x1="5" y1="4" x2="27" y2="27" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff1bd"/>
+      <stop offset=".45" stop-color="#e4ad4f"/>
+      <stop offset="1" stop-color="#9a5a16"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="#09070c" stroke-linecap="round" stroke-linejoin="round" stroke-width="5">
+    <path d="M3 3h3.2l2.7 14.1a3 3 0 0 0 3 2.4h11.7l3-10.3H7.4"/>
+    <path d="M12 24.8h11.1"/>
+    <circle cx="13.2" cy="27.3" r="1.6"/>
+    <circle cx="22.4" cy="27.3" r="1.6"/>
+  </g>
+  <g fill="none" stroke="url(#cart-metal)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4">
+    <path d="M3 3h3.2l2.7 14.1a3 3 0 0 0 3 2.4h11.7l3-10.3H7.4"/>
+    <path d="M12 24.8h11.1"/>
+    <circle cx="13.2" cy="27.3" r="1.6" fill="#e4ad4f"/>
+    <circle cx="22.4" cy="27.3" r="1.6" fill="#e4ad4f"/>
+  </g>
+  <path d="M11 12.5h13.8M12 16h11.8" fill="none" stroke="#fff2cf" stroke-linecap="round" stroke-width="1" opacity=".72"/>
+</svg>

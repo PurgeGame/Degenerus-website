@@ -460,7 +460,7 @@ describe('app-parimutuel-panel', () => {
     contractsMod.clearProvider();
   });
 
-  test('keeps its grid column with a closed-window message when neither book is open', async () => {
+  test('keeps its full-width rail with a closed-window message when neither book is open', async () => {
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
     assert.match(el.innerHTML,
@@ -484,9 +484,12 @@ describe('app-parimutuel-panel', () => {
       /\.app-parimutuel > app-wwxrp-burn\s*\{[^}]*margin-top:\s*auto;/s,
       'the restored WWXRP wrapper stays pinned to the bottom of the Side Bets column');
     assert.match(APP_CSS,
-      /\.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
-      'the Side Bets heading is centered at every viewport width');
-    assert.equal(panelOf(el).hidden, false, 'permanent right-column panel remains mounted');
+      /\.side-bets-rail \.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-column:\s*1[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
+      'the Side Bets heading stays centered in the rail utility lane');
+    assert.match(APP_CSS,
+      /\.side-bets-rail \.pari-books,\s*body\.layout-basic \.side-bets-rail \.pari-empty\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1 \/ span 2;/s,
+      'open books and the closed message share the wide rail lane');
+    assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
     assert.equal(growthCard(el).hidden, true);
     const empty = el.querySelector('[data-bind="pari-empty"]');
     assert.equal(empty.hidden, false);
