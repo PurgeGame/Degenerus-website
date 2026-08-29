@@ -2884,7 +2884,7 @@ class AppDailyFlip extends HTMLElement {
         <boon-product-indicator class="df-table-boon"
                                 product="coinflip"></boon-product-indicator>
         <quest-objective-indicator class="df-table-quest"
-                                   data-quest-pointer="bottom-left"
+                                   data-quest-pointer="right"
                                    product="coinflip"></quest-objective-indicator>
         <header class="df-title-bar">
           <div class="df-title-bar__heading">

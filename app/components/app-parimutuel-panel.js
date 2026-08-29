@@ -1,44 +1,41 @@
-// /app/components/app-parimutuel-panel.js — the side-bet books and Decimator entry.
+// /app/components/app-parimutuel-panel.js — the Growth side bet and Decimator entry.
 // only while there is something to do with them (user ask).
 //
 // Visibility rule — the panel hides itself unless at least one of:
 //   - the GROWTH book is open (jackpot phase; round = level),
-//   - the ticket-VOLUME book is open, or opens within VOLUME_WINDOW.leadSeconds,
 //   - the viewed player has an unclaimed payout on a recent round.
 // Nothing else on the page moves when it appears: it sits between the jackpot
 // hero and the primary duo, so an open window reads as an interruption.
 //
-// Reads: DegenerusParimutuel.marketState / volumeMarketState, three rounds back
-// per book (the open round plus two settled ones — the claim + result surface).
-// Both views return `openRound` alongside the queried round, so "is it open" and
-// "what is my position" cost ONE call each. The book is public, so a visitor with
+// Reads: DegenerusParimutuel.marketState, three rounds back (the open round plus
+// two settled ones — the claim + result surface). The view returns `openRound`
+// alongside the queried round, so "is it open" and "what is my position" cost
+// ONE call each. The book is public, so a visitor with
 // no wallet still sees it; only the buttons need a signer.
 //
-// Cadence: 30s at rest, 5s while the volume window is open or about to be —
-// that window is 26s wide on the testnet overlay, so a 30s poll would miss it.
+// Cadence: 30s at rest, 5s while the Decimator window is active.
 //
 // Actions (Phase 58 sendTx chokepoint paths, via app/parimutuel.js):
-//   OVER / UNDER — placeBet / placeVolumeBet; the fixed stake stays out of the
+//   OVER / UNDER — placeBet; the fixed stake stays out of the
 //   compact choices and the live book split appears once below them
 //   CLAIM                — published into the shared bottom action tray, then
-//                          claim / claimVolume over the selected round
+//                          claim over the selected round
 //
 // T-58-18: every server- and chain-derived string lands via textContent.
 
-import { CHAIN, ETH_DIVISOR, VOLUME_WINDOW } from '../app/chain-config.js';
+import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, update, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import {
-  readGrowthMarket, readVolumeMarket, readVolumeCredit, readMarketBetGates,
-  placeGrowthBet, placeVolumeBet, claimGrowth, claimVolume,
-  claimGrowthRound, claimVolumeRound, readRoundWinners,
-  volumeWindow, volumeRoundNow,
-  readLastVolumeSeal, readCurrentTicketVolume, readGrowthRatchets, readGrowthRatchetHistory,
+  readGrowthMarket, readMarketBetGates,
+  placeGrowthBet, claimGrowth,
+  claimGrowthRound, readRoundWinners,
+  readGrowthRatchets, readGrowthRatchetHistory,
   readPrizePoolTarget,
   readJackpotPhaseContext,
-  growthBps, payoutPerWinner, UNITS_PER_TICKET,
+  growthBps, payoutPerWinner,
   STAKE_WEI, SIDE_OVER, SIDE_UNDER,
 } from '../app/parimutuel.js';
 import {
@@ -185,30 +182,6 @@ function _fmtPct(pct) {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-/** Raw purchase units → whole tickets (400 units = 1 ticket), thousands-grouped. */
-function _fmtTickets(units) {
-  let u = 0n;
-  try { u = BigInt(units ?? 0); } catch (_e) { return '0'; }
-  const whole = u / UNITS_PER_TICKET;
-  const rem = u % UNITS_PER_TICKET;
-  const head = Number(whole).toLocaleString('en-US');
-  // A part-ticket is a real thing here (tickets are bought in quarters), so it
-  // is shown rather than rounded away.
-  if (rem === 0n) return head;
-  const frac = Number((rem * 100n) / UNITS_PER_TICKET) / 100;
-  return `${head}${String(frac).slice(1)}`;
-}
-
-function _fmtClock(seconds) {
-  const s = Math.max(0, Math.floor(seconds));
-  if (s >= 3600) {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    return `${h}h ${String(m).padStart(2, '0')}m`;
-  }
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
 function _clampPercent(value) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
@@ -255,15 +228,11 @@ class AppParimutuelPanel extends HTMLElement {
   #unsubs = [];
   #initialized = false;
   #growth = _emptyBook();
-  #volume = _emptyBook();
-  #bonusEligibility = { growth: false, volume: false };
+  #bonusEligible = false;
   #level = null;
   #player = null;
   #fetchSeq = 0;
-  // Benchmarks the open rounds are measured against: the last sealed volume
-  // round (its own total + the total it beat) and the level ratchet terms.
-  #lastSeal = null;
-  #currentVolume = null;
+  // Prize-pool ratchet terms for the Growth benchmark.
   #ratchets = null;
   #gameState = null;
   #decimatorPosition = null;
@@ -273,7 +242,6 @@ class AppParimutuelPanel extends HTMLElement {
   #decimatorBurnListener = null;
   #resultAbortListener = null;
   #pollHandle = null;
-  #tickHandle = null;
   #postActionRefreshHandle = null;
   #busyResetHandle = null;
   #busy = false;
@@ -310,7 +278,6 @@ class AppParimutuelPanel extends HTMLElement {
     }
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
-    this.#armTick();
     this.#refresh();
   }
 
@@ -336,7 +303,6 @@ class AppParimutuelPanel extends HTMLElement {
     }
     for (const h of [
       this.#pollHandle,
-      this.#tickHandle,
       this.#postActionRefreshHandle,
       this.#busyResetHandle,
       this.#errorTimer,
@@ -346,7 +312,6 @@ class AppParimutuelPanel extends HTMLElement {
       }
     }
     this.#pollHandle = null;
-    this.#tickHandle = null;
     this.#postActionRefreshHandle = null;
     this.#busyResetHandle = null;
     this.#errorTimer = null;
@@ -367,9 +332,7 @@ class AppParimutuelPanel extends HTMLElement {
     if (player !== this.#player) this.#decimatorContext = null;
     this.#player = player;
 
-    // The growth book numbers its rounds by LEVEL, and the level only comes off
-    // the game state. The volume book numbers by day and is computable from the
-    // clock, so it never waits on the API.
+    // The Growth book numbers its rounds by level, which comes from game state.
     let level = this.#level;
     try {
       const state = await readGameState();
@@ -385,13 +348,6 @@ class AppParimutuelPanel extends HTMLElement {
     void this.#loadPoolBenchmarks(seq, level);
 
     const growthRounds = this.#lookback(level);
-    const volumeRounds = this.#lookback(volumeRoundNow());
-
-    // The credit quote is only asked for while the book is open or about to
-    // open. The profile mirrors the deployed contract's rescaled ladder; the
-    // soft-fail still keeps a transient RPC problem from blocking both books.
-    const win = volumeWindow();
-    const wantCredit = win.open || win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
     const decimatorLevel = Number.isInteger(level) && level >= 0 ? level + 1 : null;
     // Gated on the same condition as the context read below. It was not, and the
     // asymmetry cost: the Decimator runs once every ten levels, but this fired
@@ -407,18 +363,14 @@ class AppParimutuelPanel extends HTMLElement {
       && decimatorWindowIsOpen(this.#gameState)
       ? readDecimatorContext(player, decimatorLevel).catch(() => null)
       : Promise.resolve(null);
-    const [growth, volume, credit, decimatorPosition, decimatorContext] = await Promise.all([
+    const [growth, decimatorPosition, decimatorContext] = await Promise.all([
       Promise.allSettled(growthRounds.map((round) => readGrowthMarket({ player, round }))),
-      Promise.allSettled(volumeRounds.map((round) => readVolumeMarket({ player, round }))),
-      wantCredit ? readVolumeCredit().then((c) => c, () => 0n) : Promise.resolve(0n),
       decimatorRead,
       decimatorContextRead,
     ]);
     if (seq !== this.#fetchSeq) return;
 
     this.#growth = this.#foldBook(growth);
-    this.#volume = this.#foldBook(volume);
-    this.#volume.credit = credit;
     // Retain the last known position when the read was skipped. #visible() and
     // the open-state checks pass #decimatorPosition back into
     // decimatorWindowIsOpen(), where `roundStatus === 'open'` is what keeps a
@@ -428,38 +380,19 @@ class AppParimutuelPanel extends HTMLElement {
     if (decimatorPosition) this.#decimatorPosition = decimatorPosition;
     if (decimatorContext) this.#decimatorContext = decimatorContext;
 
-    // The round anchors are off-chain guesses — the level comes from the
-    // indexer (which can lag a transition) and the volume round from the local
-    // clock. `openRound` is the chain's own answer, so when it falls outside
-    // the window just read, go get it rather than render a headless book.
-    await Promise.all([
-      this.#backfillOpen(this.#growth, (round) => readGrowthMarket({ player, round })),
-      this.#backfillOpen(this.#volume, (round) => readVolumeMarket({ player, round })),
-    ]);
+    // The level is an off-chain anchor and can lag a transition. `openRound` is
+    // the chain's own answer, so recover it when it falls outside the lookback.
+    await this.#backfillOpen(this.#growth, (round) => readGrowthMarket({ player, round }));
     if (seq !== this.#fetchSeq) return;
 
-    // marketState/volumeBetCredit are global quotes. Only QUESTS knows whether
-    // this particular player earns them. Growth checks its actual open round;
-    // volume passes Game.level(), exactly like placeVolumeBet on-chain.
+    // marketState's reward is a global quote. Only QUESTS knows whether this
+    // particular player earns it, using Growth's actual open level.
     const growthLevel = Number(this.#growth.openRound || 0);
-    const volumeLevel = Number(level || 0);
-    const [growthGate, volumeGate] = await Promise.all([
-      player && growthLevel > 0
-        ? readMarketBetGates({ player, level: growthLevel }).catch(() => null)
-        : Promise.resolve(null),
-      player && volumeLevel > 0
-        ? readMarketBetGates({ player, level: volumeLevel }).catch(() => null)
-        : Promise.resolve(null),
-    ]);
+    const growthGate = player && growthLevel > 0
+      ? await readMarketBetGates({ player, level: growthLevel }).catch(() => null)
+      : null;
     if (seq !== this.#fetchSeq) return;
-    this.#bonusEligibility = {
-      growth: growthGate?.earnsReward === true,
-      volume: volumeGate?.earnsReward === true,
-    };
-
-    // Volume history does need the authoritative open round, so its heavier log
-    // scan remains here. It cannot delay the already-running page pool reads.
-    void this.#loadVolumeBenchmark(seq, this.#volume.openRound);
+    this.#bonusEligible = growthGate?.earnsReward === true;
 
     this.#render();
     this.#armPoll();
@@ -496,8 +429,8 @@ class AppParimutuelPanel extends HTMLElement {
         }))
         : sameLevel ? prior?.history ?? [] : [];
       // The full-width pool thermometer consumes the same contract reads as
-      // this book. Publish before the historical volume scan so that an RPC's
-      // log latency cannot hold up the page-wide progression display.
+      // this book. Publish before the decorative history scan so an RPC's log
+      // latency cannot hold up the page-wide progression display.
       update('app.poolBenchmarks', {
         level: benchmarkLevel,
         targetWei,
@@ -551,28 +484,6 @@ class AppParimutuelPanel extends HTMLElement {
     this.#render();
   }
 
-  // Volume deliberately waits for its adjacent sealed ticket count so the
-  // player is never offered an unlabeled OVER / UNDER wager. This backwards
-  // log walk can take seconds on public RPCs and must stay off the pool path.
-  async #loadVolumeBenchmark(seq, volumeOpenRound) {
-    const open = Number(volumeOpenRound || volumeRoundNow());
-    const previousVolumeRound = Number.isInteger(open) && open > 1 ? open - 1 : null;
-    const seal = await readLastVolumeSeal(
-      previousVolumeRound == null ? undefined : { round: previousVolumeRound },
-    ).catch(() => null);
-    if (seq !== this.#fetchSeq) return;
-    const currentVolume = seal?.blockNumber > 0
-      ? await readCurrentTicketVolume({ afterBlock: seal.blockNumber }).catch(() => null)
-      : null;
-    if (seq !== this.#fetchSeq) return;
-    if (!seal && currentVolume == null) return;
-    // A transient historical-log failure must not erase the last good volume
-    // line; doing that made the ticket threshold and result color blink out.
-    if (seal) this.#lastSeal = seal;
-    if (currentVolume != null) this.#currentVolume = currentVolume;
-    this.#render();
-  }
-
   async #backfillOpen(book, read) {
     if (!book.openRound) return;
     // The open row renders the choices; the immediately preceding row supplies
@@ -622,9 +533,7 @@ class AppParimutuelPanel extends HTMLElement {
     return book.rounds.find((r) => r.round === book.openRound) || null;
   }
 
-  // Settled rounds the viewed player still has money on. A voided volume round
-  // pays the stake back and reports outcome 0, so `payout` is the test, not the
-  // outcome bit.
+  // Settled rounds the viewed player still has money on.
   #claimable(book) {
     return book.rounds.filter((r) => r.side !== 0 && !r.claimed && r.payout > 0n);
   }
@@ -661,14 +570,12 @@ class AppParimutuelPanel extends HTMLElement {
 
   #visible() {
     return Boolean(this.#openState(this.#growth))
-      || (Boolean(this.#openState(this.#volume)) && Boolean(this.#volumeMark(this.#volume.openRound)))
       || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition)
-      || this.#pendingSettlement(this.#growth).length > 0
-      || this.#pendingSettlement(this.#volume).length > 0;
+      || this.#pendingSettlement(this.#growth).length > 0;
   }
 
   // -----------------------------------------------------------------------
-  // Cadence — hot while the volume window is open or imminent.
+  // Cadence — hot only during the short Decimator window.
   // -----------------------------------------------------------------------
 
   #armPoll() {
@@ -676,20 +583,8 @@ class AppParimutuelPanel extends HTMLElement {
       try { clearTimeout(this.#pollHandle); } catch (_e) { /* defensive */ }
     }
     if (typeof setTimeout !== 'function') return;
-    const win = volumeWindow();
-    const hot = win.open
-      || win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0)
-      || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
+    const hot = decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
     this.#pollHandle = _setTimeoutUnref(() => this.#refresh(), hot ? POLL_HOT_MS : POLL_IDLE_MS);
-  }
-
-  // 1s repaint so the countdown moves without re-reading the chain.
-  #armTick() {
-    if (typeof setTimeout !== 'function') return;
-    this.#tickHandle = _setTimeoutUnref(() => {
-      this.#renderCountdown();
-      this.#armTick();
-    }, 1_000);
   }
 
   // -----------------------------------------------------------------------
@@ -704,10 +599,9 @@ class AppParimutuelPanel extends HTMLElement {
         </div>
         <div class="pari-books">
           <!-- Decimator comes first deliberately: its x4/x99 burn window is
-               level-gated and must not sit below the always-recurring books. -->
+               level-gated and must not sit below the Growth book. -->
           <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
           <article class="pari-book" data-bind="pari-growth" hidden></article>
-          <article class="pari-book" data-bind="pari-volume" hidden></article>
         </div>
         <p class="pari-empty" data-bind="pari-empty">Checking…</p>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
@@ -722,18 +616,10 @@ class AppParimutuelPanel extends HTMLElement {
     if (empty) {
       empty.hidden = visible;
       if (!visible) {
-        const win = volumeWindow();
-        const waitingForVolumeLine = Boolean(this.#volume.openRound)
-          && !this.#volumeMark(this.#volume.openRound);
-        empty.textContent = waitingForVolumeLine
-          ? 'Loading yesterday’s ticket total…'
-          : win.secondsToOpen > 0
-            ? `Books are closed · volume opens in ${_fmtClock(win.secondsToOpen)}`
-            : 'Books are closed';
+        empty.textContent = 'Books are closed';
       }
     }
-    this.#renderBook('growth');
-    this.#renderBook('volume');
+    this.#renderBook();
     this.#renderDecimator();
     this.#publishPending();
   }
@@ -980,112 +866,75 @@ class AppParimutuelPanel extends HTMLElement {
     }
     const seen = _seenResults(player);
     const rows = [];
-    for (const [kind, book] of [['growth', this.#growth], ['volume', this.#volume]]) {
-      for (const result of book.rounds) {
-        if (result.side === 0 || result.claimed) continue;
-        const id = `${kind}:${result.round}`;
-        const settledLoss = result.outcome !== 0
-          && result.side !== result.outcome
-          && !result.voided;
-        const claimable = result.payout > 0n;
-        if (settledLoss && seen.has(id)) continue;
-        const ready = claimable || settledLoss;
-        const side = result.side === SIDE_OVER ? 'OVER' : 'UNDER';
-        const place = kind === 'growth' ? ` · Level ${result.round}` : '';
-        const pariClaim = claimable;
-        rows.push({
-          id: `pari:${id}`,
-          dismissScope: this.#player,
-          // Every ready pari payout belongs in the bottom action tray with
-          // packs and lootboxes. The SIDE BETS cards remain the live books,
-          // not a second home for claim buttons.
-          kind: pariClaim ? `${kind}-claim` : 'pari',
-          label: kind === 'growth' ? `GROWTH BET${place}` : 'VOLUME BET',
-          shortLabel: pariClaim ? 'Claim' : kind === 'growth' ? 'GROWTH BET' : 'VOLUME BET',
-          detail: this.#busy
-            ? 'Processing result'
-            : ready
-              ? claimable
-                ? `${side} paid · ${_fmtFlip(result.payout)} FLIP ready`
-                : `${side} result ready`
-              : `${side} · waiting for settlement`,
-          state: this.#busy ? 'busy' : ready ? 'ready' : 'waiting',
-          autoOpen: settledLoss,
-          order: 30,
-          chronology: Number(result.round),
-          run: claimable
-            ? () => this.#claim(kind, [result.round])
-            : settledLoss ? () => this.#revealPari(kind, result) : null,
-        });
-      }
+    for (const result of this.#growth.rounds) {
+      if (result.side === 0 || result.claimed) continue;
+      const id = `growth:${result.round}`;
+      const settledLoss = result.outcome !== 0
+        && result.side !== result.outcome
+        && !result.voided;
+      const claimable = result.payout > 0n;
+      if (settledLoss && seen.has(id)) continue;
+      const ready = claimable || settledLoss;
+      const side = result.side === SIDE_OVER ? 'OVER' : 'UNDER';
+      rows.push({
+        id: `pari:${id}`,
+        dismissScope: this.#player,
+        // Every ready pari payout belongs in the bottom action tray with packs
+        // and lootboxes. SIDE BETS remains focused on the live Growth book.
+        kind: claimable ? 'growth-claim' : 'pari',
+        label: `GROWTH BET · Level ${result.round}`,
+        shortLabel: claimable ? 'Claim' : 'GROWTH BET',
+        detail: this.#busy
+          ? 'Processing result'
+          : ready
+            ? claimable
+              ? `${side} paid · ${_fmtFlip(result.payout)} FLIP ready`
+              : `${side} result ready`
+            : `${side} · waiting for settlement`,
+        state: this.#busy ? 'busy' : ready ? 'ready' : 'waiting',
+        autoOpen: settledLoss,
+        order: 30,
+        chronology: Number(result.round),
+        run: claimable
+          ? () => this.#claim([result.round])
+          : settledLoss ? () => this.#revealPari(result) : null,
+      });
     }
     publishPendingActions(PENDING_SOURCE, rows);
   }
 
-  async #revealPari(kind, result) {
-    let volumeSeal = null;
-    if (kind === 'volume') {
-      volumeSeal = Number(this.#lastSeal?.round) === Number(result.round)
-        ? this.#lastSeal
-        : await readLastVolumeSeal({ round: result.round }).catch(() => null);
-    }
-    const id = `${kind}:${result.round}`;
+  async #revealPari(result) {
+    const id = `growth:${result.round}`;
     _markResultSeen(this.#player, id);
     queueReveal({
       kind: 'pari',
       player: this.#player,
-      presentationId: `pari-reveal:${this.#player}:${kind}:${result.round}`,
+      presentationId: `pari-reveal:${this.#player}:growth:${result.round}`,
       // Echoed back by RESULT_REVEAL_ABORT_EVENT so a closed overlay restores
       // this exact round instead of retiring it unseen.
       revealRelease: { address: this.#player, id },
-      market: kind,
+      market: 'growth',
       round: result.round,
       side: result.side,
       outcome: result.outcome,
       payout: result.payout,
       voided: result.voided,
-      // VolumeRoundSealed is the authoritative public result. Carry its raw
-      // 400-units-per-ticket values into player-facing strings here so the
-      // overlay can show the exact line the player picked and what landed.
-      betTickets: volumeSeal ? _fmtTickets(volumeSeal.previous) : null,
-      resultTickets: volumeSeal ? _fmtTickets(volumeSeal.total) : null,
     });
     this.#render();
     this.#publishPending();
   }
 
-  // Only the two countdown chips repaint on the 1s tick.
-  #renderCountdown() {
-    const host = this.querySelector('[data-bind="pari-volume"]');
-    if (!host || host.hidden) return;
-    const chip = host.querySelector('[data-bind="pari-clock"]');
-    if (chip) {
-      const win = volumeWindow();
-      chip.textContent = win.open
-        ? `closes in ${_fmtClock(win.secondsToClose)}`
-        : `opens in ${_fmtClock(win.secondsToOpen)}`;
-    }
-  }
-
-  #renderBook(kind) {
-    const host = this.querySelector(`[data-bind="pari-${kind}"]`);
+  #renderBook() {
+    const host = this.querySelector('[data-bind="pari-growth"]');
     if (!host) return;
-    const book = kind === 'growth' ? this.#growth : this.#volume;
-    const claimable = this.#claimable(book);
-    const lost = this.#lost(book, kind);
+    const book = this.#growth;
+    const lost = this.#lost(book, 'growth');
     const pending = this.#pendingSettlement(book);
     // openRound is only a pointer returned by each lookback read. Do not paint
     // a header-only card unless the authoritative row for that exact round was
     // actually recovered (the targeted backfill can soft-fail on a stale RPC).
     const open = this.#openState(book);
-    const win = volumeWindow();
-    const volumeSoon = !win.open && win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
-    const hasContent = Boolean(open)
-      || pending.length > 0;
-    const volumeLineReady = kind !== 'volume'
-      || !book.openRound
-      || Boolean(this.#volumeMark(book.openRound));
-    const show = hasContent && volumeLineReady;
+    const show = Boolean(open) || pending.length > 0;
     host.hidden = !show;
     host.textContent = '';
     if (!show) return;
@@ -1095,7 +944,6 @@ class AppParimutuelPanel extends HTMLElement {
     const round = book.openRound || open?.round || latestPosition?.round || 0;
     const settledOnly = !book.openRound
       && (lost.length > 0 || pending.length > 0);
-    const heldOpenVolume = kind === 'volume' && Number(open?.side || 0) !== 0;
     if (host.classList) {
       if (settledOnly) host.classList.add('pari-book--settled');
       else host.classList.remove('pari-book--settled');
@@ -1105,32 +953,22 @@ class AppParimutuelPanel extends HTMLElement {
     head.className = 'pari-book__head';
     const title = document.createElement('h3');
     title.className = 'pari-book__title';
-    title.textContent = kind === 'growth'
-      ? `GROWTH BET${round ? ` · Level ${round}` : ''}`
-      : 'VOLUME BET';
+    title.textContent = `GROWTH BET${round ? ` · Level ${round}` : ''}`;
     head.appendChild(title);
     if (!settledOnly) {
       const chip = document.createElement('span');
       chip.className = 'pari-clock';
       chip.setAttribute('data-bind', 'pari-clock');
-      if (kind === 'growth') {
-        chip.textContent = book.openRound ? 'Betting open' : 'Closed';
-      } else {
-        chip.textContent = win.open
-          ? `closes in ${_fmtClock(win.secondsToClose)}`
-          : `opens in ${_fmtClock(win.secondsToOpen)}`;
-      }
+      chip.textContent = book.openRound ? 'Betting open' : 'Closed';
       head.appendChild(chip);
     }
     host.appendChild(head);
 
-    if (round && !settledOnly && !heldOpenVolume) {
-      // Keep the prior benchmark on its own compact history row. The ticket
-      // book adds a centered TODAY line immediately below it while the player
-      // is still choosing a side. Once committed, the receipt stands alone.
+    if (round && !settledOnly) {
+      // Keep the prior benchmark on its own compact history row.
       const context = document.createElement('div');
       context.className = 'pari-book__context';
-      const mark = kind === 'growth' ? this.#growthMark(round) : this.#volumeMark(round);
+      const mark = this.#growthMark(round);
       if (mark) {
         const bench = document.createElement('p');
         bench.className = 'pari-book__bench';
@@ -1149,7 +987,7 @@ class AppParimutuelPanel extends HTMLElement {
             ? 'This result did not beat the prior offered number'
             : 'Past result';
         bench.appendChild(offered);
-        if (kind === 'growth' && mark.target) {
+        if (mark.target) {
           const target = document.createElement('span');
           target.className = 'pari-book__target';
           target.textContent = ` · Target: ${mark.target}`;
@@ -1158,55 +996,20 @@ class AppParimutuelPanel extends HTMLElement {
         context.appendChild(bench);
       }
       host.appendChild(context);
-      // Keep both pari books to the compact benchmark + live bet split. The
-      // ticket-volume thermometer duplicated Yesterday's line and made the
-      // small card materially taller without clarifying the player's bet.
     }
 
-    if (book.openRound && open) this.#renderSides(host, kind, open);
+    if (book.openRound && open) this.#renderSides(host, open);
     // Once a growth position closes, its counts and payout are final. Replace
     // the live two-sided book with one receipt line and progress toward the
     // purchased-ticket growth target. Older uncranked positions (rare, but
     // possible within the lookback) remain in the fallback result list below.
-    const featuredGrowthPosition = kind === 'growth' && !book.openRound
-      ? pending[0] || null
-      : null;
+    const featuredGrowthPosition = !book.openRound ? pending[0] || null : null;
     if (featuredGrowthPosition) {
       this.#renderHeldGrowth(host, featuredGrowthPosition, { closed: true });
-      this.#renderThermometer(host, 'growth');
-    }
-    if (!book.openRound && kind === 'volume' && volumeSoon) {
-      const wait = document.createElement('p');
-      wait.className = 'pari-book__wait';
-      wait.textContent = `Next round opens in ${_fmtClock(win.secondsToOpen)}.`;
-      host.appendChild(wait);
+      this.#renderThermometer(host);
     }
 
-    this.#renderPositions(host, kind, book, lost, featuredGrowthPosition ? pending.slice(1) : pending);
-  }
-
-  // "Yesterday: N tickets bought" — strictly the immediately preceding round's
-  // result. A stale seal must never make Round 429 look like it is betting
-  // against Round 427; Round 427 only matters through Round 428's recorded
-  // OVER/UNDER outcome.
-  #volumeMark(round) {
-    const seal = this.#lastSeal;
-    if (!seal) return null;
-    const open = Number(round || this.#volume.openRound || volumeRoundNow());
-    if (!Number.isInteger(open)) return null;
-    // The latest seal includes both its own total and the total it compared
-    // against. That second value preserves the exact pick while the just-closed
-    // round is showing its TO WIN receipt.
-    const total = seal.round === open - 1
-      ? seal.total
-      : seal.round === open ? seal.previous : null;
-    if (total == null) return null;
-    const tickets = _fmtTickets(total);
-    return {
-      lead: 'Yesterday: ',
-      offered: `${tickets} tickets bought`,
-      target: `${tickets} tickets`,
-    };
+    this.#renderPositions(host, book, featuredGrowthPosition ? pending.slice(1) : pending);
   }
 
   // The book compares RATIOS of consecutive prize pools. Keep the prior
@@ -1246,25 +1049,7 @@ class AppParimutuelPanel extends HTMLElement {
       : 0;
   }
 
-  #thermometerModel(kind) {
-    if (kind === 'volume') {
-      const current = this.#currentVolume;
-      const seal = this.#lastSeal;
-      const open = Number(this.#volume.openRound || volumeRoundNow());
-      // A progress bar against an older line is just as misleading as printing
-      // that line. Wait for the adjacent seal instead of bridging a gap.
-      if (!seal || !Number.isInteger(open) || seal.round !== open - 1) return null;
-      const target = seal.total;
-      if (current == null || target == null) return null;
-      const scale = thermometerScale(current, target);
-      if (!scale) return null;
-      return {
-        ...scale,
-        currentText: `${_fmtTickets(current)} now`,
-        lineText: `${_fmtTickets(target)} line`,
-      };
-    }
-
+  #thermometerModel() {
     const r = this.#ratchets;
     const rawLive = this.#gameState?.prizePools?.nextPrizePool;
     if (!r || rawLive == null) return null;
@@ -1294,8 +1079,8 @@ class AppParimutuelPanel extends HTMLElement {
     };
   }
 
-  #renderThermometer(host, kind) {
-    const model = this.#thermometerModel(kind);
+  #renderThermometer(host) {
+    const model = this.#thermometerModel();
     if (!model) return;
 
     const meter = document.createElement('div');
@@ -1334,19 +1119,11 @@ class AppParimutuelPanel extends HTMLElement {
     host.appendChild(meter);
   }
 
-  #renderSides(host, kind, state) {
+  #renderSides(host, state) {
     const mine = state.side;
-    const offered = kind === 'growth'
-      ? this.#growthMark(state.round || this.#level)
-      : this.#volumeMark(state.round || this.#volume.openRound);
+    const offered = this.#growthMark(state.round || this.#level);
     const today = document.createElement('div');
-    today.className = `pari-today pari-today--${kind}`;
-    if (kind === 'volume' && mine === 0) {
-      const todayLabel = document.createElement('span');
-      todayLabel.className = 'pari-today__label';
-      todayLabel.textContent = 'TODAY';
-      today.appendChild(todayLabel);
-    }
+    today.className = 'pari-today pari-today--growth';
 
     const wrap = document.createElement('div');
     wrap.className = 'pari-sides';
@@ -1360,14 +1137,8 @@ class AppParimutuelPanel extends HTMLElement {
     // A placed growth bet is read-only. One clear line communicates the side
     // and offered growth threshold; keeping an empty opposite-side cell made
     // the card look actionable after the player had already committed.
-    if (kind === 'growth' && mine !== 0) {
+    if (mine !== 0) {
       this.#renderHeldGrowth(today, state);
-      this.#appendSplit(today, overPct);
-      host.appendChild(today);
-      return;
-    }
-    if (kind === 'volume' && mine !== 0) {
-      this.#renderHeldVolume(today, state, offered);
       this.#appendSplit(today, overPct);
       host.appendChild(today);
       return;
@@ -1408,22 +1179,13 @@ class AppParimutuelPanel extends HTMLElement {
             ? ` ${offered.target}`
             : ''}`,
         );
-        btn.addEventListener('click', () => this.#bet(kind, isOver));
+        btn.addEventListener('click', () => this.#bet(isOver));
         cell.appendChild(btn);
       } else {
         const label = document.createElement('span');
         label.className = 'pari-side__label';
         label.textContent = sideText;
         cell.appendChild(label);
-        // Once a volume position is held, keep the exact line visible. The old
-        // layout reduced this to OVER / UNDER + YOUR BET, which left the player
-        // with no labelled number for the wager they had actually placed.
-        if (kind === 'volume' && offered) {
-          const target = document.createElement('span');
-          target.className = 'pari-side__target';
-          target.textContent = offered.offered;
-          cell.appendChild(target);
-        }
         if (mine === side) {
           const held = document.createElement('span');
           held.className = 'pari-side__held';
@@ -1438,18 +1200,15 @@ class AppParimutuelPanel extends HTMLElement {
     // Keep the choices terse. The percentages appear once under their matching
     // ends of the live split instead of being repeated inside each button.
     this.#appendSplit(today, overPct);
-    this.#appendPrebetBonus(today, kind);
+    this.#appendPrebetBonus(today);
     host.appendChild(today);
   }
 
-  // Both contracts expose the exact reward for placing right now: growth's
-  // participation reward comes back with marketState, while Daily Volume's
-  // placement credit decays through its open window. Keep this beside the live
-  // choices only; after the player commits, the held-position receipt takes
-  // over and the quote is no longer relevant.
-  #appendPrebetBonus(host, kind) {
-    if (this.#bonusEligibility[kind] !== true) return;
-    const amount = kind === 'growth' ? this.#growth.questReward : this.#volume.credit;
+  // The participation reward comes back with marketState. Keep it beside the
+  // live choices only; after commitment, the held-position receipt takes over.
+  #appendPrebetBonus(host) {
+    if (!this.#bonusEligible) return;
+    const amount = this.#growth.questReward;
     if (BigInt(amount || 0n) <= 0n) return;
 
     const bonus = document.createElement('div');
@@ -1459,36 +1218,10 @@ class AppParimutuelPanel extends HTMLElement {
     label.textContent = `BET: ${_fmtFlip(STAKE_WEI)} FLIP\u00a0\u00a0\u00a0BONUS: `;
     const value = document.createElement('strong');
     value.className = 'pari-prebet-bonus__value';
-    value.textContent = `+${_fmtFlip(amount)} FLIP${kind === 'growth' ? ' · +1 STREAK' : ''}`;
+    value.textContent = `+${_fmtFlip(amount)} FLIP · +1 STREAK`;
     bonus.appendChild(label);
     bonus.appendChild(value);
     host.appendChild(bonus);
-  }
-
-  #renderHeldVolume(host, state, offered, { closed = false } = {}) {
-    const sideText = state.side === SIDE_OVER ? 'OVER' : 'UNDER';
-    const line = document.createElement('div');
-    line.className = `pari-your-bet pari-your-bet--volume pari-your-bet--${
-      state.side === SIDE_OVER ? 'over' : 'under'
-    }${closed ? ' pari-your-bet--closed' : ''}`;
-    const label = document.createElement('span');
-    label.className = 'pari-your-bet__label';
-    label.textContent = 'YOUR BET:';
-    const pick = document.createElement('strong');
-    pick.className = 'pari-your-bet__pick';
-    const compactTarget = offered?.target || '';
-    pick.textContent = `${sideText}${compactTarget ? ` ${compactTarget}` : ''}`;
-    line.appendChild(label);
-    line.appendChild(pick);
-    if (closed) {
-      const payout = document.createElement('strong');
-      payout.className = 'pari-your-bet__payout';
-      payout.textContent = `TO WIN: ${_fmtFlip(
-        payoutPerWinner(state.overCount, state.underCount, state.side),
-      )} FLIP`;
-      line.appendChild(payout);
-    }
-    host.appendChild(line);
   }
 
   #renderHeldGrowth(host, state, { closed = false } = {}) {
@@ -1547,26 +1280,20 @@ class AppParimutuelPanel extends HTMLElement {
 
   #renderPositions(
     host,
-    kind,
     book,
-    lost = this.#lost(book, kind),
     pending = this.#pendingSettlement(book),
   ) {
-    if (lost.length === 0 && pending.length === 0) return;
+    if (pending.length === 0) return;
 
     const list = document.createElement('div');
     list.className = 'pari-results';
 
     for (const r of pending) {
-      if (kind === 'volume') {
-        this.#renderHeldVolume(list, r, this.#volumeMark(r.round), { closed: true });
-        continue;
-      }
       const row = document.createElement('div');
       row.className = 'pari-result pari-result--pending';
       const label = document.createElement('span');
       label.className = 'pari-result__label';
-      label.textContent = `${kind === 'growth' ? 'Level' : 'Round'} ${r.round} · To win`;
+      label.textContent = `Level ${r.round} · To win`;
       row.appendChild(label);
       const amount = document.createElement('span');
       amount.className = 'pari-result__amount';
@@ -1584,11 +1311,8 @@ class AppParimutuelPanel extends HTMLElement {
   // Actions
   // -----------------------------------------------------------------------
 
-  async #bet(kind, over) {
-    await this.#run(async (player) => {
-      if (kind === 'growth') await placeGrowthBet({ player, over });
-      else await placeVolumeBet({ player, over });
-    });
+  async #bet(over) {
+    await this.#run((player) => placeGrowthBet({ player, over }));
   }
 
   async #enterDecimator() {
@@ -1617,8 +1341,8 @@ class AppParimutuelPanel extends HTMLElement {
     }
   }
 
-  async #claim(kind, rounds) {
-    const book = kind === 'growth' ? this.#growth : this.#volume;
+  async #claim(rounds) {
+    const book = this.#growth;
     const wanted = new Set((rounds || []).map(Number));
     const player = getActingAddress();
     if (!player) {
@@ -1629,11 +1353,11 @@ class AppParimutuelPanel extends HTMLElement {
     // Re-read every clicked round before choosing a write. The poll snapshot can
     // be stale because pari settlement is permissionless and the keeper batch
     // may have paid this player since the widget last rendered.
-    const read = kind === 'growth' ? readGrowthMarket : readVolumeMarket;
+    const read = readGrowthMarket;
     let results;
     try {
       results = await Promise.all(Array.from(wanted, (round) => read({ player, round })));
-      for (const row of results) this.#mergeFreshRound(kind, row);
+      for (const row of results) this.#mergeFreshRound(row);
     } catch (_e) {
       // If the read RPC blinks, the claim's static-call remains the race gate.
       results = book.rounds.filter((row) => wanted.has(row.round));
@@ -1641,7 +1365,7 @@ class AppParimutuelPanel extends HTMLElement {
 
     const unpaid = results.filter((row) => row.side !== 0 && !row.claimed && row.payout > 0n);
     const alreadySettled = results.filter((row) => row.side !== 0 && row.claimed);
-    for (const row of alreadySettled) await this.#revealPari(kind, this.#pariReplayResult(row));
+    for (const row of alreadySettled) await this.#revealPari(this.#pariReplayResult(row));
     if (unpaid.length === 0) {
       this.#render();
       return;
@@ -1657,26 +1381,20 @@ class AppParimutuelPanel extends HTMLElement {
         const winnerCount = target.outcome === SIDE_OVER
           ? target.overCount : target.underCount;
         const players = await readRoundWinners({
-          kind,
+          kind: 'growth',
           round: target.round,
           outcome: target.outcome,
           expectedCount: Number(winnerCount),
         }).catch(() => []);
-        if (kind === 'growth') {
-          await claimGrowthRound({ player: actingPlayer, round: target.round, players });
-        } else {
-          await claimVolumeRound({ player: actingPlayer, round: target.round, players });
-        }
-      } else if (kind === 'growth') {
-        await claimGrowth({ player: actingPlayer, rounds: unpaid.map((row) => row.round) });
+        await claimGrowthRound({ player: actingPlayer, round: target.round, players });
       } else {
-        await claimVolume({ player: actingPlayer, rounds: unpaid.map((row) => row.round) });
+        await claimGrowth({ player: actingPlayer, rounds: unpaid.map((row) => row.round) });
       }
     });
     if (ok) {
       for (const result of unpaid) {
         result.claimed = true;
-        await this.#revealPari(kind, this.#pariReplayResult(result));
+        await this.#revealPari(this.#pariReplayResult(result));
       }
     } else {
       // A community crank can win between the fresh read and our simulation.
@@ -1687,15 +1405,15 @@ class AppParimutuelPanel extends HTMLElement {
         const claimed = raced.filter((row) => row.claimed);
         if (claimed.length > 0) {
           this.#clearError();
-          for (const row of raced) this.#mergeFreshRound(kind, row);
-          for (const row of claimed) await this.#revealPari(kind, this.#pariReplayResult(row));
+          for (const row of raced) this.#mergeFreshRound(row);
+          for (const row of claimed) await this.#revealPari(this.#pariReplayResult(row));
         }
       } catch (_e) { /* keep the original actionable error */ }
     }
   }
 
-  #mergeFreshRound(kind, row) {
-    const book = kind === 'growth' ? this.#growth : this.#volume;
+  #mergeFreshRound(row) {
+    const book = this.#growth;
     const index = book.rounds.findIndex((existing) => existing.round === row.round);
     if (index >= 0) book.rounds[index] = row;
     else book.rounds.unshift(row);

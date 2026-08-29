@@ -14,6 +14,10 @@ const QUEST_BOTTOM_LEFT_ICON = readFileSync(
   new URL('../../assets/quest-objective-tail-bottom-left.svg', import.meta.url),
   'utf8',
 );
+const QUEST_RIGHT_ICON = readFileSync(
+  new URL('../../assets/quest-objective-tail-right.svg', import.meta.url),
+  'utf8',
+);
 
 class FakeHTMLElement {
   constructor() {
@@ -218,6 +222,10 @@ describe('<quest-objective-indicator>', () => {
     assert.match(STATUS_CSS,
       /\[data-quest-pointer="bottom-left"\][\s\S]*?quest-objective-tail-bottom-left\.svg/s,
       'hosts can select artwork whose pointer aims back at their control');
+    assert.match(QUEST_RIGHT_ICON, /tail leaves the[\s\S]*right edge/i);
+    assert.match(STATUS_CSS,
+      /\[data-quest-pointer="right"\][\s\S]*?quest-objective-tail-right\.svg/s,
+      'a left-edge game marker can explicitly point right into its felt');
     assert.match(STATUS_CSS,
       /body\.layout-basic quest-objective-indicator\s*\{[^}]*position:\s*absolute;[^}]*flex:\s*none;/s,
       'quest markers never participate in the host box dimensions');

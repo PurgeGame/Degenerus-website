@@ -329,13 +329,13 @@
            disk for THE PIT. -->
 
       <!-- Second three-column instrument, aligned to the jackpot hero:
-           quests left and Degenerette center. The right desktop track stays
-           clear for the upcoming Craps container; Side Bets now has its own
-           full-width rail below AFKING Passes. Degenerette owns fresh and
-           historical resolved spins in-panel. -->
-      <section class="play-grid" aria-label="Quests and Degenerette">
+           quests left, Degenerette center, and scheduled Craps entries right.
+           Side Bets keeps its own full-width rail below AFKING Passes.
+           Degenerette owns fresh and historical resolved spins in-panel. -->
+      <section class="play-grid" aria-label="Quests, Degenerette, and Craps">
         <app-quest-panel></app-quest-panel>
         <app-degenerette-panel></app-degenerette-panel>
+        <app-craps-entry></app-craps-entry>
       </section>
 
       <!-- The only permanent scoreboard in the game: four all-time marks and
@@ -497,6 +497,7 @@
       // store state on upgrade one idle slot after paint.
       '/app/components/app-quest-panel.js',
       '/app/components/app-degenerette-panel.js',
+      '/app/components/app-craps-entry.js',
       '/app/components/app-parimutuel-panel.js',
       '/app/components/app-records-rail.js',
       '/app/components/app-deity-desk.js',

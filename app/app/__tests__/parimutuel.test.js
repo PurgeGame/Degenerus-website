@@ -1,23 +1,20 @@
-// /app/app/__tests__/parimutuel.test.js — the two OVER/UNDER books.
+// /app/app/__tests__/parimutuel.test.js — the Growth OVER/UNDER book.
 //
 // Run: cd website && node --test app/app/__tests__/parimutuel.test.js
 //
-// Covers the write paths (placeBet / placeVolumeBet / claim / claimVolume), the
-// view decoding, the payout arithmetic and the clock helpers. Harness shape is
-// the coinflip.test.js / passes.test.js fake provider+contract port.
+// Covers the write paths (placeBet / claim / claimRound), the view decoding,
+// and the payout arithmetic. Harness shape is the coinflip.test.js /
+// passes.test.js fake provider+contract port.
 //
 // Sources (degenerus-audit/contracts/DegenerusParimutuel.sol):
-//   :66  STAKE = 1_000 ether — one fixed bet per address per round, both books
-//   :257 placeBet(player, over)          :303 claim(player, rounds[])
-//   :440 placeVolumeBet(player, over)    :499 claimVolume(player, rounds[])
-//   :477 _openVolumeRound — window off the clock, round = day index + 1
-//   :718 _payoutFrom — STAKE * (over + under) / winCount
-//   :141 MarketClosed  :144 AlreadyBet  :149 NothingToSettle  :154 NotEligible
+//   STAKE = 1_000 ether — one fixed bet per address per round
+//   placeBet(player, over) · claim(player, rounds[]) · claimRound(round, players[])
+//   _payoutFrom — STAKE * (over + under) / winCount
+//   MarketClosed · AlreadyBet · NothingToSettle · NotEligible
 //
-// The testnet overlay rescales the volume window with the 600s game day
-// (contracts-testnet/DegenerusParimutuel.sol:478 — `(ts - 82620) % 600 < 540`),
-// and chain-config.sepolia.js VOLUME_WINDOW mirrors those constants. The clock
-// tests below are written against that active profile.
+// The ticket-VOLUME book was excised from the contract at the run-43 re-vendor
+// (audit 0bbc82a6b); a guard test below pins the module to the growth-only
+// surface so the dead lane cannot silently return.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +24,6 @@ import * as pari from '../parimutuel.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
-import { CHAIN, VOLUME_WINDOW } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
@@ -42,11 +38,8 @@ function makeFakeTx() {
 function makeFakeContract(opts = {}) {
   const calls = {
     placeBet: [],
-    placeVolumeBet: [],
     claim: [],
-    claimVolume: [],
     claimRound: [],
-    claimVolumeRound: [],
   };
   const order = [];
 
@@ -71,20 +64,12 @@ function makeFakeContract(opts = {}) {
 
   return {
     placeBet: writeStub('placeBet'),
-    placeVolumeBet: writeStub('placeVolumeBet'),
     claim: writeStub('claim'),
-    claimVolume: writeStub('claimVolume'),
     claimRound: writeStub('claimRound'),
-    claimVolumeRound: writeStub('claimVolumeRound'),
     // marketState(player, round) → the 8 growth returns
     marketState: async (player, round) => (
       opts.marketState ? opts.marketState(player, round) : [42, 3n, 1n, 150n * 10n ** 18n, 0, false, 0, 0n]
     ),
-    // volumeMarketState(player, round) → the 8 volume returns (adds `voided`)
-    volumeMarketState: async (player, round) => (
-      opts.volumeMarketState ? opts.volumeMarketState(player, round) : [88, 2n, 5n, 0, false, 0, false, 0n]
-    ),
-    volumeBetCredit: async () => (opts.volumeBetCredit ?? 25n * 10n ** 18n),
     connect(_signer) { return this; },
     _calls: calls,
     _order: order,
@@ -217,46 +202,6 @@ describe('payoutPerWinner mirrors _payoutFrom', () => {
   });
 });
 
-describe('volumeWindow / volumeRoundNow mirror _openVolumeRound', () => {
-  const { anchor, period, openSeconds } = VOLUME_WINDOW;
-
-  test('active testnet profile matches the deployed post-change clock constants', () => {
-    assert.equal(period, 600);
-    assert.equal(openSeconds, 540);
-    assert.equal(VOLUME_WINDOW.creditDecayStart, 154);
-    assert.equal(VOLUME_WINDOW.creditDecayStep, 86);
-  });
-
-  test('open at the top of a game day, for openSeconds', () => {
-    const w = pari.volumeWindow(anchor + period * 5);
-    assert.equal(w.open, true);
-    assert.equal(w.secondsToClose, openSeconds);
-  });
-
-  test('closed once the window elapses, counting down to the next open', () => {
-    const w = pari.volumeWindow(anchor + period * 5 + openSeconds);
-    assert.equal(w.open, false);
-    assert.equal(w.secondsToOpen, period - openSeconds);
-  });
-
-  test('the last second of the window still reads open', () => {
-    const w = pari.volumeWindow(anchor + period * 5 + openSeconds - 1);
-    assert.equal(w.open, true);
-    assert.equal(w.secondsToClose, 1);
-  });
-
-  // Day indices are DEPLOY-relative (GameTimeLib:34), so a round is a small
-  // number. Verified against live VolumeRoundSealed logs on the current deploy:
-  // round 22 sealed in the window at day index 22.
-  test('round = deploy-relative day index + 1', () => {
-    const { deployDayBoundary: base } = VOLUME_WINDOW;
-    assert.ok(Number.isFinite(base), 'the active profile carries a deploy boundary');
-    assert.equal(pari.volumeRoundNow(anchor + period * base), 2, 'deploy day → day 1 → round 2');
-    assert.equal(pari.volumeRoundNow(anchor + period * (base + 21) + 18), 23,
-      'day index 22 (the round 22 seal) is betting into round 23');
-  });
-});
-
 // ===========================================================================
 // Reads
 // ===========================================================================
@@ -286,22 +231,13 @@ describe('view decoding', () => {
     assert.equal(s.payout, 4_000n * 10n ** 18n);
   });
 
-  test('readVolumeMarket carries the voided flag (no growth equivalent)', async () => {
-    pari.__setContractFactoryForTest(() => makeFakeContract({
-      volumeMarketState: () => [0, 2n, 5n, 2, false, 0, true, pari.STAKE_WEI],
-    }));
-    contractsMod.setProvider(makeFakeProvider(CONNECTED));
-    const s = await pari.readVolumeMarket({ player: CONNECTED, round: 87 });
-    assert.equal(s.openRound, 0, 'closed book reports openRound 0');
-    assert.equal(s.side, pari.SIDE_UNDER);
-    assert.equal(s.voided, true);
-    assert.equal(s.payout, pari.STAKE_WEI, 'a voided round refunds the stake');
-  });
-
-  test('readVolumeCredit returns the decaying placement credit', async () => {
-    pari.__setContractFactoryForTest(() => makeFakeContract({ volumeBetCredit: 15n * 10n ** 18n }));
-    contractsMod.setProvider(makeFakeProvider(CONNECTED));
-    assert.equal(await pari.readVolumeCredit(), 15n * 10n ** 18n);
+  test('the volume book stays excised (run-43 contract has no volume surface)', () => {
+    assert.equal(pari.readVolumeMarket, undefined);
+    assert.equal(pari.readVolumeCredit, undefined);
+    assert.equal(pari.placeVolumeBet, undefined);
+    assert.equal(pari.claimVolume, undefined);
+    assert.equal(pari.claimVolumeRound, undefined);
+    assert.equal(pari.readLastVolumeSeal, undefined);
   });
 
   test('readMarketBetGates keeps bet permission separate from bonus eligibility', async () => {
@@ -427,11 +363,6 @@ describe('bet placement', () => {
     assert.deepEqual(fake._order, ['static:placeBet', 'send:placeBet']);
   });
 
-  test('placeVolumeBet calls placeVolumeBet(player, over)', async () => {
-    await pari.placeVolumeBet({ player: CONNECTED, over: false });
-    assert.deepEqual(fake._calls.placeVolumeBet, [[CONNECTED, false]]);
-  });
-
   test('a reverting pre-flight surfaces the mapped message and never sends', async () => {
     fake = makeFakeContract({
       staticCallShouldRevert: { placeBet: true },
@@ -470,11 +401,6 @@ describe('claims', () => {
   test('claimGrowth passes the round list through', async () => {
     await pari.claimGrowth({ player: CONNECTED, rounds: [41, 40] });
     assert.deepEqual(fake._calls.claim, [[CONNECTED, [41, 40]]]);
-  });
-
-  test('claimVolume passes the round list through', async () => {
-    await pari.claimVolume({ player: CONNECTED, rounds: [87] });
-    assert.deepEqual(fake._calls.claimVolume, [[CONNECTED, [87]]]);
   });
 
   test('drops non-positive / non-integer rounds and refuses an empty batch', async () => {
@@ -584,114 +510,5 @@ describe('growthBps', () => {
 describe('UNITS_PER_TICKET', () => {
   test('400 raw purchase units = one whole ticket (4 entries x QTY_SCALE 100)', () => {
     assert.equal(pari.UNITS_PER_TICKET, 400n);
-  });
-});
-
-describe('readLastVolumeSeal', () => {
-  const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
-
-  test('the seal carries the volume series the contract keeps private', () => {
-    assert.match(SRC, /event VolumeRoundSealed\(uint24 indexed round, uint48 total, uint48 previous\)/);
-  });
-
-  // Public RPCs cap eth_getLogs by block range (Base Sepolia: 2,000), so a
-  // from-zero query returns NOTHING — found live, 2026-07-29. The scan walks
-  // back from the head in under-cap chunks instead.
-  test('scans backwards in chunks under the RPC block-range cap', () => {
-    assert.match(SRC, /LOG_CHUNK_BLOCKS = 1800/);
-    assert.match(SRC, /contract\.filters\.VolumeRoundSealed\(hasWantedRound \? wantedRound : undefined\)/);
-    assert.match(SRC, /contract\.queryFilter\([\s\S]{0,180}\bfrom,\s*\n\s*to,/,
-      'the filtered query still uses bounded block chunks');
-    assert.ok(!/queryFilter\([^)]*\b0, 'latest'/.test(SRC), 'no unbounded from-zero log query');
-  });
-
-  test('an exact-round read ignores a newer unrelated seal from a legacy provider', async () => {
-    const filterRounds = [];
-    contractsMod.setProvider({
-      ...makeFakeProvider(CONNECTED),
-      getBlockNumber: async () => 100,
-    });
-    pari.__setContractFactoryForTest(() => ({
-      filters: {
-        VolumeRoundSealed: (round) => {
-          filterRounds.push(round);
-          return { round };
-        },
-      },
-      // Deliberately ignore the filter, as some old/injected providers did.
-      queryFilter: async () => [
-        { blockNumber: 80, args: { round: 41, total: 800n, previous: 400n } },
-        { blockNumber: 90, args: { round: 42, total: 1200n, previous: 800n } },
-      ],
-      connect() { return this; },
-    }));
-    const seal = await pari.readLastVolumeSeal({ round: 41 });
-    assert.deepEqual(seal, {
-      round: 41, total: 800n, previous: 400n, blockNumber: 80,
-    });
-    assert.equal(filterRounds[0], 41, 'the indexed event filter receives openRound - 1');
-    pari.__resetContractFactoryForTest();
-    contractsMod.clearProvider();
-  });
-
-  test('an exact old round searches its estimated day instead of only the recent head', async () => {
-    const wantedRound = 41;
-    const deployBlock = Number(CHAIN.deployBlock);
-    const targetBlock = deployBlock + 20_000;
-    const head = deployBlock + 100_000;
-    const sealTimestamp = Number(VOLUME_WINDOW.anchor)
-      + Number(VOLUME_WINDOW.period)
-        * (Number(VOLUME_WINDOW.deployDayBoundary) + wantedRound - 1);
-    const deployTimestamp = sealTimestamp - 40_000;
-    const ranges = [];
-
-    contractsMod.setProvider({
-      ...makeFakeProvider(CONNECTED),
-      getBlockNumber: async () => head,
-      getBlock: async (blockNumber) => {
-        assert.equal(Number(blockNumber), deployBlock);
-        return { timestamp: deployTimestamp };
-      },
-    });
-    pari.__setContractFactoryForTest(() => ({
-      filters: { VolumeRoundSealed: (round) => ({ round }) },
-      queryFilter: async (_filter, from, to) => {
-        ranges.push([Number(from), Number(to)]);
-        if (Number(from) <= targetBlock && Number(to) >= targetBlock) {
-          return [{
-            blockNumber: targetBlock,
-            args: { round: wantedRound, total: 800n, previous: 400n },
-          }];
-        }
-        return [];
-      },
-      connect() { return this; },
-    }));
-
-    const seal = await pari.readLastVolumeSeal({ round: wantedRound });
-    assert.deepEqual(seal, {
-      round: wantedRound,
-      total: 800n,
-      previous: 400n,
-      blockNumber: targetBlock,
-    });
-    assert.ok(ranges.length <= 2, 'the estimated scan reaches the old seal directly');
-    assert.ok(ranges.every(([from, to]) => to - from + 1 <= 1800),
-      'every historical lookup remains beneath the RPC range cap');
-    assert.ok(ranges.every(([, to]) => to < head - 50_000),
-      'the exact-round scan does not begin at the unrelated recent head');
-
-    pari.__resetContractFactoryForTest();
-    contractsMod.clearProvider();
-  });
-
-  test('an unreachable head or log service reads null, not a throw', async () => {
-    pari.__setContractFactoryForTest(() => ({
-      filters: { VolumeRoundSealed: () => ({}) },
-      queryFilter: async () => { throw new Error('range too wide'); },
-      connect() { return this; },
-    }));
-    assert.equal(await pari.readLastVolumeSeal(), null);
-    pari.__resetContractFactoryForTest();
   });
 });

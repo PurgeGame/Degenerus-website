@@ -772,6 +772,36 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.deepEqual(legs, [{ legType: 'dgnrs', amount: ethers.parseEther('2') }]);
   });
 
+  test('decodes the regular-box Craps pass aggregate and its reserved day', () => {
+    const receipt = {
+      logs: [
+        log('LootBoxOpened', [PLAYER, 8n, 1_000n, 7, 0, 0n, false]),
+        log('LootBoxCrapsPasses', [PLAYER, 2, 1, 73]),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'crapsPasses']);
+    assert.deepEqual(legs[1], {
+      legType: 'crapsPasses',
+      crapsNormalPasses: 2,
+      crapsHighPasses: 1,
+      reservedDay: 73,
+    });
+  });
+
+  test('keeps presale Craps pass denominations on the opened anchor', () => {
+    const receipt = {
+      logs: [log('PresaleBoxOpened', [
+        PLAYER, 9n, 1_000n, 25n, 0n, 0n, false, 4, 2,
+      ])],
+    };
+    const [opened] = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.equal(opened.source, 'presale');
+    assert.equal(opened.flip, 25n, 'only residual FLIP remains beside a pass award');
+    assert.equal(opened.crapsNormalPasses, 4);
+    assert.equal(opened.crapsHighPasses, 2);
+  });
+
   test('whale pass leg decodes as legendary payload', () => {
     const receipt = {
       logs: [log('LootBoxWhalePassJackpot', [PLAYER, 10_000_000_000n, 13, 400, 0, 0])],
@@ -797,6 +827,62 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs[1].futureTickets, 42);
     assert.equal(legs[1].roundedUp, false);
     assert.equal(legs[1].wholeTickets, 0);
+  });
+
+  test('retains the current post-open WWXRP cold-bust mint', () => {
+    const receipt = {
+      logs: [
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
+        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'wwxrp']);
+    assert.equal(legs[1].amount, ethers.parseEther('1'));
+    assert.equal(legs[1].consolation, true);
+    assert.equal(legs[0].futureTickets, 42);
+    assert.equal(legs[0].roundedUp, false);
+    assert.equal(legs[0].wholeTickets, 0);
+  });
+
+  test('does not invent WWXRP for a contentless non-ticket opening', () => {
+    const receipt = {
+      logs: [
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 0, 0n, false]),
+        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened']);
+  });
+
+  test('does not invent cold-bust WWXRP when the ticket roll awards one whole ticket', () => {
+    const receipt = {
+      logs: [
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 100, 0n, false]),
+        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened']);
+    assert.equal(legs[0].wholeTickets, 1);
+  });
+
+  test('subtracts an itemized WWXRP BoxSpin from the aggregated cold-bust mint', () => {
+    const betId = (1n << 63n) | 42n;
+    const packed = packSpin(1n, 2n, 4) | (1n << 216n);
+    const receipt = {
+      logs: [
+        log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('2'), 0n]),
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
+        transferLog(ZERO, PLAYER, ethers.parseEther('3')),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['spin', 'opened', 'wwxrp']);
+    assert.equal(legs[0].payout, ethers.parseEther('2'));
+    assert.equal(legs[2].amount, ethers.parseEther('1'));
+    assert.equal(legs[2].consolation, true);
   });
 
   test('player filter drops other players; foreign address logs skipped', () => {
@@ -895,6 +981,31 @@ describe('openLegsFromFeed', () => {
     );
     assert.equal(legs.filter((leg) => leg.legType === 'spin').length, 1,
       'the immutable transaction/log identity wins over duplicate projections');
+  });
+
+  test('rebuilds presale and future indexed Craps pass payloads', () => {
+    const tx = `0x${'bc'.repeat(32)}`;
+    const rows = [
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 30, legType: 'presale',
+        lootboxIndex: 9,
+        rewardData: {
+          amount: '1000', flip: '0', dgnrs: '0', wwxrp: '0',
+          normalPasses: '3', highPasses: '1',
+        },
+      },
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 31, legType: 'crapsPasses',
+        rewardData: { normal: '2', highRoller: '1', day: '74' },
+      },
+    ];
+    const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex: 9 });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'crapsPasses']);
+    assert.equal(legs[0].crapsNormalPasses, 3);
+    assert.equal(legs[0].crapsHighPasses, 1);
+    assert.equal(legs[1].crapsNormalPasses, 2);
+    assert.equal(legs[1].crapsHighPasses, 1);
+    assert.equal(legs[1].reservedDay, 74);
   });
 
   test('refuses an unanchored spin-only row because BoxSpin carries no box index', () => {
@@ -1167,8 +1278,87 @@ describe('readOpenLegsFromChain', () => {
     assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
     assert.equal(legs[0].spinType, 'wwxrp');
     assert.equal(legs[0].reels[0].score, 5);
-    assert.equal(transactionReads, 0,
-      'the boost-inclusive RNG commitment identifies the batch result without calldata guesses');
+    assert.equal(transactionReads, 1,
+      'recovery checks the immutable purchase calldata once while retaining the legacy amount match');
+  });
+
+  test('recovers a counted custom box settled inside a permissionless mineFlip batch', async () => {
+    const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
+    const purchaseHash = `0x${'56'.repeat(32)}`;
+    const batchHash = `0x${'78'.repeat(32)}`;
+    const purchaseBlock = CHAIN.deployBlock + 320;
+    const spinBlock = purchaseBlock + 18;
+    const rngWord = BigInt('0x229da6d2a87e42e6b33f0567e621ad81604806ca3500ac58516dba435de8cae4');
+    const amountWei = 20_000_000_000n;
+    // [customCount:1][customSize:20_000 × the testnet 1e6 scale].
+    const boxOrder = 85_899_362_697_216n;
+    // Exact live-shaped id from hash2(hash4(word, player, size, nonce=1), BurnieSpin).
+    const betId = 10_564_046_084_384_080_808n;
+    const purchaseCall = new ethers.Interface([
+      'function purchase(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,bool foil)',
+    ]);
+    const purchase = {
+      ...log('LootBoxBuy', [player, 10n, amountWei]),
+      transactionHash: purchaseHash,
+      blockNumber: purchaseBlock,
+      logIndex: 1,
+    };
+    const applied = {
+      ...log('LootboxRngApplied', [10n, rngWord, 99n]),
+      transactionHash: batchHash,
+      blockNumber: spinBlock,
+      logIndex: 2,
+    };
+    const packed = packSpin(9n, 10n, 5) | (1n << 216n);
+    const spin = {
+      ...log('BoxSpin', [player, betId, packed, 0n, 0n]),
+      transactionHash: batchHash,
+      blockNumber: spinBlock,
+      logIndex: 3,
+    };
+    const transactionReads = [];
+    contractsMod.setProvider({
+      getBlockNumber: async () => spinBlock + 500,
+      getLogs: async (filter) => {
+        const containsResult = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
+        if (!containsResult) return [];
+        if (filter.topics?.[0] === iface.getEvent('LootboxRngApplied').topicHash) return [applied];
+        if (filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash) return [spin];
+        return [];
+      },
+      getTransaction: async (hash) => {
+        transactionReads.push(hash);
+        if (hash === purchaseHash) {
+          return {
+            to: GAME,
+            data: purchaseCall.encodeFunctionData('purchase', [
+              player, 0n, boxOrder, `0x${'00'.repeat(32)}`, 0, false,
+            ]),
+            value: 0n,
+          };
+        }
+        assert.equal(hash, batchHash);
+        return { to: GAME, data: '0x197b7998', value: 0n };
+      },
+      getTransactionReceipt: async (hash) => {
+        if (hash === purchaseHash) {
+          return { hash, blockNumber: purchaseBlock, logs: [purchase] };
+        }
+        assert.equal(hash, batchHash);
+        return { hash, blockNumber: spinBlock, logs: [applied, spin] };
+      },
+    });
+
+    const legs = await readOpenLegsFromChain({
+      player,
+      lootboxIndex: 10,
+      purchaseTransactionHashes: [purchaseHash],
+      boxAmountWei: amountWei,
+    });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
+    assert.equal(legs[0].spinType, 'flip');
+    assert.ok(transactionReads.includes(purchaseHash),
+      'current counted orders are reconstructed from immutable purchase calldata');
   });
 
   test('names the real quest shield and never invents a generic bonus boon', () => {

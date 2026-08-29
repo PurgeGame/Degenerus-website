@@ -660,6 +660,19 @@
   inset: 50% calc(100% + 4px) auto auto;
   transform-origin: 100% 50%;
 }
+
+/* A solo-winner badge fills almost the entire quadrant, leaving no outside
+   lane for its amount plate. Center that plate over the badge so the cabinet's
+   clipped outer edge cannot eat the prize amount. */
+.replay-badge-wrap[data-reward-direction="inside"] .replay-badge-reward-pop {
+  --replay-reward-base-x: -50%;
+  --replay-reward-base-y: -50%;
+  --replay-reward-enter-y: 4px;
+  --replay-reward-exit-y: -4px;
+  top: 50%;
+  bottom: auto;
+  transform-origin: 50% 50%;
+}
 .replay-tq.q-result-revealed .replay-badge-wrap.is-reward-pop[tabindex="0"] {
   z-index: calc(15 + var(--replay-reward-stack, 1));
 }

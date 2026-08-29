@@ -253,6 +253,10 @@ quest-objective-indicator[data-quest-pointer="bottom-left"] {
   --quest-objective-art: url('/app/assets/quest-objective-tail-bottom-left.svg');
 }
 
+quest-objective-indicator[data-quest-pointer="right"] {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-right.svg');
+}
+
 quest-objective-indicator[data-quest-count]:not([data-quest-count="1"])::after {
   position: absolute;
   right: -0.25rem;

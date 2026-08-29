@@ -11,6 +11,7 @@
 //     LootBoxDgnrsBatch(player, requested, paid)
 //     LootBoxDgnrsReward(player, lootboxAmount, dgnrsAmount) (historical runs)
 //     LootBoxWhalePassJackpot(player, lootboxAmount, targetLevel, entriesPerLevel, ...)
+//     LootBoxCrapsPasses(player, normal, highRoller, day)
 //     LootBoxReward(player, rewardType, lootboxAmount, amount)
 //       rewardType: 2=CoinflipBoon 4=Boost5 5=Boost15 6=Boost25 8=DecimatorBoost
 //                   9=WhaleBoon 10=ActivityBoon/DeityPassBoon 11=LazyPassBoon
@@ -29,7 +30,12 @@ import { ethers, getProvider } from './contracts.js';
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { dgnUnpackTicket } from './dgn-traits.js';
 import { degenerettePayoutTable } from './degenerette.js';
-import { scaledTicketPriceWei } from './lootbox.js';
+import {
+  BOX_ORDER_LARGE_MULTIPLE,
+  BOX_ORDER_MEDIUM_MULTIPLE,
+  scaledTicketPriceWei,
+  unpackBoxOrder,
+} from './lootbox.js';
 import {
   boonTypePresentation,
   boonVisualForProduct,
@@ -47,6 +53,7 @@ export const OPEN_EVENTS_ABI = [
   'event LootBoxDgnrsBatch(address indexed player, uint256 requested, uint256 paid)',
   'event LootBoxDgnrsReward(address indexed player, uint256 lootboxAmount, uint256 dgnrsAmount)',
   'event LootBoxWhalePassJackpot(address indexed player, uint256 lootboxAmount, uint24 targetLevel, uint32 entriesPerLevel, uint24 statsBoost, uint24 frozenUntilLevel)',
+  'event LootBoxCrapsPasses(address indexed player, uint32 normal, uint32 highRoller, uint24 day)',
   'event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount)',
   // audit 4a9549e51 appended `normalPasses`/`highPasses`: the FLIP branch tosses a committed
   // coin and half the boxes denominate the whole roll into Craps day-passes at the regular
@@ -56,7 +63,11 @@ export const OPEN_EVENTS_ABI = [
   'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing, uint32 normalPasses, uint32 highPasses)',
   'event BoxSpin(address indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
 ];
-const OPEN_CALL_ABI = ['function openBox(address player, uint48 index)'];
+const OPEN_CALL_ABI = [
+  'function openBox(address player, uint48 index)',
+  'function purchase(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,bool foil)',
+  'function buyLootboxAndPresaleBox(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,uint256 boxAmount)',
+];
 
 const SPIN_TYPES = ['wwxrp', 'flip', 'eth', 'record'];
 const BOX_BET_ID_SENTINEL = 1n << 63n;
@@ -814,12 +825,125 @@ export async function enrichHumanBoxSpinLegs(legs, {
   return changed ? enriched : rows;
 }
 
+function _currentHumanLootboxRollSeeds({
+  rngWord,
+  player,
+  boxOrders = [],
+  ticketPriceWei = null,
+  nominalAmountWei = null,
+} = {}) {
+  let word;
+  let playerWord;
+  try {
+    word = BigInt(rngWord ?? 0);
+    playerWord = BigInt(player);
+  } catch (_e) {
+    return [];
+  }
+  if (word === 0n || !player) return [];
+
+  const rawEntries = Array.isArray(boxOrders) ? boxOrders : [boxOrders];
+  const entries = [];
+  for (const rawEntry of rawEntries) {
+    const packedValue = rawEntry && typeof rawEntry === 'object'
+      ? rawEntry.boxOrder ?? rawEntry.order
+      : rawEntry;
+    let packed;
+    try { packed = BigInt(packedValue ?? 0); } catch (_e) { continue; }
+    if (packed <= 0n) continue;
+    let order;
+    try { order = unpackBoxOrder(packed); } catch (_e) { continue; }
+    let entryAmount = null;
+    if (rawEntry && typeof rawEntry === 'object' && rawEntry.amountWei != null) {
+      try { entryAmount = BigInt(rawEntry.amountWei); } catch (_e) { entryAmount = null; }
+    }
+    entries.push({ order, amountWei: entryAmount });
+  }
+  if (entries.length === 0) return [];
+
+  const counts = { small: 0, medium: 0, large: 0, custom: 0 };
+  let customSizeWei = 0n;
+  const priceCandidates = new Set();
+  const addPriceCandidate = (value) => {
+    try {
+      const price = BigInt(value ?? 0);
+      if (price > 0n) priceCandidates.add(price);
+    } catch (_e) { /* malformed optional price */ }
+  };
+  addPriceCandidate(ticketPriceWei);
+
+  for (const { order, amountWei: entryAmount } of entries) {
+    counts.small += order.small;
+    counts.medium += order.medium;
+    counts.large += order.large;
+    counts.custom += order.customCount;
+    if (order.customCount > 0) {
+      if (customSizeWei !== 0n && customSizeWei !== order.customSizeWei) return [];
+      customSizeWei = order.customSizeWei;
+    }
+    const presetUnits = BigInt(order.small)
+      + BOX_ORDER_MEDIUM_MULTIPLE * BigInt(order.medium)
+      + BOX_ORDER_LARGE_MULTIPLE * BigInt(order.large);
+    if (entryAmount != null && entryAmount > 0n && presetUnits > 0n) {
+      const customNominal = BigInt(order.customCount) * order.customSizeWei;
+      const presetNominal = entryAmount - customNominal;
+      if (presetNominal > 0n && presetNominal % presetUnits === 0n) {
+        addPriceCandidate(presetNominal / presetUnits);
+      }
+    }
+  }
+
+  const totalPresetUnits = BigInt(counts.small)
+    + BOX_ORDER_MEDIUM_MULTIPLE * BigInt(counts.medium)
+    + BOX_ORDER_LARGE_MULTIPLE * BigInt(counts.large);
+  if (totalPresetUnits > 0n) {
+    try {
+      const nominal = BigInt(nominalAmountWei ?? 0);
+      const customNominal = BigInt(counts.custom) * customSizeWei;
+      const presetNominal = nominal - customNominal;
+      if (presetNominal > 0n && presetNominal % totalPresetUnits === 0n) {
+        addPriceCandidate(presetNominal / totalPresetUnits);
+      }
+    } catch (_e) { /* optional aggregate amount */ }
+  }
+
+  // Custom-only orders do not need a ticket price. When the price is unknown,
+  // still advance across preset counts so a later custom lane keeps the exact
+  // contract nonce even though those preset seeds themselves cannot be rebuilt.
+  const prices = priceCandidates.size > 0 ? [...priceCandidates] : [0n];
+  const seeds = new Set();
+  for (const price of prices) {
+    const lanes = [
+      [counts.small, price],
+      [counts.medium, price * BOX_ORDER_MEDIUM_MULTIPLE],
+      [counts.large, price * BOX_ORDER_LARGE_MULTIPLE],
+      [counts.custom, customSizeWei],
+    ];
+    let nonce = 0n;
+    for (const [count, size] of lanes) {
+      for (let i = 0; i < count; i += 1) {
+        nonce += 1n;
+        if (size > 0n) seeds.add(_entropyHash4(word, playerWord, size, nonce));
+      }
+    }
+  }
+  return [...seeds];
+}
+
 /**
- * Rebuild the six possible BoxSpin ids for one human Luckbox. Spin-only
- * settlements omit LootBoxOpened and the shared RNG index, but their low
- * 60-bit entropy is a commitment to this exact (word, player, amount) tuple.
+ * Rebuild every possible BoxSpin id for one human Luckbox. Current counted
+ * orders seed each physical box from (word, player, per-box size, nonce).
+ * Legacy deployments committed to one aggregate amount and could split it
+ * into two rolls, so retain those candidates for historical Pending receipts.
  */
-export function deriveHumanLootboxSpinBetIds({ rngWord, player, amountWei } = {}) {
+export function deriveHumanLootboxSpinBetIds({
+  rngWord,
+  player,
+  amountWei,
+  boxOrders = [],
+  ticketPriceWei = null,
+  nominalAmountWei = null,
+} = {}) {
   let word;
   let amount;
   try {
@@ -828,19 +952,28 @@ export function deriveHumanLootboxSpinBetIds({ rngWord, player, amountWei } = {}
   } catch (_e) {
     return [];
   }
-  if (!player || word === 0n || amount === 0n) return [];
+  if (!player || word === 0n) return [];
   try {
-    const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-      ['uint256', 'address', 'uint256'],
-      [word, player, amount],
-    );
-    const rootSeed = BigInt(ethers.keccak256(encoded));
-    const rollSeeds = [rootSeed, _entropyHash2(rootSeed, 1n)];
-    return rollSeeds.flatMap((rollSeed) => BOX_SPIN_TAGS.map((tag, spinType) => (
+    const rollSeeds = _currentHumanLootboxRollSeeds({
+      rngWord: word,
+      player,
+      boxOrders,
+      ticketPriceWei,
+      nominalAmountWei: nominalAmountWei ?? amount,
+    });
+    if (amount > 0n) {
+      const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint256', 'address', 'uint256'],
+        [word, player, amount],
+      );
+      const rootSeed = BigInt(ethers.keccak256(encoded));
+      rollSeeds.push(rootSeed, _entropyHash2(rootSeed, 1n));
+    }
+    return [...new Set(rollSeeds.flatMap((rollSeed) => BOX_SPIN_TAGS.map((tag, spinType) => (
       BOX_BET_ID_SENTINEL
       | (BigInt(spinType) << 60n)
       | (_entropyHash2(rollSeed, tag) & BOX_BET_ID_ENTROPY_MASK)
-    )));
+    ))))];
   } catch (_e) {
     return [];
   }
@@ -1289,9 +1422,10 @@ export function __resetForTest() {
 
 /**
  * Parse an openBox receipt into normalized prize legs, in log order.
- * GAME logs carry the settlement itself. An immediately preceding WWXRP mint
- * is also retained because it is the contract's cold-bust consolation for a
- * fractional ticket roll that did not round up.
+ * GAME logs carry the settlement itself. A proven WWXRP mint beside a
+ * fractional ticket roll that did not round up is retained as the contract's
+ * cold-bust consolation. Historical contracts minted immediately before the
+ * LootBoxOpened event; the current accumulator flushes the mint afterward.
  *
  * @param {import('ethers').TransactionReceipt|null|undefined} receipt
  * @param {string} [playerFilter] lowercase address — keep only this player's legs
@@ -1302,7 +1436,8 @@ export function __resetForTest() {
  *   {legType:'dgnrs',     amount}
  *   {legType:'whalepass', targetLevel, entriesPerLevel}
  *   {legType:'reward',    rewardType, label, amount}
- *   {legType:'spin',      spinType, spinCount, survived, payout, ethShare, reels}
+ *   {legType:'crapsPasses', crapsNormalPasses, crapsHighPasses, reservedDay}
+ *   {legType:'spin',        spinType, spinCount, survived, payout, ethShare, reels}
  */
 export function parseOpenLegsFromReceipt(receipt, playerFilter) {
   const out = [];
@@ -1312,7 +1447,9 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
   const gameAddr = String(CONTRACTS.GAME || '').toLowerCase();
   const wwxrpAddr = String(CONTRACTS.WWXRP || '').toLowerCase();
   const want = playerFilter ? String(playerFilter).toLowerCase() : null;
-  let pendingWwxrpMint = null;
+  const precedingWwxrpMints = new Map();
+  const pendingColdBusts = new Set();
+  const unsettledWwxrpSpins = new Map();
   for (let position = 0; position < receipt.logs.length; position += 1) {
     const log = receipt.logs[position];
     try {
@@ -1321,9 +1458,28 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
         const transfer = _transferIface().parseLog(log);
         const from = String(transfer?.args?.from ?? transfer?.args?.[0] ?? '').toLowerCase();
         const to = String(transfer?.args?.to ?? transfer?.args?.[1] ?? '').toLowerCase();
-        pendingWwxrpMint = from === ZERO_ADDRESS && (!want || to === want)
-          ? { position, amount: BigInt(transfer.args.value ?? transfer.args[2] ?? 0) }
-          : null;
+        if (from === ZERO_ADDRESS && to && (!want || to === want)) {
+          const amount = BigInt(transfer.args.value ?? transfer.args[2] ?? 0);
+          // Current counted boxes settle all WWXRP for one player in the entry's
+          // final accumulator flush. BoxSpin already itemizes its own payout, so
+          // only the silent remainder belongs to fractional-ticket cold busts.
+          // This keeps a mixed WWXRP-spin + cold-bust entry from displaying the
+          // spin payout twice.
+          if (pendingColdBusts.has(to)) {
+            const itemized = unsettledWwxrpSpins.get(to) ?? 0n;
+            const consolation = amount > itemized ? amount - itemized : 0n;
+            if (consolation > 0n) {
+              out.push({ legType: 'wwxrp', amount: consolation, consolation: true });
+            }
+            pendingColdBusts.delete(to);
+            precedingWwxrpMints.delete(to);
+          } else {
+            // Historical generations minted the same consolation immediately
+            // before LootBoxOpened. Preserve that exact adjacency below.
+            precedingWwxrpMints.set(to, { position, amount });
+          }
+          unsettledWwxrpSpins.delete(to);
+        }
         continue;
       }
       if (gameAddr && logAddress !== gameAddr) continue;
@@ -1337,18 +1493,21 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
           const roundedUp = Boolean(parsed.args.roundedUp);
           const wholeTickets = wholeTicketsFromOpened(futureTickets, roundedUp);
           const flip = BigInt(parsed.args.flip);
-          // mintPrize emits its Transfer immediately before LootBoxOpened. Do
-          // not treat an unrelated WWXRP mint elsewhere in the receipt as box
-          // contents; adjacency is the provenance check.
-          if (futureTickets > 0
-              && wholeTickets === 0
-              && flip === 0n
-              && pendingWwxrpMint?.position === position - 1) {
-            out.push({
-              legType: 'wwxrp',
-              amount: pendingWwxrpMint.amount,
-              consolation: true,
-            });
+          const coldBust = futureTickets > 0 && wholeTickets === 0 && flip === 0n;
+          if (coldBust) {
+            const historicalMint = precedingWwxrpMints.get(player);
+            if (historicalMint?.position === position - 1) {
+              out.push({
+                legType: 'wwxrp',
+                amount: historicalMint.amount,
+                consolation: true,
+              });
+              precedingWwxrpMints.delete(player);
+            } else {
+              // Current contracts emit this anchor during the roll and mint the
+              // accumulated consolation in _flushBoxAcc after the roll batch.
+              pendingColdBusts.add(player);
+            }
           }
           out.push({
             legType: 'opened',
@@ -1376,6 +1535,14 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
             entriesPerLevel: Number(parsed.args.entriesPerLevel),
           });
           break;
+        case 'LootBoxCrapsPasses':
+          out.push({
+            legType: 'crapsPasses',
+            crapsNormalPasses: Number(parsed.args.normal ?? 0),
+            crapsHighPasses: Number(parsed.args.highRoller ?? 0),
+            reservedDay: Number(parsed.args.day ?? 0),
+          });
+          break;
         case 'LootBoxReward': {
           const rewardType = Number(parsed.args.rewardType);
           out.push({
@@ -1400,11 +1567,10 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
             wholeTickets: 0,
             flip: BigInt(parsed.args.flip),
             closing: Boolean(parsed.args.closing),
-            // Craps day-passes the box paid INSTEAD of coinflip credit (audit 4a9549e51). Carried
-            // on the anchor rather than as legs of their own: a new `legType` would need renderer
-            // support in every consumer, and an unrecognised one renders as an empty row. Note
-            // `flip` is NOT the whole FLIP branch any more — a box that denominated its roll into
-            // passes reports the passes here and a smaller (or zero) `flip`.
+            // Presale awards carry their pass counts on this event rather than the aggregated
+            // LootBoxCrapsPasses event used by regular boxes. Keep them on the physical box anchor
+            // so its opening card stays attributed to the right presale box. `flip` is only the
+            // residual coinflip credit after pass denomination, not the whole FLIP branch.
             crapsNormalPasses: Number(parsed.args.normalPasses ?? 0),
             crapsHighPasses: Number(parsed.args.highPasses ?? 0),
           });
@@ -1418,13 +1584,20 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
         }
         case 'BoxSpin': {
           const decoded = decodeBoxSpin(BigInt(parsed.args.betId), BigInt(parsed.args.packedSpins));
+          const payout = BigInt(parsed.args.payout);
           out.push({
             legType: 'spin',
             blockNumber: receipt?.blockNumber ?? log?.blockNumber ?? null,
             ...decoded,
-            payout: BigInt(parsed.args.payout),
+            payout,
             ethShare: BigInt(parsed.args.ethShare),
           });
+          if (decoded.spinType === 'wwxrp' && payout > 0n) {
+            unsettledWwxrpSpins.set(
+              player,
+              (unsettledWwxrpSpins.get(player) ?? 0n) + payout,
+            );
+          }
           break;
         }
         default:
@@ -1492,6 +1665,13 @@ export function openLegsFromDegenerettePayouts(items) {
         legType: 'whalepass',
         targetLevel: Number(data.targetLevel ?? item?.levelAtOpen ?? 0),
         entriesPerLevel: Number(data.entriesPerLevel ?? 0),
+      });
+    } else if (type === 'LootBoxCrapsPasses' || type === 'crapsPasses') {
+      out.push({
+        legType: 'crapsPasses',
+        crapsNormalPasses: Number(data.normal ?? data.normalPasses ?? 0),
+        crapsHighPasses: Number(data.highRoller ?? data.highPasses ?? data.high ?? 0),
+        reservedDay: Number(data.day ?? data.reservedDay ?? 0),
       });
     } else if (type === 'LootBoxReward' || type === 'reward') {
       const rewardType = Number(data.rewardType ?? data.type ?? 0);
@@ -1657,6 +1837,8 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
           futureLevel: Number(item.levelAtOpen ?? 0),
           wholeTickets: 0,
           flip: _feedBigInt(data.flip),
+          crapsNormalPasses: Number(data.normalPasses ?? data.normal ?? 0),
+          crapsHighPasses: Number(data.highPasses ?? data.highRoller ?? data.high ?? 0),
         });
         if (_feedBigInt(data.dgnrs) > 0n) {
           out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrs) });
@@ -1666,6 +1848,14 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         }
         break;
       }
+      case 'crapsPasses':
+        out.push({
+          legType: 'crapsPasses',
+          crapsNormalPasses: Number(data.normal ?? data.normalPasses ?? 0),
+          crapsHighPasses: Number(data.highRoller ?? data.highPasses ?? data.high ?? 0),
+          reservedDay: Number(data.day ?? data.reservedDay ?? 0),
+        });
+        break;
       case 'dgnrs':
         out.push({ legType: 'dgnrs', amount: _feedBigInt(data.paid ?? data.dgnrsAmount ?? data.amount) });
         break;
@@ -1738,6 +1928,8 @@ export async function readOpenLegsFromChain({
   lootboxIndex,
   purchaseTransactionHashes = [],
   boxAmountWei = null,
+  boxOrders = [],
+  ticketPriceWei = null,
 } = {}) {
   if (!player || lootboxIndex == null) return [];
   let index;
@@ -1764,9 +1956,12 @@ export async function readOpenLegsFromChain({
   const purchaseHashes = [...new Set([
     ...(Array.isArray(purchaseTransactionHashes) ? purchaseTransactionHashes : []),
   ].filter(Boolean).map((hash) => String(hash).toLowerCase()))];
+  const purchaseOrderEntries = [];
   for (const hash of purchaseHashes) {
+    let receipt = null;
+    let receiptPurchaseAmount = 0n;
     try {
-      const receipt = await provider.getTransactionReceipt(hash);
+      receipt = await provider.getTransactionReceipt(hash);
       const block = Number(receipt?.blockNumber);
       if (Number.isFinite(block) && block >= 0) {
         purchaseBlock = purchaseBlock == null ? block : Math.min(purchaseBlock, block);
@@ -1778,11 +1973,42 @@ export async function readOpenLegsFromChain({
           const buyer = String(parsed.args.buyer ?? parsed.args[0] ?? '').toLowerCase();
           const eventIndex = BigInt(parsed.args.index ?? parsed.args[1] ?? -1);
           if (buyer !== String(player).toLowerCase() || eventIndex !== index) continue;
-          purchaseAmountWei += BigInt(parsed.args.amount ?? parsed.args[2] ?? 0);
+          const eventAmount = BigInt(parsed.args.amount ?? parsed.args[2] ?? 0);
+          purchaseAmountWei += eventAmount;
+          receiptPurchaseAmount += eventAmount;
         } catch (_e) { /* foreign purchase-receipt log */ }
       }
     } catch (_e) { /* another reader or the index feed may still recover it */ }
+
+    // Current counted orders commit each physical box's size and lane nonce,
+    // neither of which survives after settlement. The immutable purchase
+    // calldata is therefore the durable reconstruction source when a
+    // permissionless batch emits only BoxSpin (no indexed LootBoxOpened).
+    if (receipt && typeof provider.getTransaction === 'function') {
+      try {
+        const tx = await provider.getTransaction(hash);
+        const to = String(tx?.to || '').toLowerCase();
+        if (to && to !== String(CONTRACTS.GAME || '').toLowerCase()) continue;
+        const data = tx?.data ?? tx?.input;
+        if (!data) continue;
+        const call = _openCallIface().parseTransaction({ data, value: tx?.value ?? 0 });
+        if (!call || !['purchase', 'buyLootboxAndPresaleBox'].includes(call.name)) continue;
+        const buyer = String(call.args.buyer ?? call.args[0] ?? '').toLowerCase();
+        const boxOrder = BigInt(call.args.boxOrder ?? call.args[2] ?? 0);
+        if (buyer !== String(player).toLowerCase() || boxOrder <= 0n) continue;
+        purchaseOrderEntries.push({
+          boxOrder,
+          amountWei: receiptPurchaseAmount > 0n ? receiptPurchaseAmount : null,
+        });
+      } catch (_e) { /* legacy/non-purchase hash; other recovery paths remain */ }
+    }
   }
+
+  const suppliedOrders = (Array.isArray(boxOrders) ? boxOrders : [boxOrders])
+    .filter((value) => value != null);
+  const countedOrderGroups = [];
+  if (purchaseOrderEntries.length > 0) countedOrderGroups.push(purchaseOrderEntries);
+  if (suppliedOrders.length > 0) countedOrderGroups.push(suppliedOrders);
 
   let topicSets;
   let spinTopics;
@@ -1874,10 +2100,10 @@ export async function readOpenLegsFromChain({
       }
     }
 
-    // BoxSpin omits the lootbox index. Its bet id still commits to the applied
-    // RNG word, player, and summed purchase amount, which identifies results
-    // emitted by permissionless batch opens. Keep direct-call decoding as a
-    // fallback for legacy results whose deterministic inputs are unavailable.
+    // BoxSpin omits the lootbox index. Current counted orders commit to the
+    // applied word, player, each physical box size, and its lane nonce. Legacy
+    // boxes committed to one aggregate amount. Rebuild both identities, then
+    // keep direct openBox calldata as the final historical fallback.
     if ((typeof provider.getTransaction === 'function'
         || (rngWord > 0n && (purchaseAmountWei > 0n || creditedAmountWei > 0n)))
         && inspectedSpinTransactions < REPLAY_SPIN_TX_LIMIT) {
@@ -1896,18 +2122,24 @@ export async function readOpenLegsFromChain({
         Number(b?.blockNumber ?? 0) - Number(a?.blockNumber ?? 0)
         || Number(b?.index ?? b?.logIndex ?? 0) - Number(a?.index ?? a?.logIndex ?? 0)
       ));
-      // LootBoxBuy records what the player paid. A purchase boon can credit a
-      // larger amount to the box, and that credited amount is what the spin's
-      // deterministic bet id commits to. Try both so old receipt-only rows and
-      // boost-aware feed rows are equally recoverable.
-      const deterministicBetIds = new Set(
-        [...new Set([purchaseAmountWei, creditedAmountWei].filter((amount) => amount > 0n))]
-          .flatMap((amountWei) => deriveHumanLootboxSpinBetIds({
-            rngWord,
-            player,
-            amountWei,
-          }).map(String)),
-      );
+      // Legacy boxes used either the paid or boost-credited aggregate. Current
+      // boxes use counted purchase calldata; evaluate each independently so a
+      // partially restored local order cannot double the contract's counts.
+      const amountCandidates = [...new Set(
+        [purchaseAmountWei, creditedAmountWei].filter((amount) => amount > 0n),
+      )];
+      if (amountCandidates.length === 0) amountCandidates.push(0n);
+      const orderGroups = countedOrderGroups.length > 0 ? countedOrderGroups : [[]];
+      const deterministicBetIds = new Set(orderGroups.flatMap((orderGroup) => (
+        amountCandidates.flatMap((amountWei) => deriveHumanLootboxSpinBetIds({
+          rngWord,
+          player,
+          amountWei,
+          boxOrders: orderGroup,
+          ticketPriceWei,
+          nominalAmountWei: purchaseAmountWei || amountWei,
+        }).map(String))
+      )));
       for (const candidate of candidates) {
         if (inspectedSpinTransactions >= REPLAY_SPIN_TX_LIMIT) break;
         inspectedSpinTransactions += 1;

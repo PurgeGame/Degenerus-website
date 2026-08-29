@@ -1463,6 +1463,8 @@ class AppBoxStrip extends HTMLElement {
           player: this.#addr,
           lootboxIndex: box.index,
           boxAmountWei: box.amountWei,
+          boxOrders: _boxOrders(box.boxOrders, box.boxOrder),
+          ticketPriceWei: box.ticketPriceWei,
           purchaseTransactionHashes: [
             box.resultTransactionHash,
             ...(Array.isArray(box.transactionHashes) ? box.transactionHashes : []),

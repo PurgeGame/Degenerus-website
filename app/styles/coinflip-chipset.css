@@ -1745,13 +1745,13 @@ body.layout-basic :is(.df-table-boon, .df-table-quest) {
   pointer-events: auto;
 }
 
-body.layout-basic .df-table-boon { left: 0.3rem; }
-body.layout-basic .df-table-quest { left: 1.68rem; scale: 1; }
+body.layout-basic .df-table-quest { left: 0.3rem; scale: 1; }
+body.layout-basic .df-table-boon { left: 1.68rem; }
 
-body.layout-basic .jackpot-hero .df-table-boon {
+body.layout-basic .jackpot-hero .df-table-quest {
   left: calc(var(--df-table-content-inset) + 0.12rem);
 }
-body.layout-basic .jackpot-hero .df-table-quest {
+body.layout-basic .jackpot-hero .df-table-boon {
   left: calc(var(--df-table-content-inset) + 1.5rem);
 }
 

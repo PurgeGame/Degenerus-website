@@ -1560,6 +1560,11 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_CSS,
+      /data-reward-direction="inside"[\s\S]*top:\s*50%[^}]*bottom:\s*auto[^}]*transform-origin:\s*50% 50%/,
+      'a nearly full-quadrant solo badge keeps its amount plate centered inside the cabinet',
+    );
+    assert.match(
+      REPLAY_CSS,
       /\.replay-tq\.q-result-revealed \.replay-badge-wrap\.is-reward-pop\[tabindex="0"\]\s*\{[^}]*z-index:\s*calc\(15 \+ var\(--replay-reward-stack, 1\)\)/s,
       'a reward callout receives foreground stacking only after scratch completion arms the badge',
     );

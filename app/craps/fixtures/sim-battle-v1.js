@@ -1,157 +1,109 @@
 /**
- * Replay fixture generated from the vendored exact engine with:
- *   boundSlot=100, word=14, bankroll=1,800 FLIP, goal=9,000 FLIP, board=600 FLIP.
+ * GENERATED — DO NOT EDIT BY HAND.
  *
- * It deliberately contains a goal, ordinary busts, a lost survival flip, the shooter-5
- * wager doubling boundary, picked-board boosts, and blank-board boosts.
+ *   cd degenerus-sim && npx tsx scripts/craps-replay-fixture.ts --write
+ *
+ * Produced by the PRODUCTION serializer (`database/src/craps/replay-bundle.ts`) over a field
+ * replayed by the PRODUCTION engine (`database/src/craps/battle.ts`) — the same two functions
+ * the indexer publishes with. That is the point: this fixture cannot drift from what the
+ * materializer emits, because regenerating it after a change to either IS the diff. The previous
+ * hand-written fixture carried an invented digest and a `0x5555…` verification hash, so the
+ * browser tests were checking the validator against numbers no publisher would ever produce.
+ *
+ * Scenario: bound slot 340, settlement word 5, 24 entrants,
+ * shard size 8 (3 shards).
+ * Coverage: {"goals":3,"busts":21,"survivalWon":13,"survivalLost":9,"boosted":10,"blank":3,"maxHands":12}.
+ *
+ * By construction it exercises: shard boundaries with seats on both sides; COLLIDING seat
+ * numbers across the window and whole-day lanes (the bet id is the only unique identity); one
+ * wallet holding several seats; a blank `chips == 0` ticket scattered ten ways; a high-multiple
+ * seat; Goals and Busts; won and lost survival flips; boosted shooters; and a won progressive.
  */
 
-import { encodeCrapsReplayLadder } from '../replay-contract.js';
-
-const BATTLE_KEY = '100';
-const DIGEST = '7f14c0ffee000001';
-const BASE = `/craps/replays/v1/battles/${BATTLE_KEY}/results/${DIGEST}`;
-const F = '000000000000000000';
-
-const players = [
-  {
-    betId: '1844674407370955161601', seat: '1',
-    player: '0x1111111111111111111111111111111111111111', name: 'dicegoblin',
-    avatarUrl: 'https://cdn.discordapp.com/embed/avatars/0.png', entryMultiple: 1, standing: 100,
-    resolvedBoardWei: [`180${F}`, '0', '0', `180${F}`, `60${F}`, '0', `60${F}`, '0', `60${F}`, `60${F}`],
-    bankrollInWei: `1800${F}`, goalWei: `9000${F}`, handsPlayed: 5, totalRolls: 38, unitsPlayed: '5', stop: 'bust',
-    ladder: encodeCrapsReplayLadder([
-      `1800${F}`, `14561${F.slice(0, 17)}`, `11061${F.slice(0, 17)}`,
-      `10611${F.slice(0, 17)}`, `8511${F.slice(0, 17)}`, `3561${F.slice(0, 17)}`,
-    ]),
-    boosts: [{ shooter: 0, percent: 6 }], survivals: [], wonWei: `3561${F.slice(0, 17)}`, paidWei: '0', replayOk: true,
-  },
-  {
-    betId: '1844674407370955161602', seat: '2',
-    player: '0x2222222222222222222222222222222222222222', name: 'rollhard',
-    avatarUrl: 'https://cdn.discordapp.com/embed/avatars/1.png', entryMultiple: 1, standing: 99,
-    resolvedBoardWei: [`60${F}`, `60${F}`, `120${F}`, `60${F}`, `120${F}`, `60${F}`, `120${F}`, '0', '0', '0'],
-    bankrollInWei: `1800${F}`, goalWei: `9000${F}`, handsPlayed: 11, totalRolls: 110, unitsPlayed: '19', stop: 'goal',
-    ladder: encodeCrapsReplayLadder([`1800${F}`, `1660${F}`, `1260${F}`, `1420${F}`, `1610${F}`, `1220${F}`, `920${F}`, `5180${F}`, `4120${F}`, `4400${F}`, `4100${F}`, `107312${F.slice(0, 17)}`]),
-    boosts: [{ shooter: 10, percent: 6 }], survivals: [{ shooter: 6, survived: true }],
-    wonWei: `107312${F.slice(0, 17)}`, paidWei: `107312${F.slice(0, 17)}`, replayOk: true,
-  },
-  {
-    betId: '1844674407370955161603', seat: '3',
-    player: '0x3333333333333333333333333333333333333333', name: 'feltwitch',
-    avatarUrl: 'https://cdn.discordapp.com/embed/avatars/2.png', entryMultiple: 1, standing: 98,
-    resolvedBoardWei: ['0', `120${F}`, `60${F}`, `60${F}`, '0', `60${F}`, `60${F}`, `60${F}`, `120${F}`, `60${F}`],
-    bankrollInWei: `1800${F}`, goalWei: `9000${F}`, handsPlayed: 6, totalRolls: 47, unitsPlayed: '7', stop: 'bust',
-    ladder: encodeCrapsReplayLadder([`1800${F}`, `1485${F}`, `885${F}`, `1030${F}`, `1430${F}`, `1265${F}`, `385${F}`]),
-    boosts: [], survivals: [], wonWei: `385${F}`, paidWei: '0', replayOk: true,
-  },
-  {
-    betId: '1844674407370955161604', seat: '4',
-    player: '0x4444444444444444444444444444444444444444', name: 'blankcheck',
-    avatarUrl: 'https://cdn.discordapp.com/embed/avatars/3.png', entryMultiple: 1, standing: 97,
-    resolvedBoardWei: [`60${F}`, `120${F}`, `60${F}`, `60${F}`, '0', '0', '0', `120${F}`, `120${F}`, `60${F}`],
-    bankrollInWei: `1800${F}`, goalWei: `9000${F}`, handsPlayed: 6, totalRolls: 47, unitsPlayed: '7', stop: 'bust',
-    ladder: encodeCrapsReplayLadder([`1800${F}`, `1305${F}`, `765${F}`, `66875${F.slice(0, 16)}`, `154875${F.slice(0, 16)}`, `129375${F.slice(0, 16)}`, '0']),
-    boosts: [{ shooter: 2, percent: 25 }, { shooter: 5, percent: 25 }],
-    survivals: [{ shooter: 6, survived: false }], wonWei: '0', paidWei: '0', replayOk: true,
-  },
-];
+const BATTLE_KEY = "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71";
+const DIGEST = "4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32";
+const BASE = `/craps/replays/v1/battles/${encodeURIComponent(BATTLE_KEY)}/results/${DIGEST}`;
 
 export const SIM_CRAPS_REPLAY_POINTER = Object.freeze({
-  schemaVersion: 1,
-  kind: 'craps-replay-pointer',
-  battleKey: BATTLE_KEY,
-  status: 'ready',
-  entrants: 4,
-  resolved: 4,
-  finalizedBlock: '22001400',
-  digest: DIGEST,
-  manifestPath: `${BASE}/manifest.json`,
-  publishedAt: '2026-08-28T18:00:00.000Z',
+  "schemaVersion": 1,
+  "kind": "craps-replay-pointer",
+  "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
+  "status": "ready",
+  "entrants": 24,
+  "resolved": 24,
+  "finalizedBlock": "22001400",
+  "publishedAt": "2026-08-28T18:00:00.000Z",
+  "error": null,
+  "digest": "4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32",
+  "manifestPath": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32/manifest.json"
 });
 
 export const SIM_CRAPS_REPLAY_MANIFEST = Object.freeze({
-  schemaVersion: 1,
-  kind: 'craps-replay-manifest',
-  battleKey: BATTLE_KEY,
-  digest: DIGEST,
-  ruleset: {
-    engineVersion: 'craps-solidity-484a5d60b-v1',
-    chainId: 31337,
-    contract: '0x9e545e3c0baab3e08cdfd552c960a1050f373042',
-    runtimeCodeHash: '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
+  "schemaVersion": 1,
+  "kind": "craps-replay-manifest",
+  "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
+  "digest": "4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32",
+  "ruleset": {
+    "engineVersion": "craps-solidity-484a5d60b-v1",
+    "chainId": 31337,
+    "contract": "0xd02c36ab81619cd5d7f7d235c68e734124cd3df1",
+    "runtimeCodeHash": "0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a"
   },
-  settlement: {
-    boundSlot: '100',
-    boundIndex: '500',
-    finalizedBlock: '22001400',
-    finalizedBlockHash: `0x${'3'.repeat(64)}`,
+  "settlement": {
+    "boundSlot": "340",
+    "boundIndex": "512",
+    "finalizedBlock": "22001400",
+    "finalizedBlockHash": "0x3333333333333333333333333333333333333333333333333333333333333333"
   },
-  terms: {
-    bankrollWei: `1800${F}`,
-    goalWei: `9000${F}`,
-    boardStakeWei: `600${F}`,
-    battleStakeWei: `300${F}`,
+  "terms": {
+    "bankrollWei": "3000000000000000000000",
+    "goalWei": "15000000000000000000000",
+    "boardStakeWei": "600000000000000000000",
+    "battleStakeWei": "300000000000000000000"
   },
-  tape: {
-    encoding: 'packed-nibbles+uint32be/base64',
-    maxHands: 11,
-    totalRolls: 110,
-    rolls: 'FVNURRImQ2JTQSUSVEVSUmEyE1FGZCVWYyMkFCIyEkMzY2YxISVDRiESFFZiFTQjZRMVU1YUVVNWFCRBElQzYlVkNlFiNkQlMjNDMRUzFFUyERFDNjNGQmUzVhYiZGZGJjJBFBQRMRUmYlVUERY=',
-    handOffsets: 'AAAAAAAAAAcAAAALAAAAFwAAACAAAAAmAAAALwAAAEgAAABLAAAAVAAAAFw=',
+  "tape": {
+    "encoding": "packed-nibbles+uint32be/base64",
+    "maxHands": 12,
+    "totalRolls": 119,
+    "rolls": "QxFUMjUxFWYTRVQxIxQxUyNEFCMkYjYWYzNWIhRiETJmJiFFZRMVVFNURkUlZlQUZVUhMSVhQVYxMlFFFTERQ0JCNBYURBJlVWIWJlY1EmYzJTJDUkMkEiRTViVRVVJmIUZlISI0FDJVZUQRIlJDVDRUNhJhNTQ=",
+    "handOffsets": "AAAAAAAAAC0AAAA1AAAAQAAAAEsAAABSAAAAVAAAAFwAAABfAAAAZgAAAG4AAABx"
   },
-  progressive: {
-    rollsBefore: '68',
-    thresholdRolls: '100',
-    amountWei: `1250000${F}`,
-    winnerBetId: null,
-    wonAtRoll: null,
-    status: 'live',
+  "progressive": {
+    "scoreBpsBefore": "62000",
+    "thresholdScoreBps": "250000",
+    "amountWei": "1250000000000000000000000",
+    "winnerBetId": "6271892985061247549451",
+    "wonAtScoreBps": 62000,
+    "status": "won"
   },
-  field: {
-    entrants: 4,
-    shardSize: 256,
-    shardCount: 1,
-    featuredPath: `${BASE}/featured.json`,
-    shardPathTemplate: `${BASE}/seats/{shard}.json`,
+  "field": {
+    "entrants": 24,
+    "shardSize": 8,
+    "shardCount": 3,
+    "featuredPath": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32/featured.json",
+    "shardPathTemplate": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32/seats/{shard}.json"
   },
-  verification: {
-    allSeatsReplayOk: true,
-    settledEntrants: 4,
-    replayedWonDigest: `0x${'5'.repeat(64)}`,
+  "verification": {
+    "allSeatsReplayOk": true,
+    "settledEntrants": 24,
+    "replayedWonDigest": "0x95c52faf1ed338e10b79ea6621cd09ef8109f6416953a7047d2a12be259f3041"
   },
-  publishedAt: '2026-08-28T18:00:00.000Z',
+  "publishedAt": "2026-08-28T18:00:00.000Z"
 });
 
-export const SIM_CRAPS_REPLAY_FEATURED = Object.freeze({
-  schemaVersion: 1,
-  kind: 'craps-replay-featured',
-  battleKey: BATTLE_KEY,
-  digest: DIGEST,
-  players,
-  leaderboard: [
-    ['1601', '1602', '1603', '1604'],
-    ['1602', '1603', '1601', '1604'],
-    ['1602', '1601', '1603', '1604'],
-    ['1602', '1601', '1603', '1604'],
-    ['1602', '1604', '1603', '1601'],
-    ['1604', '1603', '1602', '1601'],
-    ['1602', '1603', '1604'],
-    ['1602'], ['1602'], ['1602'], ['1602'],
-  ].map((tails, shooter) => Object.freeze({
-    shooter,
-    betIds: Object.freeze(tails.map((tail) => `184467440737095516${tail}`)),
-  })),
-});
+export const SIM_CRAPS_REPLAY_FEATURED = Object.freeze({"schemaVersion":1,"kind":"craps-replay-featured","battleKey":"0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71","digest":"4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32","players":[{"betId":"6198106008766409342977","seat":"1","player":"0x0000000000000000000000000000000000000002","name":"Day seat 1","avatarUrl":null,"entryMultiple":1,"standing":899,"resolvedBoardWei":["0","60000000000000000000","0","120000000000000000000","60000000000000000000","0","0","0","60000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":8,"totalRolls":95,"unitsPlayed":"17","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADbjQpmLiwIAAAAAAAAAAAA4bsbwi62kAAAAAAAAAAAAM9MqRuUZcAAAAAAAAAAAADnJuMgXBmgAAAAAAAAAAAArbBuoHr/kAAAAAAAAAAAAKWOw5M26vgAAAAAAAAAAABBz6Jn88w4AAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":1,"percent":20}],"survivals":[{"shooter":7,"survived":true},{"shooter":8,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6198106008766409342978","seat":"2","player":"0x0000000000000000000000000000000000000003","name":"Day seat 2","avatarUrl":null,"entryMultiple":1,"standing":898,"resolvedBoardWei":["240000000000000000000","0","120000000000000000000","0","60000000000000000000","0","0","0","180000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD3vX2DGi8oAAAAAAAAAAAA4PjRxFuPGAAAAAAAAAAAAPE8J97juEgAAAAAAAAAAAG9EKNNjkUIAAAAAAAAAAABnZ+FXocGeAAAAAAAAAAAAVySLPRmYbgAAAAAAAAAAAF2l4OFQD04AAAAAAAAAAAA9HzSsP7zuAAAAAAAAAAAAHJiIdy9qjgAAA=="},"boosts":[],"survivals":[],"wonWei":"2110000000000000000000","paidWei":"0","replayOk":true},{"betId":"6198106008766409342979","seat":"3","player":"0x0000000000000000000000000000000000000004","name":"Day seat 3","avatarUrl":null,"entryMultiple":1,"standing":897,"resolvedBoardWei":["120000000000000000000","0","60000000000000000000","0","0","60000000000000000000","0","240000000000000000000","0","120000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":6,"totalRolls":84,"unitsPlayed":"9","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADM6gm0s6CQAAAAAAAAAAAAvKazmit3YAAAAAAAAAAAALlmCMgQO/AAAAAAAAAAAACfYLI3NmBwAAAAAAAAAAAAa1YFFYKpcAAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":6,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549441","seat":"1","player":"0x0000000000000000000000000000000000000002","name":"Seat 1","avatarUrl":null,"entryMultiple":1,"standing":999,"resolvedBoardWei":["0","60000000000000000000","0","0","0","0","0","60000000000000000000","180000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACioV0JUZvgAAAAAAAAAAAAqM9uZVImaAAAAAAAAAAAAI7KF9R4SugAAAAAAAAAAAD9YMe8Fi/IAAAAAAAAAAAAvFNvUfWLCAAAAAAAAAAAALQxxESxdnAAAAAAAAAAAAAyFxNwcCzwAAA="},"boosts":[{"shooter":1,"percent":20}],"survivals":[],"wonWei":"924000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549442","seat":"2","player":"0x0000000000000000000000000000000000000003","name":"Seat 2","avatarUrl":null,"entryMultiple":1,"standing":998,"resolvedBoardWei":["60000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABUkVlWxAlgAAAAAAAAAAAAVRwgeciTSAAAAAAAAAAAAGUaEwLOd4QAAAAAAAAAAABaQoRGc7FkAAAAAAAAAAAASf8uK+uINAAAAAAAAAAAADcF9GJMrXwAAAAAAAAAAAAdAJ3RctH8AAAAAAAAAAAAH/vlEgvIeAAAA=="},"boosts":[],"survivals":[{"shooter":8,"survived":true}],"wonWei":"2360000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549444","seat":"4","player":"0x0000000000000000000000000000000000000005","name":"Seat 4","avatarUrl":null,"entryMultiple":1,"standing":996,"resolvedBoardWei":["300000000000000000000","0","60000000000000000000","0","0","0","120000000000000000000","0","120000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":12,"totalRolls":119,"unitsPlayed":"45","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADGaLQQfSmwAAAAAAAAAAAAt8WzXwKeOAAAAAAAAAAAAMzqCbSzoJAAAAAAAAAAAAF8jhIGciowAAAAAAAAAAABXAdl0WHX0AAAAAAAAAAAARr6DWdBMxAAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABDfdiHtRFUAAAAAAAAAAAAIvcsUqS+9AAAAAAAAAAAAKRBsnJfOZgAAAAAAAAAAACDuwY9Tuc4AAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":9,"survived":true},{"shooter":12,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549448","seat":"8","player":"0x0000000000000000000000000000000000000009","name":"Seat 8","avatarUrl":null,"entryMultiple":1,"standing":992,"resolvedBoardWei":["120000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","0","0","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":11,"totalRolls":113,"unitsPlayed":"37","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAE+Np1LaDb4AAAAAAAAAAABO8YdLdPKZAAAAAAAAAAAAUlTj5lFQgwAAAAAAAAAAAFTFZAPlvRcAAAAAAAAAAABJqHG2CLIDAAAAAAAAAAAAPD2xE1hc1QAAAAAAAAAAADMGd8ALNG0AAAAAAAAAAAAgfEOsCZTVAAAAAAAAAAAAMyWxWx9tDgAAAAAAAAAAAF2e8IX2O5wAAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":7,"percent":20},{"shooter":10,"percent":20}],"survivals":[{"shooter":8,"survived":true},{"shooter":9,"survived":true},{"shooter":11,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549450","seat":"10","player":"0x0000000000000000000000000000000000000002","name":"Seat 10","avatarUrl":null,"entryMultiple":1,"standing":990,"resolvedBoardWei":["240000000000000000000","60000000000000000000","60000000000000000000","0","0","0","0","0","180000000000000000000","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADWrAorBVLgAAAAAAAAAAAAyfyjKs5ReAAAAAAAAAAAANvgTq5kGGAAAAAAAAAAAAGYhwJIj4/AAAAAAAAAAAABcX8Ab0jGgAAAAAAAAAAAATvT/eSHccgAAAAAAAAAAAFV2VR1YU1IAAAAAAAAAAAA6oNPX96j2AAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[{"shooter":1,"percent":20}],"survivals":[{"shooter":9,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549451","seat":"11","player":"0x0000000000000000000000000000000000000003","name":"Seat 11","avatarUrl":null,"entryMultiple":1,"standing":989,"resolvedBoardWei":["120000000000000000000","0","60000000000000000000","0","60000000000000000000","0","0","180000000000000000000","60000000000000000000","120000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADKNCYFnO8IAAAAAAAAAAAAufDP6xTF2AAAAAAAAAAAALHPJN3QsUAAAAAAAAAAAADhg5jnYBkAAAAAAAAAAAAAtQ/Pr+vssAAAAAAAAAAAAIrHIwSJ6AAAAAAAAAAAAABWvHXi1jEAAAAAAAAAAAAAWOeSbuhYoAAAAAAAAAAAAW512Hf8KKAAAAAAAAAAAAPwTtps+fmgAAA="},"boosts":[],"survivals":[{"shooter":7,"survived":true},{"shooter":8,"survived":true}],"wonWei":"18600000000000000000000","paidWei":"18600000000000000000000","replayOk":true},{"betId":"6271892985061247549452","seat":"12","player":"0x0000000000000000000000000000000000000004","name":"Seat 12","avatarUrl":null,"entryMultiple":1,"standing":988,"resolvedBoardWei":["180000000000000000000","0","60000000000000000000","120000000000000000000","120000000000000000000","60000000000000000000","0","60000000000000000000","0","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":12,"totalRolls":119,"unitsPlayed":"45","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEjpn+XidGQAAAAAAAAAAABCADTnaJYWAAAAAAAAAAAARYZDSwYWegAAAAAAAAAAAE9IQ8FXyMoAAAAAAAAAAABHsV/XGD4aAAAAAAAAAAAAN24JvJAU6gAAAAAAAAAAADvEQtS0ZCoAAAAAAAAAAAAbPZafpBHKAAAAAAAAAAAALLksyPZxRAAAAAAAAAAAAIRhjs26v+gAAAAAAAAAAABW2DdQPX/IAAAAAAAAAAAAMxDgSRHx+AAAA=="},"boosts":[{"shooter":9,"percent":20}],"survivals":[{"shooter":8,"survived":true},{"shooter":9,"survived":true}],"wonWei":"3768000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549454","seat":"14","player":"0x0000000000000000000000000000000000000006","name":"Seat 14","avatarUrl":null,"entryMultiple":1,"standing":986,"resolvedBoardWei":["0","120000000000000000000","60000000000000000000","120000000000000000000","0","180000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":8,"totalRolls":95,"unitsPlayed":"17","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFm3vSNvJ3wAAAAAAAAAAABXr1JgHiJWAAAAAAAAAAAAWZULWq4FAgAAAAAAAAAAAGYosO19t6IAAAAAAAAAAABV5VrS9Y5yAAAAAAAAAAAARaIEuG1lQgAAAAAAAAAAACyyPG2cnZIAAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":3,"percent":33}],"survivals":[{"shooter":8,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549456","seat":"16","player":"0x0000000000000000000000000000000000000008","name":"Seat 16","avatarUrl":null,"entryMultiple":1,"standing":984,"resolvedBoardWei":["240000000000000000000","0","60000000000000000000","0","0","0","120000000000000000000","0","120000000000000000000","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADDKAk+Ye5AAAAAAAAAAAAAujYzfJcKzAAAAAAAAAAAAMWYiVv2WtQAAAAAAAAAAAFhuJDBEX/UAAAAAAAAAAABOrCO58q2lAAAAAAAAAAAAQUFjF0JYdwAAAAAAAAAAAEfCuLt4z1cAAAAAAAAAAAA57+K+hRK7AAAAAAAAAAAAHxpheSRoXwAAA=="},"boosts":[],"survivals":[],"wonWei":"2295000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549457","seat":"17","player":"0x0000000000000000000000000000000000000009","name":"Seat 17","avatarUrl":null,"entryMultiple":1,"standing":983,"resolvedBoardWei":["180000000000000000000","60000000000000000000","0","0","0","0","0","180000000000000000000","0","180000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACsY11/o04wAAAAAAAAAAAAo3GHvdhqvAAAAAAAAAAAAKayMo/zpiwAAAAAAAAAAACgMNzrvS9MAAAAAAAAAAAAcqeFbj/vLAAAAAAAAAAAAFPBLqI9OoQAAAAAAAAAAACaf7H8DYdIAAAAAAAAAAAAYo3Rd9K8KAAAAAAAAAAAAbKMWNlpa0AAAAAAAAAAAANS4cHnByNAAAA="},"boosts":[{"shooter":7,"percent":20}],"survivals":[{"shooter":6,"survived":true},{"shooter":8,"survived":true}],"wonWei":"15696000000000000000000","paidWei":"15696000000000000000000","replayOk":true},{"betId":"6271892985061247549460","seat":"20","player":"0x0000000000000000000000000000000000000003","name":"Seat 20","avatarUrl":null,"entryMultiple":1,"standing":980,"resolvedBoardWei":["60000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABUkVlWxAlgAAAAAAAAAAAAVRwgeciTSAAAAAAAAAAAAGUaEwLOd4QAAAAAAAAAAABaQoRGc7FkAAAAAAAAAAAASf8uK+uINAAAAAAAAAAAADcF9GJMrXwAAAAAAAAAAAAdAJ3RctH8AAAAAAAAAAAAH/vlEgvIeAAAA=="},"boosts":[],"survivals":[{"shooter":8,"survived":true}],"wonWei":"2360000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549461","seat":"21","player":"0x0000000000000000000000000000000000000004","name":"Seat 21","avatarUrl":null,"entryMultiple":1,"standing":979,"resolvedBoardWei":["120000000000000000000","0","120000000000000000000","0","60000000000000000000","60000000000000000000","0","180000000000000000000","0","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEOgilB2M84AAAAAAAAAAAA/W6ocsnXLAAAAAAAAAAAAP8O/dvXdOQAAAAAAAAAAAD0N28ffK7EAAAAAAAAAAAAx8Ol6AiCdAAAAAAAAAAAAJIYo11HLbwAAAAAAAAAAAB30K/F28hcAAAAAAAAAAAAhEtadjTnSAAAAAAAAAAAASotYlGhvpgAAAAAAAAAAAPSJUCI6PZIAAA="},"boosts":[{"shooter":6,"percent":33},{"shooter":9,"percent":33}],"survivals":[{"shooter":7,"survived":true}],"wonWei":"18043600000000000000000","paidWei":"18043600000000000000000","replayOk":true}],"leaderboard":[{"shooter":0,"betIds":["6198106008766409342977","6198106008766409342978","6198106008766409342979","6271892985061247549441"]},{"shooter":1,"betIds":["6271892985061247549454","6271892985061247549442","6271892985061247549460","6271892985061247549448"]},{"shooter":2,"betIds":["6271892985061247549454","6271892985061247549442","6271892985061247549460","6271892985061247549448"]},{"shooter":3,"betIds":["6271892985061247549454","6271892985061247549442","6271892985061247549460","6271892985061247549448"]},{"shooter":4,"betIds":["6198106008766409342978","6271892985061247549454","6271892985061247549450","6271892985061247549442"]},{"shooter":5,"betIds":["6198106008766409342978","6271892985061247549450","6271892985061247549442","6271892985061247549460"]},{"shooter":6,"betIds":["6198106008766409342978","6271892985061247549450","6271892985061247549442","6271892985061247549460"]},{"shooter":7,"betIds":["6198106008766409342978","6271892985061247549444","6271892985061247549450","6271892985061247549456"]},{"shooter":8,"betIds":["6271892985061247549444","6198106008766409342978","6271892985061247549450","6271892985061247549456"]},{"shooter":9,"betIds":["6271892985061247549457","6271892985061247549451","6271892985061247549461","6271892985061247549448"]},{"shooter":10,"betIds":["6271892985061247549451","6271892985061247549461","6271892985061247549457","6271892985061247549444"]},{"shooter":11,"betIds":["6271892985061247549444","6271892985061247549452","6271892985061247549448"]}]});
 
-export const SIM_CRAPS_REPLAY_SHARD = Object.freeze({
-  schemaVersion: 1,
-  kind: 'craps-replay-seat-shard',
-  battleKey: BATTLE_KEY,
-  digest: DIGEST,
-  shard: { index: 0, startSeat: '1', endSeat: '4' },
-  players,
-});
+/** Every seat shard, in order, so a test can cross a boundary without a network. */
+export const SIM_CRAPS_REPLAY_SHARDS = Object.freeze([
+  Object.freeze({"schemaVersion":1,"kind":"craps-replay-seat-shard","battleKey":"0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71","digest":"4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32","shard":{"index":0,"startSeat":"1","endSeat":"8"},"players":[{"betId":"6198106008766409342977","seat":"1","player":"0x0000000000000000000000000000000000000002","name":"Day seat 1","avatarUrl":null,"entryMultiple":1,"standing":899,"resolvedBoardWei":["0","60000000000000000000","0","120000000000000000000","60000000000000000000","0","0","0","60000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":8,"totalRolls":95,"unitsPlayed":"17","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADbjQpmLiwIAAAAAAAAAAAA4bsbwi62kAAAAAAAAAAAAM9MqRuUZcAAAAAAAAAAAADnJuMgXBmgAAAAAAAAAAAArbBuoHr/kAAAAAAAAAAAAKWOw5M26vgAAAAAAAAAAABBz6Jn88w4AAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":1,"percent":20}],"survivals":[{"shooter":7,"survived":true},{"shooter":8,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549441","seat":"1","player":"0x0000000000000000000000000000000000000002","name":"Seat 1","avatarUrl":null,"entryMultiple":1,"standing":999,"resolvedBoardWei":["0","60000000000000000000","0","0","0","0","0","60000000000000000000","180000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACioV0JUZvgAAAAAAAAAAAAqM9uZVImaAAAAAAAAAAAAI7KF9R4SugAAAAAAAAAAAD9YMe8Fi/IAAAAAAAAAAAAvFNvUfWLCAAAAAAAAAAAALQxxESxdnAAAAAAAAAAAAAyFxNwcCzwAAA="},"boosts":[{"shooter":1,"percent":20}],"survivals":[],"wonWei":"924000000000000000000","paidWei":"0","replayOk":true},{"betId":"6198106008766409342978","seat":"2","player":"0x0000000000000000000000000000000000000003","name":"Day seat 2","avatarUrl":null,"entryMultiple":1,"standing":898,"resolvedBoardWei":["240000000000000000000","0","120000000000000000000","0","60000000000000000000","0","0","0","180000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD3vX2DGi8oAAAAAAAAAAAA4PjRxFuPGAAAAAAAAAAAAPE8J97juEgAAAAAAAAAAAG9EKNNjkUIAAAAAAAAAAABnZ+FXocGeAAAAAAAAAAAAVySLPRmYbgAAAAAAAAAAAF2l4OFQD04AAAAAAAAAAAA9HzSsP7zuAAAAAAAAAAAAHJiIdy9qjgAAA=="},"boosts":[],"survivals":[],"wonWei":"2110000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549442","seat":"2","player":"0x0000000000000000000000000000000000000003","name":"Seat 2","avatarUrl":null,"entryMultiple":1,"standing":998,"resolvedBoardWei":["60000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABUkVlWxAlgAAAAAAAAAAAAVRwgeciTSAAAAAAAAAAAAGUaEwLOd4QAAAAAAAAAAABaQoRGc7FkAAAAAAAAAAAASf8uK+uINAAAAAAAAAAAADcF9GJMrXwAAAAAAAAAAAAdAJ3RctH8AAAAAAAAAAAAH/vlEgvIeAAAA=="},"boosts":[],"survivals":[{"shooter":8,"survived":true}],"wonWei":"2360000000000000000000","paidWei":"0","replayOk":true},{"betId":"6198106008766409342979","seat":"3","player":"0x0000000000000000000000000000000000000004","name":"Day seat 3","avatarUrl":null,"entryMultiple":1,"standing":897,"resolvedBoardWei":["120000000000000000000","0","60000000000000000000","0","0","60000000000000000000","0","240000000000000000000","0","120000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":6,"totalRolls":84,"unitsPlayed":"9","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADM6gm0s6CQAAAAAAAAAAAAvKazmit3YAAAAAAAAAAAALlmCMgQO/AAAAAAAAAAAACfYLI3NmBwAAAAAAAAAAAAa1YFFYKpcAAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":6,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549443","seat":"3","player":"0x0000000000000000000000000000000000000004","name":"Seat 3","avatarUrl":null,"entryMultiple":1,"standing":997,"resolvedBoardWei":["0","0","60000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","60000000000000000000","0","240000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":6,"totalRolls":84,"unitsPlayed":"9","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD/VGFtWbnYAAAAAAAAAAAA+nNhMjDgsAAAAAAAAAAAAOtFmV2xy1AAAAAAAAAAAADIk9Ccj1FQAAAAAAAAAAAAjx1cHK43QAAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":6,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549444","seat":"4","player":"0x0000000000000000000000000000000000000005","name":"Seat 4","avatarUrl":null,"entryMultiple":1,"standing":996,"resolvedBoardWei":["300000000000000000000","0","60000000000000000000","0","0","0","120000000000000000000","0","120000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":12,"totalRolls":119,"unitsPlayed":"45","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADGaLQQfSmwAAAAAAAAAAAAt8WzXwKeOAAAAAAAAAAAAMzqCbSzoJAAAAAAAAAAAAF8jhIGciowAAAAAAAAAAABXAdl0WHX0AAAAAAAAAAAARr6DWdBMxAAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABDfdiHtRFUAAAAAAAAAAAAIvcsUqS+9AAAAAAAAAAAAKRBsnJfOZgAAAAAAAAAAACDuwY9Tuc4AAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":9,"survived":true},{"shooter":12,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549445","seat":"5","player":"0x0000000000000000000000000000000000000006","name":"Seat 5","avatarUrl":null,"entryMultiple":10,"standing":995,"resolvedBoardWei":["120000000000000000000","60000000000000000000","0","0","0","60000000000000000000","60000000000000000000","180000000000000000000","0","120000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":6,"totalRolls":84,"unitsPlayed":"9","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADM6gm0s6CQAAAAAAAAAAAAxMhep2+L+AAAAAAAAAAAAMMoCT5h7kAAAAAAAAAAAAC2JV319QCAAAAAAAAAAAAAghqw1EFJgAAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[],"survivals":[{"shooter":6,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549446","seat":"6","player":"0x0000000000000000000000000000000000000007","name":"Seat 6","avatarUrl":null,"entryMultiple":1,"standing":994,"resolvedBoardWei":["180000000000000000000","60000000000000000000","0","120000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","0","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEjpn+XidGQAAAAAAAAAAABECJ+quZs8AAAAAAAAAAAAR/bDaJqDDgAAAAAAAAAAAFT5brEHcM4AAAAAAAAAAABNYorGx+YeAAAAAAAAAAAAPR80rD+87gAAAAAAAAAAAEF1bcRkDC4AAAAAAAAAAAAncBczijCuAAAAAAAAAAAADWrAorBVLgAAA=="},"boosts":[],"survivals":[],"wonWei":"990000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549447","seat":"7","player":"0x0000000000000000000000000000000000000008","name":"Seat 7","avatarUrl":null,"entryMultiple":1,"standing":993,"resolvedBoardWei":["0","0","120000000000000000000","60000000000000000000","0","0","120000000000000000000","60000000000000000000","60000000000000000000","180000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADsWyejut8gAAAAAAAAAAAA86yn/Hgk3AAAAAAAAAAAAOCzbjLZSiQAAAAAAAAAAAEaN8NpbguYAAAAAAAAAAAA2Spq/01m2AAAAAAAAAAAALpEFDNKsjAAAAAAAAAAAAAAAAAAAAAAAAA="},"boosts":[{"shooter":3,"percent":33},{"shooter":4,"percent":33}],"survivals":[{"shooter":7,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549448","seat":"8","player":"0x0000000000000000000000000000000000000009","name":"Seat 8","avatarUrl":null,"entryMultiple":1,"standing":992,"resolvedBoardWei":["120000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","0","0","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":11,"totalRolls":113,"unitsPlayed":"37","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAE+Np1LaDb4AAAAAAAAAAABO8YdLdPKZAAAAAAAAAAAAUlTj5lFQgwAAAAAAAAAAAFTFZAPlvRcAAAAAAAAAAABJqHG2CLIDAAAAAAAAAAAAPD2xE1hc1QAAAAAAAAAAADMGd8ALNG0AAAAAAAAAAAAgfEOsCZTVAAAAAAAAAAAAMyWxWx9tDgAAAAAAAAAAAF2e8IX2O5wAAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":7,"percent":20},{"shooter":10,"percent":20}],"survivals":[{"shooter":8,"survived":true},{"shooter":9,"survived":true},{"shooter":11,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true}]}),
+  Object.freeze({"schemaVersion":1,"kind":"craps-replay-seat-shard","battleKey":"0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71","digest":"4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32","shard":{"index":1,"startSeat":"9","endSeat":"16"},"players":[{"betId":"6271892985061247549449","seat":"9","player":"0x0000000000000000000000000000000000000001","name":"Seat 9","avatarUrl":null,"entryMultiple":1,"standing":991,"resolvedBoardWei":["0","60000000000000000000","0","120000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","0","0","240000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD/VGFtWbnYAAAAAAAAAAABApUMP3T1SAAAAAAAAAAAAPUHmdQDfaAAAAAAAAAAAADfWHxbTfFgAAAAAAAAAAAApeIH22zXUAAAAAAAAAAAAJJeBu7JcrAAAAAAAAAAAAAunuXDhlPwAAA="},"boosts":[],"survivals":[],"wonWei":"860000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549450","seat":"10","player":"0x0000000000000000000000000000000000000002","name":"Seat 10","avatarUrl":null,"entryMultiple":1,"standing":990,"resolvedBoardWei":["240000000000000000000","60000000000000000000","60000000000000000000","0","0","0","0","0","180000000000000000000","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADWrAorBVLgAAAAAAAAAAAAyfyjKs5ReAAAAAAAAAAAANvgTq5kGGAAAAAAAAAAAAGYhwJIj4/AAAAAAAAAAAABcX8Ab0jGgAAAAAAAAAAAATvT/eSHccgAAAAAAAAAAAFV2VR1YU1IAAAAAAAAAAAA6oNPX96j2AAAAAAAAAAAAAAAAAAAAAAAAA=="},"boosts":[{"shooter":1,"percent":20}],"survivals":[{"shooter":9,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549451","seat":"11","player":"0x0000000000000000000000000000000000000003","name":"Seat 11","avatarUrl":null,"entryMultiple":1,"standing":989,"resolvedBoardWei":["120000000000000000000","0","60000000000000000000","0","60000000000000000000","0","0","180000000000000000000","60000000000000000000","120000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADKNCYFnO8IAAAAAAAAAAAAufDP6xTF2AAAAAAAAAAAALHPJN3QsUAAAAAAAAAAAADhg5jnYBkAAAAAAAAAAAAAtQ/Pr+vssAAAAAAAAAAAAIrHIwSJ6AAAAAAAAAAAAABWvHXi1jEAAAAAAAAAAAAAWOeSbuhYoAAAAAAAAAAAAW512Hf8KKAAAAAAAAAAAAPwTtps+fmgAAA="},"boosts":[],"survivals":[{"shooter":7,"survived":true},{"shooter":8,"survived":true}],"wonWei":"18600000000000000000000","paidWei":"18600000000000000000000","replayOk":true},{"betId":"6271892985061247549452","seat":"12","player":"0x0000000000000000000000000000000000000004","name":"Seat 12","avatarUrl":null,"entryMultiple":1,"standing":988,"resolvedBoardWei":["180000000000000000000","0","60000000000000000000","120000000000000000000","120000000000000000000","60000000000000000000","0","60000000000000000000","0","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":12,"totalRolls":119,"unitsPlayed":"45","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEjpn+XidGQAAAAAAAAAAABCADTnaJYWAAAAAAAAAAAARYZDSwYWegAAAAAAAAAAAE9IQ8FXyMoAAAAAAAAAAABHsV/XGD4aAAAAAAAAAAAAN24JvJAU6gAAAAAAAAAAADvEQtS0ZCoAAAAAAAAAAAAbPZafpBHKAAAAAAAAAAAALLksyPZxRAAAAAAAAAAAAIRhjs26v+gAAAAAAAAAAABW2DdQPX/IAAAAAAAAAAAAMxDgSRHx+AAAA=="},"boosts":[{"shooter":9,"percent":20}],"survivals":[{"shooter":8,"survived":true},{"shooter":9,"survived":true}],"wonWei":"3768000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549453","seat":"13","player":"0x0000000000000000000000000000000000000005","name":"Seat 13","avatarUrl":null,"entryMultiple":1,"standing":987,"resolvedBoardWei":["60000000000000000000","0","0","0","0","0","120000000000000000000","60000000000000000000","120000000000000000000","240000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACSXgbuyXKwAAAAAAAAAAAAlZ6xwOSuIAAAAAAAAAAAAH7aBgImDhAAAAAAAAAAAADgbgqhVwUwAAAAAAAAAAAApeIH22zXUAAAAAAAAAAAAJJeBu7JcrAAAAAAAAAAAAA3S1fzzvJwAAA="},"boosts":[],"survivals":[],"wonWei":"1020000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549454","seat":"14","player":"0x0000000000000000000000000000000000000006","name":"Seat 14","avatarUrl":null,"entryMultiple":1,"standing":986,"resolvedBoardWei":["0","120000000000000000000","60000000000000000000","120000000000000000000","0","180000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":8,"totalRolls":95,"unitsPlayed":"17","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFm3vSNvJ3wAAAAAAAAAAABXr1JgHiJWAAAAAAAAAAAAWZULWq4FAgAAAAAAAAAAAGYosO19t6IAAAAAAAAAAABV5VrS9Y5yAAAAAAAAAAAARaIEuG1lQgAAAAAAAAAAACyyPG2cnZIAAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":3,"percent":33}],"survivals":[{"shooter":8,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true},{"betId":"6271892985061247549455","seat":"15","player":"0x0000000000000000000000000000000000000007","name":"Seat 15","avatarUrl":null,"entryMultiple":1,"standing":985,"resolvedBoardWei":["0","60000000000000000000","0","120000000000000000000","60000000000000000000","60000000000000000000","60000000000000000000","0","0","240000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD/VGFtWbnYAAAAAAAAAAABApUMP3T1SAAAAAAAAAAAAPUHmdQDfaAAAAAAAAAAAADfWHxbTfFgAAAAAAAAAAAApeIH22zXUAAAAAAAAAAAAJJeBu7JcrAAAAAAAAAAAAAunuXDhlPwAAA="},"boosts":[],"survivals":[],"wonWei":"860000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549456","seat":"16","player":"0x0000000000000000000000000000000000000008","name":"Seat 16","avatarUrl":null,"entryMultiple":1,"standing":984,"resolvedBoardWei":["240000000000000000000","0","60000000000000000000","0","0","0","120000000000000000000","0","120000000000000000000","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADDKAk+Ye5AAAAAAAAAAAAAujYzfJcKzAAAAAAAAAAAAMWYiVv2WtQAAAAAAAAAAAFhuJDBEX/UAAAAAAAAAAABOrCO58q2lAAAAAAAAAAAAQUFjF0JYdwAAAAAAAAAAAEfCuLt4z1cAAAAAAAAAAAA57+K+hRK7AAAAAAAAAAAAHxpheSRoXwAAA=="},"boosts":[],"survivals":[],"wonWei":"2295000000000000000000","paidWei":"0","replayOk":true}]}),
+  Object.freeze({"schemaVersion":1,"kind":"craps-replay-seat-shard","battleKey":"0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71","digest":"4c481c8c04ceb346c82cfbcaeafe4a5351a5d90c3a7f5dd27da403a74c359d32","shard":{"index":2,"startSeat":"17","endSeat":"24"},"players":[{"betId":"6271892985061247549457","seat":"17","player":"0x0000000000000000000000000000000000000009","name":"Seat 17","avatarUrl":null,"entryMultiple":1,"standing":983,"resolvedBoardWei":["180000000000000000000","60000000000000000000","0","0","0","0","0","180000000000000000000","0","180000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACsY11/o04wAAAAAAAAAAAAo3GHvdhqvAAAAAAAAAAAAKayMo/zpiwAAAAAAAAAAACgMNzrvS9MAAAAAAAAAAAAcqeFbj/vLAAAAAAAAAAAAFPBLqI9OoQAAAAAAAAAAACaf7H8DYdIAAAAAAAAAAAAYo3Rd9K8KAAAAAAAAAAAAbKMWNlpa0AAAAAAAAAAAANS4cHnByNAAAA="},"boosts":[{"shooter":7,"percent":20}],"survivals":[{"shooter":6,"survived":true},{"shooter":8,"survived":true}],"wonWei":"15696000000000000000000","paidWei":"15696000000000000000000","replayOk":true},{"betId":"6271892985061247549458","seat":"18","player":"0x0000000000000000000000000000000000000001","name":"Seat 18","avatarUrl":null,"entryMultiple":1,"standing":982,"resolvedBoardWei":["180000000000000000000","60000000000000000000","0","120000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","0","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEjpn+XidGQAAAAAAAAAAABECJ+quZs8AAAAAAAAAAAAR/bDaJqDDgAAAAAAAAAAAFT5brEHcM4AAAAAAAAAAABNYorGx+YeAAAAAAAAAAAAPR80rD+87gAAAAAAAAAAAEF1bcRkDC4AAAAAAAAAAAAncBczijCuAAAAAAAAAAAADWrAorBVLgAAA=="},"boosts":[],"survivals":[],"wonWei":"990000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549459","seat":"19","player":"0x0000000000000000000000000000000000000002","name":"Seat 19","avatarUrl":null,"entryMultiple":1,"standing":981,"resolvedBoardWei":["0","60000000000000000000","0","0","0","0","0","60000000000000000000","180000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":7,"totalRolls":92,"unitsPlayed":"13","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACioV0JUZvgAAAAAAAAAAAAqM9uZVImaAAAAAAAAAAAAI7KF9R4SugAAAAAAAAAAAD9YMe8Fi/IAAAAAAAAAAAAvFNvUfWLCAAAAAAAAAAAALQxxESxdnAAAAAAAAAAAAAyFxNwcCzwAAA="},"boosts":[{"shooter":1,"percent":20}],"survivals":[],"wonWei":"924000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549460","seat":"20","player":"0x0000000000000000000000000000000000000003","name":"Seat 20","avatarUrl":null,"entryMultiple":1,"standing":980,"resolvedBoardWei":["60000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","120000000000000000000","60000000000000000000","60000000000000000000","0","60000000000000000000","0"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":9,"totalRolls":102,"unitsPlayed":"21","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFcB2XRYdfQAAAAAAAAAAABUkVlWxAlgAAAAAAAAAAAAVRwgeciTSAAAAAAAAAAAAGUaEwLOd4QAAAAAAAAAAABaQoRGc7FkAAAAAAAAAAAASf8uK+uINAAAAAAAAAAAADcF9GJMrXwAAAAAAAAAAAAdAJ3RctH8AAAAAAAAAAAAH/vlEgvIeAAAA=="},"boosts":[],"survivals":[{"shooter":8,"survived":true}],"wonWei":"2360000000000000000000","paidWei":"0","replayOk":true},{"betId":"6271892985061247549461","seat":"21","player":"0x0000000000000000000000000000000000000004","name":"Seat 21","avatarUrl":null,"entryMultiple":1,"standing":979,"resolvedBoardWei":["120000000000000000000","0","120000000000000000000","0","60000000000000000000","60000000000000000000","0","180000000000000000000","0","60000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":10,"totalRolls":110,"unitsPlayed":"29","stop":"goal","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEOgilB2M84AAAAAAAAAAAA/W6ocsnXLAAAAAAAAAAAAP8O/dvXdOQAAAAAAAAAAAD0N28ffK7EAAAAAAAAAAAAx8Ol6AiCdAAAAAAAAAAAAJIYo11HLbwAAAAAAAAAAAB30K/F28hcAAAAAAAAAAAAhEtadjTnSAAAAAAAAAAAASotYlGhvpgAAAAAAAAAAAPSJUCI6PZIAAA="},"boosts":[{"shooter":6,"percent":33},{"shooter":9,"percent":33}],"survivals":[{"shooter":7,"survived":true}],"wonWei":"18043600000000000000000","paidWei":"18043600000000000000000","replayOk":true}]}),
+]);
+
+export const SIM_CRAPS_REPLAY_SHARD = SIM_CRAPS_REPLAY_SHARDS[0];
+
+/** The viewer used by the adapter tests: shard 0, seat 1. */
+export const SIM_CRAPS_REPLAY_VIEWER = Object.freeze({"betId":"6198106008766409342977","seat":"1","player":"0x0000000000000000000000000000000000000002","name":"Day seat 1","avatarUrl":null,"entryMultiple":1,"standing":899,"resolvedBoardWei":["0","60000000000000000000","0","120000000000000000000","60000000000000000000","0","0","0","60000000000000000000","300000000000000000000"],"bankrollInWei":"3000000000000000000000","goalWei":"15000000000000000000000","handsPlayed":8,"totalRolls":95,"unitsPlayed":"17","stop":"bust","ladder":{"encoding":"uint128be/base64","values":"AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADbjQpmLiwIAAAAAAAAAAAA4bsbwi62kAAAAAAAAAAAAM9MqRuUZcAAAAAAAAAAAADnJuMgXBmgAAAAAAAAAAAArbBuoHr/kAAAAAAAAAAAAKWOw5M26vgAAAAAAAAAAABBz6Jn88w4AAAAAAAAAAAAAAAAAAAAAAAA"},"boosts":[{"shooter":1,"percent":20}],"survivals":[{"shooter":7,"survived":true},{"shooter":8,"survived":false}],"wonWei":"0","paidWei":"0","replayOk":true});
 
 export const SIM_CRAPS_REPLAY_ARTIFACTS = Object.freeze({
   ready: true,
@@ -159,12 +111,15 @@ export const SIM_CRAPS_REPLAY_ARTIFACTS = Object.freeze({
   manifest: SIM_CRAPS_REPLAY_MANIFEST,
   featured: SIM_CRAPS_REPLAY_FEATURED,
   shard: SIM_CRAPS_REPLAY_SHARD,
-  viewer: players[0],
+  viewer: SIM_CRAPS_REPLAY_VIEWER,
 });
 
 export const SIM_CRAPS_REPLAY_PATHS = Object.freeze({
-  pointer: `/craps/replays/v1/battles/${BATTLE_KEY}/latest.json`,
+  pointer: `/craps/replays/v1/battles/${encodeURIComponent(BATTLE_KEY)}/latest.json`,
   manifest: `${BASE}/manifest.json`,
   featured: `${BASE}/featured.json`,
   shard: `${BASE}/seats/0000.json`,
+  shards: Object.freeze(SIM_CRAPS_REPLAY_SHARDS.map(
+    (_, index) => `${BASE}/seats/${String(index).padStart(4, '0')}.json`,
+  )),
 });

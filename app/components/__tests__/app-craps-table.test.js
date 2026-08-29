@@ -24,6 +24,19 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
+test('resolution acknowledgment is gated on painted completion and exact-once state', async () => {
+  const { canAcknowledgeCrapsResolution } = await import(moduleUrl);
+  const callback = () => {};
+  assert.equal(canAcknowledgeCrapsResolution({ completed: false, onAcknowledged: callback }), false);
+  assert.equal(canAcknowledgeCrapsResolution({ completed: true, onAcknowledged: callback }), true);
+  assert.equal(canAcknowledgeCrapsResolution({
+    completed: true,
+    acknowledged: true,
+    onAcknowledged: callback,
+  }), false);
+  assert.equal(canAcknowledgeCrapsResolution({ completed: true }), false);
+});
+
 test('craps model exposes the eleven WIP contract legs', async () => {
   const { CRAPS_BETS, CRAPS_BET_GROUPS } = await import(moduleUrl);
   assert.equal(CRAPS_BET_GROUPS.length, 3);
@@ -51,27 +64,6 @@ test('craps model exposes the eleven WIP contract legs', async () => {
   for (const cut of ['lay-odds', 'hard-6', 'hard-10', 'fire', 'small', 'tall', 'all']) {
     assert.equal(CRAPS_BETS.some((bet) => bet.id === cut), false);
   }
-});
-
-test('roll jackpot progress maps the threshold onto a physical 100-chip tray', async () => {
-  const { crapsJackpotProgress } = await import(moduleUrl);
-  assert.deepEqual(crapsJackpotProgress({ rolls: 68, threshold: 100, addedRolls: 10 }), {
-    active: true,
-    rolls: '78',
-    threshold: '100',
-    percentage: 78,
-    chipCount: 78,
-    complete: false,
-  });
-  assert.deepEqual(crapsJackpotProgress({ rolls: 230, threshold: 240, addedRolls: 12 }), {
-    active: true,
-    rolls: '242',
-    threshold: '240',
-    percentage: 100,
-    chipCount: 100,
-    complete: true,
-  });
-  assert.equal(crapsJackpotProgress({ rolls: 20 }).active, false);
 });
 
 test('fixed wager uses pass odds as a multiplier and produces contract-ready arguments', async () => {
@@ -132,7 +124,7 @@ test('bankroll slip uses the flat FlipCraps call shape', async () => {
   assert.equal(wager.valid, true);
   assert.equal(wager.mode, 'slip');
   assert.equal(wager.method, 'placeSlip');
-  assert.equal(wager.maxSlipHands, 256);
+  assert.equal(wager.maxSlipHands, 512);
   assert.equal(wager.maxLossFlip, '3000');
   assert.deepEqual(wager.contractArgs, [
     wager.contractBets,
@@ -173,26 +165,33 @@ test('bankroll rack separates live action from chips sitting out', async () => {
   assert.equal(crapsNextShooterAffordability({ bankrollFlip: 299, nextStakeFlip: 600, goalFlip: 900 }), 'bust');
 });
 
-test('felt stacks physically double every five completed shooters', async () => {
+test('felt stacks physically double every three completed shooters', async () => {
   const {
     crapsEscalatedChipPresentation,
     crapsWagerMultiplierForShooter,
   } = await import(moduleUrl);
 
+  // ⛔ EVERY THREE SHOOTERS, capped at uint32.max — both moved at the 2026-08-29 re-vendor
+  // (`Craps._ESC_HANDS` 5 -> 3, `_ESC_CAP` uint16 -> uint32.max). Shooter 255 is past the
+  // ceiling and pins there; 75 and 80 sit either side of a doubling to prove the step, not just
+  // the cap.
   assert.deepEqual(
     [0, 4, 5, 9, 10, 14, 15, 75, 80, 255].map(crapsWagerMultiplierForShooter),
-    [1, 1, 2, 2, 4, 4, 8, 32768, 65535, 65535],
+    [1, 2, 2, 8, 8, 16, 32, 33_554_432, 67_108_864, 4_294_967_295],
   );
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 4), {
+  // The ordinals below are chosen for the MULTIPLIER they land on (1x, 2x, 4x, 8x, 16x), not for
+  // themselves — the presentation is a function of the multiple, and the ordinals that produce
+  // each one moved when _ESC_HANDS went 5 -> 3. Under the new ladder m = 2^floor(n/3).
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 2), {   // 1x
     baseChipCount: '7', effectiveChipCount: '7', multiplier: 1,
     kind: 'stacks', stacks: ['7'], art: ['/shared/flip-chips/stack-7-high-red.svg'],
   });
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 5), {
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 3), {   // 2x
     baseChipCount: '7', effectiveChipCount: '14', multiplier: 2,
     kind: 'stacks', stacks: ['7', '7'],
     art: ['/shared/flip-chips/stack-7-high-red.svg', '/shared/flip-chips/stack-7-high-red.svg'],
   });
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 10), {
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 6), {   // 4x
     baseChipCount: '7', effectiveChipCount: '28', multiplier: 4,
     kind: 'stacks', stacks: ['10', '9', '9'],
     art: [
@@ -201,15 +200,15 @@ test('felt stacks physically double every five completed shooters', async () => 
       '/shared/flip-chips/stack-9-high-red.svg',
     ],
   });
-  assert.equal(crapsEscalatedChipPresentation(7, 15).kind, 'pile');
-  assert.equal(crapsEscalatedChipPresentation(7, 15).effectiveChipCount, '56');
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 15).art, ['/shared/flip-chips/pile-6.svg']);
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 20).art, ['/shared/flip-chips/pile-8.svg']);
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 5, 'gold').art, [
+  assert.equal(crapsEscalatedChipPresentation(7, 9).kind, 'pile');    // 8x
+  assert.equal(crapsEscalatedChipPresentation(7, 9).effectiveChipCount, '56');
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 9).art, ['/shared/flip-chips/pile-6.svg']);
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 12).art, ['/shared/flip-chips/pile-8.svg']); // 16x
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 3, 'gold').art, [
     '/shared/flip-chips/stack-7-high-gold.svg',
     '/shared/flip-chips/stack-7-high-gold.svg',
   ]);
-  assert.deepEqual(crapsEscalatedChipPresentation(7, 15, 'silver').art, [
+  assert.deepEqual(crapsEscalatedChipPresentation(7, 9, 'silver').art, [
     '/shared/flip-chips/pile-6-metal-silver.svg',
   ]);
 });
@@ -245,7 +244,15 @@ test('wager validation mirrors the 60 FLIP minimum, pass requirement, odds allow
 });
 
 test('stake/theo helpers use whole FLIP inputs and contract payout math', async () => {
-  const { CRAPS_FLIP_WEI, crapsStakeFor, crapsTheoFor, formatCrapsCompactFlip, formatCrapsFlip } = await import(moduleUrl);
+  const {
+    CRAPS_FLIP_WEI,
+    crapsStandingAtRound,
+    crapsStakeFor,
+    crapsTheoFor,
+    formatCrapsCompactFlip,
+    formatCrapsFlip,
+    formatCrapsStanding,
+  } = await import(moduleUrl);
   assert.equal(crapsStakeFor({ passLine: 30, passOddsMult: 3, place4: 30, place9: 30, place10: 30 }), 210n);
   assert.equal(crapsTheoFor({
     passLine: 251,
@@ -261,6 +268,16 @@ test('stake/theo helpers use whole FLIP inputs and contract payout math', async 
   assert.equal(formatCrapsFlip('16777215'), '16,777,215');
   assert.equal(formatCrapsCompactFlip('3000'), '3K');
   assert.equal(formatCrapsCompactFlip('3150'), '3.2K');
+  assert.deepEqual(
+    [1, 2, 3, 4, 11, 12, 13, 21, 50].map(formatCrapsStanding),
+    ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '50th'],
+  );
+  assert.equal(crapsStandingAtRound({ rankTimeline: [50, 21, 3], roundNumber: 1 }), 21,
+    'an authoritative full-field timeline wins over any viewport estimate');
+  assert.equal(crapsStandingAtRound({ fallbackRank: 4, fieldEntrants: 50, loadedEntrants: 4 }), null,
+    'a featured-only viewport cannot pretend fourth in the viewport means fourth in the field');
+  assert.equal(crapsStandingAtRound({ fallbackRank: 4, loadedEntrants: 4 }), 4,
+    'the full local demo can calculate its standing without a publisher timeline');
 });
 
 test('other players aggregate generic chip counts without entering the local seven', async () => {
@@ -324,6 +341,13 @@ test('other players aggregate generic chip counts without entering the local sev
   assert.equal(table.players[1].exitRoll, 2);
   assert.equal(table.players[1].startingBankrollFlip, '360');
   assert.deepEqual(table.players[1].bankrollsFlip, ['180', '0']);
+  const longReplay = aggregateCrapsTableBets([{
+    betId: '99',
+    resolution: { type: 'cashout', roll: 4_600, amountFlip: 1 },
+    chips: { passLine: 1 },
+  }]);
+  assert.equal(longReplay.players[0].exitRoll, 4_600,
+    'roll identity uses the 4,607-roll replay cap, not the 256-shooter cap');
   assert.equal(createCrapsWager({ bets: { passLine: 30 } }).perHandFlip, '30');
 });
 
@@ -346,6 +370,7 @@ test('resolution run pairs exact bankroll snapshots with each shared shooter', a
   const {
     crapsBoardDealBetIds,
     crapsComeOutHeldBetIds,
+    crapsRetiredBetIds,
     createCrapsResolutionRun,
     normalizeCrapsShooterBoost,
   } = await import(moduleUrl);
@@ -407,13 +432,17 @@ test('resolution run pairs exact bankroll snapshots with each shared shooter', a
     ],
   });
   assert.deepEqual(
-    exactLineRun.frames.map(({ payoutBets, lostBets, payoutBetsExact }) => ({
-      payoutBets, lostBets, payoutBetsExact,
+    exactLineRun.frames.map(({ payoutBets, lostBets, retiredBets, payoutBetsExact }) => ({
+      payoutBets, lostBets, retiredBets, payoutBetsExact,
     })),
     [
-      { payoutBets: ['dont-pass'], lostBets: ['pass'], payoutBetsExact: true },
-      { payoutBets: [], lostBets: [], payoutBetsExact: true },
-      { payoutBets: ['pass'], lostBets: ['dont-pass'], payoutBetsExact: true },
+      {
+        payoutBets: ['dont-pass'], lostBets: ['pass'], retiredBets: ['pass', 'dont-pass'], payoutBetsExact: true,
+      },
+      { payoutBets: [], lostBets: [], retiredBets: [], payoutBetsExact: true },
+      {
+        payoutBets: ['pass'], lostBets: ['dont-pass'], retiredBets: ['dont-pass'], payoutBetsExact: true,
+      },
     ],
     'exact line winners and deaths survive normalization, including an authoritative empty payout list',
   );
@@ -435,6 +464,14 @@ test('resolution run pairs exact bankroll snapshots with each shared shooter', a
     { heldBetIds: ['pass', 'dont-pass'], resetLines: true },
   ), ['place-6', 'hard-8'],
   'the next shooter recommits both lines while leaving point bets parked');
+  assert.deepEqual(crapsRetiredBetIds({
+    payoutBets: ['place-8', 'pass'],
+    lostBets: ['hard-8', 'dont-pass'],
+  }), ['hard-8', 'dont-pass'], 'losing hardways and lines retire for the shooter');
+  assert.deepEqual(crapsRetiredBetIds({
+    payoutBets: ['dont-pass'],
+    lostBets: ['pass'],
+  }), ['pass', 'dont-pass'], 'winning Don’t Pass retires with the losing Pass decision');
 
   const goalRun = createCrapsResolutionRun({
     startingBankrollFlip: 300,
@@ -451,6 +488,27 @@ test('resolution run pairs exact bankroll snapshots with each shared shooter', a
     { bankrollFlip: '690', terminal: '' },
     { bankrollFlip: '600', terminal: 'goal' },
   ]);
+
+  const sealedRun = createCrapsResolutionRun({
+    startingBankrollFlip: 300,
+    goalFlip: 600,
+    hands: [
+      { bankrollFlip: 720, label: 'INTRA-SHOOTER HIGH', dice: [3, 3], shooter: 0, globalRoll: 0, terminal: '' },
+      { bankrollFlip: 510, label: 'SHOOTER CONTINUES', dice: [2, 3], shooter: 0, globalRoll: 1, terminal: '' },
+      { bankrollFlip: 630, label: 'SEALED GOAL', dice: [4, 3], shooter: 0, globalRoll: 2, terminal: 'goal' },
+    ],
+  });
+  assert.deepEqual(
+    sealedRun.frames.map(({ bankrollFlip, shooter, globalRoll, terminal }) => ({
+      bankrollFlip, shooter, globalRoll, terminal,
+    })),
+    [
+      { bankrollFlip: '720', shooter: 0, globalRoll: 0, terminal: '' },
+      { bankrollFlip: '510', shooter: 0, globalRoll: 1, terminal: '' },
+      { bankrollFlip: '630', shooter: 0, globalRoll: 2, terminal: 'goal' },
+    ],
+    'sealed terminal flags, not a temporary bankroll crossing, decide where replay stops',
+  );
 
   const survivalRun = createCrapsResolutionRun({
     startingBankrollFlip: 3000,
@@ -508,24 +566,35 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /role="dialog" aria-modal="true"/);
   assert.match(COMPONENT_SRC, /<h2 id="craps-title">CRAPS<\/h2>/);
   assert.doesNotMatch(COMPONENT_SRC, /craps-dialog__rule|craps-intro|craps-table-felt__stamp/,
-    'the compact top rail keeps only the Craps title, dice, and close action');
+    'the compact top rail avoids bringing back instructional clutter');
+  assert.match(COMPONENT_SRC, /class="craps-dialog__prizes"[^>]*data-bind="craps-prize-marquee"[\s\S]*?<small>JACKPOT<\/small>[\s\S]*?data-bind="craps-jackpot-marquee-amount"[\s\S]*?<small>BOUNTY POOL<\/small>[\s\S]*?data-bind="craps-bounty-amount"[\s\S]*?<small>ADDED<\/small>[\s\S]*?data-bind="craps-bounty-added-amount"/s,
+    'the persistent header prominently names and displays both battle prizes');
+  assert.match(COMPONENT_SRC, /detail\.bountyPoolFlip \?\? detail\.totalBountyFlip[\s\S]*?detail\.bountyPoolWei \?\? detail\.totalBountyWei/s,
+    'the bounty readout consumes an exact whole-pool value in either UI unit');
+  assert.doesNotMatch(COMPONENT_SRC, /const bountyAmount = this\.#battleStake \* BigInt\(this\.#entryMultiple\)/,
+    'the header never relabels the viewer’s individual entry stake as the pool');
+  assert.match(CSS_SRC, /\.craps-dialog__prize output\s*\{[\s\S]*?font:\s*1000 clamp\(0\.88rem, 1\.55vw, 1\.12rem\)/s,
+    'prize values use display-sized type instead of the tiny progressive tray labels');
+  assert.match(CSS_SRC, /\.craps-dialog__prize--jackpot\[data-state="won-other"\]\s*\{[\s\S]*?grayscale\(0\.94\) brightness\(0\.62\)/s,
+    'the prominent jackpot value darkens with the tray after another player wins');
+  assert.match(COMPONENT_SRC, /detail\.addedFlip \?\? detail\.addedBountyFlip[\s\S]*?detail\.addedFlipWei \?\? detail\.addedBountyWei/s,
+    'the table accepts whole-FLIP UI data and the replay contract’s exact added-FLIP wei');
+  assert.match(CSS_SRC, /\.craps-dialog__prize-added\s*\{[\s\S]*?border-left:[\s\S]*?\.craps-dialog__prize-added output\s*\{[\s\S]*?font-size:/s,
+    'added FLIP has a bounded secondary compartment rather than competing with the bounty total');
   assert.doesNotMatch(COMPONENT_SRC, /<legend>/,
     'the felt has no redundant line, odds, or place section captions');
   assert.match(COMPONENT_SRC, /name="craps-bankroll"/);
   assert.match(COMPONENT_SRC, /class="craps-run-rail"[^>]*data-bind="craps-resolution"/);
   assert.match(COMPONENT_SRC, /class="craps-run-rail__rack"[^>]*data-bind="craps-resolution-chips"/);
-  assert.match(COMPONENT_SRC, /class="craps-run-rail__jackpot"[^>]*data-bind="craps-jackpot-tray"/);
-  assert.match(COMPONENT_SRC, /data-bind="craps-jackpot-meter"[^>]*role="progressbar"/);
-  assert.match(COMPONENT_SRC, /JP FLIP[\s\S]*?data-bind="craps-jackpot-amount"[\s\S]*?ROLLS[\s\S]*?data-bind="craps-jackpot-rolls"[\s\S]*?data-bind="craps-jackpot-threshold"/s,
-    'the second physical tray gives the progressive value and both actual roll counters dedicated end caps');
-  assert.doesNotMatch(COMPONENT_SRC, /craps-jackpot-percent|>100%<|shownPercent/,
-    'the player sees actual roll numbers rather than percentages');
-  assert.match(COMPONENT_SRC, /jackpot\.rolls[\s\S]*?detail\.jackpotRolls[\s\S]*?jackpot\.threshold[\s\S]*?detail\.jackpotThresholdRolls[\s\S]*?jackpot\.amountFlip[\s\S]*?detail\.jackpotAmountFlip/s,
+  // ⛔ THE PROGRESSIVE RACK IS GONE — the main player bankroll rack carries that job now, so
+  // there is no second tray, no jackpot meter and no score end caps to assert. The jackpot's
+  // headline figure survives in the MARQUEE, which the prize-marquee assertions below cover.
+  assert.doesNotMatch(COMPONENT_SRC, /craps-jackpot-tray|craps-jackpot-chips|craps-jackpot-meter/,
+    'no second progressive tray, meter or chip rack remains');
+  assert.match(COMPONENT_SRC, /jackpot\.amountFlip[\s\S]*?detail\.jackpotAmountFlip/s,
     'the widget consumes one progressive snapshot without polling');
   assert.match(COMPONENT_SRC, /jackpot\.claimedByOther === true[\s\S]*?jackpot\.eligible === false[\s\S]*?this\.#jackpotState = otherWon \? 'won-other'/s,
     'an explicit other-player win makes the viewer ineligible');
-  assert.match(COMPONENT_SRC, /rollsNode\.textContent = formatCrapsFlip\(progress\.rolls\)[\s\S]*?thresholdNode\.textContent = formatCrapsFlip\(progress\.threshold\)/s,
-    'the end cap prints full roll counts instead of compacting them');
   assert.match(COMPONENT_SRC, /#paintResolutionResult\(frame, index, \{ comeOut = false \} = \{\}\)[\s\S]*?#paintJackpotTray\(index \+ 1\)/s,
     'each resolved replay roll advances the progressive tray locally');
   assert.match(COMPONENT_SRC, /createCrapsResolutionRun/);
@@ -641,17 +710,29 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the winning Don’t Pass stack is excluded from the seven-out clear');
   assert.match(COMPONENT_SRC, /#holdBoardCleared\(\)[\s\S]*?table\.dataset\.board = 'dont-pass'[\s\S]*?this\.#releaseBoardBetSpots\(\[dontPass\]\)/s,
     'the existing Don’t Pass stack remains live while losing bets stay cleared');
-  assert.match(COMPONENT_SRC, /#featuredPayoutBetIds\(player, frame, frameIndex, \{ comeOut = false \} = \{\}\)[\s\S]*?return requested\.slice\(0, 2\)/s,
-    'featured opponents collect from each actual winning placement regardless of their net bankroll change');
+  assert.match(COMPONENT_SRC, /#featuredPayoutBetIds\(player, frame, frameIndex, \{ comeOut = false \} = \{\}\)[\s\S]*?hasExactTimeline[\s\S]*?exactEvent \? normalizedPayoutBetIds\(exactEvent\.payoutBets\) : \[\][\s\S]*?return hasExactTimeline \? requested/s,
+    'featured opponents collect every exact winning placement and a null aligned event stays empty');
+  assert.match(COMPONENT_SRC, /#payoutBetIds\(frame, frameIndex[\s\S]*?frame\?\.payoutBetsExact \? requested : requested\.slice\(0, 2\)/s,
+    'the viewer animation does not truncate an authoritative multi-spot payout');
+  assert.doesNotMatch(COMPONENT_SRC, /sources\.slice\(0, 2\)\.forEach/,
+    'featured exact payouts are not silently capped at two felt sources');
   assert.match(COMPONENT_SRC, /#animateBoardReload\(frame, frameIndex, onDone, \{/);
   assert.match(COMPONENT_SRC, /const opponentRackByKey = new Map\([\s\S]*?\[data-battle-key\][\s\S]*?opponentRackChips\.at\(-1\)[\s\S]*?is-board-deal is-featured-deal/s,
     'featured opponent redeals visibly travel from that opponent’s top rack to their felt marker');
-  assert.match(COMPONENT_SRC, /const afterBoardClear = \(\) => \{[\s\S]*?this\.#animateBoardReload\(frame, nextIndex, continueRun, \{ phase: 'come-out' \}\)[\s\S]*?else this\.#animateSevenOutClear\(nextIndex, afterBoardClear\)/s,
+  assert.match(COMPONENT_SRC, /const afterBoardClear = \(\) => \{[\s\S]*?this\.#animateBoardReload\(frame, nextIndex, continueRun, \{[\s\S]*?phase: 'come-out',[\s\S]*?resetRetirements: true,[\s\S]*?else this\.#animateSevenOutClear\(nextIndex, afterBoardClear\)/s,
     'seven-out clears the felt before restoring the next shooter’s placement');
   assert.match(COMPONENT_SRC, /crapsBoardDealBetIds\(heldSpots\.map\(\(spot\) => spot\.dataset\.bet\), \{ phase \}\)/,
     'shooter change deals only the held spots allowed in that board phase');
-  assert.match(COMPONENT_SRC, /#boardInPlayFlip\(phase, \{ dealingBetIds: \[\.\.\.dealIds\] \}\)/,
-    'the projected rack stake receives concrete deal IDs instead of an opaque Set');
+  assert.match(COMPONENT_SRC, /#boardInPlayFlip\(phase, \{[\s\S]*?dealingBetIds: spots\.map\(\(spot\) => spot\.dataset\.bet\)/s,
+    'the projected rack stake receives only concrete, non-retired deal IDs');
+  assert.match(COMPONENT_SRC, /#retiredBetIds = new Set\(\)/,
+    'per-shooter retirement is distinct from temporary off-felt placement');
+  assert.match(COMPONENT_SRC, /const spots = heldSpots\.filter\(\(spot\) => \([\s\S]*?dealIds\.has\(spot\.dataset\.bet\)[\s\S]*?!this\.#retiredBetIds\.has\(spot\.dataset\.bet\)/s,
+    'point establishment cannot redeal a hardway retired earlier in the shooter');
+  assert.match(COMPONENT_SRC, /#holdLostBetCollection\(frame\)[\s\S]*?crapsRetiredBetIds\(frame\)[\s\S]*?this\.#retiredBetIds\.add\(id\)/s,
+    'settlement accumulates both losing bets and winning one-decision Don’t Pass retirements');
+  assert.match(COMPONENT_SRC, /#animateBoardReload\(frame, frameIndex, onDone, \{[\s\S]*?resetRetirements = false[\s\S]*?if \(resetRetirements\) this\.#retiredBetIds\.clear\(\)/s,
+    'only an explicit next-shooter reload clears per-shooter retirements');
   assert.match(COMPONENT_SRC, /this\.#animateBoardReload\(frame, nextIndex, animateSettlement, \{ phase: 'point' \}\)/,
     'establishing a point visibly deals every parked number and hardway chip before settlement');
   assert.match(COMPONENT_SRC, /#holdComeOutBoard\(\{ resetLines = true \} = \{\}\)[\s\S]*?crapsComeOutHeldBetIds\([\s\S]*?resetLines/s,
@@ -670,6 +751,8 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'an authoritative empty payout list cannot be replaced by inferred come-out winners');
   assert.match(COMPONENT_SRC, /class="craps-run-rail__bankroll"[\s\S]*?class="craps-run-rail__well"[\s\S]*?class="craps-run-rail__rack"[\s\S]*?class="craps-run-rail__goal"/,
     'bankroll and goal readouts flank the physical chip trough instead of covering it');
+  assert.match(COMPONENT_SRC, /data-bind="craps-resolution-standing"[\s\S]*?#paintLocalStanding\(roundNumber, localStanding\?\.rank, standings\.length\)/s,
+    'the main bankroll display paints the viewer position from each chip standing update');
   assert.match(COMPONENT_SRC, /CRAPS_RUN_RACK_SLOTS = 96/);
   assert.match(COMPONENT_SRC, /'<i class="df-bankroll__chip craps-run-chip"><\/i>'/,
     'the bankroll rack reuses the Coinflip edge-on chip');
@@ -692,8 +775,19 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /if \(bet\.kind !== 'stake'\) return '';/);
   assert.doesNotMatch(COMPONENT_SRC, /data-odds=|craps-odds-max|craps-odds-action|craps-perk-odds/,
     'the table offers no hidden or visible odds controls');
-  assert.match(COMPONENT_SRC, /#wager\(\)[\s\S]*?method: 'enterBattle'[\s\S]*?contractArgs: \[[\s\S]*?this\.#battleSlot[\s\S]*?packContractChips\(chipCounts\),[\s\S]*?this\.#entryMultiple,[\s\S]*?\]/s,
-    'new wagers submit the slot, the PACKED chip word, and the entry multiple to CrapsBattle');
+  assert.match(COMPONENT_SRC, /const method = this\.#entryKind === 'board'[\s\S]*?'setBoard'[\s\S]*?'enterBonusDay'[\s\S]*?'enterBonusBattle'[\s\S]*?'enterBattle'/s,
+    'the table preserves board-only, whole-day, scheduled-window, and custom-battle modes');
+  assert.match(COMPONENT_SRC, /const contractArgs = this\.#entryKind === 'board'[\s\S]*?\[contractChips\][\s\S]*?\[contractChips, this\.#entryMultiple\][\s\S]*?\[this\.#entryPeriod, contractChips, this\.#entryMultiple\][\s\S]*?this\.#battleSlot/s,
+    'board setup and scheduled entries return the packed chip word with the correct call shape');
+  assert.match(COMPONENT_SRC, /data-bind="craps-entry-label" hidden/,
+    'scheduled entry dialogs should identify the selected day or battle');
+  assert.match(COMPONENT_SRC, /'SAVE BOARD'[\s\S]*?'ENTER FULL DAY'[\s\S]*?`ENTER BATTLE \$\{\(this\.#entryPeriod \?\? 0\) \+ 1\}`/s,
+    'board and scheduled entry submit copy should identify the selected mode');
+  assert.match(COMPONENT_SRC, /const scheduledTerms = this\.#entryKind !== 'custom'/);
+  assert.match(COMPONENT_SRC, /bankroll\.readOnly = scheduledTerms[\s\S]*?goal\.readOnly = scheduledTerms/s,
+    'scheduled bankroll and goal are protocol terms, not editable transaction inputs');
+  assert.match(COMPONENT_SRC, /const buyIn = this\.#entryKind === 'board'[\s\S]*?\? 0n[\s\S]*?\(this\.#bankroll \+ this\.#battleStake\) \* BigInt\(this\.#entryMultiple\)/s,
+    'board setup is free while entry buy-ins scale both bankroll and bounty with the lane multiple');
   // The packed order is the CONTRACT's, not the struct's: don't-pass is last in the word even
   // though `contractChipCountsFrom` lists it second. Swapping those two silently moves every bet
   // to the other side of the table, so the order is asserted here rather than trusted.
@@ -779,6 +873,10 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /<small>BUY-IN<\/small>/);
   assert.match(COMPONENT_SRC, /CRAPS_TABLE_SETTLE_EVENT/);
   assert.match(COMPONENT_SRC, /CRAPS_TABLE_REPLAY_EVENT/);
+  assert.match(COMPONENT_SRC, /onResolutionAcknowledged/);
+  assert.match(COMPONENT_SRC, /#acknowledgeResolution\(\)/);
+  assert.match(COMPONENT_SRC, /dataset\?\.phase === 'complete'/,
+    'closing only acknowledges a replay after final rewards have been painted');
   assert.match(COMPONENT_SRC, /event\?\.key === 'Escape'/);
   assert.match(COMPONENT_SRC, /event\?\.key === 'Tab'/);
   const spinResolutionDiceSrc = COMPONENT_SRC.slice(
@@ -861,6 +959,8 @@ test('layout aligns the two lines and hardways beneath six numbers with a compac
     'each opponent row contains place, Discord avatar, name, and thermometer');
   assert.match(CSS_SRC, /\.craps-battle-rack \.df-bankroll__chip\.craps-battle-rack__chip/,
     'leaderboard racks reuse the edge-on main-rack chip treatment');
+  assert.match(CSS_SRC, /\.craps-run-rail__standing\s*\{[\s\S]*?font:[\s\S]*?Roboto Mono/s,
+    'the viewer position remains a legible part of the main bankroll display');
   assert.match(CSS_SRC, /@keyframes craps-survival-coin-track/);
   assert.match(CSS_SRC, /@keyframes craps-survival-face-track[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/s);
   assert.match(CSS_SRC, /\.craps-shooter-boost\s*\{[\s\S]*?z-index:\s*60;[\s\S]*?color:\s*#ffe58d;[\s\S]*?opacity:\s*0;[\s\S]*?font-size:\s*clamp\(0\.82rem, 1\.6vw, 1\.15rem\)/s,
@@ -890,12 +990,12 @@ test('layout aligns the two lines and hardways beneath six numbers with a compac
   assert.match(CSS_SRC, /\.craps-run-rail__rack\s*\{[\s\S]*?display:\s*flex[\s\S]*?justify-content:\s*flex-start[\s\S]*?gap:\s*0/s,
     'one continuous chip row fills the trough');
   assert.doesNotMatch(CSS_SRC, /transparent calc\(50% - 2px\)/,
-    'the bankroll row has no fake shelf divider; the jackpot owns an independent tray');
-  assert.match(CSS_SRC, /\.craps-run-rail__jackpot-rack\s*\{[\s\S]*?display:\s*flex[\s\S]*?justify-content:\s*flex-start/s);
-  assert.match(CSS_SRC, /\.craps-run-rail \.df-bankroll__chip\.craps-jackpot-chip\s*\{[\s\S]*?#9d3dde/s,
-    'progressive rolls fill the lower tray with physical purple edge chips');
-  assert.match(CSS_SRC, /\.craps-run-rail__jackpot\[data-state="won-other"\]\s*\{[\s\S]*?opacity:\s*0\.7;[\s\S]*?grayscale\(0\.94\) brightness\(0\.62\)/s,
-    'another player winning visibly darkens the now-ineligible progressive tray');
+    'the bankroll row has no fake shelf divider');
+  // ⛔ THE PROGRESSIVE RACK IS GONE — the main player bankroll rack carries that job now, so the
+  // second tray, its purple chips and its won-other dimming were all removed along with the grid
+  // row they occupied. Asserted as ABSENT so the dead styles cannot drift back in.
+  assert.doesNotMatch(CSS_SRC, /craps-run-rail__jackpot|craps-jackpot-chip|data-jackpot/,
+    'no progressive tray, chip or grid-row styling survives');
   assert.doesNotMatch(CSS_SRC, /\.craps-run-barrel\s*\{/);
   assert.match(CSS_SRC, /\.craps-run-rail \.df-bankroll__chip\.craps-run-chip\s*\{[\s\S]*?height:\s*0\.76rem[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*0\.07rem/s,
     'craps scales up the Coinflip rack chip while preserving its edge treatment');
@@ -1054,6 +1154,10 @@ test('standalone demo and main app both mount the same component', () => {
   assert.match(DEMO_SRC, /<app-craps-table><\/app-craps-table>/);
   assert.match(DEMO_SCRIPT_SRC, /playedFlip:\s*params\.get\('played'\) \|\| 600/);
   assert.match(DEMO_SCRIPT_SRC, /battleStakeFlip:\s*params\.get\('battleStake'\) \|\| 300/);
+  assert.match(DEMO_SCRIPT_SRC, /bountyPoolFlip:\s*params\.get\('bountyPool'\) \|\| 84_900/,
+    'the demo keeps the whole pool distinct from one entrant’s battle stake');
+  assert.match(DEMO_SCRIPT_SRC, /addedFlip:\s*params\.get\('added'\) \|\| 75_000/,
+    'the demo exposes the added-FLIP compartment with an overridable value');
   assert.match(DEMO_SCRIPT_SRC, /completedShooters:\s*params\.get\('shooters'\) \|\| 0/,
     'the demo can open immediately before or after an escalator boundary');
   assert.match(DEMO_SCRIPT_SRC, /initialBets:\s*filled[\s\S]*?dontPassDemo[\s\S]*?'dont-pass': 2[\s\S]*?: \{ pass: 2, 'place-6': 2, 'place-8': 2, 'hard-8': 1 \}[\s\S]*?: \{\}/s,

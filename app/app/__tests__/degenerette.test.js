@@ -634,7 +634,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     const receipt = makeFakeReceipt([
       {
         parsed: {
-          name: 'BetPlaced',
+          name: 'DegeneretteBetPlaced',
           args: {
             player: CONNECTED,
             index: 7n,
@@ -818,8 +818,8 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   // DegeneretteResult (checked against degenerus-sim/deployments/abis/
   // GAME_DEGENERETTE_MODULE.json). The old FullTicket* names matched no topic,
   // so every resolve parsed as zero events.
-  test('canonical event ABIs: BetPlaced + DegeneretteResolved + DegeneretteResult', () => {
-    assert.ok(SRC.includes('event BetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)'));
+  test('canonical event ABIs: DegeneretteBetPlaced + DegeneretteResolved + DegeneretteResult', () => {
+    assert.ok(SRC.includes('event DegeneretteBetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)'));
     assert.ok(SRC.includes('event DegeneretteResolved(address indexed player, uint64 indexed betId, uint8 spinCount, uint256 totalPayout, uint32 resultTraits)'));
     assert.ok(SRC.includes('event DegeneretteResult(address indexed player, uint64 indexed betId, uint8 spinIndex, uint32 playerTraits, uint8 matches, uint256 payout)'));
     // Comments still name the old events (they explain the fix); code must not.

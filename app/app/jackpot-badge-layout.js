@@ -34,7 +34,9 @@ function _clamp(value, minimum, maximum) {
  * The browser supplies pixel bounds at activation time. Directions that would
  * clip against the quadrant are removed first; `randomValue` chooses a random
  * starting side while `sequence` rotates simultaneous wins around the badge
- * instead of stacking an aligned row into one vertical popup lane.
+ * instead of stacking an aligned row into one vertical popup lane. A marquee
+ * badge can occupy nearly the whole quadrant; when its plate fits over the
+ * badge but beside it nowhere, `inside` keeps the amount on the cabinet.
  */
 export function winningBadgeRewardDirection({
   badge,
@@ -70,9 +72,14 @@ export function winningBadgeRewardDirection({
   if (horizontalFits && badgeBottom + safeGap + popupHeight <= height - inset) candidates.push('below');
   if (verticalFits && badgeLeft - safeGap - popupWidth >= inset) candidates.push('left');
 
-  // A very large reward plate may not fit wholly on any side. Keep its exit
-  // pointed toward the side with the most room; overflow clipping is then the
-  // smallest possible instead of reverting every such plate to "above".
+  // The solo-winner badge fills nearly its entire quadrant. Its plate still
+  // fits at the badge center even though none of the four outside lanes can
+  // hold it; prefer that fully-contained overlay to a clipped edge fallback.
+  if (candidates.length === 0 && horizontalFits && verticalFits) return 'inside';
+
+  // A reward plate that cannot fit wholly even at the badge center keeps its
+  // exit pointed toward the side with the most room, minimizing unavoidable
+  // clipping rather than reverting every such plate to "above".
   if (candidates.length === 0) {
     const clearance = {
       above: badgeTop,

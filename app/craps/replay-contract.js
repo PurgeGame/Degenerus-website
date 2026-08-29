@@ -10,18 +10,41 @@ export const CRAPS_REPLAY_SCHEMA_VERSION = 1;
 export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-484a5d60b-v1';
 export const CRAPS_REPLAY_CDN_PREFIX = '/craps/replays/v1';
 export const CRAPS_REPLAY_DEFAULT_SHARD_SIZE = 256;
-export const CRAPS_REPLAY_MAX_HANDS = 256;
-export const CRAPS_REPLAY_MAX_ROLLS = 4_607;
+// Mirrors `Craps._MAX_SLIP_HANDS` and `Craps._SLIP_ROLL_CEILING` (`_SLIP_ROLL_BUDGET - 1 +
+// _MAX_ROLLS`). BOTH doubled at the 2026-08-29 re-vendor — the goal now LATCHES and the run plays
+// on, so the contract gave it room. Stale here, this validator REJECTS the manifest for any long
+// battle and the table renders nothing; the packed-nibble and offset strings still fit their own
+// caps at the new sizes (11_604 / 2_732 chars against 16_384 / 4_096).
+export const CRAPS_REPLAY_MAX_HANDS = 512;
+export const CRAPS_REPLAY_MAX_ROLLS = 8_703;
 export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
   'passLine', 'place4', 'place5', 'place6', 'place8',
   'place9', 'place10', 'hard4', 'hard8', 'dontPass',
 ]);
 
-// Runtime hash exercised by the current vendored simulator ruleset. A contract re-vendor
-// must add its verified hash explicitly; silently accepting a new engine would make the
-// browser animation look authoritative while applying stale payout rules.
+// Runtime hashes this browser build is allowed to replay. A contract re-vendor must add its
+// verified hash EXPLICITLY; silently accepting a new engine would make the animation look
+// authoritative while applying stale payout rules.
+//
+// The entry is the keccak of the DEPLOYED `CrapsBattle` runtime code, which is what
+// `manifest.ruleset.runtimeCodeHash` carries. Adding one is not a formality — the procedure is:
+//
+//   1. re-run the database repo's craps differential suite against the new artifact
+//      (`npx vitest run src/craps/__tests__/engine-differential.test.ts`), which pins the
+//      TypeScript port to the deployed Solidity;
+//   2. regenerate this repo's fixture through the production serializer
+//      (`cd degenerus-sim && npx tsx scripts/craps-replay-fixture.ts --write`);
+//   3. add the hash here.
+//
+// 0x7fa2e3de… — audit 484a5d60b, the build the engine id still names.
+// 0x300a278f… — audit 0b34a4713 (the craps RNG-gate redeploy). Settlement is byte-identical:
+//   the differential suite passes unchanged against it, and the change was to the ARMING path
+//   (`_armSlot`'s lootbox RNG request), not to `_settleSlip`. The runtime hash moved anyway,
+//   because the runtime did — which is exactly why this list keys on the code and not on a
+//   version string somebody has to remember to bump.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
+  '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -170,6 +193,41 @@ export function decodeCrapsReplayLadder(input, expectedLength = null, path = 'la
   return Object.freeze(out);
 }
 
+/** Compact one-based full-field position after entry and after every played roll. */
+export function encodeCrapsReplayRankTimeline(values) {
+  if (!Array.isArray(values)) fail('rankTimeline', 'expected an array');
+  if (values.length > CRAPS_REPLAY_MAX_ROLLS + 1) fail('rankTimeline', 'too many entries');
+  const bytes = new Uint8Array(values.length * 4);
+  values.forEach((raw, index) => {
+    const rank = integerAt(Number(raw), `rankTimeline[${index}]`, { min: 1, max: 0xffffffff });
+    bytes[index * 4] = Math.floor(rank / 0x1000000) & 0xff;
+    bytes[index * 4 + 1] = Math.floor(rank / 0x10000) & 0xff;
+    bytes[index * 4 + 2] = Math.floor(rank / 0x100) & 0xff;
+    bytes[index * 4 + 3] = rank & 0xff;
+  });
+  return Object.freeze({ encoding: 'uint32be/base64', values: encodeBase64(bytes) });
+}
+
+export function decodeCrapsReplayRankTimeline(input, expectedLength = null, path = 'rankTimeline') {
+  const value = objectAt(input, path);
+  if (value.encoding !== 'uint32be/base64') fail(`${path}.encoding`, 'unsupported rank encoding');
+  const bytes = decodeCrapsReplayBase64(value.values, `${path}.values`);
+  if (bytes.length % 4 !== 0) fail(`${path}.values`, 'decoded byte length must be divisible by 4');
+  const length = bytes.length / 4;
+  if (length > CRAPS_REPLAY_MAX_ROLLS + 1) fail(path, 'too many entries');
+  if (expectedLength != null && length !== expectedLength) fail(path, `expected ${expectedLength} entries, decoded ${length}`);
+  const out = [];
+  for (let index = 0; index < length; index += 1) {
+    const rank = (bytes[index * 4] * 0x1000000)
+      + (bytes[index * 4 + 1] * 0x10000)
+      + (bytes[index * 4 + 2] * 0x100)
+      + bytes[index * 4 + 3];
+    if (rank < 1) fail(`${path}[${index}]`, 'rank must be one-based');
+    out.push(rank);
+  }
+  return Object.freeze(out);
+}
+
 function frozen(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   Object.values(value).forEach(frozen);
@@ -277,16 +335,22 @@ function validateProgressive(input) {
     fail('manifest.progressive.status', 'unsupported state');
   }
   const winnerBetId = value.winnerBetId == null ? null : decimalAt(value.winnerBetId, 'manifest.progressive.winnerBetId');
-  const wonAtRoll = value.wonAtRoll == null ? null : integerAt(value.wonAtRoll, 'manifest.progressive.wonAtRoll', { min: 1, max: CRAPS_REPLAY_MAX_ROLLS });
-  if (status === 'won' && (winnerBetId == null || wonAtRoll == null)) {
-    fail('manifest.progressive', 'a won progressive requires winnerBetId and wonAtRoll');
+  // ⛔ SCORE BASIS POINTS, NOT A ROLL COUNT (2026-08-29 re-vendor, audit 03e8c3600). The rung is
+  // drawn on the winner's HIGH POINT over its own starting bankroll — 10,000 is 1x — and the
+  // cutoffs run to 2,250,000. The old bound here was CRAPS_REPLAY_MAX_ROLLS, which would have
+  // rejected every real score as out of range, so the field was RENAMED rather than repurposed.
+  const wonAtScoreBps = value.wonAtScoreBps == null
+    ? null
+    : integerAt(value.wonAtScoreBps, 'manifest.progressive.wonAtScoreBps', { min: 1, max: 1_000_000_000 });
+  if (status === 'won' && (winnerBetId == null || wonAtScoreBps == null)) {
+    fail('manifest.progressive', 'a won progressive requires winnerBetId and wonAtScoreBps');
   }
   return Object.freeze({
-    rollsBefore: decimalAt(value.rollsBefore ?? '0', 'manifest.progressive.rollsBefore'),
-    thresholdRolls: decimalAt(value.thresholdRolls ?? '0', 'manifest.progressive.thresholdRolls'),
+    scoreBpsBefore: decimalAt(value.scoreBpsBefore ?? '0', 'manifest.progressive.scoreBpsBefore'),
+    thresholdScoreBps: decimalAt(value.thresholdScoreBps ?? '0', 'manifest.progressive.thresholdScoreBps'),
     amountWei: value.amountWei == null ? null : decimalAt(value.amountWei, 'manifest.progressive.amountWei'),
     winnerBetId,
-    wonAtRoll,
+    wonAtScoreBps,
     status,
   });
 }
@@ -330,6 +394,12 @@ export function validateCrapsReplayManifest(input) {
       goalWei: decimalAt(terms.goalWei, 'manifest.terms.goalWei', { positive: true }),
       boardStakeWei: decimalAt(terms.boardStakeWei, 'manifest.terms.boardStakeWei', { positive: true }),
       battleStakeWei: decimalAt(terms.battleStakeWei ?? '0', 'manifest.terms.battleStakeWei'),
+      bountyPoolWei: terms.bountyPoolWei == null
+        ? null
+        : decimalAt(terms.bountyPoolWei, 'manifest.terms.bountyPoolWei'),
+      addedFlipWei: terms.addedFlipWei == null
+        ? null
+        : decimalAt(terms.addedFlipWei, 'manifest.terms.addedFlipWei'),
     }),
     tape: validateTape(value.tape),
     progressive: validateProgressive(value.progressive),
@@ -376,7 +446,11 @@ export function validateCrapsReplayPlayer(input, path = 'player') {
   )));
   if (resolvedBoardWei.every((amount) => amount === '0')) fail(`${path}.resolvedBoardWei`, 'board cannot be empty');
   const handsPlayed = integerAt(value.handsPlayed, `${path}.handsPlayed`, { max: CRAPS_REPLAY_MAX_HANDS });
+  const totalRolls = integerAt(value.totalRolls, `${path}.totalRolls`, { max: CRAPS_REPLAY_MAX_ROLLS });
   const ladderWei = decodeCrapsReplayLadder(value.ladder, handsPlayed + 1, `${path}.ladder`);
+  const rankByRoll = value.rankTimeline == null
+    ? null
+    : decodeCrapsReplayRankTimeline(value.rankTimeline, totalRolls + 1, `${path}.rankTimeline`);
   const stop = stringAt(value.stop, `${path}.stop`, { max: 8 });
   if (!STOP_STATES.has(stop)) fail(`${path}.stop`, 'expected bust or goal');
   if (value.replayOk !== true) fail(`${path}.replayOk`, 'seat is not chain-verified');
@@ -392,7 +466,7 @@ export function validateCrapsReplayPlayer(input, path = 'player') {
     bankrollInWei: decimalAt(value.bankrollInWei, `${path}.bankrollInWei`, { positive: true }),
     goalWei: decimalAt(value.goalWei, `${path}.goalWei`, { positive: true }),
     handsPlayed,
-    totalRolls: integerAt(value.totalRolls, `${path}.totalRolls`, { max: CRAPS_REPLAY_MAX_ROLLS }),
+    totalRolls,
     unitsPlayed: decimalAt(value.unitsPlayed, `${path}.unitsPlayed`),
     stop,
     ladder: Object.freeze({
@@ -400,6 +474,11 @@ export function validateCrapsReplayPlayer(input, path = 'player') {
       values: stringAt(value.ladder?.values, `${path}.ladder.values`, { min: 1, max: 6_000 }),
     }),
     ladderWei,
+    rankTimeline: value.rankTimeline == null ? null : Object.freeze({
+      encoding: 'uint32be/base64',
+      values: stringAt(value.rankTimeline?.values, `${path}.rankTimeline.values`, { min: 1, max: 32_000 }),
+    }),
+    rankByRoll,
     boosts: validateSparseSchedule(value.boosts, `${path}.boosts`, handsPlayed, 'boost'),
     survivals: validateSparseSchedule(value.survivals, `${path}.survivals`, handsPlayed, 'survival'),
     wonWei: decimalAt(value.wonWei, `${path}.wonWei`),
@@ -421,6 +500,9 @@ export function validateCrapsReplayCollection(input, manifestInput) {
   const seen = new Set();
   for (const player of players) {
     if (seen.has(player.betId)) fail('collection.players', `duplicate betId ${player.betId}`);
+    if (player.rankByRoll?.some((rank) => rank > manifest.field.entrants)) {
+      fail('collection.players', `rank for ${player.betId} exceeds ${manifest.field.entrants} entrants`);
+    }
     seen.add(player.betId);
   }
   if (value.kind === 'craps-replay-seat-shard') {

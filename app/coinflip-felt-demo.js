@@ -15,8 +15,16 @@ import {
   coinflipWinChipPiles,
 } from '/app/components/app-daily-flip.js';
 import { flipPileChipCount, flipPileVariant } from '/app/app/flip-piles.js';
+import { update as updateStore } from '/app/app/store.js';
 
 const UNIT = 10n ** 18n;
+
+// Keep the visual harness honest about the live table's quest placement. A
+// single unfinished Coinflip objective makes the real custom element visible;
+// no demo-only stand-in or CSS forcing is involved.
+updateStore('ui.questObjectives', {
+  quests: [{ questType: 2, role: 'DAILY', label: 'Coinflip', completed: false }],
+});
 
 const state = {
   customMode: 'win',

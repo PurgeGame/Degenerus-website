@@ -181,7 +181,7 @@ const {
   boxSpinScorePays, settleBoxSpinPayoutPresentation,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
   shouldCelebrateDegenerette, isUnluckyDegenerette,
-  ticketGridSizeClass, revealTerminalActionLabel,
+  ticketGridSizeClass, revealTerminalActionLabel, lootboxFlightLandingTranslations,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT, RESULT_REVEAL_ABORT_EVENT,
   LOOTBOX_REVEAL_ABORT_EVENT,
   REVEAL_OVERLAY_IDLE_EVENT, LOOTBOX_REVEAL_COMPLETE_EVENT,
@@ -222,6 +222,27 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 // ---------------------------------------------------------------------------
 
 describe('normalizeSequence', () => {
+  test('lootbox flight lands on terminal rectangles for singleton and wrapped card sets', () => {
+    assert.deepEqual(lootboxFlightLandingTranslations(
+      [{ left: 100, top: 140 }],
+      [{ left: 100, top: 199 }],
+    ), [{ x: 0, y: 59 }], 'the minimized one-card repro derives the exact vertical handoff');
+    assert.deepEqual(lootboxFlightLandingTranslations(
+      [{ left: 10, top: -84 }, { left: 190, top: -84 }, { left: 100, top: 190 }],
+      [{ left: 13, top: 73 }, { left: 187, top: 73 }, { left: 100, top: 349 }],
+    ), [
+      { x: 3, y: 157 },
+      { x: -3, y: 157 },
+      { x: 0, y: 159 },
+    ], 'the three-card mobile boundary preserves each independently wrapped target');
+    assert.deepEqual(lootboxFlightLandingTranslations(
+      [{ left: 5, top: 7 }, { left: 8, top: 9 }],
+      [{ left: 5, top: 7 }],
+    ), [], 'a card-count mismatch cannot apply offsets to the wrong rewards');
+    assert.deepEqual(lootboxFlightLandingTranslations([], []), [],
+      'the empty boundary has no synthetic landing');
+  });
+
   test('terminal actions describe the outcome instead of pretending to collect it', () => {
     assert.equal(revealTerminalActionLabel({ unlucky: true }), 'UNLUCKY');
     assert.equal(revealTerminalActionLabel({ kind: 'pack' }), 'GOOD LUCK');
@@ -328,6 +349,68 @@ describe('normalizeSequence', () => {
     assert.equal(seq.boxIndex, '47', 'the branded box can identify the RNG batch');
     assert.equal(seq.boxSpinCount, 1);
     assert.equal(seq.big, true, 'epic card marks the sequence big');
+  });
+
+  test('Craps pass awards become denomination-specific opening cards', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      lootboxIndex: 48,
+      legs: [
+        {
+          legType: 'opened', lootboxIndex: 48, wholeTickets: 0,
+          futureTickets: 0, futureLevel: 6, flip: 0n,
+        },
+        {
+          legType: 'crapsPasses',
+          crapsNormalPasses: 2,
+          crapsHighPasses: 1,
+          reservedDay: 73,
+        },
+      ],
+    });
+
+    assert.deepEqual(seq.cards.map((card) => card.type), ['craps-pass', 'craps-pass']);
+    assert.deepEqual(seq.cards.map((card) => card.passTier), ['normal', 'high']);
+    assert.deepEqual(seq.cards.map((card) => card.value), ['2', '1']);
+    assert.equal(seq.cards[0].label, 'CRAPS BATTLEPASSES');
+    assert.match(seq.cards[0].sub, /all 7 scheduled windows · Banked for a future day/);
+    assert.equal(seq.cards[1].label, 'HIGH-ROLLER CRAPS BATTLEPASS');
+    assert.match(seq.cards[1].sub, /Day 73 reserved/,
+      'the contract gives the one reserved seat to the more valuable high pass');
+    assert.equal(seq.cards[0].rarity, 'rare');
+    assert.equal(seq.cards[1].rarity, 'epic');
+    assert.equal(seq.big, true);
+    assert.equal(seq.cards.some((card) => card.type === 'nowin'), false,
+      'a pass-only box is never replaced by the old zero-ticket/zero-FLIP fallback');
+    assert.deepEqual(seq.lootboxBoxGroups[0].cards, seq.cards,
+      'an aggregate pass event belongs to its sole physical box when attribution is exact');
+    assert.match(REVEAL_SRC,
+      /card\.type === 'craps-pass'[\s\S]*?#buildCrapsPassBadge\(card\)/,
+      'the pass card mounts the established Craps battle badge rather than a generic glyph');
+    assert.match(REVEAL_SRC, /card\.passTier === 'high' \? 'HIGH ROLLER' : 'BATTLEPASS'/,
+      'the normal reward badge names the Craps Battlepass directly');
+    assert.match(REVEAL_SRC, /for \(const \[symbol, color\] of \[\[1, 6\], \[4, 4\]\]\)/,
+      'the pass badge reuses the silver 2 and blue 5 dice from the live game');
+    assert.doesNotMatch(REVEAL_SRC, /craps-battle-badge-v1\.png/,
+      'the discarded painted logo is not retained as a hidden dependency');
+    assert.match(APP_CSS,
+      /\.rvl-card--craps-pass\[data-pass-tier="high"\][\s\S]*?--craps-pass-rgb:\s*245, 183, 60/,
+      'high-roller passes have a visibly separate gold treatment');
+  });
+
+  test('presale pass counts stay attached to their physical opening card', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      lootboxIndex: 49,
+      legs: [{
+        legType: 'opened', source: 'presale', lootboxIndex: 49,
+        wholeTickets: 0, flip: 0n, crapsNormalPasses: 3, crapsHighPasses: 0,
+      }],
+    });
+    assert.equal(seq.cards.length, 1);
+    assert.equal(seq.cards[0].type, 'craps-pass');
+    assert.equal(seq.cards[0].value, '3');
+    assert.equal(seq.lootboxBoxGroups[0].cards[0], seq.cards[0]);
   });
 
   test('whale pass leg → legendary card', () => {
@@ -2593,8 +2676,8 @@ describe('reveal-overlay element', () => {
     assert.doesNotMatch(APP_CSS, /rvl-lootbox-flight-layer|rvl-lootbox-flight[^}]*steps\(/s,
       'the card flight has no discrete layer switch that can pop between frames');
     assert.match(cardRiseKeyframes,
-      /@keyframes rvl-lootbox-card-rise\s*\{\s*from\s*\{[^}]*translate3d\(var\(--rvl-card-launch-x\), clamp\(82px, 17dvh, 104px\), 0\) scale\(0\.08\)[^}]*\}\s*to\s*\{[^}]*translate3d\(0, -24px, 0\) scale\(1\)/s,
-      'the lightweight backs use one uninterrupted compositor transform from seam to fan');
+      /@keyframes rvl-lootbox-card-rise\s*\{\s*from\s*\{[^}]*translate3d\(var\(--rvl-card-launch-x\), clamp\(82px, 17dvh, 104px\), 0\) scale\(0\.08\)[^}]*\}\s*to\s*\{[^}]*translate3d\(var\(--rvl-card-land-x, 0px\), var\(--rvl-card-land-y, -24px\), 0\) scale\(1\)/s,
+      'the lightweight backs use one uninterrupted compositor transform from the seam to the measured terminal position');
     assert.doesNotMatch(cardRiseKeyframes, /\d+%\s*\{/,
       'the card flight has no intermediate transform stop that can jerk between poses');
     assert.match(APP_CSS,
@@ -2605,8 +2688,20 @@ describe('reveal-overlay element', () => {
       'the opening builds lightweight two-sided shells before the case moves');
     assert.doesNotMatch(flightStageMethod, /this\.#buildCard\(/,
       'the real card DOM does not compete with the flight animation');
-    assert.match(flightFaceMethod, /const el = this\.#buildCard\(card, true\)/,
-      'the actual reward card is mounted on the hidden face after flight settles');
+    assert.match(flightFaceMethod,
+      /const prepared = this\.#lootboxLanding\?\.sequence === seq[\s\S]*?const el = prepared \|\| this\.#buildCard\(card, true\)/,
+      'the prepared terminal reward node is mounted on the hidden face after flight settles');
+    assert.match(flightStageMethod,
+      /this\.#renderSummary\(seq\)[\s\S]*vessel\.hidden = true[\s\S]*targetCards\.map\(\(card\) => card\.getBoundingClientRect\(\)\)[\s\S]*--rvl-card-land-x[\s\S]*--rvl-card-land-y/s,
+      'the flight lands on real final-layout rectangles rather than a viewport-specific fixed offset');
+    assert.doesNotMatch(flightStageMethod, /await _prepareLootboxRewardFaces\(summary\)/,
+      'terminal measurement cannot yield a paint while the physical case is still closed');
+    assert.match(APP_CSS,
+      /\.rvl-lootbox-flight--measuring\s*\{[^}]*visibility:\s*hidden;[^}]*\}[\s\S]*?\.rvl-lootbox-flight--measuring::before\s*\{[^}]*animation:\s*none;[^}]*\}/s,
+      'the measurable flight and its glow remain non-painting until release alignment completes');
+    assert.match(REVEAL_SRC,
+      /if \(vessel\) vessel\.hidden = true;\s*if \(isLootbox\) this\.#landLootboxRewardFlight\(seq\)/,
+      'the same reward nodes move into the prepared summary in the vessel handoff task');
     assert.match(APP_CSS,
       /\.rvl-lootbox-flight__front\s*\{[^}]*rotateY\(180deg\)/s,
       'the real reward starts concealed on the reverse face');
@@ -2629,8 +2724,8 @@ describe('reveal-overlay element', () => {
       /\.rvl-lootbox-flight__front \.rvl-reward-pack\.rvl-pack,[\s\S]*?\.rvl-lootbox-flight__front \.rvl-reward-lootbox\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*none;[^}]*animation:\s*none;/s,
       'nested pack and case artwork does not run a second fade-and-slide inside the card turn');
     assert.match(APP_CSS,
-      /\.rvl-bursting \.rvl-lootbox-flight--settled \.rvl-lootbox-flight__grid > \.rvl-card--mini\s*\{[^}]*opacity:\s*1;[^}]*translate3d\(0, -24px, 0\)[^}]*animation:\s*none;/s,
-      'skipping the flight commits every card to the same settled pose');
+      /\.rvl-bursting \.rvl-lootbox-flight--settled \.rvl-lootbox-flight__grid > \.rvl-card--mini\s*\{[^}]*opacity:\s*1;[^}]*translate3d\(var\(--rvl-card-land-x, 0px\), var\(--rvl-card-land-y, -24px\), 0\)[^}]*animation:\s*none;/s,
+      'skipping the flight commits every card to its measured terminal pose');
     assert.match(APP_CSS,
       /\.rvl-lootbox-flight--revealing\.rvl-lootbox-flight--revealed \.rvl-lootbox-flight__turn\s*\{[^}]*rotateY\(180deg\)[^}]*animation:\s*none;/s,
       'skipping the turn commits the already-painted real face');

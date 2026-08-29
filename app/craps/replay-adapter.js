@@ -70,6 +70,7 @@ function viewerFrames(trace) {
       point: event.pointAfter || null,
       payoutBets: event.payoutBets,
       lostBets: event.lostBets,
+      retiredBets: event.retiredBets,
       shooterBoost: event.shooterBoost,
       survival,
       terminal: event.terminal,
@@ -102,6 +103,7 @@ function alignedOpponentEvents(trace, viewerTrace) {
     return event == null ? null : Object.freeze({
       payoutBets: event.payoutBets,
       lostBets: event.lostBets,
+      retiredBets: event.retiredBets,
       deltaFlip: displayFlip(event.deltaWei),
       bankrollFlip: displayFlip(event.bankrollAfterWei),
       shooter: event.shooter,
@@ -142,11 +144,13 @@ function progressiveForViewer(manifest, viewerBetId) {
     ? winner === viewerBetId ? 'won-you' : 'won-other'
     : 'live';
   return Object.freeze({
-    rolls: progressive.rollsBefore,
-    threshold: progressive.thresholdRolls,
+    // Renamed with the wire format: these are SCORE BASIS POINTS (10,000 = 1x), the winner's
+    // high point over its own starting bankroll — not roll counts. See replay-contract.js.
+    scoreBps: progressive.scoreBpsBefore,
+    thresholdScoreBps: progressive.thresholdScoreBps,
     amountFlip: progressive.amountWei == null ? null : displayFlip(progressive.amountWei),
     status,
-    wonAtRoll: progressive.wonAtRoll,
+    wonAtScoreBps: progressive.wonAtScoreBps,
   });
 }
 
@@ -179,10 +183,14 @@ export function createCrapsReplayTableModel(artifacts) {
     tableIndex: manifest.battleKey,
     battleSlot: manifest.settlement.boundSlot,
     viewerBetId: viewer.betId,
+    fieldEntrants: manifest.field.entrants,
+    rankTimeline: viewer.rankByRoll ?? Object.freeze([]),
     entryMultiple: viewer.entryMultiple,
     bets: boardChipCounts(viewer, manifest),
     playedFlip: displayFlip(manifest.terms.boardStakeWei),
     battleStakeFlip: displayFlip(manifest.terms.battleStakeWei),
+    bountyPoolWei: manifest.terms.bountyPoolWei,
+    addedFlipWei: manifest.terms.addedFlipWei,
     bankrollFlip: displayFlip(viewer.bankrollInWei),
     goalFlip: displayFlip(viewer.goalWei),
     rolls: rollsHex(viewport.tape),

@@ -30,6 +30,7 @@ const {
   RECORD_KIND_SPIN,
   RECORD_KIND_LUCKBOX,
   RECORD_KIND_BUY,
+  RECORD_KIND_DICE_RUN,
 } = await import('../../app/records.js');
 
 const {
@@ -101,6 +102,17 @@ describe('record claim bar', () => {
     assert.equal(recordClaimTarget(null, RECORD_KIND_BUY), null);
     assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 101n), 122n);
     assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 0n), 100n);
+
+    const dice = normalizeRecords({ records: [{
+      kind: RECORD_KIND_DICE_RUN,
+      player: '0xdice',
+      value: '2345678',
+    }] });
+    assert.equal(recordClaimTarget(dice, RECORD_KIND_DICE_RUN), 2_345_679n,
+      'Dice Run pays on the next strict improvement, not a 20% jump');
+    assert.equal(candidateClaimsRecord(dice, RECORD_KIND_DICE_RUN, 2_345_678n), false);
+    assert.equal(candidateClaimsRecord(dice, RECORD_KIND_DICE_RUN, 2_345_679n), true);
+    assert.equal(recordClaimTargetForMark(RECORD_KIND_DICE_RUN, 0n), 1_000_000n);
   });
 });
 
@@ -109,6 +121,7 @@ test('every bounty shortcut identifies the quest action it can complete', () => 
   assert.equal(recordBountyQuestProduct(RECORD_KIND_LUCKBOX), 'lootbox');
   assert.equal(recordBountyQuestProduct(RECORD_KIND_FLIP), 'coinflip');
   assert.equal(recordBountyQuestProduct(RECORD_KIND_SPIN), 'degenerette-eth');
+  assert.equal(recordBountyQuestProduct(RECORD_KIND_DICE_RUN), null);
   assert.match(COMPONENT, /records-bounty-quest-bonus/);
   assert.match(CSS, /records-bounty-dialog__quest-bonus/);
   const spinEditors = COMPONENT.slice(
@@ -162,6 +175,15 @@ describe('one-confirm Biggest transaction presets', () => {
     assert.equal(quote.targetWei, 150n);
     assert.equal(quote.costWei, 1_500n);
     assert.equal(quote.payoutWei, null, 'the stale indexed clock cannot price the new mark');
+  });
+
+  test('Dice Run stays view-only because scheduled field finalization sets it', () => {
+    assert.equal(recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_DICE_RUN,
+      liveMarkWei: 1_000_000n,
+      today: 20,
+    }), null);
   });
 
   test('ticket activation carries an explicit whole-ticket count into the guarded buy path', () => {
@@ -292,6 +314,17 @@ describe('record units are never interchangeable', () => {
     assert.equal(suffix, 'TICKETS');
   });
 
+  test('the Dice Run record reads score basis points as an exact bankroll multiple', () => {
+    assert.deepEqual(formatRecordValue(RECORD_KIND_DICE_RUN, 2_345_678n), {
+      amount: '234.5678',
+      suffix: '×',
+    });
+    assert.deepEqual(formatCompactRecordValue(RECORD_KIND_DICE_RUN, 2_345_678n), {
+      amount: '234',
+      suffix: '×',
+    });
+  });
+
   test('compact poker bounties keep roughly two significant figures', () => {
     assert.equal(formatCompactBountyWei(987n * FLIP), '990');
     assert.equal(formatCompactBountyWei(1_234n * FLIP), '1.2K');
@@ -342,15 +375,15 @@ describe('record units are never interchangeable', () => {
     }, 'open entry floors use the same compact treatment as held records');
   });
 
-  test('the Biggest widget puts Pack Ripped third and FLIP last', () => {
-    const records = [0, 1, 2, 3].map((kind) => ({ kind }));
-    assert.deepEqual(orderBiggestRecords(records).map((record) => record.kind), [1, 2, 3, 0]);
-    assert.deepEqual(records.map((record) => record.kind), [0, 1, 2, 3],
+  test('the Biggest widget leads with Dice Run and keeps FLIP last', () => {
+    const records = [0, 1, 2, 3, 4].map((kind) => ({ kind }));
+    assert.deepEqual(orderBiggestRecords(records).map((record) => record.kind), [4, 1, 2, 3, 0]);
+    assert.deepEqual(records.map((record) => record.kind), [0, 1, 2, 3, 4],
       'display sorting does not mutate the authoritative record snapshot');
   });
 
   test('every kind has presentation facts and a stated entry floor', () => {
-    assert.equal(RECORD_KINDS.length, 4);
+    assert.equal(RECORD_KINDS.length, 5);
     for (const meta of RECORD_KINDS) {
       assert.equal(recordKindMeta(meta.kind), meta);
       assert.ok(meta.label && meta.floorText, `kind ${meta.kind} needs a label and floor copy`);
@@ -360,28 +393,31 @@ describe('record units are never interchangeable', () => {
       'BIGGEST DEGENERETTE',
       'BIGGEST LUCKBOX',
       'BIGGEST PACK RIPPED',
+      'BIGGEST DICE RUN',
     ]);
     assert.deepEqual(RECORD_KINDS.map((meta) => meta.short), [
       'FLIP',
       'DEGENERETTE',
       'LUCKBOX',
       'PACK RIPPED',
+      'DICE RUN',
     ]);
     assert.deepEqual(RECORD_KINDS.map((meta) => meta.floorText), [
       '200,000 FLIP',
       '1 ETH',
       '5 ETH',
       '100 TICKETS',
+      '100×',
     ]);
     assert.equal(recordKindMeta(9), null);
   });
 });
 
 describe('normalizeRecords', () => {
-  test('always yields four ordered slots, even from an empty payload', () => {
+  test('always yields five ordered slots, even from an empty payload', () => {
     const state = normalizeRecords(null);
-    assert.equal(state.records.length, 4);
-    assert.deepEqual(state.records.map((r) => r.kind), [0, 1, 2, 3]);
+    assert.equal(state.records.length, 5);
+    assert.deepEqual(state.records.map((r) => r.kind), [0, 1, 2, 3, 4]);
     assert.equal(state.recordPoolWei, 0n);
     assert.ok(state.records.every((r) => r.held === false && r.player === null));
   });
@@ -430,8 +466,8 @@ describe('normalizeRecords', () => {
         { kind: 0, player: '0xa', value: '1', clockDay: null },
         { kind: 1, player: '0xb', value: '1', clockDay: 2 },
       ],
-    }, null, [8, 5, 3, 6]);
-    assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
+    }, null, [8, 5, 3, 6, 7]);
+    assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6, 7]);
   });
 
   test('a newly claimed chain mark replaces the stale indexed amount', () => {
@@ -443,7 +479,7 @@ describe('normalizeRecords', () => {
         barToBeat: '120',
         clockDay: 10,
       }],
-    }, null, [null, 14, null, null], [0n, 125n, 0n, 0n]);
+    }, null, [null, 14, null, null, null], [0n, 125n, 0n, 0n, 0n]);
     const spin = state.records[RECORD_KIND_SPIN];
     assert.equal(spin.value, 125n, 'the mined mark is visible before the indexer catches up');
     assert.equal(spin.barToBeat, 150n, 'the next target follows the authoritative mark');
@@ -454,13 +490,14 @@ describe('normalizeRecords', () => {
 });
 
 describe('live bounty pool', () => {
-  test('decodes all four uint24 clocks from Coinflip storage slot 4', () => {
+  test('decodes all five uint24 clocks from Coinflip storage slot 4', () => {
     const packed = 9n
       | (8n << 32n)
       | (5n << 56n)
       | (3n << 80n)
-      | (6n << 104n);
-    assert.deepEqual(decodeRecordClockSlot(`0x${packed.toString(16)}`), [8, 5, 3, 6]);
+      | (6n << 104n)
+      | (7n << 176n);
+    assert.deepEqual(decodeRecordClockSlot(`0x${packed.toString(16)}`), [8, 5, 3, 6, 7]);
   });
 
   test('fetches record history from the API but the displayed pool from chain', async () => {
@@ -488,30 +525,32 @@ describe('live bounty pool', () => {
         records: [{ kind: 0, player: '0xa', value: '5', clockDay: null }],
       }),
       pool: async () => 36_000n,
-      clocks: async () => [8, 5, 3, 6],
+      clocks: async () => [8, 5, 3, 6, 7],
     });
     try {
       const state = await fetchRecords();
       assert.equal(state.recordPoolWei, 36_000n);
-      assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
+      assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6, 7]);
     } finally {
       __resetRecordsReadersForTest();
     }
   });
 
-  test('fetches all four live marks so a claim amount updates in its mined block', async () => {
+  test('fetches all five live marks so a claim amount updates in its mined block', async () => {
     __setRecordsReadersForTest({
       json: async () => ({
         recordPool: '48000',
         records: [{ kind: 1, player: '0xold', value: '100', clockDay: 8 }],
       }),
       pool: async () => 36_000n,
-      clocks: async () => [1, 9, 1, 1],
-      marks: async () => [5n, 125n, 7n, 8n],
+      clocks: async () => [1, 9, 1, 1, 10],
+      marks: async () => [5n, 125n, 7n, 8n, 2_345_678n],
     });
     try {
       const state = await fetchRecords();
-      assert.deepEqual(state.records.map((record) => record.value), [5n, 125n, 7n, 8n]);
+      assert.deepEqual(state.records.map((record) => record.value), [
+        5n, 125n, 7n, 8n, 2_345_678n,
+      ]);
       assert.equal(state.records[1].player, null);
     } finally {
       __resetRecordsReadersForTest();
@@ -522,13 +561,15 @@ describe('live bounty pool', () => {
     __setRecordsReadersForTest({
       json: async () => { throw new Error('indexer restarting'); },
       pool: async () => 36_000n,
-      clocks: async () => [1, 2, 3, 4],
-      marks: async () => [5n, 6n, 7n, 8n],
+      clocks: async () => [1, 2, 3, 4, 5],
+      marks: async () => [5n, 6n, 7n, 8n, 2_000_000n],
     });
     try {
       const state = await fetchRecords();
       assert.equal(state.recordPoolWei, 36_000n);
-      assert.deepEqual(state.records.map((record) => record.value), [5n, 6n, 7n, 8n]);
+      assert.deepEqual(state.records.map((record) => record.value), [
+        5n, 6n, 7n, 8n, 2_000_000n,
+      ]);
     } finally {
       __resetRecordsReadersForTest();
     }
@@ -674,7 +715,7 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood\.webp"/);
     assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
       'the generated wordmark replaces the old duplicate text treatment');
-    assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 11rem\)/s,
+    assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 10\.4rem\)/s,
       'the Texas wordmark stays compact inside the desktop identity column');
     assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*4rem/s,
       'the artwork cannot inflate the collapsed rail');
@@ -696,7 +737,7 @@ describe('rail wiring', () => {
     assert.doesNotMatch(COMPONENT, />THE RECORDS</);
   });
 
-  test('collapses to the live pool plus four portrait-and-amount leaders', () => {
+  test('collapses to five portrait-and-amount leaders with the pool under the wordmark', () => {
     assert.match(COMPONENT, /<details class="records-rail__disclosure">/);
     assert.match(COMPONENT, /<summary class="records-rail__summary"/);
     assert.match(COMPONENT, /data-bind="records-leaders"/);
@@ -721,7 +762,10 @@ describe('rail wiring', () => {
       'each compact record bubble is a real keyboard-accessible action');
     assert.match(COMPONENT, /this\.#openBountyDialog\(record\.kind\)/);
     assert.match(COMPONENT, /FLIP_LOGO = '\/whitepaper\/flame-logo-split\.svg'/);
-    assert.match(COMPONENT, /records-rail__pot-label">BOUNTY POOL/);
+    assert.match(COMPONENT, /records-rail__pot-label">POOL/);
+    assert.match(COMPONENT,
+      /records-rail__identity[\s\S]*?records-rail__wordmark[\s\S]*?records-rail__pot[\s\S]*?records-rail__leaders/,
+      'the compact shared pool lives inside the logo lockup before the five records');
     assert.doesNotMatch(COMPONENT, /4 RECORDS · 1 LIVE RESERVE|records-rail__pot-meta/,
       'the compact pool poster has no explanatory footer');
     assert.match(COMPONENT, /records-rail__pot-logo/,
@@ -740,16 +784,20 @@ describe('rail wiring', () => {
       'the pool gets one restrained clipped-corner bounty-poster cue');
     assert.match(CSS, /records-rail__pot::before\s*\{[^}]*border:\s*1px solid/s,
       'a quiet inset rule completes the poster treatment');
-    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1rem/s);
+    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*0\.65rem/s);
     assert.match(COMPONENT, /RECORD_CARD_ART = '\/app\/assets\/biggest-bounty-card-v13\.webp'/,
-      'one blank asymmetric frame keeps all four record cards visually uniform');
+      'one blank asymmetric frame keeps all five record cards visually uniform');
     assert.doesNotMatch(COMPONENT, /\/app\/assets\/quests\/(?:degenerette-eth|buy-ticket-luckbox|foil-pack|coinflip)\.svg/,
       'the former right-side game icons no longer compete with the title');
     assert.match(COMPONENT,
       /<img class="records-rail__leader-card-art"[\s\S]*?src="\$\{RECORD_CARD_ART\}"[\s\S]*?alt="" aria-hidden="true"/,
       'the blank authored frame is decorative while live text supplies the title');
     assert.match(COMPONENT, /\[RECORD_KIND_FLIP, 'COINFLIP'\]/,
-      'the fourth record is presented as COINFLIP while its amount remains denominated in FLIP');
+      'the final record is presented as COINFLIP while its amount remains denominated in FLIP');
+    assert.match(COMPONENT, /\[RECORD_KIND_DICE_RUN, 'DICE RUN'\]/,
+      'Dice Run is the first display category while retaining on-chain kind 4');
+    assert.match(COMPONENT, /const interactive = [^;]*&& !isDiceRun/,
+      'scheduled Dice Run is informational rather than a fake one-click action');
     assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label|records-rail__leader-kind-icon/,
       'the prior watermark plus duplicate text interpretation is removed');
     assert.match(COMPONENT,
@@ -903,21 +951,25 @@ describe('rail wiring', () => {
     }
     assert.match(CSS, /records-rail\s*\{[^}]*container-name:\s*records-rail[^}]*container-type:\s*inline-size/s,
       'responsive sizing follows the widget width, not only the browser viewport');
-    assert.match(CSS, /@container records-rail \(max-width: 840px\)[\s\S]*?"leaders leaders leaders"/,
+    assert.match(CSS, /@container records-rail \(max-width: 840px\)[\s\S]*?"leaders leaders"/,
       'the records wrap only when the one-line rail no longer fits');
     assert.match(CSS,
       /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leaders\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
-      'compact rails use two substantial ticket columns instead of squeezing all four into one row');
+      'compact rails use two substantial ticket columns instead of squeezing all five into one row');
     assert.match(CSS,
       /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leader\s*\{[^}]*container-name:\s*records-leader[^}]*container-type:\s*inline-size/,
       'only wrapped compact tickets establish the ticket-relative sizing context');
     assert.match(CSS,
       /@container records-rail \(max-width: 840px\)[\s\S]*?records-rail__leader-title > span\s*\{[^}]*font-size:\s*clamp\(0\.78rem, 5cqw, 1\.25rem\)[\s\S]*?records-rail__leader-value\s*\{[^}]*font-size:\s*clamp\(0\.6rem, 3\.8cqw, 0\.98rem\)/,
       'mobile title and right-side record value grow with each ticket while desktop keeps its bounded sizing');
-    assert.match(CSS, /records-rail__summary\s*\{[^}]*grid-template-columns:\s*10rem minmax\(26rem, 1fr\) 11\.5rem 1\.25rem/s,
-      'fixed side tracks keep the record group evenly spaced between the wordmark and pool');
+    assert.match(CSS, /records-rail__summary\s*\{[^}]*grid-template-columns:\s*11rem minmax\(32rem, 1fr\) 1\.25rem/s,
+      'the pool no longer consumes a full summary column beside the five records');
     assert.match(CSS, /records-rail__leaders\s*\{[^}]*max-width:\s*none[^}]*justify-self:\s*stretch/s,
-      'the four compact records fill the complete center track instead of leaving capped dead space');
+      'the five compact records fill the complete center track instead of leaving capped dead space');
+    assert.match(CSS, /records-rail__cards\s*\{[^}]*grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/s,
+      'expanded details also acknowledge the fifth record');
+    assert.match(CSS, /:last-child:nth-child\(odd\)[^}]*width:\s*calc\(\(100% - var\(--records-leader-gap\)\) \/ 2\)/s,
+      'the fifth compact card centers cleanly on wrapped layouts');
     assert.ok(CSS.includes('body.layout-basic app-records-rail[hidden]'));
     assert.ok(CSS.includes('display: none !important'));
   });

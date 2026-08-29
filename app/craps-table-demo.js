@@ -1,7 +1,7 @@
 import {
   CRAPS_TABLE_REPLAY_EVENT,
   formatCrapsWei,
-} from '/app/components/app-craps-table.js?v=point-puck-v20';
+} from '/app/components/app-craps-table.js?v=line-lifecycle-v22';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
   SIM_CRAPS_REPLAY_FEATURED,
@@ -56,6 +56,8 @@ function openTable() {
     host?.open({
       opener: openButton,
       replay: { ...SIM_CRAPS_REPLAY_ARTIFACTS, viewer },
+      bountyPoolFlip: params.get('bountyPool') || 84_900,
+      addedFlip: params.get('added') || 75_000,
       autoRoll: params.get('manual') !== 'true',
     });
     receipt.textContent = `SIM BUNDLE · ${viewer.name} · ${viewer.handsPlayed} shooters · ${viewer.totalRolls} rolls`;
@@ -122,6 +124,8 @@ function openTable() {
     balanceFlip: params.get('balance') || '25000',
     playedFlip: params.get('played') || 600,
     battleStakeFlip: params.get('battleStake') || 300,
+    bountyPoolFlip: params.get('bountyPool') || 84_900,
+    addedFlip: params.get('added') || 75_000,
     completedShooters: params.get('shooters') || 0,
     tableIndex: params.get('table') || '1842',
     tableResolved: rolled,
@@ -142,7 +146,7 @@ function openTable() {
       threshold: params.get('jackpotThreshold') || 100,
       amountFlip: params.get('jackpotAmount') || 1_250_000,
       status: jackpotWinner === 'other' ? 'won-other' : jackpotWinner === 'you' ? 'won-you' : 'live',
-      wonAtRoll: params.get('jackpotWinnerRoll'),
+      wonAtScoreBps: params.get('jackpotWinnerScoreBps'),
     },
     autoRoll: params.get('manual') !== 'true',
     rakeBps: params.get('rakeBps') || 5000,

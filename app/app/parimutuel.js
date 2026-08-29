@@ -1,16 +1,18 @@
-// /app/app/parimutuel.js — the two OVER/UNDER books (user ask: parimutuel
-// actions in a widget while they are open).
+// /app/app/parimutuel.js — the Growth OVER/UNDER book (user ask: parimutuel
+// actions in a widget while it is open).
 //
 // On-chain surface, verified against degenerus-audit/contracts/DegenerusParimutuel.sol:
-//   GROWTH  placeBet(player, over)            :257   round = LEVEL
-//           claim(player, rounds[])           :303
-//           marketState(player, round)         :759   view — book + your position
-//   VOLUME  placeVolumeBet(player, over)      :440   round = day index + 1
-//           claimVolume(player, rounds[])     :499
-//           volumeMarketState(player, round)  :611   view — adds the `voided` case
-//           volumeBetCredit()                 :485   view — the decaying placement credit
+//   GROWTH  placeBet(player, over)            round = LEVEL
+//           claim(player, rounds[])
+//           claimRound(round, players[])      permissionless winner crank
+//           marketState(player, round)        view — book + your position
 //
-// Both books take ONE fixed 1,000 FLIP bet per address per round (STAKE :66),
+// The ticket-VOLUME book was excised from the contract at the run-43 re-vendor
+// (audit 0bbc82a6b): placeVolumeBet/claimVolume/claimVolumeRound/
+// volumeMarketState/volumeBetCredit and the VolumeBet*/VolumeRoundSealed events
+// no longer exist on chain, so this module carries no volume surface.
+//
+// The book takes ONE fixed 1,000 FLIP bet per address per round (STAKE :66),
 // burned at placement and re-minted to winners through the coinflip rail. FLIP is
 // UNSCALED 18-dec on both chains (only ETH /1M-scales on testnet), so the stake is
 // a plain 1000e18 on Sepolia too.
@@ -27,7 +29,7 @@
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
-import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
+import { CONTRACTS } from './chain-config.js';
 import { sharedReadProvider } from './read-provider.js';
 
 // ---------------------------------------------------------------------------
@@ -41,27 +43,14 @@ const PARIMUTUEL_ABI = [
   'function claim(address player, uint24[] rounds) external returns (uint256)',
   'function claimRound(uint24 round, address[] players) external returns (uint256)',
   'function marketState(address player, uint24 round) external view returns (uint24 openRound, uint128 overCount, uint128 underCount, uint256 questReward, uint8 side, bool claimed, uint8 outcome, uint256 payout)',
-  // -- ticket-volume book (round = day index + 1) --
-  'function placeVolumeBet(address player, bool over) external',
-  'function claimVolume(address player, uint24[] rounds) external returns (uint256)',
-  'function claimVolumeRound(uint24 round, address[] players) external returns (uint256)',
-  'function volumeMarketState(address player, uint24 round) external view returns (uint24 openRound, uint128 overCount, uint128 underCount, uint8 side, bool claimed, uint8 outcome, bool voided, uint256 payout)',
-  'function volumeBetCredit() external view returns (uint256)',
   // -- events (receipt-log-first confirmation, CF-05) --
   'event BetPlaced(address indexed player, uint24 indexed round, bool over, uint256 questReward)',
-  'event VolumeBetPlaced(address indexed player, uint24 indexed round, bool over, uint256 credit)',
   'event BetClaimed(address indexed player, uint24 indexed round, uint8 outcome, uint256 payout)',
-  'event VolumeBetClaimed(address indexed player, uint24 indexed round, uint8 outcome, uint256 payout)',
-  // The seal carries the volume series the contract does not keep readable
-  // (lastVolumeRound / prevVolume are private): `total` is the round's own
-  // volume and `previous` the benchmark it was scored against, both in RAW
-  // PURCHASE UNITS — 400 = one whole ticket.
-  'event VolumeRoundSealed(uint24 indexed round, uint48 total, uint48 previous)',
-  // Every revert placeBet / placeVolumeBet can produce must be declared here or
-  // ethers cannot name it: error.revert stays null, the registry lookup below is
-  // keyed by NAME, and the real reason collapses into the generic unexpected-error
-  // copy. DegenerusParimutuel.sol:285/290/291/296 (growth) and :468/473/474/480
-  // (volume) are the four; NothingToSettle is the claim path (:370).
+  'event GrowthRoundSealed(uint24 indexed round, bool over)',
+  // Every revert placeBet can produce must be declared here or ethers cannot
+  // name it: error.revert stays null, the registry lookup below is keyed by
+  // NAME, and the real reason collapses into the generic unexpected-error
+  // copy. NothingToSettle is the claim path.
   'error NotApproved()',
   'error MarketClosed()',
   'error AlreadyBet()',
@@ -86,10 +75,6 @@ const GAME_GROWTH_ABI = [
   'function jackpotCompressionTier() external view returns (uint8)',
   'function purchaseInfo() external view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
   'function prizePoolTargetView() external view returns (uint256)',
-  // Emitted from the mint module through GAME delegatecall. Summing these
-  // after the previous volume seal reconstructs the live manual-ticket count
-  // without reading the packed storage slot directly.
-  'event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn)',
 ];
 
 // Canonical Multicall3 deployment on Base Sepolia and Ethereum. Historical
@@ -202,162 +187,11 @@ function _readContract() {
   return _buildContract(_readerProvider());
 }
 
-/**
- * The most recent sealed volume round — "what the current round has to beat".
- *
- * Sealed volume is only in the logs (lastVolumeRound / prevVolume are private),
- * and public RPCs cap eth_getLogs at a block range (Base Sepolia: 2,000, which
- * is why a from-zero query returned nothing at all). So: walk BACKWARDS from the
- * head in under-cap chunks and stop at the first seal. A volume round is one game
- * day — ~300 blocks on the testnet overlay, ~7,200 on mainnet — so the cap below
- * reaches the previous round on both.
- *
- * @returns {Promise<{round: number, total: bigint, previous: bigint,
- *   blockNumber: number}|null>}
- */
+// eth_getLogs chunking for readRoundWinners: public RPCs cap the block range
+// (Base Sepolia: 2,000, which is why a from-zero query returned nothing at
+// all), so placement-log discovery walks backwards in under-cap chunks.
 const LOG_CHUNK_BLOCKS = 1800;
 const LOG_CHUNK_LIMIT = 10;
-
-export async function readLastVolumeSeal({ round } = {}) {
-  const provider = _readerProvider();
-  const contract = _readContract();
-  const wantedRound = Number(round);
-  const hasWantedRound = Number.isInteger(wantedRound) && wantedRound > 0;
-  let head;
-  try {
-    head = Number(await provider.getBlockNumber());
-  } catch (_e) {
-    return null;
-  }
-  if (!Number.isFinite(head) || head <= 0) return null;
-
-  const queriedRanges = new Set();
-  const readRange = async (from, to) => {
-    const rangeKey = `${from}:${to}`;
-    if (queriedRanges.has(rangeKey)) return undefined;
-    queriedRanges.add(rangeKey);
-    let logs;
-    try {
-      // Once volumeMarketState has told the panel the contract-authoritative
-      // round, filter for that exact seal. Keep the client-side round check for
-      // injected/legacy providers that ignore indexed filter arguments.
-      logs = await contract.queryFilter(
-        contract.filters.VolumeRoundSealed(hasWantedRound ? wantedRound : undefined),
-        from,
-        to,
-      );
-    } catch (_e) {
-      return null;
-    }
-    if (!logs || logs.length === 0) return undefined;
-    const matching = hasWantedRound
-      ? logs.filter((log) => Number(log?.args?.round ?? log?.args?.[0] ?? 0) === wantedRound)
-      : logs;
-    if (matching.length === 0) return undefined;
-    const latest = matching[matching.length - 1];
-    const a = latest.args;
-    return {
-      round: Number(a.round ?? a[0] ?? 0),
-      total: BigInt(a.total ?? a[1] ?? 0),
-      previous: BigInt(a.previous ?? a[2] ?? 0),
-      blockNumber: Number(latest.blockNumber ?? 0),
-    };
-  };
-
-  // An old but still-unclaimed bet can be far outside the recent head scan.
-  // On Base, derive a tight block neighborhood from this deployment's day
-  // boundary and two-second block cadence. This remains four bounded log calls,
-  // not an RPC-hostile deploy-to-head query.
-  if (hasWantedRound
-    && [8_453, 84_532].includes(Number(CHAIN.id))
-    && Number.isInteger(Number(CHAIN.deployBlock))
-    && Number.isFinite(Number(VOLUME_WINDOW.deployDayBoundary))) {
-    try {
-      const deployBlockNumber = Number(CHAIN.deployBlock);
-      const deployBlock = await provider.getBlock(deployBlockNumber);
-      const deployTimestamp = Number(deployBlock?.timestamp);
-      const sealTimestamp = Number(VOLUME_WINDOW.anchor)
-        + Number(VOLUME_WINDOW.period)
-          * (Number(VOLUME_WINDOW.deployDayBoundary) + wantedRound - 1);
-      const estimatedBlock = deployBlockNumber
-        + Math.round((sealTimestamp - deployTimestamp) / 2);
-      if (Number.isFinite(estimatedBlock) && estimatedBlock <= head + LOG_CHUNK_BLOCKS) {
-        const first = Math.max(
-          deployBlockNumber,
-          Math.min(head, estimatedBlock) - LOG_CHUNK_BLOCKS,
-        );
-        for (let i = 0; i < 4; i += 1) {
-          const from = first + i * LOG_CHUNK_BLOCKS;
-          if (from > head) break;
-          const to = Math.min(head, from + LOG_CHUNK_BLOCKS - 1);
-          const seal = await readRange(from, to);
-          if (seal === null) return null;
-          if (seal) return seal;
-        }
-      }
-    } catch (_e) { /* fall back to the recent bounded scan below */ }
-  }
-
-  for (let i = 0; i < LOG_CHUNK_LIMIT; i += 1) {
-    const to = head - i * LOG_CHUNK_BLOCKS;
-    if (to < 0) break;
-    const from = Math.max(0, to - LOG_CHUNK_BLOCKS + 1);
-    const seal = await readRange(from, to);
-    if (seal === null) return null;
-    if (seal) return seal;
-    if (from === 0) break;
-  }
-  return null;
-}
-
-/**
- * Manual ticket volume accumulated since the preceding VolumeRoundSealed log.
- * EntriesBought carries the exact raw units fed into the volume counter
- * (400 = one whole ticket). Queries stay beneath the public-RPC range cap.
- *
- * @param {{afterBlock: number, toBlock?: number}} args
- * @returns {Promise<bigint|null>} null when the provider cannot serve logs
- */
-export async function readCurrentTicketVolume({ afterBlock, toBlock } = {}) {
-  const sealedAt = Number(afterBlock);
-  if (!Number.isInteger(sealedAt) || sealedAt < 0) return null;
-
-  const provider = _readerProvider();
-  const contract = _gameContract();
-  if (typeof contract?.queryFilter !== 'function'
-    || typeof contract?.filters?.EntriesBought !== 'function') {
-    return null;
-  }
-
-  let head = Number(toBlock);
-  if (!Number.isInteger(head) || head < sealedAt) {
-    try {
-      head = Number(await provider.getBlockNumber());
-    } catch (_e) {
-      return null;
-    }
-  }
-  if (!Number.isInteger(head) || head <= sealedAt) return 0n;
-
-  let total = 0n;
-  const filter = contract.filters.EntriesBought();
-  for (let from = sealedAt + 1; from <= head; from += LOG_CHUNK_BLOCKS) {
-    const to = Math.min(head, from + LOG_CHUNK_BLOCKS - 1);
-    let logs;
-    try {
-      logs = await contract.queryFilter(filter, from, to);
-    } catch (_e) {
-      return null;
-    }
-    for (const log of logs || []) {
-      const a = log?.args;
-      try {
-        total += BigInt(a?.entryQuantityScaled ?? a?.[1] ?? 0);
-      } catch (_e) { /* malformed decoration log: ignore it */ }
-    }
-  }
-  return total;
-}
 
 /**
  * The growth book's benchmark: the ratchet terms around `round`. Growth is a
@@ -597,32 +431,6 @@ export async function readGrowthMarket({ player, round } = {}) {
 }
 
 /**
- * @param {{player?: string, round: number}} args
- * @returns {Promise<{openRound: number, overCount: bigint, underCount: bigint,
- *   side: number, claimed: boolean, outcome: number, voided: boolean, payout: bigint}>}
- */
-export async function readVolumeMarket({ player, round } = {}) {
-  const r = await _readContract().volumeMarketState(player || ZERO_ADDRESS, round);
-  return {
-    round: Number(round),
-    openRound: Number(r[0]),
-    overCount: BigInt(r[1]),
-    underCount: BigInt(r[2]),
-    questReward: 0n,
-    side: Number(r[3]),
-    claimed: Boolean(r[4]),
-    outcome: Number(r[5]),
-    voided: Boolean(r[6]),
-    payout: BigInt(r[7]),
-  };
-}
-
-/** FLIP the volume placement credit pays right now (decays through the window). */
-export async function readVolumeCredit() {
-  return BigInt(await _readContract().volumeBetCredit());
-}
-
-/**
  * Read the exact player-specific market gates used by both placement paths.
  * A missing player/level is not eligible; callers intentionally fail closed
  * for bonus presentation while the write's static call remains authoritative.
@@ -658,61 +466,6 @@ export function payoutPerWinner(overCount, underCount, side) {
 }
 
 // ---------------------------------------------------------------------------
-// Clock — display only. The contract's `openRound` is the authority for whether
-// a bet can be placed; this drives the countdown copy and the poll cadence.
-// Formula mirrors _openVolumeRound (:477) with the profile's chain constants.
-// ---------------------------------------------------------------------------
-
-// Test seam — the window is wall-clock driven, so a test that did not pin the
-// clock would pass or fail depending on when it ran (the testnet window is 26s
-// out of every 600s).
-let _clock = null;
-
-/** Test-only: pin the clock these helpers read, in Unix seconds. */
-export function __setClockForTest(fn) { _clock = fn; }
-
-/** Test-only: hand the clock back to Date.now. */
-export function __resetClockForTest() { _clock = null; }
-
-function _nowSeconds(override) {
-  if (Number.isFinite(override)) return Math.floor(override);
-  if (_clock) return Math.floor(_clock());
-  return Math.floor(Date.now() / 1000);
-}
-
-/**
- * @param {number} [nowSeconds] Unix seconds (defaults to the local clock).
- * @returns {{open: boolean, secondsToClose: number, secondsToOpen: number}}
- */
-export function volumeWindow(nowSeconds) {
-  const { anchor, period, openSeconds } = VOLUME_WINDOW;
-  const now = _nowSeconds(nowSeconds);
-  // JS % keeps the sign of the dividend; the anchor is in the past on both
-  // chains, but guard anyway so a mocked clock can't produce a negative phase.
-  const phase = (((now - anchor) % period) + period) % period;
-  if (phase < openSeconds) {
-    return { open: true, secondsToClose: openSeconds - phase, secondsToOpen: 0 };
-  }
-  return { open: false, secondsToClose: 0, secondsToOpen: period - phase };
-}
-
-/**
- * The round a volume bet placed now would join — `currentDayIndex() + 1` (:479),
- * and day indices are DEPLOY-relative (GameTimeLib:34, day 1 = deploy day), so
- * this is a small number, not an epoch-scale one.
- *
- * @returns {number} the open round, or 0 when the chain profile has no deploy
- *   boundary yet (mainnet pre-cutover) — callers then take the round off the
- *   contract's own `openRound` instead of computing it.
- */
-export function volumeRoundNow(nowSeconds) {
-  const { anchor, period, deployDayBoundary } = VOLUME_WINDOW;
-  if (!Number.isFinite(deployDayBoundary)) return 0;
-  const boundary = Math.floor((_nowSeconds(nowSeconds) - anchor) / period);
-  return (boundary - deployDayBoundary + 1) + 1;
-}
-
-// ---------------------------------------------------------------------------
 // Writes — closure-form sendTx, static-call pre-flight (CF-02 / CF-03).
 // ---------------------------------------------------------------------------
 
@@ -736,11 +489,6 @@ export async function placeGrowthBet({ player, over } = {}) {
   return _placeBet('placeBet', 'Growth bet', { player, over });
 }
 
-/** VOLUME — bet today's manual ETH ticket volume beats the previous round's. */
-export async function placeVolumeBet({ player, over } = {}) {
-  return _placeBet('placeVolumeBet', 'Volume bet', { player, over });
-}
-
 async function _claim(method, action, { player, rounds } = {}) {
   if (!player) throw new Error('Wallet not connected.');
   const list = (rounds || []).map((r) => Number(r)).filter((r) => Number.isInteger(r) && r > 0);
@@ -762,11 +510,6 @@ export async function claimGrowth({ player, rounds } = {}) {
   return _claim('claim', 'Claim growth bet', { player, rounds });
 }
 
-/** Volume payouts — a winner's share, or the stake back on a voided round. */
-export async function claimVolume({ player, rounds } = {}) {
-  return _claim('claimVolume', 'Claim volume bet', { player, rounds });
-}
-
 /**
  * Discover recent bettors on a settled round directly from indexed placement
  * logs. The caller supplies the winning count; scanning stops as soon as every
@@ -775,7 +518,6 @@ export async function claimVolume({ player, rounds } = {}) {
  * skips junk/stale entries after its first race-probe player.
  */
 export async function readRoundWinners({
-  kind,
   round,
   outcome,
   expectedCount = 0,
@@ -796,8 +538,7 @@ export async function readRoundWinners({
     || typeof contract?.queryFilter !== 'function'
     || !contract?.filters) return [];
 
-  const eventName = kind === 'volume' ? 'VolumeBetPlaced' : 'BetPlaced';
-  const filterFactory = contract.filters[eventName];
+  const filterFactory = contract.filters.BetPlaced;
   if (typeof filterFactory !== 'function') return [];
   const wantOver = Number(outcome) === SIDE_OVER;
   const target = Math.min(
@@ -872,13 +613,6 @@ async function _claimWinnerBatch(method, fallbackMethod, action, {
 /** Settle this growth winner first, then every discovered winner in the round. */
 export async function claimGrowthRound({ player, round, players } = {}) {
   return _claimWinnerBatch('claimRound', 'claim', 'Settle growth-bet winners', {
-    player, round, players,
-  });
-}
-
-/** Settle this volume winner first, then every discovered winner in the round. */
-export async function claimVolumeRound({ player, round, players } = {}) {
-  return _claimWinnerBatch('claimVolumeRound', 'claimVolume', 'Settle volume-bet winners', {
     player, round, players,
   });
 }

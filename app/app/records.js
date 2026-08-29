@@ -1,9 +1,10 @@
-// /app/app/records.js — the four all-time records and the pool they claim from.
+// /app/app/records.js — the five all-time records and the pool they claim from.
 //
-// One shared FLIP pool (Coinflip.sol:218 `recordPool`) backs four permanent
+// One shared FLIP pool backs five permanent
 // high-water marks: biggest flip, biggest Degenerette spin, biggest lootbox
-// deposit, biggest ticket buy. Settlement and level-transition paths fund the
-// pool, while successful record claims reduce it immediately.
+// deposit, biggest ticket buy, and biggest scheduled Dice Run. Settlement and
+// level-transition paths fund the pool, while successful record claims reduce
+// it immediately.
 //
 // ⛔ THE MARKS ARE ON CHAIN; THE HOLDERS ARE NOT. Every `biggest*Ever` slot
 // holds a bare uint128 — no address. The holder exists only in
@@ -18,11 +19,12 @@ import { sharedReadProvider } from './read-provider.js';
 import { ethers, getProvider } from './contracts.js';
 import { displayEthCompact, displayToken } from './scaling.js';
 
-/** RECORD_KIND_* — ICoinflip.sol:14-17. Slot order is the render order. */
+/** RECORD_KIND_* — ICoinflip.sol. Slot order is the on-chain kind order. */
 export const RECORD_KIND_FLIP = 0;
 export const RECORD_KIND_SPIN = 1;
 export const RECORD_KIND_LUCKBOX = 2;
 export const RECORD_KIND_BUY = 3;
+export const RECORD_KIND_DICE_RUN = 4;
 
 /** Session API — the only place an address maps to a Discord display identity. */
 const SESSION_API = 'https://api.degener.us';
@@ -32,15 +34,17 @@ const RECORD_POOL_ABI = [
   'function biggestSpinEver() external view returns (uint128)',
   'function biggestLuckboxEver() external view returns (uint128)',
   'function biggestBuyEver() external view returns (uint128)',
+  'function biggestDiceRunEver() external view returns (uint128)',
 ];
 const TOKEN_UNIT = 10n ** 18n;
 // Coinflip storage layout for this immutable deployment. Slot 4 packs the
-// claimable-day latch, one bool, then the four uint24 record clocks at byte
-// offsets 4/7/10/13. There is no public Solidity getter for these clocks, so a
-// single eth_getStorageAt keeps accrued bounty shares exact while an indexer
-// migration or replay is catching up.
+// claimable-day latch, one bool, the original four uint24 record clocks at byte
+// offsets 4/7/10/13, two unrelated uint24 fields, then Dice Run's clock at byte
+// 22. There is no public Solidity getter for these clocks, so a single
+// eth_getStorageAt keeps accrued bounty shares exact while an indexer migration
+// or replay is catching up.
 const RECORD_CLOCK_STORAGE_SLOT = 4n;
-const RECORD_CLOCK_BYTE_OFFSETS = Object.freeze([4n, 7n, 10n, 13n]);
+const RECORD_CLOCK_BYTE_OFFSETS = Object.freeze([4n, 7n, 10n, 13n, 22n]);
 const UINT24_MASK = (1n << 24n) - 1n;
 
 const RECORD_GETTER_BY_KIND = new Map([
@@ -48,6 +52,7 @@ const RECORD_GETTER_BY_KIND = new Map([
   [RECORD_KIND_SPIN, 'biggestSpinEver'],
   [RECORD_KIND_LUCKBOX, 'biggestLuckboxEver'],
   [RECORD_KIND_BUY, 'biggestBuyEver'],
+  [RECORD_KIND_DICE_RUN, 'biggestDiceRunEver'],
 ]);
 
 let _publicPoolProvider = null;
@@ -70,6 +75,7 @@ let _readRecordMarks = readLiveRecordMarks;
  * record, ETH wei for spin and lootbox, a plain whole-ticket COUNT for the buy
  * record (`entryQuantityScaled / (4 * QTY_SCALE)` —
  * DegenerusGameFoilPackModule.sol:199-202, so no ticket divisor applies).
+ * Dice Run is a high-point ratio in score basis points, where 10,000 = 1x.
  *
  * `floorText` is the player-facing entry floor below which a candidate never
  * even reads the record slot. ETH values use the same mainnet-equivalent
@@ -115,6 +121,16 @@ export const RECORD_KINDS = [
     floorText: '100 TICKETS',
     floorValue: 100n,
     verb: 'buy',
+  },
+  {
+    kind: RECORD_KIND_DICE_RUN,
+    unit: 'multiple-bps',
+    label: 'BIGGEST DICE RUN',
+    short: 'DICE RUN',
+    // Coinflip.sol BIGGEST_DICE_RUN_MIN = 1_000_000 score bps = 100x.
+    floorText: '100×',
+    floorValue: 1_000_000n,
+    verb: 'run',
   },
 ];
 
@@ -176,7 +192,7 @@ export async function readLiveRecordPool() {
   }
 }
 
-/** Decode Coinflip's four packed uint24 record claim clocks. */
+/** Decode Coinflip's five packed uint24 record claim clocks. */
 export function decodeRecordClockSlot(raw) {
   let packed;
   try { packed = BigInt(raw ?? 0); } catch (_e) { return null; }
@@ -232,12 +248,18 @@ export async function readLiveRecordMarks() {
       const provider = recordPoolProvider();
       if (!provider || !CONTRACTS.COINFLIP) return _lastLiveRecordMarks;
       const contract = new ethers.Contract(CONTRACTS.COINFLIP, RECORD_POOL_ABI, provider);
-      const values = await Promise.all(RECORD_KINDS.map((meta) => {
+      const values = await Promise.all(RECORD_KINDS.map(async (meta) => {
         const getter = RECORD_GETTER_BY_KIND.get(meta.kind);
-        return typeof contract[getter] === 'function' ? contract[getter]() : null;
+        if (typeof contract[getter] !== 'function') return null;
+        try { return await contract[getter](); }
+        catch (_e) { return null; }
       }));
-      if (values.some((value) => value == null)) return _lastLiveRecordMarks;
-      _lastLiveRecordMarks = values.map((value) => toBigInt(value));
+      const prior = Array.isArray(_lastLiveRecordMarks) ? _lastLiveRecordMarks : [];
+      const merged = values.map((value, index) => (
+        value == null ? prior[index] ?? null : toBigInt(value)
+      ));
+      if (!merged.some((value) => value != null)) return _lastLiveRecordMarks;
+      _lastLiveRecordMarks = merged;
       return _lastLiveRecordMarks;
     } catch (_e) {
       return _lastLiveRecordMarks;
@@ -272,15 +294,20 @@ export function recordClaimTargetForMark(kind, mark) {
   const meta = recordKindMeta(kind);
   if (!meta) return null;
   const value = toBigInt(mark);
-  return value > 0n ? barToBeat(value) : toBigInt(meta.floorValue);
+  if (value <= 0n) return toBigInt(meta.floorValue);
+  // Scheduled Dice Run is intentionally different from the four direct-action
+  // records: every strict improvement claims, so its next target is mark + 1
+  // score bps rather than mark + 20%.
+  if (Number(kind) === RECORD_KIND_DICE_RUN) return value + 1n;
+  return barToBeat(value);
 }
 
 /**
  * Exact candidate that would claim this kind's live bounty right now.
  *
  * The first holder clears the contract entry floor. Once a mark exists, the
- * live `barToBeat` is the +20% claim predicate; merely nudging the record above
- * its mark does not pay the bounty and therefore must not light a wager field.
+ * original four kinds use the +20% claim predicate; Dice Run claims on every
+ * strict improvement.
  */
 export function recordClaimTarget(state, kind) {
   const meta = recordKindMeta(kind);
@@ -288,9 +315,17 @@ export function recordClaimTarget(state, kind) {
     ? state.records.find((entry) => Number(entry?.kind) === Number(kind))
     : null;
   if (!meta || !record) return null;
-  return record.held
-    ? toBigInt(record.barToBeat)
-    : recordClaimTargetForMark(kind, 0n);
+  if (!record.held) return toBigInt(meta.floorValue);
+  if (Number(kind) === RECORD_KIND_DICE_RUN) {
+    return recordClaimTargetForMark(kind, record.value);
+  }
+  // Normalized records carry both fields. Retaining an explicit bar also keeps
+  // quote helpers compatible with small caller-owned snapshots that omit the
+  // standing value but already carry the contract-derived target.
+  const explicitTarget = toBigInt(record.barToBeat);
+  return explicitTarget > 0n
+    ? explicitTarget
+    : recordClaimTargetForMark(kind, record.value);
 }
 
 /**
@@ -403,11 +438,21 @@ function group(value) {
   return fraction == null ? grouped : `${grouped}.${fraction}`;
 }
 
+/** Exact score-bps ratio, where 10,000 bps is one bankroll multiple. */
+export function formatRecordMultiple(value) {
+  const bps = toBigInt(value);
+  const whole = bps / 10_000n;
+  const fraction = (bps % 10_000n)
+    .toString()
+    .padStart(4, '0')
+    .replace(/0+$/, '');
+  return fraction ? `${group(whole.toString())}.${fraction}` : group(whole.toString());
+}
+
 /**
  * Render a record value in its own unit.
  *
- * @returns {{amount: string, suffix: string}} suffix is '' for ticket counts,
- *          which read as a bare number with their label supplied by the card.
+ * @returns {{amount: string, suffix: string}}
  */
 export function formatRecordValue(kind, raw) {
   const meta = recordKindMeta(kind);
@@ -417,6 +462,9 @@ export function formatRecordValue(kind, raw) {
   }
   if (meta?.unit === 'tickets') {
     return { amount: group(value.toString()), suffix: 'TICKETS' };
+  }
+  if (meta?.unit === 'multiple-bps') {
+    return { amount: formatRecordMultiple(value), suffix: '×' };
   }
   return { amount: group(displayToken(value, 0)), suffix: 'FLIP' };
 }
@@ -429,10 +477,11 @@ export function shortAddress(value) {
 }
 
 /**
- * Normalize the `/records` payload into four ordered, defensive slots.
+ * Normalize the `/records` payload into five ordered, defensive slots.
  *
- * The route already zero-fills missing kinds, but a stale deploy or a partial
- * response must still produce four cards rather than a collapsing row.
+ * Older API deployments zero-fill only the original four kinds. The live
+ * Coinflip getter still lets the fifth Dice Run slot render without collapsing
+ * the row while indexed holder/history support catches up.
  */
 export function normalizeRecords(
   payload,
@@ -475,7 +524,9 @@ export function normalizeRecords(
         // holder to a newer chain mark while BigRecordUpdated is catching up.
         player: value > 0n && !chainAhead ? player : null,
         value,
-        barToBeat: barToBeat(value),
+        barToBeat: value > 0n
+          ? recordClaimTargetForMark(meta.kind, value)
+          : 0n,
         claimCount: Number(row?.claimCount ?? 0) || 0,
         totalPaidFlip: toBigInt(row?.totalPaidFlip),
         // The packed chain clock is authoritative and also fills pre-migration

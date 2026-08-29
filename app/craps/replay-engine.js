@@ -15,8 +15,13 @@ import {
 } from './replay-contract.js';
 
 export const CRAPS_REPLAY_FLIP_WEI = 10n ** 18n;
-export const CRAPS_REPLAY_ESCALATOR_SHOOTERS = 5n;
-export const CRAPS_REPLAY_MAX_WAGER_MULTIPLIER = 65_535n;
+// Mirrors `Craps._ESC_HANDS` / `Craps._ESC_CAP`. BOTH moved at the 2026-08-29 re-vendor: the
+// escalator doubles every 3 shooters (was 5) and its ceiling widened from the implicit uint16 to
+// uint32.max, because a 16-bit lane flattened the mandatory wager from the 48th shooter on and
+// capped the RUN rather than the dice. Stale here, the replay recomputes a different wager than
+// the chain charged and every seat fails its stored bankroll ladder with a drift error.
+export const CRAPS_REPLAY_ESCALATOR_SHOOTERS = 3n;
+export const CRAPS_REPLAY_MAX_WAGER_MULTIPLIER = (1n << 32n) - 1n;
 
 const UINT128 = (1n << 128n) - 1n;
 const HAND_RETURN_MASK = (1n << 112n) - 1n;
@@ -88,7 +93,10 @@ export function decodeCrapsReplayTape(manifestInput) {
 
 export function crapsReplayWagerMultiplier(shooter) {
   const ordinal = typeof shooter === 'bigint' ? shooter : BigInt(shooter);
-  const multiplier = 1n << (ordinal / CRAPS_REPLAY_ESCALATOR_SHOOTERS);
+  // The contract guards the shift itself (`shift < 32`) because 1 << 32 overflows its lane.
+  // BigInt does not overflow, but the cap below must land identically either way.
+  const shift = ordinal / CRAPS_REPLAY_ESCALATOR_SHOOTERS;
+  const multiplier = shift < 32n ? 1n << shift : CRAPS_REPLAY_MAX_WAGER_MULTIPLIER;
   return multiplier > CRAPS_REPLAY_MAX_WAGER_MULTIPLIER
     ? CRAPS_REPLAY_MAX_WAGER_MULTIPLIER
     : multiplier;
@@ -238,6 +246,10 @@ function traceHand(board, rolls) {
       label: genericRollLabel({ total, comeOut, pointBefore, pointAfter: point, sevenOut }),
       payoutBets: unique(payoutBets),
       lostBets: unique(lostBets),
+      retiredBets: unique([
+        ...lostBets,
+        ...(payoutBets.includes('dont-pass') ? ['dont-pass'] : []),
+      ]),
       returnedWei: returnedThisRoll,
       equityDeltaWei: equityDelta,
     });

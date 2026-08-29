@@ -788,14 +788,11 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the completed live endpoint keeps its amount but hides the redundant text label');
     assert.ok(
       pari.indexOf('void this.#loadPoolBenchmarks(seq, level)')
-        < pari.indexOf('const [growth, volume, credit, decimatorPosition, decimatorContext]'),
+        < pari.indexOf('const [growth, decimatorPosition, decimatorContext]'),
       'direct phase reads start before side-bet and player market reads',
     );
-    assert.ok(
-      pari.indexOf("update('app.poolBenchmarks'")
-        < pari.indexOf('const seal = await readLastVolumeSeal'),
-      'pool publication lives on a separate path from the slower volume-log scan',
-    );
+    assert.doesNotMatch(pari, /readLastVolumeSeal|loadVolumeBenchmark|pari-volume|VOLUME BET/,
+      'the pool publisher no longer carries the removed Volume Bet read path');
     const fastPublish = pari.indexOf('const published = this.#publishPoolBenchmarks');
     const historyRead = pari.indexOf('const history = await readGrowthRatchetHistory');
     assert.ok(fastPublish >= 0 && fastPublish < historyRead,

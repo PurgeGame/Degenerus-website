@@ -580,6 +580,24 @@ export function revealTerminalActionLabel(sequence = null, board = null) {
 }
 
 /**
+ * Translate case-anchored flight slots onto their terminal-summary rectangles.
+ * Both lists are viewport-space DOMRects captured after responsive layout has
+ * resolved, so their top/left difference is the exact compositor landing pose.
+ */
+export function lootboxFlightLandingTranslations(sourceRects, targetRects) {
+  const sources = Array.isArray(sourceRects) ? sourceRects : [];
+  const targets = Array.isArray(targetRects) ? targetRects : [];
+  if (sources.length === 0 || sources.length !== targets.length) return [];
+  const translations = sources.map((source, index) => {
+    const target = targets[index];
+    const x = Number(target?.left) - Number(source?.left);
+    const y = Number(target?.top) - Number(source?.top);
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  });
+  return translations.every(Boolean) ? translations : [];
+}
+
+/**
  * Project a partial Degenerette ETH total into its two final receipt lanes.
  *
  * `lootboxEth` is emitted only as a final aggregate, so attributing each
@@ -1039,6 +1057,46 @@ function _ticketHasGold(traitIds) {
     && traitIds.some((tid) => ((Number(tid) >> 3) & 7) === 7);
 }
 
+function _crapsPassCount(value) {
+  const count = Math.floor(Number(value) || 0);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+/** One aggregate Craps award becomes one readable card per denomination. */
+function _crapsPassCards(leg) {
+  const normal = _crapsPassCount(leg?.crapsNormalPasses ?? leg?.normalPasses ?? leg?.normal);
+  const high = _crapsPassCount(
+    leg?.crapsHighPasses ?? leg?.highPasses ?? leg?.highRoller ?? leg?.high,
+  );
+  const reservedDay = _crapsPassCount(leg?.reservedDay ?? leg?.day);
+  const reservedTier = reservedDay > 0 ? (high > 0 ? 'high' : normal > 0 ? 'normal' : null) : null;
+  const make = (count, passTier) => {
+    if (count <= 0) return null;
+    const highRoller = passTier === 'high';
+    const reserved = reservedTier === passTier;
+    const banked = Math.max(0, count - (reserved ? 1 : 0));
+    const status = reserved
+      ? `Day ${reservedDay} reserved${banked > 0 ? ` · ${_groupAmountText(banked)} banked` : ''}`
+      : 'Banked for a future day';
+    const countText = _groupAmountText(count);
+    return {
+      type: 'craps-pass',
+      passTier,
+      rarity: highRoller ? 'epic' : 'rare',
+      icon: null,
+      glyph: null,
+      label: highRoller
+        ? `HIGH-ROLLER CRAPS ${count === 1 ? 'BATTLEPASS' : 'BATTLEPASSES'}`
+        : `CRAPS ${count === 1 ? 'BATTLEPASS' : 'BATTLEPASSES'}`,
+      value: countText,
+      sub: `${highRoller ? 'High-roller seat in' : 'Entry to'} all 7 scheduled windows · ${status}`,
+      countText,
+      spin: null,
+    };
+  };
+  return [make(normal, 'normal'), make(high, 'high')].filter(Boolean);
+}
+
 /** One leg from lootbox-legs.js → zero or more prize cards. */
 function _cardsFromLeg(leg) {
   const cards = [];
@@ -1072,6 +1130,9 @@ function _cardsFromLeg(leg) {
           countText: '0', spin: null,
         });
       }
+      // Presale boxes carry their pass counts on this opened anchor. Regular
+      // boxes use the aggregate `crapsPasses` leg handled below.
+      cards.push(..._crapsPassCards(leg));
       if ((leg.flip ?? 0n) > 0n) {
         const art = _flipPrizeArt(leg.flip);
         cards.push({
@@ -1082,6 +1143,9 @@ function _cardsFromLeg(leg) {
       }
       break;
     }
+    case 'crapsPasses':
+      cards.push(..._crapsPassCards(leg));
+      break;
     case 'dgnrs':
       cards.push({
         type: 'dgnrs', rarity: 'rare', icon: ICONS.dgnrs, glyph: null,
@@ -2597,6 +2661,7 @@ class RevealOverlay extends HTMLElement {
   #packHistory = [];
   #controlsOnly = false;
   #continuationBusy = false;
+  #lootboxLanding = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -3885,6 +3950,7 @@ class RevealOverlay extends HTMLElement {
   }
 
   #hideAll() {
+    this.#lootboxLanding = null;
     for (const name of ['rvl-vessel', 'rvl-card-zone', 'rvl-spin-zone', 'rvl-summary']) {
       const el = this.#bind(name);
       if (el) el.hidden = true;
@@ -4268,6 +4334,7 @@ class RevealOverlay extends HTMLElement {
         // hand, while luckboxes keep each receipt; both skip repeated charging.
         if (isLootbox) this.#stageLootboxRewardFlight(seq);
         if (stage && stage.classList) stage.classList.add('rvl-bursting');
+        if (isLootbox) this.#alignLootboxRewardFlight(seq);
         // Let the physical latch/lid release and lightweight card flight
         // finish, then turn those same cards to their real reward faces.
         if (isLootbox) await this.#finishLootboxRewardFlight(seq, LOOTBOX_AUTO_BURST_MS);
@@ -4287,6 +4354,7 @@ class RevealOverlay extends HTMLElement {
           stage.classList.remove('rvl-charging');
           if (isLootbox) this.#stageLootboxRewardFlight(seq);
           stage.classList.add('rvl-bursting');
+          if (isLootbox) this.#alignLootboxRewardFlight(seq);
         }
         // Burst fires BEFORE the cards are turned, so it has to consult the
         // sequence's contents rather than the reveal-so-far: a big sequence whose
@@ -4304,6 +4372,7 @@ class RevealOverlay extends HTMLElement {
         }
       }
       if (vessel) vessel.hidden = true;
+      if (isLootbox) this.#landLootboxRewardFlight(seq);
       if (stage && stage.classList) stage.classList.remove('rvl-bursting');
       if (this.#aborted) return;
     }
@@ -6565,6 +6634,30 @@ class RevealOverlay extends HTMLElement {
     return box;
   }
 
+  #buildCrapsPassBadge(card) {
+    const badge = document.createElement('div');
+    badge.className = `rvl-craps-pass-badge rvl-craps-pass-badge--${card.passTier === 'high' ? 'high' : 'normal'}`;
+    const dice = document.createElement('span');
+    dice.className = 'rvl-craps-pass-badge__dice';
+    for (const [symbol, color] of [[1, 6], [4, 4]]) {
+      const die = document.createElement('img');
+      die.src = dgnBadgePath(3, symbol, color);
+      die.alt = '';
+      die.decoding = 'async';
+      dice.appendChild(die);
+    }
+    const band = document.createElement('span');
+    band.className = 'rvl-craps-pass-badge__band';
+    band.textContent = card.passTier === 'high' ? 'HIGH ROLLER' : 'BATTLEPASS';
+    const windows = document.createElement('small');
+    windows.className = 'rvl-craps-pass-badge__windows';
+    windows.textContent = '7 WINDOWS';
+    badge.appendChild(dice);
+    badge.appendChild(band);
+    badge.appendChild(windows);
+    return badge;
+  }
+
   #buildSdgnrsBadge() {
     const badge = document.createElement('span');
     badge.className = 'sdgnrs-badge';
@@ -6768,6 +6861,7 @@ class RevealOverlay extends HTMLElement {
     if (card.boonTier != null) el.setAttribute('data-boon-tier', String(card.boonTier));
     if (card.boonPips) el.setAttribute('data-boon-pips', card.boonPips);
     if (card.boonDirection) el.setAttribute('data-boon-direction', card.boonDirection);
+    if (card.passTier) el.setAttribute('data-pass-tier', card.passTier);
     if (card.outcome) el.className += ` rvl-card--outcome-${card.outcome}`;
     if (card.foil) el.className += ' rvl-card--foil-ticket';
     if (card.packOnly) el.className += ' rvl-card--pack-only';
@@ -6785,6 +6879,9 @@ class RevealOverlay extends HTMLElement {
     } else if (card.type === 'dgnrs') {
       icon.className = 'rvl-card-icon rvl-card-icon--sdgnrs';
       icon.appendChild(this.#buildSdgnrsBadge());
+    } else if (card.type === 'craps-pass') {
+      icon.className = 'rvl-card-icon rvl-card-icon--craps-pass';
+      icon.appendChild(this.#buildCrapsPassBadge(card));
     } else if (card.icon) {
       // A pile-scale FLIP prize renders as its chip pile: a wide bottom-
       // anchored lane instead of the square logo slot.
@@ -6942,6 +7039,7 @@ class RevealOverlay extends HTMLElement {
       'rvl-lootbox-flight--revealing',
       'rvl-lootbox-flight--settled',
       'rvl-lootbox-flight--revealed',
+      'rvl-lootbox-flight--measuring',
     );
     flight.textContent = '';
     // A mixed combo belongs to two explicit phases. Do not flash its ordinary
@@ -6978,7 +7076,77 @@ class RevealOverlay extends HTMLElement {
       grid.appendChild(slot);
     }
     flight.appendChild(grid);
+    flight.classList?.add('rvl-lootbox-flight--measuring');
     flight.hidden = false;
+    this.#prepareLootboxRewardLanding(seq, flight, Array.from(grid.children));
+  }
+
+  // Resolve the terminal receipt's real responsive layout without painting it,
+  // then make that exact geometry the card-flight landing pose. The summary
+  // nodes are retained and temporarily moved onto the turning faces below, so
+  // the post-turn handoff never rebuilds the reward in another coordinate space.
+  #prepareLootboxRewardLanding(seq, flight, slots) {
+    const vessel = this.#bind('rvl-vessel');
+    const summary = this.#bind('rvl-summary');
+    if (!vessel || !summary || typeof flight?.getBoundingClientRect !== 'function') return;
+
+    this.#renderSummary(seq);
+    const targetGrid = summary.querySelector('.rvl-summary-grid');
+    const targetCards = Array.from(targetGrid?.children || []);
+    if (!targetGrid || targetCards.length !== slots.length
+      || targetCards.some((card) => typeof card?.getBoundingClientRect !== 'function')) {
+      summary.hidden = true;
+      return;
+    }
+
+    const vesselWasHidden = vessel.hidden;
+    vessel.hidden = true;
+    summary.hidden = false;
+    const targetGridRect = targetGrid.getBoundingClientRect();
+    const targetRects = targetCards.map((card) => card.getBoundingClientRect());
+    summary.hidden = true;
+    vessel.hidden = vesselWasHidden;
+
+    if (!(targetGridRect.width > 0) || targetRects.some((rect) => !(rect.width > 0 && rect.height > 0))) {
+      return;
+    }
+    flight.style.width = `${targetGridRect.width}px`;
+    slots.forEach((slot, index) => {
+      slot.style.height = `${targetRects[index].height}px`;
+    });
+    this.#lootboxLanding = {
+      sequence: seq,
+      summary,
+      grid: targetGrid,
+      cards: targetCards,
+      targetRects,
+      landed: false,
+    };
+  }
+
+  #alignLootboxRewardFlight(seq) {
+    const landing = this.#lootboxLanding;
+    const flight = this.#bind('rvl-lootbox-flight');
+    if (!flight || !landing || landing.sequence !== seq) {
+      flight?.classList?.remove('rvl-lootbox-flight--measuring');
+      return false;
+    }
+    const slots = Array.from(flight.querySelectorAll('.rvl-lootbox-flight__card'));
+    void flight.offsetWidth;
+    const sourceRects = slots.map((slot) => slot.getBoundingClientRect());
+    const translations = lootboxFlightLandingTranslations(sourceRects, landing.targetRects);
+    if (translations.length !== slots.length) {
+      flight.classList?.remove('rvl-lootbox-flight--measuring');
+      return false;
+    }
+    slots.forEach((slot, index) => {
+      if (typeof slot.style?.setProperty !== 'function') return;
+      slot.style.setProperty('--rvl-card-land-x', `${translations[index].x}px`);
+      slot.style.setProperty('--rvl-card-land-y', `${translations[index].y}px`);
+    });
+    void flight.offsetWidth;
+    flight.classList?.remove('rvl-lootbox-flight--measuring');
+    return true;
   }
 
   #mountLootboxRewardFaces(seq) {
@@ -6991,10 +7159,13 @@ class RevealOverlay extends HTMLElement {
       const front = slots[index].querySelector('.rvl-lootbox-flight__front');
       if (!front) return;
       front.textContent = '';
-      const el = this.#buildCard(card, true);
+      const prepared = this.#lootboxLanding?.sequence === seq
+        ? this.#lootboxLanding.cards[index]
+        : null;
+      const el = prepared || this.#buildCard(card, true);
       const value = el.querySelector('.rvl-card-value');
       if (value) value.textContent = card.revealedValue || card.value || '';
-      if (!card.packOnly && card.sub) {
+      if (!prepared && !card.packOnly && card.sub) {
         const inner = el.querySelector('.rvl-card-inner');
         if (inner) inner.appendChild(this.#buildCardSub(card));
       }
@@ -7004,6 +7175,15 @@ class RevealOverlay extends HTMLElement {
     // class change then owns only one compositor rotation.
     void flight.offsetWidth;
     return flight;
+  }
+
+  #landLootboxRewardFlight(seq) {
+    const landing = this.#lootboxLanding;
+    if (!landing || landing.sequence !== seq || landing.cards.length === 0) return false;
+    landing.cards.forEach((card) => landing.grid.appendChild(card));
+    landing.summary.hidden = false;
+    landing.landed = true;
+    return true;
   }
 
   async #finishLootboxRewardFlight(seq, settleMs) {
@@ -7065,6 +7245,13 @@ class RevealOverlay extends HTMLElement {
   } = {}) {
     const summary = this.#bind('rvl-summary');
     if (!summary) return;
+    if (!spinGrant && !includeFoilMatch
+      && this.#lootboxLanding?.sequence === seq
+      && this.#lootboxLanding.landed) {
+      summary.hidden = false;
+      this.#lootboxLanding = null;
+      return;
+    }
     summary.textContent = '';
     summary.hidden = false;
     if (summary.classList) {

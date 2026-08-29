@@ -112,6 +112,7 @@ import {
   RECORD_KIND_SPIN,
 } from '../app/records.js';
 import { degeneretteBoonBoostDelta } from '../app/boons.js';
+import { readPlayerActivityScore } from '../app/decimator.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 import { registerComponentPoll } from '../app/component-poll.js';
@@ -217,7 +218,7 @@ function _degeneretteGoldTicket(goldTraits) {
   return ticket;
 }
 
-function _formatBaseCentiX(value) {
+function _formatCentiX(value) {
   const cents = BigInt(value ?? 0);
   const whole = cents / 100n;
   const fraction = cents % 100n;
@@ -935,6 +936,14 @@ class AppDegenerettePanel extends HTMLElement {
   #currentSpinCount = 0;       // retained so the reveal can show the full wager
   #currentPackedData = null;   // parent-only bounty stake/activity reveal context
   #draftCurrency = 0;          // selected setup currency; detects real switches
+  // Exact live Degen Score used by the payout quote. Keep the address beside
+  // the value so an account/mode switch can never briefly price the new
+  // player's board with the old player's score.
+  #payoutActivityScore = null;
+  #payoutActivityAddress = null;
+  #payoutActivityLoading = false;
+  #payoutActivitySeq = 0;
+  #payoutActivityRequest = null;
   // Receipt parsing is the fastest path, but a confirmed placement must remain
   // recoverable if a wallet/provider omits logs. The DB snapshot identifies the
   // pending bet and the indexed placement/on-chain slot restores its packed data.
@@ -1048,6 +1057,8 @@ class AppDegenerettePanel extends HTMLElement {
     this.#persistBetPreference(this.#draftCurrency);
     this.#pendingRecoverySeq += 1;
     this.#pendingRecoveryAddress = null;
+    this.#payoutActivitySeq += 1;
+    this.#payoutActivityRequest = null;
     this.#resolutionGeneration += 1;
     if (typeof this.#pollHandle === 'function') {
       try { this.#pollHandle(); } catch (_) { /* defensive */ }
@@ -1257,11 +1268,12 @@ class AppDegenerettePanel extends HTMLElement {
             <p><strong>Build your ticket.</strong> Pick a symbol and color for each quadrant. The starred Hero earns an extra point when its symbol matches.</p>
             <p><strong>Set the wager.</strong> Choose ETH, FLIP, or WWXRP, then choose the bet per spin and number of spins.</p>
             <p><strong>Spin for matches.</strong> Matching symbols score; a matching color adds another point. Higher scores can pay more in the currency you wagered.</p>
+            <p><strong>Influence the main jackpot.</strong> When you bet ETH, your wager backs your selected Hero symbol. The day’s most ETH-backed Hero symbol is locked into one quadrant of the main jackpot drawing; its color is still random.</p>
           </div>
           <section class="deg-payouts" aria-labelledby="deg-payouts-title">
             <div class="deg-payouts__head">
-              <h4 id="deg-payouts-title">ETH / FLIP payouts</h4>
-              <p>Base gross multiplier (× wager) before activity adjustment. Scores 0–1 pay 0; Hero position only changes the 1–3 gold schedules.</p>
+              <h4 id="deg-payouts-title">Selected board · ETH / FLIP payouts</h4>
+              <p data-bind="deg-payout-context">Loading the selected player's Degen Score…</p>
             </div>
             <div class="deg-payouts__tables" data-bind="deg-payout-tables"></div>
           </section>
@@ -1628,54 +1640,146 @@ class AppDegenerettePanel extends HTMLElement {
     try { returnFocus?.focus?.({ preventScroll: true }); } catch (_) { /* defensive */ }
   }
 
+  #refreshPayoutActivityScore() {
+    const address = get('ui.mode') === 'combined'
+      ? null
+      : (getViewedAddress() || get('viewing.address') || get('connected.address') || null);
+    const normalized = address ? String(address).toLowerCase() : null;
+
+    if (normalized !== this.#payoutActivityAddress) {
+      this.#payoutActivityAddress = normalized;
+      this.#payoutActivityScore = null;
+      this.#payoutActivityLoading = Boolean(normalized);
+      this.#payoutActivitySeq += 1;
+      this.#renderPayoutTables();
+    }
+    if (!normalized) {
+      this.#payoutActivityLoading = false;
+      this.#renderPayoutTables();
+      return Promise.resolve(null);
+    }
+    if (this.#payoutActivityRequest?.address === normalized) {
+      return this.#payoutActivityRequest.promise;
+    }
+
+    if (this.#payoutActivityScore == null) {
+      this.#payoutActivityLoading = true;
+      this.#renderPayoutTables();
+    }
+    const seq = ++this.#payoutActivitySeq;
+    const asScore = (value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) return null;
+      // The placed bet snapshots this value into uint16 storage.
+      return Math.min(0xFFFF, Math.trunc(numeric));
+    };
+    const promise = Promise.allSettled([
+      readPlayerActivityScore(normalized),
+      fetchJSON(`/player/${normalized}`),
+    ]).then(([liveResult, indexedResult]) => {
+      if (seq !== this.#payoutActivitySeq
+        || normalized !== this.#payoutActivityAddress) return null;
+      const liveScore = liveResult.status === 'fulfilled'
+        ? asScore(liveResult.value)
+        : null;
+      const indexedScore = indexedResult.status === 'fulfilled'
+        ? asScore(
+          indexedResult.value?.scoreBreakdown?.totalBps
+          ?? indexedResult.value?.activityScore,
+        )
+        : null;
+      const selectedScore = liveScore ?? indexedScore;
+      // A transient refresh failure must not replace a previously verified
+      // score with a zero-score quote. The indexed value is only a fallback;
+      // the live GAME read wins whenever both are available.
+      if (selectedScore != null) this.#payoutActivityScore = selectedScore;
+      this.#payoutActivityLoading = false;
+      this.#renderPayoutTables();
+      return this.#payoutActivityScore;
+    }).catch(() => {
+      if (seq === this.#payoutActivitySeq
+        && normalized === this.#payoutActivityAddress) {
+        this.#payoutActivityLoading = false;
+        this.#renderPayoutTables();
+      }
+      return null;
+    });
+    this.#payoutActivityRequest = { address: normalized, promise };
+    void promise.finally(() => {
+      if (this.#payoutActivityRequest?.promise === promise) {
+        this.#payoutActivityRequest = null;
+      }
+    });
+    return promise;
+  }
+
   #renderPayoutTables() {
     const host = this.querySelector('[data-bind="deg-payout-tables"]');
     if (!host) return;
     host.textContent = '';
     const currentGold = this.#dgnTraits.filter((trait) => Number(trait?.c) === 7).length;
-    const schedules = degeneretteBasePayoutTables();
-    const columns = schedules.flatMap((schedule) => schedule.heroMatters
-      ? [
-        { schedule, field: 'honestHeroGold' },
-        { schedule, field: 'honestHeroOther' },
-      ]
-      : [{ schedule, field: 'honestHeroGold' }]);
+    const heroIsGold = Number(this.#dgnTraits[this.#dgnHero]?.c) === 7;
+    const boardLabel = currentGold > 0 && currentGold < 4
+      ? `${currentGold} GOLD · ${heroIsGold ? 'HERO GOLD' : 'OTHER HERO'}`
+      : `${currentGold} GOLD`;
+    const activityScore = this.#payoutActivityScore ?? 0;
+    const scoreLabel = this.#payoutActivityScore == null
+      ? '0 ESTIMATE'
+      : this.#payoutActivityScore.toLocaleString('en-US');
+    const quote = {
+      customTicket: this.#packCustomTicket(),
+      heroQuadrant: this.#dgnHero,
+      activityScore,
+    };
+    const ethRows = degenerettePayoutTable({ ...quote, currency: 0 }).rows;
+    const flipRows = degenerettePayoutTable({ ...quote, currency: 1 }).rows;
+
+    const context = this.querySelector('[data-bind="deg-payout-context"]');
+    if (context) {
+      if (this.#payoutActivityScore != null) {
+        context.textContent = `Gross multiplier (× wager) at Degen Score ${scoreLabel}. Scores 0–1 pay 0; the quote follows the selected ticket and Hero.`;
+      } else if (this.#payoutActivityLoading) {
+        context.textContent = 'Loading the selected player’s Degen Score; the zero-score estimate is shown for now.';
+      } else if (!this.#payoutActivityAddress) {
+        context.textContent = 'Pick one player to apply their Degen Score; the zero-score estimate is shown for now.';
+      } else {
+        context.textContent = 'Degen Score is unavailable; the zero-score estimate is shown for now.';
+      }
+    }
 
     const scroll = document.createElement('div');
     scroll.className = 'deg-payout-table-wrap deg-payout-matrix';
     const table = document.createElement('table');
     table.className = 'deg-payout-table';
-    table.setAttribute('aria-label', 'ETH and FLIP payout multipliers by score and gold traits');
+    table.setAttribute(
+      'aria-label',
+      `ETH and FLIP payout multipliers for selected board: ${boardLabel}; Degen Score ${scoreLabel}`,
+    );
     const thead = document.createElement('thead');
-    const goldRow = document.createElement('tr');
+    const headingRow = document.createElement('tr');
     const scoreHeading = document.createElement('th');
     scoreHeading.setAttribute('scope', 'col');
     scoreHeading.setAttribute('rowspan', '2');
     scoreHeading.textContent = 'SCORE';
-    goldRow.appendChild(scoreHeading);
-    const heroRow = document.createElement('tr');
-    for (const schedule of schedules) {
-      const goldHeading = document.createElement('th');
-      goldHeading.setAttribute('scope', 'colgroup');
-      goldHeading.setAttribute('data-gold-traits', String(schedule.goldTraits));
-      if (schedule.heroMatters) goldHeading.setAttribute('colspan', '2');
-      else goldHeading.setAttribute('rowspan', '2');
-      if (schedule.goldTraits === currentGold) goldHeading.className = 'is-current';
-      goldHeading.textContent = `${schedule.goldTraits} GOLD`;
-      goldRow.appendChild(goldHeading);
-      if (schedule.heroMatters) {
-        for (const label of ['HERO GOLD', 'OTHER HERO']) {
-          const heroHeading = document.createElement('th');
-          heroHeading.setAttribute('scope', 'col');
-          heroHeading.setAttribute('data-gold-traits', String(schedule.goldTraits));
-          if (schedule.goldTraits === currentGold) heroHeading.className = 'is-current';
-          heroHeading.textContent = label;
-          heroRow.appendChild(heroHeading);
-        }
-      }
+    headingRow.appendChild(scoreHeading);
+    const boardHeading = document.createElement('th');
+    boardHeading.setAttribute('scope', 'colgroup');
+    boardHeading.setAttribute('colspan', '2');
+    boardHeading.setAttribute('data-gold-traits', String(currentGold));
+    boardHeading.setAttribute('data-hero-gold', String(heroIsGold));
+    boardHeading.className = 'is-current';
+    boardHeading.textContent = `${boardLabel} · DEGEN SCORE ${scoreLabel}`;
+    headingRow.appendChild(boardHeading);
+    thead.appendChild(headingRow);
+    const currencyRow = document.createElement('tr');
+    for (const currency of ['ETH', 'FLIP']) {
+      const currencyHeading = document.createElement('th');
+      currencyHeading.setAttribute('scope', 'col');
+      currencyHeading.className = 'is-current';
+      currencyHeading.textContent = currency;
+      currencyRow.appendChild(currencyHeading);
     }
-    thead.appendChild(goldRow);
-    thead.appendChild(heroRow);
+    thead.appendChild(currencyRow);
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
@@ -1687,12 +1791,14 @@ class AppDegenerettePanel extends HTMLElement {
       score.setAttribute('scope', 'row');
       score.textContent = scoreRow.label;
       tr.appendChild(score);
-      for (const column of columns) {
+      for (const [currency, rows] of [['eth', ethRows], ['flip', flipRows]]) {
         const td = document.createElement('td');
-        td.setAttribute('data-gold-traits', String(column.schedule.goldTraits));
-        if (column.schedule.goldTraits === currentGold) td.className = 'is-current';
-        td.textContent = _formatBaseCentiX(
-          column.schedule.rows[scoreRow.score][column.field],
+        td.setAttribute('data-gold-traits', String(currentGold));
+        td.setAttribute('data-hero-gold', String(heroIsGold));
+        td.setAttribute('data-currency', currency);
+        td.className = 'is-current';
+        td.textContent = _formatCentiX(
+          rows[scoreRow.score].multiplierHundredths,
         ).replace(/×$/, '');
         tr.appendChild(td);
       }
@@ -1917,6 +2023,7 @@ class AppDegenerettePanel extends HTMLElement {
       }
     }
     this.#renderEditor();
+    this.#renderPayoutTables();
   }
 
   #renderEditor() {
@@ -2040,6 +2147,7 @@ class AppDegenerettePanel extends HTMLElement {
       && document.visibilityState !== 'visible') {
       return;
     }
+    void this.#refreshPayoutActivityScore();
     // This is intentionally independent of the ticket-picker request below:
     // an edited ticket must not prevent recovery of an already-confirmed bet.
     void this.#recoverPendingBetFromDb();

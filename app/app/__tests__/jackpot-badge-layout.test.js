@@ -92,4 +92,15 @@ describe('jackpot winning-badge layout', () => {
     assert.equal(directions.includes('left'), false);
     assert.ok(directions.every((direction) => direction === 'right' || direction === 'below'));
   });
+
+  test('keeps a solo winner popup inside its nearly full-quadrant badge', () => {
+    const direction = winningBadgeRewardDirection({
+      badge: { left: 4, top: 4, width: 92, height: 92 },
+      popup: { width: 68, height: 28 },
+      container: { width: 100, height: 100 },
+      randomValue: 0,
+    });
+    assert.equal(direction, 'inside',
+      'a readable centered plate is safer than sending the solo amount through a clipped edge');
+  });
 });

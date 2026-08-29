@@ -1,14 +1,12 @@
-// Full-width all-time records rail. Four permanent marks, one shared FLIP pool.
+// Full-width all-time records rail. Five permanent marks, one shared FLIP pool.
 //
 // This is the only surface in /app/ that shows something the game never resets.
-// Levels turn over, jackpots resolve, the Decimator burns — these four numbers
+// Levels turn over, jackpots resolve, the Decimator burns — these five numbers
 // only ever go up, and the shared pot is funded by the game's settlement paths.
 //
-// The card's signature is the beat bar: the standing mark fills the track, and
-// the ice notch past the end is `mark + ceil(mark/5)` — the exact candidate that
-// claims a share of the pool rather than ratcheting the mark for free
-// (Coinflip.sol:872). The notch sits at the same place on all four cards
-// because it is one rule applied four ways.
+// The original four direct-action records claim at `mark + ceil(mark/5)`.
+// Scheduled Dice Run is the fifth category and claims on every strict
+// improvement above its 100x entry floor, so its target track closes the gap.
 
 import {
   accruedPayoutWei,
@@ -21,6 +19,7 @@ import {
   recordClaimTarget,
   recordClaimTargetForMark,
   RECORD_KIND_BUY,
+  RECORD_KIND_DICE_RUN,
   RECORD_KIND_FLIP,
   RECORD_KIND_LUCKBOX,
   RECORD_KIND_SPIN,
@@ -52,18 +51,20 @@ export const BIGGEST_SPIN_PRICE_STEP_WEI = (
 ) || 1n;
 export const BIGGEST_SPIN_MAX_SPINS = degeneretteLimits(0)?.maxSpins ?? 25;
 
-/** Fill share of the track the standing mark occupies; the notch takes the rest. */
+/** Fill share for the four records whose claim target is exactly 120% of the mark. */
 const MARK_FILL_PERCENT = 100 / 1.2;
 const DISPLAY_KIND_ORDER = new Map([
-  [RECORD_KIND_SPIN, 0],
-  [RECORD_KIND_LUCKBOX, 1],
-  [RECORD_KIND_BUY, 2],
-  [RECORD_KIND_FLIP, 3],
+  [RECORD_KIND_DICE_RUN, 0],
+  [RECORD_KIND_SPIN, 1],
+  [RECORD_KIND_LUCKBOX, 2],
+  [RECORD_KIND_BUY, 3],
+  [RECORD_KIND_FLIP, 4],
 ]);
 
 const RECORD_CARD_ART = '/app/assets/biggest-bounty-card-v13.webp';
 
 const RECORD_KIND_CARD_TITLE = new Map([
+  [RECORD_KIND_DICE_RUN, 'DICE RUN'],
   [RECORD_KIND_SPIN, 'DEGENERETTE'],
   [RECORD_KIND_LUCKBOX, 'LUCKBOX'],
   [RECORD_KIND_BUY, 'PACK RIPPED'],
@@ -166,6 +167,15 @@ function formatCompactEthRecord(value) {
 
 /** Short display-only record amount; the title and expanded card stay exact. */
 export function formatCompactRecordValue(kind, raw) {
+  if (Number(kind) === RECORD_KIND_DICE_RUN) {
+    let bps = 0n;
+    try { bps = BigInt(raw ?? 0); } catch (_e) { /* use zero */ }
+    if (bps < 0n) bps = -bps;
+    const wholeDigits = (bps / 10_000n).toString().length;
+    const decimalDigits = Math.max(0, 3 - wholeDigits);
+    const quantum = 10n ** BigInt(Math.max(0, 4 - decimalDigits));
+    return formatRecordValue(kind, (bps / quantum) * quantum);
+  }
   if (Number(kind) === RECORD_KIND_BUY) {
     return { amount: formatCompactWholeDown(raw), suffix: 'TIX' };
   }
@@ -259,6 +269,9 @@ export function recordBountyTransactionQuote({
   today = null,
 } = {}) {
   const recordKind = Number(kind);
+  // Dice Run can only be established by the finalized winner of a scheduled
+  // Craps field. There is no honest one-click transaction preset for its card.
+  if (recordKind === RECORD_KIND_DICE_RUN) return null;
   const record = Array.isArray(state?.records)
     ? state.records.find((entry) => Number(entry?.kind) === recordKind)
     : null;
@@ -483,21 +496,20 @@ class AppRecordsRail extends HTMLElement {
               <img src="/app/assets/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood.webp"
                    alt="" aria-hidden="true" loading="lazy" decoding="async">
             </span>
+            <span class="records-rail__pot" role="group"
+                  aria-label="Shared bounty pool in FLIP">
+              <span class="records-rail__pot-copy">
+                <span class="records-rail__pot-label">POOL</span>
+                <strong>
+                  <img class="records-rail__pot-logo" src="${FLIP_LOGO}" alt="FLIP">
+                  <b data-bind="records-pool">—</b>
+                </strong>
+              </span>
+            </span>
           </span>
 
           <span class="records-rail__leaders" data-bind="records-leaders"
-                role="group" aria-label="The four current Biggest records"></span>
-
-          <span class="records-rail__pot" role="group"
-                aria-label="Shared record bounty in FLIP">
-            <span class="records-rail__pot-copy">
-              <span class="records-rail__pot-label">BOUNTY POOL</span>
-              <strong>
-                <img class="records-rail__pot-logo" src="${FLIP_LOGO}" alt="FLIP">
-                <b data-bind="records-pool">—</b>
-              </strong>
-            </span>
-          </span>
+                role="group" aria-label="The five current Biggest records"></span>
 
           <span class="records-rail__toggle" aria-hidden="true">
             <span class="records-rail__chevron"></span>
@@ -506,9 +518,9 @@ class AppRecordsRail extends HTMLElement {
 
           <div class="records-rail__expanded">
             <div class="records-rail__expanded-intro">
-              <span class="records-rail__rule">Hit an open minimum or clear a standing record by 20% to collect its live share.</span>
+              <span class="records-rail__rule">Hit an open minimum. The original four pay at +20%; Dice Run pays on any new high.</span>
             </div>
-            <ol class="records-rail__cards" data-bind="records-cards" aria-label="Full details for the four all-time records"></ol>
+            <ol class="records-rail__cards" data-bind="records-cards" aria-label="Full details for the five all-time records"></ol>
           </div>
         </details>
         <span class="records-rail__notice" data-bind="records-bounty-notice"
@@ -714,6 +726,9 @@ class AppRecordsRail extends HTMLElement {
   }
 
   async #loadBountyQuote(kind) {
+    if (Number(kind) === RECORD_KIND_DICE_RUN) {
+      return { error: 'The Dice Run record is set by a finalized scheduled Craps winner.' };
+    }
     const connected = String(get('connected.address') || '').toLowerCase();
     const acting = String(getActingAddress?.() || '').toLowerCase();
     const mode = get('ui.mode');
@@ -759,6 +774,7 @@ class AppRecordsRail extends HTMLElement {
   }
 
   async #openBountyDialog(kind) {
+    if (Number(kind) === RECORD_KIND_DICE_RUN) return;
     if (readBiggestBountiesModePreference() !== 'on') return;
     if (this.#bountyDialogBusy || this.#bountyDialogLoading || this.#bountyDialogQuote) return;
     const seq = ++this.#bountyDialogSeq;
@@ -1118,7 +1134,8 @@ class AppRecordsRail extends HTMLElement {
     const payoutWei = this.#recordPayoutWei(record);
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
     const cardTitle = RECORD_KIND_CARD_TITLE.get(Number(record.kind)) || record.meta.short;
-    const interactive = readBiggestBountiesModePreference() === 'on';
+    const isDiceRun = Number(record.kind) === RECORD_KIND_DICE_RUN;
+    const interactive = readBiggestBountiesModePreference() === 'on' && !isDiceRun;
     item.classList.toggle('is-view-only', !interactive);
     if (interactive) {
       item.removeAttribute('aria-disabled');
@@ -1130,7 +1147,11 @@ class AppRecordsRail extends HTMLElement {
       item.setAttribute('aria-disabled', 'true');
       item.setAttribute('tabindex', '-1');
     }
-    const instruction = interactive ? ' Click to prepare the exact record shot.' : '';
+    const instruction = interactive
+      ? ' Click to prepare the exact record shot.'
+      : isDiceRun
+        ? ' Set by the winning scheduled Dice Run.'
+        : '';
     item.title = record.held
       ? `${record.meta.label}: ${value.amount} ${value.suffix}, held by ${holder}; bounty ${compactPayout} FLIP.${instruction}`
       : `${record.meta.label}: unhit; bounty ${compactPayout} FLIP.${instruction}`;
@@ -1176,6 +1197,7 @@ class AppRecordsRail extends HTMLElement {
     item.addEventListener('click', (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
+      if (Number(record.kind) === RECORD_KIND_DICE_RUN) return;
       if (readBiggestBountiesModePreference() !== 'on') return;
       void this.#openBountyDialog(record.kind);
     });
@@ -1192,6 +1214,7 @@ class AppRecordsRail extends HTMLElement {
 
     const value = formatRecordValue(record.kind, record.value);
     const bar = formatRecordValue(record.kind, record.barToBeat);
+    const strictImprovement = Number(record.kind) === RECORD_KIND_DICE_RUN;
     const profile = record.player ? this.#profiles.get(record.player) : null;
 
     // What breaking this record pays right now. A missing indexed clock uses
@@ -1227,8 +1250,8 @@ class AppRecordsRail extends HTMLElement {
               <b class="records-rail__holder-name">${escapeHtml(profile?.name || shortAddress(record.player))}</b>
             </span>
           </div>
-          <div class="records-rail__track" role="presentation">
-            <span class="records-rail__fill" style="width:${MARK_FILL_PERCENT.toFixed(3)}%"></span>
+          <div class="records-rail__track${strictImprovement ? ' records-rail__track--strict' : ''}" role="presentation">
+            <span class="records-rail__fill" style="width:${strictImprovement ? '100' : MARK_FILL_PERCENT.toFixed(3)}%"></span>
             <span class="records-rail__notch"></span>
           </div>
           <div class="records-rail__stakes">

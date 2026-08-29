@@ -4016,17 +4016,20 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(el.innerHTML,
       /class="df-baf-score"[\s\S]*?<boon-product-indicator class="df-table-boon"\s+product="coinflip"><\/boon-product-indicator>\s*<quest-objective-indicator class="df-table-quest"[\s\S]*?product="coinflip"><\/quest-objective-indicator>/s,
       'the coinflip boon and quest sit together on the red felt after BAF');
+    assert.match(el.innerHTML,
+      /class="df-table-quest"\s+data-quest-pointer="right"\s+product="coinflip"/s,
+      'the left-edge Coinflip quest waypoint points inward across the felt');
     assert.doesNotMatch(el.innerHTML, /df-next-bet__(?:boon|quest)/,
       'neither status icon shares the chip-filled Tomorrow oval');
     assert.match(CHIPSET_CSS,
       /:is\(\.df-table-boon, \.df-table-quest\)\s*\{[^}]*z-index:\s*6;[^}]*top:\s*calc\(var\(--df-score-cap-top\) \+ 1\.8rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem;/s,
       'both status icons stay above the chip layer directly below BAF');
     assert.match(CHIPSET_CSS,
-      /\.df-table-boon\s*\{[^}]*left:\s*0\.3rem[^}]*\}[\s\S]*?\.df-table-quest\s*\{[^}]*left:\s*1\.68rem;[^}]*scale:\s*1[^}]*\}/s,
-      'the quest is placed directly beside the boon');
+      /\.df-table-quest\s*\{[^}]*left:\s*0\.3rem;[^}]*scale:\s*1[^}]*\}[\s\S]*?\.df-table-boon\s*\{[^}]*left:\s*1\.68rem[^}]*\}/s,
+      'the quest owns the leftmost felt position and the boon sits beside it');
     assert.match(CHIPSET_CSS,
-      /\.jackpot-hero \.df-table-boon\s*\{[^}]*left:\s*calc\(var\(--df-table-content-inset\) \+ 0\.12rem\)[^}]*\}[\s\S]*?\.jackpot-hero \.df-table-quest\s*\{[^}]*left:\s*calc\(var\(--df-table-content-inset\) \+ 1\.5rem\)/s,
-      'the boon/quest pair follows the table inset on the full jackpot board');
+      /\.jackpot-hero \.df-table-quest\s*\{[^}]*left:\s*calc\(var\(--df-table-content-inset\) \+ 0\.12rem\)[^}]*\}[\s\S]*?\.jackpot-hero \.df-table-boon\s*\{[^}]*left:\s*calc\(var\(--df-table-content-inset\) \+ 1\.5rem\)/s,
+      'the leftmost quest/boon pair follows the table inset on the full jackpot board');
     assert.match(CHIPSET_CSS,
       /\.df-tomorrow-bet-oval \.df-bet-chip-rack\s*\{[^}]*width:\s*calc\(100% - 3\.8rem\)[^}]*justify-self:\s*center/s,
       'the staged amount retains its existing compact clearance around the add cue');

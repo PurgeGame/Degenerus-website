@@ -8,8 +8,8 @@
 //   - body carries layout-basic (PIT later adds layout-pro without rework)
 //   - NO page-header/search block — the nav bar carries logo + Discord + wallet;
 //     content starts at chain chip → jackpot hero (purchase +
-//     draw + coinflip, ONE widget) → quests/degenerette grid (Craps slot
-//     reserved) → tickets inventory → AFKING Passes → Side Bets rail → footer
+//     draw + coinflip, ONE widget) → quests/degenerette/craps grid → tickets
+//     inventory → AFKING Passes → Side Bets rail → footer
 //   - aggregate claims and winnings strips are unmounted
 //   - lootboxes + passes live inside the collapsed <details class="more-ways">
 //   - boons and the legacy coinflip panel remain absent; Referrals is mounted
@@ -199,18 +199,20 @@ describe('index.html basic-mode skeleton', () => {
     );
   });
 
-  test('the play grid keeps Quests left and Degenerette middle while reserving the right track for Craps', () => {
+  test('the play grid keeps Quests left, Degenerette middle, and Craps entries right', () => {
     const rowMatch = html.match(/<section class="play-grid"[\s\S]*?<\/section>/);
     assert.ok(rowMatch, '<section class="play-grid"> present');
     const row = rowMatch[0];
     const quest = row.indexOf('<app-quest-panel>');
     const degenerette = row.indexOf('<app-degenerette-panel>');
-    assert.ok(quest >= 0 && quest < degenerette, 'quests are left/first');
+    const craps = row.indexOf('<app-craps-entry>');
+    assert.ok(quest >= 0 && quest < degenerette && degenerette < craps,
+      'quests, Degenerette, and Craps are mounted in desktop track order');
     assert.equal(row.indexOf('<app-parimutuel-panel>'), -1,
-      'Side Bets no longer consumes the future Craps column');
+      'Side Bets does not consume the Craps column');
     assert.match(appCss,
       /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests degenerette craps"/s,
-      'the desktop right track remains explicitly reserved for Craps');
+      'the desktop right track belongs to Craps');
   });
 
   test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {

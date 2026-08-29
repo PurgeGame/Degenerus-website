@@ -65,25 +65,28 @@ export const CONTRACTS = {
   LINK_TOKEN:              null,
 };
 
-// Ticket-volume parimutuel window, for the COUNTDOWN ONLY (the contract's
-// `openRound` gates the buttons). Mainnet is the unscaled schedule:
-// DegenerusParimutuel.sol:478 `ts % 1 days >= 82620` — 22:57 UTC to midnight,
-// 3,780s — with the credit decaying 25 → 5 FLIP in 10-minute steps from 23:15
-// (1,080s into the day).
+// Protocol day clock. Mainnet is the unscaled schedule: one real day anchored
+// at GameTimeLib.JACKPOT_RESET_TIME (22:57 UTC).
 export const VOLUME_WINDOW = {
   anchor: 82_620,          // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC
   period: 86_400,          // one real day
   // Readiness polling hint only; never shifts the visible day-crossover clock.
   jackpotReadyDelay: 0,
-  openSeconds: 3_780,      // 22:57 → 00:00 UTC
-  creditDecayStart: 1_080, // 23:15 UTC
-  creditDecayStep: 600,    // -5 FLIP per 10 minutes
-  leadSeconds: 1_800,      // surface the card 30 minutes before the open
   // ContractAddresses.DEPLOY_DAY_BOUNDARY — populated at v5.0 cutover from the
-  // deploy manifest. Until then the widget reads the open round off the
-  // contract instead of computing it (see parimutuel.js volumeRoundNow).
+  // deploy manifest. Until then day derivations that need it fail closed.
   deployDayBoundary: null,
 };
+
+// Production CrapsBattle daily close schedule. The first battle closes at
+// 23:20 UTC, the next five on four-hour walls, and the event at 22:42 UTC.
+export const CRAPS_SCHEDULE = Object.freeze({
+  daySeconds: 86_400,
+  anchorSeconds: 82_620,
+  openerCloseSeconds: 1_200,
+  clockAlignSeconds: 180,
+  routinePeriodSeconds: 14_400,
+  eventLeadSeconds: 900,
+});
 
 export const ETH_DIVISOR = 1n;             // No /1M scaling on mainnet
 export const TICKET_DIVISOR = 100n;        // BAF scaling preserved

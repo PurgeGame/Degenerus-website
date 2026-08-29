@@ -9811,6 +9811,13 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(7) { --rvl-card-launch-x: -112%; --rvl-card-launch-mid-x: -52%; --rvl-card-launch-tilt: 8deg; --rvl-card-launch-mid-tilt: 3deg; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(4) { --rvl-card-launch-x: 55%; --rvl-card-launch-mid-x: 26%; --rvl-card-launch-tilt: -5deg; --rvl-card-launch-mid-tilt: -2deg; }
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(5) { --rvl-card-launch-x: -55%; --rvl-card-launch-mid-x: -26%; --rvl-card-launch-tilt: 5deg; --rvl-card-launch-mid-tilt: 2deg; }
+.rvl-lootbox-flight--measuring { visibility: hidden; }
+.rvl-lootbox-flight--measuring::before { animation: none; }
+.rvl-bursting .rvl-lootbox-flight--measuring .rvl-lootbox-flight__grid > .rvl-card--mini {
+  opacity: 0;
+  transform: none;
+  animation: none;
+}
 .rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini {
   animation: rvl-lootbox-card-rise var(--rvl-card-flight) cubic-bezier(0.32, 0, 0.2, 1) 0.04s both;
 }
@@ -9821,7 +9828,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-bursting .rvl-lootbox-flight__grid > .rvl-card--mini:nth-child(n+6) { animation-delay: 0.165s; }
 .rvl-bursting .rvl-lootbox-flight--settled .rvl-lootbox-flight__grid > .rvl-card--mini {
   opacity: 1;
-  transform: translate3d(0, -24px, 0) scale(1) rotate(0deg);
+  transform: translate3d(var(--rvl-card-land-x, 0px), var(--rvl-card-land-y, -24px), 0) scale(1) rotate(0deg);
   animation: none;
 }
 @keyframes rvl-lootbox-card-rise {
@@ -9831,7 +9838,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   }
   to {
     opacity: 1;
-    transform: translate3d(0, -24px, 0) scale(1) rotate(0deg);
+    transform: translate3d(var(--rvl-card-land-x, 0px), var(--rvl-card-land-y, -24px), 0) scale(1) rotate(0deg);
   }
 }
 .rvl-spin-zone--lootbox-launch {
@@ -16032,39 +16039,57 @@ body.layout-basic .jrs-error[hidden] { display: none !important; }
 }
 
 /* ==========================================================================
-   Second three-panel instrument: Quests · Degenerette · reserved Craps slot.
+   Second three-panel instrument: Quests · Degenerette · Craps entries.
    It uses the jackpot hero's exact wide-screen tracks so both rows share
-   column edges. The empty third desktop track is where the upcoming Craps
-   container lands; compact screens omit that unused track entirely.
+   column edges. Compact screens stack the same three instruments.
    ========================================================================== */
 body.layout-basic .play-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "quests"
-    "degenerette";
-  align-items: stretch;
-  margin: 0 0 clamp(1rem, 3vw, 1.5rem);
-  overflow: hidden;
-  border: 1px solid rgba(245, 166, 35, 0.38);
-  border-radius: 14px;
-  background:
-    radial-gradient(90% 70% at 50% 0%, rgba(99, 102, 241, 0.09), transparent 64%),
-    var(--bg-secondary);
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "quests" "degenerette" "craps";
+  align-items: stretch; margin: 0 0 clamp(1rem, 3vw, 1.5rem); overflow: hidden;
+  border: 1px solid rgba(245, 166, 35, 0.38); border-radius: 14px;
+  background: radial-gradient(90% 70% at 50% 0%, rgba(99, 102, 241, 0.09), transparent 64%), var(--bg-secondary);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
+body.layout-basic .play-grid > app-quest-panel { grid-area: quests; display: block; min-width: 0; }
+body.layout-basic .play-grid > app-degenerette-panel { grid-area: degenerette; display: block; min-width: 0; border-top: 1px solid rgba(245,166,35,.24); }
+body.layout-basic .play-grid > app-craps-entry { grid-area: craps; display: block; min-width: 0; border-top: 1px solid rgba(245,166,35,.24); }
 
-body.layout-basic .play-grid > app-quest-panel {
-  grid-area: quests;
-  display: block;
-  min-width: 0;
-}
-body.layout-basic .play-grid > app-degenerette-panel {
-  grid-area: degenerette;
-  display: block;
-  min-width: 0;
-  border-top: 1px solid rgba(245, 166, 35, 0.24);
-}
+/* Scheduled Craps launcher: one shared pot boost, one board, and seven dense buy rows. */
+body.layout-basic .craps-entry { position: relative; display: flex; box-sizing: border-box; width: 100%; height: 100%; min-height: 0; flex-direction: column; gap: .27rem; overflow: hidden; padding: .5rem .58rem; background: radial-gradient(circle at 96% 4%,rgba(239,68,68,.15),transparent 34%),linear-gradient(145deg,rgba(59,11,19,.24),transparent 52%); }
+body.layout-basic .craps-entry::before { position: absolute; right: -4rem; bottom: -6rem; width: 13rem; height: 13rem; border: 1px solid rgba(248,113,113,.08); border-radius: 50%; background: repeating-radial-gradient(circle,rgba(248,113,113,.04) 0 1px,transparent 1px 17px); content: ""; pointer-events: none; }
+body.layout-basic .craps-entry__head { position: relative; z-index: 1; display: grid; min-height: 2.42rem; grid-template-columns: 2.15rem minmax(3.7rem,.72fr) minmax(3.9rem,.66fr) minmax(5.5rem,1fr); align-items: center; gap: .28rem; padding: .2rem .34rem; overflow: hidden; border: 1px solid rgba(226,184,95,.38); border-radius: 7px; background: linear-gradient(180deg,rgba(69,13,26,.72),rgba(14,10,14,.83)); }
+body.layout-basic .craps-entry__dice { position: relative; display: block; width: 2.05rem; height: 1.62rem; } body.layout-basic .craps-entry__dice img { position: absolute; display: block; width: 1.45rem; height: 1.45rem; object-fit: contain; filter: drop-shadow(0 .12rem .18rem rgba(0,0,0,.5)); }
+body.layout-basic .craps-entry__dice img:first-child { z-index: 1; top: 0; left: 0; transform: rotate(-7deg); } body.layout-basic .craps-entry__dice img:last-child { right: 0; bottom: 0; transform: rotate(7deg); }
+body.layout-basic .craps-entry__head h2 { display: grid; min-width: 0; gap: .02rem; margin: 0; color: #fff0d0; font: 950 .74rem/1 Georgia,serif; letter-spacing: .07em; white-space: nowrap; } body.layout-basic .craps-entry__head h2 small { color: #d7ae64; font: 950 .31rem/1 var(--font-sans,system-ui); letter-spacing: .12em; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) { display: grid; min-width: 0; align-content: center; gap: .07rem; padding-left: .34rem; overflow: hidden; border-left: 1px solid rgba(226,184,95,.25); }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) > small { overflow: hidden; color: #9d929b; font-size: .3rem; font-weight: 950; letter-spacing: .035em; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__pot-boost > small { color: #d2b15e; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) strong { overflow: hidden; color: #e3a8ff; font: 950 .63rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__pot-boost strong { color: #ffe48d; } body.layout-basic .craps-entry__head em { color: #9f949c; font-size: .36rem; font-style: normal; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost)[data-state="loading"] strong { opacity: .5; } body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost)[data-state="unavailable"] strong { color: #aaa1a7; }
+body.layout-basic .craps-entry button { font: inherit; -webkit-tap-highlight-color: transparent; }
+body.layout-basic .craps-entry__setup { position: relative; z-index: 1; display: grid; min-height: 1.68rem; grid-template-columns: minmax(0,1.08fr) minmax(0,.92fr); gap: .27rem; }
+body.layout-basic .craps-entry__board { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .25rem; padding: .2rem .34rem; border: 1px solid rgba(248,113,113,.34); border-radius: 6px; background: rgba(13,17,23,.72); color: #f8fafc; cursor: pointer; text-align: left; } body.layout-basic .craps-entry__board > span { display: grid; min-width: 0; gap: .02rem; } body.layout-basic .craps-entry__board small { color: #919aa8; font-size: .34rem; font-weight: 900; letter-spacing: .07em; } body.layout-basic .craps-entry__board strong { overflow: hidden; font-size: .55rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__board > b { color: #fca5a5; font-size: .45rem; font-weight: 1000; letter-spacing: .025em; white-space: nowrap; }
+body.layout-basic .craps-entry__lane { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: .1rem; border: 1px solid rgba(148,163,184,.23); border-radius: 6px; background: rgba(0,0,0,.24); }
+body.layout-basic .craps-entry__lane button { min-width: 0; padding: .2rem .1rem; border: 0; border-radius: 4px; background: transparent; color: #929ba9; font-size: .45rem; font-weight: 950; letter-spacing: .025em; cursor: pointer; } body.layout-basic .craps-entry__lane button small { display: block; margin-top: .05rem; color: inherit; font-size: .32rem; letter-spacing: .01em; } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.34),rgba(127,29,29,.32)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.28); }
+body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); }
+body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 19%; } body.layout-basic .craps-entry__col-buyin { width: 18%; } body.layout-basic .craps-entry__col-mult { width: 12%; } body.layout-basic .craps-entry__col-speed { width: 14%; } body.layout-basic .craps-entry__col-action { width: 37%; }
+body.layout-basic .craps-entry__listing thead { background: rgba(0,0,0,.3); } body.layout-basic .craps-entry__listing thead th { height: .66rem; padding: .09rem .15rem; overflow: hidden; color: #7f8998; font-size: .34rem; font-weight: 950; letter-spacing: .035em; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing thead th:last-child { text-align: center; }
+body.layout-basic .craps-entry__listing tbody tr { height: 1.48rem; transition: background 120ms ease,opacity 120ms ease; } body.layout-basic .craps-entry__listing tbody tr + tr { border-top: 1px solid rgba(148,163,184,.11); } body.layout-basic .craps-entry__listing tbody tr:nth-child(odd):not(.craps-entry__day-buy) { background: rgba(255,255,255,.014); }
+body.layout-basic .craps-entry__listing tbody :is(th,td) { min-width: 0; padding: .13rem .15rem; overflow: hidden; font-size: .52rem; font-weight: 900; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th { padding-left: .26rem; }
+body.layout-basic .craps-entry__listing tbody th :is(strong,time,small) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th time { color: #e2e8f0; font: 950 .61rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; }
+body.layout-basic .craps-entry__listing tbody td:nth-child(2) strong { display: block; overflow: hidden; color: #f8fafc; font: 950 .64rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody td:nth-child(2) small { display: block; margin-top: .03rem; color: #8d97a5; font-size: .32rem; letter-spacing: .04em; }
+body.layout-basic .craps-entry__listing tbody td:nth-child(3) { color: #fde68a; font-size: .52rem; font-variant-numeric: tabular-nums; font-weight: 1000; } body.layout-basic .craps-entry__listing tbody td:nth-child(4) { color: #d9e0e9; font-size: .48rem; font-weight: 1000; }
+body.layout-basic .craps-entry__action { padding-inline: .1rem .18rem !important; text-align: right !important; } body.layout-basic .craps-entry__action > button,body.layout-basic .craps-entry__day-buy td > button { width: 100%; min-width: 0; height: 1.12rem; padding: .08rem; overflow: hidden; border: 1px solid rgba(252,165,165,.52); border-radius: 5px; background: linear-gradient(180deg,#d9394c,#8b1728); color: #fff; font-size: .48rem; font-weight: 1000; letter-spacing: .015em; text-overflow: ellipsis; white-space: nowrap; cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3,pointer; box-shadow: inset 0 1px rgba(255,255,255,.14); }
+body.layout-basic .craps-entry__listing button[data-state="entered"]:disabled { border-color: rgba(74,222,128,.45); background: linear-gradient(180deg,rgba(22,101,52,.7),rgba(20,83,45,.64)); color: #dcfce7; opacity: 1; } body.layout-basic .craps-entry__listing button[data-state="upgrade"] { border-color: rgba(253,224,71,.65); background: linear-gradient(180deg,#d99b24,#8c590c); color: #1d1200; }
+body.layout-basic .craps-entry__result { min-width: 0; padding: .18rem .34rem !important; } body.layout-basic .craps-entry__result:not([hidden]) { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,.9fr) minmax(0,.9fr); align-items: center; gap: .32rem; } body.layout-basic .craps-entry__result > span { display: grid; min-width: 0; gap: .06rem; } body.layout-basic .craps-entry__result > span + span { padding-left: .32rem; border-left: 1px solid rgba(74,222,128,.2); }
+body.layout-basic .craps-entry__result small { color: #8faf9a; font-size: .33rem; font-weight: 950; letter-spacing: .055em; } body.layout-basic .craps-entry__result strong { overflow: hidden; color: #d9fbe5; font: 1000 .52rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow: ellipsis; } body.layout-basic .craps-entry__result span:not(:first-child) strong { color: #fde68a; } body.layout-basic .craps-entry__result output { font: inherit; }
+body.layout-basic .craps-entry__day-buy { border-bottom: 1px solid rgba(253,224,71,.3); background: linear-gradient(90deg,rgba(250,204,21,.13),rgba(146,64,14,.05)); } body.layout-basic .craps-entry__day-buy th small { color: #d6b75d; font-size: .32rem; letter-spacing: .045em; } body.layout-basic .craps-entry__day-buy th strong { margin-top: .04rem; color: #fff7d6; font-size: .54rem; font-weight: 1000; } body.layout-basic .craps-entry__day-buy td:nth-child(2) strong { color: #fde68a; } body.layout-basic .craps-entry__day-buy td:last-child { padding-inline: .1rem .18rem; }
+body.layout-basic .craps-entry__battle[data-state="current"] { background: linear-gradient(90deg,rgba(180,83,9,.26),rgba(250,204,21,.035)); box-shadow: inset .16rem 0 #facc15; } body.layout-basic .craps-entry__battle[data-entry]:not([data-entry="none"]):not([data-state="completed"]) { background-color: rgba(20,83,45,.1); }
+body.layout-basic .craps-entry__battle[data-state="completed"] { height: 1.55rem; background: linear-gradient(90deg,rgba(20,83,45,.28),rgba(250,204,21,.03)); box-shadow: inset .16rem 0 #4ade80; }
+body.layout-basic .craps-entry__battle[data-state="closed"] { filter: saturate(.3); opacity: .4; } body.layout-basic .craps-entry__battle[data-terms="loading"] { opacity: .62; }
+body.layout-basic .craps-entry button:hover:not(:disabled) { filter: brightness(1.09); } body.layout-basic .craps-entry button:disabled { cursor: default; opacity: .45; } body.layout-basic .craps-entry button[data-terms="loading"] { cursor: wait; } body.layout-basic .craps-entry button:focus-visible { outline: 2px solid #fde68a; outline-offset: 2px; }
+body.layout-basic .craps-entry__foot { position: relative; z-index: 1; min-height: .7rem; margin-top: auto; overflow: hidden; color: #8e98a6; font-size: .44rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__foot[data-state="message"] { color: #fca5a5; }
+
+@media (max-width: 380px) { body.layout-basic .craps-entry { padding-inline: .44rem; } body.layout-basic .craps-entry__head { grid-template-columns: 1.85rem minmax(3.25rem,.64fr) minmax(3.4rem,.62fr) minmax(4.6rem,1fr); gap: .2rem; padding-inline: .25rem; } body.layout-basic .craps-entry__dice { width: 1.75rem; } body.layout-basic .craps-entry__head em { display: none; } body.layout-basic .craps-entry__col-action { width: 38%; } }
 
 body.layout-basic .play-grid .panel {
   box-sizing: border-box;
@@ -17368,6 +17393,10 @@ body.layout-basic .qst-action-dialog__hint {
     border-top: 0;
     border-left: 1px solid rgba(245, 166, 35, 0.24);
   }
+  body.layout-basic .play-grid > app-craps-entry {
+    border-top: 0;
+    border-left: 1px solid rgba(245, 166, 35, 0.24);
+  }
   body.layout-basic .play-grid .qst-slots {
     flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr);
@@ -18218,7 +18247,9 @@ body.layout-basic .deg-payout-group[open] summary {
   text-align: left;
 }
 body.layout-basic .deg-payout-table-wrap {
+  width: min(100%, 32rem);
   min-width: 0;
+  margin-inline: auto;
   overflow-x: auto;
   border: 1px solid rgba(196, 181, 253, 0.24);
   border-radius: 10px;
@@ -18227,7 +18258,7 @@ body.layout-basic .deg-payout-table-wrap {
 }
 body.layout-basic .deg-payout-table {
   width: 100%;
-  min-width: 51rem;
+  min-width: 18rem;
   border-collapse: collapse;
   color: #d8d9e7;
   font-size: 0.62rem;
@@ -18275,7 +18306,7 @@ body.layout-basic .deg-payout-table tbody tr:last-child td { border-bottom: 0; }
 @media (max-width: 640px) {
   body.layout-basic .deg-payouts__head { display: grid; gap: 0.24rem; }
   body.layout-basic .deg-payouts__head p { text-align: left; }
-  body.layout-basic .deg-payout-table { min-width: 47rem; }
+  body.layout-basic .deg-payout-table { min-width: 18rem; }
 }
 body.layout-basic .deg-referral-dialog__custom {
   display: grid;
@@ -24858,3 +24889,109 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
     min-width: 0; padding-inline: 0.45rem; font-size: 0.62rem;
   }
 }
+
+/* Craps passes are physical day tickets, not another token balance. The same
+   dice badge used by the battle table is mounted into a clipped pass face;
+   normal and 19x high-roller denominations keep unmistakably different felt. */
+.rvl-card--craps-pass {
+  --craps-pass-rgb: 52, 211, 153;
+  --craps-pass-ink: #a7f3d0;
+  color: rgb(var(--craps-pass-rgb));
+  border-color: rgba(var(--craps-pass-rgb), 0.8) !important;
+  background:
+    radial-gradient(circle at 22% 32%, rgba(var(--craps-pass-rgb), 0.2), transparent 48%),
+    linear-gradient(155deg, #123d2d, #081912 72%) !important;
+  box-shadow: 0 0 30px rgba(var(--craps-pass-rgb), 0.3), inset 0 0 0 1px rgba(255,255,255,0.045) !important;
+}
+.rvl-card--craps-pass[data-pass-tier="high"] {
+  --craps-pass-rgb: 245, 183, 60;
+  --craps-pass-ink: #ffe29a;
+  background:
+    radial-gradient(circle at 24% 30%, rgba(255, 211, 97, 0.26), transparent 48%),
+    linear-gradient(155deg, #49300d, #130e07 74%) !important;
+}
+.rvl-card--craps-pass .rvl-card-value { color: var(--craps-pass-ink) !important; }
+.rvl-card--craps-pass .rvl-card-label { color: #fff2c9 !important; }
+.rvl-card-icon--craps-pass { padding: 0.42rem !important; }
+.rvl-craps-pass-badge {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(var(--craps-pass-rgb), 0.88);
+  border-radius: 18% 18% 15% 15% / 24% 24% 18% 18%;
+  background:
+    linear-gradient(128deg, rgba(255,255,255,0.16), transparent 28%),
+    repeating-linear-gradient(135deg, rgba(var(--craps-pass-rgb), 0.08) 0 3px, transparent 3px 12px),
+    #071c14;
+  box-shadow: inset 0 0 18px rgba(0,0,0,0.54), 0 5px 12px rgba(0,0,0,0.38);
+  isolation: isolate;
+  clip-path: polygon(7% 0, 93% 0, 100% 12%, 100% 88%, 93% 100%, 7% 100%, 0 88%, 0 12%);
+}
+.rvl-craps-pass-badge--high { background-color: #241706; }
+.rvl-craps-pass-badge::before {
+  position: absolute;
+  inset: 6%;
+  z-index: -1;
+  border: 1px solid rgba(255, 240, 190, 0.26);
+  border-radius: inherit;
+  content: '';
+}
+.rvl-craps-pass-badge__dice {
+  position: relative;
+  display: block;
+  width: 76%;
+  height: 58%;
+  transform: translateY(-12%);
+}
+.rvl-craps-pass-badge__dice img {
+  position: absolute;
+  top: 0;
+  width: 58%;
+  height: auto;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.56));
+}
+.rvl-craps-pass-badge__dice img:first-child {
+  left: 0;
+  z-index: 1;
+  transform: rotate(-8deg);
+}
+.rvl-craps-pass-badge__dice img:last-child {
+  right: 0;
+  transform: rotate(8deg);
+}
+.rvl-craps-pass-badge__band {
+  position: absolute;
+  right: 8%;
+  bottom: 9%;
+  left: 8%;
+  padding: 0.22em 0.35em;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 999px;
+  background: #a40f18;
+  color: #fff7df;
+  font: 1000 clamp(0.32rem, 1.1vw, 0.62rem)/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.65);
+}
+.rvl-craps-pass-badge--high .rvl-craps-pass-badge__band {
+  background: linear-gradient(180deg, #ffe28a, #bd7011);
+  color: #241300;
+  text-shadow: 0 1px rgba(255,255,255,0.35);
+}
+.rvl-craps-pass-badge__windows {
+  position: absolute;
+  top: 7%;
+  right: 9%;
+  padding: 0.16em 0.34em;
+  border-radius: 999px;
+  background: rgba(3, 11, 8, 0.82);
+  color: var(--craps-pass-ink);
+  font: 950 clamp(0.24rem, 0.85vw, 0.48rem)/1 "Roboto Mono", monospace;
+  letter-spacing: 0.04em;
+}
+.rvl-card--mini .rvl-craps-pass-badge__windows { display: none; }

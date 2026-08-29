@@ -290,6 +290,7 @@ import * as storeMod from '../../app/store.js';
 import * as degeneretteMod from '../../app/degenerette.js';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
+import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as affiliateMod from '../../app/affiliate.js';
 import * as passesMod from '../../app/passes.js';
@@ -481,6 +482,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     storeMod.update('viewing.address', null);
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    decimatorMod.__setDecimatorContextReaderForTest(async () => ({ activityScore: 0 }));
     installDeityOwners();
     degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract());
     // Default lootbox stub returns 0n (RNG not ready) — tests override per-case.
@@ -2225,27 +2227,64 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     }
   });
 
-  test('Degenerette basics uses one concise ETH/FLIP payout matrix and omits WWXRP payouts', () => {
+  test('Degenerette basics quotes the selected board at the player Degen Score and explains ETH Hero influence', async () => {
+    decimatorMod.__setDecimatorContextReaderForTest(async () => ({ activityScore: 305 }));
+    _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
+      ? { cards: [] }
+      : { scoreBreakdown: { totalBps: 12 }, degenerette: { pendingBets: [] } };
     const el = instantiate();
     try {
+      await settle();
       assert.match(el.innerHTML, /data-bind="deg-basics-info"[^>]*aria-label="How Degenerette works"/);
       assert.match(el.innerHTML, /Pick a symbol and color for each quadrant/);
       assert.match(el.innerHTML, /Matching symbols score/);
+      assert.match(el.innerHTML,
+        /When you bet ETH,[\s\S]*?selected Hero symbol[\s\S]*?main jackpot drawing[\s\S]*?color is still random/,
+        'the info sheet explains the selected Hero symbol\'s ETH-only main-jackpot influence');
       const info = el.querySelector('[data-bind="deg-basics-info"]');
       const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
-      const payoutArea = el.querySelector('.deg-payouts');
-      const payoutTables = el.querySelectorAll('.deg-payout-table');
-      assert.equal(payoutTables.length, 1, 'all gold schedules share one comparison matrix');
-      const payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
+      assert.match(el.innerHTML, /Selected board · ETH \/ FLIP payouts/);
+
+      document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
+        detail: { traitIds: [56, 121, 130, 203] },
+      }));
+      let payoutTables = el.querySelectorAll('.deg-payout-table');
+      assert.equal(payoutTables.length, 1, 'the selected board has one payout table');
+      let payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
       assert.equal(payoutRows.length, 9, 'the universal zero scores share one 0–1 row');
-      assert.equal(payoutRows[0].children.length, 9,
-        'score plus all eight ETH/FLIP gold-and-Hero variants are shown');
-      const payoutHeadings = payoutTables[0].querySelectorAll('th')
+      assert.ok(payoutRows.every((row) => row.children.length === 3),
+        'each row contains score plus ETH and FLIP for only the selected board');
+      let payoutHeadings = payoutTables[0].querySelectorAll('th')
         .map((heading) => heading.textContent).join(' ');
-      assert.match(payoutHeadings, /0 GOLD/);
-      assert.match(payoutHeadings, /4 GOLD/);
-      assert.match(payoutHeadings, /HERO GOLD/);
-      assert.match(payoutHeadings, /OTHER HERO/);
+      assert.match(payoutHeadings, /2 GOLD · HERO GOLD/);
+      assert.match(payoutHeadings, /ETH/);
+      assert.match(payoutHeadings, /FLIP/);
+      assert.match(payoutHeadings, /DEGEN SCORE 305/,
+        'the visible quote prefers the live GAME score over a stale indexed score');
+      assert.doesNotMatch(payoutHeadings, /0 GOLD|1 GOLD|3 GOLD|4 GOLD|OTHER HERO/);
+      assert.equal(payoutRows[1].children[1].textContent, '2.38',
+        'score 2 ETH uses the selected board adjusted by Degen Score 305');
+      assert.equal(payoutRows[1].children[2].textContent, '2.38',
+        'score 2 FLIP uses the selected board adjusted by Degen Score 305');
+      assert.equal(payoutRows[5].children[1].textContent, '269.68',
+        'score 6 includes the ETH-only high-score bonus');
+      assert.equal(payoutRows[5].children[2].textContent, '244.52',
+        'score 6 keeps the distinct FLIP schedule');
+      assert.match(el.querySelector('[data-bind="deg-payout-context"]')?.textContent || '',
+        /Degen Score 305/,
+        'the explanatory copy says the player score is applied');
+
+      el.querySelector('[data-bind="dgn-cell-2"]')
+        .dispatchEvent({ type: 'contextmenu', preventDefault() {} });
+      payoutTables = el.querySelectorAll('.deg-payout-table');
+      payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
+      payoutHeadings = payoutTables[0].querySelectorAll('th')
+        .map((heading) => heading.textContent).join(' ');
+      assert.match(payoutHeadings, /2 GOLD · OTHER HERO/,
+        'moving Hero to a non-gold quadrant refreshes the visible schedule');
+      assert.doesNotMatch(payoutHeadings, /HERO GOLD(?:\s|$)/);
+      assert.equal(payoutRows[1].children[1].textContent, '2.31',
+        'the score-adjusted multiplier changes with the selected board Hero position');
       assert.doesNotMatch(payoutHeadings, /WWXRP/);
       assert.equal(dialog.hidden, true);
       info.dispatchEvent({ type: 'click', preventDefault() {} });

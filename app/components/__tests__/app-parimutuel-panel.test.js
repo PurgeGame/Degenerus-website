@@ -2,16 +2,15 @@
 // Run: cd website && node --test app/components/__tests__/app-parimutuel-panel.test.js
 //
 // Covers the part of the widget that has rules rather than pixels:
-//   - it hides itself when neither book is open and nothing is claimable
+//   - it shows the compact closed state when Growth is closed and nothing is claimable
 //   - an open GROWTH book renders the round, the book counts, the payout quotes
 //     and two bet buttons
 //   - a held position replaces the buttons with the "your bet" marker
 //   - a settled winner keeps the panel on screen with a CLAIM for the total
 //   - a bet click reaches placeBet(player, over)
 //
-// The volume book runs off the wall clock (540s of every 600s on the testnet
-// overlay), so every test pins it through parimutuel.js's __setClockForTest —
-// otherwise these would pass or fail depending on the minute they ran.
+// The harness retains obsolete volume fixtures so the removal regression can
+// prove they no longer influence the mounted component.
 //
 // Fake DOM harness: the trimmed port used by app-daily-flip.test.js /
 // app-balances-strip.test.js.
@@ -25,7 +24,6 @@ import * as contractsMod from '../../app/contracts.js';
 import * as pari from '../../app/parimutuel.js';
 import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
-import { VOLUME_WINDOW } from '../../app/chain-config.js';
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const LEVEL = 42;
@@ -34,15 +32,11 @@ const FLIP = 10n ** 18n;
 // factor. Keep pool fixtures in raw contract units so ETH labels are realistic.
 const RAW_ETH = 10n ** 12n;
 
-// Day 100 of this deploy. Day indices are deploy-relative (GameTimeLib:34), so
-// the boundary has to be in the timestamp or the derived round comes out
-// epoch-scale. CLOSED_AT sits one second past the window's close (growth is then
-// the only thing that can make the panel visible); OPEN_AT sits inside it.
-const DAY_100 = VOLUME_WINDOW.anchor + VOLUME_WINDOW.period * (VOLUME_WINDOW.deployDayBoundary + 99);
-const CLOSED_AT = DAY_100 + VOLUME_WINDOW.openSeconds;
-const OPEN_AT = DAY_100 + 1;
-const IMMINENT_AT = DAY_100 + VOLUME_WINDOW.period - 1;
-const VOLUME_ROUND = 101;   // day index 100 → the window bets into round 101
+// The parimutuel module lost its wall-clock surface with the volume book
+// (run-43 excision): the growth book is level-gated by the contract's own
+// openRound, so the harness no longer pins a clock. VOLUME_ROUND survives only
+// to shape the obsolete-fixture rows in the removal test below.
+const VOLUME_ROUND = 101;   // day index 100 → the old window bet into round 101
 
 // ---------------------------------------------------------------------------
 // Fake DOM
@@ -441,7 +435,6 @@ describe('app-parimutuel-panel', () => {
     storeMod.update('ui.mode', 'self');
     storeMod.update('ui.chainOk', true);
     contractsMod.setProvider(makeFakeProvider());
-    pari.__setClockForTest(() => CLOSED_AT);
     _gameState = { level: LEVEL, phase: 'JACKPOT', decWindowOpen: false };
     _decimatorPosition = null;
     _docBody = makeFakeElement('body');
@@ -455,7 +448,6 @@ describe('app-parimutuel-panel', () => {
     wwxrpWidget.__resetWwxrpBurnWidgetDepsForTest();
     pari.__resetContractFactoryForTest();
     pari.__resetQuestFactoryForTest();
-    pari.__resetClockForTest();
     decimatorMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });
@@ -597,16 +589,28 @@ describe('app-parimutuel-panel', () => {
     el.disconnectedCallback();
   });
 
-  test('an imminent volume round stays hidden when there is no open book or player position', async () => {
-    pari.__setClockForTest(() => IMMINENT_AT);
-    installContract({ growth: { [LEVEL]: { openRound: 0 } } });
+  test('Volume Bet is removed from the rendered, pending, and runtime component paths', async () => {
+    installContract({
+      growth: { [LEVEL]: { openRound: 0 } },
+      volume: {
+        [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n },
+        [VOLUME_ROUND - 1]: {
+          side: 2, outcome: 2, payout: 2_250n * FLIP, over: 1n, under: 2n,
+        },
+      },
+    });
     const el = await mount();
 
-    const volume = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(volume.hidden, true,
-      'a countdown alone does not render a VOLUME BET card');
+    assert.equal(el.querySelector('[data-bind="pari-volume"]'), null);
+    assert.doesNotMatch(el.textContent, /VOLUME BET/);
     assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false,
-      'the compact closed-books state remains instead of a blank panel');
+      'an obsolete contract fixture cannot make the removed book visible');
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((item) => /volume/i.test(item.id || item.kind)),
+      false,
+    );
+    assert.doesNotMatch(PARI_SOURCE, /volume/i,
+      'the component no longer imports, reads, writes, renders, or claims the removed book');
     el.disconnectedCallback();
   });
 
@@ -1106,90 +1110,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(pendingActionsMod.getPendingActions().length, 0);
   });
 
-  test('settled volume payouts also publish only to the shared bottom row', async () => {
-    installContract({
-      volume: {
-        [VOLUME_ROUND]: { openRound: 0 },
-        [VOLUME_ROUND - 1]: {
-          side: 2, outcome: 2, payout: 2_250n * FLIP, over: 1n, under: 2n,
-        },
-      },
-      seals: { [VOLUME_ROUND - 1]: { total: 800n, previous: 1200n } },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, true);
-    assert.equal(card.querySelector('.pari-claim-cta'), null);
-    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'volume-claim');
-    assert.ok(claim, 'volume claim is included in the bottom action row');
-    assert.equal(claim.shortLabel, 'Claim');
-    assert.match(claim.detail, /2,250 FLIP ready/);
-    await claim.run();
-    await flush();
-    const [result] = revealMod.__takeQueuedForTest();
-    assert.equal(result.kind, 'pari');
-    assert.equal(result.player, TEST_ADDR);
-    assert.equal(result.presentationId, `pari-reveal:${TEST_ADDR}:volume:${VOLUME_ROUND - 1}`);
-    assert.equal(result.betTickets, '3');
-    assert.equal(result.resultTickets, '2');
-  });
-
-  test('an open volume window uses the round-free VOLUME BET heading and its countdown', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: { [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n } },
-      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, false);
-    // The round remains an internal contract key; it is not useful player UI.
-    assert.equal(card.querySelector('.pari-book__title').textContent, 'VOLUME BET');
-    assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 8:59/);
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['UNDER 3 tickets', 'OVER 3 tickets'],
-    );
-    assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
-      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +25 FLIP',
-      'the fixed bet and current decaying volume credit are visible before betting');
-  });
-
-  test('volume credit is hidden when this player cannot earn it', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: { [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n } },
-      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
-      marketGate: { mayBet: true, earnsReward: false },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, false);
-    assert.equal(card.querySelector('.pari-prebet-bonus'), null);
-    el.disconnectedCallback();
-  });
-
-  test('an open volume book stays hidden until its adjacent ticket seal arrives', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: { [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n } },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, true,
-      'the player never sees an unlabeled ticket OVER / UNDER market');
-    assert.equal(card.querySelectorAll('.pari-side__cta').length, 0);
-    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false);
-    assert.match(el.querySelector('[data-bind="pari-empty"]').textContent,
-      /Loading yesterday’s ticket total/);
-    el.disconnectedCallback();
-  });
-
-  // User call 2026-07-29: each book shows the number the round has to beat, and
-  // the % of the book on each side. Neither is a payout quote.
+  // Each Growth book shows the number the round has to beat and the percentage
+  // of the book on each side. Neither is a payout quote.
   test('the growth book states last level’s realized growth as the bar to clear', async () => {
     installContract({
       growth: {
@@ -1228,182 +1150,6 @@ describe('app-parimutuel-panel', () => {
     const offered = bench.querySelector('.pari-book__offered');
     assert.equal(offered.textContent, '-10%');
     assert.match(offered.className, /pari-book__offered--lost/, 'prior UNDER result is red');
-  });
-
-  test('the volume book states how many tickets the last round bought', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 2n, under: 6n },
-        [VOLUME_ROUND - 1]: { outcome: 1 },
-      },
-      // Raw purchase units: 400 = 1 ticket. 1,200 units = 3 tickets, up from 2.
-      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    const bench = card.querySelector('.pari-book__bench');
-    assert.ok(bench, 'benchmark line rendered');
-    assert.equal(bench.textContent, 'Yesterday: 3 tickets bought');
-    assert.equal(card.querySelector('.pari-today__label').parentElement,
-      card.querySelector('.pari-today'),
-      'TODAY owns a centered line immediately below Yesterday');
-    assert.equal(card.querySelector('.pari-book__context').querySelector('.pari-today__label'), null,
-      'TODAY is no longer squeezed onto Yesterday’s line');
-    const offered = bench.querySelector('.pari-book__offered');
-    assert.equal(offered.textContent, '3 tickets bought', 'the new bet’s offered number is isolated');
-    assert.match(offered.className, /pari-book__offered--won/, 'last day’s OVER win is green');
-    // …and the split reads off the bet counts, 2 v 6.
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['UNDER 3 tickets', 'OVER 3 tickets'],
-    );
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__target').map((n) => n.textContent),
-      ['3 tickets', '3 tickets'],
-      'the actual number being bet over or under stays visible without redundant TARGET copy',
-    );
-    assert.match(
-      APP_CSS,
-      /\.pari-side__action\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/s,
-      'long offered values wrap inside their equal-width choice instead of clipping',
-    );
-    assert.match(
-      APP_CSS,
-      /\.pari-today__label\s*\{[^}]*width:\s*100%[^}]*text-align:\s*center/s,
-      'TODAY is centered across its dedicated row',
-    );
-    assert.match(
-      APP_CSS,
-      /\.pari-today--volume \.pari-side__cta\s*\{[^}]*min-height:\s*1\.9rem[^}]*padding:\s*0\.2rem 0\.32rem/s,
-      'ticket choice buttons are slightly shorter without shrinking their width',
-    );
-    assert.deepEqual(
-      card.querySelectorAll('.pari-split__label').map((n) => n.textContent),
-      ['25%', '75%'],
-    );
-    assert.equal(card.querySelector('.pari-thermometer'), null,
-      'ticket pari keeps the benchmark and split without a redundant thermometer');
-  });
-
-  test('a chain-reported open round backfills its adjacent result for threshold color', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    const chainRound = VOLUME_ROUND + 9;
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        // The locally predicted lookback is stale, but every view carries the
-        // contract-authoritative open round.
-        [VOLUME_ROUND]: { openRound: chainRound, over: 0n, under: 0n },
-        [chainRound]: { openRound: chainRound, over: 3n, under: 2n },
-        [chainRound - 1]: { openRound: chainRound, outcome: 2 },
-      },
-      seals: { [chainRound - 1]: { total: 1600n, previous: 2000n } },
-    });
-
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    const offered = card.querySelector('.pari-book__offered');
-    assert.equal(offered.textContent, '4 tickets bought');
-    assert.match(offered.className, /pari-book__offered--lost/,
-      'the immediately preceding UNDER result is fetched and painted red');
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__action').map((node) => node.textContent),
-      ['UNDER 4 tickets', 'OVER 4 tickets'],
-      'both choices retain the actual chain benchmark despite the stale local anchor',
-    );
-    el.disconnectedCallback();
-  });
-
-  test('a held volume position replaces both choices with one labelled receipt', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        [VOLUME_ROUND]: {
-          openRound: VOLUME_ROUND,
-          over: 2n,
-          under: 6n,
-          side: 2,
-        },
-        [VOLUME_ROUND - 1]: { outcome: 1 },
-      },
-      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
-    });
-
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.querySelector('.pari-book__title').textContent, 'VOLUME BET');
-    assert.equal(card.querySelector('.pari-book__context'), null,
-      'Yesterday disappears as soon as the player has a position');
-    assert.equal(card.querySelector('.pari-today__label'), null,
-      'TODAY disappears as soon as the player has a position');
-    assert.equal(card.querySelectorAll('.pari-side__cta').length, 0,
-      'submitted ticket bets no longer look actionable');
-    assert.equal(card.querySelectorAll('.pari-side').length, 0,
-      'the unused opposite choice is removed entirely');
-    const receipt = card.querySelector('.pari-your-bet--volume');
-    assert.ok(receipt?.className.includes('pari-your-bet--under'));
-    assert.equal(receipt.textContent, 'YOUR BET:UNDER 3 tickets');
-    el.disconnectedCallback();
-  });
-
-  test('a closed volume position keeps its pick beside the to-win amount', async () => {
-    pari.__setClockForTest(() => CLOSED_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        [VOLUME_ROUND]: {
-          openRound: 0,
-          over: 2n,
-          under: 3n,
-          side: 2,
-          outcome: 0,
-          payout: 0n,
-        },
-      },
-      // Round 101 was offered round 100's three-ticket total.
-      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
-    });
-
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    const receipt = card.querySelector('.pari-your-bet--volume.pari-your-bet--closed')
-      || card.querySelector('.pari-your-bet--closed');
-    assert.ok(receipt, 'the unresolved closed wager stays visible');
-    assert.match(receipt.textContent, /YOUR BET:UNDER 3 tickets/,
-      'the exact side and ticket line survive market close');
-    assert.match(receipt.textContent, /TO WIN: 1,666 FLIP/);
-    const pendingAction = pendingActionsMod.getPendingActions()
-      .find((item) => item.id === `pari:volume:${VOLUME_ROUND}`);
-    assert.equal(pendingAction?.label, 'VOLUME BET');
-    assert.equal(pendingAction?.shortLabel, 'VOLUME BET');
-    assert.doesNotMatch(`${pendingAction?.label}${pendingAction?.detail}`, /Round\s+\d+/i,
-      'the pending surface keeps the contract round internal too');
-    el.disconnectedCallback();
-  });
-
-  test('a stale volume seal is never shown as the current round benchmark', async () => {
-    pari.__setClockForTest(() => OPEN_AT);
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 2n, under: 2n },
-        [VOLUME_ROUND - 1]: { outcome: 1 },
-        [VOLUME_ROUND - 2]: { outcome: 2 },
-      },
-      // Round 101 may only compare with 100. A still-indexed 99 seal is useful
-      // history, but it is not the offered number for this book.
-      seals: { [VOLUME_ROUND - 2]: { total: 1200n, previous: 800n } },
-    });
-    const el = await mount();
-    const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, true,
-      'the whole ticket book waits for round 100 instead of substituting round 99');
-    assert.equal(card.querySelector('.pari-book__bench'), null);
-    assert.equal(card.querySelector('.pari-thermometer'), null,
-      'live progress never targets the stale round-99 line');
   });
 
   test('an untouched book shows zeroes while keeping an even empty bar', async () => {

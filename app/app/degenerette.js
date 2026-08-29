@@ -1,13 +1,13 @@
 // /app/app/degenerette.js — Phase 62 Plan 62-03 (BUY-05 write path).
 //
-// Degenerette two-tx bet flow: placeBet (single tx, emits BetPlaced) → poll
+// Degenerette two-tx bet flow: placeBet (single tx, emits DegeneretteBetPlaced) → poll
 // the indexed word / simulate the exact resolver until ready → resolveBets (single tx,
 // emits DegeneretteResolved + DegeneretteResult per spin).
 //
 // On-chain surfaces (verified against degenerus-audit/contracts/):
 //   - DegenerusGame.sol:714 — placeDegeneretteBet(player, currency, amount, count, customTicket, heroQuadrant) payable
 //   - DegenerusGame.sol:743 — resolveDegeneretteBets(player, betIds[])
-//   - DegeneretteModule.sol:69-104 — BetPlaced / DegeneretteResolved / DegeneretteResult events.
+//   - DegeneretteModule.sol — DegeneretteBetPlaced / DegeneretteResolved / DegeneretteResult events.
 //
 // The resolve events were declared here as FullTicketResolved / FullTicketResult
 // until 2026-07-29 — names the contract has not used since the ticket→spin
@@ -16,7 +16,7 @@
 // degenerus-sim/deployments/abis/GAME_DEGENERETTE_MODULE.json.
 //
 // RESEARCH R5 confirmed two-tx flow + RNG keying:
-//   - placeDegeneretteBet emits BetPlaced(player, index, betId, packed) where
+//   - placeDegeneretteBet emits DegeneretteBetPlaced(player, index, betId, packed) where
 //     `index` is the lootbox-RNG index this bet ties to.
 //   - RNG resolution is shared with the lootbox subsystem. The exact word is an
 //     indexer projection; the deployed contract exposes readiness safely by
@@ -66,8 +66,9 @@ const DEGENERETTE_ABI = [
   'error BatchAlreadyTaken()',
   'error NoWork()',
   'error LengthMismatch()',
-  // DegeneretteModule.sol:69 — BetPlaced (RESEARCH R5).
-  'event BetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
+  // DegeneretteModule — renamed from the bare `BetPlaced` (the parimutuel now
+  // owns that name); same fields, new topic0.
+  'event DegeneretteBetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
   // DegeneretteModule.sol:83 — DegeneretteResolved. resultTraits is SPIN 0's
   // house reel only; later spins are derived per spinIndex (see dgn-reels.js).
   'event DegeneretteResolved(address indexed player, uint64 indexed betId, uint8 spinCount, uint256 totalPayout, uint32 resultTraits)',
@@ -731,7 +732,7 @@ export function parseBetPlacedFromReceipt(receipt, contract = receiptParser()) {
   for (const log of receipt.logs) {
     try {
       const parsed = contract.interface.parseLog(log);
-      if (parsed && parsed.name === 'BetPlaced') {
+      if (parsed && parsed.name === 'DegeneretteBetPlaced') {
         out.push({
           player: String(parsed.args.player ?? parsed.args[0]),
           index: BigInt(parsed.args.index ?? parsed.args[1]),

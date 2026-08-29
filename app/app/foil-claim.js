@@ -24,7 +24,7 @@ export const FOIL_CLAIM_ABI = [
   'function claimFoilMatch(address player, uint256 day, uint256 ticketIndex, uint8 drawKind)',
   'error NoClaimableMatch()',
   'error GameOver()',
-  'event FoilMatchClaimed(address indexed player, uint24 day, uint8 ticketIndex, uint8 drawKind, uint8 tier, uint256 faces)',
+  'event FoilMatchClaimed(address indexed player, uint24 indexed day, uint256 ticketIndex, uint8 drawKind, uint8 tier, uint256 faces)',
 ];
 
 // These errors are reachable before the payout spin. In particular,
