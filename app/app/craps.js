@@ -21,6 +21,7 @@ export const FLIP_CRAPS_ABI = Object.freeze([
   `function placeSlip(${BETS} b,uint128 bankroll,uint128 goal,bool letItRide) returns (uint64 betId)`,
   'function enterBonusBattle(uint256 period,uint32 chips,uint16 multiple) returns (uint256 betId)',
   'function enterBonusDay(uint32 chips,uint16 multiple) returns (uint256 placed)',
+  'function applyCrapsPasses(uint24 startDay,uint8 count,bool high,uint32 chips)',
   'function buyFutureCrapsDays(uint24 startDay,uint8 count,bool high,uint32 chips)',
   'function upgradeDayWindows(uint24 day,uint8 periodMask) returns (uint256 burned)',
   'function progressivePool() view returns (uint256)',
@@ -110,6 +111,13 @@ const CRAPS_EVENT_MULT_SHIFT = 160n;
 const CRAPS_EVENT_BET_ID_MASK = (1n << 128n) - 1n;
 const CRAPS_EVENT_MULT_MASK = 0xFFn;
 const CRAPS_ALL_WINDOWS_MASK = 0x7F;
+// CrapsBattle's deployed storage layout keeps `_passCredits` at mapping slot
+// 15. There is deliberately no public getter in the size-constrained contract,
+// so the wallet reads its own two packed uint32 balances directly. This value
+// is deployment-coupled in the same way as CONTRACTS.CRAPS and must be checked
+// whenever that address is replaced.
+const CRAPS_PASS_CREDITS_MAPPING_SLOT = 15n;
+const CRAPS_PASS_COUNT_MASK = 0xFFFFFFFFn;
 export const CRAPS_FUTURE_DAY_PRICES = Object.freeze({ normal: 25_000n, high: 450_000n });
 let _contractFactory = null;
 let _addressOverride;
@@ -167,6 +175,31 @@ function asUint(value, label) {
   } catch (_error) {
     throw new Error(`${label} must be a non-negative whole number.`);
   }
+}
+
+export function decodeCrapsPassCredits(value) {
+  const packed = asUint(value, 'Craps pass balance');
+  return Object.freeze({
+    normal: Number(packed & CRAPS_PASS_COUNT_MASK),
+    high: Number((packed >> 32n) & CRAPS_PASS_COUNT_MASK),
+  });
+}
+
+export function crapsPassCreditsStorageKey(player) {
+  if (!ethers.isAddress(String(player ?? ''))) throw new Error('Choose a valid player to read Craps passes.');
+  return ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+    ['address', 'uint256'],
+    [ethers.getAddress(String(player)), CRAPS_PASS_CREDITS_MAPPING_SLOT],
+  ));
+}
+
+/** Read the two uncommitted Craps day-pass lanes from the deployed packed mapping. */
+export async function readCrapsPassCredits(player) {
+  requireCraps();
+  const provider = readerProvider();
+  if (!provider?.getStorage) throw new Error('The chain provider cannot read Craps pass balances.');
+  const packed = await provider.getStorage(contractAddress(), crapsPassCreditsStorageKey(player));
+  return decodeCrapsPassCredits(packed);
 }
 
 function hashPair(first, second) {
@@ -917,9 +950,11 @@ export async function placeCrapsBonusEntry(wager, { onSubmitted } = {}) {
     ? 'enterBonusDay'
     : wager.method === 'enterBonusBattle'
       ? 'enterBonusBattle'
-      : wager.method === 'buyFutureCrapsDays'
-        ? 'buyFutureCrapsDays'
-        : null;
+      : wager.method === 'applyCrapsPasses'
+        ? 'applyCrapsPasses'
+        : wager.method === 'buyFutureCrapsDays'
+          ? 'buyFutureCrapsDays'
+          : null;
   if (!method || !Array.isArray(wager.contractArgs)) throw new Error('Unknown scheduled craps entry.');
   const args = wager.contractArgs;
   const expectedArgs = method === 'enterBonusDay' ? 2 : method === 'enterBonusBattle' ? 3 : 4;
@@ -933,9 +968,11 @@ export async function placeCrapsBonusEntry(wager, { onSubmitted } = {}) {
   }
   const receipt = await sendTx(
     (freshSigner) => buildContract(freshSigner)[method](...args),
-    method === 'buyFutureCrapsDays'
-      ? 'Reserve future Craps day'
-      : method === 'enterBonusDay' ? 'Enter full Craps day' : 'Enter Craps battle',
+    method === 'applyCrapsPasses'
+      ? 'Use Craps day pass'
+      : method === 'buyFutureCrapsDays'
+        ? 'Reserve future Craps day'
+        : method === 'enterBonusDay' ? 'Enter full Craps day' : 'Enter Craps battle',
     { onSubmitted },
   );
   return { receipt, method };

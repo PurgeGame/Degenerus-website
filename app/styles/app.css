@@ -11219,6 +11219,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-weight: 850;
   letter-spacing: 0.22em;
 }
+.gr__bounty-pool { display: flex; align-items: baseline; gap: 0.13rem; margin-top: 0.16rem; color: rgba(255, 224, 158, 0.58); font-size: clamp(0.3rem, 0.72vw, 0.37rem); font-style: normal; font-weight: 850; letter-spacing: 0.055em; white-space: nowrap; } .gr__bounty-pool[hidden] { display: none !important; } .gr__bounty-pool b { color: #ffe39b; font: 950 1.08em/1 "Inter", system-ui, sans-serif; } .gr__bounty-pool em { color: rgba(255, 192, 77, 0.66); font: inherit; }
 
 .gr__masthead-divider {
   width: 1px;
@@ -16070,26 +16071,30 @@ body.layout-basic .craps-entry__setup { position: relative; z-index: 1; display:
 body.layout-basic .craps-entry__board { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .25rem; padding: .2rem .34rem; border: 1px solid rgba(248,113,113,.34); border-radius: 6px; background: rgba(13,17,23,.72); color: #f8fafc; cursor: pointer; text-align: left; } body.layout-basic .craps-entry__board > span { display: grid; min-width: 0; gap: .02rem; } body.layout-basic .craps-entry__board small { color: #919aa8; font-size: .34rem; font-weight: 900; letter-spacing: .07em; } body.layout-basic .craps-entry__board strong { overflow: hidden; font-size: .55rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__board > b { color: #fca5a5; font-size: .45rem; font-weight: 1000; letter-spacing: .025em; white-space: nowrap; }
 body.layout-basic .craps-entry__lane { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: .1rem; border: 1px solid rgba(148,163,184,.23); border-radius: 6px; background: rgba(0,0,0,.24); }
 body.layout-basic .craps-entry__lane button { min-width: 0; padding: .2rem .1rem; border: 0; border-radius: 4px; background: transparent; color: #929ba9; font-size: .45rem; font-weight: 950; letter-spacing: .025em; cursor: pointer; } body.layout-basic .craps-entry__lane button small { display: block; margin-top: .05rem; color: inherit; font-size: .32rem; letter-spacing: .01em; } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.34),rgba(127,29,29,.32)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.28); }
+body.layout-basic .craps-entry__pass-wallet { display: flex; min-width: 0; grid-column: 1/-1; align-items: center; justify-content: center; gap: .24rem; margin-top: .08rem; padding-top: .11rem; border-top: 1px solid rgba(74,222,128,.16); color: #a7f3d0; font-size: .31rem; font-weight: 950; letter-spacing: .035em; white-space: nowrap; } body.layout-basic .craps-entry__pass-wallet[hidden],body.layout-basic .craps-entry__pass-wallet span[hidden] { display: none !important; } body.layout-basic .craps-entry__pass-wallet > small { color: #789587; font-size: .29rem; letter-spacing: .055em; } body.layout-basic .craps-entry__pass-wallet span { padding: .08rem .18rem; border: 1px solid rgba(74,222,128,.22); border-radius: 999px; background: rgba(20,83,45,.16); } body.layout-basic .craps-entry__pass-wallet span[data-selected="true"] { border-color: rgba(74,222,128,.52); background: rgba(22,101,52,.34); color: #dcfce7; }
 body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); }
-body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 19%; } body.layout-basic .craps-entry__col-buyin { width: 18%; } body.layout-basic .craps-entry__col-mult { width: 12%; } body.layout-basic .craps-entry__col-speed { width: 14%; } body.layout-basic .craps-entry__col-action { width: 37%; }
+body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 17%; } body.layout-basic .craps-entry__col-wager { width: 29%; } body.layout-basic .craps-entry__col-goal { width: 10%; } body.layout-basic .craps-entry__col-action { width: 44%; }
 body.layout-basic .craps-entry__listing thead { background: rgba(0,0,0,.3); } body.layout-basic .craps-entry__listing thead th { height: .66rem; padding: .09rem .15rem; overflow: hidden; color: #7f8998; font-size: .34rem; font-weight: 950; letter-spacing: .035em; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing thead th:last-child { text-align: center; }
 body.layout-basic .craps-entry__listing tbody tr { height: 1.48rem; transition: background 120ms ease,opacity 120ms ease; } body.layout-basic .craps-entry__listing tbody tr + tr { border-top: 1px solid rgba(148,163,184,.11); } body.layout-basic .craps-entry__listing tbody tr:nth-child(odd):not(.craps-entry__day-buy) { background: rgba(255,255,255,.014); }
 body.layout-basic .craps-entry__listing tbody :is(th,td) { min-width: 0; padding: .13rem .15rem; overflow: hidden; font-size: .52rem; font-weight: 900; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th { padding-left: .26rem; }
 body.layout-basic .craps-entry__listing tbody th :is(strong,time,small) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th time { color: #e2e8f0; font: 950 .61rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; }
-body.layout-basic .craps-entry__listing tbody td:nth-child(2) strong { display: block; overflow: hidden; color: #f8fafc; font: 950 .64rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody td:nth-child(2) small { display: block; margin-top: .03rem; color: #8d97a5; font-size: .32rem; letter-spacing: .04em; }
-body.layout-basic .craps-entry__listing tbody td:nth-child(3) { color: #fde68a; font-size: .52rem; font-variant-numeric: tabular-nums; font-weight: 1000; } body.layout-basic .craps-entry__listing tbody td:nth-child(4) { color: #d9e0e9; font-size: .48rem; font-weight: 1000; }
+body.layout-basic .craps-entry__terms strong { display: flex; min-width: 0; align-items: baseline; gap: .1rem; overflow: hidden; color: #f8fafc; font: 950 .59rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; white-space: nowrap; } body.layout-basic .craps-entry__terms strong span { min-width: 0; overflow: hidden; text-overflow: ellipsis; } body.layout-basic .craps-entry__terms strong span:last-child { color: #fde68a; } body.layout-basic .craps-entry__terms i { flex: 0 0 auto; color: #788493; font: 900 .44rem/1 "Inter",system-ui,sans-serif; }
+body.layout-basic .craps-entry__listing tbody td:nth-child(3) { color: #fde68a; font-size: .5rem; font-variant-numeric: tabular-nums; font-weight: 1000; }
 body.layout-basic .craps-entry__action { padding-inline: .1rem .18rem !important; text-align: right !important; } body.layout-basic .craps-entry__action > button,body.layout-basic .craps-entry__day-buy td > button { width: 100%; min-width: 0; height: 1.12rem; padding: .08rem; overflow: hidden; border: 1px solid rgba(252,165,165,.52); border-radius: 5px; background: linear-gradient(180deg,#d9394c,#8b1728); color: #fff; font-size: .48rem; font-weight: 1000; letter-spacing: .015em; text-overflow: ellipsis; white-space: nowrap; cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3,pointer; box-shadow: inset 0 1px rgba(255,255,255,.14); }
 body.layout-basic .craps-entry__listing button[data-state="entered"]:disabled { border-color: rgba(74,222,128,.45); background: linear-gradient(180deg,rgba(22,101,52,.7),rgba(20,83,45,.64)); color: #dcfce7; opacity: 1; } body.layout-basic .craps-entry__listing button[data-state="upgrade"] { border-color: rgba(253,224,71,.65); background: linear-gradient(180deg,#d99b24,#8c590c); color: #1d1200; }
-body.layout-basic .craps-entry__result { min-width: 0; padding: .18rem .34rem !important; } body.layout-basic .craps-entry__result:not([hidden]) { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,.9fr) minmax(0,.9fr); align-items: center; gap: .32rem; } body.layout-basic .craps-entry__result > span { display: grid; min-width: 0; gap: .06rem; } body.layout-basic .craps-entry__result > span + span { padding-left: .32rem; border-left: 1px solid rgba(74,222,128,.2); }
+body.layout-basic .craps-entry__listing button[data-state="pass"] { border-color: rgba(74,222,128,.72); background: linear-gradient(180deg,#168a4b,#0d5a32); color: #ecfdf5; cursor: pointer; }
+body.layout-basic .craps-entry__entered { display: inline-flex; width: 100%; min-height: 1.12rem; align-items: center; justify-content: center; color: #86efac; font-size: .47rem; font-weight: 1000; letter-spacing: .07em; } body.layout-basic .craps-entry__entered[hidden] { display: none !important; }
+body.layout-basic .craps-entry__result { min-width: 0; padding: .18rem .34rem !important; } body.layout-basic .craps-entry__result-grid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,.9fr) minmax(0,.9fr); align-items: center; gap: .32rem; } body.layout-basic .craps-entry__result-grid > span { display: grid; min-width: 0; gap: .06rem; } body.layout-basic .craps-entry__result-grid > span + span { padding-left: .32rem; border-left: 1px solid rgba(74,222,128,.2); }
 body.layout-basic .craps-entry__result small { color: #8faf9a; font-size: .33rem; font-weight: 950; letter-spacing: .055em; } body.layout-basic .craps-entry__result strong { overflow: hidden; color: #d9fbe5; font: 1000 .52rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow: ellipsis; } body.layout-basic .craps-entry__result span:not(:first-child) strong { color: #fde68a; } body.layout-basic .craps-entry__result output { font: inherit; }
-body.layout-basic .craps-entry__day-buy { border-bottom: 1px solid rgba(253,224,71,.3); background: linear-gradient(90deg,rgba(250,204,21,.13),rgba(146,64,14,.05)); } body.layout-basic .craps-entry__day-buy th small { color: #d6b75d; font-size: .32rem; letter-spacing: .045em; } body.layout-basic .craps-entry__day-buy th strong { margin-top: .04rem; color: #fff7d6; font-size: .54rem; font-weight: 1000; } body.layout-basic .craps-entry__day-buy td:nth-child(2) strong { color: #fde68a; } body.layout-basic .craps-entry__day-buy td:last-child { padding-inline: .1rem .18rem; }
+body.layout-basic .craps-entry__day-buy { border-bottom: 1px solid rgba(253,224,71,.3); background: linear-gradient(90deg,rgba(250,204,21,.13),rgba(146,64,14,.05)); } body.layout-basic .craps-entry__day-buy th small { color: #d6b75d; font-size: .32rem; letter-spacing: .045em; } body.layout-basic .craps-entry__day-buy th strong { margin-top: .04rem; color: #fff7d6; font-size: .54rem; font-weight: 1000; } body.layout-basic .craps-entry__day-buy .craps-entry__terms strong span { color: #fde68a; } body.layout-basic .craps-entry__day-buy td:last-child { padding-inline: .1rem .18rem; } body.layout-basic .craps-entry__day-buy--tomorrow { border-top: 1px solid rgba(253,224,71,.3); border-bottom: 0; }
+body.layout-basic .craps-entry__day-buy[data-payment="pass"] { background: linear-gradient(90deg,rgba(34,197,94,.16),rgba(20,83,45,.04)); } body.layout-basic .craps-entry__day-buy[data-payment="pass"] .craps-entry__terms strong span { color: #86efac; }
 body.layout-basic .craps-entry__battle[data-state="current"] { background: linear-gradient(90deg,rgba(180,83,9,.26),rgba(250,204,21,.035)); box-shadow: inset .16rem 0 #facc15; } body.layout-basic .craps-entry__battle[data-entry]:not([data-entry="none"]):not([data-state="completed"]) { background-color: rgba(20,83,45,.1); }
 body.layout-basic .craps-entry__battle[data-state="completed"] { height: 1.55rem; background: linear-gradient(90deg,rgba(20,83,45,.28),rgba(250,204,21,.03)); box-shadow: inset .16rem 0 #4ade80; }
 body.layout-basic .craps-entry__battle[data-state="closed"] { filter: saturate(.3); opacity: .4; } body.layout-basic .craps-entry__battle[data-terms="loading"] { opacity: .62; }
 body.layout-basic .craps-entry button:hover:not(:disabled) { filter: brightness(1.09); } body.layout-basic .craps-entry button:disabled { cursor: default; opacity: .45; } body.layout-basic .craps-entry button[data-terms="loading"] { cursor: wait; } body.layout-basic .craps-entry button:focus-visible { outline: 2px solid #fde68a; outline-offset: 2px; }
 body.layout-basic .craps-entry__foot { position: relative; z-index: 1; min-height: .7rem; margin-top: auto; overflow: hidden; color: #8e98a6; font-size: .44rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__foot[data-state="message"] { color: #fca5a5; }
 
-@media (max-width: 380px) { body.layout-basic .craps-entry { padding-inline: .44rem; } body.layout-basic .craps-entry__head { grid-template-columns: 1.85rem minmax(3.25rem,.64fr) minmax(3.4rem,.62fr) minmax(4.6rem,1fr); gap: .2rem; padding-inline: .25rem; } body.layout-basic .craps-entry__dice { width: 1.75rem; } body.layout-basic .craps-entry__head em { display: none; } body.layout-basic .craps-entry__col-action { width: 38%; } }
+@media (max-width: 380px) { body.layout-basic .craps-entry { padding-inline: .44rem; } body.layout-basic .craps-entry__head { grid-template-columns: 1.85rem minmax(3.25rem,.64fr) minmax(3.4rem,.62fr) minmax(4.6rem,1fr); gap: .2rem; padding-inline: .25rem; } body.layout-basic .craps-entry__dice { width: 1.75rem; } body.layout-basic .craps-entry__head em { display: none; } }
 
 body.layout-basic .play-grid .panel {
   box-sizing: border-box;
@@ -16132,117 +16137,123 @@ body.layout-basic .play-grid .app-quest-panel::before {
   pointer-events: none;
 }
 
-/* Side Bets moves out of the future Craps column and into one short,
-   full-width rail after AFKING Passes. Open books share the wide right lane;
-   the heading and compact WWXRP utility stack in the narrow left lane. */
-body.layout-basic .side-bets-rail {
-  display: block;
-  min-width: 0;
-  margin: 0 0 clamp(1rem, 3vw, 1.5rem);
-}
-
-body.layout-basic .side-bets-rail > app-parimutuel-panel {
-  display: block;
-  min-width: 0;
-}
+/* Side Bets is one compact utility row: live Growth book and Incinerator.
+   A closed Growth book disappears completely; the Incinerator simply expands
+   into the available lane without a placeholder card. */
+body.layout-basic .side-bets-rail { display: block; min-width: 0; margin: 0 0 clamp(0.7rem, 1.6vw, 1rem); }
+body.layout-basic .side-bets-rail > app-parimutuel-panel { display: block; min-width: 0; }
 
 body.layout-basic .side-bets-rail .app-parimutuel {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(13rem, 0.42fr) minmax(0, 1.58fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.55rem 0.7rem;
+  grid-template-columns: minmax(19rem, 1.55fr) minmax(10rem, 0.65fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0.42rem 0.55rem;
   margin: 0;
-  padding: 0.62rem 0.72rem;
-}
-
-body.layout-basic .side-bets-rail .app-parimutuel > .panel-header {
-  display: grid;
-  grid-column: 1;
-  grid-row: 1;
-  min-height: 2.55rem;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-body.layout-basic .side-bets-rail .app-parimutuel > .panel-header h2 {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  color: var(--text-primary, #eee);
-  font-family: inherit;
-  font-size: 0.88rem;
-  font-weight: 950;
-  letter-spacing: 0.13em;
-  line-height: 1.2;
-  text-align: center;
-}
-
-body.layout-basic .side-bets-rail .pari-learn-link {
-  color: inherit;
-  text-decoration: none;
-}
-
-body.layout-basic .side-bets-rail .pari-learn-link:hover { color: #ffe0a3; }
-
-body.layout-basic .side-bets-rail .pari-learn-link:focus-visible {
-  border-radius: 3px;
-  outline: 2px solid rgba(255, 192, 77, 0.76);
-  outline-offset: 3px;
-}
-
-body.layout-basic .side-bets-rail .pari-books,
-body.layout-basic .side-bets-rail .pari-empty {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  padding: 0.44rem 0.52rem;
 }
 
 body.layout-basic .side-bets-rail .pari-books {
-  align-self: start;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 
-body.layout-basic .side-bets-rail .pari-empty {
-  display: grid;
-  min-height: 2.55rem;
-  place-items: center;
-  align-self: stretch;
-  margin: 0;
-  padding: 0.45rem 0.6rem;
+body.layout-basic .side-bets-rail .pari-books[hidden] { display: none !important; }
+
+body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn { width: 100%; min-width: 0; grid-column: 2; grid-row: 1; align-self: center; margin-top: 0; padding-top: 0; }
+
+body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
+  width: min(100%, 28rem);
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
-body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn {
-  grid-column: 1;
-  grid-row: 2;
-  align-self: end;
-  margin-top: 0;
-  padding-top: 0;
+/* On the wide rail, Growth uses its own horizontal mini-layout: context at
+   left, the two live choices at right. This is the main height reduction. */
+body.layout-basic .side-bets-rail .pari-book--open {
+  display: grid;
+  min-width: 0;
+  grid-template-areas:
+    "head head"
+    "context today";
+  grid-template-columns: minmax(7.5rem, 0.72fr) minmax(10.5rem, 1.28fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.18rem 0.5rem;
+  padding: 0.42rem 0.5rem;
+}
+
+body.layout-basic .side-bets-rail .pari-book--open > .pari-book__head {
+  grid-area: head;
+  margin: 0;
+}
+
+body.layout-basic .side-bets-rail .pari-book--open > .pari-book__context {
+  display: block;
+  grid-area: context;
+  margin: 0;
+}
+
+body.layout-basic .side-bets-rail .pari-book--open > .pari-today {
+  grid-area: today;
+  align-self: center;
+}
+
+body.layout-basic .side-bets-rail .pari-book--open .pari-book__title { font-size: 0.72rem; }
+body.layout-basic .side-bets-rail .pari-book--open .pari-clock { display: none; }
+body.layout-basic .side-bets-rail .pari-wwxrp { grid-template-columns: 1.58rem minmax(2.5rem, 0.72fr) minmax(2rem, 0.75fr) auto; gap: 0.25rem; padding-inline: 0.35rem; }
+body.layout-basic .side-bets-rail .pari-wwxrp__identity small { display: none; }
+body.layout-basic .side-bets-rail .pari-wwxrp__burn[data-write] { min-width: 2.4rem; padding-inline: 0.25rem; }
+body.layout-basic .side-bets-rail .pari-book--open .pari-book__bench {
+  font-size: 0.61rem;
+  letter-spacing: 0.035em;
+}
+body.layout-basic .side-bets-rail .pari-book--open .pari-book__target {
+  display: block;
+  margin-top: 0.1rem;
+  white-space: normal;
+}
+body.layout-basic .side-bets-rail .pari-book--open .pari-side { min-height: 1.75rem; }
+body.layout-basic .side-bets-rail .pari-book--open .pari-side__cta {
+  min-height: 1.9rem;
+  padding-block: 0.2rem;
+}
+body.layout-basic .side-bets-rail .pari-book--open .pari-prebet-bonus {
+  margin-top: 0.18rem;
+  font-size: 0.5rem;
 }
 
 body.layout-basic .side-bets-rail .pari-error {
   grid-column: 1 / -1;
-  grid-row: 3;
+  grid-row: 2;
   margin-top: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 520px) {
   body.layout-basic .side-bets-rail .app-parimutuel {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;
   }
 
-  body.layout-basic .side-bets-rail .app-parimutuel > .panel-header,
   body.layout-basic .side-bets-rail .pari-books,
-  body.layout-basic .side-bets-rail .pari-empty,
   body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn,
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn,
   body.layout-basic .side-bets-rail .pari-error {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  body.layout-basic .side-bets-rail .pari-book--open {
+    grid-template-areas: "head" "context" "today";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
+    width: 100%;
   }
 }
 
@@ -17468,18 +17479,6 @@ body.layout-basic .qst-action-dialog__hint {
   body.layout-basic .play-grid .qst-streak-gain { display: none; }
 }
 
-body.layout-basic .pari-empty {
-  margin: 0.65rem 0 0;
-  padding: 0.75rem;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 9px;
-  color: var(--text-secondary, #aaa);
-  font-size: 0.72rem;
-  line-height: 1.4;
-  text-align: center;
-}
-body.layout-basic .pari-empty[hidden] { display: none !important; }
-
 /* Degenerette hierarchy: compact header, numbered setup blocks, one clear
    action row, then the resolved spin stage in the same widget. */
 body.layout-basic .play-grid .app-degenerette-panel {
@@ -18497,6 +18496,8 @@ body.layout-basic boon-product-indicator[hidden] { display: none !important; }
 body.layout-basic :is(
   .app-decimator-panel .dec-input-group,
   .df-add-bet-dialog__card,
+  .df-bet-oval,
+  .df-tomorrow-bet-oval,
   .df-tomorrow-layout,
   .pass-product-row,
   .pass-deity-section,

@@ -61,6 +61,8 @@ class BoonProductIndicator extends HTMLElement {
     const selector = [
       '.dec-input-group',
       '.df-add-bet-dialog__card',
+      '.df-bet-oval',
+      '.df-tomorrow-bet-oval',
       '.df-tomorrow-layout',
       '.pass-product-row',
       '.pass-deity-section',
@@ -124,8 +126,12 @@ class BoonProductIndicator extends HTMLElement {
     this.setAttribute?.('data-boon-tier', String(model.tier));
     this.setAttribute?.('data-boon-pips', model.pips);
     this.setAttribute?.('data-boon-direction', model.direction);
-    const nestedInButton = String(this.parentElement?.tagName || '').toUpperCase() === 'BUTTON';
-    this.setAttribute?.('tabindex', nestedInButton ? '-1' : '0');
+    const parent = this.parentElement;
+    const nestedInAction = String(parent?.tagName || '').toUpperCase() === 'BUTTON'
+      || parent?.getAttribute?.('role') === 'button'
+      || parent?.classList?.contains?.('df-bet-oval')
+      || parent?.classList?.contains?.('df-tomorrow-bet-oval');
+    this.setAttribute?.('tabindex', nestedInAction ? '-1' : '0');
     this.#decorateHost(product, model);
   }
 }

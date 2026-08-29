@@ -375,9 +375,9 @@ describe('record units are never interchangeable', () => {
     }, 'open entry floors use the same compact treatment as held records');
   });
 
-  test('the Biggest widget leads with Dice Run and keeps FLIP last', () => {
+  test('the Biggest widget keeps the four direct records first and Dice Run last', () => {
     const records = [0, 1, 2, 3, 4].map((kind) => ({ kind }));
-    assert.deepEqual(orderBiggestRecords(records).map((record) => record.kind), [4, 1, 2, 3, 0]);
+    assert.deepEqual(orderBiggestRecords(records).map((record) => record.kind), [1, 2, 3, 0, 4]);
     assert.deepEqual(records.map((record) => record.kind), [0, 1, 2, 3, 4],
       'display sorting does not mutate the authoritative record snapshot');
   });
@@ -737,7 +737,7 @@ describe('rail wiring', () => {
     assert.doesNotMatch(COMPONENT, />THE RECORDS</);
   });
 
-  test('collapses to five portrait-and-amount leaders with the pool under the wordmark', () => {
+  test('collapses to five portrait-and-amount leaders without a pool display', () => {
     assert.match(COMPONENT, /<details class="records-rail__disclosure">/);
     assert.match(COMPONENT, /<summary class="records-rail__summary"/);
     assert.match(COMPONENT, /data-bind="records-leaders"/);
@@ -761,30 +761,16 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /document\.createElement\('button'\)/,
       'each compact record bubble is a real keyboard-accessible action');
     assert.match(COMPONENT, /this\.#openBountyDialog\(record\.kind\)/);
-    assert.match(COMPONENT, /FLIP_LOGO = '\/whitepaper\/flame-logo-split\.svg'/);
-    assert.match(COMPONENT, /records-rail__pot-label">POOL/);
-    assert.match(COMPONENT,
-      /records-rail__identity[\s\S]*?records-rail__wordmark[\s\S]*?records-rail__pot[\s\S]*?records-rail__leaders/,
-      'the compact shared pool lives inside the logo lockup before the five records');
-    assert.doesNotMatch(COMPONENT, /4 RECORDS · 1 LIVE RESERVE|records-rail__pot-meta/,
-      'the compact pool poster has no explanatory footer');
-    assert.match(COMPONENT, /records-rail__pot-logo/,
-      'the main bounty pool total uses the FLIP mark instead of a FLIP word');
-    assert.match(COMPONENT, /records-rail__pot-logo[\s\S]*data-bind="records-pool"/,
-      'the plain FLIP mark leads the bounty amount');
-    assert.doesNotMatch(COMPONENT, /records-rail__pot-mark/,
-      'the main pool logo has no crosshair treatment');
+    assert.doesNotMatch(COMPONENT, /records-rail__pot|data-bind="records-pool"|>POOL</,
+      'the shared pool is no longer displayed in the compact Biggest rail');
+    assert.doesNotMatch(CSS, /records-rail__pot/,
+      'removing the pool also removes its dead layout and poster styling');
     assert.match(COMPONENT, /records-rail__bounty-crosshair" viewBox="0 0 24 24"/,
       'each compact bounty amount uses the poker-style target mark');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-logo/,
       'the record bounties do not repeat the pool currency logo');
-    assert.doesNotMatch(COMPONENT, /BOUNTY_EMBLEM|records-rail__pot-emblem/,
-      'the Degenerus bounty emblem is not repeated in the pool or record boxes');
-    assert.match(CSS, /records-rail__pot\s*\{[^}]*clip-path:\s*polygon/s,
-      'the pool gets one restrained clipped-corner bounty-poster cue');
-    assert.match(CSS, /records-rail__pot::before\s*\{[^}]*border:\s*1px solid/s,
-      'a quiet inset rule completes the poster treatment');
-    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*0\.65rem/s);
+    assert.doesNotMatch(COMPONENT, /BOUNTY_EMBLEM/,
+      'the Degenerus bounty emblem is not repeated in the compact record boxes');
     assert.match(COMPONENT, /RECORD_CARD_ART = '\/app\/assets\/biggest-bounty-card-v13\.webp'/,
       'one blank asymmetric frame keeps all five record cards visually uniform');
     assert.doesNotMatch(COMPONENT, /\/app\/assets\/quests\/(?:degenerette-eth|buy-ticket-luckbox|foil-pack|coinflip)\.svg/,
@@ -795,7 +781,7 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /\[RECORD_KIND_FLIP, 'COINFLIP'\]/,
       'the final record is presented as COINFLIP while its amount remains denominated in FLIP');
     assert.match(COMPONENT, /\[RECORD_KIND_DICE_RUN, 'DICE RUN'\]/,
-      'Dice Run is the first display category while retaining on-chain kind 4');
+      'Dice Run retains its presentation label while occupying the final display slot');
     assert.match(COMPONENT, /const interactive = [^;]*&& !isDiceRun/,
       'scheduled Dice Run is informational rather than a fake one-click action');
     assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label|records-rail__leader-kind-icon/,

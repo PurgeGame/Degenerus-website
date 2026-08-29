@@ -423,6 +423,9 @@ function renderShiftedPositions() {
 function renderPositionChrome() {
   const top = $('demo-today-surface');
   const lower = $('demo-lower-surface');
+  const topOval = $('df-bet-oval');
+  const lowerOval = $('df-tomorrow-bet-oval');
+  const boon = document.querySelector('.df-table-boon');
   top.classList.add('is-actionable');
   top.classList.toggle('is-add-bet', state.shifted);
   lower.classList.toggle('is-yesterday', state.shifted);
@@ -430,7 +433,10 @@ function renderPositionChrome() {
   $('demo-lower-label').textContent = state.shifted ? "YESTERDAY'S BET" : "TOMORROW'S BET";
   $('demo-today-add-cue').hidden = !state.shifted;
   $('demo-tomorrow-add-cue').hidden = state.shifted;
-  if (!state.shifted) $('df-tomorrow-bet-oval').removeAttribute('data-yesterday-outcome');
+  if (!state.shifted) lowerOval.removeAttribute('data-yesterday-outcome');
+  const actionableOval = state.shifted ? topOval : lowerOval;
+  if (boon && boon.parentElement !== actionableOval) actionableOval.appendChild(boon);
+  boon?.setAttribute('variant', state.shifted ? 'today-bet' : 'tomorrow-bet');
 }
 
 function renderBankroll() {

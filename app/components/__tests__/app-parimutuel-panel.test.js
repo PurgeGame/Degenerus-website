@@ -2,15 +2,12 @@
 // Run: cd website && node --test app/components/__tests__/app-parimutuel-panel.test.js
 //
 // Covers the part of the widget that has rules rather than pixels:
-//   - it shows the compact closed state when Growth is closed and nothing is claimable
+//   - it shows only the compact Incinerator when Growth is closed
 //   - an open GROWTH book renders the round, the book counts, the payout quotes
 //     and two bet buttons
 //   - a held position replaces the buttons with the "your bet" marker
 //   - a settled winner keeps the panel on screen with a CLAIM for the total
 //   - a bet click reaches placeBet(player, over)
-//
-// The harness retains obsolete volume fixtures so the removal regression can
-// prove they no longer influence the mounted component.
 //
 // Fake DOM harness: the trimmed port used by app-daily-flip.test.js /
 // app-balances-strip.test.js.
@@ -31,12 +28,6 @@ const FLIP = 10n ** 18n;
 // Base Sepolia stores native amounts at /1M scale; displayEth restores that
 // factor. Keep pool fixtures in raw contract units so ETH labels are realistic.
 const RAW_ETH = 10n ** 12n;
-
-// The parimutuel module lost its wall-clock surface with the volume book
-// (run-43 excision): the growth book is level-gated by the contract's own
-// openRound, so the harness no longer pins a clock. VOLUME_ROUND survives only
-// to shape the obsolete-fixture rows in the removal test below.
-const VOLUME_ROUND = 101;   // day index 100 → the old window bet into round 101
 
 // ---------------------------------------------------------------------------
 // Fake DOM
@@ -231,12 +222,9 @@ function growthRow(over) {
 
 function installContract({
   growth = {},
-  volume = {},
-  seals = {},
   ratchets = null,
   calls,
   growthBettors = [],
-  volumeBettors = [],
   growthReadErrors = [],
   marketGate = { mayBet: true, earnsReward: true },
   chainLevel = LEVEL,
@@ -252,41 +240,20 @@ function installContract({
       const r = growthRow(rows[Number(round)] || {});
       return [r.openRound, r.over, r.under, r.questReward, r.side, r.claimed, r.outcome, r.payout];
     },
-    volumeMarketState: async (_player, round) => {
-      const r = { openRound: 0, over: 0n, under: 0n, side: 0, claimed: false, outcome: 0, voided: false, payout: 0n, ...(volume[Number(round)] || {}) };
-      return [r.openRound, r.over, r.under, r.side, r.claimed, r.outcome, r.voided, r.payout];
-    },
-    volumeBetCredit: async () => 25n * FLIP,
     placeBet: Object.assign(
       async (...args) => { calls?.push(['placeBet', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
-      { staticCall: async () => undefined },
-    ),
-    placeVolumeBet: Object.assign(
-      async (...args) => { calls?.push(['placeVolumeBet', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
       { staticCall: async () => undefined },
     ),
     claim: Object.assign(
       async (...args) => { calls?.push(['claim', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
       { staticCall: async () => undefined },
     ),
-    claimVolume: Object.assign(
-      async (...args) => { calls?.push(['claimVolume', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
-      { staticCall: async () => undefined },
-    ),
     claimRound: Object.assign(
       async (...args) => { calls?.push(['claimRound', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
       { staticCall: async () => undefined },
     ),
-    claimVolumeRound: Object.assign(
-      async (...args) => { calls?.push(['claimVolumeRound', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
-      { staticCall: async () => undefined },
-    ),
-    // The sealed-round log query behind "last round bought N tickets".
-    // The backward chunk scan takes the newest seal in range, whatever its round.
     filters: {
-      VolumeRoundSealed: () => ({ event: 'seal' }),
       BetPlaced: (_player, round) => ({ event: 'growth', round }),
-      VolumeBetPlaced: (_player, round) => ({ event: 'volume', round }),
     },
     queryFilter: async (filter) => {
       if (filter?.event === 'growth') {
@@ -294,14 +261,7 @@ function installContract({
           args: { player: row.player, round: filter.round, over: row.over },
         }));
       }
-      if (filter?.event === 'volume') {
-        return volumeBettors.map((row) => ({
-          args: { player: row.player, round: filter.round, over: row.over },
-        }));
-      }
-      return Object.entries(seals)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([round, row]) => ({ args: { round: Number(round), total: row.total, previous: row.previous } }));
+      return [];
     },
     // requireStaticCall connects the signer before pre-flighting.
     connect(_signer) { return this; },
@@ -342,7 +302,6 @@ function makeFakeProvider() {
   return {
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
-    // The seal scan walks back from the head in under-RPC-cap chunks.
     getBlockNumber: async () => 5_000,
   };
 }
@@ -452,12 +411,11 @@ describe('app-parimutuel-panel', () => {
     contractsMod.clearProvider();
   });
 
-  test('keeps its full-width rail with a closed-window message when neither book is open', async () => {
+  test('keeps only the compact Incinerator row when no live book is open', async () => {
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
-    assert.match(el.innerHTML,
-      /<h2><a class="pari-learn-link" href="\/learn\/side-bets\/">SIDE BETS<\/a><\/h2>/,
-      'the Side Bets heading links directly to its Learn page');
+    assert.doesNotMatch(el.innerHTML, /SIDE BETS|panel-header|pari-learn-link/,
+      'the compact wager rail does not spend a lane on a redundant heading');
     assert.equal(el.querySelector('[data-bind="pari-bounty-strip"]'), null,
       'Side Bets has no bounty strip');
     assert.doesNotMatch(PARI_SOURCE, /readBiggestFlipRecord|pari-record-strip|pari-bounty-strip/,
@@ -473,19 +431,20 @@ describe('app-parimutuel-panel', () => {
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
     assert.match(APP_CSS,
-      /\.app-parimutuel > app-wwxrp-burn\s*\{[^}]*margin-top:\s*auto;/s,
-      'the restored WWXRP wrapper stays pinned to the bottom of the Side Bets column');
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(19rem, 1\.55fr\) minmax\(10rem, 0\.65fr\)/s,
+      'the live Growth book and Incinerator share the full desktop row');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-column:\s*1[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
-      'the Side Bets heading stays centered in the rail utility lane');
+      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      'the Incinerator reclaims the book lane when Growth is closed');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.pari-books,\s*body\.layout-basic \.side-bets-rail \.pari-empty\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1 \/ span 2;/s,
-      'open books and the closed message share the wide rail lane');
+      /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head head"[^}]*"context today"/s,
+      'the open Growth header stays readable above side-by-side context and actions');
     assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
     assert.equal(growthCard(el).hidden, true);
-    const empty = el.querySelector('[data-bind="pari-empty"]');
-    assert.equal(empty.hidden, false);
-    assert.match(empty.textContent, /Books are closed|No side-bet book/i);
+    assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pari-empty"]'), null);
+    assert.doesNotMatch(PARI_SOURCE, /Books are closed|pari-empty/,
+      'closed books leave no placeholder copy or dead box behind');
   });
 
   test('restored WWXRP wrapper shows the viewed balance and burns from self view', async () => {
@@ -585,25 +544,17 @@ describe('app-parimutuel-panel', () => {
       'a pointer without its authoritative market row stays out of the UI');
     assert.doesNotMatch(el.textContent, /GROWTH BET · Level/,
       'no orphaned level heading is painted');
-    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
     el.disconnectedCallback();
   });
 
   test('Volume Bet is removed from the rendered, pending, and runtime component paths', async () => {
-    installContract({
-      growth: { [LEVEL]: { openRound: 0 } },
-      volume: {
-        [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n },
-        [VOLUME_ROUND - 1]: {
-          side: 2, outcome: 2, payout: 2_250n * FLIP, over: 1n, under: 2n,
-        },
-      },
-    });
+    installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
 
     assert.equal(el.querySelector('[data-bind="pari-volume"]'), null);
     assert.doesNotMatch(el.textContent, /VOLUME BET/);
-    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false,
+    assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true,
       'an obsolete contract fixture cannot make the removed book visible');
     assert.equal(
       pendingActionsMod.getPendingActions().some((item) => /volume/i.test(item.id || item.kind)),
@@ -1033,8 +984,8 @@ describe('app-parimutuel-panel', () => {
 
     assert.equal(growthCard(el).hidden, true,
       'the shared result rail owns settled losses once the live book is closed');
-    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false,
-      'an unseen result does not suppress the closed-books state');
+    assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true,
+      'an unseen result stays in Pending without leaving an empty book lane');
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.state, 'ready');
     assert.equal(pending.kind, 'pari');

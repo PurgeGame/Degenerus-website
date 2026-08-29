@@ -120,8 +120,7 @@ describe('parimutuel.js reason-map registrations', () => {
     const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
     const abi = [...SRC.matchAll(/'(error [^']+)'/g)].map((m) => m[1]);
     const iface = new contractsMod.ethers.Interface(abi);
-    // DegenerusParimutuel.sol — placeBet :285/290/291/296, placeVolumeBet
-    // :468/473/474/480, claim :370, plus FLIP's burn gate (FLIP.sol:587).
+    // DegenerusParimutuel.sol — placeBet and claim, plus FLIP's burn gate.
     for (const signature of [
       'NotApproved()', 'MarketClosed()', 'AlreadyBet()',
       'NotEligible()', 'NothingToSettle()', 'OnlyGame()',
@@ -504,11 +503,5 @@ describe('growthBps', () => {
     assert.equal(pari.growthBps(0n, 100n), null);
     assert.equal(pari.growthBps(100n, 0n), null);
     assert.equal(pari.growthBps(null, undefined), null);
-  });
-});
-
-describe('UNITS_PER_TICKET', () => {
-  test('400 raw purchase units = one whole ticket (4 entries x QTY_SCALE 100)', () => {
-    assert.equal(pari.UNITS_PER_TICKET, 400n);
   });
 });

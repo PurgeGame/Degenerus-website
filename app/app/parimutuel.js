@@ -94,10 +94,7 @@ const QUEST_MARKET_ABI = [
   'function marketBetGates(address player, uint24 lvl) external view returns (bool mayBet, bool earnsReward)',
 ];
 
-/** Raw purchase units per whole ticket (4 entries x QTY_SCALE 100). */
-export const UNITS_PER_TICKET = 400n;
-
-/** DegenerusParimutuel.sol:66 — the single fixed stake, both books. */
+/** DegenerusParimutuel.sol:66 — the single fixed Growth stake. */
 export const STAKE_WEI = 1_000n * 10n ** 18n;
 
 /** Side encoding (SIDE_OVER / SIDE_UNDER at :96-97). 0 = no bet / unsettled. */

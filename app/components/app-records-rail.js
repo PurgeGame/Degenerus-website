@@ -44,7 +44,6 @@ import {
 const POLL_MS = 15_000;
 const PROFILE_LINKED_EVENT = 'degenerus:discord-profile-linked';
 const BOUNTY_SOURCE = 'records-bounty';
-const FLIP_LOGO = '/whitepaper/flame-logo-split.svg';
 const DISPLAY_ETH_UNIT = 10n ** 18n;
 export const BIGGEST_SPIN_PRICE_STEP_WEI = (
   (10n ** 15n) / BigInt(ETH_DIVISOR)
@@ -54,11 +53,11 @@ export const BIGGEST_SPIN_MAX_SPINS = degeneretteLimits(0)?.maxSpins ?? 25;
 /** Fill share for the four records whose claim target is exactly 120% of the mark. */
 const MARK_FILL_PERCENT = 100 / 1.2;
 const DISPLAY_KIND_ORDER = new Map([
-  [RECORD_KIND_DICE_RUN, 0],
-  [RECORD_KIND_SPIN, 1],
-  [RECORD_KIND_LUCKBOX, 2],
-  [RECORD_KIND_BUY, 3],
-  [RECORD_KIND_FLIP, 4],
+  [RECORD_KIND_SPIN, 0],
+  [RECORD_KIND_LUCKBOX, 1],
+  [RECORD_KIND_BUY, 2],
+  [RECORD_KIND_FLIP, 3],
+  [RECORD_KIND_DICE_RUN, 4],
 ]);
 
 const RECORD_CARD_ART = '/app/assets/biggest-bounty-card-v13.webp';
@@ -495,16 +494,6 @@ class AppRecordsRail extends HTMLElement {
                   aria-level="2" aria-label="The Biggest Bounties">
               <img src="/app/assets/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood.webp"
                    alt="" aria-hidden="true" loading="lazy" decoding="async">
-            </span>
-            <span class="records-rail__pot" role="group"
-                  aria-label="Shared bounty pool in FLIP">
-              <span class="records-rail__pot-copy">
-                <span class="records-rail__pot-label">POOL</span>
-                <strong>
-                  <img class="records-rail__pot-logo" src="${FLIP_LOGO}" alt="FLIP">
-                  <b data-bind="records-pool">—</b>
-                </strong>
-              </span>
             </span>
           </span>
 
@@ -1082,8 +1071,6 @@ class AppRecordsRail extends HTMLElement {
     this.hidden = false;
     shell.hidden = false;
 
-    const pool = this.querySelector('[data-bind="records-pool"]');
-    if (pool) pool.textContent = group(displayToken(state.recordPoolWei, 0));
     const displayedRecords = orderBiggestRecords(state.records);
 
     const leaders = this.querySelector('[data-bind="records-leaders"]');

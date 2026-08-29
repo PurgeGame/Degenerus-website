@@ -30,7 +30,7 @@ import { sendTx, getProvider, ethers, gasEstimateWithHeadroom } from './contract
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
-import { getActingAddress } from './store.js';
+import { get, getActingAddress } from './store.js';
 import { sharedReadProvider } from './read-provider.js';
 
 // Verified: DegenerusGame.sol:398 and a live eth_call (see header). Declaring
@@ -220,7 +220,11 @@ export async function probeMineFlip({ player } = {}) {
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt, entrypoint: string}>}
  */
 export async function mineFlip({ player } = {}) {
-  const playerArg = player ?? getActingAddress();
+  // Permissionless crank: the tx signs (and its bounty pays) the CONNECTED
+  // wallet regardless of switcher mode, so fall through to it when the acting
+  // address is null (view/combined modes are read-only for player-owned
+  // writes, but the keeper crank belongs to whoever holds the keys).
+  const playerArg = player ?? getActingAddress() ?? get('connected.address');
   if (!playerArg) throw new Error('Wallet not connected.');
 
   const probe = await probeMineFlip({ player: playerArg });

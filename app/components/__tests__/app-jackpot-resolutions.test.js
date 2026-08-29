@@ -261,13 +261,17 @@ test('a due BAF opens its dedicated staged fullscreen final', () => {
   assert.match(overlay, /FINAL-DAY WEIGHTED DRAW/);
 });
 
-test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', () => {
+test('the dedicated x4/x99 Decimator rail supersedes the old Side Bets card', () => {
   const source = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
-  const cards = /<div class="pari-books">([\s\S]*?)<\/div>/.exec(source)?.[1] || '';
-  assert.ok(cards.indexOf('data-bind="pari-decimator"') >= 0);
-  assert.ok(cards.indexOf('data-bind="pari-decimator"') < cards.indexOf('data-bind="pari-growth"'));
-  assert.match(source, /title\.textContent = 'DECIMATOR'/);
-  assert.match(source, /burnPrompt\.textContent = 'BURN FLIP'/);
+  const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  assert.match(index, /<app-decimator-burn><\/app-decimator-burn>/,
+    'the full-width Decimator action remains mounted outside Side Bets');
+  assert.match(source, /document\.querySelector\?\.\('app-decimator-burn'\)/,
+    'the compact fallback detects the dedicated rail');
+  assert.match(source, /if \(_dedicatedDecimatorMounted\(\)\) \{[\s\S]*?host\.hidden = true;[\s\S]*?host\.textContent = '';/,
+    'the duplicate compact Decimator card is suppressed in the live page');
+  assert.match(source, /data-bind="pari-growth"/,
+    'Growth remains the only live book beside the Incinerator');
 
   // The x4/x99 window rule lives in decimator.js, not in the panel. The panel
   // imports it so the write path and the card agree on one predicate.

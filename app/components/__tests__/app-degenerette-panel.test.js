@@ -360,7 +360,7 @@ function makeFakeDegContract(opts = {}) {
         return makeFakeTx(makeFakeReceipt([
           {
             parsed: {
-              name: 'BetPlaced',
+              name: 'DegeneretteBetPlaced',
               args: { player: args[0], index: 7n, betId: 42n, packed: 0n },
             },
           },
@@ -1055,14 +1055,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const fullWagerWei = (10n ** 16n) / BigInt(ETH_DIVISOR);
     const spendableClaimableWei = fullWagerWei / 2n;
     const iface = new contractsMod.ethers.Interface([
-      'event BetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
+      'event DegeneretteBetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
     ]);
     degeneretteMod.__setContractFactoryForTest(() => ({
       placeDegeneretteBet: Object.assign(
         async (...args) => {
           recordedArgs = args;
           const { data, topics } = iface.encodeEventLog(
-            iface.getEvent('BetPlaced'), [args[0], 7n, 42n, 0n],
+            iface.getEvent('DegeneretteBetPlaced'), [args[0], 7n, 42n, 0n],
           );
           return makeFakeTx(makeFakeReceipt([
             { data, topics, address: '0x0000000000000000000000000000000000000001' },
@@ -1407,7 +1407,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     degeneretteMod.__setContractFactoryForTest(() => ({
       placeDegeneretteBet: Object.assign(
         async (...args) => makeFakeTx(makeFakeReceipt([
-          { parsed: { name: 'BetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
+          { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
         ])),
         { staticCall: async () => undefined },
       ),
@@ -1574,7 +1574,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
           placeCalls += 1;
           recordedValue = args[6]?.value;
           return makeFakeTx(makeFakeReceipt([
-            { parsed: { name: 'BetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
+            { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
           ]));
         },
         { staticCall: async () => undefined },
@@ -1836,7 +1836,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       placeDegeneretteBet: Object.assign(
         async (...args) => makeFakeTx(makeFakeReceipt([{
           parsed: {
-            name: 'BetPlaced',
+            name: 'DegeneretteBetPlaced',
             args: { player: args[0], index: 7n, betId: 42n, packed },
           },
         }])),
@@ -1894,7 +1894,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
           placeCalls += 1;
           return makeFakeTx(makeFakeReceipt([{
             parsed: {
-              name: 'BetPlaced',
+              name: 'DegeneretteBetPlaced',
               args: { player: args[0], index: 8n, betId: newBetId, packed },
             },
           }]));
@@ -2650,7 +2650,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         async (...args) => makeFakeTx(makeFakeReceipt([
           {
             parsed: {
-              name: 'BetPlaced',
+              name: 'DegeneretteBetPlaced',
               args: { player: args[0], index: 7n, betId: 42n, packed },
             },
           },
@@ -2820,7 +2820,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       placeDegeneretteBet: Object.assign(
         async (...args) => makeFakeTx(makeFakeReceipt([{
           parsed: {
-            name: 'BetPlaced',
+            name: 'DegeneretteBetPlaced',
             args: { player: args[0], index: 7n, betId: 42n, packed },
           },
         }])),

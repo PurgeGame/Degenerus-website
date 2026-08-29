@@ -163,8 +163,12 @@ describe('index.html basic-mode skeleton', () => {
     assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
       'the DGNRS rail immediately follows Side Bets');
     assert.match(appCss,
-      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(13rem, 0\.42fr\) minmax\(0, 1\.58fr\)/s,
-      'the relocated books use a short two-lane horizontal rail');
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(19rem, 1\.55fr\) minmax\(10rem, 0\.65fr\)/s,
+      'Growth and the Incinerator use one short horizontal rail at the review width');
+    assert.match(appCss, /@media \(max-width: 520px\)[\s\S]*?\.side-bets-rail \.app-parimutuel/s,
+      'the rail stacks only on genuinely narrow phones');
+    assert.doesNotMatch(html.slice(sideBets, sideBetsEnd), /SIDE BETS/,
+      'the compact rail has no redundant Side Bets label');
     assert.match(html, /href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
   });
 
@@ -240,7 +244,7 @@ describe('index.html basic-mode skeleton', () => {
     const shellMatch = html.match(/<gold-rush-headline class="gr">([\s\S]*?)<\/gold-rush-headline>/);
     assert.ok(shellMatch, '<gold-rush-headline class="gr"> static shell present');
     const shell = shellMatch[1];
-    for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"']) {
+    for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"', 'data-el="bounty-pool"', 'data-el="bounty-pool-amount"']) {
       assert.ok(shell.includes(hook), `adoption hook present in static shell: ${hook}`);
     }
     assert.match(shell, /class="gr__amount" data-el="amount">—</,

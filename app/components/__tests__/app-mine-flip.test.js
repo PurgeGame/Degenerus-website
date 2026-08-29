@@ -172,6 +172,49 @@ describe('headless Mine FLIP resolver', () => {
     noWork.disconnectedCallback();
   });
 
+  test('a browsing switcher mode still offers the crank to the connected wallet', async () => {
+    // The crank is permissionless and pays msg.sender, so 'view'/'combined'
+    // modes — where getActingAddress() is deliberately null — must not hide
+    // Mine FLIP from the wallet that could execute it (run-43 craps keeping
+    // rides on this exact call).
+    store.update('connected.address', TEST_ADDR);
+    store.update('viewing.address', '0x9999000000000000000000000000000000000000');
+    store.update('ui.mode', 'view');
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    const action = publishedResolver();
+    assert.equal(action?.state, 'ready');
+    assert.ok(action?.id.includes(TEST_ADDR.toLowerCase()),
+      'the row is scoped to the connected wallet, not the viewed player');
+    resolver.disconnectedCallback();
+  });
+
+  test('an unknown probe retains the last-known crank instead of blinking it off', async () => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    assert.equal(publishedResolver()?.state, 'ready');
+
+    // A dead RPC / raced gas estimate reports known:false — not "empty". The
+    // armed row must survive the blink; its click-time re-probe still guards
+    // execution against genuinely stale work.
+    mineFlip.__setContractFactoryForTest(() => ({
+      mineFlip: Object.assign(
+        async () => ({ hash: '0xtx', wait: async () => ({ status: 1, logs: [] }) }),
+        {
+          estimateGas: async () => { throw new Error('rpc timeout'); },
+          staticCall: async () => { throw new Error('rpc timeout'); },
+        },
+      ),
+      connect() { return this; },
+    }));
+    store.update('app.daySync', { day: 82, rngFulfilled: true });
+    await settle();
+    assert.equal(publishedResolver()?.state, 'ready',
+      'the crank row survives a probe blink');
+    resolver.disconnectedCallback();
+  });
+
   test('re-probes immediately when the direct RNG day-sync witness changes', async () => {
     store.update('connected.address', TEST_ADDR);
     stubProbe({ hasWork: false });

@@ -98,7 +98,7 @@ function _dailyQuestTarget(questType, slot, level, projectedTarget) {
   const indexed = _positiveTarget(projectedTarget);
   if (indexed != null) return indexed.toString();
   const type = Number(questType);
-  if (type === 4 || type === 9) return '1';
+  if (type === 4 || type === 9 || type === 10 || type === 11) return '1';
   if ([2, 3, 5, 8].includes(type)) return String(2_000n * 10n ** 18n);
   if ([1, 6, 7].includes(type) && Number.isFinite(level) && level >= 0) {
     const price = scaledTicketPriceWei(level);
@@ -124,6 +124,8 @@ function _fmtDailyQuestAmount(questType, raw) {
   }
   if (type === 4) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'pack' : 'packs'}`;
   if (type === 9) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
+  if (type === 10) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'battle' : 'battles'}`;
+  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'pass' : 'passes'}`;
   return amount.toLocaleString('en-US');
 }
 
@@ -145,6 +147,8 @@ const QUEST_TYPE_LABELS = {
   7: 'Degenerette (ETH)',
   8: 'Degenerette (FLIP)',
   9: 'Redeem FLIP',
+  10: 'Join a Craps Battle',
+  11: 'Buy a Craps Day Pass',
 };
 
 // Purpose-built product art replaces the old font glyphs. The icon tile still
@@ -162,6 +166,11 @@ const QUEST_TYPE_ICONS = Object.freeze({
   // ticket composite crushed FLIP into a misleading vertical two-color speck;
   // let the canonical protocol mark occupy the whole tile instead.
   9: '/whitepaper/flame-logo-split.svg',
+  // These two always-visible UI icons intentionally keep their stable asset
+  // paths. dgnBadgePath may return a warmed blob URL, while _paintQuestIcon's
+  // strict internal-asset gate accepts only same-origin paths.
+  10: '/badges-circular/dice_04_5_silver.svg',
+  11: '/badges-circular/dice_04_5_gold.svg',
 });
 
 // These two pictograms add product context around FLIP. Keep that context as
@@ -200,7 +209,7 @@ function _paintQuestIcon(host, icon) {
 // Every setup-oriented quest has a matching form listener. Affiliate rewards
 // are earned by other players' purchases, so type 3 copies the player's
 // shareable referral link instead of opening an amount form.
-const QUEST_SETUP_TYPES = new Set([1, 2, 4, 5, 6, 7, 8, 9]);
+const QUEST_SETUP_TYPES = new Set([1, 2, 4, 5, 6, 7, 8, 9, 10, 11]);
 const REFERRAL_QUEST_TYPE = 3;
 
 function _parseDgnQuestAmount(value, questType) {
@@ -424,6 +433,8 @@ function _fmtLevelQuestAmount(questType, raw) {
   if (type === 9) {
     return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
   }
+  if (type === 10) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'battle' : 'battles'}`;
+  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'pass' : 'passes'}`;
   return amount.toLocaleString('en-US');
 }
 
@@ -532,9 +543,7 @@ class AppQuestPanel extends HTMLElement {
           </div>
           <div class="qst-score-control" data-bind="qst-score-control" tabindex="0">
             <strong class="qst-score-value" data-bind="qst-score-value">—</strong>
-            <span class="qst-score-label">DEGEN RATING
-              <boon-product-indicator product="activity"></boon-product-indicator>
-            </span>
+            <span class="qst-score-label">DEGEN RATING</span>
             <div class="ac-pop qst-score-pop" data-bind="qst-score-pop" hidden>
               <div class="ac-pop__head" data-bind="qst-score-head"></div>
               <div class="ac-pop__rows" data-bind="qst-score-rows"></div>
@@ -1010,6 +1019,12 @@ class AppQuestPanel extends HTMLElement {
         adjustable: true,
       };
     }
+    if (originalType === 10) {
+      return { label: 'OPEN CRAPS BATTLE', target: 1n, completes: true };
+    }
+    if (originalType === 11) {
+      return { label: 'BUY CRAPS DAY PASS', target: 1n, completes: true };
+    }
     return { label: 'SET UP QUEST', target: required, completes: true };
   }
 
@@ -1147,6 +1162,10 @@ class AppQuestPanel extends HTMLElement {
         copy.textContent = `Buy a ${_fmtDailyQuestAmount(6, action.target)} luckbox.`;
       } else if (type === 9) {
         copy.textContent = `Redeem ${BigInt(action.target ?? 0n).toLocaleString('en-US')} ticket${BigInt(action.target ?? 0n) === 1n ? '' : 's'} for FLIP.`;
+      } else if (type === 10) {
+        copy.textContent = 'Choose and enter any open paid Craps battle.';
+      } else if (type === 11) {
+        copy.textContent = 'Buy one future Craps day with FLIP. Awarded passes stay banked because using one does not count as a purchase.';
       } else {
         copy.textContent = 'Confirm to open the matching quest action.';
       }

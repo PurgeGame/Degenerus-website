@@ -53,6 +53,8 @@ function fakeContract() {
     'static:enterBonusDay': [],
     buyFutureCrapsDays: [],
     'static:buyFutureCrapsDays': [],
+    applyCrapsPasses: [],
+    'static:applyCrapsPasses': [],
     upgradeDayWindows: [],
     'static:upgradeDayWindows': [],
     resolveBets: [],
@@ -90,6 +92,7 @@ function fakeContract() {
     enterBonusBattle: callable('enterBonusBattle', calls),
     enterBonusDay: callable('enterBonusDay', calls),
     buyFutureCrapsDays: callable('buyFutureCrapsDays', calls),
+    applyCrapsPasses: callable('applyCrapsPasses', calls),
     upgradeDayWindows: callable('upgradeDayWindows', calls, 4_500n),
     resolveBets: callable('resolveBets', calls),
     connect() { return this; },
@@ -102,6 +105,7 @@ function fakeProvider() {
   return {
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => PLAYER }),
+    getStorage: async () => '0x0000000000000000000000000000000000000000000000000000000200000011',
   };
 }
 
@@ -130,7 +134,7 @@ test('FlipCraps ABI exposes the complete front-end surface', () => {
     'stakeFor', 'quote', 'theoFor', 'maxOddsFor', 'rakeBpsFor', 'betOf',
     'previewSettlement', 'survivedAt', 'shooterDice', 'resolveHandAt',
     'resolveHandsAt', 'resolveSlipAt', 'enterBonusBattle', 'enterBonusDay',
-    'buyFutureCrapsDays', 'upgradeDayWindows',
+    'applyCrapsPasses', 'buyFutureCrapsDays', 'upgradeDayWindows',
     'progressivePool',
   ]) assert.ok(iface.getFunction(method), method);
   for (const event of [
@@ -453,6 +457,9 @@ test('table, perk, quote, bet, preview, dice, and breakdown reads normalize chai
   });
   assert.deepEqual(await craps.readCrapsPerks(PLAYER), { available: true, maxOdds: 100, rakeBps: 5000 });
   assert.equal(await craps.readCrapsProgressivePool(), '1250000000000000000000000');
+  assert.deepEqual(await craps.readCrapsPassCredits(PLAYER), { normal: 17, high: 2 });
+  assert.deepEqual(craps.decodeCrapsPassCredits((9n << 32n) | 23n), { normal: 23, high: 9 });
+  assert.match(craps.crapsPassCreditsStorageKey(PLAYER), /^0x[0-9a-f]{64}$/);
   assert.deepEqual(await craps.readCrapsQuote({ bets: BETS, hands: 3 }), {
     stakeWei: '210000000000000000000',
     quoteWei: '630000000000000000000',
@@ -512,6 +519,14 @@ test('scheduled battle, live day, future day, and upgrades use their distinct co
   });
   assert.deepEqual(contract._calls['static:buyFutureCrapsDays'], [[43, 1, true, 0x1241111]]);
   assert.deepEqual(contract._calls.buyFutureCrapsDays, [[43, 1, true, 0x1241111]]);
+
+  await craps.placeCrapsBonusEntry({
+    valid: true,
+    method: 'applyCrapsPasses',
+    contractArgs: [44, 1, false, 0x1241111],
+  });
+  assert.deepEqual(contract._calls['static:applyCrapsPasses'], [[44, 1, false, 0x1241111]]);
+  assert.deepEqual(contract._calls.applyCrapsPasses, [[44, 1, false, 0x1241111]]);
 
   await craps.upgradeCrapsDayWindows({ day: 42, periodMask: 0b0010101 });
   assert.deepEqual(contract._calls['static:upgradeDayWindows'], [[42, 0b0010101]]);

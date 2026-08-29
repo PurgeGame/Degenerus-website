@@ -797,6 +797,75 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  test('the Craps day-pass level quest is named, clickable, and routes to its paid buy-in', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async () => makeQuestsPayload({
+      levelQuest: {
+        level: 7,
+        questType: 11,
+        progress: '0',
+        target: '1',
+        completed: false,
+        eligible: true,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const level = el.querySelectorAll('.qst-slot')[2];
+    assert.match(level.textContent, /Buy a Craps Day Pass/);
+    assert.match(level.textContent, /0 day passes \/ 1 day pass/);
+    assert.equal(level.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+      '/badges-circular/dice_04_5_gold.svg',
+      'the Craps level quest uses the gold 5 die');
+    assert.equal(level.classList.contains('qst-slot--actionable'), true);
+    assert.equal(level.getAttribute('role'), 'button');
+    level.dispatchEvent({ type: 'click' });
+
+    assert.equal(el.querySelector('[data-bind="qst-action-dialog"]').hidden, false);
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY CRAPS DAY PASS',
+    );
+    assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      /Buy one future Craps day with FLIP/);
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 11,
+      target: '1',
+      variant: 'level',
+      submit: true,
+      level: 7,
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('the daily Craps battle quest uses the silver 5 die', async () => {
+    assert.match(PANEL_SRC, /10:\s*'\/badges-circular\/dice_04_5_silver\.svg'/,
+      'the daily icon is a stable same-origin asset, never a blob-string fallback');
+    assert.match(PANEL_SRC, /11:\s*'\/badges-circular\/dice_04_5_gold\.svg'/,
+      'the level icon is a stable same-origin asset, never a blob-string fallback');
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        { day: 1, slot: 0, questType: 10, progress: 0, target: 1, completed: false },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const daily = el.querySelectorAll('.qst-slot')[0];
+    assert.match(daily.textContent, /Join a Craps Battle/);
+    assert.equal(daily.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+      '/badges-circular/dice_04_5_silver.svg',
+      'the daily Craps quest uses the silver 5 die');
+    el.disconnectedCallback();
+  });
+
   test('clicking a gated Coinflip quest explains the gate instead of appearing unresponsive', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);
@@ -1836,6 +1905,9 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
   test('Degen Rating uses loot colors at the exact tier boundaries', async () => {
     const { degenScoreLootTier } = await import('../app-quest-panel.js');
+    assert.doesNotMatch(PANEL_SRC,
+      /qst-score-label[\s\S]*?<boon-product-indicator product="activity"/,
+      'passive Degen Rating boons are reflected in the score without a redundant icon');
     assert.deepEqual(
       [59, 60, 149, 150, 299, 300, 999, 1_000].map(degenScoreLootTier),
       ['white', 'green', 'green', 'purple', 'purple', 'orange', 'orange', 'gold'],

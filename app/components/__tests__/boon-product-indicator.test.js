@@ -169,13 +169,15 @@ describe('<boon-product-indicator>', () => {
     assert.match(coinflip, /top:\s*0\.52rem/);
     assert.match(coinflip, /right:\s*2\.9rem/);
 
-    // Column 3 of the quest header rail is auto-sized against a centred QUESTS
-    // heading in column 2, so the icon straddles the existing card corner.
+    // The actionable quest boon remains beside the QUESTS heading. Degen
+    // Rating itself reflects passive activity boons without another marker.
     const quest = STATUS_CSS.match(
-      /\.qst-score-label boon-product-indicator\s*\{[^}]*\}/)?.[0];
+      /\.qst-header h2 boon-product-indicator\s*\{[^}]*\}/)?.[0];
     assert.ok(quest, 'the quest boon is a compact icon rather than a text chip');
-    assert.match(quest, /top:\s*-0\.48rem/);
-    assert.match(quest, /right:\s*-0\.48rem/);
+    assert.match(quest, /top:\s*50%/);
+    assert.match(quest, /left:\s*calc\(100% \+ 0\.24rem\)/);
+    assert.doesNotMatch(STATUS_CSS, /\.qst-score-label boon-product-indicator/,
+      'passive Degen Rating boons reserve no icon styling');
   });
 
   test('uses a standard tier-colored arrow with native product badges and a real shield', () => {

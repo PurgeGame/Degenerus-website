@@ -197,6 +197,9 @@
               <span class="gr__brand-copy">
                 <strong>DEGENERUS</strong>
                 <small>PROTOCOL</small>
+                <span class="gr__bounty-pool" data-el="bounty-pool" hidden>
+                  <span>BOUNTY POOL</span><b data-el="bounty-pool-amount">—</b><em>FLIP</em>
+                </span>
               </span>
             </span>
             <span class="gr__masthead-divider" aria-hidden="true"></span>
@@ -338,10 +341,9 @@
         <app-craps-entry></app-craps-entry>
       </section>
 
-      <!-- The only permanent scoreboard in the game: four all-time marks and
-           the shared FLIP pool they claim from. Sits under the play grid
-           because three of the four are set by the surfaces directly above it
-           (spin, lootbox, ticket buy). -->
+      <!-- The only permanent scoreboard in the game: five all-time marks.
+           Their payouts still quote the shared FLIP pool without spending a
+           separate display slot on it. -->
       <app-records-rail></app-records-rail>
 
       <!-- Deity holders act from a compact daily-power desk outside the

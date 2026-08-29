@@ -425,81 +425,6 @@ body.layout-basic .records-rail__leader-value :is(em, i) {
   letter-spacing: 0.04em;
 }
 
-body.layout-basic .records-rail__pot {
-  position: relative;
-  display: inline-grid;
-  width: 100%;
-  max-width: 10.4rem;
-  min-width: 0;
-  align-items: center;
-  justify-self: start;
-  padding: 0.2rem 0.36rem 0.19rem;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background:
-    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 241, 196, 0.018) 3px 4px),
-    linear-gradient(145deg, rgba(57, 32, 14, 0.98), rgba(24, 13, 11, 0.98) 70%);
-  box-shadow:
-    inset 0 0 0 1px rgba(var(--rec-yellow), 0.58),
-    inset 0 0 0 3px rgba(64, 9, 9, 0.5),
-    0 4px 10px rgba(0, 0, 0, 0.24);
-  clip-path: polygon(0.24rem 0, calc(100% - 0.24rem) 0, 100% 0.24rem, 100% calc(100% - 0.24rem), calc(100% - 0.24rem) 100%, 0.24rem 100%, 0 calc(100% - 0.24rem), 0 0.24rem);
-  text-align: left;
-}
-
-body.layout-basic .records-rail__pot::before {
-  position: absolute;
-  inset: 2px;
-  border: 1px solid rgba(var(--rec-yellow), 0.24);
-  content: '';
-  pointer-events: none;
-}
-
-body.layout-basic .records-rail__pot-copy {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.32rem;
-}
-
-body.layout-basic .records-rail__pot-label {
-  color: rgba(var(--rec-cream), 0.78);
-  font: 1000 0.43rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.13em;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.62);
-}
-
-body.layout-basic .records-rail__pot strong {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  color: #ffe6a3;
-  font: 1000 clamp(0.66rem, 0.9vw, 0.8rem)/1 "Roboto Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.045em;
-  text-shadow: 0 0 18px rgba(var(--rec-gold), 0.27);
-  white-space: nowrap;
-}
-
-body.layout-basic .records-rail__pot strong b {
-  min-width: 0;
-  overflow: hidden;
-  font: inherit;
-  text-overflow: ellipsis;
-}
-
-body.layout-basic .records-rail__pot-logo {
-  width: 0.65rem;
-  height: 0.65rem;
-  flex: 0 0 0.65rem;
-  object-fit: contain;
-  filter: drop-shadow(0 0 7px rgba(var(--rec-yellow), 0.32));
-}
-
 body.layout-basic .records-rail__toggle {
   display: grid;
   width: 1.5rem;
@@ -1512,7 +1437,6 @@ body.layout-basic :is(
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  body.layout-basic .records-rail__pot { padding: 0.18rem 0.32rem; }
 }
 
 @container records-rail (max-width: 430px) {
@@ -1526,8 +1450,6 @@ body.layout-basic :is(
   }
 
   body.layout-basic .records-rail__wordmark { width: min(100%, 8.5rem); }
-  body.layout-basic .records-rail__pot-label { font-size: 0.4rem; }
-
 }
 
 @media (max-width: 840px) {
@@ -1604,10 +1526,6 @@ body.layout-basic :is(
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  body.layout-basic .records-rail__pot {
-    padding: 0.18rem 0.32rem;
-  }
-
   body.layout-basic .records-rail__expanded-intro {
     align-items: flex-start;
     flex-direction: column;
@@ -1647,8 +1565,6 @@ body.layout-basic :is(
   }
 
   body.layout-basic .records-rail__wordmark { width: min(100%, 8.5rem); }
-  body.layout-basic .records-rail__pot-label { font-size: 0.4rem; }
-
   body.layout-basic .records-rail__cards {
     grid-template-columns: minmax(0, 1fr);
   }

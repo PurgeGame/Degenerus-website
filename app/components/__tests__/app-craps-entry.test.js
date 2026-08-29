@@ -57,6 +57,7 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
 test('goal multipliers use player-facing difficulty labels', () => {
   assert.equal(crapsEntry.crapsGoalLabel(5), 'EASY');
   assert.equal(crapsEntry.crapsGoalLabel(10), 'HARD');
+  assert.equal(crapsEntry.crapsGoalLabel(20), 'HARD');
   assert.equal(crapsEntry.crapsGoalLabel(50), 'V HARD');
   assert.equal(crapsEntry.crapsGoalLabel(null), '—');
 });
@@ -81,6 +82,20 @@ test('the day row rolls to tomorrow after Battle 1 while later windows remain se
   ]);
   assert.equal(state.battles[0].slot, '337');
   assert.equal(state.battles[6].slot, '343');
+});
+
+test('lobby order keeps the next event first, tomorrow above newest settled history', () => {
+  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 0, futureDay: false }),
+    ['day', 0, 1, 2, 3, 4, 5, 6, 'tomorrow']);
+  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 3, futureDay: true }),
+    [3, 4, 5, 6, 'day', 2, 1, 0]);
+  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({
+    currentPeriod: 2,
+    futureDay: true,
+    settledPeriods: [2],
+  }), [3, 4, 5, 6, 'day', 2, 1, 0]);
+  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 7, futureDay: true }),
+    ['day', 6, 5, 4, 3, 2, 1, 0]);
 });
 
 test('entry terms combine exact economics with the event-published added FLIP ceiling', () => {
@@ -157,6 +172,16 @@ test('lobby rows build exact normal, High Roller, and future-day contract calls'
   assert.equal(futureNormal.method, 'buyFutureCrapsDays');
   assert.deepEqual(futureNormal.contractArgs, [43, 1, false, board]);
   assert.equal(futureNormal.totalFlip, '25000');
+  assert.equal(futureNormal.payment, 'flip');
+
+  const futurePass = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'future-day', contractChips: board, usePass: true,
+  });
+  assert.equal(futurePass.method, 'applyCrapsPasses');
+  assert.deepEqual(futurePass.contractArgs, [43, 1, false, board]);
+  assert.equal(futurePass.payment, 'pass');
+  assert.equal(futurePass.totalFlip, '0');
+  assert.equal(futurePass.stakedWei, '0');
 
   const futureHigh = crapsEntry.crapsEntryWager({
     day: 42, kind: 'future-day', highRoller: true, contractChips: board,
@@ -171,8 +196,9 @@ test('the widget occupies the third play-grid track and loads with the idle pane
   assert.match(cssSource, /grid-template-areas:\s*"quests degenerette craps"/);
   assert.match(cssSource, /> app-craps-entry\s*\{[\s\S]*?grid-area:\s*craps/s);
   assert.match(componentSource, /data-craps-entry="day"/);
-  assert.equal((componentSource.match(/data-craps-entry="window"/g) || []).length, 2,
-    'one selector and one generated battle button template cover all seven windows');
+  assert.match(componentSource, /data-craps-entry="future-day"/);
+  assert.equal((componentSource.match(/data-craps-entry="window"/g) || []).length, 3,
+    'the click selector, quest-focus selector, and one generated template cover all seven windows');
 });
 
 test('the launcher reuses the live table dice badges and puts the jackpot in the header', () => {
@@ -189,7 +215,10 @@ test('the launcher reuses the live table dice badges and puts the jackpot in the
 
 test('a poker-lobby listing shows exact historical boost and completed winners beside explicit entry terms', () => {
   assert.match(componentSource, /<table class="craps-entry__listing"/);
-  assert.match(componentSource, /CLOSES IN<\/th><th>BUY-IN<\/th><th>GOAL<\/th><th>SPEED<\/th><th>ENTER/);
+  assert.match(componentSource, /CLOSES IN<\/th><th>WAGER \+ POT<\/th><th>GOAL<\/th><th>BUY IN/);
+  assert.doesNotMatch(componentSource, /craps-battle-speed|craps-full-day-speed|<th>SPEED<\/th>/);
+  assert.doesNotMatch(componentSource, /<small>FLIP<\/small>|craps-full-day-(?:entry|pot)-unit/,
+    'the combined wager split has no repeated micro FLIP labels');
   assert.match(componentSource, /YEST\. ACTUAL BOOST · ALL POTS/);
   assert.equal((componentSource.match(/data-bind="craps-added-total"/g) || []).length, 1);
   assert.doesNotMatch(componentSource, /craps-battle-added/);
@@ -197,32 +226,41 @@ test('a poker-lobby listing shows exact historical boost and completed winners b
   assert.match(componentSource, /readCrapsLobbySnapshot\(day, player\)/);
   assert.match(componentSource, /data-bind="craps-battle-countdown"/);
   assert.match(componentSource, /crapsBattleCountdownLabel\(battle\.closeAtMs, nowMs\)/);
-  assert.match(componentSource, /data-bind="craps-battle-buyin"/);
-  assert.match(componentSource, /data-bind="craps-battle-speed"/);
+  assert.match(componentSource, /data-bind="craps-battle-entry"/);
+  assert.match(componentSource, /data-bind="craps-battle-pot"/);
   assert.match(componentSource, /data-bind="craps-battle-goal"/);
   assert.match(componentSource, /crapsGoalLabel\(battleTerms\?\.goalMult\)/);
   assert.match(componentSource, /bindText\('craps-full-day-goal', ''\)/);
-  assert.match(componentSource, /bindText\('craps-full-day-speed', ''\)/);
   assert.doesNotMatch(componentSource, /'MIXED'/);
   assert.match(componentSource, /data-bind="craps-battle-winner"/);
   assert.match(componentSource, /data-bind="craps-battle-payout"/);
   assert.match(componentSource, /data-bind="craps-battle-boost"/);
+  assert.match(componentSource, /<td class="craps-entry__result"[^>]*colspan="4"[^>]*>\s*<div class="craps-entry__result-grid">/);
   assert.match(componentSource, /row\.dataset\.state = result \? 'completed'/);
   assert.match(componentSource, /playerEntries/);
   assert.match(componentSource, /data-craps-upgrade/);
   assert.match(componentSource, /upgradeCrapsDayWindows/);
-  assert.match(componentSource, /'✓ ENTERED'/);
+  assert.match(componentSource, /class="craps-entry__entered"/);
+  assert.doesNotMatch(componentSource, /✓ ENTERED|✓ ENTERED ROWS/,
+    'owned seats use plain status text rather than disabled button copy');
   assert.match(componentSource, /`UPGRADE \$\{formatCrapsCompactFlip/);
-  assert.match(componentSource, /`BUY \$\{price == null/);
+  assert.match(componentSource, /`ENTER: \$\{price == null/);
   assert.match(componentSource, /data-craps-board/);
   assert.match(componentSource, /data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/);
   assert.match(componentSource, /CRAPS_FUTURE_DAY_PRICES/);
+  assert.match(componentSource, /readCrapsPassCredits/);
+  assert.match(componentSource, /applyCrapsPasses/);
+  assert.match(componentSource, /ENTER: 1 PASS/);
+  assert.match(componentSource, /data-bind="craps-pass-wallet"/);
+  assert.match(componentSource, /data-bind="craps-tomorrow-row"/);
   assert.match(componentSource, /buyFutureCrapsDays/);
   assert.doesNotMatch(componentSource, /DEEP/);
   assert.match(cssSource, /\.craps-entry\s*\{[^}]*min-height:\s*0/s);
   assert.match(cssSource, /\.craps-entry__listing\s*\{/);
   assert.match(cssSource, /\.craps-entry__listing tbody :is\(th,td\)[^{]*\{[^}]*font-size:\s*\.52rem/s);
   assert.match(cssSource, /\.craps-entry__result\s*\{/);
+  assert.match(cssSource, /\.craps-entry__result-grid\s*\{[^}]*display:\s*grid/s);
+  assert.doesNotMatch(cssSource, /\.craps-entry__result:not\(\[hidden\]\)\s*\{[^}]*display:\s*grid/s);
   assert.match(cssSource, /data-state="completed"/);
   assert.match(cssSource, /data-state="entered"/);
   assert.match(cssSource, /data-state="upgrade"/);
@@ -259,6 +297,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
   const waiting = crapsEntry.crapsResolutionPendingActions({ address, replays: [replay] });
   assert.equal(waiting.length, 1);
   assert.equal(waiting[0].state, 'waiting');
+  assert.equal(waiting[0].pinned, true);
   assert.equal(waiting[0].run, null);
   assert.equal(waiting[0].autoOpen, false);
   assert.equal(waiting[0].dismissScope, address.toLowerCase());
@@ -270,6 +309,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
     run: async (row, scope) => { runs.push([row.viewerBetId, scope]); return true; },
   });
   assert.equal(ready[0].state, 'ready');
+  assert.equal(ready[0].shortLabel, 'View result');
   assert.match(ready[0].detail, /Main pot won · 12\.3K FLIP/);
   assert.equal(await ready[0].run(), true);
   assert.deepEqual(runs, [[viewerBetId, address.toLowerCase()]]);

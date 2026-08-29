@@ -49,7 +49,7 @@
 //
 // T-58-18 discipline: every server-derived string goes in via textContent.
 
-import { displayEthCompact } from '../app/scaling.js';
+import { displayEthCompact, displayToken } from '../app/scaling.js';
 import { subscribe } from '../app/store.js';
 
 // Count-up duration. Long enough to read as motion, short enough that the next
@@ -81,6 +81,20 @@ function groupEth(formatted) {
  */
 function fmtEth(rawWei, digits = HEADLINE_DIGITS) {
   return groupEth(displayEthCompact(rawWei, digits));
+}
+
+/** Keep the relocated record pool readable in the tiny protocol-logo lockup. */
+function formatBountyPoolFlip(rawWei) {
+  let whole;
+  try { whole = BigInt(displayToken(BigInt(rawWei), 0)); } catch (_error) { return null; }
+  const units = [[10n ** 9n, 'B'], [10n ** 6n, 'M'], [10n ** 3n, 'K']];
+  for (const [scale, suffix] of units) {
+    if (whole < scale) continue;
+    const tenths = (whole * 10n) / scale;
+    const fraction = tenths % 10n;
+    return `${groupEth(String(tenths / 10n))}${fraction ? `.${fraction}` : ''}${suffix}`;
+  }
+  return groupEth(String(whole));
 }
 
 /** Width bucket used by the narrow-screen CSS; punctuation consumes room too. */
@@ -130,6 +144,7 @@ class GoldRushHeadline extends HTMLElement {
     this.#initialized = true;
     this.#renderShell();
     this.#unsubs.push(subscribe('app.goldRush', (payload) => this.#onPayload(payload)));
+    this.#unsubs.push(subscribe('app.records', (payload) => this.#onRecords(payload)));
   }
 
   disconnectedCallback() {
@@ -153,7 +168,9 @@ class GoldRushHeadline extends HTMLElement {
     // static copy in index.html byte-for-byte in sync.
     if (!(this.querySelector('[data-el="amount"]')
       && this.querySelector('[data-el="chip"]')
-      && this.querySelector('[data-el="float"]'))) this.innerHTML = `
+      && this.querySelector('[data-el="float"]')
+      && this.querySelector('[data-el="bounty-pool"]')
+      && this.querySelector('[data-el="bounty-pool-amount"]'))) this.innerHTML = `
       <div class="gr__inner">
         <div class="gr__masthead">
           <span class="gr__brand">
@@ -161,6 +178,9 @@ class GoldRushHeadline extends HTMLElement {
             <span class="gr__brand-copy">
               <strong>DEGENERUS</strong>
               <small>PROTOCOL</small>
+              <span class="gr__bounty-pool" data-el="bounty-pool" hidden>
+                <span>BOUNTY POOL</span><b data-el="bounty-pool-amount">—</b><em>FLIP</em>
+              </span>
             </span>
           </span>
           <span class="gr__masthead-divider" aria-hidden="true"></span>
@@ -180,7 +200,23 @@ class GoldRushHeadline extends HTMLElement {
       chip: this.querySelector('[data-el="chip"]'),
       amount: this.querySelector('[data-el="amount"]'),
       float: this.querySelector('[data-el="float"]'),
+      bountyPool: this.querySelector('[data-el="bounty-pool"]'),
+      bountyPoolAmount: this.querySelector('[data-el="bounty-pool-amount"]'),
     };
+  }
+
+  #onRecords(payload) {
+    const host = this.#els?.bountyPool;
+    const amount = this.#els?.bountyPoolAmount;
+    if (!host || !amount) return;
+    const formatted = formatBountyPoolFlip(payload?.recordPoolWei);
+    if (formatted == null) {
+      host.hidden = true;
+      return;
+    }
+    amount.textContent = formatted;
+    host.hidden = false;
+    host.setAttribute('aria-label', `Bounty pool ${formatted} FLIP`);
   }
 
   #onPayload(payload) {
@@ -306,6 +342,6 @@ if (typeof customElements !== 'undefined' && !customElements.get('gold-rush-head
 // Test surface — the pure formatting helpers, exercised by
 // __tests__/gold-rush-headline.test.js without a DOM.
 export const _testing = {
-  groupEth, fmtEth, easeOutCubic, headlineAmountFit,
+  groupEth, fmtEth, formatBountyPoolFlip, easeOutCubic, headlineAmountFit,
 };
 export default GoldRushHeadline;

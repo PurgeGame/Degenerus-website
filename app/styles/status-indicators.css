@@ -463,15 +463,6 @@ body.layout-basic .qst-header h2 boon-product-indicator {
   translate: 0 -50%;
 }
 
-/* The rating badge straddles its already-positioned card corner. In particular
-   it must not widen column 3 and push the centred QUESTS heading sideways. */
-body.layout-basic .qst-score-label boon-product-indicator {
-  top: -0.48rem;
-  right: -0.48rem;
-  width: 1.34rem;
-  height: 1.34rem;
-}
-
 body.layout-basic .pass-deity-title-lockup {
   position: relative;
 }

@@ -2881,8 +2881,6 @@ class AppDailyFlip extends HTMLElement {
           </a>
           <strong class="df-baf-score__value" data-bind="df-baf-score">—</strong>
         </div>
-        <boon-product-indicator class="df-table-boon"
-                                product="coinflip"></boon-product-indicator>
         <quest-objective-indicator class="df-table-quest"
                                    data-quest-pointer="right"
                                    product="coinflip"></quest-objective-indicator>
@@ -2930,6 +2928,8 @@ class AppDailyFlip extends HTMLElement {
             <div class="df-tomorrow-bet-oval" data-bind="df-tomorrow-bet-oval" role="img"
                  aria-label="Tomorrow's bet is loading">
               <span class="df-tomorrow-layout__add-cue" data-bind="df-tomorrow-add-cue" aria-hidden="true">+</span>
+              <boon-product-indicator class="df-table-boon"
+                                      product="coinflip"></boon-product-indicator>
               <span class="df-bet-chip-rack" data-bind="df-tomorrow-chip-rack" aria-hidden="true">—</span>
               <span class="df-flip-group df-next-bet" data-bind="df-add-bet-controls"></span>
             </div>
@@ -4935,10 +4935,20 @@ class AppDailyFlip extends HTMLElement {
     const lowerLabel = this.querySelector('[data-bind="df-lower-felt-label"]');
     const todayAddCue = this.querySelector('[data-bind="df-today-add-cue"]');
     const tomorrowAddCue = this.querySelector('[data-bind="df-tomorrow-add-cue"]');
+    const todayOval = this.querySelector('[data-bind="df-bet-oval"]');
     const lowerOval = this.querySelector('[data-bind="df-tomorrow-bet-oval"]');
     const todayActionable = revealComplete && this.#browsingDay == null;
     const addBetDialog = this.querySelector('[data-bind="df-add-bet-dialog"]');
     const dialogOpen = addBetDialog != null && !addBetDialog.hidden;
+    // Keep the active deposit boon beside the actual Add Bet surface. At the
+    // day handoff that surface moves from Tomorrow's oval into Today's oval,
+    // so the single live indicator moves with it instead of staying up by BAF.
+    const depositBoon = this.querySelector('.df-table-boon');
+    const actionableOval = positionsShifted ? todayOval : lowerOval;
+    if (depositBoon && actionableOval && depositBoon.parentElement !== actionableOval) {
+      actionableOval.appendChild(depositBoon);
+    }
+    depositBoon?.setAttribute('variant', positionsShifted ? 'today-bet' : 'tomorrow-bet');
     const yesterdayReceiptLabel = !positionsShifted
       ? null
       : resolvedStake == null

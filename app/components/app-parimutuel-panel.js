@@ -371,8 +371,8 @@ class AppParimutuelPanel extends HTMLElement {
     if (seq !== this.#fetchSeq) return;
 
     this.#growth = this.#foldBook(growth);
-    // Retain the last known position when the read was skipped. #visible() and
-    // the open-state checks pass #decimatorPosition back into
+    // Retain the last known position when the read was skipped. The render and
+    // open-state checks pass #decimatorPosition back into
     // decimatorWindowIsOpen(), where `roundStatus === 'open'` is what keeps a
     // burned-but-unresolved entry on screen after the x4 window closes. Nulling
     // it on every gated cycle would blank the player's own pending entry at
@@ -568,12 +568,6 @@ class AppParimutuelPanel extends HTMLElement {
     );
   }
 
-  #visible() {
-    return Boolean(this.#openState(this.#growth))
-      || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition)
-      || this.#pendingSettlement(this.#growth).length > 0;
-  }
-
   // -----------------------------------------------------------------------
   // Cadence — hot only during the short Decimator window.
   // -----------------------------------------------------------------------
@@ -594,16 +588,12 @@ class AppParimutuelPanel extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-parimutuel">
-        <div class="panel-header">
-          <h2><a class="pari-learn-link" href="/learn/side-bets/">SIDE BETS</a></h2>
-        </div>
-        <div class="pari-books">
+        <div class="pari-books" data-bind="pari-books" hidden>
           <!-- Decimator comes first deliberately: its x4/x99 burn window is
                level-gated and must not sit below the Growth book. -->
           <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
           <article class="pari-book" data-bind="pari-growth" hidden></article>
         </div>
-        <p class="pari-empty" data-bind="pari-empty">Checking…</p>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
         <app-wwxrp-burn></app-wwxrp-burn>
       </section>
@@ -611,16 +601,18 @@ class AppParimutuelPanel extends HTMLElement {
   }
 
   #render() {
-    const visible = this.#visible();
-    const empty = this.querySelector('[data-bind="pari-empty"]');
-    if (empty) {
-      empty.hidden = visible;
-      if (!visible) {
-        empty.textContent = 'Books are closed';
-      }
-    }
     this.#renderBook();
     this.#renderDecimator();
+    const books = this.querySelector('[data-bind="pari-books"]');
+    const growth = this.querySelector('[data-bind="pari-growth"]');
+    const decimator = this.querySelector('[data-bind="pari-decimator"]');
+    const hasLiveBook = Boolean((growth && !growth.hidden) || (decimator && !decimator.hidden));
+    if (books) books.hidden = !hasLiveBook;
+    const panel = this.querySelector('.app-parimutuel');
+    if (panel?.classList) {
+      if (hasLiveBook) panel.classList.add('has-live-book');
+      else panel.classList.remove('has-live-book');
+    }
     this.#publishPending();
   }
 
@@ -945,6 +937,8 @@ class AppParimutuelPanel extends HTMLElement {
     const settledOnly = !book.openRound
       && (lost.length > 0 || pending.length > 0);
     if (host.classList) {
+      if (open) host.classList.add('pari-book--open');
+      else host.classList.remove('pari-book--open');
       if (settledOnly) host.classList.add('pari-book--settled');
       else host.classList.remove('pari-book--settled');
     }

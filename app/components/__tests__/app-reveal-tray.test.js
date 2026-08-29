@@ -140,12 +140,14 @@ describe('actionableRevealItems', () => {
       { kind: 'batch-resolution', state: 'ready' },
       { kind: 'bingo', state: 'ready' },
       { kind: 'foil-match', state: 'ready' },
+      { kind: 'craps', state: 'waiting', pinned: true },
+      { kind: 'craps', state: 'ready' },
       { kind: 'funds-claim', state: 'ready' },
       { kind: 'decimator', state: 'ready', primarySurface: 'jackpot' },
       { kind: 'decimator', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
-      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'decimator', 'decimator',
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'craps', 'craps', 'decimator', 'decimator',
     ]);
     assert.doesNotMatch(
       readFileSync(new URL('../../app/launch-claims.js', import.meta.url), 'utf8'),
@@ -400,6 +402,48 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.querySelector('.rrt-action__label').textContent, 'WHALE PASS · 2');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
     assert.notEqual(action.getAttribute('data-write'), null);
+    el.disconnectedCallback();
+  });
+
+  test('a finalized Craps run stays in Pending through replay assembly, then opens its result', async () => {
+    const source = 'craps-resolutions';
+    const base = {
+      id: 'craps-resolution:0xabc:battle:7',
+      kind: 'craps',
+      kindLabel: 'CRAPS FINAL',
+      label: 'Day 42 · Battle 2',
+      detail: 'Settling · 87 of 120 resolved.',
+      pinned: true,
+      autoOpen: false,
+    };
+    pending.publishPendingActions(source, [{
+      ...base,
+      state: 'waiting',
+      phase: 'settling',
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    let action = el.querySelector('.rrt-action--craps');
+    assert.ok(action, 'the finalized owned run is visible while its replay is assembled');
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'CRAPS FINAL');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
+    assert.ok(action.querySelector('.rrt-action__glyph'), 'Craps has a dedicated dice glyph');
+
+    let opened = 0;
+    pending.publishPendingActions(source, [{
+      ...base,
+      detail: 'Battle settled. Your roll-by-roll result and final rewards are ready.',
+      state: 'ready',
+      phase: 'ready',
+      run: async () => { opened += 1; return true; },
+    }]);
+    action = el.querySelector('.rrt-action--craps');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
+    assert.match(action.getAttribute('aria-label'), /^VIEW: Day 42 · Battle 2/);
+    action.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(opened, 1, 'the ready receipt opens the owned replay result');
     el.disconnectedCallback();
   });
 

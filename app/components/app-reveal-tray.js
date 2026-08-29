@@ -58,6 +58,7 @@ const REVEAL_KINDS = new Set([
   'affiliate-bonus',
   'wwxrp-draw',
   'foil-gold',
+  'craps',
   'mass-resolution',
   'batch-resolution',
 ]);
@@ -135,6 +136,10 @@ const ACTION_ICON_PATHS = Object.freeze({
   ],
   baf: [
     'm12 3 1.7 5.2H19l-4.3 3.1 1.7 5.2-4.4-3.2-4.4 3.2 1.7-5.2L5 8.2h5.3L12 3Z',
+  ],
+  craps: [
+    'M4.5 5.5h10v10h-10v-10ZM9.5 15.5v3h10v-10h-5',
+    'M8 9h.01M11 12h.01M8 12h.01M16 12h.01M16 15h.01',
   ],
 });
 
@@ -567,6 +572,7 @@ function _actionVerb(item, { busy = false, waiting = false } = {}) {
   if (CLAIM_KINDS.has(item?.kind)) return 'CLAIM';
   if (item?.kind === 'tickets' || item?.kind === 'lootbox') return 'OPEN';
   if (item?.kind === 'degenerette' || item?.kind === 'bingo') return 'VIEW';
+  if (item?.kind === 'craps') return 'VIEW';
   if (item?.kind === 'decimator') return item?.write === true ? 'RESOLVE' : 'VIEW';
   if (item?.kind === 'baf') return item?.write === true ? 'CLAIM' : 'VIEW';
   if (item?.kind === 'mass-resolution' || item?.kind === 'batch-resolution') return 'RUN';
@@ -682,6 +688,7 @@ function _kindLabel(kind) {
   if (kind === 'affiliate-bonus') return 'REFERRAL BONUS';
   if (kind === 'wwxrp-draw') return 'WWXRP DRAW';
   if (kind === 'foil-gold') return 'FOIL GOLD';
+  if (kind === 'craps') return 'CRAPS FINAL';
   if (kind === 'mass-resolution' || kind === 'batch-resolution') return 'PROTOCOL RESOLUTION';
   return 'TICKET PACK';
 }
@@ -1633,6 +1640,8 @@ class AppRevealTray extends HTMLElement {
         button.addEventListener('click', () => this.#showError(
           autoArmed
             ? 'Auto-open is armed. No click is needed.'
+            : item.kind === 'craps'
+              ? 'This Craps result is still settling. Pending will light up when the replay is ready.'
             : item.phase === 'submitting'
               ? 'Transaction is still confirming. No click is needed yet.'
               : item.phase === 'indexing'

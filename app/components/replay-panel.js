@@ -1429,7 +1429,7 @@ class ReplayPanel extends HTMLElement {
   /**
    * Mirror the resolver's published Mine FLIP row. Nothing about availability
    * is decided here: app-mine-flip.js publishes the row only when a simulated
-   * `mineFlip()` succeeds for the acting wallet, and clears it when another
+   * `mineFlip()` succeeds for the connected wallet, and clears it when another
    * keeper wins the race. Reading that row is how this key stays honest.
    */
   #setMineFlipAction(items) {

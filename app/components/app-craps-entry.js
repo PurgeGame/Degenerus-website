@@ -12,6 +12,7 @@ import {
   CRAPS_FUTURE_DAY_PRICES,
   crapsBonusDayTerms,
   placeCrapsBonusEntry,
+  readCrapsPassCredits,
   readCrapsLobbySnapshot,
   readCrapsProgressivePool,
   upgradeCrapsDayWindows,
@@ -199,6 +200,22 @@ export function crapsEntryState({ day = null, nowMs = Date.now() } = {}) {
   });
 }
 
+/** Urgency order for the lobby: next open rows, tomorrow, then newest history. */
+export function crapsLobbyRowOrder({ currentPeriod = 0, futureDay = false, settledPeriods = [] } = {}) {
+  const period = Math.max(0, Math.min(CRAPS_BATTLES_PER_DAY, Math.trunc(Number(currentPeriod) || 0)));
+  const settled = new Set((Array.isArray(settledPeriods) ? settledPeriods : [])
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value >= 0 && value < CRAPS_BATTLES_PER_DAY));
+  const open = Array.from({ length: CRAPS_BATTLES_PER_DAY }, (_, value) => value)
+    .filter((value) => value >= period && !settled.has(value));
+  const history = Array.from({ length: CRAPS_BATTLES_PER_DAY }, (_, value) => value)
+    .filter((value) => value < period || settled.has(value))
+    .reverse();
+  return Object.freeze(!futureDay && period === 0
+    ? ['day', ...open, 'tomorrow', ...history]
+    : [...open, 'day', ...history]);
+}
+
 /** Merge pure word-derived terms with event-published added-FLIP ceilings. */
 export function crapsEntryTerms({ wordValue = 0, schedule = null } = {}) {
   let derived = null;
@@ -274,6 +291,7 @@ export function crapsEntryWager({
   highRoller = false,
   highMult = null,
   contractChips = 0,
+  usePass = false,
 } = {}) {
   const selection = crapsEntrySelection({ day, kind, period });
   const packed = Number(contractChips);
@@ -293,12 +311,17 @@ export function crapsEntryWager({
     try { base = BigInt(buyInFlip); } catch (_error) { base = null; }
     if (base == null || base < 0n) throw new Error('The Craps buy-in is not available yet.');
   }
-  const totalFlip = future
-    ? CRAPS_FUTURE_DAY_PRICES[highRoller ? 'high' : 'normal']
-    : base * BigInt(entryMultiple);
-  const method = future
-    ? 'buyFutureCrapsDays'
-    : selection.entryKind === 'day' ? 'enterBonusDay' : 'enterBonusBattle';
+  const paysWithPass = future && Boolean(usePass);
+  const totalFlip = paysWithPass
+    ? 0n
+    : future
+      ? CRAPS_FUTURE_DAY_PRICES[highRoller ? 'high' : 'normal']
+      : base * BigInt(entryMultiple);
+  const method = paysWithPass
+    ? 'applyCrapsPasses'
+    : future
+      ? 'buyFutureCrapsDays'
+      : selection.entryKind === 'day' ? 'enterBonusDay' : 'enterBonusBattle';
   const contractArgs = future
     ? [selection.entryDay, 1, Boolean(highRoller), packed]
     : selection.entryKind === 'day'
@@ -311,6 +334,7 @@ export function crapsEntryWager({
     ...selection,
     entryMultiple,
     highRoller: Boolean(highRoller),
+    payment: paysWithPass ? 'pass' : 'flip',
     contractChips: packed,
     contractArgs: Object.freeze(contractArgs),
     totalFlip: totalFlip.toString(),
@@ -366,7 +390,7 @@ export function crapsResolutionPendingActions({
         ? `Main pot won · ${compactWei(replay.amountWei)} FLIP. Final rewards are ready.`
         : 'Battle settled. Your roll-by-roll result and final rewards are ready.';
     const shortLabel = ready
-      ? 'Watch run'
+      ? 'View result'
       : ['failed', 'build-unavailable'].includes(loaderStatus)
         ? 'Replay unavailable'
         : loaderStatus === 'pending'
@@ -385,6 +409,10 @@ export function crapsResolutionPendingActions({
       detail,
       state: ready ? 'ready' : 'waiting',
       phase: loaderStatus,
+      // Finalization can land before the sealed replay shards. Keep the same
+      // owned result visible through that handoff instead of dropping it until
+      // the action becomes clickable.
+      pinned: true,
       passive: ['failed', 'build-unavailable'].includes(loaderStatus),
       autoOpen: false,
       order: 14,
@@ -394,7 +422,7 @@ export function crapsResolutionPendingActions({
   });
 }
 
-const CRAPS_GOAL_LABELS = Object.freeze({ 5: 'EASY', 10: 'HARD', 50: 'V HARD' });
+const CRAPS_GOAL_LABELS = Object.freeze({ 5: 'EASY', 10: 'HARD', 20: 'HARD', 50: 'V HARD' });
 
 export function crapsGoalLabel(value) {
   return CRAPS_GOAL_LABELS[Number(value)] ?? '—';
@@ -420,6 +448,7 @@ export class AppCrapsEntry extends HTMLElement {
   #schedulePlayer = null;
   #schedulePending = false;
   #scheduleSeq = 0;
+  #passCredits = null;
   #replayStates = new Map();
   #replaySeq = 0;
   #replayPollTimer = null;
@@ -431,6 +460,8 @@ export class AppCrapsEntry extends HTMLElement {
   #boardSet = false;
   #busyKey = null;
   #message = '';
+  #forceFlipDay = false;
+  #questActivationListening = false;
   #storeListener = () => {
     this.#render();
     void this.#refreshSchedule();
@@ -443,6 +474,29 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#replayNeedsPolling()) {
       void this.#refreshResolvedReplays(this.#snapshot?.resolvedReplays, this.#schedulePlayer);
     }
+  };
+  #questActivateListener = (event) => {
+    const questType = Number(event?.detail?.questType);
+    if (questType !== 10 && questType !== 11) return;
+    if (questType === 11) {
+      // Buying a future day with FLIP is the qualifying level-quest action.
+      // Applying a banked reward pass is still the normal payment priority,
+      // but it cannot advance this particular quest because no burn occurs.
+      this.#forceFlipDay = true;
+      this.#highRoller = false;
+      this.#message = 'DAY-PASS QUEST · Buy the next Normal slate with FLIP; banked passes stay untouched.';
+    } else {
+      this.#forceFlipDay = false;
+      this.#message = 'CRAPS QUEST · Choose any open paid battle.';
+    }
+    this.#render();
+    const tomorrow = this.querySelector('[data-craps-entry="future-day"]');
+    const explicitTomorrow = tomorrow && !tomorrow.closest?.('tr')?.hidden ? tomorrow : null;
+    const target = questType === 11
+      ? explicitTomorrow ?? this.querySelector('[data-craps-entry="day"]')
+      : [...this.querySelectorAll('[data-craps-entry="window"]')].find((button) => !button.disabled && !button.hidden);
+    try { target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_error) { /* detached DOM */ }
+    try { target?.focus?.({ preventScroll: true }); } catch (_error) { /* detached DOM */ }
   };
   #clickListener = (event) => {
     const lane = event?.target?.closest?.('[data-craps-lane]');
@@ -488,6 +542,10 @@ export class AppCrapsEntry extends HTMLElement {
       globalThis.addEventListener?.('online', this.#replayLifecycleListener);
       globalThis.addEventListener?.('offline', this.#replayLifecycleListener);
     }
+    if (!this.#questActivationListening) {
+      this.#questActivationListening = true;
+      globalThis.document?.addEventListener?.('quest:activate', this.#questActivateListener);
+    }
     if (this.#timer == null) {
       this.#timer = timer(() => this.#render(), 60_000);
     }
@@ -514,6 +572,10 @@ export class AppCrapsEntry extends HTMLElement {
       globalThis.document?.removeEventListener?.('visibilitychange', this.#replayLifecycleListener);
       globalThis.removeEventListener?.('online', this.#replayLifecycleListener);
       globalThis.removeEventListener?.('offline', this.#replayLifecycleListener);
+    }
+    if (this.#questActivationListening) {
+      this.#questActivationListening = false;
+      globalThis.document?.removeEventListener?.('quest:activate', this.#questActivateListener);
     }
     this.#progressiveSeq += 1;
     this.#scheduleSeq += 1;
@@ -549,36 +611,48 @@ export class AppCrapsEntry extends HTMLElement {
           <div class="craps-entry__lane" role="group" aria-label="Craps entry lane">
             <button type="button" data-craps-lane="normal" aria-pressed="true">NORMAL</button>
             <button type="button" data-craps-lane="high" aria-pressed="false">HIGH ROLLER <small data-bind="craps-high-mult">—</small></button>
+            <div class="craps-entry__pass-wallet" data-bind="craps-pass-wallet" hidden>
+              <small>YOUR PASSES</small>
+              <span data-bind="craps-normal-passes" hidden>NORMAL <strong>0</strong></span>
+              <span data-bind="craps-high-passes" hidden>HIGH <strong>0</strong></span>
+            </div>
           </div>
         </div>
 
         <div class="craps-entry__lobby">
           <table class="craps-entry__listing" aria-label="Craps battle buy-ins">
-            <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-buyin"><col class="craps-entry__col-mult"><col class="craps-entry__col-speed"><col class="craps-entry__col-action"></colgroup>
-            <thead><tr><th>CLOSES IN</th><th>BUY-IN</th><th>GOAL</th><th>SPEED</th><th>ENTER</th></tr></thead>
+            <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-wager"><col class="craps-entry__col-goal"><col class="craps-entry__col-action"></colgroup>
+            <thead><tr><th>CLOSES IN</th><th>WAGER + POT</th><th>GOAL</th><th>BUY IN</th></tr></thead>
             <tbody>
               <tr class="craps-entry__day-buy" data-bind="craps-day-row" data-state="open">
                 <th scope="row"><small data-bind="craps-day-kicker">DAY PASS</small><strong data-bind="craps-day-title">ALL 7</strong></th>
-                <td><strong data-bind="craps-full-day-buyin">—</strong><small>FLIP</small></td>
+                <td class="craps-entry__terms"><strong><span data-bind="craps-full-day-entry">—</span><i>+</i><span data-bind="craps-full-day-pot">—</span></strong></td>
                 <td data-bind="craps-full-day-goal">—</td>
-                <td data-bind="craps-full-day-speed">—</td>
-                <td><button type="button" data-craps-entry="day" data-terms="loading">BUY —</button></td>
+                <td><button type="button" data-craps-entry="day" data-terms="loading">ENTER: — FLIP</button><span class="craps-entry__entered" data-bind="craps-day-entered" hidden>ENTERED</span></td>
               </tr>
               ${Array.from({ length: CRAPS_BATTLES_PER_DAY }, (_, period) => `
                 <tr class="craps-entry__battle" data-craps-period="${period}" data-state="upcoming" data-terms="loading">
                   <th scope="row" class="craps-entry__open-cell"><time data-bind="craps-battle-countdown">—</time></th>
-                  <td class="craps-entry__open-cell"><strong data-bind="craps-battle-buyin">—</strong><small>FLIP</small></td>
+                  <td class="craps-entry__terms craps-entry__open-cell"><strong><span data-bind="craps-battle-entry">—</span><i>+</i><span data-bind="craps-battle-pot">—</span></strong></td>
                   <td class="craps-entry__open-cell" data-bind="craps-battle-goal">—</td>
-                  <td class="craps-entry__open-cell" data-bind="craps-battle-speed">—</td>
                   <td class="craps-entry__action craps-entry__open-cell">
-                    <button type="button" data-craps-entry="window" data-craps-period="${period}">BUY —</button>
+                    <button type="button" data-craps-entry="window" data-craps-period="${period}">ENTER: — FLIP</button>
+                    <span class="craps-entry__entered" data-bind="craps-battle-entered" hidden>ENTERED</span>
                   </td>
-                  <td class="craps-entry__result" data-bind="craps-battle-result" colspan="5" hidden>
-                    <span><small>WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
-                    <span><small>TOTAL WON</small><strong><output data-bind="craps-battle-payout">—</output> FLIP</strong></span>
-                    <span><small>BOOSTED</small><strong><output data-bind="craps-battle-boost">—</output> FLIP</strong></span>
+                  <td class="craps-entry__result" data-bind="craps-battle-result" colspan="4" hidden>
+                    <div class="craps-entry__result-grid">
+                      <span><small>WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
+                      <span><small>TOTAL WON</small><strong><output data-bind="craps-battle-payout">—</output> FLIP</strong></span>
+                      <span><small>BOOSTED</small><strong><output data-bind="craps-battle-boost">—</output> FLIP</strong></span>
+                    </div>
                   </td>
                 </tr>`).join('')}
+              <tr class="craps-entry__day-buy craps-entry__day-buy--tomorrow" data-bind="craps-tomorrow-row" data-state="open" hidden>
+                <th scope="row"><small data-bind="craps-tomorrow-kicker">NEXT SLATE</small><strong>ALL 7</strong></th>
+                <td class="craps-entry__terms"><strong><span>TBD</span><i>+</i><span>TBD</span></strong></td>
+                <td>—</td>
+                <td><button type="button" data-craps-entry="future-day" data-terms="loading">ENTER: — FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -600,6 +674,8 @@ export class AppCrapsEntry extends HTMLElement {
     const terms = this.#termsFor(state);
     const multiple = this.#highRoller ? terms?.highMult ?? null : 1;
     const connectedPlayer = String(get('connected.address') ?? '').toLowerCase();
+    const futureDay = state.dayEntryKind === 'future-day';
+    const dayEntryDay = state.dayEntryDay;
     const bindText = (name, value) => {
       const node = this.querySelector(`[data-bind="${name}"]`);
       if (node) node.textContent = value;
@@ -608,6 +684,20 @@ export class AppCrapsEntry extends HTMLElement {
     bindText('craps-board-state', this.#boardSet ? '7-CHIP BOARD' : 'RANDOM DRAW');
     bindText('craps-board-action', this.#boardSet ? 'EDIT BOARD' : 'SET YOUR BOARD');
     bindText('craps-high-mult', terms?.highMult == null ? 'DRAWN DAILY' : `TODAY ${terms.highMult}×`);
+    const normalPasses = Number(this.#passCredits?.normal ?? 0);
+    const highPasses = Number(this.#passCredits?.high ?? 0);
+    const passWallet = this.querySelector('[data-bind="craps-pass-wallet"]');
+    const paintPassCount = (name, count, selected) => {
+      const node = this.querySelector(`[data-bind="${name}"]`);
+      if (!node) return;
+      node.hidden = count <= 0;
+      node.dataset.selected = String(Boolean(selected));
+      const value = node.querySelector('strong');
+      if (value) value.textContent = count.toLocaleString('en-US');
+    };
+    if (passWallet) passWallet.hidden = normalPasses + highPasses <= 0;
+    paintPassCount('craps-normal-passes', normalPasses, !this.#highRoller);
+    paintPassCount('craps-high-passes', highPasses, this.#highRoller);
     for (const lane of this.querySelectorAll('[data-craps-lane]')) {
       const selected = (lane.dataset.crapsLane === 'high') === this.#highRoller;
       lane.setAttribute('aria-pressed', String(selected));
@@ -629,21 +719,28 @@ export class AppCrapsEntry extends HTMLElement {
       : '—');
     if (addedBanner) addedBanner.dataset.state = addedReady ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
 
-    const futureDay = state.dayEntryKind === 'future-day';
-    const dayReady = state.dayEntryDay != null && (futureDay || (terms?.complete && multiple != null));
+    const selectedPasses = this.#highRoller ? highPasses : normalPasses;
+    const passInventoryReady = !connectedPlayer || this.#passCredits != null;
+    const usePass = futureDay && !this.#forceFlipDay && selectedPasses > 0;
+    const dayReady = dayEntryDay != null
+      && (futureDay || (terms?.complete && multiple != null))
+      && (!futureDay || this.#forceFlipDay || passInventoryReady);
     const dayPrice = futureDay
       ? CRAPS_FUTURE_DAY_PRICES[this.#highRoller ? 'high' : 'normal']
       : dayReady ? terms.buyInFlip * BigInt(multiple) : null;
-    bindText('craps-day-kicker', futureDay ? 'NEXT SLATE' : 'DAY PASS');
+    const dayEntry = !futureDay && dayReady ? terms.bankrollFlip * BigInt(multiple) : null;
+    const dayPot = !futureDay && dayReady ? terms.battleStakeFlip * BigInt(multiple) : null;
+    bindText('craps-day-kicker', futureDay && this.#forceFlipDay ? 'QUEST PASS' : futureDay ? 'NEXT SLATE' : 'DAY PASS');
     bindText('craps-day-title', 'ALL 7');
-    bindText('craps-full-day-buyin', dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice));
-    bindText('craps-full-day-speed', '');
+    bindText('craps-full-day-entry', futureDay ? 'TBD' : dayEntry == null ? '—' : formatCrapsCompactFlip(dayEntry));
+    bindText('craps-full-day-pot', futureDay ? 'TBD' : dayPot == null ? '—' : formatCrapsCompactFlip(dayPot));
     bindText('craps-full-day-goal', '');
     const dayRow = this.querySelector('[data-bind="craps-day-row"]');
     const dayButton = this.querySelector('[data-craps-entry="day"]');
-    const dayTicket = state.dayEntryDay == null
+    const dayEnteredStatus = this.querySelector('[data-bind="craps-day-entered"]');
+    const dayTicket = dayEntryDay == null
       ? null
-      : playerEntries?.days?.[String(state.dayEntryDay)] ?? null;
+      : playerEntries?.days?.[String(dayEntryDay)] ?? null;
     const directCurrentEntry = !futureDay && playerEntries?.windows?.some(Boolean);
     const joinableMask = state.battles.reduce((mask, battle) => (
       battle.joinable ? mask | (1 << battle.period) : mask
@@ -660,30 +757,81 @@ export class AppCrapsEntry extends HTMLElement {
       : null;
     const dayEntered = Boolean(dayTicket || directCurrentEntry);
     const dayCanUpgrade = dayUpgradeMask > 0 && dayUpgradePrice != null;
+    const plainDayEntered = dayEntered && !dayCanUpgrade;
     if (dayRow) {
       dayRow.dataset.state = dayCanUpgrade ? 'upgrade' : dayEntered ? 'entered' : dayReady ? 'open' : 'loading';
+      dayRow.dataset.payment = usePass ? 'pass' : 'flip';
     }
     if (dayButton) {
       dayButton.removeAttribute('data-craps-upgrade');
       if (dayCanUpgrade) dayButton.dataset.crapsUpgrade = String(dayUpgradeMask);
+      dayButton.hidden = plainDayEntered;
       dayButton.disabled = this.#busyKey != null || (dayEntered ? !dayCanUpgrade : !dayReady);
       dayButton.dataset.terms = dayReady ? 'ready' : 'loading';
-      dayButton.dataset.state = dayCanUpgrade ? 'upgrade' : dayEntered ? 'entered' : 'buy';
+      dayButton.dataset.state = dayCanUpgrade ? 'upgrade' : dayEntered ? 'entered' : usePass ? 'pass' : 'buy';
       dayButton.textContent = this.#busyKey === 'day' || this.#busyKey === `upgrade-${dayUpgradeMask}`
-        ? 'LOCKING…'
+        ? 'ENTERING…'
         : dayCanUpgrade
           ? `UPGRADE ${formatCrapsCompactFlip(dayUpgradePrice)}`
           : dayEntered
-            ? directCurrentEntry && !dayTicket ? '✓ ENTERED ROWS' : '✓ ENTERED'
-            : `BUY ${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)}`;
+            ? 'ENTERED'
+            : usePass
+              ? 'ENTER: 1 PASS'
+              : `ENTER: ${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)} FLIP`;
       dayButton.setAttribute('aria-label', dayCanUpgrade
         ? `Upgrade the remaining open battles on your day ticket for ${dayUpgradePrice} FLIP.`
         : dayEntered
           ? 'This wallet is already entered for this Craps slate.'
           : dayReady
-            ? `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
+            ? usePass
+              ? `Use one of your ${selectedPasses.toLocaleString('en-US')} ${this.#highRoller ? 'High Roller' : 'Normal'} Craps passes to reserve all seven battles. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
+              : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
             : 'Full-day Craps terms are loading');
     }
+    if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered;
+
+    // Before Battle 1, today's live all-seven entry stays at the top while a
+    // second, blind reservation for tomorrow remains available at the bottom.
+    const tomorrowRow = this.querySelector('[data-bind="craps-tomorrow-row"]');
+    const tomorrowButton = this.querySelector('[data-craps-entry="future-day"]');
+    const tomorrowEnteredStatus = this.querySelector('[data-bind="craps-tomorrow-entered"]');
+    const showTomorrow = !futureDay && state.day != null;
+    const tomorrowDay = state.day == null ? null : state.day + 1;
+    const tomorrowTicket = tomorrowDay == null
+      ? null
+      : playerEntries?.days?.[String(tomorrowDay)] ?? null;
+    const tomorrowUsePass = showTomorrow && !this.#forceFlipDay && selectedPasses > 0;
+    const tomorrowReady = showTomorrow
+      && tomorrowDay != null
+      && (this.#forceFlipDay || passInventoryReady);
+    const tomorrowPrice = CRAPS_FUTURE_DAY_PRICES[this.#highRoller ? 'high' : 'normal'];
+    bindText('craps-tomorrow-kicker', this.#forceFlipDay ? 'QUEST PASS' : 'NEXT SLATE');
+    if (tomorrowRow) {
+      tomorrowRow.hidden = !showTomorrow;
+      tomorrowRow.dataset.state = tomorrowTicket ? 'entered' : tomorrowReady ? 'open' : 'loading';
+      tomorrowRow.dataset.payment = tomorrowUsePass ? 'pass' : 'flip';
+    }
+    if (tomorrowButton) {
+      tomorrowButton.hidden = Boolean(tomorrowTicket);
+      tomorrowButton.disabled = !showTomorrow || this.#busyKey != null || Boolean(tomorrowTicket) || !tomorrowReady;
+      tomorrowButton.dataset.terms = tomorrowReady ? 'ready' : 'loading';
+      tomorrowButton.dataset.state = tomorrowTicket ? 'entered' : tomorrowUsePass ? 'pass' : 'buy';
+      tomorrowButton.textContent = this.#busyKey === 'future-day'
+        ? 'ENTERING…'
+        : tomorrowTicket
+          ? 'ENTERED'
+          : tomorrowUsePass
+            ? 'ENTER: 1 PASS'
+            : `ENTER: ${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
+      tomorrowButton.setAttribute('aria-label', tomorrowTicket
+        ? 'This wallet is already entered for tomorrow\'s Craps slate.'
+        : tomorrowReady
+          ? tomorrowUsePass
+            ? `Use one of your ${selectedPasses.toLocaleString('en-US')} ${this.#highRoller ? 'High Roller' : 'Normal'} Craps passes to reserve tomorrow's seven battles.`
+            : `Reserve tomorrow's seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${tomorrowPrice} FLIP.`
+          : 'Tomorrow\'s Craps pass balance is loading.');
+    }
+    if (tomorrowEnteredStatus) tomorrowEnteredStatus.hidden = !showTomorrow || !tomorrowTicket;
 
     const rows = [...this.querySelectorAll('.craps-entry__battle')];
     const currentDayTicket = state.day == null
@@ -696,6 +844,8 @@ export class AppCrapsEntry extends HTMLElement {
       const result = snapshot?.results?.[index] ?? null;
       const ready = Boolean(battleTerms && multiple != null);
       const price = ready ? battleTerms.buyInFlip * BigInt(multiple) : null;
+      const entryPrice = ready ? battleTerms.bankrollFlip * BigInt(multiple) : null;
+      const potPrice = ready ? battleTerms.battleStakeFlip * BigInt(multiple) : null;
       const directEntry = playerEntries?.windows?.[index] ?? null;
       const dayEntry = currentDayTicket ? Object.freeze({
         source: 'day',
@@ -718,10 +868,11 @@ export class AppCrapsEntry extends HTMLElement {
       row.dataset.entry = entry ? entry.high ? 'high' : 'normal' : 'none';
       row.dataset.terms = ready ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
       const close = row.querySelector('[data-bind="craps-battle-countdown"]');
-      const buyIn = row.querySelector('[data-bind="craps-battle-buyin"]');
-      const speed = row.querySelector('[data-bind="craps-battle-speed"]');
+      const entryPriceNode = row.querySelector('[data-bind="craps-battle-entry"]');
+      const potPriceNode = row.querySelector('[data-bind="craps-battle-pot"]');
       const goal = row.querySelector('[data-bind="craps-battle-goal"]');
       const button = row.querySelector('[data-craps-entry="window"]');
+      const enteredStatus = row.querySelector('[data-bind="craps-battle-entered"]');
       const resultBox = row.querySelector('[data-bind="craps-battle-result"]');
       const winner = row.querySelector('[data-bind="craps-battle-winner"]');
       const payout = row.querySelector('[data-bind="craps-battle-payout"]');
@@ -734,8 +885,8 @@ export class AppCrapsEntry extends HTMLElement {
         close.dateTime = new Date(battle.closeAtMs).toISOString();
         close.title = `Closes ${battle.closeLabel} UTC`;
       }
-      if (buyIn) buyIn.textContent = price == null ? '—' : formatCrapsCompactFlip(price);
-      if (speed) speed.textContent = battleTerms?.speedLabel ?? '—';
+      if (entryPriceNode) entryPriceNode.textContent = entryPrice == null ? '—' : formatCrapsCompactFlip(entryPrice);
+      if (potPriceNode) potPriceNode.textContent = potPrice == null ? '—' : formatCrapsCompactFlip(potPrice);
       if (goal) goal.textContent = crapsGoalLabel(battleTerms?.goalMult);
       if (resultBox) resultBox.hidden = !result;
       if (winner) {
@@ -747,39 +898,58 @@ export class AppCrapsEntry extends HTMLElement {
       if (button) {
         button.removeAttribute('data-craps-upgrade');
         if (canUpgrade) button.dataset.crapsUpgrade = String(upgradeMask);
-        button.hidden = Boolean(result);
+        button.hidden = Boolean(result) || Boolean(entry && !canUpgrade);
         button.disabled = Boolean(entry && !canUpgrade)
           || !battle.joinable
           || (!canUpgrade && !ready)
           || this.#busyKey != null;
         button.dataset.state = canUpgrade ? 'upgrade' : entry ? 'entered' : 'buy';
         button.textContent = this.#busyKey === `window-${index}` || this.#busyKey === `upgrade-${upgradeMask}`
-          ? 'LOCKING…'
+          ? 'ENTERING…'
           : canUpgrade
             ? `UPGRADE ${formatCrapsCompactFlip(upgradePrice)}`
             : entry
-              ? '✓ ENTERED'
+              ? 'ENTERED'
               : battle.state === 'closed'
                 ? 'SETTLING'
-                : `BUY ${price == null ? '—' : formatCrapsCompactFlip(price)}`;
+                : `ENTER: ${price == null ? '—' : formatCrapsCompactFlip(price)} FLIP`;
         button.setAttribute('aria-label', entry && !canUpgrade
           ? `This wallet is entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}.`
           : canUpgrade
             ? `Upgrade Battle ${battle.number} to High Roller for ${upgradePrice} FLIP.`
             : battle.state === 'closed'
-          ? `Battle ${battle.number} is closed and settling`
-          : ready
-            ? `Buy into Battle ${battle.number} for ${price} FLIP. Speed ${battleTerms.speedLabel}; goal ${crapsGoalLabel(battleTerms.goalMult)}.`
-            : `Battle ${battle.number}, terms loading`);
+              ? `Battle ${battle.number} is closed and settling`
+              : ready
+                ? `Enter Battle ${battle.number} for ${price} FLIP: ${entryPrice} FLIP bankroll plus ${potPrice} FLIP to the battle pot; goal ${crapsGoalLabel(battleTerms.goalMult)}.`
+                : `Battle ${battle.number}, terms loading`);
       }
+      if (enteredStatus) enteredStatus.hidden = Boolean(result) || !entry || canUpgrade;
     });
+
+    const body = this.querySelector('.craps-entry__listing tbody');
+    if (body && dayRow && tomorrowRow) {
+      const order = crapsLobbyRowOrder({
+        currentPeriod: state.currentPeriod,
+        futureDay,
+        settledPeriods: rows.flatMap((row, period) => (
+          ['closed', 'completed'].includes(row.dataset.state) ? [period] : []
+        )),
+      });
+      for (const item of order) {
+        body.appendChild(item === 'day' ? dayRow : item === 'tomorrow' ? tomorrowRow : rows[item]);
+      }
+    }
 
     const status = this.querySelector('[data-bind="craps-entry-status"]');
     if (status) {
       status.dataset.state = this.#message ? 'message' : 'idle';
-      status.textContent = this.#message || (futureDay
-        ? 'Today is underway. The day button reserves the next full slate; its terms draw at open.'
-        : 'Buy the full slate before the first battle, or choose any individual row.');
+      status.textContent = this.#message || (futureDay && !passInventoryReady
+        ? 'Checking your banked Craps passes before enabling a FLIP purchase.'
+        : futureDay && usePass
+          ? `Your ${this.#highRoller ? 'High Roller' : 'Normal'} pass will reserve the next full slate before any FLIP is used.`
+          : futureDay
+            ? 'Today is underway. The day button reserves the next full slate; its terms draw at open.'
+            : 'Buy the full slate before the first battle, or choose any individual row.');
     }
     this.#renderProgressive();
   }
@@ -823,6 +993,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#scheduleDay !== day || this.#schedulePlayer !== player) {
       this.#schedule = null;
       this.#snapshot = null;
+      this.#passCredits = null;
       this.#replaySeq += 1;
       this.#replayLoadPending = false;
       this.#stopReplayPoll();
@@ -835,15 +1006,20 @@ export class AppCrapsEntry extends HTMLElement {
     this.#schedulePending = true;
     this.#render();
     try {
-      const snapshot = await readCrapsLobbySnapshot(day, player);
+      const [snapshotResult, passResult] = await Promise.allSettled([
+        readCrapsLobbySnapshot(day, player),
+        player ? readCrapsPassCredits(player) : Promise.resolve(null),
+      ]);
       if (seq !== this.#scheduleSeq) return;
+      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
       if (snapshot?.day === day) {
         this.#snapshot = snapshot;
         if (snapshot.schedule?.day === day) this.#schedule = snapshot.schedule;
         void this.#refreshResolvedReplays(snapshot?.resolvedReplays, player);
       }
+      if (passResult.status === 'fulfilled') this.#passCredits = passResult.value;
     } catch (_error) {
-      // Buy-in, speed, and goal remain available from the committed day word;
+      // Entry, pot, and goal remain available from the committed day word;
       // retain the last good winners and historical boost through an RPC blip.
     } finally {
       if (seq === this.#scheduleSeq) {
@@ -1048,7 +1224,11 @@ export class AppCrapsEntry extends HTMLElement {
 
   async #buy(requestedKind, period) {
     const state = crapsEntryState({ day: currentDayFromStore() });
-    const kind = requestedKind === 'day' ? state.dayEntryKind : 'window';
+    const kind = requestedKind === 'day'
+      ? state.dayEntryKind
+      : requestedKind === 'future-day'
+        ? 'future-day'
+        : 'window';
     const battle = kind === 'window' ? state.battles[period] : null;
     if (kind === 'window' && (!battle || !battle.joinable)) return;
     const selection = crapsEntrySelection({ day: state.day, kind, period });
@@ -1056,6 +1236,11 @@ export class AppCrapsEntry extends HTMLElement {
     const selectedTerms = kind === 'window' ? terms?.windows?.[period] : terms;
     const highMult = terms?.highMult ?? null;
     if (kind !== 'future-day' && (!selectedTerms || (this.#highRoller && highMult == null))) return;
+    const selectedPasses = Number(this.#highRoller
+      ? this.#passCredits?.high ?? 0
+      : this.#passCredits?.normal ?? 0);
+    if (kind === 'future-day' && !this.#forceFlipDay && this.#passCredits == null) return;
+    const usePass = kind === 'future-day' && !this.#forceFlipDay && selectedPasses > 0;
 
     const baseWager = crapsEntryWager({
       day: state.day,
@@ -1065,21 +1250,29 @@ export class AppCrapsEntry extends HTMLElement {
       highRoller: this.#highRoller,
       highMult,
       contractChips: this.#contractChips,
+      usePass,
     });
     const wager = Object.freeze({
       ...baseWager,
       chips: { ...this.#boardBets },
     });
 
-    const busyKey = requestedKind === 'day' ? 'day' : `window-${period}`;
+    const busyKey = requestedKind === 'day'
+      ? 'day'
+      : requestedKind === 'future-day'
+        ? 'future-day'
+        : `window-${period}`;
     this.#busyKey = busyKey;
     this.#message = '';
     this.#render();
     try {
       const result = await placeCrapsBonusEntry(wager);
       this.#message = kind === 'future-day'
-        ? `Next slate reserved in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`
+        ? usePass
+          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Normal'} pass.`
+          : `Next slate purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`
         : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`;
+      if (kind === 'future-day') this.#forceFlipDay = false;
       await this.#refreshSchedule(true);
       this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
         detail: { kind, period, day: selection.entryDay, battleSlot: selection.battleSlot, wager, result },

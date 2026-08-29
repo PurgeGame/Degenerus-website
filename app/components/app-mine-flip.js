@@ -4,7 +4,7 @@
 // permissionless `mineFlip` crank and publishes one executable row through
 // pending-actions.js; app-reveal-tray.js is the only player-facing surface.
 // Keeping the probe here preserves the important lifecycle behavior from the
-// old nav widget: refresh after a confirmed transaction, on acting-wallet
+// old nav widget: refresh after a confirmed transaction, on connected-wallet
 // changes, when the tab regains focus, and every 30 seconds.
 //
 // Permissionless work is raced. The published tray callback re-probes at intent
@@ -12,7 +12,7 @@
 // stale row quietly. A NoWork revert is likewise an ordinary stale-state
 // result; every other error is rethrown for the bottom tray to display.
 
-import { subscribe, get, getActingAddress } from '../app/store.js';
+import { subscribe, get } from '../app/store.js';
 import { VOLUME_WINDOW } from '../app/chain-config.js';
 import { loadWorkQueue, nextAction } from '../app/work-queue.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
@@ -45,10 +45,20 @@ function _mineFlipGeneration() {
   return `clock-${Math.floor((Date.now() / 1_000 - anchor) / period)}`;
 }
 
+// The crank is permissionless and its bounty pays msg.sender, so the CONNECTED
+// wallet is the actor in every switcher mode — including 'view'/'combined',
+// where getActingAddress() is deliberately null for player-owned writes. Using
+// the acting address here made Mine FLIP vanish exactly when a browsing
+// operator was the one keeper watching the page.
+function _crankWallet() {
+  return String(get('connected.address') ?? '').toLowerCase() || null;
+}
+
 class AppMineFlipResolver extends HTMLElement {
   #unsubs = [];
   #initialized = false;
   #queue = [];
+  #queueWallet = null;
   #busy = false;
   #loadSeq = 0;
   #pollHandle = null;
@@ -58,10 +68,7 @@ class AppMineFlipResolver extends HTMLElement {
     if (this.#initialized) return;
     this.#initialized = true;
 
-    // getActingAddress derives from all three values, so observe every input.
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
-    this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
-    this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
     this.#unsubs.push(subscribe('app.gameState', () => this.#refresh()));
     // day-rollover.js publishes the direct isRngFulfilled() edge here. Probe
     // in that same update instead of making the player wait for this
@@ -91,10 +98,11 @@ class AppMineFlipResolver extends HTMLElement {
   __queueForTest() { return this.#queue; }
 
   async #refresh() {
-    const player = getActingAddress();
+    const player = _crankWallet();
     const seq = ++this.#loadSeq;
     if (!player) {
       this.#queue = [];
+      this.#queueWallet = null;
       clearPendingActions(RESOLVER_SOURCE);
       return;
     }
@@ -103,9 +111,19 @@ class AppMineFlipResolver extends HTMLElement {
     try {
       result = await loadWorkQueue({ player });
     } catch (_error) {
-      result = { queue: [] };
+      result = { queue: [], probe: null };
     }
     if (seq !== this.#loadSeq) return;
+
+    // "Unknown" is not "empty" (probeMineFlip's own contract): a dead RPC or a
+    // raced gas estimate must not blink an armed crank off the tray and the
+    // jackpot key for a poll cycle. Retain this wallet's last-known queue; the
+    // row's click-time re-probe still quietly retires genuinely stale work.
+    const probeKnown = result?.probe?.known === true;
+    if (!probeKnown && this.#queueWallet === player && this.#queue.length > 0) {
+      this.#publish(player);
+      return;
+    }
 
     // Preserve a test/in-flight callback across the intent-time re-probe while
     // still replacing all contract-derived queue metadata with the fresh read.
@@ -113,6 +131,7 @@ class AppMineFlipResolver extends HTMLElement {
     this.#queue = (result.queue || []).map((item) => (
       priorRuns.has(item.id) ? { ...item, run: priorRuns.get(item.id) } : item
     ));
+    this.#queueWallet = player;
     this.#publish(player);
   }
 
@@ -139,7 +158,7 @@ class AppMineFlipResolver extends HTMLElement {
       // reveals should chain first. Keep Mine FLIP at the end of the tray.
       order: 1_000,
       run: this.#busy ? null : async () => {
-        if (String(getActingAddress() || '').toLowerCase() !== address) return;
+        if (_crankWallet() !== address) return;
 
         // Re-check permissionless work at click time. If another keeper already
         // resolved it, #refresh clears the tray row and no wallet opens.
@@ -153,7 +172,7 @@ class AppMineFlipResolver extends HTMLElement {
 
   async #runAction(item) {
     if (this.#busy) return;
-    const player = getActingAddress();
+    const player = _crankWallet();
     if (!player) return;
 
     this.#busy = true;
