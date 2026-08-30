@@ -954,6 +954,45 @@ describe('openLegsFromFeed', () => {
     assert.equal(legs[2].reels.length, 1);
   });
 
+  test('rebuilds an indexed AfKing fractional miss as its 1 WWXRP consolation', () => {
+    const tx = `0x${'af'.repeat(32)}`;
+    const rows = [{
+      player: PLAYER,
+      transactionHash: tx,
+      blockNumber: 46_136_786,
+      logIndex: 545,
+      legType: 'opened',
+      lootboxIndex: 0,
+      origin: 'afking',
+      boxAmountRawWei: '21486000000',
+      rewardData: {
+        amount: '21486000000',
+        futureLevel: 46,
+        futureTickets: 28,
+        roundedUp: false,
+        flip: '0',
+      },
+    }];
+
+    const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex: 0 });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'wwxrp']);
+    assert.equal(legs[1].amount, ethers.parseEther('1'),
+      'the current testnet-sized box amount takes the contract one-token floor');
+    assert.equal(legs[1].consolation, true);
+
+    const largeTx = `0x${'fa'.repeat(32)}`;
+    const largeAmount = 3_000_000_000_000_000n;
+    const [largeOpened, largeWwxrp] = openLegsFromFeed([{
+      ...rows[0],
+      transactionHash: largeTx,
+      boxAmountRawWei: String(largeAmount),
+      rewardData: { ...rows[0].rewardData, amount: String(largeAmount) },
+    }], { player: PLAYER, lootboxIndex: 0 });
+    assert.equal(largeOpened.legType, 'opened');
+    assert.equal(largeWwxrp.amount, 1_499_500_000_000_000_000n,
+      'larger payouts use the post-boon roll amount, matching _boxWwxrpStake');
+  });
+
   test('one indexed chain event produces one leg when feed projections overlap', () => {
     const tx = `0x${'ef'.repeat(32)}`;
     const spin = {

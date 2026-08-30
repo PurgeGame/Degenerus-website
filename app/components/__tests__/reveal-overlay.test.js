@@ -814,7 +814,8 @@ describe('normalizeSequence', () => {
         },
       ],
     });
-    assert.deepEqual(direct.cards.map((card) => card.type), ['wwxrp', 'tickets']);
+    assert.deepEqual(direct.cards.map((card) => card.type), ['wwxrp'],
+      'the WWXRP consolation replaces the zero-ticket placeholder');
     assert.equal(direct.wwxrpOnly, true);
     assert.equal(direct.unlucky, true);
     assert.equal(revealTerminalActionLabel(direct), 'UNLUCKY');

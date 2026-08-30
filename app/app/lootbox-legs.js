@@ -135,6 +135,7 @@ function _entropyHash4(a, b, c, d) {
 }
 
 const FULL_ETH_WEI = 10n ** 18n;
+const LOOTBOX_WWXRP_PER_ETH = 500n;
 const PRICE_COIN_UNIT = 1_000n * FULL_ETH_WEI;
 const LOOTBOX_BOON_BUDGET_BPS = 1_000n;
 const LOOTBOX_BOON_MAX_BUDGET = FULL_ETH_WEI / BigInt(ETH_DIVISOR);
@@ -1787,25 +1788,47 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
     .sort((a, b) => Number(a?.logIndex ?? 0) - Number(b?.logIndex ?? 0));
 
   const out = [];
+  let indexedAfkingColdBustWwxrp = 0n;
   for (const item of txRows) {
     const data = item?.rewardData || {};
     switch (item?.legType) {
       case 'opened': {
         const futureTickets = Number(data.futureTickets ?? 0);
         const roundedUp = Boolean(data.roundedUp);
+        const wholeTickets = wholeTicketsFromOpened(futureTickets, roundedUp);
+        const flip = _feedBigInt(data.flip);
+        const amount = _feedBigInt(data.amount ?? item.boxAmountRawWei);
         out.push({
           legType: 'opened',
           transactionHash: String(item?.transactionHash || '').toLowerCase() || null,
           blockNumber: item?.blockNumber == null ? null : String(item.blockNumber),
           logIndex: item?.logIndex == null ? null : Number(item.logIndex),
           lootboxIndex: BigInt(item.lootboxIndex),
-          amount: _feedBigInt(data.amount ?? item.boxAmountRawWei),
+          amount,
           futureLevel: Number(data.futureLevel ?? item.levelAtOpen ?? 0),
           futureTickets,
           roundedUp,
-          wholeTickets: wholeTicketsFromOpened(futureTickets, roundedUp),
-          flip: _feedBigInt(data.flip),
+          wholeTickets,
+          flip,
         });
+        // AfKing boxes settle at the presentation-only index zero, so the
+        // normal exact-index receipt recovery cannot recover their later
+        // token Transfer. The current contract explicitly enables the same
+        // cold-bust consolation as a manual box, and the indexed opening keeps
+        // every input to its exact amount formula. Rebuild that omitted token
+        // leg here, aggregating just as _flushBoxAcc does on chain.
+        if (String(item?.origin || '').toLowerCase() === 'afking'
+            && futureTickets > 0
+            && wholeTickets === 0
+            && flip === 0n
+            && amount > 0n) {
+          let boonBudget = (amount * LOOTBOX_BOON_BUDGET_BPS) / 10_000n;
+          if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) {
+            boonBudget = LOOTBOX_BOON_MAX_BUDGET;
+          }
+          const stake = (amount - boonBudget) * LOOTBOX_WWXRP_PER_ETH;
+          indexedAfkingColdBustWwxrp += stake < FULL_ETH_WEI ? FULL_ETH_WEI : stake;
+        }
         break;
       }
       case 'flipOpened': {
@@ -1908,6 +1931,13 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
       default:
         break;
     }
+  }
+  if (indexedAfkingColdBustWwxrp > 0n) {
+    out.push({
+      legType: 'wwxrp',
+      amount: indexedAfkingColdBustWwxrp,
+      consolation: true,
+    });
   }
   return out;
 }

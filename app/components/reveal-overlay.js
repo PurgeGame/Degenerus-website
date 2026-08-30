@@ -1430,6 +1430,24 @@ export function normalizeSequence(seq) {
     const boxOrders = _normalizedLootboxOrders(seq);
     const breakdown = _lootboxCardBreakdown(legs, boxOrders, routedPriceWei);
     let cards = breakdown.cards;
+    const hasWwxrpReplacement = legs.some((leg) => (
+      leg?.legType === 'wwxrp'
+      && _safeBigInt(leg.amount) > 0n
+    ));
+    if (hasWwxrpReplacement) {
+      const isZeroTicketPlaceholder = (card) => (
+        card?.type === 'tickets' && card?.value === '0'
+      );
+      // Cold-bust WWXRP is the result of the fractional ticket miss, not an
+      // additional prize beside a zero-ticket card. Keep one truthful outcome
+      // on screen by replacing that placeholder everywhere it was grouped.
+      cards = cards.filter((card) => !isZeroTicketPlaceholder(card));
+      breakdown.groups.forEach((group) => {
+        group.cards = group.cards.filter((card) => !isZeroTicketPlaceholder(card));
+      });
+      breakdown.sharedCards = breakdown.sharedCards
+        .filter((card) => !isZeroTicketPlaceholder(card));
+    }
     // Legacy feed rows may omit the scaled fractional-ticket fields. An
     // index-bearing LootBoxOpened still tells us the concrete empty main-prize
     // result; settlement timing is not box content and is never shown as one.
