@@ -7,7 +7,11 @@
  */
 
 export const CRAPS_REPLAY_SCHEMA_VERSION = 1;
-export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-484a5d60b-v1';
+// 0b0ed9fb3: the run-#43 ruleset — goal latch + peak ranking, the two-way 5/20 goal draw, and
+// the posted-stake → played-round restore at the materializer's load boundary. Exact-match
+// checked against `manifest.ruleset.engineVersion`, so bundles from the drifted 484a5d60b
+// materializer fail closed here rather than animating the wrong chips.
+export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-0b0ed9fb3-v1';
 export const CRAPS_REPLAY_CDN_PREFIX = '/craps/replays/v1';
 export const CRAPS_REPLAY_DEFAULT_SHARD_SIZE = 256;
 // Mirrors `Craps._MAX_SLIP_HANDS` and `Craps._SLIP_ROLL_CEILING` (`_SLIP_ROLL_BUDGET - 1 +
@@ -36,15 +40,20 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 //      (`cd degenerus-sim && npx tsx scripts/craps-replay-fixture.ts --write`);
 //   3. add the hash here.
 //
-// 0x7fa2e3de… — audit 484a5d60b, the build the engine id still names.
+// 0x7fa2e3de… — audit 484a5d60b, the build the engine was first ported against.
 // 0x300a278f… — audit 0b34a4713 (the craps RNG-gate redeploy). Settlement is byte-identical:
 //   the differential suite passes unchanged against it, and the change was to the ARMING path
 //   (`_armSlot`'s lootbox RNG request), not to `_settleSlip`. The runtime hash moved anyway,
 //   because the runtime did — which is exactly why this list keys on the code and not on a
 //   version string somebody has to remember to bump.
+// 0xff6c3a41… — audit 0b0ed9fb3, the run-#43 deploy (CrapsBattle 0x006c1c39…, keccak verified
+//   against the live Base Sepolia code). Differential suite green against the re-vendored
+//   harness, and the day-2 field reproduces its chain settlements to the wei once the
+//   materializer restores the played round from the posted stake.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
+  '0xff6c3a41a60f9eb5d5ef16553282ae304a739949a321e08ad5b83e3aabfcb4c2',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -531,9 +540,9 @@ export function validateCrapsReplayCollection(input, manifestInput) {
     const row = objectAt(raw, `collection.leaderboard[${index}]`);
     const shooter = integerAt(row.shooter, `collection.leaderboard[${index}].shooter`, { max: Math.max(0, manifest.tape.maxHands - 1) });
     if (shooter !== index) fail(`collection.leaderboard[${index}].shooter`, 'must be sequential');
-    // Four candidates let every viewer render the best three OTHER seats even when the
-    // viewer is themselves in the global top three. The UI still shows only three racks.
-    if (!Array.isArray(row.betIds) || row.betIds.length > 4) fail(`collection.leaderboard[${index}].betIds`, 'expected at most four candidate bet ids');
+    // Eleven candidates let every viewer render the best ten OTHER seats even when the
+    // viewer is themselves in the global top ten. Older four-wide bundles remain valid.
+    if (!Array.isArray(row.betIds) || row.betIds.length > 11) fail(`collection.leaderboard[${index}].betIds`, 'expected at most eleven candidate bet ids');
     const betIds = Object.freeze(row.betIds.map((betId, betIndex) => decimalAt(betId, `collection.leaderboard[${index}].betIds[${betIndex}]`, { positive: true })));
     for (const betId of betIds) if (!seen.has(betId)) fail(`collection.leaderboard[${index}].betIds`, `missing featured player ${betId}`);
     return Object.freeze({ shooter, betIds });

@@ -4,7 +4,11 @@
 
 import { ethers, getProvider } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readProviderBlockNumber,
+  sharedReadProvider,
+} from './read-provider.js';
 
 const QUESTS_ABI = [
   'function getPlayerQuestView(address player) view returns (((uint24 day,uint8 questType,bool highDifficulty,(uint32 mints,uint256 tokenAmount) requirements)[2] quests,uint128[2] progress,bool[2] completed,uint24 lastCompletedDay,uint32 baseStreak) viewData)',
@@ -73,14 +77,14 @@ export function __resetQuestContractFactoryForTest() {
 
 function _readProvider() {
   const walletProvider = getProvider();
-  if (walletProvider) return walletProvider;
+  if (walletProvider) return permissionlessReadProvider(walletProvider);
   // Real browsers without an injected wallet still need an honest public
   // quest board. Fake-DOM tests intentionally do not expose window.fetch.
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return null;
   if (!_publicProvider) {
     _publicProvider = sharedReadProvider();  // C15: shared batched read stream
   }
-  return _publicProvider;
+  return permissionlessReadProvider(_publicProvider);
 }
 
 function _contract(provider) {
@@ -235,7 +239,7 @@ export async function readLiveQuestBoard(player) {
   }
   const provider = _readProvider();
   if (!provider) throw new Error('Quest contract provider unavailable.');
-  const blockNumber = await provider.getBlockNumber();
+  const blockNumber = await readProviderBlockNumber(provider);
   const overrides = { blockTag: blockNumber };
   const contract = _contract(provider);
   const [daily, level, currentState, effective, shieldResult, gameContext] = await Promise.all([

@@ -3466,7 +3466,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(CHIPSET_CSS,
       /\.df-bankroll__chip--total\s*\{[^}]*--df-bankroll-chip-(?:hi|tone|lo)/s,
       'the semantic total marker never introduces a yellow or gold material treatment');
-    assert.match(APP_INDEX, /href="\/app\/styles\/app\.css"[\s\S]*?href="\/app\/styles\/coinflip-chipset\.css"/,
+    assert.match(APP_INDEX, /href="\/app\/styles\/app\.css(?:\?[^\"]+)?"[\s\S]*?href="\/app\/styles\/coinflip-chipset\.css"/,
       'the reviewed chipset loads after the base coinflip geometry');
     assert.match(
       APP_CSS,

@@ -36,6 +36,7 @@ import {
   subscribeUiPreferences,
 } from '../app/ui-preferences.js';
 import { getProvider } from '../app/contracts.js';
+import { permissionlessReadProvider, readNativeBalance } from '../app/read-provider.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import {
@@ -242,11 +243,18 @@ function randomPurchaseEntryTrait() {
 }
 // Purchase quotes are controls, not accounting tables: fixed-width values such
 // as "0.0400" add noise and can make an input step look more precise than it
-// is. Keep displayEth's chain scaling/precision, then trim only fractional zeroes.
-function formatPurchaseEth(raw) {
+// is. Keep displayEth's chain scaling/precision, then trim fractional zeroes
+// unless a specific readout needs a small fixed minimum (the pack quote uses
+// two places so its 10x relationship reads as 0.40 beside a 0.04 ticket).
+function formatPurchaseEth(raw, minimumFractionDigits = 0) {
   const fixed = displayEth(BigInt(raw || 0));
-  if (!fixed.includes('.')) return fixed;
-  return fixed.replace(/0+$/, '').replace(/\.$/, '');
+  const trimmed = fixed.includes('.')
+    ? fixed.replace(/0+$/, '').replace(/\.$/, '')
+    : fixed;
+  const minDigits = Math.max(0, Math.trunc(Number(minimumFractionDigits) || 0));
+  if (minDigits === 0) return trimmed;
+  const [whole, fraction = ''] = trimmed.split('.');
+  return `${whole}.${fraction.padEnd(minDigits, '0')}`;
 }
 
 // Quote CTAs can contain the player's entire balance and a four-digit ticket
@@ -261,14 +269,14 @@ function groupAllInNumber(raw) {
   return `${match[1]}${grouped}${match[3] || ''}`;
 }
 
-// Keep both rate quotes byte-for-byte identical while giving CSS real cells
+// Keep all three rate quotes byte-for-byte identical while giving CSS real cells
 // for the label, equals sign, amount, and unit. This lets ENTRY and TICKET
 // share one visual price column without padding either quote with display
 // characters. The separator renders as a dash; the aria-label keeps the equals
 // sign because that is the relation being stated, and a lone dash reads as
 // nothing (or "minus") to a screen reader. The unit is its own cell so
 // ETH/FLIP stays on a single x across
-// both lines however many digits the amount takes; the leading spaces here
+// every line however many digits the amount takes; the leading spaces here
 // collapse in the grid cells and exist only to keep the row's text readable
 // when it is copied or read without the aria-label.
 function renderPurchasePriceRow(host, kind, amount, unit) {
@@ -319,6 +327,7 @@ export function formatPurchaseBonusFlip(value) {
 }
 
 const PURCHASE_UNITS_PER_TICKET = 400n;
+const PURCHASE_TICKETS_PER_PACK = 10;
 const PURCHASE_BOON_MAX_VALUE_WEI = (10n * (10n ** 18n)) / ETH_DIVISOR;
 const CENTURY_BONUS_MAX_VALUE_WEI = (20n * (10n ** 18n)) / ETH_DIVISOR;
 
@@ -1003,9 +1012,10 @@ class AppDecimatorPanel extends HTMLElement {
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
           <div class="dec-price" data-bind="dec-price"
-               aria-label="Current entry and ticket prices">
+               aria-label="Current entry, ticket, and pack prices">
             <span class="dec-price__row" data-bind="dec-entry-price">1 ENTRY - —</span>
             <span class="dec-price__row" data-bind="dec-ticket-price">1 TICKET - —</span>
+            <span class="dec-price__row" data-bind="dec-pack-price">1 PACK - —</span>
           </div>
           <div class="dec-flip-credit dec-flip-credit--header is-idle"
                data-bind="dec-flip-credit"
@@ -1033,7 +1043,6 @@ class AppDecimatorPanel extends HTMLElement {
             <span class="dec-input-accessories" role="group" aria-label="Ticket purchase modifiers">
               <boon-product-indicator product="purchase" data-bind="dec-ticket-boon"
                                       variant="purchase-control"></boon-product-indicator>
-              <quest-objective-indicator product="purchase"></quest-objective-indicator>
             </span>
 
             <div class="dec-ticket-pieces" role="group" aria-label="Add tickets to your buy in">
@@ -1061,6 +1070,9 @@ class AppDecimatorPanel extends HTMLElement {
                     <span class="dec-ticket-center"><img src="/whitepaper/flame-center.svg" alt=""></span>
                   </span>
                 </span>
+                <quest-objective-indicator class="dec-ticket-single-quest"
+                                           product="purchase"
+                                           quest-roles="DAILY,BONUS"></quest-objective-indicator>
               </button>
               <button type="button" class="dec-ticket-piece dec-ticket-piece--pack"
                       data-bind="dec-ticket-add-pack" aria-label="Add one pack, 10 tickets"
@@ -1072,6 +1084,9 @@ class AppDecimatorPanel extends HTMLElement {
                     <span class="dec-pack-count">10 TICKETS</span>
                   </span>
                 </span>
+                <quest-objective-indicator class="dec-ticket-pack-quest"
+                                           product="purchase"
+                                           quest-roles="LEVEL"></quest-objective-indicator>
               </button>
               <label class="dec-ticket-piece dec-ticket-piece--foil" data-bind="dec-foil-row"
                      aria-label="Toggle one foil pack, limit one" hidden>
@@ -1695,7 +1710,7 @@ class AppDecimatorPanel extends HTMLElement {
     for (const [bind, amount] of [
       ['dec-ticket-add-entry', 0.25],
       ['dec-ticket-add-ticket', 1],
-      ['dec-ticket-add-pack', 10],
+      ['dec-ticket-add-pack', PURCHASE_TICKETS_PER_PACK],
     ]) {
       const control = this.querySelector(`[data-bind="${bind}"]`);
       const adjust = (dir) => {
@@ -2913,10 +2928,10 @@ class AppDecimatorPanel extends HTMLElement {
     const actingLower = acting ? String(acting).toLowerCase() : null;
     const connectedLower = connected ? String(connected).toLowerCase() : null;
     if (!actingLower || actingLower !== connectedLower || get('ui.mode') !== 'self') return;
-    const provider = getProvider();
+    const provider = permissionlessReadProvider(getProvider());
     const [walletResult, claimableResult, afkingResult] = await Promise.allSettled([
       typeof provider?.getBalance === 'function'
-        ? provider.getBalance(connectedLower)
+        ? readNativeBalance(connectedLower, { provider })
         : Promise.resolve(null),
       readClaimableEth({ player: actingLower }),
       readAfkingFunding(actingLower),
@@ -3558,26 +3573,22 @@ class AppDecimatorPanel extends HTMLElement {
     }
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
-    const provider = getProvider();
+    const provider = permissionlessReadProvider(getProvider());
     const walletBalancePromise = connectedLower && typeof provider?.getBalance === 'function'
-      ? provider.getBalance(connectedLower)
+      ? readNativeBalance(connectedLower, { provider })
       : Promise.resolve(null);
-    const [
-      gameResult,
-      purchaseResult,
-      playerResult,
-      liveScoreResult,
-      flipLedgerResult,
-      walletResult,
-      afkingFundingResult,
-      afkingResult,
-      presaleResult,
-    ] = await Promise.allSettled([
-      // Display only: the click-time path below refetches fresh before pricing
-      // anything, so the 15s shared snapshot is already fresher than this 30s
-      // cycle was achieving on its own.
+    // Purchase-critical reads resolve and paint independently of the indexed
+    // dashboard wave. A dead /game/state or /player request must not hold the
+    // live contract quote, presale option, or Buy In controls behind the API's
+    // timeout.
+    const purchaseQuotePromise = readPurchaseQuote().catch(() => null);
+    const presaleStatePromise = actingLower
+      ? readPresaleBoxState({ player: actingLower }).catch(() => null)
+      : Promise.resolve(null);
+    const dashboardResultsPromise = Promise.allSettled([
+      // Display fallback only. purchaseInfo() above and the click-time read
+      // below are the authority for anything that sends value.
       readGameState(),
-      readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       actingLower ? readPlayerActivityScore(actingLower) : Promise.resolve(null),
       actingLower
@@ -3586,16 +3597,36 @@ class AppDecimatorPanel extends HTMLElement {
       walletBalancePromise,
       actingLower ? readAfkingFunding(actingLower) : Promise.resolve(null),
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
-      actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
     ]);
+
+    const purchaseQuote = await purchaseQuotePromise;
+    if (signal.aborted) return;
+    this.#purchaseQuote = purchaseQuote;
+    this.#renderSnapshot();
+    this.#refreshFoilStatus();
+    this.#refreshFlipBuyStatus();
+
+    const presaleState = await presaleStatePromise;
+    if (signal.aborted) return;
+    if (presaleState != null && this.#presaleAddress === actingLower) {
+      this.#presaleState = presaleState;
+      this.#renderPresaleRow(this.#draftMintCostWei());
+    }
+
+    const [
+      gameResult,
+      playerResult,
+      liveScoreResult,
+      flipLedgerResult,
+      walletResult,
+      afkingFundingResult,
+      afkingResult,
+    ] = await dashboardResultsPromise;
     if (signal.aborted) return;
 
     if (gameResult.status === 'fulfilled' && gameResult.value) {
       this.#gameState = gameResult.value;
     }
-    this.#purchaseQuote = purchaseResult.status === 'fulfilled'
-      ? purchaseResult.value
-      : null;
     const indexedScore = playerResult.status === 'fulfilled' && playerResult.value
       ? Number(
         playerResult.value.scoreBreakdown?.totalBps
@@ -3775,12 +3806,6 @@ class AppDecimatorPanel extends HTMLElement {
       this.#afkingFundingWei = 0n;
       this.#afkingFundingAddress = actingLower;
       this.#afkingFundingKnown = false;
-    }
-
-    if (presaleResult.status === 'fulfilled'
-      && presaleResult.value != null
-      && this.#presaleAddress === actingLower) {
-      this.#presaleState = presaleResult.value;
     }
 
     this.#renderAffiliateInput();
@@ -4701,30 +4726,38 @@ class AppDecimatorPanel extends HTMLElement {
     const priceEl = this.querySelector('[data-bind="dec-price"]');
     const entryPriceEl = this.querySelector('[data-bind="dec-entry-price"]');
     const ticketPriceEl = this.querySelector('[data-bind="dec-ticket-price"]');
-    if (!priceEl || !entryPriceEl || !ticketPriceEl) return;
+    const packPriceEl = this.querySelector('[data-bind="dec-pack-price"]');
+    if (!priceEl || !entryPriceEl || !ticketPriceEl || !packPriceEl) return;
     const priceWei = this.#ticketPriceWei();
     const targetLevel = this.#targetLevel();
     const levelText = targetLevel == null ? 'LEVEL —' : `LEVEL ${targetLevel}`;
     let entryPriceText = '—';
     let ticketPriceText = '—';
-    // The unit is set only after both amounts resolve, so a throw leaves the
-    // pair on the bare unavailable dash instead of a unit with no number.
+    let packPriceText = '—';
+    // The unit is set only after all amounts resolve, so a throw leaves the
+    // group on the bare unavailable dash instead of a unit with no number.
     let priceUnit = '';
     if (this.#flipModeEnabled()) {
       try {
         entryPriceText = formatFlip(flipCostFromTickets(1 / ENTRIES_PER_TICKET).toString());
         ticketPriceText = formatFlip(flipCostFromTickets(1).toString());
+        packPriceText = formatFlip(flipCostFromTickets(PURCHASE_TICKETS_PER_PACK).toString());
         priceUnit = 'FLIP';
       } catch (_e) { /* keep unavailable prices */ }
     } else if (priceWei != null) {
       try {
         entryPriceText = formatPurchaseEth(ticketCostFromTickets(priceWei, 1 / ENTRIES_PER_TICKET));
         ticketPriceText = formatPurchaseEth(priceWei);
+        packPriceText = formatPurchaseEth(
+          priceWei * BigInt(PURCHASE_TICKETS_PER_PACK),
+          2,
+        );
         priceUnit = 'ETH';
       } catch (_e) { /* keep unavailable prices */ }
     }
     renderPurchasePriceRow(entryPriceEl, 'ENTRY', entryPriceText, priceUnit);
     renderPurchasePriceRow(ticketPriceEl, 'TICKET', ticketPriceText, priceUnit);
+    renderPurchasePriceRow(packPriceEl, 'PACK', packPriceText, priceUnit);
     for (const bind of ['dec-pack-level', 'dec-foil-level']) {
       const level = this.querySelector(`[data-bind="${bind}"]`);
       if (level) level.textContent = levelText;
@@ -4869,20 +4902,15 @@ class AppDecimatorPanel extends HTMLElement {
       // the same purchase and payment waterfall.
       let ticketCostWei = 0n;
       let foilCostWei = 0n;
+      let purchaseQuote = null;
       const hasPresetBoxes = (boxOrder & 0xFFFFFFn) !== 0n;
       if (ticketQuantity > 0 || boxOrder > 0n || foilWanted) {
-        // Codex finding: a cached /game/state can cross a phase/level
-        // boundary between polls — underpay silently pulls afking credit,
-        // overpay silently credits it (no revert to save us). Refetch at
-        // click time so the total and its wallet shortfall use fresh state.
-        const [gameRead, quoteRead] = await Promise.allSettled([
-          fetchJSON('/game/state'),
-          readPurchaseQuote(),
-        ]);
-        if (gameRead.status === 'fulfilled' && gameRead.value) {
-          this.#gameState = gameRead.value;
-        }
-        if (quoteRead.status === 'fulfilled') this.#purchaseQuote = quoteRead.value;
+        // purchaseInfo() is the complete buy-now authority. Never put the DB
+        // in this click's promise graph: an indexed outage must not consume the
+        // wallet gesture or add the API timeout before the wallet prompt.
+        const quote = await readPurchaseQuote({ fresh: true });
+        purchaseQuote = quote;
+        if (quote) this.#purchaseQuote = quote;
         // Never re-check indexed ownership here. purchaseEth immediately runs
         // the exact contract static-call with this level/value, which is both
         // fresher and authoritative.
@@ -4964,6 +4992,7 @@ class AppDecimatorPanel extends HTMLElement {
         : await purchaseEth({
             ticketQuantity, boxOrder, boxCostWei, affiliateCode, ticketCostWei,
             foil: foilWanted, foilCostWei, presaleBoxAmountWei,
+            purchaseQuote,
             preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
             useAfking: questPurchase?.useAfking ?? this.#useAfking,
             onSubmitted,

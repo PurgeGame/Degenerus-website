@@ -121,7 +121,7 @@ class AppWwxrpBurn extends HTMLElement {
     for (const key of ['ui.mode', 'ui.chainOk']) {
       this.#unsubs.push(subscribe(key, () => this.#render()));
     }
-    this.#poll = registerComponentPoll(() => this.#queueRefresh(), POLL_MS);
+    this.#poll = registerComponentPoll(() => this.#refresh(), POLL_MS);
     if (typeof document !== 'undefined') {
       this.#txListener = () => this.#queueRefresh();
       document.addEventListener?.(TX_CONFIRMED_EVENT, this.#txListener);
@@ -162,7 +162,9 @@ class AppWwxrpBurn extends HTMLElement {
         </strong>
         <button type="button" class="pari-wwxrp__burn" data-write data-write-locked
                 data-write-lock-title="WWXRP balance is loading"
-                data-bind="wwxrp-open" aria-haspopup="dialog">INCINERATE</button>
+                data-bind="wwxrp-open" aria-haspopup="dialog">
+          <b data-bind="wwxrp-open-label">BURN</b>
+        </button>
         <p class="pari-wwxrp__feedback" data-bind="wwxrp-feedback"
            hidden role="status"></p>
       </section>
@@ -309,8 +311,9 @@ class AppWwxrpBurn extends HTMLElement {
     }
 
     const open = this.querySelector('[data-bind="wwxrp-open"]');
+    const openLabel = this.querySelector('[data-bind="wwxrp-open-label"]');
     const lockReason = this.#lockReason();
-    if (open) open.textContent = this.#busy ? 'WAIT' : 'INCINERATE';
+    if (openLabel) openLabel.textContent = this.#busy ? 'WAIT' : 'BURN';
     _setWriteLock(open, Boolean(lockReason), lockReason);
 
     const input = this.querySelector('[data-bind="wwxrp-amount"]');

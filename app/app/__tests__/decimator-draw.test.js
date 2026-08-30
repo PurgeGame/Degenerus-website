@@ -11,7 +11,7 @@ import {
   formatDecimatorSettlement,
   formatEth,
   formatScore,
-  loadKnownWinnerNames,
+  loadWinnerProfiles,
   minDegenScoreForBucket,
   exitDecimatorDraw,
   playDecimatorDrawSound,
@@ -156,19 +156,24 @@ describe('standalone Decimator draw replay', () => {
     );
   });
 
-  test('known Discord identities are optional and keyed by wallet address', async () => {
-    const names = await loadKnownWinnerNames({
-      fetcher: async () => ({
-        ok: true,
-        async json() {
-          return { leaderboard: [{
-            eth_address: '0x00000000000000000000000000000000000000A1',
-            discord_name: 'Burnie',
-          }] };
-        },
-      }),
+  test('loads Discord names and avatars for the exact visible winners', async () => {
+    const player = snapshot.players.find((entry) => playerResult(snapshot, entry)?.won === false);
+    assert.ok(player);
+    let requested = [];
+    const profiles = await loadWinnerProfiles(snapshot, player.address, {
+      loader: async (addresses) => {
+        requested = addresses;
+        return new Map([[
+          player.address.toLowerCase(),
+          { name: 'Burnie', avatar: 'https://cdn.discordapp.com/avatars/burnie.png' },
+        ]]);
+      },
     });
-    assert.equal(names.get('0x00000000000000000000000000000000000000a1'), 'Burnie');
+    assert.ok(requested.includes(player.address.toLowerCase()));
+    assert.deepEqual(profiles.get(player.address.toLowerCase()), {
+      name: 'Burnie',
+      avatar: 'https://cdn.discordapp.com/avatars/burnie.png',
+    });
   });
 
   test('offers a clearly synthetic full-data art preview without touching the real fixture', () => {
@@ -326,6 +331,12 @@ describe('standalone Decimator draw replay', () => {
     assert.doesNotMatch(drawSource, /percent\.textContent = formatSharePercent\(entry\.shareBps\)/,
       'the final winner list does not restate pie percentages');
     assert.match(css, /\.winner-legend__row\.is-player/);
+    assert.match(css, /\.winner-legend__avatar\s*\{[^}]*border:\s*2px solid var\(--winner-color/s,
+      'Discord avatars retain the matching payout-pie color ring');
+    assert.match(drawSource, /profile\?\.name[\s\S]*?'ANON WINNER'/,
+      'the winner ledger never falls back to a wallet fragment');
+    assert.match(drawSource, /avatar\.alt = `\$\{profile\.name\} Discord avatar`/,
+      'winner profile pictures remain accessible');
     assert.match(css, /body\.is-embedded/,
       'the full-screen app takeover has a dedicated compact layout');
     assert.match(drawSource, /sessionStorage\.getItem\(storageKey\)/,

@@ -28,7 +28,7 @@ const css = readFileSync(cssPath, 'utf8');
 globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
 
 const { _testing } = await import('../gold-rush-headline.js');
-const { groupEth, fmtEth, formatBountyPoolFlip, easeOutCubic, headlineAmountFit } = _testing;
+const { groupEth, fmtEth, easeOutCubic, headlineAmountFit } = _testing;
 
 // polling.js registers a visibilitychange listener behind a typeof guard, so it is
 // import-safe here; its _testing surface exposes the adaptive-cadence internals.
@@ -88,16 +88,6 @@ describe('narrow headline fitting', () => {
   });
 });
 
-describe('relocated bounty pool formatting', () => {
-  test('compacts the live FLIP pool beside the protocol logo', () => {
-    const flip = 10n ** 18n;
-    assert.equal(formatBountyPoolFlip(999n * flip), '999');
-    assert.equal(formatBountyPoolFlip(123_456n * flip), '123.4K');
-    assert.equal(formatBountyPoolFlip(12_000_000n * flip), '12M');
-    assert.equal(formatBountyPoolFlip(undefined), null);
-  });
-});
-
 // ===========================================================================
 // Count-up easing
 // ===========================================================================
@@ -146,7 +136,8 @@ describe('gold-rush-headline.js source discipline', () => {
 
   test('reads the store, owns no fetch of its own (polling.js is the only fetcher)', () => {
     assert.match(src, /subscribe\('app\.goldRush'/, "subscribes to app.goldRush");
-    assert.match(src, /subscribe\('app\.records'/, "subscribes to the shared bounty state");
+    assert.doesNotMatch(src, /subscribe\('app\.records'/,
+      'the jackpot headline does not subscribe to unrelated bounty-pool state');
     assert.equal(/\bfetch\(/.test(src), false, 'component performs no fetch');
     assert.equal(/API_BASE/.test(src), false, 'component does not know the API base');
   });
@@ -219,8 +210,8 @@ describe('gold-rush-headline.js source discipline', () => {
       /\.gr__brand-copy small\s*\{[^}]*font-size:\s*clamp\(0\.4rem,\s*1\.05vw,\s*0\.5rem\)/s,
       'the PROTOCOL line receives the same modest size increase',
     );
-    assert.match(src, /class="gr__bounty-pool"[^>]*data-el="bounty-pool"[^>]*hidden/,
-      'the shared bounty pool relocates into the protocol-logo lockup');
+    assert.doesNotMatch(src, /gr__bounty-pool|BOUNTY POOL|bounty-pool-amount/,
+      'the protocol-logo lockup stays free of the unrelated bounty pool');
     assert.match(
       css,
       /\.gr__label-text\s*\{[^}]*font-size:\s*clamp\(0\.72rem,\s*1\.75vw,\s*1\.02rem\)/s,

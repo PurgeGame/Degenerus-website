@@ -425,6 +425,33 @@ describe('AFKing seat entitlement and claim', () => {
     assert.equal(state.tokenBalance, 1n);
   });
 
+  test('starts every independent AFKing leg together for one Multicall window', async () => {
+    const started = [];
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const wait = async (name, value) => {
+      started.push(name);
+      await gate;
+      return value;
+    };
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: () => wait('balance', 1n) },
+      game: {
+        subInfo: () => wait('info', [true, 2n, 8n, 12n]),
+        afkingSnapshot: () => wait('snapshot', [10n, false, [0n], [25n]]),
+      },
+      lens: {
+        subInfoFull: () => wait('lens', { flags: 0n, pendingFlip: 0n }),
+      },
+    }));
+
+    const pending = passesMod.readAfkingSubscription(CONNECTED);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(new Set(started), new Set(['balance', 'info', 'snapshot', 'lens']));
+    release();
+    assert.equal((await pending).fundingWei, 25n);
+  });
+
   test('a failed core snapshot is unknown instead of synthetic zero funding', async () => {
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 1n },

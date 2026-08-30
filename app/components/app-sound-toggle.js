@@ -4,6 +4,7 @@
 
 import {
   isMuted as isSfxMuted,
+  preloadCrapsChipSamples,
   setMuted as setSfxMuted,
   warmup,
 } from '../app/jackpot-sfx.js';
@@ -47,6 +48,7 @@ function _persist(muted) {
 export function primeSoundEngines() {
   if (isSfxMuted() || isPackMuted()) return false;
   warmup();
+  void preloadCrapsChipSamples();
   warmupPackAudio();
   void preloadPackOpen();
   return true;
@@ -90,7 +92,10 @@ export function mountSoundToggle(root = document) {
   _persist(muted);
   _paint(button, muted);
   _armFirstGesture(root);
-  if (!muted) void preloadPackOpen();
+  if (!muted) {
+    void preloadPackOpen();
+    void preloadCrapsChipSamples();
+  }
 
   button.addEventListener('click', () => {
     muted = !muted;

@@ -23,7 +23,7 @@
 // quota errors must never break a buy or a poll (Pitfall F).
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { permissionlessReadProvider, sharedReadProvider } from './read-provider.js';
 import { getProvider, ethers } from './contracts.js';
 import { fetchJSON } from './api.js';
 import { get } from './store.js';
@@ -401,7 +401,10 @@ async function _readEntriesOwed(address, levels) {
   let reader = _entriesOwedReaderForTest;
   let walletProvider = null;
   if (!reader) {
-    walletProvider = getProvider();
+    const connected = getProvider();
+    if (!connected
+      && (typeof window === 'undefined' || typeof window.fetch !== 'function')) return [];
+    walletProvider = permissionlessReadProvider(connected);
     if (!walletProvider || !CONTRACTS.GAME) return [];
     try {
       const contract = new ethers.Contract(CONTRACTS.GAME, ENTRIES_OWED_ABI, walletProvider);

@@ -568,19 +568,21 @@ export async function readAfkingSubscription(player) {
       if (typeof target?.[method] !== 'function') throw new Error(`${method} unavailable`);
       return target[method](...args);
     });
-    // Keep these three calls sequential. The Base public endpoint intermittently
-    // rate-limits the panel's wider mount burst; losing afkingSnapshot made the
-    // editor appear with no daily price even though the seat probe succeeded.
+    // Start every independent leg in one turn. The shared read provider turns
+    // these calls into one Multicall; awaiting them sequentially forced four
+    // separate RPC round trips and defeated that protection entirely.
     const settle = async (promise) => {
       try { return { status: 'fulfilled', value: await promise }; }
       catch (reason) { return { status: 'rejected', reason }; }
     };
-    const balanceRes = await settle(call(contracts.token, 'balanceOf', address));
-    const infoRes = await settle(call(contracts.game, 'subInfo', address));
-    const snapshotRes = await settle(call(contracts.game, 'afkingSnapshot', [address]));
-    const pendingRes = contracts.lens
-      ? await settle(call(contracts.lens, 'subInfoFull', CONTRACTS.GAME, address))
-      : { status: 'rejected', reason: new Error('AFKing lens unavailable') };
+    const [balanceRes, infoRes, snapshotRes, pendingRes] = await Promise.all([
+      settle(call(contracts.token, 'balanceOf', address)),
+      settle(call(contracts.game, 'subInfo', address)),
+      settle(call(contracts.game, 'afkingSnapshot', [address])),
+      contracts.lens
+        ? settle(call(contracts.lens, 'subInfoFull', CONTRACTS.GAME, address))
+        : Promise.resolve({ status: 'rejected', reason: new Error('AFKing lens unavailable') }),
+    ]);
     const value = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
     const balanceKnown = balanceRes.status === 'fulfilled';
     const tokenBalance = BigInt(value(balanceRes, 0n) ?? 0n);

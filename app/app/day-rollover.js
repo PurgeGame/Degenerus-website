@@ -10,7 +10,7 @@
 
 import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 import { get, subscribe, update } from './store.js';
 
 const GAME_DAY_ABI = [
@@ -219,7 +219,7 @@ async function _readSnapshot() {
   const game = new ethers.Contract(CONTRACTS.GAME, GAME_DAY_ABI, _provider);
   const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_DAY_ABI, _provider);
   let blockNumber = null;
-  try { blockNumber = Number(await _provider.getBlockNumber()); }
+  try { blockNumber = Number(await readProviderBlockNumber(_provider)); }
   catch (_e) { /* unpinned best effort */ }
   const overrides = blockNumber == null ? [] : [{ blockTag: blockNumber }];
   const day = _positiveDay(await game.currentDayView(...overrides));

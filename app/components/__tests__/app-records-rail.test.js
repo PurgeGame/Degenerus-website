@@ -320,8 +320,8 @@ describe('record units are never interchangeable', () => {
       suffix: '×',
     });
     assert.deepEqual(formatCompactRecordValue(RECORD_KIND_DICE_RUN, 2_345_678n), {
-      amount: '234',
-      suffix: '×',
+      amount: '234x',
+      suffix: '',
     });
   });
 

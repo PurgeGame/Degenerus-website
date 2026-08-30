@@ -125,7 +125,7 @@ function _fmtDailyQuestAmount(questType, raw) {
   if (type === 4) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'pack' : 'packs'}`;
   if (type === 9) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
   if (type === 10) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'battle' : 'battles'}`;
-  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'pass' : 'passes'}`;
+  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'entry' : 'entries'}`;
   return amount.toLocaleString('en-US');
 }
 
@@ -148,7 +148,7 @@ const QUEST_TYPE_LABELS = {
   8: 'Degenerette (FLIP)',
   9: 'Redeem FLIP',
   10: 'Join a Craps Battle',
-  11: 'Buy a Craps Day Pass',
+  11: 'Buy a Craps Day',
 };
 
 // Purpose-built product art replaces the old font glyphs. The icon tile still
@@ -180,16 +180,36 @@ const QUEST_FLIP_MARK_POSITIONS = Object.freeze({
   '/app/assets/quests/degenerette-flip.svg': 'center',
 });
 
+const QUEST_CRAPS_BACK_ICONS = Object.freeze({
+  '/badges-circular/dice_04_5_silver.svg': '/badges-circular/dice_01_2_blue.svg',
+  '/badges-circular/dice_04_5_gold.svg': '/badges-circular/dice_01_2_blue.svg',
+});
+
 function _paintQuestIcon(host, icon) {
   if (!host) return;
   const source = String(icon || '');
   host.textContent = '';
-  host.classList?.remove('qst-painted-icon--flip-center', 'qst-painted-icon--flip-left');
+  host.classList?.remove(
+    'qst-painted-icon--flip-center',
+    'qst-painted-icon--flip-left',
+    'qst-painted-icon--craps-dice',
+  );
   if (!source.startsWith('/')) {
     host.textContent = source || '?';
     return;
   }
   const image = document.createElement('img');
+  const crapsBackIcon = QUEST_CRAPS_BACK_ICONS[source];
+  if (crapsBackIcon) {
+    host.classList?.add('qst-painted-icon--craps-dice');
+    const backImage = document.createElement('img');
+    backImage.className = 'qst-painted-icon__craps-back';
+    backImage.src = crapsBackIcon;
+    backImage.alt = '';
+    backImage.setAttribute('aria-hidden', 'true');
+    host.appendChild(backImage);
+    image.className = 'qst-painted-icon__craps-front';
+  }
   image.src = source;
   image.alt = '';
   image.setAttribute('aria-hidden', 'true');
@@ -434,7 +454,7 @@ function _fmtLevelQuestAmount(questType, raw) {
     return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
   }
   if (type === 10) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'battle' : 'battles'}`;
-  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'pass' : 'passes'}`;
+  if (type === 11) return `${amount.toLocaleString('en-US')} day ${amount === 1n ? 'entry' : 'entries'}`;
   return amount.toLocaleString('en-US');
 }
 
@@ -1023,7 +1043,7 @@ class AppQuestPanel extends HTMLElement {
       return { label: 'OPEN CRAPS BATTLE', target: 1n, completes: true };
     }
     if (originalType === 11) {
-      return { label: 'BUY CRAPS DAY PASS', target: 1n, completes: true };
+      return { label: 'BUY CRAPS DAY', target: 1n, completes: true };
     }
     return { label: 'SET UP QUEST', target: required, completes: true };
   }
@@ -1165,7 +1185,7 @@ class AppQuestPanel extends HTMLElement {
       } else if (type === 10) {
         copy.textContent = 'Choose and enter any open paid Craps battle.';
       } else if (type === 11) {
-        copy.textContent = 'Buy one future Craps day with FLIP. Awarded passes stay banked because using one does not count as a purchase.';
+        copy.textContent = 'Buy one future Craps day with FLIP. Awarded comps stay banked because using one does not count as a purchase.';
       } else {
         copy.textContent = 'Confirm to open the matching quest action.';
       }

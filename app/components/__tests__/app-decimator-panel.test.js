@@ -762,6 +762,14 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'the pack wrapper carries its quantity without a redundant PACK pill');
     assert.match(PANEL_SRC,
       /data-bind="dec-ticket-add-pack"[\s\S]*?<span class="dec-pack-count">10 TICKETS<\/span>/);
+    assert.match(PANEL_SRC,
+      /data-bind="dec-ticket-add-ticket"[\s\S]*?<quest-objective-indicator class="dec-ticket-single-quest"\s+product="purchase"\s+quest-roles="DAILY,BONUS"><\/quest-objective-indicator>[\s\S]*?<\/button>/,
+      'single-purchase quests belong to the one-ticket control');
+    assert.match(PANEL_SRC,
+      /data-bind="dec-ticket-add-pack"[\s\S]*?<quest-objective-indicator class="dec-ticket-pack-quest"\s+product="purchase"\s+quest-roles="LEVEL"><\/quest-objective-indicator>[\s\S]*?<\/button>/,
+      'level purchase quests belong to the ten-ticket pack');
+    assert.equal(el.querySelector('.dec-input-group--tickets > .dec-input-accessories > quest-objective-indicator'), null,
+      'the ticket quest marker no longer floats at the purchase panel edge');
     assert.match(el.innerHTML,
       /<boon-product-indicator product="purchase" data-bind="dec-ticket-boon"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
@@ -839,6 +847,11 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       PURCHASE_DESK_CSS,
       /Approved compact asset desk[\s\S]*?\.dec-ticket-pieces\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
       'the default Entry, Ticket, and Pack shelf does not reserve a blank foil slot',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-ticket-piece--ticket > \.dec-ticket-single-quest,[\s\S]*?\.dec-ticket-piece--pack > \.dec-ticket-pack-quest\s*\{[^}]*quest-objective-tail-left\.svg[^}]*top:\s*50%;[^}]*right:\s*0\.38rem;[^}]*width:\s*1\.08rem;[^}]*min-width:\s*0;[^}]*height:\s*1\.08rem;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*translate:\s*0 -50%;/s,
+      'single and level quest markers sit beside their ticket controls without escaping the tile',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -1036,18 +1049,28 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       compactHeroCss,
-      /\.panel-header\s*\{[^}]*min-height:\s*3\.15rem;[^}]*grid-template-columns:\s*4\.9rem minmax\(0, 1fr\) 6\.45rem;[^}]*grid-template-rows:\s*2\.55rem/s,
-      'mobile and medium BUY IN, price screen, and bonus share one instrument row',
+      /\.panel-header\s*\{[^}]*min-height:\s*4\.4rem;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 6\.45rem;[^}]*grid-template-rows:\s*auto 2\.8rem/s,
+      'mobile and medium reserve a full title row above the two readouts',
     );
     assert.match(
       compactHeroCss,
-      /\.dec-price\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;[^}]*grid-template-columns:\s*1ch max-content 1\.5ch max-content 0\.5ch minmax\(max-content, 1fr\);[^}]*font-size:\s*clamp\(0\.43rem, 2vw, 0\.5rem\)/s,
-      'the compact rate screen uses its width instead of a separate header row',
+      /\.dec-header-title\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*1/s,
+      'BUY IN spans the complete top row at compact widths',
     );
     assert.match(
       compactHeroCss,
-      /\.dec-flip-credit--header\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*1/s,
-      'the bonus readout stays in the same compact instrument row',
+      /\.dec-purchase-help\s*\{[^}]*right:\s*auto;[^}]*left:\s*0;/s,
+      'the compact info control stays at the upper-left of BUY IN',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-price\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*2;[^}]*grid-template-columns:\s*1ch max-content 1\.5ch max-content 0\.5ch minmax\(max-content, 1fr\);[^}]*font-size:\s*clamp\(0\.54rem, 2\.2vw, 0\.6rem\)/s,
+      'the larger compact rate screen owns the left side of the second row',
+    );
+    assert.match(
+      compactHeroCss,
+      /\.dec-flip-credit--header\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2/s,
+      'the bonus readout shares the second instrument row',
     );
     assert.match(
       compactHeroCss,
@@ -1200,6 +1223,49 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       1,
       'double-click invokes purchase exactly once (#busy debounce)',
     );
+    el.disconnectedCallback();
+  });
+
+  test('Buy In quotes and submits while every database request is still blocked', async () => {
+    invalidateJSONCache();
+    let releaseDatabase;
+    let databaseReads = 0;
+    const databaseBlocked = new Promise((resolve) => { releaseDatabase = resolve; });
+    _fetchHandler = async () => {
+      databaseReads += 1;
+      return databaseBlocked;
+    };
+
+    const price = lootboxMod.scaledTicketPriceWei(12);
+    const contract = makeFakePurchaseContract({
+      purchaseInfo: [12, false, false, false, price],
+    });
+    lootboxMod.__setContractFactoryForTest(() => contract);
+
+    const el = instantiate();
+    await settle(40);
+    assert.ok(databaseReads > 0, 'the indexed dashboard wave is genuinely pending');
+    assert.match(
+      el.querySelector('[data-bind="dec-ticket-price"]').textContent,
+      /TICKET/,
+      'purchaseInfo paints the quote without the indexed response',
+    );
+
+    el.querySelector('[name="dec-tickets"]').value = '1';
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(contract._calls.purchase.length, 1,
+      'the wallet-to-contract purchase completes before the DB is released');
+
+    releaseDatabase({
+      level: 12,
+      phase: 'PURCHASE',
+      jackpotPhaseFlag: false,
+      claimableEth: '0',
+      flipBalance: '0',
+      pending: {},
+    });
+    await settle(20);
     el.disconnectedCallback();
   });
 
@@ -1634,6 +1700,10 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(
       el.querySelector('[data-bind="dec-ticket-price"]').getAttribute('aria-label'),
       '1 TICKET = 0.24 ETH',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="dec-pack-price"]').getAttribute('aria-label'),
+      '1 PACK = 2.40 ETH',
     );
     assert.match(
       el.querySelector('[data-bind="dec-flip-credit"]').getAttribute('aria-label'),
@@ -2891,30 +2961,35 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(
       PURCHASE_DESK_CSS,
       /Approved compact asset desk[\s\S]*?\.panel-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 8rem;[^}]*grid-template-rows:\s*auto auto;[^}]*gap:\s*0\.22rem 0\.24rem;/s,
-      'the header reclaims buffer space for a wider permanent bonus column',
+      'the price keeps its wider content column beside the compact bonus',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /Approved compact asset desk[\s\S]*?\.dec-header-title\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*1/s,
+      'BUY IN owns the full first row above both instruments',
     );
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-price\s*\{[^}]*display:\s*grid;[^}]*gap:\s*0\.1rem;/s,
-      'entry and ticket prices occupy distinct lines in the rate window',
+      'entry, ticket, and pack prices occupy distinct lines in the rate window',
     );
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-price\s*\{[^}]*grid-template-columns:\s*1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;[^}]*justify-content:\s*center/s,
-      'both quotes share centered count, kind, equals, content-sized amount, and unit columns',
+      'all three quotes share centered count, kind, equals, content-sized amount, and unit columns',
     );
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-price > \.dec-price__row\s*\{[^}]*display:\s*contents/s,
-      'both quote rows participate in the same alignment grid',
+      'all quote rows participate in the same alignment grid',
     );
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-price__amount\s*\{[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;/s,
-      'the exact 1,000 FLIP value is not clipped at the old fixed-width boundary',
+      'the exact 10,000 FLIP pack value is not clipped at the old fixed-width boundary',
     );
-    // The unit owns a column of its own, so ETH/FLIP holds one x down both
-    // quotes no matter how many digits the amount above or below it takes.
+    // The unit owns a column of its own, so ETH/FLIP holds one x down all
+    // quotes no matter how many digits the amounts above or below it take.
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-price__amount\s*\{[^}]*grid-column:\s*7;[^}]*text-align:\s*left;/s,
@@ -2927,8 +3002,8 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PANEL_SRC,
-      /renderPurchasePriceRow\(entryPriceEl, 'ENTRY', entryPriceText, priceUnit\);[\s\S]*?renderPurchasePriceRow\(ticketPriceEl, 'TICKET', ticketPriceText, priceUnit\);/,
-      'alignment does not change either quote string, and both carry the same unit',
+      /renderPurchasePriceRow\(entryPriceEl, 'ENTRY', entryPriceText, priceUnit\);[\s\S]*?renderPurchasePriceRow\(ticketPriceEl, 'TICKET', ticketPriceText, priceUnit\);[\s\S]*?renderPurchasePriceRow\(packPriceEl, 'PACK', packPriceText, priceUnit\);/,
+      'alignment does not change the quote strings, and all carry the same unit',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -2937,8 +3012,18 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-flip-credit--header\s*\{[^}]*height:\s*2\.55rem;[^}]*grid-column:\s*2;[^}]*grid-row:\s*1 \/ 3;[^}]*align-self:\s*end;/s,
-      'idle and numeric bonus content share a fixed footprint bottom-aligned with the price window',
+      /\.dec-price\s*\{[^}]*height:\s*2\.8rem;[^}]*min-height:\s*2\.8rem;[^}]*border-radius:\s*5px;[\s\S]*?\.dec-flip-credit--header\s*\{[^}]*height:\s*2\.8rem;[^}]*min-height:\s*2\.8rem;[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;[^}]*align-self:\s*stretch;[^}]*border-radius:\s*5px;/s,
+      'the price and bonus use exactly the same height and corner geometry',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-flip-credit--header\s*\{[^}]*box-shadow:\s*0 0 0 1px rgba\(124, 88, 34, 0\.5\),/s,
+      'the bonus paints the same one-pixel outer frame as the price window',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /Approved compact asset desk[\s\S]*?\.dec-purchase-help\s*\{[^}]*right:\s*auto;[^}]*left:\s*0\.08rem;/s,
+      'the info control occupies the upper-left corner of the title row',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -3100,6 +3185,8 @@ describe('combined ticket + lootbox buy', () => {
       '1 ENTRY - 0.01 ETH');
     assert.equal(el.querySelector('[data-bind="dec-ticket-price"]').textContent,
       '1 TICKET - 0.04 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-pack-price"]').textContent,
+      '1 PACK - 0.40 ETH');
     assert.equal(el.querySelector('[data-bind="dec-box-price-small"]').textContent, '0.04');
     assert.equal(el.querySelector('[data-bind="dec-box-price-medium"]').textContent, '0.2');
     assert.equal(el.querySelector('[data-bind="dec-box-price-large"]').textContent, '1');
@@ -4510,6 +4597,11 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       '1 TICKET - 1,000 FLIP',
       'FLIP mode omits the level prefix so the fixed burn rate fits the header',
     );
+    assert.equal(
+      el.querySelector('[data-bind="dec-pack-price"]').textContent,
+      '1 PACK - 10,000 FLIP',
+      'the ten-ticket pack follows the same active FLIP quote',
+    );
     assert.equal(flipBalance.hidden, false, 'the FLIP balance does not move or disappear in FLIP mode');
     assert.equal(useFlip.textContent, 'USING FLIP');
     assert.equal(useFlip.getAttribute('aria-pressed'), 'true');
@@ -4529,6 +4621,11 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       el.querySelector('[data-bind="dec-ticket-price"]').textContent,
       '1 TICKET - 0.04 ETH',
       'switching back to ETH restores the compact ETH ticket quote',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="dec-pack-price"]').textContent,
+      '1 PACK - 0.40 ETH',
+      'switching back to ETH restores the ten-ticket pack quote',
     );
     assert.equal(useFlip.textContent, 'USE FLIP');
     useFlip.dispatchEvent({ type: 'click' });

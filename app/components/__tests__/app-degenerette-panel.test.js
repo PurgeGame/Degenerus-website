@@ -1311,7 +1311,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     contractsMod.setProvider({
       ...makeFakeProvider(CONNECTED),
       getBlockNumber: async () => 119,
-      getStorage: async (_address, slot) => slot === 33n ? queuePacked : 0n,
+      getStorage: async (_address, slot) => slot === '0x21' ? queuePacked : 0n,
     });
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 13n,

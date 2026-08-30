@@ -15,7 +15,7 @@
 
 import { fetchJSON } from './api.js';
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { readContractStorage, sharedReadProvider } from './read-provider.js';
 import { ethers, getProvider } from './contracts.js';
 import { displayEthCompact, displayToken } from './scaling.js';
 
@@ -214,10 +214,14 @@ export async function readLiveRecordClocks() {
   const request = (async () => {
     try {
       const provider = recordPoolProvider();
-      if (!provider || !CONTRACTS.COINFLIP || typeof provider.getStorage !== 'function') {
+      if (!provider || !CONTRACTS.COINFLIP) {
         return _lastLiveRecordClocks;
       }
-      const raw = await provider.getStorage(CONTRACTS.COINFLIP, RECORD_CLOCK_STORAGE_SLOT);
+      const raw = await readContractStorage(
+        CONTRACTS.COINFLIP,
+        RECORD_CLOCK_STORAGE_SLOT,
+        { provider },
+      );
       const decoded = decodeRecordClockSlot(raw);
       if (!decoded || !decoded.some((day) => day != null)) return _lastLiveRecordClocks;
       _lastLiveRecordClocks = decoded;

@@ -45,6 +45,11 @@ import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { getActingAddress } from './store.js';
 import { claimableFirstPayment } from './lootbox.js';
+import {
+  permissionlessReadProvider,
+  readProviderBlockNumber,
+  readTransactionReceipt,
+} from './read-provider.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -304,15 +309,25 @@ export function formatDegeneretteMultiplier(multiplierHundredths) {
 // ---------------------------------------------------------------------------
 
 let _contractFactory = null;
+const _resolvedBetCache = new Map();
+const _resolvedBetInflight = new Map();
 
 /** Test-only: replace the `new Contract(...)` construction with a fake. */
 export function __setContractFactoryForTest(fn) {
   _contractFactory = fn;
+  _resolvedBetCache.clear();
+  _resolvedBetInflight.clear();
 }
 
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
+  _resolvedBetCache.clear();
+  _resolvedBetInflight.clear();
+}
+
+function _readProvider() {
+  return permissionlessReadProvider(getProvider());
 }
 
 function _buildContract(signerOrProvider) {
@@ -531,7 +546,7 @@ export async function resolveBets({ betIds, player } = {}) {
 export async function readBetInfo({ player, betId } = {}) {
   const owner = player || getActingAddress();
   if (!owner || betId == null) return null;
-  const provider = getProvider();
+  const provider = _readProvider();
   if (!provider) return null;
   const contract = _buildContract(provider);
   if (typeof contract.degeneretteBetInfo !== 'function') return null;
@@ -581,7 +596,25 @@ export async function readResolvedBet({ player, betId } = {}) {
   if (!owner || betId == null) return null;
   let id;
   try { id = BigInt(betId); } catch (_e) { return null; }
-  const provider = getProvider();
+  const key = `${String(owner).toLowerCase()}:${id}`;
+  if (_resolvedBetCache.has(key)) return _resolvedBetCache.get(key);
+  if (_resolvedBetInflight.has(key)) return _resolvedBetInflight.get(key);
+  const request = _readResolvedBetUncached({ player: owner, betId: id }).then((value) => {
+    if (value) _resolvedBetCache.set(key, value);
+    return value;
+  }).finally(() => {
+    if (_resolvedBetInflight.get(key) === request) _resolvedBetInflight.delete(key);
+  });
+  _resolvedBetInflight.set(key, request);
+  return request;
+}
+
+async function _readResolvedBetUncached({ player, betId } = {}) {
+  const owner = player || getActingAddress();
+  if (!owner || betId == null) return null;
+  let id;
+  try { id = BigInt(betId); } catch (_e) { return null; }
+  const provider = _readProvider();
   if (!provider || typeof provider.getBlockNumber !== 'function') return null;
   const contract = _buildContract(provider);
   if (typeof contract?.queryFilter !== 'function'
@@ -589,7 +622,7 @@ export async function readResolvedBet({ player, betId } = {}) {
     || typeof contract?.filters?.DegeneretteResult !== 'function') return null;
 
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider)); }
   catch (_e) { return null; }
   if (!Number.isFinite(head) || head < 0) return null;
 
@@ -643,7 +676,7 @@ export async function readResolvedBet({ player, betId } = {}) {
         const transactionHash = resolvedLog.transactionHash == null
           ? null : String(resolvedLog.transactionHash);
         if (transactionHash && typeof provider.getTransactionReceipt === 'function') {
-          try { receipt = await provider.getTransactionReceipt(transactionHash); }
+          try { receipt = await readTransactionReceipt(transactionHash, { provider }); }
           catch (_e) { receipt = null; }
         }
         return { resolved, spins, receipt, transactionHash };

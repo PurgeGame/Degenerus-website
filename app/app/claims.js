@@ -42,6 +42,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
 import { get, getActingAddress } from './store.js';
+import { permissionlessReadProvider, readContractStorage } from './read-provider.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -157,6 +158,12 @@ function _buildGoldenTicketContract(signerOrProvider) {
   return new ethers.Contract(CONTRACTS.GAME, GOLDEN_TICKET_ABI, signerOrProvider);
 }
 
+function _claimsReadProvider() {
+  const wallet = getProvider();
+  if (_contractFactory && !wallet) return null;
+  return permissionlessReadProvider(wallet);
+}
+
 // ---------------------------------------------------------------------------
 // Structured-revert-error helper — port of Phase 60 lootbox.js:90-98.
 // Decodes via reason-map; wraps as Error with .code / .userMessage /
@@ -195,7 +202,7 @@ function _structuredRevertError(error, context) {
 export async function readClaimableEth({ player } = {}) {
   const playerArg = player ?? getActingAddress();
   if (!playerArg) return null;
-  const provider = getProvider();
+  const provider = _claimsReadProvider();
   if (!provider) return null;
   try {
     const contract = _buildGameContract(provider);
@@ -220,7 +227,7 @@ export async function readClaimableEth({ player } = {}) {
 export async function readWhalePassClaimAmount({ player } = {}) {
   const playerArg = player ?? getActingAddress();
   if (!playerArg) return null;
-  const provider = getProvider();
+  const provider = _claimsReadProvider();
   if (!provider) return null;
   try {
     const contract = _buildGameContract(provider);
@@ -583,18 +590,11 @@ const TICKET_REDEMPTION_OPEN_SHIFT = 30n * 8n;
 const PACKED_BYTE_MASK = 0xffn;
 
 async function _readTicketRedemptionOpen(provider) {
-  let raw;
-  if (typeof provider?.getStorage === 'function') {
-    raw = await provider.getStorage(CONTRACTS.GAME, REDEEM_FLIP_STORAGE_SLOT);
-  } else if (typeof provider?.send === 'function') {
-    raw = await provider.send('eth_getStorageAt', [
-      CONTRACTS.GAME,
-      '0x0',
-      'latest',
-    ]);
-  } else {
-    throw new Error('Provider cannot read packed game storage.');
-  }
+  const raw = await readContractStorage(
+    CONTRACTS.GAME,
+    REDEEM_FLIP_STORAGE_SLOT,
+    { provider },
+  );
   return ((BigInt(raw) >> TICKET_REDEMPTION_OPEN_SHIFT) & PACKED_BYTE_MASK) !== 0n;
 }
 
@@ -634,7 +634,7 @@ export function flipCostFromTickets(tickets) {
  */
 export async function probeRedeemFlipWindow() {
   try {
-    const provider = getProvider();
+    const provider = _claimsReadProvider();
     if (!provider) return false;
     const contract = _buildRedeemFlipContract(provider);
 

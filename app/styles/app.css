@@ -6541,6 +6541,39 @@ body.layout-basic .rrt-action--compact .rrt-action__label {
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
+body.layout-basic .rrt-action--craps.rrt-action--compact {
+  min-width: 7.2rem;
+  padding: 0.34rem 0.72rem;
+  border-color: rgba(148, 163, 184, 0.46);
+  background:
+    radial-gradient(circle at 1.35rem 50%, rgba(226, 232, 240, 0.14), transparent 34%),
+    rgba(71, 85, 105, 0.1);
+}
+body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__art--craps {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__art--craps img {
+  position: absolute;
+  max-width: none;
+  object-fit: contain;
+  filter: drop-shadow(0 0 5px rgba(226, 232, 240, 0.28));
+}
+body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__icon-front {
+  z-index: 2; right: -0.42rem; bottom: -0.38rem; width: 2.62rem; height: 2.62rem;
+}
+body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__icon-back {
+  z-index: 1; top: -0.42rem; left: -0.38rem; width: 1.82rem; height: 1.82rem;
+  filter: brightness(0.9) drop-shadow(0 1px 4px rgba(19, 23, 247, 0.4));
+}
+body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__label {
+  line-height: 1.08;
+  text-align: center;
+  white-space: pre-line;
+}
 body.layout-basic .rrt-action--bingo.rrt-action--compact {
   grid-template-columns: 2.35rem auto;
   min-width: 6.5rem;
@@ -10401,9 +10434,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   --rvl-survival-ending: rvl-survival-coin-end-loss;
   --rvl-survival-face-ending: rvl-survival-face-end-loss;
   animation-name: rvl-survival-coin-track, var(--rvl-survival-ending);
-  animation-duration: 3300ms, 700ms;
+  animation-duration: 1650ms, 350ms;
   animation-timing-function: linear, linear;
-  animation-delay: 0ms, 3300ms;
+  animation-delay: 0ms, 1650ms;
   animation-iteration-count: 1, 1;
   animation-fill-mode: forwards, forwards;
 }
@@ -10413,9 +10446,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-survival-coin.df-reveal-active .rvl-survival-coin-face {
   animation-name: rvl-survival-face-track, var(--rvl-survival-face-ending);
-  animation-duration: 3300ms, 700ms;
+  animation-duration: 1650ms, 350ms;
   animation-timing-function: linear, linear;
-  animation-delay: 0ms, 3300ms;
+  animation-delay: 0ms, 1650ms;
   animation-iteration-count: 1, 1;
   animation-fill-mode: forwards, forwards;
 }
@@ -11219,8 +11252,6 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-weight: 850;
   letter-spacing: 0.22em;
 }
-.gr__bounty-pool { display: flex; align-items: baseline; gap: 0.13rem; margin-top: 0.16rem; color: rgba(255, 224, 158, 0.58); font-size: clamp(0.3rem, 0.72vw, 0.37rem); font-style: normal; font-weight: 850; letter-spacing: 0.055em; white-space: nowrap; } .gr__bounty-pool[hidden] { display: none !important; } .gr__bounty-pool b { color: #ffe39b; font: 950 1.08em/1 "Inter", system-ui, sans-serif; } .gr__bounty-pool em { color: rgba(255, 192, 77, 0.66); font: inherit; }
-
 .gr__masthead-divider {
   width: 1px;
   height: 1.42rem;
@@ -13252,9 +13283,14 @@ body.layout-basic .pari-error[hidden] { display: none !important; }
 /* WWXRP lives with the side wagers. margin-top:auto pins it to the bottom of
    the equal-height Side Bets column without disturbing open or settled books. */
 body.layout-basic .app-parimutuel > app-wwxrp-burn {
-  display: block; min-width: 0; margin-top: auto; padding-top: 0.08rem;
+  display: block;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 0.08rem;
 }
-body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] { display: none !important; }
+body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] {
+  display: none !important;
+}
 body.layout-basic .pari-wwxrp {
   position: relative; box-sizing: border-box; display: grid;
   min-width: 0; min-height: 3.15rem;
@@ -13327,30 +13363,36 @@ body.layout-basic .pari-wwxrp__burn[data-write] {
   position: relative; box-sizing: border-box; display: grid;
   width: 5.3rem; min-width: 5.3rem; min-height: 2.55rem;
   grid-column: 3; grid-row: 1 / -1;
-  grid-template-columns: 0.82rem minmax(0, 1fr);
+  grid-template-columns: 1.34rem auto;
   align-self: center; align-items: center; justify-content: center;
-  gap: 0.28rem; margin: 0; padding: 0.32rem 0.42rem;
+  gap: 0.42rem; margin: 0; padding: 0.32rem 0.72rem 0.32rem 0.48rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 120, 111, 0.9); border-radius: 8px;
+  border: 1px solid rgba(255, 120, 111, 0.92); border-radius: 8px;
   background:
-    radial-gradient(circle at 62% -40%, rgba(255, 180, 142, 0.34), transparent 66%),
+    linear-gradient(90deg, rgba(54, 0, 7, 0.6) 0 1.72rem, transparent 1.72rem),
+    radial-gradient(circle at 62% -40%, rgba(255, 180, 142, 0.36), transparent 66%),
     linear-gradient(180deg, #d32c34 0%, #a1121d 48%, #700810 100%);
-  color: #fff7ec; font: 950 0.46rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.065em; text-align: center;
+  color: #fff7ec; font: 950 0.66rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em; text-align: center;
   box-shadow:
     inset 0 1px rgba(255, 239, 220, 0.22),
     inset 0 -2px rgba(58, 0, 5, 0.76),
-    0 0 0 2px rgba(37, 0, 4, 0.68),
-    0 5px 14px rgba(100, 2, 10, 0.42),
-    0 0 12px rgba(229, 42, 47, 0.14);
+    0 0 0 2px rgba(37, 0, 4, 0.72),
+    0 5px 14px rgba(100, 2, 10, 0.45),
+    0 0 12px rgba(229, 42, 47, 0.16);
   cursor: pointer; transition: filter 120ms ease, transform 120ms ease;
 }
 body.layout-basic .pari-wwxrp__burn[data-write]::before {
-  display: block; width: 0.82rem; height: 1.18rem;
-  background: url('/app/assets/jackpot/flame-center-silver.svg') center / contain no-repeat;
+  display: block;
+  width: 1.34rem;
+  height: 1.72rem;
+  grid-column: 1;
+  background: url('/app/assets/jackpot/flame-center-silver.svg') center / 0.98rem 1.34rem no-repeat;
+  border-right: 1px solid rgba(255, 194, 174, 0.17);
+  filter: brightness(1.65) contrast(1.08) drop-shadow(0 0 4px rgba(255, 205, 145, 0.65));
   content: '';
-  filter: brightness(1.65) contrast(1.08) drop-shadow(0 0 4px rgba(255, 205, 145, 0.58));
 }
+body.layout-basic .pari-wwxrp__burn[data-write] > b { grid-column: 2; }
 body.layout-basic .pari-wwxrp__burn[data-write]:hover:not(:disabled) {
   filter: brightness(1.12); transform: translateY(-1px);
 }
@@ -13647,6 +13689,13 @@ body.layout-basic .rvl-ticket-grid-stage--size-9 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(92vw, 510px, 68dvh);
   max-width: 510px;
+}
+/* OPEN ALL's later hands keep the small ripping pack above the 3x3 grid. Cap
+   that taller composition before the fixed action dock so the last ticket,
+   pack-history label, and continuation never occupy the same hit area. */
+body.layout-basic .rvl-ticket-pack-stage--inline-rip .rvl-ticket-grid-stage--size-9 {
+  width: min(92vw, 510px, 53dvh);
+  align-self: start;
 }
 
 body.layout-basic .rvl-foil-presentation {
@@ -16051,43 +16100,55 @@ body.layout-basic .play-grid > app-craps-entry { grid-area: craps; display: bloc
 /* Scheduled Craps launcher: one shared pot boost, one board, and seven dense buy rows. */
 body.layout-basic .craps-entry { position: relative; display: flex; box-sizing: border-box; width: 100%; height: 100%; min-height: 0; flex-direction: column; gap: .27rem; overflow: hidden; padding: .5rem .58rem; background: radial-gradient(circle at 96% 4%,rgba(239,68,68,.15),transparent 34%),linear-gradient(145deg,rgba(59,11,19,.24),transparent 52%); }
 body.layout-basic .craps-entry::before { position: absolute; right: -4rem; bottom: -6rem; width: 13rem; height: 13rem; border: 1px solid rgba(248,113,113,.08); border-radius: 50%; background: repeating-radial-gradient(circle,rgba(248,113,113,.04) 0 1px,transparent 1px 17px); content: ""; pointer-events: none; }
-body.layout-basic .craps-entry__head { position: relative; z-index: 1; display: grid; min-height: 2.42rem; grid-template-columns: 2.15rem minmax(3.7rem,.72fr) minmax(3.9rem,.66fr) minmax(5.5rem,1fr); align-items: center; gap: .28rem; padding: .2rem .34rem; overflow: hidden; border: 1px solid rgba(226,184,95,.38); border-radius: 7px; background: linear-gradient(180deg,rgba(69,13,26,.72),rgba(14,10,14,.83)); }
-body.layout-basic .craps-entry__dice { position: relative; display: block; width: 2.05rem; height: 1.62rem; } body.layout-basic .craps-entry__dice img { position: absolute; display: block; width: 1.45rem; height: 1.45rem; object-fit: contain; filter: drop-shadow(0 .12rem .18rem rgba(0,0,0,.5)); }
+body.layout-basic .craps-entry__head { position: relative; z-index: 1; display: grid; min-height: 3rem; grid-template-columns: minmax(6.3rem,1.05fr) minmax(5.25rem,.82fr) minmax(5.5rem,.9fr); align-items: stretch; gap: .3rem; padding: .24rem .3rem; overflow: hidden; border: 1px solid rgba(226,184,95,.42); border-radius: 8px; background: radial-gradient(circle at 14% 0,rgba(167,47,68,.22),transparent 48%),linear-gradient(180deg,rgba(48,12,21,.82),rgba(11,10,14,.92)); box-shadow: inset 0 1px rgba(255,238,201,.05); }
+body.layout-basic .craps-entry__brand { display: flex; min-width: 0; align-items: center; gap: .38rem; padding-inline: .08rem .2rem; }
+body.layout-basic .craps-entry__dice { position: relative; display: block; width: 2.2rem; height: 1.72rem; flex: 0 0 2.2rem; } body.layout-basic .craps-entry__dice img { position: absolute; display: block; width: 1.55rem; height: 1.55rem; object-fit: contain; filter: drop-shadow(0 .12rem .18rem rgba(0,0,0,.5)); }
 body.layout-basic .craps-entry__dice img:first-child { z-index: 1; top: 0; left: 0; transform: rotate(-7deg); } body.layout-basic .craps-entry__dice img:last-child { right: 0; bottom: 0; transform: rotate(7deg); }
-body.layout-basic .craps-entry__head h2 { display: grid; min-width: 0; gap: .02rem; margin: 0; color: #fff0d0; font: 950 .74rem/1 Georgia,serif; letter-spacing: .07em; white-space: nowrap; } body.layout-basic .craps-entry__head h2 small { color: #d7ae64; font: 950 .31rem/1 var(--font-sans,system-ui); letter-spacing: .12em; }
-body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) { display: grid; min-width: 0; align-content: center; gap: .07rem; padding-left: .34rem; overflow: hidden; border-left: 1px solid rgba(226,184,95,.25); }
-body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) > small { overflow: hidden; color: #9d929b; font-size: .3rem; font-weight: 950; letter-spacing: .035em; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__pot-boost > small { color: #d2b15e; }
-body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) strong { overflow: hidden; color: #e3a8ff; font: 950 .63rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__pot-boost strong { color: #ffe48d; } body.layout-basic .craps-entry__head em { color: #9f949c; font-size: .36rem; font-style: normal; }
+body.layout-basic .craps-entry__head h2 { display: grid; min-width: 0; gap: .04rem; margin: 0; white-space: nowrap; } body.layout-basic .craps-entry__head h2 small { color: #d7ae64; font: 950 .44rem/1 var(--font-sans,system-ui); letter-spacing: .1em; } body.layout-basic .craps-entry__head h2 strong { color: #fff0d0; font: 950 .94rem/1 Georgia,serif; letter-spacing: .06em; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) { display: grid; min-width: 0; align-content: center; gap: .08rem; padding: .25rem .34rem; overflow: hidden; border: 1px solid rgba(192,101,240,.28); border-radius: 5px; background: linear-gradient(135deg,rgba(143,67,187,.13),rgba(8,8,13,.42)); box-shadow: inset .12rem 0 #a965c9; }
+body.layout-basic .craps-entry__pot-boost { border-color: rgba(226,184,95,.3); background: linear-gradient(135deg,rgba(166,114,26,.14),rgba(8,8,13,.42)); box-shadow: inset .12rem 0 #c89b42; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) > small { overflow: hidden; color: #b98ad0; font-size: .48rem; font-weight: 950; letter-spacing: .015em; line-height: 1.05; text-overflow: ellipsis; white-space: normal; } body.layout-basic .craps-entry__pot-boost > small { color: #d2b15e; }
+body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost) strong { overflow: hidden; color: #e3a8ff; font: 950 .78rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__pot-boost strong { color: #ffe48d; } body.layout-basic .craps-entry__head em { color: #9f949c; font-size: .44rem; font-style: normal; }
 body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost)[data-state="loading"] strong { opacity: .5; } body.layout-basic :is(.craps-entry__progressive,.craps-entry__pot-boost)[data-state="unavailable"] strong { color: #aaa1a7; }
 body.layout-basic .craps-entry button { font: inherit; -webkit-tap-highlight-color: transparent; }
-body.layout-basic .craps-entry__setup { position: relative; z-index: 1; display: grid; min-height: 1.68rem; grid-template-columns: minmax(0,1.08fr) minmax(0,.92fr); gap: .27rem; }
-body.layout-basic .craps-entry__board { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .25rem; padding: .2rem .34rem; border: 1px solid rgba(248,113,113,.34); border-radius: 6px; background: rgba(13,17,23,.72); color: #f8fafc; cursor: pointer; text-align: left; } body.layout-basic .craps-entry__board > span { display: grid; min-width: 0; gap: .02rem; } body.layout-basic .craps-entry__board small { color: #919aa8; font-size: .34rem; font-weight: 900; letter-spacing: .07em; } body.layout-basic .craps-entry__board strong { overflow: hidden; font-size: .55rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__board > b { color: #fca5a5; font-size: .45rem; font-weight: 1000; letter-spacing: .025em; white-space: nowrap; }
+body.layout-basic .craps-entry__setup { position: relative; z-index: 1; display: grid; min-height: 2.08rem; grid-template-columns: minmax(0,1.08fr) minmax(0,.92fr); gap: .3rem; padding-top: .08rem; border-top: 1px solid rgba(226,184,95,.18); }
+body.layout-basic .craps-entry__board { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .25rem; padding: .22rem .38rem; border: 1px solid rgba(248,113,113,.4); border-radius: 6px; background: linear-gradient(180deg,rgba(61,20,27,.72),rgba(13,17,23,.82)); color: #f8fafc; cursor: pointer; text-align: left; } body.layout-basic .craps-entry__board > span { display: grid; min-width: 0; gap: .02rem; } body.layout-basic .craps-entry__board small { color: #c28b92; font-size: .46rem; font-weight: 900; letter-spacing: .045em; } body.layout-basic .craps-entry__board strong { overflow: hidden; font-size: .64rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__board > b { color: #fecaca; font-size: .54rem; font-weight: 1000; letter-spacing: .01em; white-space: nowrap; }
 body.layout-basic .craps-entry__lane { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: .1rem; border: 1px solid rgba(148,163,184,.23); border-radius: 6px; background: rgba(0,0,0,.24); }
-body.layout-basic .craps-entry__lane button { min-width: 0; padding: .2rem .1rem; border: 0; border-radius: 4px; background: transparent; color: #929ba9; font-size: .45rem; font-weight: 950; letter-spacing: .025em; cursor: pointer; } body.layout-basic .craps-entry__lane button small { display: block; margin-top: .05rem; color: inherit; font-size: .32rem; letter-spacing: .01em; } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.34),rgba(127,29,29,.32)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.28); }
-body.layout-basic .craps-entry__pass-wallet { display: flex; min-width: 0; grid-column: 1/-1; align-items: center; justify-content: center; gap: .24rem; margin-top: .08rem; padding-top: .11rem; border-top: 1px solid rgba(74,222,128,.16); color: #a7f3d0; font-size: .31rem; font-weight: 950; letter-spacing: .035em; white-space: nowrap; } body.layout-basic .craps-entry__pass-wallet[hidden],body.layout-basic .craps-entry__pass-wallet span[hidden] { display: none !important; } body.layout-basic .craps-entry__pass-wallet > small { color: #789587; font-size: .29rem; letter-spacing: .055em; } body.layout-basic .craps-entry__pass-wallet span { padding: .08rem .18rem; border: 1px solid rgba(74,222,128,.22); border-radius: 999px; background: rgba(20,83,45,.16); } body.layout-basic .craps-entry__pass-wallet span[data-selected="true"] { border-color: rgba(74,222,128,.52); background: rgba(22,101,52,.34); color: #dcfce7; }
+body.layout-basic .craps-entry__lane button { display: flex; min-width: 0; align-items: center; justify-content: center; gap: .25rem; padding: .2rem .1rem; border: 0; border-radius: 4px; background: transparent; color: #929ba9; font-size: .58rem; font-weight: 950; letter-spacing: .01em; cursor: pointer; } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.34),rgba(127,29,29,.32)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.28); }
+body.layout-basic .craps-entry__pass-count { display: inline-flex; box-sizing: border-box; min-width: .9rem; height: .9rem; align-items: center; justify-content: center; padding: 0 .13rem; border: 1px solid rgba(134,239,172,.64); border-radius: 999px; background: #168a4b; color: #f0fdf4; font: 1000 .46rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: 0; box-shadow: 0 .08rem .18rem rgba(0,0,0,.32); } body.layout-basic .craps-entry__pass-count[hidden] { display: none !important; }
 body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); }
-body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 17%; } body.layout-basic .craps-entry__col-wager { width: 29%; } body.layout-basic .craps-entry__col-goal { width: 10%; } body.layout-basic .craps-entry__col-action { width: 44%; }
-body.layout-basic .craps-entry__listing thead { background: rgba(0,0,0,.3); } body.layout-basic .craps-entry__listing thead th { height: .66rem; padding: .09rem .15rem; overflow: hidden; color: #7f8998; font-size: .34rem; font-weight: 950; letter-spacing: .035em; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing thead th:last-child { text-align: center; }
-body.layout-basic .craps-entry__listing tbody tr { height: 1.48rem; transition: background 120ms ease,opacity 120ms ease; } body.layout-basic .craps-entry__listing tbody tr + tr { border-top: 1px solid rgba(148,163,184,.11); } body.layout-basic .craps-entry__listing tbody tr:nth-child(odd):not(.craps-entry__day-buy) { background: rgba(255,255,255,.014); }
-body.layout-basic .craps-entry__listing tbody :is(th,td) { min-width: 0; padding: .13rem .15rem; overflow: hidden; font-size: .52rem; font-weight: 900; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th { padding-left: .26rem; }
-body.layout-basic .craps-entry__listing tbody th :is(strong,time,small) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th time { color: #e2e8f0; font: 950 .61rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; }
-body.layout-basic .craps-entry__terms strong { display: flex; min-width: 0; align-items: baseline; gap: .1rem; overflow: hidden; color: #f8fafc; font: 950 .59rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; white-space: nowrap; } body.layout-basic .craps-entry__terms strong span { min-width: 0; overflow: hidden; text-overflow: ellipsis; } body.layout-basic .craps-entry__terms strong span:last-child { color: #fde68a; } body.layout-basic .craps-entry__terms i { flex: 0 0 auto; color: #788493; font: 900 .44rem/1 "Inter",system-ui,sans-serif; }
-body.layout-basic .craps-entry__listing tbody td:nth-child(3) { color: #fde68a; font-size: .5rem; font-variant-numeric: tabular-nums; font-weight: 1000; }
-body.layout-basic .craps-entry__action { padding-inline: .1rem .18rem !important; text-align: right !important; } body.layout-basic .craps-entry__action > button,body.layout-basic .craps-entry__day-buy td > button { width: 100%; min-width: 0; height: 1.12rem; padding: .08rem; overflow: hidden; border: 1px solid rgba(252,165,165,.52); border-radius: 5px; background: linear-gradient(180deg,#d9394c,#8b1728); color: #fff; font-size: .48rem; font-weight: 1000; letter-spacing: .015em; text-overflow: ellipsis; white-space: nowrap; cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3,pointer; box-shadow: inset 0 1px rgba(255,255,255,.14); }
-body.layout-basic .craps-entry__listing button[data-state="entered"]:disabled { border-color: rgba(74,222,128,.45); background: linear-gradient(180deg,rgba(22,101,52,.7),rgba(20,83,45,.64)); color: #dcfce7; opacity: 1; } body.layout-basic .craps-entry__listing button[data-state="upgrade"] { border-color: rgba(253,224,71,.65); background: linear-gradient(180deg,#d99b24,#8c590c); color: #1d1200; }
-body.layout-basic .craps-entry__listing button[data-state="pass"] { border-color: rgba(74,222,128,.72); background: linear-gradient(180deg,#168a4b,#0d5a32); color: #ecfdf5; cursor: pointer; }
-body.layout-basic .craps-entry__entered { display: inline-flex; width: 100%; min-height: 1.12rem; align-items: center; justify-content: center; color: #86efac; font-size: .47rem; font-weight: 1000; letter-spacing: .07em; } body.layout-basic .craps-entry__entered[hidden] { display: none !important; }
-body.layout-basic .craps-entry__result { min-width: 0; padding: .18rem .34rem !important; } body.layout-basic .craps-entry__result-grid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,.9fr) minmax(0,.9fr); align-items: center; gap: .32rem; } body.layout-basic .craps-entry__result-grid > span { display: grid; min-width: 0; gap: .06rem; } body.layout-basic .craps-entry__result-grid > span + span { padding-left: .32rem; border-left: 1px solid rgba(74,222,128,.2); }
-body.layout-basic .craps-entry__result small { color: #8faf9a; font-size: .33rem; font-weight: 950; letter-spacing: .055em; } body.layout-basic .craps-entry__result strong { overflow: hidden; color: #d9fbe5; font: 1000 .52rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow: ellipsis; } body.layout-basic .craps-entry__result span:not(:first-child) strong { color: #fde68a; } body.layout-basic .craps-entry__result output { font: inherit; }
-body.layout-basic .craps-entry__day-buy { border-bottom: 1px solid rgba(253,224,71,.3); background: linear-gradient(90deg,rgba(250,204,21,.13),rgba(146,64,14,.05)); } body.layout-basic .craps-entry__day-buy th small { color: #d6b75d; font-size: .32rem; letter-spacing: .045em; } body.layout-basic .craps-entry__day-buy th strong { margin-top: .04rem; color: #fff7d6; font-size: .54rem; font-weight: 1000; } body.layout-basic .craps-entry__day-buy .craps-entry__terms strong span { color: #fde68a; } body.layout-basic .craps-entry__day-buy td:last-child { padding-inline: .1rem .18rem; } body.layout-basic .craps-entry__day-buy--tomorrow { border-top: 1px solid rgba(253,224,71,.3); border-bottom: 0; }
-body.layout-basic .craps-entry__day-buy[data-payment="pass"] { background: linear-gradient(90deg,rgba(34,197,94,.16),rgba(20,83,45,.04)); } body.layout-basic .craps-entry__day-buy[data-payment="pass"] .craps-entry__terms strong span { color: #86efac; }
+body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 15%; } body.layout-basic .craps-entry__col-wager { width: 15%; } body.layout-basic .craps-entry__col-operator { width: 3%; } body.layout-basic .craps-entry__col-battle { width: 15%; } body.layout-basic .craps-entry__col-goal { width: 12%; } body.layout-basic .craps-entry__col-action { width: 27%; } body.layout-basic .craps-entry__col-entrants { width: 13%; }
+body.layout-basic .craps-entry__listing thead { background: rgba(0,0,0,.3); } body.layout-basic .craps-entry__listing thead th { height: .86rem; padding: .09rem .08rem; overflow: hidden; color: #a8b2bf; font-size: .5rem; font-weight: 950; letter-spacing: .01em; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing thead th:nth-child(6),body.layout-basic .craps-entry__listing thead th:last-child { text-align: center; }
+body.layout-basic .craps-entry__listing tbody tr { height: 1.72rem; transition: background 120ms ease,opacity 120ms ease; } body.layout-basic .craps-entry__listing tbody tr + tr { border-top: 1px solid rgba(148,163,184,.11); } body.layout-basic .craps-entry__listing tbody tr:nth-child(odd):not(.craps-entry__day-buy) { background: rgba(255,255,255,.014); }
+body.layout-basic .craps-entry__listing tbody :is(th,td) { min-width: 0; padding: .13rem .15rem; overflow: hidden; font-size: .64rem; font-weight: 900; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th { padding-left: .26rem; }
+body.layout-basic .craps-entry__listing tbody th :is(strong,time,small) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th time { color: #e2e8f0; font: 950 .72rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; }
+body.layout-basic .craps-entry__money strong { display: block; min-width: 0; overflow: hidden; color: #f8fafc; font: 950 .68rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__battle-fee strong { color: #fde68a; }
+body.layout-basic .craps-entry__operator { padding-inline: 0 !important; color: #788493 !important; font: 950 .56rem/1 "Inter",system-ui,sans-serif !important; text-align: center !important; } body.layout-basic .craps-entry__goal { color: #fde68a; font-size: .62rem !important; font-variant-numeric: tabular-nums; font-weight: 1000 !important; } body.layout-basic .craps-entry__listing :is(th,td).craps-entry__wager { padding-right: .1rem; text-align: right !important; }
+body.layout-basic .craps-entry__battle .craps-entry__goal[data-difficulty="easy"] { color: #4ade80; } body.layout-basic .craps-entry__battle .craps-entry__goal[data-difficulty="hard"] { color: #f87171; }
+body.layout-basic .craps-entry__entrants { color: #a7f3d0; font: 1000 .62rem/1 ui-monospace,SFMono-Regular,Menlo,monospace !important; font-variant-numeric: tabular-nums; text-align: center !important; }
+body.layout-basic .craps-entry__action { padding-inline: .08rem !important; text-align: center !important; } body.layout-basic .craps-entry__action > button { width: min(100%,5.2rem); min-width: 0; height: 1.1rem; padding: .05rem .12rem; overflow: hidden; border: 1px solid rgba(253,224,71,.72); border-radius: 4px; background: linear-gradient(180deg,#f5c842,#b8790a); color: #241600; font-size: .55rem; font-weight: 1000; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3,pointer; box-shadow: inset 0 1px rgba(255,255,255,.28),0 .06rem .14rem rgba(0,0,0,.25); }
+body.layout-basic .craps-entry__listing button[data-state="entered"] { border-color: rgba(74,222,128,.58); background: linear-gradient(180deg,rgba(22,101,52,.88),rgba(20,83,45,.82)); color: #dcfce7; opacity: 1; cursor: pointer; } body.layout-basic .craps-entry__listing button[data-state="amend"] { border-color: rgba(251,191,36,.82); background: linear-gradient(180deg,#f0ad28,#a9670a); color: #1f1300; cursor: pointer; } body.layout-basic .craps-entry__listing button[data-state="upgrade"] { border-color: rgba(253,224,71,.65); background: linear-gradient(180deg,#d99b24,#8c590c); color: #1d1200; }
+body.layout-basic .craps-entry__listing button[data-state="pass"] { cursor: pointer; }
+body.layout-basic .craps-entry__entered { display: inline-flex; width: 100%; min-height: 1.1rem; align-items: center; justify-content: center; color: #86efac; font-size: .55rem; font-weight: 1000; letter-spacing: .04em; } body.layout-basic .craps-entry__entered[hidden] { display: none !important; }
+body.layout-basic .craps-entry__result { min-width: 0; padding: .18rem .34rem !important; } body.layout-basic .craps-entry__result-grid { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,1.5fr) minmax(3rem,.7fr); align-items: center; gap: .32rem; } body.layout-basic .craps-entry__result-grid > span { display: grid; min-width: 0; gap: .06rem; } body.layout-basic .craps-entry__result-grid > span + span { padding-left: .32rem; border-left: 1px solid color-mix(in srgb,var(--craps-winner-accent,#8b949e) 35%,transparent); }
+body.layout-basic .craps-entry__result-grid[hidden],body.layout-basic .craps-entry__result-locked[hidden] { display: none !important; }
+body.layout-basic .craps-entry__result-locked { display: flex; min-height: 1rem; align-items: center; gap: .38rem; } body.layout-basic .craps-entry__result-locked small { color: #94a3b8; } body.layout-basic .craps-entry__result-locked strong { color: #e2e8f0; letter-spacing: .045em; }
+body.layout-basic .craps-entry__result small { min-width: 0; overflow: hidden; color: color-mix(in srgb,var(--craps-winner-accent,#8b949e) 76%,#dce3e8); font-size: .48rem; font-weight: 950; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__result strong { overflow: hidden; color: color-mix(in srgb,var(--craps-winner-accent,#8b949e) 36%,#f3f6f8); font: 1000 .64rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__result span:not(:first-child) strong { color: #fde68a; } body.layout-basic .craps-entry__result output { font: inherit; } body.layout-basic .craps-entry__result-total > strong { display: flex; min-width: 0; align-items: center; gap: .16rem; } body.layout-basic .craps-entry__result-total > strong > output:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; } body.layout-basic .craps-entry__boost-mark { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .08rem; padding: .07rem .2rem .07rem .14rem; border: 1px solid color-mix(in srgb,var(--craps-winner-accent,#8b949e) 48%,#facc15); border-radius: 999px; background: color-mix(in srgb,var(--craps-winner-accent,#8b949e) 13%,rgba(250,204,21,.09)); color: color-mix(in srgb,var(--craps-winner-accent,#8b949e) 34%,#fde68a); font-size: .76em; font-style: normal; line-height: 1; } body.layout-basic .craps-entry__boost-mark[hidden] { display: none !important; } body.layout-basic .craps-entry__boost-mark::before { width: .34rem; height: .48rem; flex: 0 0 auto; background: currentColor; clip-path: polygon(53% 0,13% 56%,42% 56%,30% 100%,89% 37%,59% 37%); content: ""; filter: drop-shadow(0 0 .12rem currentColor); } body.layout-basic .craps-entry__result-buyin { justify-items: end; text-align: right; }
+body.layout-basic .craps-entry__day-buy { border-bottom: 1px solid rgba(253,224,71,.3); background: linear-gradient(90deg,rgba(250,204,21,.13),rgba(146,64,14,.05)); } body.layout-basic .craps-entry__day-buy th small { color: #d6b75d; font-size: .44rem; letter-spacing: .025em; } body.layout-basic .craps-entry__day-buy th strong { margin-top: .04rem; color: #fff7d6; font-size: .6rem; font-weight: 1000; } body.layout-basic .craps-entry__day-buy .craps-entry__money strong { color: #fde68a; } body.layout-basic .craps-entry__day-buy--tomorrow { border-top: 1px solid rgba(253,224,71,.3); border-bottom: 0; }
+body.layout-basic .craps-entry__day-buy[data-payment="pass"] { background: linear-gradient(90deg,rgba(34,197,94,.16),rgba(20,83,45,.04)); } body.layout-basic .craps-entry__day-buy[data-payment="pass"] .craps-entry__money strong { color: #86efac; }
+/* A blind seven-battle reservation keeps its rollover clock in CLOSES IN and
+   reads the combined cost and scope on one line: "4.2K–126K  7 BATTLES". */
+body.layout-basic .craps-entry__listing :is(th,td).craps-entry__tomorrow-range { display: table-cell; text-align: left !important; } body.layout-basic .craps-entry__tomorrow-range small, body.layout-basic .craps-entry__range-note { color: #d6b75d; font-size: .52rem; font-weight: 950; letter-spacing: .01em; white-space: nowrap; } body.layout-basic .craps-entry__tomorrow-range strong { display: inline-block !important; overflow: visible; white-space: nowrap; } body.layout-basic .craps-entry__tomorrow-range small { display: inline-block; margin-left: .45rem; vertical-align: .04rem; } body.layout-basic .craps-entry__range-note[hidden] { display: none !important; }
+/* Winner identity: the linked Discord face and name; the address survives in the title. */
+body.layout-basic .craps-entry__winner-pfp { width: .74rem; height: .74rem; margin-right: .14rem; border: 1px solid color-mix(in srgb,var(--craps-winner-accent,#8b949e) 58%,transparent); border-radius: 50%; object-fit: cover; vertical-align: -.18rem; }
 body.layout-basic .craps-entry__battle[data-state="current"] { background: linear-gradient(90deg,rgba(180,83,9,.26),rgba(250,204,21,.035)); box-shadow: inset .16rem 0 #facc15; } body.layout-basic .craps-entry__battle[data-entry]:not([data-entry="none"]):not([data-state="completed"]) { background-color: rgba(20,83,45,.1); }
-body.layout-basic .craps-entry__battle[data-state="completed"] { height: 1.55rem; background: linear-gradient(90deg,rgba(20,83,45,.28),rgba(250,204,21,.03)); box-shadow: inset .16rem 0 #4ade80; }
+body.layout-basic .craps-entry__battle[data-state="completed"] { --craps-winner-accent: #8b949e; height: 1.78rem; background: linear-gradient(90deg,rgba(71,80,89,.34),rgba(35,40,46,.08)); box-shadow: inset .16rem 0 var(--craps-winner-accent); }
+body.layout-basic .craps-entry__battle[data-state="completed"][data-goal-result="met"] { --craps-winner-accent: #38a9f4; background: linear-gradient(90deg,rgba(12,93,155,.38),rgba(30,101,151,.07)); }
 body.layout-basic .craps-entry__battle[data-state="closed"] { filter: saturate(.3); opacity: .4; } body.layout-basic .craps-entry__battle[data-terms="loading"] { opacity: .62; }
 body.layout-basic .craps-entry button:hover:not(:disabled) { filter: brightness(1.09); } body.layout-basic .craps-entry button:disabled { cursor: default; opacity: .45; } body.layout-basic .craps-entry button[data-terms="loading"] { cursor: wait; } body.layout-basic .craps-entry button:focus-visible { outline: 2px solid #fde68a; outline-offset: 2px; }
-body.layout-basic .craps-entry__foot { position: relative; z-index: 1; min-height: .7rem; margin-top: auto; overflow: hidden; color: #8e98a6; font-size: .44rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__foot[data-state="message"] { color: #fca5a5; }
+body.layout-basic .craps-entry__foot { position: relative; z-index: 1; min-height: .84rem; margin-top: auto; overflow: hidden; color: #a1aab6; font-size: .56rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__foot[data-state="message"] { color: #fca5a5; }
 
-@media (max-width: 380px) { body.layout-basic .craps-entry { padding-inline: .44rem; } body.layout-basic .craps-entry__head { grid-template-columns: 1.85rem minmax(3.25rem,.64fr) minmax(3.4rem,.62fr) minmax(4.6rem,1fr); gap: .2rem; padding-inline: .25rem; } body.layout-basic .craps-entry__dice { width: 1.75rem; } body.layout-basic .craps-entry__head em { display: none; } }
+@media (max-width: 380px) { body.layout-basic .craps-entry { padding-inline: .44rem; } body.layout-basic .craps-entry__head { grid-template-columns: minmax(5.2rem,1fr) minmax(4.25rem,.8fr) minmax(4.4rem,.84fr); gap: .2rem; padding-inline: .25rem; } body.layout-basic .craps-entry__brand { gap: .24rem; padding-right: .08rem; } body.layout-basic .craps-entry__dice { width: 1.8rem; flex-basis: 1.8rem; } body.layout-basic .craps-entry__dice img { width: 1.35rem; height: 1.35rem; } body.layout-basic .craps-entry__head h2 strong { font-size: .82rem; } body.layout-basic .craps-entry__head em { display: none; } }
 
 body.layout-basic .play-grid .panel {
   box-sizing: border-box;
@@ -16151,7 +16212,11 @@ body.layout-basic .side-bets-rail .app-parimutuel {
    market shell (and its empty full-width runway), then line the compact rail's
    action edge up with the DGNRS burn key directly below it. */
 body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
-  margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 body.layout-basic .side-bets-rail .pari-books {
@@ -16251,9 +16316,13 @@ body.layout-basic .side-bets-rail .pari-error {
     grid-template-rows: auto;
   }
 
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn { width: 100%; }
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
+    width: 100%;
+  }
 
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small { display: inline; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small {
+    display: inline;
+  }
 }
 
 body.layout-basic .play-grid .qst-header {
@@ -16656,6 +16725,7 @@ body.layout-basic .play-grid .qst-slot-core {
   gap: 0.55rem;
 }
 body.layout-basic .play-grid .qst-slot-icon {
+  position: relative;
   display: grid;
   flex: 0 0 2.65rem;
   width: 2.65rem;
@@ -16698,6 +16768,22 @@ body.layout-basic .qst-action-dialog__sigil img.qst-painted-icon__flip-mark {
   object-fit: contain;
   pointer-events: none;
   transform: translate(-50%, -50%);
+}
+body.layout-basic :is(.play-grid .qst-slot-icon, .qst-action-dialog__sigil > [data-bind="qst-action-icon"]).qst-painted-icon--craps-dice {
+  isolation: isolate;
+}
+body.layout-basic .play-grid .qst-slot-icon img:is(.qst-painted-icon__craps-front, .qst-painted-icon__craps-back),
+body.layout-basic .qst-action-dialog__sigil img:is(.qst-painted-icon__craps-front, .qst-painted-icon__craps-back) {
+  position: absolute; max-width: none; object-fit: contain; pointer-events: none;
+}
+body.layout-basic .play-grid .qst-slot-icon img.qst-painted-icon__craps-front,
+body.layout-basic .qst-action-dialog__sigil img.qst-painted-icon__craps-front {
+  z-index: 2; right: -2%; bottom: -2%; width: 82%; height: 82%;
+}
+body.layout-basic .play-grid .qst-slot-icon img.qst-painted-icon__craps-back,
+body.layout-basic .qst-action-dialog__sigil img.qst-painted-icon__craps-back {
+  z-index: 1; top: -2%; left: -2%; width: 64%; height: 64%;
+  filter: brightness(0.9) drop-shadow(0 1px 4px rgba(19, 23, 247, 0.42));
 }
 body.layout-basic .play-grid .qst-slot-copy {
   display: grid;
@@ -17395,8 +17481,8 @@ body.layout-basic .qst-action-dialog__hint {
   body.layout-basic .play-grid {
     grid-template-columns:
       minmax(250px, 0.78fr)
-      minmax(420px, 1.4fr)
-      minmax(260px, 0.82fr);
+      minmax(390px, 1.3fr)
+      minmax(290px, 0.92fr);
     grid-template-areas: "quests degenerette craps";
   }
   body.layout-basic .play-grid > app-degenerette-panel {
@@ -19592,6 +19678,71 @@ body.layout-basic .deg-currency-option[data-bind="deg-currency-option-0"] img {
 }
 .rvl-card--coinflip-result.rvl-card--outcome-win .rvl-card-sub--coinflip { color: #86efac; }
 .rvl-card--coinflip-result.rvl-card--outcome-loss .rvl-card-sub--coinflip { color: #86efac; }
+
+/* Craps day receipts use the table's red felt and gold trim, with the payout
+   kept green so it reads as a settled win rather than another wager control. */
+.rvl-card--craps-result {
+  border-color: rgba(226, 184, 95, 0.82) !important;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(248, 113, 113, 0.2), transparent 48%),
+    linear-gradient(155deg, rgba(80, 17, 31, 0.94), rgba(15, 10, 15, 0.99)) !important;
+  box-shadow: 0 0 28px rgba(185, 111, 28, 0.24), inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+}
+.rvl-card--craps-result .rvl-card-value { color: #86efac !important; }
+.rvl-card--craps-result .rvl-card-label { color: #ffe7a3 !important; }
+.rvl-card--craps-result .rvl-card-sub { color: #a7f3d0; }
+.rvl-card-icon--craps-result { padding: 0.38rem !important; }
+.rvl-craps-result-badge {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(226, 184, 95, 0.82);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(151, 31, 49, 0.72), rgba(33, 9, 16, 0.96) 70%);
+  box-shadow: inset 0 0 18px rgba(0,0,0,0.5), 0 5px 12px rgba(0,0,0,0.35);
+}
+.rvl-craps-result-badge__dice {
+  position: relative;
+  display: block;
+  width: 72%;
+  height: 58%;
+  transform: translateY(-8%);
+}
+.rvl-craps-result-badge__dice img {
+  position: absolute;
+  top: 0;
+  width: 58%;
+  height: auto;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.56));
+}
+.rvl-craps-result-badge__dice img:first-child {
+  left: 0;
+  z-index: 1;
+  transform: rotate(-8deg);
+}
+.rvl-craps-result-badge__dice img:last-child {
+  right: 0;
+  transform: rotate(8deg);
+}
+.rvl-craps-result-badge__band {
+  position: absolute;
+  right: 13%;
+  bottom: 12%;
+  left: 13%;
+  padding: 0.22em 0.35em;
+  border: 1px solid rgba(255,255,255,0.24);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f4cb69, #a96912);
+  color: #231400;
+  font: 1000 clamp(0.34rem, 1.1vw, 0.62rem)/1 "Roboto Mono", monospace;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
 body.layout-basic .dgn-inline-spin .dgn-rq.dgn-lock-color {
   border-bottom-color: #f5a623;
   border-bottom-width: 3px;
@@ -24636,7 +24787,8 @@ body.layout-basic .pfd-asset__name { display: grid; min-width: 0; gap: 0.22rem; 
 body.layout-basic .pfd-asset__name strong { color: #fff7ed; font: 900 0.8rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.05em; }
 body.layout-basic .pfd-asset__name small,
 body.layout-basic .pfd-available small,
-body.layout-basic .pfd-link__stats small {
+body.layout-basic .pfd-link__stats small,
+body.layout-basic .pfd-link__quote small {
   overflow: hidden;
   color: rgba(254, 226, 226, 0.46);
   font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
@@ -24646,7 +24798,8 @@ body.layout-basic .pfd-link__stats small {
 }
 body.layout-basic .pfd-available { display: grid; min-width: 0; max-width: 56%; gap: 0.22rem; text-align: right; }
 body.layout-basic .pfd-available > strong,
-body.layout-basic .pfd-link__stats strong {
+body.layout-basic .pfd-link__stats strong,
+body.layout-basic .pfd-link__quote > span > strong {
   display: block;
   overflow: hidden;
   color: var(--pfd-accent);
@@ -24736,6 +24889,32 @@ body.layout-basic .pfd-link__stats > span {
   gap: 0.25rem;
 }
 body.layout-basic .pfd-link__stats > span:last-child { text-align: right; }
+body.layout-basic .pfd-link__quote {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 0.72fr) minmax(0, 1.55fr);
+  min-width: 0;
+  gap: 0.62rem;
+  margin-top: 0.58rem;
+  padding: 0.58rem 0.62rem;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 9px;
+  background: linear-gradient(120deg, rgba(59, 130, 246, 0.11), rgba(251, 191, 36, 0.045));
+}
+body.layout-basic .pfd-link__quote > span { display: grid; min-width: 0; gap: 0.24rem; }
+body.layout-basic .pfd-link__quote > span + span { padding-left: 0.62rem; border-left: 1px solid rgba(147, 197, 253, 0.16); text-align: right; }
+body.layout-basic .pfd-link__quote[data-state="loading"],
+body.layout-basic .pfd-link__quote[data-state="unavailable"] { opacity: 0.62; }
+body.layout-basic .pfd-link__conversion > strong {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  font-size: 0.75rem;
+}
+body.layout-basic .pfd-link__conversion output { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .pfd-link__conversion output:first-child { color: #bfdbfe; }
+body.layout-basic .pfd-link__conversion output:last-child { color: #fde68a; }
+body.layout-basic .pfd-link__conversion i { flex: 0 0 auto; color: rgba(219, 234, 254, 0.42); font-style: normal; }
 body.layout-basic .pfd-link > p { margin: 0.5rem 0 0.62rem; color: rgba(219, 234, 254, 0.48); font: 600 0.56rem/1.4 "Inter", system-ui, sans-serif; }
 body.layout-basic .pfd-error {
   margin: 0.65rem 0 0;
@@ -24824,7 +25003,18 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 .rvl-vessel-pack-actions--lootboxes.is-loading {
   opacity: 0.72;
 }
-.rvl-ticket-actions { justify-content: center; }
+.rvl-ticket-actions {
+  z-index: 12;
+  justify-content: center;
+  pointer-events: auto;
+}
+.rvl-ticket-actions > button,
+.rvl-ticket-actions .rvl-pack-history-actions > button {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
 .rvl-dgn-actions:is(.rvl-dgn-actions--box, .rvl-dgn-actions--result-exit, .rvl-dgn-actions--result-ready) {
   width: min(15rem, calc(100vw - 1.7rem));
 }
@@ -24890,7 +25080,7 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
   }
 }
 
-/* Craps passes are physical day tickets, not another token balance. The same
+/* Craps comps are physical day entries, not another token balance. The same
    dice badge used by the battle table is mounted into a clipped pass face;
    normal and 19x high-roller denominations keep unmistakably different felt. */
 .rvl-card--craps-pass {

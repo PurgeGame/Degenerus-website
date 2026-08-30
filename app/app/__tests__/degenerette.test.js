@@ -570,6 +570,11 @@ describe('degenerette fresh-state and community resolution', () => {
     assert.ok(queries.every((query) => query.to - query.from < 1800));
     assert.ok(queries.every((query) => query.filter.player === CONNECTED));
     assert.ok(queries.every((query) => query.filter.betId === 42n));
+    assert.equal(
+      (await degeneretteMod.readResolvedBet({ player: CONNECTED, betId: 42 })).resolved.totalPayout,
+      5n,
+    );
+    assert.equal(queries.length, 2, 'an immutable resolved replay is never scanned twice');
   });
 
   test('chain replay refuses duplicate spin indexes that leave a later spin missing', async () => {

@@ -4,7 +4,7 @@ import { get, subscribe } from '../app/store.js';
 import { questObjectiveIndicatorModel } from '../app/quest-objectives.js';
 
 class QuestObjectiveIndicator extends HTMLElement {
-  static get observedAttributes() { return ['product']; }
+  static get observedAttributes() { return ['product', 'quest-roles']; }
 
   #unsub = null;
 
@@ -36,7 +36,8 @@ class QuestObjectiveIndicator extends HTMLElement {
 
   #activate = (event) => {
     const product = this.getAttribute?.('product') || '';
-    const model = questObjectiveIndicatorModel(get('ui.questObjectives'), product);
+    const roles = this.getAttribute?.('quest-roles') || '';
+    const model = questObjectiveIndicatorModel(get('ui.questObjectives'), product, roles);
     if (!model || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
     try { event?.preventDefault?.(); } catch (_e) { /* cross-realm event */ }
     try { event?.stopPropagation?.(); } catch (_e) { /* cross-realm event */ }
@@ -62,7 +63,8 @@ class QuestObjectiveIndicator extends HTMLElement {
 
   #render() {
     const product = this.getAttribute?.('product') || '';
-    const model = questObjectiveIndicatorModel(get('ui.questObjectives'), product);
+    const roles = this.getAttribute?.('quest-roles') || '';
+    const model = questObjectiveIndicatorModel(get('ui.questObjectives'), product, roles);
     this.hidden = !model;
     this.textContent = '';
     if (!model) {

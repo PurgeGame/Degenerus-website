@@ -371,9 +371,6 @@ const SPIN_LABELS = Object.freeze({
 const DGN_UNITS = Object.freeze({ 0: 'ETH', 1: 'FLIP', 3: 'WWXRP' });
 const DGN_CARD_TYPES = Object.freeze({ 0: 'eth', 1: 'flip', 3: 'wwxrp' });
 const BOX_SPIN_CURRENCIES = Object.freeze({ eth: 0, flip: 1, record: 1, wwxrp: 3 });
-// FlipRoundLib.FLIP_ROUND_THRESHOLD: above this a surviving FLIP mint is
-// collapsed onto a whole 100-FLIP multiple, so halving it is an estimate.
-const FLIP_ROUND_THRESHOLD = 1_000n * (10n ** 18n);
 const TOKEN_WEI = 10n ** 18n;
 // FoilPackModule._payFoilTier sends `faces * 1,000 FLIP` into its three-reel
 // FLIP lane. The final BoxSpin payout is zero when survival loses, but this
@@ -402,15 +399,15 @@ const PACK_BATCH_SKIP_TTL_MS = 5 * 60_000;
 // next ready Pending pack. A healthy indexer answers well inside this; a slow
 // one must not freeze the wrapper behind a disabled close button.
 const PENDING_PACK_HANDOFF_MS = 4_000;
-// The denomination lock uses the Daily Flip's complete 3.3s airborne track
-// plus 0.7s landing at 1x. The player's reveal-speed preference scales both
-// authored phases together, so the face switch and the wait remain in sync.
-const BOX_CURRENCY_FLIP_MS = 4_000;
+// The denomination lock uses a compressed 1.65s airborne track plus 0.35s
+// landing at 1x. The player's reveal-speed preference scales both authored
+// phases together, so the face switch and the wait remain in sync.
+const BOX_CURRENCY_FLIP_MS = 2_000;
 const BOX_CURRENCY_RESULT_MS = 850;
-// Match the ordinary daily coinflip: one 3.3s toss plus its 0.7s truthful
-// landing. Survival never inherits reel/reveal speed and never gets a Reverse
-// Flip correction, so the double-or-nothing result is readable every time.
-const SURVIVAL_FLIP_MS = 4_000;
+// Use the same compressed 1.65s toss plus its 0.35s truthful landing. Survival
+// never inherits reel/reveal speed and never gets a Reverse Flip correction,
+// so the double-or-nothing result is readable every time.
+const SURVIVAL_FLIP_MS = 2_000;
 const SURVIVAL_RESULT_MS = 950;
 
 const TRAIT_LABEL_OVERRIDES = Object.freeze({ cashsack: 'CASH SACK' });
@@ -901,25 +898,28 @@ export function buildBoxSpinBoard(spin) {
   const estimatedAtRisk = flipLike
     ? _humanBoxSpinPayoutEstimate(spin, rows)
     : null;
-  // Keep the pre-flip meter outcome-neutral. If exact event-block enrichment
-  // is unavailable, both branches start from the same physical-box estimate;
-  // a surviving branch may reconcile to its emitted payout only after the
-  // survival coin lands. Above 1,000 FLIP that emitted payout was collapsed
-  // onto a whole 100-FLIP granule, so halving it remains approximate.
+  // A surviving settlement is authoritative even when historical enrichment
+  // is unavailable. Use its known half for the reel pot immediately; only a
+  // busted branch needs the physical-box estimate. This also makes a lone
+  // paying reel exact instead of showing an unrelated average-roll amount.
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
-  const payoutAtRisk = explicitAtRisk > 0n
-    ? explicitAtRisk
-    : (reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? inferredAtRisk);
-  const payoutAtRiskApproximate = explicitAtRisk > 0n
-    ? false
-    : reconstructedAtRisk != null
-      ? reconstructedAtRisk.approximate
-      : estimatedAtRisk != null
-        ? true
-        : inferredAtRisk > 0n && total > FLIP_ROUND_THRESHOLD;
   const exactReconstructedAtRisk = reconstructedAtRisk?.approximate === false
     ? reconstructedAtRisk.amount
     : 0n;
+  const payoutAtRisk = explicitAtRisk > 0n
+    ? explicitAtRisk
+    : exactReconstructedAtRisk > 0n
+      ? exactReconstructedAtRisk
+      : inferredAtRisk > 0n
+        ? inferredAtRisk
+        : (reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? 0n);
+  const payoutAtRiskApproximate = explicitAtRisk > 0n
+    || exactReconstructedAtRisk > 0n
+    || inferredAtRisk > 0n
+    ? false
+    : reconstructedAtRisk != null
+      ? reconstructedAtRisk.approximate
+      : estimatedAtRisk != null;
   const settledPayoutAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
     : exactReconstructedAtRisk > 0n
@@ -931,12 +931,13 @@ export function buildBoxSpinBoard(spin) {
     || exactReconstructedAtRisk > 0n
     ? false
     : inferredAtRisk > 0n
-      ? total > FLIP_ROUND_THRESHOLD
+      ? false
       : reconstructedAtRisk != null
         ? reconstructedAtRisk.approximate
         : estimatedAtRisk != null;
   const suppliedSurvivalWinPayout = _safeBigInt(spin?.survivalWinPayout);
   const survivalWinPayout = suppliedSurvivalWinPayout
+    || (survivalStake && total > 0n ? total : 0n)
     || (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n);
   const settledSurvivalWinPayout = suppliedSurvivalWinPayout
     || (survivalStake && total > 0n ? total : 0n)
@@ -958,10 +959,11 @@ export function buildBoxSpinBoard(spin) {
     survivalStake,
     payoutAtRisk,
     payoutAtRiskApproximate,
-    // Both branches keep the same outcome-neutral pre-flip prize. Once the
-    // coin settles, the emitted survivor payout may replace that estimate.
+    // Survivors use their emitted payout immediately; busted branches keep a
+    // realistic estimate until an exact pre-survival amount is available.
     survivalWinPayout,
     survivalWinPayoutApproximate: suppliedSurvivalWinPayout <= 0n
+      && total <= 0n
       && payoutAtRiskApproximate,
     settledPayoutAtRisk,
     settledPayoutAtRiskApproximate,
@@ -1086,8 +1088,8 @@ function _crapsPassCards(leg) {
       icon: null,
       glyph: null,
       label: highRoller
-        ? `HIGH-ROLLER CRAPS ${count === 1 ? 'BATTLEPASS' : 'BATTLEPASSES'}`
-        : `CRAPS ${count === 1 ? 'BATTLEPASS' : 'BATTLEPASSES'}`,
+        ? `HIGH-ROLLER CRAPS ${count === 1 ? 'COMP' : 'COMPS'}`
+        : `CRAPS ${count === 1 ? 'COMP' : 'COMPS'}`,
       value: countText,
       sub: `${highRoller ? 'High-roller seat in' : 'Entry to'} all 7 scheduled windows · ${status}`,
       countText,
@@ -2180,6 +2182,20 @@ export function normalizeSequence(seq) {
         outcomeLabel: flipWon ? 'WIN' : null,
         outcomePercent: flipWon ? `${100 + rewardPercent}%` : null,
         consolationWwxrp: flipWon ? null : `+${_tokenText(consolationWwxrp)} WWXRP`,
+        summaryDetail: true,
+        countText: null,
+        spin: null,
+      });
+    }
+    const crapsWinnings = _safeBigInt(activity.crapsWinningsAmount);
+    const crapsWinCount = Math.max(0, Math.trunc(Number(activity.crapsWinCount) || 0));
+    if (crapsWinnings > 0n && crapsWinCount > 0) {
+      cards.push({
+        type: 'craps-result', rarity: 'rare', icon: null, glyph: null,
+        label: 'CRAPS WINNINGS',
+        value: `+${_tokenText(crapsWinnings)} FLIP`,
+        sub: `${crapsWinCount} WINNING ${crapsWinCount === 1 ? 'BATTLE' : 'BATTLES'}`,
+        crapsWinCount,
         summaryDetail: true,
         countText: null,
         spin: null,
@@ -5221,7 +5237,8 @@ class RevealOverlay extends HTMLElement {
           board,
           built,
           board.payoutAtRiskApproximate === true
-            || winningRows.some((row) => row.previewApproximate === true),
+            || (remaining > 0
+              && winningRows.some((row) => row.previewApproximate === true)),
         )
       : (remaining > 0
           ? `${winningRows.length} SO FAR`
@@ -5755,7 +5772,7 @@ class RevealOverlay extends HTMLElement {
 
     if (!reducedMotion) {
       const revealSpeed = Math.max(0.5, Math.min(3, Number(readDegeneretteSpeed()) || 1));
-      const landingBaseMs = 700;
+      const landingBaseMs = 350;
       const trackMs = Math.max(1, Math.round(
         (BOX_CURRENCY_FLIP_MS - landingBaseMs) / revealSpeed,
       ));
@@ -6666,13 +6683,33 @@ class RevealOverlay extends HTMLElement {
     }
     const band = document.createElement('span');
     band.className = 'rvl-craps-pass-badge__band';
-    band.textContent = card.passTier === 'high' ? 'HIGH ROLLER' : 'BATTLEPASS';
+    band.textContent = card.passTier === 'high' ? 'HIGH ROLLER' : 'COMP';
     const windows = document.createElement('small');
     windows.className = 'rvl-craps-pass-badge__windows';
     windows.textContent = '7 WINDOWS';
     badge.appendChild(dice);
     badge.appendChild(band);
     badge.appendChild(windows);
+    return badge;
+  }
+
+  #buildCrapsResultBadge() {
+    const badge = document.createElement('div');
+    badge.className = 'rvl-craps-result-badge';
+    const dice = document.createElement('span');
+    dice.className = 'rvl-craps-result-badge__dice';
+    for (const [symbol, color] of [[1, 6], [4, 4]]) {
+      const die = document.createElement('img');
+      die.src = dgnBadgePath(3, symbol, color);
+      die.alt = '';
+      die.decoding = 'async';
+      dice.appendChild(die);
+    }
+    const band = document.createElement('span');
+    band.className = 'rvl-craps-result-badge__band';
+    band.textContent = 'CRAPS';
+    badge.appendChild(dice);
+    badge.appendChild(band);
     return badge;
   }
 
@@ -6900,6 +6937,9 @@ class RevealOverlay extends HTMLElement {
     } else if (card.type === 'craps-pass') {
       icon.className = 'rvl-card-icon rvl-card-icon--craps-pass';
       icon.appendChild(this.#buildCrapsPassBadge(card));
+    } else if (card.type === 'craps-result') {
+      icon.className = 'rvl-card-icon rvl-card-icon--craps-result';
+      icon.appendChild(this.#buildCrapsResultBadge());
     } else if (card.icon) {
       // A pile-scale FLIP prize renders as its chip pile: a wide bottom-
       // anchored lane instead of the square logo slot.

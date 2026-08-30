@@ -76,3 +76,33 @@ test('bad arguments return a no-op unregister', () => {
   assert.equal(typeof cp.registerComponentPoll(() => {}, 0), 'function');
   assert.equal(cp._componentPollStatsForTests().registered, 0);
 });
+
+test('slow async ticks are single-flight and collapse into one trailing refresh', async () => {
+  let calls = 0;
+  let active = 0;
+  let maxActive = 0;
+  const releases = [];
+  const unregister = cp.registerComponentPoll(() => {
+    calls += 1;
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    return new Promise((resolve) => {
+      releases.push(() => {
+        active -= 1;
+        resolve();
+      });
+    });
+  }, 10);
+
+  await sleep(36);
+  assert.equal(calls, 1, 'interval ticks do not overlap the first slow request');
+  releases.shift()();
+  await sleep(2);
+  assert.equal(calls, 2, 'missed ticks become one immediate trailing refresh');
+  assert.equal(maxActive, 1);
+
+  unregister();
+  releases.shift()();
+  await sleep(15);
+  assert.equal(calls, 2, 'finishing after unregister cannot schedule more work');
+});

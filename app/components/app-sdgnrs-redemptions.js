@@ -10,6 +10,7 @@ import { CHAIN } from '../app/chain-config.js';
 import { getProvider } from '../app/contracts.js';
 import { subscribe } from '../app/store.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { permissionlessReadProvider, readTransactionReceipt } from '../app/read-provider.js';
 import {
   claimSdgnrsRedemption,
   discoverSdgnrsRedemptions,
@@ -186,7 +187,7 @@ class AppSdgnrsRedemptions extends HTMLElement {
       this.#publish();
       if (this.#address) void this.#refresh();
     });
-    this.#poll = registerComponentPoll(() => void this.#refresh(), POLL_MS);
+    this.#poll = registerComponentPoll(() => this.#refresh(), POLL_MS);
   }
 
   disconnectedCallback() {
@@ -243,16 +244,13 @@ class AppSdgnrsRedemptions extends HTMLElement {
     const owner = this.#address;
     try {
       const stored = _readPeriods(owner);
-      const [discovered, ...storedStates] = await Promise.all([
-        discoverSdgnrsRedemptions({ player: owner }),
-        ...stored.map((periodIndex) => readSdgnrsRedemptionState({
-          player: owner,
-          periodIndex,
-        })),
-      ]);
+      const discovered = await discoverSdgnrsRedemptions({
+        player: owner,
+        periodIndexes: stored,
+      });
       if (this.#address !== owner) return;
       const states = new Map();
-      for (const state of [...(discovered?.periods || []), ...storedStates]) {
+      for (const state of discovered?.periods || []) {
         if (!state?.exists) continue;
         const periodIndex = Number(state.periodIndex);
         const prior = states.get(periodIndex);
@@ -291,9 +289,9 @@ class AppSdgnrsRedemptions extends HTMLElement {
   }
 
   async #receipt(transactionHash) {
-    const provider = getProvider();
+    const provider = permissionlessReadProvider(getProvider());
     if (!provider || typeof provider.getTransactionReceipt !== 'function') return null;
-    try { return await provider.getTransactionReceipt(transactionHash); }
+    try { return await readTransactionReceipt(transactionHash, { provider }); }
     catch (_e) { return null; }
   }
 
@@ -309,6 +307,7 @@ class AppSdgnrsRedemptions extends HTMLElement {
         const exact = await readSdgnrsRedemptionState({
           player: owner,
           periodIndex: row.periodIndex,
+          fresh: true,
         });
         if (!exact?.ready) throw new Error('This sDGNRS redemption is still waiting for RNG.');
         const result = await claimSdgnrsRedemption({

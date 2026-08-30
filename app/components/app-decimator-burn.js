@@ -150,7 +150,7 @@ class AppDecimatorBurn extends HTMLElement {
         else void this.#refresh();
       }));
     }
-    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
+    this.#timer = registerComponentPoll(() => this.#refresh(), POLL_MS);
     void this.#refresh();
   }
 

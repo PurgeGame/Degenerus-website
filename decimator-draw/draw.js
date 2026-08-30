@@ -1,4 +1,5 @@
 import { decimatorPayoutBreakdown } from '../app/app/decimator-payout.js';
+import { fetchProfiles } from '../app/app/profiles.js';
 import {
   sfxFanfare,
   sfxNoWin,
@@ -11,7 +12,6 @@ import {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNIT = 10n ** 18n;
 const DRAW_BRIDGE_TYPE = 'degenerus:decimator-draw';
-const DISCORD_DIRECTORY_URL = 'https://api.degener.us/api/leaderboard?limit=50';
 const WINNER_COLORS = Object.freeze([
   '#ed0e11', '#f7931a', '#d7dce2', '#ff4d8d', '#2f9cff',
   '#35d88a', '#9d64ff', '#f4c542', '#ce384c', '#50cbd7',
@@ -485,30 +485,41 @@ export function buildFullDemoSnapshot(source = {}) {
   };
 }
 
-/** Best-effort public Discord directory. Missing entries simply use last-4. */
-export async function loadKnownWinnerNames({ fetcher = globalThis.fetch } = {}) {
-  if (typeof fetcher !== 'function') return new Map();
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timeout = setTimeout(() => controller?.abort(), 1_800);
-  try { timeout?.unref?.(); } catch (_error) { /* browser timer */ }
+/**
+ * Load the exact Discord identities needed by the visible winner ledger.
+ * This intentionally asks the shared profile service for the top ten plus the
+ * viewed player instead of hoping each wallet happens to be on a leaderboard.
+ */
+export async function loadWinnerProfiles(
+  snapshot,
+  playerAddress = '',
+  { loader = fetchProfiles } = {},
+) {
+  if (typeof loader !== 'function') return new Map();
+  const viewed = String(playerAddress || '').toLowerCase();
+  const addresses = buildWinnerAllocation(snapshot, viewed).entries
+    .map((entry) => String(entry?.address || '').toLowerCase())
+    .filter((address) => /^0x[0-9a-f]{40}$/.test(address));
+  if (/^0x[0-9a-f]{40}$/.test(viewed)) addresses.push(viewed);
+  if (addresses.length === 0) return new Map();
   try {
-    const response = await fetcher(DISCORD_DIRECTORY_URL, {
-      credentials: 'include',
-      ...(controller ? { signal: controller.signal } : {}),
-    });
-    if (!response?.ok) return new Map();
-    const payload = await response.json();
-    const names = new Map();
-    for (const row of Array.isArray(payload?.leaderboard) ? payload.leaderboard : []) {
-      const address = String(row?.eth_address || '').toLowerCase();
-      const name = String(row?.discord_name || '').trim();
-      if (address && name) names.set(address, name.slice(0, 64));
+    const loaded = await loader([...new Set(addresses)]);
+    const profiles = new Map();
+    for (const [rawAddress, rawProfile] of loaded instanceof Map ? loaded : []) {
+      const address = String(rawAddress || '').toLowerCase();
+      const name = String(rawProfile?.name || '').trim().slice(0, 64);
+      if (!/^0x[0-9a-f]{40}$/.test(address) || !name) continue;
+      const avatar = String(rawProfile?.avatar || '').trim();
+      profiles.set(address, {
+        name,
+        avatar: /^(?:https:\/\/|\/(?:badges-circular|specials)\/)/.test(avatar)
+          ? avatar
+          : null,
+      });
     }
-    return names;
+    return profiles;
   } catch (_error) {
     return new Map();
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -617,8 +628,8 @@ class DecimatorDrawReplay {
     this.animations = new Set();
     this.selectionElements = new Map();
     this.currentPhysical = null;
-    this.winnerNames = new Map(Object.entries(snapshot.winnerNames || {}).map(([address, name]) => (
-      [String(address).toLowerCase(), String(name)]
+    this.winnerProfiles = new Map(Object.entries(snapshot.winnerNames || {}).map(([address, name]) => (
+      [String(address).toLowerCase(), { name: String(name), avatar: null }]
     )));
     this.allocationVisible = false;
     this.totalBurned = totalFlipBurned(snapshot);
@@ -644,6 +655,7 @@ class DecimatorDrawReplay {
     this.#buildPlayerPicker();
     const initialAddress = await this.#resolvePlayerAddress();
     this.#selectPlayer(initialAddress);
+    void this.#loadWinnerProfiles();
     this.#wireControls();
     this.#resetView();
     if (new URLSearchParams(window.location.search).get('result') === '1') {
@@ -654,10 +666,10 @@ class DecimatorDrawReplay {
     try { this.bind('replay')?.focus(); } catch (_error) { /* wheel remains readable */ }
   }
 
-  setWinnerNames(names) {
-    if (names instanceof Map) {
-      for (const [address, name] of names) {
-        this.winnerNames.set(String(address).toLowerCase(), String(name));
+  setWinnerProfiles(profiles) {
+    if (profiles instanceof Map) {
+      for (const [address, profile] of profiles) {
+        this.winnerProfiles.set(String(address).toLowerCase(), profile);
       }
     }
     if (this.allocationVisible) {
@@ -675,7 +687,8 @@ class DecimatorDrawReplay {
     for (const player of sorted) {
       const option = document.createElement('option');
       option.value = player.address.toLowerCase();
-      const identity = this.winnerNames.get(player.address.toLowerCase()) || shortAddress(player.address);
+      const identity = this.winnerProfiles.get(player.address.toLowerCase())?.name
+        || shortAddress(player.address);
       option.textContent = `${identity} · ${bucketScoreLabel(player.bucket)} DEGEN RATING`;
       select.appendChild(option);
     }
@@ -704,6 +717,16 @@ class DecimatorDrawReplay {
     if (this.player) this.bind('player-select').value = this.player.address.toLowerCase();
     this.#renderPlayer('waiting');
     this.#renderPayout();
+  }
+
+  async #loadWinnerProfiles() {
+    const playerAddress = this.player?.address || '';
+    const profiles = await loadWinnerProfiles(this.snapshot, playerAddress);
+    // The player picker can change while identity decoration is in flight. The
+    // top-ten profiles remain useful; immediately fetch the new viewed winner
+    // as well if it was outside that first allocation.
+    this.setWinnerProfiles(profiles);
+    if (playerAddress !== (this.player?.address || '')) void this.#loadWinnerProfiles();
   }
 
   #buildWheelHardware() {
@@ -756,6 +779,7 @@ class DecimatorDrawReplay {
     });
     this.bind('player-select').addEventListener('change', (event) => {
       this.#selectPlayer(event.target.value);
+      void this.#loadWinnerProfiles();
       const url = new URL(window.location.href);
       url.searchParams.set('player', this.player.address);
       window.history.replaceState(null, '', url);
@@ -908,12 +932,33 @@ class DecimatorDrawReplay {
   }
 
   #winnerIdentity(entry) {
-    if (entry?.isPlayer) return 'YOU';
     if (entry?.kind === 'other') return 'OTHER WINNERS';
-    const known = this.winnerNames.get(String(entry?.address || '').toLowerCase());
-    if (known) return known;
-    const address = String(entry?.address || '');
-    return address ? `0x…${address.slice(-4)}` : 'UNKNOWN';
+    const profile = this.winnerProfiles.get(String(entry?.address || '').toLowerCase());
+    if (profile?.name) return profile.name;
+    return entry?.isPlayer ? 'YOU' : 'ANON WINNER';
+  }
+
+  #winnerAvatar(entry) {
+    const profile = this.winnerProfiles.get(String(entry?.address || '').toLowerCase());
+    const fallback = document.createElement('span');
+    fallback.className = 'winner-legend__avatar is-fallback';
+    fallback.style.setProperty('--winner-color', entry.color);
+    fallback.setAttribute('aria-hidden', 'true');
+    fallback.textContent = entry.kind === 'other'
+      ? '+'
+      : (profile?.name?.slice(0, 1).toUpperCase() || (entry.isPlayer ? 'Y' : '?'));
+    if (!profile?.avatar || entry.kind === 'other') return fallback;
+
+    const avatar = document.createElement('img');
+    avatar.className = 'winner-legend__avatar';
+    avatar.style.setProperty('--winner-color', entry.color);
+    avatar.src = profile.avatar;
+    avatar.alt = `${profile.name} Discord avatar`;
+    avatar.loading = 'lazy';
+    avatar.decoding = 'async';
+    avatar.referrerPolicy = 'no-referrer';
+    avatar.addEventListener('error', () => avatar.replaceWith(fallback), { once: true });
+    return avatar;
   }
 
   #winnerPayoutLabel(value) {
@@ -934,19 +979,20 @@ class DecimatorDrawReplay {
       const rank = document.createElement('span');
       rank.className = 'winner-legend__rank';
       rank.textContent = entry.rank ? `#${entry.rank}` : '+';
-      const swatch = document.createElement('span');
-      swatch.className = 'winner-legend__swatch';
-      swatch.style.setProperty('--winner-color', entry.color);
+      const avatar = this.#winnerAvatar(entry);
       const identity = document.createElement('strong');
       identity.className = 'winner-legend__identity';
       identity.textContent = this.#winnerIdentity(entry);
+      if (entry.isPlayer && identity.textContent !== 'YOU') {
+        identity.dataset.player = 'YOU';
+      }
       const award = document.createElement('span');
       award.className = 'winner-legend__award';
       const amount = document.createElement('b');
       amount.textContent = this.#winnerPayoutLabel(entry.payoutWei);
       award.appendChild(amount);
       row.appendChild(rank);
-      row.appendChild(swatch);
+      row.appendChild(avatar);
       row.appendChild(identity);
       row.appendChild(award);
       legend.appendChild(row);
@@ -958,19 +1004,27 @@ class DecimatorDrawReplay {
       const rank = document.createElement('span');
       rank.className = 'winner-legend__rank';
       rank.textContent = '—';
-      const swatch = document.createElement('span');
-      swatch.className = 'winner-legend__swatch';
-      swatch.style.setProperty('--winner-color', '#555b68');
+      const avatar = this.#winnerAvatar({
+        kind: 'winner',
+        address: this.player.address,
+        isPlayer: true,
+        color: '#555b68',
+      });
       const identity = document.createElement('strong');
       identity.className = 'winner-legend__identity';
-      identity.textContent = 'YOU';
+      identity.textContent = this.#winnerIdentity({
+        kind: 'winner',
+        address: this.player.address,
+        isPlayer: true,
+      });
+      if (identity.textContent !== 'YOU') identity.dataset.player = 'YOU';
       const award = document.createElement('span');
       award.className = 'winner-legend__award';
       const amount = document.createElement('b');
       amount.textContent = '0 ETH';
       award.appendChild(amount);
       row.appendChild(rank);
-      row.appendChild(swatch);
+      row.appendChild(avatar);
       row.appendChild(identity);
       row.appendChild(award);
       legend.appendChild(row);
@@ -1736,10 +1790,6 @@ async function bootstrap() {
       throw new Error('Last Decimator winning-score snapshot does not reconcile.');
     }
     const replay = new DecimatorDrawReplay(snapshot);
-    // Names are decorative and best-effort. Load them while the ready wheel is
-    // waiting for its explicit START DRAW click; a late response only updates
-    // the legend and never delays authoritative on-chain animation data.
-    void loadKnownWinnerNames().then((names) => replay.setWinnerNames(names));
     await replay.init();
   } catch (error) {
     const status = document.querySelector('[data-bind="draw-phase"]');

@@ -186,7 +186,11 @@ const lootboxMod = await import('../../app/lootbox.js');
 const pendingActionsMod = await import('../../app/pending-actions.js');
 const packWatchMod = await import('../../app/pack-watch.js');
 const revealMod = await import('../reveal-overlay.js');
-const { pendingBoxesKey, revealedBoxesKey } = await import('../app-box-strip.js');
+const {
+  lootboxResultLegsReadyForReveal,
+  pendingBoxesKey,
+  revealedBoxesKey,
+} = await import('../app-box-strip.js');
 const { CHAIN, CONTRACTS } = await import('../../app/chain-config.js');
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -288,6 +292,31 @@ describe('app-box-strip', () => {
     const el = instantiate();
     await tick();
     assert.equal(el.querySelector('[data-bind="bxs-strip"]').hidden, true);
+  });
+
+  test('keeps a bare zero-value opened anchor pending until its reward leg arrives', () => {
+    const openedAnchor = {
+      legType: 'opened',
+      wholeTickets: 0,
+      futureTickets: 0,
+      flip: 0n,
+      crapsNormalPasses: 0,
+      crapsHighPasses: 0,
+    };
+
+    assert.equal(lootboxResultLegsReadyForReveal([openedAnchor]), false,
+      'an indexed opening event alone does not prove the result transaction is complete');
+    assert.equal(lootboxResultLegsReadyForReveal([
+      openedAnchor,
+      { legType: 'dgnrs', amount: 1n },
+    ]), true, 'a companion prize leg completes the indexed result');
+    assert.equal(lootboxResultLegsReadyForReveal([{
+      ...openedAnchor,
+      futureLevel: 20,
+      futureTickets: 21,
+      roundedUp: true,
+      wholeTickets: 21,
+    }]), true, 'a concrete ticket award on the opening anchor is complete');
   });
 
   test('tray-only mode does not render an inline opener', async () => {
@@ -909,7 +938,7 @@ describe('app-box-strip', () => {
       logIndex: 2,
       ord: 203_000_002,
       rewardData: {
-        amount: '123', futureLevel: 9, futureTickets: 0,
+        amount: '123', futureLevel: 20, futureTickets: 2100,
         roundedUp: false, flip: '0',
       },
     };
@@ -1229,7 +1258,7 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a newly indexed result wins over a stale non-zero RPC slot before openBox', async () => {
+  test('a bare feed anchor blocks a stale-RPC open until its missing prize projection appears', async () => {
     const calls = { complete: [], open: [] };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
@@ -1255,6 +1284,7 @@ describe('app-box-strip', () => {
     lootboxMod.__setContractFactoryForTest(() => fake);
 
     let indexed = false;
+    let companionProjected = false;
     const settledLeg = {
       uid: 'indexed-8',
       player: ADDR_LC,
@@ -1265,15 +1295,26 @@ describe('app-box-strip', () => {
       logIndex: 4,
       ord: 104,
       rewardData: {
-        amount: '123', futureLevel: 9, futureTickets: 0,
+        amount: '123', futureLevel: 20, futureTickets: 0,
         roundedUp: false, flip: '0',
       },
+    };
+    const companionLeg = {
+      uid: 'indexed-8-dgnrs',
+      player: ADDR_LC,
+      legType: 'dgnrs',
+      lootboxIndex: 8,
+      transactionHash: '0xsettled',
+      blockNumber: '100',
+      logIndex: 5,
+      ord: 105,
+      rewardData: { paid: '1000000000000000000' },
     };
     globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
       json: async () => indexed && String(url).includes('/lootbox/legs')
-        ? { items: [settledLeg] }
+        ? { items: companionProjected ? [settledLeg, companionLeg] : [settledLeg] }
         : { items: [] },
     });
 
@@ -1294,11 +1335,26 @@ describe('app-box-strip', () => {
     assert.equal(calls.complete.length, 0,
       'indexed settlement is authoritative before consulting a potentially stale frontier');
     assert.equal(calls.open.length, 0, 'an already-settled box never reaches the wallet write');
+    assert.equal(revealMod.__takeQueuedForTest().length, 0,
+      'the cardless anchor is not converted into a zero-result reveal');
+    const syncing = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.equal(syncing?.shortLabel, 'Syncing result');
+    assert.equal(syncing?.run, null, 'the settled box never offers a second open action');
+
+    companionProjected = true;
+    await el.__pollForTest();
+    const ready = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.equal(ready?.shortLabel, 'View result');
+    assert.equal(await ready.run(), true);
     const [replay] = revealMod.__takeQueuedForTest();
     assert.equal(replay?.kind, 'lootbox');
     assert.equal(replay?.lootboxIndex, 8);
     assert.equal(replay?.legs?.[0]?.transactionHash, '0xsettled',
       'the purchase hash cannot mask the later settlement transaction');
+    assert.equal(replay?.legs?.some((leg) => leg.legType === 'dgnrs'), true,
+      'the reveal waits for and includes the companion prize leg');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the indexed result becomes a reveal and leaves the pending tray');
     el.disconnectedCallback();

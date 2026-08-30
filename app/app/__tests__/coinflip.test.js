@@ -1081,7 +1081,7 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
     // run23+ generation: price-guarded overload + public quote view.
     assert.ok(SRC.includes('function reverseFlip(uint256 expectedCost) external'));
     assert.ok(SRC.includes('function rngNudgeQuote() external view returns (uint256 queued, uint256 cost)'));
-    assert.ok(SRC.includes('provider.getStorage(CONTRACTS.GAME, REVERSE_FLIP_STORAGE_SLOT)'));
+    assert.ok(SRC.includes('readContractStorage(CONTRACTS.GAME, REVERSE_FLIP_STORAGE_SLOT, { provider })'));
     assert.ok(SRC.includes('BigInt(packedSlot) & UINT64_MASK'));
     // Closure-form sendTx; args carry expectedCost on v2 deploys, empty on legacy.
     assert.match(SRC, /sendTx\(\s*\(s\)\s*=>\s*_buildReverseFlipContract\(s\)\.reverseFlip\(\.\.\.args\)/);

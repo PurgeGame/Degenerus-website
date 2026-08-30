@@ -7,69 +7,87 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readContractStorage,
+  readProviderBlockNumber,
+} from './read-provider.js';
 
-const BETS = '(uint24 passLine,uint24 dontPassLine,uint24 place4,uint24 place5,uint24 place6,uint24 place8,uint24 place9,uint24 place10,uint24 hard4,uint24 hard8,uint16 passOddsMult)';
-const HAND_RECORD = '(int256 net,uint32 rolls,uint8 pointsMade,bool truncated)';
-const OUTCOME = '(uint256 staked,uint256 returned,int256 net,uint32 rolls,uint8 pointsMade,bool truncated,uint256[11] legStaked,uint256[11] legReturned)';
-const SESSION = `(uint256 hands,uint256 staked,uint256 returned,int256 net,uint256 totalRolls,uint256[11] legStaked,uint256[11] legReturned,${HAND_RECORD}[] ledger,bytes rollLog)`;
-const SLIP_RESULT = `(uint256 bankrollIn,uint256 bankrollOut,uint256 handsPlayed,uint256 unitsPlayed,uint256 totalRolls,uint8 stop,${HAND_RECORD}[] ledger,bytes rollLog)`;
-const STORED_BET = `(address player,uint48 index,uint16 hands,uint16 rakeBps,bool settled,uint8 mode,uint128 staked,uint128 goal,${BETS} bets)`;
-
+// THE DEPLOYED SURFACE, AND NOTHING ELSE. Generated from the verified
+// CrapsBattle artifact whose runtime bytecode matches the deployed contract
+// byte for byte, so every entry here is one the chain will actually answer.
+//
+// ⛔ CrapsBattle sits a few hundred bytes under EIP-170 and the whole standalone
+// TABLE read surface was cut to fit — `wordAt`, `currentIndex`, `isResolved`,
+// `survivedAt`, `shooterDice`, `betOf`, `resolveBets`, `maxOddsFor`,
+// `rakeBpsFor`, `placeBet`, `placeSlip`, `quote`, `theoFor` and the `resolve*At`
+// previews are ALL absent. Calling one reverts with NO revert data, which every
+// caller here swallows, so a stale entry shows up as a panel that renders a dash
+// forever rather than as an error. Re-verify this list against the deployed
+// bytecode after any craps re-vendor: `ethers.id(sig).slice(2, 10)` must appear
+// in `eth_getCode`, and the call must return data.
 export const FLIP_CRAPS_ABI = Object.freeze([
-  `function placeBet(${BETS} b,uint16 hands) returns (uint64 betId)`,
-  `function placeSlip(${BETS} b,uint128 bankroll,uint128 goal,bool letItRide) returns (uint64 betId)`,
-  'function enterBonusBattle(uint256 period,uint32 chips,uint16 multiple) returns (uint256 betId)',
-  'function enterBonusDay(uint32 chips,uint16 multiple) returns (uint256 placed)',
-  'function applyCrapsPasses(uint24 startDay,uint8 count,bool high,uint32 chips)',
-  'function buyFutureCrapsDays(uint24 startDay,uint8 count,bool high,uint32 chips)',
-  'function upgradeDayWindows(uint24 day,uint8 periodMask) returns (uint256 burned)',
-  'function progressivePool() view returns (uint256)',
-  'function resolveBets(uint64[] betIds)',
-  'function currentIndex() view returns (uint48)',
-  'function wordAt(uint48 index) view returns (uint256)',
-  'function isResolved(uint48 index) view returns (bool)',
-  `function stakeFor(${BETS} b) pure returns (uint256 total)`,
-  `function quote(${BETS} b,uint32 hands) pure returns (uint256)`,
-  `function theoFor(${BETS} b) pure returns (uint256)`,
-  'function maxOddsFor(address player) view returns (uint256)',
-  'function rakeBpsFor(address player) view returns (uint256)',
-  `function betOf(uint64 betId) view returns (${STORED_BET})`,
-  'function previewSettlement(uint64 betId) view returns (uint256 won,bool survived,uint256 paid)',
-  'function survivedAt(uint48 index) view returns (bool)',
-  'function shooterDice(uint48 index,uint256 handOrdinal) view returns (uint8[])',
-  `function resolveHandAt(${BETS} b,uint48 index) view returns (${OUTCOME} o)`,
-  `function resolveHandsAt(${BETS} b,uint48 index,uint256 hands) view returns (${SESSION})`,
-  `function resolveSlipAt(${BETS} b,uint48 index,uint256 bankroll,uint256 goal,uint256 cap,bool ride) view returns (${SLIP_RESULT})`,
-  'event CrapsBetPlaced(uint64 indexed betId,address indexed player,uint48 indexed index,uint32 hands,uint256 staked)',
-  'event CrapsSlipPlaced(uint64 indexed betId,address indexed player,uint48 indexed index,uint256 bankroll,uint256 goal)',
-  'event CrapsBetSettled(uint64 indexed betId,address indexed player,uint256 staked,uint256 won,bool survived,uint256 paid,bytes rolls)',
-  'event CrapsRakeback(address indexed player,uint64 indexed betId,uint256 amount)',
-  'event CrapsBonusOpened(bytes32 indexed battleKey,uint48 indexed slot,uint256 seed,uint128 bankroll,uint128 goal,uint256 boardStake,uint256 battleStake)',
-  'event CrapsBonusDonated(bytes32 indexed battleKey,address indexed donor,uint256 amount,uint256 seed)',
-  'error NoStake()',
-  'error BadBetHandCount()',
-  'error NoSuchBet()',
-  'error AlreadySettled()',
-  'error CoinNotPinned()',
-  'error OddsAboveAllowance()',
-  'error BankrollBelowStake()',
-  'error BadGoal()',
-  'error CoinflipNotPinned()',
-  'error NotTheLiveIndex()',
-  'error IndexAlreadyRevealed()',
-  'error RngNotReady()',
-  'error GameNotPinned()',
-  'error BonusPeriodSpent()',
-  'error AlreadyInBonus()',
-  'error ScoreRequiredForBonus()',
-  'error BadEntryMultiple()',
-  'error BadPassCount()',
-  'error DayNotReservable()',
-  'error NothingToUpgrade()',
-  'error BadRandomCount()',
-  'error TooManyChipsOnALeg()',
-  'error BoardPlaysBothSides()',
+  "function amendSlip(uint256 betId,uint32 chips)",
+  "function applyCrapsPasses(uint24 startDay,uint8 count,bool high,uint32 chips)",
+  "function armBonusWindow(uint64 slot) returns (uint48 index)",
+  "function buyFutureCrapsDays(uint24 startDay,uint8 count,bool high,uint32 chips)",
+  "function closeBattle(uint64 slot) returns (uint48 index)",
+  "function createBattle(uint32 played,uint8 bankMult,uint16 goalMult,uint24 stakeUnits,uint16 minScore,uint40 closeTime,bool multiEntry,uint16 highRollerMult) returns (uint64 slot)",
+  "function creditPasses(address player,uint32 normal,uint32 high)",
+  "function deliverPasses(address player,uint32 normal,uint32 high) returns (uint24 day)",
+  "function donate(bool custom,uint256 index,uint24 granules)",
+  "function enterBattle(uint64 slot,uint32 chips,uint16 multiple) returns (uint256 betId)",
+  "function enterBonusBattle(uint256 period,uint32 chips,uint16 multiple) returns (uint256 betId)",
+  "function enterBonusDay(uint32 chips,uint16 multiple) returns (uint256 placed)",
+  "function keepScheduled(uint64 budgetUnits) returns (bool progressed,uint64 slot)",
+  "function openBonusDay()",
+  "function previewSettlement(uint256 betId) view returns (uint256 won,uint256 paid)",
+  "function progressivePool() view returns (uint256)",
+  "function resolveSlot(uint64 slot,uint64 budgetUnits)",
+  "function setBattleCreator(address account,bool allowed)",
+  "function setVaultBoard(uint32 packed)",
+  "function upgradeDayWindows(uint24 day,uint8 periodMask) returns (uint256 burned)",
+  "event BattleCreatorSet(address indexed account,bool allowed)",
+  "event CrapsBattleCreated(uint64 indexed slot,address indexed creator,uint256 terms)",
+  "event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)",
+  "event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)",
+  "event CrapsBetSettled(uint256 indexed betId,address indexed player,uint256 won,uint256 paid)",
+  "event CrapsBonusArmed(bytes32 indexed battleKey,uint48 indexed slot,uint48 indexed index)",
+  "event CrapsBonusDonated(bytes32 indexed battleKey,address indexed donor,uint256 amount,uint256 seed)",
+  "event CrapsBonusOpened(bytes32 indexed battleKey,uint48 indexed slot,uint256 seed,uint128 bankroll,uint128 goal,uint256 boardStake,uint256 battleStake)",
+  "event CrapsDayLapsed(uint24 indexed day,uint64 seats)",
+  "event CrapsDayReserved(address indexed player,uint24 indexed day,bool highRoller)",
+  "event CrapsDayWindowsUpgraded(address indexed player,uint24 indexed day,uint8 upgradedMask,uint256 burned)",
+  "event CrapsHighRollerDayOpened(uint24 indexed day,uint16 multiplier,uint256 mainBoostBudget,uint256 highRollerBoostBudget)",
+  "event CrapsHighRollerPaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount,bool bankrollRider)",
+  "event CrapsPassesCredited(address indexed player,bool highRoller,uint256 count)",
+  "event CrapsProgressiveFunded(uint24 indexed day,uint256 contribution,uint256 balance)",
+  "event CrapsProgressivePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,bool rare,uint16 poolBps,uint16 goalMult,uint256 peak,uint256 scoreBps,uint256 candidate,uint256 paid,uint256 balance)",
+  "event CrapsProgressiveRolled(bytes32 indexed battleKey,uint8 indexed source,uint256 amount,uint256 balance)",
+  "event CrapsSlipAmended(uint256 indexed betId,uint256 chips)",
+  "event CrapsSlipPlaced(address indexed player,uint256 bet)",
+  "error AlreadyInBonus()",
+  "error BadBattleTerms()",
+  "error BadBurnTag()",
+  "error BadEntryMultiple()",
+  "error BadPassCount()",
+  "error BadRandomCount()",
+  "error BetLocked()",
+  "error BoardPlaysBothSides()",
+  "error BonusPeriodSpent()",
+  "error BonusStillRunning()",
+  "error DayNotReservable()",
+  "error NoSuchBattle()",
+  "error NoSuchBet()",
+  "error NotBattleCreator()",
+  "error NothingToUpgrade()",
+  "error NotVaultOwner()",
+  "error NotYourBet()",
+  "error OnlyGame()",
+  "error RngNotReady()",
+  "error ScoreRequiredForBonus()",
+  "error SeedAboveMax()",
+  "error TooManyChipsOnALeg()",
 ]);
 
 // Canonical scheduled-battle logs used by the compact tournament lobby. Keep
@@ -78,6 +96,7 @@ export const FLIP_CRAPS_ABI = Object.freeze([
 // use the wider event shape parsed elsewhere in this adapter.
 export const CRAPS_LOBBY_EVENT_ABI = Object.freeze([
   'event CrapsSlipPlaced(address indexed player,uint256 bet)',
+  'event CrapsSlipAmended(uint256 indexed betId,uint256 chips)',
   'event CrapsBonusOpened(bytes32 indexed battleKey,uint48 indexed slot,uint256 seed,uint128 bankroll,uint128 goal,uint256 boardStake,uint256 battleStake)',
   'event CrapsBonusDonated(bytes32 indexed battleKey,address indexed donor,uint256 amount,uint256 seed)',
   'event CrapsBonusArmed(bytes32 indexed battleKey,uint48 indexed slot,uint48 indexed index)',
@@ -85,6 +104,16 @@ export const CRAPS_LOBBY_EVENT_ABI = Object.freeze([
   'event CrapsDayWindowsUpgraded(address indexed player,uint24 indexed day,uint8 upgradedMask,uint256 burned)',
   'event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)',
   'event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)',
+  // The day's two boost budgets, published once when the day opens. The HIGH one
+  // is the only client path to the side lane's base — there is no view for it.
+  'event CrapsHighRollerDayOpened(uint24 indexed day,uint16 multiplier,uint256 mainBoostBudget,uint256 highRollerBoostBudget)',
+  // Marks a window that ran a high lane, AND which shape it was. `bankrollRider`
+  // is the whole distinction: false = a contested race whose boost is paid into
+  // the lane pot, true = a lone seat whose boost merely RIDES its own run.
+  'event CrapsHighRollerPaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount,bool bankrollRider)',
+  // Protocol money a winner's standing would not admit, banked instead of paid.
+  // Source 1 = main, 2 = contested high lane, 3 = sole high lane.
+  'event CrapsProgressiveRolled(bytes32 indexed battleKey,uint8 indexed source,uint256 amount,uint256 balance)',
 ]);
 
 const TEST_ADDRESS = '0x0000000000000000000000000000000000000001';
@@ -105,8 +134,25 @@ const CRAPS_SPEED_LABELS = Object.freeze({ 2: 'TURBO', 5: 'NORMAL', 10: 'SLOW' }
 const CRAPS_HIGH_ROLLER_TAG = 0x48696768526f6c6c6572n;
 const CRAPS_BOOST_TAG = 0x426f6f7374n;
 const CRAPS_BOOST_MAX_MULTIPLE = 100n;
+// CrapsBattle._roundBoost: granules at or below the floor pay exact, everything
+// above collapses to the NEAREST step. The contract rounds before it widens to
+// wei, so a client that skips this understates a boosted window by up to half a
+// step (500 FLIP) per window.
+const CRAPS_BOOST_ROUND_ABOVE = 40n;
+const CRAPS_BOOST_ROUND_STEP = 10n;
+// LootboxCraps.LOOTBOX_RNG_WORD_SLOT. CrapsBattle keeps NO public accessor for a
+// settlement word — `_wordAt` is an internal extsload into GAME — so the word is
+// read straight out of GAME's storage at keccak256(abi.encode(index, 34)).
+const CRAPS_SETTLEMENT_WORD_SLOT = 34n;
+/** `_ROLL_SRC_MAIN` — main-winner boost denied by standing and banked instead. */
+const CRAPS_ROLL_SRC_MAIN = 1;
+/** `_ROLL_SRC_HIGH_CONTESTED` — contested high-winner boost denied by standing. */
+const CRAPS_ROLL_SRC_HIGH_CONTESTED = 2;
+/** `_ROLL_SRC_HIGH_SOLE` — a lone high seat's standing-denied boost, banked not staked. */
+const CRAPS_ROLL_SRC_HIGH_SOLE = 3;
 const CRAPS_BATTLE_STAKE_UNIT_WEI = 100n * CRAPS_FLIP_WEI;
 const CRAPS_EVENT_BET_ID_SHIFT = 32n;
+const CRAPS_EVENT_CHIPS_MASK = 0xFFFFFFFFn;
 const CRAPS_EVENT_MULT_SHIFT = 160n;
 const CRAPS_EVENT_BET_ID_MASK = (1n << 128n) - 1n;
 const CRAPS_EVENT_MULT_MASK = 0xFFn;
@@ -119,6 +165,24 @@ const CRAPS_ALL_WINDOWS_MASK = 0x7F;
 const CRAPS_PASS_CREDITS_MAPPING_SLOT = 15n;
 const CRAPS_PASS_COUNT_MASK = 0xFFFFFFFFn;
 export const CRAPS_FUTURE_DAY_PRICES = Object.freeze({ normal: 25_000n, high: 450_000n });
+// Tomorrow's word has not landed yet, but the shipped preset has exact face-cost
+// bounds. Routine windows span 400..6,000 FLIP and the event spans
+// 1,800..90,000, so an ordinary seven-window slate spans 4,200..126,000.
+// The High Roller lane adopts tomorrow's still-unknown 10x/100x draw.
+export const CRAPS_FUTURE_DAY_FACE_RANGES = Object.freeze({
+  normal: Object.freeze({
+    low: 4_200n,
+    high: 126_000n,
+    wager: Object.freeze({ low: 3_300n, high: 78_000n }),
+    battle: Object.freeze({ low: 900n, high: 48_000n }),
+  }),
+  high: Object.freeze({
+    low: 42_000n,
+    high: 12_600_000n,
+    wager: Object.freeze({ low: 33_000n, high: 7_800_000n }),
+    battle: Object.freeze({ low: 9_000n, high: 4_800_000n }),
+  }),
+});
 let _contractFactory = null;
 let _addressOverride;
 let _readProvider = null;
@@ -139,10 +203,7 @@ function requireCraps() {
 }
 
 function readerProvider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
-  if (!_readProvider) _readProvider = sharedReadProvider();
-  return _readProvider;
+  return permissionlessReadProvider(getProvider());
 }
 
 function buildContract(runner) {
@@ -178,7 +239,7 @@ function asUint(value, label) {
 }
 
 export function decodeCrapsPassCredits(value) {
-  const packed = asUint(value, 'Craps pass balance');
+  const packed = asUint(value, 'Craps comp balance');
   return Object.freeze({
     normal: Number(packed & CRAPS_PASS_COUNT_MASK),
     high: Number((packed >> 32n) & CRAPS_PASS_COUNT_MASK),
@@ -186,19 +247,23 @@ export function decodeCrapsPassCredits(value) {
 }
 
 export function crapsPassCreditsStorageKey(player) {
-  if (!ethers.isAddress(String(player ?? ''))) throw new Error('Choose a valid player to read Craps passes.');
+  if (!ethers.isAddress(String(player ?? ''))) throw new Error('Choose a valid player to read Craps comps.');
   return ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
     ['address', 'uint256'],
     [ethers.getAddress(String(player)), CRAPS_PASS_CREDITS_MAPPING_SLOT],
   ));
 }
 
-/** Read the two uncommitted Craps day-pass lanes from the deployed packed mapping. */
+/** Read the two uncommitted Craps comp lanes from the deployed packed mapping. */
 export async function readCrapsPassCredits(player) {
   requireCraps();
   const provider = readerProvider();
-  if (!provider?.getStorage) throw new Error('The chain provider cannot read Craps pass balances.');
-  const packed = await provider.getStorage(contractAddress(), crapsPassCreditsStorageKey(player));
+  if (!provider) throw new Error('The chain provider cannot read Craps comp balances.');
+  const packed = await readContractStorage(
+    contractAddress(),
+    crapsPassCreditsStorageKey(player),
+    { provider },
+  );
   return decodeCrapsPassCredits(packed);
 }
 
@@ -451,7 +516,7 @@ export async function readCrapsBonusSchedule(dayValue) {
   if (!Number.isInteger(day) || day <= 0) return null;
   const provider = readerProvider();
   if (!provider?.getBlockNumber || !provider?.getLogs) return null;
-  const latestBlock = Number(await provider.getBlockNumber());
+  const latestBlock = Number(await readProviderBlockNumber(provider));
   const deployBlock = Number(CHAIN.deployBlock ?? 0);
   const fromBlock = Math.max(deployBlock, latestBlock - CRAPS_LOG_LOOKBACK_BLOCKS);
   const iface = interfaceForCraps();
@@ -471,6 +536,44 @@ function crapsLobbyReceiptParser() {
 }
 
 /**
+ * Solidity's `_windowShare`. The day's EVENT window — its last — takes HALF the
+ * budget outright; the other half is split across the six routine windows by
+ * size, weighted 4:2:1. Both lanes share the same weight and tier, so the ONLY
+ * difference between the main and high bases is which budget goes in.
+ */
+export function crapsWindowShareWei(budgetWei, weight, period, tier) {
+  const half = asUint(budgetWei, 'Craps boost budget') / 2n;
+  if (period === CRAPS_BONUS_WINDOWS - 1) return half;
+  if (weight === 0n) return 0n;
+  return (half * (1n << BigInt(tier - 1))) / weight;
+}
+
+/**
+ * Solidity's `_routineWeight`, rebuilt from the day's own opening logs rather
+ * than from the daily word: every routine window's tier is already implied by
+ * the bankroll it published. Null until all six routine windows are in hand —
+ * a partial day would divide by a short denominator and overstate every share.
+ */
+export function crapsRoutineWeight(windows) {
+  let weight = 0n;
+  for (let period = 0; period < CRAPS_BONUS_WINDOWS - 1; period += 1) {
+    const tier = windows?.[period]?.tier;
+    if (!Number.isInteger(tier) || tier < 1) return null;
+    weight += 1n << BigInt(tier - 1);
+  }
+  return weight;
+}
+
+/**
+ * Solidity's `_roundBoost`, in granules. Rounds to NEAREST, which is why a
+ * window's realized figure can land ABOVE the exact draw rather than below it.
+ */
+function crapsRoundBoostUnits(units) {
+  if (units <= CRAPS_BOOST_ROUND_ABOVE) return units;
+  return ((units + CRAPS_BOOST_ROUND_STEP / 2n) / CRAPS_BOOST_ROUND_STEP) * CRAPS_BOOST_ROUND_STEP;
+}
+
+/**
  * Reproduce the scheduled pot boost that actually landed once a battle's
  * settlement word became public. CrapsBonusOpened.seed is the 100x ceiling;
  * Solidity draws one of 1/4x, 1x, 10x, or 100x and floors it to the same
@@ -478,14 +581,31 @@ function crapsLobbyReceiptParser() {
  */
 export function crapsRealizedBoostWei({ ceilingWei, battleKey, wordValue } = {}) {
   const ceiling = asUint(ceilingWei, 'Craps boost ceiling');
+  return crapsRealizedBoostFromBaseWei({
+    baseWei: ceiling / CRAPS_BOOST_MAX_MULTIPLE,
+    battleKey,
+    wordValue,
+  });
+}
+
+/**
+ * The same rung applied to a base the client derived itself — the HIGH lane's,
+ * which no event publishes as a ceiling. Both lanes draw off ONE roll keyed to
+ * the battle, so the side pot never adds a second source of randomness.
+ *
+ * The contract rounds in GRANULES and only then widens to wei, so the rounding
+ * must happen here too: a client that skips it understates any window whose
+ * draw lands above the floor.
+ */
+export function crapsRealizedBoostFromBaseWei({ baseWei, battleKey, wordValue } = {}) {
+  const base = asUint(baseWei, 'Craps boost base');
   const word = asUint(wordValue, 'Craps settlement word');
   if (word === 0n) return null;
   const key = asUint(battleKey, 'Craps battle key');
   const roll = hashTriple(word, key, CRAPS_BOOST_TAG) % 1000n;
   const quarterMultiple = roll < 768n ? 1n : roll < 976n ? 4n : roll < 996n ? 40n : 400n;
-  const base = ceiling / CRAPS_BOOST_MAX_MULTIPLE;
   const units = (base * quarterMultiple) / (4n * CRAPS_BATTLE_STAKE_UNIT_WEI);
-  return units * CRAPS_BATTLE_STAKE_UNIT_WEI;
+  return crapsRoundBoostUnits(units) * CRAPS_BATTLE_STAKE_UNIT_WEI;
 }
 
 function wordAtIndex(wordsByIndex, index) {
@@ -517,17 +637,55 @@ export function crapsLobbySnapshotFromLogs(
   const openedBySlot = new Map();
   const finalizedByKey = new Map();
   const paidByKey = new Map();
+  const highPaidByKey = new Map();
   const ownedBets = new Map();
   const dayTickets = new Map();
   const playerWindows = Array(CRAPS_BONUS_WINDOWS).fill(null);
+  const countedBetIds = new Set();
+  const publicDayTickets = new Map();
+  const directEntrantCounts = Array.from(
+    { length: CRAPS_BONUS_WINDOWS },
+    () => ({ total: 0, high: 0 }),
+  );
+  const previousEventDirectEntrants = { total: 0, high: 0 };
+  // The day's HIGH boost budget, and the SHAPE of the lane each window ran —
+  // 'contested' or 'sole'. Both are needed before a side boost may be counted.
+  const highBudgetByDay = new Map();
+  const highMultipleByDay = new Map();
+  const highLaneShape = new Map();
+  const amendedChipsByBetId = new Map();
+  // What the main winner could not receive because of standing (roll source 1).
+  const mainRolledWei = new Map();
+  // What the contested High Roller winner could not receive (roll source 2).
+  const contestedHighRolledWei = new Map();
+  // What a sole lane BANKED rather than staked, by battle key (roll source 3).
+  const soleRolledWei = new Map();
 
-  const rememberDayTicket = (entryDay, highMask = 0) => {
+  // High is a per-window property for a day ticket: a paid High Roller day
+  // starts with all seven bits, while an ordinary ticket can acquire them one
+  // at a time through CrapsDayWindowsUpgraded. Keep the public ticket book by
+  // player/day and derive counts after every log has been folded so duplicate
+  // provider logs and repeated upgrade masks cannot inflate the side field.
+  const rememberPublicDayTicket = (entrant, entryDay, { seen = false, highMask = 0 } = {}) => {
+    if (entryDay !== yesterdayDay && entryDay !== day && entryDay !== day + 1) return;
+    const key = `${entryDay}:${String(entrant).toLowerCase()}`;
+    const prior = publicDayTickets.get(key);
+    publicDayTickets.set(key, {
+      day: entryDay,
+      seen: Boolean(prior?.seen || seen),
+      highMask: (prior?.highMask ?? 0) | (Number(highMask) & CRAPS_ALL_WINDOWS_MASK),
+    });
+  };
+
+  const rememberDayTicket = (entryDay, highMask = 0, { betId = null, chips = null } = {}) => {
     if (entryDay !== day && entryDay !== day + 1) return;
     const prior = dayTickets.get(entryDay);
     dayTickets.set(entryDay, {
       day: entryDay,
       source: 'day',
       highMask: (prior?.highMask ?? 0) | (Number(highMask) & CRAPS_ALL_WINDOWS_MASK),
+      betId: betId ?? prior?.betId ?? null,
+      chips: chips ?? prior?.chips ?? 0,
     });
   };
 
@@ -538,43 +696,91 @@ export function crapsLobbySnapshotFromLogs(
     try {
       if (parsed.name === 'CrapsSlipPlaced') {
         const entrant = String(args.player ?? args[0]).toLowerCase();
-        if (!scopedPlayer || entrant !== scopedPlayer) continue;
         const packed = asUint(args.bet ?? args[1], 'Craps placed slip');
         const betId = (packed >> CRAPS_EVENT_BET_ID_SHIFT) & CRAPS_EVENT_BET_ID_MASK;
         const slot = betId >> 64n;
         const entryDay = Number(slot / BigInt(CRAPS_BONUS_WINDOWS + 1));
         const remainder = Number(slot % BigInt(CRAPS_BONUS_WINDOWS + 1));
         const multiple = Number(((packed >> CRAPS_EVENT_MULT_SHIFT) & CRAPS_EVENT_MULT_MASK) + 1n);
+        const betKey = betId.toString();
+        const chips = Number(packed & CRAPS_EVENT_CHIPS_MASK);
+        if (!countedBetIds.has(betKey)) {
+          countedBetIds.add(betKey);
+          if (remainder === 0 && (
+            entryDay === yesterdayDay || entryDay === day || entryDay === day + 1
+          )) {
+            rememberPublicDayTicket(entrant, entryDay, {
+              seen: true,
+              highMask: multiple > 1 ? CRAPS_ALL_WINDOWS_MASK : 0,
+            });
+          } else if (
+            remainder >= 1
+            && remainder <= CRAPS_BONUS_WINDOWS
+            && (entryDay === day || (
+              entryDay === yesterdayDay && remainder === CRAPS_BONUS_WINDOWS
+            ))
+          ) {
+            const field = entryDay === day
+              ? directEntrantCounts[remainder - 1]
+              : previousEventDirectEntrants;
+            field.total += 1;
+            if (multiple > 1) field.high += 1;
+          }
+        }
+        // The public field count uses every slip. Everything below this gate is
+        // the connected wallet's private entry/replay projection.
+        if (!scopedPlayer || entrant !== scopedPlayer) continue;
         ownedBets.set(betId.toString(), Object.freeze({
           betId: betId.toString(),
           slot: slot.toString(),
           day: entryDay,
           remainder,
+          chips,
         }));
         if (remainder === 0) {
-          rememberDayTicket(entryDay, multiple > 1 ? CRAPS_ALL_WINDOWS_MASK : 0);
+          rememberDayTicket(entryDay, multiple > 1 ? CRAPS_ALL_WINDOWS_MASK : 0, {
+            betId: betKey,
+            chips,
+          });
         } else if (entryDay === day && remainder <= CRAPS_BONUS_WINDOWS) {
-          playerWindows[remainder - 1] = Object.freeze({
+          playerWindows[remainder - 1] = {
             day: entryDay,
             period: remainder - 1,
             source: 'window',
             multiple,
             high: multiple > 1,
-          });
+            betId: betKey,
+            chips,
+          };
         }
+      } else if (parsed.name === 'CrapsSlipAmended') {
+        const betId = asUint(args.betId ?? args[0], 'Amended Craps bet').toString();
+        const chips = asUint(args.chips ?? args[1], 'Amended Craps board');
+        if (chips <= CRAPS_EVENT_CHIPS_MASK) amendedChipsByBetId.set(betId, Number(chips));
       } else if (parsed.name === 'CrapsDayReserved') {
         const entrant = String(args.player ?? args[0]).toLowerCase();
+        const reservedDay = Number(asUint(args.day ?? args[1], 'Reserved Craps day'));
+        const highRoller = Boolean(args.highRoller ?? args[2]);
+        // A future reservation's CrapsSlipPlaced echo deliberately carries a
+        // 1x event multiple even when its stored seat is high. This companion
+        // event is therefore the authoritative public lane marker.
+        rememberPublicDayTicket(entrant, reservedDay, {
+          highMask: highRoller ? CRAPS_ALL_WINDOWS_MASK : 0,
+        });
         if (!scopedPlayer || entrant !== scopedPlayer) continue;
         rememberDayTicket(
-          Number(asUint(args.day ?? args[1], 'Reserved Craps day')),
-          Boolean(args.highRoller ?? args[2]) ? CRAPS_ALL_WINDOWS_MASK : 0,
+          reservedDay,
+          highRoller ? CRAPS_ALL_WINDOWS_MASK : 0,
         );
       } else if (parsed.name === 'CrapsDayWindowsUpgraded') {
         const entrant = String(args.player ?? args[0]).toLowerCase();
+        const upgradedDay = Number(asUint(args.day ?? args[1], 'Upgraded Craps day'));
+        const upgradedMask = Number(asUint(args.upgradedMask ?? args[2], 'Craps upgrade mask'));
+        rememberPublicDayTicket(entrant, upgradedDay, { highMask: upgradedMask });
         if (!scopedPlayer || entrant !== scopedPlayer) continue;
         rememberDayTicket(
-          Number(asUint(args.day ?? args[1], 'Upgraded Craps day')),
-          Number(asUint(args.upgradedMask ?? args[2], 'Craps upgrade mask')),
+          upgradedDay,
+          upgradedMask,
         );
       } else if (parsed.name === 'CrapsBonusOpened') {
         const slot = asUint(args.slot ?? args[1], 'Craps bonus slot');
@@ -582,16 +788,76 @@ export function crapsLobbySnapshotFromLogs(
         if (remainder < 1 || remainder > CRAPS_BONUS_WINDOWS) continue;
         const openedDay = Number(slot / 8n);
         const battleKey = String(args.battleKey ?? args[0]).toLowerCase();
+        const period = remainder - 1;
+        // The published bankroll names the window's tier, which is the weight it
+        // takes of the day's routine half — the same one BOTH lanes divide on.
+        // Kept SEPARATE from the ceiling read: a bankroll a third-party RPC
+        // mangled costs the side lane its figure, never the main one.
+        let tier = period === CRAPS_BONUS_WINDOWS - 1 ? 0 : null;
+        if (tier == null) {
+          try {
+            const bankrollFlip = asUint(args.bankroll ?? args[3], 'Craps bankroll') / CRAPS_FLIP_WEI;
+            tier = bankrollFlip === 300n ? 1 : bankrollFlip === 1_200n ? 2 : 3;
+          } catch (_error) { tier = null; }
+        }
+        let buyInWei = null;
+        let battleStakeWei = null;
+        try {
+          battleStakeWei = asUint(args.battleStake ?? args[6], 'Craps battle stake');
+          buyInWei = asUint(args.bankroll ?? args[3], 'Craps bankroll') + battleStakeWei;
+        } catch (_error) {
+          buyInWei = null;
+          battleStakeWei = null;
+        }
         const window = Object.freeze({
           day: openedDay,
-          period: remainder - 1,
+          period,
           slot: slot.toString(),
           battleKey,
           ceilingWei: asUint(args.seed ?? args[2], 'Craps boost ceiling'),
+          buyInWei,
+          battleStakeWei,
+          tier,
         });
         openedBySlot.set(window.slot, window);
         if (openedDay !== day && openedDay !== yesterdayDay) continue;
         (openedDay === day ? currentWindows : yesterdayWindows)[window.period] = window;
+      } else if (parsed.name === 'CrapsHighRollerDayOpened') {
+        const openedDay = Number(asUint(args.day ?? args[0], 'High Roller day'));
+        highMultipleByDay.set(
+          openedDay,
+          Number(asUint(args.multiplier ?? args[1], 'High Roller multiple')),
+        );
+        highBudgetByDay.set(openedDay, asUint(
+          args.highRollerBoostBudget ?? args[3],
+          'High Roller boost budget',
+        ));
+      } else if (parsed.name === 'CrapsHighRollerPaid') {
+        // Emitted for a sole lane as its seat settles (even at zero, which is
+        // that lane's final word) and once for a contested one. Its presence is
+        // the only client-visible proof a window seated a high roller: the day
+        // seat's `CrapsSlipPlaced` echo carries no high bit. The rider flag is
+        // what separates money ADDED from money merely put at risk.
+        const battleKey = String(args.battleKey ?? args[1]).toLowerCase();
+        const bankrollRider = Boolean(args.bankrollRider ?? args[4]);
+        highLaneShape.set(battleKey, bankrollRider ? 'sole' : 'contested');
+        highPaidByKey.set(battleKey, Object.freeze({
+          betId: asUint(args.betId ?? args[0], 'High Roller winning bet').toString(),
+          winner: String(args.player ?? args[2]),
+          amountWei: asUint(args.amount ?? args[3], 'High Roller payout'),
+          bankrollRider,
+        }));
+      } else if (parsed.name === 'CrapsProgressiveRolled') {
+        const source = Number(asUint(args.source ?? args[1], 'Craps rollover source'));
+        const key = String(args.battleKey ?? args[0]).toLowerCase();
+        const amount = asUint(args.amount ?? args[2], 'Craps rollover amount');
+        if (source === CRAPS_ROLL_SRC_MAIN) {
+          mainRolledWei.set(key, amount);
+        } else if (source === CRAPS_ROLL_SRC_HIGH_CONTESTED) {
+          contestedHighRolledWei.set(key, (contestedHighRolledWei.get(key) ?? 0n) + amount);
+        } else if (source === CRAPS_ROLL_SRC_HIGH_SOLE) {
+          soleRolledWei.set(key, (soleRolledWei.get(key) ?? 0n) + amount);
+        }
       } else if (parsed.name === 'CrapsBonusArmed') {
         const battleKey = String(args.battleKey ?? args[0]).toLowerCase();
         armedByKey.set(battleKey, asUint(args.index ?? args[2], 'Craps table index').toString());
@@ -608,6 +874,7 @@ export function crapsLobbySnapshotFromLogs(
       } else if (parsed.name === 'CrapsBattlePaid') {
         const battleKey = String(args.battleKey ?? args[1]).toLowerCase();
         paidByKey.set(battleKey, Object.freeze({
+          betId: asUint(args.betId ?? args[0], 'Craps battle winning bet').toString(),
           winner: String(args.player ?? args[2]),
           amountWei: asUint(args.amount ?? args[3], 'Craps battle payout'),
         }));
@@ -626,20 +893,127 @@ export function crapsLobbySnapshotFromLogs(
       .filter((window) => window && paidByKey.has(window.battleKey))
       .map((window) => armedByKey.get(window.battleKey)),
   ].filter((index) => index != null))]);
-  const results = Object.freeze(currentWindows.map((window, period) => {
-    const paid = window ? paidByKey.get(window.battleKey) : null;
-    if (!paid) return null;
+  /**
+   * The HIGH lane's boost base for one window, in FLIP wei.
+   *
+   *   null -> not yet determinable   0n -> determined, and this window adds none
+   *
+   * The side lane is NOT a second draw: it shares the main lane's rung and the
+   * day's own weighting, and differs only in which budget it divides.
+   *
+   * THE FIGURE IS AN EV — what the house COMMITTED, not what the dice returned —
+   * and that cuts both ways on a lane with a single high seat.
+   *
+   * A CONTESTED lane pays its boost straight into `lanePot`, so committed and
+   * received are the same number. A SOLE lane is different: `_foldHigh` puts the
+   * boost on that one seat's own run as capital riding alongside the bankroll,
+   * so `_ride` returns nothing on a bust and a MULTIPLE of it on a big run.
+   * Both are counted at the capital:
+   *
+   *   - a sole rider who BUSTS still had the boost put up on their behalf, so it
+   *     counts in full — 33 of run #43's 34 sole rides came home empty, and a
+   *     headline that read zero for them would understate what the house staked
+   *   - a sole rider who WINS does NOT book the multiplier. The amplification is
+   *     the dice paying out a risk the player carried, not more protocol money.
+   *
+   * Measured at realised cash instead, the headline would be a function of how
+   * the dice fell rather than of what the house put up, and would swing by an
+   * order of magnitude on one window's luck.
+   *
+   * `roundBoost(units)` is the whole allocation either way: the slice paid plus
+   * the slice standing denied, which the contract banks in the progressive so
+   * that `paid + rolled` equals the full-standing award to the wei.
+   */
+  const highBaseFor = (window, dayWindows) => {
+    if (!window) return null;
+    const budget = highBudgetByDay.get(window.day);
+    if (budget == null) return null;
+    // A day that banked no high action has no high budget and nothing to give.
+    if (budget === 0n) return 0n;
+    // The lane markers are complete only once the field has FINALIZED: a sole
+    // lane announces itself as its seat settles, and every seat settles before
+    // the comparator can close the field. Before that, absence proves nothing.
+    if (!finalizedByKey.has(window.battleKey)) return null;
+    // EITHER SHAPE counts — see above. What must be true is that a high roller
+    // actually sat down: a window that seated none allocated nothing, however
+    // large the day's budget was.
+    if (!highLaneShape.has(window.battleKey)) return 0n;
+    const weight = crapsRoutineWeight(dayWindows);
+    if (weight == null) return null;
+    return crapsWindowShareWei(budget, weight, window.period, window.tier);
+  };
+  const realizedBoosts = (window, dayWindows) => {
     const index = armedByKey.get(window.battleKey);
     const word = wordAtIndex(wordsByIndex, index);
-    const boostWei = index == null || word == null
+    if (index == null || word == null) return { mainBoostWei: null, highBoostWei: null };
+    const mainBoostWei = crapsRealizedBoostWei({
+      ceilingWei: window.ceilingWei,
+      battleKey: window.battleKey,
+      wordValue: word,
+    });
+    const highBase = highBaseFor(window, dayWindows);
+    // ⛔ `soleRolledWei` is NOT added here. A sole lane's standing-denied slice is
+    // already inside `roundBoost(units)` — the contract splits one allocation into
+    // the part that rides and the part it banks — so adding the rollover on top
+    // would count the same FLIP twice.
+    const highBoostWei = highBase == null
       ? null
-      : crapsRealizedBoostWei({
-          ceilingWei: window.ceilingWei,
-          battleKey: window.battleKey,
-          wordValue: word,
-        });
-    return Object.freeze({ period, battleKey: window.battleKey, ...paid, boostWei });
-  }));
+      : highBase === 0n
+        ? 0n
+        : crapsRealizedBoostFromBaseWei({
+            baseWei: highBase,
+            battleKey: window.battleKey,
+            wordValue: word,
+          });
+    return { mainBoostWei, highBoostWei };
+  };
+  const resultForWindow = (window, period) => {
+    const paid = window ? paidByKey.get(window.battleKey) : null;
+    if (!paid) return null;
+    const final = finalizedByKey.get(window.battleKey) ?? null;
+    const dayWindows = window.day === day ? currentWindows : yesterdayWindows;
+    const { mainBoostWei, highBoostWei } = realizedBoosts(window, dayWindows);
+    const deniedMainBoostWei = mainRolledWei.get(window.battleKey) ?? 0n;
+    const winnerBoostWei = mainBoostWei == null
+      ? null
+      : mainBoostWei > deniedMainBoostWei ? mainBoostWei - deniedMainBoostWei : 0n;
+    const highPaid = highPaidByKey.get(window.battleKey) ?? null;
+    const deniedHighBoostWei = contestedHighRolledWei.get(window.battleKey) ?? 0n;
+    const highWinnerBoostWei = highPaid?.bankrollRider || highBoostWei == null
+      ? null
+      : highBoostWei > deniedHighBoostWei ? highBoostWei - deniedHighBoostWei : 0n;
+    return Object.freeze({
+      period,
+      battleKey: window.battleKey,
+      ...paid,
+      winningStop: final?.winningStop ?? null,
+      buyInWei: window.buyInWei,
+      highMultiple: highMultipleByDay.get(window.day) ?? null,
+      mainBoostWei,
+      winnerBoostWei,
+      highBoostWei,
+      ...(highPaid ? {
+        highResult: Object.freeze({
+          ...highPaid,
+          // A sole rider receives a non-zero rider return iff its run latched
+          // the goal. A contested lane always names its comparator winner, but
+          // its payment event does not restate that run's stop.
+          winningStop: highPaid.bankrollRider ? (highPaid.amountWei > 0n ? 1 : 0) : null,
+          winnerBoostWei: highWinnerBoostWei,
+        }),
+      } : {}),
+      // What the protocol put into THIS window, both lanes. A side lane still
+      // being counted must not blank the main figure that is already known.
+      boostWei: mainBoostWei == null ? null : mainBoostWei + (highBoostWei ?? 0n),
+    });
+  };
+  const results = Object.freeze(currentWindows.map(resultForWindow));
+  // The day's EVENT window closes on the day boundary, so its result belongs to
+  // yesterday's row rather than to any of today's seven.
+  const yesterdayEventResult = resultForWindow(
+    yesterdayWindows[CRAPS_BONUS_WINDOWS - 1],
+    CRAPS_BONUS_WINDOWS - 1,
+  );
   const resolvedReplays = Object.freeze([...ownedBets.values()]
     .flatMap((entry) => {
       const windows = entry.remainder === 0
@@ -655,7 +1029,9 @@ export function crapsLobbySnapshotFromLogs(
           slot: window.slot,
           battleKey: window.battleKey,
           viewerBetId: entry.betId,
+          battleStakeWei: window.battleStakeWei?.toString?.() ?? null,
           ...final,
+          winnerBetId: paid?.betId ?? null,
           winner: paid?.winner ?? null,
           amountWei: paid?.amountWei?.toString?.() ?? null,
         })];
@@ -667,46 +1043,265 @@ export function crapsLobbySnapshotFromLogs(
       return BigInt(a.viewerBetId) < BigInt(b.viewerBetId) ? -1 : 1;
     }));
 
-  let yesterdayAddedWei = 0n;
+  // Yesterday's headline is ALL-OR-NOTHING across both lanes and all seven
+  // windows: a partial sum announced as the day's total would understate what
+  // the protocol actually put up, which is worse than saying nothing yet.
+  let yesterdayAddedMainWei = 0n;
+  let yesterdayAddedHighWei = 0n;
   let yesterdayComplete = yesterdayDay > 0 && yesterdayWindows.every(Boolean);
   if (yesterdayComplete) {
     for (const window of yesterdayWindows) {
-      const index = armedByKey.get(window.battleKey);
-      const word = wordAtIndex(wordsByIndex, index);
-      if (index == null || word == null) {
+      const { mainBoostWei, highBoostWei } = realizedBoosts(window, yesterdayWindows);
+      if (mainBoostWei == null || highBoostWei == null) {
         yesterdayComplete = false;
         break;
       }
-      const realized = crapsRealizedBoostWei({
-        ceilingWei: window.ceilingWei,
-        battleKey: window.battleKey,
-        wordValue: word,
-      });
-      if (realized == null) {
-        yesterdayComplete = false;
-        break;
-      }
-      yesterdayAddedWei += realized;
+      yesterdayAddedMainWei += mainBoostWei;
+      yesterdayAddedHighWei += highBoostWei;
     }
   }
+  const yesterdayAddedWei = yesterdayAddedMainWei + yesterdayAddedHighWei;
+
+  const schedule = crapsBonusScheduleFromLogs(day, logs, parser);
+  const dayTicketSummary = (entryDay) => {
+    const tickets = [...publicDayTickets.values()].filter((ticket) => (
+      ticket.seen && ticket.day === entryDay
+    ));
+    return Object.freeze({
+      total: tickets.length,
+      high: tickets.filter((ticket) => ticket.highMask === CRAPS_ALL_WINDOWS_MASK).length,
+      highByPeriod: Object.freeze(Array.from({ length: CRAPS_BONUS_WINDOWS }, (_, period) => (
+        tickets.reduce((count, ticket) => count + ((ticket.highMask & (1 << period)) ? 1 : 0), 0)
+      ))),
+    });
+  };
+  const yesterdayTickets = dayTicketSummary(yesterdayDay);
+  const todayTickets = dayTicketSummary(day);
+  const tomorrowTickets = dayTicketSummary(day + 1);
+  const dayEntrants = todayTickets.total;
+  const previousEventDayHigh = yesterdayTickets.highByPeriod[CRAPS_BONUS_WINDOWS - 1];
+  const previousEventTotal = previousEventDirectEntrants.total + yesterdayTickets.total;
+  const previousEventHigh = previousEventDirectEntrants.high + previousEventDayHigh;
+  const previousEventBattleStakeWei = yesterdayWindows[CRAPS_BONUS_WINDOWS - 1]?.battleStakeWei ?? null;
+  const entrants = Object.freeze({
+    days: Object.freeze({
+      [String(day)]: dayEntrants,
+      [String(day + 1)]: tomorrowTickets.total,
+    }),
+    highDays: Object.freeze({
+      [String(day)]: todayTickets.high,
+      [String(day + 1)]: tomorrowTickets.high,
+    }),
+    previousEvent: Object.freeze({
+      period: CRAPS_BONUS_WINDOWS - 1,
+      direct: previousEventDirectEntrants.total,
+      directHigh: previousEventDirectEntrants.high,
+      day: yesterdayTickets.total,
+      dayHigh: previousEventDayHigh,
+      total: previousEventTotal,
+      high: previousEventHigh,
+      mainPotStakeWei: previousEventBattleStakeWei == null
+        ? null
+        : (BigInt(previousEventTotal) * previousEventBattleStakeWei).toString(),
+    }),
+    windows: Object.freeze(directEntrantCounts.map((direct, period) => {
+      // One High Roller still owns one main-scoreboard seat and posts exactly
+      // one bounty to the main pot; its remaining H-1 bounties fund the side
+      // lane. Whole-day seats join every window when it arms, so both kinds
+      // belong in this public main-field count exactly once.
+      const total = direct.total + dayEntrants;
+      const dayHigh = todayTickets.highByPeriod[period];
+      const high = direct.high + dayHigh;
+      const battleStakeFlip = schedule?.windows?.[period]?.battleStakeFlip ?? null;
+      return Object.freeze({
+        period,
+        direct: direct.total,
+        directHigh: direct.high,
+        day: dayEntrants,
+        dayHigh,
+        total,
+        high,
+        mainPotStakeWei: battleStakeFlip == null
+          ? null
+          : (BigInt(total) * battleStakeFlip * CRAPS_FLIP_WEI).toString(),
+      });
+    })),
+  });
+
+  const currentEntry = (entry) => {
+    if (!entry) return null;
+    const chips = entry.betId == null
+      ? Number(entry.chips ?? 0)
+      : amendedChipsByBetId.get(String(entry.betId)) ?? Number(entry.chips ?? 0);
+    return Object.freeze({ ...entry, chips });
+  };
 
   return Object.freeze({
     day,
-    schedule: crapsBonusScheduleFromLogs(day, logs, parser),
+    schedule,
+    entrants,
     results,
     resolvedReplays,
     playerEntries: scopedPlayer ? Object.freeze({
       player: scopedPlayer,
       days: Object.freeze(Object.fromEntries([...dayTickets].map(([entryDay, ticket]) => (
-        [String(entryDay), Object.freeze({ ...ticket })]
+        [String(entryDay), currentEntry(ticket)]
       )))),
-      windows: Object.freeze(playerWindows),
+      windows: Object.freeze(playerWindows.map(currentEntry)),
     }) : null,
     yesterdayDay,
+    yesterdayEventResult: yesterdayEventResult
+      ? Object.freeze({ day: yesterdayDay, ...yesterdayEventResult })
+      : null,
     yesterdayAddedWei: yesterdayComplete ? yesterdayAddedWei : null,
+    yesterdayAddedMainWei: yesterdayComplete ? yesterdayAddedMainWei : null,
+    yesterdayAddedHighWei: yesterdayComplete ? yesterdayAddedHighWei : null,
     yesterdayComplete,
     requiredWordIndexes,
   });
+}
+
+/**
+ * Validate the indexer's compact winner-total response.
+ *
+ * The API has already done the hard part: assigning a whole-day ticket's reused bet id to the
+ * window that actually settled it. Keep the arithmetic check here too so a stale or partially
+ * deployed indexer can never turn a component mismatch into a confident TOTAL WON figure.
+ */
+export function crapsWinnerTotalsFromPayload(dayValue, payload) {
+  const day = Number(dayValue);
+  if (!Number.isInteger(day) || day <= 0 || Number(payload?.day) !== day) return Object.freeze([]);
+  const input = Array.isArray(payload?.results) ? payload.results : [];
+  const totals = [];
+  for (const value of input) {
+    try {
+      const resultDay = Number(value?.day);
+      const period = Number(value?.period);
+      if (
+        !Number.isInteger(resultDay)
+        || !Number.isInteger(period)
+        || period < 0
+        || period >= CRAPS_BONUS_WINDOWS
+        || (resultDay !== day && !(resultDay === day - 1 && period === CRAPS_BONUS_WINDOWS - 1))
+      ) continue;
+      const battleKey = String(value?.battleKey ?? '').toLowerCase();
+      const winner = String(value?.winner ?? '').toLowerCase();
+      const lane = value?.lane === 'high' ? 'high' : value?.lane === 'main' ? 'main' : null;
+      if (!/^0x[0-9a-f]{64}$/.test(battleKey) || !/^0x[0-9a-f]{40}$/.test(winner) || !lane) continue;
+      const parsedBetId = asUint(value?.betId, 'Craps result bet id');
+      if (parsedBetId === 0n) continue;
+      const betId = parsedBetId.toString();
+      const runPaidWei = value?.runPaidWei == null
+        ? null
+        : asUint(value.runPaidWei, 'Craps run payout');
+      const battlePaidWei = asUint(value?.battlePaidWei, 'Craps battle payout');
+      const highPaidWei = asUint(value?.highPaidWei, 'Craps High Roller payout');
+      const progressivePaidWei = asUint(value?.progressivePaidWei, 'Craps progressive payout');
+      const totalWonWei = value?.totalWonWei == null
+        ? null
+        : asUint(value.totalWonWei, 'Craps total won');
+      if (runPaidWei == null ? totalWonWei != null : (
+        totalWonWei !== runPaidWei + battlePaidWei + highPaidWei + progressivePaidWei
+      )) continue;
+      if (value?.bankrollRider != null && typeof value.bankrollRider !== 'boolean') continue;
+      const bankrollRider = value?.bankrollRider ?? null;
+      // A sole rider's return is already part of CrapsBetSettled.paid. A non-zero separate
+      // high payout here would be the exact double-count this endpoint exists to prevent.
+      if (bankrollRider === true && highPaidWei !== 0n) continue;
+      totals.push(Object.freeze({
+        day: resultDay,
+        period,
+        battleKey,
+        lane,
+        betId,
+        winner,
+        bankrollRider,
+        runPaidWei,
+        battlePaidWei,
+        highPaidWei,
+        progressivePaidWei,
+        totalWonWei,
+      }));
+    } catch (_error) {
+      // One malformed row cannot blank the other completed battles.
+    }
+  }
+  return Object.freeze(totals);
+}
+
+/**
+ * Enrich chain-native lobby facts with the indexer's attributed settlement credits.
+ *
+ * Winner identity, lane shape, schedule and entry state remain usable without the DB. Only the
+ * derived total is nullable: showing a dash is honest; relabeling the battle pot as a total is not.
+ */
+export function crapsLobbySnapshotWithWinnerTotals(snapshot, totals = []) {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot ?? null;
+  const winnerKey = (entry, lane = entry?.lane) => [
+    String(entry?.battleKey ?? '').toLowerCase(),
+    lane,
+    String(entry?.betId),
+    String(entry?.winner ?? '').toLowerCase(),
+  ].join(':');
+  const byWinner = new Map((Array.isArray(totals) ? totals : []).map((entry) => [
+    winnerKey(entry),
+    entry,
+  ]));
+  const enrichLane = (result, lane) => {
+    if (!result || typeof result !== 'object') return result ?? null;
+    const match = byWinner.get(winnerKey(result, lane));
+    return Object.freeze({
+      ...result,
+      runPaidWei: match?.runPaidWei ?? null,
+      battlePaidWei: match?.battlePaidWei ?? null,
+      highPaidWei: match?.highPaidWei ?? null,
+      progressivePaidWei: match?.progressivePaidWei ?? null,
+      totalWonWei: match?.totalWonWei ?? null,
+    });
+  };
+  const enrichResult = (result) => {
+    if (!result) return null;
+    const main = enrichLane(result, 'main');
+    return Object.freeze({
+      ...main,
+      ...(result.highResult ? { highResult: enrichLane({
+        ...result.highResult,
+        battleKey: result.battleKey,
+      }, 'high') } : {}),
+    });
+  };
+  return Object.freeze({
+    ...snapshot,
+    results: Object.freeze((Array.isArray(snapshot.results) ? snapshot.results : []).map(enrichResult)),
+    yesterdayEventResult: enrichResult(snapshot.yesterdayEventResult),
+  });
+}
+
+/** Storage key of the VRF word committed to table index, in GAME's own layout. */
+export function crapsSettlementWordStorageKey(index) {
+  return ethers.toBeHex(hashPair(asUint(index, 'Craps table index'), CRAPS_SETTLEMENT_WORD_SLOT), 32);
+}
+
+/**
+ * The settlement word for a table index, or null while it is still undrawn.
+ *
+ * CrapsBattle exposes no `wordAt` — it reaches into GAME with `extsload`, and
+ * the deployment kept none of the table's public read surface. Reading the same
+ * slot directly is the only client path to a realized boost figure; calling the
+ * absent selector reverts with no data and blanks the whole banner.
+ */
+export async function readCrapsSettlementWord(index, providerOverride = null, blockTag = 'latest') {
+  const provider = providerOverride ?? readerProvider();
+  if (!provider) return null;
+  const game = CONTRACTS.GAME;
+  if (typeof game !== 'string' || !ethers.isAddress(game) || game === ethers.ZeroAddress) return null;
+  const raw = await readContractStorage(
+    game,
+    crapsSettlementWordStorageKey(index),
+    { provider, blockTag },
+  );
+  const word = asUint(raw, 'Craps settlement word');
+  return word === 0n ? null : word;
 }
 
 /** One RPC log read powers schedule terms, completed rows, and the prior-day boost. */
@@ -716,12 +1311,13 @@ export async function readCrapsLobbySnapshot(dayValue, player = null) {
   if (!Number.isInteger(day) || day <= 0) return null;
   const provider = readerProvider();
   if (!provider?.getBlockNumber || !provider?.getLogs) return null;
-  const latestBlock = Number(await provider.getBlockNumber());
+  const latestBlock = Number(await readProviderBlockNumber(provider));
   const deployBlock = Number(CHAIN.deployBlock ?? 0);
   const fromBlock = Math.max(deployBlock, latestBlock - CRAPS_LOG_LOOKBACK_BLOCKS);
   const iface = interfaceForCrapsLobby();
   const topics = [
     'CrapsSlipPlaced',
+    'CrapsSlipAmended',
     'CrapsBonusOpened',
     'CrapsBonusDonated',
     'CrapsBonusArmed',
@@ -729,6 +1325,9 @@ export async function readCrapsLobbySnapshot(dayValue, player = null) {
     'CrapsDayWindowsUpgraded',
     'CrapsBattleFinalized',
     'CrapsBattlePaid',
+    'CrapsHighRollerDayOpened',
+    'CrapsHighRollerPaid',
+    'CrapsProgressiveRolled',
   ]
     .map((name) => iface.getEvent(name).topicHash);
   const logs = await provider.getLogs({
@@ -739,24 +1338,11 @@ export async function readCrapsLobbySnapshot(dayValue, player = null) {
   });
   const parser = crapsLobbyReceiptParser();
   const shell = crapsLobbySnapshotFromLogs(day, logs, { parser, player });
-  const contract = readContract();
   const words = new Map(await Promise.all(shell.requiredWordIndexes.map(async (index) => {
-    try { return [String(index), asUint(await contract.wordAt(index), 'Craps settlement word')]; }
+    try { return [String(index), await readCrapsSettlementWord(index, provider, latestBlock)]; }
     catch (_error) { return [String(index), null]; }
   })));
   return crapsLobbySnapshotFromLogs(day, logs, { parser, wordsByIndex: words, player });
-}
-
-function plain(value) {
-  if (typeof value === 'bigint') return value.toString();
-  if (value && typeof value.toObject === 'function') {
-    try { return plain(value.toObject(true)); } catch (_error) { /* fall through */ }
-  }
-  if (Array.isArray(value)) return value.map(plain);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, plain(child)]));
-  }
-  return value;
 }
 
 function structuredRevert(error, fallback) {
@@ -791,153 +1377,58 @@ export function crapsReceiptParser() {
   };
 }
 
-/** Current or historical shared-table state. */
-export async function readCrapsTable({ index } = {}) {
-  if (!isCrapsAvailable()) {
-    return { available: false, currentIndex: null, index: null, resolved: false, word: '0', survived: null };
-  }
-  const contract = readContract();
-  const current = asUint(await contract.currentIndex(), 'Current index');
-  const target = index == null ? current : asUint(index, 'Table index');
-  const [wordValue, resolvedValue] = await Promise.all([
-    contract.wordAt(target),
-    contract.isResolved(target),
-  ]);
-  const word = asUint(wordValue, 'VRF word');
-  const resolved = Boolean(resolvedValue) || word !== 0n;
-  const survived = resolved ? Boolean(await contract.survivedAt(target)) : null;
-  return {
-    available: true,
-    currentIndex: current.toString(),
-    index: target.toString(),
-    resolved,
-    word: word.toString(),
-    survived,
-  };
-}
-
-export async function readCrapsPerks(player) {
-  if (!isCrapsAvailable() || !player) return { available: isCrapsAvailable(), maxOdds: 3, rakeBps: 0 };
-  const contract = readContract();
-  const [maxOdds, rakeBps] = await Promise.all([
-    contract.maxOddsFor(player),
-    contract.rakeBpsFor(player),
-  ]);
-  return { available: true, maxOdds: Number(maxOdds), rakeBps: Number(rakeBps) };
-}
-
 /** Live global progressive shared by every scheduled Craps battle. */
 export async function readCrapsProgressivePool() {
   if (!isCrapsAvailable()) return null;
   return asUint(await readContract().progressivePool(), 'Craps progressive pool').toString();
 }
 
-export async function readCrapsQuote({ bets, hands = 1 } = {}) {
-  if (!isCrapsAvailable()) return null;
-  const count = asUint(hands, 'Shooter count');
-  const contract = readContract();
-  const [stake, quote, theo] = await Promise.all([
-    contract.stakeFor(bets),
-    contract.quote(bets, count),
-    contract.theoFor(bets),
-  ]);
-  return { stakeWei: String(stake), quoteWei: String(quote), theoPerHandWei: String(theo) };
-}
-
-export async function readCrapsBet(betId) {
-  if (!isCrapsAvailable()) return null;
-  return plain(await readContract().betOf(asUint(betId, 'Bet id')));
-}
-
-export async function previewCrapsSettlement(betId) {
-  if (!isCrapsAvailable()) return null;
-  const result = await readContract().previewSettlement(asUint(betId, 'Bet id'));
-  return { won: String(result.won ?? result[0]), survived: Boolean(result.survived ?? result[1]), paid: String(result.paid ?? result[2]) };
-}
-
-export async function readCrapsShooterDice(index, handOrdinal = 0) {
-  if (!isCrapsAvailable()) return [];
-  const flat = await readContract().shooterDice(
-    asUint(index, 'Table index'),
-    asUint(handOrdinal, 'Shooter ordinal'),
-  );
-  const dice = Array.from(flat, Number);
-  const rolls = [];
-  for (let offset = 0; offset + 1 < dice.length; offset += 2) {
-    const d1 = dice[offset];
-    const d2 = dice[offset + 1];
-    rolls.push({ d1, d2, total: d1 + d2, hard: d1 === d2 });
-  }
-  return rolls;
-}
-
-/** Full per-leg resolver view for fixed, flat-slip, or let-it-ride preview. */
-export async function readCrapsBreakdown({
-  bets,
-  index,
-  mode = 'fixed',
-  hands = 1,
-  bankrollWei = 0,
-  goalWei = 0,
-  cap = 256,
-  letItRide = false,
-} = {}) {
-  const contract = readContract();
-  const tableIndex = asUint(index, 'Table index');
-  if (mode === 'slip' || mode === 'ride') {
-    return plain(await contract.resolveSlipAt(
-      bets,
-      tableIndex,
-      asUint(bankrollWei, 'Bankroll'),
-      asUint(goalWei, 'Goal'),
-      asUint(cap, 'Shooter cap'),
-      mode === 'ride' || Boolean(letItRide),
-    ));
-  }
-  const count = asUint(hands, 'Shooter count');
-  return plain(count === 1n
-    ? await contract.resolveHandAt(bets, tableIndex)
-    : await contract.resolveHandsAt(bets, tableIndex, count));
-}
-
 export function parseCrapsReceipt(receipt, parser = crapsReceiptParser()) {
-  const result = { placed: [], settled: [], rakeback: [] };
+  const result = { placed: [], reserved: [], upgraded: [], amended: [], settled: [] };
   for (const log of receipt?.logs || []) {
     let parsed;
     try { parsed = parser?.interface?.parseLog?.(log); } catch (_error) { parsed = null; }
     if (!parsed) continue;
     const a = parsed.args || {};
-    if (parsed.name === 'CrapsBetPlaced') {
-      result.placed.push({ mode: 'fixed', betId: String(a.betId ?? a[0]), player: a.player ?? a[1], index: String(a.index ?? a[2]), hands: Number(a.hands ?? a[3]), staked: String(a.staked ?? a[4]) });
-    } else if (parsed.name === 'CrapsSlipPlaced') {
-      result.placed.push({ mode: 'slip', betId: String(a.betId ?? a[0]), player: a.player ?? a[1], index: String(a.index ?? a[2]), bankroll: String(a.bankroll ?? a[3]), goal: String(a.goal ?? a[4]) });
+    if (parsed.name === 'CrapsSlipPlaced') {
+      // ONE packed word, not a field per value — the deployed echo carries the
+      // chip board, the bet id, the entry multiple and the frozen standing.
+      const packed = asUint(a.bet ?? a[1], 'Craps placed slip');
+      const betId = (packed >> CRAPS_EVENT_BET_ID_SHIFT) & CRAPS_EVENT_BET_ID_MASK;
+      result.placed.push({
+        player: a.player ?? a[0],
+        betId: betId.toString(),
+        slot: (betId >> 64n).toString(),
+        multiple: Number(((packed >> CRAPS_EVENT_MULT_SHIFT) & CRAPS_EVENT_MULT_MASK) + 1n),
+      });
+    } else if (parsed.name === 'CrapsSlipAmended') {
+      result.amended.push({
+        betId: asUint(a.betId ?? a[0], 'Amended Craps bet').toString(),
+        chips: Number(asUint(a.chips ?? a[1], 'Amended Craps board') & CRAPS_EVENT_CHIPS_MASK),
+      });
+    } else if (parsed.name === 'CrapsDayReserved') {
+      result.reserved.push({
+        player: a.player ?? a[0],
+        day: Number(asUint(a.day ?? a[1], 'Reserved Craps day')),
+        highRoller: Boolean(a.highRoller ?? a[2]),
+      });
+    } else if (parsed.name === 'CrapsDayWindowsUpgraded') {
+      result.upgraded.push({
+        player: a.player ?? a[0],
+        day: Number(asUint(a.day ?? a[1], 'Upgraded Craps day')),
+        upgradedMask: Number(asUint(a.upgradedMask ?? a[2], 'Craps upgrade mask')),
+        burnedWei: asUint(a.burned ?? a[3], 'Craps upgrade burn').toString(),
+      });
     } else if (parsed.name === 'CrapsBetSettled') {
-      result.settled.push({ betId: String(a.betId ?? a[0]), player: a.player ?? a[1], staked: String(a.staked ?? a[2]), won: String(a.won ?? a[3]), survived: Boolean(a.survived ?? a[4]), paid: String(a.paid ?? a[5]), rolls: a.rolls ?? a[6] });
-    } else if (parsed.name === 'CrapsRakeback') {
-      result.rakeback.push({ player: a.player ?? a[0], betId: String(a.betId ?? a[1]), amount: String(a.amount ?? a[2]) });
+      result.settled.push({
+        betId: String(a.betId ?? a[0]),
+        player: a.player ?? a[1],
+        wonWei: asUint(a.won ?? a[2], 'Craps won').toString(),
+        paidWei: asUint(a.paid ?? a[3], 'Craps paid').toString(),
+      });
     }
   }
   return result;
-}
-
-export async function placeCrapsWager(wager, { onSubmitted } = {}) {
-  requireCraps();
-  if (!wager || wager.valid === false) throw new Error(wager?.errors?.[0]?.message || 'The craps wager is invalid.');
-  const method = wager.method === 'placeSlip' ? 'placeSlip' : wager.method === 'placeBet' ? 'placeBet' : null;
-  if (!method || !Array.isArray(wager.contractArgs)) throw new Error('Unknown craps placement mode.');
-  const args = wager.contractArgs;
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (signer) {
-    const simulation = await requireStaticCall(buildContract(signer), method, args, signer);
-    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps wager was rejected.');
-  }
-  const receipt = await sendTx(
-    (freshSigner) => buildContract(freshSigner)[method](...args),
-    method === 'placeBet' ? 'Place craps bet' : 'Place craps slip',
-    { onSubmitted },
-  );
-  return { receipt, events: parseCrapsReceipt(receipt) };
 }
 
 /** Submit a scheduled window, today's whole-day lane, or a blind future-day reservation. */
@@ -969,13 +1460,35 @@ export async function placeCrapsBonusEntry(wager, { onSubmitted } = {}) {
   const receipt = await sendTx(
     (freshSigner) => buildContract(freshSigner)[method](...args),
     method === 'applyCrapsPasses'
-      ? 'Use Craps day pass'
+      ? 'Use Craps comp'
       : method === 'buyFutureCrapsDays'
         ? 'Reserve future Craps day'
         : method === 'enterBonusDay' ? 'Enter full Craps day' : 'Enter Craps battle',
     { onSubmitted },
   );
   return { receipt, method };
+}
+
+/** Replace the seven-chip board on one still-open scheduled entry. */
+export async function amendCrapsSlip({ betId, contractChips, onSubmitted } = {}) {
+  requireCraps();
+  const id = asUint(betId, 'Craps bet id');
+  const chips = asUint(contractChips, 'Craps board');
+  if (id === 0n) throw new Error('Choose a Craps entry to amend.');
+  if (chips > CRAPS_EVENT_CHIPS_MASK) throw new Error('The Craps board is not a packed uint32.');
+  const args = [id.toString(), Number(chips)];
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const simulation = await requireStaticCall(buildContract(signer), 'amendSlip', args, signer);
+    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps amendment was rejected.');
+  }
+  const receipt = await sendTx(
+    (freshSigner) => buildContract(freshSigner).amendSlip(...args),
+    'Amend Craps entry',
+    { onSubmitted },
+  );
+  return { receipt, betId: id.toString(), contractChips: Number(chips) };
 }
 
 /** Upgrade selected windows of an existing whole-day ticket to High Roller. */
@@ -1004,37 +1517,24 @@ export async function upgradeCrapsDayWindows({ day, periodMask, onSubmitted } = 
   return { receipt, day: entryDay, periodMask: mask };
 }
 
-export async function resolveCrapsBets({ betIds, onSubmitted } = {}) {
-  requireCraps();
-  if (!Array.isArray(betIds) || betIds.length === 0) throw new Error('Choose at least one craps bet to settle.');
-  const ids = betIds.map((id) => asUint(id, 'Bet id'));
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (signer) {
-    const simulation = await requireStaticCall(buildContract(signer), 'resolveBets', [ids], signer);
-    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps settlement was rejected.');
-  }
-  const receipt = await sendTx(
-    (freshSigner) => buildContract(freshSigner).resolveBets(ids),
-    'Settle craps bets',
-    { onSubmitted },
-  );
-  return { receipt, events: parseCrapsReceipt(receipt) };
-}
-
+// Revert copy for the errors the DEPLOYED contract can actually raise. Kept in
+// lockstep with FLIP_CRAPS_ABI's error list: copy for an error the contract no
+// longer declares is dead weight, and a deployed error with no copy surfaces to
+// the player as a generic failure.
 const errors = [
+  // CLIENT-SIDE validation codes, not contract reverts: the board editor raises
+  // these before anything is sent, and the reason map carries their fallback copy.
   ['NoStake', 'Place at least one FLIP chip.', 'Add a chip to the board.'],
-  ['BadBetHandCount', 'A fixed bet must cover 1–25 shooters.', 'Choose 1–25 shooters.'],
   ['OddsAboveAllowance', 'Those Pass Odds exceed your current activity allowance.', 'Lower the odds multiplier.'],
   ['BankrollBelowStake', 'The bankroll cannot cover one base board.', 'Raise the bankroll or lower the board.'],
   ['BadGoal', 'The payout goal must exceed twice the starting bankroll.', 'Raise the goal or set it to zero.'],
-  ['IndexAlreadyRevealed', 'This table has already rolled; betting is closed.', 'Refresh onto the current open table.'],
-  ['NoSuchBet', 'That craps bet does not exist.', 'Refresh your open bets.'],
-  ['AlreadySettled', 'That craps bet has already been settled.', 'Refresh your open bets.'],
-  ['CoinNotPinned', 'FLIP Craps is not fully connected yet.', 'Wait for the deployment pins.'],
-  ['CoinflipNotPinned', 'Craps rakeback is not fully connected yet.', 'Wait for the deployment pins.'],
-  ['GameNotPinned', 'Craps randomness is not fully connected yet.', 'Wait for the deployment pins.'],
+  // Contract reverts, one per error the deployed CrapsBattle declares.
   ['BonusPeriodSpent', 'That Craps battle has already closed.', 'Choose the current battle or a later one.'],
+  ['BonusStillRunning', 'That Craps battle is still taking entries.', 'Wait for it to close.'],
+  ['NoSuchBattle', 'That Craps battle does not exist.', 'Reload the lobby and choose an open battle.'],
+  ['NoSuchBet', 'That craps bet does not exist.', 'Refresh your open bets.'],
+  ['NotYourBet', 'That craps slip belongs to another wallet.', 'Switch wallets or choose your own slip.'],
+  ['BetLocked', 'That slip is locked: its battle has closed and its table is bound.', 'Wait for the result.'],
   ['AlreadyInBonus', 'This wallet is already entered in that Craps battle.', 'Choose another open battle.'],
   ['ScoreRequiredForBonus', 'Your activity score does not meet this battle’s entry bar.', 'Raise your activity score or choose another battle.'],
   ['BadEntryMultiple', 'That Craps entry multiple is not available.', 'Use the standard entry option.'],
@@ -1044,5 +1544,12 @@ const errors = [
   ['BadRandomCount', 'A Craps board must place exactly seven chips or leave the board blank.', 'Place all seven chips.'],
   ['TooManyChipsOnALeg', 'One Craps position has too many chips.', 'Spread that stack across more positions.'],
   ['BoardPlaysBothSides', 'A board cannot play Pass and Don’t Pass together.', 'Choose one side of the line.'],
+  ['RngNotReady', 'That table’s dice have not landed yet.', 'Try again once the round’s randomness arrives.'],
+  ['SeedAboveMax', 'That donation would overflow the battle’s seed.', 'Donate a smaller amount.'],
+  ['BadBurnTag', 'That FLIP burn was not tagged for Craps.', 'Retry the entry from the lobby.'],
+  ['BadBattleTerms', 'Those custom battle terms are out of range.', 'Adjust the terms and try again.'],
+  ['NotBattleCreator', 'This wallet is not approved to open custom Craps battles.', 'Use the scheduled battles instead.'],
+  ['NotVaultOwner', 'Only the vault owner may set the vault’s Craps board.', 'Switch to the vault owner wallet.'],
+  ['OnlyGame', 'That Craps call is reserved for the protocol.', 'Use the lobby entry buttons.'],
 ];
 for (const [code, userMessage, recoveryAction] of errors) register(code, { code, userMessage, recoveryAction });

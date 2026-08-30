@@ -1,7 +1,7 @@
 // viewer/main.js -- Entry point for viewer page
 // Wallet-free entry point: no imports from app/ wallet/contracts chain (SHELL-01)
 
-import { initPlayerSelector, setSelectedPlayer } from './player-selector.js';
+import { getPlayerIdentity, initPlayerSelector, setSelectedPlayer } from './player-selector.js';
 import { initScrubber, loadDays, setDay, getCurrentDay, getDaysData } from './scrubber.js';
 import { fetchJSON } from './api.js';
 import { render as renderDashboard, clearChart } from './dashboard.js';
@@ -16,6 +16,19 @@ const contentEl     = document.getElementById('viewer-content');
 const replayWrapperEl = document.getElementById('replay-wrapper');
 
 let currentPlayer = null;
+
+function renderNoActivity(identity) {
+  const panel = document.createElement('div');
+  panel.className = 'panel viewer-no-activity';
+  const title = document.createElement('h2');
+  title.textContent = identity.playerType === 'vault' || identity.playerType === 'sdgnrs'
+    ? 'Protocol identity'
+    : 'No activity yet';
+  const copy = document.createElement('p');
+  copy.textContent = `${identity.discordName} has a sim profile, but no player-day history to display.`;
+  panel.append(title, copy);
+  contentEl.replaceChildren(panel);
+}
 
 // --- URL Hash State (D-17, D-18, NAV-03) ---
 
@@ -134,7 +147,7 @@ async function refreshPanels(player, day) {
 
 // --- Player Change Handler ---
 
-async function onPlayerChange(addr) {
+async function onPlayerChange(addr, identity = getPlayerIdentity(addr)) {
   currentPlayer = addr;
   emptyEl.hidden = true;
   contentEl.hidden = false;
@@ -148,7 +161,15 @@ async function onPlayerChange(addr) {
   document.querySelectorAll('.viewer-error').forEach(el => el.remove());
 
   const result = await loadDays(addr);
-  if (!result) return;
+  if (!result) {
+    updateHash(addr, 1);
+    if (identity) {
+      clearChart();
+      renderNoActivity(identity);
+    }
+    if (replayWrapperEl) replayWrapperEl.hidden = true;
+    return;
+  }
 
   // Default to first day, or restore from hash if same player
   const hashState = parseHash();
@@ -179,7 +200,7 @@ window.addEventListener('hashchange', () => {
   // Only act if something actually changed
   if (state.player !== currentPlayer) {
     setSelectedPlayer(selectEl, state.player);
-    onPlayerChange(state.player);
+    onPlayerChange(state.player, getPlayerIdentity(state.player));
   } else if (state.day !== getCurrentDay()) {
     setDay(state.day);
     onDayChange(state.day);
@@ -201,7 +222,7 @@ async function boot() {
   const initial = parseHash();
   if (initial) {
     setSelectedPlayer(selectEl, initial.player);
-    await onPlayerChange(initial.player);
+    await onPlayerChange(initial.player, getPlayerIdentity(initial.player));
     // setDay after loadDays completes inside onPlayerChange
   }
 

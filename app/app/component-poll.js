@@ -14,9 +14,9 @@
 //   - unregister  → idempotent, safe in disconnectedCallback.
 //
 // Registration does NOT fire the callback up front — components keep their
-// existing mount-time refresh call, so ordering semantics stay identical to
-// the setInterval they replace. Ticks are fire-and-forget; a rejected poll
-// logs nothing here (components already handle their own errors).
+// existing mount-time refresh call. Each registration is single-flight: ticks
+// that arrive while an async refresh is running collapse into one trailing
+// refresh instead of stacking duplicate RPC/API work behind a slow endpoint.
 
 const entries = new Set();
 let listening = false;
@@ -25,9 +25,35 @@ function isHidden() {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
+function run(entry) {
+  if (!entries.has(entry) || isHidden()) return;
+  if (entry.running) {
+    entry.trailing = true;
+    return;
+  }
+  entry.running = true;
+  let result;
+  try { result = entry.fn(); }
+  catch (_e) { result = undefined; }
+  Promise.resolve(result).catch(() => {
+    // Components own their presentation/error policy. Consuming the rejection
+    // here prevents an otherwise-handled poll from becoming an unhandled one.
+  }).finally(() => {
+    entry.running = false;
+    if (!entries.has(entry) || isHidden()) {
+      entry.trailing = false;
+      return;
+    }
+    if (entry.trailing) {
+      entry.trailing = false;
+      run(entry);
+    }
+  });
+}
+
 function arm(entry) {
   if (entry.timer != null || isHidden()) return;
-  entry.timer = setInterval(entry.fn, entry.intervalMs);
+  entry.timer = setInterval(() => run(entry), entry.intervalMs);
   // Node (tests) returns a Timeout with unref; browsers return a number.
   if (entry.timer && typeof entry.timer.unref === 'function') entry.timer.unref();
 }
@@ -45,7 +71,7 @@ function onVisibilityChange() {
   }
   for (const entry of entries) {
     // Immediate catch-up, then the normal cadence.
-    try { entry.fn(); } catch { /* the component's own error handling owns this */ }
+    run(entry);
     arm(entry);
   }
 }
@@ -65,12 +91,13 @@ export function registerComponentPoll(fn, intervalMs) {
     return () => {};
   }
   ensureListener();
-  const entry = { fn, intervalMs, timer: null };
+  const entry = { fn, intervalMs, timer: null, running: false, trailing: false };
   entries.add(entry);
   arm(entry);
   return () => {
     if (!entries.has(entry)) return;
     disarm(entry);
+    entry.trailing = false;
     entries.delete(entry);
   };
 }

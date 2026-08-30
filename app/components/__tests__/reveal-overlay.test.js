@@ -351,7 +351,7 @@ describe('normalizeSequence', () => {
     assert.equal(seq.big, true, 'epic card marks the sequence big');
   });
 
-  test('Craps pass awards become denomination-specific opening cards', () => {
+  test('Craps comp awards become denomination-specific opening cards', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
       lootboxIndex: 48,
@@ -372,23 +372,23 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.type), ['craps-pass', 'craps-pass']);
     assert.deepEqual(seq.cards.map((card) => card.passTier), ['normal', 'high']);
     assert.deepEqual(seq.cards.map((card) => card.value), ['2', '1']);
-    assert.equal(seq.cards[0].label, 'CRAPS BATTLEPASSES');
+    assert.equal(seq.cards[0].label, 'CRAPS COMPS');
     assert.match(seq.cards[0].sub, /all 7 scheduled windows · Banked for a future day/);
-    assert.equal(seq.cards[1].label, 'HIGH-ROLLER CRAPS BATTLEPASS');
+    assert.equal(seq.cards[1].label, 'HIGH-ROLLER CRAPS COMP');
     assert.match(seq.cards[1].sub, /Day 73 reserved/,
       'the contract gives the one reserved seat to the more valuable high pass');
     assert.equal(seq.cards[0].rarity, 'rare');
     assert.equal(seq.cards[1].rarity, 'epic');
     assert.equal(seq.big, true);
     assert.equal(seq.cards.some((card) => card.type === 'nowin'), false,
-      'a pass-only box is never replaced by the old zero-ticket/zero-FLIP fallback');
+      'a comp-only box is never replaced by the old zero-ticket/zero-FLIP fallback');
     assert.deepEqual(seq.lootboxBoxGroups[0].cards, seq.cards,
-      'an aggregate pass event belongs to its sole physical box when attribution is exact');
+      'an aggregate comp event belongs to its sole physical box when attribution is exact');
     assert.match(REVEAL_SRC,
       /card\.type === 'craps-pass'[\s\S]*?#buildCrapsPassBadge\(card\)/,
-      'the pass card mounts the established Craps battle badge rather than a generic glyph');
-    assert.match(REVEAL_SRC, /card\.passTier === 'high' \? 'HIGH ROLLER' : 'BATTLEPASS'/,
-      'the normal reward badge names the Craps Battlepass directly');
+      'the comp card mounts the established Craps battle badge rather than a generic glyph');
+    assert.match(REVEAL_SRC, /card\.passTier === 'high' \? 'HIGH ROLLER' : 'COMP'/,
+      'the normal reward badge names the Craps comp directly');
     assert.match(REVEAL_SRC, /for \(const \[symbol, color\] of \[\[1, 6\], \[4, 4\]\]\)/,
       'the pass badge reuses the silver 2 and blue 5 dice from the live game');
     assert.doesNotMatch(REVEAL_SRC, /craps-battle-badge-v1\.png/,
@@ -398,7 +398,7 @@ describe('normalizeSequence', () => {
       'high-roller passes have a visibly separate gold treatment');
   });
 
-  test('presale pass counts stay attached to their physical opening card', () => {
+  test('presale comp counts stay attached to their physical opening card', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
       lootboxIndex: 49,
@@ -1401,6 +1401,43 @@ describe('normalizeSequence', () => {
       'WWXRP plus a lost flip is still a full loss, even without a caller hint');
   });
 
+  test('day summary includes one aggregated Craps card only for positive indexed wins', () => {
+    const won = normalizeSequence({
+      kind: 'jackpot',
+      day: 9,
+      prizes: [],
+      activity: {
+        crapsWinningsAmount: String(1_234n * 10n ** 18n),
+        crapsWinCount: 3,
+      },
+    });
+    assert.ok(won);
+    assert.equal(won.cards.length, 1);
+    assert.deepEqual(won.cards[0], {
+      type: 'craps-result',
+      rarity: 'rare',
+      icon: null,
+      glyph: null,
+      label: 'CRAPS WINNINGS',
+      value: '+1,234 FLIP',
+      sub: '3 WINNING BATTLES',
+      crapsWinCount: 3,
+      summaryDetail: true,
+      countText: null,
+      spin: null,
+    });
+    assert.equal(won.consolationOnly, false);
+
+    assert.equal(normalizeSequence({
+      kind: 'jackpot', day: 9, prizes: [],
+      activity: { crapsWinningsAmount: '0', crapsWinCount: 2 },
+    }), null, 'zero payout does not create a participation card');
+    assert.equal(normalizeSequence({
+      kind: 'jackpot', day: 9, prizes: [],
+      activity: { crapsWinningsAmount: '1000000000000000000', crapsWinCount: 0 },
+    }), null, 'a malformed payout without a winning battle is omitted');
+  });
+
   test('unknown kind / junk → null', () => {
     assert.equal(normalizeSequence({ kind: 'nope' }), null);
     assert.equal(normalizeSequence(null), null);
@@ -1616,7 +1653,7 @@ describe('buildBoxSpinBoard', () => {
     );
   });
 
-  test('marks a halved payout as an estimate once the FLIP granule applies', () => {
+  test('uses a known survivor payout immediately even when the FLIP granule applies', () => {
     const oneFlip = 10n ** 18n;
     const reels = [
       { spinIndex: 0, playerTicket: 0xC3824100n, resultTicket: 0xC7864504n, score: 3 },
@@ -1629,7 +1666,10 @@ describe('buildBoxSpinBoard', () => {
       spinType: 'flip', survived: true, payout: 4_200n * oneFlip, reels,
     });
     assert.equal(collapsed.payoutAtRisk, 2_100n * oneFlip);
-    assert.equal(collapsed.payoutAtRiskApproximate, true);
+    assert.equal(collapsed.payoutAtRiskApproximate, false,
+      'the emitted survivor amount is authoritative for presentation');
+    assert.equal(collapsed.survivalWinPayout, 4_200n * oneFlip);
+    assert.equal(collapsed.survivalWinPayoutApproximate, false);
 
     // Below it the mint keeps a whole-FLIP floor, which halves cleanly enough
     // to present without a qualifier.
@@ -1639,7 +1679,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(floored.payoutAtRiskApproximate, false);
   });
 
-  test('a settled survivor outranks an aggregate combo estimate', () => {
+  test('a known survivor outranks an aggregate combo estimate immediately', () => {
     const oneFlip = 10n ** 18n;
     const board = buildBoxSpinBoard({
       spinType: 'flip',
@@ -1656,16 +1696,16 @@ describe('buildBoxSpinBoard', () => {
       ],
     });
 
-    assert.notEqual(board.payoutAtRisk, 8_000n * oneFlip,
-      'the pre-flip meter stays on the outcome-neutral estimate');
+    assert.equal(board.payoutAtRisk, 8_000n * oneFlip,
+      'the reels use the known survivor settlement instead of an average roll');
+    assert.equal(board.payoutAtRiskApproximate, false);
     settleBoxSpinPayoutPresentation(board);
     assert.equal(board.payoutAtRisk, 8_000n * oneFlip,
-      'after the coin lands, the emitted 16,000 FLIP settlement bounds the reel sum');
-    assert.equal(board.payoutAtRiskApproximate, true,
-      'halving a rounded large settlement keeps the honest qualifier');
+      'settling the coin keeps the already-authoritative reel sum');
+    assert.equal(board.payoutAtRiskApproximate, false);
     assert.equal(board.survivalWinPayout, 16_000n * oneFlip);
     assert.equal(board.survivalWinPayoutApproximate, false,
-      'the actual settled win is exact even though its inferred reel sum is approximate');
+      'the actual settled win is exact');
   });
 
   test('estimates the same pre-survival reel payout on a BoxSpin bust', () => {
@@ -1752,8 +1792,8 @@ describe('buildBoxSpinBoard', () => {
       board.rows.map((row) => row.previewPayout),
       [59_750n * oneFlip, 0n, 0n],
     );
-    assert.equal(board.rows[0].previewApproximate, true,
-      'the large rounded survival mint keeps its estimate qualifier on the reel');
+    assert.equal(board.rows[0].previewApproximate, false,
+      'a lone paying reel owns the entire known survivor pot');
   });
 
   test('marks the contract-derived Hero independently on each FLIP reel', () => {
@@ -1934,8 +1974,8 @@ describe('buildBoxSpinBoard', () => {
       'the FLIP landing introduces its two remaining reels without promising a nonexistent gate',
     );
     assert.doesNotMatch(REVEAL_SRC, /MORE FLIP SPINS · THEN SURVIVAL/);
-    assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 4_000/,
-      'the box currency coin gets the complete Daily Flip track and landing');
+    assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 2_000/,
+      'the box currency coin gets the compressed two-second track and landing');
     assert.match(
       REVEAL_SRC,
       /readDegeneretteSpeed\(\)[\s\S]*?BOX_CURRENCY_FLIP_MS - landingBaseMs[\s\S]*?landingBaseMs \/ revealSpeed[\s\S]*?#waitForCoinflip\(trackMs\)[\s\S]*?#waitForCoinflip\(endingMs\)/,
@@ -1962,10 +2002,15 @@ describe('buildBoxSpinBoard', () => {
     assert.doesNotMatch(APP_CSS, /rvl-box-currency-flip-face/);
     assert.doesNotMatch(APP_CSS, /@keyframes rvl-box-currency-(?:toss|face)/,
       'the old ring-shaped pseudo flip is gone');
-    assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 4_000/,
-      'the survival toss gets the same four-second window as a normal daily coinflip');
+    assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 2_000/,
+      'the survival toss gets the same compressed two-second window');
     assert.match(REVEAL_SRC, /#waitForCoinflip\(SURVIVAL_FLIP_MS\)/,
       'the survival toss cannot be shortened by a backdrop tap or reel-speed preference');
+    assert.match(
+      APP_CSS,
+      /\.rvl-survival-coin\.df-reveal-active\s*\{[^}]*animation-duration:\s*1650ms,\s*350ms;[^}]*animation-delay:\s*0ms,\s*1650ms;/s,
+      'the survival rotor and its two-second wait stay synchronized',
+    );
     assert.match(
       REVEAL_SRC,
       /rvl-survival-coin[\s\S]*?board\.survived \? 'df-reveal-ending--win' : 'df-reveal-ending--loss'/,
@@ -4308,6 +4353,57 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  test('the final ticket hand can continue directly into its pending Bingo reveal', async () => {
+    let bingoRuns = 0;
+    pendingActionsMod.publishPendingActions('ticket-bingo-continuation', [{
+      id: 'bingo:ticket-continuation-level-8',
+      kind: 'bingo',
+      label: 'Level 8 Bingo',
+      state: 'ready',
+      order: 14,
+      run: async () => {
+        bingoRuns += 1;
+        pendingActionsMod.clearPendingActions('ticket-bingo-continuation');
+        queueReveal({
+          kind: 'bingo',
+          level: 8,
+          symbol: 0,
+          counts: Array.from({ length: 64 }, (_unused, index) => (
+            index % 8 === 0 ? 1 : 0
+          )),
+          presentationId: 'bingo:ticket-continuation-test',
+        });
+      },
+    }]);
+
+    const tickets = Array.from({ length: 9 }, (_, index) => ({
+      traitIds: [index, 64 + index, 128 + index, 192 + index],
+    }));
+    queueReveal({ kind: 'pack', title: 'YOUR TICKETS', level: 8, count: 9, tickets });
+    const el = instantiate();
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    const continuation = zone.querySelector('.rvl-collect-cta');
+    assert.equal(continuation.textContent, 'REVEAL BINGO');
+    assert.equal(continuation.disabled, false);
+
+    continuation.dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 4; i += 1) await tick();
+
+    assert.equal(bingoRuns, 1, 'one click executes the pending Bingo action once');
+    assert.equal(
+      el.querySelector('[data-bind="rvl-stage"]').classList.contains('rvl-stage--bingo'),
+      true,
+      'the action replaces the ticket hand with the Bingo result',
+    );
+    assert.ok(el.querySelector('.rvl-bingo-chart'));
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
   test('OPEN ALL remaining is one confirmation for sealed-card pack batches', async (t) => {
     const previousMatchMedia = window.matchMedia;
     t.after(() => { window.matchMedia = previousMatchMedia; });
@@ -4568,6 +4664,15 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS,
       /\.rvl-stage\.rvl-stage--degenerette:has\(\.rvl-dgn-actions--box:not\(\[hidden\]\)\)\s*\{[^}]*padding-bottom:\s*max\(0\.8rem, env\(safe-area-inset-bottom\)\)/s,
       'an in-flow Box Spin control does not retain the fixed-dock spacer');
+    assert.match(APP_CSS,
+      /\.rvl-ticket-actions\s*\{[^}]*z-index:\s*12;[^}]*pointer-events:\s*auto;/s,
+      'the final pack action rail remains the top interactive layer');
+    assert.match(APP_CSS,
+      /\.rvl-ticket-actions[^}]*>[^}]*button[^}]*\{[^}]*pointer-events:\s*auto;[^}]*touch-action:\s*manipulation;/s,
+      'the final pack continuation and history buttons retain direct touch targets');
+    assert.match(APP_CSS,
+      /\.rvl-ticket-pack-stage--inline-rip \.rvl-ticket-grid-stage--size-9\s*\{[^}]*53dvh[^}]*align-self:\s*start/s,
+      'the taller final OPEN ALL hand leaves the fixed continuation rail unobscured');
     assert.doesNotMatch(REVEAL_SRC, /rvl-dgn-result-details|rvl-dgn-facts--result/,
       'Degenerette ends at its primary action instead of repeating stats below it');
   });
@@ -5292,7 +5397,7 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
-  test('a settled survivor replaces its pre-flip estimate with the emitted payout', async () => {
+  test('a survivor uses its emitted payout instead of a pre-flip estimate', async () => {
     const oneFlip = 10n ** 18n;
     queueReveal({
       kind: 'lootbox',
@@ -5319,11 +5424,11 @@ describe('reveal-overlay element', () => {
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
     assert.match(
       payoutMeter.textContent,
-      /REEL PAYOUT≈8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
-      'the settled screen reconciles to the chain result instead of retaining the combo estimate',
+      /REEL PAYOUT8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
+      'the reels use the chain result instead of the combo estimate',
     );
     assert.doesNotMatch(payoutMeter.textContent, /WIN ≈16,000 FLIP/,
-      'the emitted final payout is exact even though its halved reel sum is approximate');
+      'the emitted final payout is exact');
 
     el.querySelector('.rvl-dgn-spin-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -5861,9 +5966,9 @@ describe('reveal-overlay element', () => {
       assert.equal(sealed.classList.contains('is-flipping'), true,
         'a real currency coin flip bridges reel one and the result');
       const currencyCoin = sealed.querySelector('.rvl-box-currency-coin');
-      assert.equal(currencyCoin.style['--df-track-duration'], '1100ms');
-      assert.equal(currencyCoin.style['--df-ending-duration'], '233ms');
-      await new Promise((resolve) => setTimeout(resolve, 1_800));
+      assert.equal(currencyCoin.style['--df-track-duration'], '550ms');
+      assert.equal(currencyCoin.style['--df-ending-duration'], '117ms');
+      await new Promise((resolve) => setTimeout(resolve, 1_300));
 
       const currency = stage.querySelector('.rvl-box-currency-reveal');
       assert.ok(currency.classList.contains('is-revealed'));

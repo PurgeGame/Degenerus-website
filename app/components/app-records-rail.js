@@ -173,7 +173,8 @@ export function formatCompactRecordValue(kind, raw) {
     const wholeDigits = (bps / 10_000n).toString().length;
     const decimalDigits = Math.max(0, 3 - wholeDigits);
     const quantum = 10n ** BigInt(Math.max(0, 4 - decimalDigits));
-    return formatRecordValue(kind, (bps / quantum) * quantum);
+    const value = formatRecordValue(kind, (bps / quantum) * quantum);
+    return { amount: `${value.amount}x`, suffix: '' };
   }
   if (Number(kind) === RECORD_KIND_BUY) {
     return { amount: formatCompactWholeDown(raw), suffix: 'TIX' };
@@ -455,7 +456,7 @@ class AppRecordsRail extends HTMLElement {
       this.#profileLinkedListener = () => { void this.#refreshProfiles(); };
       document.addEventListener(PROFILE_LINKED_EVENT, this.#profileLinkedListener);
     }
-    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
+    this.#timer = registerComponentPoll(() => this.#refresh(), POLL_MS);
     void this.#refresh();
   }
 

@@ -6,20 +6,27 @@ import { gameDay } from '../app/game-state.js';
 import { dgnBadgePath } from '../app/dgn-traits.js';
 import { CHAIN, CRAPS_SCHEDULE } from '../app/chain-config.js';
 import { loadCrapsReplay } from '../craps/replay-contract.js';
+import { crapsReplayFetch } from '../craps/replay-fetch.js';
 import { openCrapsReplayTable } from '../craps/replay-adapter.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
+import { fetchProfiles } from '../app/profiles.js';
 import {
+  CRAPS_FUTURE_DAY_FACE_RANGES,
   CRAPS_FUTURE_DAY_PRICES,
+  amendCrapsSlip,
   crapsBonusDayTerms,
+  crapsLobbySnapshotWithWinnerTotals,
   placeCrapsBonusEntry,
   readCrapsPassCredits,
   readCrapsLobbySnapshot,
   readCrapsProgressivePool,
   upgradeCrapsDayWindows,
 } from '../app/craps.js';
+import { readCrapsWinnerTotals } from '../app/craps-results.js';
 import {
   CRAPS_TABLE_OPEN_EVENT,
   formatCrapsCompactFlip,
+  unpackCrapsContractChips,
 } from './app-craps-table.js';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
@@ -27,6 +34,15 @@ export const CRAPS_BATTLES_PER_DAY = 7;
 
 const FLIP_WEI = 10n ** 18n;
 const PENDING_SOURCE = 'craps-resolutions';
+
+// Identity is decoration: a winner cell must survive the profile service being
+// down, so lookups ride a swappable seam and every failure keeps the address.
+let _fetchProfiles = fetchProfiles;
+
+/** Test-only seam for the Discord identity lookup. */
+export function __setCrapsProfilesForTest(impl) {
+  _fetchProfiles = typeof impl === 'function' ? impl : fetchProfiles;
+}
 const CRAPS_REPLAY_POLL_MIN_MS = 850;
 const CRAPS_REPLAY_POLL_JITTER_MS = 300;
 const CRAPS_REPLAY_TERMINAL_STATES = new Set(['ready', 'failed', 'build-unavailable']);
@@ -127,6 +143,21 @@ function resolutionIdentity(replay) {
   return `${String(replay?.battleKey || '').toLowerCase()}:${String(replay?.viewerBetId || '')}`;
 }
 
+/** Keep public lobby results sealed while this wallet still owns an unseen replay. */
+export function crapsResultNeedsReveal(result, {
+  address,
+  replays = [],
+  wasSeen = () => false,
+} = {}) {
+  const scope = String(address ?? '').toLowerCase();
+  const battleKey = String(result?.battleKey ?? '').toLowerCase();
+  if (!scope || !battleKey || !Array.isArray(replays)) return false;
+  return replays.some((replay) => (
+    String(replay?.battleKey ?? '').toLowerCase() === battleKey
+    && !wasSeen(scope, replay)
+  ));
+}
+
 function positiveDay(value) {
   const day = Number(value);
   return Number.isInteger(day) && day > 0 ? day : null;
@@ -173,18 +204,25 @@ export function crapsBattleCountdownLabel(closeAtMs, nowMs = Date.now()) {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
-export function crapsEntryState({ day = null, nowMs = Date.now() } = {}) {
-  const currentPeriod = crapsPeriodAt(nowMs);
+export function crapsEntryState({ day = null, nowMs = Date.now(), clock = CRAPS_SCHEDULE } = {}) {
+  const currentPeriod = crapsPeriodAt(nowMs, clock);
   const currentDay = positiveDay(day);
   const daySlot = currentDay == null ? null : BigInt(currentDay) * 8n;
-  const closeLabels = crapsBattleCloseLabels(nowMs);
-  const cycleStart = cycleStartAt(nowMs);
-  const closeTimes = closeOffsets().map((offset) => (cycleStart + offset) * 1000);
+  const closeLabels = crapsBattleCloseLabels(nowMs, clock);
+  const cycleStart = cycleStartAt(nowMs, clock);
+  const closeTimes = closeOffsets(clock).map((offset) => (cycleStart + offset) * 1000);
+  const nextDayAtMs = (cycleStart + clock.daySeconds) * 1000;
+  // A comp must be committed one normal battle period before rollover: four
+  // hours on mainnet and the equivalent scaled period on the testnet clock.
+  const passCutoffAtMs = nextDayAtMs - (clock.routinePeriodSeconds * 1000);
   const dayEntryKind = currentPeriod === 0 ? 'day' : 'future-day';
   const dayEntryDay = currentDay == null ? null : currentDay + (dayEntryKind === 'future-day' ? 1 : 0);
   return Object.freeze({
     day: currentDay,
     currentPeriod,
+    nextDayAtMs,
+    passCutoffAtMs,
+    futurePassOpen: Number(nowMs) < passCutoffAtMs,
     dayEntryKind,
     dayEntryDay,
     fullDayOpen: currentDay != null,
@@ -342,6 +380,15 @@ export function crapsEntryWager({
   });
 }
 
+export function crapsEntryNeedsAmend(entry, { boardSet = false, contractChips = 0 } = {}) {
+  if (!boardSet || entry?.betId == null) return false;
+  const selected = Number(contractChips);
+  const entered = Number(entry.chips ?? 0);
+  if (!Number.isInteger(selected) || selected < 0 || selected > 0xFFFFFFFF) return false;
+  if (!Number.isInteger(entered) || entered < 0 || entered > 0xFFFFFFFF) return false;
+  return selected !== entered;
+}
+
 function currentDayFromStore() {
   return gameDay(get('app.gameState'))
     ?? positiveDay(get('app.daySync')?.day)
@@ -354,11 +401,32 @@ function currentWordFromStore(day) {
   return state?.dailyRng?.finalWord ?? 0;
 }
 
+/** Keep yesterday's event only across the brief gap before today's word lands. */
+export function crapsPreviousEventDuringRollover({ day = null, wordValue = 0, result = null } = {}) {
+  const currentDay = positiveDay(day);
+  if (currentDay == null || positiveDay(result?.day) !== currentDay - 1) return null;
+  let currentDayRolled = false;
+  try { currentDayRolled = BigInt(wordValue ?? 0) > 0n; } catch (_error) { /* wait for valid proof */ }
+  return currentDayRolled ? null : result;
+}
+
 function compactWei(value) {
   if (value == null) return '—';
   let wei;
   try { wei = BigInt(value); } catch (_error) { return '—'; }
   return formatCrapsCompactFlip((wei + (FLIP_WEI / 2n)) / FLIP_WEI);
+}
+
+/** Paint the resolved-row boost as a compact bolt badge; prose lives in a11y/tooltip copy. */
+function paintCrapsBoostMark(container, output, value) {
+  const amount = compactWei(value);
+  const ready = value != null && amount !== '—';
+  if (output) output.textContent = ready ? `+${amount}` : '—';
+  if (!container) return;
+  container.hidden = !ready;
+  const label = ready ? `${amount} FLIP boost included in total won` : 'Boost unavailable';
+  container.setAttribute('aria-label', label);
+  container.title = ready ? label : '';
 }
 
 function compactWinner(value) {
@@ -374,6 +442,7 @@ export function crapsResolutionPendingActions({
   states = new Map(),
   wasSeen = () => false,
   run = () => false,
+  clearAll = null,
 } = {}) {
   const scope = String(address ?? '').toLowerCase();
   if (!scope || !Array.isArray(replays)) return [];
@@ -383,12 +452,10 @@ export function crapsResolutionPendingActions({
     const loader = states.get(identity);
     const ready = loader?.ready === true;
     const loaderStatus = String(loader?.status ?? 'checking');
-    const wonMainPot = String(replay?.winner ?? '').toLowerCase() === scope;
+    const battleStakeLabel = compactWei(replay.battleStakeWei);
     const detail = !ready
       ? crapsReplayStatusCopy(loader)
-      : wonMainPot && replay.amountWei != null
-        ? `Main pot won · ${compactWei(replay.amountWei)} FLIP. Final rewards are ready.`
-        : 'Battle settled. Your roll-by-roll result and final rewards are ready.';
+      : 'Battle settled. Open the replay to reveal your result and final rewards.';
     const shortLabel = ready
       ? 'View result'
       : ['failed', 'build-unavailable'].includes(loaderStatus)
@@ -404,9 +471,12 @@ export function crapsResolutionPendingActions({
       dismissKey: identity,
       kind: 'craps',
       kindLabel: 'CRAPS FINAL',
-      label: `Day ${replay.day} · Battle ${Number(replay.period) + 1}`,
+      label: `${battleStakeLabel} FLIP\nBATTLE`,
       shortLabel,
       detail,
+      icon: '/badges-circular/dice_04_5_silver.svg',
+      iconBack: '/badges-circular/dice_01_2_blue.svg',
+      compact: true,
       state: ready ? 'ready' : 'waiting',
       phase: loaderStatus,
       // Finalization can land before the sealed replay shards. Keep the same
@@ -418,6 +488,7 @@ export function crapsResolutionPendingActions({
       order: 14,
       chronology: Number(replay.slot),
       run: ready ? () => run(replay, scope) : null,
+      ...(typeof clearAll === 'function' ? { clearAll } : {}),
     }];
   });
 }
@@ -426,6 +497,69 @@ const CRAPS_GOAL_LABELS = Object.freeze({ 5: 'EASY', 10: 'HARD', 20: 'HARD', 50:
 
 export function crapsGoalLabel(value) {
   return CRAPS_GOAL_LABELS[Number(value)] ?? '—';
+}
+
+/** Pick the public main field or the High Roller side field for the active lane. */
+export function crapsEntrantCountForLane(field, highRoller = false) {
+  const raw = highRoller ? field?.high : field?.total;
+  if (raw == null) return null;
+  const count = Number(raw);
+  return Number.isInteger(count) && count >= 0 ? count : null;
+}
+
+/** Color-key a finalized winner by the comparator route sealed on-chain. */
+export function crapsWinnerGoalResult(result) {
+  const raw = result && typeof result === 'object' ? result.winningStop : result;
+  if (raw == null) return 'unknown';
+  const stop = Number(raw);
+  return stop === 1 ? 'met' : stop === 0 ? 'missed' : 'unknown';
+}
+
+/** Total WAGER + BATTLE buy-in for the lane currently selected in the lobby. */
+export function crapsWinnerListBuyInWei(result, highRoller = false) {
+  if (result?.buyInWei == null) return null;
+  let base;
+  try { base = BigInt(result.buyInWei); } catch (_error) { return null; }
+  if (base < 0n) return null;
+  if (!highRoller) return base.toString();
+  const multiple = Number(result.highMultiple);
+  if (!Number.isInteger(multiple) || multiple < 1 || multiple > 256) return null;
+  return (base * BigInt(multiple)).toString();
+}
+
+/** Select the on-chain winner/payment for the lane currently shown in the lobby. */
+export function crapsWinnerResultForLane(result, highRoller = false) {
+  if (!result || typeof result !== 'object') return null;
+  if (!highRoller) return result;
+  const high = result.highResult;
+  if (!high || typeof high !== 'object') return null;
+  let amount;
+  try { amount = BigInt(high.amountWei); } catch (_error) { return null; }
+  // A field of one is not a side contest. It appears as the High Roller
+  // winner only when its rider returned non-zero, which is exactly the
+  // contract's observable proof that the run latched its goal.
+  if (high.bankrollRider && amount === 0n) return null;
+  return Object.freeze({
+    ...result,
+    ...high,
+    lane: 'high',
+  });
+}
+
+/** Exact indexed total when known; otherwise an honest lower bound from the chain prize. */
+export function crapsWinnerTotalLabel(result) {
+  if (!result || typeof result !== 'object') return '—';
+  if (result.totalWonWei != null) return compactWei(result.totalWonWei);
+  if (result.amountWei == null) return '—';
+  const knownPayment = compactWei(result.amountWei);
+  return knownPayment === '—' ? '—' : `≥${knownPayment}`;
+}
+
+/** A Normal whole-day reservation still needs promotion for the selected High Roller lane. */
+export function crapsDayTicketNeedsHighUpgrade(ticket, highRoller = false) {
+  if (!ticket || highRoller !== true) return false;
+  const highMask = Number(ticket.highMask ?? (ticket.high ? 0x7F : 0));
+  return (highMask & 0x7F) !== 0x7F;
 }
 
 function timer(fn, milliseconds) {
@@ -444,6 +578,12 @@ export class AppCrapsEntry extends HTMLElement {
   #progressiveSeq = 0;
   #schedule = null;
   #snapshot = null;
+  #winnerTotals = [];
+  #previousEventResult = null;
+  #previousEventEntrants = null;
+  #resolvedReplays = [];
+  #profiles = new Map();
+  #profileKey = '';
   #scheduleDay = null;
   #schedulePlayer = null;
   #schedulePending = false;
@@ -467,12 +607,18 @@ export class AppCrapsEntry extends HTMLElement {
     void this.#refreshSchedule();
   };
   #replayLifecycleListener = () => {
+    // Browsers can heavily throttle a background tab's interval. Refresh chain
+    // truth immediately when the lobby becomes visible/online again, and use
+    // force so one superseded request can never keep the rows on SETTLING.
+    if (globalThis.document?.hidden !== true && globalThis.navigator?.onLine !== false) {
+      void this.#refreshSchedule(true);
+    }
     if (!this.#replayPollingAllowed()) {
       this.#stopReplayPoll();
       return;
     }
     if (this.#replayNeedsPolling()) {
-      void this.#refreshResolvedReplays(this.#snapshot?.resolvedReplays, this.#schedulePlayer);
+      void this.#refreshResolvedReplays(this.#resolvedReplays, this.#schedulePlayer);
     }
   };
   #questActivateListener = (event) => {
@@ -480,11 +626,11 @@ export class AppCrapsEntry extends HTMLElement {
     if (questType !== 10 && questType !== 11) return;
     if (questType === 11) {
       // Buying a future day with FLIP is the qualifying level-quest action.
-      // Applying a banked reward pass is still the normal payment priority,
+      // Applying a banked reward comp is still the normal payment priority,
       // but it cannot advance this particular quest because no burn occurs.
       this.#forceFlipDay = true;
       this.#highRoller = false;
-      this.#message = 'DAY-PASS QUEST · Buy the next Normal slate with FLIP; banked passes stay untouched.';
+      this.#message = 'CRAPS DAY QUEST · Buy the next Normal slate with FLIP; banked comps stay untouched.';
     } else {
       this.#forceFlipDay = false;
       this.#message = 'CRAPS QUEST · Choose any open paid battle.';
@@ -518,6 +664,17 @@ export class AppCrapsEntry extends HTMLElement {
     }
     const button = event?.target?.closest?.('[data-craps-entry]');
     if (!button || button.disabled) return;
+    if (button.dataset.state === 'entered') {
+      this.#openBoard(button, {
+        betId: button.dataset.crapsBetId,
+        chips: Number(button.dataset.crapsEntryChips ?? 0),
+      });
+      return;
+    }
+    if (button.dataset.state === 'amend') {
+      void this.#amend(button);
+      return;
+    }
     const kind = button.dataset.crapsEntry;
     const period = kind === 'window' ? Number(button.dataset.crapsPeriod) : null;
     void this.#buy(kind, period);
@@ -589,75 +746,96 @@ export class AppCrapsEntry extends HTMLElement {
     this.innerHTML = `
       <section class="craps-entry" aria-labelledby="craps-entry-title">
         <header class="craps-entry__head">
-          <span class="craps-entry__dice" aria-hidden="true">
-            <img src="${dgnBadgePath(3, 1, 6)}" width="102" height="102" alt="">
-            <img src="${dgnBadgePath(3, 4, 4)}" width="102" height="102" alt="">
+          <span class="craps-entry__brand">
+            <span class="craps-entry__dice" aria-hidden="true">
+              <img src="${dgnBadgePath(3, 1, 6)}" width="102" height="102" alt="">
+              <img src="${dgnBadgePath(3, 4, 4)}" width="102" height="102" alt="">
+            </span>
+            <h2 id="craps-entry-title"><small>CRAPS</small><strong>BATTLE</strong></h2>
           </span>
-          <h2 id="craps-entry-title"><small>CRAPS</small>BATTLE</h2>
           <div class="craps-entry__progressive" data-bind="craps-progressive" data-state="loading"
-               aria-label="Craps progressive jackpot amount unavailable">
-            <small>JACKPOT</small><strong><output data-bind="craps-progressive-amount" aria-live="polite">—</output> <em>FLIP</em></strong>
+               aria-label="Run It Up jackpot amount unavailable">
+            <small>RUN IT UP JACKPOT</small><strong><output data-bind="craps-progressive-amount" aria-live="polite">—</output> <em>FLIP</em></strong>
           </div>
-          <span class="craps-entry__pot-boost" data-bind="craps-added-banner" data-state="loading">
-            <small data-bind="craps-added-kicker">YEST. ACTUAL BOOST · ALL POTS</small><strong><output data-bind="craps-added-total">—</output> <em>FLIP</em></strong>
+          <span class="craps-entry__pot-boost" data-bind="craps-added-banner" data-state="loading"
+                aria-label="Yesterday's actual Craps boost unavailable">
+            <small data-bind="craps-added-kicker">YESTERDAY'S BOOST</small><strong><output data-bind="craps-added-total">—</output> <em>FLIP</em></strong>
           </span>
         </header>
 
-        <div class="craps-entry__setup">
-          <button type="button" class="craps-entry__board" data-craps-board>
-            <span><small>YOUR PLAY</small><strong data-bind="craps-board-state">RANDOM 10-CHIP</strong></span>
-            <b data-bind="craps-board-action">SET YOUR BOARD</b>
-          </button>
-          <div class="craps-entry__lane" role="group" aria-label="Craps entry lane">
-            <button type="button" data-craps-lane="normal" aria-pressed="true">NORMAL</button>
-            <button type="button" data-craps-lane="high" aria-pressed="false">HIGH ROLLER <small data-bind="craps-high-mult">—</small></button>
-            <div class="craps-entry__pass-wallet" data-bind="craps-pass-wallet" hidden>
-              <small>YOUR PASSES</small>
-              <span data-bind="craps-normal-passes" hidden>NORMAL <strong>0</strong></span>
-              <span data-bind="craps-high-passes" hidden>HIGH <strong>0</strong></span>
-            </div>
-          </div>
-        </div>
-
         <div class="craps-entry__lobby">
           <table class="craps-entry__listing" aria-label="Craps battle buy-ins">
-            <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-wager"><col class="craps-entry__col-goal"><col class="craps-entry__col-action"></colgroup>
-            <thead><tr><th>CLOSES IN</th><th>WAGER + POT</th><th>GOAL</th><th>BUY IN</th></tr></thead>
+            <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-wager"><col class="craps-entry__col-operator"><col class="craps-entry__col-battle"><col class="craps-entry__col-goal"><col class="craps-entry__col-action"><col class="craps-entry__col-entrants"></colgroup>
+            <thead><tr><th>CLOSES IN</th><th class="craps-entry__wager">WAGER</th><th class="craps-entry__operator">+</th><th>BATTLE</th><th>GOAL</th><th>BUY IN</th><th>FIELD</th></tr></thead>
             <tbody>
               <tr class="craps-entry__day-buy" data-bind="craps-day-row" data-state="open">
-                <th scope="row"><small data-bind="craps-day-kicker">DAY PASS</small><strong data-bind="craps-day-title">ALL 7</strong></th>
-                <td class="craps-entry__terms"><strong><span data-bind="craps-full-day-entry">—</span><i>+</i><span data-bind="craps-full-day-pot">—</span></strong></td>
-                <td data-bind="craps-full-day-goal">—</td>
-                <td><button type="button" data-craps-entry="day" data-terms="loading">ENTER: — FLIP</button><span class="craps-entry__entered" data-bind="craps-day-entered" hidden>ENTERED</span></td>
+                <th scope="row" data-bind="craps-day-head"><small data-bind="craps-day-kicker">FULL DAY</small><time data-bind="craps-day-countdown">—</time></th>
+                <td class="craps-entry__money craps-entry__wager" data-bind="craps-full-day-terms"><strong data-bind="craps-full-day-entry">—</strong><small class="craps-entry__range-note" data-bind="craps-full-day-range-note" hidden>7 BATTLES</small></td>
+                <td class="craps-entry__operator" data-bind="craps-full-day-separator">+</td>
+                <td class="craps-entry__money craps-entry__battle-fee" data-bind="craps-full-day-pot-cell"><strong data-bind="craps-full-day-pot">—</strong></td>
+                <td class="craps-entry__goal" data-bind="craps-full-day-goal">—</td>
+                <td class="craps-entry__action"><button type="button" data-craps-entry="day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-day-entered" hidden>ENTERED</span></td>
+                <td class="craps-entry__entrants" data-bind="craps-day-entrants">—</td>
               </tr>
               ${Array.from({ length: CRAPS_BATTLES_PER_DAY }, (_, period) => `
                 <tr class="craps-entry__battle" data-craps-period="${period}" data-state="upcoming" data-terms="loading">
                   <th scope="row" class="craps-entry__open-cell"><time data-bind="craps-battle-countdown">—</time></th>
-                  <td class="craps-entry__terms craps-entry__open-cell"><strong><span data-bind="craps-battle-entry">—</span><i>+</i><span data-bind="craps-battle-pot">—</span></strong></td>
-                  <td class="craps-entry__open-cell" data-bind="craps-battle-goal">—</td>
+                  <td class="craps-entry__money craps-entry__wager craps-entry__open-cell"><strong data-bind="craps-battle-entry">—</strong></td>
+                  <td class="craps-entry__operator craps-entry__open-cell">+</td>
+                  <td class="craps-entry__money craps-entry__battle-fee craps-entry__open-cell"><strong data-bind="craps-battle-pot">—</strong></td>
+                  <td class="craps-entry__goal craps-entry__open-cell" data-bind="craps-battle-goal">—</td>
                   <td class="craps-entry__action craps-entry__open-cell">
-                    <button type="button" data-craps-entry="window" data-craps-period="${period}">ENTER: — FLIP</button>
+                    <button type="button" data-craps-entry="window" data-craps-period="${period}">— FLIP</button>
                     <span class="craps-entry__entered" data-bind="craps-battle-entered" hidden>ENTERED</span>
                   </td>
-                  <td class="craps-entry__result" data-bind="craps-battle-result" colspan="4" hidden>
-                    <div class="craps-entry__result-grid">
-                      <span><small>WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
-                      <span><small>TOTAL WON</small><strong><output data-bind="craps-battle-payout">—</output> FLIP</strong></span>
-                      <span><small>BOOSTED</small><strong><output data-bind="craps-battle-boost">—</output> FLIP</strong></span>
+                  <td class="craps-entry__result" data-bind="craps-battle-result" colspan="6" hidden>
+                    <div class="craps-entry__result-locked" data-bind="craps-battle-result-locked" hidden>
+                      <small>RESULT READY</small><strong>VIEW IN PENDING</strong>
+                    </div>
+                    <div class="craps-entry__result-grid" data-bind="craps-battle-result-details">
+                      <span><small data-bind="craps-battle-winner-label">WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
+                      <span class="craps-entry__result-total"><small>TOTAL WON</small><strong><output data-bind="craps-battle-payout">—</output><em class="craps-entry__boost-mark" data-bind="craps-battle-boost-detail" hidden><output data-bind="craps-battle-boost">—</output></em></strong></span>
+                      <span class="craps-entry__result-buyin"><small>BUY IN</small><strong><output data-bind="craps-battle-buyin">—</output></strong></span>
                     </div>
                   </td>
+                  <td class="craps-entry__entrants" data-bind="craps-battle-entrants">—</td>
                 </tr>`).join('')}
               <tr class="craps-entry__day-buy craps-entry__day-buy--tomorrow" data-bind="craps-tomorrow-row" data-state="open" hidden>
-                <th scope="row"><small data-bind="craps-tomorrow-kicker">NEXT SLATE</small><strong>ALL 7</strong></th>
-                <td class="craps-entry__terms"><strong><span>TBD</span><i>+</i><span>TBD</span></strong></td>
-                <td>—</td>
-                <td><button type="button" data-craps-entry="future-day" data-terms="loading">ENTER: — FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
+                <th scope="row"><time data-bind="craps-tomorrow-countdown">—</time></th>
+                <td class="craps-entry__money craps-entry__tomorrow-range" data-bind="craps-tomorrow-terms" colspan="4"><strong data-bind="craps-tomorrow-range">4.2K–126K</strong><small>7 BATTLES</small></td>
+                <td class="craps-entry__action"><button type="button" data-craps-entry="future-day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
+                <td class="craps-entry__entrants" data-bind="craps-tomorrow-entrants">—</td>
+              </tr>
+              <tr class="craps-entry__battle craps-entry__previous-event"
+                  data-bind="craps-previous-event-row" data-state="completed" hidden>
+                <td class="craps-entry__result" colspan="6">
+                  <div class="craps-entry__result-locked" data-bind="craps-previous-event-result-locked" hidden>
+                    <small>RESULT READY</small><strong>VIEW IN PENDING</strong>
+                  </div>
+                  <div class="craps-entry__result-grid" data-bind="craps-previous-event-result-details">
+                    <span><small data-bind="craps-previous-event-label">YESTERDAY'S EVENT WINNER</small><strong data-bind="craps-previous-event-winner">—</strong></span>
+                    <span class="craps-entry__result-total"><small>TOTAL WON</small><strong><output data-bind="craps-previous-event-payout">—</output><em class="craps-entry__boost-mark" data-bind="craps-previous-event-boost-detail" hidden><output data-bind="craps-previous-event-boost">—</output></em></strong></span>
+                    <span class="craps-entry__result-buyin"><small>BUY IN</small><strong><output data-bind="craps-previous-event-buyin">—</output></strong></span>
+                  </div>
+                </td>
+                <td class="craps-entry__entrants" data-bind="craps-previous-event-entrants">—</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <footer class="craps-entry__foot" data-bind="craps-entry-status" aria-live="polite">Set a board or buy in with the random draw.</footer>
+
+        <div class="craps-entry__setup" aria-label="Craps picks and entry lane">
+          <button type="button" class="craps-entry__board" data-craps-board>
+            <span><small>YOUR PICKS</small><strong data-bind="craps-board-state">RANDOM DRAW</strong></span>
+            <b data-bind="craps-board-action">SET PICKS</b>
+          </button>
+          <div class="craps-entry__lane" role="group" aria-label="Craps entry lane">
+            <button type="button" data-craps-lane="normal" aria-pressed="true"><span>NORMAL</span><strong class="craps-entry__pass-count" data-bind="craps-normal-passes" hidden>0</strong></button>
+            <button type="button" data-craps-lane="high" aria-pressed="false"><span>HIGH ROLLER</span><strong class="craps-entry__pass-count" data-bind="craps-high-passes" hidden>0</strong></button>
+          </div>
+        </div>
       </section>`;
   }
 
@@ -680,27 +858,39 @@ export class AppCrapsEntry extends HTMLElement {
       const node = this.querySelector(`[data-bind="${name}"]`);
       if (node) node.textContent = value;
     };
+    const bindEntryTarget = (button, entry) => {
+      if (!button) return;
+      if (entry?.betId != null) {
+        button.dataset.crapsBetId = String(entry.betId);
+        button.dataset.crapsEntryChips = String(Number(entry.chips ?? 0) >>> 0);
+      } else {
+        button.removeAttribute('data-craps-bet-id');
+        button.removeAttribute('data-craps-entry-chips');
+      }
+    };
+    const needsAmend = (entry) => crapsEntryNeedsAmend(entry, {
+      boardSet: this.#boardSet,
+      contractChips: this.#contractChips,
+    });
 
     bindText('craps-board-state', this.#boardSet ? '7-CHIP BOARD' : 'RANDOM DRAW');
-    bindText('craps-board-action', this.#boardSet ? 'EDIT BOARD' : 'SET YOUR BOARD');
-    bindText('craps-high-mult', terms?.highMult == null ? 'DRAWN DAILY' : `TODAY ${terms.highMult}×`);
+    bindText('craps-board-action', this.#boardSet ? 'EDIT PICKS' : 'SET PICKS');
     const normalPasses = Number(this.#passCredits?.normal ?? 0);
     const highPasses = Number(this.#passCredits?.high ?? 0);
-    const passWallet = this.querySelector('[data-bind="craps-pass-wallet"]');
-    const paintPassCount = (name, count, selected) => {
+    const paintPassCount = (name, count) => {
       const node = this.querySelector(`[data-bind="${name}"]`);
       if (!node) return;
       node.hidden = count <= 0;
-      node.dataset.selected = String(Boolean(selected));
-      const value = node.querySelector('strong');
-      if (value) value.textContent = count.toLocaleString('en-US');
+      node.textContent = count.toLocaleString('en-US');
     };
-    if (passWallet) passWallet.hidden = normalPasses + highPasses <= 0;
-    paintPassCount('craps-normal-passes', normalPasses, !this.#highRoller);
-    paintPassCount('craps-high-passes', highPasses, this.#highRoller);
+    paintPassCount('craps-normal-passes', normalPasses);
+    paintPassCount('craps-high-passes', highPasses);
     for (const lane of this.querySelectorAll('[data-craps-lane]')) {
       const selected = (lane.dataset.crapsLane === 'high') === this.#highRoller;
+      const laneHigh = lane.dataset.crapsLane === 'high';
+      const count = laneHigh ? highPasses : normalPasses;
       lane.setAttribute('aria-pressed', String(selected));
+      lane.setAttribute('aria-label', `${laneHigh ? 'High Roller' : 'Normal'} Craps lane${count > 0 ? `, ${count.toLocaleString('en-US')} ${count === 1 ? 'comp' : 'comps'} available` : ''}`);
       lane.disabled = this.#busyKey != null;
     }
     const board = this.querySelector('[data-craps-board]');
@@ -708,33 +898,96 @@ export class AppCrapsEntry extends HTMLElement {
 
     const addedBanner = this.querySelector('[data-bind="craps-added-banner"]');
     const snapshot = this.#snapshot?.day === state.day ? this.#snapshot : null;
+    const dayEntrants = (entryDay) => crapsEntrantCountForLane({
+      total: snapshot?.entrants?.days?.[String(entryDay)],
+      high: snapshot?.entrants?.highDays?.[String(entryDay)],
+    }, this.#highRoller);
     const playerEntries = connectedPlayer
       && snapshot?.playerEntries?.player === connectedPlayer
       ? snapshot.playerEntries
       : null;
     const addedReady = snapshot?.yesterdayAddedWei != null;
-    bindText('craps-added-kicker', 'YEST. ACTUAL BOOST · ALL POTS');
+    bindText('craps-added-kicker', 'YESTERDAY\'S BOOST');
     bindText('craps-added-total', addedReady
       ? `+${compactWei(snapshot.yesterdayAddedWei)}`
       : '—');
-    if (addedBanner) addedBanner.dataset.state = addedReady ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
+    if (addedBanner) {
+      addedBanner.dataset.state = addedReady ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
+      addedBanner.setAttribute('aria-label', addedReady
+        ? `Yesterday's actual Craps boost across all pots ${compactWei(snapshot.yesterdayAddedWei)} FLIP`
+        : this.#schedulePending ? 'Loading yesterday\'s actual Craps boost' : 'Yesterday\'s actual Craps boost unavailable');
+    }
 
     const selectedPasses = this.#highRoller ? highPasses : normalPasses;
     const passInventoryReady = !connectedPlayer || this.#passCredits != null;
-    const usePass = futureDay && !this.#forceFlipDay && selectedPasses > 0;
+    const compEligible = state.futurePassOpen && !this.#forceFlipDay;
+    const usePass = futureDay && compEligible && selectedPasses > 0;
     const dayReady = dayEntryDay != null
       && (futureDay || (terms?.complete && multiple != null))
-      && (!futureDay || this.#forceFlipDay || passInventoryReady);
+      && (!futureDay || !compEligible || passInventoryReady);
     const dayPrice = futureDay
       ? CRAPS_FUTURE_DAY_PRICES[this.#highRoller ? 'high' : 'normal']
       : dayReady ? terms.buyInFlip * BigInt(multiple) : null;
     const dayEntry = !futureDay && dayReady ? terms.bankrollFlip * BigInt(multiple) : null;
-    const dayPot = !futureDay && dayReady ? terms.battleStakeFlip * BigInt(multiple) : null;
-    bindText('craps-day-kicker', futureDay && this.#forceFlipDay ? 'QUEST PASS' : futureDay ? 'NEXT SLATE' : 'DAY PASS');
-    bindText('craps-day-title', 'ALL 7');
-    bindText('craps-full-day-entry', futureDay ? 'TBD' : dayEntry == null ? '—' : formatCrapsCompactFlip(dayEntry));
-    bindText('craps-full-day-pot', futureDay ? 'TBD' : dayPot == null ? '—' : formatCrapsCompactFlip(dayPot));
-    bindText('craps-full-day-goal', '');
+    const dayBattle = !futureDay && dayReady ? terms.battleStakeFlip * BigInt(multiple) : null;
+    const futureFaceRange = CRAPS_FUTURE_DAY_FACE_RANGES[this.#highRoller ? 'high' : 'normal'];
+    const compactRange = (range) => `${formatCrapsCompactFlip(range.low)}–${formatCrapsCompactFlip(range.high)}`;
+    const dayKicker = this.querySelector('[data-bind="craps-day-kicker"]');
+    if (dayKicker) {
+      dayKicker.hidden = futureDay;
+      dayKicker.textContent = 'FULL DAY';
+    }
+    // Today's full slate closes with Battle 1. Once that closes, the same cell
+    // counts to the next protocol-day rollover instead of switching to a vague
+    // TOMORROW label.
+    const dayCountdown = this.querySelector('[data-bind="craps-day-countdown"]');
+    if (dayCountdown) {
+      const opener = state.battles[0] ?? null;
+      const closesAtMs = futureDay ? state.nextDayAtMs : opener?.closeAtMs;
+      dayCountdown.textContent = closesAtMs == null
+        ? '—'
+        : crapsBattleCountdownLabel(closesAtMs, nowMs);
+      if (closesAtMs != null) {
+        dayCountdown.dateTime = new Date(closesAtMs).toISOString();
+        dayCountdown.title = futureDay
+          ? `Next day rolls ${new Date(closesAtMs).toISOString().slice(11, 16)} UTC`
+          : `Closes ${opener.closeLabel} UTC`;
+      }
+    }
+    // Tomorrow's word has not been drawn, so its row abandons the WAGER + BATTLE
+    // columns: one spanned cell carries the combined face-cost range instead of
+    // two per-column ranges pretending to be independent draws.
+    const combinedTomorrowRange = `Tomorrow's ${this.#highRoller ? 'High Roller' : 'Normal'} slate draws a combined seven-battle buy-in between ${futureFaceRange.low.toLocaleString('en-US')} and ${futureFaceRange.high.toLocaleString('en-US')} FLIP.`;
+    bindText('craps-full-day-entry', futureDay
+      ? compactRange(futureFaceRange)
+      : dayEntry == null ? '—' : formatCrapsCompactFlip(dayEntry));
+    bindText('craps-full-day-separator', '+');
+    bindText('craps-full-day-pot', dayBattle == null ? '—' : formatCrapsCompactFlip(dayBattle));
+    bindText('craps-full-day-goal', futureDay ? '' : 'ALL 7');
+    const fullDayHead = this.querySelector('[data-bind="craps-day-head"]');
+    const fullDayTerms = this.querySelector('[data-bind="craps-full-day-terms"]');
+    const fullDayRangeNote = this.querySelector('[data-bind="craps-full-day-range-note"]');
+    const fullDaySeparator = this.querySelector('[data-bind="craps-full-day-separator"]');
+    const fullDayPotCell = this.querySelector('[data-bind="craps-full-day-pot-cell"]');
+    const fullDayGoalCell = this.querySelector('[data-bind="craps-full-day-goal"]');
+    // The rollover timer uses the normal CLOSES IN column. Tomorrow's combined
+    // range then spans all four term columns without repeating micro-labels.
+    if (fullDayHead) fullDayHead.colSpan = 1;
+    if (fullDayTerms) {
+      fullDayTerms.colSpan = futureDay ? 4 : 1;
+      fullDayTerms.classList.toggle('craps-entry__tomorrow-range', futureDay);
+      fullDayTerms.setAttribute('aria-label', futureDay
+        ? combinedTomorrowRange
+        : `Wager ${dayEntry?.toLocaleString?.('en-US') ?? 'unknown'} plus Battle fee ${dayBattle?.toLocaleString?.('en-US') ?? 'unknown'} FLIP.`);
+    }
+    if (fullDayRangeNote) fullDayRangeNote.hidden = !futureDay;
+    if (fullDaySeparator) fullDaySeparator.hidden = futureDay;
+    if (fullDayPotCell) fullDayPotCell.hidden = futureDay;
+    if (fullDayGoalCell) fullDayGoalCell.hidden = futureDay;
+    const selectedDayEntrants = dayEntrants(dayEntryDay);
+    bindText('craps-day-entrants', selectedDayEntrants == null
+      ? '—'
+      : selectedDayEntrants.toLocaleString('en-US'));
     const dayRow = this.querySelector('[data-bind="craps-day-row"]');
     const dayButton = this.querySelector('[data-craps-entry="day"]');
     const dayEnteredStatus = this.querySelector('[data-bind="craps-day-entered"]');
@@ -757,38 +1010,69 @@ export class AppCrapsEntry extends HTMLElement {
       : null;
     const dayEntered = Boolean(dayTicket || directCurrentEntry);
     const dayCanUpgrade = dayUpgradeMask > 0 && dayUpgradePrice != null;
-    const plainDayEntered = dayEntered && !dayCanUpgrade;
+    // Future reservations cannot be upgraded until their word opens the seven
+    // window terms on-chain. Still surface the selected-lane mismatch instead
+    // of claiming that a Normal ticket is already entered as High Roller.
+    const dayUpgradeWhenOpen = Boolean(
+      futureDay && crapsDayTicketNeedsHighUpgrade(dayTicket, this.#highRoller),
+    );
+    const plainDayEntered = dayEntered && !dayCanUpgrade && !dayUpgradeWhenOpen;
+    const dayAmendOpen = dayTicket?.day > state.day || Boolean(state.battles[0]?.joinable);
+    const dayAmendable = plainDayEntered && dayTicket?.betId != null && dayAmendOpen;
+    const dayNeedsAmend = dayAmendable && needsAmend(dayTicket);
     if (dayRow) {
-      dayRow.dataset.state = dayCanUpgrade ? 'upgrade' : dayEntered ? 'entered' : dayReady ? 'open' : 'loading';
+      dayRow.dataset.state = dayCanUpgrade || dayUpgradeWhenOpen
+        ? 'upgrade'
+        : dayEntered ? 'entered' : dayReady ? 'open' : 'loading';
       dayRow.dataset.payment = usePass ? 'pass' : 'flip';
     }
     if (dayButton) {
       dayButton.removeAttribute('data-craps-upgrade');
       if (dayCanUpgrade) dayButton.dataset.crapsUpgrade = String(dayUpgradeMask);
-      dayButton.hidden = plainDayEntered;
-      dayButton.disabled = this.#busyKey != null || (dayEntered ? !dayCanUpgrade : !dayReady);
+      bindEntryTarget(dayButton, dayTicket);
+      dayButton.hidden = plainDayEntered && !dayAmendable;
+      dayButton.disabled = this.#busyKey != null
+        || dayUpgradeWhenOpen
+        || (dayEntered ? !dayCanUpgrade && !dayAmendable : !dayReady);
       dayButton.dataset.terms = dayReady ? 'ready' : 'loading';
-      dayButton.dataset.state = dayCanUpgrade ? 'upgrade' : dayEntered ? 'entered' : usePass ? 'pass' : 'buy';
-      dayButton.textContent = this.#busyKey === 'day' || this.#busyKey === `upgrade-${dayUpgradeMask}`
-        ? 'ENTERING…'
+      dayButton.dataset.state = dayCanUpgrade || dayUpgradeWhenOpen
+        ? 'upgrade'
+        : dayAmendable
+          ? dayNeedsAmend ? 'amend' : 'entered'
+          : dayEntered ? 'entered' : usePass ? 'pass' : 'buy';
+      const dayBusy = this.#busyKey === 'day'
+        || this.#busyKey === `upgrade-${dayUpgradeMask}`
+        || this.#busyKey === `amend-${dayTicket?.betId}`;
+      dayButton.textContent = dayBusy
+        ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
         : dayCanUpgrade
           ? `UPGRADE ${formatCrapsCompactFlip(dayUpgradePrice)}`
-          : dayEntered
-            ? 'ENTERED'
+          : dayUpgradeWhenOpen
+            ? 'UPGRADE WHEN OPEN'
+          : dayAmendable
+            ? dayNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+            : dayEntered
+              ? 'ENTERED'
             : usePass
-              ? 'ENTER: 1 PASS'
-              : `ENTER: ${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)} FLIP`;
+              ? '1 COMP'
+              : `${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)} FLIP`;
       dayButton.setAttribute('aria-label', dayCanUpgrade
         ? `Upgrade the remaining open battles on your day ticket for ${dayUpgradePrice} FLIP.`
-        : dayEntered
-          ? 'This wallet is already entered for this Craps slate.'
+        : dayUpgradeWhenOpen
+          ? 'This is a Normal reservation. Its High Roller upgrade becomes available when that day opens and its exact terms land on-chain.'
+        : dayAmendable
+          ? dayNeedsAmend
+            ? 'Amend this Craps slate with the changed chip placement.'
+            : 'Entered in this Craps slate. Edit its chip placement.'
+          : dayEntered
+            ? 'This wallet is already entered for this Craps slate.'
           : dayReady
             ? usePass
-              ? `Use one of your ${selectedPasses.toLocaleString('en-US')} ${this.#highRoller ? 'High Roller' : 'Normal'} Craps passes to reserve all seven battles. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
+              ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve all seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
               : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
             : 'Full-day Craps terms are loading');
     }
-    if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered;
+    if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
 
     // Before Battle 1, today's live all-seven entry stays at the top while a
     // second, blind reservation for tomorrow remains available at the bottom.
@@ -800,40 +1084,96 @@ export class AppCrapsEntry extends HTMLElement {
     const tomorrowTicket = tomorrowDay == null
       ? null
       : playerEntries?.days?.[String(tomorrowDay)] ?? null;
-    const tomorrowUsePass = showTomorrow && !this.#forceFlipDay && selectedPasses > 0;
+    const tomorrowUsePass = showTomorrow && compEligible && selectedPasses > 0;
     const tomorrowReady = showTomorrow
       && tomorrowDay != null
-      && (this.#forceFlipDay || passInventoryReady);
+      && (!compEligible || passInventoryReady);
+    const tomorrowUpgradeWhenOpen = Boolean(
+      showTomorrow && crapsDayTicketNeedsHighUpgrade(tomorrowTicket, this.#highRoller),
+    );
+    const tomorrowAmendable = Boolean(
+      showTomorrow && tomorrowTicket?.betId != null && !tomorrowUpgradeWhenOpen,
+    );
+    const tomorrowNeedsAmend = tomorrowAmendable && needsAmend(tomorrowTicket);
     const tomorrowPrice = CRAPS_FUTURE_DAY_PRICES[this.#highRoller ? 'high' : 'normal'];
-    bindText('craps-tomorrow-kicker', this.#forceFlipDay ? 'QUEST PASS' : 'NEXT SLATE');
+    bindText('craps-tomorrow-range', compactRange(futureFaceRange));
+    const tomorrowCountdown = this.querySelector('[data-bind="craps-tomorrow-countdown"]');
+    if (tomorrowCountdown) {
+      tomorrowCountdown.textContent = crapsBattleCountdownLabel(state.nextDayAtMs, nowMs);
+      tomorrowCountdown.dateTime = new Date(state.nextDayAtMs).toISOString();
+      tomorrowCountdown.title = `Next day rolls ${new Date(state.nextDayAtMs).toISOString().slice(11, 16)} UTC`;
+    }
+    const tomorrowTerms = this.querySelector('[data-bind="craps-tomorrow-terms"]');
+    if (tomorrowTerms) tomorrowTerms.setAttribute('aria-label', combinedTomorrowRange);
+    const tomorrowEntrants = dayEntrants(tomorrowDay);
+    bindText('craps-tomorrow-entrants', tomorrowEntrants == null
+      ? '—'
+      : tomorrowEntrants.toLocaleString('en-US'));
     if (tomorrowRow) {
       tomorrowRow.hidden = !showTomorrow;
-      tomorrowRow.dataset.state = tomorrowTicket ? 'entered' : tomorrowReady ? 'open' : 'loading';
+      tomorrowRow.dataset.state = tomorrowUpgradeWhenOpen
+        ? 'upgrade'
+        : tomorrowTicket ? 'entered' : tomorrowReady ? 'open' : 'loading';
       tomorrowRow.dataset.payment = tomorrowUsePass ? 'pass' : 'flip';
     }
     if (tomorrowButton) {
-      tomorrowButton.hidden = Boolean(tomorrowTicket);
-      tomorrowButton.disabled = !showTomorrow || this.#busyKey != null || Boolean(tomorrowTicket) || !tomorrowReady;
+      bindEntryTarget(tomorrowButton, tomorrowTicket);
+      tomorrowButton.hidden = !showTomorrow || Boolean(tomorrowTicket && !tomorrowAmendable);
+      tomorrowButton.disabled = !showTomorrow
+        || this.#busyKey != null
+        || tomorrowUpgradeWhenOpen
+        || (!tomorrowTicket && !tomorrowReady);
       tomorrowButton.dataset.terms = tomorrowReady ? 'ready' : 'loading';
-      tomorrowButton.dataset.state = tomorrowTicket ? 'entered' : tomorrowUsePass ? 'pass' : 'buy';
-      tomorrowButton.textContent = this.#busyKey === 'future-day'
-        ? 'ENTERING…'
-        : tomorrowTicket
-          ? 'ENTERED'
+      tomorrowButton.dataset.state = tomorrowUpgradeWhenOpen
+        ? 'upgrade'
+        : tomorrowAmendable
+        ? tomorrowNeedsAmend ? 'amend' : 'entered'
+        : tomorrowTicket ? 'entered' : tomorrowUsePass ? 'pass' : 'buy';
+      const tomorrowBusy = this.#busyKey === 'future-day'
+        || this.#busyKey === `amend-${tomorrowTicket?.betId}`;
+      tomorrowButton.textContent = tomorrowBusy
+        ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
+        : tomorrowUpgradeWhenOpen
+          ? 'UPGRADE WHEN OPEN'
+        : tomorrowAmendable
+          ? tomorrowNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+          : tomorrowTicket
+            ? 'ENTERED'
           : tomorrowUsePass
-            ? 'ENTER: 1 PASS'
-            : `ENTER: ${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
-      tomorrowButton.setAttribute('aria-label', tomorrowTicket
-        ? 'This wallet is already entered for tomorrow\'s Craps slate.'
+            ? '1 COMP'
+            : `${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
+      tomorrowButton.setAttribute('aria-label', tomorrowAmendable
+        ? tomorrowNeedsAmend
+          ? 'Amend tomorrow\'s Craps slate with the changed chip placement.'
+          : 'Entered in tomorrow\'s Craps slate. Edit its chip placement.'
+        : tomorrowUpgradeWhenOpen
+          ? 'This is a Normal reservation. Its High Roller upgrade becomes available when tomorrow opens and its exact terms land on-chain.'
+        : tomorrowTicket
+          ? 'This wallet is already entered for tomorrow\'s Craps slate.'
         : tomorrowReady
           ? tomorrowUsePass
-            ? `Use one of your ${selectedPasses.toLocaleString('en-US')} ${this.#highRoller ? 'High Roller' : 'Normal'} Craps passes to reserve tomorrow's seven battles.`
+            ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve tomorrow's seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available.`
             : `Reserve tomorrow's seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${tomorrowPrice} FLIP.`
-          : 'Tomorrow\'s Craps pass balance is loading.');
+          : 'Tomorrow\'s Craps comp balance is loading.');
     }
-    if (tomorrowEnteredStatus) tomorrowEnteredStatus.hidden = !showTomorrow || !tomorrowTicket;
+    if (tomorrowEnteredStatus) {
+      tomorrowEnteredStatus.hidden = !showTomorrow
+        || !tomorrowTicket
+        || tomorrowAmendable
+        || tomorrowUpgradeWhenOpen;
+    }
 
-    const rows = [...this.querySelectorAll('.craps-entry__battle')];
+    // The lobby physically moves rows into urgency order after every render.
+    // Never let that DOM order become battle identity on the next render:
+    // Firefox and Chrome can run a different number of async renders between
+    // minute boundaries, which previously painted period 0's winner into an
+    // arbitrary row and left the real row displaying SETTLING forever.
+    const rowsByPeriod = new Map([...this.querySelectorAll('.craps-entry__battle[data-craps-period]')]
+      .map((row) => [Number(row.dataset.crapsPeriod), row]));
+    const rows = Array.from(
+      { length: CRAPS_BATTLES_PER_DAY },
+      (_, period) => rowsByPeriod.get(period),
+    );
     const currentDayTicket = state.day == null
       ? null
       : playerEntries?.days?.[String(state.day)] ?? null;
@@ -842,14 +1182,18 @@ export class AppCrapsEntry extends HTMLElement {
       if (!row) return;
       const battleTerms = terms?.windows?.[index] ?? null;
       const result = snapshot?.results?.[index] ?? null;
+      const laneResult = crapsWinnerResultForLane(result, this.#highRoller);
+      const concealed = Boolean(result && this.#resultNeedsReveal(result));
       const ready = Boolean(battleTerms && multiple != null);
       const price = ready ? battleTerms.buyInFlip * BigInt(multiple) : null;
       const entryPrice = ready ? battleTerms.bankrollFlip * BigInt(multiple) : null;
-      const potPrice = ready ? battleTerms.battleStakeFlip * BigInt(multiple) : null;
+      const battlePrice = ready ? battleTerms.battleStakeFlip * BigInt(multiple) : null;
       const directEntry = playerEntries?.windows?.[index] ?? null;
       const dayEntry = currentDayTicket ? Object.freeze({
         source: 'day',
         high: Boolean((currentDayTicket.highMask ?? 0) & (1 << index)),
+        betId: currentDayTicket.betId,
+        chips: currentDayTicket.chips,
       }) : null;
       const entry = directEntry ?? dayEntry;
       const upgradeMask = 1 << index;
@@ -864,19 +1208,34 @@ export class AppCrapsEntry extends HTMLElement {
       const upgradePrice = canUpgrade
         ? battleTerms.buyInFlip * BigInt(multiple - 1)
         : null;
+      const amendOpen = entry?.source === 'day'
+        ? Boolean(state.battles[0]?.joinable)
+        : battle.joinable;
+      const amendable = Boolean(entry?.betId != null && !canUpgrade && amendOpen);
+      const entryNeedsAmend = amendable && needsAmend(entry);
       row.dataset.state = result ? 'completed' : battle.state;
+      row.dataset.goalResult = concealed
+        ? 'pending'
+        : laneResult ? crapsWinnerGoalResult(laneResult) : result ? 'unknown' : 'pending';
+      row.dataset.resultVisibility = concealed ? 'concealed' : result ? 'revealed' : 'pending';
       row.dataset.entry = entry ? entry.high ? 'high' : 'normal' : 'none';
       row.dataset.terms = ready ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
       const close = row.querySelector('[data-bind="craps-battle-countdown"]');
       const entryPriceNode = row.querySelector('[data-bind="craps-battle-entry"]');
       const potPriceNode = row.querySelector('[data-bind="craps-battle-pot"]');
       const goal = row.querySelector('[data-bind="craps-battle-goal"]');
+      const entrantNode = row.querySelector('[data-bind="craps-battle-entrants"]');
       const button = row.querySelector('[data-craps-entry="window"]');
       const enteredStatus = row.querySelector('[data-bind="craps-battle-entered"]');
       const resultBox = row.querySelector('[data-bind="craps-battle-result"]');
+      const resultLocked = row.querySelector('[data-bind="craps-battle-result-locked"]');
+      const resultDetails = row.querySelector('[data-bind="craps-battle-result-details"]');
       const winner = row.querySelector('[data-bind="craps-battle-winner"]');
+      const winnerLabel = row.querySelector('[data-bind="craps-battle-winner-label"]');
       const payout = row.querySelector('[data-bind="craps-battle-payout"]');
       const boost = row.querySelector('[data-bind="craps-battle-boost"]');
+      const boostDetail = row.querySelector('[data-bind="craps-battle-boost-detail"]');
+      const resultBuyIn = row.querySelector('[data-bind="craps-battle-buyin"]');
       for (const cell of row.querySelectorAll('.craps-entry__open-cell')) cell.hidden = Boolean(result);
       if (close) {
         close.textContent = battle.state === 'closed'
@@ -886,45 +1245,190 @@ export class AppCrapsEntry extends HTMLElement {
         close.title = `Closes ${battle.closeLabel} UTC`;
       }
       if (entryPriceNode) entryPriceNode.textContent = entryPrice == null ? '—' : formatCrapsCompactFlip(entryPrice);
-      if (potPriceNode) potPriceNode.textContent = potPrice == null ? '—' : formatCrapsCompactFlip(potPrice);
-      if (goal) goal.textContent = crapsGoalLabel(battleTerms?.goalMult);
-      if (resultBox) resultBox.hidden = !result;
-      if (winner) {
-        winner.textContent = compactWinner(result?.winner);
-        winner.title = result?.winner ?? '';
+      if (potPriceNode) potPriceNode.textContent = battlePrice == null ? '—' : formatCrapsCompactFlip(battlePrice);
+      if (goal) {
+        const goalLabel = crapsGoalLabel(battleTerms?.goalMult);
+        goal.textContent = goalLabel;
+        goal.dataset.difficulty = goalLabel === 'EASY'
+          ? 'easy'
+          : goalLabel.includes('HARD') ? 'hard' : 'unknown';
       }
-      if (payout) payout.textContent = result ? compactWei(result.amountWei) : '—';
-      if (boost) boost.textContent = result ? compactWei(result.boostWei) : '—';
+      if (entrantNode) {
+        const field = snapshot?.entrants?.windows?.[index] ?? null;
+        const shown = crapsEntrantCountForLane(field, this.#highRoller);
+        const known = shown != null;
+        entrantNode.textContent = known ? shown.toLocaleString('en-US') : '—';
+        entrantNode.dataset.lane = this.#highRoller ? 'high' : 'main';
+        if (known) {
+          const dayCount = Number(this.#highRoller ? field?.dayHigh : field?.day) || 0;
+          const pot = field?.mainPotStakeWei == null ? null : compactWei(field.mainPotStakeWei);
+          const detail = (this.#highRoller ? [
+            `${shown.toLocaleString('en-US')} High Roller ${shown === 1 ? 'entrant' : 'entrants'}`,
+            dayCount > 0 ? `includes ${dayCount.toLocaleString('en-US')} High Roller full-day ${dayCount === 1 ? 'seat' : 'seats'}` : null,
+            'High Roller side field only',
+          ] : [
+            `${shown.toLocaleString('en-US')} ${shown === 1 ? 'entrant' : 'entrants'}`,
+            pot == null ? null : `${pot} FLIP staked in the main pot`,
+            dayCount > 0 ? `includes ${dayCount.toLocaleString('en-US')} full-day ${dayCount === 1 ? 'seat' : 'seats'}` : null,
+            'each High Roller contributes one main-pot stake',
+          ]).filter(Boolean).join(' · ');
+          entrantNode.title = detail;
+          entrantNode.setAttribute('aria-label', detail);
+        } else {
+          entrantNode.title = '';
+          entrantNode.setAttribute('aria-label', 'Craps entrants loading');
+        }
+      }
+      if (resultBox) resultBox.hidden = !result;
+      if (resultLocked) resultLocked.hidden = !concealed;
+      if (resultDetails) resultDetails.hidden = concealed;
+      if (winnerLabel) {
+        winnerLabel.textContent = 'WINNER';
+        winnerLabel.setAttribute('aria-label', this.#highRoller ? 'High Roller winner' : 'Winner');
+      }
+      this.#paintWinner(winner, concealed
+        ? null
+        : laneResult?.winner ?? (result && this.#highRoller ? 'NO WINNER' : null));
+      if (payout) {
+        payout.textContent = laneResult && !concealed ? crapsWinnerTotalLabel(laneResult) : '—';
+        payout.title = laneResult && !concealed && laneResult.totalWonWei == null && laneResult.amountWei != null
+          ? 'Known on-chain winner payment; exact total is still loading.'
+          : '';
+      }
+      paintCrapsBoostMark(
+        boostDetail,
+        boost,
+        laneResult && !concealed ? laneResult.winnerBoostWei : null,
+      );
+      if (resultBuyIn) {
+        resultBuyIn.textContent = laneResult && !concealed
+          ? compactWei(crapsWinnerListBuyInWei(laneResult, this.#highRoller))
+          : '—';
+      }
+      if (concealed) {
+        row.setAttribute('aria-label', `Battle ${battle.number} result ready; view it in Pending to reveal`);
+      } else {
+        row.removeAttribute('aria-label');
+      }
       if (button) {
         button.removeAttribute('data-craps-upgrade');
         if (canUpgrade) button.dataset.crapsUpgrade = String(upgradeMask);
-        button.hidden = Boolean(result) || Boolean(entry && !canUpgrade);
-        button.disabled = Boolean(entry && !canUpgrade)
-          || !battle.joinable
-          || (!canUpgrade && !ready)
-          || this.#busyKey != null;
-        button.dataset.state = canUpgrade ? 'upgrade' : entry ? 'entered' : 'buy';
-        button.textContent = this.#busyKey === `window-${index}` || this.#busyKey === `upgrade-${upgradeMask}`
-          ? 'ENTERING…'
+        bindEntryTarget(button, entry);
+        button.hidden = Boolean(result) || Boolean(entry && !canUpgrade && !amendable);
+        button.disabled = this.#busyKey != null
+          || (entry
+            ? !canUpgrade && !amendable
+            : !battle.joinable || !ready);
+        button.dataset.state = canUpgrade
+          ? 'upgrade'
+          : amendable
+            ? entryNeedsAmend ? 'amend' : 'entered'
+            : entry ? 'entered' : 'buy';
+        const entryBusy = this.#busyKey === `window-${index}`
+          || this.#busyKey === `upgrade-${upgradeMask}`
+          || this.#busyKey === `amend-${entry?.betId}`;
+        button.textContent = entryBusy
+          ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
           : canUpgrade
             ? `UPGRADE ${formatCrapsCompactFlip(upgradePrice)}`
-            : entry
-              ? 'ENTERED'
+            : amendable
+              ? entryNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+              : entry
+                ? 'ENTERED'
               : battle.state === 'closed'
                 ? 'SETTLING'
-                : `ENTER: ${price == null ? '—' : formatCrapsCompactFlip(price)} FLIP`;
-        button.setAttribute('aria-label', entry && !canUpgrade
-          ? `This wallet is entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}.`
+                : `${price == null ? '—' : formatCrapsCompactFlip(price)} FLIP`;
+        button.setAttribute('aria-label', amendable
+          ? entryNeedsAmend
+            ? `Amend Battle ${battle.number} with the changed chip placement.`
+            : `Entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}. Edit its chip placement.`
+          : entry && !canUpgrade
+            ? `This wallet is entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}.`
           : canUpgrade
             ? `Upgrade Battle ${battle.number} to High Roller for ${upgradePrice} FLIP.`
             : battle.state === 'closed'
               ? `Battle ${battle.number} is closed and settling`
               : ready
-                ? `Enter Battle ${battle.number} for ${price} FLIP: ${entryPrice} FLIP bankroll plus ${potPrice} FLIP to the battle pot; goal ${crapsGoalLabel(battleTerms.goalMult)}.`
+                ? `Enter Battle ${battle.number} for ${price} FLIP: ${entryPrice} FLIP wager plus ${battlePrice} FLIP battle fee; goal ${crapsGoalLabel(battleTerms.goalMult)}.`
                 : `Battle ${battle.number}, terms loading`);
       }
-      if (enteredStatus) enteredStatus.hidden = Boolean(result) || !entry || canUpgrade;
+      if (enteredStatus) enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || amendable;
     });
+
+    const previousEvent = crapsPreviousEventDuringRollover({
+      day: state.day,
+      wordValue: currentWordFromStore(state.day),
+      result: snapshot?.yesterdayEventResult ?? this.#previousEventResult,
+    });
+    const previousEventEntrants = snapshot?.entrants?.previousEvent ?? this.#previousEventEntrants;
+    const previousEventLaneResult = crapsWinnerResultForLane(previousEvent, this.#highRoller);
+    const previousEventConcealed = Boolean(previousEvent && this.#resultNeedsReveal(previousEvent));
+    const previousEventRow = this.querySelector('[data-bind="craps-previous-event-row"]');
+    const previousEventWinner = this.querySelector('[data-bind="craps-previous-event-winner"]');
+    const previousEventLocked = this.querySelector('[data-bind="craps-previous-event-result-locked"]');
+    const previousEventDetails = this.querySelector('[data-bind="craps-previous-event-result-details"]');
+    const previousEventEntrantNode = this.querySelector('[data-bind="craps-previous-event-entrants"]');
+    if (previousEventRow) {
+      previousEventRow.hidden = !previousEvent;
+      previousEventRow.dataset.day = previousEvent ? String(previousEvent.day) : '';
+      previousEventRow.dataset.goalResult = previousEventConcealed
+        ? 'pending'
+        : previousEventLaneResult
+          ? crapsWinnerGoalResult(previousEventLaneResult)
+          : 'unknown';
+      previousEventRow.dataset.resultVisibility = previousEventConcealed
+        ? 'concealed'
+        : previousEvent ? 'revealed' : 'pending';
+      previousEventRow.setAttribute('aria-label', previousEvent
+        ? previousEventConcealed
+          ? `Day ${previousEvent.day} event result ready; view it in Pending to reveal`
+          : previousEventLaneResult
+            ? `Day ${previousEvent.day} ${this.#highRoller ? 'High Roller ' : ''}result, ${crapsWinnerGoalResult(previousEventLaneResult) === 'met' ? 'goal met' : crapsWinnerGoalResult(previousEventLaneResult) === 'missed' ? 'goal not met' : 'goal result unavailable'}`
+            : `Day ${previousEvent.day} High Roller result, no winner`
+        : 'Previous Craps event result unavailable');
+    }
+    if (previousEventLocked) previousEventLocked.hidden = !previousEventConcealed;
+    if (previousEventDetails) previousEventDetails.hidden = previousEventConcealed;
+    bindText('craps-previous-event-label', previousEvent
+      ? `DAY ${previousEvent.day} WINNER`
+      : 'PREVIOUS WINNER');
+    this.#paintWinner(previousEventWinner, previousEventConcealed
+      ? null
+      : previousEventLaneResult?.winner ?? (previousEvent && this.#highRoller ? 'NO WINNER' : null));
+    bindText('craps-previous-event-payout', previousEventConcealed
+      ? '—'
+      : crapsWinnerTotalLabel(previousEventLaneResult));
+    const previousEventPayout = this.querySelector('[data-bind="craps-previous-event-payout"]');
+    if (previousEventPayout) {
+      previousEventPayout.title = previousEventLaneResult
+        && !previousEventConcealed
+        && previousEventLaneResult.totalWonWei == null
+        && previousEventLaneResult.amountWei != null
+        ? 'Known on-chain winner payment; exact total is still loading.'
+        : '';
+    }
+    const previousEventBoost = this.querySelector('[data-bind="craps-previous-event-boost"]');
+    const previousEventBoostDetail = this.querySelector('[data-bind="craps-previous-event-boost-detail"]');
+    paintCrapsBoostMark(
+      previousEventBoostDetail,
+      previousEventBoost,
+      previousEventConcealed ? null : previousEventLaneResult?.winnerBoostWei,
+    );
+    bindText('craps-previous-event-buyin', compactWei(
+      previousEventConcealed ? null : crapsWinnerListBuyInWei(previousEventLaneResult, this.#highRoller),
+    ));
+    if (previousEventEntrantNode) {
+      const shown = crapsEntrantCountForLane(previousEventEntrants, this.#highRoller);
+      const known = shown != null;
+      previousEventEntrantNode.textContent = known ? shown.toLocaleString('en-US') : '—';
+      previousEventEntrantNode.dataset.lane = this.#highRoller ? 'high' : 'main';
+      previousEventEntrantNode.title = known
+        ? `${shown.toLocaleString('en-US')} ${this.#highRoller ? 'High Roller ' : ''}${shown === 1 ? 'entrant' : 'entrants'}`
+        : '';
+      previousEventEntrantNode.setAttribute('aria-label', known
+        ? previousEventEntrantNode.title
+        : 'Previous Craps event entrants loading');
+    }
 
     const body = this.querySelector('.craps-entry__listing tbody');
     if (body && dayRow && tomorrowRow) {
@@ -938,20 +1442,97 @@ export class AppCrapsEntry extends HTMLElement {
       for (const item of order) {
         body.appendChild(item === 'day' ? dayRow : item === 'tomorrow' ? tomorrowRow : rows[item]);
       }
+      if (previousEventRow) body.appendChild(previousEventRow);
     }
 
     const status = this.querySelector('[data-bind="craps-entry-status"]');
     if (status) {
       status.dataset.state = this.#message ? 'message' : 'idle';
-      status.textContent = this.#message || (futureDay && !passInventoryReady
-        ? 'Checking your banked Craps passes before enabling a FLIP purchase.'
+      status.textContent = this.#message || (futureDay && compEligible && !passInventoryReady
+        ? 'Checking comps…'
         : futureDay && usePass
-          ? `Your ${this.#highRoller ? 'High Roller' : 'Normal'} pass will reserve the next full slate before any FLIP is used.`
+          ? `1 ${this.#highRoller ? 'High Roller' : 'Normal'} comp reserves the next slate.`
+          : futureDay && !state.futurePassOpen && selectedPasses > 0
+            ? 'Comp window closed · FLIP entry remains open.'
           : futureDay
-            ? 'Today is underway. The day button reserves the next full slate; its terms draw at open.'
-            : 'Buy the full slate before the first battle, or choose any individual row.');
+            ? 'Today live · reserve the next slate.'
+            : 'Full slate before Battle 1 · or enter one battle.');
     }
     this.#renderProgressive();
+    void this.#refreshWinnerProfiles();
+  }
+
+  /**
+   * A winner cell shows the Discord identity when the wallet linked one, and the
+   * shortened address otherwise. The full address always survives in the title —
+   * identity is decoration and must never hide the on-chain fact.
+   */
+  #paintWinner(node, address) {
+    if (!node) return;
+    const raw = String(address ?? '');
+    node.textContent = '';
+    if (!/^0x[0-9a-f]{40}$/i.test(raw)) {
+      node.textContent = raw || '—';
+      node.title = raw;
+      return;
+    }
+    const profile = this.#profiles.get(raw.toLowerCase()) ?? null;
+    if (profile?.avatar && typeof globalThis.document?.createElement === 'function') {
+      const portrait = globalThis.document.createElement('img');
+      portrait.className = 'craps-entry__winner-pfp';
+      portrait.src = profile.avatar;
+      portrait.alt = '';
+      portrait.loading = 'lazy';
+      portrait.referrerPolicy = 'no-referrer';
+      // A Discord avatar can 404 long after the battle settled (deleted account,
+      // rotated hash). Drop to name-only rather than leaving a broken image.
+      portrait.addEventListener('error', () => portrait.remove(), { once: true });
+      node.append(portrait);
+    }
+    node.append(profile?.name || compactWinner(raw));
+    node.title = profile?.name ? `${profile.name} · ${raw}` : raw;
+  }
+
+  #resultNeedsReveal(result) {
+    return crapsResultNeedsReveal(result, {
+      address: this.#schedulePlayer,
+      replays: this.#resolvedReplays,
+      wasSeen: resolutionWasSeen,
+    });
+  }
+
+  #winnerAddresses() {
+    const out = new Set();
+    const remember = (value) => {
+      const address = String(value ?? '').toLowerCase();
+      if (/^0x[0-9a-f]{40}$/.test(address)) out.add(address);
+    };
+    for (const result of this.#snapshot?.results ?? []) {
+      if (this.#resultNeedsReveal(result)) continue;
+      remember(result?.winner);
+      remember(result?.highResult?.winner);
+    }
+    const day = currentDayFromStore();
+    const previous = crapsPreviousEventDuringRollover({
+      day,
+      wordValue: currentWordFromStore(day),
+      result: this.#snapshot?.yesterdayEventResult ?? this.#previousEventResult,
+    });
+    if (this.#resultNeedsReveal(previous)) return [...out].sort();
+    remember(previous?.winner);
+    remember(previous?.highResult?.winner);
+    return [...out].sort();
+  }
+
+  async #refreshWinnerProfiles() {
+    const addresses = this.#winnerAddresses();
+    const key = addresses.join(',');
+    if (!key || key === this.#profileKey) return;
+    this.#profileKey = key;
+    const profiles = await _fetchProfiles(addresses);
+    if (this.#profileKey !== key || !profiles?.size) return;
+    this.#profiles = profiles;
+    this.#render();
   }
 
   #renderProgressive() {
@@ -963,8 +1544,8 @@ export class AppCrapsEntry extends HTMLElement {
     meter.dataset.state = hasAmount ? 'live' : this.#progressivePending ? 'loading' : 'unavailable';
     amount.textContent = formatted ?? '—';
     meter.setAttribute('aria-label', hasAmount
-      ? `Craps progressive jackpot ${formatted} FLIP`
-      : this.#progressivePending ? 'Loading the Craps progressive jackpot' : 'Craps progressive jackpot amount unavailable');
+      ? `Run It Up jackpot ${formatted} FLIP`
+      : this.#progressivePending ? 'Loading the Run It Up jackpot' : 'Run It Up jackpot amount unavailable');
   }
 
   async #refreshProgressive() {
@@ -990,7 +1571,23 @@ export class AppCrapsEntry extends HTMLElement {
     if (day == null) return;
     const player = String(get('connected.address') ?? '').toLowerCase() || null;
     if (!force && this.#schedulePending && this.#scheduleDay === day && this.#schedulePlayer === player) return;
-    if (this.#scheduleDay !== day || this.#schedulePlayer !== player) {
+    if (this.#scheduleDay != null && this.#scheduleDay !== day) {
+      const completedEvent = this.#scheduleDay === day - 1
+        ? this.#snapshot?.results?.[CRAPS_BATTLES_PER_DAY - 1] ?? null
+        : null;
+      this.#previousEventResult = completedEvent
+        ? Object.freeze({ day: this.#scheduleDay, ...completedEvent })
+        : null;
+      this.#previousEventEntrants = completedEvent
+        ? this.#snapshot?.entrants?.windows?.[CRAPS_BATTLES_PER_DAY - 1] ?? null
+        : null;
+      this.#boardBets = {};
+      this.#contractChips = 0;
+      this.#boardSet = false;
+      this.#message = '';
+    }
+    const playerChanged = this.#schedulePlayer !== player;
+    if (this.#scheduleDay !== day || playerChanged) {
       this.#schedule = null;
       this.#snapshot = null;
       this.#passCredits = null;
@@ -998,6 +1595,7 @@ export class AppCrapsEntry extends HTMLElement {
       this.#replayLoadPending = false;
       this.#stopReplayPoll();
       this.#replayStates.clear();
+      if (playerChanged) this.#resolvedReplays = [];
       clearPendingActions(PENDING_SOURCE);
     }
     this.#scheduleDay = day;
@@ -1005,19 +1603,54 @@ export class AppCrapsEntry extends HTMLElement {
     const seq = ++this.#scheduleSeq;
     this.#schedulePending = true;
     this.#render();
+    // Pass inventory is wallet-specific decoration. Do not make public battle
+    // results wait for it: a blocked storage read could otherwise hold this
+    // refresh open, suppress later polls, and leave resolved rows showing
+    // SETTLING indefinitely.
+    void (player ? readCrapsPassCredits(player) : Promise.resolve(null)).then((credits) => {
+      if (seq !== this.#scheduleSeq || this.#schedulePlayer !== player) return;
+      this.#passCredits = credits;
+      this.#render();
+    }).catch(() => {
+      // Preserve the last known inventory; result polling remains independent.
+    });
+    // Start the optional indexer read beside the chain read, but never await it
+    // on the transaction-critical path. A wedged API must not hold buy controls
+    // behind its transport timeout; it may only delay the derived TOTAL WON text.
+    const totalsRead = readCrapsWinnerTotals(day).then(
+      (totals) => ({ ok: true, totals }),
+      () => ({ ok: false, totals: null }),
+    );
     try {
-      const [snapshotResult, passResult] = await Promise.allSettled([
-        readCrapsLobbySnapshot(day, player),
-        player ? readCrapsPassCredits(player) : Promise.resolve(null),
-      ]);
+      const snapshot = crapsLobbySnapshotWithWinnerTotals(
+        await readCrapsLobbySnapshot(day, player),
+        this.#winnerTotals,
+      );
       if (seq !== this.#scheduleSeq) return;
-      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
       if (snapshot?.day === day) {
         this.#snapshot = snapshot;
+        this.#previousEventResult = snapshot.yesterdayEventResult ?? this.#previousEventResult;
+        this.#previousEventEntrants = snapshot.entrants?.previousEvent ?? this.#previousEventEntrants;
+        this.#resolvedReplays = Array.isArray(snapshot.resolvedReplays)
+          ? snapshot.resolvedReplays
+          : [];
         if (snapshot.schedule?.day === day) this.#schedule = snapshot.schedule;
         void this.#refreshResolvedReplays(snapshot?.resolvedReplays, player);
+        void totalsRead.then((read) => {
+          if (
+            !read.ok
+            || seq !== this.#scheduleSeq
+            || this.#scheduleDay !== day
+            || this.#schedulePlayer !== player
+            || this.#snapshot?.day !== day
+          ) return;
+          this.#winnerTotals = read.totals;
+          this.#snapshot = crapsLobbySnapshotWithWinnerTotals(this.#snapshot, read.totals);
+          this.#previousEventResult = this.#snapshot.yesterdayEventResult
+            ?? this.#previousEventResult;
+          this.#render();
+        });
       }
-      if (passResult.status === 'fulfilled') this.#passCredits = passResult.value;
     } catch (_error) {
       // Entry, pot, and goal remain available from the committed day word;
       // retain the last good winners and historical boost through an RPC blip.
@@ -1031,15 +1664,14 @@ export class AppCrapsEntry extends HTMLElement {
 
   #publishResolvedReplays() {
     const address = String(this.#schedulePlayer ?? '').toLowerCase();
-    const replays = Array.isArray(this.#snapshot?.resolvedReplays)
-      ? this.#snapshot.resolvedReplays
-      : [];
+    const replays = this.#resolvedReplays;
     const rows = crapsResolutionPendingActions({
       address,
       replays,
       states: this.#replayStates,
       wasSeen: resolutionWasSeen,
       run: (replay, scope) => this.#openResolvedReplay(replay, scope),
+      clearAll: () => this.#dismissAllResolvedReplays(),
     });
     publishPendingActions(PENDING_SOURCE, rows);
   }
@@ -1054,9 +1686,7 @@ export class AppCrapsEntry extends HTMLElement {
   #replayNeedsPolling() {
     const address = String(this.#schedulePlayer ?? '').toLowerCase();
     if (!address) return false;
-    const replays = Array.isArray(this.#snapshot?.resolvedReplays)
-      ? this.#snapshot.resolvedReplays
-      : [];
+    const replays = this.#resolvedReplays;
     return replays.some((replay) => {
       if (resolutionWasSeen(address, replay)) return false;
       const state = this.#replayStates.get(resolutionIdentity(replay));
@@ -1074,7 +1704,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#replayLoadPending || !this.#replayPollingAllowed() || !this.#replayNeedsPolling()) return;
     this.#replayPollTimer = globalThis.setTimeout?.(() => {
       this.#replayPollTimer = null;
-      void this.#refreshResolvedReplays(this.#snapshot?.resolvedReplays, this.#schedulePlayer);
+      void this.#refreshResolvedReplays(this.#resolvedReplays, this.#schedulePlayer);
     }, crapsReplayPollDelay()) ?? null;
     if (this.#replayPollTimer && typeof this.#replayPollTimer.unref === 'function') {
       this.#replayPollTimer.unref();
@@ -1112,6 +1742,7 @@ export class AppCrapsEntry extends HTMLElement {
           const artifacts = await loadCrapsReplay({
             battleKey: replay.battleKey,
             viewerBetId: replay.viewerBetId,
+            fetchImpl: crapsReplayFetch,
           });
           return { identity, state: crapsReplayLoaderState(artifacts) };
         } catch (error) {
@@ -1140,10 +1771,20 @@ export class AppCrapsEntry extends HTMLElement {
       result = await openCrapsReplayTable(table, {
         battleKey: replay.battleKey,
         viewerBetId: replay.viewerBetId,
+        fetchImpl: crapsReplayFetch,
+        // Older sealed bundles predate the optional prize totals. The chain's
+        // finalization event still carries the exact settled main bounty, so
+        // let the adapter use it instead of painting two permanent dashes.
+        settledMainPotWei: replay.potWei,
+        battleWinner: replay.winner,
+        battleWinnerBetId: replay.winnerBetId,
+        battlePayoutWei: replay.amountWei,
+        battleWinningStop: replay.winningStop,
         onResolutionAcknowledged: () => {
           if (resolutionWasSeen(address, replay)) return;
           markResolutionSeen(address, replay);
           this.#replayStates.delete(resolutionIdentity(replay));
+          this.#render();
           this.#publishResolvedReplays();
           this.#scheduleReplayPoll();
         },
@@ -1167,15 +1808,31 @@ export class AppCrapsEntry extends HTMLElement {
     return true;
   }
 
-  #openBoard(opener) {
+  #dismissAllResolvedReplays() {
+    const address = String(this.#schedulePlayer ?? '').toLowerCase();
+    if (!address) return;
+    for (const replay of this.#resolvedReplays) markResolutionSeen(address, replay);
+    this.#replayStates.clear();
+    this.#stopReplayPoll();
+    this.#render();
+    this.#publishResolvedReplays();
+  }
+
+  #openBoard(opener, entry = null) {
     const state = crapsEntryState({ day: currentDayFromStore() });
     const terms = this.#termsFor(state);
     const reference = terms?.windows?.find(Boolean) ?? null;
+    const editingEntry = entry?.betId != null;
+    const entryChips = Number(entry?.chips ?? 0) >>> 0;
     const confirm = async (wager) => {
       this.#boardBets = { ...wager.chips };
       this.#contractChips = wager.contractChips;
       this.#boardSet = true;
-      this.#message = 'Your seven-chip board is set for the Buy In buttons.';
+      this.#message = editingEntry
+        ? wager.contractChips === entryChips
+          ? 'Entry board unchanged.'
+          : 'Chip placement changed. Select AMEND ENTRY to update it.'
+        : 'Your seven-chip board is set for the Buy In buttons.';
       this.#render();
       return true;
     };
@@ -1184,8 +1841,8 @@ export class AppCrapsEntry extends HTMLElement {
         opener,
         screen: 'placement',
         entryKind: 'board',
-        entryLabel: this.#boardSet ? 'EDIT YOUR BOARD' : 'SET YOUR BOARD',
-        bets: this.#boardBets,
+        entryLabel: editingEntry ? 'EDIT ENTRY BOARD' : this.#boardSet ? 'EDIT YOUR BOARD' : 'SET YOUR BOARD',
+        bets: editingEntry ? unpackCrapsContractChips(entryChips) : this.#boardBets,
         bankrollFlip: 0n,
         battleStakeFlip: 0n,
         goalFlip: 0n,
@@ -1193,6 +1850,55 @@ export class AppCrapsEntry extends HTMLElement {
         confirm,
       },
     }));
+  }
+
+  #applyAmendedBoard(betId, chips) {
+    const playerEntries = this.#snapshot?.playerEntries;
+    if (!playerEntries) return;
+    const id = String(betId);
+    const patchEntry = (entry) => entry?.betId != null && String(entry.betId) === id
+      ? Object.freeze({ ...entry, chips })
+      : entry;
+    this.#snapshot = Object.freeze({
+      ...this.#snapshot,
+      playerEntries: Object.freeze({
+        ...playerEntries,
+        days: Object.freeze(Object.fromEntries(Object.entries(playerEntries.days ?? {}).map(
+          ([day, entry]) => [day, patchEntry(entry)],
+        ))),
+        windows: Object.freeze((playerEntries.windows ?? []).map(patchEntry)),
+      }),
+    });
+  }
+
+  async #amend(button) {
+    if (this.#busyKey != null || !this.#boardSet) return;
+    const betId = String(button?.dataset?.crapsBetId ?? '');
+    const enteredChips = Number(button?.dataset?.crapsEntryChips ?? 0) >>> 0;
+    if (!/^\d+$/.test(betId) || this.#contractChips === enteredChips) {
+      this.#openBoard(button, { betId, chips: enteredChips });
+      return;
+    }
+    const busyKey = `amend-${betId}`;
+    this.#busyKey = busyKey;
+    this.#message = '';
+    this.#render();
+    try {
+      const result = await amendCrapsSlip({ betId, contractChips: this.#contractChips });
+      await this.#refreshSchedule(true);
+      this.#applyAmendedBoard(betId, this.#contractChips);
+      this.#message = 'Entry amended with your new seven-chip board.';
+      this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
+        detail: { kind: 'amend', betId, contractChips: this.#contractChips, result },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.#message = String(error?.userMessage || error?.message || 'The Craps entry was not amended. Try again.');
+    } finally {
+      if (this.#busyKey === busyKey) this.#busyKey = null;
+      this.#render();
+    }
   }
 
   async #upgrade(periodMask) {
@@ -1239,8 +1945,9 @@ export class AppCrapsEntry extends HTMLElement {
     const selectedPasses = Number(this.#highRoller
       ? this.#passCredits?.high ?? 0
       : this.#passCredits?.normal ?? 0);
-    if (kind === 'future-day' && !this.#forceFlipDay && this.#passCredits == null) return;
-    const usePass = kind === 'future-day' && !this.#forceFlipDay && selectedPasses > 0;
+    const compEligible = state.futurePassOpen && !this.#forceFlipDay;
+    if (kind === 'future-day' && compEligible && this.#passCredits == null) return;
+    const usePass = kind === 'future-day' && compEligible && selectedPasses > 0;
 
     const baseWager = crapsEntryWager({
       day: state.day,
@@ -1269,7 +1976,7 @@ export class AppCrapsEntry extends HTMLElement {
       const result = await placeCrapsBonusEntry(wager);
       this.#message = kind === 'future-day'
         ? usePass
-          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Normal'} pass.`
+          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp.`
           : `Next slate purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`
         : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`;
       if (kind === 'future-day') this.#forceFlipDay = false;

@@ -86,3 +86,21 @@ test('every endpoint dead surfaces the last transport error', async () => {
   const send = _makeFailoverSend([A, B], async () => { throw new Error('all down'); });
   await assert.rejects(send(PAYLOAD), /all down/);
 });
+
+test('a hung endpoint is aborted with a concrete signal before failover', async () => {
+  const hits = [];
+  let primarySignal = null;
+  const send = _makeFailoverSend([A, B], async (url, init) => {
+    hits.push(url);
+    if (url === B) return ok({ id: 1, result: '0x2' });
+    primarySignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    });
+  }, 5);
+
+  assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x2' }]);
+  assert.equal(primarySignal instanceof AbortSignal, true);
+  assert.equal(primarySignal.aborted, true);
+  assert.deepEqual(hits, [A, B]);
+});

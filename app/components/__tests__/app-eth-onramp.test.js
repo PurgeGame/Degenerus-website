@@ -57,7 +57,7 @@ describe('low-ETH funding helper', () => {
     assert.match(html, /src="\/app\/components\/app-eth-onramp\.js"/);
     assert.match(source, /target="_blank"/);
     assert.match(source, /rel="noopener noreferrer" referrerpolicy="no-referrer"/);
-    assert.match(source, /provider\.getBalance\(address\)/);
+    assert.match(source, /readNativeBalance\(address, \{ provider \}\)/);
     assert.match(source, /subscribe\('connected\.address'/);
     assert.match(source, /subscribe\('ui\.chainOk'/);
     assert.doesNotMatch(source, /destinationWallet|walletAddress=/,

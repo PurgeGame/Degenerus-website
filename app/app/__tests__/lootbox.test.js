@@ -192,14 +192,14 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       getBlockNumber: async () => 901,
       getStorage: async (_address, slot, blockTag) => {
         reads.push([slot, blockTag]);
-        return slot === 33n ? queuePacked : timingPacked | (1n << 152n);
+        return slot === '0x21' ? queuePacked : timingPacked | (1n << 152n);
       },
     };
     const locked = await lootboxMod.readLootboxRngQueueState({ provider });
     assert.equal(locked.rngLocked, true);
     assert.equal(locked.middayRequestInFlight, false,
       'a daily RNG lock is not mislabeled as the mid-day request');
-    assert.deepEqual(reads, [[33n, 901], [0n, 901]], 'both slots share one block tag');
+    assert.deepEqual(reads, [['0x21', 901], ['0x0', 901]], 'both slots share one block tag');
   });
 
   test('reads the active player century-bonus usage from the deployment-pinned mapping', async () => {
@@ -228,7 +228,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       0n,
       'a usage word stamped for an older century is fresh allowance at the new one',
     );
-    assert.equal(reads.length, 2);
+    assert.equal(reads.length, 1, 'the immutable block-pinned storage word is reused');
     assert.equal(reads[0][0], CONTRACTS.GAME);
     assert.match(String(reads[0][1]), /^0x[0-9a-f]{64}$/i);
     assert.equal(reads[0][2], 902);
@@ -411,6 +411,22 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       'the write ignores the half-price Level 29 quote and funds routed Level 30');
     assert.equal(args[6].value, staleFoilCost * 2n,
       'this exact boundary reproduces the reported 2x tier jump');
+  });
+
+  test('purchaseEth reuses the same fresh quote prepared by the click handler', async () => {
+    const routedPrice = lootboxMod.scaledTicketPriceWei(30);
+    lastFakeContract = makeFakeContract({
+      purchaseInfo: [29, true, false, true, routedPrice],
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const purchaseQuote = await lootboxMod.readPurchaseQuote({ fresh: true });
+    await lootboxMod.purchaseEth({
+      ticketQuantity: 1,
+      purchaseQuote,
+    });
+    assert.equal(lastFakeContract._calls.purchaseInfo.length, 1,
+      'the writer does not immediately repeat the click-time purchaseInfo read');
   });
 
   test('claimable-first split preserves the 1-wei sentinel', () => {
@@ -894,11 +910,11 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.deepEqual(c._calls.openBoxStatic, [[CONNECTED, 7n]]);
   });
 
-  test('canOpenLootbox returns false when no provider is configured', async () => {
+  test('canOpenLootbox remains available through the public reader without a wallet', async () => {
     contractsMod.clearProvider();
     assert.equal(
       await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }),
-      false,
+      true,
     );
   });
 });

@@ -50,6 +50,7 @@ import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS, CHAIN } from './chain-config.js';
 import { get } from './store.js';
 import { fetchJSON as sharedFetchJSON } from './api.js';
+import { permissionlessReadProvider } from './read-provider.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -92,6 +93,14 @@ export function __resetContractFactoryForTest() {
 function _buildAffiliateContract(signerOrProvider) {
   if (_contractFactory) return _contractFactory(signerOrProvider);
   return new ethers.Contract(CONTRACTS.AFFILIATE, AFFILIATE_ABI, signerOrProvider);
+}
+
+function _affiliateReadProvider() {
+  // An injected factory with no provider is an explicit "RPC unavailable"
+  // test seam. Production has no factory and can always use the public reader.
+  const wallet = getProvider();
+  if (_contractFactory && !wallet) return null;
+  return permissionlessReadProvider(wallet);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,8 +217,8 @@ export async function validatePurchaseAffiliateCode(raw, player) {
   if (numeric <= MAX_UINT160) {
     owner = `0x${code.slice(-40)}`;
   } else {
-    const provider = getProvider();
-    if (!provider) throw new Error('Connect a wallet to validate this affiliate code.');
+    const provider = _affiliateReadProvider();
+    if (!provider) throw new Error('Could not reach the chain to validate this affiliate code.');
     try {
       const info = await _buildAffiliateContract(provider).affiliateCode(code);
       owner = info?.owner ?? info?.[0] ?? null;
@@ -284,7 +293,7 @@ export async function savePurchaseAffiliateCode(raw, player = null) {
 export async function readPlayerReferrer(player) {
   const address = String(player || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(address)) return null;
-  const provider = getProvider();
+  const provider = _affiliateReadProvider();
   if (!provider) return null;
   const referrer = await _buildAffiliateContract(provider).getReferrer(address);
   const normalized = String(referrer || '').toLowerCase();
@@ -397,7 +406,7 @@ export async function resolveRegisteredCode(addr) {
   const stored = readRegisteredCode(addr);
   if (!stored) return null;
   try {
-    const provider = getProvider();
+    const provider = _affiliateReadProvider();
     if (!provider) return null;
     const info = await _buildAffiliateContract(provider).affiliateCode(stored);
     const owner = info?.owner ?? info?.[0];

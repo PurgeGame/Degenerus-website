@@ -8,7 +8,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { permissionlessReadProvider } from './read-provider.js';
 import { getActingAddress } from './store.js';
 
 const SALVAGE_ABI = [
@@ -41,12 +41,7 @@ export function __resetSalvageContractFactoryForTest() {
 }
 
 function _readRunner() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
-  if (!_readProvider && CHAIN.rpcUrl) {
-    _readProvider = sharedReadProvider();  // C15: shared batched read stream
-  }
-  return _readProvider;
+  return permissionlessReadProvider(getProvider());
 }
 
 function _buildContract(runner) {

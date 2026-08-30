@@ -22,7 +22,14 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { getActingAddress } from './store.js';
 import { CONTRACTS, CHAIN, ETH_DIVISOR } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readContractStorage,
+  readProviderBlockNumber,
+  readTransactionReceipt,
+  sharedReadProvider,
+} from './read-provider.js';
+import { readPurchaseInfo } from './purchase-info.js';
 
 // Foil-leg revert reasons (DegenerusGameFoilPackModule.sol) — register both
 // their ABI names and raw selectors. Delegatecall reverts are not decoded by
@@ -85,6 +92,7 @@ const LR_THRESHOLD_SHIFT = 112n;
 const LR_PENDING_FLIP_SHIFT = 184n;
 const MILLI_ETH_WEI = 10n ** 15n;
 let _rngQueueReadProvider = null;
+let _purchaseQuoteMeta = new WeakMap();
 
 // ---------------------------------------------------------------------------
 // GAME_ABI fragment — minimal human-readable ABI, reconciled against the
@@ -142,7 +150,7 @@ export const GAME_ABI = [
   'event LootBoxIdx(address indexed buyer, uint32 indexed index, uint32 indexed day)',
   'event PresaleBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount, bool closing)',
   // audit 4a9549e51 appended `normalPasses`/`highPasses`: the FLIP branch tosses a committed
-  // coin and half the boxes denominate the whole roll into Craps day-passes at the regular
+  // coin and half the boxes denominate the whole roll into Craps comps at the regular
   // box units instead of paying it as coinflip credit. ⚠ THE TOPIC0 CHANGED WITH THEM — the
   // old signature does not merely lose two fields, it matches NO log at all, and
   // `encodeFilterTopics` fails closed by returning an empty feed rather than an error.
@@ -406,6 +414,7 @@ export function __setContractFactoryForTest(fn) {
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
+  _purchaseQuoteMeta = new WeakMap();
 }
 
 function _buildContract(signerOrProvider) {
@@ -436,26 +445,39 @@ function _readBuyer() {
  * priceWei already accounts for a final sealed RNG window routing Level N
  * purchases into Level N+1.
  */
-export async function readPurchaseQuote() {
-  const provider = getProvider();
-  if (!provider) return null;
+export async function readPurchaseQuote({ fresh = false } = {}) {
   try {
-    const contract = _buildContract(provider);
-    if (typeof contract.purchaseInfo !== 'function') return null;
-    const raw = await contract.purchaseInfo();
-    const currentLevel = Number(raw?.lvl ?? raw?.[0]);
+    let raw;
+    if (_contractFactory) {
+      const provider = getProvider();
+      if (!provider) return null;
+      const contract = _buildContract(provider);
+      if (typeof contract.purchaseInfo !== 'function') return null;
+      raw = await contract.purchaseInfo();
+    } else {
+      raw = await readPurchaseInfo({ fresh });
+    }
+    const currentLevel = Number(raw?.currentLevel ?? raw?.lvl ?? raw?.[0]);
     const priceWei = BigInt(raw?.priceWei ?? raw?.[4] ?? 0n);
     if (!Number.isInteger(currentLevel) || currentLevel < 0 || priceWei <= 0n) return null;
-    return {
+    const quote = {
       currentLevel,
       inJackpotPhase: Boolean(raw?.inJackpotPhase ?? raw?.[1]),
-      lastPurchaseDay: Boolean(raw?.lastPurchaseDay_ ?? raw?.[2]),
-      rngLocked: Boolean(raw?.rngLocked_ ?? raw?.[3]),
+      lastPurchaseDay: Boolean(raw?.lastPurchaseDay ?? raw?.lastPurchaseDay_ ?? raw?.[2]),
+      rngLocked: Boolean(raw?.rngLocked ?? raw?.rngLocked_ ?? raw?.[3]),
       priceWei,
     };
+    _purchaseQuoteMeta.set(quote, { fresh: Boolean(fresh), readAt: Date.now() });
+    return quote;
   } catch (_e) {
     return null;
   }
+}
+
+function _recentFreshPurchaseQuote(value) {
+  if (!value || typeof value !== 'object') return null;
+  const meta = _purchaseQuoteMeta.get(value);
+  return meta?.fresh === true && Date.now() - meta.readAt <= 5_000 ? value : null;
 }
 
 /** Storage position for centuryBonusUsed[player] in the deployed GAME. */
@@ -765,6 +787,7 @@ async function _purchaseFundingFor(
  *          affiliateCode?: string, ticketCostWei?: bigint,
  *          foil?: boolean, foilCostWei?: bigint, presaleBoxAmountWei?: bigint,
  *          preferClaimable?: boolean, useAfking?: boolean,
+ *          purchaseQuote?: object,
  *          onSubmitted?: function(import('ethers').TransactionResponse): void}} args
  *   ticketCostWei — scaled per-purchase ticket cost (scaledTicketPriceWei(target) ×
  *   quantity), computed by the panel from /game/state level + phase. It is part
@@ -790,7 +813,8 @@ export async function purchaseEth(args) {
   // window the API can still say Level N while purchase() already routes to
   // Level N+1; preset box tiers and foils both derive from this routed price.
   const purchaseQuote = ticketQuantity > 0 || boxOrder > 0n || args.foil
-    ? await readPurchaseQuote()
+    ? _recentFreshPurchaseQuote(args.purchaseQuote)
+      || await readPurchaseQuote({ fresh: true })
     : null;
   const quotedPriceWei = purchaseQuote?.priceWei ?? 0n;
   let boxCostWei = 0n;
@@ -951,7 +975,7 @@ export async function purchaseEth(args) {
 export async function readPresaleBoxState({ player } = {}) {
   const owner = player || getActingAddress();
   if (!owner) return null;
-  const provider = getProvider();
+  const provider = permissionlessReadProvider(getProvider());
   if (!provider) return null;
   const contract = _buildContract(provider);
   if (typeof contract.lootboxPresaleActiveFlag !== 'function'
@@ -1064,15 +1088,16 @@ export async function readLootboxPurchaseReceipt({ transactionHash, player, loot
   try { index = BigInt(lootboxIndex); } catch (_e) { return null; }
   if (!hash || !owner) return null;
   const connected = getProvider();
-  const readers = [connected];
+  const readers = _contractFactory
+    ? [connected]
+    : [_publicLootboxReadProvider(), connected];
   // Wallet RPCs occasionally omit an older receipt (notably after Firefox
   // reconnects). The public read RPC is authoritative enough for immutable
   // mined logs and lets Pending recover a presale leg after a reload.
-  if (!_contractFactory) readers.push(_publicLootboxReadProvider());
   for (const reader of [...new Set(readers.filter(Boolean))]) {
     if (typeof reader.getTransactionReceipt !== 'function') continue;
     try {
-      const receipt = await reader.getTransactionReceipt(hash);
+      const receipt = await readTransactionReceipt(hash, { provider: reader });
       if (!receipt || !Array.isArray(receipt.logs)) continue;
       const contract = _buildContract(reader);
       let hasLootboxLeg = false;
@@ -1305,7 +1330,7 @@ export function openBoxRevertName(error) {
  * @returns {Promise<{ok: boolean, reason: string|null, settled: boolean, error: Error|null}>}
  */
 export async function probeOpenLootbox({ player, lootboxIndex } = {}) {
-  const provider = getProvider();
+  const provider = permissionlessReadProvider(getProvider());
   const owner = player || getActingAddress();
   const unavailable = { ok: false, reason: null, settled: false, error: null };
   if (!provider || !owner || lootboxIndex == null) return unavailable;
@@ -1335,7 +1360,7 @@ export async function canOpenLootbox({ player, lootboxIndex } = {}) {
  * A null result means the RPC could not answer.
  */
 export async function readLootboxIndexCompletion(lootboxIndex) {
-  const provider = getProvider();
+  const provider = permissionlessReadProvider(getProvider());
   if (!provider || lootboxIndex == null) return null;
   const contract = _buildContract(provider);
   if (typeof contract?.boxIndexComplete !== 'function') return null;
@@ -1395,23 +1420,10 @@ export function decodeLootboxRngQueueState(
 }
 
 async function _readGameStorage(provider, slot, blockNumber) {
-  if (typeof provider?.getStorage === 'function') {
-    return provider.getStorage(CONTRACTS.GAME, slot, blockNumber ?? 'latest');
-  }
-  if (typeof provider?.send === 'function') {
-    const blockTag = Number.isInteger(blockNumber)
-      ? `0x${blockNumber.toString(16)}`
-      : 'latest';
-    const storageSlot = typeof slot === 'string' && slot.startsWith('0x')
-      ? slot
-      : `0x${BigInt(slot).toString(16)}`;
-    return provider.send('eth_getStorageAt', [
-      CONTRACTS.GAME,
-      storageSlot,
-      blockTag,
-    ]);
-  }
-  throw new Error('Provider cannot read the shared RNG queue.');
+  return readContractStorage(CONTRACTS.GAME, slot, {
+    provider,
+    blockTag: blockNumber ?? 'latest',
+  });
 }
 
 /**
@@ -1420,14 +1432,11 @@ async function _readGameStorage(provider, slot, blockNumber) {
  * so consumers can render progress without floating-point rounding.
  */
 export async function readLootboxRngQueueState({ provider = null } = {}) {
-  let reader = provider || getProvider();
-  if (!reader && CHAIN.rpcUrl) {
-    reader = _publicLootboxReadProvider();
-  }
+  const reader = provider || permissionlessReadProvider(getProvider());
   if (!reader || !CONTRACTS.GAME) return null;
   let blockNumber = null;
   try {
-    const head = Number(await reader.getBlockNumber?.());
+    const head = Number(await readProviderBlockNumber(reader));
     if (Number.isInteger(head) && head >= 0) blockNumber = head;
   } catch (_e) { /* an unpinned latest read is still useful */ }
   const [queuePacked, timingPacked] = await Promise.all([
@@ -1599,7 +1608,7 @@ export async function prewarmLootboxBuy(args) {
   // remain the preferred funding source. Only the uncovered remainder rides
   // as msg.value.
   const boxOrder = _boxOrderFromPurchaseArgs(args);
-  const quote = boxOrder > 0n ? await readPurchaseQuote() : null;
+  const quote = boxOrder > 0n ? await readPurchaseQuote({ fresh: true }) : null;
   let boxCostWei = 0n;
   if (boxOrder > 0n) {
     if (quote?.priceWei > 0n) {

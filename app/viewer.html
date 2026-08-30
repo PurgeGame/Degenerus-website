@@ -42,11 +42,19 @@
     <div class="panel viewer-controls">
 
       <!-- Player selector -->
-      <div>
+      <div class="viewer-player-picker">
         <select id="viewer-player-select" class="viewer-select" disabled>
           <option value="">-- Select a player --</option>
         </select>
         <div id="viewer-player-loading" class="skeleton-line skeleton-shimmer" style="height:12px;display:none"></div>
+        <div id="viewer-player-profile" class="viewer-profile" hidden>
+          <span class="viewer-profile__avatar" data-bind="avatar" aria-hidden="true"></span>
+          <span class="viewer-profile__copy">
+            <strong data-bind="name"></strong>
+            <span data-bind="handle"></span>
+          </span>
+          <span class="viewer-profile__type" data-bind="type"></span>
+        </div>
       </div>
 
       <!-- Day scrubber row -->

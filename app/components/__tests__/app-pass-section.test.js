@@ -278,7 +278,9 @@ async function settle(loops = 30) {
 
 import * as storeMod from '../../app/store.js';
 import * as passesMod from '../../app/passes.js';
+import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 const PANEL_SRC = readFileSync(
   new URL('../app-pass-section.js', import.meta.url),
@@ -450,6 +452,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     passesMod.__resetContractFactoryForTest();
     passesMod.__resetDeityReadContractFactoryForTest();
     passesMod.__resetAfkingReadContractFactoryForTest();
+    lootboxMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });
 
@@ -928,6 +931,41 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(recordedArgs[0], CONNECTED, 'buyer = connected.address');
     assert.equal(recordedArgs[1], 3n, 'quantity = BigInt(3)');
 
+    el.disconnectedCallback();
+  });
+
+  test('pass pricing and purchase stay live while indexed game/player reads are blocked', async () => {
+    invalidateJSONCache();
+    let releaseDatabase;
+    let databaseReads = 0;
+    const databaseBlocked = new Promise((resolve) => { releaseDatabase = resolve; });
+    _fetchHandler = async () => {
+      databaseReads += 1;
+      return databaseBlocked;
+    };
+
+    const quotePrice = 1_000_000_000_000n;
+    lootboxMod.__setContractFactoryForTest(() => ({
+      purchaseInfo: async () => [12, false, false, false, quotePrice],
+    }));
+    const contract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => contract);
+
+    const el = instantiate();
+    await settle(50);
+    assert.ok(databaseReads > 0, 'both indexed decoration requests remain pending');
+    assert.equal(el.querySelector('[data-bind="pass-whale-buy"]').textContent,
+      'BUY WHALE PASS\n4 ETH',
+      'purchaseInfo alone supplies the live pass level and price tier');
+
+    el.querySelector('[name="pass-whale-qty"]').value = '1';
+    el.querySelector('[data-bind="pass-whale-buy"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(contract._calls.purchaseWhalePass.length, 1,
+      'the pass reaches the contract before either DB read resolves');
+
+    releaseDatabase({ level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false });
+    await settle(20);
     el.disconnectedCallback();
   });
 

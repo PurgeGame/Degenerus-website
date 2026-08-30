@@ -1552,7 +1552,15 @@ class AppRevealTray extends HTMLElement {
         logo.alt = '';
         art.appendChild(logo);
       } else if (item.icon) {
+        if (item.iconBack) {
+          const backLogo = document.createElement('img');
+          backLogo.className = 'rrt-action__icon-back';
+          backLogo.src = item.iconBack;
+          backLogo.alt = '';
+          art.appendChild(backLogo);
+        }
         const logo = document.createElement('img');
+        logo.className = 'rrt-action__icon-front';
         logo.src = item.icon;
         logo.alt = '';
         art.appendChild(logo);

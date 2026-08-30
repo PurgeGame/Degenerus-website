@@ -126,6 +126,14 @@ function openTable() {
     battleStakeFlip: params.get('battleStake') || 300,
     bountyPoolFlip: params.get('bountyPool') || 84_900,
     addedFlip: params.get('added') || 75_000,
+    battleWonByViewer: params.has('battleWin'),
+    battlePayoutWei: params.has('battleWin')
+      ? (BigInt(params.get('battlePayout') || 84_900) * 10n ** 18n).toString()
+      : null,
+    battleBoostWei: params.has('battleWin')
+      ? (BigInt(params.get('battleBoost') || 75_000) * 10n ** 18n).toString()
+      : null,
+    battleWinningStop: params.get('battleWin') === 'last' ? 0 : 1,
     completedShooters: params.get('shooters') || 0,
     tableIndex: params.get('table') || '1842',
     tableResolved: rolled,
@@ -142,8 +150,8 @@ function openTable() {
     bankrollFlip: params.get('bankroll') || '3000',
     goalFlip: params.get('goal') || '9000',
     jackpot: {
-      rolls: params.get('jackpotRolls') || 68,
-      threshold: params.get('jackpotThreshold') || 100,
+      scoreBps: params.get('jackpotScoreBps') || 32_400,
+      thresholdScoreBps: params.get('jackpotThresholdScoreBps') || 250_000,
       amountFlip: params.get('jackpotAmount') || 1_250_000,
       status: jackpotWinner === 'other' ? 'won-other' : jackpotWinner === 'you' ? 'won-you' : 'live',
       wonAtScoreBps: params.get('jackpotWinnerScoreBps'),
@@ -166,6 +174,9 @@ function openTable() {
           ...(bonusRun ? {
             shooterBoosts: [{ active: true, percent: 30 }, null, { active: true, percent: 30 }],
           } : {}),
+          // In the survival run DG doubles through the second boundary right as
+          // the viewer's own coin comes up short.
+          ...(survivalRun ? { survivals: [null, { survived: true }] } : {}),
           // DG takes the lead on roll one, but the felt seats stay frozen
           // until roll two's seven-out starts the next shooter.
           bankrollsFlip: [4320, 3660, 4500, 4680, 4920, 5100],
@@ -181,6 +192,9 @@ function openTable() {
           type: 'bust',
           roll: 2,
           startingBankrollFlip: 1200,
+          // RH's bust is a lost survival coin at the first boundary, flipping
+          // beside the portrait while the viewer's own coin lands a win.
+          ...(survivalRun ? { survivals: [{ survived: false }] } : {}),
           bankrollsFlip: [540, 0],
         },
         chips: { dontPassLine: 2, place4: 1, place5: 1, place6: 1, place8: 1, hard4: 1 },

@@ -45,6 +45,10 @@ import {
 } from '../../craps/replay-engine.js';
 import {
   createCrapsReplayTableModel,
+  crapsReplayBattleAward,
+  crapsReplayPrizeAmounts,
+  loadCrapsReplayProfiles,
+  openCrapsReplayTable,
 } from '../../craps/replay-adapter.js';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
@@ -140,7 +144,7 @@ test('manifest, featured union, and every seat shard form a closed verified arti
 
   // The featured union is a strict subset of the field and covers every candidate row.
   for (const row of featured.leaderboard) {
-    assert.ok(row.betIds.length <= 4, 'at most four candidates per shooter');
+    assert.ok(row.betIds.length <= 11, 'at most eleven candidates per shooter');
     for (const betId of row.betIds) assert.ok(seen.has(betId));
   }
 
@@ -167,6 +171,175 @@ test('the replay manifest carries optional whole-pool and added-FLIP totals into
   }).tableOptions;
   assert.equal(options.bountyPoolWei, withAdded.terms.bountyPoolWei);
   assert.equal(options.addedFlipWei, withAdded.terms.addedFlipWei);
+});
+
+test('older replay bundles recover bounty and added totals from the finalized pot', () => {
+  const wei = 10n ** 18n;
+  assert.deepEqual(crapsReplayPrizeAmounts({
+    bountyPoolWei: null,
+    addedFlipWei: null,
+    settledMainPotWei: 84_900n * wei,
+    battleStakeWei: 300n * wei,
+    entrants: 33,
+  }), {
+    bountyPoolWei: (84_900n * wei).toString(),
+    addedFlipWei: (75_000n * wei).toString(),
+    bountyPoolScope: 'main',
+  });
+
+  assert.deepEqual(crapsReplayPrizeAmounts({
+    bountyPoolWei: 90_000n * wei,
+    addedFlipWei: 80_000n * wei,
+    settledMainPotWei: 84_900n * wei,
+    battleStakeWei: 300n * wei,
+    entrants: 33,
+  }), {
+    bountyPoolWei: (90_000n * wei).toString(),
+    addedFlipWei: (80_000n * wei).toString(),
+    bountyPoolScope: 'whole',
+  }, 'sealed exact totals take precedence over the live compatibility fallback');
+});
+
+test('battle award uses the paid event without adding it to the replay bankroll', () => {
+  const wei = 10n ** 18n;
+  const viewer = '0xaA00000000000000000000000000000000000001';
+  const winner = viewer.toLowerCase();
+  assert.deepEqual(crapsReplayBattleAward({
+    viewer,
+    winner,
+    payoutWei: 84_900n * wei,
+    battleStakeWei: 300n * wei,
+    entrants: 33,
+    winningStop: 0,
+  }), {
+    battleWinner: winner,
+    battleWonByViewer: true,
+    battlePayoutWei: (84_900n * wei).toString(),
+    battleBoostWei: (75_000n * wei).toString(),
+    battleWinningStop: 0,
+  }, 'last-standing winners receive the exact chain payout and its boost component');
+
+  assert.deepEqual(crapsReplayBattleAward({
+    viewer,
+    winner: '0xbb00000000000000000000000000000000000002',
+    payoutWei: 2_000n,
+  }), {
+    battleWinner: '0xbb00000000000000000000000000000000000002',
+    battleWonByViewer: false,
+    battlePayoutWei: '2000',
+    battleBoostWei: null,
+    battleWinningStop: null,
+  }, 'another winner never triggers the local receipt or invents a stop reason');
+
+  assert.equal(crapsReplayBattleAward({
+    viewer,
+    winner: viewer,
+    viewerBetId: '41',
+    winnerBetId: '42',
+  }).battleWonByViewer, false,
+  'two seats owned by one wallet are not both declared the battle winner');
+});
+
+test('Discord identities load in endpoint-sized batches without one failure blanking every rack', async () => {
+  const addresses = Array.from(
+    { length: 18 },
+    (_, index) => `0x${(index + 1).toString(16).padStart(40, '0')}`,
+  );
+  const batches = [];
+  const profiles = await loadCrapsReplayProfiles(addresses, async (batch) => {
+    batches.push([...batch]);
+    if (batches.length === 2) throw new Error('temporary profile outage');
+    return new Map(batch.map((address) => [address, {
+      name: `Discord ${address.slice(-2)}`,
+      avatar: `https://cdn.discordapp.com/avatars/${address.slice(-2)}.png`,
+    }]));
+  });
+  assert.deepEqual(batches.map((batch) => batch.length), [8, 8, 2]);
+  assert.equal(profiles.size, 10);
+  assert.equal(profiles.get(addresses[0])?.name, 'Discord 01');
+  assert.equal(profiles.has(addresses[8]), false);
+  assert.equal(profiles.get(addresses[17])?.name, 'Discord 12');
+});
+
+test('replay opening carries repaired prizes, the paid battle receipt, and live identities into the table', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const viewer = SIM_CRAPS_REPLAY_VIEWER;
+  const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const bodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[viewerShard], SIM_CRAPS_REPLAY_SHARDS[viewerShard]],
+  ]);
+  const opened = [];
+  const profileBatchSizes = [];
+  const settledMainPotWei = 84_900n * 10n ** 18n;
+  await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
+    viewerBetId: viewer.betId,
+    settledMainPotWei,
+    battleWinner: viewer.player,
+    battleWinnerBetId: viewer.betId,
+    battlePayoutWei: settledMainPotWei,
+    battleWinningStop: 1,
+    fetchImpl: async (path) => ({
+      ok: bodies.has(path),
+      status: bodies.has(path) ? 200 : 404,
+      json: async () => clone(bodies.get(path)),
+    }),
+    loadProfiles: async (addresses) => {
+      profileBatchSizes.push(addresses.length);
+      return new Map(addresses.map((address) => [address, {
+        name: `Discord ${address.slice(-4)}`,
+        avatar: `https://cdn.discordapp.com/avatars/${address.slice(-4)}.png`,
+      }]));
+    },
+  });
+
+  assert.equal(opened.length, 1);
+  const options = opened[0];
+  const expectedAddedWei = settledMainPotWei
+    - BigInt(MANIFEST.terms.battleStakeWei) * BigInt(MANIFEST.field.entrants);
+  assert.ok(profileBatchSizes.length >= 1, 'the replay opener requests the featured identity union');
+  assert.ok(profileBatchSizes.every((size) => size <= 8));
+  assert.equal(options.bountyPoolWei, settledMainPotWei.toString());
+  assert.equal(options.bountyPoolScope, 'main');
+  assert.equal(options.addedFlipWei, expectedAddedWei.toString());
+  assert.equal(options.battleWonByViewer, true);
+  assert.equal(options.battleWinnerBetId, viewer.betId);
+  assert.equal(options.battlePayoutWei, settledMainPotWei.toString());
+  assert.equal(options.battleBoostWei, options.addedFlipWei);
+  assert.equal(options.battleWinningStop, 1);
+  assert.ok(options.otherPlayers.every((player) => player.label.startsWith('Discord ')));
+  assert.ok(options.otherPlayers.every((player) => player.discordPfp?.startsWith('https://')));
+
+  const watched = options.otherPlayers[0];
+  assert.equal(typeof options.onPerspectiveSelect, 'function');
+  assert.equal(options.onPerspectiveSelect({
+    betId: watched.betId,
+    resumeResolutionIndex: 7,
+    autoRoll: false,
+  }), true);
+  assert.equal(opened.length, 2, 'switching perspective reopens from the verified in-memory model');
+  const watchedOptions = opened[1];
+  assert.equal(watchedOptions.viewerBetId, watched.betId);
+  assert.equal(watchedOptions.originalViewerBetId, viewer.betId);
+  assert.equal(watchedOptions.resumeResolutionIndex, 7);
+  assert.equal(watchedOptions.autoRoll, false);
+  assert.equal(watchedOptions.battleWonByViewer, false,
+    'the exact winning seat does not follow the camera');
+  assert.ok(watchedOptions.otherPlayers.some((player) => player.betId === viewer.betId),
+    'the original player remains available to click back to');
+  assert.equal(watchedOptions.onPerspectiveSelect({
+    betId: viewer.betId,
+    resumeResolutionIndex: 8,
+    autoRoll: true,
+  }), true);
+  assert.equal(opened[2].viewerBetId, viewer.betId, 'the same control switches back to YOU');
+  assert.equal(opened[2].resumeResolutionIndex, 8);
+  assert.equal(options.onPerspectiveSelect({ betId: '999999999999999999999' }), false,
+    'a click cannot escape the already verified viewport');
+  __resetCrapsReplayLoaderForTest();
 });
 
 test('shard lookup is exact at the 256-seat production boundary', () => {
@@ -397,8 +570,8 @@ test('ladder drift fails closed instead of presenting plausible but wrong payout
 
 test('adapter seats the viewer, excludes them from the opponent rack, and aligns opponent frames', () => {
   const featured = validateCrapsReplayCollection(SIM_CRAPS_REPLAY_FEATURED, MANIFEST);
-  // Deliberately choose a viewer who IS a featured candidate: that is the case the four-wide
-  // candidate row exists for — the viewer must be dropped and three OTHERS still shown.
+  // Deliberately choose a viewer who IS a featured candidate: candidate rows include one
+  // spare seat so the viewer can be dropped without shrinking the rival viewport.
   const viewerBetId = featured.leaderboard[0].betIds[0];
   const viewerRecord = clone(SIM_CRAPS_REPLAY_FEATURED.players.find((p) => p.betId === viewerBetId));
   assert.ok(viewerRecord, 'the viewer is inside the featured union');
@@ -414,29 +587,60 @@ test('adapter seats the viewer, excludes them from the opponent rack, and aligns
   }).tableOptions;
 
   assert.equal(options.viewerBetId, viewerBetId);
+  assert.deepEqual(options.viewerResult, {
+    stop: viewer.stop,
+    handsPlayed: viewer.handsPlayed,
+    rawEndingFlip: (BigInt(viewer.ladderWei.at(-1)) / (10n ** 18n)).toString(),
+    highPointFlip: (viewer.ladderWei.reduce((highest, amount) => (
+      BigInt(amount) > highest ? BigInt(amount) : highest
+    ), 0n) / (10n ** 18n)).toString(),
+    standing: viewer.standing,
+  });
   assert.equal(options.fieldEntrants, MANIFEST.field.entrants);
   assert.deepEqual(options.rankTimeline, rankByRoll,
     'the one viewer shard carries exact field position without loading every other shard');
-  assert.equal(options.resolutionHands.length, viewer.totalRolls);
+  const battleRolls = Math.max(viewer.totalRolls, ...featured.players.map((player) => player.totalRolls));
+  assert.equal(options.resolutionHands.length, battleRolls,
+    'the shared replay lasts through the final tracked battle closeout');
+  assert.ok(options.resolutionHands.length > viewer.totalRolls,
+    'an early viewer exit does not cut off the visible top-ten battle');
+  assert.equal(options.resolutionHands[viewer.totalRolls - 1].terminal, '',
+    'the personal terminal does not stop the shared table clock');
+  assert.equal(options.resolutionHands[viewer.totalRolls].viewerClosed, true);
+  assert.equal(options.resolutionHands.at(-1).terminal, viewer.stop,
+    'the viewer outcome is restored only when the battle presentation finishes');
   assert.equal(Object.values(options.bets).reduce((sum, count) => sum + count, 0), 10);
 
   for (const row of options.leaderboardTimeline) {
     assert.ok(!row.opponentBetIds.includes(viewerBetId), 'the viewer never appears as an opponent');
-    assert.ok(row.opponentBetIds.length <= 3, 'the rack shows three');
+    assert.ok(row.opponentBetIds.length <= 10, 'the rack exposes at most ten rivals');
   }
-  // Four candidates are exactly why the top row still fills three racks with the viewer in it.
+  // The legacy fixture is four-wide; future bundles may publish eleven candidates for ten rivals.
   assert.equal(
     options.leaderboardTimeline[0].opponentBetIds.length,
-    Math.min(3, featured.leaderboard[0].betIds.length - 1),
+    Math.min(10, featured.leaderboard[0].betIds.length - 1),
   );
 
   assert.ok(options.otherPlayers.length > 0);
+  const sealedByBet = new Map(ALL_PLAYERS.map((p) => [p.betId, p]));
   for (const opponent of options.otherPlayers) {
     assert.notEqual(opponent.betId, viewerBetId);
     assert.equal(opponent.resolution.rollEvents.length, options.resolutionHands.length,
-      'opponent frames are aligned to the viewer timeline, roll for roll');
+      'opponent frames are aligned to the full shared battle timeline, roll for roll');
     assert.equal(opponent.resolution.bankrollsFlip.length, options.resolutionHands.length);
+    assert.equal(opponent.resolution.handsPlayed, sealedByBet.get(opponent.betId).handsPlayed);
+    assert.equal(opponent.resolution.standing, sealedByBet.get(opponent.betId).standing);
+    assert.equal(opponent.resolution.rawEndingFlip,
+      (BigInt(sealedByBet.get(opponent.betId).wonWei) / BigInt(sealedByBet.get(opponent.betId).entryMultiple) / (10n ** 18n)).toString());
     assert.equal(opponent.resolution.shooterBoosts.length, MANIFEST.tape.maxHands);
+    assert.equal(opponent.resolution.survivals.length, MANIFEST.tape.maxHands);
+    assert.deepEqual(
+      opponent.resolution.survivals.flatMap((flip, shooter) => (
+        flip ? [{ shooter: shooter + 1, survived: flip.survived }] : []
+      )),
+      (sealedByBet.get(opponent.betId).survivals ?? []).map(({ shooter, survived }) => ({ shooter, survived })),
+      'the rack coin schedule is the sealed survival list, indexed by the shooter that just ended',
+    );
   }
 
   // ONE WALLET, SEVERAL SEATS: they stay several visual players keyed by BET ID, never merged.
@@ -451,6 +655,30 @@ test('adapter seats the viewer, excludes them from the opponent rack, and aligns
 
   assert.equal(options.replayEngineVersion, MANIFEST.ruleset.engineVersion);
   assert.equal(options.replayDigest, MANIFEST.digest);
+});
+
+test('a featured seat can become the complete replay perspective without dropping the original viewer', () => {
+  const original = validateCrapsReplayPlayer(SIM_CRAPS_REPLAY_ARTIFACTS.viewer);
+  const selected = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => player.betId !== original.betId);
+  assert.ok(selected, 'the fixture has a featured perspective distinct from the original viewer');
+
+  const switched = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS, {
+    perspectiveBetId: selected.betId,
+  });
+  const options = switched.tableOptions;
+  assert.equal(options.viewerBetId, selected.betId);
+  assert.equal(options.originalViewerBetId, original.betId);
+  assert.equal(options.bankrollFlip, (BigInt(selected.bankrollInWei) / (10n ** 18n)).toString());
+  assert.equal(options.goalFlip, (BigInt(selected.goalWei) / (10n ** 18n)).toString());
+  assert.deepEqual(options.bets, createCrapsReplayTableModel({
+    ...SIM_CRAPS_REPLAY_ARTIFACTS,
+    viewer: selected,
+  }).tableOptions.bets, 'the selected player owns the local felt placements');
+  assert.ok(options.resolutionHands.length > 0, 'the selected player owns a complete frame timeline');
+  assert.ok(options.otherPlayers.some((player) => player.betId === original.betId),
+    'the original viewer moves into the opponent list');
+  assert.ok(!options.otherPlayers.some((player) => player.betId === selected.betId),
+    'the selected player is no longer duplicated as an opponent');
 });
 
 test('the table consumer preserves every sealed frame and every authoritative payout list', async () => {
@@ -560,4 +788,44 @@ test('loader rechecks the pointer but single-flights immutable sharded artifacts
   assert.equal(result.pointer.status, 'settling');
   assert.equal(settlingCalls.size, 1, 'a settling battle fetches the pointer and nothing else');
   __resetCrapsReplayLoaderForTest();
+});
+
+test('live Discord identity overlays the sealed seat labels, and an outage keeps them', () => {
+  const base = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS).tableOptions;
+  assert.ok(base.otherPlayers.length > 0);
+  const viewerAddress = SIM_CRAPS_REPLAY_ARTIFACTS.viewer.player.toLowerCase();
+  const target = base.otherPlayers.find((player) => String(player.player).toLowerCase() !== viewerAddress);
+  assert.ok(target, 'fixture has an opponent wallet distinct from the viewer');
+  const profiles = new Map([
+    [String(target.player).toLowerCase(), {
+      name: 'DegenDave',
+      avatar: 'https://cdn.discordapp.com/avatars/1/a.png',
+    }],
+    [viewerAddress, {
+      name: 'ViewerVera',
+      avatar: 'https://cdn.discordapp.com/avatars/2/b.png',
+    }],
+  ]);
+
+  const overlaid = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS, { profiles }).tableOptions;
+  const dressed = overlaid.otherPlayers.find((player) => player.betId === target.betId);
+  assert.equal(dressed.label, 'DegenDave', 'a linked wallet shows its Discord name');
+  assert.equal(dressed.discordPfp, 'https://cdn.discordapp.com/avatars/1/a.png');
+  assert.equal(overlaid.viewerLabel, 'ViewerVera', 'YOU carries the viewer Discord name into the ten rows');
+  assert.equal(overlaid.viewerDiscordPfp, 'https://cdn.discordapp.com/avatars/2/b.png');
+  for (const other of overlaid.otherPlayers) {
+    if (profiles.has(String(other.player).toLowerCase())) continue;
+    const sealed = base.otherPlayers.find((player) => player.betId === other.betId);
+    assert.equal(other.label, sealed.label, 'unlinked seats keep their sealed labels');
+    assert.equal(other.discordPfp, sealed.discordPfp);
+  }
+
+  // No profiles at all — the deterministic model is byte-identical to the bundle's.
+  const bare = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS, { profiles: null }).tableOptions;
+  assert.deepEqual(
+    bare.otherPlayers.map((player) => [player.label, player.discordPfp]),
+    base.otherPlayers.map((player) => [player.label, player.discordPfp]),
+  );
+  assert.equal(bare.viewerLabel, base.viewerLabel);
+  assert.equal(bare.viewerDiscordPfp, base.viewerDiscordPfp);
 });

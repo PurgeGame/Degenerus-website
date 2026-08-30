@@ -332,20 +332,56 @@ class AppParimutuelPanel extends HTMLElement {
     if (player !== this.#player) this.#decimatorContext = null;
     this.#player = player;
 
-    // The Growth book numbers its rounds by level, which comes from game state.
+    // Growth's round anchor is contract state. Start the indexed snapshot in
+    // parallel for decorative pool fields, but never await it while
+    // purchaseInfo() is available: a DB outage must not hide the live book.
+    const indexedStatePromise = readGameState().catch(() => null);
+    void indexedStatePromise.then((state) => {
+      if (seq !== this.#fetchSeq || !state || typeof state !== 'object') return;
+      // Adopt any immediately available decorative/window fields without
+      // making them a prerequisite for the chain round discovery below.
+      this.#gameState = { ...(this.#gameState || {}), ...state };
+    });
     let level = this.#level;
-    try {
-      const state = await readGameState();
+    const phaseContext = await readJackpotPhaseContext().catch(() => null);
+    const chainLevel = Number(phaseContext?.level);
+    if (Number.isInteger(chainLevel) && chainLevel >= 0) {
+      level = chainLevel;
+      this.#gameState = {
+        ...(this.#gameState || {}),
+        level,
+        jackpotPhaseFlag: phaseContext.jackpot === true,
+        phase: phaseContext.jackpot === true ? 'JACKPOT' : 'PURCHASE',
+        lastPurchaseDay: phaseContext.lastPurchaseDay,
+        rngLocked: phaseContext.rngLocked,
+      };
+      void indexedStatePromise.then((state) => {
+        if (seq !== this.#fetchSeq || !state || typeof state !== 'object') return;
+        this.#gameState = {
+          ...state,
+          level,
+          jackpotPhaseFlag: phaseContext.jackpot === true,
+          phase: phaseContext.jackpot === true ? 'JACKPOT' : 'PURCHASE',
+          lastPurchaseDay: phaseContext.lastPurchaseDay,
+          rngLocked: phaseContext.rngLocked,
+        };
+        this.#render();
+      });
+    } else {
+      // Rolling-deploy/RPC compatibility only. The deployed purchaseInfo view
+      // supplies the level on the normal path, so DB failure cannot reach here
+      // while the chain needed to place the bet is healthy.
+      const state = await indexedStatePromise;
       if (state && Number.isFinite(Number(state.level))) level = Number(state.level);
       if (state && typeof state === 'object') this.#gameState = state;
-    } catch (_e) { /* keep the last known level — the books still render */ }
+    }
     if (seq !== this.#fetchSeq) return;
     this.#level = level;
 
     // The full-width pool strip is page-level state, not side-bet history.
-    // Start its three cheap direct reads as soon as /game/state gives us the
+    // Start its three cheap direct reads as soon as the chain gives us the
     // level; do not put them behind market lookbacks, player gates, or logs.
-    void this.#loadPoolBenchmarks(seq, level);
+    void this.#loadPoolBenchmarks(seq, level, phaseContext);
 
     const growthRounds = this.#lookback(level);
     const decimatorLevel = Number.isInteger(level) && level >= 0 ? level + 1 : null;
@@ -355,14 +391,31 @@ class AppParimutuelPanel extends HTMLElement {
     // that cannot exist and can only come back empty. It was the second-heaviest
     // endpoint on a live page load, 21 of 138 requests.
     const dedicatedDecimator = _dedicatedDecimatorMounted();
+    const decimatorWindowKnown = decimatorWindowIsOpen(this.#gameState);
     const decimatorRead = !dedicatedDecimator && player && decimatorLevel != null
       && decimatorWindowIsOpen(this.#gameState)
       ? fetchJSON(`/player/${player}/decimator?level=${decimatorLevel}`).catch(() => null)
       : Promise.resolve(null);
-    const decimatorContextRead = !dedicatedDecimator && decimatorLevel != null
+    const decimatorContextRead = !dedicatedDecimator && player && decimatorLevel != null
       && decimatorWindowIsOpen(this.#gameState)
       ? readDecimatorContext(player, decimatorLevel).catch(() => null)
       : Promise.resolve(null);
+    // If an optional indexed latch arrives after chain round discovery began,
+    // hydrate only the legacy Decimator card in the background. Never make the
+    // Growth book wait for this DB-dependent branch.
+    if (!dedicatedDecimator && player && decimatorLevel != null && !decimatorWindowKnown) {
+      void indexedStatePromise.then(async (state) => {
+        if (seq !== this.#fetchSeq || !decimatorWindowIsOpen(state)) return;
+        const [position, context] = await Promise.all([
+          fetchJSON(`/player/${player}/decimator?level=${decimatorLevel}`).catch(() => null),
+          readDecimatorContext(player, decimatorLevel).catch(() => null),
+        ]);
+        if (seq !== this.#fetchSeq) return;
+        if (position) this.#decimatorPosition = position;
+        if (context) this.#decimatorContext = context;
+        this.#render();
+      });
+    }
     const [growth, decimatorPosition, decimatorContext] = await Promise.all([
       Promise.allSettled(growthRounds.map((round) => readGrowthMarket({ player, round }))),
       decimatorRead,
@@ -380,8 +433,8 @@ class AppParimutuelPanel extends HTMLElement {
     if (decimatorPosition) this.#decimatorPosition = decimatorPosition;
     if (decimatorContext) this.#decimatorContext = decimatorContext;
 
-    // The level is an off-chain anchor and can lag a transition. `openRound` is
-    // the chain's own answer, so recover it when it falls outside the lookback.
+    // Any local level anchor can lag a transition. `openRound` is the market's
+    // own answer, so recover it when it falls outside the lookback.
     await this.#backfillOpen(this.#growth, (round) => readGrowthMarket({ player, round }));
     if (seq !== this.#fetchSeq) return;
 
@@ -458,11 +511,13 @@ class AppParimutuelPanel extends HTMLElement {
     return false;
   }
 
-  async #loadPoolBenchmarks(seq, level) {
+  async #loadPoolBenchmarks(seq, level, phaseContextHint = null) {
     const [ratchets, poolTarget, phaseContext] = await Promise.all([
       readGrowthRatchets({ round: level }).catch(() => null),
       readPrizePoolTarget().catch(() => null),
-      readJackpotPhaseContext().catch(() => null),
+      phaseContextHint
+        ? Promise.resolve(phaseContextHint)
+        : readJackpotPhaseContext().catch(() => null),
     ]);
     if (seq !== this.#fetchSeq) return;
     const published = this.#publishPoolBenchmarks({

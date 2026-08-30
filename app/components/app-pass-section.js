@@ -41,6 +41,7 @@ import { get, update, subscribe, getViewedAddress, getActingAddress, deriveCanSi
 import { registerComponentPoll } from '../app/component-poll.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
+import { readPurchaseQuote } from '../app/lootbox.js';
 import {
   purchaseWhaleBundle,
   purchaseDeityPass,
@@ -179,8 +180,8 @@ const DEBOUNCE_MS = 500;               // 500ms click debounce window.
 
 // Documented price formulas (RESEARCH Open Q4). Whale: 2.4 ETH (lvl 0-3) or
 // 4 ETH (lvl 4+) per quantity unit; deity: 24 ETH base + sum-of-prior. The
-// panel computes msgValueWei from /player/:address currentLevel; if the data
-// is unavailable we surface a "Loading price…" state and disable Buy CTAs.
+// panel computes msgValueWei from GAME.purchaseInfo(); indexed snapshots are a
+// display-only compatibility fallback and never gate a value-bearing click.
 // Sepolia uses /1M scaling per chain-config.sepolia.js ETH_DIVISOR (Phase 51 D).
 const ETH_BASE_WEI = 10n ** 18n;
 
@@ -377,6 +378,9 @@ class AppPassSection extends HTMLElement {
   #pinnedAddress = null;
   // Cached pricing snapshot for click-time msgValueWei computation.
   #pricingData = null;
+  // Last contract-authoritative purchaseInfo() response. Indexed game state is
+  // retained only as a compatibility/display fallback when this view is absent.
+  #purchaseQuote = null;
   // Full game state is retained so AFKing pricing can fall back to the same
   // active-ticket-level calculation as the purchase widget when the batched
   // contract snapshot is temporarily unavailable.
@@ -829,6 +833,42 @@ class AppPassSection extends HTMLElement {
   // Panel-owned 30s poll lifecycle (Phase 61 D-04 LOCKED — NOT polling.js).
   // ---------------------------------------------------------------------
 
+  #applyPurchasePricing(levelRaw, jackpotPhase, gameState = null) {
+    const level = Number(levelRaw);
+    if (!Number.isInteger(level) || level < 0) return false;
+    const indexed = gameState && typeof gameState === 'object' ? gameState : {};
+    this.#gameState = {
+      ...indexed,
+      level,
+      jackpotPhaseFlag: Boolean(jackpotPhase),
+      phase: Boolean(jackpotPhase) ? 'JACKPOT' : 'PURCHASE',
+    };
+    this.#pricingData = {
+      ...(this.#pricingData || {}),
+      currentLevel: level,
+      whaleUnitPriceWei: computeWhaleUnitPriceWei(level, CHAIN.id),
+      deityNextPriceWei: this.#deityCatalog
+        ? computeDeityNextPriceWei(this.#deityCatalog.issuedCount, CHAIN.id)
+        : this.#pricingData?.deityNextPriceWei ?? null,
+      lazyOpen: lazyPassLevelOpen(level, Boolean(jackpotPhase)),
+      lazyCostWei: lazyPassCostWei(level),
+    };
+    return true;
+  }
+
+  async #refreshPurchasePricing({ fresh = false } = {}) {
+    const quote = await readPurchaseQuote({ fresh });
+    if (!quote) return false;
+    this.#purchaseQuote = quote;
+    const applied = this.#applyPurchasePricing(
+      quote.currentLevel,
+      quote.inJackpotPhase,
+      this.#gameState,
+    );
+    if (applied) this.#renderPricing();
+    return applied;
+  }
+
   #startPolling() {
     if (typeof this.#pollHandle === 'function') this.#pollHandle();
     this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), POLL_INTERVAL_MS);
@@ -862,41 +902,73 @@ class AppPassSection extends HTMLElement {
         // A verified snapshot may survive a transient RPC failure, but it must
         // never survive an account switch.
         this.#afkingState = null;
+        this.#playerData = null;
       }
       this.#pinnedAddress = addr;
-      // Level comes from /game/state. Deity availability and issued count come
-      // from the pass NFT, because /player has neither a global count nor the
-      // 32-symbol ownership catalog.
-      const [stateRes, playerRes, deityRes, afkingRes] = await Promise.allSettled([
-        readGameState(),
-        addr ? fetchJSON(`/player/${addr}`) : Promise.resolve(null),
+      // Start indexed decoration at the same time, but keep it out of the
+      // purchase-critical await. A dead DB may remove score/history polish;
+      // it must never delay contract pricing or pass availability.
+      const indexedStatePromise = readGameState().catch(() => null);
+      const indexedPlayerPromise = addr
+        ? fetchJSON(`/player/${addr}`, { signal }).catch(() => null)
+        : Promise.resolve(null);
+      const purchaseQuotePromise = readPurchaseQuote().catch(() => null);
+      const passExtrasPromise = Promise.allSettled([
         readDeityPassCatalog(),
         actionTarget ? readAfkingSubscription(actionTarget) : Promise.resolve(null),
       ]);
+      const quote = await purchaseQuotePromise;
       if (signal.aborted) return;
-      const gs = stateRes.status === 'fulfilled' ? stateRes.value : null;
-      const data = playerRes.status === 'fulfilled' ? playerRes.value : null;
+
+      if (quote) {
+        this.#purchaseQuote = quote;
+        this.#applyPurchasePricing(quote.currentLevel, quote.inJackpotPhase);
+        // Preserve richer indexed display fields if they arrive, while the
+        // chain's level/phase remain authoritative.
+        void indexedStatePromise.then((state) => {
+          if (signal.aborted || !state) return;
+          this.#applyPurchasePricing(quote.currentLevel, quote.inJackpotPhase, state);
+          this.#renderPricing();
+        });
+      } else {
+        // Compatibility fallback for a transient/rolling-deploy RPC. On the
+        // deployed purchaseInfo surface this branch is never needed for a
+        // healthy chain, so a DB outage cannot enter the critical path.
+        this.#purchaseQuote = null;
+        const state = await indexedStatePromise;
+        if (signal.aborted) return;
+        this.#applyPurchasePricing(
+          state?.level,
+          Boolean(state?.jackpotPhaseFlag ?? (state?.phase === 'JACKPOT')),
+          state,
+        );
+      }
+
+      // Whale/Lazy are now fully quoted. Paint them before waiting for the
+      // independent Deity catalog or AFKing subscription views.
+      this.#renderPricing();
+      const [deityRes, afkingRes] = await passExtrasPromise;
+      if (signal.aborted) return;
+
       const freshCatalog = deityRes.status === 'fulfilled' ? deityRes.value : null;
-      if (freshCatalog) this.#deityCatalog = freshCatalog;
+      if (freshCatalog) {
+        this.#deityCatalog = freshCatalog;
+        this.#pricingData = {
+          ...(this.#pricingData || {}),
+          deityNextPriceWei: computeDeityNextPriceWei(freshCatalog.issuedCount, CHAIN.id),
+        };
+      }
       const afkingReadKnown = afkingRes.status === 'fulfilled' && afkingRes.value != null;
       // Keep the last verified state for this same account when a core AFKing
       // RPC read blips. readAfkingSubscription() returns null rather than fake
       // zero balances, so replacing here would make the panel flicker and lose
       // the player's last trustworthy funding value.
       if (afkingReadKnown) this.#afkingState = afkingRes.value;
-      this.#playerData = data || null;
-      this.#gameState = gs;
-      const level = gs?.level ?? data?.level ?? data?.currentLevel ?? null;
-      const jackpotPhase = Boolean(gs?.jackpotPhaseFlag ?? (gs?.phase === 'JACKPOT'));
-      this.#pricingData = {
-        currentLevel: level,
-        whaleUnitPriceWei: computeWhaleUnitPriceWei(level, CHAIN.id),
-        deityNextPriceWei: this.#deityCatalog
-          ? computeDeityNextPriceWei(this.#deityCatalog.issuedCount, CHAIN.id)
-          : null,
-        lazyOpen: lazyPassLevelOpen(level, jackpotPhase),
-        lazyCostWei: lazyPassCostWei(level),
-      };
+      void indexedPlayerPromise.then((data) => {
+        if (signal.aborted) return;
+        this.#playerData = data || null;
+        this.#renderPricing();
+      });
       if (afkingReadKnown && this.#afkingState) {
         const coverage = afkingClosedSummary(this.#afkingState, this.#afkingMintPriceWei());
         update('app.afkingSubscription', Object.freeze({
@@ -1769,6 +1841,9 @@ class AppPassSection extends HTMLElement {
     this.#clearLazyError();
 
     try {
+      // Re-price from purchaseInfo() inside the wallet gesture. Indexed state
+      // is presentation-only and is never awaited by a value-bearing action.
+      await this.#refreshPurchasePricing({ fresh: true });
       const cost = this.#lazyPurchasePrice();
       if (cost == null) {
         this.#renderLazyError('Price unavailable — try again in a moment.');
@@ -1844,6 +1919,9 @@ class AppPassSection extends HTMLElement {
         this.#renderWhaleError('Quantity must be 1-100.');
         return;
       }
+      // The level boundary is contract state. Refresh it directly instead of
+      // trusting (or waiting for) the indexed player/game snapshots.
+      await this.#refreshPurchasePricing({ fresh: true });
       const msgValueWei = this.#whalePurchasePrice(quantity);
       if (msgValueWei == null) {
         this.#renderWhaleError('Price unavailable — try again in a moment.');

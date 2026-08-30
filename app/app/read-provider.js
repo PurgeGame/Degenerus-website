@@ -76,6 +76,44 @@ const CACHEABLE_FIELDS = new Set(['to', 'data', 'from', 'blockTag']);
 const inflightCalls = new Map();
 const recentCalls = new Map();
 const pinnedCalls = new Map();
+const readCacheInvalidators = new Set();
+
+// `provider.call` is only one part of the public read surface. Ethers routes
+// block heads, native balances, and raw storage through different methods, so
+// they do not pass through attachReadCache below. Keep equally small,
+// receipt-invalidated caches for those hot primitives here rather than making
+// every component invent its own polling cache.
+let providerHeadState = new WeakMap();
+let primitiveProviderIds = new WeakMap();
+let nextPrimitiveProviderId = 1;
+const recentNativeBalances = new Map();
+const pinnedNativeBalances = new Map();
+const inflightNativeBalances = new Map();
+const recentStorageReads = new Map();
+const pinnedStorageReads = new Map();
+const inflightStorageReads = new Map();
+const recentLogReads = new Map();
+const inflightLogReads = new Map();
+const recentReceiptReads = new Map();
+const pinnedReceiptReads = new Map();
+const inflightReceiptReads = new Map();
+const RECENT_PRIMITIVE_TTL_MS = 1_000;
+const MAX_RECENT_PRIMITIVES = 128;
+const MAX_PINNED_STORAGE_READS = 256;
+const MAX_PINNED_RECEIPTS = 256;
+
+function primitiveProviderKey(provider) {
+  if ((typeof provider !== 'object' || provider === null) && typeof provider !== 'function') {
+    return String(provider);
+  }
+  let id = primitiveProviderIds.get(provider);
+  if (id == null) {
+    id = nextPrimitiveProviderId;
+    nextPrimitiveProviderId += 1;
+    primitiveProviderIds.set(provider, id);
+  }
+  return String(id);
+}
 
 // Mirrors api.js cacheGeneration: a read that was IN FLIGHT when the receipt
 // boundary invalidated must not repopulate the cache when it lands — its value
@@ -137,6 +175,289 @@ function store(key, pinned, value) {
     if (oldest === undefined) break;
     map.delete(oldest);
   }
+}
+
+function primitiveGet(map, key, recent) {
+  const hit = map.get(key);
+  if (!hit) return null;
+  if (recent && hit.expiresAt <= Date.now()) {
+    map.delete(key);
+    return null;
+  }
+  map.delete(key);
+  map.set(key, hit);
+  return hit;
+}
+
+function primitiveStore(map, key, value, cap, recent) {
+  map.delete(key);
+  map.set(key, recent
+    ? { value, expiresAt: Date.now() + RECENT_PRIMITIVE_TTL_MS }
+    : { value });
+  while (map.size > cap) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
+
+/**
+ * Return the preferred runner for a permissionless read.
+ *
+ * Production wallet connections are ethers BrowserProviders and should not
+ * absorb background traffic: the shared provider supplies batching,
+ * Multicall, caching, and endpoint failover. Plain injected providers remain
+ * first for deterministic tests and embedding seams.
+ */
+export function permissionlessReadProvider(walletProvider = null) {
+  if (walletProvider && !(walletProvider instanceof ethers.BrowserProvider)) {
+    return walletProvider;
+  }
+  return sharedReadProvider() || walletProvider || null;
+}
+
+/** Coalesce the app-wide burst of eth_blockNumber reads. */
+export async function readProviderBlockNumber(provider = null, { maxAgeMs = 500 } = {}) {
+  const reader = provider || sharedReadProvider();
+  if (!reader || typeof reader.getBlockNumber !== 'function') {
+    throw new Error('Provider cannot read the chain head.');
+  }
+  const now = Date.now();
+  let state = providerHeadState.get(reader);
+  if (!state) {
+    state = { value: null, readAt: 0, inflight: null };
+    providerHeadState.set(reader, state);
+  }
+  const ageLimit = Math.max(0, Number(maxAgeMs) || 0);
+  if (state.value != null && ageLimit > 0 && now - state.readAt <= ageLimit) {
+    return state.value;
+  }
+  if (state.inflight) return state.inflight;
+  const generation = cacheGeneration;
+  const request = Promise.resolve(reader.getBlockNumber()).then((raw) => {
+    const blockNumber = Number(raw);
+    if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+      throw new Error('Provider returned an invalid chain head.');
+    }
+    if (generation === cacheGeneration) {
+      state.value = blockNumber;
+      state.readAt = Date.now();
+    }
+    return blockNumber;
+  }).finally(() => {
+    if (state.inflight === request) state.inflight = null;
+  });
+  state.inflight = request;
+  return request;
+}
+
+/** One-second/in-flight cache for permissionless native-balance displays. */
+export async function readNativeBalance(address, {
+  provider = null,
+  blockTag = 'latest',
+  fresh = false,
+} = {}) {
+  const reader = provider || sharedReadProvider();
+  if (!reader || typeof reader.getBalance !== 'function') {
+    throw new Error('Provider cannot read native balances.');
+  }
+  const owner = String(address || '').toLowerCase();
+  if (!owner) throw new Error('Missing balance address.');
+  const block = normalizeBlockTag(blockTag);
+  if (block === null) return reader.getBalance(address, blockTag);
+  const pinned = block.startsWith('#');
+  const key = `${primitiveProviderKey(reader)}|${owner}|${block}`;
+  const completed = primitiveGet(
+    pinned ? pinnedNativeBalances : recentNativeBalances,
+    key,
+    !pinned,
+  );
+  if (!fresh && completed) return completed.value;
+  if (inflightNativeBalances.has(key)) return inflightNativeBalances.get(key);
+  const generation = cacheGeneration;
+  const request = Promise.resolve(reader.getBalance(address, blockTag)).then((value) => {
+    if (generation === cacheGeneration) {
+      primitiveStore(
+        pinned ? pinnedNativeBalances : recentNativeBalances,
+        key,
+        value,
+        pinned ? MAX_PINNED_STORAGE_READS : MAX_RECENT_PRIMITIVES,
+        !pinned,
+      );
+    }
+    return value;
+  }).finally(() => {
+    if (inflightNativeBalances.get(key) === request) inflightNativeBalances.delete(key);
+  });
+  inflightNativeBalances.set(key, request);
+  return request;
+}
+
+/** Cached raw-storage read; explicit block tags are immutable. */
+export async function readContractStorage(address, slot, {
+  provider = null,
+  blockTag = 'latest',
+  fresh = false,
+} = {}) {
+  const reader = provider || sharedReadProvider();
+  if (!reader) throw new Error('Provider cannot read contract storage.');
+  const contract = String(address || '').toLowerCase();
+  if (!contract) throw new Error('Missing storage contract.');
+  const position = typeof slot === 'string' && slot.startsWith('0x')
+    ? slot
+    : `0x${BigInt(slot).toString(16)}`;
+  const block = normalizeBlockTag(blockTag);
+  const read = () => {
+    if (typeof reader.getStorage === 'function') {
+      return reader.getStorage(address, position, blockTag);
+    }
+    if (typeof reader.send === 'function') {
+      const rpcBlock = blockTag == null || blockTag === 'latest'
+        ? 'latest'
+        : typeof blockTag === 'string' && blockTag.startsWith('0x')
+          ? blockTag
+          : `0x${BigInt(blockTag).toString(16)}`;
+      return reader.send('eth_getStorageAt', [address, position, rpcBlock]);
+    }
+    throw new Error('Provider cannot read contract storage.');
+  };
+  if (block === null) return read();
+  const pinned = block.startsWith('#');
+  const key = `${primitiveProviderKey(reader)}|${contract}|${position.toLowerCase()}|${block}`;
+  const completed = primitiveGet(
+    pinned ? pinnedStorageReads : recentStorageReads,
+    key,
+    !pinned,
+  );
+  if (!fresh && completed) return completed.value;
+  if (inflightStorageReads.has(key)) return inflightStorageReads.get(key);
+  const generation = cacheGeneration;
+  const request = Promise.resolve().then(read).then((value) => {
+    if (generation === cacheGeneration) {
+      primitiveStore(
+        pinned ? pinnedStorageReads : recentStorageReads,
+        key,
+        value,
+        pinned ? MAX_PINNED_STORAGE_READS : MAX_RECENT_PRIMITIVES,
+        !pinned,
+      );
+    }
+    return value;
+  }).finally(() => {
+    if (inflightStorageReads.get(key) === request) inflightStorageReads.delete(key);
+  });
+  inflightStorageReads.set(key, request);
+  return request;
+}
+
+/**
+ * Share receipt lookups across reveal/recovery consumers.
+ * Positive receipts stay cached until the normal receipt/reorg invalidation
+ * boundary; a null (still pending) answer lives for only one second.
+ */
+export async function readTransactionReceipt(transactionHash, {
+  provider = null,
+  fresh = false,
+} = {}) {
+  const reader = provider || sharedReadProvider();
+  if (!reader || typeof reader.getTransactionReceipt !== 'function') {
+    throw new Error('Provider cannot read transaction receipts.');
+  }
+  const hash = String(transactionHash || '').toLowerCase();
+  if (!hash) throw new Error('Missing transaction hash.');
+  const key = `${primitiveProviderKey(reader)}|${hash}`;
+  const mined = primitiveGet(pinnedReceiptReads, key, false);
+  if (mined) return mined.value;
+  const recent = primitiveGet(recentReceiptReads, key, true);
+  if (!fresh && recent) return recent.value;
+  const existing = inflightReceiptReads.get(key);
+  if (existing) return existing;
+  const generation = cacheGeneration;
+  const request = Promise.resolve(reader.getTransactionReceipt(transactionHash)).then((value) => {
+    if (generation === cacheGeneration) {
+      primitiveStore(
+        value == null ? recentReceiptReads : pinnedReceiptReads,
+        key,
+        value,
+        value == null ? MAX_RECENT_PRIMITIVES : MAX_PINNED_RECEIPTS,
+        value == null,
+      );
+    }
+    return value;
+  }).finally(() => {
+    if (inflightReceiptReads.get(key) === request) inflightReceiptReads.delete(key);
+  });
+  inflightReceiptReads.set(key, request);
+  return request;
+}
+
+/** Register a domain snapshot cache to clear at the receipt boundary. */
+export function registerReadCacheInvalidator(fn) {
+  if (typeof fn !== 'function') return () => {};
+  readCacheInvalidators.add(fn);
+  return () => readCacheInvalidators.delete(fn);
+}
+
+function normalizeLogFilterValue(value) {
+  if (value == null) return value;
+  if (typeof value === 'bigint' || typeof value === 'number') {
+    try { return `#${BigInt(value)}`; } catch (_e) { return null; }
+  }
+  if (typeof value === 'string') return value.toLowerCase();
+  if (Array.isArray(value)) return value.map(normalizeLogFilterValue);
+  return null;
+}
+
+function logFilterKey(provider, filter) {
+  if (!filter || typeof filter !== 'object') return null;
+  const allowed = new Set(['address', 'topics', 'fromBlock', 'toBlock', 'blockHash']);
+  if (Object.keys(filter).some((key) => !allowed.has(key))) return null;
+  const normalized = {};
+  for (const key of ['address', 'topics', 'fromBlock', 'toBlock', 'blockHash']) {
+    if (filter[key] === undefined) continue;
+    normalized[key] = normalizeLogFilterValue(filter[key]);
+  }
+  try {
+    return `${primitiveProviderKey(provider)}|${JSON.stringify(normalized)}`;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
+ * Coalesce identical eth_getLogs work on the shared provider.
+ *
+ * Even explicit ranges use only the short completed-response window. A
+ * shallow reorg can rewrite logs in a nominally closed range, so long-lived
+ * immutable caching belongs in domain cursors that deliberately rescan a
+ * reorg tail. This layer only removes same-mount/same-refresh duplication.
+ */
+export function attachLogCache(provider) {
+  if (!provider || typeof provider.getLogs !== 'function' || provider._logCacheAttached) {
+    return provider;
+  }
+  const perform = provider.getLogs.bind(provider);
+  provider.getLogs = (filter) => {
+    const key = logFilterKey(provider, filter);
+    if (key == null) return perform(filter);
+    const completed = primitiveGet(recentLogReads, key, true);
+    if (completed) return Promise.resolve(completed.value);
+    const existing = inflightLogReads.get(key);
+    if (existing) return existing;
+    const generation = cacheGeneration;
+    const request = Promise.resolve(perform(filter)).then((value) => {
+      if (generation === cacheGeneration) {
+        primitiveStore(recentLogReads, key, value, MAX_RECENT_PRIMITIVES, true);
+      }
+      return value;
+    }).finally(() => {
+      if (inflightLogReads.get(key) === request) inflightLogReads.delete(key);
+    });
+    inflightLogReads.set(key, request);
+    return request;
+  };
+  provider._logCacheAttached = true;
+  return provider;
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +673,23 @@ export function invalidateReadCache() {
   recentCalls.clear();
   pinnedCalls.clear();
   inflightCalls.clear();
+  providerHeadState = new WeakMap();
+  primitiveProviderIds = new WeakMap();
+  nextPrimitiveProviderId = 1;
+  recentNativeBalances.clear();
+  pinnedNativeBalances.clear();
+  inflightNativeBalances.clear();
+  recentStorageReads.clear();
+  pinnedStorageReads.clear();
+  inflightStorageReads.clear();
+  recentLogReads.clear();
+  inflightLogReads.clear();
+  recentReceiptReads.clear();
+  pinnedReceiptReads.clear();
+  inflightReceiptReads.clear();
+  for (const invalidate of readCacheInvalidators) {
+    try { invalidate(); } catch (_e) { /* one domain cache cannot block others */ }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +709,7 @@ const FAILOVER_TIMEOUT_MS = 10_000;
 const PROMOTE_AFTER = 3;
 
 /** Build a `_send` that walks `urls`. Exported with injectable fetch for tests. */
-export function _makeFailoverSend(urls, fetchImpl) {
+export function _makeFailoverSend(urls, fetchImpl, timeoutMs = FAILOVER_TIMEOUT_MS) {
   const doFetch = fetchImpl ?? ((...args) => fetch(...args));
   const state = { preferred: 0, consecutiveFailures: 0 };
   const send = async (payload) => {
@@ -381,13 +719,27 @@ export function _makeFailoverSend(urls, fetchImpl) {
     const start = state.preferred;
     for (let attempt = 0; attempt < urls.length; attempt++) {
       const index = (start + attempt) % urls.length;
+      // Use one concrete controller on every supported browser rather than
+      // making timeout behavior depend on AbortSignal.timeout availability.
+      // A wedged RPC read must not pin later lobby refreshes behind it.
+      const controller = typeof AbortController === 'function'
+        ? new AbortController()
+        : null;
+      let timeout = null;
+      const signal = controller?.signal
+        ?? (typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+          ? AbortSignal.timeout(timeoutMs)
+          : undefined);
+      if (controller && typeof setTimeout === 'function') {
+        timeout = setTimeout(() => controller.abort(), timeoutMs);
+        if (timeout && typeof timeout.unref === 'function') timeout.unref();
+      }
       try {
         const response = await doFetch(urls[index], {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
-          signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-            ? AbortSignal.timeout(FAILOVER_TIMEOUT_MS) : undefined,
+          signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status} from ${urls[index]}`);
         const json = await response.json();
@@ -402,6 +754,8 @@ export function _makeFailoverSend(urls, fetchImpl) {
             state.consecutiveFailures = 0;
           }
         }
+      } finally {
+        if (timeout != null) clearTimeout(timeout);
       }
     }
     throw lastError;
@@ -424,7 +778,7 @@ export function sharedReadProvider() {
     if (fallbacks.length > 0) {
       provider._send = _makeFailoverSend([CHAIN.rpcUrl, ...fallbacks]);
     }
-    _shared = attachReadCache(attachMulticall(provider));
+    _shared = attachReadCache(attachMulticall(attachLogCache(provider)));
   }
   return _shared;
 }

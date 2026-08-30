@@ -21,6 +21,7 @@ import * as contractsMod from '../../app/contracts.js';
 import * as pari from '../../app/parimutuel.js';
 import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const LEVEL = 42;
@@ -198,7 +199,7 @@ globalThis.customElements = {
 };
 let _gameState = { level: LEVEL, phase: 'JACKPOT', decWindowOpen: false };
 let _decimatorPosition = null;
-globalThis.fetch = async (url) => {
+const indexedFetch = async (url) => {
   if (/\/game\/state$/.test(String(url))) {
     return { ok: true, status: 200, json: async () => _gameState };
   }
@@ -207,6 +208,7 @@ globalThis.fetch = async (url) => {
   }
   return { ok: false, status: 404, json: async () => ({}) };
 };
+globalThis.fetch = indexedFetch;
 
 // ---------------------------------------------------------------------------
 // Chain fakes — one contract stub feeding both views.
@@ -281,6 +283,7 @@ function installContract({
         if (poolTarget == null) throw new Error('no target reader');
         return poolTarget;
       },
+      purchaseInfo: async () => [chainLevel, jackpotPhase, false, false, 1n],
       jackpotPhase: async () => jackpotPhase,
       jackpotCompressionTier: async () => compressedFlag,
     }));
@@ -291,6 +294,7 @@ function installContract({
         if (poolTarget == null) throw new Error('no target reader');
         return poolTarget;
       },
+      purchaseInfo: async () => [chainLevel, jackpotPhase, false, false, 1n],
       jackpotPhase: async () => jackpotPhase,
       jackpotCompressionTier: async () => compressedFlag,
     }));
@@ -400,6 +404,7 @@ describe('app-parimutuel-panel', () => {
     _docListeners.clear();
     globalThis.document.body = _docBody;
     globalThis.document.querySelector = (sel) => _docBody.querySelector(sel);
+    globalThis.fetch = indexedFetch;
   });
 
   afterEach(() => {
@@ -471,7 +476,7 @@ describe('app-parimutuel-panel', () => {
       /aria-label="WWXRP balance and Daily Incinerator entry"/);
     assert.equal(el.querySelector('[data-bind="wwxrp-balance"]').textContent, '12.3K');
     const open = el.querySelector('[data-bind="wwxrp-open"]');
-    assert.equal(open.textContent, 'INCINERATE');
+    assert.equal(el.querySelector('[data-bind="wwxrp-open-label"]').textContent, 'BURN');
     assert.equal(open.disabled, false);
     open.click();
 
@@ -501,8 +506,14 @@ describe('app-parimutuel-panel', () => {
       /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*width:\s*5\.3rem[^}]*min-height:\s*2\.55rem/s,
       'the action is a full-height rail key instead of the old tiny pill');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*flame-center-silver\.svg/s,
-      'the Incinerate key shares the flame emblem language of the burn rail below');
+      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*grid-template-columns:\s*1\.34rem auto;[^}]*padding:\s*0\.32rem 0\.72rem 0\.32rem 0\.48rem;[^}]*font:\s*950 0\.66rem\/1/s,
+      'the WWXRP action shares the exact proportions and type hierarchy of the sDGNRS burn key');
+    assert.match(WWXRP_SOURCE,
+      /data-bind="wwxrp-open-label">BURN<\/b>/,
+      'the WWXRP action keeps its BURN label in a stable child during refreshes');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*width:\s*1\.34rem;[^}]*height:\s*1\.72rem;[^}]*flame-center-silver\.svg[^}]*border-right:/s,
+      'the CSS-owned flame compartment matches the sDGNRS key and cannot be erased by a label refresh');
   });
 
   test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {
@@ -532,7 +543,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(balance.textContent, '0');
   });
 
-  test('does not publish a prize-pool target while the API and RPC disagree on level', async () => {
+  test('uses the chain level when the indexed game snapshot disagrees', async () => {
     installContract({
       growth: { [LEVEL]: { openRound: 0 } },
       ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
@@ -540,8 +551,9 @@ describe('app-parimutuel-panel', () => {
       poolTarget: 123n * FLIP,
     });
     const el = await mount();
-    assert.equal(storeMod.get('app.poolBenchmarks'), undefined,
-      'a target with no level in its ABI is withheld until both data sources agree');
+    assert.equal(storeMod.get('app.poolBenchmarks')?.level, LEVEL - 1,
+      'purchaseInfo is authoritative; stale indexed state cannot relabel the live round');
+    assert.equal(storeMod.get('app.poolBenchmarks')?.targetWei, String(123n * FLIP));
     el.disconnectedCallback();
   });
 
@@ -708,7 +720,7 @@ describe('app-parimutuel-panel', () => {
       decWindowOpen: false,
       prizePools: { futurePrizePool: '1250000000000' },
     };
-    installContract({ growth: { 24: { openRound: 0 } } });
+    installContract({ growth: { 24: { openRound: 0 } }, chainLevel: 24 });
 
     const el = await mount();
     const card = decimatorCard(el);
@@ -1017,6 +1029,39 @@ describe('app-parimutuel-panel', () => {
     growthCard(el).querySelectorAll('.pari-side__cta')[1].click();
     await flush();
     assert.deepEqual(calls[0], ['placeBet', TEST_ADDR, true]);
+  });
+
+  test('an open Growth book accepts a bet while /game/state is still blocked', async () => {
+    invalidateJSONCache();
+    let releaseDatabase;
+    let databaseReads = 0;
+    const databaseBlocked = new Promise((resolve) => { releaseDatabase = resolve; });
+    globalThis.fetch = async () => {
+      databaseReads += 1;
+      const data = await databaseBlocked;
+      return { ok: true, status: 200, json: async () => data };
+    };
+    const calls = [];
+    installContract({
+      growth: { [LEVEL]: { openRound: LEVEL, over: 1n, under: 2n } },
+      calls,
+    });
+
+    try {
+      const el = await mount();
+      await flush();
+      assert.ok(databaseReads > 0, 'the indexed game read is genuinely pending');
+      assert.equal(growthCard(el).hidden, false,
+        'purchaseInfo and marketState discover the book without the DB');
+      growthCard(el).querySelectorAll('.pari-side__cta')[1].click();
+      await flush();
+      assert.deepEqual(calls[0], ['placeBet', TEST_ADDR, true],
+        'the contract receives the bet before indexed state resolves');
+      el.disconnectedCallback();
+    } finally {
+      releaseDatabase(_gameState);
+      globalThis.fetch = indexedFetch;
+    }
   });
 
   test('clicking Claim cranks the clicked winner first plus other discovered winners', async () => {

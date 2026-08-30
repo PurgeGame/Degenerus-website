@@ -6,7 +6,12 @@ import { formatEther, parseEther } from 'ethers';
 import { ETH_DIVISOR } from '../app/chain-config.js';
 import { claimEthAmount, claimFlip, readClaimableEth } from '../app/claims.js';
 import { readClaimableCoinflip } from '../app/coinflip.js';
-import { donateLink, readLinkDonationState } from '../app/link-donation.js';
+import {
+  donateLink,
+  formatLinkDonationMultiplier,
+  linkDonationFlipQuote,
+  readLinkDonationState,
+} from '../app/link-donation.js';
 import { normalizePlayerFundsMode, PLAYER_FUNDS_OPEN_EVENT } from '../app/player-funds.js';
 import { getActingAddress, subscribe } from '../app/store.js';
 import { compactUiError } from '../app/ui-error.js';
@@ -189,7 +194,14 @@ class AppPlayerFundsDialog extends HTMLElement {
               <span><small>WALLET</small><strong data-bind="pfd-link-balance">—</strong></span>
               <span><small>RNG CREDIT</small><strong data-bind="pfd-link-credit">—</strong></span>
             </div>
-            <p>Donated LINK goes straight to the Chainlink subscription and gives you equal mid-day RNG credit.</p>
+            <div class="pfd-link__quote" data-bind="pfd-link-quote" data-state="loading" aria-live="polite">
+              <span><small>CURRENT MULTIPLIER</small><strong data-bind="pfd-link-multiplier">—</strong></span>
+              <span class="pfd-link__conversion">
+                <small>YOUR QUOTE</small>
+                <strong><output data-bind="pfd-link-quote-input">0 LINK</output><i aria-hidden="true">→</i><output data-bind="pfd-link-quote-reward">— FLIP</output></strong>
+              </span>
+            </div>
+            <p>Funds Chainlink, banks equal RNG credit, and earns the live FLIP reward quoted above.</p>
             <div class="pfd-input-row">
               <label class="pfd-amount-field">
                 <input type="text" inputmode="decimal" name="pfd-link" value="0" autocomplete="off" spellcheck="false" aria-label="LINK amount to donate">
@@ -311,6 +323,7 @@ class AppPlayerFundsDialog extends HTMLElement {
     const ethAmount = _parseEthInput(this.querySelector('[name="pfd-eth"]')?.value);
     const flipAmount = _parseTokenInput(this.querySelector('[name="pfd-flip"]')?.value);
     const linkAmount = _parseTokenInput(this.querySelector('[name="pfd-link"]')?.value);
+    this.#renderLinkQuote(linkAmount);
     const models = [
       ['pfd-eth-claim', ethAmount, this.#ethWei, 'CLAIM ETH', 'CLAIMING…', 'eth'],
       ['pfd-flip-claim', flipAmount, this.#flipWei, 'CLAIM FLIP', 'CLAIMING…', 'flip'],
@@ -323,6 +336,50 @@ class AppPlayerFundsDialog extends HTMLElement {
       button.disabled = Boolean(this.#busy) || !valid;
       button.textContent = this.#busy === kind ? busyLabel : label;
     }
+  }
+
+  #renderLinkQuote(amountWei) {
+    const container = this.querySelector('[data-bind="pfd-link-quote"]');
+    const multiplierNode = this.querySelector('[data-bind="pfd-link-multiplier"]');
+    const inputNode = this.querySelector('[data-bind="pfd-link-quote-input"]');
+    const rewardNode = this.querySelector('[data-bind="pfd-link-quote-reward"]');
+    if (!container || !multiplierNode || !inputNode || !rewardNode) return;
+    const amount = amountWei != null && amountWei >= 0n ? amountWei : null;
+    const pricingReady = this.#linkState?.subscriptionBalanceWei != null
+      && this.#linkState?.ethPerLinkWei != null
+      && this.#linkState?.mintPriceWei != null;
+    const rateQuote = !pricingReady ? null : linkDonationFlipQuote({
+      amountWei: 0n,
+      subscriptionBalanceWei: this.#linkState.subscriptionBalanceWei,
+      ethPerLinkWei: this.#linkState.ethPerLinkWei,
+      mintPriceWei: this.#linkState.mintPriceWei,
+    });
+    const currentMultiplierWei = rateQuote?.currentMultiplierWei ?? null;
+    const quote = amount == null || !pricingReady ? null : linkDonationFlipQuote({
+      amountWei: amount,
+      subscriptionBalanceWei: this.#linkState.subscriptionBalanceWei,
+      ethPerLinkWei: this.#linkState.ethPerLinkWei,
+      mintPriceWei: this.#linkState.mintPriceWei,
+    });
+    const inputLabel = amount == null
+      ? '— LINK'
+      : _compactAmountLabel(_tokenInput(amount), 'LINK');
+    const rewardLabel = quote == null
+      ? '— FLIP'
+      : _compactAmountLabel(_tokenInput(quote.flipWei), 'FLIP');
+    multiplierNode.textContent = formatLinkDonationMultiplier(currentMultiplierWei);
+    inputNode.textContent = inputLabel;
+    rewardNode.textContent = rewardLabel;
+    container.dataset.state = this.#linkState == null
+      ? 'loading'
+      : pricingReady ? 'ready' : 'unavailable';
+    container.setAttribute('aria-label', quote
+      ? `Current LINK reward multiplier ${multiplierNode.textContent}. Donating ${inputLabel} is estimated to earn ${rewardLabel}.`
+      : pricingReady
+        ? `Current LINK reward multiplier ${multiplierNode.textContent}. Enter a valid LINK amount for a FLIP quote.`
+        : this.#linkState == null
+          ? 'Loading the current LINK reward quote.'
+          : 'The current LINK reward quote is unavailable.');
   }
 
   async #run(kind) {

@@ -6,7 +6,7 @@ import { CHAIN, CONTRACTS } from './chain-config.js';
 import { ethers, getProvider, sendTx } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
-import { sharedReadProvider } from './read-provider.js';
+import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 
 const DRAW_ABI = [
   'event DrawEntered(uint24 indexed day, address indexed player, uint8 bucket, uint32 entryIndex, uint256 burnAmount, uint256 effectiveScore, uint256 cumulativeScore)',
@@ -91,7 +91,7 @@ export async function readPlayerWwxrpDrawDays({ player } = {}) {
   if (!player || !provider || !CONTRACTS.WWXRP) return { days: [], complete: false };
   const cache = _readCache(player);
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return { days: [...cache.days], complete: false }; }
   if (!Number.isInteger(head) || head < 0) return { days: [...cache.days], complete: false };
   let fromBlock = Math.max(Number(CHAIN.deployBlock || 0), Number(cache.throughBlock) + 1);

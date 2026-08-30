@@ -42,7 +42,12 @@ import {
   decodePackedBoons,
 } from './boons.js';
 import { readExactBoonState } from './polling.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readContractStorage,
+  readProviderBlockNumber,
+  readTransactionReceipt,
+} from './read-provider.js';
 
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
 // lives in lootbox.js).
@@ -56,7 +61,7 @@ export const OPEN_EVENTS_ABI = [
   'event LootBoxCrapsPasses(address indexed player, uint32 normal, uint32 highRoller, uint24 day)',
   'event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount)',
   // audit 4a9549e51 appended `normalPasses`/`highPasses`: the FLIP branch tosses a committed
-  // coin and half the boxes denominate the whole roll into Craps day-passes at the regular
+  // coin and half the boxes denominate the whole roll into Craps comps at the regular
   // box units instead of paying it as coinflip credit. ⚠ THE TOPIC0 CHANGED WITH THEM — the
   // old signature does not merely lose two fields, it matches NO log at all, and
   // `encodeFilterTopics` fails closed by returning an empty feed rather than an error.
@@ -676,20 +681,7 @@ function _storageKey(types, values) {
 }
 
 async function _readStorageAt(provider, slot, blockTag) {
-  const storageSlot = typeof slot === 'string'
-    ? slot
-    : ethers.toBeHex(BigInt(slot), 32);
-  if (typeof provider?.getStorage === 'function') {
-    return provider.getStorage(CONTRACTS.GAME, storageSlot, blockTag);
-  }
-  if (typeof provider?.send === 'function') {
-    return provider.send('eth_getStorageAt', [
-      CONTRACTS.GAME,
-      storageSlot,
-      ethers.toQuantity(blockTag),
-    ]);
-  }
-  throw new Error('Historical storage reader unavailable');
+  return readContractStorage(CONTRACTS.GAME, slot, { provider, blockTag });
 }
 
 async function _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber }) {
@@ -718,21 +710,18 @@ async function _readHumanBoxSpinContext({ player, lootboxIndex, blockNumber }) {
       : null;
   };
 
-  // Historical storage support varies across injected wallet RPCs. Try the
-  // connected provider first, then the app's public archival read path before
-  // giving up on the exact committed result.
+  // The public failover reader is the normal archival path. A wallet provider
+  // remains a fallback because some injected RPCs have different retention.
   const connected = getProvider();
-  if (connected) {
+  const primary = permissionlessReadProvider(connected);
+  if (primary) {
     try {
-      const context = await readContext(connected);
+      const context = await readContext(primary);
       if (context) return context;
-    } catch (_e) { /* retry through the public provider below */ }
+    } catch (_e) { /* retry through the alternate provider below */ }
   }
-  let publicProvider = null;
-  try { publicProvider = sharedReadProvider(); }
-  catch (_e) { return null; }
-  if (!publicProvider || publicProvider === connected) return null;
-  try { return await readContext(publicProvider); }
+  if (!connected || connected === primary) return null;
+  try { return await readContext(connected); }
   catch (_e) { return null; }
 }
 
@@ -1568,10 +1557,10 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
             wholeTickets: 0,
             flip: BigInt(parsed.args.flip),
             closing: Boolean(parsed.args.closing),
-            // Presale awards carry their pass counts on this event rather than the aggregated
+            // Presale awards carry their comp counts on this event rather than the aggregated
             // LootBoxCrapsPasses event used by regular boxes. Keep them on the physical box anchor
             // so its opening card stays attributed to the right presale box. `flip` is only the
-            // residual coinflip credit after pass denomination, not the whole FLIP branch.
+            // residual coinflip credit after comp denomination, not the whole FLIP branch.
             crapsNormalPasses: Number(parsed.args.normalPasses ?? 0),
             crapsHighPasses: Number(parsed.args.highPasses ?? 0),
           });
@@ -1964,14 +1953,14 @@ export async function readOpenLegsFromChain({
   if (!player || lootboxIndex == null) return [];
   let index;
   try { index = BigInt(lootboxIndex); } catch (_e) { return []; }
-  const provider = getProvider();
+  const provider = permissionlessReadProvider(getProvider());
   if (!provider
     || typeof provider.getBlockNumber !== 'function'
     || typeof provider.getLogs !== 'function'
     || typeof provider.getTransactionReceipt !== 'function') return [];
 
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider)); }
   catch (_e) { return []; }
   if (!Number.isFinite(head) || head < 0) return [];
 
@@ -1991,7 +1980,7 @@ export async function readOpenLegsFromChain({
     let receipt = null;
     let receiptPurchaseAmount = 0n;
     try {
-      receipt = await provider.getTransactionReceipt(hash);
+      receipt = await readTransactionReceipt(hash, { provider });
       const block = Number(receipt?.blockNumber);
       if (Number.isFinite(block) && block >= 0) {
         purchaseBlock = purchaseBlock == null ? block : Math.min(purchaseBlock, block);
@@ -2122,7 +2111,7 @@ export async function readOpenLegsFromChain({
     const anchor = Array.isArray(logs) ? logs.at(-1) : null;
     if (anchor?.transactionHash) {
       try {
-        const receipt = await provider.getTransactionReceipt(anchor.transactionHash);
+        const receipt = await readTransactionReceipt(anchor.transactionHash, { provider });
         const legs = parseOpenLegsFromReceipt(receipt, player);
         if (legs.length > 0) return legs;
       } catch (_e) {
@@ -2194,7 +2183,7 @@ export async function readOpenLegsFromChain({
             matches = callPlayer === String(player).toLowerCase() && callIndex === index;
           }
           if (!matches) continue;
-          const receipt = await provider.getTransactionReceipt(candidate.transactionHash);
+          const receipt = await readTransactionReceipt(candidate.transactionHash, { provider });
           const legs = parseOpenLegsFromReceipt(receipt, player);
           if (legs.length > 0) return legs;
         } catch (_e) {

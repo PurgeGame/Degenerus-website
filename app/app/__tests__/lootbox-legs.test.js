@@ -489,7 +489,7 @@ describe('human BoxSpin payout enrichment', () => {
       ['uint48', 'uint256'],
       [index, 34n],
     ));
-    const timingSlot = ethers.toBeHex(0n, 32);
+    const timingSlot = '0x0';
     const reads = [];
     contractsMod.setProvider({
       async getStorage(address, slot, blockTag) {
@@ -772,7 +772,7 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.deepEqual(legs, [{ legType: 'dgnrs', amount: ethers.parseEther('2') }]);
   });
 
-  test('decodes the regular-box Craps pass aggregate and its reserved day', () => {
+  test('decodes the regular-box Craps comp aggregate and its reserved day', () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [PLAYER, 8n, 1_000n, 7, 0, 0n, false]),
@@ -789,7 +789,7 @@ describe('parseOpenLegsFromReceipt', () => {
     });
   });
 
-  test('keeps presale Craps pass denominations on the opened anchor', () => {
+  test('keeps presale Craps comp denominations on the opened anchor', () => {
     const receipt = {
       logs: [log('PresaleBoxOpened', [
         PLAYER, 9n, 1_000n, 25n, 0n, 0n, false, 4, 2,
@@ -797,7 +797,7 @@ describe('parseOpenLegsFromReceipt', () => {
     };
     const [opened] = parseOpenLegsFromReceipt(receipt, PLAYER);
     assert.equal(opened.source, 'presale');
-    assert.equal(opened.flip, 25n, 'only residual FLIP remains beside a pass award');
+    assert.equal(opened.flip, 25n, 'only residual FLIP remains beside a comp award');
     assert.equal(opened.crapsNormalPasses, 4);
     assert.equal(opened.crapsHighPasses, 2);
   });
@@ -1022,7 +1022,7 @@ describe('openLegsFromFeed', () => {
       'the immutable transaction/log identity wins over duplicate projections');
   });
 
-  test('rebuilds presale and future indexed Craps pass payloads', () => {
+  test('rebuilds presale and future indexed Craps comp payloads', () => {
     const tx = `0x${'bc'.repeat(32)}`;
     const rows = [
       {

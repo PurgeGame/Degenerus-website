@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import * as sdgnrsMod from '../sdgnrs.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
-import { CONTRACTS } from '../chain-config.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
+import { invalidateReadCache } from '../read-provider.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const TOKEN = 10n ** 18n;
@@ -268,6 +269,7 @@ describe('burnSdgnrs', () => {
   });
 
   test('discovery retains and aggregates the burned amount for each pending period', async () => {
+    const base = Number(CHAIN.deployBlock);
     const iface = new contractsMod.ethers.Interface([
       'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex)',
     ]);
@@ -279,15 +281,22 @@ describe('burnSdgnrs', () => {
         address: CONTRACTS.SDGNRS,
         topics: event.topics,
         data: event.data,
-        blockNumber: 1_000 + index,
+        blockNumber: base + 10 + index,
         transactionHash: `0x${index + 1}`,
         index,
       };
     });
+    let head = base + 100;
+    const ranges = [];
     contractsMod.setProvider({
       ...makeFakeProvider(),
-      getBlockNumber: async () => 1_100,
-      getLogs: async () => logs,
+      getBlockNumber: async () => head,
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([Number(fromBlock), Number(toBlock)]);
+        return logs.filter((log) => (
+          log.blockNumber >= Number(fromBlock) && log.blockNumber <= Number(toBlock)
+        ));
+      },
     });
     sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({
       pending: [8n, 156, 500n],
@@ -298,5 +307,21 @@ describe('burnSdgnrs', () => {
     assert.equal(discovered.periods.length, 1);
     assert.equal(discovered.periods[0].periodIndex, 67);
     assert.equal(discovered.periods[0].sdgnrsAmount, 25n * TOKEN);
+
+    head = base + 105;
+    invalidateReadCache();
+    const refreshed = await sdgnrsMod.discoverSdgnrsRedemptions({
+      player: CONNECTED,
+      periodIndexes: [68],
+    });
+    assert.deepEqual(ranges.at(-1), [base + 89, base + 105],
+      'the next poll scans only the reorg tail plus new blocks');
+    assert.equal(refreshed.periods.length, 2,
+      'durable period ids join discovery without a second state-read wave');
+    assert.equal(
+      refreshed.periods.find((row) => row.periodIndex === 67).sdgnrsAmount,
+      25n * TOKEN,
+      'overlap logs replace by identity instead of double-counting',
+    );
   });
 });

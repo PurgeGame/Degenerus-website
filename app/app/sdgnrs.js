@@ -10,7 +10,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { get } from './store.js';
-import { sharedReadProvider } from './read-provider.js';
+import { permissionlessReadProvider, readProviderBlockNumber } from './read-provider.js';
 
 const SDGNRS_ABI = [
   'function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)',
@@ -41,6 +41,7 @@ export const SDGNRS_BURN_DIALOG_REQUEST_EVENT = 'degenerus:open-sdgnrs-burn';
 export const SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT = 'degenerus:open-sdgnrs-charity-vote';
 export const SDGNRS_REDEMPTION_LOOKBACK_BLOCKS = 120_000;
 const SDGNRS_LOG_CHUNK_BLOCKS = 5_000;
+const SDGNRS_REORG_OVERLAP_BLOCKS = 12;
 
 /** Compact a burned sDGNRS amount to at most two significant figures. */
 export function formatSdgnrsRedemptionAmount(value) {
@@ -74,6 +75,8 @@ export function formatSdgnrsRedemptionAmount(value) {
 
 let _contractFactory = null;
 let _ifaceCache = null;
+const _redemptionLogStates = new Map();
+const _redemptionStateInflight = new Map();
 
 /** Test-only contract-construction seam. */
 export function __setContractFactoryForTest(factory) {
@@ -84,6 +87,12 @@ export function __setContractFactoryForTest(factory) {
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
   _ifaceCache = null;
+  _redemptionLogStates.clear();
+  _redemptionStateInflight.clear();
+}
+
+function _readProvider() {
+  return permissionlessReadProvider(getProvider());
 }
 
 function _iface() {
@@ -217,46 +226,92 @@ export function parseSdgnrsRedemptionReceipt(receipt, playerFilter = null) {
 }
 
 /** Read one exact redemption slot and its period roll. */
-export async function readSdgnrsRedemptionState({ player, periodIndex } = {}) {
+export async function readSdgnrsRedemptionState({ player, periodIndex, fresh = false } = {}) {
   if (!player || periodIndex == null) return null;
   const period = Number(periodIndex);
   if (!Number.isInteger(period) || period < 0 || period > 0xFFFFFF) return null;
-  const provider = getProvider();
+  const provider = _readProvider();
   if (!provider) return null;
+  const key = `${String(player).toLowerCase()}:${period}:${fresh ? 'fresh' : 'display'}`;
+  if (_redemptionStateInflight.has(key)) return _redemptionStateInflight.get(key);
+  const request = (async () => {
+    try {
+      const contract = _buildContract(provider);
+      let blockTag = null;
+      try {
+        blockTag = await readProviderBlockNumber(provider, { maxAgeMs: fresh ? 0 : 500 });
+      } catch (_e) { /* latest remains usable */ }
+      const overrides = blockTag == null ? [] : [{ blockTag }];
+      const [pending, rollRaw] = await Promise.all([
+        contract.pendingRedemptions(player, period, ...overrides),
+        contract.redemptionPeriods(period, ...overrides),
+      ]);
+      const ethValueOwed = BigInt(pending?.ethValueOwed ?? pending?.[0] ?? 0);
+      const activityScore = Number(pending?.activityScore ?? pending?.[1] ?? 0);
+      const flipEscrow = BigInt(pending?.flipEscrow ?? pending?.[2] ?? 0);
+      const roll = Number(rollRaw ?? 0);
+      return {
+        player: String(player).toLowerCase(),
+        periodIndex: period,
+        ethValueOwed,
+        activityScore,
+        flipEscrow,
+        roll,
+        exists: ethValueOwed > 0n || flipEscrow > 0n,
+        ready: roll > 0 && (ethValueOwed > 0n || flipEscrow > 0n),
+      };
+    } catch (_e) {
+      return null;
+    }
+  })().finally(() => {
+    if (_redemptionStateInflight.get(key) === request) _redemptionStateInflight.delete(key);
+  });
+  _redemptionStateInflight.set(key, request);
+  return request;
+}
+
+function _redemptionLogKey(log) {
+  const transactionHash = String(log?.transactionHash || '').toLowerCase();
+  const blockNumber = Number(log?.blockNumber ?? 0);
+  const logIndex = Number(log?.index ?? log?.logIndex ?? 0);
+  return `${transactionHash || `block:${blockNumber}`}:${logIndex}`;
+}
+
+async function _fetchRedemptionLogRange(provider, filter, fromBlock, toBlock) {
+  if (fromBlock > toBlock) return { logs: [], completeThrough: toBlock };
   try {
-    const contract = _buildContract(provider);
-    const [pending, rollRaw] = await Promise.all([
-      contract.pendingRedemptions(player, period),
-      contract.redemptionPeriods(period),
-    ]);
-    const ethValueOwed = BigInt(pending?.ethValueOwed ?? pending?.[0] ?? 0);
-    const activityScore = Number(pending?.activityScore ?? pending?.[1] ?? 0);
-    const flipEscrow = BigInt(pending?.flipEscrow ?? pending?.[2] ?? 0);
-    const roll = Number(rollRaw ?? 0);
-    return {
-      player: String(player).toLowerCase(),
-      periodIndex: period,
-      ethValueOwed,
-      activityScore,
-      flipEscrow,
-      roll,
-      exists: ethValueOwed > 0n || flipEscrow > 0n,
-      ready: roll > 0 && (ethValueOwed > 0n || flipEscrow > 0n),
-    };
-  } catch (_e) {
-    return null;
+    const logs = await provider.getLogs({ ...filter, fromBlock, toBlock });
+    return { logs: Array.isArray(logs) ? logs : [], completeThrough: toBlock };
+  } catch (_wideError) {
+    const logs = [];
+    let completeThrough = fromBlock - 1;
+    // Walk forward and stop on the first missing range. Advancing across a
+    // failed middle chunk would make that gap permanent on the next poll.
+    for (let start = fromBlock; start <= toBlock; start += SDGNRS_LOG_CHUNK_BLOCKS) {
+      const end = Math.min(toBlock, start + SDGNRS_LOG_CHUNK_BLOCKS - 1);
+      try {
+        const chunk = await provider.getLogs({ ...filter, fromBlock: start, toBlock: end });
+        if (Array.isArray(chunk)) logs.push(...chunk);
+        completeThrough = end;
+      } catch (_chunkError) {
+        break;
+      }
+    }
+    return { logs, completeThrough };
   }
 }
 
 async function _recentRedemptionLogs(provider, player) {
-  if (!provider
-    || typeof provider.getBlockNumber !== 'function'
-    || typeof provider.getLogs !== 'function') return [];
+  if (!provider || typeof provider.getLogs !== 'function') return [];
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return []; }
-  if (!Number.isFinite(head) || head < 0) return [];
-  const fromBlock = Math.max(Number(CHAIN.deployBlock) || 0, head - SDGNRS_REDEMPTION_LOOKBACK_BLOCKS);
+  if (!Number.isSafeInteger(head) || head < 0) return [];
+  const floor = Math.max(
+    Number(CHAIN.deployBlock) || 0,
+    head - SDGNRS_REDEMPTION_LOOKBACK_BLOCKS,
+  );
+  if (floor > head) return [];
   let topics;
   try {
     const submit = _iface().encodeFilterTopics(_iface().getEvent('RedemptionSubmitted'), [player]);
@@ -266,21 +321,36 @@ async function _recentRedemptionLogs(provider, player) {
     return [];
   }
   const filter = { address: CONTRACTS.SDGNRS, topics };
-  try {
-    return await provider.getLogs({ ...filter, fromBlock, toBlock: head });
-  } catch (_wideError) {
-    const logs = [];
-    for (let end = head; end >= fromBlock; end -= SDGNRS_LOG_CHUNK_BLOCKS) {
-      const start = Math.max(fromBlock, end - SDGNRS_LOG_CHUNK_BLOCKS + 1);
-      try {
-        const chunk = await provider.getLogs({ ...filter, fromBlock: start, toBlock: end });
-        if (Array.isArray(chunk)) logs.push(...chunk);
-      } catch (_chunkError) {
-        // Keep other chunks useful; a later poll can retry the missing range.
-      }
-    }
-    return logs;
+  const key = `${CHAIN.id}:${String(player).toLowerCase()}`;
+  let state = _redemptionLogStates.get(key);
+  if (!state) {
+    state = { lastScannedBlock: null, logs: new Map(), pending: null };
+    _redemptionLogStates.set(key, state);
   }
+  if (state.pending) return state.pending;
+
+  const request = (async () => {
+    if (state.lastScannedBlock === head) return [...state.logs.values()];
+    if (state.lastScannedBlock != null && head < state.lastScannedBlock) {
+      state.logs.clear();
+      state.lastScannedBlock = null;
+    }
+    const fromBlock = state.lastScannedBlock == null
+      ? floor
+      : Math.max(floor, state.lastScannedBlock - SDGNRS_REORG_OVERLAP_BLOCKS + 1);
+    for (const [logKey, log] of state.logs) {
+      const blockNumber = Number(log?.blockNumber ?? 0);
+      if (blockNumber < floor || blockNumber >= fromBlock) state.logs.delete(logKey);
+    }
+    const scanned = await _fetchRedemptionLogRange(provider, filter, fromBlock, head);
+    for (const log of scanned.logs) state.logs.set(_redemptionLogKey(log), log);
+    state.lastScannedBlock = scanned.completeThrough;
+    return [...state.logs.values()];
+  })().finally(() => {
+    if (state.pending === request) state.pending = null;
+  });
+  state.pending = request;
+  return request;
 }
 
 /**
@@ -288,9 +358,9 @@ async function _recentRedemptionLogs(provider, player) {
  * Exact pending/ready state is always re-read from the contract; logs only
  * identify which composite-keyed periods belong to the player.
  */
-export async function discoverSdgnrsRedemptions({ player } = {}) {
+export async function discoverSdgnrsRedemptions({ player, periodIndexes = [] } = {}) {
   if (!player) return { periods: [], claims: [] };
-  const provider = getProvider();
+  const provider = _readProvider();
   if (!provider) return { periods: [], claims: [] };
   const logs = await _recentRedemptionLogs(provider, player);
   const periods = new Map();
@@ -319,9 +389,16 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
       }
     } catch (_e) { /* unknown log */ }
   }
-  const states = await Promise.all([...periods].map(async ([periodIndex, sdgnrsAmount]) => {
+  const wantedPeriods = new Set(periods.keys());
+  for (const periodIndex of Array.isArray(periodIndexes) ? periodIndexes : []) {
+    const period = Number(periodIndex);
+    if (Number.isInteger(period) && period >= 0 && period <= 0xFFFFFF) wantedPeriods.add(period);
+  }
+  const states = await Promise.all([...wantedPeriods].map(async (periodIndex) => {
     const state = await readSdgnrsRedemptionState({ player, periodIndex });
-    return state ? { ...state, sdgnrsAmount } : null;
+    return state
+      ? { ...state, sdgnrsAmount: periods.has(periodIndex) ? periods.get(periodIndex) : null }
+      : null;
   }));
   return {
     periods: states.filter((state) => state?.exists),
@@ -340,13 +417,13 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
  * @param {{amount: bigint|string|number, publicRead?: boolean}} args
  * @returns {Promise<{ethOut: bigint, flipOut: bigint}|null>}
  */
-export async function previewSdgnrsBurn({ amount, publicRead = false } = {}) {
+export async function previewSdgnrsBurn({ amount, publicRead: _publicRead = false } = {}) {
   let amountWei;
   try { amountWei = BigInt(amount); }
   catch (_e) { return null; }
   if (amountWei <= 0n) return null;
 
-  const provider = getProvider() || (publicRead ? sharedReadProvider() : null);
+  const provider = _readProvider();
   if (!provider) return null;
   const result = await _buildContract(provider).previewBurnValue(amountWei);
   return {

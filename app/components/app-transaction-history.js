@@ -6,7 +6,7 @@
 import { fetchJSON } from '../app/api.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from '../app/chain-config.js';
 import { ethers, getProvider } from '../app/contracts.js';
-import { sharedReadProvider } from '../app/read-provider.js';
+import { permissionlessReadProvider, readProviderBlockNumber } from '../app/read-provider.js';
 import { dgnPartitionTicketEntries } from '../app/dgn-traits.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, subscribe } from '../app/store.js';
@@ -28,6 +28,8 @@ const JACKPOT_BLOCK_LOOKUPS = 6;
 const SOURCE_PAGE_CAP = 200;
 const RPC_BATCH_SIZE = 50;
 const AFKING_LOG_CHUNK_BLOCKS = 1_800;
+const AFKING_LOG_REORG_BLOCKS = 12;
+const AFKING_HISTORY_CURSOR_CAP = 16;
 const HISTORY_TICKETS_PER_PACK = 10;
 const TOKEN_UNIT = 10n ** 18n;
 const ASSET_ORDER = Object.freeze([
@@ -75,6 +77,7 @@ const AFKING_HISTORY_ABI = Object.freeze([
   'event LazyPassPurchased(address indexed buyer,uint24 startLevel,uint256 weiIn)',
   'event DeityPassPurchased(address indexed buyer,uint8 symbolId,uint256 price,uint24 level)',
 ]);
+const _afkingHistoryCursors = new Map();
 
 function _lower(value) {
   return String(value || '').toLowerCase();
@@ -102,11 +105,7 @@ function _chronology(blockNumber, logIndex = 0) {
 }
 
 function _historyReadProvider() {
-  const connected = getProvider();
-  if (connected && typeof connected.getLogs === 'function') return connected;
-  // getLogs passes straight through the shared provider (the read cache only
-  // wraps .call), so history fetches stay live while joining its batches.
-  return sharedReadProvider();
+  return permissionlessReadProvider(getProvider());
 }
 
 function _eventItem(log, parsed) {
@@ -153,39 +152,72 @@ export async function loadAfkingPurchaseHistory(address, { provider = null } = {
     || typeof reader.getLogs !== 'function'
     || !CONTRACTS?.GAME) return { items: [] };
 
-  const iface = new ethers.Interface(AFKING_HISTORY_ABI);
-  const eventTopics = [
-    'SubscriptionUpdated', 'AfkingDelivered', 'LootBoxBuy',
-    'WhalePassPurchased', 'LazyPassPurchased', 'DeityPassPurchased',
-  ]
-    .map((name) => iface.getEvent(name)?.topicHash)
-    .filter(Boolean);
-  const playerTopic = ethers.zeroPadValue(owner, 32);
-  const head = Number(await reader.getBlockNumber());
   const deployBlock = Math.max(0, Number(CHAIN?.deployBlock) || 0);
-  if (!Number.isInteger(head) || head < deployBlock) return { items: [] };
-
-  const items = [];
-  for (let fromBlock = deployBlock; fromBlock <= head; fromBlock += AFKING_LOG_CHUNK_BLOCKS) {
-    const toBlock = Math.min(head, fromBlock + AFKING_LOG_CHUNK_BLOCKS - 1);
-    const logs = await reader.getLogs({
-      address: CONTRACTS.GAME,
-      topics: [eventTopics, playerTopic],
-      fromBlock,
-      toBlock,
-    });
-    for (const log of Array.isArray(logs) ? logs : []) {
-      try {
-        const parsed = iface.parseLog(log);
-        if (parsed) items.push(_eventItem(log, parsed));
-      } catch (_e) { /* one malformed log does not blank the rest of history */ }
+  const cursorKey = `${Number(CHAIN?.id) || 0}:${owner}`;
+  let state = _afkingHistoryCursors.get(cursorKey);
+  if (!state || state.provider !== reader) {
+    state = { provider: reader, scannedTo: null, items: new Map(), pending: null };
+    _afkingHistoryCursors.set(cursorKey, state);
+    while (_afkingHistoryCursors.size > AFKING_HISTORY_CURSOR_CAP) {
+      _afkingHistoryCursors.delete(_afkingHistoryCursors.keys().next().value);
     }
+  } else {
+    _afkingHistoryCursors.delete(cursorKey);
+    _afkingHistoryCursors.set(cursorKey, state);
   }
-  items.sort((a, b) => (
-    Number(a.blockNumber || 0) - Number(b.blockNumber || 0)
-    || Number(a.logIndex || 0) - Number(b.logIndex || 0)
-  ));
-  return { items };
+  if (state.pending) return state.pending;
+
+  state.pending = (async () => {
+    const iface = new ethers.Interface(AFKING_HISTORY_ABI);
+    const eventTopics = [
+      'SubscriptionUpdated', 'AfkingDelivered', 'LootBoxBuy',
+      'WhalePassPurchased', 'LazyPassPurchased', 'DeityPassPurchased',
+    ]
+      .map((name) => iface.getEvent(name)?.topicHash)
+      .filter(Boolean);
+    const playerTopic = ethers.zeroPadValue(owner, 32);
+    const head = Number(await readProviderBlockNumber(reader, { maxAgeMs: 0 }));
+    if (!Number.isInteger(head) || head < deployBlock) return { items: [] };
+
+    // Keep settled history and replace only a small overlap. That makes a
+    // refresh O(new blocks), while still repairing shallow Base reorgs.
+    const fromStart = state.scannedTo == null
+      ? deployBlock
+      : Math.max(deployBlock, Math.min(head, state.scannedTo) - AFKING_LOG_REORG_BLOCKS + 1);
+    const nextItems = new Map(
+      [...state.items].filter(([, item]) => Number(item.blockNumber || 0) < fromStart),
+    );
+    for (let fromBlock = fromStart; fromBlock <= head; fromBlock += AFKING_LOG_CHUNK_BLOCKS) {
+      const toBlock = Math.min(head, fromBlock + AFKING_LOG_CHUNK_BLOCKS - 1);
+      const logs = await reader.getLogs({
+        address: CONTRACTS.GAME,
+        topics: [eventTopics, playerTopic],
+        fromBlock,
+        toBlock,
+      });
+      for (const log of Array.isArray(logs) ? logs : []) {
+        try {
+          const parsed = iface.parseLog(log);
+          if (!parsed) continue;
+          const item = _eventItem(log, parsed);
+          const identity = `${item.transactionHash}:${item.logIndex}`;
+          nextItems.set(identity, item);
+        } catch (_e) { /* one malformed log does not blank the rest of history */ }
+      }
+    }
+    state.items = nextItems;
+    state.scannedTo = head;
+    const items = [...nextItems.values()].sort((a, b) => (
+      Number(a.blockNumber || 0) - Number(b.blockNumber || 0)
+      || Number(a.logIndex || 0) - Number(b.logIndex || 0)
+    ));
+    return { items };
+  })();
+  try {
+    return await state.pending;
+  } finally {
+    state.pending = null;
+  }
 }
 
 export function gameDayForHistoryTimestamp(timestampMs) {

@@ -137,7 +137,7 @@ function _install(host) {
     if (event?.key === 'affiliate-ref') _syncCode();
   });
   window.addEventListener?.('focus', _syncVisibility);
-  _visibilityPoll = registerComponentPoll(() => { void _syncVisibility(); }, VISIBILITY_POLL_MS);
+  _visibilityPoll = registerComponentPoll(() => _syncVisibility(), VISIBILITY_POLL_MS);
   _unsub = subscribe('connected.address', () => {
     _syncCode();
     void _syncVisibility();

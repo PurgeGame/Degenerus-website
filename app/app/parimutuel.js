@@ -30,7 +30,8 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { permissionlessReadProvider, readProviderBlockNumber } from './read-provider.js';
+import { readPurchaseInfo } from './purchase-info.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures from DegenerusParimutuel.sol.
@@ -171,13 +172,10 @@ function _buildContract(signerOrProvider) {
   return new ethers.Contract(CONTRACTS.PARIMUTUEL, PARIMUTUEL_ABI, signerOrProvider);
 }
 
-// Wallet provider when one is attached, else the chain's public RPC. Cached so a
-// 5s poll cycle does not rebuild a JsonRpcProvider per tick.
+// Permissionless reads stay on the shared batched/failover transport even when
+// a wallet is connected. The wallet remains exclusive to write simulations.
 function _readerProvider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
-  if (!_readProvider) _readProvider = sharedReadProvider();  // C15: shared batched read stream
-  return _readProvider;
+  return permissionlessReadProvider(getProvider());
 }
 
 function _readContract() {
@@ -315,18 +313,26 @@ export async function readGrowthRatchetHistory({ throughLevel } = {}) {
 export async function readJackpotPhaseContext() {
   try {
     const contract = _gameContract();
-    let jackpot;
+    const [purchaseResult, compressionResult] = await Promise.allSettled([
+      _gameFactory
+        ? contract.purchaseInfo()
+        : readPurchaseInfo({ provider: _readerProvider() }),
+      contract.jackpotCompressionTier(),
+    ]);
+    let jackpot = null;
     let lastPurchaseDay = null;
     let level = null;
     let rngLocked = null;
-    try {
-      const purchase = await contract.purchaseInfo();
-      const rawLevel = Number(purchase?.lvl ?? purchase?.[0]);
+    if (purchaseResult.status === 'fulfilled' && purchaseResult.value) {
+      const purchase = purchaseResult.value;
+      const rawLevel = Number(purchase?.currentLevel ?? purchase?.lvl ?? purchase?.[0]);
       level = Number.isInteger(rawLevel) && rawLevel >= 0 ? rawLevel : null;
       jackpot = Boolean(purchase?.inJackpotPhase ?? purchase?.[1]);
-      lastPurchaseDay = Boolean(purchase?.lastPurchaseDay_ ?? purchase?.[2]);
-      rngLocked = Boolean(purchase?.rngLocked_ ?? purchase?.[3]);
-    } catch (_e) {
+      lastPurchaseDay = Boolean(
+        purchase?.lastPurchaseDay ?? purchase?.lastPurchaseDay_ ?? purchase?.[2],
+      );
+      rngLocked = Boolean(purchase?.rngLocked ?? purchase?.rngLocked_ ?? purchase?.[3]);
+    } else {
       // Rolling-deploy fallback for an older reader/ABI.
       jackpot = Boolean(await contract.jackpotPhase());
     }
@@ -336,10 +342,10 @@ export async function readJackpotPhaseContext() {
     // `??`, which does not fall through a 0 — so one bad read masked a live
     // turbo/compressed phase behind a five-day label.
     let compressedFlag = null;
-    try {
-      const tier = Number(await contract.jackpotCompressionTier());
+    if (compressionResult.status === 'fulfilled') {
+      const tier = Number(compressionResult.value);
       if (Number.isInteger(tier) && tier >= 0) compressedFlag = tier;
-    } catch (_e) { /* old deploy / transient read: leave the tier unknown */ }
+    }
     return { level, jackpot, lastPurchaseDay, rngLocked, compressedFlag };
   } catch (_e) {
     return null;
@@ -545,7 +551,7 @@ export async function readRoundWinners({
   const found = new Map();
 
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return []; }
   if (!Number.isFinite(head) || head < 0) return [];
 

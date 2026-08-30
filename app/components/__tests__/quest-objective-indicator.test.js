@@ -104,6 +104,39 @@ describe('<quest-objective-indicator>', () => {
     assert.match(model.title, /level: buy luckbox/i);
   });
 
+  test('role-scoped purchase markers separate single purchases from level purchases', () => {
+    const payload = { quests: [
+      { questType: 1, role: 'DAILY', label: 'Buy a Ticket or Luckbox', completed: false },
+      { questType: 1, role: 'LEVEL', label: 'Buy a Ticket or Luckbox', completed: false },
+    ] };
+    const single = questObjectiveIndicatorModel(payload, 'purchase', 'DAILY,BONUS');
+    const level = questObjectiveIndicatorModel(payload, 'purchase', 'LEVEL');
+    assert.equal(single.count, 1);
+    assert.match(single.title, /daily: buy a ticket or luckbox/i);
+    assert.doesNotMatch(single.title, /level:/i);
+    assert.equal(level.count, 1);
+    assert.match(level.title, /level: buy a ticket or luckbox/i);
+    assert.doesNotMatch(level.title, /daily:/i);
+
+    const singleMarker = new QuestObjectiveIndicator();
+    singleMarker.setAttribute('product', 'purchase');
+    singleMarker.setAttribute('quest-roles', 'DAILY,BONUS');
+    singleMarker.connectedCallback();
+    const levelMarker = new QuestObjectiveIndicator();
+    levelMarker.setAttribute('product', 'purchase');
+    levelMarker.setAttribute('quest-roles', 'LEVEL');
+    levelMarker.connectedCallback();
+    storeMod.update('ui.questObjectives', payload);
+    assert.equal(singleMarker.hidden, false);
+    assert.match(singleMarker.title, /daily:/i);
+    assert.doesNotMatch(singleMarker.title, /level:/i);
+    assert.equal(levelMarker.hidden, false);
+    assert.match(levelMarker.title, /level:/i);
+    assert.doesNotMatch(levelMarker.title, /daily:/i);
+    singleMarker.disconnectedCallback();
+    levelMarker.disconnectedCallback();
+  });
+
   test('previews only rewards this exact action will complete', () => {
     const unit = 10n ** 18n;
     const payload = { quests: [

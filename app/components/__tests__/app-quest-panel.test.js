@@ -797,7 +797,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('the Craps day-pass level quest is named, clickable, and routes to its paid buy-in', async () => {
+  test('the Craps day level quest is named, clickable, and routes to its paid buy-in', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);
     document.addEventListener('quest:activate', listener);
@@ -815,22 +815,30 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     await settle(40);
 
     const level = el.querySelectorAll('.qst-slot')[2];
-    assert.match(level.textContent, /Buy a Craps Day Pass/);
-    assert.match(level.textContent, /0 day passes \/ 1 day pass/);
-    assert.equal(level.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+    assert.match(level.textContent, /Buy a Craps Day/);
+    assert.match(level.textContent, /0 day entries \/ 1 day entry/);
+    assert.equal(level.querySelector('.qst-painted-icon__craps-front')?.src,
       '/badges-circular/dice_04_5_gold.svg',
       'the Craps level quest uses the gold 5 die');
+    assert.equal(level.querySelector('.qst-painted-icon__craps-back')?.src,
+      '/badges-circular/dice_01_2_blue.svg',
+      'the Craps level quest layers the blue 2 behind its 5 die');
     assert.equal(level.classList.contains('qst-slot--actionable'), true);
     assert.equal(level.getAttribute('role'), 'button');
     level.dispatchEvent({ type: 'click' });
 
     assert.equal(el.querySelector('[data-bind="qst-action-dialog"]').hidden, false);
+    const actionIcon = el.querySelector('[data-bind="qst-action-icon"]');
+    assert.equal(actionIcon.querySelector('.qst-painted-icon__craps-front')?.src,
+      '/badges-circular/dice_04_5_gold.svg');
+    assert.equal(actionIcon.querySelector('.qst-painted-icon__craps-back')?.src,
+      '/badges-circular/dice_01_2_blue.svg');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'BUY CRAPS DAY PASS',
+      'BUY CRAPS DAY',
     );
     assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      /Buy one future Craps day with FLIP/);
+      /Buy one future Craps day with FLIP\. Awarded comps stay banked/);
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
       questType: 11,
@@ -860,9 +868,12 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     const daily = el.querySelectorAll('.qst-slot')[0];
     assert.match(daily.textContent, /Join a Craps Battle/);
-    assert.equal(daily.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+    assert.equal(daily.querySelector('.qst-painted-icon__craps-front')?.src,
       '/badges-circular/dice_04_5_silver.svg',
       'the daily Craps quest uses the silver 5 die');
+    assert.equal(daily.querySelector('.qst-painted-icon__craps-back')?.src,
+      '/badges-circular/dice_01_2_blue.svg',
+      'the daily Craps quest layers the blue 2 behind its silver 5');
     el.disconnectedCallback();
   });
 

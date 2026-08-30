@@ -33,7 +33,12 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readContractStorage,
+  readProviderBlockNumber,
+} from './read-provider.js';
+import { readPurchaseInfo } from './purchase-info.js';
 import { getActingAddress } from './store.js';
 
 // ---------------------------------------------------------------------------
@@ -384,15 +389,7 @@ export function __resetBiggestFlipReaderForTest() {
 }
 
 function _readerProvider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
-  if (!_publicReadProvider && CHAIN.rpcUrl) {
-    // C15: the shared provider coalesces the whole mount wave into a few
-    // batch POSTs — kinder to the public RPC than this module's old
-    // batching-disabled private provider.
-    _publicReadProvider = sharedReadProvider();
-  }
-  return _publicReadProvider;
+  return permissionlessReadProvider(getProvider());
 }
 
 function _stakeReadContract(provider) {
@@ -434,11 +431,7 @@ async function _readBafPurchaseInfo() {
     try {
       return _bafFlipEveReader
         ? await _bafFlipEveReader()
-        : await new ethers.Contract(
-          CONTRACTS.GAME,
-          GAME_BAF_EVE_READ_ABI,
-          _readerProvider(),
-        ).purchaseInfo();
+        : await readPurchaseInfo();
     } catch (_e) {
       return null;
     }
@@ -501,10 +494,10 @@ export async function readUpcomingFlipBonus() {
         if (!provider || !CONTRACTS.GAME) return null;
         const game = new ethers.Contract(CONTRACTS.GAME, GAME_FLIP_BONUS_READ_ABI, provider);
         let blockTag = null;
-        try { blockTag = await provider.getBlockNumber(); } catch (_e) { /* latest is acceptable */ }
+        try { blockTag = await readProviderBlockNumber(provider); } catch (_e) { /* latest is acceptable */ }
         const overrides = blockTag == null ? [] : [{ blockTag }];
         const [purchaseInfo, compressionTier, growthState] = await Promise.all([
-          game.purchaseInfo(...overrides),
+          readPurchaseInfo({ provider, blockTag }),
           game.jackpotCompressionTier(...overrides),
           game.growthState(0, ...overrides),
         ]);
@@ -650,7 +643,7 @@ export async function readLatestCoinflipResult() {
       const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
       let overrides = [];
       if (typeof provider.getBlockNumber === 'function') {
-        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        try { overrides = [{ blockTag: await readProviderBlockNumber(provider) }]; }
         catch (_e) { /* unpinned best effort */ }
       }
       const currentDay = Number(await game.currentDayView(...overrides));
@@ -756,7 +749,7 @@ export async function readFlipWidgetBalances({ player } = {}) {
       if (!provider) return null;
       let overrides = [];
       if (typeof provider.getBlockNumber === 'function') {
-        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        try { overrides = [{ blockTag: await readProviderBlockNumber(provider) }]; }
         catch (_e) { /* unpinned best effort */ }
       }
       const flip = new ethers.Contract(CONTRACTS.COIN, ERC20_BALANCE_ABI, provider);
@@ -881,7 +874,7 @@ export async function readReverseFlipQuote() {
         }
       }
       const [packedSlot, locked] = await Promise.all([
-        provider.getStorage(CONTRACTS.GAME, REVERSE_FLIP_STORAGE_SLOT),
+        readContractStorage(CONTRACTS.GAME, REVERSE_FLIP_STORAGE_SLOT, { provider }),
         game.rngLocked(),
       ]);
       const queued = BigInt(packedSlot) & UINT64_MASK;
@@ -991,7 +984,7 @@ export async function readCoinflipAutoRebuyInfo({ player } = {}) {
       if (!provider || !CONTRACTS.COINFLIP) return null;
       let overrides = [];
       if (typeof provider.getBlockNumber === 'function') {
-        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        try { overrides = [{ blockTag: await readProviderBlockNumber(provider) }]; }
         catch (_e) { /* an unpinned best-effort read is still useful */ }
       }
       return normalizeCoinflipAutoRebuyInfo(
@@ -1047,7 +1040,7 @@ export async function readCurrentCoinflipStake({ player } = {}) {
       // value and briefly double-count (or omit) the carry.
       let readOverrides = [];
       if (typeof provider.getBlockNumber === 'function') {
-        try { readOverrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        try { readOverrides = [{ blockTag: await readProviderBlockNumber(provider) }]; }
         catch (_e) { /* an unpinned best-effort read is still useful */ }
       }
       const canReplayCarry = typeof coinflip.previewClaimCoinflips === 'function'
@@ -1181,7 +1174,7 @@ async function _resolveBiggestFlipLocator(contract, provider, recordWei) {
   const recordFilter = contract.filters?.BiggestFlipUpdated?.();
   if (!recordFilter) return null;
 
-  const head = Number(await provider.getBlockNumber());
+  const head = Number(await readProviderBlockNumber(provider));
   const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
   const lowerBlock = cached?.blockNumber >= deployBlock ? cached.blockNumber : deployBlock;
   let recordLog = await _latestLog(contract, recordFilter, lowerBlock, head);
@@ -1455,7 +1448,7 @@ export async function readCoinflipDisplaySnapshot({ player, blockTag = null } = 
       if (!provider || !CONTRACTS.COINFLIP) return null;
       let snapshotBlock = blockTag;
       if (snapshotBlock == null && typeof provider.getBlockNumber === 'function') {
-        try { snapshotBlock = await provider.getBlockNumber(); }
+        try { snapshotBlock = await readProviderBlockNumber(provider); }
         catch (_e) { /* retain an unpinned best-effort snapshot */ }
       }
       const overrides = snapshotBlock == null ? [] : [{ blockTag: snapshotBlock }];
@@ -1564,7 +1557,7 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
       const provider = _readerProvider();
       if (!provider || !CONTRACTS.COINFLIP) return null;
       const contract = _stakeReadContract(provider);
-      const head = Number(await provider.getBlockNumber());
+      const head = Number(await readProviderBlockNumber(provider));
       const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
       const resolved = await _latestLog(
         contract,

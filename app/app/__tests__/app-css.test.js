@@ -328,6 +328,10 @@ describe('app.css LOC budget', () => {
     // 24700 → 25000 covers the player-funds dialog (.pfd-*) and the coinflip
     // auto-rebuy dialog reaching their finished card layouts. Both are existing
     // surfaces gaining their real chrome, not new families; ~290 lines remain.
-    assert.ok(cssLines.length <= 25000, `total <=25000, got ${cssLines.length}`);
+    // 25000 → 25050 for the craps lobby's combined TOMORROW range cell and the
+    // Discord winner identity (.craps-entry__tomorrow-range / __winner-pfp):
+    // five deliberate lines on an existing surface, landed with one line of
+    // headroom left in the previous budget.
+    assert.ok(cssLines.length <= 25_050, `total <=25050, got ${cssLines.length}`);
   });
 });

@@ -41,6 +41,7 @@
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { getProvider } from '../app/contracts.js';
+import { permissionlessReadProvider, readProviderBlockNumber } from '../app/read-provider.js';
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
@@ -3299,9 +3300,9 @@ class AppDegenerettePanel extends HTMLElement {
     const tick = async () => {
       if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
       try {
-        const provider = getProvider();
+        const provider = permissionlessReadProvider(getProvider());
         if (provider && typeof provider.getBlockNumber === 'function') {
-          const block = Number(await provider.getBlockNumber());
+          const block = Number(await readProviderBlockNumber(provider));
           if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
           if (Number.isInteger(block) && block > 0) {
             const previousStart = this.#rngRequestBlock;
@@ -3517,8 +3518,8 @@ class AppDegenerettePanel extends HTMLElement {
       }
       if (requestAccepted && requestBlock <= 0) {
         try {
-          const provider = getProvider();
-          const observed = Number(await provider?.getBlockNumber?.());
+          const provider = permissionlessReadProvider(getProvider());
+          const observed = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 }));
           if (Number.isInteger(observed) && observed > 0) requestBlock = observed;
         } catch (_e) { /* a later block poll can establish the baseline */ }
       }

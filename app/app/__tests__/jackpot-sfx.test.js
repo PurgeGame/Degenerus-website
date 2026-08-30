@@ -12,13 +12,16 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   SFX_MUTE_KEY,
+  CRAPS_CHIP_SAMPLE_PATHS,
   isMuted,
   setMuted,
   toggleMuted,
   warmup,
+  preloadCrapsChipSamples,
   sfxSpinStart,
   sfxTick,
   sfxMatchLock,
@@ -33,6 +36,12 @@ import {
   sfxCoinflipTurn,
   sfxCoinflipLand,
   sfxQuestComplete,
+  sfxCrapsBetPlace,
+  sfxCrapsBonusShooter,
+  sfxCrapsDiceTick,
+  sfxCrapsDiceLand,
+  sfxCrapsDouble,
+  sfxCrapsSettlement,
   __resetForTest,
 } from '../jackpot-sfx.js';
 
@@ -130,6 +139,28 @@ class FakeNoiseAudioContext extends FakeAudioContext {
   }
 }
 
+class FakeSampleAudioContext extends FakeNoiseAudioContext {
+  constructor() {
+    super();
+    this.decoded = [];
+  }
+  decodeAudioData(bytes) {
+    const buffer = { duration: 0.64, byteLength: bytes.byteLength };
+    this.decoded.push(buffer);
+    return Promise.resolve(buffer);
+  }
+  createBufferSource() {
+    const source = super.createBufferSource();
+    source.starts = [];
+    source.playbackRate = {
+      values: [],
+      setValueAtTime(value, at) { this.values.push({ value, at }); },
+    };
+    source.start = (...args) => source.starts.push(args);
+    return source;
+  }
+}
+
 describe('headless safety (no AudioContext / no localStorage)', () => {
   beforeEach(() => {
     delete globalThis.AudioContext;
@@ -161,6 +192,13 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
       sfxCoinflipLand(true);
       sfxCoinflipLand(false);
       sfxQuestComplete();
+      sfxCrapsBetPlace();
+      sfxCrapsBonusShooter();
+      sfxCrapsDiceTick(2, 17);
+      sfxCrapsDiceLand({ total: 7, sevenOutcome: 'win' });
+      sfxCrapsDouble();
+      sfxCrapsSettlement('opponent');
+      sfxCrapsSettlement('sweep');
     });
   });
 
@@ -171,6 +209,60 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
   test('setMuted without localStorage does not throw', () => {
     assert.doesNotThrow(() => setMuted(true));
   });
+
+  test('sample preloading is a guarded no-op without a browser', async () => {
+    assert.equal(await preloadCrapsChipSamples(), false);
+  });
+});
+
+test('the real CC0 craps chip recordings ship with the app', () => {
+  for (const assetPath of Object.values(CRAPS_CHIP_SAMPLE_PATHS)) {
+    const assetUrl = new URL(`../../${assetPath.slice('/app/'.length)}`, import.meta.url);
+    assert.ok(fs.statSync(assetUrl).size > 2_000, `${assetPath} contains recorded audio`);
+  }
+  assert.ok(fs.readFileSync(new URL('../../sounds/craps/LICENSE.md', import.meta.url), 'utf8').includes('CC0'));
+});
+
+test('decoded recordings replace the synthesized chip fallback', async () => {
+  const fetched = [];
+  globalThis.localStorage = makeLocalStorage();
+  globalThis.window = {};
+  globalThis.fetch = async (path) => {
+    fetched.push(path);
+    return {
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    };
+  };
+  globalThis.AudioContext = FakeSampleAudioContext;
+  __resetForTest();
+
+  try {
+    assert.equal(await preloadCrapsChipSamples(), true);
+    warmup();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const ctx = FakeAudioContext.last;
+    assert.deepEqual(fetched, Object.values(CRAPS_CHIP_SAMPLE_PATHS));
+    assert.equal(ctx.decoded.length, 2, 'both chip recordings decode once');
+
+    sfxCrapsSettlement('collect');
+    assert.equal(ctx.bufferSources.length, 2, 'local payout layers two real recordings');
+    assert.equal(ctx.oscillators.length, 0, 'the synthesized fallback stays silent');
+
+    sfxCrapsSettlement('opponent');
+    assert.equal(ctx.bufferSources.length, 3, 'opponent payout uses its quieter recording');
+    sfxCrapsBetPlace();
+    assert.equal(ctx.bufferSources.length, 4, 'bet placement uses a short recorded contact');
+    sfxCrapsDouble();
+    assert.equal(ctx.bufferSources.length, 6, 'doubling plays the physical one-to-two stack rhythm');
+  } finally {
+    __resetForTest();
+    delete globalThis.window;
+    delete globalThis.fetch;
+    delete globalThis.AudioContext;
+    delete globalThis.localStorage;
+  }
 });
 
 describe('mute persistence', () => {
@@ -309,6 +401,87 @@ describe('cues with a stubbed AudioContext', () => {
     assert.equal(FakeAudioContext.last.oscillators.length - before, 2);
   });
 
+  test('every craps total has a distinct result pitch', () => {
+    warmup();
+    const pitches = [];
+    const landingBodies = [];
+    for (let total = 2; total <= 12; total += 1) {
+      const before = FakeAudioContext.last.oscillators.length;
+      sfxCrapsDiceLand({ total });
+      const cue = FakeAudioContext.last.oscillators.slice(before);
+      assert.equal(cue.length, 4, `total ${total} has one tone after the three-part landing`);
+      landingBodies.push(cue[0].frequency.values[0].value);
+      pitches.push(cue.at(-1).frequency.values[0].value);
+    }
+    assert.equal(new Set(landingBodies).size, 11,
+      'the physical completion beat itself is subtly tuned for every total');
+    assert.equal(new Set(pitches).size, 11, 'totals 2–12 have eleven different tones');
+    assert.ok(pitches.every((pitch, index) => index === 0 || pitch > pitches[index - 1]),
+      'the outcome palette rises consistently with the dice total');
+  });
+
+  test('craps roll, landing, seven, and table-action cues stay short and distinct', () => {
+    warmup();
+    const sample = (cue) => {
+      const before = FakeAudioContext.last.oscillators.length;
+      cue();
+      return FakeAudioContext.last.oscillators.length - before;
+    };
+    assert.equal(sample(() => sfxCrapsDiceTick(2, 17)), 1,
+      'a motion clack has one damped resin body');
+    assert.equal(sample(() => sfxCrapsDiceLand()), 3,
+      'an ordinary landing stays physical rather than musical');
+    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, sevenOutcome: 'win' })), 6,
+      'a come-out seven adds its total tone and a two-note rise');
+    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, sevenOutcome: 'crap-out' })), 6,
+      'seven-out adds its total tone and a two-note fall');
+    assert.equal(sample(() => sfxCrapsSettlement('collect')), 3,
+      'a whole payout is one three-click ceramic cue');
+    assert.equal(sample(() => sfxCrapsSettlement('opponent')), 2,
+      'an opponent payout is a darker two-click cue');
+    assert.equal(sample(() => sfxCrapsSettlement('sweep')), 2,
+      'a whole loss is one scrape with two falling chip bodies');
+    assert.equal(sample(() => sfxCrapsBetPlace()), 1,
+      'placing bets is a single felt-muted chip contact');
+    assert.equal(sample(() => sfxCrapsDouble()), 3,
+      'doubling speaks as one stack becoming two');
+    assert.equal(sample(() => sfxCrapsBonusShooter()), 3,
+      'bonus shooter has its own three-part metallic badge cue');
+  });
+
+  test('payouts use broadband chip impacts instead of bare beeps', () => {
+    globalThis.AudioContext = FakeNoiseAudioContext;
+    __resetForTest();
+    warmup();
+    sfxCrapsSettlement('collect');
+    const localNoiseCount = FakeAudioContext.last.bufferSources.length;
+    const localFrequencies = FakeAudioContext.last.oscillators
+      .map((osc) => osc.frequency.values[0].value);
+    sfxCrapsSettlement('opponent');
+    const opponentNoiseCount = FakeAudioContext.last.bufferSources.length - localNoiseCount;
+    const opponentFrequencies = FakeAudioContext.last.oscillators
+      .slice(localFrequencies.length)
+      .map((osc) => osc.frequency.values[0].value);
+    assert.equal(localNoiseCount, 3, 'the local rack gets three ceramic transients');
+    assert.equal(opponentNoiseCount, 2, 'the opponent rack gets two ceramic transients');
+    assert.ok(Math.max(...opponentFrequencies) < Math.min(...localFrequencies),
+      'opponent chips are audibly darker than local chips');
+  });
+
+  test('payout impact weight scales through small, medium, large, and huge chip wins', () => {
+    warmup();
+    const contacts = (chips) => {
+      const before = FakeAudioContext.last.oscillators.length;
+      sfxCrapsSettlement('collect', chips);
+      return FakeAudioContext.last.oscillators.length - before;
+    };
+    assert.deepEqual(
+      [contacts(1), contacts(6), contacts(18), contacts(64)],
+      [1, 3, 5, 7],
+      'one table-level cue gains ceramic contacts instead of playing once per chip',
+    );
+  });
+
   test('muted → no context, no oscillators', () => {
     setMuted(true);
     warmup();
@@ -326,6 +499,13 @@ describe('cues with a stubbed AudioContext', () => {
     sfxCoinflipTurn(true, 1);
     sfxCoinflipLand(false);
     sfxQuestComplete();
+    sfxCrapsBetPlace();
+    sfxCrapsBonusShooter();
+    sfxCrapsDiceTick(0, 9);
+    sfxCrapsDiceLand({ total: 7, sevenOutcome: 'crap-out' });
+    sfxCrapsDouble();
+    sfxCrapsSettlement('opponent');
+    sfxCrapsSettlement('collect');
     assert.equal(FakeAudioContext.created, 0, 'muted cues never touch WebAudio');
   });
 

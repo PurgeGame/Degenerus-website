@@ -76,7 +76,7 @@
   <link rel="stylesheet" href="/app/styles/viewer.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/app.css?v=reveal-controls-20260829">
   <link rel="stylesheet" href="/app/styles/sdgnrs-burn-rail.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css">
@@ -114,6 +114,7 @@
       "gsap/Flip": "/app/vendor/gsap-flip.mjs",
       "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
       "lean-qr": "/app/vendor/lean-qr.mjs",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-20260829",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
   }
@@ -197,9 +198,6 @@
               <span class="gr__brand-copy">
                 <strong>DEGENERUS</strong>
                 <small>PROTOCOL</small>
-                <span class="gr__bounty-pool" data-el="bounty-pool" hidden>
-                  <span>BOUNTY POOL</span><b data-el="bounty-pool-amount">—</b><em>FLIP</em>
-                </span>
               </span>
             </span>
             <span class="gr__masthead-divider" aria-hidden="true"></span>
@@ -470,7 +468,10 @@
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
-  <script type="module" src="/app/components/reveal-overlay.js"></script>
+  <!-- Enter through the import map so the eager tag and every relative
+       importer share one cache-revised RevealOverlay singleton. A direct src
+       here can leave old controls registered while newer CSS paints them. -->
+  <script type="module">import '/app/components/reveal-overlay.js';</script>
   <script type="module">
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
     //
@@ -523,17 +524,27 @@
       // it must never compete with the panels it measures.
       '/app/app/telemetry.js',
     ];
+    // A hard reload only applies its cache bypass to navigation-time fetches.
+    // These modules arrive later from an idle callback, so reused Firefox and
+    // Chromium profiles can otherwise keep different pre-edit generations of
+    // the same local panel. Give every lazy import in one localhost navigation
+    // a shared fresh URL; production retains its deliberate 60-second cache.
+    const DEV_MODULE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+    const moduleRevision = DEV_MODULE_HOSTS.has(window.location.hostname)
+      ? `?dev=${Date.now().toString(36)}`
+      : '';
+    const importModule = (src) => import(`${src}${moduleRevision}`);
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     for (const [detailsId, src] of LAZY_PANELS) {
       const host = document.getElementById(detailsId);
-      if (!host) { import(src); continue; }
+      if (!host) { importModule(src); continue; }
       let requested = false;
-      const load = () => { if (!requested) { requested = true; import(src); } };
+      const load = () => { if (!requested) { requested = true; importModule(src); } };
       host.addEventListener('toggle', load, { once: true });
       if (host.open) load();
       idle(load);
     }
-    idle(() => { for (const src of IDLE_MODULES) import(src); });
+    idle(() => { for (const src of IDLE_MODULES) importModule(src); });
   </script>
 </body>
 </html>

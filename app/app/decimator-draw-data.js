@@ -7,7 +7,7 @@
 // window is open. Raw FLIP destroyed comes from FLIP.DecimatorBurn.
 
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 import { ethers } from './contracts.js';
 import { readIndexedDecimatorWindowStartBlock } from './decimator.js';
 
@@ -200,7 +200,7 @@ export async function loadDecimatorDrawSnapshot({ level, player, fromBlock: know
   const topic = levelTopic(lvl);
   const resolvedEvent = gameInterface.getEvent('DecimatorResolved');
   const burnEvent = gameInterface.getEvent('DecBurnRecorded');
-  const head = Number(await reader.getBlockNumber());
+  const head = Number(await readProviderBlockNumber(reader));
   if (!Number.isInteger(head) || head < 0) {
     throw new Error('The latest Decimator block is unavailable.');
   }

@@ -17,7 +17,7 @@ import {
 } from './wwxrp-draw.js';
 import { clearPendingActions, publishPendingActions } from './pending-actions.js';
 import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
-import { sharedReadProvider } from './read-provider.js';
+import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
 
 const SOURCE = 'launch-claims';
@@ -268,7 +268,7 @@ async function _readPlayerFoilLevels(player) {
   if (!provider || !player || !CONTRACTS.GAME) return { levels: [], complete: false };
   const cache = _readFoilCache(player);
   let head;
-  try { head = Number(await provider.getBlockNumber()); }
+  try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return { levels: [...cache.levels], complete: false }; }
   let fromBlock = Math.max(Number(CHAIN.deployBlock || 0), Number(cache.throughBlock) + 1);
   if (fromBlock > head) return { levels: [...cache.levels], complete: true };

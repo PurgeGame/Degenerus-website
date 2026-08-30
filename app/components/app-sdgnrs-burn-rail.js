@@ -127,7 +127,7 @@ export class AppSdgnrsBurnRail extends HTMLElement {
       this.#refreshQuote();
     }));
 
-    this.#poll = registerComponentPoll(() => this.#queueRefresh(), POLL_MS);
+    this.#poll = registerComponentPoll(() => this.#refresh(), POLL_MS);
     if (typeof document !== 'undefined') {
       this.#txListener = () => this.#queueRefresh();
       document.addEventListener?.(TX_CONFIRMED_EVENT, this.#txListener);

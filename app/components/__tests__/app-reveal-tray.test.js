@@ -411,8 +411,11 @@ describe('<app-reveal-tray>', () => {
       id: 'craps-resolution:0xabc:battle:7',
       kind: 'craps',
       kindLabel: 'CRAPS FINAL',
-      label: 'Day 42 · Battle 2',
+      label: '200 FLIP\nBATTLE',
       detail: 'Settling · 87 of 120 resolved.',
+      icon: '/badges-circular/dice_04_5_silver.svg',
+      iconBack: '/badges-circular/dice_01_2_blue.svg',
+      compact: true,
       pinned: true,
       autoOpen: false,
     };
@@ -426,9 +429,16 @@ describe('<app-reveal-tray>', () => {
 
     let action = el.querySelector('.rrt-action--craps');
     assert.ok(action, 'the finalized owned run is visible while its replay is assembled');
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'CRAPS FINAL');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
-    assert.ok(action.querySelector('.rrt-action__glyph'), 'Craps has a dedicated dice glyph');
+    assert.ok(action.className.includes('rrt-action--compact'));
+    assert.equal(action.querySelector('.rrt-action__label').textContent, '200 FLIP\nBATTLE');
+    assert.equal(action.querySelector('.rrt-action__kind'), null);
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'the compact battle receipt has no trailing status or VIEW copy');
+    const crapsArt = action.querySelector('.rrt-action__art--craps');
+    assert.equal(crapsArt.querySelector('.rrt-action__icon-back').src,
+      '/badges-circular/dice_01_2_blue.svg');
+    assert.equal(crapsArt.querySelector('.rrt-action__icon-front').src,
+      '/badges-circular/dice_04_5_silver.svg');
 
     let opened = 0;
     pending.publishPendingActions(source, [{
@@ -439,11 +449,15 @@ describe('<app-reveal-tray>', () => {
       run: async () => { opened += 1; return true; },
     }]);
     action = el.querySelector('.rrt-action--craps');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
-    assert.match(action.getAttribute('aria-label'), /^VIEW: Day 42 · Battle 2/);
+    assert.equal(action.querySelector('.rrt-action__cta'), null);
+    assert.equal(action.getAttribute('aria-label'), '200 FLIP\nBATTLE');
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1, 'the ready receipt opens the owned replay result');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css,
+      /\.rrt-action--craps\.rrt-action--compact \.rrt-action__label\s*\{[^}]*white-space:\s*pre-line/s,
+      'the compact receipt preserves the requested line break');
     el.disconnectedCallback();
   });
 

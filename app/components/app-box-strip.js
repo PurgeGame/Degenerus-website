@@ -62,6 +62,7 @@ import {
   LOOTBOX_REVEAL_ABORT_EVENT,
 } from './reveal-overlay.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { permissionlessReadProvider, readTransactionReceipt } from '../app/read-provider.js';
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
@@ -86,11 +87,17 @@ async function _degeneretteChildResultKeys(rows, player) {
   ));
   if (candidates.length === 0) return new Set();
   let provider;
-  try { provider = getProvider(); } catch (_e) { return new Set(); }
+  try {
+    const connected = getProvider();
+    if (!connected
+      && (typeof window === 'undefined' || typeof window.fetch !== 'function')) return new Set();
+    provider = permissionlessReadProvider(connected);
+  } catch (_e) { return new Set(); }
+  if (!provider || typeof provider.getTransactionReceipt !== 'function') return new Set();
   const excluded = new Set();
   await Promise.all(candidates.map(async (row) => {
     try {
-      const receipt = await provider.getTransactionReceipt(row.transactionHash);
+      const receipt = await readTransactionReceipt(row.transactionHash, { provider });
       if (_samePlayerDegeneretteResolution(receipt, player)) excluded.add(_boxKey(row));
     } catch (_e) {
       // A transient RPC failure must not hide an otherwise actionable result.
@@ -494,6 +501,29 @@ function _needsReceiptRecovery(legs) {
     let flip = 0n;
     try { flip = BigInt(leg.flip ?? 0); } catch (_e) { /* malformed feed value */ }
     return Number(leg.wholeTickets ?? 0) === 0 && flip === 0n;
+  });
+}
+
+/**
+ * LootBoxOpened is the transaction anchor, not necessarily the prize: current
+ * boxes can pay entirely through a same-transaction aggregate event. If a feed
+ * projection or receipt decoder omits that companion event, do not consume the
+ * pending box until the normalized legs can produce a real reveal card;
+ * otherwise the overlay turns the cardless anchor into its legacy
+ * `0 TICKETS · 0 FLIP` fallback and retires it.
+ */
+export function lootboxResultLegsReadyForReveal(legs) {
+  if (!Array.isArray(legs) || legs.length === 0) return false;
+  return legs.some((leg) => {
+    if (!leg) return false;
+    if (leg.legType !== 'opened') return true;
+    let flip = 0n;
+    try { flip = BigInt(leg.flip ?? 0); } catch (_e) { /* malformed feed value */ }
+    return Number(leg.wholeTickets ?? 0) > 0
+      || Number(leg.futureTickets ?? 0) > 0
+      || flip > 0n
+      || Number(leg.crapsNormalPasses ?? 0) > 0
+      || Number(leg.crapsHighPasses ?? 0) > 0;
   });
 }
 
@@ -1279,14 +1309,15 @@ class AppBoxStrip extends HTMLElement {
     for (const box of syncing) box.ready = false;
     const recovered = await Promise.allSettled(syncing.map(async (box) => ({
       key: _boxKey(box),
-      legs: await this.#readResolvedBoxLegs(box),
+      result: await this.#readResolvedBoxResult(box),
     })));
     if (this.#addr !== owner) return;
     for (const result of recovered) {
-      if (result.status !== 'fulfilled' || result.value.legs.length === 0) continue;
+      if (result.status !== 'fulfilled' || result.value.result.legs.length === 0) continue;
       const box = this.#boxes.find((candidate) => _boxKey(candidate) === result.value.key);
       if (!box) continue;
-      const resultHash = result.value.legs.find((leg) => leg?.transactionHash)?.transactionHash;
+      const resultHash = result.value.result.legs
+        .find((leg) => leg?.transactionHash)?.transactionHash;
       if (resultHash) box.resultTransactionHash = String(resultHash).toLowerCase();
       box.ready = true;
       box.resultSyncing = false;
@@ -1304,12 +1335,13 @@ class AppBoxStrip extends HTMLElement {
     this.#clearError();
     try {
       if (box.resolved) {
-        return await this.#replayResolvedBox(box);
+        return (await this.#replayResolvedBox(box)) === 'revealed';
       }
       // The indexer can learn about a settlement between polling cycles (or
       // while the connected RPC is still serving the pre-settlement block).
       // Prefer that immutable result before consulting the exact write probe.
-      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return true;
+      const indexedReplay = await this.#replayResolvedBox(box, { silentIfMissing: true });
+      if (indexedReplay !== 'missing') return indexedReplay === 'revealed';
       // Never open from a stale UI snapshot. This exact-player static call is
       // the only current GAME read that proves the box is ready and pending.
       const probe = await probeOpenLootbox({
@@ -1354,15 +1386,16 @@ class AppBoxStrip extends HTMLElement {
         blockNumber: receipt?.blockNumber ?? null,
       });
       const settlementHash = receipt?.hash || receipt?.transactionHash || null;
-      if (legs.length > 0) {
+      if (lootboxResultLegsReadyForReveal(legs)) {
         box.resultTransactionHash = settlementHash || box.resultTransactionHash || null;
         box.transactionHash = settlementHash || box.transactionHash || null;
         return this.#queueBoxReveal(box, legs);
       } else {
-        // The transaction landed, but its result ABI was newer than this
-        // client. Persist the settlement hash and let the background result
-        // reader recover it; this is no longer an open action and must not be
-        // auto-clicked every polling interval.
+        // The transaction landed, but its prize legs are either omitted or
+        // newer than this client's result ABI. A bare opened anchor is not
+        // a zero-result card. Persist the settlement hash and let background
+        // recovery assemble a concrete reveal; this is no longer an open
+        // action and must not be auto-clicked every polling interval.
         box.resultTransactionHash = settlementHash || box.resultTransactionHash || null;
         box.opening = false;
         box.ready = false;
@@ -1405,7 +1438,8 @@ class AppBoxStrip extends HTMLElement {
       // opener race: another wallet settled it first. Ask the same immutable
       // result feed used by background discovery before waiting for indexing;
       // never publish another openBox action for this already-credited box.
-      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return true;
+      const indexedReplay = await this.#replayResolvedBox(box, { silentIfMissing: true });
+      if (indexedReplay !== 'missing') return indexedReplay === 'revealed';
       box.ready = false;
       box.resolved = true;
       box.resultSyncing = true;
@@ -1416,10 +1450,12 @@ class AppBoxStrip extends HTMLElement {
     }
   }
 
-  async #readResolvedBoxLegs(box) {
+  async #readResolvedBoxResult(box) {
     const key = _boxKey(box);
     const cached = this.#resolvedLegCache.get(key);
-    if (Array.isArray(cached) && cached.length > 0) return cached;
+    if (Array.isArray(cached) && cached.length > 0) {
+      return { legs: cached, settled: true };
+    }
     let legs = [];
     try {
       // Ask for both the exact index and the player's newest legs. Current APIs
@@ -1473,8 +1509,9 @@ class AppBoxStrip extends HTMLElement {
         });
         if (receiptLegs.length > 0) legs = receiptLegs;
       } catch (_e) {
-        // Keep the indexed result if receipt recovery is temporarily
-        // unavailable; its concrete zero/fractional result is still truthful.
+        // Let indexed legs continue through enrichment and the completeness
+        // boundary below. A concrete prize is usable; a bare anchor stays in
+        // passive sync until its companion projection or receipt becomes available.
       }
     }
 
@@ -1491,14 +1528,16 @@ class AppBoxStrip extends HTMLElement {
       lootboxIndex: box.index,
       blockNumber: settlementBlockNumber,
     });
+    const settled = legs.length > 0;
+    if (!lootboxResultLegsReadyForReveal(legs)) return { legs: [], settled };
     if (key && legs.length > 0) this.#resolvedLegCache.set(key, legs);
-    return legs;
+    return { legs, settled: true };
   }
 
   async #replayResolvedBox(box, {
     silentIfMissing = false,
   } = {}) {
-    const legs = await this.#readResolvedBoxLegs(box);
+    const { legs, settled } = await this.#readResolvedBoxResult(box);
     if (legs.length > 0) {
       const accepted = this.#queueBoxReveal(box, legs, { settledExpected: true });
       if (!accepted) {
@@ -1510,12 +1549,26 @@ class AppBoxStrip extends HTMLElement {
         if (address && key) _markRevealed(address, key);
         if (key) this.#removeBox(key);
       }
-      return true;
+      return 'revealed';
+    }
+
+    if (settled) {
+      // The immutable anchor wins over a potentially stale RPC slot, but it is
+      // not displayable until a complete result projection is available.
+      // Preserve the pending receipt and never offer another wallet write.
+      box.opening = false;
+      box.ready = false;
+      box.resolved = true;
+      box.resultSyncing = true;
+      if (this.#addr) _writePending(this.#addr, this.#boxes);
+      this.#render();
+      void this.#runPollCycle();
+      return 'syncing';
     }
 
     // Probe mode is used immediately before a write. A miss simply continues
     // to the exact-player readiness check without changing the busy state.
-    if (silentIfMissing) return false;
+    if (silentIfMissing) return 'missing';
 
     // A miss here used to unconditionally re-arm `ready + resolved`, which put
     // the box straight back into this same branch on the next click: a silent
@@ -1536,7 +1589,7 @@ class AppBoxStrip extends HTMLElement {
       this.#resolvedLegCache.delete(_boxKey(box));
       if (this.#addr) _writePending(this.#addr, this.#boxes);
       this.#render();
-      return false;
+      return 'missing';
     }
 
     // Settled on chain, legs still indexing. This is passive synchronization,
@@ -1547,7 +1600,7 @@ class AppBoxStrip extends HTMLElement {
     box.resultSyncing = true;
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
-    return false;
+    return 'syncing';
   }
 
   #queueBoxReveal(box, legs, { title = null, settledExpected = false } = {}) {

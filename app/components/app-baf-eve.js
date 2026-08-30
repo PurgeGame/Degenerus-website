@@ -248,7 +248,7 @@ class AppBafEve extends HTMLElement {
       this.#player = position;
       this.#render();
     }));
-    this.#timer = registerComponentPoll(() => { void this.#refresh(); }, POLL_MS);
+    this.#timer = registerComponentPoll(() => this.#refresh(), POLL_MS);
     void this.#refresh();
   }
 

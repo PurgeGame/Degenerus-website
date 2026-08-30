@@ -19,6 +19,12 @@
 //   sfxReverseBonk()   — heavy outcome-neutral Reverse-card contact
 //   sfxCoinflipLand()  — authoritative green-win or red-loss landing
 //   sfxQuestComplete() — small two-note quest completion chime
+//   sfxCrapsDiceTick() — restrained resin/felt clack during a dice roll
+//   sfxCrapsDiceLand() — physical landing plus a distinct 2–12 result tone
+//   sfxCrapsSettlement() — local/opponent chip clacks or a felt sweep
+//   sfxCrapsBetPlace() — one chip contacting the felt
+//   sfxCrapsDouble() — a one-stack-to-two-stacks physical flourish
+//   sfxCrapsBonusShooter() — short metallic bonus badge reveal
 //
 // Headless-safe: importable under node:test with no window/document/
 // AudioContext defined — every cue no-ops when the context can't be built.
@@ -57,6 +63,16 @@ export function toggleMuted() {
 
 let _audioCtx = null;
 
+export const CRAPS_CHIP_SAMPLE_PATHS = Object.freeze({
+  clay: '/app/sounds/craps/poker-chips-clay-cc0.mp3',
+  smallBet: '/app/sounds/craps/poker-chips-small-bet-cc0.mp3',
+});
+
+const _crapsChipEncoded = new Map();
+const _crapsChipBuffers = new Map();
+let _crapsChipFetchPromise = null;
+let _crapsChipLoadPromise = null;
+
 function _ctx() {
   if (isMuted()) return null;
   try {
@@ -78,12 +94,81 @@ function _ctx() {
 
 /** warmup — call from a user gesture so iOS/Safari unlocks the context. */
 export function warmup() {
-  if (!isMuted()) _ctx();
+  if (isMuted()) return;
+  const ctx = _ctx();
+  if (ctx && typeof window !== 'undefined') void _loadCrapsChipSamples(ctx);
+}
+
+/** Fetch the tiny CC0 chip recordings without creating an AudioContext. */
+export function preloadCrapsChipSamples() {
+  if (isMuted() || typeof window === 'undefined' || typeof fetch !== 'function') {
+    return Promise.resolve(false);
+  }
+  if (_crapsChipEncoded.size === Object.keys(CRAPS_CHIP_SAMPLE_PATHS).length) {
+    return Promise.resolve(true);
+  }
+  if (_crapsChipFetchPromise) return _crapsChipFetchPromise;
+  _crapsChipFetchPromise = Promise.all(Object.entries(CRAPS_CHIP_SAMPLE_PATHS).map(
+    async ([name, path]) => {
+      try {
+        const response = await fetch(path);
+        if (!response.ok) return false;
+        const bytes = await response.arrayBuffer();
+        if (!bytes?.byteLength) return false;
+        _crapsChipEncoded.set(name, bytes);
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    },
+  )).then((results) => results.some(Boolean));
+  return _crapsChipFetchPromise;
+}
+
+async function _loadCrapsChipSamples(ctx) {
+  if (!ctx || typeof ctx.decodeAudioData !== 'function') return false;
+  if (_crapsChipBuffers.size === Object.keys(CRAPS_CHIP_SAMPLE_PATHS).length) return true;
+  if (_crapsChipLoadPromise) return _crapsChipLoadPromise;
+  _crapsChipLoadPromise = (async () => {
+    await preloadCrapsChipSamples();
+    for (const [name, bytes] of _crapsChipEncoded) {
+      if (_crapsChipBuffers.has(name)) continue;
+      try {
+        const buffer = await ctx.decodeAudioData(bytes.slice(0));
+        if (buffer) _crapsChipBuffers.set(name, buffer);
+      } catch (_error) { /* the synthesized physical fallback remains available */ }
+    }
+    return _crapsChipBuffers.size > 0;
+  })();
+  return _crapsChipLoadPromise;
 }
 
 // One-shot oscillator envelope: attack to `peak`, exponential decay to
 // silence. Optional frequency glide freq → glideTo over the decay window.
-function _tone(ctx, { freq = 440, glideTo = null, type = 'sine', at = 0, attack = 0.005, decay = 0.15, peak = 0.2 }) {
+function _connectWithPan(ctx, node, pan = 0) {
+  const position = Math.max(-1, Math.min(1, Number(pan) || 0));
+  if (position !== 0 && typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner();
+    if (typeof panner.pan?.setValueAtTime === 'function') {
+      panner.pan.setValueAtTime(position, ctx.currentTime);
+    } else if (panner.pan) panner.pan.value = position;
+    node.connect(panner);
+    panner.connect(ctx.destination);
+    return;
+  }
+  node.connect(ctx.destination);
+}
+
+function _tone(ctx, {
+  freq = 440,
+  glideTo = null,
+  type = 'sine',
+  at = 0,
+  attack = 0.005,
+  decay = 0.15,
+  peak = 0.2,
+  pan = 0,
+}) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const t0 = ctx.currentTime + at;
@@ -94,10 +179,115 @@ function _tone(ctx, { freq = 440, glideTo = null, type = 'sine', at = 0, attack 
   gain.gain.exponentialRampToValueAtTime(peak, t0 + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + decay);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  _connectWithPan(ctx, gain, pan);
   osc.start(t0);
   osc.stop(t0 + attack + decay + 0.05);
 }
+
+function _playCrapsChipSample(ctx, name, {
+  at = 0,
+  gain: level = 0.42,
+  playbackRate = 1,
+  pan = 0,
+  offset = 0,
+  duration = null,
+} = {}) {
+  const buffer = _crapsChipBuffers.get(name);
+  if (!buffer || typeof ctx.createBufferSource !== 'function') {
+    if (typeof window !== 'undefined') void _loadCrapsChipSamples(ctx);
+    return false;
+  }
+  try {
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    const t0 = ctx.currentTime + Math.max(0, Number(at) || 0);
+    source.buffer = buffer;
+    const rate = Math.max(0.5, Math.min(1.6, Number(playbackRate) || 1));
+    if (typeof source.playbackRate?.setValueAtTime === 'function') {
+      source.playbackRate.setValueAtTime(rate, t0);
+    } else if (source.playbackRate) source.playbackRate.value = rate;
+    gain.gain.setValueAtTime(Math.max(0.0001, Number(level) || 0.42), t0);
+    source.connect(gain);
+    _connectWithPan(ctx, gain, pan);
+    const startOffset = Math.max(0, Number(offset) || 0);
+    const playDuration = Number(duration);
+    if (Number.isFinite(playDuration) && playDuration > 0) {
+      source.start(t0, startOffset, playDuration);
+    } else source.start(t0, startOffset);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+// Scheduled filtered noise for tiny physical contacts and felt movement. The
+// oscillator layer remains the fallback on older WebAudio implementations.
+function _filteredNoise(ctx, {
+  at = 0,
+  duration = 0.05,
+  type = 'bandpass',
+  from = 1_600,
+  to = 700,
+  q = 0.8,
+  peak = 0.04,
+  pan = 0,
+} = {}) {
+  if (typeof ctx.createBuffer !== 'function'
+    || typeof ctx.createBufferSource !== 'function'
+    || typeof ctx.createBiquadFilter !== 'function') return false;
+  const sampleRate = Math.max(8_000, Number(ctx.sampleRate) || 44_100);
+  const length = Math.max(1, Math.floor(sampleRate * duration));
+  const buffer = ctx.createBuffer(1, length, sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < length; index += 1) {
+    data[index] = (Math.random() * 2) - 1;
+  }
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  const t0 = ctx.currentTime + Math.max(0, Number(at) || 0);
+  source.buffer = buffer;
+  filter.type = type;
+  filter.Q.setValueAtTime(q, t0);
+  filter.frequency.setValueAtTime(from, t0);
+  filter.frequency.exponentialRampToValueAtTime(to, t0 + duration);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(peak, t0 + Math.min(0.004, duration * 0.2));
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  _connectWithPan(ctx, gain, pan);
+  source.start(t0);
+  source.stop(t0 + duration + 0.01);
+  return true;
+}
+
+function _cueVariation(...values) {
+  let hash = 2_166_136_261;
+  const input = values.map((value) => String(value ?? '')).join(':');
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return ((hash >>> 0) / 0xffff_ffff) * 2 - 1;
+}
+
+// Each possible two-dice total owns one pitch in an ascending pentatonic
+// palette. The broad range keeps neighboring totals recognizable while each
+// note remains short enough to stay subordinate to the physical dice landing.
+const CRAPS_DICE_TOTAL_TONES = Object.freeze({
+  2: 220,
+  3: 261.63,
+  4: 293.66,
+  5: 329.63,
+  6: 392,
+  7: 440,
+  8: 523.25,
+  9: 587.33,
+  10: 659.25,
+  11: 783.99,
+  12: 880,
+});
 
 // Filtered-noise motion sweep. Older WebAudio shims (and the node:test stub)
 // do not expose buffer/filter nodes, so callers can fall back to pitched air.
@@ -583,9 +773,302 @@ export function sfxQuestComplete() {
   } catch (_e) { /* audio is decoration */ }
 }
 
+/** One of four quiet physical clacks spread across the dice animation. */
+export function sfxCrapsDiceTick(step = 0, seed = 0) {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    const index = Math.max(0, Math.trunc(Number(step) || 0));
+    const variation = _cueVariation(seed, index);
+    const pan = Math.max(-0.12, Math.min(0.12, variation * 0.12));
+    const frequency = 1_020 * (1 + variation * 0.04);
+    _filteredNoise(ctx, {
+      duration: 0.032,
+      type: 'highpass',
+      from: 1_750,
+      to: 980,
+      q: 0.55,
+      peak: 0.018,
+      pan,
+    });
+    _tone(ctx, {
+      freq: frequency,
+      glideTo: frequency * 0.76,
+      type: 'triangle',
+      attack: 0.0015,
+      decay: 0.038,
+      peak: 0.03,
+      pan,
+    });
+  } catch (_e) { /* audio is decoration */ }
+}
+
+/** Physical dice landing with one recognizable result pitch for totals 2–12. */
+export function sfxCrapsDiceLand({ total = null, sevenOutcome = '' } = {}) {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    const totalNumber = Math.trunc(Number(total));
+    // Keep one recognizable physical landing, but tune its body a few percent
+    // per total so 2–12 differ at the exact lock beat, not only afterward.
+    const impactRatio = totalNumber >= 2 && totalNumber <= 12
+      ? 1 + (totalNumber - 7) * 0.012
+      : 1;
+    _filteredNoise(ctx, {
+      duration: 0.065,
+      type: 'lowpass',
+      from: 2_600 * impactRatio,
+      to: 720 * impactRatio,
+      q: 0.7,
+      peak: 0.055,
+    });
+    _tone(ctx, {
+      freq: 185 * impactRatio,
+      glideTo: 120 * impactRatio,
+      type: 'sine',
+      attack: 0.0015,
+      decay: 0.09,
+      peak: 0.07,
+    });
+    _tone(ctx, {
+      freq: 920 * impactRatio,
+      glideTo: 640 * impactRatio,
+      type: 'triangle',
+      at: 0.004,
+      attack: 0.001,
+      decay: 0.052,
+      peak: 0.05,
+      pan: -0.08,
+    });
+    _tone(ctx, {
+      freq: 1_120 * impactRatio,
+      glideTo: 700 * impactRatio,
+      type: 'triangle',
+      at: 0.035,
+      attack: 0.001,
+      decay: 0.045,
+      peak: 0.042,
+      pan: 0.08,
+    });
+    const resultTone = CRAPS_DICE_TOTAL_TONES[totalNumber];
+    if (resultTone) {
+      _tone(ctx, {
+        freq: resultTone,
+        glideTo: resultTone * 0.985,
+        type: 'triangle',
+        at: 0.068,
+        attack: 0.002,
+        decay: 0.13,
+        peak: 0.052,
+      });
+    }
+    if (sevenOutcome === 'win') {
+      _tone(ctx, { freq: 659.25, type: 'triangle', at: 0.13, decay: 0.16, peak: 0.07 });
+      _tone(ctx, { freq: 880, type: 'sine', at: 0.19, decay: 0.21, peak: 0.085 });
+    } else if (sevenOutcome === 'crap-out') {
+      _tone(ctx, { freq: 293.66, glideTo: 246.94, type: 'triangle', at: 0.13, decay: 0.24, peak: 0.085 });
+      _tone(ctx, { freq: 164.81, glideTo: 110, type: 'sine', at: 0.19, decay: 0.27, peak: 0.07 });
+    }
+  } catch (_e) { /* audio is decoration */ }
+}
+
+// A broadband ceramic tick plus a very short resonance. The resonance is only
+// the body of the impact; keeping it below 30ms prevents these contacts from
+// reading as the former pitched UI beeps.
+function _crapsChipClack(ctx, {
+  at = 0,
+  resonance = 1_800,
+  peak = 0.04,
+  pan = 0,
+} = {}) {
+  _filteredNoise(ctx, {
+    at,
+    duration: 0.024,
+    type: 'bandpass',
+    from: resonance * 1.9,
+    to: resonance * 0.82,
+    q: 2.2,
+    peak,
+    pan,
+  });
+  _tone(ctx, {
+    freq: resonance,
+    glideTo: resonance * 0.68,
+    type: 'triangle',
+    at,
+    attack: 0.0008,
+    decay: 0.026,
+    peak: peak * 0.58,
+    pan,
+  });
+}
+
+function _crapsPayoutTier(chipsWon) {
+  const chips = Math.max(1, Math.trunc(Number(chipsWon) || 1));
+  if (chips <= 2) return 'small';
+  if (chips <= 8) return 'medium';
+  if (chips <= 32) return 'large';
+  return 'huge';
+}
+
+/** One restrained table-level cue whose weight follows the chips collected. */
+export function sfxCrapsSettlement(kind = 'collect', chipsWon = 7) {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    if (kind === 'sweep') {
+      _filteredNoise(ctx, {
+        duration: 0.19,
+        type: 'bandpass',
+        from: 1_450,
+        to: 360,
+        q: 0.65,
+        peak: 0.045,
+      });
+      if (_playCrapsChipSample(ctx, 'clay', {
+        at: 0.035, gain: 0.26, playbackRate: 0.78, pan: 0.06,
+      })) return;
+      _crapsChipClack(ctx, { at: 0.035, resonance: 1_080, peak: 0.031, pan: -0.08 });
+      _crapsChipClack(ctx, { at: 0.115, resonance: 860, peak: 0.027, pan: 0.08 });
+      return;
+    }
+    if (kind === 'opponent') {
+      // The side rack keeps a darker timbre, while a larger haul still gains
+      // weight and extra ceramic contacts.
+      const tier = _crapsPayoutTier(chipsWon);
+      let sampled = _playCrapsChipSample(ctx, 'smallBet', {
+        at: 0.012,
+        gain: tier === 'small' ? 0.2 : tier === 'medium' ? 0.27 : 0.31,
+        playbackRate: tier === 'small' ? 1.02 : tier === 'medium' ? 0.86 : 0.76,
+        pan: 0.32,
+        duration: 0.42,
+      });
+      if (tier === 'large' || tier === 'huge') {
+        sampled = _playCrapsChipSample(ctx, 'clay', {
+          at: 0.064, gain: 0.19, playbackRate: tier === 'huge' ? 0.7 : 0.8, pan: 0.28,
+        }) || sampled;
+      }
+      if (tier === 'huge') {
+        sampled = _playCrapsChipSample(ctx, 'smallBet', {
+          at: 0.13, gain: 0.18, playbackRate: 0.67, pan: 0.36, duration: 0.48,
+        }) || sampled;
+      }
+      if (sampled) return;
+      const opponentContacts = tier === 'small' ? 1 : tier === 'medium' ? 2 : tier === 'large' ? 3 : 4;
+      for (let index = 0; index < opponentContacts; index += 1) {
+        _crapsChipClack(ctx, {
+          at: 0.012 + index * 0.055,
+          resonance: (1_180 - index * 135) * (tier === 'huge' ? 0.88 : 1),
+          peak: Math.max(0.018, 0.029 - index * 0.002),
+          pan: 0.28 + (index % 2) * 0.06,
+        });
+      }
+      return;
+    }
+    const tier = _crapsPayoutTier(chipsWon);
+    let sampled = _playCrapsChipSample(ctx, tier === 'small' ? 'smallBet' : 'clay', {
+      gain: tier === 'small' ? 0.34 : tier === 'medium' ? 0.5 : 0.56,
+      playbackRate: tier === 'small' ? 1.18 : tier === 'medium' ? 1.03 : tier === 'large' ? 0.9 : 0.76,
+      pan: -0.04,
+      duration: tier === 'small' ? 0.2 : null,
+    });
+    if (tier !== 'small') {
+      sampled = _playCrapsChipSample(ctx, 'smallBet', {
+        at: 0.028,
+        gain: tier === 'medium' ? 0.2 : 0.25,
+        playbackRate: tier === 'medium' ? 1.08 : tier === 'large' ? 0.94 : 0.78,
+        pan: 0.08,
+        duration: tier === 'huge' ? 0.48 : 0.3,
+      }) || sampled;
+    }
+    if (tier === 'large' || tier === 'huge') {
+      sampled = _playCrapsChipSample(ctx, 'clay', {
+        at: 0.092, gain: 0.3, playbackRate: tier === 'huge' ? 0.72 : 0.84, pan: -0.1,
+      }) || sampled;
+    }
+    if (tier === 'huge') {
+      sampled = _playCrapsChipSample(ctx, 'smallBet', {
+        at: 0.165, gain: 0.25, playbackRate: 0.68, pan: 0.11, duration: 0.52,
+      }) || sampled;
+    }
+    if (sampled) return;
+    const localContacts = tier === 'small' ? 1 : tier === 'medium' ? 3 : tier === 'large' ? 5 : 7;
+    for (let index = 0; index < localContacts; index += 1) {
+      _crapsChipClack(ctx, {
+        at: index * (tier === 'huge' ? 0.034 : 0.043),
+        resonance: (2_150 - (index % 3) * 195) * (tier === 'huge' ? 0.82 : tier === 'large' ? 0.92 : 1),
+        peak: Math.max(0.025, 0.043 - index * 0.0022),
+        pan: index % 2 === 0 ? -0.08 : 0.08,
+      });
+    }
+  } catch (_e) { /* audio is decoration */ }
+}
+
+/** One chip placed by hand, with a muted felt body under its ceramic edge. */
+export function sfxCrapsBetPlace() {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    if (_playCrapsChipSample(ctx, 'smallBet', {
+      gain: 0.38, playbackRate: 1.12, duration: 0.14,
+    })) return;
+    _filteredNoise(ctx, {
+      duration: 0.042,
+      type: 'lowpass',
+      from: 1_100,
+      to: 420,
+      q: 0.7,
+      peak: 0.025,
+    });
+    _crapsChipClack(ctx, { at: 0.008, resonance: 1_520, peak: 0.034 });
+  } catch (_e) { /* audio is decoration */ }
+}
+
+/** A physical 1→2 stack rhythm for either wager or survival doubling. */
+export function sfxCrapsDouble({ at = 0 } = {}) {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    const offset = Math.max(0, Number(at) || 0);
+    const firstStack = _playCrapsChipSample(ctx, 'clay', {
+      at: offset, gain: 0.34, playbackRate: 0.94, pan: -0.1,
+    });
+    const secondStack = _playCrapsChipSample(ctx, 'smallBet', {
+      at: offset + 0.075, gain: 0.42, playbackRate: 1.08, pan: 0.1, duration: 0.34,
+    });
+    if (firstStack || secondStack) return;
+    _crapsChipClack(ctx, { at: offset, resonance: 1_480, peak: 0.036 });
+    _crapsChipClack(ctx, { at: offset + 0.075, resonance: 1_940, peak: 0.039, pan: -0.13 });
+    _crapsChipClack(ctx, { at: offset + 0.079, resonance: 2_120, peak: 0.039, pan: 0.13 });
+  } catch (_e) { /* audio is decoration */ }
+}
+
+/** A brief gold-token shimmer reserved for the local bonus-shooter reveal. */
+export function sfxCrapsBonusShooter() {
+  const ctx = _ctx();
+  if (!ctx) return;
+  try {
+    _filteredNoise(ctx, {
+      duration: 0.045,
+      type: 'highpass',
+      from: 2_800,
+      to: 1_500,
+      q: 1.2,
+      peak: 0.026,
+    });
+    _tone(ctx, { freq: 740, type: 'triangle', decay: 0.1, peak: 0.048 });
+    _tone(ctx, { freq: 1_110, type: 'triangle', at: 0.052, decay: 0.13, peak: 0.055 });
+    _tone(ctx, { freq: 1_480, type: 'sine', at: 0.11, decay: 0.18, peak: 0.05 });
+  } catch (_e) { /* audio is decoration */ }
+}
+
 // Test-only — drops the cached context so stubbed AudioContext globals take
 // effect per-case. NOT for production consumers.
 export function __resetForTest() {
   try { _audioCtx?.close?.(); } catch (_e) { /* defensive */ }
   _audioCtx = null;
+  _crapsChipEncoded.clear();
+  _crapsChipBuffers.clear();
+  _crapsChipFetchPromise = null;
+  _crapsChipLoadPromise = null;
 }

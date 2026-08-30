@@ -99,6 +99,7 @@ globalThis.customElements = {
 
 const store = await import('../../app/store.js');
 const history = await import('../app-transaction-history.js');
+const { CHAIN } = await import('../../app/chain-config.js');
 
 afterEach(() => {
   history.setTransactionHistoryLoaderForTest(null);
@@ -109,6 +110,30 @@ afterEach(() => {
 });
 
 describe('transaction history composition', () => {
+  test('AFKing chain history shares in-flight loads and rescans only a reorg tail', async () => {
+    const player = '0x7777777777777777777777777777777777777777';
+    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+    const head = deployBlock + 50;
+    const ranges = [];
+    const provider = {
+      getBlockNumber: async () => head,
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([fromBlock, toBlock]);
+        return [];
+      },
+    };
+
+    await Promise.all([
+      history.loadAfkingPurchaseHistory(player, { provider }),
+      history.loadAfkingPurchaseHistory(player, { provider }),
+    ]);
+    assert.deepEqual(ranges, [[deployBlock, head]], 'concurrent opens share one full discovery');
+
+    await history.loadAfkingPurchaseHistory(player, { provider });
+    assert.deepEqual(ranges.at(-1), [head - 11, head],
+      'a later refresh checks only the 12-block reorg overlap');
+  });
+
   test('queues zero-payout record reels before a genuine Degenerette Luckbox replay', () => {
     const sequence = {
       kind: 'degenerette',

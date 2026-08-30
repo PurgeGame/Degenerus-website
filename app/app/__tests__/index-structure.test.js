@@ -244,9 +244,11 @@ describe('index.html basic-mode skeleton', () => {
     const shellMatch = html.match(/<gold-rush-headline class="gr">([\s\S]*?)<\/gold-rush-headline>/);
     assert.ok(shellMatch, '<gold-rush-headline class="gr"> static shell present');
     const shell = shellMatch[1];
-    for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"', 'data-el="bounty-pool"', 'data-el="bounty-pool-amount"']) {
+    for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"']) {
       assert.ok(shell.includes(hook), `adoption hook present in static shell: ${hook}`);
     }
+    assert.doesNotMatch(shell, /BOUNTY POOL|data-el="bounty-pool/,
+      'the Golden Ticket headline does not include the unrelated bounty pool');
     assert.match(shell, /class="gr__amount" data-el="amount">—</,
       'placeholder amount matches the JS template');
     // And the component must adopt rather than unconditionally re-render.
@@ -317,6 +319,43 @@ describe('index.html basic-mode skeleton', () => {
     }
   });
 
+  test('localhost lazy modules cannot reuse a stale pre-edit browser generation', () => {
+    assert.match(html, /const DEV_MODULE_HOSTS = new Set\(\['localhost', '127\.0\.0\.1', '::1'\]\)/,
+      'the no-build local workflow recognizes every loopback hostname');
+    assert.match(html, /const moduleRevision = DEV_MODULE_HOSTS\.has\(window\.location\.hostname\)[\s\S]*?Date\.now\(\)\.toString\(36\)/,
+      'one per-navigation revision is minted only for local development');
+    assert.match(html, /const importModule = \(src\) => import\(`\$\{src\}\$\{moduleRevision\}`\)/,
+      'lazy imports use the coherent local navigation revision');
+    assert.doesNotMatch(html, /\bimport\(src\)/,
+      'no lazy path bypasses the local revision helper');
+  });
+
+  test('the eager reveal engine and its stylesheet cannot reuse the broken control generation', () => {
+    const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+    assert.ok(mapMatch, 'index.html carries an import map');
+    const map = JSON.parse(mapMatch[1]);
+    assert.match(
+      map.imports?.['/app/components/reveal-overlay.js'] || '',
+      /^\/app\/components\/reveal-overlay\.js\?v=reveal-controls-/,
+      'every absolute or relative reveal-overlay import resolves to one revised URL',
+    );
+    assert.doesNotMatch(
+      html,
+      /<script type="module" src="\/app\/components\/reveal-overlay\.js"><\/script>/,
+      'the eager tag cannot bypass the import-map revision',
+    );
+    assert.match(
+      html,
+      /<script type="module">\s*import '\/app\/components\/reveal-overlay\.js';\s*<\/script>/,
+      'the eager reveal engine enters through the same mapped module identity as its importers',
+    );
+    assert.match(
+      html,
+      /href="\/app\/styles\/app\.css\?v=reveal-controls-[^"]+"/,
+      'the matching hit-target and layout CSS receives the same explicit cache cutover',
+    );
+  });
+
   // Import-map targets are BARE specifiers at the call site (`from 'ethers'`),
   // so the publish runbook's module-resolution check — which only follows
   // relative imports — cannot see them. Combined with this site having no 404
@@ -333,8 +372,9 @@ describe('index.html basic-mode skeleton', () => {
     const local = targets.filter(([, url]) => url.startsWith('/'));
     assert.ok(local.length >= 5, 'the vendored modules are served same-origin');
     for (const [name, url] of local) {
+      const pathname = url.replace(/[?#].*$/, '');
       assert.ok(
-        existsSync(resolvePath(__dirname, '../..', url.replace(/^\/app\//, ''))),
+        existsSync(resolvePath(__dirname, '../..', pathname.replace(/^\/app\//, ''))),
         `import-map target exists on disk: ${name} -> ${url}`,
       );
     }

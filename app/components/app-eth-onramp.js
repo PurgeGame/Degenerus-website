@@ -8,6 +8,7 @@ import { getProvider, TX_CONFIRMED_EVENT } from '../app/contracts.js';
 import { displayEthCompact } from '../app/scaling.js';
 import { get, subscribe } from '../app/store.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { permissionlessReadProvider, readNativeBalance } from '../app/read-provider.js';
 import {
   BASE_SEPOLIA_FAUCET_URL,
   isBaseSepolia,
@@ -102,7 +103,7 @@ export class AppEthOnramp extends HTMLElement {
     if (typeof document !== 'undefined') {
       document.addEventListener?.('visibilitychange', this.#focusListener);
     }
-    this.#timer = registerComponentPoll(() => void this.#refresh(), POLL_MS);
+    this.#timer = registerComponentPoll(() => this.#refresh(), POLL_MS);
     void this.#refresh();
   }
 
@@ -138,7 +139,7 @@ export class AppEthOnramp extends HTMLElement {
       return;
     }
 
-    const provider = getProvider();
+    const provider = permissionlessReadProvider(getProvider());
     if (typeof provider?.getBalance !== 'function') {
       this.#balanceWei = null;
       this.#balanceAddress = address;
@@ -147,7 +148,7 @@ export class AppEthOnramp extends HTMLElement {
     }
 
     let balance = null;
-    try { balance = BigInt(await provider.getBalance(address)); }
+    try { balance = BigInt(await readNativeBalance(address, { provider })); }
     catch (_error) { balance = null; }
     if (seq !== this.#seq) return;
     if (String(get('connected.address') || '').toLowerCase() !== address) return;

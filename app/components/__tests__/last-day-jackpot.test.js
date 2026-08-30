@@ -5010,6 +5010,18 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           }),
         };
       }
+      if (path.includes(`/viewer/player/${address}/day/5/craps`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: 5,
+            totalWinnings: String(1_234n * 10n ** 18n),
+            winCount: 3,
+          }),
+        };
+      }
       if (path.includes(`/viewer/player/${address}/day/5`)) {
         return {
           ok: true,
@@ -5130,6 +5142,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         coinflipWon: null,
         coinflipStakeAmount: '0',
         coinflipRewardPercent: 0,
+        crapsWinningsAmount: String(1_234n * 10n ** 18n),
+        crapsWinCount: 3,
       });
       assert.equal(lootboxResults.length, 2,
         'only the two manual boxes are itemized; 40 deferred index-0 boxes cannot become an endless summary');
@@ -5143,6 +5157,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'pack count came from the day-scoped DB feed');
       assert.ok(requested.some((url) => url.includes(`/viewer/player/${address}/day/5`)),
         'lootboxes and coinflip participation came from the day-scoped DB snapshot');
+      assert.ok(requested.some((url) => url.includes(`/viewer/player/${address}/day/5/craps`)),
+        'an immutable legacy snapshot falls back to the exact indexed Craps total');
       assert.ok(requested.some((url) => url.includes('/lootbox/legs?')),
         'the summary loads the full indexed reward legs, not just opened counts');
       assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');

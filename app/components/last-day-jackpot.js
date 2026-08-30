@@ -1555,6 +1555,16 @@ class LastDayJackpot extends HTMLElement {
           0,
         );
     const activity = viewer?.activity;
+    let crapsActivity = activity?.craps;
+    // Completed-day viewer snapshots can predate the Craps field because the
+    // cold-history objects are intentionally immutable. Only those legacy
+    // shapes need the dedicated, still-indexed fallback; current snapshots
+    // carry `craps` (including null) and avoid a fourth request.
+    if (!activity || !Object.prototype.hasOwnProperty.call(activity, 'craps')) {
+      const fallback = await read(`/viewer/player/${address}/day/${dayParam}/craps`)
+        .catch(() => null);
+      crapsActivity = _isExactDayPayload(fallback, day, player) ? fallback : null;
+    }
     const openedLootboxes = Array.isArray(packs?.lootboxPacks)
       ? packs.lootboxPacks.length : 0;
     const lootboxesBought = !Array.isArray(activity?.lootboxPurchases)
@@ -1591,6 +1601,16 @@ class LastDayJackpot extends HTMLElement {
     const coinflipRewardPercent = Number.isFinite(dayReward)
       ? Math.max(0, Math.trunc(dayReward))
       : 0;
+    let crapsWinningsAmount = '0';
+    let crapsWinCount = 0;
+    try {
+      const indexedWinnings = BigInt(crapsActivity?.totalWinnings ?? 0);
+      const indexedWins = Math.max(0, Math.trunc(Number(crapsActivity?.winCount) || 0));
+      if (indexedWinnings > 0n && indexedWins > 0) {
+        crapsWinningsAmount = indexedWinnings.toString();
+        crapsWinCount = indexedWins;
+      }
+    } catch { /* malformed or stale viewer row: omit the Craps receipt */ }
     return {
       // PACKS-V2 batches every ten revealed tickets for presentation. Those
       // tickets may have been purchased, won, or otherwise awarded, so only
@@ -1603,6 +1623,7 @@ class LastDayJackpot extends HTMLElement {
       coinflipWon,
       coinflipStakeAmount,
       coinflipRewardPercent,
+      ...(crapsWinCount > 0 ? { crapsWinningsAmount, crapsWinCount } : {}),
     };
   }
 
@@ -2447,7 +2468,7 @@ class LastDayJackpot extends HTMLElement {
     // one-minute cadence (and the shared scheduler's immediate visible-tab
     // catch-up) so an indexed pack seats without requiring a page reload.
     this.#foilPollHandle = registerComponentPoll(
-      () => { void this.#refreshFoil({ force: true }); },
+      () => this.#refreshFoil({ force: true }),
       FOIL_REFRESH_INTERVAL_MS,
     );
 

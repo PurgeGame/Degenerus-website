@@ -43,12 +43,18 @@ function _completionReward(quest) {
 }
 
 /** Compact tooltip/count model for an unfinished-quest marker. */
-export function questObjectiveIndicatorModel(payload, product) {
+export function questObjectiveIndicatorModel(payload, product, roles = '') {
   const wanted = String(product || '');
   if (!wanted) return null;
+  const wantedRoles = new Set(
+    (Array.isArray(roles) ? roles : String(roles || '').split(','))
+      .map((role) => String(role || '').trim().toUpperCase())
+      .filter(Boolean),
+  );
   const quests = _objectiveRows(payload).filter((quest) => (
     quest?.completed !== true
       && questProductsForType(quest?.questType).includes(wanted)
+      && (wantedRoles.size === 0 || wantedRoles.has(String(quest?.role || '').toUpperCase()))
   ));
   if (quests.length === 0) return null;
 

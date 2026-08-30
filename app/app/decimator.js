@@ -8,7 +8,12 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import {
+  permissionlessReadProvider,
+  readContractStorage,
+  readProviderBlockNumber,
+} from './read-provider.js';
+import { readPurchaseInfo } from './purchase-info.js';
 import { getActingAddress } from './store.js';
 
 export { purchaseEth, scaledTicketPriceWei } from './lootbox.js';
@@ -107,12 +112,7 @@ function _buildContract(signerOrProvider) {
 }
 
 function _contextProvider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
-  if (!_readProvider) {
-    _readProvider = sharedReadProvider();  // C15: shared batched read stream
-  }
-  return _readProvider;
+  return permissionlessReadProvider(getProvider());
 }
 
 function _activityScoreNumber(value) {
@@ -145,21 +145,12 @@ export async function readPlayerActivityScore(player) {
   }
 }
 
-async function _storageAt(provider, slot) {
-  const position = typeof slot === 'string' && slot.startsWith('0x')
-    ? slot
-    : `0x${BigInt(slot).toString(16)}`;
-  if (typeof provider?.getStorage === 'function') {
-    return provider.getStorage(CONTRACTS.GAME, position);
-  }
-  if (typeof provider?.send === 'function') {
-    return provider.send('eth_getStorageAt', [CONTRACTS.GAME, position, 'latest']);
-  }
-  throw new Error('Storage reads unavailable.');
+async function _storageAt(provider, slot, blockTag = 'latest') {
+  return readContractStorage(CONTRACTS.GAME, slot, { provider, blockTag });
 }
 
-async function _storageSlotZero(provider) {
-  return _storageAt(provider, 0);
+async function _storageSlotZero(provider, blockTag = 'latest') {
+  return _storageAt(provider, 0, blockTag);
 }
 
 export function decimatorBurnStorageSlot(player, level) {
@@ -390,7 +381,7 @@ async function _readDecimatorRoundScore(provider, level) {
   if (state.pending) return state.pending;
 
   state.pending = (async () => {
-    const head = Number(await provider.getBlockNumber());
+    const head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 }));
     if (!Number.isInteger(head) || head < 0) return state.total;
     if (head < state.nextBlock) {
       state.players.clear();
@@ -528,7 +519,7 @@ export async function readDecimatorRawBurnTotal({ level, sinceTimestamp, sinceBl
   if (state.pending) return state.pending;
 
   state.pending = (async () => {
-    const head = Number(await provider.getBlockNumber());
+    const head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 }));
     if (!Number.isInteger(head) || head < 0) return state.total;
     if (state.nextBlock == null) {
       state.nextBlock = startBlock == null
@@ -576,6 +567,10 @@ export async function readDecimatorContext(player, targetLevel = null, options =
   const provider = _contextProvider();
   const game = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_CONTEXT_ABI, provider);
   const burnSlot = player ? decimatorBurnStorageSlot(player, targetLevel) : null;
+  let blockTag = null;
+  try { blockTag = await readProviderBlockNumber(provider); }
+  catch (_e) { /* latest reads remain a useful soft-failure fallback */ }
+  const overrides = blockTag == null ? [] : [{ blockTag }];
   const [
     scoreRead,
     purchaseRead,
@@ -585,11 +580,13 @@ export async function readDecimatorContext(player, targetLevel = null, options =
     roundScoreRead,
     rawBurnRead,
   ] = await Promise.allSettled([
-    player ? game.playerActivityScore(player) : Promise.resolve(null),
-    game.purchaseInfo(),
-    _storageSlotZero(provider),
-    game.futurePrizePoolView(),
-    burnSlot == null ? Promise.resolve(null) : _storageAt(provider, burnSlot),
+    player ? game.playerActivityScore(player, ...overrides) : Promise.resolve(null),
+    readPurchaseInfo({ provider, blockTag }),
+    _storageSlotZero(provider, blockTag ?? 'latest'),
+    game.futurePrizePoolView(...overrides),
+    burnSlot == null
+      ? Promise.resolve(null)
+      : _storageAt(provider, burnSlot, blockTag ?? 'latest'),
     _readFastDecimatorRoundScore(provider, targetLevel),
     options?.sinceTimestamp == null
       ? Promise.resolve(null)
@@ -602,7 +599,11 @@ export async function readDecimatorContext(player, targetLevel = null, options =
 
   let lastPurchaseDay = null;
   if (purchaseRead.status === 'fulfilled') {
-    lastPurchaseDay = Boolean(purchaseRead.value?.lastPurchaseDay_ ?? purchaseRead.value?.[2]);
+    lastPurchaseDay = Boolean(
+      purchaseRead.value?.lastPurchaseDay
+      ?? purchaseRead.value?.lastPurchaseDay_
+      ?? purchaseRead.value?.[2],
+    );
   }
 
   let dayOneActive = null;

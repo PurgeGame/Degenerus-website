@@ -1,7 +1,7 @@
 // viewer/player-selector.js -- Player dropdown population with archetype labels
 // Imports only from ./api.js and ./utils.js (no app/ imports) -- SHELL-01
 
-import { fetchJSON } from './api.js';
+import { API_BASE, fetchJSON } from './api.js';
 import { truncateAddress } from './utils.js';
 
 const ARCHETYPE_LABEL = {
@@ -9,9 +9,14 @@ const ARCHETYPE_LABEL = {
   evMaximizer: 'EV Max',
   whale:       'Whale',
   hybrid:      'Hybrid',
+  afkPassive:  'AFK Passive',
+  afkQuestFlip:'AFK Quest + Flip',
+  vault:       'Protocol Vault',
+  sdgnrs:      'Protocol Token',
 };
 
 let archetypeMap = null;
+let simIdentityMap = new Map();
 
 async function loadArchetypeMap() {
   if (archetypeMap) return archetypeMap;
@@ -36,6 +41,64 @@ async function loadJackpotTotals() {
   return totals;
 }
 
+async function loadSimRoster() {
+  try {
+    return await fetchJSON('/players/sim');
+  } catch (err) {
+    // Backward-compatible fallback for a viewer pointed at an older API.
+    console.warn('[viewer] Sim Discord roster unavailable:', err);
+    return { players: [] };
+  }
+}
+
+function resolveAvatarUrl(identity, path) {
+  if (!path) return '';
+  return identity?.avatarSource === 'api' ? `${API_BASE}${path}` : path;
+}
+
+function avatarImage(src, className) {
+  const image = document.createElement('img');
+  image.src = src;
+  image.alt = '';
+  image.className = className;
+  image.loading = 'lazy';
+  return image;
+}
+
+function renderIdentityCard(address) {
+  const card = document.getElementById('viewer-player-profile');
+  if (!card) return;
+  const identity = address ? simIdentityMap.get(address.toLowerCase()) : null;
+  card.hidden = !identity;
+  if (!identity) return;
+
+  const avatar = card.querySelector('[data-bind="avatar"]');
+  const name = card.querySelector('[data-bind="name"]');
+  const handle = card.querySelector('[data-bind="handle"]');
+  const type = card.querySelector('[data-bind="type"]');
+  avatar.replaceChildren();
+
+  if (identity.avatarLayers) {
+    avatar.classList.add('is-layered');
+    avatar.append(
+      avatarImage(resolveAvatarUrl(identity, identity.avatarLayers.frameUrl), 'viewer-profile__avatar-frame'),
+      avatarImage(resolveAvatarUrl(identity, identity.avatarLayers.markUrl), 'viewer-profile__avatar-mark'),
+    );
+  } else {
+    avatar.classList.remove('is-layered');
+    avatar.append(avatarImage(resolveAvatarUrl(identity, identity.avatarUrl), 'viewer-profile__avatar-image'));
+  }
+
+  card.style.setProperty('--profile-color', identity.avatarColor);
+  name.textContent = identity.discordName;
+  handle.textContent = identity.discordHandle;
+  type.textContent = ARCHETYPE_LABEL[identity.playerType] ?? identity.playerType;
+}
+
+export function getPlayerIdentity(address) {
+  return address ? simIdentityMap.get(address.toLowerCase()) ?? null : null;
+}
+
 function formatEthShort(wei) {
   const eth = Number(wei) / 1e18;
   if (eth === 0) return '';
@@ -51,22 +114,45 @@ export async function initPlayerSelector(selectEl, onPlayerChange) {
   if (loadingEl) loadingEl.style.display = 'block';
 
   try {
-    const [{ players }, archMap, jackpotTotals] = await Promise.all([
+    const [{ players }, archMap, jackpotTotals, simRoster] = await Promise.all([
       fetchJSON('/replay/players'),
       loadArchetypeMap(),
       loadJackpotTotals(),
+      loadSimRoster(),
     ]);
+
+    simIdentityMap = new Map(simRoster.players.map(({ address, simIdentity }) => [
+      address.toLowerCase(),
+      simIdentity,
+    ]));
+
+    // The manifest is the complete sim roster (including players that have not
+    // acted yet). Preserve replay-only addresses as a compatibility fallback.
+    const addresses = [];
+    const seen = new Set();
+    for (const { address } of simRoster.players) {
+      const normalized = address.toLowerCase();
+      if (!seen.has(normalized)) addresses.push(address);
+      seen.add(normalized);
+    }
+    for (const address of players) {
+      const normalized = address.toLowerCase();
+      if (!seen.has(normalized)) addresses.push(address);
+      seen.add(normalized);
+    }
 
     // Clear and populate — show jackpot winnings in label
     selectEl.innerHTML = '<option value="">-- Select a player --</option>';
-    for (const addr of players) {
+    for (const addr of addresses) {
       const opt = document.createElement('option');
       opt.value = addr;
-      const archetype = archMap[addr.toLowerCase()];
+      const identity = simIdentityMap.get(addr.toLowerCase());
+      const archetype = identity?.playerType ?? archMap[addr.toLowerCase()];
       const label = ARCHETYPE_LABEL[archetype] ?? 'Unknown';
       const winnings = jackpotTotals[addr] || jackpotTotals[addr.toLowerCase()] || 0n;
       const winLabel = winnings > 0n ? ` — won ${formatEthShort(winnings)}` : '';
-      opt.textContent = `${label} (${truncateAddress(addr)})${winLabel}`;
+      const name = identity ? `${identity.discordName} — ` : '';
+      opt.textContent = `${name}${label} (${truncateAddress(addr)})${winLabel}`;
       selectEl.appendChild(opt);
     }
 
@@ -85,11 +171,13 @@ export async function initPlayerSelector(selectEl, onPlayerChange) {
   // Wire change event
   selectEl.addEventListener('change', () => {
     const addr = selectEl.value;
-    if (addr) onPlayerChange(addr);
+    renderIdentityCard(addr);
+    if (addr) onPlayerChange(addr, getPlayerIdentity(addr));
   });
 }
 
 export function setSelectedPlayer(selectEl, addr) {
   if (!addr) return;
   selectEl.value = addr;
+  renderIdentityCard(addr);
 }

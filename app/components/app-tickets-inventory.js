@@ -27,7 +27,7 @@ import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ethers, getProvider } from '../app/contracts.js';
-import { sharedReadProvider } from '../app/read-provider.js';
+import { permissionlessReadProvider } from '../app/read-provider.js';
 import { CONTRACTS } from '../app/chain-config.js';
 import { scaledTicketPriceWei } from '../app/lootbox.js';
 import { displayEth, displayToken } from '../app/scaling.js';
@@ -85,7 +85,7 @@ export function __resetDeityEntryContractFactoryForTest() {
 
 function _deityEntryContract() {
   if (_deityEntryContractFactory) return _deityEntryContractFactory();
-  const provider = getProvider() || sharedReadProvider();
+  const provider = permissionlessReadProvider(getProvider());
   if (!provider || !CONTRACTS.GAME) return null;
   return new ethers.Contract(CONTRACTS.GAME, GAME_TRAIT_ENTRY_ABI, provider);
 }
@@ -473,11 +473,7 @@ class AppTicketsInventory extends HTMLElement {
       this.#combined = payload;
       if (get('ui.mode') === 'combined') this.#render();
     }));
-    this.#pollHandle = registerComponentPoll(() => {
-      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-        this.#refresh();
-      }
-    }, POLL_INTERVAL_MS);
+    this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_INTERVAL_MS);
     this.#refresh();
   }
 
