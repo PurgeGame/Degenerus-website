@@ -437,6 +437,12 @@ describe('app-parimutuel-panel', () => {
       /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1 \/ -1/s,
       'the Incinerator reclaims the book lane when Growth is closed');
     assert.match(APP_CSS,
+      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\)\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent/s,
+      'an Incinerator-only row drops the redundant amber market shell');
+    assert.match(APP_CSS,
+      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*width:\s*min\(100%, 30\.7rem\)/s,
+      'the Incinerate key aligns with the burn key in the utility rail below');
+    assert.match(APP_CSS,
       /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head head"[^}]*"context today"/s,
       'the open Growth header stays readable above side-by-side context and actions');
     assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
@@ -465,6 +471,7 @@ describe('app-parimutuel-panel', () => {
       /aria-label="WWXRP balance and Daily Incinerator entry"/);
     assert.equal(el.querySelector('[data-bind="wwxrp-balance"]').textContent, '12.3K');
     const open = el.querySelector('[data-bind="wwxrp-open"]');
+    assert.equal(open.textContent, 'INCINERATE');
     assert.equal(open.disabled, false);
     open.click();
 
@@ -472,7 +479,7 @@ describe('app-parimutuel-panel', () => {
     const input = el.querySelector('[data-bind="wwxrp-amount"]');
     const accept = el.querySelector('[data-bind="wwxrp-accept"]');
     assert.equal(dialog.hidden, false);
-    assert.match(WWXRP_SOURCE, /today’s Daily Incinerator/);
+    assert.match(WWXRP_SOURCE, /Incinerate WWXRP for a weighted entry in today’s Daily Incinerator/);
     assert.equal(input.value, '25');
     assert.equal(accept.disabled, false);
 
@@ -486,7 +493,16 @@ describe('app-parimutuel-panel', () => {
 
     assert.equal(burned, 25n * FLIP);
     assert.equal(dialog.hidden, true);
-    assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /BURN CONFIRMED/);
+    assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /WWXRP INCINERATED/);
+    assert.match(APP_CSS,
+      /\.pari-wwxrp\s*\{[^}]*min-height:\s*3\.15rem[^}]*grid-template-columns:\s*2\.55rem minmax\(0, 1fr\) 5\.3rem/s,
+      'the Incinerator uses the same compact rail rhythm as the utility strip below');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*width:\s*5\.3rem[^}]*min-height:\s*2\.55rem/s,
+      'the action is a full-height rail key instead of the old tiny pill');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*flame-center-silver\.svg/s,
+      'the Incinerate key shares the flame emblem language of the burn rail below');
   });
 
   test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {

@@ -13249,65 +13249,50 @@ body.layout-basic .pari-error {
 }
 body.layout-basic .pari-error[hidden] { display: none !important; }
 
-/* WWXRP keeps its former red balance/BURN wrapper, but lives with the other
-   side wagers now. margin-top:auto pins it to the bottom of the equal-height
-   Side Bets column without disturbing open or settled book cards. */
+/* WWXRP lives with the side wagers. margin-top:auto pins it to the bottom of
+   the equal-height Side Bets column without disturbing open or settled books. */
 body.layout-basic .app-parimutuel > app-wwxrp-burn {
-  display: block;
-  min-width: 0;
-  margin-top: auto;
-  padding-top: 0.08rem;
+  display: block; min-width: 0; margin-top: auto; padding-top: 0.08rem;
 }
-body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] {
-  display: none !important;
-}
+body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] { display: none !important; }
 body.layout-basic .pari-wwxrp {
-  position: relative;
-  box-sizing: border-box;
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 1.58rem minmax(3rem, 0.72fr) minmax(3.5rem, 1fr) auto;
-  align-items: center;
-  gap: 0.38rem;
-  padding: 0.45rem 0.48rem;
+  position: relative; box-sizing: border-box; display: grid;
+  min-width: 0; min-height: 3.15rem;
+  grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem;
+  grid-template-rows: 1fr 1fr; align-items: stretch;
+  gap: 0.08rem 0.38rem; padding: 0.2rem 0.22rem 0.2rem 0.3rem;
   overflow: hidden;
-  border: 1px solid rgba(239, 68, 68, 0.42);
-  border-radius: 8px;
+  border: 1px solid rgba(199, 91, 107, 0.54); border-radius: 10px;
   background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.014) 0,
-      rgba(255, 255, 255, 0.014) 1px,
-      transparent 1px,
-      transparent 3px
-    ),
-    linear-gradient(100deg, rgba(48, 7, 10, 0.92), rgba(18, 5, 8, 0.82));
+    linear-gradient(90deg, rgba(154, 26, 42, 0.13), transparent 28%, rgba(111, 12, 27, 0.1)),
+    radial-gradient(circle at 2.15rem 50%, rgba(237, 14, 17, 0.18), transparent 4.5rem),
+    repeating-linear-gradient(115deg, transparent 0 13px, rgba(255, 255, 255, 0.012) 13px 14px),
+    linear-gradient(180deg, #1d1419 0%, #0e0b0e 54%, #140d11 100%);
   box-shadow:
-    inset 0 1px rgba(254, 202, 202, 0.055),
-    inset 0 0 15px rgba(239, 68, 68, 0.04),
-    0 4px 12px rgba(0, 0, 0, 0.18);
+    inset 0 1px rgba(255, 224, 227, 0.08),
+    inset 0 -1px rgba(52, 18, 26, 0.72),
+    0 8px 22px rgba(0, 0, 0, 0.32),
+    0 0 20px rgba(183, 30, 47, 0.06);
 }
 body.layout-basic .pari-wwxrp__mark {
-  display: grid;
-  width: 1.58rem;
-  height: 1.58rem;
-  place-items: center;
+  display: grid; width: 2.55rem; height: 2.55rem;
+  grid-column: 1; grid-row: 1 / -1;
+  align-self: center; place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(255, 122, 124, 0.5);
-  border-radius: 50%;
-  background: #190507;
-  box-shadow: 0 0 9px rgba(237, 14, 17, 0.22);
+  border: 1px solid rgba(255, 122, 124, 0.46); border-radius: 50%; background: #18090c;
+  box-shadow:
+    inset 0 1px rgba(255, 225, 218, 0.1),
+    0 0 12px rgba(237, 14, 17, 0.24),
+    0 2px 6px rgba(0, 0, 0, 0.55);
 }
 body.layout-basic .pari-wwxrp__mark img {
-  display: block;
-  width: 1.46rem;
-  height: 1.46rem;
-  object-fit: contain;
+  display: block; width: 2.35rem; height: 2.35rem; object-fit: contain;
 }
 body.layout-basic .pari-wwxrp__identity {
-  display: grid;
-  min-width: 0;
-  gap: 0.08rem;
+  display: flex; min-width: 0;
+  grid-column: 2; grid-row: 1;
+  align-self: end; align-items: baseline;
+  gap: 0.3rem; padding-top: 0.15rem;
 }
 body.layout-basic .pari-wwxrp__identity small {
   overflow: hidden;
@@ -13326,52 +13311,60 @@ body.layout-basic .pari-wwxrp__identity strong {
   white-space: nowrap;
 }
 body.layout-basic .pari-wwxrp__balance {
-  display: block;
-  min-width: 0;
+  display: block; min-width: 0;
+  grid-column: 2; grid-row: 2; align-self: start;
   overflow: hidden;
   color: #f87171;
   font: 800 clamp(0.68rem, 1.35vw, 0.88rem)/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  text-align: right;
+  text-align: left;
   text-overflow: ellipsis;
   text-shadow: 0 0 8px rgba(239, 68, 68, 0.48);
   white-space: nowrap;
 }
 body.layout-basic .pari-wwxrp__burn[data-write] {
-  box-sizing: border-box;
-  display: inline-flex;
-  width: auto;
-  min-width: 2.85rem;
-  height: 1.45rem;
-  min-height: 1.45rem;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0 0.4rem;
-  border: 1px solid rgba(255, 122, 124, 0.76);
-  border-radius: 4px;
-  background: linear-gradient(180deg, #ff7375, #ed0e11);
-  color: #250707;
-  font: 950 0.52rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  box-shadow: 0 2px 10px rgba(237, 14, 17, 0.28);
-  cursor: pointer;
+  position: relative; box-sizing: border-box; display: grid;
+  width: 5.3rem; min-width: 5.3rem; min-height: 2.55rem;
+  grid-column: 3; grid-row: 1 / -1;
+  grid-template-columns: 0.82rem minmax(0, 1fr);
+  align-self: center; align-items: center; justify-content: center;
+  gap: 0.28rem; margin: 0; padding: 0.32rem 0.42rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 120, 111, 0.9); border-radius: 8px;
+  background:
+    radial-gradient(circle at 62% -40%, rgba(255, 180, 142, 0.34), transparent 66%),
+    linear-gradient(180deg, #d32c34 0%, #a1121d 48%, #700810 100%);
+  color: #fff7ec; font: 950 0.46rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.065em; text-align: center;
+  box-shadow:
+    inset 0 1px rgba(255, 239, 220, 0.22),
+    inset 0 -2px rgba(58, 0, 5, 0.76),
+    0 0 0 2px rgba(37, 0, 4, 0.68),
+    0 5px 14px rgba(100, 2, 10, 0.42),
+    0 0 12px rgba(229, 42, 47, 0.14);
+  cursor: pointer; transition: filter 120ms ease, transform 120ms ease;
+}
+body.layout-basic .pari-wwxrp__burn[data-write]::before {
+  display: block; width: 0.82rem; height: 1.18rem;
+  background: url('/app/assets/jackpot/flame-center-silver.svg') center / contain no-repeat;
+  content: '';
+  filter: brightness(1.65) contrast(1.08) drop-shadow(0 0 4px rgba(255, 205, 145, 0.58));
 }
 body.layout-basic .pari-wwxrp__burn[data-write]:hover:not(:disabled) {
-  filter: brightness(1.08);
+  filter: brightness(1.12); transform: translateY(-1px);
 }
+body.layout-basic .pari-wwxrp__burn[data-write]:active:not(:disabled) { transform: translateY(1px); }
 body.layout-basic .pari-wwxrp__burn[data-write]:focus-visible {
-  outline: 2px solid #fecaca;
-  outline-offset: 2px;
+  outline: 2px solid #fecaca; outline-offset: 2px;
 }
 body.layout-basic .pari-wwxrp__burn[data-write]:disabled {
-  border-color: rgba(254, 202, 202, 0.14);
-  background: rgba(0, 0, 0, 0.18);
-  color: rgba(254, 202, 202, 0.28);
-  box-shadow: none;
-  cursor: default;
+  border-color: rgba(118, 103, 118, 0.3); background: linear-gradient(180deg, #2a232b, #18151a);
+  color: #706771;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04), 0 0 0 2px rgba(10, 8, 11, 0.56);
+  cursor: not-allowed;
 }
+body.layout-basic .pari-wwxrp__burn[data-write]:disabled::before { filter: grayscale(1) opacity(0.35); }
 body.layout-basic .pari-wwxrp__feedback {
   grid-column: 1 / -1;
   margin: 0.08rem 0 0;
@@ -16154,6 +16147,13 @@ body.layout-basic .side-bets-rail .app-parimutuel {
   padding: 0.44rem 0.52rem;
 }
 
+/* With no live book, the Incinerator is the entire surface. Remove the amber
+   market shell (and its empty full-width runway), then line the compact rail's
+   action edge up with the DGNRS burn key directly below it. */
+body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
+  margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none;
+}
+
 body.layout-basic .side-bets-rail .pari-books {
   grid-column: 1;
   grid-row: 1;
@@ -16166,7 +16166,7 @@ body.layout-basic .side-bets-rail .pari-books[hidden] { display: none !important
 body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn { width: 100%; min-width: 0; grid-column: 2; grid-row: 1; align-self: center; margin-top: 0; padding-top: 0; }
 
 body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
-  width: min(100%, 28rem);
+  width: min(100%, 30.7rem);
   grid-column: 1 / -1;
   justify-self: start;
 }
@@ -16204,9 +16204,8 @@ body.layout-basic .side-bets-rail .pari-book--open > .pari-today {
 
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__title { font-size: 0.72rem; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-clock { display: none; }
-body.layout-basic .side-bets-rail .pari-wwxrp { grid-template-columns: 1.58rem minmax(2.5rem, 0.72fr) minmax(2rem, 0.75fr) auto; gap: 0.25rem; padding-inline: 0.35rem; }
-body.layout-basic .side-bets-rail .pari-wwxrp__identity small { display: none; }
-body.layout-basic .side-bets-rail .pari-wwxrp__burn[data-write] { min-width: 2.4rem; padding-inline: 0.25rem; }
+body.layout-basic .side-bets-rail .pari-wwxrp { grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem; gap: 0.08rem 0.35rem; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small { display: none; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__bench {
   font-size: 0.61rem;
   letter-spacing: 0.035em;
@@ -16252,9 +16251,9 @@ body.layout-basic .side-bets-rail .pari-error {
     grid-template-rows: auto;
   }
 
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
-    width: 100%;
-  }
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn { width: 100%; }
+
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small { display: inline; }
 }
 
 body.layout-basic .play-grid .qst-header {

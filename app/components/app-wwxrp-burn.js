@@ -162,7 +162,7 @@ class AppWwxrpBurn extends HTMLElement {
         </strong>
         <button type="button" class="pari-wwxrp__burn" data-write data-write-locked
                 data-write-lock-title="WWXRP balance is loading"
-                data-bind="wwxrp-open" aria-haspopup="dialog">BURN</button>
+                data-bind="wwxrp-open" aria-haspopup="dialog">INCINERATE</button>
         <p class="pari-wwxrp__feedback" data-bind="wwxrp-feedback"
            hidden role="status"></p>
       </section>
@@ -172,10 +172,10 @@ class AppWwxrpBurn extends HTMLElement {
            role="dialog" aria-modal="true" aria-labelledby="pari-wwxrp-title">
         <div class="df-reverse-dialog__card df-burn-dialog__card">
           <button type="button" class="df-reverse-dialog__close"
-                  data-bind="wwxrp-cancel" aria-label="Close WWXRP burn">×</button>
-          <h3 id="pari-wwxrp-title">Burn WWXRP</h3>
+                  data-bind="wwxrp-cancel" aria-label="Close WWXRP incinerator">×</button>
+          <h3 id="pari-wwxrp-title">Incinerate WWXRP</h3>
           <p class="df-reverse-dialog__copy">
-            <span>Burn WWXRP for a weighted entry in today’s Daily Incinerator.</span>
+            <span>Incinerate WWXRP for a weighted entry in today’s Daily Incinerator.</span>
             <span>The minimum is 25 WWXRP and burned tokens cannot be recovered.</span>
           </p>
           <label class="df-burn-dialog__amount">
@@ -194,7 +194,7 @@ class AppWwxrpBurn extends HTMLElement {
             <button type="button" class="df-reverse-dialog__accept df-burn-dialog__accept"
                     data-write data-write-locked
                     data-write-lock-title="Enter at least 25 WWXRP"
-                    data-bind="wwxrp-accept">Burn</button>
+                    data-bind="wwxrp-accept">Incinerate</button>
           </div>
         </div>
       </div>
@@ -285,7 +285,7 @@ class AppWwxrpBurn extends HTMLElement {
   #lockReason() {
     if (this.#busy) return 'Transaction in progress';
     if (!this.#address) return 'Connect a wallet first';
-    if (!this.#canWrite()) return 'Open your own wallet view to burn WWXRP';
+    if (!this.#canWrite()) return 'Open your own wallet view to incinerate WWXRP';
     if (this.#balance == null) return 'WWXRP balance is loading';
     if (this.#balance < MIN_WWXRP_BURN_WEI) return 'Minimum burn is 25 WWXRP';
     return '';
@@ -310,7 +310,7 @@ class AppWwxrpBurn extends HTMLElement {
 
     const open = this.querySelector('[data-bind="wwxrp-open"]');
     const lockReason = this.#lockReason();
-    if (open) open.textContent = this.#busy ? 'WAIT' : 'BURN';
+    if (open) open.textContent = this.#busy ? 'WAIT' : 'INCINERATE';
     _setWriteLock(open, Boolean(lockReason), lockReason);
 
     const input = this.querySelector('[data-bind="wwxrp-amount"]');
@@ -325,7 +325,7 @@ class AppWwxrpBurn extends HTMLElement {
       input.disabled = this.#busy;
     }
     const accept = this.querySelector('[data-bind="wwxrp-accept"]');
-    if (accept) accept.textContent = this.#busy ? 'Burning…' : 'Burn';
+    if (accept) accept.textContent = this.#busy ? 'Incinerating…' : 'Incinerate';
     _setWriteLock(
       accept,
       this.#busy || !this.#canWrite() || !valid,
@@ -400,12 +400,12 @@ class AppWwxrpBurn extends HTMLElement {
       if (target !== this.#address) return;
       if (this.#balance != null) this.#balance -= amount;
       this.#closeDialog();
-      this.#setFeedback(`${formatWwxrpBalance(amount)} WWXRP BURN CONFIRMED`);
+      this.#setFeedback(`${formatWwxrpBalance(amount)} WWXRP INCINERATED`);
       this.#queueRefresh();
     } catch (error) {
       if (target === this.#address) {
         this.#setFeedback(
-          compactUiError(error, 'WWXRP burn did not go through.'),
+          compactUiError(error, 'WWXRP incineration did not go through.'),
           { error: true },
         );
       }
