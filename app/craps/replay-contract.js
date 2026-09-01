@@ -54,18 +54,23 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 // 0xde6033ca… — run-#44 at CrapsBattle 0x643c3c30…. The live Base Sepolia bytecode keccak
 //   matches the replay manifest, the current vendored harness passes the full differential
 //   suite, and the first published 13-seat field replayed every chain settlement exactly.
-// 0x2dc4aee4… — audit 0880d134c, staged for run #45 (2026-08-31). Computed as the keccak of
-//   forge-out-testnet's deployedBytecode — CrapsBattle carries ZERO immutableReferences, so
-//   the artifact bytes ARE the runtime bytes the launcher deploys. Differential suite 7/7
-//   against the re-vendored harness (0..7 boards, placed-indexed boost, fixed 5x). ⚠ Verify
-//   against the LIVE code keccak once run #45's CRAPS address exists, per this list's rule
-//   that the deployed edge is the only evidence that counts.
+// 0x022f73db… — audit 0880d134c, run #45 LIVE at CrapsBattle 0x387eb017…, read back off
+//   Base Sepolia. Differential suite 7/7 against the re-vendored harness (0..7 boards,
+//   placed-indexed boost, fixed 5x).
+//   ⛔ A RUNTIME HASH CANNOT BE PRE-COMPUTED FROM forge-out. Run #45's prep staged
+//   0x2dc4aee4… — the keccak of forge-out-testnet's deployedBytecode — reasoning that
+//   CrapsBattle has zero immutableReferences so the artifact bytes were the runtime bytes.
+//   THAT IS WRONG: `deployAll` patches ContractAddresses.sol with the run's freshly-mined
+//   addresses and REBUILDS, so every run's bytecode embeds its own sibling addresses as
+//   constants and its runtime hash is unique per run. The indexer publishes
+//   keccak256(live code) (indexer/main.ts), so a staged guess makes every replay fail
+//   CLOSED — the battle simply does not open. Always read it back from chain after deploy.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
   '0xff6c3a41a60f9eb5d5ef16553282ae304a739949a321e08ad5b83e3aabfcb4c2',
   '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796',
-  '0x2dc4aee4c3469fe2488d0bb9e880ab49ac2a4c3b647c3d7d3e0825ca9a17d5c3',
+  '0x022f73dbdd170c87a2074ace604fdadfaaf06f1b18f01faf785b77709d862639',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
