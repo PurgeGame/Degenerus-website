@@ -90,12 +90,43 @@ test('goal multipliers use player-facing difficulty labels', () => {
   assert.equal(crapsEntry.crapsGoalLabel(null), '—');
 });
 
-test('individual battle goals use green for EASY and red for HARD', () => {
-  assert.match(componentSource, /goal\.dataset\.difficulty = goalLabel === 'EASY'/);
-  assert.match(cssSource, /\.craps-entry__goal\[data-difficulty="easy"\][^{]*\{[^}]*color:\s*#4ade80/s,
-    'EASY battle goals are green');
-  assert.match(cssSource, /\.craps-entry__goal\[data-difficulty="hard"\][^{]*\{[^}]*color:\s*#f87171/s,
-    'HARD and V HARD battle goals are red');
+test('the legacy launcher omits the retired goal presentation', () => {
+  assert.doesNotMatch(componentSource, /<th[^>]*>GOAL<\/th>|data-bind="craps-(?:battle|full-day)-goal"/);
+  assert.doesNotMatch(componentSource, /dataset\.goalResult/);
+  assert.doesNotMatch(cssSource, /craps-entry__goal|data-goal-result/);
+});
+
+test('the compact surface keeps ten chips and packs the audited contract order', () => {
+  assert.equal(crapsEntry.packCrapsEntryBoard({
+    passLine: 1,
+    place4: 2,
+    hard8: 3,
+    dontPassLine: 1,
+  }), (1 | (2 << 3) | (3 << 24) | (1 << 27)) >>> 0);
+
+  const initial = crapsEntry.crapsEntryBoardSummary({});
+  assert.deepEqual({
+    placed: initial.placed,
+    random: initial.random,
+    chance: initial.chance,
+    stacks: [initial.leftRandomStack, initial.rightRandomStack],
+  }, { placed: 0, random: 10, chance: 15, stacks: [5, 5] });
+
+  const fivePlaced = crapsEntry.crapsEntryBoardSummary({ place4: 3, place8: 2 });
+  assert.deepEqual({
+    placed: fivePlaced.placed,
+    random: fivePlaced.random,
+    chance: fivePlaced.chance,
+    stacks: [fivePlaced.leftRandomStack, fivePlaced.rightRandomStack],
+  }, { placed: 5, random: 5, chance: 8, stacks: [5, 0] });
+
+  const sevenPlaced = crapsEntry.crapsEntryBoardSummary({ place4: 3, place8: 3, hard4: 1 });
+  assert.deepEqual({
+    placed: sevenPlaced.placed,
+    random: sevenPlaced.random,
+    chance: sevenPlaced.chance,
+    stacks: [sevenPlaced.leftRandomStack, sevenPlaced.rightRandomStack],
+  }, { placed: 7, random: 3, chance: 5, stacks: [3, 0] });
 });
 
 test('High Roller selection exposes only the High Roller entrant field', () => {
@@ -245,9 +276,9 @@ test('result-bar replays open with the winning seat as the viewer', () => {
   assert.match(componentSource,
     /#bindWinnerReplay\([\s\S]*?concealed \? null : laneResult/s,
     'an unseen owned result cannot leak through the public replay button');
-  assert.match(cssSource, /\.craps-entry__result-replay\s*\{[^}]*width:\s*1\.28rem[^}]*height:\s*1\.28rem[^}]*border:\s*0[^}]*background:\s*transparent/s,
+  assert.match(cssSource, /\.craps-entry__result-replay\s*\{[^}]*width:\s*1\.02rem[^}]*height:\s*1\.02rem[^}]*border:\s*0[^}]*background:\s*transparent/s,
     'the replay action is a small transparent icon instead of a text button');
-  assert.match(cssSource, /\.craps-entry__result-replay svg\s*\{[^}]*width:\s*\.86rem[^}]*stroke:\s*currentColor/s,
+  assert.match(cssSource, /\.craps-entry__result-replay svg\s*\{[^}]*width:\s*\.7rem[^}]*stroke:\s*currentColor/s,
     'the camera stays crisp and inherits the interactive state color');
 });
 
@@ -294,6 +325,29 @@ test('the day row rolls to tomorrow after Battle 1 while later windows remain se
   assert.equal(state.battles[6].slot, '343');
 });
 
+test('the Craps day quest offers exact Today terms only before Battle 1 resolves', () => {
+  const beforeFirstResolution = crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 0 },
+    todayPrice: 17_300n,
+  });
+  assert.deepEqual(beforeFirstResolution, {
+    today: { day: 42, price: '17300' },
+    tomorrow: { day: 43, price: '25000' },
+  });
+
+  assert.deepEqual(crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 1 },
+    todayPrice: 17_300n,
+  }), {
+    today: null,
+    tomorrow: { day: 43, price: '25000' },
+  });
+  assert.equal(crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 0 },
+    todayPrice: null,
+  }).today, null, 'Today stays hidden until its exact live price is available');
+});
+
 test('lobby order keeps the next event first, tomorrow above newest settled history', () => {
   assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 0, futureDay: false }),
     ['day', 0, 1, 2, 3, 4, 5, 6, 'tomorrow']);
@@ -306,6 +360,15 @@ test('lobby order keeps the next event first, tomorrow above newest settled hist
   }), [3, 4, 5, 6, 'day', 2, 1, 0]);
   assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 7, futureDay: true }),
     ['day', 6, 5, 4, 3, 2, 1, 0]);
+});
+
+test('the authoritative chain day wins while indexed game state is stale at rollover', () => {
+  assert.equal(crapsEntry.crapsActiveDay({ indexedDay: 42, chainDay: 43 }), 43,
+    'a prepaid day-43 ticket must be looked up as soon as the chain crosses into day 43');
+  assert.equal(crapsEntry.crapsActiveDay({ indexedDay: 43, chainDay: null }), 43,
+    'indexed game state remains the startup fallback until the direct chain clock is available');
+  assert.equal(crapsEntry.crapsActiveDay({ indexedDay: 44, chainDay: 43 }), 43,
+    'once available, the direct chain clock is authoritative in either disagreement direction');
 });
 
 test('the previous day clears as soon as the new day is rolled', () => {
@@ -446,59 +509,122 @@ test('the widget occupies the third play-grid track and loads with the idle pane
     'the click selector, quest-focus selector, and one generated template cover all seven windows');
 });
 
-test('the launcher uses the game dice badges and puts the jackpot in the header', () => {
-  assert.match(componentSource, /dgnBadgePath\(3, 1, 6\)/, 'die 2 uses the silver game badge');
-  assert.match(componentSource, /dgnBadgePath\(3, 4, 4\)/, 'die 5 uses the blue game badge');
-  assert.equal((componentSource.match(/dgnBadgePath\(3,/g) || []).length, 2,
-    'exactly two game dice badges form the header mark');
+test('the split header presents Craps Autobattle and the Run It Up jackpot', () => {
+  assert.match(componentSource, /craps-entry__identity craps-entry__identity--craps/);
+  assert.match(componentSource, /craps-autobattle-balanced-badges-v2\.webp/);
+  assert.match(componentSource, /alt="CRAPS AUTOBATTLE bookended by silver and blue dice badges"/,
+    'the combined logo preserves both circular dice badges');
+  assert.doesNotMatch(componentSource, /dgnBadgePath|dgn-traits\.js/,
+    'the finished logo does not reconstruct itself from unrelated game badges');
   assert.doesNotMatch(componentSource, /7 DAILY AUTOBATTLES/);
   assert.match(componentSource, /<header class="craps-entry__head">[\s\S]*?data-bind="craps-progressive"[\s\S]*?<\/header>/);
   assert.match(componentSource, /data-bind="craps-progressive-amount"/);
-  assert.match(componentSource, /<small>RUN IT UP JACKPOT<\/small>/,
-    'the progressive pool uses its player-facing Run It Up name');
-  assert.doesNotMatch(componentSource, /Craps progressive jackpot/,
-    'accessible meter copy uses the same player-facing name');
+  assert.match(componentSource, /run-it-up-progressive-jackpot-logo-v2\.webp/,
+    'the right identity integrates Progressive Jackpot into the Run It Up artwork');
+  assert.match(componentSource, /Run It Up Progressive Jackpot/,
+    'accessible meter copy matches the finished logo');
   assert.match(componentSource, /readCrapsProgressivePool\(\)/);
-  assert.match(cssSource, /craps-entry__progressive/);
+  assert.match(cssSource, /\.craps-entry__head\s*\{[^}]*grid-template-columns:\s*50% 50%/s,
+    'the divider is an explicit midpoint instead of favoring either logo');
+  assert.match(cssSource, /\.craps-entry__header-metrics\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*grid-row:\s*2[^}]*grid-template-columns:\s*50% 50%/s,
+    'both metrics occupy one structural footer row across the split header');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*height:\s*100%[^}]*align-items:\s*center[^}]*justify-content:\s*center/s);
+  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*display:\s*grid[^}]*height:\s*100%[^}]*place-items:\s*center/s);
+  assert.match(cssSource, /\.craps-entry__progressive-value\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*baseline[^}]*justify-content:\s*center/s,
+    'the right number-and-FLIP line is vertically centered as one unit');
+  assert.match(componentSource, /class="craps-entry__progressive-value"><output data-bind="craps-progressive-amount"[^>]*>—<\/output><em>FLIP<\/em><\/span>/);
+  assert.match(cssSource, /\.craps-entry__identity--craps\s*\{[^}]*linear-gradient\(105deg,rgba\(5,72,49,\.94\),rgba\(3,34,26,\.9\)\)/s,
+    'the Craps Autobattle identity sits on its own dark felt-green field');
+  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*linear-gradient\(180deg,rgba\(79,43,111,\.46\),rgba\(29,16,44,\.62\)\)/s,
+    'the jackpot number keeps a deliberate purple display field');
   assert.doesNotMatch(componentSource, /data-bind="craps-entry-day"/);
-  assert.match(componentSource, /class="craps-entry__brand"[\s\S]*?<strong>CRAPS<\/strong><small>BATTLE<\/small>/,
-    'the product remains Craps Battle while Craps carries the headline weight');
   const wei = 10n ** 18n;
   assert.equal(crapsEntry.crapsHeaderBoostLabel(999n * wei), '999');
   assert.equal(crapsEntry.crapsHeaderBoostLabel(7_350n * wei), '7.35K');
   assert.equal(crapsEntry.crapsHeaderBoostLabel(18_000n * wei), '18K');
+  assert.equal(crapsEntry.crapsHeaderJackpotLabel(1_500_000n * wei), '1,500,000',
+    'Run It Up uses the whole amount while it fits its half of the header');
+  assert.equal(crapsEntry.crapsHeaderJackpotLabel(1_500_000n * wei, 5), '1.5M',
+    'an amount too wide for its rail still has a compact fallback');
+  assert.deepEqual(crapsEntry.crapsHeaderAddedMetric({
+    yesterdayTotalAddedWei: 40_000n * wei,
+    yesterdayAverageAddedWei: 50_000n * wei,
+  }), {
+    actualWei: 40_000n * wei,
+    averageWei: 50_000n * wei,
+    valueWei: 50_000n * wei,
+    showsYesterday: false,
+    label: 'ADDED',
+    period: 'PER DAY',
+  });
+  assert.equal(crapsEntry.crapsHeaderAddedMetric({
+    yesterdayTotalAddedWei: 90_000n * wei,
+    yesterdayAverageAddedWei: 50_000n * wei,
+  }).period, 'YESTERDAY', 'an above-average completed day earns the headline');
+  assert.deepEqual(crapsEntry.crapsHeaderAddedMetric({
+    todayAverageAddedWei: 50_000n * wei,
+  }), {
+    actualWei: null,
+    averageWei: 50_000n * wei,
+    valueWei: 50_000n * wei,
+    showsYesterday: false,
+    label: 'ADDED',
+    period: 'PER DAY',
+  }, 'live can fall back to today\'s known funding when bounded history omits yesterday');
+  assert.equal(crapsEntry.crapsHeaderAddedMetric(null, 50_000n * wei).valueWei, 50_000n * wei,
+    'the independent funding read prevents a failed lobby scan from blanking Added');
 });
 
-test('a poker-lobby listing shows exact historical added FLIP and completed winners beside explicit entry terms', () => {
+test('a poker-lobby listing separates battle stakes from settled added FLIP', () => {
   assert.match(componentSource, /<table class="craps-entry__listing"/);
-  assert.match(componentSource, /CLOSES IN<\/th><th class="craps-entry__wager">WAGER<\/th><th class="craps-entry__operator">\+<\/th><th>BATTLE<\/th><th>GOAL<\/th><th>BUY IN<\/th><th>ENTRANTS/,
-    'the last column explicitly names its entrant count');
+  assert.match(componentSource, /CLOSES IN<\/th><th class="craps-entry__wager">WAGER<\/th><th class="craps-entry__operator">\+<\/th><th class="craps-entry__battle-key">BATTLE<\/th><th>BUY IN<\/th><th>ENTRANTS/,
+    'open entries label the at-risk battle-pool contribution instead of calling it Added');
+  assert.match(componentSource, /Wager \$\{dayEntry[^`]+FLIP plus \$\{dayBattle[^`]+FLIP to the battle pool\./s);
+  assert.match(componentSource, /FLIP wager plus \$\{battlePrice\} FLIP to the battle pool\./,
+    'entry accessibility copy preserves the same wager-plus-battle distinction');
+  assert.doesNotMatch(componentSource, /<th[^>]*>GOAL<\/th>|data-bind="craps-(?:battle|full-day)-goal"/,
+    'the retired Goal column is absent from the real launcher');
   assert.doesNotMatch(componentSource, /craps-battle-speed|craps-full-day-speed|<th>SPEED<\/th>/);
   assert.doesNotMatch(componentSource, /<small>FLIP<\/small>|craps-full-day-(?:entry|pot)-unit/,
     'the combined wager split has no repeated micro FLIP labels');
   assert.match(componentSource,
-    /data-bind="craps-added-kicker">YESTERDAY<\/small><strong><output data-bind="craps-added-total">—<\/output> <em>FLIP<\/em><\/strong><small class="craps-entry__pot-boost-state">ADDED<\/small>/,
-    'the historical addition uses the literal Yesterday / amount FLIP / Added stack');
-  assert.match(componentSource, /bindText\('craps-added-kicker', 'YESTERDAY'\)/);
+    /data-bind="craps-added-banner"[\s\S]*?<strong><output data-bind="craps-added-total"[^>]*>—<\/output><em>FLIP<\/em><\/strong>[\s\S]*?<span class="craps-entry__added-key"><b data-bind="craps-added-label">ADDED<\/b><small data-bind="craps-added-period">PER DAY<\/small><\/span>/,
+    'the amount and FLIP share a baseline while the Added period owns the two-level key at right');
+  assert.doesNotMatch(componentSource, /AVG ADDED|average added per day/,
+    'the rail says only Added per day or Added yesterday');
+  assert.match(componentSource, /readCrapsAddedPerDay\(day\)/,
+    'a narrow funding query keeps the rail independent of the larger lobby snapshot');
+  assert.match(componentSource, /import \* as crapsApi from '\.\.\/app\/craps\.js'/,
+    'the newly-added funding reader is obtained through the module namespace');
+  assert.match(componentSource, /CRAPS_COMPONENT_REVISION = new URL\(import\.meta\.url\)\.search/);
+  assert.match(componentSource, /import\(CRAPS_ADDED_API_URL\)[\s\S]*?revisedReader\(day\)/,
+    'a tab holding the prior craps.js generation loads the funding reader at the component revision');
   assert.match(componentSource,
-    /bindText\('craps-added-total', addedReady\s*\? crapsHeaderBoostLabel\(snapshot\.yesterdayAddedWei\)/,
-    'the historical boost amount no longer carries a redundant plus sign');
-  assert.match(cssSource, /\.craps-entry__pot-boost\s*\{[^}]*border-color:\s*rgba\(192,132,252/s,
-    'the historical boost uses the shared purple boost color');
-  assert.match(cssSource, /\.craps-entry__progressive\s*\{[^}]*border-color:\s*rgba\(250,204,21/s,
-    'the Run It Up jackpot uses the gold jackpot color');
+    /bindText\('craps-added-total', addedReady\s*\? crapsHeaderBoostLabel\(addedMetric\.valueWei\)/,
+    'the selected average-or-yesterday amount no longer carries a redundant plus sign');
+  assert.match(componentSource, /including the daily Run It Up funding/,
+    'the accessible headline makes the jackpot contribution explicit');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*background:\s*linear-gradient\(180deg,rgba\(5,80,55,\.92\),rgba\(3,45,33,\.96\)\)[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong\s*\{[^}]*color:\s*#d8b4fe/s,
+    'the daily addition keeps its green field while using the purple Added key');
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__head\s*\{[^}]*grid-template-rows:\s*minmax\(0,1fr\) 1\.86rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong,body\.layout-basic \.craps-entry__progressive-meter\s*\{[^}]*font-size:\s*1\.15rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong em,body\.layout-basic \.craps-entry__added-key,body\.layout-basic \.craps-entry__progressive-meter em\s*\{[^}]*font-size:\s*\.46rem/s,
+    'desktop keeps the jackpot rail compact without shrinking its labels to mobile size');
   assert.equal((componentSource.match(/data-bind="craps-added-total"/g) || []).length, 1);
   assert.doesNotMatch(componentSource, /craps-battle-added/);
-  assert.match(componentSource, /snapshot\.yesterdayAddedWei/);
+  assert.match(componentSource, /snapshot\?\.yesterdayTotalAddedWei/);
+  assert.match(componentSource, /snapshot\?\.yesterdayAverageAddedWei/);
   assert.match(componentSource, /readCrapsLobbySnapshot\(day, player\)/);
   assert.match(componentSource, /data-bind="craps-battle-countdown"/);
   assert.match(componentSource, /crapsBattleCountdownLabel\(battle\.closeAtMs, nowMs\)/);
   assert.match(componentSource, /data-bind="craps-battle-entry"/);
   assert.match(componentSource, /data-bind="craps-battle-pot"/);
-  assert.match(componentSource, /data-bind="craps-battle-goal"/);
-  assert.match(componentSource, /crapsGoalLabel\(battleTerms\?\.goalMult\)/);
-  assert.match(componentSource, /bindText\('craps-full-day-goal', futureDay \? '' : 'ALL 7'\)/,
-    'the full-day entry names ALL 7 in the GOAL column');
+  assert.match(componentSource, /data-bind="craps-full-day-terms" colspan="3"[\s\S]*?data-bind="craps-full-day-entry">ROLLING<[\s\S]*?data-bind="craps-full-day-separator" hidden>\+<[\s\S]*?data-bind="craps-full-day-pot-cell" hidden/s,
+    'the initial full-day terms occupy the WAGER + BATTLE span as one rolling state');
+  assert.match(componentSource, /craps-entry__rolling-terms" colspan="3"><strong data-bind="craps-battle-entry">ROLLING<\/strong>[\s\S]*?craps-entry__operator craps-entry__open-cell" hidden>\+<[\s\S]*?craps-entry__battle-fee craps-entry__open-cell" hidden/s,
+    'individual rows never flash an unexplained dash-plus-dash before the day word lands');
+  assert.match(componentSource, /const dayRolling = !futureDay && !dayReady[\s\S]*?fullDayTerms\.colSpan = futureDay \|\| dayRolling \? 3 : 1[\s\S]*?fullDaySeparator\.hidden = futureDay \|\| dayRolling/s);
+  assert.match(componentSource, /const rolling = !ready && !result[\s\S]*?termsCell\.colSpan = rolling \? 3 : 1[\s\S]*?entryPriceNode\.textContent = rolling \? 'ROLLING'/s,
+    'resolved terms restore the normal wager and battle columns');
+  assert.match(cssSource, /\.craps-entry__rolling-terms strong\s*\{[^}]*color:\s*#d8b4fe[^}]*letter-spacing:\s*\.08em/s);
   assert.match(componentSource, /data-bind="craps-day-countdown"/,
     'the full-day entry head carries the opener countdown');
   assert.doesNotMatch(componentSource, /'MIXED'/);
@@ -506,20 +632,24 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
   assert.match(componentSource, /data-bind="craps-battle-payout"/);
   assert.match(componentSource, /data-bind="craps-battle-boost"/);
   assert.match(componentSource,
-    /<small>TOTAL WON<\/small><strong><output data-bind="craps-battle-payout">—<\/output><em class="craps-entry__boost-mark" data-bind="craps-battle-boost-detail" hidden><output data-bind="craps-battle-boost">—<\/output><\/em><\/strong>/,
-    'the lobby tucks each exact boost into a compact visual mark beside TOTAL WON');
+    /data-bind="craps-results-head"[^>]*hidden>[\s\S]*?<span>WINNER<\/span><span>TOTAL WON<\/span><span>ADDED<\/span><span>BUY IN<\/span>[\s\S]*?<th scope="col">ENTRANTS<\/th>/,
+    'settled rows get one shared header with Added as a real column');
+  assert.match(componentSource,
+    /class="craps-entry__result-total"><strong><output data-bind="craps-battle-payout">—<\/output><\/strong><\/span>[\s\S]*?class="craps-entry__result-added" data-bind="craps-battle-boost-detail"><strong><output data-bind="craps-battle-boost">—<\/output><\/strong><\/span>/,
+    'each settled amount occupies its aligned column without an oval badge');
+  assert.doesNotMatch(componentSource, /<small>(?:TOTAL WON|BUY IN)<\/small>|craps-entry__boost-mark/,
+    'settled rows do not repeat the shared headings or revive the old boost pill');
   assert.doesNotMatch(componentSource, /\(<output[^>]*craps-(?:battle|previous-event)-boost[^>]*>—<\/output> BOOST\)/,
     'resolved contests do not spend row space spelling out BOOST in parentheses');
   assert.doesNotMatch(componentSource,
     /data-bind="craps-(?:battle|previous-event)-(?:payout|buyin)">—<\/output> FLIP/,
     'completed rows do not repeat the understood FLIP unit after the prize and buy-in');
-  assert.doesNotMatch(componentSource, /<small>BOOSTED<\/small>/,
-    'boost is not repeated as its own result column');
+  assert.doesNotMatch(componentSource, /<small>BOOSTED<\/small>/);
   assert.match(componentSource,
     /class="craps-entry__result-buyin"[\s\S]*?data-bind="craps-battle-buyin"[\s\S]*?<td class="craps-entry__entrants" data-bind="craps-battle-entrants"/,
     'the total buy-in sits at the result block’s right edge beside entrants');
-  assert.match(componentSource, /paintCrapsBoostMark\([\s\S]*?laneResult && !concealed \? laneResult\.winnerBoostWei : null/s,
-    'the bolt mark follows the selected lane and only exposes an attributable boost');
+  assert.match(componentSource, /paintCrapsAddedValue\([\s\S]*?laneResult && !concealed \? laneResult\.winnerBoostWei : null/s,
+    'the Added column follows the selected lane and only exposes an attributable boost');
   assert.match(componentSource, /crapsWinnerTotalLabel\(laneResult\)/,
     'the result shows the exact total or an explicit lower bound while attribution loads');
   assert.match(componentSource, /crapsWinnerResultForLane\(result, this\.#highRoller\)/,
@@ -532,18 +662,20 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
   assert.match(componentSource,
     /const previousEvent = crapsPreviousEventDuringRollover\(\{[\s\S]*?wordValue: currentWordFromStore\(state\.day\)/,
     'the prior-day row expires as soon as the current day word lands');
-  assert.match(componentSource, /body\.appendChild\(previousEventRow\)/,
+  assert.match(componentSource, /appendLobbyRow\(previousEventRow\)/,
     'the rollover-only prior-day result stays pinned beneath the reset current slate');
+  assert.match(componentSource, /resultsHead\.hidden = false;[\s\S]*?body\.appendChild\(resultsHead\)/,
+    'the shared results heading moves directly above the first completed row');
   assert.match(componentSource, /\.craps-entry__battle\[data-craps-period\]/,
     'the dedicated history row is not mistaken for one of the seven current battles');
   assert.match(componentSource,
     /new Map\([\s\S]*?Number\(row\.dataset\.crapsPeriod\)[\s\S]*?rowsByPeriod\.get\(period\)/,
     'urgency reordering cannot change a battle row\'s period identity on the next render');
   assert.match(componentSource,
-    /this\.#scheduleDay != null && this\.#scheduleDay !== day[\s\S]*?this\.#boardBets = \{\};[\s\S]*?this\.#contractChips = 0;[\s\S]*?this\.#boardSet = false;/,
+    /this\.#scheduleDay != null && this\.#scheduleDay !== day[\s\S]*?this\.#boardBets = \{\};[\s\S]*?this\.#boardHistory = \[\];[\s\S]*?this\.#contractChips = 0;[\s\S]*?this\.#boardSet = false;/,
     'a new authoritative day clears the reusable custom board');
   assert.match(componentSource,
-    /<td class="craps-entry__result"[^>]*colspan="6"[^>]*>[\s\S]*?<td class="craps-entry__entrants" data-bind="craps-battle-entrants">/,
+    /<td class="craps-entry__result"[^>]*colspan="5"[^>]*>[\s\S]*?<td class="craps-entry__entrants" data-bind="craps-battle-entrants">/,
     'completed rows retain their entrant count in the rightmost column');
   assert.doesNotMatch(componentSource,
     /class="craps-entry__entrants craps-entry__open-cell" data-bind="craps-battle-entrants"/,
@@ -575,19 +707,69 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
   assert.match(componentSource, /`\$\{price == null \? '—' : formatCrapsCompactFlip\(price\)\} FLIP`/);
   assert.doesNotMatch(componentSource, /ENTER: (?:—|1 COMP|\$\{)/,
     'compact buy-in controls show only their price or comp payment');
-  assert.match(componentSource, /data-craps-board/);
   assert.match(componentSource,
-    /class="craps-entry__lobby"[\s\S]*?<footer class="craps-entry__foot"[\s\S]*?class="craps-entry__pick-instruction">Pick your bets or choose RANDOM for 3x BONUS<\/span>[\s\S]*?<div class="craps-entry__setup"/s,
-    'picks and the lane selector sit at the bottom beneath the battle list and status');
-  assert.match(componentSource, /status\.hidden = !status\.textContent/,
-    'transient status disappears when idle without displacing the permanent board instruction');
+    /class="craps-entry__lobby"[\s\S]*?<section class="craps-entry__betting"[\s\S]*?class="craps-entry__surface-strip"[\s\S]*?class="craps-entry__mini-felt"/s,
+    'one coherent compact betting surface sits directly beneath the lobby');
+  assert.doesNotMatch(componentSource, /craps-entry__foot|craps-entry__setup|YOUR BETTING BOARD|data-craps-board/,
+    'the old footer, setup panel, and detached board opener are gone');
+  assert.doesNotMatch(componentSource, /data-bind="craps-status"|craps-entry__status/,
+    'quest routing and transaction feedback never inserts a red row into the widget');
+  assert.match(componentSource,
+    /requestedDay === 'today' \? 'day' : 'future-day',[\s\S]*?\.finally\(\(\) => \{[\s\S]*?this\.#forceFlipDay = false/,
+    'the paid day quest submits the selected slate directly and restores normal comp handling afterward');
+  assert.doesNotMatch(componentSource, /CRAPS DAY QUEST ·/,
+    'the old focus-only red quest banner is gone');
   assert.doesNotMatch(componentSource, /Full slate before Battle 1 · or enter one battle\./,
     'the old full-slate helper is gone');
   assert.doesNotMatch(componentSource, /Comp window closed · FLIP entry remains open\./,
     'an expired comp does not add a second idle helper above the permanent pick instruction');
-  assert.match(componentSource, /<small>YOUR PICKS<\/small>[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
-    'the bottom strip keeps picks and Normal/High Roller together');
-  assert.match(componentSource, /data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/);
+  assert.doesNotMatch(componentSource, /Today live · reserve the next slate\./,
+    'the compact lane-and-bonus bar is the only routine bottom-row guidance');
+  assert.doesNotMatch(componentSource, /comp reserves the next slate/,
+    'the selected comp is already visible on the control and needs no idle explainer');
+  assert.match(componentSource,
+    /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-chance">15<\/output>%[\s\S]*?HOT SHOOTER BONUS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
+    'the random equation and right-side Normal/High Roller selector share one thin strip');
+  assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*><span>PLACE<\/span><span>YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
+    'the readable two-line betting callout owns the middle section before the lane selector');
+  assert.match(cssSource, /\.craps-entry__surface-strip\s*\{[^}]*grid-template-columns:\s*minmax\(0,1\.35fr\) minmax\(3\.2rem,\.34fr\) minmax\(6\.7rem,\.92fr\)/s);
+  assert.match(cssSource, /\.craps-entry__place-prompt\s*\{[^}]*color:\s*#ff8588[^}]*font-size:\s*\.39rem/s,
+    'the center callout is red and large enough to read');
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__betting\s*\{[^}]*flex:\s*1 1 auto[^}]*grid-template-rows:\s*auto minmax\(0,1fr\)[^}]*\}[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.craps-entry__mini-felt\s*\{[^}]*grid-row:\s*2[^}]*grid-template-rows:\s*minmax\(2\.35rem,1\.35fr\) minmax\(1\.74rem,1fr\)/s,
+    'the desktop betting felt, rather than the lobby, consumes the neighboring widgets’ extra height');
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__listing tbody :is\(th,td\)\s*\{[^}]*font-size:\s*\.57rem[^}]*\}[\s\S]*?\.craps-entry__money strong\s*\{[^}]*font-size:\s*\.6rem/s,
+    'desktop lobby copy steps up when the full three-column row has room');
+  assert.equal((componentSource.match(/data-craps-bet="(?:place-[45689]|place-10|hard-[48]|pass|dont-pass)"/g) || []).length, 10,
+    'the felt exposes all ten supported contract betting spots as large tap targets');
+  assert.match(componentSource, /dice_01_2_silver\.svg[\s\S]*?dice_01_2_blue\.svg[\s\S]*?HARD <b>4<\/b>/,
+    'Hard 4 carries bare silver and blue dice faces');
+  assert.match(componentSource, /dice_03_4_silver\.svg[\s\S]*?dice_03_4_blue\.svg[\s\S]*?HARD <b>8<\/b>/,
+    'Hard 8 carries bare silver and blue dice faces');
+  assert.equal((componentSource.match(/data-craps-random-stack="(?:left|right)" src="\/shared\/flip-chips\/stack-5-high-red\.svg"/g) || []).length, 2,
+    'RANDOM begins as two clipping-safe stacks of five');
+  assert.match(cssSource, /\.craps-entry__bet-spot\s*\{[^}]*min-height:\s*0;[^}]*padding:\s*0;/s,
+    'global mobile button sizing cannot overflow or clip a felt cell');
+  assert.match(cssSource, /\.craps-entry__bet-label\s*\{[^}]*font:\s*1000 1\.24rem\/1/s,
+    'the six place numbers use the larger felt-scale type');
+  assert.match(cssSource, /\.craps-entry__pays\s*\{[^}]*font:\s*1000 \.39rem\/1/s,
+    'place odds remain readable beneath the larger numbers');
+  assert.match(cssSource, /\[data-craps-bet="pass"\] \.craps-entry__bet-label\s*\{[^}]*font-size:\s*\.9rem/s);
+  assert.match(cssSource, /\.craps-entry__bet-spot--hard \.craps-entry__bet-label b\s*\{[^}]*font-size:\s*\.76rem/s,
+    'the compact lower row scales its most important labels too');
+  assert.match(cssSource, /@media \(max-width: 768px\)[^{]*\{[^}]*\.craps-entry__mini-felt\s*\{[^}]*grid-template-rows:\s*2\.75rem 2\.5rem/s,
+    'narrow screens enlarge both whole-cell tap targets without resizing the chip artwork');
+  assert.match(componentSource, /CRAPS_ENTRY_MAX_CHIPS_PER_BET = 3/);
+  assert.match(componentSource, /CRAPS_ENTRY_MAX_PLACED_CHIPS = 7/);
+  assert.match(componentSource, /3 RANDOM MINIMUM · Tap RANDOM to reclaim the last placed chip\./,
+    'an eighth placement attempt explains the three-Random floor immediately');
+  assert.match(componentSource, /Three chips must remain random\. Tap Random to reclaim the last placed chip\./,
+    'capped spots expose the same reason to touch and assistive users');
+  assert.match(componentSource, /#cycleInlineBet\(betSpot\.dataset\.crapsBet\)/);
+  assert.match(componentSource, /#reclaimInlineBet\(\)/);
+  assert.match(componentSource, /this\.#contractChips = packCrapsEntryBoard\(next\)/,
+    'inline picks feed the existing buy and amend calldata');
+  assert.doesNotMatch(componentSource, />\s*(?:UNDO|CLEAR)\s*</,
+    'the tiny surface carries no redundant undo or clear controls');
   assert.match(componentSource, /CRAPS_FUTURE_DAY_PRICES/);
   assert.match(componentSource, /readCrapsPassCredits/);
   assert.match(componentSource, /applyCrapsPasses/);
@@ -622,30 +804,30 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
   // The next word has not been drawn, so one spanned cell carries the combined
   // cost with its seven-battle scope on the same line.
   assert.match(componentSource,
-    /data-bind="craps-tomorrow-terms" colspan="4"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">[^<]+<\/strong><small>7 BATTLES<\/small><\/span>/,
+    /data-bind="craps-tomorrow-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">[^<]+<\/strong><small>7 BATTLES<\/small><\/span>/,
     'the rollover row puts seven battles to the right of its combined cost');
   assert.match(componentSource, /craps-tomorrow-range', compactRange\(futureFaceRange\)/,
     'the rendered range is the combined low..high, never the split sub-ranges');
   assert.match(componentSource, /const compactRange = \(range\) => `\$\{formatCrapsCompactFlip\(range\.low\)\} – \$\{formatCrapsCompactFlip\(range\.high\)\}`/,
     'the cost range gives the dash breathing room on both sides');
-  assert.match(cssSource, /\.craps-entry__tomorrow-range \.craps-entry__tomorrow-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,33fr\) minmax\(max-content,12fr\)[^}]*column-gap:\s*\.18rem;[^}]*padding:\s*0 \.28rem 0 \.08rem/s,
+  assert.match(cssSource, /\.craps-entry__tomorrow-range \.craps-entry__tomorrow-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\) max-content[^}]*column-gap:\s*\.12rem;[^}]*padding:\s*0 \.18rem 0 \.06rem/s,
     'the future-day scope keeps its full width and a safe gutter before BUY IN');
   assert.match(cssSource, /\.craps-entry__tomorrow-range small\s*\{[^}]*min-width:\s*max-content/s,
     '7 BATTLES cannot shrink underneath the adjacent buy button');
   assert.match(cssSource, /\.craps-entry__tomorrow-range strong\s*\{[^}]*text-align:\s*center/s,
     'the future-day cost centers beneath WAGER + BATTLE');
   assert.match(cssSource, /\.craps-entry__tomorrow-range small\s*\{[^}]*text-align:\s*center/s,
-    'seven battles centers beneath GOAL');
+    'seven battles remains legible inside the combined term cell');
   assert.doesNotMatch(componentSource, /craps-tomorrow-wager|craps-tomorrow-battle/,
     'the split per-column tomorrow ranges are gone');
   assert.match(componentSource, /fullDayHead\.colSpan = 1/,
     'the rollover clock stays in the normal CLOSES IN column');
-  assert.match(componentSource, /fullDayTerms\.colSpan = futureDay \? 4 : 1/,
-    'the future range consumes the freed term columns');
+  assert.match(componentSource, /fullDayTerms\.colSpan = futureDay \|\| dayRolling \? 3 : 1/,
+    'the future range and opening roll consume the freed term columns');
   assert.doesNotMatch(componentSource, /NEXT SLATE/);
   assert.match(componentSource, /data-bind="craps-battle-entrants"/);
   assert.match(componentSource, /data-bind="craps-previous-event-entrants"/);
-  assert.match(componentSource, /data-bind="craps-previous-event-row"[\s\S]*?colspan="6"[\s\S]*?data-bind="craps-previous-event-entrants"/,
+  assert.match(componentSource, /data-bind="craps-previous-event-row"[\s\S]*?colspan="5"[\s\S]*?data-bind="craps-previous-event-entrants"/,
     'the previous event keeps the same result and Entrants columns as every completed battle');
   assert.match(componentSource, /data-bind="craps-battle-result-locked"/);
   assert.match(componentSource, /data-bind="craps-previous-event-result-locked"/);
@@ -658,14 +840,14 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
   assert.doesNotMatch(componentSource, /DEEP/);
   assert.match(cssSource, /\.craps-entry\s*\{[^}]*min-height:\s*0/s);
   assert.match(cssSource, /\.craps-entry__listing\s*\{/);
-  assert.match(cssSource, /\.craps-entry__col-wager\s*\{[^}]*width:\s*15%/s);
+  assert.match(cssSource, /\.craps-entry__col-wager\s*\{[^}]*width:\s*16%/s);
   assert.match(cssSource, /\.craps-entry__col-operator\s*\{[^}]*width:\s*3%/s);
-  assert.match(cssSource, /\.craps-entry__col-battle\s*\{[^}]*width:\s*15%/s);
-  assert.match(cssSource, /\.craps-entry__col-action\s*\{[^}]*width:\s*25%/s);
-  assert.match(cssSource, /\.craps-entry__col-entrants\s*\{[^}]*width:\s*15%/s);
+  assert.match(cssSource, /\.craps-entry__col-battle\s*\{[^}]*width:\s*17%/s);
+  assert.match(cssSource, /\.craps-entry__col-action\s*\{[^}]*width:\s*29%/s);
+  assert.match(cssSource, /\.craps-entry__col-entrants\s*\{[^}]*width:\s*18%/s);
   assert.match(cssSource, /\.craps-entry__entrants\s*\{[^}]*text-align:\s*center/s);
   assert.match(cssSource, /\.craps-entry__pass-count\s*\{[^}]*border-radius:\s*999px/s);
-  assert.match(cssSource, /\.craps-entry__action > button\s*\{[^}]*width:\s*min\(100%,5\.2rem\)[^}]*height:\s*1\.1rem[^}]*background:\s*linear-gradient\(180deg,#f5c842,#b8790a\)[^}]*font-size:\s*\.55rem/s,
+  assert.match(cssSource, /\.craps-entry__action > button\s*\{[^}]*width:\s*min\(100%,5\.2rem\)[^}]*height:\s*\.94rem[^}]*background:\s*linear-gradient\(180deg,#f5c842,#b8790a\)[^}]*font-size:\s*\.43rem/s,
     'buy-in buttons remain compact yellow controls with readable type');
   assert.doesNotMatch(cssSource, /button\[data-state="pass"\]\s*\{[^}]*(?:#168a4b|#0d5a32)/s,
     'pass-funded purchases retain the yellow buy-in treatment');
@@ -675,39 +857,31 @@ test('a poker-lobby listing shows exact historical added FLIP and completed winn
     'the day price stays white in every payment state');
   assert.match(cssSource, /\.craps-entry__day-buy\[data-payment="pass"\] \.craps-entry__money strong\s*\{[^}]*color:\s*#f8fafc/s,
     'a comp-funded day keeps its price white instead of borrowing the win green');
-  assert.match(cssSource, /\.craps-entry__listing tbody :is\(th,td\)[^{]*\{[^}]*font-size:\s*\.64rem/s,
+  assert.match(cssSource, /\.craps-entry__listing tbody :is\(th,td\)[^{]*\{[^}]*font-size:\s*\.53rem/s,
     'the dense lobby keeps its larger readable body type');
   assert.match(cssSource, /\.craps-entry__result\s*\{/);
-  assert.match(cssSource, /\.craps-entry__result-grid\s*\{[^}]*display:\s*grid/s);
-  assert.match(cssSource, /\.craps-entry__boost-mark\s*\{[^}]*display:\s*inline-flex[^}]*border-radius:\s*999px/s,
-    'the boost uses a tiny pill instead of another result column');
-  assert.match(cssSource, /\.craps-entry__result-total > strong > output:first-child\s*\{[^}]*color:\s*#86efac/s,
+  assert.match(cssSource, /:is\(\.craps-entry__result-grid,\.craps-entry__results-head-grid\)\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,1\.25fr\) minmax\(0,1fr\) minmax\(0,\.72fr\) minmax\(0,\.7fr\) 1\.02rem/s,
+    'the shared header and settled rows use exactly the same five tracks');
+  assert.match(cssSource, /\.craps-entry__results-head\s*\{[^}]*height:\s*\.78rem/s);
+  assert.doesNotMatch(cssSource, /\.craps-entry__boost-mark/,
+    'the old oval boost badge is fully removed');
+  assert.match(cssSource, /\.craps-entry__result-total strong\s*\{[^}]*color:\s*#86efac/s,
     'the total-won amount keeps the green win color');
-  assert.doesNotMatch(cssSource, /\.craps-entry__result-total > small[^{]*\{[^}]*color:/s,
-    'the TOTAL WON text inherits the same result-header color as WINNER and BUY IN');
-  assert.match(cssSource, /\.craps-entry__boost-mark\s*\{[^}]*color:\s*#d8b4fe/s,
-    'the boost amount uses the shared purple boost color');
-  assert.match(cssSource, /\.craps-entry__pot-boost\s*\{[^}]*grid-template-areas:\s*"kicker" "value" "state"/s,
-    'yesterday uses one deliberate three-line stack');
-  assert.doesNotMatch(cssSource, /\.craps-entry__pot-boost strong::before/,
-    'the header keeps the exact copy stack free of an extra bolt');
-  assert.match(cssSource, /\.craps-entry__boost-mark::before\s*\{[^}]*clip-path:\s*polygon/s,
-    'a CSS lightning bolt carries the boost meaning visually without emoji or extra copy');
+  assert.match(cssSource, /\.craps-entry__result-added strong\s*\{[^}]*color:\s*#d8b4fe/s,
+    'the Added amount uses the shared purple funding color');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*white-space:\s*nowrap/s,
+    'daily Added uses the available width for its amount, unit, and stacked period key');
   assert.match(cssSource, /\.craps-entry__result small\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
-    'completed-result headings cannot spill into adjacent columns');
-  assert.match(componentSource, /winnerLabel\.textContent = 'WINNER'/,
-    'the selected lane supplies context without repeating a long heading in every result row');
-  assert.match(componentSource, /`DAY \$\{previousEvent\.day\} WINNER`/,
-    'the previous-event heading stays concise enough for the result grid');
+    'the compact battle/day row labels cannot spill into adjacent columns');
+  assert.match(componentSource, /winnerLabel\.textContent = `BATTLE \$\{battle\.number\}`/,
+    'each result retains a concise row identity beneath the shared WINNER heading');
+  assert.match(componentSource, /`DAY \$\{previousEvent\.day\} EVENT`/,
+    'the previous-event row label stays concise beneath the shared heading');
   assert.doesNotMatch(cssSource, /\.craps-entry__result:not\(\[hidden\]\)\s*\{[^}]*display:\s*grid/s);
   assert.match(cssSource, /data-state="completed"/);
-  assert.match(componentSource,
-    /row\.dataset\.goalResult = concealed[\s\S]*?laneResult \? crapsWinnerGoalResult\(laneResult\)[\s\S]*?result \? 'unknown' : 'pending'/,
-    'goal coloring follows the selected lane and never borrows the main winner verdict');
   assert.match(cssSource, /data-state="completed"[^}]*--craps-winner-accent:\s*#8b949e/s,
-    'non-goal winner rows use the neutral grey result state');
-  assert.match(cssSource, /data-goal-result="met"[^}]*--craps-winner-accent:\s*#38a9f4/s,
-    'goal winner rows use the blue result state');
+    'completed winner rows use one neutral result state without reviving Goal');
+  assert.doesNotMatch(cssSource, /data-goal-result/);
   assert.match(cssSource, /data-state="entered"/);
   assert.match(cssSource, /button\[data-state="amend"\]/,
     'the pending amendment has a distinct clickable action treatment');
@@ -745,6 +919,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
     slot: '338',
     battleKey,
     viewerBetId,
+    buyInWei: (500n * 10n ** 18n).toString(),
     battleStakeWei: (200n * 10n ** 18n).toString(),
     winner: address.toLowerCase(),
     amountWei: (12_300n * 10n ** 18n).toString(),
@@ -761,7 +936,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
   assert.equal(waiting[0].autoOpen, false);
   assert.equal(waiting[0].dismissScope, address.toLowerCase());
   assert.equal(waiting[0].compact, true);
-  assert.equal(waiting[0].label, '200 FLIP\nBATTLE');
+  assert.equal(waiting[0].label, '500 FLIP\nBATTLE');
   assert.equal(waiting[0].icon, '/badges-circular/dice_04_5_silver.svg');
   assert.equal(waiting[0].iconBack, '/badges-circular/dice_01_2_blue.svg');
 
@@ -769,8 +944,15 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
     address,
     replays: [{ ...replay, entryMultiple: 10 }],
   });
-  assert.equal(highWaiting[0].label, '2,000 FLIP\nBATTLE',
-    'a High Roller Pending card shows the full multiplied battle stake');
+  assert.equal(highWaiting[0].label, '5,000 FLIP\nBATTLE',
+    'a High Roller Pending card shows the full multiplied buy-in');
+
+  const unknownBuyIn = crapsEntry.crapsResolutionPendingActions({
+    address,
+    replays: [{ ...replay, buyInWei: null }],
+  });
+  assert.equal(unknownBuyIn[0].label, '— FLIP\nBATTLE',
+    'missing buy-in data is never misrepresented as a zero-cost battle');
 
   const armed = crapsEntry.crapsResolutionPendingActions({
     address,

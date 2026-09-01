@@ -120,7 +120,7 @@ test('the craps ABI names only functions the deployed contract actually has', ()
     'CrapsSlipPlaced', 'CrapsSlipAmended', 'CrapsBetSettled', 'CrapsBonusOpened', 'CrapsBonusDonated',
     'CrapsBonusArmed', 'CrapsBattleFinalized', 'CrapsBattlePaid',
     'CrapsHighRollerDayOpened', 'CrapsHighRollerPaid', 'CrapsDayReserved',
-    'CrapsDayWindowsUpgraded',
+    'CrapsDayWindowsUpgraded', 'CrapsProgressiveFunded',
   ]) assert.ok(iface.getEvent(event), event);
 
   // ⛔ THE GUARD. CrapsBattle sits a few hundred bytes under EIP-170 and the
@@ -218,6 +218,20 @@ test('opening logs supply the honest added-FLIP ceiling and include later donati
   });
 });
 
+test('the narrow Added read combines battle and Run It Up funding with one-log fallback', () => {
+  const wei = 10n ** 18n;
+  assert.equal(craps.crapsAddedPerDayFromLogs(46, [
+    { parsed: { name: 'CrapsHighRollerDayOpened', args: { day: 46n, mainBoostBudget: 32_000n * wei } } },
+    { parsed: { name: 'CrapsProgressiveFunded', args: { day: 46n, contribution: 32_001n * wei } } },
+  ]), 64_001n * wei, 'both contract halves are included');
+  assert.equal(craps.crapsAddedPerDayFromLogs(46, [
+    { parsed: { name: 'CrapsProgressiveFunded', args: { day: 46n, contribution: 32_000n * wei } } },
+  ]), 64_000n * wei, 'either adjacent funding log can recover the whole-FLIP headline');
+  assert.equal(craps.crapsAddedPerDayFromLogs(46, [
+    { parsed: { name: 'CrapsHighRollerDayOpened', args: { day: 45n, mainBoostBudget: 25_000n * wei } } },
+  ]), 50_000n * wei, 'the prior day remains a safe per-day fallback during rollover');
+});
+
 test('lobby history resolves current winners and yesterday exact protocol boost', () => {
   const day = 42;
   const wei = 10n ** 18n;
@@ -307,6 +321,12 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
     },
     {
       parsed: {
+        name: 'CrapsProgressiveFunded',
+        args: { day: 41n, contribution: 25_000n * wei, balance: 1_500_000n * wei },
+      },
+    },
+    {
+      parsed: {
         name: 'CrapsHighRollerDayOpened',
         args: { day: 42n, multiplier: 10n, mainBoostBudget: 25_000n * wei, highRollerBoostBudget: 0n },
       },
@@ -391,6 +411,8 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
   const contestedHigh = laneBoost(highLanePeriod, 3);   // bankroll 3,000 -> tier 3
   const soleHigh = laneBoost(1, 1);                     // bankroll   300 -> tier 1
   const expectedHigh = contestedHigh + soleHigh;
+  const expectedHighAverage = craps.crapsWindowShareWei(highBudget, 10n, highLanePeriod, 3)
+    + craps.crapsWindowShareWei(highBudget, 10n, 1, 1);
 
   assert.equal(snapshot.results[0].winner, PLAYER);
   assert.equal(snapshot.results[0].betId, '77');
@@ -458,6 +480,13 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
   assert.equal(snapshot.yesterdayAddedMainWei, expectedMain);
   assert.equal(snapshot.yesterdayAddedHighWei, expectedHigh);
   assert.equal(snapshot.yesterdayAddedWei, expectedMain + expectedHigh);
+  assert.equal(snapshot.yesterdayProgressiveFundedWei, 25_000n * wei,
+    'the separate daily Run It Up contribution is retained without counting ladder rollovers twice');
+  assert.equal(snapshot.yesterdayTotalAddedWei, expectedMain + expectedHigh + (25_000n * wei));
+  assert.equal(snapshot.yesterdayAverageAddedWei,
+    (25_000n * wei) + expectedHighAverage + (25_000n * wei));
+  assert.equal(snapshot.todayAverageAddedWei, 50_000n * wei,
+    'today\'s average includes the matching Run It Up half even when a bounded live log window omits its funded echo');
   assert.deepEqual(snapshot.requiredWordIndexes, [...previous.map(({ index }) => index), currentIndex]);
   assert.equal(snapshot.yesterdayAddedWei % (100n * wei), 0n, 'the contract floors boosts to 100-FLIP granules');
   // Day 42 banked no high action, so today's settled row carries a main-lane
@@ -968,6 +997,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       slot: priorBattleSlot.toString(),
       battleKey: priorKey,
       viewerBetId: priorBetId.toString(),
+      buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: true,
       winningStop: 1,
@@ -987,6 +1017,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       slot: directBattleSlot.toString(),
       battleKey: directKey,
       viewerBetId: directBetId.toString(),
+      buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: true,
       winningStop: 0,
@@ -1006,6 +1037,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       slot: pendingBattleSlot.toString(),
       battleKey: pendingKey,
       viewerBetId: pendingBetId.toString(),
+      buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: false,
       winningStop: null,
@@ -1116,6 +1148,7 @@ test('resolved High Roller replays retain their full stake and exact side-field 
     .sort((left, right) => BigInt(left) < BigInt(right) ? -1 : 1);
   for (const replay of snapshot.resolvedReplays) {
     assert.equal(replay.entryMultiple, 10);
+    assert.equal(replay.buyInWei, (500n * wei).toString());
     assert.equal(replay.entryBattleStakeWei, (2_000n * wei).toString());
     assert.deepEqual(replay.highRollerBetIds, expectedHighSeats);
     assert.equal(replay.highRollerEntrants, 4);

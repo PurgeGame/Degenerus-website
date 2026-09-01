@@ -111,6 +111,9 @@ export const CRAPS_LOBBY_EVENT_ABI = Object.freeze([
   // is the whole distinction: false = a contested race whose boost is paid into
   // the lane pot, true = a lone seat whose boost merely RIDES its own run.
   'event CrapsHighRollerPaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount,bool bankrollRider)',
+  // The other half of the main allocation goes straight to Run It Up. It is
+  // separate from ladder rollovers, which are already part of the boost total.
+  'event CrapsProgressiveFunded(uint24 indexed day,uint256 contribution,uint256 balance)',
   // Protocol money a winner's standing would not admit, banked instead of paid.
   // Source 1 = main, 2 = contested high lane, 3 = sole high lane.
   'event CrapsProgressiveRolled(bytes32 indexed battleKey,uint8 indexed source,uint256 amount,uint256 balance)',
@@ -547,6 +550,7 @@ const CRAPS_WINDOW_EVENT_NAMES = Object.freeze([
   'CrapsBattlePaid',
   'CrapsHighRollerDayOpened',
   'CrapsHighRollerPaid',
+  'CrapsProgressiveFunded',
   'CrapsProgressiveRolled',
 ]);
 
@@ -624,6 +628,72 @@ export async function readCrapsBonusSchedule(dayValue) {
   const logs = (await readCrapsWindowLogs(provider, latestBlock))
     .filter((log) => wanted.has(String(log?.topics?.[0] ?? '').toLowerCase()));
   return crapsBonusScheduleFromLogs(day, logs);
+}
+
+/**
+ * Recover the recurring daily Added amount from the two adjacent funding logs.
+ * Either half is enough to keep the headline available: the contract splits
+ * raw main funding between the battle ladder and Run It Up, with only an odd
+ * wei able to separate the halves.
+ */
+export function crapsAddedPerDayFromLogs(
+  dayValue,
+  logs = [],
+  parser = crapsLobbyReceiptParser(),
+) {
+  const day = Number(dayValue);
+  if (!Number.isInteger(day) || day <= 0) return null;
+  const mainByDay = new Map();
+  const progressiveByDay = new Map();
+  for (const log of logs) {
+    const parsed = parsedCrapsLog(log, parser);
+    const args = parsed?.args ?? {};
+    try {
+      if (parsed?.name === 'CrapsHighRollerDayOpened') {
+        mainByDay.set(
+          Number(asUint(args.day ?? args[0], 'Craps funding day')),
+          asUint(args.mainBoostBudget ?? args[2], 'Craps ladder funding'),
+        );
+      } else if (parsed?.name === 'CrapsProgressiveFunded') {
+        progressiveByDay.set(
+          Number(asUint(args.day ?? args[0], 'Craps funding day')),
+          asUint(args.contribution ?? args[1], 'Run It Up daily funding'),
+        );
+      }
+    } catch (_error) { /* one malformed provider log cannot blank a known day */ }
+  }
+  const totalFor = (fundingDay) => {
+    const main = mainByDay.get(fundingDay) ?? null;
+    const progressive = progressiveByDay.get(fundingDay) ?? null;
+    if (main != null && progressive != null) return main + progressive;
+    const knownHalf = main ?? progressive;
+    return knownHalf == null ? null : knownHalf * 2n;
+  };
+  return totalFor(day) ?? totalFor(day - 1);
+}
+
+/** A narrow indexed query keeps the Added rail independent of the full lobby scan. */
+export async function readCrapsAddedPerDay(dayValue) {
+  if (!isCrapsAvailable()) return null;
+  const day = Number(dayValue);
+  if (!Number.isInteger(day) || day <= 0) return null;
+  const provider = readerProvider();
+  if (!provider?.getBlockNumber || !provider?.getLogs) return null;
+  const latestBlock = Number(await readProviderBlockNumber(provider));
+  const iface = interfaceForCrapsLobby();
+  const dayTopics = [day, day - 1]
+    .filter((value) => value > 0)
+    .map((value) => ethers.zeroPadValue(ethers.toBeHex(value), 32));
+  const logs = await provider.getLogs({
+    address: contractAddress(),
+    fromBlock: Math.max(Number(CHAIN.deployBlock ?? 0), latestBlock - CRAPS_LOG_LOOKBACK_BLOCKS),
+    toBlock: latestBlock,
+    topics: [[
+      iface.getEvent('CrapsHighRollerDayOpened').topicHash,
+      iface.getEvent('CrapsProgressiveFunded').topicHash,
+    ], dayTopics],
+  });
+  return crapsAddedPerDayFromLogs(day, logs, { interface: iface });
 }
 
 function crapsLobbyReceiptParser() {
@@ -724,7 +794,8 @@ function wordAtIndex(wordsByIndex, index) {
 /**
  * Fold the lobby's canonical logs into current winners and yesterday's exact
  * realized protocol contribution. Donations and entrant stakes are not part
- * of the historical added figure; only the contract's own boost ladder is.
+ * of the historical added figure; only the contract's own boost ladder and
+ * its separate daily Run It Up funding are.
  */
 export function crapsLobbySnapshotFromLogs(
   dayValue,
@@ -757,8 +828,10 @@ export function crapsLobbySnapshotFromLogs(
   const previousEventDirectEntrants = { total: 0, high: 0 };
   // The day's HIGH boost budget, and the SHAPE of the lane each window ran —
   // 'contested' or 'sole'. Both are needed before a side boost may be counted.
+  const mainBudgetByDay = new Map();
   const highBudgetByDay = new Map();
   const highMultipleByDay = new Map();
+  const progressiveContributionByDay = new Map();
   const highLaneShape = new Map();
   const amendedChipsByBetId = new Map();
   // What the main winner could not receive because of standing (roll source 1).
@@ -944,6 +1017,10 @@ export function crapsLobbySnapshotFromLogs(
         (openedDay === day ? currentWindows : yesterdayWindows)[window.period] = window;
       } else if (parsed.name === 'CrapsHighRollerDayOpened') {
         const openedDay = Number(asUint(args.day ?? args[0], 'High Roller day'));
+        mainBudgetByDay.set(openedDay, asUint(
+          args.mainBoostBudget ?? args[2],
+          'Main Craps boost budget',
+        ));
         highMultipleByDay.set(
           openedDay,
           Number(asUint(args.multiplier ?? args[1], 'High Roller multiple')),
@@ -951,6 +1028,12 @@ export function crapsLobbySnapshotFromLogs(
         highBudgetByDay.set(openedDay, asUint(
           args.highRollerBoostBudget ?? args[3],
           'High Roller boost budget',
+        ));
+      } else if (parsed.name === 'CrapsProgressiveFunded') {
+        const fundedDay = Number(asUint(args.day ?? args[0], 'Funded Craps day'));
+        progressiveContributionByDay.set(fundedDay, asUint(
+          args.contribution ?? args[1],
+          'Run It Up daily contribution',
         ));
       } else if (parsed.name === 'CrapsHighRollerPaid') {
         // Emitted for a sole lane as its seat settles (even at zero, which is
@@ -1196,6 +1279,7 @@ export function crapsLobbySnapshotFromLogs(
           slot: window.slot,
           battleKey: window.battleKey,
           viewerBetId: entry.betId,
+          buyInWei: window.buyInWei?.toString?.() ?? null,
           battleStakeWei: window.battleStakeWei?.toString?.() ?? null,
           finalized: Boolean(final),
           winningStop: final?.winningStop ?? null,
@@ -1234,19 +1318,42 @@ export function crapsLobbySnapshotFromLogs(
   // the protocol actually put up, which is worse than saying nothing yet.
   let yesterdayAddedMainWei = 0n;
   let yesterdayAddedHighWei = 0n;
+  let yesterdayAverageHighWei = 0n;
   let yesterdayComplete = yesterdayDay > 0 && yesterdayWindows.every(Boolean);
   if (yesterdayComplete) {
     for (const window of yesterdayWindows) {
       const { mainBoostWei, highBoostWei } = realizedBoosts(window, yesterdayWindows);
-      if (mainBoostWei == null || highBoostWei == null) {
+      const highAverageWei = highBaseFor(window, yesterdayWindows);
+      if (mainBoostWei == null || highBoostWei == null || highAverageWei == null) {
         yesterdayComplete = false;
         break;
       }
       yesterdayAddedMainWei += mainBoostWei;
       yesterdayAddedHighWei += highBoostWei;
+      yesterdayAverageHighWei += highAverageWei;
     }
   }
   const yesterdayAddedWei = yesterdayAddedMainWei + yesterdayAddedHighWei;
+  const yesterdayMainAverageWei = mainBudgetByDay.get(yesterdayDay) ?? null;
+  // The contract splits raw main funding in half: ladder=floor(raw/2), with at
+  // most the odd wei going to Run It Up. Older bounded log windows can retain
+  // CrapsHighRollerDayOpened while omitting its adjacent funded echo, so use
+  // the proven ladder half rather than blanking a whole-FLIP headline.
+  const yesterdayProgressiveFundedWei = progressiveContributionByDay.get(yesterdayDay)
+    ?? yesterdayMainAverageWei;
+  const yesterdayTotalAddedWei = yesterdayComplete && yesterdayProgressiveFundedWei != null
+    ? yesterdayAddedWei + yesterdayProgressiveFundedWei
+    : null;
+  const yesterdayAverageAddedWei = yesterdayComplete
+    && yesterdayProgressiveFundedWei != null
+    && yesterdayMainAverageWei != null
+      ? yesterdayMainAverageWei + yesterdayAverageHighWei + yesterdayProgressiveFundedWei
+      : null;
+  const todayMainAverageWei = mainBudgetByDay.get(day) ?? null;
+  const todayProgressiveFundedWei = progressiveContributionByDay.get(day) ?? todayMainAverageWei;
+  const todayAverageAddedWei = todayMainAverageWei != null && todayProgressiveFundedWei != null
+    ? todayMainAverageWei + todayProgressiveFundedWei
+    : null;
 
   const schedule = crapsBonusScheduleFromLogs(day, logs, parser);
   const dayTicketSummary = (entryDay) => {
@@ -1342,6 +1449,10 @@ export function crapsLobbySnapshotFromLogs(
     yesterdayAddedWei: yesterdayComplete ? yesterdayAddedWei : null,
     yesterdayAddedMainWei: yesterdayComplete ? yesterdayAddedMainWei : null,
     yesterdayAddedHighWei: yesterdayComplete ? yesterdayAddedHighWei : null,
+    yesterdayProgressiveFundedWei,
+    yesterdayTotalAddedWei,
+    yesterdayAverageAddedWei,
+    todayAverageAddedWei,
     yesterdayComplete,
     requiredWordIndexes,
   });
