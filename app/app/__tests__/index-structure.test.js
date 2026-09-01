@@ -163,9 +163,9 @@ describe('index.html basic-mode skeleton', () => {
     assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
       'the DGNRS rail immediately follows Side Bets');
     assert.match(appCss,
-      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(19rem, 1\.55fr\) minmax\(10rem, 0\.65fr\)/s,
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(22rem, 1fr\) clamp\(8\.5rem, 24vw, 14rem\)/s,
       'Growth and the Incinerator use one short horizontal rail at the review width');
-    assert.match(appCss, /@media \(max-width: 520px\)[\s\S]*?\.side-bets-rail \.app-parimutuel/s,
+    assert.match(appCss, /@media \(max-width: 580px\)[\s\S]*?\.side-bets-rail \.app-parimutuel/s,
       'the rail stacks only on genuinely narrow phones');
     assert.doesNotMatch(html.slice(sideBets, sideBetsEnd), /SIDE BETS/,
       'the compact rail has no redundant Side Bets label');

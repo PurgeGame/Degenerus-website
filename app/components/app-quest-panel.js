@@ -45,7 +45,12 @@ import { ETH_DIVISOR } from '../app/chain-config.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import { displayEth, displayToken } from '../app/scaling.js';
-import { LOOTBOX_MIN_WEI, scaledTicketPriceWei } from '../app/lootbox.js';
+import {
+  LOOTBOX_MIN_WEI,
+  BOX_ORDER_MAX_BOXES,
+  BOX_ORDER_CUSTOM_SCALE_WEI,
+  scaledTicketPriceWei,
+} from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { degeneretteLimits } from '../app/degenerette.js';
 import {
@@ -162,10 +167,8 @@ const QUEST_TYPE_ICONS = Object.freeze({
   6: '/app/assets/quests/luckbox.svg',
   7: '/app/assets/quests/degenerette-eth.svg',
   8: '/app/assets/quests/degenerette-flip.svg',
-  // Redeem is already named by the card. At icon scale the old mark → arrow →
-  // ticket composite crushed FLIP into a misleading vertical two-color speck;
-  // let the canonical protocol mark occupy the whole tile instead.
-  9: '/whitepaper/flame-logo-split.svg',
+  // Keep the redemption direction visible: canonical FLIP mark → ticket.
+  9: '/app/assets/quests/redeem-flip.svg',
   // These two always-visible UI icons intentionally keep their stable asset
   // paths. dgnBadgePath may return a warmed blob URL, while _paintQuestIcon's
   // strict internal-asset gate accepts only same-origin paths.
@@ -178,6 +181,7 @@ const QUEST_TYPE_ICONS = Object.freeze({
 // diagonal split and flame approximately inside another SVG.
 const QUEST_FLIP_MARK_POSITIONS = Object.freeze({
   '/app/assets/quests/degenerette-flip.svg': 'center',
+  '/app/assets/quests/redeem-flip.svg': 'left',
 });
 
 const QUEST_CRAPS_BACK_ICONS = Object.freeze({
@@ -249,6 +253,16 @@ function _formatDgnQuestPerSpin(value, questType) {
     ? displayEth(BigInt(value || 0), 6)
     : displayToken(BigInt(value || 0), 6);
   return String(text).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+}
+
+function _lootboxAmountEach(totalWei, quantity = 1) {
+  const count = BigInt(Math.max(1, Math.min(BOX_ORDER_MAX_BOXES, Math.trunc(Number(quantity) || 1))));
+  let total = 0n;
+  try { total = BigInt(totalWei ?? 0n); } catch (_e) { total = 0n; }
+  let amount = total > 0n ? (total + count - 1n) / count : LOOTBOX_MIN_WEI;
+  if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+  return ((amount + BOX_ORDER_CUSTOM_SCALE_WEI - 1n) / BOX_ORDER_CUSTOM_SCALE_WEI)
+    * BOX_ORDER_CUSTOM_SCALE_WEI;
 }
 
 function _parseQuarterTicketCount(value) {
@@ -485,6 +499,7 @@ class AppQuestPanel extends HTMLElement {
   #questDialogModel = null;
   #questDialogChoice = 'ticket';
   #questActionAmount = null;
+  #questLootboxQuantity = 1;
   #questDialogReturnFocus = null;
   #questCompletionIdentity = null;
   #questCompletionState = new Map();
@@ -495,6 +510,7 @@ class AppQuestPanel extends HTMLElement {
   #streakDisplayIdentity = null;
   #lastRenderedStreak = null;
   #questCards = [];
+  #renderedBenchmarksKey = null;
   #questShortcutListener = null;
 
   connectedCallback() {
@@ -632,6 +648,22 @@ class AppQuestPanel extends HTMLElement {
                       aria-label="Increase quest action amount">+</button>
             </span>
           </label>
+          <label class="qst-action-adjust" data-bind="qst-action-lootbox-quantity" hidden>
+            <span class="qst-action-dgn__field-head">
+              <span>BOXES</span>
+              <small>MAX ${BOX_ORDER_MAX_BOXES}</small>
+            </span>
+            <span class="qst-action-dgn__stepper qst-action-adjust__stepper">
+              <button type="button" data-bind="qst-action-lootbox-quantity-down"
+                      aria-label="Decrease Luckbox quantity">−</button>
+              <input type="number" name="qst-action-lootbox-quantity" min="1"
+                     max="${BOX_ORDER_MAX_BOXES}" step="1" value="1"
+                     inputmode="numeric" aria-label="Luckbox quantity">
+              <strong aria-hidden="true"></strong>
+              <button type="button" data-bind="qst-action-lootbox-quantity-up"
+                      aria-label="Increase Luckbox quantity">+</button>
+            </span>
+          </label>
           <div class="qst-action-boon" data-bind="qst-action-boon" hidden
                aria-live="polite">
             <boon-product-indicator data-bind="qst-action-boon-indicator"></boon-product-indicator>
@@ -706,6 +738,7 @@ class AppQuestPanel extends HTMLElement {
     const adjustUnit = this.querySelector('[data-bind="qst-action-adjust-unit"]');
     const dgnBet = this.querySelector('[name="qst-action-dgn-bet"]');
     const dgnSpins = this.querySelector('[name="qst-action-dgn-spins"]');
+    const lootboxQuantity = this.querySelector('[name="qst-action-lootbox-quantity"]');
     const actionAmount = this.querySelector('[name="qst-action-amount"]');
     const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
     close?.addEventListener?.('click', () => this.#closeQuestDialog());
@@ -729,6 +762,13 @@ class AppQuestPanel extends HTMLElement {
       ?.addEventListener?.('click', () => this.#stepQuestAction(-1));
     this.querySelector('[data-bind="qst-action-adjust-up"]')
       ?.addEventListener?.('click', () => this.#stepQuestAction(1));
+    lootboxQuantity?.addEventListener?.('change', () => {
+      this.#setQuestLootboxQuantity(lootboxQuantity.value);
+    });
+    this.querySelector('[data-bind="qst-action-lootbox-quantity-down"]')
+      ?.addEventListener?.('click', () => this.#stepQuestLootboxQuantity(-1));
+    this.querySelector('[data-bind="qst-action-lootbox-quantity-up"]')
+      ?.addEventListener?.('click', () => this.#stepQuestLootboxQuantity(1));
     dgnBet?.addEventListener?.('change', () => {
       const parsed = _parseDgnQuestAmount(dgnBet.value, this.#questDialogModel?.questType);
       if (parsed != null && parsed > 0n) this.#questDgnPerSpin = parsed;
@@ -838,8 +878,8 @@ class AppQuestPanel extends HTMLElement {
     }
     if ((type === 1 && purchaseChoice === 'lootbox') || type === 6) {
       return {
-        kind: 'eth', label: 'LUCKBOX VALUE', unit: 'ETH', min: LOOTBOX_MIN_WEI,
-        step: price != null && price > 0n ? price : LOOTBOX_MIN_WEI,
+        kind: 'eth', label: 'ETH EACH', unit: 'ETH', min: LOOTBOX_MIN_WEI,
+        step: LOOTBOX_MIN_WEI,
         required, price,
       };
     }
@@ -866,6 +906,8 @@ class AppQuestPanel extends HTMLElement {
     let amount = config.required > config.min ? config.required : config.min;
     if (config.kind === 'tickets') {
       amount = this.#ticketActionForSpend(amount, config.price).cost;
+    } else if (config.kind === 'eth') {
+      amount = _lootboxAmountEach(config.required, this.#questLootboxQuantity);
     }
     this.#questActionAmount = amount;
   }
@@ -905,6 +947,23 @@ class AppQuestPanel extends HTMLElement {
       ? current + config.step
       : (current > config.min + config.step - 1n ? current - config.step : config.min);
     this.#renderQuestDialog();
+  }
+
+  #setQuestLootboxQuantity(value) {
+    const parsed = Math.trunc(Number(value));
+    this.#questLootboxQuantity = Math.max(
+      1,
+      Math.min(BOX_ORDER_MAX_BOXES, Number.isFinite(parsed) ? parsed : 1),
+    );
+    // Match the Degenerette sheet: changing the action count re-quotes the
+    // per-action amount so the draft still completes the remaining target.
+    this.#resetQuestActionAmount();
+    this.#renderQuestDialog();
+  }
+
+  #stepQuestLootboxQuantity(direction) {
+    if (![-1, 1].includes(Number(direction))) return;
+    this.#setQuestLootboxQuantity(this.#questLootboxQuantity + Number(direction));
   }
 
   #stepQuestDgn(kind, direction) {
@@ -971,10 +1030,16 @@ class AppQuestPanel extends HTMLElement {
 
     if (originalType === 1 && choice === 'lootbox') {
       const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
-      const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      const costEach = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      const quantity = Math.max(1, Math.min(BOX_ORDER_MAX_BOXES, this.#questLootboxQuantity));
+      const cost = costEach * BigInt(quantity);
       return {
-        label: `BUY LUCKBOX · ${format(1, cost)}`,
+        label: quantity === 1
+          ? `BUY LUCKBOX · ${format(1, cost)}`
+          : `BUY ${quantity} LUCKBOXES · ${format(1, cost)}`,
         target: cost,
+        lootboxQuantity: quantity,
+        lootboxAmountWei: costEach,
         purchaseKind: 'lootbox',
         completes: cost >= required,
         adjustable: true,
@@ -1008,9 +1073,16 @@ class AppQuestPanel extends HTMLElement {
     }
     if (originalType === 6) {
       const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
-      const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      const costEach = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      const quantity = Math.max(1, Math.min(BOX_ORDER_MAX_BOXES, this.#questLootboxQuantity));
+      const cost = costEach * BigInt(quantity);
       return {
-        label: `BUY LUCKBOX · ${format(6, cost)}`, target: cost,
+        label: quantity === 1
+          ? `BUY LUCKBOX · ${format(6, cost)}`
+          : `BUY ${quantity} LUCKBOXES · ${format(6, cost)}`,
+        target: cost,
+        lootboxQuantity: quantity,
+        lootboxAmountWei: costEach,
         completes: cost >= required, adjustable: true,
       };
     }
@@ -1089,6 +1161,7 @@ class AppQuestPanel extends HTMLElement {
     if (!dialog) return;
     this.#questDialogModel = { ...model };
     this.#questDialogChoice = 'ticket';
+    this.#questLootboxQuantity = 1;
     this.#resetQuestActionAmount();
     this.#prepareQuestDgnDraft(this.#questDialogModel);
     this.#questDialogReturnFocus = returnFocus || null;
@@ -1119,6 +1192,8 @@ class AppQuestPanel extends HTMLElement {
     const adjustLabel = this.querySelector('[data-bind="qst-action-adjust-label"]');
     const adjustNeeded = this.querySelector('[data-bind="qst-action-adjust-needed"]');
     const adjustUnit = this.querySelector('[data-bind="qst-action-adjust-unit"]');
+    const lootboxQuantityField = this.querySelector('[data-bind="qst-action-lootbox-quantity"]');
+    const lootboxQuantityInput = this.querySelector('[name="qst-action-lootbox-quantity"]');
     const boon = this.querySelector('[data-bind="qst-action-boon"]');
     const boonIndicator = this.querySelector('[data-bind="qst-action-boon-indicator"]');
     const boonLabel = this.querySelector('[data-bind="qst-action-boon-label"]');
@@ -1133,11 +1208,15 @@ class AppQuestPanel extends HTMLElement {
     const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
     const hasPurchaseChoice = Number(model.questType) === 1;
     const isDgn = Number(model.questType) === 7 || Number(model.questType) === 8;
+    const isLootboxPurchase = Number(model.questType) === 6
+      || (hasPurchaseChoice && this.#questDialogChoice === 'lootbox');
     // Ticket/lootbox purchase quests retain their useful product + amount
     // picker. Degenerette retains its ticket, per-spin wager, and spin count.
     // Every other quest is a one-click preset, so an amount stepper only adds
     // noise and makes the confirmation sheet feel like a second game form.
-    const adjustConfig = hasPurchaseChoice ? this.#questAdjustConfig(model) : null;
+    const adjustConfig = (hasPurchaseChoice || isLootboxPurchase)
+      ? this.#questAdjustConfig(model)
+      : null;
     const action = this.#questAction(model);
     const purchaseBoon = this.#questPurchaseBoon(model, action);
     const variant = ['primary', 'secondary', 'level'].includes(String(model.variant))
@@ -1170,6 +1249,8 @@ class AppQuestPanel extends HTMLElement {
       const type = Number(model.questType);
       if (isDgn) {
         copy.textContent = 'Choose the bet per spin and number of spins, then confirm.';
+      } else if (isLootboxPurchase) {
+        copy.textContent = 'Choose the ETH per box and number of Luckboxes, then confirm.';
       } else if (hasPurchaseChoice) {
         copy.textContent = 'Choose Tickets or Luckbox and the amount, then confirm.';
       } else if (type === 2) {
@@ -1202,6 +1283,10 @@ class AppQuestPanel extends HTMLElement {
       lootbox.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'lootbox'));
     }
     if (adjust) adjust.hidden = !adjustConfig;
+    if (lootboxQuantityField) lootboxQuantityField.hidden = !isLootboxPurchase;
+    if (lootboxQuantityInput && isLootboxPurchase) {
+      lootboxQuantityInput.value = String(this.#questLootboxQuantity);
+    }
     if (adjustConfig) {
       if (adjustInput) {
         adjustInput.value = this.#formatQuestActionAmount(adjustConfig);
@@ -1215,7 +1300,12 @@ class AppQuestPanel extends HTMLElement {
       if (adjustNeeded) {
         const needed = adjustConfig.kind === 'tickets'
           ? this.#ticketActionForSpend(adjustConfig.required, adjustConfig.price).count
-          : this.#formatQuestActionAmount(adjustConfig, adjustConfig.required);
+          : adjustConfig.kind === 'eth'
+            ? this.#formatQuestActionAmount(
+              adjustConfig,
+              _lootboxAmountEach(adjustConfig.required, this.#questLootboxQuantity),
+            )
+            : this.#formatQuestActionAmount(adjustConfig, adjustConfig.required);
         adjustNeeded.textContent = `NEEDED ${needed}${adjustConfig.unit ? ` ${adjustConfig.unit}` : ''}`;
       }
     }
@@ -1272,7 +1362,7 @@ class AppQuestPanel extends HTMLElement {
       confirm.textContent = blocked
         ? `DAILY QUEST FIRST · ${action.label}`
         : completes && !isDgn && !hasPurchaseChoice
-          ? 'CONFIRM'
+          && !isLootboxPurchase ? 'CONFIRM'
           : `${completes ? 'CONFIRM' : "WON'T COMPLETE"} · ${action.label}`;
       confirm.setAttribute?.('title', completes
         ? (blocked
@@ -1295,6 +1385,10 @@ class AppQuestPanel extends HTMLElement {
       ...(action.adjustable ? { configuredAmount: true } : {}),
       ...(model.level != null ? { level: Number(model.level) } : {}),
       ...(action.purchaseKind ? { purchaseKind: action.purchaseKind } : {}),
+      ...(action.lootboxQuantity > 1 ? {
+        lootboxQuantity: Number(action.lootboxQuantity),
+        lootboxAmountWei: String(action.lootboxAmountWei ?? 0n),
+      } : {}),
       ...(Number(model.questType) === 7 || Number(model.questType) === 8 ? {
         amountPerSpin: String(action.amountPerSpin ?? 0n),
         spinCount: Number(action.spinCount ?? 5),
@@ -1541,7 +1635,14 @@ class AppQuestPanel extends HTMLElement {
       this.#runMountFetch();
     });
     const u5 = subscribe('app.poolBenchmarks', (benchmarks) => {
-      if (benchmarks?.contractPhase) this.#renderQuests();
+      if (!benchmarks?.contractPhase) return;
+      // Benchmarks republish on every pool tick; a rebuild of every quest
+      // card (listeners included) is only owed when the payload moved.
+      let key = null;
+      try { key = JSON.stringify(benchmarks); } catch (_e) { /* rebuild */ }
+      if (key != null && key === this.#renderedBenchmarksKey) return;
+      this.#renderedBenchmarksKey = key;
+      this.#renderQuests();
     });
     const u6 = subscribe('app.boons', () => {
       if (this.#questDialogModel) this.#renderQuestDialog();

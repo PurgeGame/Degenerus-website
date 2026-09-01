@@ -326,6 +326,21 @@ const PANEL_SRC = readFileSync(
   new URL('../app-degenerette-panel.js', import.meta.url),
   'utf8',
 );
+
+test('private RNG monitors yield to major draw animation work', () => {
+  const rngPoll = PANEL_SRC.slice(
+    PANEL_SRC.indexOf('#startRngPollCycle()'),
+    PANEL_SRC.indexOf('\n  #startRngBlockPoll()', PANEL_SRC.indexOf('#startRngPollCycle()')),
+  );
+  const blockPoll = PANEL_SRC.slice(
+    PANEL_SRC.indexOf('#startRngBlockPoll()'),
+    PANEL_SRC.indexOf('\n  #cancelRngBlockPoll()', PANEL_SRC.indexOf('#startRngBlockPoll()')),
+  );
+  assert.match(rngPoll, /if \(isMajorDrawActive\(\)\)[\s\S]*?setTimeout\(tick, RNG_POLL_INTERVAL_MS\)[\s\S]*?return;/,
+    'the seven-second result poll re-arms without reading during a draw');
+  assert.match(blockPoll, /if \(isMajorDrawActive\(\)\)[\s\S]*?setTimeout\(tick, RNG_BLOCK_POLL_INTERVAL_MS\)[\s\S]*?return;/,
+    'the block-progress poll re-arms without reading during a draw');
+});
 const APP_CSS = readFileSync(
   new URL('../../styles/app.css', import.meta.url),
   'utf8',

@@ -1779,6 +1779,27 @@ body.layout-basic .jackpot-hero .df-funds {
 
 }
 
+/* In the stacked hero, Today's larger wide-layout spot and the next-bet label
+   meet at the middle seam. The desktop watermark then lands on top of both,
+   which reads like accidental duplicate copy. Lift and trim Today's fixture
+   slightly, and reserve the one-ink watermark for the three-column table where
+   it has a genuine clear felt lane. */
+@media (max-width: 1099px) {
+  body.layout-basic .jackpot-hero .df-table-watermark {
+    display: none;
+  }
+}
+
+@media (min-width: 521px) and (max-width: 1099px) {
+  body.layout-basic .jackpot-hero .df-bet-table {
+    top: calc(50% + 0.1rem);
+  }
+
+  body.layout-basic .jackpot-hero .df-bet-oval {
+    height: 4.15rem;
+  }
+}
+
 /* --------------------------------------------------------------- *
  *  Add Bet placard — a pocket version of the live coinflip table   *
  * --------------------------------------------------------------- */

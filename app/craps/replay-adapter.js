@@ -169,9 +169,13 @@ function exitRoll(trace) {
 }
 
 function playerHighPointWei(player) {
+  // ⛔ COMPARE AS BIGINT. The ladder entries are decimal STRINGS, and `'905…' > '4165…'` is TRUE
+  // lexicographically when the digit counts differ — a bust below 1,000 FLIP beat every peak
+  // above it and the tray showed the ending as the high point. Latent until run #45's fixture
+  // regeneration seated a busting viewer whose ladder crossed a digit boundary.
   return player.ladderWei.reduce(
-    (highest, amount) => amount > highest ? amount : highest,
-    player.bankrollInWei,
+    (highest, amount) => (BigInt(amount) > highest ? BigInt(amount) : highest),
+    BigInt(player.bankrollInWei),
   );
 }
 
@@ -186,6 +190,7 @@ function tablePlayer(trace, clock, manifest, profiles = null) {
     player: player.player,
     label: identity?.name || player.name,
     discordPfp: identity?.avatar || player.avatarUrl,
+    entryMultiple: player.entryMultiple,
     chips: boardChipCounts(player, manifest),
     rollEvents: alignedOpponentEvents(trace, clock),
     resolution: Object.freeze({
@@ -204,6 +209,45 @@ function tablePlayer(trace, clock, manifest, profiles = null) {
       rollEvents: alignedOpponentEvents(trace, clock),
     }),
   });
+}
+
+function uniqueReplayPlayers(featuredPlayers, highRollers) {
+  const byBetId = new Map();
+  for (const raw of [...featuredPlayers, ...(Array.isArray(highRollers) ? highRollers : [])]) {
+    const player = validateCrapsReplayPlayer(raw);
+    byBetId.set(player.betId, player);
+  }
+  return Object.freeze([...byBetId.values()]);
+}
+
+function replayLaneViewport(viewport, lane) {
+  if (lane !== 'high') return viewport;
+  const seats = Object.freeze(viewport.seats.filter((trace) => trace.player.entryMultiple > 1));
+  return Object.freeze({
+    ...viewport,
+    seats,
+    byBetId: new Map(seats.map((trace) => [trace.player.betId, trace])),
+  });
+}
+
+function highRollerLeaderboard(viewport, viewerBetId, maxHands) {
+  return Object.freeze(Array.from({ length: maxHands }, (_, shooter) => {
+    const leaders = viewport.seats
+      .filter((trace) => shooter < trace.player.ladderWei.length)
+      .map((trace) => ({
+        betId: trace.player.betId,
+        bankroll: BigInt(trace.player.ladderWei[shooter]),
+      }))
+      .sort((left, right) => (
+        left.bankroll === right.bankroll
+          ? BigInt(left.betId) < BigInt(right.betId) ? -1 : 1
+          : right.bankroll > left.bankroll ? 1 : -1
+      ))
+      .map((entry) => entry.betId)
+      .filter((betId) => betId !== viewerBetId)
+      .slice(0, 10);
+    return Object.freeze({ shooter, opponentBetIds: Object.freeze(leaders) });
+  }));
 }
 
 function progressiveForViewer(manifest, viewerBetId) {
@@ -230,6 +274,8 @@ function progressiveForViewer(manifest, viewerBetId) {
 export function createCrapsReplayTableModel(artifacts, {
   profiles = null,
   perspectiveBetId = null,
+  lane = 'main',
+  highRollerEntrants = null,
 } = {}) {
   const manifest = assertSupportedCrapsReplayRuleset(artifacts?.manifest);
   const featured = validateCrapsReplayCollection(artifacts?.featured, manifest);
@@ -238,7 +284,10 @@ export function createCrapsReplayTableModel(artifacts, {
   // Always seed the viewport with the wallet's own shard record. When the
   // spectator switches to a featured seat, the original player must move into
   // the opponent list instead of disappearing from the table.
-  const viewport = replayCrapsViewport(manifest, featured.players, originalViewer);
+  const replayLane = lane === 'high' ? 'high' : 'main';
+  const replayPlayers = uniqueReplayPlayers(featured.players, artifacts?.highRollers);
+  const fullViewport = replayCrapsViewport(manifest, replayPlayers, originalViewer);
+  const viewport = replayLaneViewport(fullViewport, replayLane);
   const selectedBetId = perspectiveBetId == null
     ? originalViewer.betId
     : String(perspectiveBetId);
@@ -252,17 +301,27 @@ export function createCrapsReplayTableModel(artifacts, {
   const opponents = viewport.seats.filter((trace) => trace.player.betId !== viewer.betId);
   const viewerIdentity = profiles?.get?.(String(viewer.player ?? '').toLowerCase()) ?? null;
   const clock = battleClock(viewport);
-  const leaderboardTimeline = Object.freeze(featured.leaderboard.map((row) => Object.freeze({
-    shooter: row.shooter,
-    opponentBetIds: Object.freeze(row.betIds.filter((betId) => betId !== viewer.betId).slice(0, 10)),
-  })));
+  const leaderboardTimeline = replayLane === 'high'
+    ? highRollerLeaderboard(viewport, viewer.betId, manifest.tape.maxHands)
+    : Object.freeze(featured.leaderboard.map((row) => Object.freeze({
+        shooter: row.shooter,
+        opponentBetIds: Object.freeze(row.betIds.filter((betId) => betId !== viewer.betId).slice(0, 10)),
+      })));
   const resolutionHands = viewerFrames(viewerTrace, clock);
+  const requestedHighEntrants = Number(highRollerEntrants);
+  const laneEntrants = replayLane === 'high'
+    && Number.isInteger(requestedHighEntrants)
+    && requestedHighEntrants > 0
+      ? requestedHighEntrants
+      : viewport.seats.length;
   const tableOptions = Object.freeze({
     screen: 'battle',
     tableResolved: true,
     showResolution: resolutionHands.length > 0,
     tableIndex: manifest.battleKey,
     battleSlot: manifest.settlement.boundSlot,
+    replayLane,
+    entryLabel: replayLane === 'high' ? 'HIGH ROLLER BATTLE' : 'MAIN BATTLE',
     viewerBetId: viewer.betId,
     originalViewerBetId: originalViewer.betId,
     viewerLabel: viewerIdentity?.name || viewer.name,
@@ -273,15 +332,18 @@ export function createCrapsReplayTableModel(artifacts, {
       rawEndingFlip: displayFlip(viewer.ladderWei.at(-1)),
       highPointFlip: displayFlip(playerHighPointWei(viewer)),
       standing: viewer.standing,
+      // `paidWei` is the exact run credit after the lane multiple. Keep it
+      // separate from the Battle bounty, which is awarded independently.
+      runPayoutWei: replayLane === 'high' ? null : viewer.paidWei,
     }),
-    fieldEntrants: manifest.field.entrants,
-    rankTimeline: viewer.rankByRoll ?? Object.freeze([]),
+    fieldEntrants: replayLane === 'high' ? laneEntrants : manifest.field.entrants,
+    rankTimeline: replayLane === 'high' ? Object.freeze([]) : viewer.rankByRoll ?? Object.freeze([]),
     entryMultiple: viewer.entryMultiple,
     bets: boardChipCounts(viewer, manifest),
     playedFlip: displayFlip(manifest.terms.boardStakeWei),
     battleStakeFlip: displayFlip(manifest.terms.battleStakeWei),
-    bountyPoolWei: manifest.terms.bountyPoolWei,
-    addedFlipWei: manifest.terms.addedFlipWei,
+    bountyPoolWei: replayLane === 'high' ? null : manifest.terms.bountyPoolWei,
+    addedFlipWei: replayLane === 'high' ? null : manifest.terms.addedFlipWei,
     bankrollFlip: displayFlip(viewer.bankrollInWei),
     goalFlip: displayFlip(viewer.goalWei),
     rolls: rollsHex(viewport.tape),
@@ -297,6 +359,7 @@ export function createCrapsReplayTableModel(artifacts, {
     viewer,
     viewerTrace,
     viewport,
+    fullViewport,
     leaderboardTimeline,
     tableOptions,
   });
@@ -416,74 +479,155 @@ export function crapsReplayPrizeAmounts({
 
 /** Fetch the sharded result and open a table without exposing transport details to the component. */
 export async function openCrapsReplayTable(table, {
-  battleKey, viewerBetId, fetchImpl, loadProfiles = fetchProfiles, ...openOptions
+  battleKey,
+  viewerBetId,
+  highRollerBetIds = [],
+  highRollerEntrants = null,
+  highWinnerBetId = null,
+  highWinner = null,
+  highPayoutWei = null,
+  highWinningStop = null,
+  highBankrollRider = null,
+  fetchImpl,
+  loadProfiles = fetchProfiles,
+  ...openOptions
 } = {}) {
-  const artifacts = await loadCrapsReplay({ battleKey, viewerBetId, fetchImpl });
+  const artifacts = await loadCrapsReplay({
+    battleKey,
+    viewerBetId,
+    highRollerBetIds,
+    fetchImpl,
+  });
   if (!artifacts.ready) return artifacts;
-  let model = createCrapsReplayTableModel(artifacts);
+  let mainModel = createCrapsReplayTableModel(artifacts);
   let profiles = null;
   // Overlay live Discord identity on the sealed seats. Decoration only: any
   // failure keeps the deterministic model exactly as the bundle shipped it.
   try {
     const addresses = [
-      model.viewer.player,
-      ...model.tableOptions.otherPlayers.map((player) => player.player),
+      mainModel.viewer.player,
+      ...mainModel.tableOptions.otherPlayers.map((player) => player.player),
     ];
     profiles = await loadCrapsReplayProfiles(addresses, loadProfiles);
-    if (profiles?.size) model = createCrapsReplayTableModel(artifacts, { profiles });
+    if (profiles?.size) mainModel = createCrapsReplayTableModel(artifacts, { profiles });
   } catch (_error) { /* identity outage must never block the replay */ }
-  const prizeAmounts = crapsReplayPrizeAmounts({
-    bountyPoolWei: model.tableOptions.bountyPoolWei,
-    addedFlipWei: model.tableOptions.addedFlipWei,
+  const mainPrizeAmounts = crapsReplayPrizeAmounts({
+    bountyPoolWei: mainModel.tableOptions.bountyPoolWei,
+    addedFlipWei: mainModel.tableOptions.addedFlipWei,
     fallbackBountyPoolWei: openOptions.bountyPoolWei,
     fallbackAddedFlipWei: openOptions.addedFlipWei,
     settledMainPotWei: openOptions.settledMainPotWei,
-    battleStakeWei: model.manifest.terms.battleStakeWei,
-    entrants: model.manifest.field.entrants,
+    battleStakeWei: mainModel.manifest.terms.battleStakeWei,
+    entrants: mainModel.manifest.field.entrants,
   });
-  const availablePerspectives = new Set(model.viewport.seats.map((trace) => trace.player.betId));
-  const winnerBetId = openOptions.battleWinnerBetId ?? openOptions.winnerBetId ?? null;
+  const mainWinnerBetId = openOptions.battleWinnerBetId ?? openOptions.winnerBetId ?? null;
+  const requestedHighEntrants = Number(highRollerEntrants);
+  const exactHighRoster = Number.isInteger(requestedHighEntrants) && requestedHighEntrants >= 2
+    && artifacts.highRollers.length === requestedHighEntrants;
+  const highWinnerSeat = highWinnerBetId == null ? null : String(highWinnerBetId);
+  const stageHighRollers = exactHighRoster
+    && highBankrollRider !== true
+    && mainModel.viewer.entryMultiple > 1
+    && highWinnerSeat != null
+    && artifacts.highRollers.some((player) => player.betId === highWinnerSeat);
+  let highModel = stageHighRollers
+    ? createCrapsReplayTableModel(artifacts, {
+        profiles,
+        lane: 'high',
+        highRollerEntrants: requestedHighEntrants,
+      })
+    : null;
+
+  const modelFor = (lane, perspectiveBetId = null) => createCrapsReplayTableModel(artifacts, {
+    profiles,
+    perspectiveBetId,
+    lane,
+    highRollerEntrants: requestedHighEntrants,
+  });
 
   const openModel = (nextModel, {
+    lane = 'main',
     resumeResolutionIndex = null,
     autoRoll = null,
   } = {}) => {
+    const highLane = lane === 'high';
+    const winnerBetId = highLane ? highWinnerSeat : mainWinnerBetId;
+    const winner = highLane
+      ? highWinner
+      : openOptions.battleWinner ?? openOptions.winner;
+    const payoutWei = highLane
+      ? highPayoutWei
+      : openOptions.battlePayoutWei ?? openOptions.amountWei;
+    const laneStakeWei = highLane
+      ? BigInt(nextModel.manifest.terms.battleStakeWei)
+        * BigInt(Math.max(0, nextModel.viewer.entryMultiple - 1))
+      : nextModel.manifest.terms.battleStakeWei;
+    const laneEntrants = highLane
+      ? requestedHighEntrants
+      : nextModel.manifest.field.entrants;
     const battleAward = crapsReplayBattleAward({
       viewer: nextModel.viewer.player,
-      winner: openOptions.battleWinner ?? openOptions.winner,
+      winner,
       viewerBetId: nextModel.viewer.betId,
       winnerBetId,
-      payoutWei: openOptions.battlePayoutWei ?? openOptions.amountWei,
-      battleStakeWei: nextModel.manifest.terms.battleStakeWei,
-      entrants: nextModel.manifest.field.entrants,
-      winningStop: openOptions.battleWinningStop ?? openOptions.winningStop,
-      wonByViewer: openOptions.battleWonByViewer,
+      payoutWei,
+      battleStakeWei: laneStakeWei,
+      entrants: laneEntrants,
+      winningStop: highLane
+        ? highWinningStop
+        : openOptions.battleWinningStop ?? openOptions.winningStop,
+      wonByViewer: highLane ? false : openOptions.battleWonByViewer,
     });
+    const lanePrizeAmounts = highLane
+      ? Object.freeze({
+          bountyPoolWei: optionalWei(highPayoutWei)?.toString?.() ?? null,
+          addedFlipWei: battleAward.battleBoostWei,
+          bountyPoolScope: 'high',
+        })
+      : mainPrizeAmounts;
+    const availablePerspectives = new Set(
+      nextModel.viewport.seats.map((trace) => trace.player.betId),
+    );
+    const onPerspectiveSelect = ({ betId, resumeResolutionIndex: resumeAt, autoRoll: keepAuto } = {}) => {
+      const selectedBetId = betId == null ? '' : String(betId);
+      if (!availablePerspectives.has(selectedBetId)) return false;
+      openModel(modelFor(lane, selectedBetId), {
+        lane,
+        resumeResolutionIndex: resumeAt,
+        autoRoll: keepAuto,
+      });
+      return true;
+    };
+    const onResolutionPhaseComplete = highLane ? ({
+      resolutionIndex = null,
+      autoRoll: keepAuto = null,
+    } = {}) => {
+      const resumeAt = Number.isInteger(resolutionIndex)
+        ? resolutionIndex
+        : nextModel.tableOptions.resolutionHands.length - 1;
+      const nextMain = modelFor('main', nextModel.viewer.betId);
+      openModel(nextMain, {
+        lane: 'main',
+        resumeResolutionIndex: resumeAt,
+        autoRoll: keepAuto,
+      });
+      return true;
+    } : null;
     table?.open?.({
       ...openOptions,
       ...nextModel.tableOptions,
-      ...prizeAmounts,
+      ...lanePrizeAmounts,
       ...battleAward,
       battleWinnerBetId: winnerBetId,
       onPerspectiveSelect,
+      onResolutionAcknowledged: highLane ? undefined : openOptions.onResolutionAcknowledged,
+      onResolutionPhaseComplete: onResolutionPhaseComplete ?? undefined,
       ...(Number.isInteger(resumeResolutionIndex) ? { resumeResolutionIndex } : {}),
       ...(typeof autoRoll === 'boolean' ? { autoRoll } : {}),
     });
   };
 
-  // This callback stays bound to the already-verified artifact set. Switching
-  // seats is therefore synchronous and never fetches or trusts a second replay.
-  const onPerspectiveSelect = ({ betId, resumeResolutionIndex, autoRoll } = {}) => {
-    const selectedBetId = betId == null ? '' : String(betId);
-    if (!availablePerspectives.has(selectedBetId)) return false;
-    const nextModel = createCrapsReplayTableModel(artifacts, {
-      profiles,
-      perspectiveBetId: selectedBetId,
-    });
-    openModel(nextModel, { resumeResolutionIndex, autoRoll });
-    return true;
-  };
-
-  openModel(model);
-  return Object.freeze({ ...artifacts, model });
+  const model = highModel ?? mainModel;
+  openModel(model, { lane: highModel ? 'high' : 'main' });
+  return Object.freeze({ ...artifacts, model, mainModel, highModel });
 }

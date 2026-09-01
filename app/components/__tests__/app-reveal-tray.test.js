@@ -124,6 +124,16 @@ beforeEach(() => {
 });
 
 describe('actionableRevealItems', () => {
+  test('the independent RNG monitor yields while a major draw owns the frame lane', () => {
+    const source = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'utf8');
+    const refresh = source.slice(
+      source.indexOf('async #refreshRngQueue('),
+      source.indexOf('\n  async #requestGlobalRng()', source.indexOf('async #refreshRngQueue(')),
+    );
+    assert.match(refresh, /if \(isMajorDrawActive\(\)\) return;[\s\S]*?readLootboxRngQueueState\(\)/,
+      'the background queue read is rejected before it can enter RPC during a draw');
+  });
+
   test('accepts ready/busy work and explicitly pinned RNG waits, but rejects ordinary waiting', () => {
     const rows = trayModule.actionableRevealItems([
       { kind: 'lootbox', state: 'ready' },

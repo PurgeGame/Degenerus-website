@@ -27,7 +27,7 @@ import {
   CRAPS_TABLE_OPEN_EVENT,
   formatCrapsCompactFlip,
   unpackCrapsContractChips,
-} from './app-craps-table.js';
+} from './app-craps-table.js?rev=bonus-reveal-v1';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
 export const CRAPS_BATTLES_PER_DAY = 7;
@@ -45,15 +45,28 @@ export function __setCrapsProfilesForTest(impl) {
 }
 const CRAPS_REPLAY_POLL_MIN_MS = 850;
 const CRAPS_REPLAY_POLL_JITTER_MS = 300;
+// The sub-second cadence buys the hot window: a battle that just finalized
+// while the builder is still sealing its artifacts, where the reveal should
+// land the moment the pointer flips. It is the wrong steady state. A pointer
+// still missing after ten seconds is not about to appear within the next one,
+// and each unsettled battle was holding a 1 Hz 404 loop open indefinitely.
+const CRAPS_REPLAY_POLL_FAST_ATTEMPTS = 10;
+const CRAPS_REPLAY_POLL_MAX_MS = 30_000;
 const CRAPS_REPLAY_TERMINAL_STATES = new Set(['ready', 'failed', 'build-unavailable']);
 
-/** Keep synchronized result viewers spread around the edge's one-second cache boundary. */
-export function crapsReplayPollDelay(randomValue = Math.random()) {
+/**
+ * Keep synchronized result viewers spread around the edge's one-second cache
+ * boundary, then double away from it once the builder is clearly not close.
+ */
+export function crapsReplayPollDelay(randomValue = Math.random(), attempts = 0) {
   const requested = Number(randomValue);
   const unit = Number.isFinite(requested)
     ? Math.max(0, Math.min(0.999999, requested))
     : 0.5;
-  return CRAPS_REPLAY_POLL_MIN_MS + Math.floor(unit * (CRAPS_REPLAY_POLL_JITTER_MS + 1));
+  const base = CRAPS_REPLAY_POLL_MIN_MS + Math.floor(unit * (CRAPS_REPLAY_POLL_JITTER_MS + 1));
+  const over = Math.max(0, Math.trunc(Number(attempts) || 0) - CRAPS_REPLAY_POLL_FAST_ATTEMPTS);
+  if (over === 0) return base;
+  return Math.min(CRAPS_REPLAY_POLL_MAX_MS, base * (2 ** Math.min(over, 8)));
 }
 
 /** Validation/drift is terminal for this browser build; transport failures are retryable. */
@@ -417,6 +430,18 @@ function compactWei(value) {
   return formatCrapsCompactFlip((wei + (FLIP_WEI / 2n)) / FLIP_WEI);
 }
 
+/** The narrow green header chip always stays compact, including 1K–9.9K boosts. */
+export function crapsHeaderBoostLabel(value) {
+  if (value == null) return '—';
+  let wei;
+  try { wei = BigInt(value); } catch (_error) { return '—'; }
+  const flip = (wei + (FLIP_WEI / 2n)) / FLIP_WEI;
+  return flip.toLocaleString('en-US', {
+    notation: 'compact',
+    maximumSignificantDigits: 3,
+  });
+}
+
 /** Paint the resolved-row boost as a compact bolt badge; prose lives in a11y/tooltip copy. */
 function paintCrapsBoostMark(container, output, value) {
   const amount = compactWei(value);
@@ -449,10 +474,22 @@ export function crapsResolutionPendingActions({
   return replays.flatMap((replay) => {
     if (wasSeen(scope, replay)) return [];
     const identity = resolutionIdentity(replay);
-    const loader = states.get(identity);
+    const loader = states.get(identity) ?? (replay?.finalized === false
+      ? { ready: false, status: 'pending', pointer: null }
+      : null);
     const ready = loader?.ready === true;
     const loaderStatus = String(loader?.status ?? 'checking');
-    const battleStakeLabel = compactWei(replay.battleStakeWei);
+    let entryBattleStakeWei = replay.entryBattleStakeWei ?? null;
+    if (entryBattleStakeWei == null) {
+      try {
+        const multiple = BigInt(replay.entryMultiple ?? 1);
+        const baseStake = BigInt(replay.battleStakeWei);
+        entryBattleStakeWei = multiple >= 1n && multiple <= 256n
+          ? (baseStake * multiple).toString()
+          : replay.battleStakeWei;
+      } catch (_error) { entryBattleStakeWei = replay.battleStakeWei; }
+    }
+    const battleStakeLabel = compactWei(entryBattleStakeWei);
     const detail = !ready
       ? crapsReplayStatusCopy(loader)
       : 'Battle settled. Open the replay to reveal your result and final rewards.';
@@ -546,6 +583,43 @@ export function crapsWinnerResultForLane(result, highRoller = false) {
   });
 }
 
+/** Build a public replay request with the winning seat as the initial camera. */
+export function crapsWinnerReplayRequest(result) {
+  const battleKey = String(result?.battleKey ?? '').toLowerCase();
+  const winner = String(result?.winner ?? '').toLowerCase();
+  let viewerBetId;
+  try {
+    const betId = BigInt(result?.betId);
+    if (betId <= 0n) return null;
+    viewerBetId = betId.toString();
+  } catch (_error) {
+    return null;
+  }
+  if (!/^0x[0-9a-f]{64}$/.test(battleKey) || !/^0x[0-9a-f]{40}$/.test(winner)) return null;
+  const optionalUint = (value) => {
+    if (value == null) return null;
+    try {
+      const parsed = BigInt(value);
+      return parsed >= 0n ? parsed.toString() : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+  const winningStop = result?.winningStop == null ? null : Number(result.winningStop);
+  const bonusMultiplier = Number(result?.bonusMultiplier);
+  const hasBonusMultiplier = [0.25, 1, 10, 100].includes(bonusMultiplier);
+  return Object.freeze({
+    battleKey,
+    viewerBetId,
+    settledMainPotWei: optionalUint(result?.potWei),
+    battleWinner: winner,
+    battleWinnerBetId: viewerBetId,
+    battlePayoutWei: optionalUint(result?.amountWei),
+    battleWinningStop: winningStop === 0 || winningStop === 1 ? winningStop : null,
+    ...(hasBonusMultiplier ? { bonusMultiplier } : {}),
+  });
+}
+
 /** Exact indexed total when known; otherwise an honest lower bound from the chain prize. */
 export function crapsWinnerTotalLabel(result) {
   if (!result || typeof result !== 'object') return '—';
@@ -594,6 +668,8 @@ export class AppCrapsEntry extends HTMLElement {
   #replayPollTimer = null;
   #replayLoadPending = false;
   #replayLifecycleListening = false;
+  #winnerReplayTargets = new Map();
+  #winnerReplayOpening = null;
   #highRoller = false;
   #boardBets = {};
   #contractChips = 0;
@@ -645,6 +721,11 @@ export class AppCrapsEntry extends HTMLElement {
     try { target?.focus?.({ preventScroll: true }); } catch (_error) { /* detached DOM */ }
   };
   #clickListener = (event) => {
+    const replay = event?.target?.closest?.('[data-craps-winner-replay]');
+    if (replay && !replay.disabled) {
+      void this.#openWinnerReplay(replay);
+      return;
+    }
     const lane = event?.target?.closest?.('[data-craps-lane]');
     if (lane && !lane.disabled) {
       this.#highRoller = lane.dataset.crapsLane === 'high';
@@ -746,31 +827,36 @@ export class AppCrapsEntry extends HTMLElement {
     this.innerHTML = `
       <section class="craps-entry" aria-labelledby="craps-entry-title">
         <header class="craps-entry__head">
-          <span class="craps-entry__brand">
+          <div class="craps-entry__brand">
             <span class="craps-entry__dice" aria-hidden="true">
               <img src="${dgnBadgePath(3, 1, 6)}" width="102" height="102" alt="">
               <img src="${dgnBadgePath(3, 4, 4)}" width="102" height="102" alt="">
             </span>
-            <h2 id="craps-entry-title"><small>CRAPS</small><strong>BATTLE</strong></h2>
-          </span>
-          <div class="craps-entry__progressive" data-bind="craps-progressive" data-state="loading"
-               aria-label="Run It Up jackpot amount unavailable">
-            <small>RUN IT UP JACKPOT</small><strong><output data-bind="craps-progressive-amount" aria-live="polite">—</output> <em>FLIP</em></strong>
+            <div class="craps-entry__title-lockup">
+              <h2 id="craps-entry-title"><strong>CRAPS</strong><small>BATTLE</small></h2>
+              <div class="craps-entry__progressive" data-bind="craps-progressive" data-state="loading"
+                   aria-label="Run It Up jackpot amount unavailable">
+                <span class="craps-entry__run-it-up-mark" aria-hidden="true">
+                  <img src="/app/assets/craps/run-it-up-jackpot-logo-v2.webp" width="1200" height="500" loading="lazy" decoding="async" alt="">
+                </span>
+                <small>RUN IT UP JACKPOT</small><strong><output data-bind="craps-progressive-amount" aria-live="polite">—</output> <em>FLIP</em></strong>
+              </div>
+            </div>
           </div>
           <span class="craps-entry__pot-boost" data-bind="craps-added-banner" data-state="loading"
-                aria-label="Yesterday's actual Craps boost unavailable">
-            <small data-bind="craps-added-kicker">YESTERDAY'S BOOST</small><strong><output data-bind="craps-added-total">—</output> <em>FLIP</em></strong>
+                aria-label="Yesterday's added FLIP unavailable">
+            <small data-bind="craps-added-kicker">YESTERDAY</small><strong><output data-bind="craps-added-total">—</output> <em>FLIP</em></strong><small class="craps-entry__pot-boost-state">ADDED</small>
           </span>
         </header>
 
         <div class="craps-entry__lobby">
           <table class="craps-entry__listing" aria-label="Craps battle buy-ins">
             <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-wager"><col class="craps-entry__col-operator"><col class="craps-entry__col-battle"><col class="craps-entry__col-goal"><col class="craps-entry__col-action"><col class="craps-entry__col-entrants"></colgroup>
-            <thead><tr><th>CLOSES IN</th><th class="craps-entry__wager">WAGER</th><th class="craps-entry__operator">+</th><th>BATTLE</th><th>GOAL</th><th>BUY IN</th><th>FIELD</th></tr></thead>
+            <thead><tr><th>CLOSES IN</th><th class="craps-entry__wager">WAGER</th><th class="craps-entry__operator">+</th><th>BATTLE</th><th>GOAL</th><th>BUY IN</th><th>ENTRANTS</th></tr></thead>
             <tbody>
               <tr class="craps-entry__day-buy" data-bind="craps-day-row" data-state="open">
                 <th scope="row" data-bind="craps-day-head"><small data-bind="craps-day-kicker">FULL DAY</small><time data-bind="craps-day-countdown">—</time></th>
-                <td class="craps-entry__money craps-entry__wager" data-bind="craps-full-day-terms"><strong data-bind="craps-full-day-entry">—</strong><small class="craps-entry__range-note" data-bind="craps-full-day-range-note" hidden>7 BATTLES</small></td>
+                <td class="craps-entry__money craps-entry__wager" data-bind="craps-full-day-terms"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-full-day-entry">—</strong><small class="craps-entry__range-note" data-bind="craps-full-day-range-note" hidden>7 BATTLES</small></span></td>
                 <td class="craps-entry__operator" data-bind="craps-full-day-separator">+</td>
                 <td class="craps-entry__money craps-entry__battle-fee" data-bind="craps-full-day-pot-cell"><strong data-bind="craps-full-day-pot">—</strong></td>
                 <td class="craps-entry__goal" data-bind="craps-full-day-goal">—</td>
@@ -796,13 +882,14 @@ export class AppCrapsEntry extends HTMLElement {
                       <span><small data-bind="craps-battle-winner-label">WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
                       <span class="craps-entry__result-total"><small>TOTAL WON</small><strong><output data-bind="craps-battle-payout">—</output><em class="craps-entry__boost-mark" data-bind="craps-battle-boost-detail" hidden><output data-bind="craps-battle-boost">—</output></em></strong></span>
                       <span class="craps-entry__result-buyin"><small>BUY IN</small><strong><output data-bind="craps-battle-buyin">—</output></strong></span>
+                      <button type="button" class="craps-entry__result-replay" data-craps-winner-replay hidden aria-label="Replay from the winner's perspective" title="Watch from the winner's perspective"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="7.5" cy="6.75" r="2.75"></circle><circle cx="14" cy="6.5" r="2.25"></circle><rect x="4" y="10" width="12" height="8" rx="1.5"></rect><path d="m16 12.25 4-2v7.5l-4-2Z"></path></svg></button>
                     </div>
                   </td>
                   <td class="craps-entry__entrants" data-bind="craps-battle-entrants">—</td>
                 </tr>`).join('')}
               <tr class="craps-entry__day-buy craps-entry__day-buy--tomorrow" data-bind="craps-tomorrow-row" data-state="open" hidden>
                 <th scope="row"><time data-bind="craps-tomorrow-countdown">—</time></th>
-                <td class="craps-entry__money craps-entry__tomorrow-range" data-bind="craps-tomorrow-terms" colspan="4"><strong data-bind="craps-tomorrow-range">4.2K–126K</strong><small>7 BATTLES</small></td>
+                <td class="craps-entry__money craps-entry__tomorrow-range" data-bind="craps-tomorrow-terms" colspan="4"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">4.2K – 126K</strong><small>7 BATTLES</small></span></td>
                 <td class="craps-entry__action"><button type="button" data-craps-entry="future-day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
                 <td class="craps-entry__entrants" data-bind="craps-tomorrow-entrants">—</td>
               </tr>
@@ -816,6 +903,7 @@ export class AppCrapsEntry extends HTMLElement {
                     <span><small data-bind="craps-previous-event-label">YESTERDAY'S EVENT WINNER</small><strong data-bind="craps-previous-event-winner">—</strong></span>
                     <span class="craps-entry__result-total"><small>TOTAL WON</small><strong><output data-bind="craps-previous-event-payout">—</output><em class="craps-entry__boost-mark" data-bind="craps-previous-event-boost-detail" hidden><output data-bind="craps-previous-event-boost">—</output></em></strong></span>
                     <span class="craps-entry__result-buyin"><small>BUY IN</small><strong><output data-bind="craps-previous-event-buyin">—</output></strong></span>
+                    <button type="button" class="craps-entry__result-replay" data-craps-winner-replay hidden aria-label="Replay from the winner's perspective" title="Watch from the winner's perspective"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="7.5" cy="6.75" r="2.75"></circle><circle cx="14" cy="6.5" r="2.25"></circle><rect x="4" y="10" width="12" height="8" rx="1.5"></rect><path d="m16 12.25 4-2v7.5l-4-2Z"></path></svg></button>
                   </div>
                 </td>
                 <td class="craps-entry__entrants" data-bind="craps-previous-event-entrants">—</td>
@@ -824,7 +912,10 @@ export class AppCrapsEntry extends HTMLElement {
           </table>
         </div>
 
-        <footer class="craps-entry__foot" data-bind="craps-entry-status" aria-live="polite">Set a board or buy in with the random draw.</footer>
+        <footer class="craps-entry__foot">
+          <span class="craps-entry__status" data-bind="craps-entry-status" aria-live="polite" hidden></span>
+          <span class="craps-entry__pick-instruction">Pick your bets or choose RANDOM for 3x BONUS</span>
+        </footer>
 
         <div class="craps-entry__setup" aria-label="Craps picks and entry lane">
           <button type="button" class="craps-entry__board" data-craps-board>
@@ -852,6 +943,7 @@ export class AppCrapsEntry extends HTMLElement {
     const terms = this.#termsFor(state);
     const multiple = this.#highRoller ? terms?.highMult ?? null : 1;
     const connectedPlayer = String(get('connected.address') ?? '').toLowerCase();
+    this.#winnerReplayTargets.clear();
     const futureDay = state.dayEntryKind === 'future-day';
     const dayEntryDay = state.dayEntryDay;
     const bindText = (name, value) => {
@@ -907,15 +999,15 @@ export class AppCrapsEntry extends HTMLElement {
       ? snapshot.playerEntries
       : null;
     const addedReady = snapshot?.yesterdayAddedWei != null;
-    bindText('craps-added-kicker', 'YESTERDAY\'S BOOST');
+    bindText('craps-added-kicker', 'YESTERDAY');
     bindText('craps-added-total', addedReady
-      ? `+${compactWei(snapshot.yesterdayAddedWei)}`
+      ? crapsHeaderBoostLabel(snapshot.yesterdayAddedWei)
       : '—');
     if (addedBanner) {
       addedBanner.dataset.state = addedReady ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
       addedBanner.setAttribute('aria-label', addedReady
-        ? `Yesterday's actual Craps boost across all pots ${compactWei(snapshot.yesterdayAddedWei)} FLIP`
-        : this.#schedulePending ? 'Loading yesterday\'s actual Craps boost' : 'Yesterday\'s actual Craps boost unavailable');
+        ? `Yesterday added ${compactWei(snapshot.yesterdayAddedWei)} FLIP across all Craps pots`
+        : this.#schedulePending ? 'Loading yesterday\'s added FLIP' : 'Yesterday\'s added FLIP unavailable');
     }
 
     const selectedPasses = this.#highRoller ? highPasses : normalPasses;
@@ -931,7 +1023,7 @@ export class AppCrapsEntry extends HTMLElement {
     const dayEntry = !futureDay && dayReady ? terms.bankrollFlip * BigInt(multiple) : null;
     const dayBattle = !futureDay && dayReady ? terms.battleStakeFlip * BigInt(multiple) : null;
     const futureFaceRange = CRAPS_FUTURE_DAY_FACE_RANGES[this.#highRoller ? 'high' : 'normal'];
-    const compactRange = (range) => `${formatCrapsCompactFlip(range.low)}–${formatCrapsCompactFlip(range.high)}`;
+    const compactRange = (range) => `${formatCrapsCompactFlip(range.low)} – ${formatCrapsCompactFlip(range.high)}`;
     const dayKicker = this.querySelector('[data-bind="craps-day-kicker"]');
     if (dayKicker) {
       dayKicker.hidden = futureDay;
@@ -1068,8 +1160,8 @@ export class AppCrapsEntry extends HTMLElement {
             ? 'This wallet is already entered for this Craps slate.'
           : dayReady
             ? usePass
-              ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve all seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
-              : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your seven-chip board is set.' : 'The contract will draw a random ten-chip board.'}`
+              ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve all seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
+              : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
             : 'Full-day Craps terms are loading');
     }
     if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
@@ -1236,6 +1328,7 @@ export class AppCrapsEntry extends HTMLElement {
       const boost = row.querySelector('[data-bind="craps-battle-boost"]');
       const boostDetail = row.querySelector('[data-bind="craps-battle-boost-detail"]');
       const resultBuyIn = row.querySelector('[data-bind="craps-battle-buyin"]');
+      const replayButton = row.querySelector('[data-craps-winner-replay]');
       for (const cell of row.querySelectorAll('.craps-entry__open-cell')) cell.hidden = Boolean(result);
       if (close) {
         close.textContent = battle.state === 'closed'
@@ -1305,6 +1398,11 @@ export class AppCrapsEntry extends HTMLElement {
           ? compactWei(crapsWinnerListBuyInWei(laneResult, this.#highRoller))
           : '—';
       }
+      this.#bindWinnerReplay(
+        replayButton,
+        concealed ? null : laneResult,
+        `Battle ${battle.number}`,
+      );
       if (concealed) {
         row.setAttribute('aria-label', `Battle ${battle.number} result ready; view it in Pending to reveal`);
       } else {
@@ -1368,6 +1466,7 @@ export class AppCrapsEntry extends HTMLElement {
     const previousEventLocked = this.querySelector('[data-bind="craps-previous-event-result-locked"]');
     const previousEventDetails = this.querySelector('[data-bind="craps-previous-event-result-details"]');
     const previousEventEntrantNode = this.querySelector('[data-bind="craps-previous-event-entrants"]');
+    const previousEventReplay = this.querySelector('.craps-entry__previous-event [data-craps-winner-replay]');
     if (previousEventRow) {
       previousEventRow.hidden = !previousEvent;
       previousEventRow.dataset.day = previousEvent ? String(previousEvent.day) : '';
@@ -1417,6 +1516,11 @@ export class AppCrapsEntry extends HTMLElement {
     bindText('craps-previous-event-buyin', compactWei(
       previousEventConcealed ? null : crapsWinnerListBuyInWei(previousEventLaneResult, this.#highRoller),
     ));
+    this.#bindWinnerReplay(
+      previousEventReplay,
+      previousEventConcealed ? null : previousEventLaneResult,
+      previousEvent ? `Day ${previousEvent.day} event` : 'previous event',
+    );
     if (previousEventEntrantNode) {
       const shown = crapsEntrantCountForLane(previousEventEntrants, this.#highRoller);
       const known = shown != null;
@@ -1453,10 +1557,11 @@ export class AppCrapsEntry extends HTMLElement {
         : futureDay && usePass
           ? `1 ${this.#highRoller ? 'High Roller' : 'Normal'} comp reserves the next slate.`
           : futureDay && !state.futurePassOpen && selectedPasses > 0
-            ? 'Comp window closed · FLIP entry remains open.'
+            ? ''
           : futureDay
             ? 'Today live · reserve the next slate.'
-            : 'Full slate before Battle 1 · or enter one battle.');
+            : '');
+      status.hidden = !status.textContent;
     }
     this.#renderProgressive();
     void this.#refreshWinnerProfiles();
@@ -1491,6 +1596,23 @@ export class AppCrapsEntry extends HTMLElement {
     }
     node.append(profile?.name || compactWinner(raw));
     node.title = profile?.name ? `${profile.name} · ${raw}` : raw;
+  }
+
+  #bindWinnerReplay(button, result, label) {
+    if (!button) return;
+    const replay = crapsWinnerReplayRequest(result);
+    const key = replay ? resolutionIdentity(replay) : '';
+    const opening = Boolean(key && key === this.#winnerReplayOpening);
+    button.hidden = !replay;
+    button.disabled = !replay || opening;
+    button.dataset.state = opening ? 'loading' : 'ready';
+    button.dataset.crapsWinnerReplay = key;
+    button.parentElement?.setAttribute?.('data-replay', replay ? 'ready' : 'none');
+    const description = `Replay ${label} from the winner's perspective`;
+    button.setAttribute('aria-label', opening ? `Loading ${description.toLowerCase()}` : description);
+    button.setAttribute('aria-busy', String(opening));
+    button.title = 'Watch from the winner\'s perspective';
+    if (replay) this.#winnerReplayTargets.set(key, replay);
   }
 
   #resultNeedsReveal(result) {
@@ -1699,13 +1821,31 @@ export class AppCrapsEntry extends HTMLElement {
     this.#replayPollTimer = null;
   }
 
+  /**
+   * Attempts already spent by the battle that has been waiting the least. A
+   * newly settled battle therefore keeps the fast cadence for its own hot
+   * window even while an older pointer sits in backoff beside it.
+   */
+  #replayPollAttempts() {
+    const address = String(this.#schedulePlayer ?? '').toLowerCase();
+    let lowest = null;
+    for (const replay of this.#resolvedReplays) {
+      if (resolutionWasSeen(address, replay)) continue;
+      const state = this.#replayStates.get(resolutionIdentity(replay));
+      if (state && CRAPS_REPLAY_TERMINAL_STATES.has(state.status)) continue;
+      const attempts = Math.max(0, Math.trunc(Number(state?.attempts) || 0));
+      if (lowest == null || attempts < lowest) lowest = attempts;
+    }
+    return lowest ?? 0;
+  }
+
   #scheduleReplayPoll() {
     this.#stopReplayPoll();
     if (this.#replayLoadPending || !this.#replayPollingAllowed() || !this.#replayNeedsPolling()) return;
     this.#replayPollTimer = globalThis.setTimeout?.(() => {
       this.#replayPollTimer = null;
       void this.#refreshResolvedReplays(this.#resolvedReplays, this.#schedulePlayer);
-    }, crapsReplayPollDelay()) ?? null;
+    }, crapsReplayPollDelay(Math.random(), this.#replayPollAttempts())) ?? null;
     if (this.#replayPollTimer && typeof this.#replayPollTimer.unref === 'function') {
       this.#replayPollTimer.unref();
     }
@@ -1723,7 +1863,12 @@ export class AppCrapsEntry extends HTMLElement {
     for (const replay of replays) {
       const identity = resolutionIdentity(replay);
       if (!this.#replayStates.has(identity)) {
-        this.#replayStates.set(identity, { ready: false, status: 'checking', pointer: null });
+        this.#replayStates.set(identity, {
+          ready: false,
+          status: replay?.finalized === false ? 'pending' : 'checking',
+          pointer: null,
+          attempts: 0,
+        });
       }
     }
     this.#publishResolvedReplays();
@@ -1738,17 +1883,29 @@ export class AppCrapsEntry extends HTMLElement {
         if (prior?.ready || CRAPS_REPLAY_TERMINAL_STATES.has(prior?.status)) {
           return { identity, state: prior };
         }
+        const attempts = Math.max(0, Math.trunc(Number(prior?.attempts) || 0)) + 1;
         try {
           const artifacts = await loadCrapsReplay({
             battleKey: replay.battleKey,
             viewerBetId: replay.viewerBetId,
             fetchImpl: crapsReplayFetch,
           });
-          return { identity, state: crapsReplayLoaderState(artifacts) };
+          return { identity, state: { ...crapsReplayLoaderState(artifacts), attempts } };
         } catch (error) {
+          const failureStatus = crapsReplayFailureStatus(error);
           return {
             identity,
-            state: { ready: false, status: crapsReplayFailureStatus(error), pointer: null },
+            // A pointer can legitimately 404 before the replay builder observes
+            // the Armed event. Chain truth still says settlement is pending;
+            // retain that honest state while retrying transport failures.
+            state: {
+              ready: false,
+              status: replay?.finalized === false && failureStatus === 'retrying'
+                ? 'pending'
+                : failureStatus,
+              pointer: null,
+              attempts,
+            },
           };
         }
       }));
@@ -1760,6 +1917,41 @@ export class AppCrapsEntry extends HTMLElement {
         this.#replayLoadPending = false;
         this.#scheduleReplayPoll();
       }
+    }
+  }
+
+  async #openWinnerReplay(button) {
+    const key = String(button?.dataset?.crapsWinnerReplay ?? '');
+    const replay = this.#winnerReplayTargets.get(key);
+    if (!replay || this.#winnerReplayOpening) return false;
+    const table = globalThis.document?.querySelector?.('app-craps-table');
+    if (!table?.open) {
+      this.#message = 'The Craps replay table is unavailable.';
+      this.#render();
+      return false;
+    }
+    this.#winnerReplayOpening = key;
+    this.#message = 'Loading the winner\'s replay…';
+    this.#render();
+    try {
+      const result = await openCrapsReplayTable(table, {
+        ...replay,
+        fetchImpl: crapsReplayFetch,
+      });
+      if (!result.ready) {
+        this.#message = crapsReplayStatusCopy(crapsReplayLoaderState(result));
+        return false;
+      }
+      this.#message = '';
+      return true;
+    } catch (error) {
+      this.#message = crapsReplayFailureStatus(error) === 'build-unavailable'
+        ? 'Replay unavailable for this build.'
+        : 'Replay temporarily unavailable. Try again.';
+      return false;
+    } finally {
+      this.#winnerReplayOpening = null;
+      this.#render();
     }
   }
 
@@ -1780,6 +1972,14 @@ export class AppCrapsEntry extends HTMLElement {
         battleWinnerBetId: replay.winnerBetId,
         battlePayoutWei: replay.amountWei,
         battleWinningStop: replay.winningStop,
+        bonusMultiplier: replay.bonusMultiplier,
+        highRollerBetIds: replay.highRollerBetIds,
+        highRollerEntrants: replay.highRollerEntrants,
+        highWinnerBetId: replay.highWinnerBetId,
+        highWinner: replay.highWinner,
+        highPayoutWei: replay.highPayoutWei,
+        highWinningStop: replay.highWinningStop,
+        highBankrollRider: replay.highBankrollRider,
         onResolutionAcknowledged: () => {
           if (resolutionWasSeen(address, replay)) return;
           markResolutionSeen(address, replay);
@@ -1832,7 +2032,7 @@ export class AppCrapsEntry extends HTMLElement {
         ? wager.contractChips === entryChips
           ? 'Entry board unchanged.'
           : 'Chip placement changed. Select AMEND ENTRY to update it.'
-        : 'Your seven-chip board is set for the Buy In buttons.';
+        : 'Your board is set for the Buy In buttons.';
       this.#render();
       return true;
     };
@@ -1887,7 +2087,7 @@ export class AppCrapsEntry extends HTMLElement {
       const result = await amendCrapsSlip({ betId, contractChips: this.#contractChips });
       await this.#refreshSchedule(true);
       this.#applyAmendedBoard(betId, this.#contractChips);
-      this.#message = 'Entry amended with your new seven-chip board.';
+      this.#message = 'Entry amended with your new board.';
       this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
         detail: { kind: 'amend', betId, contractChips: this.#contractChips, result },
         bubbles: true,

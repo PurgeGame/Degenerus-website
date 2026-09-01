@@ -6,16 +6,21 @@
 // level-transition paths fund the pool, while successful record claims reduce
 // it immediately.
 //
-// ⛔ THE MARKS ARE ON CHAIN; THE HOLDERS ARE NOT. Every `biggest*Ever` slot
-// holds a bare uint128 — no address. The holder exists only in
+// ⛔ THE MARKS ARE ON CHAIN; THE HOLDERS ARE IN EVENTS. Every `biggest*Ever`
+// slot holds a bare uint128 — no address. The holder exists only in
 // `BigRecordUpdated(kind, player, value, paid, sdgnrsPaid)`, which the indexer
-// rolls into `coinflip_records`. Both the permanent marks and shared pool move
-// in the claim transaction, so their headlines are read directly from the
-// contract while the DB remains the source for holder and record history.
+// normally rolls into `coinflip_records`. Dice Run shipped before that indexer
+// learned kind 4, so its latest event is also recovered directly from chain;
+// the same transaction supplies the winning Craps replay perspective.
 
 import { fetchJSON } from './api.js';
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
-import { readContractStorage, sharedReadProvider } from './read-provider.js';
+import {
+  readContractStorage,
+  readProviderBlockNumber,
+  readTransactionReceipt,
+  sharedReadProvider,
+} from './read-provider.js';
 import { ethers, getProvider } from './contracts.js';
 import { displayEthCompact, displayToken } from './scaling.js';
 
@@ -36,7 +41,16 @@ const RECORD_POOL_ABI = [
   'function biggestBuyEver() external view returns (uint128)',
   'function biggestDiceRunEver() external view returns (uint128)',
 ];
+const BIG_RECORD_EVENT_ABI = [
+  'event BigRecordUpdated(uint8 indexed kind,address indexed player,uint256 value,uint128 paid,uint256 sdgnrsPaid)',
+];
+const CRAPS_RECORD_REPLAY_ABI = [
+  'event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)',
+  'event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)',
+];
 const TOKEN_UNIT = 10n ** 18n;
+const DICE_RUN_LOG_REORG_TAIL_BLOCKS = 12;
+const DICE_RUN_LOG_CHUNK_BLOCKS = 10_000;
 // Coinflip storage layout for this immutable deployment. Slot 4 packs the
 // claimable-day latch, one bool, the original four uint24 record clocks at byte
 // offsets 4/7/10/13, two unrelated uint24 fields, then Dice Run's clock at byte
@@ -62,11 +76,15 @@ let _clockReadInflight = null;
 let _lastLiveRecordClocks = null;
 let _markReadInflight = null;
 let _lastLiveRecordMarks = null;
+let _diceRunReadInflight = null;
+let _lastLiveDiceRunRecord = null;
+let _diceRunLogWindow = null;
 let _lastRecordsPayload = null;
 let _fetchRecordsJSON = fetchJSON;
 let _readRecordPool = readLiveRecordPool;
 let _readRecordClocks = readLiveRecordClocks;
 let _readRecordMarks = readLiveRecordMarks;
+let _readDiceRunRecord = readLiveDiceRunRecord;
 
 /**
  * Per-kind presentation facts.
@@ -274,6 +292,241 @@ export async function readLiveRecordMarks() {
     return await request;
   } finally {
     if (_markReadInflight === request) _markReadInflight = null;
+  }
+}
+
+let _bigRecordEventInterface = null;
+let _crapsRecordReplayInterface = null;
+
+function bigRecordEventInterface() {
+  _bigRecordEventInterface ??= new ethers.Interface(BIG_RECORD_EVENT_ABI);
+  return _bigRecordEventInterface;
+}
+
+function crapsRecordReplayInterface() {
+  _crapsRecordReplayInterface ??= new ethers.Interface(CRAPS_RECORD_REPLAY_ABI);
+  return _crapsRecordReplayInterface;
+}
+
+function normalizedRecordAddress(value) {
+  const address = String(value ?? '').toLowerCase();
+  return /^0x[0-9a-f]{40}$/.test(address) ? address : null;
+}
+
+function parsedRecordLog(iface, log) {
+  if (log?.parsed) return log.parsed;
+  try { return iface.parseLog(log); } catch (_e) { return null; }
+}
+
+/**
+ * Join a Dice Run record event to the finalized battle and winning payment in
+ * the same receipt. The record event supplies identity; the Craps pair supplies
+ * the immutable replay key and the winner's bet id (the initial perspective).
+ *
+ * Identity remains useful when a legacy/malformed receipt lacks replay logs,
+ * so a valid candidate returns with `replay: null` instead of disappearing.
+ */
+export function diceRunRecordFromReceipt(candidate, receipt) {
+  const player = normalizedRecordAddress(candidate?.player);
+  const value = toBigInt(candidate?.value);
+  if (!player || value <= 0n) return null;
+
+  const blockNumber = Number(candidate?.blockNumber);
+  const transactionHash = String(candidate?.transactionHash ?? '').toLowerCase() || null;
+  const base = {
+    player,
+    value,
+    blockNumber: Number.isSafeInteger(blockNumber) && blockNumber >= 0 ? blockNumber : null,
+    transactionHash,
+    replay: null,
+  };
+  const iface = crapsRecordReplayInterface();
+  const crapsAddress = normalizedRecordAddress(CONTRACTS.CRAPS);
+  const finalized = [];
+  const paid = [];
+
+  for (const log of receipt?.logs ?? []) {
+    const logAddress = normalizedRecordAddress(log?.address);
+    if (crapsAddress && logAddress !== crapsAddress) continue;
+    const parsed = parsedRecordLog(iface, log);
+    if (!parsed) continue;
+    const args = parsed.args ?? {};
+    try {
+      if (parsed.name === 'CrapsBattleFinalized') {
+        const scoreBps = toBigInt(args.winningScoreBps ?? args[5]);
+        if (scoreBps !== value) continue;
+        finalized.push({
+          battleKey: String(args.battleKey ?? args[0]).toLowerCase(),
+          winningStop: Number(args.winningStop ?? args[1]),
+          potWei: toBigInt(args.pot ?? args[6]).toString(),
+        });
+      } else if (parsed.name === 'CrapsBattlePaid') {
+        const winner = normalizedRecordAddress(args.player ?? args[2]);
+        if (winner !== player) continue;
+        paid.push({
+          betId: toBigInt(args.betId ?? args[0]).toString(),
+          battleKey: String(args.battleKey ?? args[1]).toLowerCase(),
+          amountWei: toBigInt(args.amount ?? args[3]).toString(),
+        });
+      }
+    } catch (_e) { /* ignore one malformed log without losing holder identity */ }
+  }
+
+  for (const final of finalized) {
+    if (!/^0x[0-9a-f]{64}$/.test(final.battleKey)) continue;
+    const payment = paid.find((entry) => (
+      entry.battleKey === final.battleKey && toBigInt(entry.betId) > 0n
+    ));
+    if (!payment) continue;
+    return Object.freeze({
+      ...base,
+      replay: Object.freeze({
+        battleKey: final.battleKey,
+        viewerBetId: payment.betId,
+        settledMainPotWei: final.potWei,
+        battleWinner: player,
+        battleWinnerBetId: payment.betId,
+        battlePayoutWei: payment.amountWei,
+        battleWinningStop: final.winningStop === 0 || final.winningStop === 1
+          ? final.winningStop
+          : null,
+      }),
+    });
+  }
+  return Object.freeze(base);
+}
+
+function diceRunLogIndex(log) {
+  const value = Number(log?.index ?? log?.logIndex ?? -1);
+  return Number.isSafeInteger(value) ? value : -1;
+}
+
+function diceRunCandidateFromLog(log) {
+  const parsed = parsedRecordLog(bigRecordEventInterface(), log);
+  if (parsed?.name !== 'BigRecordUpdated') return null;
+  const args = parsed.args ?? {};
+  if (Number(args.kind ?? args[0]) !== RECORD_KIND_DICE_RUN) return null;
+  const player = normalizedRecordAddress(args.player ?? args[1]);
+  const value = toBigInt(args.value ?? args[2]);
+  const transactionHash = String(log?.transactionHash ?? '').toLowerCase();
+  const blockNumber = Number(log?.blockNumber);
+  if (!player || value <= 0n || !/^0x[0-9a-f]{64}$/.test(transactionHash)
+      || !Number.isSafeInteger(blockNumber) || blockNumber < 0) return null;
+  return {
+    player,
+    value,
+    transactionHash,
+    blockNumber,
+    logIndex: diceRunLogIndex(log),
+  };
+}
+
+async function fetchDiceRunLogRange(provider, filter, fromBlock, toBlock) {
+  if (fromBlock > toBlock) return [];
+  try {
+    const logs = await provider.getLogs({ ...filter, fromBlock, toBlock });
+    return Array.isArray(logs) ? logs : [];
+  } catch (wideError) {
+    const logs = [];
+    for (let start = fromBlock; start <= toBlock; start += DICE_RUN_LOG_CHUNK_BLOCKS) {
+      const end = Math.min(toBlock, start + DICE_RUN_LOG_CHUNK_BLOCKS - 1);
+      try {
+        const chunk = await provider.getLogs({ ...filter, fromBlock: start, toBlock: end });
+        if (Array.isArray(chunk)) logs.push(...chunk);
+      } catch (_chunkError) {
+        // A partial history could misidentify an old holder as the permanent
+        // high-water mark. Keep the previous complete snapshot instead.
+        throw wideError;
+      }
+    }
+    return logs;
+  }
+}
+
+async function readDiceRunRecordLogs(provider, latestBlock) {
+  const address = normalizedRecordAddress(CONTRACTS.COINFLIP);
+  if (!address) return [];
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock ?? 0));
+  const cached = _diceRunLogWindow;
+  const reusable = Boolean(cached
+    && cached.provider === provider
+    && cached.address === address
+    && cached.fromBlock === deployBlock
+    && cached.toBlock <= latestBlock);
+  const fetchFrom = reusable
+    ? Math.max(deployBlock, cached.toBlock - DICE_RUN_LOG_REORG_TAIL_BLOCKS + 1)
+    : deployBlock;
+  const iface = bigRecordEventInterface();
+  const topics = iface.encodeFilterTopics(iface.getEvent('BigRecordUpdated'), [
+    RECORD_KIND_DICE_RUN,
+  ]);
+  const fresh = await fetchDiceRunLogRange(
+    provider,
+    { address, topics },
+    fetchFrom,
+    latestBlock,
+  );
+  const retained = reusable
+    ? cached.logs.filter((log) => Number(log?.blockNumber) < fetchFrom)
+    : [];
+  const logs = retained.length ? retained.concat(fresh) : fresh;
+  _diceRunLogWindow = {
+    provider,
+    address,
+    fromBlock: deployBlock,
+    toBlock: latestBlock,
+    logs,
+  };
+  return logs;
+}
+
+/**
+ * Recover the current Dice Run record holder and replay provenance from chain.
+ * This closes the gap left by `/records` deployments that still emit only the
+ * original kinds 0–3.
+ */
+export async function readLiveDiceRunRecord() {
+  if (_diceRunReadInflight) return _diceRunReadInflight;
+  const request = (async () => {
+    try {
+      const provider = recordPoolProvider();
+      if (!provider?.getLogs || !CONTRACTS.COINFLIP || !CONTRACTS.CRAPS) {
+        return _lastLiveDiceRunRecord;
+      }
+      const latestBlock = Number(await readProviderBlockNumber(provider));
+      if (!Number.isSafeInteger(latestBlock) || latestBlock < 0) {
+        return _lastLiveDiceRunRecord;
+      }
+      const logs = await readDiceRunRecordLogs(provider, latestBlock);
+      const candidates = logs
+        .map(diceRunCandidateFromLog)
+        .filter(Boolean)
+        .sort((left, right) => (
+          left.blockNumber - right.blockNumber || left.logIndex - right.logIndex
+        ));
+      const candidate = candidates.at(-1) ?? null;
+      if (!candidate) return _lastLiveDiceRunRecord;
+      if (_lastLiveDiceRunRecord?.transactionHash === candidate.transactionHash
+          && _lastLiveDiceRunRecord?.value === candidate.value
+          && _lastLiveDiceRunRecord?.replay) {
+        return _lastLiveDiceRunRecord;
+      }
+      let receipt = null;
+      try {
+        receipt = await readTransactionReceipt(candidate.transactionHash, { provider });
+      } catch (_e) { /* holder identity still renders while receipt RPC retries */ }
+      _lastLiveDiceRunRecord = diceRunRecordFromReceipt(candidate, receipt)
+        ?? _lastLiveDiceRunRecord;
+      return _lastLiveDiceRunRecord;
+    } catch (_e) {
+      return _lastLiveDiceRunRecord;
+    }
+  })();
+  _diceRunReadInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_diceRunReadInflight === request) _diceRunReadInflight = null;
   }
 }
 
@@ -492,6 +745,7 @@ export function normalizeRecords(
   liveRecordPool = null,
   liveRecordClocks = null,
   liveRecordMarks = null,
+  liveDiceRunRecord = null,
 ) {
   const rows = Array.isArray(payload?.records) ? payload.records : [];
   const byKind = new Map(rows.map((row) => [Number(row?.kind), row]));
@@ -507,11 +761,30 @@ export function normalizeRecords(
         ? liveRecordMarks[meta.kind]
         : null;
       const liveMark = rawLiveMark == null ? null : toBigInt(rawLiveMark);
+      const diceRunProvenance = meta.kind === RECORD_KIND_DICE_RUN
+        ? liveDiceRunRecord
+        : null;
+      const provenanceValue = diceRunProvenance == null
+        ? null
+        : toBigInt(diceRunProvenance.value);
       // Permanent marks only ratchet upward. Taking the maximum prevents a
       // briefly lagging RPC from rolling back an already-indexed newer mark.
-      const chainAhead = liveMark != null && liveMark > indexedValue;
-      const value = chainAhead ? liveMark : indexedValue;
-      const player = String(row?.player || '').toLowerCase() || null;
+      let value = indexedValue;
+      if (liveMark != null && liveMark > value) value = liveMark;
+      if (provenanceValue != null && provenanceValue > value) value = provenanceValue;
+      const indexedMatches = indexedValue > 0n && indexedValue === value;
+      const provenanceMatches = provenanceValue != null
+        && provenanceValue > 0n
+        && provenanceValue === value;
+      const indexedPlayer = String(row?.player || '').toLowerCase() || null;
+      const provenancePlayer = normalizedRecordAddress(diceRunProvenance?.player);
+      const player = value <= 0n
+        ? null
+        : provenanceMatches && provenancePlayer
+          ? provenancePlayer
+          : indexedMatches
+            ? indexedPlayer
+            : null;
       const indexedClock = row?.clockDay == null || !Number.isInteger(Number(row.clockDay))
         ? null
         : Number(row.clockDay);
@@ -524,9 +797,9 @@ export function normalizeRecords(
       return {
         kind: meta.kind,
         meta,
-        // The contract has no holder getter. Never attach the old indexed
-        // holder to a newer chain mark while BigRecordUpdated is catching up.
-        player: value > 0n && !chainAhead ? player : null,
+        // Never attach an old indexed holder to a newer mark. Dice Run's event
+        // fallback is safe only when its value exactly matches that mark.
+        player,
         value,
         barToBeat: value > 0n
           ? recordClaimTargetForMark(meta.kind, value)
@@ -538,6 +811,7 @@ export function normalizeRecords(
         // otherwise max the accrued share instead of suppressing it.
         clockDay: liveClock ?? indexedClock,
         held: value > 0n,
+        replay: provenanceMatches ? diceRunProvenance?.replay ?? null : null,
       };
     }),
   };
@@ -545,11 +819,12 @@ export function normalizeRecords(
 
 /** GET indexed history plus the chain-authoritative pool, clocks, and marks. */
 export async function fetchRecords() {
-  const [payloadResult, poolResult, clocksResult, marksResult] = await Promise.allSettled([
+  const [payloadResult, poolResult, clocksResult, marksResult, diceRunResult] = await Promise.allSettled([
     _fetchRecordsJSON('/records'),
     Promise.resolve().then(() => _readRecordPool()),
     Promise.resolve().then(() => _readRecordClocks()),
     Promise.resolve().then(() => _readRecordMarks()),
+    Promise.resolve().then(() => _readDiceRunRecord()),
   ]);
   if (payloadResult.status === 'fulfilled') _lastRecordsPayload = payloadResult.value;
   return normalizeRecords(
@@ -557,21 +832,29 @@ export async function fetchRecords() {
     poolResult.status === 'fulfilled' ? poolResult.value : null,
     clocksResult.status === 'fulfilled' ? clocksResult.value : null,
     marksResult.status === 'fulfilled' ? marksResult.value : null,
+    diceRunResult.status === 'fulfilled' ? diceRunResult.value : null,
   );
 }
 
 /** Test-only readers for indexed history and authoritative chain state. */
-export function __setRecordsReadersForTest({ json, pool, clocks, marks } = {}) {
+export function __setRecordsReadersForTest({ json, pool, clocks, marks, diceRun } = {}) {
   if (typeof json === 'function') _fetchRecordsJSON = json;
   if (typeof pool === 'function') _readRecordPool = pool;
   if (typeof clocks === 'function') _readRecordClocks = clocks;
-  else if (typeof json === 'function' || typeof pool === 'function' || typeof marks === 'function') {
+  else if (typeof json === 'function' || typeof pool === 'function'
+      || typeof marks === 'function' || typeof diceRun === 'function') {
     // Existing reader-seam tests must never leak a public-RPC request.
     _readRecordClocks = async () => null;
   }
   if (typeof marks === 'function') _readRecordMarks = marks;
-  else if (typeof json === 'function' || typeof pool === 'function' || typeof clocks === 'function') {
+  else if (typeof json === 'function' || typeof pool === 'function'
+      || typeof clocks === 'function' || typeof diceRun === 'function') {
     _readRecordMarks = async () => null;
+  }
+  if (typeof diceRun === 'function') _readDiceRunRecord = diceRun;
+  else if (typeof json === 'function' || typeof pool === 'function'
+      || typeof clocks === 'function' || typeof marks === 'function') {
+    _readDiceRunRecord = async () => null;
   }
 }
 
@@ -580,12 +863,16 @@ export function __resetRecordsReadersForTest() {
   _readRecordPool = readLiveRecordPool;
   _readRecordClocks = readLiveRecordClocks;
   _readRecordMarks = readLiveRecordMarks;
+  _readDiceRunRecord = readLiveDiceRunRecord;
   _poolReadInflight = null;
   _lastLiveRecordPool = null;
   _clockReadInflight = null;
   _lastLiveRecordClocks = null;
   _markReadInflight = null;
   _lastLiveRecordMarks = null;
+  _diceRunReadInflight = null;
+  _lastLiveDiceRunRecord = null;
+  _diceRunLogWindow = null;
   _lastRecordsPayload = null;
 }
 

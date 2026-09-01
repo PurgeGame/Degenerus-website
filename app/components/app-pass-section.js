@@ -1323,9 +1323,31 @@ class AppPassSection extends HTMLElement {
     }
     if (!select || !buy || !opener || !symbolGroups) return;
 
+    // Store-driven refreshes reach this render far more often than the
+    // catalog changes. Rebuilding 32 buttons plus the select on every pass is
+    // steady listener/DOM churn for identical output, so the DOM rebuild runs
+    // only when one of its inputs moved; the label/lock/preview updates below
+    // the grid still run every pass. select.value participates so a user's
+    // click (which only repaints the preview) still gets its aria-pressed
+    // sweep on the next pass, exactly like the unconditional rebuild did.
+    const catalogKey = [
+      known ? 1 : 0,
+      ownedSymbolId ?? '',
+      canSign ? 1 : 0,
+      get('ui.mode') === 'combined' ? 1 : 0,
+      known ? [...catalog.takenSymbols].sort((a, b) => a - b).join(',') : '',
+      [...this.#busySymbols].sort((a, b) => a - b).join(','),
+      select.value,
+    ].join('|');
+    const rebuildCatalog = symbolGroups.dataset.catalogKey !== catalogKey
+      || !symbolGroups.children?.length;
+    symbolGroups.dataset.catalogKey = catalogKey;
+
     const previous = Number(select.value);
-    while (select.children?.length) select.removeChild(select.children[0]);
-    while (symbolGroups.children?.length) symbolGroups.removeChild(symbolGroups.children[0]);
+    if (rebuildCatalog) {
+      while (select.children?.length) select.removeChild(select.children[0]);
+      while (symbolGroups.children?.length) symbolGroups.removeChild(symbolGroups.children[0]);
+    }
 
     let availableIds = [];
     if (ownedSymbolId != null) {
@@ -1335,12 +1357,12 @@ class AppPassSection extends HTMLElement {
         .filter((id) => !catalog.takenSymbols.has(id));
     }
 
-    if (!availableIds.length) {
+    if (rebuildCatalog && !availableIds.length) {
       const option = document.createElement('option');
       option.value = '';
       option.textContent = known ? 'No symbols available' : 'Checking availability…';
       select.appendChild(option);
-    } else {
+    } else if (rebuildCatalog) {
       for (const symbolId of availableIds) {
         const badge = passSymbolBadge(symbolId);
         const option = document.createElement('option');
@@ -1367,7 +1389,7 @@ class AppPassSection extends HTMLElement {
 
     // Four stable rows keep all 32 choices aligned. Taken symbols remain in
     // place as disabled context instead of making every later icon jump.
-    for (let quadrant = 0; quadrant < PASS_QUADRANTS.length; quadrant += 1) {
+    if (rebuildCatalog) for (let quadrant = 0; quadrant < PASS_QUADRANTS.length; quadrant += 1) {
       const category = PASS_QUADRANTS[quadrant];
       const group = document.createElement('section');
       group.className = 'pass-deity-symbol-group';

@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-25000 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-25300 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -332,6 +332,13 @@ describe('app.css LOC budget', () => {
     // Discord winner identity (.craps-entry__tomorrow-range / __winner-pfp):
     // five deliberate lines on an existing surface, landed with one line of
     // headroom left in the previous budget.
-    assert.ok(cssLines.length <= 25_050, `total <=25050, got ${cssLines.length}`);
+    // 25050 → 25300 for three blocks, none of them a new family: the LINK
+    // donation live multiplier + FLIP quote in the player-funds dialog
+    // (.pfd-link__quote / __conversion), the craps day receipt card in the
+    // reveal tray (.rvl-card--craps-result and its badge), and the
+    // z-index/pointer-events repair on .rvl-ticket-actions. ~68 lines of
+    // headroom; the overdue component-stylesheet split noted at 8800 above
+    // still has not happened, and this file is now ten times that budget.
+    assert.ok(cssLines.length <= 25_300, `total <=25300, got ${cssLines.length}`);
   });
 });

@@ -12,6 +12,7 @@ import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
 import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 import { get, subscribe, update } from './store.js';
+import { isMajorDrawActive } from './major-draw-activity.js';
 
 const GAME_DAY_ABI = [
   'function currentDayView() external view returns (uint24)',
@@ -331,6 +332,12 @@ function _schedule() {
   if (_timer != null) clearTimeout(_timer);
   _timer = setTimeout(() => {
     _timer = null;
+    if (isMajorDrawActive()) {
+      // Keep the chain clock off the reel's main-thread lane. Resume from the
+      // next ordinary cadence instead of issuing a catch-up at draw release.
+      _schedule();
+      return;
+    }
     void refreshDayRollover();
   }, nextDayProbeDelay());
   try { _timer?.unref?.(); } catch (_e) { /* browser timer */ }

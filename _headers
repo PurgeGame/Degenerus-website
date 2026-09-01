@@ -94,6 +94,15 @@
 /app/components/*
   Cache-Control: public, max-age=60, must-revalidate
 
+# app-player-funds-dialog and link-donation share a named-export ABI. The
+# general 60s freshness window can pair a newly revalidated importer with the
+# previous dependency revision during a deploy, which fails the whole dynamic
+# import before the dialog mounts. Retain conditional caching, but revalidate
+# this ABI-bearing dependency on every new document load.
+/app/app/link-donation.js
+  ! Cache-Control
+  Cache-Control: no-cache, must-revalidate
+
 # The app's own entry document was the one HTML entry point with NO rule —
 # the same 4h-default trap as the modules above, but for the page itself.
 /app

@@ -263,7 +263,11 @@ describe('gold-rush headline wiring', () => {
       'headline never traverses the API/database route');
     assert.match(polling, /update\('app\.goldRush', payload\)/);
     // Self-rescheduling setTimeout, NOT setInterval — the gap adapts.
-    assert.match(polling, /TIMER_HANDLES\.goldRush = setTimeout\(runGoldRushCycle, _goldRushDelay\)/);
+    assert.match(
+      polling,
+      /TIMER_HANDLES\.goldRush = setTimeout\(runScheduledGoldRushCycle, _goldRushDelay\)/,
+      'the adaptive timeout enters through the major-draw admission gate',
+    );
   });
 });
 

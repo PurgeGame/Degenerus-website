@@ -6,10 +6,14 @@ const componentUrl = new URL('../app-craps-table.js', import.meta.url);
 const source = fs.readFileSync(componentUrl, 'utf8');
 
 test('craps resolution wires one restrained cue to each visible gameplay beat', () => {
-  assert.match(source, /if \(step % 2 === 0\) \{\s*sfxCrapsDiceTick\(step, frame\.globalRoll \?\? frame\.ordinal \?\? index\);/s,
-    'seven animation steps produce four clacks, not a machine-gun tick on every face');
-  assert.match(source, /#lockDicePair\(dicePair\);[\s\S]*?#popDiceLockReadout\(frame, \{ comeOut \}\);[\s\S]*?sfxCrapsDiceLand\(\{\s*total: frame\.total,[\s\S]*?crapsSevenRollOutcome\(frame, \{ comeOut \}\)/s,
-    'the total tone and semantic seven treatment share the visual lock beat');
+  assert.doesNotMatch(source, /sfxCrapsDiceTick/,
+    'there are no random face-swap clacks before the result');
+  assert.match(source,
+    /#landResolutionDice\(frame, index, onDone\)[\s\S]*?const outstandingBetFlip =[\s\S]*?this\.#boardInPlayFlip\(\);[\s\S]*?const netResultBps = crapsNetResultBps\(frame\?\.deltaFlip, outstandingBetFlip\)/s,
+    'the result voice is calculated from the player net divided by the chips exposed on that roll');
+  assert.match(source,
+    /dice\.forEach\(\(die, dieIndex\) => this\.#paintDiceBadge\(die, targets\[dieIndex\], colors\[dieIndex\]\)\);[\s\S]*?bay\.dataset\.state = 'impact';[\s\S]*?this\.#impactDicePair\(dicePair\);[\s\S]*?#popDiceLockReadout\(frame, \{ comeOut \}\);[\s\S]*?sfxCrapsDiceLand\(\{ total: frame\.total, netResultBps \}\)/s,
+    'the authoritative faces appear in one impact with a roll-number tone and a wager-relative result tone');
   assert.match(source, /#animateBankrollLoss[\s\S]*?sfxCrapsSettlement\('sweep'\)/s,
     'a whole felt loss gets one sweep');
   assert.match(source, /firstLocalPayoutChip\?\.addEventListener\?\.\('animationend', playLocalClack,[\s\S]*?firstOpponentPayoutChip\?\.addEventListener\?\.\('animationend', playOpponentClack/s,

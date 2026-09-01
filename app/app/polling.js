@@ -48,6 +48,7 @@ import {
   lastDayPayloadNeedsRecheck,
   normalizeLastDayPayload,
 } from './last-day-state.js';
+import { isMajorDrawActive } from './major-draw-activity.js';
 
 // ---------------------------------------------------------------------------
 // LOCKED constants (D-04 + Pitfall 3)
@@ -710,7 +711,23 @@ function runPlayerCycle() {
 // ---------------------------------------------------------------------------
 
 function scheduleGoldRush() {
-  TIMER_HANDLES.goldRush = setTimeout(runGoldRushCycle, _goldRushDelay);
+  TIMER_HANDLES.goldRush = setTimeout(runScheduledGoldRushCycle, _goldRushDelay);
+}
+
+function runBackgroundCycle(cycle) {
+  if (isMajorDrawActive() || typeof cycle !== 'function') return null;
+  return cycle();
+}
+
+function runScheduledGoldRushCycle() {
+  if (!isMajorDrawActive()) return runGoldRushCycle();
+  // This timeout has fired, so replace it with a fresh cadence instead of
+  // letting a skipped poll burst at the reel-to-scratch boundary.
+  if (TIMER_HANDLES.goldRush !== null) {
+    clearTimeout(TIMER_HANDLES.goldRush);
+    scheduleGoldRush();
+  }
+  return Promise.resolve([]);
 }
 
 function runGoldRushCycle() {
@@ -1075,9 +1092,18 @@ export function start({ playerAddress = null } = {}) {
   // cohort phase-locked forever, so the origin sees a spike every 15s instead of
   // a flat line. A per-client ±20% period makes them drift apart within a few
   // ticks. The mean cadence is unchanged, so nothing gets staler on average.
-  TIMER_HANDLES.game     = setInterval(game,     jittered(POLL_INTERVALS.gameState));
-  TIMER_HANDLES.player   = setInterval(player,   jittered(POLL_INTERVALS.playerData));
-  TIMER_HANDLES.health   = setInterval(health,   jittered(POLL_INTERVALS.health));
+  TIMER_HANDLES.game = setInterval(
+    () => runBackgroundCycle(game),
+    jittered(POLL_INTERVALS.gameState),
+  );
+  TIMER_HANDLES.player = setInterval(
+    () => runBackgroundCycle(player),
+    jittered(POLL_INTERVALS.playerData),
+  );
+  TIMER_HANDLES.health = setInterval(
+    () => runBackgroundCycle(health),
+    jittered(POLL_INTERVALS.health),
+  );
   // lastDay is deliberately NOT on an interval — see POLL_INTERVALS.
 }
 
@@ -1149,6 +1175,7 @@ export const _testing = {
   get TIMER_HANDLES() { return TIMER_HANDLES; },
   get ACTIVE_CYCLES() { return ACTIVE_CYCLES; },
   runCycle,
+  runBackgroundCycle,
   runPlayerCycle,
   clearApiCooldown,
   invalidateJSONCache,

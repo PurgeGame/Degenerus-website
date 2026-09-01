@@ -18,15 +18,25 @@
 // that arrive while an async refresh is running collapse into one trailing
 // refresh instead of stacking duplicate RPC/API work behind a slow endpoint.
 
+import {
+  isMajorDrawActive,
+  subscribeMajorDrawActivity,
+} from './major-draw-activity.js';
+
 const entries = new Set();
 let listening = false;
+let drawUnsubscribe = null;
 
 function isHidden() {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
+function isPaused() {
+  return isHidden() || isMajorDrawActive();
+}
+
 function run(entry) {
-  if (!entries.has(entry) || isHidden()) return;
+  if (!entries.has(entry) || isPaused()) return;
   if (entry.running) {
     entry.trailing = true;
     return;
@@ -40,7 +50,7 @@ function run(entry) {
     // here prevents an otherwise-handled poll from becoming an unhandled one.
   }).finally(() => {
     entry.running = false;
-    if (!entries.has(entry) || isHidden()) {
+    if (!entries.has(entry) || isPaused()) {
       entry.trailing = false;
       return;
     }
@@ -52,7 +62,7 @@ function run(entry) {
 }
 
 function arm(entry) {
-  if (entry.timer != null || isHidden()) return;
+  if (entry.timer != null || isPaused()) return;
   entry.timer = setInterval(() => run(entry), entry.intervalMs);
   // Node (tests) returns a Timeout with unref; browsers return a number.
   if (entry.timer && typeof entry.timer.unref === 'function') entry.timer.unref();
@@ -65,7 +75,7 @@ function disarm(entry) {
 }
 
 function onVisibilityChange() {
-  if (isHidden()) {
+  if (isPaused()) {
     for (const entry of entries) disarm(entry);
     return;
   }
@@ -76,10 +86,28 @@ function onVisibilityChange() {
   }
 }
 
+function onMajorDrawActivity(active) {
+  if (active) {
+    for (const entry of entries) {
+      disarm(entry);
+      // A tick that arrived behind an in-flight request must not burst into
+      // the draw when that request settles.
+      entry.trailing = false;
+    }
+    return;
+  }
+  // Resume from a fresh interval. An immediate catch-up here would simply
+  // move the deferred work into the final reel/scratch handoff.
+  for (const entry of entries) arm(entry);
+}
+
 function ensureListener() {
-  if (listening || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
-  listening = true;
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  if (!drawUnsubscribe) drawUnsubscribe = subscribeMajorDrawActivity(onMajorDrawActivity);
+  if (!listening && typeof document !== 'undefined'
+    && typeof document.addEventListener === 'function') {
+    listening = true;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
 }
 
 /**
@@ -111,5 +139,7 @@ export function _componentPollStatsForTests() {
 export function _resetComponentPollsForTests() {
   for (const entry of entries) disarm(entry);
   entries.clear();
+  try { drawUnsubscribe?.(); } catch (_e) { /* defensive */ }
+  drawUnsubscribe = null;
 }
 export const _onVisibilityChangeForTests = onVisibilityChange;

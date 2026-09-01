@@ -64,6 +64,33 @@ import { CRAPS_REPLAY_ESCALATOR_SHOOTERS } from '../../craps/replay-engine.js';
 const clone = (value) => structuredClone(value);
 const MANIFEST = validateCrapsReplayManifest(SIM_CRAPS_REPLAY_MANIFEST);
 const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
+const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
+
+function contestedHighRollerFixture() {
+  const existing = clone(ALL_PLAYERS.find((player) => player.entryMultiple > 1));
+  const featuredIds = new Set(SIM_CRAPS_REPLAY_FEATURED.players.map((player) => player.betId));
+  const promoted = clone(ALL_PLAYERS.find((player) => (
+    player.entryMultiple === 1
+    && !featuredIds.has(player.betId)
+    && crapsReplayShardIndex(player.seat, MANIFEST.field.shardSize)
+      !== crapsReplayShardIndex(existing.seat, MANIFEST.field.shardSize)
+  )));
+  const validated = validateCrapsReplayPlayer(promoted);
+  promoted.entryMultiple = existing.entryMultiple;
+  promoted.wonWei = (
+    BigInt(validated.ladderWei.at(-1)) * BigInt(promoted.entryMultiple)
+  ).toString();
+  return { existing, promoted };
+}
+
+test('the differentially verified run-44 Craps runtime is explicitly replayable', () => {
+  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  manifest.ruleset.runtimeCodeHash = RUN_44_CRAPS_RUNTIME_HASH;
+  assert.equal(
+    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
+    RUN_44_CRAPS_RUNTIME_HASH,
+  );
+});
 
 test('full-field chip positions use a compact, exact roll-aligned codec', () => {
   const ranks = [1, 2, 11, 50, 65_536, 4_294_967_295];
@@ -282,6 +309,7 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
     battleWinnerBetId: viewer.betId,
     battlePayoutWei: settledMainPotWei,
     battleWinningStop: 1,
+    bonusMultiplier: 10,
     fetchImpl: async (path) => ({
       ok: bodies.has(path),
       status: bodies.has(path) ? 200 : 404,
@@ -310,6 +338,8 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   assert.equal(options.battlePayoutWei, settledMainPotWei.toString());
   assert.equal(options.battleBoostWei, options.addedFlipWei);
   assert.equal(options.battleWinningStop, 1);
+  assert.equal(options.bonusMultiplier, 10,
+    'the authoritative boost rung survives the replay adapter');
   assert.ok(options.otherPlayers.every((player) => player.label.startsWith('Discord ')));
   assert.ok(options.otherPlayers.every((player) => player.discordPfp?.startsWith('https://')));
 
@@ -339,6 +369,78 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   assert.equal(opened[2].resumeResolutionIndex, 8);
   assert.equal(options.onPerspectiveSelect({ betId: '999999999999999999999' }), false,
     'a click cannot escape the already verified viewport');
+  __resetCrapsReplayLoaderForTest();
+});
+
+test('a contested High Roller replay runs its exact side field before the main battle', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const { existing: viewer, promoted: rival } = contestedHighRollerFixture();
+  const viewerShardIndex = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const rivalShardIndex = crapsReplayShardIndex(rival.seat, MANIFEST.field.shardSize);
+  const rivalShard = clone(SIM_CRAPS_REPLAY_SHARDS[rivalShardIndex]);
+  const rivalIndex = rivalShard.players.findIndex((player) => player.betId === rival.betId);
+  rivalShard.players[rivalIndex] = rival;
+  const bodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[viewerShardIndex], SIM_CRAPS_REPLAY_SHARDS[viewerShardIndex]],
+    [SIM_CRAPS_REPLAY_PATHS.shards[rivalShardIndex], rivalShard],
+  ]);
+  const opened = [];
+  const acknowledged = () => {};
+  const mainWinner = SIM_CRAPS_REPLAY_FEATURED.players[0];
+  const highPayoutWei = (8_000n * 10n ** 18n).toString();
+
+  const loaded = await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
+    viewerBetId: viewer.betId,
+    highRollerBetIds: [viewer.betId, rival.betId],
+    highRollerEntrants: 2,
+    highWinnerBetId: rival.betId,
+    highWinner: rival.player,
+    highPayoutWei,
+    highBankrollRider: false,
+    battleWinnerBetId: mainWinner.betId,
+    battleWinner: mainWinner.player,
+    battlePayoutWei: '9000',
+    onResolutionAcknowledged: acknowledged,
+    fetchImpl: async (path) => ({
+      ok: bodies.has(path),
+      status: bodies.has(path) ? 200 : 404,
+      json: async () => clone(bodies.get(path)),
+    }),
+    loadProfiles: async () => new Map(),
+  });
+
+  assert.equal(loaded.ready, true);
+  assert.deepEqual(loaded.highRollers.map((player) => player.betId), [viewer.betId, rival.betId]);
+  assert.equal(opened.length, 1);
+  const high = opened[0];
+  assert.equal(high.replayLane, 'high');
+  assert.equal(high.entryLabel, 'HIGH ROLLER BATTLE');
+  assert.equal(high.fieldEntrants, 2);
+  assert.equal(high.viewerBetId, viewer.betId);
+  assert.deepEqual(high.otherPlayers.map((player) => player.betId), [rival.betId]);
+  assert.equal(high.battleWinnerBetId, rival.betId);
+  assert.equal(high.battlePayoutWei, highPayoutWei);
+  assert.equal(high.onResolutionAcknowledged, undefined,
+    'the side round cannot retire the Pending receipt');
+  assert.equal(typeof high.onResolutionPhaseComplete, 'function');
+
+  assert.equal(high.onResolutionPhaseComplete({ autoRoll: false }), true);
+  assert.equal(opened.length, 2, 'the High Roller winner advances the presentation to the main battle');
+  const main = opened[1];
+  assert.equal(main.replayLane, 'main');
+  assert.equal(main.entryLabel, 'MAIN BATTLE');
+  assert.equal(main.fieldEntrants, MANIFEST.field.entrants);
+  assert.ok(main.otherPlayers.some((player) => player.entryMultiple === 1),
+    'the main phase restores Normal entrants');
+  assert.equal(main.battleWinnerBetId, mainWinner.betId);
+  assert.equal(main.onResolutionPhaseComplete, undefined);
+  assert.equal(main.onResolutionAcknowledged, acknowledged,
+    'only the completed main battle may retire the Pending receipt');
+  assert.equal(main.autoRoll, false);
   __resetCrapsReplayLoaderForTest();
 });
 
@@ -595,6 +697,7 @@ test('adapter seats the viewer, excludes them from the opponent rack, and aligns
       BigInt(amount) > highest ? BigInt(amount) : highest
     ), 0n) / (10n ** 18n)).toString(),
     standing: viewer.standing,
+    runPayoutWei: viewer.paidWei,
   });
   assert.equal(options.fieldEntrants, MANIFEST.field.entrants);
   assert.deepEqual(options.rankTimeline, rankByRoll,
@@ -679,6 +782,19 @@ test('a featured seat can become the complete replay perspective without droppin
     'the original viewer moves into the opponent list');
   assert.ok(!options.otherPlayers.some((player) => player.betId === selected.betId),
     'the selected player is no longer duplicated as an opponent');
+});
+
+test('a goal-completing perspective carries its exact credited run payout into the table', () => {
+  const goalWinner = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => (
+    player.stop === 'goal' && BigInt(player.paidWei) > 0n
+  ));
+  assert.ok(goalWinner, 'the production fixture includes a paid goal completion');
+  const options = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS, {
+    perspectiveBetId: goalWinner.betId,
+  }).tableOptions;
+  assert.equal(options.viewerResult.stop, 'goal');
+  assert.equal(options.viewerResult.runPayoutWei, goalWinner.paidWei,
+    'the sealed CrapsBetSettled credit reaches the final result without being replaced by the bounty');
 });
 
 test('the table consumer preserves every sealed frame and every authoritative payout list', async () => {

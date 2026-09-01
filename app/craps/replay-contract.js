@@ -7,11 +7,12 @@
  */
 
 export const CRAPS_REPLAY_SCHEMA_VERSION = 1;
-// 0b0ed9fb3: the run-#43 ruleset — goal latch + peak ranking, the two-way 5/20 goal draw, and
-// the posted-stake → played-round restore at the materializer's load boundary. Exact-match
-// checked against `manifest.ruleset.engineVersion`, so bundles from the drifted 484a5d60b
+// 0880d134c: the run-#45 ruleset — the 0..7 chip-board continuum (settlement scatters
+// `10 - placed`), the three-chip leg cap, the FIXED 5x scheduled goal, the eight-row
+// placed-indexed shooter boost, and the single 250,000/1,200,000 progressive cutoff pair.
+// Exact-match checked against `manifest.ruleset.engineVersion`, so bundles from any older
 // materializer fail closed here rather than animating the wrong chips.
-export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-0b0ed9fb3-v1';
+export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-0880d134c-v1';
 export const CRAPS_REPLAY_CDN_PREFIX = '/craps/replays/v1';
 export const CRAPS_REPLAY_DEFAULT_SHARD_SIZE = 256;
 // Mirrors `Craps._MAX_SLIP_HANDS` and `Craps._SLIP_ROLL_CEILING` (`_SLIP_ROLL_BUDGET - 1 +
@@ -50,10 +51,21 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 //   against the live Base Sepolia code). Differential suite green against the re-vendored
 //   harness, and the day-2 field reproduces its chain settlements to the wei once the
 //   materializer restores the played round from the posted stake.
+// 0xde6033ca… — run-#44 at CrapsBattle 0x643c3c30…. The live Base Sepolia bytecode keccak
+//   matches the replay manifest, the current vendored harness passes the full differential
+//   suite, and the first published 13-seat field replayed every chain settlement exactly.
+// 0x2dc4aee4… — audit 0880d134c, staged for run #45 (2026-08-31). Computed as the keccak of
+//   forge-out-testnet's deployedBytecode — CrapsBattle carries ZERO immutableReferences, so
+//   the artifact bytes ARE the runtime bytes the launcher deploys. Differential suite 7/7
+//   against the re-vendored harness (0..7 boards, placed-indexed boost, fixed 5x). ⚠ Verify
+//   against the LIVE code keccak once run #45's CRAPS address exists, per this list's rule
+//   that the deployed edge is the only evidence that counts.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
   '0xff6c3a41a60f9eb5d5ef16553282ae304a739949a321e08ad5b83e3aabfcb4c2',
+  '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796',
+  '0x2dc4aee4c3469fe2488d0bb9e880ab49ac2a4c3b647c3d7d3e0825ca9a17d5c3',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -346,8 +358,9 @@ function validateProgressive(input) {
   const winnerBetId = value.winnerBetId == null ? null : decimalAt(value.winnerBetId, 'manifest.progressive.winnerBetId');
   // ⛔ SCORE BASIS POINTS, NOT A ROLL COUNT (2026-08-29 re-vendor, audit 03e8c3600). The rung is
   // drawn on the winner's HIGH POINT over its own starting bankroll — 10,000 is 1x — and the
-  // cutoffs run to 2,250,000. The old bound here was CRAPS_REPLAY_MAX_ROLLS, which would have
-  // rejected every real score as out of range, so the field was RENAMED rather than repurposed.
+  // rare cutoff is 1,200,000 since audit 0880d134c fixed the goal at 5x (the 20x pair, up to
+  // 2,250,000, left with the draw). The old bound here was CRAPS_REPLAY_MAX_ROLLS, which would
+  // have rejected every real score as out of range, so the field was RENAMED, not repurposed.
   const wonAtScoreBps = value.wonAtScoreBps == null
     ? null
     : integerAt(value.wonAtScoreBps, 'manifest.progressive.wonAtScoreBps', { min: 1, max: 1_000_000_000 });
@@ -598,7 +611,12 @@ async function fetchJson(path, fetchImpl, { immutable = false } = {}) {
  * Load the sealed artifacts needed by one viewer. The pointer is always rechecked; immutable
  * artifacts are single-flight and cached by their digest path inside the tab.
  */
-export async function loadCrapsReplay({ battleKey, viewerBetId, fetchImpl = globalThis.fetch } = {}) {
+export async function loadCrapsReplay({
+  battleKey,
+  viewerBetId,
+  highRollerBetIds = [],
+  fetchImpl = globalThis.fetch,
+} = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('loadCrapsReplay requires fetch');
   const requestedBattleKey = stringAt(String(battleKey ?? ''), 'battleKey', { max: 160 });
   const pointer = validateCrapsReplayPointer(await fetchJson(crapsReplayPointerPath(battleKey), fetchImpl));
@@ -613,16 +631,55 @@ export async function loadCrapsReplay({ battleKey, viewerBetId, fetchImpl = glob
   const seat = crapsReplaySeatFromBetId(betId);
   const shardIndex = crapsReplayShardIndex(seat, manifest.field.shardSize);
   if (shardIndex >= manifest.field.shardCount) fail('viewerBetId', 'seat is outside the battle field');
-  const [featuredRaw, shardRaw] = await Promise.all([
-    fetchJson(manifest.field.featuredPath, fetchImpl, { immutable: true }),
-    fetchJson(crapsReplayShardPath(manifest, shardIndex), fetchImpl, { immutable: true }),
-  ]);
+  if (!Array.isArray(highRollerBetIds)) fail('highRollerBetIds', 'expected an array');
+  const parsedHighBetIds = highRollerBetIds.map((value, index) => (
+    decimalAt(String(value ?? ''), `highRollerBetIds[${index}]`, { positive: true })
+  ));
+  const requestedHighBetIds = Object.freeze([...new Set(parsedHighBetIds)]);
+  const requestedShardIndexes = [...new Set([
+    shardIndex,
+    ...requestedHighBetIds.map((requestedBetId, index) => {
+      const requestedSeat = crapsReplaySeatFromBetId(requestedBetId);
+      const requestedShard = crapsReplayShardIndex(requestedSeat, manifest.field.shardSize);
+      if (requestedShard >= manifest.field.shardCount) {
+        fail(`highRollerBetIds[${index}]`, 'seat is outside the battle field');
+      }
+      return requestedShard;
+    }),
+  ])].sort((left, right) => left - right);
+  const featuredRaw = await fetchJson(manifest.field.featuredPath, fetchImpl, { immutable: true });
+  const shardRaws = [];
+  // A large side field may span many immutable seat shards. Keep initial load
+  // pressure bounded while still completing the exact roster before playback.
+  for (let offset = 0; offset < requestedShardIndexes.length; offset += 8) {
+    const batch = requestedShardIndexes.slice(offset, offset + 8);
+    const loaded = await Promise.all(batch.map(async (index) => Object.freeze({
+      index,
+      raw: await fetchJson(crapsReplayShardPath(manifest, index), fetchImpl, { immutable: true }),
+    })));
+    shardRaws.push(...loaded);
+  }
   const featured = validateCrapsReplayCollection(featuredRaw, manifest);
-  const shard = validateCrapsReplayCollection(shardRaw, manifest);
+  const shards = Object.freeze(shardRaws.map(({ index, raw }) => {
+    const parsed = validateCrapsReplayCollection(raw, manifest);
+    if (parsed.shard.index !== index) fail('collection.shard.index', `expected ${index}`);
+    return parsed;
+  }));
+  const shard = shards.find((candidate) => candidate.shard.index === shardIndex);
   const viewer = featured.players.find((player) => player.betId === betId)
     ?? shard.players.find((player) => player.betId === betId);
   if (!viewer) fail('viewerBetId', `seat ${seat} was not present in its shard`);
-  return frozen({ ready: true, pointer, manifest, featured, shard, viewer });
+  const loadedPlayers = new Map([
+    ...featured.players,
+    ...shards.flatMap((candidate) => candidate.players),
+  ].map((player) => [player.betId, player]));
+  const highRollers = Object.freeze(requestedHighBetIds.map((requestedBetId, index) => {
+    const player = loadedPlayers.get(requestedBetId);
+    if (!player) fail(`highRollerBetIds[${index}]`, 'seat was not present in its immutable shard');
+    if (player.entryMultiple <= 1) fail(`highRollerBetIds[${index}]`, 'seat is not a High Roller');
+    return player;
+  }));
+  return frozen({ ready: true, pointer, manifest, featured, shard, shards, viewer, highRollers });
 }
 
 export function __resetCrapsReplayLoaderForTest() {

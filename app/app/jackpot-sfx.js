@@ -19,8 +19,8 @@
 //   sfxReverseBonk()   — heavy outcome-neutral Reverse-card contact
 //   sfxCoinflipLand()  — authoritative green-win or red-loss landing
 //   sfxQuestComplete() — small two-note quest completion chime
-//   sfxCrapsDiceTick() — restrained resin/felt clack during a dice roll
-//   sfxCrapsDiceLand() — physical landing plus a distinct 2–12 result tone
+//   sfxCrapsDiceTick() — optional restrained resin/felt motion clack
+//   sfxCrapsDiceLand() — one impact → 2–12 total tone → wager-relative result tone
 //   sfxCrapsSettlement() — local/opponent chip clacks or a felt sweep
 //   sfxCrapsBetPlace() — one chip contacting the felt
 //   sfxCrapsDouble() — a one-stack-to-two-stacks physical flourish
@@ -288,6 +288,42 @@ const CRAPS_DICE_TOTAL_TONES = Object.freeze({
   11: 783.99,
   12: 880,
 });
+
+// The total answers “what rolled?”; this final contour answers “what did it
+// do to me?” A rise, level hold, and fall remain legible after any total pitch.
+const CRAPS_ROLL_OUTCOME_TONES = Object.freeze({
+  win: Object.freeze({ freq: 783.99, glideTo: 987.77, type: 'triangle', peak: 0.075 }),
+  push: Object.freeze({ freq: 349.23, glideTo: 349.23, type: 'sine', peak: 0.052 }),
+  loss: Object.freeze({ freq: 246.94, glideTo: 164.81, type: 'triangle', peak: 0.07 }),
+});
+
+/**
+ * Continuous result voice keyed to signed basis points of the live wager.
+ * +10000 is a +100% result, -5000 is -50%; larger swings spread farther
+ * from the neutral pitch on a logarithmic scale so outliers stay audible.
+ */
+export function crapsNetResultTone(netResultBps = 0) {
+  const raw = Number(netResultBps);
+  const bps = Number.isFinite(raw) ? Math.max(-1_000_000, Math.min(1_000_000, raw)) : 0;
+  if (bps === 0) {
+    return Object.freeze({ freq: 349.23, glideTo: 349.23, type: 'sine', peak: 0.052 });
+  }
+  const direction = Math.sign(bps);
+  const ratio = Math.abs(bps) / 10_000;
+  const octaves = Math.min(1.75, Math.log2(1 + ratio));
+  const frequency = Math.max(103.83, Math.min(1_174.66, 349.23 * (2 ** (direction * octaves))));
+  const contourSemitones = 1.5 + Math.min(4.5, ratio * 1.5);
+  const glideTo = Math.max(
+    82.41,
+    Math.min(1_318.51, frequency * (2 ** (direction * contourSemitones / 12))),
+  );
+  return Object.freeze({
+    freq: frequency,
+    glideTo,
+    type: 'triangle',
+    peak: Math.min(0.09, 0.058 + Math.log2(1 + ratio) * 0.012),
+  });
+}
 
 // Filtered-noise motion sweep. Older WebAudio shims (and the node:test stub)
 // do not expose buffer/filter nodes, so callers can fall back to pitched air.
@@ -773,7 +809,7 @@ export function sfxQuestComplete() {
   } catch (_e) { /* audio is decoration */ }
 }
 
-/** One of four quiet physical clacks spread across the dice animation. */
+/** Optional quiet physical clack for callers that need a motion preview. */
 export function sfxCrapsDiceTick(step = 0, seed = 0) {
   const ctx = _ctx();
   if (!ctx) return;
@@ -803,71 +839,60 @@ export function sfxCrapsDiceTick(step = 0, seed = 0) {
   } catch (_e) { /* audio is decoration */ }
 }
 
-/** Physical dice landing with one recognizable result pitch for totals 2–12. */
-export function sfxCrapsDiceLand({ total = null, sevenOutcome = '' } = {}) {
+/** One table impact, a 2–12 total pitch, then a wager-relative result pitch. */
+export function sfxCrapsDiceLand({
+  total = null,
+  netResultBps = null,
+  outcome = '',
+  sevenOutcome = '',
+} = {}) {
   const ctx = _ctx();
   if (!ctx) return;
   try {
     const totalNumber = Math.trunc(Number(total));
-    // Keep one recognizable physical landing, but tune its body a few percent
-    // per total so 2–12 differ at the exact lock beat, not only afterward.
-    const impactRatio = totalNumber >= 2 && totalNumber <= 12
-      ? 1 + (totalNumber - 7) * 0.012
-      : 1;
     _filteredNoise(ctx, {
-      duration: 0.065,
+      duration: 0.052,
       type: 'lowpass',
-      from: 2_600 * impactRatio,
-      to: 720 * impactRatio,
+      from: 2_450,
+      to: 680,
       q: 0.7,
+      peak: 0.052,
+      pan: -0.09,
+    });
+    _tone(ctx, {
+      freq: 760,
+      glideTo: 390,
+      type: 'triangle',
+      attack: 0.001,
+      decay: 0.05,
       peak: 0.055,
+      pan: -0.09,
     });
-    _tone(ctx, {
-      freq: 185 * impactRatio,
-      glideTo: 120 * impactRatio,
-      type: 'sine',
-      attack: 0.0015,
-      decay: 0.09,
-      peak: 0.07,
-    });
-    _tone(ctx, {
-      freq: 920 * impactRatio,
-      glideTo: 640 * impactRatio,
-      type: 'triangle',
-      at: 0.004,
-      attack: 0.001,
-      decay: 0.052,
-      peak: 0.05,
-      pan: -0.08,
-    });
-    _tone(ctx, {
-      freq: 1_120 * impactRatio,
-      glideTo: 700 * impactRatio,
-      type: 'triangle',
-      at: 0.035,
-      attack: 0.001,
-      decay: 0.045,
-      peak: 0.042,
-      pan: 0.08,
-    });
-    const resultTone = CRAPS_DICE_TOTAL_TONES[totalNumber];
-    if (resultTone) {
+    const totalTone = CRAPS_DICE_TOTAL_TONES[totalNumber];
+    if (totalTone) {
       _tone(ctx, {
-        freq: resultTone,
-        glideTo: resultTone * 0.985,
+        freq: totalTone,
+        glideTo: totalTone * 0.985,
         type: 'triangle',
-        at: 0.068,
+        at: 0.1,
         attack: 0.002,
-        decay: 0.13,
-        peak: 0.052,
+        decay: 0.085,
+        peak: 0.058,
       });
     }
-    if (sevenOutcome === 'win') {
-      _tone(ctx, { freq: 659.25, type: 'triangle', at: 0.13, decay: 0.16, peak: 0.07 });
-      _tone(ctx, { freq: 880, type: 'sine', at: 0.19, decay: 0.21, peak: 0.085 });
-    } else if (sevenOutcome === 'crap-out') {
-      _tone(ctx, { freq: 293.66, glideTo: 246.94, type: 'triangle', at: 0.13, decay: 0.24, peak: 0.085 });
-      _tone(ctx, { freq: 164.81, glideTo: 110, type: 'sine', at: 0.19, decay: 0.27, peak: 0.07 });
+    const normalizedOutcome = Object.hasOwn(CRAPS_ROLL_OUTCOME_TONES, outcome)
+      ? outcome
+      : sevenOutcome === 'win' ? 'win' : sevenOutcome === 'crap-out' ? 'loss' : '';
+    const resultTone = netResultBps == null
+      ? CRAPS_ROLL_OUTCOME_TONES[normalizedOutcome]
+      : crapsNetResultTone(netResultBps);
+    if (resultTone) {
+      _tone(ctx, {
+        ...resultTone,
+        at: 0.205,
+        attack: 0.003,
+        decay: 0.12,
+      });
     }
   } catch (_e) { /* audio is decoration */ }
 }

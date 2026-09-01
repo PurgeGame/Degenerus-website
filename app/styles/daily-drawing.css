@@ -1239,6 +1239,12 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-lane path {
      seated card or in from the frame. */
   stroke-dasharray: 9 21;
   animation: ldj-foil-lane-flow 1.05s linear infinite;
+  /* An unlit lane (parent opacity 0) would otherwise still tick this
+     non-compositable animation every frame — style work and an invisible
+     repaint, times eight paths, forever. The same :has() gates that light a
+     lane below also set it running; a lane resuming from offset 0 is
+     indistinguishable from one that never stopped. */
+  animation-play-state: paused;
 }
 
 @keyframes ldj-foil-lane-flow {
@@ -1254,6 +1260,17 @@ body.layout-basic .jackpot-hero__machine
 body.layout-basic .jackpot-hero__machine
   .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(4).is-loaded) .ldj-foil-lane--4 {
   opacity: 1;
+}
+
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(1).is-loaded) .ldj-foil-lane--1 path,
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(2).is-loaded) .ldj-foil-lane--2 path,
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(3).is-loaded) .ldj-foil-lane--3 path,
+body.layout-basic .jackpot-hero__machine
+  .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(4).is-loaded) .ldj-foil-lane--4 path {
+  animation-play-state: running;
 }
 
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta::before,

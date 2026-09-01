@@ -365,6 +365,244 @@ test('the jackpot scratch coin clears a generous hover area', () => {
   );
 });
 
+test('mouse hover scratches every jackpot surface without stacking redraw listeners', () => {
+  const quadrantStart = REPLAY_PANEL_SRC.indexOf('#wireCanvas(canvas, qIdx)');
+  const quadrantEnd = REPLAY_PANEL_SRC.indexOf('\n  // --- Center diamond scratch ---', quadrantStart);
+  const quadrant = REPLAY_PANEL_SRC.slice(quadrantStart, quadrantEnd);
+  assert.match(
+    quadrant,
+    /const onMouseMove = \(e\) => \{\s*if \(this\.#scratched\[qIdx\]\) return;/,
+    'moving across a quadrant keeps the intended hover-to-scratch interaction',
+  );
+  assert.match(quadrant, /replaceScratchListeners\(canvas,[\s\S]*?handler: onMouseMove/,
+    'quadrant rewires replace rather than accumulate their gesture closure');
+
+  const centerStart = REPLAY_PANEL_SRC.indexOf('#wireCenterCanvas(canvas)');
+  const centerEnd = REPLAY_PANEL_SRC.indexOf('\n  #revealCenter(', centerStart);
+  const center = REPLAY_PANEL_SRC.slice(centerStart, centerEnd);
+  assert.match(
+    center,
+    /const onMouseMove = \(e\) => \{\s*if \(this\.#centerScratched\) return;/,
+    'moving across the center keeps the intended hover-to-scratch interaction',
+  );
+  assert.match(center, /replaceScratchListeners\(canvas,[\s\S]*?handler: onMouseMove/,
+    'center rewires replace rather than accumulate their gesture closure');
+});
+
+test('rewiring a scratch canvas replaces its prior gesture listeners', async () => {
+  const replay = await import('../replay-panel.js');
+  assert.equal(typeof replay.replaceScratchListeners, 'function',
+    'scratch listener ownership is directly testable');
+  const canvas = makeFakeElement('canvas');
+  let staleCalls = 0;
+  let activeCalls = 0;
+  replay.replaceScratchListeners(canvas, [
+    { type: 'mousemove', handler: () => { staleCalls += 1; } },
+  ]);
+  replay.replaceScratchListeners(canvas, [
+    { type: 'mousemove', handler: () => { activeCalls += 1; } },
+  ]);
+  assert.equal(canvas.eventListeners.mousemove.length, 1,
+    'main/bonus redraws leave exactly one active mousemove closure');
+  canvas.dispatchEvent({ type: 'mousemove' });
+  assert.equal(staleCalls, 0, 'the prior draw cannot keep scratching');
+  assert.equal(activeCalls, 1, 'the current draw handles the gesture once');
+});
+
+test('scratch gestures reuse one noise buffer instead of resynthesizing two seconds per entry', async () => {
+  await import('../replay-panel.js');
+  const Ctor = customElements.get('replay-panel');
+  const priorAudioContext = globalThis.window.AudioContext;
+  let bufferCreates = 0;
+  class ScratchAudioContext {
+    constructor() {
+      this.state = 'running';
+      this.sampleRate = 48_000;
+      this.destination = {};
+    }
+    createBuffer(_channels, length) {
+      bufferCreates += 1;
+      const data = new Float32Array(length);
+      return { getChannelData: () => data };
+    }
+    createBufferSource() {
+      return { connect() {}, start() {}, stop() {}, buffer: null, loop: false };
+    }
+    createBiquadFilter() {
+      return {
+        connect() {},
+        type: '',
+        frequency: { value: 0 },
+        Q: { value: 0 },
+      };
+    }
+    createGain() {
+      return { connect() {}, gain: { value: 0 } };
+    }
+    resume() { return Promise.resolve(); }
+  }
+  globalThis.window.AudioContext = ScratchAudioContext;
+  globalThis.localStorage.removeItem('degenerus.sfxMuted');
+  try {
+    const panel = new Ctor();
+    panel.__cycleScratchAudioForTest();
+    panel.__cycleScratchAudioForTest();
+    assert.equal(bufferCreates, 1,
+      'the second quadrant/source reuses the immutable loop buffer');
+  } finally {
+    if (priorAudioContext === undefined) delete globalThis.window.AudioContext;
+    else globalThis.window.AudioContext = priorAudioContext;
+  }
+});
+
+test('ordinary reel frames reuse two audio voices across a main-plus-bonus sequence', async () => {
+  await import('../replay-panel.js');
+  const Ctor = customElements.get('replay-panel');
+  const priorAudioContext = globalThis.window.AudioContext;
+  let oscillatorCreates = 0;
+  let oscillatorStarts = 0;
+  let oscillatorStops = 0;
+  let gainCreates = 0;
+  const audioParam = () => ({
+    value: 0,
+    cancelScheduledValues() {},
+    setValueAtTime() {},
+    linearRampToValueAtTime() {},
+    exponentialRampToValueAtTime() {},
+  });
+  class ReelAudioContext {
+    constructor() {
+      this.state = 'running';
+      this.currentTime = 1;
+      this.destination = {};
+    }
+    createOscillator() {
+      oscillatorCreates += 1;
+      return {
+        type: '',
+        frequency: audioParam(),
+        connect() {},
+        disconnect() {},
+        start() { oscillatorStarts += 1; },
+        stop() { oscillatorStops += 1; },
+      };
+    }
+    createGain() {
+      gainCreates += 1;
+      return {
+        connect() {},
+        disconnect() {},
+        gain: audioParam(),
+      };
+    }
+    resume() { return Promise.resolve(); }
+  }
+  globalThis.window.AudioContext = ReelAudioContext;
+  globalThis.localStorage.removeItem('degenerus.sfxMuted');
+  let panel;
+  try {
+    panel = new Ctor();
+    panel.__playSpinFrameSfxForTest(80);
+    assert.equal(oscillatorCreates, 2,
+      'both spins share one triangle and one sine reel oscillator');
+    assert.equal(gainCreates, 2,
+      'ordinary frames do not leave a fresh gain node for Chrome to collect');
+    assert.equal(oscillatorStarts, 2,
+      'each persistent reel voice starts only once');
+    panel.disconnectedCallback();
+    panel = null;
+    assert.equal(oscillatorStops, 2,
+      'disconnect explicitly releases both persistent reel oscillators');
+  } finally {
+    panel?.disconnectedCallback();
+    if (priorAudioContext === undefined) delete globalThis.window.AudioContext;
+    else globalThis.window.AudioContext = priorAudioContext;
+  }
+});
+
+test('badge decode warming is a completion barrier before the first live reel frame', async () => {
+  const replay = await import('../replay-panel.js');
+  assert.equal(typeof replay.preloadBadgeImages, 'function',
+    'the preloader exposes a directly testable completion contract');
+
+  let unnecessaryImages = 0;
+  class UnexpectedImage {
+    constructor() { unnecessaryImages += 1; }
+  }
+  await replay.preloadBadgeImages([], new Map(), { ImageCtor: UnexpectedImage });
+  await replay.preloadBadgeImages(
+    ['/already-warm.svg'],
+    new Map([['/already-warm.svg', {}]]),
+    { ImageCtor: UnexpectedImage },
+  );
+  assert.equal(unnecessaryImages, 0,
+    'empty and already-warm boundaries resolve without creating decode work');
+
+  const images = [];
+  class DeferredDecodeImage {
+    constructor() {
+      this.src = '';
+      this.resolveDecode = null;
+      images.push(this);
+    }
+    decode() {
+      return new Promise((resolve) => { this.resolveDecode = resolve; });
+    }
+  }
+
+  const cache = new Map();
+  let settled = false;
+  const warm = replay.preloadBadgeImages(
+    ['/badge-a.svg', '/badge-b.svg', '/badge-c.svg'],
+    cache,
+    { concurrency: 2, ImageCtor: DeferredDecodeImage },
+  ).then(() => { settled = true; });
+  await flushMicrotasks();
+
+  assert.equal(images.length, 2, 'only the configured decode workers start');
+  assert.equal(settled, false, 'launching image requests is not completion');
+  images[0].resolveDecode();
+  await flushMicrotasks();
+  assert.equal(images.length, 3, 'a worker advances only after its prior image is decoded');
+  assert.equal(settled, false, 'the unresolved images keep the warm barrier closed');
+  images[1].resolveDecode();
+  images[2].resolveDecode();
+  await warm;
+  assert.equal(settled, true);
+  assert.equal(cache.size, 3, 'every warmed badge is render-ready before release');
+
+  const spinStart = REPLAY_PANEL_SRC.indexOf('async #runSpin(');
+  const spinEnd = REPLAY_PANEL_SRC.indexOf('\n  #afterSpin(', spinStart);
+  const spin = REPLAY_PANEL_SRC.slice(spinStart, spinEnd);
+  const barrierAt = spin.indexOf('await this.#badgeWarmPromise');
+  const paintAt = spin.indexOf('img.src = path');
+  assert.ok(barrierAt >= 0 && paintAt > barrierAt,
+    'a live reel cannot start replacing visible badge sources before decode warm completes');
+});
+
+test('cache invalidation AbortError is a quiet replay-day cancellation', async () => {
+  await import('../replay-panel.js');
+  const Ctor = customElements.get('replay-panel');
+  const priorFetch = globalThis.fetch;
+  const priorWarn = console.warn;
+  const warnings = [];
+  const aborted = Object.assign(new Error('cache generation advanced'), {
+    name: 'AbortError',
+  });
+  globalThis.fetch = async () => { throw aborted; };
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const panel = new Ctor();
+    panel.innerHTML = '<select data-bind="day-select"></select>';
+    assert.equal(await panel.refreshDays({ force: true }), false);
+    assert.deepEqual(warnings, [],
+      'polling pause/start cancellation does not masquerade as a failed replay load');
+  } finally {
+    console.warn = priorWarn;
+    globalThis.fetch = priorFetch;
+  }
+});
+
 test('the Daily Drawing is a responsive branded attraction rather than an empty full-width cabinet', () => {
   assert.match(INDEX_SRC, /styles\/daily-drawing\.css/);
   assert.match(
@@ -1127,15 +1365,14 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const flow = REPLAY_PANEL_SRC.slice(start, end);
     const mainReadAt = flow.indexOf('const playerTraitsPromise = this.#loadPlayerTraits()');
     const warmAt = flow.indexOf('void this.#loadFutureTraits()');
-    const summaryWarmAt = flow.indexOf("new CustomEvent('replay:spin-start'");
     const mainAwaitAt = flow.indexOf('await playerTraitsPromise');
     const spinAt = flow.indexOf('await this.#runSpin(');
     assert.ok(mainReadAt >= 0 && warmAt > mainReadAt,
       'the current trait read gets first access, then the bonus warm begins');
-    assert.ok(summaryWarmAt > warmAt && mainAwaitAt > summaryWarmAt,
-      'both later-button preloads begin before the main spin waits on the network');
+    assert.ok(mainAwaitAt > warmAt,
+      'the later bonus-button preload begins before the main spin waits on the network');
     assert.ok(mainAwaitAt < spinAt,
-      'the preloads overlap preparation, the reel, and the scratch interaction');
+      'the bonus preload overlaps preparation while the summary does not enter this flow');
 
     // One hydration, not two: the warm-up and the press share a flight.
     assert.match(
@@ -1234,20 +1471,25 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.match(activityFlow, /read\(`\/viewer\/player\/\$\{address\}\/day\/\$\{dayParam\}`\)/);
   });
 
-  test('the jackpot spin-start signal warms every DAY SUMMARY input', () => {
-    assert.match(
-      REPLAY_PANEL_SRC,
-      /new CustomEvent\('replay:spin-start',[\s\S]*?day: this\.#selectedDay,[\s\S]*?player: this\.#selectedPlayer/,
-      'replay-panel announces the loading window as soon as the main press starts',
-    );
+  test('DAY SUMMARY warming is admitted only after active presentation completes', () => {
     const start = LAST_DAY_SRC.indexOf('#warmDaySummary(viewed, day)');
-    const end = LAST_DAY_SRC.indexOf('\n  #onPanelSpinStart(', start);
+    const end = LAST_DAY_SRC.indexOf('\n  // A completed spin', start);
     const warm = LAST_DAY_SRC.slice(start, end);
     assert.match(warm, /#dayActivity\(viewed, day\)/);
     assert.match(warm, /#daySummaryWinners\(day\)/);
     assert.match(warm, /#loadExactSummaryCoinflip\(day\)/);
-    assert.match(LAST_DAY_SRC, /addEventListener\('replay:spin-start', this\.#spinStartListener\)/);
-    assert.match(LAST_DAY_SRC, /removeEventListener\('replay:spin-start', this\.#spinStartListener\)/);
+    assert.doesNotMatch(REPLAY_PANEL_SRC, /replay:spin-start/,
+      'the reel no longer publishes a summary-prefetch admission point');
+    assert.doesNotMatch(LAST_DAY_SRC, /#spinStartListener|#onPanelSpinStart/,
+      'the host has no spin-start summary listener');
+    const completeStart = LAST_DAY_SRC.indexOf('#onPanelSpinComplete(e)');
+    const completeEnd = LAST_DAY_SRC.indexOf('\n  // Panel reveal fully scratched', completeStart);
+    assert.doesNotMatch(LAST_DAY_SRC.slice(completeStart, completeEnd), /#warmDaySummary/,
+      'spin completion cannot move summary work into scratch interaction');
+    const ctaStart = LAST_DAY_SRC.indexOf('#maybeShowResultsCta()');
+    const ctaEnd = LAST_DAY_SRC.indexOf('\n  #clearSummaryActivityCache()', ctaStart);
+    assert.match(LAST_DAY_SRC.slice(ctaStart, ctaEnd), /if \(show\) this\.#warmDaySummary/,
+      'the post-scratch CTA eligibility gate owns the warm');
   });
 
   test('a reloaded DAY SUMMARY owns the LCD before a loading repaint can claim it', async () => {
@@ -3012,8 +3254,15 @@ describe('foil match pending action', () => {
   test('source publishes the contract tuple and sends its receipt to the reveal engine', () => {
     const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
     assert.equal(/renderDayResults/.test(src), false, 'results renderer removed');
-    assert.match(src, /#renderFoilBackdrop\(\)[\s\S]*gradeLine\(line, bonusSet\)[\s\S]*gradeLine\(line, mainSet\)[\s\S]*traitToBadge\(traitId\)/,
-      'the cabinet paints real foil traits and grades each spoiler-gated draw independently');
+    const renderFoilBackdrop = src.slice(
+      src.indexOf('  #renderFoilBackdrop() {'),
+      src.indexOf('  #renderFoil() {'),
+    );
+    assert.match(renderFoilBackdrop, /traitToBadge\(traitId\)/,
+      'the cabinet paints real foil traits');
+    assert.match(renderFoilBackdrop,
+      /gradeLine\(line, bonusSet\)[\s\S]*gradeLine\(line, mainSet\)/,
+      'the cabinet grades each spoiler-gated draw independently');
     assert.match(src, /claimableDrawGrades\(/,
       'main and bonus draw claims are graded independently');
     assert.match(src, /publishPendingActions\(FOIL_MATCH_ACTION_SOURCE/);
@@ -4159,6 +4408,41 @@ describe('foil faces track the spin presentation', () => {
     }
   });
 
+  test('successive reel frames patch seated foil faces without rebuilding their ticket DOM', async () => {
+    const priorFetch = globalThis.fetch;
+    const priorCreateElement = globalThis.document.createElement;
+    globalThis.fetch = foilFetch();
+    let el = null;
+    try {
+      el = await mount();
+      await progress([null, null, null, null], {
+        liveTraits: [9, 70, 130, 200],
+      });
+      const firstTicket = el.querySelectorAll('.ldj-foil-machine-ticket')[0];
+      let created = 0;
+      globalThis.document.createElement = (tag) => {
+        created += 1;
+        return priorCreateElement(tag);
+      };
+
+      await progress([null, null, null, null], {
+        liveTraits: [1, 78, 131, 201],
+      });
+
+      assert.equal(created, 0,
+        'a reel frame changes match classes/attributes without allocating replacement DOM');
+      assert.equal(
+        el.querySelectorAll('.ldj-foil-machine-ticket')[0],
+        firstTicket,
+        'a visual grade update retains the already-seated ticket node',
+      );
+    } finally {
+      globalThis.document.createElement = priorCreateElement;
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
+  });
+
   test('a locked face stays lit while the other live faces continue changing', async () => {
     const priorFetch = globalThis.fetch;
     globalThis.fetch = foilFetch();
@@ -4599,7 +4883,7 @@ describe('foil faces track the spin presentation', () => {
       'and the ring becomes a steady lit state instead of disappearing');
   });
 
-  test('the panel publishes both live faces and BOTH-reels-stopped commits', () => {
+  test('the panel publishes opening and lock frames without repainting foils on every reel tick', () => {
     const src = REPLAY_PANEL_SRC;
     const from = src.indexOf('const emitSpinProgress = (liveTraits');
     assert.ok(from > 0, 'the panel publishes its live and committed faces');
@@ -4616,18 +4900,22 @@ describe('foil faces track the spin presentation', () => {
       'the published byte is packed the way the contract packs it, in CONTRACT quadrant order');
     assert.match(emit, /liveTraits,/,
       'the same progress payload carries the exact cycling faces separately');
-    assert.doesNotMatch(emit, /announcedCommits/,
-      'live face changes are not throttled behind the committed count');
     assert.match(emit, /if \(!announce\) return;/,
       'and a silent restore replays no presentation');
 
-    const frame = src.slice(src.indexOf('// Render random or locked badges'));
+    const frame = src.slice(
+      src.indexOf('// Render random or locked badges'),
+      src.indexOf('// Check if all locked'),
+    );
     assert.match(frame, /const liveTraits = \[null, null, null, null\];/,
       'each painted frame starts one explicit live-face snapshot');
     assert.match(frame, /liveTraits\[contractQ\] = shownTrait;/,
       'the event byte is the exact trait packed for the badge currently on screen');
-    assert.match(frame, /emitSpinProgress\(liveTraits\);/,
-      'each painted frame reaches the host so a transient light can clear immediately');
+    assert.match(frame,
+      /if \(lockedQuadrant != null\) \{\s*emitSpinProgress\(liveTraits\);\s*this\.#sfxLock/,
+      'only a durable reel stop synchronously repaints the secondary foil cabinet');
+    assert.equal((frame.match(/emitSpinProgress\(liveTraits\)/g) || []).length, 1,
+      'the ordinary 80ms reel tick has no second host repaint path');
 
     // The same frame loop uses the same both-locked test to commit a
     // quadrant's ownership colour. If these two ever disagree, the foil card
@@ -4796,7 +5084,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     el.disconnectedCallback();
   });
 
-  test('DAY SUMMARY spin-start warms one complete snapshot reused by the click', async () => {
+  test('DAY SUMMARY work begins only after final scratch and the click reuses one snapshot', async () => {
     const revealMod = await import('../reveal-overlay.js');
     revealMod.__resetForTest();
     const day = 905;
@@ -4852,13 +5140,25 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       await flushMicrotasks();
 
       const cta = el.querySelector('[data-bind="ldj-results-cta"]');
-      assert.equal(cta.hidden, true, 'the entire summary warms while the first reel is starting');
-      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
-        'spin start launches one pack prefetch');
-      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
-        'spin start launches one viewer prefetch');
-      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
-        'spin start launches the authoritative winner prefetch too');
+      assert.equal(cta.hidden, true, 'the summary stays unavailable while the first reel is starting');
+      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 0,
+        'spin start cannot admit pack parsing into the active reel');
+      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 0,
+        'spin start cannot admit viewer reconstruction into the active reel');
+      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 0,
+        'spin start cannot admit winner processing into the active reel');
+
+      globalThis.document.dispatchEvent({
+        type: 'replay:spin-complete',
+        detail: { day, player: address, bonusPhase: false },
+      });
+      await flushMicrotasks();
+      assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 0,
+        'spin completion cannot move summary work into the scratch interaction');
+      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 0,
+        'the viewer feed also waits until the scratch interaction is over');
+      assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 0,
+        'the authoritative winners feed also waits until the scratch interaction is over');
 
       globalThis.document.dispatchEvent(scratchEvent({
         day, player: address, bonusPhase: false, bonusAvailable: false,
@@ -4867,11 +5167,11 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
 
       assert.equal(cta.hidden, false, 'the summary action is visible');
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
-        'CTA visibility shares the spin-time pack prefetch');
+        'final scratch starts one pack snapshot when active presentation is over');
       assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
-        'CTA visibility shares the spin-time viewer prefetch');
+        'final scratch starts one viewer snapshot when active presentation is over');
       assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
-        'CTA visibility shares the spin-time winner prefetch');
+        'final scratch starts one winner snapshot when active presentation is over');
 
       cta.dispatchEvent({ type: 'click' });
       await Promise.resolve();

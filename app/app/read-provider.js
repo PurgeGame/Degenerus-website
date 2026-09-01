@@ -99,6 +99,7 @@ const pinnedReceiptReads = new Map();
 const inflightReceiptReads = new Map();
 const RECENT_PRIMITIVE_TTL_MS = 1_000;
 const MAX_RECENT_PRIMITIVES = 128;
+const MAX_CACHEABLE_LOGS = 400;
 const MAX_PINNED_STORAGE_READS = 256;
 const MAX_PINNED_RECEIPTS = 256;
 
@@ -446,7 +447,12 @@ export function attachLogCache(provider) {
     if (existing) return existing;
     const generation = cacheGeneration;
     const request = Promise.resolve(perform(filter)).then((value) => {
-      if (generation === cacheGeneration) {
+      // Entry-count LRU is no byte bound: a wide history scan can return
+      // thousands of logs, and 128 pinned copies of those is hundreds of MB
+      // of renderer heap. Giant responses stay uncached — surfaces that
+      // rescan wide ranges keep their own incremental cursors instead.
+      const cacheable = !Array.isArray(value) || value.length <= MAX_CACHEABLE_LOGS;
+      if (generation === cacheGeneration && cacheable) {
         primitiveStore(recentLogReads, key, value, MAX_RECENT_PRIMITIVES, true);
       }
       return value;

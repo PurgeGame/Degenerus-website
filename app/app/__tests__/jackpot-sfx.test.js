@@ -40,6 +40,7 @@ import {
   sfxCrapsBonusShooter,
   sfxCrapsDiceTick,
   sfxCrapsDiceLand,
+  crapsNetResultTone,
   sfxCrapsDouble,
   sfxCrapsSettlement,
   __resetForTest,
@@ -195,7 +196,7 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
       sfxCrapsBetPlace();
       sfxCrapsBonusShooter();
       sfxCrapsDiceTick(2, 17);
-      sfxCrapsDiceLand({ total: 7, sevenOutcome: 'win' });
+      sfxCrapsDiceLand({ total: 7, netResultBps: 10_000 });
       sfxCrapsDouble();
       sfxCrapsSettlement('opponent');
       sfxCrapsSettlement('sweep');
@@ -407,20 +408,64 @@ describe('cues with a stubbed AudioContext', () => {
     const landingBodies = [];
     for (let total = 2; total <= 12; total += 1) {
       const before = FakeAudioContext.last.oscillators.length;
-      sfxCrapsDiceLand({ total });
+      sfxCrapsDiceLand({ total, netResultBps: 0 });
       const cue = FakeAudioContext.last.oscillators.slice(before);
-      assert.equal(cue.length, 4, `total ${total} has one tone after the three-part landing`);
+      assert.equal(cue.length, 3, `total ${total} has one impact, a total tone, and a result tone`);
       landingBodies.push(cue[0].frequency.values[0].value);
-      pitches.push(cue.at(-1).frequency.values[0].value);
+      pitches.push(cue[1].frequency.values[0].value);
+      assert.deepEqual(
+        cue.map((osc) => osc.frequency.values[0].at),
+        [0, 0.1, 0.205],
+        'the impact, rolled-number tone, and result tone remain sequential and easy to parse',
+      );
     }
-    assert.equal(new Set(landingBodies).size, 11,
-      'the physical completion beat itself is subtly tuned for every total');
+    assert.equal(new Set(landingBodies).size, 1,
+      'the physical beat stays consistent so only the second cue names the total');
     assert.equal(new Set(pitches).size, 11, 'totals 2–12 have eleven different tones');
     assert.ok(pitches.every((pitch, index) => index === 0 || pitch > pitches[index - 1]),
-      'the outcome palette rises consistently with the dice total');
+      'the total palette rises consistently with the dice total');
   });
 
-  test('craps roll, landing, seven, and table-action cues stay short and distinct', () => {
+  test('the dice landing has exactly one physical contact', () => {
+    globalThis.AudioContext = FakeNoiseAudioContext;
+    __resetForTest();
+    warmup();
+    sfxCrapsDiceLand({ total: 6, netResultBps: 0 });
+
+    const ctx = FakeAudioContext.last;
+    assert.equal(ctx.bufferSources.length, 1, 'the new dice pair lands as one broadband beat');
+    assert.equal(ctx.filters.length, 1);
+    assert.equal(ctx.filters[0].frequency.values[0].at, 0);
+  });
+
+  test('the final dice tone continuously identifies net result as a percentage of action', () => {
+    const tones = [-10_000, -5_000, 0, 5_000, 10_000].map(crapsNetResultTone);
+    assert.ok(tones[0].freq < tones[1].freq);
+    assert.ok(tones[1].freq < tones[2].freq);
+    assert.ok(tones[2].freq < tones[3].freq);
+    assert.ok(tones[3].freq < tones[4].freq,
+      'larger wager-relative results move continuously higher instead of collapsing to win/loss');
+    assert.ok(tones[0].glideTo < tones[0].freq, 'a -100% result falls');
+    assert.equal(tones[2].glideTo, tones[2].freq, 'a 0% result holds');
+    assert.ok(tones[4].glideTo > tones[4].freq, 'a +100% result rises');
+
+    warmup();
+    const resultTones = [];
+    for (const netResultBps of [-10_000, 0, 10_000]) {
+      const before = FakeAudioContext.last.oscillators.length;
+      sfxCrapsDiceLand({ total: 8, netResultBps });
+      const result = FakeAudioContext.last.oscillators.slice(before).at(-1);
+      resultTones.push({
+        from: result.frequency.values[0].value,
+        to: result.frequency.ramps[0].value,
+      });
+    }
+    assert.ok(resultTones[0].to < resultTones[0].from, 'loss falls');
+    assert.equal(resultTones[1].to, resultTones[1].from, 'push holds');
+    assert.ok(resultTones[2].to > resultTones[2].from, 'win rises');
+  });
+
+  test('craps roll, landing, result, and table-action cues stay short and distinct', () => {
     warmup();
     const sample = (cue) => {
       const before = FakeAudioContext.last.oscillators.length;
@@ -429,12 +474,14 @@ describe('cues with a stubbed AudioContext', () => {
     };
     assert.equal(sample(() => sfxCrapsDiceTick(2, 17)), 1,
       'a motion clack has one damped resin body');
-    assert.equal(sample(() => sfxCrapsDiceLand()), 3,
-      'an ordinary landing stays physical rather than musical');
-    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, sevenOutcome: 'win' })), 6,
-      'a come-out seven adds its total tone and a two-note rise');
-    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, sevenOutcome: 'crap-out' })), 6,
-      'seven-out adds its total tone and a two-note fall');
+    assert.equal(sample(() => sfxCrapsDiceLand()), 1,
+      'a bare landing is exactly one physical table beat');
+    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, netResultBps: 10_000 })), 3,
+      'a +100% roll adds one total tone and one rising result tone');
+    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, netResultBps: -10_000 })), 3,
+      'a -100% roll adds one total tone and one falling result tone');
+    assert.equal(sample(() => sfxCrapsDiceLand({ total: 7, netResultBps: 0 })), 3,
+      'a push adds one total tone and one level result tone');
     assert.equal(sample(() => sfxCrapsSettlement('collect')), 3,
       'a whole payout is one three-click ceramic cue');
     assert.equal(sample(() => sfxCrapsSettlement('opponent')), 2,
@@ -502,7 +549,7 @@ describe('cues with a stubbed AudioContext', () => {
     sfxCrapsBetPlace();
     sfxCrapsBonusShooter();
     sfxCrapsDiceTick(0, 9);
-    sfxCrapsDiceLand({ total: 7, sevenOutcome: 'crap-out' });
+    sfxCrapsDiceLand({ total: 7, netResultBps: -10_000 });
     sfxCrapsDouble();
     sfxCrapsSettlement('opponent');
     sfxCrapsSettlement('collect');

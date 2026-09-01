@@ -20,7 +20,7 @@ import {
 } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
-import { getActingAddress } from './store.js';
+import { get, getActingAddress } from './store.js';
 import { CONTRACTS, CHAIN, ETH_DIVISOR } from './chain-config.js';
 import {
   permissionlessReadProvider,
@@ -405,15 +405,18 @@ export function foilPackCostFromPriceWei(priceWei) {
 // ---------------------------------------------------------------------------
 
 let _contractFactory = null;
+let _canRequestLootboxRngInflight = null;
 
 /** Test-only: replace the `new Contract(...)` construction with a fake. */
 export function __setContractFactoryForTest(fn) {
   _contractFactory = fn;
+  _canRequestLootboxRngInflight = null;
 }
 
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
+  _canRequestLootboxRngInflight = null;
   _purchaseQuoteMeta = new WeakMap();
 }
 
@@ -554,11 +557,16 @@ export async function probeFoilPackAvailabilityState({ buyer } = {}) {
   const buyerArg = buyer ?? getActingAddress();
   if (!buyerArg) return { available: false, definitive: false, code: 'NO_BUYER' };
   try {
-    const provider = getProvider();
+    // This is an eth_call that deliberately expects an Insolvent revert as its
+    // positive availability signal. Sending it through BrowserProvider makes
+    // MetaMask report every caught probe as an "Internal JSON-RPC error" in the
+    // page console. Use the shared public reader and explicitly preserve the
+    // connected operator as msg.sender; in self mode that is the buyer.
+    const caller = get('connected.address') ?? buyerArg;
+    const provider = _publicLootboxReadProvider()
+      || permissionlessReadProvider(getProvider());
     if (!provider) return { available: false, definitive: false, code: 'NO_PROVIDER' };
-    const signer = await provider.getSigner();
-    if (!signer) return { available: false, definitive: false, code: 'NO_SIGNER' };
-    const contract = _buildContract(signer);
+    const contract = _buildContract(provider);
     await contract.purchase.staticCall(
       buyerArg,
       0n,
@@ -566,7 +574,7 @@ export async function probeFoilPackAvailabilityState({ buyer } = {}) {
       ethers.ZeroHash,
       MINT_PAYMENT_KIND_DIRECT_ETH,
       true,
-      { value: 0n },
+      { value: 0n, from: caller },
     );
     return { available: true, definitive: true, code: 'AVAILABLE' };
   } catch (error) {
@@ -1448,18 +1456,24 @@ export async function readLootboxRngQueueState({ provider = null } = {}) {
 
 /** Whether the connected account can permissionlessly request the pending RNG now. */
 export async function canRequestLootboxRng() {
-  const provider = getProvider();
-  if (!provider) return false;
-  let runner = provider;
-  try { runner = await provider.getSigner(); } catch (_e) { /* read-only probe */ }
-  const contract = _buildContract(runner);
-  if (typeof contract?.requestLootboxRng?.staticCall !== 'function') return false;
-  try {
-    await contract.requestLootboxRng.staticCall();
-    return true;
-  } catch (_e) {
-    return false;
-  }
+  if (_canRequestLootboxRngInflight) return _canRequestLootboxRngInflight;
+  let flight;
+  flight = (async () => {
+    const provider = permissionlessReadProvider(getProvider());
+    if (!provider) return false;
+    const contract = _buildContract(provider);
+    if (typeof contract?.requestLootboxRng?.staticCall !== 'function') return false;
+    try {
+      await contract.requestLootboxRng.staticCall();
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  })().finally(() => {
+    if (_canRequestLootboxRngInflight === flight) _canRequestLootboxRngInflight = null;
+  });
+  _canRequestLootboxRngInflight = flight;
+  return flight;
 }
 
 /** Permissionlessly start the shared RNG batch once its on-chain gates are open. */

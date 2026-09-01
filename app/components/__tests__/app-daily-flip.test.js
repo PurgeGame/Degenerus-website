@@ -1333,6 +1333,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-table-watermark__flame\s*\{[^}]*background:\s*currentColor[^}]*mask:\s*url\('\/whitepaper\/flame-center\.svg'\)/s,
       'the table mark uses the native Degenerus flame instead of another coin badge');
     assert.match(CHIPSET_CSS,
+      /@media \(max-width: 1099px\)[\s\S]*?\.df-table-watermark\s*\{\s*display:\s*none;/s,
+      'stacked Coinflip layouts remove the watermark before it can collide with both bet labels');
+    assert.match(CHIPSET_CSS,
       /\.app-daily-flip::before\s*\{[^}]*content:\s*none/s,
       'the oversized circular watermark cannot remain behind the betting fixtures');
     assert.match(APP_CSS,
@@ -1816,6 +1819,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /@media \(min-width: 521px\)\s*\{[^]*?\.df-bet-oval\s*\{\s*height:\s*4\.75rem;[^]*?\.df-tomorrow-layout\s*\{[^}]*grid-template-rows:\s*auto 2\.35rem 1\.2rem[^]*?\.df-bet-chip-rack\s*\{[^}]*--df-chip-width:\s*1\.86rem[^}]*--df-chip-mark-height:\s*\.68rem/s,
       'wider layouts spend their extra vertical gap on larger tables and readable badge art');
+    assert.match(CHIPSET_CSS,
+      /@media \(min-width: 521px\) and \(max-width: 1099px\)[\s\S]*?\.df-bet-table\s*\{[^}]*top:\s*calc\(50% \+ 0\.1rem\)[\s\S]*?\.df-bet-oval\s*\{[^}]*height:\s*4\.15rem/s,
+      'the stacked wide table leaves a clean seam between Today and Tomorrow');
     assert.doesNotMatch(APP_CSS, /\.df-bet-chip\.is-payout/,
       'winnings use the same denomination styling instead of a green payout override');
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);

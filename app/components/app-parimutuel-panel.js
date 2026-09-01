@@ -1264,7 +1264,7 @@ class AppParimutuelPanel extends HTMLElement {
     bonus.className = 'pari-prebet-bonus';
     const label = document.createElement('span');
     label.className = 'pari-prebet-bonus__label';
-    label.textContent = `BET: ${_fmtFlip(STAKE_WEI)} FLIP\u00a0\u00a0\u00a0BONUS: `;
+    label.textContent = `${_fmtFlip(STAKE_WEI)} FLIP BET \u00b7 `;
     const value = document.createElement('strong');
     value.className = 'pari-prebet-bonus__value';
     value.textContent = `+${_fmtFlip(amount)} FLIP · +1 STREAK`;

@@ -520,10 +520,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'the fallback FLIP icon follows the canonical bottom-left to top-right split');
     assert.doesNotMatch(`${degeneretteFlip}${redeemFlip}`, /#30d100|#ed0e11/,
       'composite pictograms do not contain another approximate FLIP redraw');
+    assert.match(redeemFlip, /M31 32h10m-5-6 6 6-6 6/,
+      'Redeem FLIP keeps the directional arrow from FLIP into its ticket');
     assert.match(PANEL_SRC, /qst-painted-icon__flip-mark[\s\S]*?src = '\/whitepaper\/flame-logo-split\.svg'/,
       'composite quest icons layer the real FLIP mark');
-    assert.match(PANEL_SRC, /9:\s*'\/whitepaper\/flame-logo-split\.svg'/,
-      'Redeem FLIP gives the canonical mark the whole icon tile instead of crushing it into a vertical shorthand');
+    assert.match(PANEL_SRC, /9:\s*'\/app\/assets\/quests\/redeem-flip\.svg'/,
+      'Redeem FLIP uses the directional FLIP-to-ticket pictogram');
+    assert.match(PANEL_SRC, /'\/app\/assets\/quests\/redeem-flip\.svg':\s*'left'/,
+      'the canonical FLIP mark occupies the source side of the redemption pictogram');
   });
 
   test('quest action sheets have themed completion hierarchy and motion-safe polish', () => {
@@ -776,11 +780,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'BUY LUCKBOX · 1.2 ETH',
       'the popup subtracts existing progress and presents only the remaining minimum',
     );
-    assert.equal(el.querySelector('[data-bind="qst-action-adjust"]').hidden, true,
-      'one-click quest presets do not repeat the destination form controls');
+    assert.equal(el.querySelector('[data-bind="qst-action-adjust"]').hidden, false,
+      'Luckbox quests expose the per-box amount in their action sheet');
+    assert.equal(el.querySelector('[data-bind="qst-action-lootbox-quantity"]').hidden, false,
+      'Luckbox quests expose the box quantity in their action sheet');
     assert.equal(el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      'Buy a 1.2 ETH luckbox.');
-    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent, 'CONFIRM');
+      'Choose the ETH per box and number of Luckboxes, then confirm.');
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
+      'CONFIRM · BUY LUCKBOX · 1.2 ETH');
 
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
@@ -958,17 +965,39 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(confirm.disabled, false);
     assert.equal(
       el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      'Buy a 0.02 ETH luckbox.',
+      'Choose the ETH per box and number of Luckboxes, then confirm.',
+    );
+    const amount = el.querySelector('[name="qst-action-amount"]');
+    const quantity = el.querySelector('[name="qst-action-lootbox-quantity"]');
+    assert.equal(el.querySelector('[data-bind="qst-action-adjust"]').hidden, false,
+      'the Luckbox quest exposes its per-box amount');
+    assert.equal(el.querySelector('[data-bind="qst-action-lootbox-quantity"]').hidden, false,
+      'the Luckbox quest exposes its quantity');
+    assert.equal(amount.value, '0.02');
+    assert.equal(quantity.value, '1');
+
+    el.querySelector('[data-bind="qst-action-lootbox-quantity-up"]')
+      .dispatchEvent({ type: 'click' });
+    assert.equal(quantity.value, '2');
+    assert.equal(amount.value, '0.01',
+      'changing quantity re-quotes ETH each to keep the quest-completing total');
+    amount.value = '0.02';
+    amount.dispatchEvent({ type: 'change' });
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY 2 LUCKBOXES · 0.04 ETH',
     );
     assert.doesNotMatch(confirm.textContent, /DAILY QUEST FIRST/);
 
     confirm.dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
       questType: 6,
-      target: '20000000000',
+      target: '40000000000',
       variant: 'secondary',
       submit: true,
       configuredAmount: true,
+      lootboxQuantity: 2,
+      lootboxAmountWei: '20000000000',
     }]);
 
     document.removeEventListener('quest:activate', listener);
@@ -1310,9 +1339,13 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const redeemSlot = el.querySelectorAll('.qst-slot')[1];
     assert.match(redeemSlot.textContent, /Redeem FLIP/);
     assert.doesNotMatch(el.textContent, /Mint with FLIP/i);
-    assert.equal(redeemSlot.querySelector('.qst-slot-icon')?.querySelector('img')?.src,
+    const redeemIcon = redeemSlot.querySelector('.qst-slot-icon');
+    assert.equal(redeemIcon?.querySelector('img')?.src,
+      '/app/assets/quests/redeem-flip.svg',
+      'Redeem FLIP shows the directional redemption pictogram');
+    assert.equal(redeemIcon?.querySelector('.qst-painted-icon__flip-mark')?.src,
       '/whitepaper/flame-logo-split.svg',
-      'Redeem FLIP keeps its canonical product icon');
+      'Redeem FLIP layers the canonical mark on the source side');
     el.disconnectedCallback();
   });
 

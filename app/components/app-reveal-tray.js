@@ -29,6 +29,7 @@ import {
 } from '../app/dgn-traits.js';
 import {
   isAutomaticPopupBlocked,
+  isMajorDrawActive,
   subscribeAutomaticPopupGate,
 } from '../app/major-draw-activity.js';
 import {
@@ -873,6 +874,9 @@ class AppRevealTray extends HTMLElement {
   }
 
   async #refreshRngQueue(token = this.#rngMonitorToken) {
+    // This is background status work, not the player's request transaction.
+    // Defer it while a jackpot/daily draw owns the animation frame lane.
+    if (isMajorDrawActive()) return;
     let next = null;
     try { next = await readLootboxRngQueueState(); } catch (_e) { /* retain the last good display */ }
     if (!this.#initialized || token !== this.#rngMonitorToken) return;

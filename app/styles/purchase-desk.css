@@ -2324,15 +2324,15 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--pack > .dec-ticket-pac
   --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
   position: absolute;
   z-index: 14;
-  top: 50%;
-  right: 0.38rem;
+  top: -0.14rem;
+  right: -0.1rem;
   bottom: auto;
-  width: 1.08rem;
+  width: 1.18rem;
   min-width: 0;
-  height: 1.08rem;
+  height: 1.18rem;
   min-height: 0;
   padding: 0;
-  translate: 0 -50%;
+  translate: none;
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--foil > quest-objective-indicator {
@@ -3664,6 +3664,138 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   body.layout-basic .app-decimator-panel .dec-funds-stack {
     margin-top: 0;
     padding-top: 0;
+  }
+
+  /* Keep the desktop quote's balanced tabular columns when the hero stacks.
+     The earlier compact fallback packs them to the left, leaving the rest of
+     a wider rate window visually empty. */
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
+    justify-content: center;
+    gap: 0.1rem;
+    column-gap: 0;
+    font-size: 0.54rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__count {
+    grid-column: 1;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__kind {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__sep {
+    grid-column: 5;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__amount {
+    grid-column: 7;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__unit {
+    grid-column: 9;
+  }
+}
+
+/* The hero is still a single stacked column on small tablets and landscape
+   phones, but its full width is much larger than the compact instruments were
+   designed to consume. Keep the rates + bonus together as one centered desk
+   cluster, using the same centered rate geometry as desktop. */
+@media (min-width: 521px) and (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    width: 100%;
+    min-height: 4rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 11.4rem) 8rem minmax(0, 1fr);
+    grid-template-rows: auto 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    height: 2.35rem;
+    min-height: 2.35rem;
+  }
+
+  /* Four products already fill the shelf. Preserve their compact natural
+     proportions instead of making the narrow pack art chase extra height. */
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+    .dec-ticket-piece--foil:not([hidden])
+  ) .dec-ticket-piece {
+    min-height: 6.25rem;
+  }
+
+  /* With no level-gated Foil pack, three controls have even more room. Give
+     their real silhouettes that room instead of leaving three thumbnails in
+     four-product-sized whitespace. */
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece {
+    min-height: clamp(8rem, 18vw, 10.75rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece__copy > strong {
+    font-size: 0.54rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-pack-mark img {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) :is(.dec-pack-level, .dec-pack-count) {
+    font-size: 0.52rem;
+  }
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    min-height: 4.05rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 11.4rem) 6.45rem minmax(0, 1fr);
+    grid-template-rows: auto 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    height: 2.35rem;
+    min-height: 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces {
+    gap: 0.16rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+    .dec-ticket-piece--foil:not([hidden])
+  ) .dec-ticket-piece {
+    min-height: 6.25rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece {
+    min-height: 7.25rem;
   }
 }
 

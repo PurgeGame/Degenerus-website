@@ -117,6 +117,7 @@ import { readPlayerActivityScore } from '../app/decimator.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';
 import { registerComponentPoll } from '../app/component-poll.js';
+import { isMajorDrawActive } from '../app/major-draw-activity.js';
 
 // Clipboard API calls must happen during the original click's transient user
 // activation. This fallback uses a real, temporarily mounted field instead of
@@ -1236,7 +1237,7 @@ class AppDegenerettePanel extends HTMLElement {
                     </span>
                   </button>
                   <quest-objective-indicator product="affiliate"
-                                             data-quest-pointer="bottom-left"></quest-objective-indicator>
+                                             data-quest-pointer="left"></quest-objective-indicator>
                 </span>
               </strong>
             </div>
@@ -3127,6 +3128,13 @@ class AppDegenerettePanel extends HTMLElement {
     this.#startRngBlockPoll();
     const tick = async () => {
       if (!stillCurrent()) return;
+      if (isMajorDrawActive()) {
+        this.#rngPollTimer = setTimeout(tick, RNG_POLL_INTERVAL_MS);
+        if (this.#rngPollTimer && typeof this.#rngPollTimer.unref === 'function') {
+          try { this.#rngPollTimer.unref(); } catch (_) { /* defensive */ }
+        }
+        return;
+      }
       try {
         const player = this.#pendingAddress || getActingAddress();
         let bet = null;
@@ -3299,6 +3307,13 @@ class AppDegenerettePanel extends HTMLElement {
     const token = ++this.#rngBlockPollToken;
     const tick = async () => {
       if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
+      if (isMajorDrawActive()) {
+        this.#rngBlockPollTimer = setTimeout(tick, RNG_BLOCK_POLL_INTERVAL_MS);
+        if (this.#rngBlockPollTimer && typeof this.#rngBlockPollTimer.unref === 'function') {
+          try { this.#rngBlockPollTimer.unref(); } catch (_e) { /* defensive */ }
+        }
+        return;
+      }
       try {
         const provider = permissionlessReadProvider(getProvider());
         if (provider && typeof provider.getBlockNumber === 'function') {

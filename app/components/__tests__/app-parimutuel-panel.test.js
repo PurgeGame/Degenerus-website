@@ -436,7 +436,7 @@ describe('app-parimutuel-panel', () => {
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(19rem, 1\.55fr\) minmax\(10rem, 0\.65fr\)/s,
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(22rem, 1fr\) clamp\(8\.5rem, 24vw, 14rem\)/s,
       'the live Growth book and Incinerator share the full desktop row');
     assert.match(APP_CSS,
       /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1 \/ -1/s,
@@ -448,8 +448,14 @@ describe('app-parimutuel-panel', () => {
       /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*width:\s*min\(100%, 30\.7rem\)/s,
       'the Incinerate key aligns with the burn key in the utility rail below');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head head"[^}]*"context today"/s,
-      'the open Growth header stays readable above side-by-side context and actions');
+      /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head today"[^}]*"context today"/s,
+      'the open Growth identity and context stack beside the actions');
+    assert.match(APP_CSS,
+      /\.side-bets-rail \.pari-book--open \.pari-side__target\s*\{[^}]*display:\s*none/s,
+      'the exact target appears once in context instead of bloating both buttons');
+    assert.match(APP_CSS,
+      /@media \(min-width: 581px\)[\s\S]*?\.pari-wwxrp__burn\[data-write\][^}]*width:\s*4\.4rem/s,
+      'the adjacent Incinerator yields decorative key width while both tools share a row');
     assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
     assert.equal(growthCard(el).hidden, true);
     assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
@@ -458,7 +464,7 @@ describe('app-parimutuel-panel', () => {
       'closed books leave no placeholder copy or dead box behind');
   });
 
-  test('restored WWXRP wrapper shows the viewed balance and burns from self view', async () => {
+  test('WWXRP shows an inline amount and burns from self view without a dialog', async () => {
     let burned = null;
     wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
       balances: async () => ({ wwxrpBalance: 12_345n * FLIP }),
@@ -475,29 +481,29 @@ describe('app-parimutuel-panel', () => {
     assert.match(WWXRP_SOURCE,
       /aria-label="WWXRP balance and Daily Incinerator entry"/);
     assert.equal(el.querySelector('[data-bind="wwxrp-balance"]').textContent, '12.3K');
-    const open = el.querySelector('[data-bind="wwxrp-open"]');
-    assert.equal(el.querySelector('[data-bind="wwxrp-open-label"]').textContent, 'BURN');
-    assert.equal(open.disabled, false);
-    open.click();
-
-    const dialog = el.querySelector('[data-bind="wwxrp-dialog"]');
+    const burn = el.querySelector('[data-bind="wwxrp-burn"]');
     const input = el.querySelector('[data-bind="wwxrp-amount"]');
-    const accept = el.querySelector('[data-bind="wwxrp-accept"]');
-    assert.equal(dialog.hidden, false);
-    assert.match(WWXRP_SOURCE, /Incinerate WWXRP for a weighted entry in today’s Daily Incinerator/);
+    assert.equal(el.querySelector('[data-bind="wwxrp-burn-label"]').textContent, 'BURN');
+    assert.equal(el.querySelector('[data-bind="wwxrp-dialog"]'), null);
+    assert.doesNotMatch(WWXRP_SOURCE,
+      /wwxrp-dialog|wwxrp-accept|aria-haspopup="dialog"|#openDialog|#closeDialog/,
+      'the amount and write action stay in the rail instead of opening a nested popup');
+    assert.match(WWXRP_SOURCE,
+      /class="pari-wwxrp__amount"[\s\S]*data-bind="wwxrp-amount"[\s\S]*data-bind="wwxrp-max"[\s\S]*class="pari-wwxrp__burn"/,
+      'the amount field is immediately before the BURN key');
     assert.equal(input.value, '25');
-    assert.equal(accept.disabled, false);
+    assert.equal(burn.disabled, false);
 
     input.value = '24';
     input.dispatchEvent({ type: 'input' });
-    assert.equal(accept.disabled, true, 'the on-chain 25 WWXRP minimum is enforced in the dialog');
+    assert.equal(burn.disabled, true, 'the on-chain 25 WWXRP minimum is enforced inline');
     input.value = '25';
     input.dispatchEvent({ type: 'input' });
-    accept.click();
+    assert.equal(burn.disabled, false);
+    burn.click();
     await flush();
 
     assert.equal(burned, 25n * FLIP);
-    assert.equal(dialog.hidden, true);
     assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /WWXRP INCINERATED/);
     assert.match(APP_CSS,
       /\.pari-wwxrp\s*\{[^}]*min-height:\s*3\.15rem[^}]*grid-template-columns:\s*2\.55rem minmax\(0, 1fr\) 5\.3rem/s,
@@ -508,12 +514,26 @@ describe('app-parimutuel-panel', () => {
     assert.match(APP_CSS,
       /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*grid-template-columns:\s*1\.34rem auto;[^}]*padding:\s*0\.32rem 0\.72rem 0\.32rem 0\.48rem;[^}]*font:\s*950 0\.66rem\/1/s,
       'the WWXRP action shares the exact proportions and type hierarchy of the sDGNRS burn key');
-    assert.match(WWXRP_SOURCE,
-      /data-bind="wwxrp-open-label">BURN<\/b>/,
-      'the WWXRP action keeps its BURN label in a stable child during refreshes');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*width:\s*1\.34rem;[^}]*height:\s*1\.72rem;[^}]*flame-center-silver\.svg[^}]*border-right:/s,
-      'the CSS-owned flame compartment matches the sDGNRS key and cannot be erased by a label refresh');
+      /\.pari-wwxrp__amount\s*\{[^}]*grid-column:\s*2;[^}]*grid-template-columns:\s*minmax\(1\.6rem, 1fr\) auto auto;/s,
+      'the compact amount/MAX field occupies the lane directly beside BURN');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__amount input\s*\{[^}]*min-height:\s*0;[^}]*height:\s*100%/s,
+      'mobile touch-target defaults cannot clip the inline amount text');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__amount button\s*\{[^}]*min-height:\s*0;[^}]*height:\s*100%/s,
+      'mobile touch-target defaults cannot clip the MAX label');
+    assert.match(WWXRP_SOURCE,
+      /data-bind="wwxrp-burn-label">BURN<\/b>/,
+      'the WWXRP action keeps its BURN label in a stable child during refreshes');
+    const flameRule = APP_CSS.match(
+      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*\}/s,
+    )?.[0] || '';
+    assert.match(flameRule,
+      /width:\s*1\.34rem;[^}]*height:\s*1\.72rem;[^}]*flame-center-silver\.svg/s,
+      'the CSS-owned flame cannot be erased by a label refresh');
+    assert.doesNotMatch(flameRule, /border-right:/,
+      'the WWXRP flame has no stray divider line');
   });
 
   test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {
@@ -535,7 +555,7 @@ describe('app-parimutuel-panel', () => {
     storeMod.update('viewing.address', viewed);
     assert.equal(balance.textContent, '—',
       'the old wallet amount is invalidated before the replacement read settles');
-    assert.equal(el.querySelector('[data-bind="wwxrp-open"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, true);
 
     await Promise.resolve();
     resolveViewed({ wwxrpBalance: 0n });
@@ -814,7 +834,7 @@ describe('app-parimutuel-panel', () => {
       'the split percentages appear once beside the bar',
     );
     assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
-      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +150 FLIP · +1 STREAK',
+      '1,000 FLIP BET · +150 FLIP · +1 STREAK',
       'the fixed bet and complete contract-quoted growth reward are visible before betting');
     assert.match(
       APP_CSS,

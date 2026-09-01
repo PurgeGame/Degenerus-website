@@ -16,6 +16,7 @@ const {
   candidateRecordPayoutWei,
   candidateClaimsRecord,
   decodeRecordClockSlot,
+  diceRunRecordFromReceipt,
   fetchRecords,
   formatRecordValue,
   normalizeRecords,
@@ -46,8 +47,10 @@ const {
   recordBountyActivationDetail,
   recordBountySpinSelection,
   recordBountyTransactionQuote,
+  renderSnapshotKey,
 } = await import('../app-records-rail.js');
-const { ETH_DIVISOR } = await import('../../app/chain-config.js');
+const { CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
+const { ethers } = await import('../../app/contracts.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
@@ -487,6 +490,103 @@ describe('normalizeRecords', () => {
     assert.equal(spin.player, null,
       'the previous indexed holder is not mislabeled as owner of the new mark');
   });
+
+  test('fills a missing Dice Run holder and replay from matching chain provenance', () => {
+    const replay = Object.freeze({
+      battleKey: `0x${'12'.repeat(32)}`,
+      viewerBetId: '991',
+    });
+    const provenance = Object.freeze({
+      player: '0xABCDEF0123456789012345678901234567890123',
+      value: 12_103_866n,
+      replay,
+    });
+    const state = normalizeRecords(
+      { records: [] },
+      null,
+      null,
+      [0n, 0n, 0n, 0n, 12_103_866n],
+      provenance,
+    );
+    const dice = state.records[RECORD_KIND_DICE_RUN];
+    assert.equal(dice.value, 12_103_866n);
+    assert.equal(dice.player, '0xabcdef0123456789012345678901234567890123');
+    assert.equal(dice.replay, replay);
+  });
+
+  test('never attaches stale Dice Run provenance to a newer mark', () => {
+    const state = normalizeRecords(
+      { records: [] },
+      null,
+      null,
+      [0n, 0n, 0n, 0n, 12_200_000n],
+      {
+        player: '0xabcdef0123456789012345678901234567890123',
+        value: 12_103_866n,
+        replay: { battleKey: `0x${'34'.repeat(32)}`, viewerBetId: '991' },
+      },
+    );
+    const dice = state.records[RECORD_KIND_DICE_RUN];
+    assert.equal(dice.value, 12_200_000n);
+    assert.equal(dice.player, null);
+    assert.equal(dice.replay, null);
+  });
+});
+
+describe('Dice Run record provenance', () => {
+  const PLAYER = '0xabcdef0123456789012345678901234567890123';
+  const BATTLE_KEY = `0x${'ab'.repeat(32)}`;
+  const SCORE_BPS = 12_103_866n;
+  const BET_ID = 8_559_289_250_201_231_949_833n;
+  const TX_HASH = `0x${'56'.repeat(32)}`;
+  const iface = new ethers.Interface([
+    'event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)',
+    'event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)',
+  ]);
+
+  function eventLog(name, values) {
+    const encoded = iface.encodeEventLog(iface.getEvent(name), values);
+    return { ...encoded, address: CONTRACTS.CRAPS };
+  }
+
+  test('extracts the winning seat as the initial replay perspective', () => {
+    const receipt = {
+      logs: [
+        eventLog('CrapsBattleFinalized', [
+          BATTLE_KEY, 1, 9n, 13_000n, 12_000n, SCORE_BPS, 55_000n,
+        ]),
+        eventLog('CrapsBattlePaid', [BET_ID, BATTLE_KEY, PLAYER, 77_000n]),
+      ],
+    };
+    const record = diceRunRecordFromReceipt({
+      player: PLAYER,
+      value: SCORE_BPS,
+      blockNumber: 123,
+      transactionHash: TX_HASH,
+    }, receipt);
+    assert.equal(record.player, PLAYER);
+    assert.equal(record.value, SCORE_BPS);
+    assert.deepEqual(record.replay, {
+      battleKey: BATTLE_KEY,
+      viewerBetId: BET_ID.toString(),
+      settledMainPotWei: '55000',
+      battleWinner: PLAYER,
+      battleWinnerBetId: BET_ID.toString(),
+      battlePayoutWei: '77000',
+      battleWinningStop: 1,
+    });
+  });
+
+  test('keeps the holder when replay logs are not yet available', () => {
+    const record = diceRunRecordFromReceipt({
+      player: PLAYER,
+      value: SCORE_BPS,
+      blockNumber: 123,
+      transactionHash: TX_HASH,
+    }, null);
+    assert.equal(record.player, PLAYER);
+    assert.equal(record.replay, null);
+  });
 });
 
 describe('live bounty pool', () => {
@@ -552,6 +652,31 @@ describe('live bounty pool', () => {
         5n, 125n, 7n, 8n, 2_345_678n,
       ]);
       assert.equal(state.records[1].player, null);
+    } finally {
+      __resetRecordsReadersForTest();
+    }
+  });
+
+  test('fetches Dice Run holder and replay provenance beside the live mark', async () => {
+    const replay = {
+      battleKey: `0x${'78'.repeat(32)}`,
+      viewerBetId: '456',
+    };
+    __setRecordsReadersForTest({
+      json: async () => ({ recordPool: '48000', records: [] }),
+      pool: async () => 36_000n,
+      clocks: async () => [1, 1, 1, 1, 9],
+      marks: async () => [0n, 0n, 0n, 0n, 2_345_678n],
+      diceRun: async () => ({
+        player: '0xabcdef0123456789012345678901234567890123',
+        value: 2_345_678n,
+        replay,
+      }),
+    });
+    try {
+      const dice = (await fetchRecords()).records[RECORD_KIND_DICE_RUN];
+      assert.equal(dice.player, '0xabcdef0123456789012345678901234567890123');
+      assert.equal(dice.replay, replay);
     } finally {
       __resetRecordsReadersForTest();
     }
@@ -707,6 +832,22 @@ describe('holder identity', () => {
     assert.match(COMPONENT, /escapeHtml\(profile\?\.name \|\| shortAddress\(record\.player\)\)/);
     assert.match(COMPONENT, /escapeHtml\(profile\.avatar\)/);
   });
+
+  test('profile and bigint snapshots repaint when Dice Run provenance arrives later', () => {
+    const before = renderSnapshotKey(new Map([
+      ['0xold', { name: 'Old Holder' }],
+    ]));
+    const after = renderSnapshotKey(new Map([
+      ['0xold', { name: 'Old Holder' }],
+      ['0xdice', { name: 'Sleepy Sloth' }],
+    ]));
+    assert.notEqual(before, after, 'Maps must not collapse to the same JSON object key');
+    assert.notEqual(
+      renderSnapshotKey({ value: 12_103_866n }),
+      renderSnapshotKey({ value: 12_200_000n }),
+      'bigint record marks participate in the repaint key',
+    );
+  });
 });
 
 describe('rail wiring', () => {
@@ -782,8 +923,17 @@ describe('rail wiring', () => {
       'the final record is presented as COINFLIP while its amount remains denominated in FLIP');
     assert.match(COMPONENT, /\[RECORD_KIND_DICE_RUN, 'DICE RUN'\]/,
       'Dice Run retains its presentation label while occupying the final display slot');
-    assert.match(COMPONENT, /const interactive = [^;]*&& !isDiceRun/,
-      'scheduled Dice Run is informational rather than a fake one-click action');
+    assert.match(COMPONENT,
+      /const interactive = isDiceRun\s*\? Boolean\(record\.held\)\s*:\s*readBiggestBountiesModePreference\(\) === 'on'/,
+      'a held Dice Run is a read-only replay action while direct records retain their transaction gate');
+    assert.match(COMPONENT, /this\.#openDiceRunReplay\(record\)/,
+      'the Dice Run leader opens its sealed winner-perspective replay');
+    assert.match(COMPONENT,
+      /item\.classList\.toggle\('is-replay', isDiceRun && Boolean\(record\.held\)\)/,
+      'only a held Dice Run advertises a replay action');
+    assert.match(CSS,
+      /records-rail__leader\.is-replay:not\(\.is-view-only\)\s*\{[^}]*cursor:\s*url\("data:image\/svg\+xml,[^"]*movie-camera-cursor[^"]*"\) 4 4,\s*pointer;/s,
+      'the Craps bounty uses a movie-camera cursor with a pointer fallback');
     assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label|records-rail__leader-kind-icon/,
       'the prior watermark plus duplicate text interpretation is removed');
     assert.match(COMPONENT,
@@ -966,17 +1116,25 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /removeEventListener\?\.\(TX_CONFIRMED_EVENT/);
   });
 
-  test('honors ON, VIEW, and OFF without turning view-only records into transactions', () => {
+  test('honors ON, VIEW, and OFF while keeping the read-only Dice replay available', () => {
     assert.match(COMPONENT, /readBiggestBountiesModePreference/);
     assert.match(COMPONENT, /name !== 'biggestBountiesMode'/);
     assert.match(COMPONENT, /mode === 'off'[\s\S]*?this\.hidden = true/,
       'OFF removes the complete widget');
-    assert.match(COMPONENT, /const interactive = readBiggestBountiesModePreference\(\) === 'on'/);
+    assert.match(COMPONENT,
+      /const interactive = isDiceRun[\s\S]*?Boolean\(record\.held\)[\s\S]*?readBiggestBountiesModePreference\(\) === 'on'/,
+      'VIEW still enables a held Dice Run because watching a replay never writes');
     assert.match(COMPONENT, /item\.setAttribute\('aria-disabled', 'true'\)/,
       'VIEW keeps the useful record tooltip but announces the shortcut as disabled');
     assert.match(COMPONENT,
-      /if \(readBiggestBountiesModePreference\(\) !== 'on'\) return;[\s\S]*?#openBountyDialog/,
-      'both the click path and dialog path reject view-only activation');
+      /if \(Number\(record\.kind\) === RECORD_KIND_DICE_RUN\) \{[\s\S]*?this\.#openDiceRunReplay\(record\)[\s\S]*?return;/,
+      'Dice Run clicks route to replay before any transaction path');
+    assert.match(COMPONENT,
+      /if \(readBiggestBountiesModePreference\(\) !== 'on'\) return;[\s\S]*?this\.#openBountyDialog\(record\.kind\)/,
+      'the other four click paths still reject view-only activation');
+    assert.match(COMPONENT,
+      /openCrapsReplayTable\(table, \{[\s\S]*?\.\.\.replay,[\s\S]*?fetchImpl: crapsReplayFetch/,
+      'the rail uses the same sealed replay loader with the recovered winner bet id');
     assert.match(CSS, /\.records-rail__leader\.is-view-only/);
   });
 });

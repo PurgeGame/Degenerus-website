@@ -146,25 +146,25 @@ test('the craps ABI names only functions the deployed contract actually has', ()
 test('daily word derivation reproduces the seven published buy-ins, speeds, and goal multipliers', () => {
   const word = '102858562227254754036121703853225298402533986033002165985066946425924666406226';
   const day = craps.crapsBonusDayTerms(word);
-  // Run-43 draw (audit 0b0ed9fb3): the scheduled depth is FIXED at 5 and the
-  // goal is a two-way even draw between 5x and 20x on `(roll >> 32) % 2`.
-  // Bankroll and bounty draws are untouched, so every buy-in (and the 17,300
-  // day total) matches the pre-delta fixture.
+  // Run-45 rules (audit 0880d134c): the scheduled depth is FIXED at 5 and the goal is FIXED at
+  // 5x — the old two-way `(roll >> 32) % 2` draw is gone from the contract, so every window
+  // reads 5 and the derivation must not consume those roll bits. Bankroll and bounty draws are
+  // untouched, so every buy-in (and the 17,300 day total) matches the pre-delta fixture.
   assert.deepEqual(day.windows.map(({ buyInFlip, bankMult, speedLabel, goalMult }) => ({
     buyInFlip, bankMult, speedLabel, goalMult,
   })), [
     { buyInFlip: 2_000n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
-    { buyInFlip: 400n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 20 },
-    { buyInFlip: 500n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 20 },
     { buyInFlip: 400n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
-    { buyInFlip: 400n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 20 },
-    { buyInFlip: 1_500n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 20 },
-    { buyInFlip: 12_100n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 20 },
+    { buyInFlip: 500n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
+    { buyInFlip: 400n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
+    { buyInFlip: 400n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
+    { buyInFlip: 1_500n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
+    { buyInFlip: 12_100n, bankMult: 5, speedLabel: 'NORMAL', goalMult: 5 },
   ]);
   assert.equal(day.buyInFlip, 17_300n);
   assert.deepEqual(
     [day.minBankMult, day.maxBankMult, day.minGoalMult, day.maxGoalMult],
-    [5, 5, 5, 20],
+    [5, 5, 5, 5],
   );
 });
 
@@ -425,6 +425,10 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
     winningStop: 1,
     buyInWei: (bankrolls[6] + 200n) * wei,
     highMultiple: 10,
+    bonusMultiplier: craps.crapsBonusMultiplier({
+      battleKey: previous[6].key,
+      wordValue: previous[6].word,
+    }),
     mainBoostWei: craps.crapsRealizedBoostWei({
       ceilingWei: previous[6].ceiling,
       battleKey: previous[6].key,
@@ -681,6 +685,13 @@ test('the realized boost carries the contract rounding, not the raw draw', () =>
   const key = `0x${'ab'.padStart(64, '0')}`;
   const word = 3n;
 
+  assert.equal(craps.crapsBonusMultiplier({ battleKey: key, wordValue: 1n }), 0.25);
+  assert.equal(craps.crapsBonusMultiplier({ battleKey: key, wordValue: 3n }), 1);
+  assert.equal(craps.crapsBonusMultiplier({ battleKey: key, wordValue: 37n }), 10);
+  assert.equal(craps.crapsBonusMultiplier({ battleKey: key, wordValue: 47n }), 100);
+  assert.equal(craps.crapsBonusMultiplier({ battleKey: key, wordValue: 0n }), null,
+    'the UI never invents a multiplier before the settlement word is available');
+
   // Above the 40-granule floor CrapsBattle._roundBoost collapses to the NEAREST
   // ten granules, so 45 pays 50. Announcing the raw 45 understates the window by
   // 500 FLIP — the exact shortfall seen on the live run-43 day 5 window 4.
@@ -877,7 +888,7 @@ test('tomorrow face-cost ranges cover the shipped Normal and unknown High Roller
   });
 });
 
-test('finalized direct and day-ticket seats retain viewer ids for pending replays', () => {
+test('armed and finalized owned seats retain viewer ids across the Pending lifecycle', () => {
   const day = 42;
   const priorDaySlot = 41n * 8n;
   const priorBetId = (priorDaySlot << 64n) | 4n;
@@ -889,9 +900,12 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
   const pendingBattleSlot = 42n * 8n + 3n;
   const pendingBetId = (pendingBattleSlot << 64n) | 10n;
   const pendingKey = `0x${'43'.padStart(64, '0')}`;
-  const otherBattleSlot = 42n * 8n + 4n;
+  const openBattleSlot = 42n * 8n + 4n;
+  const openBetId = (openBattleSlot << 64n) | 11n;
+  const openKey = `0x${'44'.padStart(64, '0')}`;
+  const otherBattleSlot = 42n * 8n + 5n;
   const otherBetId = (otherBattleSlot << 64n) | 11n;
-  const otherKey = `0x${'44'.padStart(64, '0')}`;
+  const otherKey = `0x${'45'.padStart(64, '0')}`;
   const wei = 10n ** 18n;
   const pack = (betId) => betId << 32n;
   const opened = (battleKey, slot) => ({
@@ -907,11 +921,25 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
     { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: pack(priorBetId) } } },
     { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: pack(directBetId) } } },
     { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: pack(pendingBetId) } } },
+    { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: pack(openBetId) } } },
     { parsed: { name: 'CrapsSlipPlaced', args: { player: '0x00000000000000000000000000000000000000cc', bet: pack(otherBetId) } } },
     { parsed: { name: 'CrapsBonusOpened', args: opened(priorKey, priorBattleSlot) } },
     { parsed: { name: 'CrapsBonusOpened', args: opened(directKey, directBattleSlot) } },
     { parsed: { name: 'CrapsBonusOpened', args: opened(pendingKey, pendingBattleSlot) } },
+    { parsed: { name: 'CrapsBonusOpened', args: opened(openKey, openBattleSlot) } },
     { parsed: { name: 'CrapsBonusOpened', args: opened(otherKey, otherBattleSlot) } },
+    {
+      parsed: {
+        name: 'CrapsBonusArmed',
+        args: { battleKey: pendingKey, slot: pendingBattleSlot, index: 901n },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBonusArmed',
+        args: { battleKey: otherKey, slot: otherBattleSlot, index: 902n },
+      },
+    },
     {
       parsed: {
         name: 'CrapsBattleFinalized',
@@ -926,8 +954,8 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
     },
     {
       parsed: {
-        name: 'CrapsBattleFinalized',
-        args: { battleKey: otherKey, winningStop: 1n, winnerId: 11n, winningPeak: 600n, winningEnd: 150n, winningScoreBps: 20_000n, pot: 300n },
+        name: 'CrapsBattlePaid',
+        args: { battleKey: directKey, betId: directBetId, player: PLAYER, amount: 1_100n },
       },
     },
   ];
@@ -941,6 +969,7 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
       battleKey: priorKey,
       viewerBetId: priorBetId.toString(),
       battleStakeWei: (200n * wei).toString(),
+      finalized: true,
       winningStop: 1,
       winnerId: '2',
       winningPeakWei: '4000',
@@ -950,6 +979,7 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
       winnerBetId: null,
       winner: null,
       amountWei: null,
+      bonusMultiplier: null,
     },
     {
       day: 42,
@@ -958,17 +988,142 @@ test('finalized direct and day-ticket seats retain viewer ids for pending replay
       battleKey: directKey,
       viewerBetId: directBetId.toString(),
       battleStakeWei: (200n * wei).toString(),
+      finalized: true,
       winningStop: 0,
       winnerId: '9',
       winningPeakWei: '9000',
       winningEndWei: '9000',
       winningScoreBps: 300000,
       potWei: '1200',
+      winnerBetId: directBetId.toString(),
+      winner: PLAYER,
+      amountWei: '1100',
+      bonusMultiplier: null,
+    },
+    {
+      day: 42,
+      period: 2,
+      slot: pendingBattleSlot.toString(),
+      battleKey: pendingKey,
+      viewerBetId: pendingBetId.toString(),
+      battleStakeWei: (200n * wei).toString(),
+      finalized: false,
+      winningStop: null,
+      winnerId: null,
+      winningPeakWei: null,
+      winningEndWei: null,
+      winningScoreBps: null,
+      potWei: null,
       winnerBetId: null,
       winner: null,
       amountWei: null,
+      bonusMultiplier: null,
     },
   ]);
+  assert.equal(snapshot.resolvedReplays.some((replay) => replay.battleKey === openKey), false,
+    'an owned battle that is still open does not enter Pending early');
+  assert.equal(snapshot.resolvedReplays.some((replay) => replay.battleKey === otherKey), false,
+    'another player\'s armed battle never enters this wallet\'s Pending feed');
+});
+
+test('resolved High Roller replays retain their full stake and exact side-field seats', () => {
+  const day = 42;
+  const wei = 10n ** 18n;
+  const windowSlot = BigInt(day * 8 + 1);
+  const daySlot = BigInt(day * 8);
+  const directOwned = (windowSlot << 64n) | 1n;
+  const directOther = (windowSlot << 64n) | 2n;
+  const dayOwned = (daySlot << 64n) | 3n;
+  const dayOther = (daySlot << 64n) | 4n;
+  const battleKey = `0x${'46'.padStart(64, '0')}`;
+  const otherPlayer = '0x00000000000000000000000000000000000000bb';
+  const pack = (betId, multiple = 1) => (
+    (betId << 32n) | (BigInt(multiple - 1) << 160n)
+  );
+  const slip = (player, betId, multiple = 1) => ({
+    parsed: { name: 'CrapsSlipPlaced', args: { player, bet: pack(betId, multiple) } },
+  });
+  const logs = [
+    slip(PLAYER, directOwned, 10),
+    slip(otherPlayer, directOther, 10),
+    slip(PLAYER, dayOwned),
+    slip(otherPlayer, dayOther, 10),
+    {
+      parsed: {
+        name: 'CrapsDayWindowsUpgraded',
+        args: { player: PLAYER, day: BigInt(day), upgradedMask: 1n, burned: 1n },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsHighRollerDayOpened',
+        args: { day: BigInt(day), multiplier: 10n, mainBoostBudget: 0n, highRollerBoostBudget: 0n },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBonusOpened',
+        args: {
+          battleKey,
+          slot: windowSlot,
+          seed: 25_000n * wei,
+          bankroll: 300n * wei,
+          goal: 1_500n * wei,
+          boardStake: 105n * wei,
+          battleStake: 200n * wei,
+        },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBonusArmed',
+        args: { battleKey, slot: windowSlot, index: 903n },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBattleFinalized',
+        args: {
+          battleKey,
+          winningStop: 0n,
+          winnerId: 2n,
+          winningPeak: 9_000n,
+          winningEnd: 9_000n,
+          winningScoreBps: 300_000n,
+          pot: 1_200n,
+        },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsHighRollerPaid',
+        args: {
+          battleKey,
+          betId: directOther,
+          player: otherPlayer,
+          amount: 8_000n * wei,
+          bankrollRider: false,
+        },
+      },
+    },
+  ];
+
+  const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs, { player: PLAYER });
+  assert.equal(snapshot.resolvedReplays.length, 2,
+    'the owned direct and upgraded day seats each publish a replay receipt');
+  const expectedHighSeats = [dayOwned, dayOther, directOwned, directOther]
+    .map(String)
+    .sort((left, right) => BigInt(left) < BigInt(right) ? -1 : 1);
+  for (const replay of snapshot.resolvedReplays) {
+    assert.equal(replay.entryMultiple, 10);
+    assert.equal(replay.entryBattleStakeWei, (2_000n * wei).toString());
+    assert.deepEqual(replay.highRollerBetIds, expectedHighSeats);
+    assert.equal(replay.highRollerEntrants, 4);
+    assert.equal(replay.highWinnerBetId, directOther.toString());
+    assert.equal(replay.highWinner, otherPlayer);
+    assert.equal(replay.highPayoutWei, (8_000n * wei).toString());
+    assert.equal(replay.highBankrollRider, false);
+  }
 });
 
 test('the surviving chain reads normalize their values', async () => {

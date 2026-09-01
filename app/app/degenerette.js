@@ -561,7 +561,7 @@ export async function readBetInfo({ player, betId } = {}) {
 export async function canResolveBets({ player, betIds } = {}) {
   const owner = player || getActingAddress();
   if (!owner || !Array.isArray(betIds) || betIds.length === 0) return false;
-  const provider = getProvider();
+  const provider = _readProvider();
   if (!provider) return false;
   let ids;
   try { ids = betIds.map((id) => BigInt(id)); }

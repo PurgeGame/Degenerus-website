@@ -24,10 +24,12 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 const cp = await import('../component-poll.js');
+const drawGate = await import('../major-draw-activity.js');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 afterEach(() => {
   cp._resetComponentPollsForTests();
+  drawGate.__resetMajorDrawActivityForTest();
   hidden = false;
 });
 
@@ -69,6 +71,31 @@ test('registering while hidden stays disarmed until visible', () => {
   cp._onVisibilityChangeForTests();
   assert.equal(ticks, 1);
   assert.equal(cp._componentPollStatsForTests().armed, 1);
+});
+
+test('major draw activity excludes component poll work from the reel task lane', async () => {
+  const order = [];
+  cp.registerComponentPoll(() => {
+    // Always-mounted consumers include the 12s sDGNRS log-discovery refresh.
+    // Any synchronous continuation here owns the same browser thread as the reel.
+    order.push('background-start', 'background-end');
+  }, 12_000);
+  drawGate.setMajorDrawActivity('jackpot-replay', true);
+  assert.equal(cp._componentPollStatsForTests().armed, 0,
+    'entering a draw disarms the registered background intervals');
+
+  const reelContinuation = Promise.resolve().then(() => order.push('reel'));
+  cp._onVisibilityChangeForTests();
+  await reelContinuation;
+
+  assert.deepEqual(order, ['reel'],
+    'component callbacks must not be admitted while a major draw owns the frame lane');
+
+  drawGate.setMajorDrawActivity('jackpot-replay', false);
+  assert.deepEqual(order, ['reel'],
+    'leaving the draw does not burst deferred work into the scratch handoff');
+  assert.equal(cp._componentPollStatsForTests().armed, 1,
+    'the normal interval cadence resumes after the draw');
 });
 
 test('bad arguments return a no-op unregister', () => {

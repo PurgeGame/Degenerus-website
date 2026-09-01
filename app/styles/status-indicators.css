@@ -223,10 +223,11 @@ body.layout-basic boon-product-indicator {
   margin: 0;
 }
 
-/* Game-style objective waypoint. The bubble tail points at the action and the
-   exclamation reads at tiny sizes without adding another framed UI box. */
+/* Game-style objective waypoint. Default to the full left-pointing quote
+   bubble so the tail remains unmistakable at control-badge size; placements
+   on an action's left edge explicitly select the mirrored right-facing art. */
 quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective.svg');
+  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
   position: relative;
   display: inline-grid;
   box-sizing: border-box;
@@ -247,8 +248,11 @@ quest-objective-indicator::before {
   content: "";
 }
 
-/* Point the callout back toward controls that sit below and to its left. Other
-   placements keep the centered waypoint until their host selects a direction. */
+quest-objective-indicator[data-quest-pointer="left"] {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
+}
+
+/* Point the callout back toward controls that sit below and to its left. */
 quest-objective-indicator[data-quest-pointer="bottom-left"] {
   --quest-objective-art: url('/app/assets/quest-objective-tail-bottom-left.svg');
 }
@@ -379,6 +383,7 @@ body.layout-basic .dbb__burn:has(> quest-objective-indicator:not([hidden])) {
 }
 
 body.layout-basic .deg-currency-option > quest-objective-indicator {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-right.svg');
   z-index: 2;
   top: 0.2rem;
   left: 0.2rem;

@@ -172,3 +172,27 @@
   border-top: 1px solid var(--border-subtle);
   margin: 0.75rem 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* Below-the-fold render containment                                    */
+/* ------------------------------------------------------------------ */
+/* These panels sit under the hero and grids; while they are outside the
+   viewport the browser skips their style, layout, and paint entirely —
+   including their looping foil/coin animations — so the hero keeps the
+   whole frame budget. `auto` intrinsic sizing remembers each panel's real
+   height after its first reveal, so scrollbar jumps only ever happen on
+   the first pass down the page. Selectors match each panel's block-level
+   root (some custom-element hosts are unstyled inline; their inner
+   wrapper is the box that can be size-contained). */
+body.layout-basic app-records-rail,
+body.layout-basic .deity-desk,
+body.layout-basic .app-tickets-inventory,
+body.layout-basic .side-bets-rail,
+body.layout-basic app-sdgnrs-burn-rail,
+body.layout-basic app-transaction-history,
+body.layout-basic .app-affiliate-panel {
+  content-visibility: auto;
+  /* Matches the panels' common collapsed-bar height (~50-80px); after the
+     first on-screen render `auto` remembers each panel's true size. */
+  contain-intrinsic-size: auto 5rem;
+}

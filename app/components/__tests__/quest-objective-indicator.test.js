@@ -242,7 +242,9 @@ describe('<quest-objective-indicator>', () => {
   });
 
   test('uses a distinct quest-waypoint symbol, not boon or bounty language', () => {
-    assert.match(STATUS_CSS, /url\('\/app\/assets\/quest-objective\.svg'\)/);
+    assert.match(STATUS_CSS,
+      /quest-objective-indicator\s*\{[^}]*url\('\/app\/assets\/quest-objective-tail-left\.svg'\)/s,
+      'the shared marker defaults to the full left-facing quote bubble');
     assert.match(STATUS_CSS,
       /quest-objective-indicator\[hidden\]\s*\{\s*display:\s*none\s*!important/);
     assert.match(QUEST_ICON, /Unfinished quest/);
@@ -252,6 +254,9 @@ describe('<quest-objective-indicator>', () => {
     assert.match(QUEST_ICON, /stem-to-dot air/i,
       'the enlarged bubble retains compact punctuation with a clearer gap');
     assert.match(QUEST_BOTTOM_LEFT_ICON, /tail leaves the[\s\S]*lower-left edge/i);
+    assert.match(STATUS_CSS,
+      /\[data-quest-pointer="left"\][\s\S]*?quest-objective-tail-left\.svg/s,
+      'right-edge markers can explicitly point left into their action');
     assert.match(STATUS_CSS,
       /\[data-quest-pointer="bottom-left"\][\s\S]*?quest-objective-tail-bottom-left\.svg/s,
       'hosts can select artwork whose pointer aims back at their control');

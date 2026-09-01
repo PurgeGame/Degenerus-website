@@ -40,6 +40,8 @@ import {
   readBiggestBountiesModePreference,
   subscribeUiPreferences,
 } from '../app/ui-preferences.js';
+import { openCrapsReplayTable } from '../craps/replay-adapter.js';
+import { crapsReplayFetch } from '../craps/replay-fetch.js';
 
 const POLL_MS = 15_000;
 const PROFILE_LINKED_EVENT = 'degenerus:discord-profile-linked';
@@ -383,6 +385,23 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/** Stable repaint key for snapshots containing bigint values and profile Maps. */
+export function renderSnapshotKey(value) {
+  try {
+    return JSON.stringify(value, (_key, entry) => {
+      if (typeof entry === 'bigint') return `bigint:${entry}`;
+      if (entry instanceof Map) {
+        return [...entry.entries()].sort(([left], [right]) => (
+          String(left).localeCompare(String(right))
+        ));
+      }
+      return entry;
+    });
+  } catch (_e) {
+    return null;
+  }
+}
+
 /**
  * A deterministic two-letter monogram for a holder with no linked Discord
  * account, so every card carries a portrait rather than an empty ring.
@@ -419,6 +438,10 @@ class AppRecordsRail extends HTMLElement {
   #bountyDialogLoading = false;
   #bountyDialogSeq = 0;
   #bountySpinDraftValid = true;
+  #diceRunReplayOpening = false;
+  #daySyncDay = null;
+  #renderedStateKey = null;
+  #renderedProfilesKey = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -432,8 +455,15 @@ class AppRecordsRail extends HTMLElement {
       }));
     }
     // The accrued share grows every game day, so a rollover re-prices all four
-    // cards without needing a poll.
-    this.#unsubs.push(subscribe('app.daySync', () => { this.#render(); }));
+    // cards without needing a poll. Only the DAY matters here — daySync also
+    // republishes on reverse-flip queue movement and RNG phase flips, and a
+    // full card rebuild for each of those is pure churn.
+    this.#unsubs.push(subscribe('app.daySync', (state) => {
+      const day = Number(state?.day) || null;
+      if (day === this.#daySyncDay) return;
+      this.#daySyncDay = day;
+      this.#render();
+    }));
     this.#unsubs.push(subscribe('ui.questObjectives', () => {
       if (this.#bountyDialogQuote) this.#renderBountyQuestBonus();
     }));
@@ -627,6 +657,46 @@ class AppRecordsRail extends HTMLElement {
         this.#noticeTimer = null;
       }, error ? 5_000 : 2_000);
       try { this.#noticeTimer?.unref?.(); } catch (_e) { /* browser timer */ }
+    }
+  }
+
+  async #openDiceRunReplay(record) {
+    if (this.#diceRunReplayOpening) return false;
+    const replay = record?.replay ?? null;
+    if (!replay?.battleKey || !replay?.viewerBetId) {
+      this.#showNotice('The Dice Run replay link is temporarily unavailable.', { error: true });
+      return false;
+    }
+    const table = globalThis.document?.querySelector?.('app-craps-table');
+    if (!table?.open) {
+      this.#showNotice('The Craps replay table is unavailable.', { error: true });
+      return false;
+    }
+
+    this.#diceRunReplayOpening = true;
+    this.#showNotice('LOADING BIGGEST DICE RUN REPLAY…', { persist: true });
+    try {
+      const result = await openCrapsReplayTable(table, {
+        ...replay,
+        fetchImpl: crapsReplayFetch,
+      });
+      if (!result?.ready) {
+        const status = String(result?.pointer?.status ?? '');
+        this.#showNotice(
+          status === 'pending' || status === 'settling'
+            ? 'The Dice Run replay is still being sealed. Try again shortly.'
+            : 'The Dice Run replay is unavailable.',
+          { error: status === 'failed' },
+        );
+        return false;
+      }
+      this.#showNotice('');
+      return true;
+    } catch (_error) {
+      this.#showNotice('The Dice Run replay is temporarily unavailable. Try again.', { error: true });
+      return false;
+    } finally {
+      this.#diceRunReplayOpening = false;
     }
   }
 
@@ -1033,17 +1103,29 @@ class AppRecordsRail extends HTMLElement {
     // One authoritative snapshot powers both the board and the qualifying
     // glow on the four wager inputs. Publishing it here keeps every surface on
     // the rail's immediate post-transaction refresh and 15-second live poll.
-    update('app.records', state);
-    this.#viewedAddress = getViewedAddress?.() || getActingAddress?.() || null;
-    this.#render();
+    // Records move rarely relative to that poll, and a full rebuild re-adds a
+    // listener per leader card — publish and repaint only when the snapshot
+    // (or the viewed account) actually changed.
+    const viewed = getViewedAddress?.() || getActingAddress?.() || null;
+    const stateKey = renderSnapshotKey({ state, viewed: String(viewed ?? '') });
+    if (stateKey == null || stateKey !== this.#renderedStateKey) {
+      this.#renderedStateKey = stateKey;
+      update('app.records', state);
+      this.#viewedAddress = viewed;
+      this.#render();
+    }
 
     if (!loadProfiles) return state;
 
     const holders = state.records.map((record) => record.player).filter(Boolean);
     const profiles = await _fetchProfiles(holders);
     if (seq !== this.#seq) return null;
-    this.#profiles = profiles;
-    this.#render();
+    const profilesKey = renderSnapshotKey(profiles ?? null);
+    if (profilesKey == null || profilesKey !== this.#renderedProfilesKey) {
+      this.#renderedProfilesKey = profilesKey;
+      this.#profiles = profiles;
+      this.#render();
+    }
     return state;
   }
 
@@ -1123,7 +1205,12 @@ class AppRecordsRail extends HTMLElement {
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
     const cardTitle = RECORD_KIND_CARD_TITLE.get(Number(record.kind)) || record.meta.short;
     const isDiceRun = Number(record.kind) === RECORD_KIND_DICE_RUN;
-    const interactive = readBiggestBountiesModePreference() === 'on' && !isDiceRun;
+    item.classList.toggle('is-replay', isDiceRun && Boolean(record.held));
+    // Dice Run is a read-only replay action, so it remains available in VIEW
+    // mode. The other four buttons prepare transactions and require ON.
+    const interactive = isDiceRun
+      ? Boolean(record.held)
+      : readBiggestBountiesModePreference() === 'on';
     item.classList.toggle('is-view-only', !interactive);
     if (interactive) {
       item.removeAttribute('aria-disabled');
@@ -1135,10 +1222,12 @@ class AppRecordsRail extends HTMLElement {
       item.setAttribute('aria-disabled', 'true');
       item.setAttribute('tabindex', '-1');
     }
-    const instruction = interactive
-      ? ' Click to prepare the exact record shot.'
-      : isDiceRun
-        ? ' Set by the winning scheduled Dice Run.'
+    const instruction = isDiceRun
+      ? record.held
+        ? ' Click to replay from the record holder\'s perspective.'
+        : ' Set by the winning scheduled Dice Run.'
+      : interactive
+        ? ' Click to prepare the exact record shot.'
         : '';
     item.title = record.held
       ? `${record.meta.label}: ${value.amount} ${value.suffix}, held by ${holder}; bounty ${compactPayout} FLIP.${instruction}`
@@ -1185,7 +1274,10 @@ class AppRecordsRail extends HTMLElement {
     item.addEventListener('click', (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
-      if (Number(record.kind) === RECORD_KIND_DICE_RUN) return;
+      if (Number(record.kind) === RECORD_KIND_DICE_RUN) {
+        if (record.held) void this.#openDiceRunReplay(record);
+        return;
+      }
       if (readBiggestBountiesModePreference() !== 'on') return;
       void this.#openBountyDialog(record.kind);
     });

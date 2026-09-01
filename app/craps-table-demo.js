@@ -1,7 +1,7 @@
 import {
   CRAPS_TABLE_REPLAY_EVENT,
   formatCrapsWei,
-} from '/app/components/app-craps-table.js?v=line-lifecycle-v22';
+} from '/app/components/app-craps-table.js?v=bonus-impact-v23';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
   SIM_CRAPS_REPLAY_FEATURED,
@@ -58,6 +58,7 @@ function openTable() {
       replay: { ...SIM_CRAPS_REPLAY_ARTIFACTS, viewer },
       bountyPoolFlip: params.get('bountyPool') || 84_900,
       addedFlip: params.get('added') || 75_000,
+      bonusMultiplier: params.get('bonusMultiplier') || 10,
       autoRoll: params.get('manual') !== 'true',
     });
     receipt.textContent = `SIM BUNDLE · ${viewer.name} · ${viewer.handsPlayed} shooters · ${viewer.totalRolls} rolls`;
@@ -126,6 +127,7 @@ function openTable() {
     battleStakeFlip: params.get('battleStake') || 300,
     bountyPoolFlip: params.get('bountyPool') || 84_900,
     addedFlip: params.get('added') || 75_000,
+    bonusMultiplier: params.get('bonusMultiplier') || 10,
     battleWonByViewer: params.has('battleWin'),
     battlePayoutWei: params.has('battleWin')
       ? (BigInt(params.get('battlePayout') || 84_900) * 10n ** 18n).toString()

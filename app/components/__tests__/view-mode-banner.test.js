@@ -330,6 +330,24 @@ describe('view-mode-banner banner visibility (DD-02)', () => {
   });
 });
 
+test('an intentionally unmounted optional banner is a quiet no-op', async () => {
+  const mod = await importBanner();
+  const priorGetElementById = globalThis.document.getElementById;
+  const priorWarn = console.warn;
+  const warnings = [];
+  mod.__resetForTest();
+  globalThis.document.getElementById = () => null;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    mod.setupBanner();
+    assert.deepEqual(warnings, [],
+      'the basic-mode layout intentionally omits the placeholder');
+  } finally {
+    console.warn = priorWarn;
+    globalThis.document.getElementById = priorGetElementById;
+  }
+});
+
 // ===========================================================================
 // [data-write] disable manager
 // ===========================================================================

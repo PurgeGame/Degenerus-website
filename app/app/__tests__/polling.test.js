@@ -15,6 +15,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as storeMod from '../store.js';
 import { CHAIN } from '../chain-config.js';
+import * as drawGate from '../major-draw-activity.js';
 
 // ---------------------------------------------------------------------------
 // Stub document for the node runtime (polling.js gates on `typeof document`).
@@ -88,6 +89,7 @@ test('localhost jackpot reads use the deployed edge while production stays same-
 });
 
 beforeEach(() => {
+  drawGate.__resetMajorDrawActivityForTest();
   fetchCalls = [];
   fetchImpl = async (url, opts) => {
     fetchCalls.push({ url, opts });
@@ -109,6 +111,7 @@ beforeEach(() => {
 afterEach(() => {
   stop();
   _testing.resetBoonStateReader();
+  drawGate.__resetMajorDrawActivityForTest();
 });
 
 // ===========================================================================
@@ -116,6 +119,17 @@ afterEach(() => {
 // ===========================================================================
 
 describe('POLL_INTERVALS (D-04 LOCKED cadence)', () => {
+  test('timer-owned cycles yield their main-thread lane during a major draw', () => {
+    let calls = 0;
+    drawGate.setMajorDrawActivity('jackpot-replay', true);
+    assert.equal(_testing.runBackgroundCycle(() => { calls += 1; }), null);
+    assert.equal(calls, 0, 'no scheduled poll callback begins during the reel');
+
+    drawGate.setMajorDrawActivity('jackpot-replay', false);
+    assert.equal(_testing.runBackgroundCycle(() => { calls += 1; return 'ran'; }), 'ran');
+    assert.equal(calls, 1, 'normal scheduled work is admitted again after release');
+  });
+
   test('cadence is 15s/30s/60s', () => {
     assert.equal(POLL_INTERVALS.gameState, 15_000);
     assert.equal(POLL_INTERVALS.playerData, 30_000);

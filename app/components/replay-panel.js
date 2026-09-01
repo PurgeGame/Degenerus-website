@@ -306,6 +306,56 @@ function isGoldTrait(traitId) {
     && Math.floor((id % 64) / 8) === 7;
 }
 
+/**
+ * Decode badge images with bounded parallelism and resolve only when every
+ * usable path is ready to paint. Keeping this contract outside the element
+ * makes the warm barrier deterministic in tests instead of relying on browser
+ * cache timing.
+ */
+export async function preloadBadgeImages(
+  paths,
+  cache,
+  { concurrency = 8, ImageCtor = globalThis.Image } = {},
+) {
+  const queue = Array.isArray(paths) ? paths : [];
+  if (queue.length === 0 || typeof ImageCtor !== 'function') return;
+  const warmed = cache && typeof cache.has === 'function' && typeof cache.set === 'function'
+    ? cache
+    : new Map();
+  const workerCount = Math.max(1, Math.min(
+    queue.length,
+    Math.trunc(Number(concurrency) || 1),
+  ));
+  let next = 0;
+
+  const worker = async () => {
+    while (next < queue.length) {
+      const path = queue[next++];
+      if (!path || warmed.has(path)) continue;
+      const image = new ImageCtor();
+      let finishLoad;
+      const loaded = new Promise((resolve) => { finishLoad = resolve; });
+      image.onload = () => finishLoad(true);
+      image.onerror = () => finishLoad(false);
+      image.src = path;
+
+      let ready = false;
+      if (typeof image.decode === 'function') {
+        try {
+          await image.decode();
+          ready = true;
+        } catch { /* fall back to the load/error signal below */ }
+      }
+      if (!ready) ready = await loaded;
+      image.onload = null;
+      image.onerror = null;
+      if (ready) warmed.set(path, image);
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+}
+
 // --- Module-level scratch helpers ---
 
 const BRUSH_R = 28;
@@ -313,6 +363,24 @@ const REVEAL_THRESHOLD = 0.5;
 const KNOWN_LOSER_REVEAL_THRESHOLD = 0.4;
 const GRID_RES = 40;
 const CENTER_GRID_RES = 20;
+const scratchListenersByCanvas = new WeakMap();
+
+/** Replace one canvas's complete gesture-listener set instead of stacking redraw closures. */
+export function replaceScratchListeners(canvas, listeners = []) {
+  if (!canvas?.addEventListener || !canvas?.removeEventListener) return;
+  const prior = scratchListenersByCanvas.get(canvas) || [];
+  for (const { type, handler, options } of prior) {
+    canvas.removeEventListener(type, handler, options);
+  }
+  const active = [];
+  for (const entry of listeners) {
+    const { type, handler, options } = entry || {};
+    if (!type || typeof handler !== 'function') continue;
+    canvas.addEventListener(type, handler, options);
+    active.push({ type, handler, options });
+  }
+  scratchListenersByCanvas.set(canvas, active);
+}
 
 function makeScratchGrid(res) { return new Uint8Array(res * res); }
 
@@ -530,10 +598,13 @@ class ReplayPanel extends HTMLElement {
 
   #audioCtx = null;             // Web Audio context for SFX
   #sfxBus = null;               // dry, compressed slot-cabinet output
+  #reelVoices = [];             // two persistent voices shared by main + bonus reel frames
   #soloEthCuePlayed = false;    // replaces the generic roll fanfare for this reveal
   #scratchNode = null;          // active scratch noise node
+  #scratchNoiseBuffer = null;   // immutable two-second loop, shared by scratch gestures
   #mouseIsDown = false;         // global mouse button state
   #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
+  #badgeWarmPromise = Promise.resolve(); // live reels wait for render-ready badge art
   #rewardPopSequence = 0;       // earlier concurrent reward callouts stay in front
   #rewardDirectionPhase = Math.random(); // random starting side; sequence fans a burst around
   #daysRefreshPromise = null;   // coalesce initial/new-day option reloads
@@ -556,6 +627,10 @@ class ReplayPanel extends HTMLElement {
   #dayReloadTimer = null;
   #dayReloadAttempt = 0;
   #dayReloadTarget = null;
+  // Which day already reported a missing roll endpoint. Around the jackpot the
+  // retry loop can poll a not-yet-resolved day for minutes; without this it
+  // logged two warnings per attempt and buried every other console message.
+  #rollsMissingWarnedDay = null;
   #idleSpinTimer = null;
   // Once the player starts this selection's reveal, polling may update the
   // persisted flags but must not rebuild/cancel the live main or bonus board.
@@ -763,7 +838,7 @@ class ReplayPanel extends HTMLElement {
     // expose the neutral grey reset board during a cold load.
     this.#startIdleSpin();
     this.refreshDays();
-    void this.#preloadBadges(); // decode-warm every badge in the background
+    this.#badgeWarmPromise = this.#preloadBadges();
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -803,6 +878,7 @@ class ReplayPanel extends HTMLElement {
     this.removeAttribute?.('data-primary-action');
     this.#stopIdleSpin();
     this.#sfxScratchStop();
+    this.#stopReelVoices();
     document.removeEventListener('mousedown', this._onMouseDown);
     document.removeEventListener('mouseup', this._onMouseUp);
   }
@@ -1452,6 +1528,20 @@ class ReplayPanel extends HTMLElement {
     return this.#triggerMineFlip();
   }
 
+  /** Test-only seam: exercise one complete scratch-audio gesture. */
+  __cycleScratchAudioForTest() {
+    this.#sfxScratchStart();
+    this.#sfxScratchStop();
+  }
+
+  /** Test-only seam: model the ordinary audio-frame load of consecutive spins. */
+  __playSpinFrameSfxForTest(frameCount = 1) {
+    const count = Math.max(0, Math.min(200, Math.trunc(Number(frameCount) || 0)));
+    for (let frame = 0; frame < count; frame++) {
+      this.#sfxSpinFrame(frame % 5, frame % 13 === 0, frame % 9);
+    }
+  }
+
   /**
    * Test-only seam: pin the day the key is reporting on, without the network
    * load `#loadDay` would otherwise perform to set it.
@@ -1871,8 +1961,8 @@ class ReplayPanel extends HTMLElement {
   // local blob URL and the whole warm costs zero network.
   async #preloadBadges() {
     await warmBadgeStore();
+    if (typeof Image !== 'function') return;
     const BADGE_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
-    let i = 0;
     const paths = [];
     for (const cat of BADGE_CATEGORIES) {
       for (let sym = 0; sym < 8; sym++) {
@@ -1881,21 +1971,9 @@ class ReplayPanel extends HTMLElement {
         }
       }
     }
-    // Load one at a time to avoid flooding the network on first visit
-    const loadNext = () => {
-      if (i >= paths.length) return;
-      const path = paths[i++];
-      if (this.#badgeCache.has(path)) { loadNext(); return; }
-      const img = new Image();
-      img.onload = img.onerror = () => {
-        this.#badgeCache.set(path, img);
-        loadNext();
-      };
-      img.src = path;
-    };
-    // Kick off up to 8 parallel preload chains
-    const concurrency = Math.min(8, paths.length);
-    for (let c = 0; c < concurrency; c++) loadNext();
+    // Eight workers retain the old bounded concurrency, but their shared
+    // promise now represents actual decode readiness rather than request launch.
+    await preloadBadgeImages(paths, this.#badgeCache, { concurrency: 8 });
   }
 
   // --- Data Loading ---
@@ -1962,7 +2040,12 @@ class ReplayPanel extends HTMLElement {
       }
       return true;
     } catch (err) {
-      console.warn('[ReplayPanel] Failed to load days:', err);
+      // Cache invalidation and tab/account lifecycle intentionally abort the
+      // old replay read. Keep the last usable selector without reporting that
+      // expected cancellation as a failed load.
+      if (err?.name !== 'AbortError') {
+        console.warn('[ReplayPanel] Failed to load days:', err);
+      }
       // A network blip is not a day change. Keep the last usable options and
       // visible board; only show the failure placeholder on a true cold load.
       const hasUsableDay = select?.options
@@ -2061,8 +2144,15 @@ class ReplayPanel extends HTMLElement {
     else noteReplayApiResponse(r1Res.reason?.response);
     if (r2Res.status === 'fulfilled') roll2 = r2Res.value;
     else noteReplayApiResponse(r2Res.reason?.response);
-    if (!roll1) console.warn('[ReplayPanel] roll1 endpoint unavailable for day', day);
-    if (!roll2) console.warn('[ReplayPanel] roll2 endpoint unavailable for day', day);
+    if (roll1 && roll2) {
+      if (this.#rollsMissingWarnedDay === day) this.#rollsMissingWarnedDay = null;
+    } else if (this.#rollsMissingWarnedDay !== day) {
+      this.#rollsMissingWarnedDay = day;
+      const missing = [!roll1 && 'roll1', !roll2 && 'roll2'].filter(Boolean).join(' + ');
+      console.warn(
+        `[ReplayPanel] ${missing} not indexed yet for day ${day} — retrying quietly`,
+      );
+    }
     return { roll1, roll2 };
   }
 
@@ -2895,24 +2985,12 @@ class ReplayPanel extends HTMLElement {
 
     let settled = false;
     try {
-      // Everything needed by the later Bonus Spin and DAY SUMMARY is already
-      // knowable here. Start those reads with the main trait read so the reel
-      // and scratch interaction provide their loading window; later buttons
-      // only consume the shared result.
+      // Bonus traits are already knowable here and stay on the shared flight
+      // consumed by the later button. DAY SUMMARY deliberately waits until
+      // the final scratch is over: its response processing must not compete
+      // with reel or scratch presentation on the main thread.
       const playerTraitsPromise = this.#loadPlayerTraits();
       if (this.#hasBonus) void this.#loadFutureTraits();
-      if (!instant && !persisted) {
-        try {
-          this.dispatchEvent(new CustomEvent('replay:spin-start', {
-            detail: {
-              day: this.#selectedDay,
-              player: this.#selectedPlayer,
-              bonusPhase: false,
-            },
-            bubbles: true,
-          }));
-        } catch { /* headless / CustomEvent shim absent */ }
-      }
 
       await playerTraitsPromise; // ensure traits loaded for spin coloring
       if (this.#selectionKey() !== selectionKey) return false;
@@ -3554,6 +3632,10 @@ class ReplayPanel extends HTMLElement {
 
   async #runSpin(displayTraits, { instant = false, announce = true } = {}) {
     this.#stopIdleSpin();
+    // A live reel replaces the same four <img> sources every 80-200ms. Let the
+    // cold decode warmer finish first so intermediate swaps cannot be canceled
+    // before they become paintable, leaving the prior frame stuck on screen.
+    if (!instant) await this.#badgeWarmPromise;
     const myId = ++this.#animId;
     const spinSelectionKey = this.#selectionKey();
     const spinBonusPhase = this.#bonusPhase;
@@ -3678,12 +3760,12 @@ class ReplayPanel extends HTMLElement {
     const totalLocks = 8;
     let idleCount = 2 + Math.floor(Math.random() * 3);
     let finalLockSettling = false;
-
     // Phase 64 (app embed): publish two separate views of the reel state.
     // `traits` contains durable locks only: a quadrant commits once BOTH its
-    // colour and symbol stop. `liveTraits` is the exact badge painted on this
-    // frame, including still-cycling reels. Hosts can therefore replace a
-    // transient lamp on every frame without losing already-committed locks.
+    // colour and symbol stop. `liveTraits` snapshots the exact four badges on
+    // that lock frame, which lets the bonus presentation light the face that
+    // actually landed. Publishing on lock frames instead of every 80ms tick
+    // keeps the secondary foil cabinet out of the reel's animation hot path.
     // The opening emit contains four nulls in both arrays and clears the prior
     // roll before the first new frame is painted.
     const emitSpinProgress = (liveTraits = [null, null, null, null]) => {
@@ -3848,11 +3930,11 @@ class ReplayPanel extends HTMLElement {
           }
         }
         this.#syncOwnedGoldState(quads);
-        emitSpinProgress(liveTraits);
         // Ordinary frames get one terse digital pulse whose pitch/volume
         // follows the blue count. A lock frame substitutes its red/blue/gold
         // cue instead of stacking both sounds on the same animation frame.
         if (lockedQuadrant != null) {
+          emitSpinProgress(liveTraits);
           this.#sfxLock({
             winnable: this.#quadOwned[lockedQuadrant],
             gold: !this.#bonusPhase
@@ -4485,25 +4567,32 @@ class ReplayPanel extends HTMLElement {
       return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
     };
 
-    canvas.addEventListener('mousemove', (e) => {
+    const onMouseMove = (e) => {
       if (this.#scratched[qIdx]) return;
       const p = getPos(e.clientX, e.clientY);
       onScratch(p.x, p.y);
-    });
-    canvas.addEventListener('mouseleave', () => { lastPos = null; this.#sfxScratchStop(); });
-    canvas.addEventListener('touchstart', (e) => {
+    };
+    const onMouseLeave = () => { lastPos = null; this.#sfxScratchStop(); };
+    const onTouchStart = (e) => {
       if (this.#scratched[qIdx]) return;
       e.preventDefault(); lastPos = null;
       const t = e.touches[0], p = getPos(t.clientX, t.clientY);
       onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchmove', (e) => {
+    };
+    const onTouchMove = (e) => {
       if (this.#scratched[qIdx]) return;
       e.preventDefault();
       const t = e.touches[0], p = getPos(t.clientX, t.clientY);
       onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
+    };
+    const onTouchEnd = () => { lastPos = null; this.#sfxScratchStop(); };
+    replaceScratchListeners(canvas, [
+      { type: 'mousemove', handler: onMouseMove },
+      { type: 'mouseleave', handler: onMouseLeave },
+      { type: 'touchstart', handler: onTouchStart, options: { passive: false } },
+      { type: 'touchmove', handler: onTouchMove, options: { passive: false } },
+      { type: 'touchend', handler: onTouchEnd },
+    ]);
   }
 
   // --- Center diamond scratch ---
@@ -4602,25 +4691,32 @@ class ReplayPanel extends HTMLElement {
       return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
     };
 
-    canvas.addEventListener('mousemove', (e) => {
+    const onMouseMove = (e) => {
       if (this.#centerScratched) return;
       const p = getPos(e.clientX, e.clientY);
       onScratch(p.x, p.y);
-    });
-    canvas.addEventListener('mouseleave', () => { lastPos = null; this.#sfxScratchStop(); });
-    canvas.addEventListener('touchstart', (e) => {
+    };
+    const onMouseLeave = () => { lastPos = null; this.#sfxScratchStop(); };
+    const onTouchStart = (e) => {
       if (this.#centerScratched) return;
       e.preventDefault(); lastPos = null;
       const t = e.touches[0], p = getPos(t.clientX, t.clientY);
       onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchmove', (e) => {
+    };
+    const onTouchMove = (e) => {
       if (this.#centerScratched) return;
       e.preventDefault();
       const t = e.touches[0], p = getPos(t.clientX, t.clientY);
       onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
+    };
+    const onTouchEnd = () => { lastPos = null; this.#sfxScratchStop(); };
+    replaceScratchListeners(canvas, [
+      { type: 'mousemove', handler: onMouseMove },
+      { type: 'mouseleave', handler: onMouseLeave },
+      { type: 'touchstart', handler: onTouchStart, options: { passive: false } },
+      { type: 'touchmove', handler: onTouchMove, options: { passive: false } },
+      { type: 'touchend', handler: onTouchEnd },
+    ]);
   }
 
   #revealCenter({ instant = false, silent = false } = {}) {
@@ -5155,6 +5251,55 @@ class ReplayPanel extends HTMLElement {
     source.stop(start + seconds + 0.005);
   }
 
+  #stopReelVoices() {
+    for (const voice of this.#reelVoices) {
+      if (!voice) continue;
+      try { voice.oscillator.stop(); } catch { /* already stopped */ }
+      try { voice.oscillator.disconnect(); } catch { /* defensive */ }
+      try { voice.gain.disconnect(); } catch { /* defensive */ }
+    }
+    this.#reelVoices = [];
+  }
+
+  #reelTone(voiceIndex, {
+    frequency,
+    type,
+    gain: level,
+    delay = 0,
+    duration,
+  }) {
+    if (isSfxMuted()) return;
+    const ctx = this.#getAudio();
+    let voice = this.#reelVoices[voiceIndex];
+    if (!voice || voice.context !== ctx) {
+      if (voice) {
+        try { voice.oscillator.stop(); } catch { /* already stopped */ }
+        try { voice.oscillator.disconnect(); } catch { /* defensive */ }
+        try { voice.gain.disconnect(); } catch { /* defensive */ }
+      }
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = type;
+      oscillator.connect(gain);
+      gain.connect(this.#sfxOutput(ctx));
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      oscillator.start(ctx.currentTime);
+      voice = { context: ctx, oscillator, gain };
+      this.#reelVoices[voiceIndex] = voice;
+    }
+
+    const start = ctx.currentTime + Math.max(0, delay);
+    const stop = start + Math.max(0.012, duration);
+    const frequencyParam = voice.oscillator.frequency;
+    const gainParam = voice.gain.gain;
+    frequencyParam.cancelScheduledValues?.(start);
+    frequencyParam.setValueAtTime(Math.max(20, frequency), start);
+    gainParam.cancelScheduledValues?.(start);
+    gainParam.setValueAtTime(0.0001, start);
+    gainParam.linearRampToValueAtTime(Math.max(0.001, level), start + 0.002);
+    gainParam.exponentialRampToValueAtTime(0.0001, stop);
+  }
+
   #sfxSpinFrame(winnableCount, goldWinnable, lockCount) {
     const count = Math.max(0, Math.min(4, Math.trunc(Number(winnableCount) || 0)));
     const progress = Math.max(0, Math.min(8, Math.trunc(Number(lockCount) || 0)));
@@ -5167,13 +5312,13 @@ class ReplayPanel extends HTMLElement {
     const root = goldWinnable
       ? 988 * arpRatios[progress % arpRatios.length]
       : reelPitches[count] * arpRatios[progress % arpRatios.length];
-    this.#slotTone({
+    this.#reelTone(0, {
       frequency: root,
       type: 'triangle',
       gain: goldWinnable ? 0.3 : reelGains[count],
       duration: 0.072,
     });
-    this.#slotTone({
+    this.#reelTone(1, {
       frequency: root * 2,
       type: 'sine',
       gain: goldWinnable ? 0.115 : 0.035 + (count * 0.012),
@@ -5228,13 +5373,16 @@ class ReplayPanel extends HTMLElement {
   #sfxScratchStart() {
     if (this.#scratchNode || isSfxMuted()) return;
     const ctx = this.#getAudio();
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    if (!this.#scratchNoiseBuffer) {
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      this.#scratchNoiseBuffer = buffer;
+    }
     const noise = ctx.createBufferSource();
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
-    noise.buffer = buf; noise.loop = true;
+    noise.buffer = this.#scratchNoiseBuffer; noise.loop = true;
     filter.type = 'bandpass'; filter.frequency.value = 3000; filter.Q.value = 0.5;
     noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
     gain.gain.value = 0.05;

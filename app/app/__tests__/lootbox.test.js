@@ -126,12 +126,15 @@ function makeFakeContract(opts = {}) {
 }
 
 function makeFakeProvider(connectedAddr) {
+  let signerReads = 0;
   return {
     // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
     getNetwork: async () => ({ chainId: 84532n }),
-    getSigner: async () => ({
-      getAddress: async () => connectedAddr,
-    }),
+    getSigner: async () => {
+      signerReads += 1;
+      return { getAddress: async () => connectedAddr };
+    },
+    getSignerReadCount: () => signerReads,
   };
 }
 
@@ -158,6 +161,35 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   test('__setContractFactoryForTest seam works (sanity)', () => {
     const res = lootboxMod.parseLootboxIdxFromReceipt({ logs: [] }, lastFakeContract);
     assert.deepEqual(res, []);
+  });
+
+  test('concurrent RNG-readiness polls share one public static call without a signer', async () => {
+    const walletProvider = contractsMod.getProvider();
+    let staticCalls = 0;
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    lootboxMod.__setContractFactoryForTest(() => ({
+      requestLootboxRng: {
+        staticCall: async () => {
+          staticCalls += 1;
+          await held;
+        },
+      },
+    }));
+
+    const panelProbe = lootboxMod.canRequestLootboxRng();
+    const trayProbe = lootboxMod.canRequestLootboxRng();
+    await Promise.resolve();
+    await Promise.resolve();
+    const signerReads = walletProvider.getSignerReadCount();
+    const callsBeforeRelease = staticCalls;
+    release();
+    assert.deepEqual(await Promise.all([panelProbe, trayProbe]), [true, true]);
+    assert.deepEqual(
+      { signerReads, callsBeforeRelease },
+      { signerReads: 0, callsBeforeRelease: 1 },
+      'background consumers avoid MetaMask and share one in-flight eth_call',
+    );
   });
 
   test('decodes the authoritative mid-day RNG queue fill and request latch', async () => {
@@ -249,8 +281,11 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   });
 
   test('foil availability uses the exact zero-value purchase probe and only accepts the funding sentinel', async () => {
+    const walletProvider = contractsMod.getProvider();
     assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), true,
       'a successful forward-compatible zero-price simulation is available');
+    assert.equal(walletProvider.getSignerReadCount(), 0,
+      'the background availability read never reaches MetaMask for a signer');
     assert.equal(lastFakeContract._calls.purchase.length, 0, 'the probe never sends');
     assert.equal(lastFakeContract._calls.purchaseStatic.length, 1);
     assert.deepEqual(lastFakeContract._calls.purchaseStatic[0], [
@@ -260,7 +295,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       '0x0000000000000000000000000000000000000000000000000000000000000000',
       0,
       true,
-      { value: 0n },
+      { value: 0n, from: CONNECTED },
     ]);
 
     lastFakeContract = makeFakeContract({
@@ -279,6 +314,20 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
       assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), false, name);
     }
+  });
+
+  test('foil availability preserves the connected operator as the public eth_call sender', async () => {
+    const owner = '0xcd34000000000000000000000000000000000000';
+    storeMod.update('viewing.address', owner);
+    storeMod.update('ui.mode', 'operator');
+
+    assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: owner }), true);
+    const args = lastFakeContract._calls.purchaseStatic[0];
+    assert.equal(args[0], owner, 'the viewed owner remains the purchase beneficiary');
+    assert.deepEqual(args.at(-1), { value: 0n, from: CONNECTED },
+      'the public simulation retains the connected operator as msg.sender');
+    assert.equal(contractsMod.getProvider().getSignerReadCount(), 0,
+      'operator availability also avoids the wallet provider');
   });
 
   test('foil availability detail separates ownership from temporary liveness failures', async () => {

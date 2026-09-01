@@ -882,4 +882,13 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     assert.doesNotMatch(SRC, /pollRngForLootbox/,
       'Degenerette readiness is checked against its own deployed resolver');
   });
+
+  test('the side-effect-free resolution probe uses the public read provider', () => {
+    const start = SRC.indexOf('export async function canResolveBets(');
+    const end = SRC.indexOf('\n}', start) + 2;
+    const probe = SRC.slice(start, end);
+    assert.match(probe, /const provider = _readProvider\(\);/,
+      'background readiness must use the shared public provider instead of MetaMask');
+    assert.doesNotMatch(probe, /const provider = getProvider\(\);/);
+  });
 });

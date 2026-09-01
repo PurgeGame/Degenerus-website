@@ -4445,6 +4445,37 @@ class AppDailyFlip extends HTMLElement {
     if (this.#landing) return;
     if (this.#liveReverseAnimation && zone.querySelector('.df-coin--live-reverse')) return;
 
+    // Poll-driven renders reach here far more often than the coin's state
+    // changes. Rebuilding unconditionally detaches a spinning coin mid-turn
+    // (restarting its animation), re-registers its face tracker, and re-adds
+    // a click listener. Skip the rebuild while the pre-result coin would be
+    // recreated identically; every input of the two spinning branches (and of
+    // the reveal-hint line) is folded into the key.
+    // 'result' is the third spinning state: the day's outcome is known but the
+    // player has not clicked reveal, so the neutral coin idles with default
+    // args — only the day and the hint flag can change what it looks like.
+    const spinPhase = !this.#dayAvailabilityReady()
+      ? 'sync'
+      : !hasResult
+        ? 'wait'
+        : !this.#revealed() ? 'result' : null;
+    if (spinPhase && this.#day != null && !this.#revealed()) {
+      const locked = spinPhase === 'sync'
+        ? this.#rngRequestStarted(this.#activeDaySync()) || Boolean(this.#reverseFlipQuote?.locked)
+        : Boolean(this.#reverseFlipQuote?.locked);
+      const spinKey = [
+        spinPhase,
+        this.#day,
+        spinPhase === 'result' ? '' : String(this.#resolvingReverseQueued() ?? ''),
+        spinPhase !== 'result' && locked ? 1 : 0,
+        this.#revealRequestedDay === this.#day ? 1 : 0,
+      ].join('|');
+      if (zone.dataset.spinKey === spinKey && zone.querySelector('.df-coin--spinning')) return;
+      zone.dataset.spinKey = spinKey;
+    } else if (zone.dataset.spinKey !== undefined) {
+      delete zone.dataset.spinKey;
+    }
+
     zone.textContent = '';
     // The coin itself is the reveal control; this left-side cue must never add
     // a helper-text row beneath the coin or remain after an early click queues it.

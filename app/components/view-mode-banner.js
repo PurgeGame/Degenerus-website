@@ -92,11 +92,7 @@ export function setupBanner() {
   if (_bannerSetupDone) return;
   if (typeof document === 'undefined') return;
   const banner = document.getElementById(BANNER_ID);
-  if (!banner) {
-    // eslint-disable-next-line no-console
-    console.warn('[view-mode-banner] #view-mode-banner element not found');
-    return;
-  }
+  if (!banner) return;
   _bannerSetupDone = true;
 
   // Visibility + copy — hidden only in 'self'; visible for 'view' / 'operator' /

@@ -11,7 +11,7 @@ import {
   formatLinkDonationMultiplier,
   linkDonationFlipQuote,
   readLinkDonationState,
-} from '../app/link-donation.js';
+} from '../app/link-donation.js?rev=link-reward-v1';
 import { normalizePlayerFundsMode, PLAYER_FUNDS_OPEN_EVENT } from '../app/player-funds.js';
 import { getActingAddress, subscribe } from '../app/store.js';
 import { compactUiError } from '../app/ui-error.js';

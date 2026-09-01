@@ -72,6 +72,7 @@ import {
   readPresaleBoxState, purchasePresaleBox, parsePresaleBoxBuyFromReceipt,
   PRESALE_BOX_MIN_WEI,
   packBoxOrder, boxOrderCostFromPriceWei, BOX_ORDER_MAX_BOXES,
+  BOX_ORDER_CUSTOM_SCALE_WEI,
   BOX_ORDER_MEDIUM_MULTIPLE, BOX_ORDER_LARGE_MULTIPLE,
   // A ticket is 4 entries; the contract takes entries and charges per entry, so
   // both the quote and the call go through these (see lootbox.js UNITS note).
@@ -143,6 +144,31 @@ const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const PURCHASE_TICKET_SAMPLE_REFRESH_MS = 60_000;
+
+function _questLootboxSelection(detail, fallbackAmountWei = 0n) {
+  const requestedQuantity = Number(detail?.lootboxQuantity);
+  const quantity = Number.isSafeInteger(requestedQuantity)
+    && requestedQuantity >= 1
+    && requestedQuantity <= BOX_ORDER_MAX_BOXES
+    ? requestedQuantity
+    : 1;
+  let amount = 0n;
+  try { amount = BigInt(fallbackAmountWei ?? 0n); } catch (_e) { amount = 0n; }
+  if (quantity > 1) {
+    try { amount = BigInt(detail?.lootboxAmountWei ?? 0); }
+    catch (_e) { amount = 0n; }
+    if (amount <= 0n) {
+      let total = 0n;
+      try { total = BigInt(fallbackAmountWei ?? 0n); } catch (_e) { total = 0n; }
+      if (total > 0n) amount = (total + BigInt(quantity) - 1n) / BigInt(quantity);
+    }
+  }
+  if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+  amount = ((amount + BOX_ORDER_CUSTOM_SCALE_WEI - 1n) / BOX_ORDER_CUSTOM_SCALE_WEI)
+    * BOX_ORDER_CUSTOM_SCALE_WEI;
+  return { quantity, amount };
+}
+
 // Buy In deliberately keeps dedicated static card renders even if a reveal
 // surface changes its animation art later. The medium render is perspective-
 // matched to the green and gold cases solely for this three-box row.
@@ -1337,7 +1363,7 @@ class AppDecimatorPanel extends HTMLElement {
               <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
                       data-bind="dec-funds-total-flip" aria-pressed="false" hidden>USE FLIP</button>
               <quest-objective-indicator class="dec-redeem-quest"
-                                         data-quest-pointer="bottom-left"
+                                         data-quest-pointer="left"
                                          product="redeem-flip"></quest-objective-indicator>
             </span>
             <span class="dec-flip-balance__label">FLIP BALANCE</span>
@@ -2269,9 +2295,15 @@ class AppDecimatorPanel extends HTMLElement {
     if ((questType === 1 && detail?.purchaseKind === 'lootbox') || questType === 6) {
       let amount = target;
       if (amount <= 0n && price != null) amount = questType === 6 ? price * 2n : price;
-      if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+      const selection = _questLootboxSelection(detail, amount);
       return {
-        kind: 'eth', ticketQuantity: 0, lootBoxAmountWei: amount,
+        kind: 'eth', ticketQuantity: 0,
+        ...(selection.quantity > 1 ? {
+          boxSelection: {
+            customCount: selection.quantity,
+            customSizeWei: selection.amount,
+          },
+        } : { lootBoxAmountWei: selection.amount }),
         presaleBoxAmountWei: 0n, foilWanted: false,
         ...(detail?.source === 'records-bounty' ? {
           preferClaimable: true,
@@ -2418,9 +2450,9 @@ class AppDecimatorPanel extends HTMLElement {
         // subject to the contract's ordinary lootbox floor.
         let amount = target;
         if (amount <= 0n && price != null) amount = price;
-        if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+        const selection = _questLootboxSelection(detail, amount);
         if (tickets) tickets.value = '0';
-        focus = this.#setCustomBoxDraft(amount);
+        focus = this.#setCustomBoxDraft(selection.amount, selection.quantity);
       } else {
         // Ticket choice: express the raw spend target as quarter-ticket entries.
         let wanted = 1;
@@ -2439,9 +2471,9 @@ class AppDecimatorPanel extends HTMLElement {
       // level quests carry their larger DB-projected target in the same field.
       let amount = target;
       if (amount <= 0n && price != null) amount = price * 2n;
-      if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+      const selection = _questLootboxSelection(detail, amount);
       if (tickets) tickets.value = '0';
-      focus = this.#setCustomBoxDraft(amount);
+      focus = this.#setCustomBoxDraft(selection.amount, selection.quantity);
       if (foil) foil.checked = false;
       if (flip) flip.checked = false;
       this.#renderPurchaseMode();
@@ -2635,7 +2667,7 @@ class AppDecimatorPanel extends HTMLElement {
     this.#updateTotalLabel();
   }
 
-  #setCustomBoxDraft(amountWei = 0n) {
+  #setCustomBoxDraft(amountWei = 0n, quantity = 1) {
     for (const name of ['dec-box-small', 'dec-box-medium', 'dec-box-large']) {
       const input = this.querySelector(`[name="${name}"]`);
       if (input) input.value = '0';
@@ -2643,7 +2675,11 @@ class AppDecimatorPanel extends HTMLElement {
     const count = this.querySelector('[name="dec-box-custom-count"]');
     const size = this.querySelector('[name="dec-box-custom-eth"]');
     const amount = BigInt(amountWei ?? 0n);
-    if (count) count.value = amount > 0n ? '1' : '0';
+    const requestedQuantity = Number(quantity);
+    const safeQuantity = Number.isSafeInteger(requestedQuantity)
+      ? Math.max(1, Math.min(BOX_ORDER_MAX_BOXES, requestedQuantity))
+      : 1;
+    if (count) count.value = amount > 0n ? String(safeQuantity) : '0';
     if (size && amount > 0n) size.value = formatPurchaseEth(amount);
     this.#customBoxOpen = amount > 0n;
     return size;

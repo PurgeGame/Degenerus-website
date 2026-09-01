@@ -146,7 +146,6 @@ class LastDayJackpot extends HTMLElement {
   #foilPollHandle = null;
   #bridgeTimer = null;
   #bridgeAttempts = 0;
-  #spinStartListener = null;
   #spinCompleteListener = null;
   #scratchCompleteListener = null;
   #decimatorOpenedListener = null;
@@ -173,9 +172,10 @@ class LastDayJackpot extends HTMLElement {
   // The reels' presentation for the spin currently on screen, as published by
   // replay:spin-progress. `traits` reports reel locks; while a spin is active,
   // only main-draw locks are durable foil grades. `liveTraits` holds the exact
-  // current frame and is replaced as the reels cycle. Bonus completion promotes
-  // the authoritative packed set separately. This presentation is never a
-  // record — nothing here opens a spoiler or claim gate.
+  // lock-frame snapshot (including the landing bonus face), rather than
+  // forcing this cabinet to repaint for every random reel tick.
+  // Bonus completion promotes the authoritative packed set separately. This
+  // presentation is never a record — nothing here opens a spoiler or claim gate.
   #foilPresentation = null;
   #foilFlashQuadrants = new Set();
   #foilFlashTimers = new Map();
@@ -1144,8 +1144,8 @@ class LastDayJackpot extends HTMLElement {
     this.#bridgeTimer = handle;
   }
 
-  // Repaint the seated foils against what is on the board RIGHT NOW. Cycling
-  // faces contribute replaceable transient lamps; newly committed quadrants
+  // Repaint the seated foils when a reel lands. The lock-frame snapshot gives
+  // bonus faces their exact transient lamp; newly committed main quadrants
   // become durable and receive the one-shot lock pop.
   //
   // Presentation only. It opens no gate, writes no key, and publishes no
@@ -1186,14 +1186,6 @@ class LastDayJackpot extends HTMLElement {
     void this.#loadExactSummaryCoinflip(day);
   }
 
-  #onPanelSpinStart(e) {
-    const d = e?.detail;
-    const eventDay = Number(d?.day);
-    if (!Number.isInteger(eventDay) || eventDay <= 0
-      || eventDay !== Number(this.#pinnedDay)) return;
-    this.#warmDaySummary(d?.player || getViewedAddress(), eventDay);
-  }
-
   // A completed spin promotes its settled draw into a durable foil lane. Bonus
   // completion also replaces Roll 2's live presentation with the authoritative
   // packed result, so its final lights remain on instead of disappearing.
@@ -1204,9 +1196,6 @@ class LastDayJackpot extends HTMLElement {
     const eventDay = Number(d?.day);
     if (!Number.isInteger(eventDay) || eventDay <= 0
       || eventDay !== Number(this.#pinnedDay)) return;
-    // Compatibility fallback for older replay panels without spin-start. The
-    // current panel began this shared warm before its first reel frame.
-    this.#warmDaySummary(d?.player || getViewedAddress(), eventDay);
     if (d?.bonusPhase === true) {
       this.#foilBonusActivated = true;
       this.#foilPresentation = null;
@@ -1672,8 +1661,8 @@ class LastDayJackpot extends HTMLElement {
 
   // The exact global day row is the sole authority for the flip outcome. The
   // viewer activity row is level-derived and can describe a different flip day.
-  // Usually #refreshFlipRow already owns this immutable result; the spin-start
-  // warm fills any gap and the summary click merely consumes it.
+  // Usually #refreshFlipRow already owns this immutable result; the post-
+  // scratch summary warm fills any gap and the click merely consumes it.
   #loadExactSummaryCoinflip(day, { priority = 'background' } = {}) {
     const numericDay = Number(day);
     if (!Number.isInteger(numericDay) || numericDay <= 0 || typeof fetch !== 'function') {
@@ -1765,9 +1754,10 @@ class LastDayJackpot extends HTMLElement {
       const viewed = getViewedAddress();
       const target = viewed ? String(viewed).toLowerCase() : null;
       const summaryDay = this.#pinnedDay;
-      // All three reads began with the main jackpot spin. These calls consume
-      // their shared values (or promote an unusually slow warm request) rather
-      // than starting fresh click-time work.
+      // All three reads began when the summary action became eligible after
+      // the final scratch. These calls consume their shared values (or promote
+      // an unusually slow warm request) rather than starting fresh click-time
+      // work.
       const activityPromise = this.#dayActivity(viewed, summaryDay);
       const exactWinnersPromise = target
         ? this.#daySummaryWinners(summaryDay, { priority: 'interaction' })
@@ -1995,7 +1985,68 @@ class LastDayJackpot extends HTMLElement {
 
     let slotted = 0;
     slots.forEach((slot, index) => {
-      slot.textContent = '';
+      const line = normalizeFoilLine(lines[index]);
+      const claimCandidate = line ? (claimByTicket.get(index) || null) : null;
+      const structureKey = line
+        ? `${line.join(',')}|${claimCandidate?.key || ''}`
+        : '';
+      const priorStructureKey = slot.getAttribute('data-foil-structure-key') || '';
+
+      // Live reel frames only change four match grades. The ticket artwork,
+      // images, and claim listener are stable until the foil line or its
+      // outstanding claim tuple changes, so keep those nodes seated instead
+      // of allocating/re-decoding an entire cabinet on every frame.
+      if (!line) {
+        if (priorStructureKey || slot.children?.length) slot.textContent = '';
+        slot.removeAttribute('data-foil-structure-key');
+      } else if (priorStructureKey !== structureKey
+        || !slot.querySelector('.ldj-foil-machine-ticket')) {
+        slot.textContent = '';
+        slot.setAttribute('data-foil-structure-key', structureKey);
+        const ticket = document.createElement(claimCandidate ? 'button' : 'span');
+        ticket.className = 'ldj-foil-machine-ticket ticket-card tc-small ticket-card--foil';
+        if (claimCandidate) {
+          ticket.classList.add('ldj-foil-machine-ticket--claimable');
+          ticket.setAttribute('type', 'button');
+          ticket.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
+        }
+        applyDgnTicketAccent(ticket, line);
+        line.forEach((traitId, quadrant) => {
+          const badge = traitToBadge(traitId);
+          const cell = document.createElement('span');
+          cell.className = 'ldj-foil-machine-cell trait-quadrant';
+          cell.setAttribute('data-foil-quadrant', String(quadrant));
+          if (badge?.color) cell.setAttribute('data-trait-color', badge.color);
+          if (badge?.color === 'gold') cell.classList.add('trait-quadrant--gold');
+          if (badge) {
+            const image = document.createElement('img');
+            image.src = badge.path;
+            image.alt = badge.label;
+            image.loading = 'lazy';
+            image.decoding = 'async';
+            cell.appendChild(image);
+          }
+          ticket.appendChild(cell);
+        });
+        const center = document.createElement('span');
+        center.className = 'ldj-foil-machine-center ticket-card-center';
+        const flame = document.createElement('img');
+        flame.src = '/whitepaper/flame-center.svg';
+        flame.alt = '';
+        flame.loading = 'lazy';
+        flame.decoding = 'async';
+        center.appendChild(flame);
+        ticket.appendChild(center);
+        slot.appendChild(ticket);
+        if (claimCandidate) {
+          const marker = document.createElement('button');
+          marker.className = 'ldj-foil-claim-marker';
+          marker.setAttribute('type', 'button');
+          marker.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
+          slot.appendChild(marker);
+        }
+      }
+
       slot.classList.remove(
         'is-loaded',
         'is-graded',
@@ -2008,9 +2059,7 @@ class LastDayJackpot extends HTMLElement {
       slot.removeAttribute('data-draw-kind');
       slot.removeAttribute('data-claim-score');
       slot.removeAttribute('data-claim-draw-kind');
-      const line = normalizeFoilLine(lines[index]);
       if (!line) return;
-      const claimCandidate = claimByTicket.get(index) || null;
 
       const presented = this.#foilPresentationGrade(line);
       const bonusPresentationActive = Boolean(
@@ -2071,30 +2120,39 @@ class LastDayJackpot extends HTMLElement {
         slot.classList.add('is-slotting');
         slot.style?.setProperty?.('--foil-slot-index', String(index));
         slotted += 1;
+      } else {
+        slot.style?.removeProperty?.('--foil-slot-index');
       }
 
-      const ticket = document.createElement(claimCandidate ? 'button' : 'span');
-      ticket.className = 'ldj-foil-machine-ticket ticket-card tc-small ticket-card--foil';
-      let claimLabel = '';
+      const ticket = slot.querySelector('.ldj-foil-machine-ticket');
       if (claimCandidate) {
         const drawLabel = claimCandidate.grade.drawKind === 1 ? 'bonus spin' : 'main spin';
-        claimLabel = `Claim T${claimCandidate.grade.score} ${drawLabel} foil match from ticket ${index + 1}`;
-        ticket.classList.add('ldj-foil-machine-ticket--claimable');
-        ticket.setAttribute('type', 'button');
+        const claimLabel = `Claim T${claimCandidate.grade.score} ${drawLabel} foil match from ticket ${index + 1}`;
         ticket.setAttribute('aria-label', claimLabel);
         ticket.setAttribute('title', claimLabel);
         ticket.disabled = this.#foilClaimBusy;
         if (this.#foilClaimBusy) ticket.setAttribute('aria-busy', 'true');
-        ticket.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
+        else ticket.removeAttribute('aria-busy');
+        const marker = slot.querySelector('.ldj-foil-claim-marker');
+        if (marker) {
+          marker.setAttribute('aria-label', claimLabel);
+          marker.setAttribute('title', claimLabel);
+          marker.disabled = this.#foilClaimBusy;
+          if (this.#foilClaimBusy) marker.setAttribute('aria-busy', 'true');
+          else marker.removeAttribute('aria-busy');
+        }
       }
-      applyDgnTicketAccent(ticket, line);
-      line.forEach((traitId, quadrant) => {
-        const badge = traitToBadge(traitId);
-        const cell = document.createElement('span');
-        cell.className = 'ldj-foil-machine-cell trait-quadrant';
-        cell.setAttribute('data-foil-quadrant', String(quadrant));
-        if (badge?.color) cell.setAttribute('data-trait-color', badge.color);
-        if (badge?.color === 'gold') cell.classList.add('trait-quadrant--gold');
+
+      const cells = ticket?.querySelectorAll?.('.ldj-foil-machine-cell') || [];
+      for (let quadrant = 0; quadrant < cells.length; quadrant += 1) {
+        const cell = cells[quadrant];
+        cell.removeAttribute('data-match-points');
+        cell.classList.remove(
+          'is-no-match',
+          'is-symbol-match',
+          'is-color-match',
+          'is-match-flash',
+        );
         const face = Number(displayFaces[quadrant] || 0);
         if ((faceMask >> quadrant) & 1) {
           cell.setAttribute('data-match-points', String(face));
@@ -2105,36 +2163,6 @@ class LastDayJackpot extends HTMLElement {
             cell.classList.add('is-match-flash');
           }
         }
-        if (badge) {
-          const image = document.createElement('img');
-          image.src = badge.path;
-          image.alt = badge.label;
-          image.loading = 'lazy';
-          image.decoding = 'async';
-          cell.appendChild(image);
-        }
-        ticket.appendChild(cell);
-      });
-      const center = document.createElement('span');
-      center.className = 'ldj-foil-machine-center ticket-card-center';
-      const flame = document.createElement('img');
-      flame.src = '/whitepaper/flame-center.svg';
-      flame.alt = '';
-      flame.loading = 'lazy';
-      flame.decoding = 'async';
-      center.appendChild(flame);
-      ticket.appendChild(center);
-      slot.appendChild(ticket);
-      if (claimCandidate) {
-        const marker = document.createElement('button');
-        marker.className = 'ldj-foil-claim-marker';
-        marker.setAttribute('type', 'button');
-        marker.setAttribute('aria-label', claimLabel);
-        marker.setAttribute('title', claimLabel);
-        marker.disabled = this.#foilClaimBusy;
-        if (this.#foilClaimBusy) marker.setAttribute('aria-busy', 'true');
-        marker.addEventListener('click', () => this.#activateFoilClaim(claimCandidate));
-        slot.appendChild(marker);
       }
     });
     if (slotted > 0 && slottingThisPack) this.#foilSlottingPending = false;
@@ -2476,8 +2504,6 @@ class LastDayJackpot extends HTMLElement {
     // quadrants land. Scratch completion separately opens the spoiler/claim
     // gates and feeds the results-CTA "whole board done" state.
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      this.#spinStartListener = (e) => this.#onPanelSpinStart(e);
-      document.addEventListener('replay:spin-start', this.#spinStartListener);
       this.#spinProgressListener = (e) => this.#onPanelSpinProgress(e);
       document.addEventListener('replay:spin-progress', this.#spinProgressListener);
       this.#spinCompleteListener = (e) => this.#onPanelSpinComplete(e);
@@ -2558,13 +2584,6 @@ class LastDayJackpot extends HTMLElement {
       try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
       this.#bridgeTimer = null;
     }
-    if (this.#spinStartListener
-      && typeof document !== 'undefined'
-      && typeof document.removeEventListener === 'function') {
-      try { document.removeEventListener('replay:spin-start', this.#spinStartListener); }
-      catch { /* defensive */ }
-    }
-    this.#spinStartListener = null;
     if (this.#spinProgressListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {

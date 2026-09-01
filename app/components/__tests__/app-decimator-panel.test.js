@@ -850,9 +850,11 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece--ticket > \.dec-ticket-single-quest,[\s\S]*?\.dec-ticket-piece--pack > \.dec-ticket-pack-quest\s*\{[^}]*quest-objective-tail-left\.svg[^}]*top:\s*50%;[^}]*right:\s*0\.38rem;[^}]*width:\s*1\.08rem;[^}]*min-width:\s*0;[^}]*height:\s*1\.08rem;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*translate:\s*0 -50%;/s,
-      'single and level quest markers sit beside their ticket controls without escaping the tile',
+      /\.dec-ticket-piece--ticket > \.dec-ticket-single-quest,[\s\S]*?\.dec-ticket-piece--pack > \.dec-ticket-pack-quest\s*\{[^}]*quest-objective-tail-left\.svg[^}]*top:\s*-0\.14rem;[^}]*right:\s*-0\.1rem;[^}]*width:\s*1\.18rem;[^}]*min-width:\s*0;[^}]*height:\s*1\.18rem;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*translate:\s*none;/s,
+      'single and level quest markers use the full left-pointing bubble at each upper-right corner',
     );
+    assert.match(QUEST_LEFT_ICON, /tail[\s\S]*leaves the bubble's left edge/i,
+      'the shared ticket marker retains its complete speech-bubble point');
     assert.match(
       PURCHASE_DESK_CSS,
       /\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\)\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
@@ -1076,6 +1078,26 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       compactHeroCss,
       /\.dec-ticket-piece\s*\{[^}]*min-height:\s*6\.25rem/s,
       'recovered height enlarges the clickable ticket shelf',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(max-width: 1099px\)[\s\S]*?\.dec-price\s*\{[^}]*grid-template-columns:\s*1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;[^}]*justify-content:\s*center[\s\S]*?\.dec-price__count\s*\{[^}]*grid-column:\s*1[\s\S]*?\.dec-price__kind\s*\{[^}]*grid-column:\s*3[\s\S]*?\.dec-price__amount\s*\{[^}]*grid-column:\s*7[\s\S]*?\.dec-price__unit\s*\{[^}]*grid-column:\s*9/s,
+      'stacked layouts restore the centered desktop rate columns instead of left-packing the quote',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(min-width: 521px\) and \(max-width: 1099px\)[\s\S]*?\.panel-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 11\.4rem\) 8rem minmax\(0, 1fr\)[^}]*grid-template-rows:\s*auto 2\.35rem[\s\S]*?\.dec-price\s*\{[^}]*grid-column:\s*2[\s\S]*?\.dec-flip-credit--header\s*\{[^}]*grid-column:\s*3/s,
+      'stacked medium layouts center a desktop-sized rate/bonus cluster without moving the title or help control',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(min-width: 521px\) and \(max-width: 1099px\)[\s\S]*?\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\) \.dec-ticket-piece\s*\{[^}]*min-height:\s*6\.25rem[\s\S]*?\.dec-ticket-pieces:not\(:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\)\) \.dec-ticket-piece\s*\{[^}]*min-height:\s*clamp\(8rem, 18vw, 10\.75rem\)/s,
+      'medium foil rows keep compact natural proportions while only the three-product state grows',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.panel-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 11\.4rem\) 6\.45rem minmax\(0, 1fr\)[^}]*grid-template-rows:\s*auto 2\.35rem[\s\S]*?\.dec-ticket-pieces:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\) \.dec-ticket-piece\s*\{[^}]*min-height:\s*6\.25rem[\s\S]*?\.dec-ticket-pieces:not\(:has\([\s\S]*?\.dec-ticket-piece--foil:not\(\[hidden\]\)[\s\S]*?\)\) \.dec-ticket-piece\s*\{[^}]*min-height:\s*7\.25rem/s,
+      'phones center the desktop-style rate cluster and enlarge tickets only when Foil is absent',
     );
     assert.match(
       compactHeroCss,
@@ -4666,7 +4688,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       PANEL_SRC,
-      /<span class="dec-flip-balance__action">[\s\S]*?data-bind="dec-funds-total-flip"[\s\S]*?<quest-objective-indicator class="dec-redeem-quest"[\s\S]*?data-quest-pointer="bottom-left"[\s\S]*?product="redeem-flip"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
+      /<span class="dec-flip-balance__action">[\s\S]*?data-bind="dec-funds-total-flip"[\s\S]*?<quest-objective-indicator class="dec-redeem-quest"[\s\S]*?data-quest-pointer="left"[\s\S]*?product="redeem-flip"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
       'the redeem quest marker is anchored to the USE FLIP action itself',
     );
     assert.match(
