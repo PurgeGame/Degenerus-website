@@ -118,6 +118,56 @@ export function getEip1193() {
   return _eip1193;
 }
 
+function _walletConnectSessionHasChain(provider, chainId) {
+  const namespaces = provider?.session?.namespaces;
+  if (!namespaces || typeof namespaces !== 'object') return false;
+  const target = `eip155:${Number(chainId)}`;
+  return Object.entries(namespaces).some(([key, namespace]) => {
+    if (key === target) return true;
+    if (Array.isArray(namespace?.chains) && namespace.chains.includes(target)) return true;
+    return Array.isArray(namespace?.accounts)
+      && namespace.accounts.some((account) => String(account).startsWith(`${target}:`));
+  });
+}
+
+/**
+ * Switch the connected wallet to this deployment's chain.
+ *
+ * WalletConnect namespaces are fixed when a session is approved. If a player
+ * enables Base Sepolia in MetaMask after pairing, the old session still cannot
+ * switch to it. A user-initiated retry therefore retires that stale session
+ * and opens a fresh pairing; ordinary injected wallets and WC sessions that
+ * already authorize the chain use the normal switch/add flow.
+ */
+export async function ensureConfiguredWalletChain() {
+  const raw = getEip1193();
+  if (!raw) return false;
+
+  if (
+    raw.isWalletConnect === true
+    && raw.session
+    && !_walletConnectSessionHasChain(raw, CHAIN.id)
+  ) {
+    try {
+      await raw.disconnect();
+    } catch (_e) {
+      return false;
+    }
+    // The WC disconnect event normally clears this state first; keep the
+    // explicit reset for providers that do not emit it until a later tick.
+    disconnect();
+    try {
+      return Boolean(await connectWalletConnect());
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  const switched = await switchToSepolia(raw);
+  if (switched) update('ui.chainOk', true);
+  return switched;
+}
+
 /**
  * Whether this browser currently exposes an installed EIP-1193/EIP-6963
  * wallet. This never requests accounts and never opens a wallet prompt.

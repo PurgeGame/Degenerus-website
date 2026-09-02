@@ -25,8 +25,7 @@
 
 import { subscribe } from '../app/store.js';
 import { CHAIN } from '../app/chain-config.js';
-import { switchToSepolia } from '../app/contracts.js';
-import { getEip1193 } from '../app/wallet.js';
+import { ensureConfiguredWalletChain } from '../app/wallet.js';
 import { lock, unlock } from '../app/scroll-lock.js';
 
 // ---------------------------------------------------------------------------
@@ -275,10 +274,7 @@ export function _updateChainChip(chainOk) {
       cta.addEventListener('click', async (e) => {
         if (e && e.preventDefault) e.preventDefault();
         try {
-          // ethers BrowserProvider.provider self-references and has no
-          // EIP-1193 request(). Use the raw wallet captured by wallet.js.
-          const eth = getEip1193();
-          if (eth) await switchToSepolia(eth);
+          await ensureConfiguredWalletChain();
         } catch { /* swallow — UI surface, error toast is Phase 60+ */ }
       });
       chip.appendChild(cta);

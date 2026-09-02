@@ -566,10 +566,12 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     accounts = [],
     chainId = 84532,
     connectImpl,
+    disconnectImpl,
     requestImpl,
   } = {}) {
     const initCalls = [];
     const connectCalls = [];
+    const disconnectCalls = [];
     const requestCalls = [];
     const wcListeners = {};
     const wcInstance = {
@@ -582,6 +584,15 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         connectCalls.push(Date.now());
         if (typeof connectImpl === 'function') await connectImpl();
       },
+      disconnect: async () => {
+        disconnectCalls.push(Date.now());
+        if (typeof disconnectImpl === 'function') {
+          await disconnectImpl(wcInstance);
+          return;
+        }
+        wcInstance.session = null;
+        accounts = [];
+      },
       request: async (payload) => {
         requestCalls.push(payload);
         return typeof requestImpl === 'function' ? requestImpl(payload, wcInstance) : null;
@@ -589,6 +600,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       on: (ev, fn) => { (wcListeners[ev] = wcListeners[ev] || []).push(fn); },
       _initCalls: initCalls,
       _connectCalls: connectCalls,
+      _disconnectCalls: disconnectCalls,
       _requestCalls: requestCalls,
       _wcListeners: wcListeners,
       _setAccounts: (a) => { accounts = a; },
@@ -731,6 +743,47 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       _storeUpdates.some(([path, value]) => path === 'connected.address' && Boolean(value)),
       'wallet address is published before switch completion',
     );
+  });
+
+  test('ensureConfiguredWalletChain re-pairs a WC session that does not authorize Base Sepolia', async () => {
+    const account = '0xBb00000000000000000000000000000000000077';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'stale-mainnet-session',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`],
+            chains: ['eip155:1'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 1,
+      connectImpl: async () => {
+        wcInstance.chainId = 84532;
+        wcInstance._setSession({
+          topic: 'fresh-base-session',
+          namespaces: {
+            eip155: {
+              accounts: [`eip155:84532:${account}`],
+              chains: ['eip155:84532'],
+            },
+          },
+        });
+        wcInstance._setAccounts([account]);
+      },
+    });
+    wcInstance.isWalletConnect = true;
+    wallet._testInjectWcFactory(factory);
+    await wallet.connectWalletConnect();
+
+    const result = await wallet.ensureConfiguredWalletChain();
+
+    assert.equal(result, true, 'fresh WalletConnect pairing succeeds');
+    assert.equal(wcInstance._disconnectCalls.length, 1, 'stale session is retired');
+    assert.equal(wcInstance._connectCalls.length, 1, 'replacement session is paired');
+    assert.equal(storeMod.get('connected.address'), account.toLowerCase());
+    assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
   test('connectWalletConnect: listeners attached BEFORE store mutations (WR-05 ordering preserved)', async () => {

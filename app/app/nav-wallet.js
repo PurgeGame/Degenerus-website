@@ -23,8 +23,7 @@
 // Only /app/ is affected. Every other page keeps nav.js's session flow, which
 // is what its Discord + affiliate-code features are built on.
 
-import { connectWithPicker, disconnect, getEip1193 } from './wallet.js';
-import { switchToSepolia } from './contracts.js';
+import { connectWithPicker, disconnect, ensureConfiguredWalletChain } from './wallet.js';
 import { subscribe, get } from './store.js';
 import { CHAIN } from './chain-config.js';
 
@@ -78,10 +77,10 @@ async function _onClick() {
   const addr = get('connected.address');
 
   if (addr && get('ui.chainOk') === false) {
-    // The raw wallet object, NOT `getProvider().provider` — that getter
-    // self-references the ethers BrowserProvider and has no `.request`.
-    const eip1193 = getEip1193();
-    if (eip1193) await switchToSepolia(eip1193);
+    // A stale WalletConnect session may predate Base Sepolia being enabled in
+    // MetaMask. The shared helper switches an authorized session, or retires
+    // and re-pairs one whose immutable namespace does not include this chain.
+    await ensureConfiguredWalletChain();
     _render();
     return;
   }
