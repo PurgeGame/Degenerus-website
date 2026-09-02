@@ -36,7 +36,7 @@ import {
   subscribeUiPreferences,
 } from '../app/ui-preferences.js';
 import { getProvider } from '../app/contracts.js';
-import { getEip1193 } from '../app/wallet.js';
+import { createWalletConnectRequestHandoff, getEip1193 } from '../app/wallet.js';
 import { permissionlessReadProvider, readNativeBalance } from '../app/read-provider.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
@@ -853,6 +853,7 @@ class AppDecimatorPanel extends HTMLElement {
   #purchasePrewarm = null;
   #purchasePrewarmTimer = null;
   #purchasePrewarmSeq = 0;
+  #walletConnectHandoff = null;
   #purchasePrewarmPendingFingerprint = null;
   #purchasePrewarmError = null;
   // --- Pinned data (server-derived; rendered via textContent) ---
@@ -956,6 +957,7 @@ class AppDecimatorPanel extends HTMLElement {
 
   disconnectedCallback() {
     this.#clearPurchasePrewarm();
+    this.#clearWalletConnectHandoff();
     this.#closeBuyInDialog({ restoreFocus: false });
     this.#closeBuilderPopovers({ restoreFocus: false });
     this.#clearPurchaseTargetPulse(this.querySelector('[data-bind="dec-flip-credit"]'));
@@ -3427,7 +3429,11 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #startEthPurchase(e) {
-    if (this.#busy) return;
+    if (this.#busy) {
+      try { e?.preventDefault?.(); } catch (_e) { /* defensive */ }
+      this.#walletConnectHandoff?.open?.();
+      return;
+    }
     const draft = this.#purchasePrewarmDraft();
     if (!draft) {
       void this.#onBuyClick(e);
@@ -3446,16 +3452,38 @@ class AppDecimatorPanel extends HTMLElement {
     }
 
     let txPromise;
+    let handoff = null;
     try {
+      handoff = createWalletConnectRequestHandoff(getEip1193(), {
+        onReady: () => {
+          // SignClient emits after its relay publish. Let the handler that
+          // started below establish #busy first, then leave this same CTA live
+          // as a user-gesture fallback if the OS ignores the automatic link.
+          queueMicrotask(() => {
+            if (!this.#busy || this.#walletConnectHandoff !== handoff) return;
+            const btn = this.querySelector('[data-bind="dec-buy-cta"]');
+            if (btn) btn.disabled = false;
+            this.#setBuyLabel('Open', handoff?.walletName || 'Wallet');
+          });
+        },
+      });
+      this.#walletConnectHandoff = handoff;
       // CRITICAL: buildTx invokes raw WalletConnect eth_sendTransaction right
       // here, in the event listener's synchronous stack, before any await.
       txPromise = prepared.buildTx();
     } catch (error) {
+      try { handoff?.cancel?.(); } catch (_e) { /* defensive */ }
+      if (this.#walletConnectHandoff === handoff) this.#walletConnectHandoff = null;
       this.#renderError(compactUiError(error, 'Cannot open the wallet request. Try again.'));
       this.#schedulePurchasePrewarm(0, true);
       return;
     }
-    void this.#onBuyClick(e, null, { prepared, txPromise });
+    void this.#onBuyClick(e, null, { prepared, txPromise, handoff });
+  }
+
+  #clearWalletConnectHandoff(handoff = this.#walletConnectHandoff) {
+    try { handoff?.cancel?.(); } catch (_e) { /* defensive */ }
+    if (this.#walletConnectHandoff === handoff) this.#walletConnectHandoff = null;
   }
 
   #setBuyLabel(action, amount = '') {
@@ -5058,7 +5086,16 @@ class AppDecimatorPanel extends HTMLElement {
     if (btn) {
       btn.disabled = true;
       if (!allInFlow) {
-        this.#setBuyLabel(preparedSend?.txPromise ? 'Confirm in MetaMask…' : 'Buying…');
+        if (preparedSend?.txPromise) {
+          // Use the CTA's two deliberate text rows instead of squeezing this
+          // status into the narrow one-row prompt width (four lines on mobile).
+          this.#setBuyLabel(
+            'Confirm in',
+            `${preparedSend?.handoff?.walletName || 'MetaMask'}…`,
+          );
+        } else {
+          this.#setBuyLabel('Buying…');
+        }
       }
     }
     // Defensive: clear any prior error before a fresh attempt.
@@ -5445,6 +5482,7 @@ class AppDecimatorPanel extends HTMLElement {
       }
       if (allInFlow) throw new Error(failureMessage, { cause: error });
     } finally {
+      this.#clearWalletConnectHandoff(preparedSend?.handoff);
       if (btn) btn.disabled = false;
       this.#busy = false;
       // Recompute both button lines after the pending label.
