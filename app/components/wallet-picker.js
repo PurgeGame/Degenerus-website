@@ -25,7 +25,8 @@
 
 import { subscribe } from '../app/store.js';
 import { CHAIN } from '../app/chain-config.js';
-import { getProvider, switchToSepolia } from '../app/contracts.js';
+import { switchToSepolia } from '../app/contracts.js';
+import { getEip1193 } from '../app/wallet.js';
 import { lock, unlock } from '../app/scroll-lock.js';
 
 // ---------------------------------------------------------------------------
@@ -274,8 +275,9 @@ export function _updateChainChip(chainOk) {
       cta.addEventListener('click', async (e) => {
         if (e && e.preventDefault) e.preventDefault();
         try {
-          const provider = getProvider();
-          const eth = provider && provider.provider;
+          // ethers BrowserProvider.provider self-references and has no
+          // EIP-1193 request(). Use the raw wallet captured by wallet.js.
+          const eth = getEip1193();
           if (eth) await switchToSepolia(eth);
         } catch { /* swallow — UI surface, error toast is Phase 60+ */ }
       });

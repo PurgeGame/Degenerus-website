@@ -564,6 +564,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
   function makeMockWcFactory({ session = null, accounts = [], chainId = 84532, connectImpl } = {}) {
     const initCalls = [];
     const connectCalls = [];
+    const disconnectCalls = [];
     const wcListeners = {};
     const wcInstance = {
       session,
@@ -575,10 +576,16 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         connectCalls.push(Date.now());
         if (typeof connectImpl === 'function') await connectImpl();
       },
+      disconnect: async () => {
+        disconnectCalls.push(Date.now());
+        wcInstance.session = null;
+        accounts = [];
+      },
       request: async () => null,
       on: (ev, fn) => { (wcListeners[ev] = wcListeners[ev] || []).push(fn); },
       _initCalls: initCalls,
       _connectCalls: connectCalls,
+      _disconnectCalls: disconnectCalls,
       _wcListeners: wcListeners,
       _setAccounts: (a) => { accounts = a; },
       _setSession: (s) => { wcInstance.session = s; },
@@ -639,12 +646,13 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(ev, 'wallet-connected dispatched');
   });
 
-  test('init opts shape: optionalChains [84532, 1], showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
+  test('init opts require the configured beta chain, showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
     const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: ['0xab000000000000000000000000000000000000ab'] });
     wallet._testInjectWcFactory(factory);
     await wallet._testEnsureWcProvider();
     const opts = wcInstance._initCalls[0];
-    assert.deepEqual(opts.optionalChains, [84532, 1], 'optionalChains is [Sepolia, mainnet]');
+    assert.deepEqual(opts.chains, [84532], 'Base Sepolia is the required WalletConnect chain');
+    assert.equal(opts.optionalChains, undefined, 'Ethereum mainnet is not advertised during beta');
     assert.equal(opts.showQrModal, true);
     assert.ok(opts.qrModalOptions, 'qrModalOptions present');
     assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
@@ -652,8 +660,6 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(opts.metadata.redirect, 'metadata.redirect present');
     assert.ok(typeof opts.metadata.redirect.universal === 'string', 'redirect.universal is a string');
     assert.ok(opts.metadata.redirect.universal.endsWith('/app/'), 'redirect.universal ends with /app/');
-    // No required-namespace `chains` key
-    assert.equal(opts.chains, undefined, 'no required-namespace chains key');
   });
 
   test('autoReconnect WC branch: with persisted session and accounts returns true silently (no wc.connect call)', async () => {
@@ -680,6 +686,20 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const result = await wallet.autoReconnect();
     assert.equal(result, false, 'no session → false');
     assert.equal(wcInstance._connectCalls.length, 0, 'wc.connect NEVER called on resume path');
+  });
+
+  test('autoReconnect WC branch: drops a persisted wrong-chain session for clean Base Sepolia reconnect', async () => {
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: { topic: 'old-mainnet-session' },
+      accounts: ['0xBb00000000000000000000000000000000000077'],
+      chainId: 1,
+    });
+    wallet._testInjectWcFactory(factory);
+    const result = await wallet.autoReconnect();
+    assert.equal(result, false, 'wrong-chain session is not restored');
+    assert.equal(wcInstance._disconnectCalls.length, 1, 'stale mainnet session disconnected');
+    assert.equal(_localStore.has('lastWalletRdns'), false, 'stale reconnect sentinel cleared');
   });
 
   test('connectWalletConnect: listeners attached BEFORE store mutations (WR-05 ordering preserved)', async () => {

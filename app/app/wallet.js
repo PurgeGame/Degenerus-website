@@ -170,8 +170,10 @@ export function onUserPickedWallet(info) {
 
 function _wcInitOpts() {
   // RESEARCH §Pattern 1 verified bundle behavior:
-  //   - optionalChains (NOT chains) so wallets that don't pre-support Sepolia
-  //     can still pair (required-namespace blocks them).
+  //   - The app is single-chain. Require the active deployment chain so a
+  //     mobile wallet cannot approve its current Ethereum-mainnet account and
+  //     leave every write control disabled. CHAIN.id follows the deployment
+  //     profile, so this is Base Sepolia in beta and mainnet after cutover.
   //   - showQrModal:true triggers AppKit lazy-load of the bundled WC modal.
   //   - enableMobileFullScreen MUST be nested under qrModalOptions (top-level
   //     is silently ignored — verified in bundle: this.rpc.qrModalOptions?.enableMobileFullScreen===!0).
@@ -182,7 +184,7 @@ function _wcInitOpts() {
   const origin = (win && win.location && win.location.origin) ? win.location.origin : '';
   return {
     projectId: WALLETCONNECT_PROJECT_ID,
-    optionalChains: [CHAIN.id, 1],
+    chains: [CHAIN.id],
     showQrModal: true,
     qrModalOptions: {
       enableMobileFullScreen: true,
@@ -246,6 +248,13 @@ async function _ensureWcProvider() {
 
 export async function connectWalletConnect() {
   const wc = await _ensureWcProvider();
+  // Sessions created by the former optional-chain configuration may restore
+  // on Ethereum mainnet even though this deployment only accepts Base
+  // Sepolia. Retire that unusable session before the explicit connect so the
+  // replacement is negotiated against the required chain above.
+  if (wc.session && wc.accounts?.length > 0 && Number(wc.chainId) !== CHAIN.id) {
+    try { await wc.disconnect(); } catch (_) { /* reconnect below if reset landed */ }
+  }
   if (!wc.session || !wc.accounts || wc.accounts.length === 0) {
     // No persisted session — open the QR modal / deep-link to mobile wallet.
     // wc.connect() is the popup-equivalent and is intentionally invoked here
@@ -458,6 +467,14 @@ export async function autoReconnect() {
     try {
       const wc = await _ensureWcProvider();
       if (!wc.session || !wc.accounts || wc.accounts.length === 0) return false;
+      // A persisted session from the old multi-chain beta configuration can
+      // restore on mainnet. It cannot sign here, so clear it silently and let
+      // the next explicit Connect create a Base-Sepolia-required session.
+      if (Number(wc.chainId) !== CHAIN.id) {
+        try { await wc.disconnect(); } catch (_) { /* stale session remains read-only */ }
+        localStorage.removeItem('lastWalletRdns');
+        return false;
+      }
       const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
       const browserProvider = new BPCtor(wc);
       // WR-05: attach listeners BEFORE consuming wc state so chainChanged
