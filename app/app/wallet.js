@@ -272,6 +272,11 @@ function _wcInitOpts() {
   return {
     projectId: WALLETCONNECT_PROJECT_ID,
     optionalChains: [CHAIN.id, 1],
+    // WalletConnect routes non-wallet JSON-RPC methods (eth_call,
+    // eth_estimateGas, block/receipt reads) through its HTTP provider. Pin the
+    // active beta chain to the same public RPC used by the rest of the app so
+    // a purchase preflight never depends on the WalletConnect gateway.
+    rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
     showQrModal: true,
     qrModalOptions: {
       enableMobileFullScreen: true,

@@ -82,6 +82,7 @@ let _pickerEl = {
 
 import * as storeMod from '../store.js';        // resolved against the live ./store.js
 import * as pollingMod from '../polling.js';   // resolved against the live ./polling.js
+import { CHAIN } from '../chain-config.js';
 
 // Track call history through the real store. WR-09: subscribers are
 // installed/torn down per test (was: top-level module subscribe with no
@@ -674,6 +675,8 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const opts = wcInstance._initCalls[0];
     assert.deepEqual(opts.optionalChains, [84532, 1], 'Base Sepolia and the wallet default are optional');
     assert.equal(opts.chains, undefined, 'custom beta chain is not a required pairing namespace');
+    assert.deepEqual(opts.rpcMap, { 84532: CHAIN.rpcUrl },
+      'non-wallet Base Sepolia RPC methods use the app RPC instead of the WC gateway');
     assert.equal(opts.showQrModal, true);
     assert.ok(opts.qrModalOptions, 'qrModalOptions present');
     assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
