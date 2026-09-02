@@ -332,6 +332,43 @@ function wholeFlip(value) {
   try { return BigInt(normalized); } catch (_error) { return null; }
 }
 
+// Replay math memos. Opponent bankroll snapshots arrive as strings and were
+// re-parsed to BigInt on every leaderboard paint (several times per roll per
+// player); the shooter index rescanned every frame per call. Both are keyed on
+// object identity, so a fresh run or a replaced array simply misses.
+const RACK_INPUT_CACHE = new WeakMap();
+const SHOOTER_INDEX_CACHE = new WeakMap();
+
+function parsedRackInputs(player) {
+  const cached = RACK_INPUT_CACHE.get(player);
+  if (cached
+    && cached.source === player.bankrollsFlip
+    && cached.startingRaw === player.startingBankrollFlip
+    && cached.goalRaw === player.goalFlip
+    && cached.exitRaw === player.exitAmountFlip) return cached;
+  const snapshots = Array.isArray(player.bankrollsFlip)
+    ? player.bankrollsFlip.map((amount) => wholeFlip(amount)).filter((amount) => amount != null)
+    : [];
+  const starting = wholeFlip(player.startingBankrollFlip) ?? 0n;
+  const goal = wholeFlip(player.goalFlip) ?? 0n;
+  const exitAmount = wholeFlip(player.exitAmountFlip) ?? 0n;
+  const capacity = [starting, goal, exitAmount, ...snapshots]
+    .reduce((highest, amount) => amount > highest ? amount : highest, 0n) || 1n;
+  const entry = {
+    source: player.bankrollsFlip,
+    startingRaw: player.startingBankrollFlip,
+    goalRaw: player.goalFlip,
+    exitRaw: player.exitAmountFlip,
+    snapshots,
+    starting,
+    goal,
+    exitAmount,
+    capacity,
+  };
+  RACK_INPUT_CACHE.set(player, entry);
+  return entry;
+}
+
 /** Apply a survival verdict only once its coin has visibly landed. */
 export function crapsBoundaryBankroll(bankrollFlip = 0, survival = null, {
   settled = false,
@@ -1867,6 +1904,7 @@ class AppCrapsTable extends HTMLElement {
   #leaderboardPlayerKeys = [];
   #leaderboardRanksByKey = new Map();
   #leaderboardViewerRank = null;
+  #leaderboardRowMarkup = new Map();
   #viewerBetId = null;
   #originalViewerBetId = null;
   #viewerLabel = 'YOU';
@@ -2227,6 +2265,7 @@ class AppCrapsTable extends HTMLElement {
     this.#featuredPlayerKeys = [];
     this.#feltOpponentKeys = [];
     this.#leaderboardPlayerKeys = [];
+    this.#leaderboardRowMarkup = new Map();
     this.#leaderboardRanksByKey = new Map();
     this.#leaderboardViewerRank = null;
     this.#viewerBustRank = null;
@@ -2934,6 +2973,29 @@ class AppCrapsTable extends HTMLElement {
     };
   }
 
+  #shooterIndexTable(frames) {
+    const cached = SHOOTER_INDEX_CACHE.get(frames);
+    if (cached && cached.length === frames.length && cached.last === frames[frames.length - 1]) {
+      return cached;
+    }
+    const shooters = frames.map((frame) => wholeNumber(frame?.shooter));
+    const sevenOutPrefix = new Array(frames.length + 1);
+    sevenOutPrefix[0] = 0;
+    for (let index = 0; index < frames.length; index += 1) {
+      sevenOutPrefix[index + 1] = sevenOutPrefix[index] + (this.#isSevenOut(frames[index]) ? 1 : 0);
+    }
+    const table = {
+      length: frames.length,
+      last: frames[frames.length - 1],
+      shooters,
+      allKnown: frames.length > 0 && shooters.every((shooter) => shooter != null),
+      sevenOutPrefix,
+      lastSevenOut: frames.length > 0 && this.#isSevenOut(frames[frames.length - 1]),
+    };
+    SHOOTER_INDEX_CACHE.set(frames, table);
+    return table;
+  }
+
   #runShooterIndexAtRound(roundNumber = 0) {
     const frames = this.#resolutionRun?.frames ?? [];
     const resolvedFrames = clampInteger(
@@ -2942,17 +3004,13 @@ class AppCrapsTable extends HTMLElement {
       frames.length,
       0,
     );
-    if (frames.length > 0 && frames.every((frame) => wholeNumber(frame.shooter) != null)) {
-      const upcoming = frames[resolvedFrames];
-      if (upcoming) return wholeNumber(upcoming.shooter);
-      const last = frames.at(-1);
-      return wholeNumber(last.shooter) + (this.#isSevenOut(last) ? 1 : 0);
+    const table = this.#shooterIndexTable(frames);
+    if (table.allKnown) {
+      const upcoming = table.shooters[resolvedFrames];
+      if (upcoming != null) return upcoming;
+      return table.shooters[table.length - 1] + (table.lastSevenOut ? 1 : 0);
     }
-    let shooterIndex = 0;
-    for (let index = 0; index < resolvedFrames; index += 1) {
-      if (this.#isSevenOut(frames[index])) shooterIndex += 1;
-    }
-    return shooterIndex;
+    return table.sevenOutPrefix[resolvedFrames];
   }
 
   #shooterOrdinalAtRound(roundNumber = 0) {
@@ -2976,8 +3034,8 @@ class AppCrapsTable extends HTMLElement {
     return multiplier;
   }
 
-  #featuredStandings(roundNumber = 0, localBankroll = null, roundResult = null, atRoundFlip = false, reorder = false) {
-    const standings = this.#battleStandings(roundNumber, localBankroll, roundResult, atRoundFlip);
+  #featuredStandings(roundNumber = 0, localBankroll = null, roundResult = null, atRoundFlip = false, reorder = false, precomputed = null) {
+    const standings = precomputed ?? this.#battleStandings(roundNumber, localBankroll, roundResult, atRoundFlip);
     const byKey = new Map(standings.map((entry) => [entry.key, entry]));
     const local = standings.find((entry) => entry.local);
     // Opponent stacks are opt-in. Keep at most the two players the viewer
@@ -3214,17 +3272,11 @@ class AppCrapsTable extends HTMLElement {
   }
 
   #opponentRackProgress(player, rollNumber) {
-    const snapshots = Array.isArray(player.bankrollsFlip)
-      ? player.bankrollsFlip.map((amount) => wholeFlip(amount)).filter((amount) => amount != null)
-      : [];
-    const starting = wholeFlip(player.startingBankrollFlip) ?? 0n;
-    const goal = wholeFlip(player.goalFlip) ?? 0n;
-    const exitAmount = wholeFlip(player.exitAmountFlip) ?? 0n;
+    const { snapshots, starting, exitAmount } = parsedRackInputs(player);
     let snapshot = rollNumber > 0 && snapshots.length > 0
       ? snapshots[Math.min(rollNumber - 1, snapshots.length - 1)]
       : starting;
-    const knownAmounts = [starting, goal, exitAmount, ...snapshots];
-    let capacity = knownAmounts.reduce((highest, amount) => amount > highest ? amount : highest, 0n) || 1n;
+    let { capacity } = parsedRackInputs(player);
     const exact = snapshots.length > 0;
     if (!exact) {
       const exitRoll = Math.max(1, Number(player.exitRoll) || 1);
@@ -3638,9 +3690,6 @@ class AppCrapsTable extends HTMLElement {
     const host = this.querySelector('[data-bind="craps-battle-board"]');
     const rows = this.querySelector('[data-bind="craps-battle-rows"]');
     if (!host || !rows) return [];
-    const previousPositions = new Map([...rows.querySelectorAll('[data-battle-key]')].map((rack) => (
-      [rack.dataset.battleKey, rack.getBoundingClientRect?.()]
-    )));
     const standings = this.#battleStandings(roundNumber, localBankroll, roundResult, atRoundFlip);
     const localStanding = standings.find((entry) => entry.local);
     const localRank = this.#localRankAtRound(roundNumber, localStanding?.rank, standings);
@@ -3666,7 +3715,7 @@ class AppCrapsTable extends HTMLElement {
         } : null;
       })
       .filter(Boolean);
-    const featured = this.#featuredStandings(roundNumber, localBankroll, roundResult, atRoundFlip, reorder);
+    const featured = this.#featuredStandings(roundNumber, localBankroll, roundResult, atRoundFlip, reorder, standings);
     const feltRivalKeys = new Set(featured.filter((entry) => !entry.local).map((entry) => entry.key));
     host.dataset.leader = visibleStandings[0]?.local ? 'you' : 'other';
     rows.dataset.count = String(visibleStandings.length);
@@ -3679,7 +3728,16 @@ class AppCrapsTable extends HTMLElement {
       { length: CRAPS_RACK_SLOTS },
       () => '<i class="df-bankroll__chip craps-battle-rack__chip"></i>',
     ).join('');
-    rows.innerHTML = visibleStandings.map((entry) => {
+    const visibleKeys = visibleStandings.map((entry) => entry.key);
+    const existingRacks = [...rows.querySelectorAll('[data-battle-key]')];
+    const sameOrder = existingRacks.length === visibleKeys.length
+      && existingRacks.every((rack, index) => rack.dataset?.battleKey === visibleKeys[index]);
+    // Rank-shift geometry is only needed when rows can move. Reading it on
+    // every paint forced a layout per row per roll.
+    const previousPositions = new Map(sameOrder
+      ? []
+      : existingRacks.map((rack) => [rack.dataset.battleKey, rack.getBoundingClientRect?.()]));
+    const rowMarkup = visibleStandings.map((entry) => {
       // Keep initials behind the live Discord portrait. If Discord rotates or
       // removes an avatar URL, its load error drops cleanly to this fallback.
       const avatar = `<b>${escapeHtml(entry.initials)}</b>${entry.avatar
@@ -3780,13 +3838,35 @@ class AppCrapsTable extends HTMLElement {
           <span class="craps-battle-rack__chips craps-run-rail__rack" aria-hidden="true">${chipMarkup}</span>
         </span>${coin}
       </article>`;
-    }).join('');
-    for (const portrait of rows.querySelectorAll('.craps-battle-rack__avatar img')) {
-      portrait.addEventListener?.('error', () => portrait.remove?.(), { once: true });
+    });
+    const rackByKey = new Map();
+    if (sameOrder) {
+      // Same rows in the same order: replace only the racks whose markup
+      // changed. Untouched racks keep their nodes, portraits and in-flight
+      // CSS animations instead of being rebuilt on every roll.
+      visibleStandings.forEach((entry, index) => {
+        const html = rowMarkup[index];
+        let rack = existingRacks[index];
+        if (this.#leaderboardRowMarkup.get(entry.key) !== html) {
+          rack = this.#replaceLeaderboardRack(rack, html);
+        }
+        rackByKey.set(entry.key, rack);
+      });
+    } else {
+      rows.innerHTML = rowMarkup.join('');
+      this.#watchLeaderboardPortraits(rows);
+      for (const rack of rows.querySelectorAll('[data-battle-key]')) {
+        rackByKey.set(rack.dataset.battleKey, rack);
+      }
     }
+    this.#leaderboardRowMarkup = new Map(
+      visibleStandings.map((entry, index) => [entry.key, rowMarkup[index]]),
+    );
+    // Write phase: every rack's pips, with no geometry read in between. A
+    // rack whose pip layout is unchanged since its last paint is skipped: the
+    // fifty-chip class sweep is the bulk of a leaderboard paint's style work.
     visibleStandings.forEach((entry) => {
-      const rack = [...rows.querySelectorAll('[data-battle-key]')]
-        .find((candidate) => candidate.dataset.battleKey === entry.key);
+      const rack = rackByKey.get(entry.key);
       if (!rack) return;
       const chips = [...rack.querySelectorAll('.craps-battle-rack__chip')];
       const layout = this.#battleRackChipLayout(
@@ -3794,20 +3874,58 @@ class AppCrapsTable extends HTMLElement {
         chips.length,
         entry.battleAwardFlip ?? entry.amount,
       );
+      const signature = [
+        chips.length,
+        layout?.filledCount ?? layout?.chipCount ?? 0,
+        layout?.bankedCount ?? 0,
+        layout?.shooterAddedStart ?? -1,
+        layout?.shooterAddedCount ?? 0,
+        layout?.inPlay === 0n ? 1 : 0,
+        entry.reserveState ?? 'safe',
+      ].join('|');
+      if (rack.dataset?.pipSignature === signature) return;
       this.#paintRackPips(chips, layout, {
         reserveState: entry.reserveState,
       });
-      const previous = previousPositions.get(entry.key);
-      const current = rack.getBoundingClientRect?.();
-      const dx = Number(previous?.left) - Number(current?.left);
-      const dy = Number(previous?.top) - Number(current?.top);
-      if (Number.isFinite(dx) && Number.isFinite(dy) && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
-        rack.style?.setProperty?.('--craps-rank-shift-x', `${dx}px`);
-        rack.style?.setProperty?.('--craps-rank-shift-y', `${dy}px`);
-        rack.classList?.add('is-rank-shifting');
-      }
+      if (rack.dataset) rack.dataset.pipSignature = signature;
     });
+    // Read phase (one layout for every rack), then the shift writes.
+    if (previousPositions.size > 0) {
+      const moved = visibleStandings.map((entry) => {
+        const rack = rackByKey.get(entry.key);
+        return { rack, previous: previousPositions.get(entry.key), current: rack?.getBoundingClientRect?.() };
+      });
+      for (const { rack, previous, current } of moved) {
+        if (!rack) continue;
+        const dx = Number(previous?.left) - Number(current?.left);
+        const dy = Number(previous?.top) - Number(current?.top);
+        if (Number.isFinite(dx) && Number.isFinite(dy) && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+          rack.style?.setProperty?.('--craps-rank-shift-x', `${dx}px`);
+          rack.style?.setProperty?.('--craps-rank-shift-y', `${dy}px`);
+          rack.classList?.add('is-rank-shifting');
+        }
+      }
+    }
     return visibleStandings;
+  }
+
+  #replaceLeaderboardRack(rack, html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const next = template.content?.firstElementChild ?? null;
+    if (!next || typeof rack?.replaceWith !== 'function') return rack;
+    rack.replaceWith(next);
+    this.#watchLeaderboardPortraits(next);
+    return next;
+  }
+
+  #watchLeaderboardPortraits(root) {
+    if (typeof root?.querySelectorAll !== 'function') return;
+    for (const portrait of root.querySelectorAll('.craps-battle-rack__avatar img')) {
+      // If Discord rotates or removes an avatar URL, its load error drops
+      // cleanly to the initials behind it.
+      portrait.addEventListener?.('error', () => portrait.remove?.(), { once: true });
+    }
   }
 
   #paintOpponentRacks(roundNumber = 0, roundResult = null, atRoundFlip = false, reorder = false) {
