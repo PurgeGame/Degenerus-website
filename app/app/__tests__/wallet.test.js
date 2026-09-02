@@ -561,10 +561,16 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
   }
 
   // Build a mock EthereumProvider factory whose init() returns a wc-shaped object.
-  function makeMockWcFactory({ session = null, accounts = [], chainId = 84532, connectImpl } = {}) {
+  function makeMockWcFactory({
+    session = null,
+    accounts = [],
+    chainId = 84532,
+    connectImpl,
+    requestImpl,
+  } = {}) {
     const initCalls = [];
     const connectCalls = [];
-    const disconnectCalls = [];
+    const requestCalls = [];
     const wcListeners = {};
     const wcInstance = {
       session,
@@ -576,16 +582,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         connectCalls.push(Date.now());
         if (typeof connectImpl === 'function') await connectImpl();
       },
-      disconnect: async () => {
-        disconnectCalls.push(Date.now());
-        wcInstance.session = null;
-        accounts = [];
+      request: async (payload) => {
+        requestCalls.push(payload);
+        return typeof requestImpl === 'function' ? requestImpl(payload, wcInstance) : null;
       },
-      request: async () => null,
       on: (ev, fn) => { (wcListeners[ev] = wcListeners[ev] || []).push(fn); },
       _initCalls: initCalls,
       _connectCalls: connectCalls,
-      _disconnectCalls: disconnectCalls,
+      _requestCalls: requestCalls,
       _wcListeners: wcListeners,
       _setAccounts: (a) => { accounts = a; },
       _setSession: (s) => { wcInstance.session = s; },
@@ -646,13 +650,13 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(ev, 'wallet-connected dispatched');
   });
 
-  test('init opts require the configured beta chain, showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
+  test('init opts keep Base Sepolia optional for MetaMask Mobile pairing, showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
     const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: ['0xab000000000000000000000000000000000000ab'] });
     wallet._testInjectWcFactory(factory);
     await wallet._testEnsureWcProvider();
     const opts = wcInstance._initCalls[0];
-    assert.deepEqual(opts.chains, [84532], 'Base Sepolia is the required WalletConnect chain');
-    assert.equal(opts.optionalChains, undefined, 'Ethereum mainnet is not advertised during beta');
+    assert.deepEqual(opts.optionalChains, [84532, 1], 'Base Sepolia and the wallet default are optional');
+    assert.equal(opts.chains, undefined, 'custom beta chain is not a required pairing namespace');
     assert.equal(opts.showQrModal, true);
     assert.ok(opts.qrModalOptions, 'qrModalOptions present');
     assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
@@ -688,7 +692,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(wcInstance._connectCalls.length, 0, 'wc.connect NEVER called on resume path');
   });
 
-  test('autoReconnect WC branch: drops a persisted wrong-chain session for clean Base Sepolia reconnect', async () => {
+  test('autoReconnect WC branch: preserves a wrong-chain session so the user can switch it', async () => {
     _localStore.set('lastWalletRdns', 'walletconnect:v2');
     const { factory, wcInstance } = makeMockWcFactory({
       session: { topic: 'old-mainnet-session' },
@@ -696,10 +700,37 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       chainId: 1,
     });
     wallet._testInjectWcFactory(factory);
+    _storeUpdates.length = 0;
     const result = await wallet.autoReconnect();
-    assert.equal(result, false, 'wrong-chain session is not restored');
-    assert.equal(wcInstance._disconnectCalls.length, 1, 'stale mainnet session disconnected');
-    assert.equal(_localStore.has('lastWalletRdns'), false, 'stale reconnect sentinel cleared');
+    assert.equal(result, true, 'wrong-chain wallet remains connected');
+    assert.equal(wcInstance._requestCalls.length, 0, 'silent reconnect never opens a switch prompt');
+    assert.equal(_localStore.get('lastWalletRdns'), 'walletconnect:v2', 'session remains available');
+    assert.ok(
+      _storeUpdates.some(([path, value]) => path === 'ui.chainOk' && value === false),
+      'UI exposes Wrong Network for a user-initiated retry',
+    );
+  });
+
+  test('connectWalletConnect keeps a default-mainnet MetaMask session and requests Base Sepolia', async () => {
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: { topic: 'metamask-mobile' },
+      accounts: ['0xBb00000000000000000000000000000000000077'],
+      chainId: 1,
+    });
+    wallet._testInjectWcFactory(factory);
+    _storeUpdates.length = 0;
+    const result = await wallet.connectWalletConnect();
+    await Promise.resolve();
+    assert.ok(result, 'wrong-chain pairing still returns a connected provider');
+    assert.equal(wcInstance._connectCalls.length, 0, 'existing pairing is reused');
+    assert.deepEqual(wcInstance._requestCalls[0], {
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x14a34' }],
+    });
+    assert.ok(
+      _storeUpdates.some(([path, value]) => path === 'connected.address' && Boolean(value)),
+      'wallet address is published before switch completion',
+    );
   });
 
   test('connectWalletConnect: listeners attached BEFORE store mutations (WR-05 ordering preserved)', async () => {
