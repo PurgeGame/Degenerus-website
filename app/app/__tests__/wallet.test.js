@@ -551,10 +551,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
   // The stub mirrors the test mock pattern: .provider points at the wrapped
   // wc instance directly so attachListeners attaches to the wc.on listener map.
   class StubBrowserProvider {
-    constructor(wc) {
+    static instances = [];
+
+    constructor(wc, network = null) {
       this._wc = wc;
+      this.network = network;
       this.provider = wc;
       this.providerInfo = null;
+      StubBrowserProvider.instances.push(this);
     }
     async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
     async getSigner() { return { getAddress: async () => this._wc.accounts?.[0] || null }; }
@@ -620,6 +624,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
   // event-name validation.
   beforeEach(() => {
     if (typeof wallet._testResetWcSingleton === 'function') wallet._testResetWcSingleton();
+    StubBrowserProvider.instances.length = 0;
     if (typeof wallet._testInjectWcBrowserProviderCtor === 'function') {
       wallet._testInjectWcBrowserProviderCtor(StubBrowserProvider);
     }
@@ -743,6 +748,45 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       _storeUpdates.some(([path, value]) => path === 'connected.address' && Boolean(value)),
       'wallet address is published before switch completion',
     );
+  });
+
+  test('WalletConnect chain switch replaces the pre-switch ethers provider before writes', async () => {
+    const account = '0xBb00000000000000000000000000000000000077';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'metamask-mobile',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
+            chains: ['eip155:1', 'eip155:84532'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 1,
+      requestImpl: async (payload, wc) => {
+        if (payload.method === 'wallet_switchEthereumChain') {
+          wc.chainId = 84532;
+          for (const fn of wc._wcListeners.chainChanged || []) fn('0x14a34');
+          return null;
+        }
+        if (payload.method === 'eth_chainId') return '0x14a34';
+        return null;
+      },
+    });
+    wcInstance.isWalletConnect = true;
+    wallet._testInjectWcFactory(factory);
+
+    const connectedProvider = await wallet.connectWalletConnect();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(connectedProvider.network, 'any', 'WC BrowserProvider accepts a chain transition');
+    assert.ok(StubBrowserProvider.instances.length >= 2,
+      'Base chain event discards the wrapper that could have cached Ethereum');
+    assert.notStrictEqual(contractsMod.getProvider(), connectedProvider,
+      'contract writes use the fresh post-switch provider');
+    assert.equal(contractsMod.getProvider().network, 'any');
+    assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
   test('ensureConfiguredWalletChain re-pairs a WC session that does not authorize Base Sepolia', async () => {

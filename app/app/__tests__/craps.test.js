@@ -1377,7 +1377,7 @@ test('contract errors map to actionable craps copy', () => {
 // ---------------------------------------------------------------------------
 
 const WINDOW_HEAD = 46_300_000;
-const WINDOW_LOOKBACK = 45_000;
+const WINDOW_LOOKBACK = 2_400;
 const WINDOW_TAIL = 12;
 const WINDOW_DAY = 42;
 // Digits only. An address with letters comes back checksummed from an ethers
@@ -1574,8 +1574,8 @@ test('the craps window refresh asks for the reorg tail and replaces the rows ins
   assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
   assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 5_000n * WINDOW_WEI);
   assert.deepEqual(paths, [
-    '/game/craps/events?lookback=45000',
-    `/game/craps/events?lookback=45000&since=${WINDOW_HEAD - WINDOW_TAIL}`,
+    '/game/craps/events?lookback=2400',
+    `/game/craps/events?lookback=2400&since=${WINDOW_HEAD - WINDOW_TAIL}`,
   ]);
   assert.equal(provider.calls.length, 0);
 });
@@ -1607,7 +1607,7 @@ test('the craps window mirrors its cursor to localStorage so a reload pays only 
   });
   try {
     assert.equal(await reloaded.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
-    assert.deepEqual(paths, [`/game/craps/events?lookback=45000&since=${WINDOW_HEAD - WINDOW_TAIL}`]);
+    assert.deepEqual(paths, [`/game/craps/events?lookback=2400&since=${WINDOW_HEAD - WINDOW_TAIL}`]);
     assert.equal(provider.calls.length, 0, 'a revived window never rescans the chain');
   } finally {
     reloaded.__resetCrapsContractFactoryForTest();

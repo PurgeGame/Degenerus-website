@@ -164,8 +164,16 @@ export async function ensureConfiguredWalletChain() {
   }
 
   const switched = await switchToSepolia(raw);
-  if (switched) update('ui.chainOk', true);
-  return switched;
+  if (!switched) return false;
+  if (raw.isWalletConnect === true) {
+    const activeChainId = await _readEip1193ChainId(raw);
+    const chainOk = activeChainId === CHAIN.id;
+    if (chainOk) _refreshWcBrowserProvider(raw);
+    update('ui.chainOk', chainOk);
+    return chainOk;
+  }
+  update('ui.chainOk', true);
+  return true;
 }
 
 /**
@@ -206,6 +214,34 @@ let _wcEthereumProviderFactory = null;
 // the wrapped provider's internal subscription system. In production this is
 // always the imported BrowserProvider from ethers.
 let _wcBrowserProviderCtor = null;
+
+// A WalletConnect session can pair on the wallet's current chain and switch to
+// the beta chain a moment later. ethers pins the first network detected by a
+// BrowserProvider unless it is constructed with "any"; keeping the pre-switch
+// wrapper then makes every signer/static-call fail with NETWORK_ERROR even
+// though MetaMask and the UI both show Base Sepolia. Build WC wrappers in
+// any-network mode and replace the active wrapper whenever WC reports the
+// configured chain so no pre-switch network cache reaches a write.
+function _newWcBrowserProvider(wc) {
+  const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
+  return new BPCtor(wc, 'any');
+}
+
+function _refreshWcBrowserProvider(wc) {
+  const browserProvider = _newWcBrowserProvider(wc);
+  setProvider(browserProvider);
+  return browserProvider;
+}
+
+async function _readEip1193ChainId(raw) {
+  try {
+    const value = await raw?.request?.({ method: 'eth_chainId' });
+    if (typeof value === 'string' && value.trim()) return Number(BigInt(value));
+    if (typeof value === 'number' || typeof value === 'bigint') return Number(value);
+  } catch (_e) { /* fall back to the provider's public chainId below */ }
+  const fallback = Number(raw?.chainId);
+  return Number.isFinite(fallback) ? fallback : null;
+}
 
 export function onUserPickedWallet(info) {
   if (_pickerResolve) {
@@ -307,8 +343,7 @@ export async function connectWalletConnect() {
   }
   if (!wc.accounts || wc.accounts.length === 0) return null;
 
-  const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
-  const browserProvider = new BPCtor(wc);
+  const browserProvider = _newWcBrowserProvider(wc);
   // WR-05: attach EIP-1193 listeners BEFORE returning so chainChanged /
   // accountsChanged events fired during WC session establishment are not lost.
   attachListeners(browserProvider, wc);
@@ -328,8 +363,15 @@ export async function connectWalletConnect() {
     // unsupported, or deep-link-blocked switch must not undo the successful
     // wallet connection. The now-connected Wrong Network controls provide a
     // fresh user gesture for retrying; chainChanged also updates this flag.
-    void switchToSepolia(wc).then((switched) => {
-      if (switched) update('ui.chainOk', true);
+    void switchToSepolia(wc).then(async (switched) => {
+      if (!switched) return;
+      // Do not publish a signable state merely because the switch request
+      // resolved. Verify WC's active CAIP chain, then discard the wrapper that
+      // may already have cached the wallet's pre-switch Ethereum network.
+      const activeChainId = await _readEip1193ChainId(wc);
+      if (activeChainId !== CHAIN.id) return;
+      _refreshWcBrowserProvider(wc);
+      update('ui.chainOk', true);
     }).catch(() => {});
   }
   return browserProvider;
@@ -522,8 +564,7 @@ export async function autoReconnect() {
     try {
       const wc = await _ensureWcProvider();
       if (!wc.session || !wc.accounts || wc.accounts.length === 0) return false;
-      const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
-      const browserProvider = new BPCtor(wc);
+      const browserProvider = _newWcBrowserProvider(wc);
       // WR-05: attach listeners BEFORE consuming wc state so chainChanged
       // events fired during silent resume are not lost.
       attachListeners(browserProvider, wc);
@@ -597,8 +638,12 @@ function attachListeners(browserProvider, rawProvider = null) {
       // per-account chain settings, e.g., MetaMask Snap, Coinbase Wallet).
       // Re-derive ui.chainOk so the banner / button-enable state stay in sync
       // even before any user-driven write triggers assertChain().
-      const network = await browserProvider.getNetwork().catch(() => null);
-      update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
+      if (eth?.isWalletConnect === true) {
+        update('ui.chainOk', Number(eth.chainId) === CHAIN.id);
+      } else {
+        const network = await browserProvider.getNetwork().catch(() => null);
+        update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
+      }
       // DO NOT touch ui.mode here — view-mode is derived from viewing.address vs
       // connected.address (handled in plan 58-02 store.js deriveMode subscriber).
       document.dispatchEvent(new CustomEvent('wallet-connected', {
@@ -613,7 +658,14 @@ function attachListeners(browserProvider, rawProvider = null) {
     // but buggy/malicious wallet extensions can pass a number, object, or
     // undefined. Compare lowercased per EIP-695 (some wallets return uppercase).
     const hex = (typeof hexId === 'string') ? hexId.toLowerCase() : null;
-    update('ui.chainOk', hex !== null && hex === CHAIN.hexId.toLowerCase());
+    const chainOk = hex !== null && hex === CHAIN.hexId.toLowerCase();
+    if (chainOk && eth?.isWalletConnect === true) {
+      // The existing BrowserProvider may have detected the wallet's old chain
+      // between pairing and this event. A fresh wrapper is the only reliable
+      // way to clear ethers' pinned network promise before a purchase preflight.
+      _refreshWcBrowserProvider(eth);
+    }
+    update('ui.chainOk', chainOk);
     // CRITICAL: NO page refresh on chainChanged — preserves ?as= URL state for
     // view-mode users (T-58-06). The store update is sufficient to drive UI re-render.
   });
@@ -672,6 +724,12 @@ async function _attachSilentlyFor(addr) {
     if (getProvider()) {
       // Provider already live (our own connect flow) — only the chain flag can
       // be stale here.
+      if (_eip1193?.isWalletConnect === true) {
+        // Avoid teaching ethers' BrowserProvider the pre-switch chain during
+        // connectWalletConnect()'s wallet-connected bridge event.
+        update('ui.chainOk', Number(_eip1193.chainId) === CHAIN.id);
+        return;
+      }
       const net = await getProvider().getNetwork().catch(() => null);
       update('ui.chainOk', net ? Number(net.chainId) === CHAIN.id : null);
       return;

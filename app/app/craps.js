@@ -6,7 +6,7 @@
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
-import { CHAIN, CONTRACTS } from './chain-config.js';
+import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from './chain-config.js';
 // READ transport only. Everything money-in below still goes wallet -> contract,
 // and the lobby window keeps its eth_getLogs path as a fallback, so a dead API
 // costs the lobby bandwidth rather than correctness.
@@ -151,8 +151,8 @@ const CRAPS_LOG_LOOKBACK_MAX_BLOCKS = 45_000;
 const CRAPS_LOG_LOOKBACK_MIN_BLOCKS = 1_800;
 const CRAPS_LOG_LOOKBACK_DAYS = 4;
 function crapsLogLookbackBlocks() {
-  const daySeconds = Number(CHAIN.daySeconds);
-  const blockSeconds = Number(CHAIN.blockSeconds);
+  const daySeconds = Number(CRAPS_SCHEDULE?.daySeconds);
+  const blockSeconds = Number(CRAPS_SCHEDULE?.blockSeconds);
   if (!(daySeconds > 0) || !(blockSeconds > 0)) return CRAPS_LOG_LOOKBACK_MAX_BLOCKS;
   const blocks = Math.ceil((CRAPS_LOG_LOOKBACK_DAYS * daySeconds) / blockSeconds);
   return Math.min(CRAPS_LOG_LOOKBACK_MAX_BLOCKS, Math.max(CRAPS_LOG_LOOKBACK_MIN_BLOCKS, blocks));
