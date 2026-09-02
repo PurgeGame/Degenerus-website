@@ -1159,6 +1159,9 @@ function makeFakePrewarmContract(opts = {}) {
     connect(_signer) { return this; },
     _calls: calls,
   };
+  if (opts.purchaseInfo != null) {
+    c.purchaseInfo = async () => opts.purchaseInfo;
+  }
   return c;
 }
 
@@ -1271,6 +1274,71 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     // The returned promise resolves to the tx response.
     const tx = await promise;
     assert.equal(tx.hash, '0xtx-hash-from-prewarm');
+  });
+
+  test('WalletConnect buildTx dispatches raw eth_sendTransaction in the click frame', async () => {
+    const hash = `0x${'12'.repeat(32)}`;
+    const rawCalls = [];
+    const raw = {
+      isWalletConnect: true,
+      request(payload) {
+        rawCalls.push(payload);
+        return Promise.resolve(hash);
+      },
+    };
+    const receipt = { status: 1, hash, logs: [] };
+    fakeProvider.getRpcTransaction = (tx) => ({
+      from: tx.from,
+      to: tx.to,
+      data: tx.data,
+      value: `0x${BigInt(tx.value ?? 0n).toString(16)}`,
+      gas: `0x${BigInt(tx.gasLimit ?? 0n).toString(16)}`,
+    });
+    fakeProvider.waitForTransaction = async (txHash) => {
+      assert.equal(txHash, hash);
+      return receipt;
+    };
+
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0,
+      lootboxQuantity: 1,
+      eip1193Provider: raw,
+    });
+    let microtaskRanFirst = false;
+    Promise.resolve().then(() => { microtaskRanFirst = true; });
+    const promise = result.buildTx();
+
+    assert.equal(rawCalls.length, 1, 'raw WalletConnect request starts synchronously');
+    assert.equal(microtaskRanFirst, false, 'no microtask runs before the wallet request');
+    assert.equal(rawCalls[0].method, 'eth_sendTransaction');
+    assert.equal(rawCalls[0].params[0].from, CONNECTED);
+    assert.equal(fakeSigner._calls.sendTransaction.length, 0,
+      'ethers sendTransaction preflight cannot delay the WalletConnect request');
+    const tx = await promise;
+    assert.equal(tx.hash, hash);
+    assert.equal(await tx.wait(), receipt);
+  });
+
+  test('foil pre-warm quotes and simulates the exact additive foil value', async () => {
+    const priceWei = 80n;
+    fakeContract = makeFakePrewarmContract({
+      purchaseInfo: [36n, true, false, false, priceWei],
+    });
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0,
+      boxOrder: 0n,
+      foil: true,
+    });
+
+    const expectedFoilCost = lootboxMod.foilPackCostFromPriceWei(priceWei);
+    const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
+    assert.equal(args[5], true, 'foil flag reaches purchase');
+    assert.equal(txOverrides.value, expectedFoilCost, 'wallet value includes the exact foil cost');
+    assert.equal(result.foilCostWei, expectedFoilCost);
+    assert.equal(result.ticketPriceWei, priceWei);
+    assert.equal(fakeContract._calls.purchaseStaticCall.length, 1, 'foil tx is simulated before click');
   });
 
   test('requireSelf() called BEFORE provider.getSigner() — rejects with thrown error', async () => {

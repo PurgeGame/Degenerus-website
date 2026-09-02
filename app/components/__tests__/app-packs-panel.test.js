@@ -1176,8 +1176,8 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
 //   5. Disconnect cleanup aborts pending pre-warm + clears debounce timer.
 //   6. R11 fallback when cache is stale OR lootboxQuantity > 1.
 //   7. Pre-warm error disables Buy + shows reason inline.
-//   8. Other 10 panel files do NOT contain `prewarmLootboxBuy` token (D-02
-//      LOCKED scope source-grep assertion).
+//   8. Unrelated panels do NOT contain `prewarmLootboxBuy`; the mounted
+//      app-decimator replacement now shares the mobile-safe path.
 //   9. Chain-advance trigger (BLOCKER 2 fix) — app.lastDay update fires
 //      pre-warm refresh after debounce settles.
 // ===========================================================================
@@ -1582,9 +1582,8 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
     el.disconnectedCallback();
   });
 
-  test('D-02 LOCKED scope — sibling 10 panel files do NOT contain `prewarmLootboxBuy`', () => {
+  test('mobile pre-warm stays limited to the two purchase panels', () => {
     const SIBLING_PANELS = [
-      'app-decimator-panel.js',
       'app-pass-section.js',
       'app-coinflip-panel.js',
       'app-degenerette-panel.js',
@@ -1601,6 +1600,10 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
       assert.equal(src.includes('prewarmLootboxBuy'), false,
         `D-02 LOCKED scope violation: ${f} must NOT import prewarmLootboxBuy`);
     }
+    const replacementPath = pathModForGrep.join(__dirnameGrep, '..', 'app-decimator-panel.js');
+    const replacementSrc = fsModForGrep.readFileSync(replacementPath, 'utf8');
+    assert.equal(replacementSrc.includes('prewarmLootboxBuy'), true,
+      'the mounted replacement purchase panel inherits the WalletConnect pre-warm');
   });
 
   test('Synchronous click invariant — populated tx contains pre-fetched gasLimit', async () => {

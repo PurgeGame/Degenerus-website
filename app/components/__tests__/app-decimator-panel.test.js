@@ -339,6 +339,7 @@ import * as storeMod from '../../app/store.js';
 import * as decimatorMod from '../../app/decimator.js';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
+import * as walletMod from '../../app/wallet.js';
 import * as claimsMod from '../../app/claims.js';
 import * as passesMod from '../../app/passes.js';
 import * as coinflipMod from '../../app/coinflip.js';
@@ -1246,6 +1247,75 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'double-click invokes purchase exactly once (#busy debounce)',
     );
     el.disconnectedCallback();
+  });
+
+  test('WalletConnect Buy dispatches eth_sendTransaction synchronously from the tap', async () => {
+    const hash = `0x${'34'.repeat(32)}`;
+    const rawCalls = [];
+    const signer = {
+      getAddress: async () => CONNECTED,
+      estimateGas: async () => 21000n,
+      sendTransaction: async () => { throw new Error('ethers send path must not run'); },
+    };
+    const receipt = { status: 1, hash, logs: [] };
+    const provider = {
+      ...makeFakeProvider(CONNECTED),
+      getSigner: async () => signer,
+      getRpcTransaction: (tx) => ({
+        from: tx.from,
+        to: tx.to,
+        data: tx.data,
+        value: `0x${BigInt(tx.value ?? 0n).toString(16)}`,
+        gas: `0x${BigInt(tx.gasLimit ?? 0n).toString(16)}`,
+      }),
+      waitForTransaction: async (txHash) => {
+        assert.equal(txHash, hash);
+        return receipt;
+      },
+    };
+    const fakeContract = makeFakePurchaseContract({
+      purchaseInfo: [36n, true, false, false, 80_000_000_000n],
+    });
+    fakeContract.purchase.populateTransaction = async (...args) => ({
+      to: '0xc0ffee0000000000000000000000000000000000',
+      data: '0xdeadbeef',
+      value: args.at(-1)?.value ?? 0n,
+    });
+    const raw = {
+      isWalletConnect: true,
+      on() {},
+      request(payload) {
+        rawCalls.push(payload);
+        return Promise.resolve(hash);
+      },
+    };
+
+    contractsMod.setProvider(provider);
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    walletMod._testAttachListeners(provider, raw);
+    storeMod.update('ui.chainOk', true);
+    const el = instantiate();
+    try {
+      await settle(60);
+      el.querySelector('[data-bind="dec-ticket-add-ticket"]').dispatchEvent({ type: 'click' });
+      await new Promise((resolve) => setTimeout(resolve, 190));
+      await settle(30);
+
+      let microtaskRanFirst = false;
+      Promise.resolve().then(() => { microtaskRanFirst = true; });
+      el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+
+      assert.equal(rawCalls.length, 1, 'wallet request starts during click dispatch');
+      assert.equal(microtaskRanFirst, false, 'no await precedes WalletConnect request');
+      assert.equal(rawCalls[0].method, 'eth_sendTransaction');
+      assert.equal(rawCalls[0].params[0].from, CONNECTED);
+      await settle(60);
+      assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
+        'confirmed pre-warmed purchase clears the draft');
+    } finally {
+      el.disconnectedCallback();
+      walletMod.disconnect();
+    }
   });
 
   test('Buy In quotes and submits while every database request is still blocked', async () => {
