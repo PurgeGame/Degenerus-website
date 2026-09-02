@@ -19,6 +19,8 @@ import { clearPendingActions, publishPendingActions } from './pending-actions.js
 import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
 import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
 import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
+import { registerComponentPoll } from './component-poll.js';
+import { fetchJSON } from './api.js';
 
 const SOURCE = 'launch-claims';
 const POLL_MS = 30_000;
@@ -26,6 +28,9 @@ const FAST_RETRY_MS = 1_500;
 const FOIL_LOG_CHUNK_BLOCKS = 20_000;
 const FOIL_LOG_MAX_CHUNKS = 12;
 const FOIL_SCAN_VERSION = 1;
+// A dead/old API must not get hammered every poll, but a 404 also must not
+// calcify into a permanent "route missing" verdict beyond this session.
+const FOIL_LEVELS_API_FAILURE_MEMO_MS = 5 * 60 * 1000;
 
 const GAME_CLAIM_READ_ABI = [
   'function claimAffiliateDgnrs(address player) external',
@@ -55,9 +60,11 @@ let _txConfirmedListener = null;
 let _resultAbortListener = null;
 let _contractFactory = null;
 let _readProvider = null;
+let _fetch = fetchJSON;
 const _foilCache = new Map();
 const _outcomeCache = new Map();
 const _revealedReferralBonuses = new Set();
+const _foilLevelsApiFailureMemo = new Map();
 const _affiliateClaimInterface = new ethers.Interface(GAME_CLAIM_READ_ABI);
 
 function _contract(address, abi, runner) {
@@ -263,10 +270,60 @@ function _writeFoilCache(player, value) {
   catch (_e) { /* memory cache remains */ }
 }
 
-async function _readPlayerFoilLevels(player) {
-  const provider = _readerProvider();
-  if (!provider || !player || !CONTRACTS.GAME) return { levels: [], complete: false };
+function _foilLevelsApiFailedRecently(owner) {
+  const expiresAt = _foilLevelsApiFailureMemo.get(owner);
+  if (expiresAt == null) return false;
+  if (Date.now() >= expiresAt) {
+    _foilLevelsApiFailureMemo.delete(owner);
+    return false;
+  }
+  return true;
+}
+
+/** API-first foil-level discovery. Returns null (never a bare array) on failure. */
+async function _apiFoilLevels(player, cache) {
+  const owner = _lower(player);
+  if (!owner || _foilLevelsApiFailedRecently(owner)) return null;
+  try {
+    const payload = await _fetch(`/player/${owner}/facts?names=FoilPackBought`);
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const levels = new Set(cache.levels);
+    for (const row of events) {
+      if (String(row?.name) !== 'FoilPackBought') continue;
+      const level = Number(row?.args?.level);
+      if (Number.isInteger(level) && level >= 0) levels.add(level);
+    }
+    const toBlock = Number(payload?.toBlock);
+    const next = {
+      version: FOIL_SCAN_VERSION,
+      throughBlock: Number.isFinite(toBlock) ? toBlock : cache.throughBlock,
+      levels: [...levels].sort((a, b) => a - b),
+    };
+    _writeFoilCache(player, next);
+    return { levels: next.levels, complete: true };
+  } catch (_e) {
+    _foilLevelsApiFailureMemo.set(owner, Date.now() + FOIL_LEVELS_API_FAILURE_MEMO_MS);
+    return null;
+  }
+}
+
+/**
+ * API-first foil-pack level discovery. The chain scan below survives only as
+ * a fallback when the API throws, and only when the caller allows it: a
+ * gameState-triggered refresh is too frequent to re-run an RPC log scan on
+ * every publish, so it passes `allowChainFallback: false` and settles for the
+ * last cached levels while an API failure is memoized; only the slower 30s
+ * poll (and other one-off triggers) actually retries the chain.
+ */
+async function _readPlayerFoilLevels(player, { allowChainFallback = true } = {}) {
+  if (!player || !CONTRACTS.GAME) return { levels: [], complete: false };
   const cache = _readFoilCache(player);
+  const apiResult = await _apiFoilLevels(player, cache);
+  if (apiResult) return apiResult;
+  if (!allowChainFallback) return { levels: [...cache.levels], complete: false };
+
+  const provider = _readerProvider();
+  if (!provider) return { levels: [...cache.levels], complete: false };
   let head;
   try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return { levels: [...cache.levels], complete: false }; }
@@ -511,6 +568,9 @@ async function _goldenTicketItems(address, levels, currentLevel) {
 
 function _scheduleFastRetry() {
   if (!_running || _fastRetry != null || typeof setTimeout !== 'function') return;
+  // An incomplete scan retries quickly only while someone can see the result;
+  // the shared poll's visible catch-up resumes an interrupted scan on return.
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   _fastRetry = setTimeout(() => {
     _fastRetry = null;
     void refreshLaunchClaims();
@@ -518,7 +578,14 @@ function _scheduleFastRetry() {
   try { _fastRetry?.unref?.(); } catch (_e) { /* browser timer */ }
 }
 
-export async function refreshLaunchClaims() {
+/**
+ * @param {{allowChainFallback?: boolean}} [options] `allowChainFallback: false`
+ * for the high-frequency app.gameState subscription: the API path is cheap
+ * enough to keep calling on every publish, but a chain-scan fallback must not
+ * run from it — only the 30s poll (and other one-off triggers) may fall back
+ * to an RPC log scan when the API is unavailable.
+ */
+export async function refreshLaunchClaims({ allowChainFallback = true } = {}) {
   if (!_running) return;
   let address = null;
   let level = null;
@@ -532,8 +599,8 @@ export async function refreshLaunchClaims() {
   const seq = ++_refreshSeq;
   const [affiliateResult, drawDaysResult, foilLevelsResult] = await Promise.allSettled([
     readAffiliateLevelBonus({ player: address, level, includeClaimed: true }),
-    readPlayerWwxrpDrawDays({ player: address }),
-    _readPlayerFoilLevels(address),
+    readPlayerWwxrpDrawDays({ player: address, allowChainFallback }),
+    _readPlayerFoilLevels(address, { allowChainFallback }),
   ]);
   if (!_running || seq !== _refreshSeq) return;
   const items = [];
@@ -567,10 +634,10 @@ export function startLaunchClaims({ getAddress, getLevel } = {}) {
   _running = true;
   _getAddress = typeof getAddress === 'function' ? getAddress : null;
   _getLevel = typeof getLevel === 'function' ? getLevel : null;
-  if (typeof setInterval === 'function') {
-    _timer = setInterval(refreshLaunchClaims, POLL_MS);
-    try { _timer?.unref?.(); } catch (_e) { /* browser timer */ }
-  }
+  // Shared scheduler, not a raw setInterval: these claims only move at jackpot
+  // resolutions (and the jackpot:revealed/TX listeners below already cover
+  // that moment) — a hidden tab must not keep running the scan/probe bundle.
+  _timer = registerComponentPoll(refreshLaunchClaims, POLL_MS);
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     _jackpotRevealListener = () => { void refreshLaunchClaims(); };
     _txConfirmedListener = () => { void refreshLaunchClaims(); };
@@ -595,7 +662,7 @@ export function startLaunchClaims({ getAddress, getLevel } = {}) {
 }
 
 export function stopLaunchClaims() {
-  if (_timer != null) clearInterval(_timer);
+  if (_timer != null) { try { _timer(); } catch (_e) { /* defensive */ } }
   if (_fastRetry != null) clearTimeout(_fastRetry);
   if (_jackpotRevealListener && typeof document !== 'undefined') {
     document.removeEventListener?.('jackpot:revealed', _jackpotRevealListener);
@@ -627,6 +694,16 @@ export function __setLaunchClaimsContractFactoryForTest(factory) {
   _contractFactory = typeof factory === 'function' ? factory : null;
 }
 
+/** Test-only /player/:address/facts?names=FoilPackBought fetch seam. */
+export function __setLaunchClaimsFetcherForTest(fetcher) {
+  _fetch = typeof fetcher === 'function' ? fetcher : fetchJSON;
+}
+
+/** Test-only direct access to the foil-level API-first/chain-fallback read. */
+export function __readPlayerFoilLevelsForTest(player, options) {
+  return _readPlayerFoilLevels(player, options);
+}
+
 export function __resetLaunchClaimsForTest() {
   stopLaunchClaims();
   _contractFactory = null;
@@ -634,4 +711,6 @@ export function __resetLaunchClaimsForTest() {
   _foilCache.clear();
   _outcomeCache.clear();
   _revealedReferralBonuses.clear();
+  _fetch = fetchJSON;
+  _foilLevelsApiFailureMemo.clear();
 }

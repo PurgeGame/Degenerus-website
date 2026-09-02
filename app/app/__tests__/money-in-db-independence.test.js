@@ -11,8 +11,8 @@ const WRITERS = new Map([
   ['premium pass purchases and AFKing funding', source('../passes.js')],
   ['Degenerette bets', source('../degenerette.js')],
   ['Coinflip deposits', source('../coinflip.js')],
-  ['Craps entries', source('../craps.js')],
   ['Growth bets', source('../parimutuel.js')],
+  ['Craps entries', source('../craps.js')],
 ]);
 
 test('every mission-critical money-in writer is database-free', () => {
@@ -20,6 +20,56 @@ test('every mission-critical money-in writer is database-free', () => {
     assert.doesNotMatch(
       moduleSource,
       /from\s+['"][^'"]*(?:api|game-state)\.js['"]|\b(?:fetchJSON|readGameState)\s*\(/,
+      `${name} must stay wallet/RPC -> contract with no indexed API dependency`,
+    );
+  }
+});
+
+// The craps lobby WINDOW moved to /game/craps/events because the old client
+// scan pulled a 45,000-block, ~5.6 MB eth_getLogs page on every load. The one
+// fetch lives in craps-events.js (a satellite, like coinflip-day-status.js),
+// so craps.js itself stays in the blanket guard above. The eth_getLogs path
+// survives underneath as the fallback, so a dead indexer costs the lobby
+// bandwidth rather than the ability to play; and no craps WRITE door may put
+// the window loader in a wallet gesture's promise graph.
+test('the craps API window is read-only and keeps its chain fallback', () => {
+  const craps = source('../craps.js');
+  assert.doesNotMatch(
+    craps,
+    /\bfetchJSON\s*\(/,
+    'craps.js must not call the API directly; the window loader owns the one call site',
+  );
+  assert.match(
+    craps,
+    /provider\.getLogs\(/,
+    'the eth_getLogs window must survive as the fallback for a dead or old API',
+  );
+  assert.match(
+    craps,
+    /CRAPS_API_FAILURE_MEMO_MS/,
+    'an API failure must be memoised rather than re-probed on every poll',
+  );
+  const doors = new Map([
+    ['placeCrapsBonusEntry', handler(
+      craps,
+      'export async function placeCrapsBonusEntry(',
+      '/** Re-spread zero through seven chips',
+    )],
+    ['amendCrapsSlip', handler(
+      craps,
+      'export async function amendCrapsSlip(',
+      '/** Upgrade selected windows',
+    )],
+    ['upgradeCrapsDayWindows', handler(
+      craps,
+      'export async function upgradeCrapsDayWindows(',
+      '// Revert copy for the errors',
+    )],
+  ]);
+  for (const [name, body] of doors) {
+    assert.doesNotMatch(
+      body,
+      /\b(?:fetchJSON|readGameState|readCrapsWindowLogs|CRAPS_EVENTS_ROUTE)\b/,
       `${name} must stay wallet/RPC -> contract with no indexed API dependency`,
     );
   }

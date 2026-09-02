@@ -293,7 +293,10 @@ async function boot() {
   subscribe('connected.address', () => refreshLaunchClaims());
   subscribe('viewing.address', () => refreshLaunchClaims());
   subscribe('ui.mode', () => refreshLaunchClaims());
-  subscribe('app.gameState', () => refreshLaunchClaims());
+  // Every gameState publish is too frequent for an RPC log-scan fallback; the
+  // API read alone is cheap enough to run here, but a chain scan must wait
+  // for the slower 30s poll (see launch-claims.js refreshLaunchClaims).
+  subscribe('app.gameState', () => refreshLaunchClaims({ allowChainFallback: false }));
   // 3. Polling starts with the resolved viewing target (?as= OR connected OR
   //    null). Store subscriptions fire immediately, so startup and a connected
   //    self-view used to restart the complete five-poller stack 2–3 times in

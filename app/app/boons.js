@@ -42,6 +42,9 @@ const BOON_UI = Object.freeze({
   38: { product: 'degenerette-wwxrp', label: '4% BONUS WWXRP BET', detail: 'Adds 4% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
   39: { product: 'degenerette-wwxrp', label: '8% BONUS WWXRP BET', detail: 'Adds 8% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
   40: { product: 'degenerette-wwxrp', label: '12% BONUS WWXRP BET', detail: 'Adds 12% effective stake to your next eligible WWXRP Degenerette bet, split across its spins (uncapped)' },
+  41: { product: 'craps', label: 'BOON +5%', detail: 'Adds 5% to the bankroll return from your next paid Craps entry' },
+  42: { product: 'craps', label: 'BOON +10%', detail: 'Adds 10% to the bankroll return from your next paid Craps entry' },
+  43: { product: 'craps', label: 'BOON +15%', detail: 'Adds 15% to the bankroll return from your next paid Craps entry' },
 });
 
 /* Reuse real site art where it exists. Most controls already name/show the
@@ -61,6 +64,7 @@ export const BOON_PRODUCT_ICONS = Object.freeze({
   'degenerette-eth': '/badges-circular/crypto_06_ethereum_green.svg',
   'degenerette-flip': '/whitepaper/flame-logo-split.svg',
   'degenerette-wwxrp': '/shared/coinflip-face-red.svg',
+  craps: '/badges-circular/dice_04_5_silver.svg',
 });
 
 export const BOON_PRODUCT_COLORS = Object.freeze({
@@ -76,6 +80,7 @@ export const BOON_PRODUCT_COLORS = Object.freeze({
   'degenerette-eth': '#a855f7',
   'degenerette-flip': '#f59e0b',
   'degenerette-wwxrp': '#ef4444',
+  craps: '#60a5fa',
 });
 
 export const BOON_AMOUNT_COLORS = Object.freeze({
@@ -115,6 +120,7 @@ const BOON_TIER_BY_TYPE = Object.freeze({
   32: 1, 33: 2, 34: 3,
   35: 1, 36: 2, 37: 3,
   38: 1, 39: 2, 40: 3,
+  41: 1, 42: 2, 43: 3,
 });
 
 const BOON_STRENGTH_BY_TIER = Object.freeze({ 1: 'low', 2: 'mid', 3: 'high' });
@@ -131,6 +137,7 @@ const BOON_BOOST_BPS_BY_TYPE = Object.freeze({
   32: 400, 33: 800, 34: 1_200,
   35: 400, 36: 800, 37: 1_200,
   38: 400, 39: 800, 40: 1_200,
+  41: 500, 42: 1_000, 43: 1_500,
 });
 
 /** Product emblem plus a color/pip tier that can be shared by every surface. */
@@ -256,18 +263,6 @@ export function decodePackedBoons(slot0Raw, slot1Raw, currentDayRaw) {
     expiresAfter: 4,
   }));
 
-  const activityPending = _packedBits(slot1, 0, MASK_24);
-  if (_isActiveDay({
-    tier: activityPending,
-    stampDay: _packedBits(slot1, 24, MASK_24),
-    deityDay: _packedBits(slot1, 48, MASK_24),
-    currentDay,
-    expiresAfter: 2,
-  })) {
-    const boonType = activityPending >= 50 ? 19 : (activityPending >= 25 ? 18 : 17);
-    rows.push({ boonType, consumed: false, source: 'chain', boostAmount: activityPending });
-  }
-
   const deityPassTier = _packedBits(slot1, 72, MASK_8);
   addTier(_tierType(deityPassTier, [25, 26, 27]), _isActiveDay({
     tier: deityPassTier,
@@ -286,11 +281,23 @@ export function decodePackedBoons(slot0Raw, slot1Raw, currentDayRaw) {
     expiresAfter: 4,
   }));
 
+  // Craps owns slot1's low 24-bit lane. Activity awards are credited directly
+  // and no longer occupy this space. The lane shares the Degenerette encoding:
+  // tier in bits 0-1, deity provenance in bit 2, and award day in bits 3-23.
+  const currentDayMasked = currentDay % (2 ** 21);
+  const crapsLane = _packedBits(slot1, 0, MASK_24);
+  const crapsTier = crapsLane & 0x3;
+  const crapsDeity = (crapsLane & 0x4) !== 0;
+  const crapsStampDay = Math.floor(crapsLane / 8) & 0x1FFFFF;
+  const crapsActive = crapsTier > 0 && (crapsDeity
+    ? crapsStampDay === currentDayMasked
+    : (crapsStampDay === 0 || currentDayMasked <= crapsStampDay + 2));
+  addTier(crapsTier > 0 ? 40 + crapsTier : null, crapsActive);
+
   // Three independent 24-bit Degenerette lanes finish slot1. Each lane packs
   // tier in bits 0-1, deity provenance in bit 2, and a masked award day in
   // bits 3-23. Lootbox boons live through award day + 2; deity boons only live
   // on their issue day. This mirrors _degeneretteLaneLive on-chain.
-  const currentDayMasked = currentDay % (2 ** 21);
   for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
     const lane = _packedBits(slot1, 184 + laneIndex * 24, MASK_24);
     const tier = lane & 0x3;
@@ -315,7 +322,7 @@ function _boonStrength(ui) {
   return amount ? Number(amount[1]) : 0;
 }
 
-/** Activity boons store raw quest streak; each streak is worth 0.5 Degen Rating. */
+/** Activity boon payloads carry raw quest streak; each point is worth 0.5 Degen Rating. */
 export function activityBoonScore(rawStreak) {
   const streak = Number(rawStreak);
   return Number.isFinite(streak) && streak > 0 ? streak / 2 : 0;
@@ -456,6 +463,7 @@ const BOON_PRODUCT_NAMES = Object.freeze({
   'degenerette-eth': 'Degenerette',
   'degenerette-flip': 'Degenerette',
   'degenerette-wwxrp': 'Degenerette',
+  craps: 'Craps',
 });
 
 function _issuanceEffect(ui, boonType) {
@@ -477,6 +485,7 @@ function _issuanceEffect(ui, boonType) {
     case 'degenerette-eth': return `${pct} BONUS ETH BET`;
     case 'degenerette-flip': return `${pct} BONUS FLIP BET`;
     case 'degenerette-wwxrp': return `${pct} BONUS WWXRP BET`;
+    case 'craps': return `${pct} MORE CRAPS BANKROLL RETURN`;
     default: return compact;
   }
 }

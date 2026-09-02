@@ -91,12 +91,18 @@ describe('lootboxRewardPresentation', () => {
       value: '+12%',
       detail: '',
     });
+    assert.deepEqual(lootboxRewardPresentation(14, 42n), {
+      label: 'CRAPS BOON',
+      value: '+10%',
+      detail: '',
+    });
     assert.deepEqual(lootboxRewardPresentation(13, 0n), {
       label: 'DEGENERETTE BOON',
       value: 'BOOST',
       detail: '',
     });
     assert.equal(REWARD_TYPE_LABELS[13], 'Degenerette boon');
+    assert.equal(REWARD_TYPE_LABELS[14], 'Craps boon');
   });
 
   test('keeps an unencoded purchase-boon product concise without listing both guesses', () => {

@@ -2254,3 +2254,11 @@ body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:disabled {
     transition: none;
   }
 }
+
+/* The Coinflip quest belongs beside Today's wager rather than beneath BAF.
+   Keep its right-facing tail aimed into the centered blue oval. */
+body.layout-basic .df-table-quest,
+body.layout-basic .jackpot-hero .df-table-quest {
+  top: calc(var(--df-score-cap-top) + 4.9rem);
+  left: calc(50% - min(6.8rem, calc(50% - 3rem)) - 1.28rem);
+}

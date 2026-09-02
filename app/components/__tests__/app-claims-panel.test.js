@@ -347,6 +347,9 @@ globalThis.fetch = async (url) => {
 
 function setFetchResponses({ pending = null, lastDay = null, dashboard = null } = {}) {
   _fetchResponses = { pending, lastDay, dashboard };
+  // The panel reads the sealed last-day payload from the store (published by
+  // polling.js), never from its own fetch. Mirror the fixture there.
+  storeMod.update('app.lastDay', lastDay);
 }
 
 function resetDom() {
@@ -359,6 +362,7 @@ function resetDom() {
   _docListeners.clear();
   _winListeners.clear();
   _fetchResponses = { pending: null, lastDay: null, dashboard: null };
+  storeMod.update('app.lastDay', null);
   _fetchLog.length = 0;
 }
 
@@ -1168,18 +1172,20 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     );
     // Behaviour: initial mount fetch fired (eager first cycle).
     assert.ok(_fetchLog.some(({ url }) => url.endsWith('/pending')), '/pending fetched on mount');
+    // The sealed last-day payload rides polling.js's app.lastDay store key —
+    // this panel must never re-download it on its own cadence.
     assert.ok(
-      _fetchLog.some(({ url }) => url.includes('/game/jackpot/last-day')),
-      '/last-day fetched on mount',
+      !_fetchLog.some(({ url }) => url.includes('/game/jackpot/last-day')),
+      '/last-day is read from the store, not fetched by the panel',
     );
     el.disconnectedCallback();
   });
 
-  test('30s polling cycle re-fetches /pending + /last-day + /player/:address in parallel (Promise.allSettled)', async () => {
+  test('30s polling cycle re-fetches /pending + /player/:address in parallel (Promise.allSettled)', async () => {
     const el = mountPanelForPolling();
     await flushMicrotasks();
     const initialCount = _fetchLog.length;
-    assert.ok(initialCount >= 3, 'initial mount fired 3 fetches in parallel');
+    assert.ok(initialCount >= 2, 'initial mount fired both fetches in parallel');
     // Drive a subsequent poll cycle by invoking the panel-internal cycle via
     // visibility-return (simulates the 30s tick without waiting). After a
     // visibility-return-after-stale, the panel runs an immediate cycle.
@@ -1197,9 +1203,9 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     } finally {
       Date.now = realNow;
     }
-    // After visibility-return, we expect a fresh cycle = 3 more fetches.
+    // After visibility-return, we expect a fresh cycle = 2 more fetches.
     const afterCycle = _fetchLog.length;
-    assert.ok(afterCycle - initialCount >= 3, `visibility-return triggered fresh cycle (${afterCycle - initialCount} new fetches)`);
+    assert.ok(afterCycle - initialCount >= 2, `visibility-return triggered fresh cycle (${afterCycle - initialCount} new fetches)`);
     // Promise.allSettled fan-out — verified at source level.
     assert.match(PANEL_SRC, /Promise\.allSettled\(/, 'panel uses Promise.allSettled for parallel fan-out');
     el.disconnectedCallback();

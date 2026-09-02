@@ -8705,7 +8705,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-card--boon[data-boon-product="lootbox"] { --boon-rgb: 167, 139, 250; }
 .rvl-card--boon[data-boon-product="coinflip"] { --boon-rgb: 248, 113, 113; }
 .rvl-card--boon[data-boon-product="decimator"] { --boon-rgb: 34, 211, 238; }
-.rvl-card--boon[data-boon-product="whale"] { --boon-rgb: 96, 165, 250; }
+.rvl-card--boon:is([data-boon-product="whale"], [data-boon-product="craps"]) { --boon-rgb: 96, 165, 250; }
 .rvl-card--boon[data-boon-product="activity"] { --boon-rgb: 129, 140, 248; }
 .rvl-card--boon[data-boon-product="deity"] { --boon-rgb: 216, 180, 254; }
 .rvl-card--boon[data-boon-product="lazy"] { --boon-rgb: 250, 204, 21; }
@@ -8848,10 +8848,10 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(0.78rem, 3vw, 1rem);
 }
 
-/* Large sDGNRS/DGNRS payouts stay on one line, but compact Luckbox reward
-   cards must clip that line inside their value lane instead of spilling into
-   the neighboring card. The complete amount remains in the DOM. */
-.rvl-stage--lootbox .rvl-card--dgnrs .rvl-card-value {
+/* Compact Luckbox receipt tiles keep exact sDGNRS/DGNRS amounts in the DOM,
+   but may ellipsize them rather than spilling into a neighboring tile. The
+   full-size reveal gets a fitted type tier below and must remain complete. */
+.rvl-stage--lootbox .rvl-card--dgnrs.rvl-card--mini .rvl-card-value {
   width: 100%;
   max-width: 100%;
   overflow: hidden;
@@ -9585,6 +9585,13 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(1.75rem, 5.3vw, 2.85rem);
   overflow-wrap: normal;
 }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card--dgnrs .rvl-card-value--long {
+  font-size: clamp(1.5rem, 5vw, 1.75rem);
+  letter-spacing: -0.035em;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card--dgnrs .rvl-card-value--extra-long {
+  font-size: clamp(1.05rem, 3.5vw, 1.3rem);
+}
 .rvl-stage--lootbox > .rvl-card-zone .rvl-card-label {
   grid-area: label;
   color: #f5dda0;
@@ -9932,6 +9939,22 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(1.72rem, 3vw, 1.95rem);
   line-height: 1;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.44);
+}
+/* A one-reward receipt is a hero card, despite retaining the shared `mini`
+   DOM class. Fit its exact DGNRS total instead of applying the multi-card
+   ellipsis treatment above. */
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] .rvl-card--dgnrs .rvl-card-value {
+  overflow: visible;
+  font-size: clamp(1.4rem, 7vw, 1.85rem);
+  letter-spacing: -0.02em;
+  text-overflow: clip;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] .rvl-card--dgnrs .rvl-card-value--long {
+  font-size: clamp(1.2rem, 6vw, 1.55rem);
+  letter-spacing: -0.035em;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] .rvl-card--dgnrs .rvl-card-value--extra-long {
+  font-size: clamp(0.9rem, 4.4vw, 1.1rem);
 }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-label { color: #e8d5a3; font-size: 0.68rem; line-height: 1.25; }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-sub { max-width: 23ch; color: rgba(226,222,239,0.68); font-size: 0.62rem; line-height: 1.35; }
@@ -13346,6 +13369,7 @@ body.layout-basic .pari-wwxrp__identity strong {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+body.layout-basic .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance) { display: inline; }
 body.layout-basic .pari-wwxrp__balance {
   display: block; min-width: 0;
   margin-left: auto;
@@ -16127,29 +16151,29 @@ body.layout-basic .play-grid > app-degenerette-panel { grid-area: degenerette; d
 body.layout-basic .play-grid > app-craps-entry { grid-area: craps; display: block; min-width: 0; border-top: 1px solid rgba(245,166,35,.24); }
 
 /* Scheduled Craps launcher: split identity, six-column lobby, and inline ten-chip felt. */ body.layout-basic .craps-entry { position: relative; display: flex; box-sizing: border-box; width: 100%; height: 100%; min-height: 0; flex-direction: column; gap: .18rem; overflow: hidden; padding: .36rem .4rem .42rem; background: radial-gradient(circle at 96% 4%,rgba(239,68,68,.15),transparent 34%),linear-gradient(145deg,rgba(59,11,19,.24),transparent 52%); } body.layout-basic .craps-entry::before { position: absolute; right: -4rem; bottom: -6rem; width: 13rem; height: 13rem; border: 1px solid rgba(248,113,113,.08); border-radius: 50%; background: repeating-radial-gradient(circle,rgba(248,113,113,.04) 0 1px,transparent 1px 17px); content: ""; pointer-events: none; }
-body.layout-basic .craps-entry__head { position: relative; z-index: 1; display: grid; min-height: 4.8rem; isolation: isolate; grid-template-columns: 50% 50%; grid-template-rows: minmax(0,1fr) 1.42rem; align-items: stretch; padding: 0; overflow: hidden; border: 1px solid rgba(245,190,62,.5); border-radius: 8px; background: linear-gradient(100deg,#290a10 0%,#13090d 55%,#1b1026 100%); box-shadow: inset 0 1px rgba(255,242,204,.1),0 .14rem .4rem rgba(0,0,0,.3); } body.layout-basic .craps-entry__identity { position: relative; display: grid; min-width: 0; min-height: 0; grid-row: 1; align-items: center; overflow: hidden; }
-body.layout-basic .craps-entry__identity--craps { padding: .04rem .08rem .01rem; background: radial-gradient(circle at 14% 46%,rgba(52,211,153,.2),transparent 48%),linear-gradient(105deg,rgba(5,72,49,.94),rgba(3,34,26,.9)); } body.layout-basic .craps-entry__identity--runup { justify-items: center; padding: .04rem .08rem .01rem; border-left: 1px solid rgba(226,184,95,.28); background: radial-gradient(circle at 70% 45%,rgba(168,85,247,.18),transparent 56%),linear-gradient(105deg,rgba(13,8,18,.66),rgba(29,15,43,.86)); }
-body.layout-basic .craps-entry__craps-logo { display: grid; width: 100%; min-width: 0; min-height: 0; place-items: center; margin: 0; overflow: hidden; } body.layout-basic .craps-entry__craps-logo img { display: block; width: 100%; height: 3.22rem; max-height: none; object-fit: contain; filter: drop-shadow(0 .08rem .13rem rgba(0,0,0,.7)); }
-body.layout-basic .craps-entry__header-metrics { position: relative; z-index: 2; display: grid; min-width: 0; grid-column: 1 / -1; grid-row: 2; grid-template-columns: 50% 50%; align-items: stretch; overflow: hidden; border-top: 1px solid rgba(226,184,95,.42); background: rgba(8,7,10,.76); box-shadow: inset 0 1px rgba(255,239,181,.05); } body.layout-basic .craps-entry__daily-added { display: flex; box-sizing: border-box; min-width: 0; height: 100%; align-items: center; justify-content: center; gap: .16rem; padding: .04rem .08rem; overflow: hidden; border-right: 1px solid rgba(216,180,254,.32); background: linear-gradient(180deg,rgba(5,80,55,.92),rgba(3,45,33,.96)); white-space: nowrap; } body.layout-basic .craps-entry__daily-added > strong { display: inline-flex; min-width: 0; align-items: baseline; gap: .08rem; color: #d8b4fe; font: 1000 .76rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-shadow: 0 0 .18rem rgba(192,132,252,.3); } body.layout-basic .craps-entry__daily-added > strong em { color: #c4b5fd; font-size: .29rem; font-style: normal; }
-body.layout-basic .craps-entry__added-key { display: grid; min-width: 0; flex: 0 0 auto; grid-template-rows: repeat(2,auto); align-items: center; gap: 0; color: #eadcff; font-size: .29rem; font-weight: 1000; letter-spacing: .025em; line-height: .82; text-align: left; white-space: nowrap; } body.layout-basic .craps-entry__added-key :is(b,small) { display: block; } body.layout-basic .craps-entry__daily-added .craps-entry__added-key b { letter-spacing: .045em; }
-body.layout-basic .craps-entry__run-it-up-mark { display: grid; width: 100%; min-height: 0; place-items: center; overflow: hidden; } body.layout-basic .craps-entry__run-it-up-mark img { display: block; width: 105%; max-width: none; height: 3.3rem; max-height: none; object-fit: contain; filter: drop-shadow(0 .1rem .15rem rgba(0,0,0,.62)); }
-body.layout-basic .craps-entry__progressive-meter { display: grid; box-sizing: border-box; min-width: 0; height: 100%; place-items: center; padding: .04rem .08rem; overflow: hidden; background: linear-gradient(180deg,rgba(79,43,111,.46),rgba(29,16,44,.62)); color: #f2e5ff; font: 1000 .76rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; letter-spacing: .01em; text-overflow: ellipsis; text-shadow: 0 0 .24rem rgba(216,180,254,.44); white-space: nowrap; } body.layout-basic .craps-entry__progressive-value { display: inline-flex; max-width: 100%; min-width: 0; align-items: baseline; justify-content: center; gap: .1rem; } body.layout-basic .craps-entry__progressive-value output { min-width: 0; overflow: hidden; text-overflow: ellipsis; } body.layout-basic .craps-entry__progressive-meter em { flex: 0 0 auto; color: #bfa7ef; font-size: .29rem; font-style: normal; }
+body.layout-basic .craps-entry__head { position: relative; z-index: 1; display: grid; min-height: 5rem; isolation: isolate; grid-template-rows: minmax(0,1fr) 1.62rem; align-items: stretch; padding: .18rem; overflow: hidden; border: 1px solid #eef4f7; border-radius: 8px; background: linear-gradient(180deg,#e8edf0 0,#626c74 10%,#151b20 24%,#070a0e 76%,#8e989f 92%,#252c31 100%); box-shadow: inset 0 0 0 1px #1b2227,inset 0 0 0 3px rgba(255,255,255,.2),0 .2rem .55rem rgba(0,0,0,.55); }
+body.layout-basic .craps-entry__display-face { position: relative; display: grid; min-width: 0; min-height: 0; isolation: isolate; grid-row: 1 / -1; grid-template-rows: minmax(0,1fr) 1.62rem; overflow: hidden; border: 1px solid #040609; border-radius: 4px; background: radial-gradient(ellipse at 50% -18%,rgba(36,175,112,.2),transparent 72%),linear-gradient(180deg,#10372a 0,#082117 46%,#04150e 74%,#020b07 100%); box-shadow: inset 1px 0 #283848,inset -1px 0 #283848,inset 0 1px #283848,inset 0 -1px #1d2831,inset 0 -1rem 1.5rem rgba(0,0,0,.35); } body.layout-basic .craps-entry__logo-deck { position: relative; display: grid; min-width: 0; min-height: 0; grid-row: 1; grid-template-columns: 50% 50%; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; } body.layout-basic .craps-entry__identity { position: relative; display: grid; min-width: 0; min-height: 0; place-items: center; overflow: hidden; }
+body.layout-basic .craps-entry__identity--craps { padding: .04rem .08rem .01rem; } body.layout-basic .craps-entry__identity--runup { container-type: inline-size; padding: .04rem .08rem .01rem; } body.layout-basic .craps-entry__craps-logo { position: relative; display: grid; width: 93%; min-width: 0; min-height: 0; justify-self: center; place-items: center; margin: 0; overflow: visible; } body.layout-basic .craps-entry__craps-lockup { display: block; width: 100%; height: auto; max-height: none; object-fit: contain; filter: drop-shadow(0 .08rem .13rem rgba(0,0,0,.7)); }
+body.layout-basic .craps-entry__run-it-up-mark { display: grid; width: 100%; min-height: 0; place-items: center; overflow: hidden; } body.layout-basic .craps-entry__run-it-up-mark img { display: block; width: 98%; max-width: none; height: 2.69rem; max-height: none; object-fit: contain; clip-path: inset(0 0 31% 0); filter: drop-shadow(0 .1rem .15rem rgba(0,0,0,.62)); transform: translateY(-.06rem); } body.layout-basic .craps-entry__runup-kicker { position: absolute; z-index: 5; top: .31rem; left: 47%; display: block; width: 38%; translate: -50% 0; color: #e7d9f7; font: 950 .4rem/1 "Arial Narrow",system-ui,sans-serif; letter-spacing: .13em; text-align: center; text-shadow: 0 1px #000,0 0 .2rem rgba(201,111,255,.7); white-space: nowrap; } body.layout-basic .craps-entry__runup-submark { position: absolute; z-index: 3; bottom: calc(1.47rem - 10.1cqi); left: 50%; display: grid; box-sizing: border-box; width: 68%; height: clamp(.56rem,6.6cqi,.69rem); translate: -50% 0; place-items: center; overflow: visible; border: 0; border-top: 1px solid rgba(241,201,100,.9); border-bottom: 1px solid rgba(164,92,190,.84); border-radius: 0; clip-path: none; background: linear-gradient(90deg,transparent 0,rgba(106,39,131,.58) 10%,rgba(13,9,19,.94) 28% 72%,rgba(106,39,131,.58) 90%,transparent 100%); color: #fff2bd; font: 1000 clamp(.34rem,3.25cqi,.39rem)/.88 "Arial Narrow",Impact,system-ui,sans-serif; letter-spacing: .055em; text-shadow: 0 1px #000,0 0 .2rem #bc4df2; box-shadow: inset 0 1px rgba(255,255,255,.24),inset 0 -1px rgba(90,41,111,.5),0 0 .31rem rgba(188,67,244,.28); white-space: nowrap; }
+body.layout-basic .craps-entry__header-metrics { position: relative; z-index: 2; display: grid; min-width: 0; grid-row: 2; grid-template-columns: 50% 50%; align-items: stretch; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; } body.layout-basic .craps-entry__flip-mark { display: block; width: 1.31rem; height: 1.31rem; flex: 0 0 1.31rem; filter: drop-shadow(0 .06rem .08rem rgba(0,0,0,.7)); }
+body.layout-basic .craps-entry__daily-added { display: flex; box-sizing: border-box; width: calc(100% - .72rem); min-width: 0; height: calc(100% - .16rem); place-self: center; align-items: center; justify-content: center; gap: .16rem; margin: 0; padding: .04rem .08rem; overflow: hidden; border: 1px solid rgba(190,204,213,.78); border-radius: .16rem; background: linear-gradient(180deg,rgba(203,217,225,.28) 0,rgba(55,69,80,.32) 35%,rgba(9,16,23,.88) 100%); box-shadow: inset 0 1px rgba(255,255,255,.14),inset 0 -1px rgba(80,96,107,.3); white-space: nowrap; } body.layout-basic .craps-entry__daily-added > strong { display: inline-flex; min-width: 0; align-items: center; color: #58d5ff; font: 1000 1.02rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; letter-spacing: .018em; text-shadow: 0 0 .24rem rgba(34,183,238,.42); } body.layout-basic .craps-entry__added-key { display: grid; min-width: 0; flex: 0 0 auto; grid-template-rows: repeat(2,auto); place-items: center start; gap: 0; color: #7dd3fc; font-size: .34rem; font-weight: 1000; letter-spacing: .025em; line-height: .94; text-align: left; white-space: nowrap; } body.layout-basic .craps-entry__added-key :is(b,small) { display: block; } body.layout-basic .craps-entry__daily-added .craps-entry__added-key b { letter-spacing: .045em; }
+body.layout-basic .craps-entry__progressive-meter { display: grid; box-sizing: border-box; width: calc(100% - .72rem); min-width: 0; height: calc(100% - .16rem); place-self: center; place-items: center; margin: 0; padding: .04rem .08rem; overflow: hidden; border: 1px solid rgba(222,174,65,.8); border-radius: .16rem; background: linear-gradient(180deg,rgba(226,177,68,.25) 0,rgba(67,43,9,.32) 35%,rgba(16,10,3,.9) 100%); color: #d69cff; font: 1000 1.02rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; letter-spacing: .018em; text-overflow: ellipsis; text-shadow: 0 0 .28rem rgba(192,104,252,.5); box-shadow: inset 0 1px rgba(255,240,184,.14),inset 0 -1px rgba(112,73,12,.34); white-space: nowrap; } body.layout-basic .craps-entry__progressive-value { display: inline-flex; max-width: 100%; min-width: 0; align-items: center; justify-content: center; gap: .16rem; } body.layout-basic .craps-entry__progressive-value output { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body.layout-basic .craps-entry__daily-added[data-state="loading"] > strong,body.layout-basic .craps-entry__progressive-meter[data-state="loading"] { opacity: .5; } body.layout-basic .craps-entry__daily-added[data-state="unavailable"] > strong,body.layout-basic .craps-entry__progressive-meter[data-state="unavailable"] { color: #aaa1a7; } body.layout-basic .craps-entry button { font: inherit; -webkit-tap-highlight-color: transparent; }
 body.layout-basic .craps-entry__betting { position: relative; z-index: 1; display: grid; min-width: 0; gap: .1rem; margin-top: auto; }
-body.layout-basic .craps-entry__surface-strip { display: grid; min-height: 1.56rem; grid-template-columns: minmax(0,1.35fr) minmax(3.2rem,.34fr) minmax(6.7rem,.92fr); align-items: stretch; overflow: hidden; border: 1px solid rgba(226,184,95,.25); border-radius: 5px; background: #080c0b; } body.layout-basic .craps-entry__lane { display: grid; min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); padding: .07rem; border-left: 1px solid rgba(226,184,95,.2); background: rgba(55,18,24,.38); }
-body.layout-basic .craps-entry__lane button { display: flex; min-width: 0; min-height: 1rem; align-items: center; justify-content: center; gap: .1rem; padding: .06rem .05rem; border: 0; border-radius: 3px; background: transparent; color: #929ba9; font-size: .34rem; font-weight: 950; letter-spacing: .005em; cursor: pointer; white-space: nowrap; } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.34),rgba(127,29,29,.32)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.28); }
+body.layout-basic .craps-entry__surface-strip { display: grid; min-height: 1.56rem; grid-template-columns: minmax(0,1.35fr) minmax(3.2rem,.34fr) minmax(6.7rem,.92fr); align-items: stretch; overflow: hidden; border: 1px solid rgba(226,184,95,.25); border-radius: 5px; background: #080c0b; } body.layout-basic .craps-entry__lane { display: grid; min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); margin: .07rem; padding: 0; overflow: hidden; border: 1px solid rgba(226,184,95,.28); border-radius: 4px; background: #100b0e; box-shadow: inset 0 0 .32rem rgba(0,0,0,.5); }
+body.layout-basic .craps-entry__lane button { position: relative; display: flex; min-width: 0; min-height: 1rem; align-items: center; justify-content: center; gap: .1rem; padding: .06rem .05rem; border: 0; border-radius: 0; background: transparent; color: #929ba9; font-size: .34rem; font-weight: 950; letter-spacing: .005em; cursor: pointer; white-space: nowrap; } body.layout-basic .craps-entry__lane button + button { border-left: 1px solid rgba(226,184,95,.22); } body.layout-basic .craps-entry__lane button[aria-pressed="true"] { background: linear-gradient(180deg,rgba(239,68,68,.38),rgba(127,29,29,.38)); color: #fff1f2; box-shadow: inset 0 0 0 1px rgba(252,165,165,.22),inset 0 .08rem rgba(255,255,255,.06); }
 body.layout-basic .craps-entry__pass-count { display: inline-flex; box-sizing: border-box; min-width: .68rem; height: .68rem; align-items: center; justify-content: center; padding: 0 .08rem; border: 1px solid rgba(134,239,172,.64); border-radius: 999px; background: #168a4b; color: #f0fdf4; font: 1000 .34rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: 0; box-shadow: 0 .06rem .12rem rgba(0,0,0,.32); } body.layout-basic .craps-entry__pass-count[hidden] { display: none !important; }
 body.layout-basic .craps-entry__bonus-equation { display: flex; min-width: 0; align-items: center; justify-content: center; padding: .06rem; overflow: hidden; background: rgba(107,76,13,.11); white-space: nowrap; } body.layout-basic .craps-entry__bonus-equation-line { display: flex; min-width: 0; align-items: baseline; justify-content: center; gap: .11rem; } body.layout-basic .craps-entry__bonus-equation strong { color: #f4dfad; font: 1000 .67rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; } body.layout-basic .craps-entry__bonus-equation small { color: #91a79b; font-size: .33rem; font-weight: 950; letter-spacing: .025em; } body.layout-basic .craps-entry__bonus-equation b { color: #708278; font: 1000 .45rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; } body.layout-basic .craps-entry__bonus-equation .craps-entry__hot-value { color: #ffe278; } body.layout-basic .craps-entry__bonus-equation-line small:last-child { color: #b7a76d; } body.layout-basic .craps-entry__place-prompt { display: grid; min-width: 0; place-content: center; gap: .03rem; padding: .04rem .06rem; border-right: 1px solid rgba(248,113,113,.3); border-left: 1px solid rgba(248,113,113,.3); background: linear-gradient(180deg,rgba(127,29,29,.34),rgba(69,10,10,.3)); color: #ff8588; font-size: .39rem; font-weight: 1000; letter-spacing: .055em; line-height: 1; text-align: center; text-shadow: 0 0 .2rem rgba(237,14,17,.5); white-space: nowrap; } body.layout-basic .craps-entry__place-prompt span { display: block; }
 body.layout-basic .craps-entry__mini-felt { position: relative; display: grid; min-width: 0; grid-template-rows: 2.35rem 1.74rem; gap: .09rem; padding: .15rem; border: 1.5px solid rgba(207,219,227,.44); border-radius: 8px; background: radial-gradient(circle at 50% 50%,rgba(22,121,78,.24),transparent 70%),repeating-linear-gradient(45deg,rgba(255,255,255,.012) 0 1px,transparent 1px 4px),linear-gradient(155deg,#0c5a3f,#063c2c 72%); box-shadow: inset 0 0 1.5rem rgba(0,20,13,.56),0 3px 10px rgba(0,0,0,.38); } body.layout-basic .craps-entry__mini-felt::before { position: absolute; inset: .11rem; border: 1px solid rgba(243,223,173,.12); border-radius: 6px; content: ""; pointer-events: none; }
-body.layout-basic :is(.craps-entry__number-row,.craps-entry__line-row) { display: grid; min-width: 0; grid-template-columns: repeat(6,minmax(0,1fr)); gap: .08rem; } body.layout-basic .craps-entry__line-row [data-craps-bet="hard-4"] { grid-column: 1; } body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] { grid-column: 2 / span 2; } body.layout-basic .craps-entry__line-row [data-craps-bet="hard-8"] { grid-column: 4; } body.layout-basic .craps-entry__line-row [data-craps-bet="dont-pass"] { grid-column: 5; } body.layout-basic .craps-entry__line-row [data-craps-random] { grid-column: 6; }
+body.layout-basic :is(.craps-entry__number-row,.craps-entry__line-row) { display: grid; min-width: 0; grid-template-columns: repeat(6,minmax(0,1fr)); gap: .08rem; } body.layout-basic .craps-entry__line-row [data-craps-bet="hard-4"] { grid-column: 1; } body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] { grid-column: 2; } body.layout-basic .craps-entry__line-row [data-craps-how-to-play] { grid-column: 3; } body.layout-basic .craps-entry__line-row [data-craps-bet="hard-8"] { grid-column: 4; } body.layout-basic .craps-entry__line-row [data-craps-bet="dont-pass"] { grid-column: 5; } body.layout-basic .craps-entry__line-row [data-craps-random] { grid-column: 6; }
 body.layout-basic .craps-entry__bet-spot { position: relative; box-sizing: border-box; min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 1px solid rgba(242,224,179,.52); border-radius: 4px; background: rgba(0,42,29,.1); color: #f6e5ad; cursor: pointer; font-weight: 1000; text-shadow: 0 1px 0 #003525,0 2px 4px rgba(0,15,10,.6); touch-action: manipulation; user-select: none; -webkit-tap-highlight-color: transparent; }
 body.layout-basic .craps-entry__bet-spot:hover:not(:disabled) { border-color: rgba(255,224,160,.8); background: rgba(255,224,160,.08); } body.layout-basic .craps-entry__bet-spot:active:not(:disabled) { transform: translateY(1px); }
 body.layout-basic .craps-entry__bet-label { position: absolute; z-index: 2; top: .1rem; left: .14rem; font: 1000 1.24rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: .015em; } body.layout-basic :is([data-craps-bet="place-6"],[data-craps-bet="place-8"]) .craps-entry__bet-label { color: #ffd36e; } body.layout-basic .craps-entry__pays { position: absolute; z-index: 2; left: .13rem; bottom: .08rem; color: #ffe0a0; font: 1000 .39rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: .01em; text-shadow: 0 1px 0 #003525; }
-body.layout-basic .craps-entry__line-row .craps-entry__bet-spot { background: rgba(242,224,179,.045); } body.layout-basic .craps-entry__line-row .craps-entry__bet-label { top: 34%; left: 50%; width: 100%; font-size: .6rem; letter-spacing: .02em; line-height: .9; text-align: center; transform: translate(-50%,-50%); } body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] .craps-entry__bet-label { left: 38%; font-size: .9rem; }
+body.layout-basic .craps-entry__line-row .craps-entry__bet-spot { background: rgba(242,224,179,.045); } body.layout-basic .craps-entry__line-row .craps-entry__bet-label { top: 34%; left: 50%; width: 100%; font-size: .6rem; letter-spacing: .02em; line-height: .9; text-align: center; transform: translate(-50%,-50%); } body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] .craps-entry__bet-label { left: 50%; font-size: .68rem; } body.layout-basic .craps-entry__how-to-play { border-color: rgba(186,230,253,.62); background: radial-gradient(circle at 72% 55%,rgba(56,189,248,.13),transparent 62%),rgba(5,46,54,.28) !important; color: #d8f2ff; box-shadow: inset 0 0 0 1px rgba(191,238,255,.08); } body.layout-basic .craps-entry__how-to-play:hover:not(:disabled) { border-color: #dff7ff; background: radial-gradient(circle at 72% 55%,rgba(56,189,248,.24),transparent 64%),rgba(8,63,73,.44) !important; } body.layout-basic .craps-entry__line-row .craps-entry__how-to-play .craps-entry__bet-label { top: 50%; color: #d8f2ff; font-size: .46rem; letter-spacing: .045em; line-height: .88; text-shadow: 0 1px #002c37,0 0 .2rem rgba(125,211,252,.3); }
 body.layout-basic .craps-entry__bet-spot--dont { border-color: rgba(237,14,17,.76); } body.layout-basic .craps-entry__bet-spot--dont .craps-entry__bet-label { color: #ffd1d1; font-size: .48rem; line-height: .82; } body.layout-basic .craps-entry__bet-spot--hard .craps-entry__bet-label { font-size: .4rem; line-height: .78; } body.layout-basic .craps-entry__bet-spot--hard .craps-entry__bet-label b { display: block; margin-top: .03rem; font-size: .76rem; }
 body.layout-basic .craps-entry__line-row .craps-entry__pays { left: .09rem; bottom: .06rem; font-size: .36rem; } body.layout-basic .craps-entry__hard-dice { position: absolute; z-index: 3; top: .06rem; left: .06rem; display: flex; gap: 0; pointer-events: none; } body.layout-basic .craps-entry__hard-dice img { display: block; width: .52rem; height: .52rem; filter: drop-shadow(0 .03rem .04rem rgba(0,0,0,.48)); }
 body.layout-basic .craps-entry__chip-stack { position: absolute; z-index: 4; top: 52%; left: 64%; display: none; width: min(58%,1.75rem); height: 82%; place-items: center; filter: drop-shadow(0 .08rem .1rem rgba(0,0,0,.64)); pointer-events: none; transform: translate(-50%,-50%); }
-body.layout-basic .craps-entry__bet-spot.has-chip .craps-entry__chip-stack { display: grid; } body.layout-basic .craps-entry__chip-stack img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; } body.layout-basic .craps-entry__line-row .craps-entry__chip-stack { top: 52%; left: 68%; width: min(58%,1.48rem); height: 80%; } body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] .craps-entry__chip-stack { left: 76%; width: min(35%,1.7rem); } body.layout-basic .craps-entry__bet-spot.is-full { box-shadow: inset 0 0 0 1px rgba(255,213,110,.64),0 0 .45rem rgba(255,213,110,.14); }
+body.layout-basic .craps-entry__bet-spot.has-chip .craps-entry__chip-stack { display: grid; } body.layout-basic .craps-entry__chip-stack img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; } body.layout-basic .craps-entry__line-row .craps-entry__chip-stack { top: 52%; left: 68%; width: min(58%,1.48rem); height: 80%; } body.layout-basic .craps-entry__bet-spot.is-full { box-shadow: inset 0 0 0 1px rgba(255,213,110,.64),0 0 .45rem rgba(255,213,110,.14); }
 body.layout-basic .craps-entry__random-slot { border-color: rgba(125,211,252,.6); background: radial-gradient(circle at 70% 55%,rgba(56,189,248,.12),transparent 62%),rgba(5,46,54,.34) !important; box-shadow: inset 0 0 0 1px rgba(191,238,255,.12),0 0 .45rem rgba(56,189,248,.12); } body.layout-basic .craps-entry__line-row .craps-entry__random-slot .craps-entry__bet-label { z-index: 6; top: .07rem; left: .04rem; width: auto; padding: .035rem .045rem; border-radius: 2px; background: rgba(1,31,35,.76); color: #bfeeff; font-size: .38rem; letter-spacing: .01em; line-height: 1; text-align: left; transform: none; }
 body.layout-basic .craps-entry__random-stack { position: absolute; z-index: 4; top: 50%; right: 4%; display: flex; width: min(72%,2.35rem); height: 72%; align-items: flex-end; justify-content: flex-end; gap: 5%; transform: translateY(-50%); } body.layout-basic .craps-entry__random-stack img { display: block; width: 47%; height: 100%; flex: 0 0 47%; object-fit: contain; object-position: center bottom; } body.layout-basic .craps-entry__random-stack img[hidden] { display: none; }
 body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); } body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 17%; } body.layout-basic .craps-entry__col-wager { width: 16%; } body.layout-basic .craps-entry__col-operator { width: 3%; } body.layout-basic .craps-entry__col-battle { width: 17%; } body.layout-basic .craps-entry__col-action { width: 29%; } body.layout-basic .craps-entry__col-entrants { width: 18%; }
@@ -16167,7 +16191,7 @@ body.layout-basic .craps-entry__day-buy[data-payment="pass"] { background: linea
 body.layout-basic .craps-entry__listing :is(th,td).craps-entry__tomorrow-range { display: table-cell; padding-inline: 0 !important; text-align: left !important; } body.layout-basic .craps-entry__tomorrow-range .craps-entry__tomorrow-layout { display: grid; box-sizing: border-box; width: 100%; grid-template-columns: minmax(0,1fr) max-content; align-items: center; column-gap: .12rem; padding: 0 .18rem 0 .06rem; } body.layout-basic .craps-entry__tomorrow-range small,body.layout-basic .craps-entry__range-note { color: #d6b75d; font-size: .39rem; font-weight: 950; letter-spacing: .005em; white-space: nowrap; } body.layout-basic .craps-entry__tomorrow-range strong { display: block !important; min-width: 0; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__tomorrow-range small { display: block; min-width: max-content; margin: 0; text-align: center; } body.layout-basic .craps-entry__range-note[hidden] { display: none !important; } body.layout-basic .craps-entry__listing :is(th,td).craps-entry__rolling-terms { display: table-cell; padding-inline: .1rem !important; text-align: center !important; } body.layout-basic .craps-entry__rolling-terms .craps-entry__tomorrow-layout { display: block; width: 100%; } body.layout-basic .craps-entry__rolling-terms strong { display: block; color: #d8b4fe; font-size: .54rem; font-weight: 1000; letter-spacing: .08em; text-align: center; }
 /* Winner identity: the linked Discord face and name; the address survives in the title. */ body.layout-basic .craps-entry__winner-pfp { width: .62rem; height: .62rem; margin-right: .1rem; border: 1px solid color-mix(in srgb,var(--craps-winner-accent,#8b949e) 58%,transparent); border-radius: 50%; object-fit: cover; vertical-align: -.15rem; }
 body.layout-basic .craps-entry__battle[data-state="current"] { background: linear-gradient(90deg,rgba(180,83,9,.26),rgba(250,204,21,.035)); box-shadow: inset .16rem 0 #facc15; } body.layout-basic .craps-entry__battle[data-entry]:not([data-entry="none"]):not([data-state="completed"]) { background-color: rgba(20,83,45,.1); } body.layout-basic .craps-entry__battle[data-state="completed"] { --craps-winner-accent: #8b949e; height: 1.5rem; background: linear-gradient(90deg,rgba(71,80,89,.34),rgba(35,40,46,.08)); box-shadow: inset .16rem 0 var(--craps-winner-accent); } body.layout-basic .craps-entry__battle[data-state="closed"] { filter: saturate(.3); opacity: .4; } body.layout-basic .craps-entry__battle[data-terms="loading"] { opacity: .62; } body.layout-basic .craps-entry button:hover:not(:disabled) { filter: brightness(1.09); } body.layout-basic .craps-entry button:disabled { cursor: default; opacity: .45; } body.layout-basic .craps-entry button[data-terms="loading"] { cursor: wait; } body.layout-basic .craps-entry button:focus-visible { outline: 2px solid #fde68a; outline-offset: 2px; }
-@media (max-width: 768px) { body.layout-basic .craps-entry__mini-felt { grid-template-rows: 2.75rem 2.5rem; } } @media (max-width: 380px) { body.layout-basic .craps-entry { padding: .32rem .34rem .38rem; } body.layout-basic .craps-entry__head { min-height: 4.7rem; } body.layout-basic .craps-entry__identity { min-height: 0; } body.layout-basic .craps-entry__daily-added > strong,body.layout-basic .craps-entry__progressive-meter { font-size: .71rem; } body.layout-basic .craps-entry__surface-strip { grid-template-columns: minmax(0,1.35fr) minmax(3rem,.34fr) minmax(6.2rem,.92fr); } body.layout-basic .craps-entry__bonus-equation { padding-inline: .04rem; } body.layout-basic .craps-entry__bonus-equation-line { gap: .08rem; } body.layout-basic .craps-entry__bonus-equation strong { font-size: .63rem; } body.layout-basic .craps-entry__bonus-equation small { font-size: .3rem; } body.layout-basic .craps-entry__place-prompt { font-size: .35rem; } }
+@media (max-width: 768px) { body.layout-basic .craps-entry__mini-felt { grid-template-rows: 2.75rem 2.5rem; } } @media (max-width: 380px) { body.layout-basic .craps-entry { padding: .32rem .34rem .38rem; } body.layout-basic .craps-entry__head { min-height: 4.7rem; } body.layout-basic .craps-entry__identity { min-height: 0; } body.layout-basic .craps-entry__daily-added > strong,body.layout-basic .craps-entry__progressive-meter { font-size: .92rem; } body.layout-basic .craps-entry__flip-mark { width: 1.16rem; height: 1.16rem; flex-basis: 1.16rem; } body.layout-basic .craps-entry__surface-strip { grid-template-columns: minmax(0,1.35fr) minmax(3rem,.34fr) minmax(6.2rem,.92fr); } body.layout-basic .craps-entry__bonus-equation { padding-inline: .04rem; } body.layout-basic .craps-entry__bonus-equation-line { gap: .08rem; } body.layout-basic .craps-entry__bonus-equation strong { font-size: .63rem; } body.layout-basic .craps-entry__bonus-equation small { font-size: .3rem; } body.layout-basic .craps-entry__place-prompt { font-size: .35rem; } }
 body.layout-basic .play-grid .panel {
   box-sizing: border-box;
   width: 100%;
@@ -16218,7 +16242,7 @@ body.layout-basic .side-bets-rail > app-parimutuel-panel { display: block; min-w
 body.layout-basic .side-bets-rail .app-parimutuel {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(22rem, 1fr) clamp(8.5rem, 24vw, 14rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: auto auto;
   align-items: center;
   gap: 0.42rem 0.55rem;
@@ -16260,7 +16284,7 @@ body.layout-basic .side-bets-rail .pari-book--open {
   display: grid;
   min-width: 0;
   grid-template-areas: "head today" "context today";
-  grid-template-columns: minmax(9rem, 0.78fr) minmax(11rem, 1.22fr);
+  grid-template-columns: minmax(7.25rem, 0.72fr) minmax(9.5rem, 1.28fr);
   grid-template-rows: auto 1fr;
   align-items: center;
   gap: 0.08rem 0.42rem;
@@ -16297,7 +16321,6 @@ body.layout-basic .side-bets-rail .app-parimutuel.has-live-book :is(
 ) { grid-column: 1; }
 body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 2; }
 body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small,
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance),
 body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount > span { display: none; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__bench { font-size: 0.57rem; letter-spacing: 0.025em; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__target { display: block; margin-top: 0.06rem; white-space: nowrap; }
@@ -17532,9 +17555,8 @@ body.layout-basic .qst-action-dialog__hint {
   body.layout-basic .play-grid > app-craps-entry {
     border-top: 0;
     border-left: 1px solid rgba(245, 166, 35, 0.24);
-  }
-  body.layout-basic .craps-entry__head { min-height: 5.5rem; grid-template-rows: minmax(0,1fr) 1.86rem; } body.layout-basic .craps-entry__daily-added > strong,body.layout-basic .craps-entry__progressive-meter { font-size: 1.15rem; } body.layout-basic .craps-entry__daily-added > strong em,body.layout-basic .craps-entry__added-key,body.layout-basic .craps-entry__progressive-meter em { font-size: .46rem; } body.layout-basic .craps-entry__daily-added { gap: .25rem; } body.layout-basic .craps-entry__daily-added > strong { gap: .13rem; } body.layout-basic .craps-entry__added-key { letter-spacing: .04em; line-height: .82; } body.layout-basic .craps-entry__progressive-value { gap: .18rem; } body.layout-basic .craps-entry__betting { min-height: 0; flex: 1 1 auto; grid-template-rows: auto minmax(0,1fr); margin-top: 0; } body.layout-basic .craps-entry__surface-strip { grid-row: 1; } body.layout-basic .craps-entry__mini-felt { grid-row: 2; grid-template-rows: minmax(2.35rem,1.35fr) minmax(1.74rem,1fr); } body.layout-basic .craps-entry__listing thead th { font-size: .42rem; } body.layout-basic .craps-entry__listing tbody :is(th,td) { font-size: .57rem; } body.layout-basic .craps-entry__listing tbody th time { font-size: .62rem; } body.layout-basic .craps-entry__money strong { font-size: .6rem; } body.layout-basic .craps-entry__entrants { font-size: .54rem !important; } body.layout-basic .craps-entry__action > button,body.layout-basic .craps-entry__entered { font-size: .46rem; } body.layout-basic .craps-entry__result small { font-size: .4rem; } body.layout-basic .craps-entry__result strong { font-size: .54rem; } body.layout-basic .craps-entry__day-buy th small { font-size: .37rem; }
-  body.layout-basic .play-grid .qst-slots {
+  } body.layout-basic .craps-entry__head { min-height: 5.66rem; grid-template-rows: minmax(0,1fr) 2.02rem; } body.layout-basic .craps-entry__daily-added > strong,body.layout-basic .craps-entry__progressive-meter { font-size: 1.15rem; } body.layout-basic .craps-entry__added-key { font-size: .46rem; letter-spacing: .04em; line-height: .9; } body.layout-basic .craps-entry__flip-mark { width: 1.5rem; height: 1.5rem; flex-basis: 1.5rem; } body.layout-basic .craps-entry__daily-added { gap: .25rem; } body.layout-basic .craps-entry__progressive-value { gap: .18rem; } body.layout-basic .craps-entry__betting { min-height: 0; flex: 1 1 auto; grid-template-rows: auto minmax(0,1fr); margin-top: 0; } body.layout-basic .craps-entry__surface-strip { grid-row: 1; } body.layout-basic .craps-entry__mini-felt { grid-row: 2; grid-template-rows: minmax(2.35rem,1.35fr) minmax(1.74rem,1fr); } body.layout-basic .craps-entry__listing thead th { font-size: .42rem; } body.layout-basic .craps-entry__listing tbody :is(th,td) { font-size: .57rem; } body.layout-basic .craps-entry__listing tbody th time { font-size: .62rem; } body.layout-basic .craps-entry__money strong { font-size: .6rem; } body.layout-basic .craps-entry__entrants { font-size: .54rem !important; } body.layout-basic .craps-entry__action > button,body.layout-basic .craps-entry__entered { font-size: .46rem; } body.layout-basic .craps-entry__result small { font-size: .4rem; } body.layout-basic .craps-entry__result strong { font-size: .54rem; } body.layout-basic .craps-entry__day-buy th small { font-size: .37rem; }
+  body.layout-basic .craps-entry__display-face { grid-template-rows: minmax(0,1fr) 2.02rem; } body.layout-basic .play-grid .qst-slots {
     flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: 7.5rem;
@@ -25209,3 +25231,302 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
   letter-spacing: 0.04em;
 }
 .rvl-card--mini .rvl-craps-pass-badge__windows { display: none; }
+
+/* Growth and the Incinerator are peer cards. Closed Growth does not repeat the
+   page-level meter, and WWXRP keeps its amount control deliberately compact. */
+body.layout-basic .side-bets-rail .pari-book--settled .pari-thermometer { display: none; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book { align-items: stretch; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-books { grid-column: 2; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book > app-wwxrp-burn { grid-column: 1; align-self: stretch; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp {
+  isolation: isolate;
+  height: 100%;
+  grid-template-columns: 2.3rem minmax(0, 1fr) clamp(6.25rem, 12vw, 8.5rem) 4.4rem;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0.3rem;
+  padding: 0.32rem 0.38rem;
+  border-color: rgba(244, 63, 94, 0.58);
+  background:
+    radial-gradient(circle at 1.8rem 50%, rgba(244, 63, 94, 0.24), transparent 5.2rem),
+    linear-gradient(100deg, rgba(127, 29, 29, 0.28), transparent 44%),
+    repeating-linear-gradient(115deg, transparent 0 13px, rgba(255, 255, 255, 0.014) 13px 14px),
+    linear-gradient(180deg, #211419 0%, #100c0f 58%, #180d12 100%);
+  box-shadow: inset 0 1px rgba(255, 228, 230, 0.1), inset 0 -1px rgba(76, 5, 25, 0.7), 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: grid; width: 2.3rem; height: 2.3rem; grid-column: 1; grid-row: 1; align-self: center; border-color: rgba(251, 113, 133, 0.7); background: radial-gradient(circle, #3f1019, #16090d 72%); box-shadow: inset 0 1px rgba(255, 228, 230, 0.12), 0 0 16px rgba(244, 63, 94, 0.3); }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark img { width: 2.08rem; height: 2.08rem; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity {
+  display: grid;
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+  grid-template-areas: "brand balance" "token balance";
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-self: stretch;
+  align-content: center;
+  gap: 0.1rem 0.42rem;
+  padding-top: 0;
+}
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small { display: block; grid-area: brand; color: #fda4af; font-size: 0.52rem; letter-spacing: 0.1em; text-shadow: 0 0 8px rgba(244, 63, 94, 0.3); }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance) { display: block; grid-area: token; color: #fff1f2; font-size: 0.58rem; letter-spacing: 0.16em; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__balance { display: flex; grid-area: balance; align-self: center; align-items: center; margin-left: 0; padding: 0.2rem 0.34rem; border: 1px solid rgba(251, 113, 133, 0.28); border-radius: 999px; background: rgba(69, 10, 22, 0.46); font-size: 0.62rem; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 3; grid-row: 1; align-self: center; }
+body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 4; grid-row: 1; }
+
+@media (min-width: 581px) {
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { height: 1.5rem; grid-template-columns: minmax(0, 1fr) 2.15rem; border-radius: 999px; background: rgba(12, 7, 10, 0.82); box-shadow: inset 0 1px 5px rgba(0, 0, 0, 0.52); }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount:focus-within { border-color: rgba(254, 202, 202, 0.72); box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.12), inset 0 1px 5px rgba(0, 0, 0, 0.52); }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount input { padding-inline: 0.5rem; font-size: 0.62rem; letter-spacing: 0.03em; text-align: right; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount input:focus-visible { box-shadow: none; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount button { width: 2.15rem; min-width: 0; padding-inline: 0; font-size: 0.42rem; letter-spacing: 0.02em; }
+}
+
+@media (max-width: 580px) {
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp { grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem; grid-template-rows: 1fr 1fr; gap: 0.08rem 0.35rem; padding: 0.2rem 0.22rem 0.2rem 0.3rem; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { width: 2.55rem; height: 2.55rem; grid-column: 1; grid-row: 1 / -1; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark img { width: 2.35rem; height: 2.35rem; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity { grid-column: 2; grid-row: 1; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 2; grid-row: 2; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 3; grid-row: 1 / -1; }
+}
+
+@media (min-width: 581px) and (max-width: 680px) {
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp { grid-template-columns: minmax(0, 1fr) 6.25rem 4.4rem; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: none; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity { grid-column: 1; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 2; }
+  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 3; }
+}
+
+/* A changed board remains the same green owned-entry action, with its label
+   carrying the distinction instead of switching to a purchase-colored state. */
+body.layout-basic .craps-entry__listing button[data-state="amend"] {
+  border-color: rgba(74, 222, 128, 0.58);
+  background: linear-gradient(180deg, rgba(22, 101, 52, 0.88), rgba(20, 83, 45, 0.82));
+  color: #dcfce7;
+}
+
+body.layout-basic .craps-entry__result-added[data-state="ready"] strong {
+  color: #58d5ff;
+  text-shadow: 0 0 0.16rem rgba(34, 183, 238, 0.3);
+}
+body.layout-basic .craps-entry__result-added[data-state="ready"][data-tone="progressive"] strong {
+  color: #d69cff;
+  text-shadow: 0 0 0.16rem rgba(192, 104, 252, 0.4);
+}
+
+body.layout-basic .craps-entry__lobby {
+  border-radius: 0;
+}
+
+/* Approved Craps entry felt: the header and wagers share one sharp six-column
+   table surface. These late overrides intentionally win over the compact
+   launcher defaults above without replacing any interactive board markup. */
+body.layout-basic .craps-entry__betting {
+  gap: 0;
+  padding: 0.12rem;
+  overflow: hidden;
+  border: 1px solid rgba(215, 190, 125, 0.58);
+  border-radius: 0 0 4px 4px;
+  background:
+    url('/app/assets/jackpot/community-coinflip-felt-v6.webp') center top / cover no-repeat,
+    #06351f;
+  box-shadow: inset 0 0 1rem rgba(0, 24, 16, 0.2);
+}
+
+body.layout-basic .craps-entry__surface-strip {
+  position: relative;
+  isolation: isolate;
+  min-height: 1.56rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+body.layout-basic .craps-entry__surface-strip::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0 33.333% 0 0;
+  background: linear-gradient(180deg, rgba(1, 46, 29, 0.86), rgba(0, 24, 15, 0.78));
+  box-shadow: inset 0 1px rgba(221, 238, 227, 0.08), inset 0 -1px rgba(0, 8, 5, 0.28);
+  content: "";
+  pointer-events: none;
+}
+body.layout-basic .craps-entry__surface-strip > * {
+  position: relative;
+  z-index: 1;
+}
+body.layout-basic .craps-entry__bonus-equation {
+  grid-column: 1 / 4;
+  padding: 0.06rem;
+  background: transparent;
+}
+body.layout-basic .craps-entry__bonus-equation :is(strong, small, b),
+body.layout-basic .craps-entry__place-prompt {
+  text-shadow: none;
+}
+body.layout-basic .craps-entry__bonus-equation-line small:last-child { color: #dbc57f; }
+body.layout-basic .craps-entry__place-prompt {
+  grid-column: 4;
+  padding: 0.04rem;
+  border: 0;
+  background: transparent;
+  color: #ff8588;
+}
+
+body.layout-basic .craps-entry__lane {
+  grid-column: 5 / 7;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.layout-basic .craps-entry__lane button {
+  min-height: 1rem;
+  padding: 0.06rem 0.05rem;
+  border: 1px solid rgba(215, 190, 125, 0.38);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #121716, #080b0a);
+  color: #aeb6b3;
+  text-shadow: none;
+  box-shadow: none;
+}
+body.layout-basic .craps-entry__lane button > span {
+  display: block;
+  font-size: 0.44rem;
+  line-height: 0.88;
+  letter-spacing: 0.035em;
+  text-align: center;
+}
+body.layout-basic .craps-entry__lane button + button { border-left: 0; }
+body.layout-basic .craps-entry__lane [data-craps-lane="normal"][aria-pressed="true"] {
+  border-color: #eef1f2;
+  background: linear-gradient(180deg, #f2f3f3, #aeb4b7);
+  color: #171a1b;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.76), inset 0 -1px rgba(61, 68, 72, 0.36);
+}
+body.layout-basic .craps-entry__lane [data-craps-lane="high"][aria-pressed="true"] {
+  border-color: #ffe29a;
+  background: linear-gradient(180deg, #f8d56c, #c98b18);
+  color: #251700;
+  box-shadow: inset 0 1px rgba(255, 249, 214, 0.72), inset 0 -1px rgba(100, 57, 0, 0.4);
+}
+
+body.layout-basic .craps-entry__mini-felt {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.layout-basic .craps-entry__mini-felt::before { content: none; }
+body.layout-basic :is(.craps-entry__number-row, .craps-entry__line-row) { gap: 0; }
+body.layout-basic .craps-entry__bet-spot {
+  border: 0;
+  border-top: 1px solid rgba(242, 224, 179, 0.48);
+  border-left: 1px solid rgba(242, 224, 179, 0.48);
+  border-radius: 0;
+  background: rgba(0, 38, 23, 0.08);
+  text-shadow: none;
+  box-shadow: none;
+}
+body.layout-basic :is(.craps-entry__number-row, .craps-entry__line-row) .craps-entry__bet-spot:last-child {
+  border-right: 1px solid rgba(242, 224, 179, 0.48);
+}
+body.layout-basic .craps-entry__line-row .craps-entry__bet-spot {
+  border-bottom: 1px solid rgba(242, 224, 179, 0.48);
+  background: rgba(0, 38, 23, 0.12);
+}
+body.layout-basic .craps-entry__bet-spot:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(219, 255, 236, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(209, 250, 232, 0.58);
+}
+body.layout-basic .craps-entry__bet-spot:focus-visible,
+body.layout-basic .craps-entry__lane button:focus-visible {
+  z-index: 8;
+  outline: 2px solid #f8fafc;
+  outline-offset: -2px;
+}
+body.layout-basic .craps-entry__bet-label {
+  top: 0.1rem;
+  left: 0.14rem;
+  font-size: 1.48rem;
+  text-shadow: none;
+}
+body.layout-basic .craps-entry__pays {
+  left: 0.13rem;
+  bottom: 0.08rem;
+  font-size: 0.52rem;
+  text-shadow: none;
+}
+body.layout-basic .craps-entry__line-row .craps-entry__pays {
+  left: 0.1rem;
+  bottom: 0.07rem;
+  font-size: 0.48rem;
+}
+body.layout-basic .craps-entry__line-row .craps-entry__bet-label {
+  top: 50%;
+  font-size: 0.68rem;
+  text-shadow: none;
+}
+body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] .craps-entry__bet-label { font-size: 0.78rem; }
+body.layout-basic .craps-entry__bet-spot--hard .craps-entry__bet-label {
+  top: 58%;
+  font-size: 0.48rem;
+  line-height: 0.82;
+}
+body.layout-basic .craps-entry__bet-spot--hard .craps-entry__bet-label b {
+  margin-top: 0.05rem;
+  font-size: 0.92rem;
+}
+body.layout-basic .craps-entry__hard-dice {
+  top: 0.08rem;
+  left: 0.08rem;
+  gap: 0.03rem;
+}
+body.layout-basic .craps-entry__hard-dice img {
+  width: 0.84rem;
+  height: 0.84rem;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.42));
+}
+body.layout-basic .craps-entry__how-to-play {
+  border-color: transparent;
+  background: linear-gradient(150deg, #176bd2, #073a92) !important;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.76);
+}
+body.layout-basic .craps-entry__how-to-play:hover:not(:disabled) {
+  border-color: transparent;
+  background: linear-gradient(150deg, #2783ee, #0a4db6) !important;
+  box-shadow: inset 0 0 0 1px #dbeafe;
+}
+body.layout-basic .craps-entry__line-row .craps-entry__how-to-play .craps-entry__bet-label {
+  color: #fff;
+  font-size: 0.52rem;
+  text-shadow: none;
+}
+body.layout-basic .craps-entry__bet-spot--dont { box-shadow: inset 0 0 0 1px rgba(237, 14, 17, 0.9); }
+body.layout-basic .craps-entry__random-slot {
+  border-color: transparent;
+  background: rgba(0, 49, 43, 0.42) !important;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.62);
+}
+
+@media (max-width: 768px) {
+  body.layout-basic .craps-entry__action > button,
+  body.layout-basic .craps-entry__entered {
+    height: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0.16rem 0.3rem;
+    font-size: 0.62rem;
+    line-height: 1;
+  }
+}

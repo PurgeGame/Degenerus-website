@@ -116,6 +116,7 @@ function openTable() {
         }))
       : standardResolutionHands;
   const lastHand = resolutionHands.at(-1);
+  const terminalHand = [...resolutionHands].reverse().find((hand) => hand?.terminal);
   const runReturn = lastHand?.survival?.survived === false || lastHand?.terminal === 'bust'
     ? 0n
     : BigInt(lastHand?.bankrollFlip ?? 0);
@@ -143,6 +144,10 @@ function openTable() {
     pendingBetIds: rolled ? ['412', '413'] : [],
     rolls: rolled ? '0x3366430041556100442652003265340051244300623361004255160053442500' : null,
     resolutionHands: rolled ? resolutionHands : [],
+    viewerResult: rolled ? {
+      stop: terminalHand?.terminal ?? null,
+      runPayoutWei: (runReturn * 10n ** 18n).toString(),
+    } : null,
     preview: rolled ? {
       won: (runReturn * 10n ** 18n).toString(),
       paid: (runReturn * 10n ** 18n).toString(),

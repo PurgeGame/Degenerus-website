@@ -427,10 +427,53 @@ describe('claims', () => {
 describe('readRoundWinners', () => {
   afterEach(() => {
     pari.__resetContractFactoryForTest();
+    pari.__resetWinnersFetcherForTest();
     contractsMod.clearProvider();
   });
 
-  test('discovers only the winning side and stops at the expected winner count', async () => {
+  test('reads winners from the API and caps at the expected count', async () => {
+    const winnerA = '0x1111000000000000000000000000000000000000';
+    const winnerB = '0x3333000000000000000000000000000000000000';
+    const winnerC = '0x4444000000000000000000000000000000000000';
+    let requested = null;
+    pari.__setWinnersFetcherForTest(async (path) => {
+      requested = path;
+      return {
+        market: 'growth',
+        round: 41,
+        over: true,
+        winners: [
+          { player: winnerA, credit: '1000', blockNumber: 10, logIndex: 0 },
+          { player: winnerB, credit: '1000', blockNumber: 11, logIndex: 0 },
+          { player: winnerC, credit: '1000', blockNumber: 12, logIndex: 0 },
+        ],
+      };
+    });
+
+    assert.deepEqual(await pari.readRoundWinners({
+      round: 41,
+      outcome: pari.SIDE_OVER,
+      expectedCount: 2,
+    }), [winnerA, winnerB]);
+    assert.equal(requested, '/game/parimutuel/growth/41/winners?over=1');
+  });
+
+  test('encodes the UNDER side and a non-default market', async () => {
+    let requested = null;
+    pari.__setWinnersFetcherForTest(async (path) => {
+      requested = path;
+      return { winners: [] };
+    });
+
+    await pari.readRoundWinners({
+      market: 'volume',
+      round: 7,
+      outcome: pari.SIDE_UNDER,
+    });
+    assert.equal(requested, '/game/parimutuel/volume/7/winners?over=0');
+  });
+
+  test('falls back to the chain scan only when the API throws', async () => {
     const winnerA = '0x1111000000000000000000000000000000000000';
     const loser = '0x2222000000000000000000000000000000000000';
     const winnerB = '0x3333000000000000000000000000000000000000';
@@ -455,6 +498,7 @@ describe('readRoundWinners', () => {
     };
     contractsMod.setProvider(provider);
     pari.__setContractFactoryForTest(() => contract);
+    pari.__setWinnersFetcherForTest(async () => { throw new Error('API unavailable'); });
 
     assert.deepEqual(await pari.readRoundWinners({
       kind: 'growth',
@@ -465,6 +509,22 @@ describe('readRoundWinners', () => {
     assert.equal(queries.length, 1, 'the expected count stops the backwards scan');
     assert.equal(queries[0].filter.round, 41);
     assert.ok(queries[0].to - queries[0].from < 1800, 'RPC range stays under the cap');
+  });
+
+  test('an empty API winners list is a real (non-error) answer and does not fall back', async () => {
+    let chainTouched = false;
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => { chainTouched = true; return 9000; },
+    });
+    pari.__setWinnersFetcherForTest(async () => ({ winners: [] }));
+
+    assert.deepEqual(await pari.readRoundWinners({
+      round: 41,
+      outcome: pari.SIDE_OVER,
+      expectedCount: 2,
+    }), []);
+    assert.equal(chainTouched, false, 'a genuine empty API answer never triggers the chain fallback');
   });
 });
 

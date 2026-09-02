@@ -62,7 +62,6 @@ class AppMineFlipResolver extends HTMLElement {
   #busy = false;
   #loadSeq = 0;
   #pollHandle = null;
-  #onFocus = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -75,9 +74,10 @@ class AppMineFlipResolver extends HTMLElement {
     // resolver's 30-second fallback poll before the first Mine FLIP press.
     this.#unsubs.push(subscribe('app.daySync', () => this.#refresh()));
 
+    // No private visibilitychange listener: registerComponentPoll already
+    // fires an immediate catch-up on tab return, and a second listener just
+    // doubled that refresh.
     this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_INTERVAL_MS);
-    this.#onFocus = () => { if (!document.hidden) this.#refresh(); };
-    document.addEventListener('visibilitychange', this.#onFocus);
     this.#refresh();
   }
 
@@ -87,9 +87,7 @@ class AppMineFlipResolver extends HTMLElement {
     });
     this.#unsubs = [];
     if (typeof this.#pollHandle === 'function') this.#pollHandle();
-    if (this.#onFocus) document.removeEventListener('visibilitychange', this.#onFocus);
     this.#pollHandle = null;
-    this.#onFocus = null;
     clearPendingActions(RESOLVER_SOURCE);
     this.#initialized = false;
   }

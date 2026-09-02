@@ -65,6 +65,9 @@ import { registerComponentPoll } from '../app/component-poll.js';
 import { permissionlessReadProvider, readTransactionReceipt } from '../app/read-provider.js';
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
+// Timer cadence when no box is mid-transition: discovery of external
+// settlements (another wallet's sweep, another device's purchase) only.
+const IDLE_DISCOVERY_POLL_MS = 35_000;
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const PENDING_SOURCE = 'lootboxes';
 const DEGENERETTE_RESOLVED_TOPIC = ethers.id(
@@ -536,6 +539,7 @@ class AppBoxStrip extends HTMLElement {
   // subscription starts a cycle of its own, so a caller that needs settled
   // state has to wait for that one rather than race its 7s successor.
   #pollInFlight = null;
+  #lastPollCycleAt = 0;
   #errorTimer = null;
   #docListener = null;
   #submittedListener = null;
@@ -892,7 +896,19 @@ class AppBoxStrip extends HTMLElement {
   // -------------------------------------------------------------------------
 
   #startPolling() {
-    this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), RNG_POLL_INTERVAL_MS);
+    // The 7s cadence exists to catch a box mid-transition (waiting for RNG,
+    // opening, or waiting for the indexer to seat its result). With nothing in
+    // flight the two forced 200-row feed reads are pure discovery — someone
+    // else's sweep or a purchase from another device — and a slow cadence
+    // serves that. Event-driven refreshes (purchase, reveal, TX) stay
+    // immediate; only the timer is gated.
+    this.#pollHandle = registerComponentPoll(() => {
+      const hot = this.#boxes.some((box) => (
+        (!box.ready && !box.resolved) || box.resultSyncing || box.opening
+      ));
+      if (!hot && Date.now() - this.#lastPollCycleAt < IDLE_DISCOVERY_POLL_MS) return undefined;
+      return this.#runPollCycle();
+    }, RNG_POLL_INTERVAL_MS);
   }
 
   async #readPurchaseKinds(box, owner) {
@@ -930,6 +946,7 @@ class AppBoxStrip extends HTMLElement {
       && document.visibilityState !== 'visible') return;
     if (!this.#addr) return;
     this.#pollBusy = true;
+    this.#lastPollCycleAt = Date.now();
     const owner = this.#addr;
     try {
       // Purchases tell us about boxes still waiting for RNG. Settlement legs

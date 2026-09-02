@@ -436,8 +436,26 @@ describe('app-parimutuel-panel', () => {
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*minmax\(22rem, 1fr\) clamp\(8\.5rem, 24vw, 14rem\)/s,
-      'the live Growth book and Incinerator share the full desktop row');
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'Growth and the Incinerator receive equal desktop lanes');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__identity > strong:not\(\.pari-wwxrp__balance\)\s*\{[^}]*display:\s*inline/s,
+      'the compact Incinerator still identifies itself as WWXRP');
+    assert.match(APP_CSS,
+      /\.app-parimutuel\.has-live-book \.pari-books\s*\{[^}]*grid-column:\s*2[^}]*\}[\s\S]*?\.app-parimutuel\.has-live-book > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1/s,
+      'the Incinerator leads on the left while Growth occupies the right lane');
+    assert.match(APP_CSS,
+      /\.app-parimutuel\.has-live-book \.pari-wwxrp\s*\{[^}]*grid-template-columns:\s*2\.3rem minmax\(0, 1fr\) clamp\(6\.25rem, 12vw, 8\.5rem\) 4\.4rem/s,
+      'the branded Incinerator reserves compact lanes for its coin, input, and burn key');
+    assert.match(APP_CSS,
+      /\.app-parimutuel\.has-live-book \.pari-wwxrp__mark\s*\{[^}]*display:\s*grid[^}]*grid-column:\s*1/s,
+      'the live card restores the WWXRP coin mark');
+    assert.match(APP_CSS,
+      /\.app-parimutuel\.has-live-book \.pari-wwxrp__identity small\s*\{[^}]*display:\s*block[^}]*grid-area:\s*brand/s,
+      'the Daily Incinerator branding is visible in the live row');
+    assert.match(APP_CSS,
+      /\.app-parimutuel\.has-live-book \.pari-wwxrp__amount\s*\{[^}]*height:\s*1\.5rem[^}]*border-radius:\s*999px/s,
+      'the inline WWXRP amount and MAX action form one compact pill');
     assert.match(APP_CSS,
       /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1 \/ -1/s,
       'the Incinerator reclaims the book lane when Growth is closed');
@@ -933,8 +951,9 @@ describe('app-parimutuel-panel', () => {
       'closed row shows the current per-winner result');
     assert.equal(card.querySelector('.pari-split'), null,
       'the closed book no longer shows the bettor split');
-    assert.ok(card.querySelector('.pari-thermometer'),
-      'ticket purchases now drive the growth thermometer after close');
+    assert.match(APP_CSS,
+      /\.side-bets-rail \.pari-book--settled \.pari-thermometer\s*\{[^}]*display:\s*none/s,
+      'the duplicate in-card thermometer is suppressed after Growth closes');
     assert.equal(card.querySelector('.pari-result--pending'), null,
       'the old duplicate pending row is removed');
   });

@@ -35,9 +35,26 @@ globalThis.localStorage = {
 };
 
 const launch = await import('../launch-claims.js');
+const wwxrpDraw = await import('../wwxrp-draw.js');
 const revealOverlay = await import('../../components/reveal-overlay.js');
 const { ethers } = await import('../contracts.js');
-const { CONTRACTS } = await import('../chain-config.js');
+const { CHAIN, CONTRACTS } = await import('../chain-config.js');
+const {
+  _setSharedReadProviderForTests,
+  _resetSharedReadProviderForTests,
+} = await import('../read-provider.js');
+
+// refreshLaunchClaims also fans out to readPlayerWwxrpDrawDays; default both
+// API-first reads to an always-failing fetch so a collateral refresh (e.g.
+// startLaunchClaims below) never reaches the real indexer API.
+function stubApiFetchersToFail() {
+  launch.__setLaunchClaimsFetcherForTest(async () => {
+    throw new Error('launch-claims API not stubbed in this test');
+  });
+  wwxrpDraw.__setWwxrpDrawFetcherForTest(async () => {
+    throw new Error('wwxrp-draw API not stubbed in this test');
+  });
+}
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const CALLER = '0xcd34000000000000000000000000000000000000';
@@ -66,9 +83,13 @@ describe('launch referral bonus action', () => {
     localStorage.clear();
     launch.__resetLaunchClaimsForTest();
     revealOverlay.__resetForTest();
+    stubApiFetchersToFail();
   });
 
-  afterEach(() => launch.__resetLaunchClaimsForTest());
+  afterEach(() => {
+    launch.__resetLaunchClaimsForTest();
+    wwxrpDraw.__resetWwxrpDrawForTest();
+  });
 
   test('already-claimed state opens its reward without submitting a transaction', async () => {
     let claims = 0;
@@ -241,5 +262,84 @@ describe('referral bonus reveal presentation', () => {
     assert.equal(revealOverlay.queueReveal(sequence), true);
     assert.equal(revealOverlay.queueReveal({ ...sequence }), false);
     assert.equal(revealOverlay.__takeQueuedForTest().length, 1);
+  });
+});
+
+describe('foil-level API-first discovery', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    launch.__resetLaunchClaimsForTest();
+    stubApiFetchersToFail();
+  });
+
+  afterEach(() => {
+    launch.__resetLaunchClaimsForTest();
+    _resetSharedReadProviderForTests();
+  });
+
+  test('reads foil levels from the API before touching the chain log scan', async () => {
+    const fetchCalls = [];
+    launch.__setLaunchClaimsFetcherForTest(async (path) => {
+      fetchCalls.push(path);
+      return {
+        toBlock: 4321,
+        events: [
+          { name: 'FoilPackBought', args: { buyer: PLAYER, level: '5', multBps: '15000', weiIn: '1' }, blockNumber: 10, logIndex: 0, transactionHash: '0xf1' },
+          { name: 'FoilPackBought', args: { buyer: PLAYER, level: '3', multBps: '15000', weiIn: '1' }, blockNumber: 11, logIndex: 0, transactionHash: '0xf2' },
+        ],
+      };
+    });
+    _setSharedReadProviderForTests({
+      getBlockNumber: async () => { throw new Error('must not scan chain when the API answers'); },
+      getLogs: async () => { throw new Error('must not scan chain when the API answers'); },
+    });
+
+    const result = await launch.__readPlayerFoilLevelsForTest(PLAYER);
+    assert.deepEqual(fetchCalls, [`/player/${PLAYER.toLowerCase()}/facts?names=FoilPackBought`]);
+    assert.deepEqual(result.levels, [3, 5]);
+    assert.equal(result.complete, true);
+  });
+
+  test('falls back to the chain scan on an API failure and memoizes it', async () => {
+    const base = Number(CHAIN.deployBlock);
+    let head = base + 5;
+    const ranges = [];
+    let fetchCalls = 0;
+    launch.__setLaunchClaimsFetcherForTest(async () => {
+      fetchCalls += 1;
+      const error = new Error('API 404');
+      error.status = 404;
+      throw error;
+    });
+    _setSharedReadProviderForTests({
+      getBlockNumber: async () => head,
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([Number(fromBlock), Number(toBlock)]);
+        return [];
+      },
+    });
+
+    await launch.__readPlayerFoilLevelsForTest(PLAYER);
+    assert.equal(fetchCalls, 1, 'the first read attempts the API once');
+    assert.equal(ranges.length, 1, 'an API failure falls back to the chain scan');
+
+    head += 5;
+    await launch.__readPlayerFoilLevelsForTest(PLAYER);
+    assert.equal(fetchCalls, 1, 'a memoized API failure is not retried within the 5-minute window');
+    assert.equal(ranges.length, 2, 'the chain fallback keeps serving reads while the API is memoized');
+  });
+
+  test('a gameState-triggered read never falls back to the chain scan', async () => {
+    launch.__setLaunchClaimsFetcherForTest(async () => {
+      throw new Error('API down');
+    });
+    _setSharedReadProviderForTests({
+      getBlockNumber: async () => { throw new Error('must not scan chain when fallback is disallowed'); },
+      getLogs: async () => { throw new Error('must not scan chain when fallback is disallowed'); },
+    });
+
+    const result = await launch.__readPlayerFoilLevelsForTest(PLAYER, { allowChainFallback: false });
+    assert.deepEqual(result.levels, []);
+    assert.equal(result.complete, false);
   });
 });

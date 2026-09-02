@@ -101,10 +101,49 @@ function _lockRotorAnimationClock(rotor) {
   }
 }
 
+// Element#getAnimations() is not free: profiled at ~4% of a core for the
+// always-on hero coins when called every frame. The list only changes when a
+// CSS animation starts, ends, or is cancelled, so it is cached per rotor and
+// re-read on those events, on a computed animation-name change (checked from
+// the style object _updateRotor already resolves). Cancelled animations leave
+// the list on the next refresh; `animationcancel` dispatches before the frame
+// callbacks that would otherwise seek a stale entry. Reading `playState` per
+// animation is NOT a cheaper guard: it forces the same timing update as
+// getAnimations() itself. An empty list is re-checked on a short cadence
+// rather than every frame so a rotor between animations stays cheap.
+const EMPTY_ANIMATION_RECHECK_FRAMES = 6;
+
+function _markAnimationsDirty(entry) {
+  entry.animationsDirty = true;
+}
+
+function _watchRotorAnimationEvents(rotor, entry) {
+  if (typeof rotor?.addEventListener !== 'function') return;
+  const onChange = () => _markAnimationsDirty(entry);
+  for (const type of ['animationstart', 'animationend', 'animationcancel']) {
+    try { rotor.addEventListener(type, onChange); } catch (_e) { /* shim */ }
+  }
+}
+
+function _rotorAnimations(entry) {
+  const cached = entry.animationList;
+  if (cached && !entry.animationsDirty) {
+    if (cached.length) return cached;
+    entry.emptyAnimationFrames = (entry.emptyAnimationFrames || 0) + 1;
+    if (entry.emptyAnimationFrames < EMPTY_ANIMATION_RECHECK_FRAMES) return cached;
+  }
+  let animations;
+  try { animations = entry.rotor.getAnimations(); } catch (_e) { return null; }
+  entry.animationList = Array.isArray(animations) ? animations : [];
+  entry.animationsDirty = false;
+  entry.emptyAnimationFrames = 0;
+  return entry.animationList;
+}
+
 function _advanceRotorAnimations(entry, timestamp) {
   if (!entry?.frameLocked) return;
-  let animations = [];
-  try { animations = entry.rotor.getAnimations(); } catch (_e) { return; }
+  const animations = _rotorAnimations(entry);
+  if (!animations) return;
   const frameTime = _frameTimestamp(timestamp);
   for (const animation of animations) {
     if (!animation) continue;
@@ -203,14 +242,26 @@ function _setVisibleSide(rotor, side) {
 // keyframe shape) to avoid the forced style update; it reintroduced the
 // upside-down-WWXRP artifact this module exists to prevent and was reverted.
 // Do not swap the matrix read for any nominal-timeline computation.
-function _updateRotor(rotor) {
+function _updateRotor(rotor, entry = null) {
   if (!rotor) return;
   let transform = 'none';
   try {
     const readStyle = typeof getComputedStyle === 'function'
       ? getComputedStyle
       : (typeof window !== 'undefined' ? window.getComputedStyle : null);
-    if (typeof readStyle === 'function') transform = readStyle(rotor).transform;
+    if (typeof readStyle === 'function') {
+      const style = readStyle(rotor);
+      transform = style.transform;
+      if (entry) {
+        // Same resolved style object, so this read costs no extra recalc. A
+        // changed animation-name means a new CSS animation to take over.
+        const animationName = style.animationName;
+        if (animationName !== entry.lastAnimationName) {
+          if (entry.lastAnimationName !== undefined) _markAnimationsDirty(entry);
+          entry.lastAnimationName = animationName;
+        }
+      }
+    }
   } catch (_e) { /* retain the safe front face */ }
   const prior = rotor.dataset?.visibleCoinFace || FRONT;
   _setVisibleSide(rotor, coinSideFromTransform(transform, prior));
@@ -241,7 +292,7 @@ function _tick(timestamp) {
     if (entry.onScreen === false) continue;
     sampling = true;
     _advanceRotorAnimations(entry, timestamp);
-    _updateRotor(rotor);
+    _updateRotor(rotor, entry);
   }
   const { request } = _frameApi();
   if (sampling && request) _frameHandle = request(_tick);
@@ -269,7 +320,12 @@ function _trackRotor(rotor) {
     wasConnected: rotor?.isConnected === true,
     onScreen: true,
     viewportTarget: null,
+    animationList: null,
+    animationsDirty: true,
+    emptyAnimationFrames: 0,
+    lastAnimationName: undefined,
   };
+  _watchRotorAnimationEvents(rotor, entry);
   _trackedRotors.add(entry);
   _ensureFrameLoop();
 }

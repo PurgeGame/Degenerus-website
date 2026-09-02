@@ -1,4 +1,4 @@
-import { describe, test, afterEach } from 'node:test';
+import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -101,8 +101,18 @@ const store = await import('../../app/store.js');
 const history = await import('../app-transaction-history.js');
 const { CHAIN } = await import('../../app/chain-config.js');
 
+beforeEach(() => {
+  // Default every test to an always-failing AFKing-history fetch so nothing
+  // accidentally reaches the real indexer API; tests exercising the API path
+  // install their own stub explicitly.
+  history.__setAfkingHistoryFetcherForTest(async () => {
+    throw new Error('AFKing history API not stubbed in this test');
+  });
+});
+
 afterEach(() => {
   history.setTransactionHistoryLoaderForTest(null);
+  history.__resetAfkingHistoryForTest();
   store.update('viewing.address', null);
   store.update('connected.address', null);
   store.update('app.lastDay', null);
@@ -132,6 +142,146 @@ describe('transaction history composition', () => {
     await history.loadAfkingPurchaseHistory(player, { provider });
     assert.deepEqual(ranges.at(-1), [head - 11, head],
       'a later refresh checks only the 12-block reorg overlap');
+  });
+
+  test('reads AFKing/pass purchase history from the API before touching the chain log scan', async () => {
+    const player = '0xaa11111111111111111111111111111111111111';
+    const fetchCalls = [];
+    history.__setAfkingHistoryFetcherForTest(async (path) => {
+      fetchCalls.push(path);
+      return {
+        toBlock: 999,
+        truncated: false,
+        events: [
+          {
+            name: 'SubscriptionUpdated',
+            args: { player, dailyQuantity: '3', drainGameCreditFirst: false, useTickets: true, fundingSource: player },
+            blockNumber: 10, logIndex: 0, transactionHash: '0xaa1',
+          },
+          {
+            name: 'AfkingDelivered',
+            args: { player, day: '5', weiIn: '0', pendingFlipAfter: '0', affiliateBaseAfter: '0' },
+            blockNumber: 11, logIndex: 0, transactionHash: '0xaa2',
+          },
+        ],
+      };
+    });
+    const provider = {
+      getBlockNumber: async () => { throw new Error('must not scan chain when the API answers'); },
+      getLogs: async () => { throw new Error('must not scan chain when the API answers'); },
+    };
+
+    const result = await history.loadAfkingPurchaseHistory(player, { provider });
+    assert.deepEqual(fetchCalls, [
+      `/player/${player}/facts?names=SubscriptionUpdated,AfkingDelivered,LootBoxBuy,WhalePassPurchased,LazyPassPurchased,DeityPassPurchased`,
+    ]);
+    assert.deepEqual(result.items.map((item) => item.eventName), ['SubscriptionUpdated', 'AfkingDelivered']);
+    assert.equal(result.items[0].dailyQuantity, 3);
+    assert.equal(result.items[0].useTickets, true);
+    assert.equal(result.items[1].day, 5);
+  });
+
+  test('pages a truncated API response by since until the API catches up', async () => {
+    const player = '0xaa22222222222222222222222222222222222222';
+    const sinceValues = [];
+    let call = 0;
+    history.__setAfkingHistoryFetcherForTest(async (path) => {
+      const since = new URL(path, 'https://api.invalid').searchParams.get('since');
+      sinceValues.push(since);
+      call += 1;
+      if (call === 1) {
+        return {
+          toBlock: 999,
+          truncated: true,
+          events: [
+            { name: 'LootBoxBuy', args: { buyer: player, index: '0', amount: '1' }, blockNumber: 100, logIndex: 0, transactionHash: '0xb1' },
+          ],
+        };
+      }
+      return {
+        toBlock: 999,
+        truncated: false,
+        events: [
+          { name: 'LootBoxBuy', args: { buyer: player, index: '1', amount: '2' }, blockNumber: 200, logIndex: 0, transactionHash: '0xb2' },
+        ],
+      };
+    });
+
+    const result = await history.loadAfkingPurchaseHistory(player, { provider: {} });
+    assert.deepEqual(sinceValues, [null, '100'], 'the second page is requested since the last row of the first');
+    assert.equal(call, 2);
+    assert.deepEqual(result.items.map((item) => item.transactionHash), ['0xb1', '0xb2']);
+  });
+
+  test('falls back to the chain scan on an API failure and memoizes it', async () => {
+    const player = '0xaa33333333333333333333333333333333333333';
+    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+    let head = deployBlock + 5;
+    const ranges = [];
+    let fetchCalls = 0;
+    history.__setAfkingHistoryFetcherForTest(async () => {
+      fetchCalls += 1;
+      const error = new Error('API 404');
+      error.status = 404;
+      throw error;
+    });
+    const provider = {
+      getBlockNumber: async () => head,
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([fromBlock, toBlock]);
+        return [];
+      },
+    };
+
+    await history.loadAfkingPurchaseHistory(player, { provider });
+    assert.equal(fetchCalls, 1, 'the first read attempts the API once');
+    assert.equal(ranges.length, 1, 'an API failure falls back to the chain scan');
+
+    head += 5;
+    await history.loadAfkingPurchaseHistory(player, { provider });
+    assert.equal(fetchCalls, 1, 'a memoized API failure is not retried within the 5-minute window');
+    assert.equal(ranges.length, 2, 'the chain fallback keeps serving reads while the API is memoized');
+  });
+
+  test('persists the chain-fallback cursor to localStorage so a fresh session resumes from it', async () => {
+    const player = '0xaa44444444444444444444444444444444444444';
+    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+    const head = deployBlock + 40;
+    const realLocalStorage = globalThis.localStorage;
+    const values = new Map();
+    globalThis.localStorage = {
+      getItem: (key) => (values.has(key) ? values.get(key) : null),
+      setItem: (key, value) => { values.set(key, String(value)); },
+      removeItem: (key) => { values.delete(key); },
+    };
+    try {
+      history.__setAfkingHistoryFetcherForTest(async () => { throw new Error('API down'); });
+      const provider = {
+        getBlockNumber: async () => head,
+        getLogs: async () => [],
+      };
+      await history.loadAfkingPurchaseHistory(player, { provider });
+      assert.equal(values.size, 1, 'the chain-scan cursor was written to localStorage');
+
+      // A fresh session (a new in-memory cursor cache, e.g. after a reload)
+      // should revive from the persisted cursor instead of rescanning from
+      // the deploy block.
+      history.__resetAfkingHistoryForTest();
+      history.__setAfkingHistoryFetcherForTest(async () => { throw new Error('API down'); });
+      const ranges = [];
+      const resumedProvider = {
+        getBlockNumber: async () => head + 3,
+        getLogs: async ({ fromBlock, toBlock }) => {
+          ranges.push([fromBlock, toBlock]);
+          return [];
+        },
+      };
+      await history.loadAfkingPurchaseHistory(player, { provider: resumedProvider });
+      assert.deepEqual(ranges, [[head - 11, head + 3]],
+        'a revived cursor rescans only the reorg-overlap tail plus new blocks');
+    } finally {
+      globalThis.localStorage = realLocalStorage;
+    }
   });
 
   test('queues zero-payout record reels before a genuine Degenerette Luckbox replay', () => {

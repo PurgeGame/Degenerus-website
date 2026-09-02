@@ -116,7 +116,8 @@ export function mountSettingsMenu(root = document) {
           <output data-bind="settings-reveal-speed-value">1×</output>
         </span>
       </label>
-      <label class="nav-settings__row nav-settings__row--toggle">
+      <label class="nav-settings__row nav-settings__row--toggle"
+             data-bind="settings-afking-funding-warning-row" hidden>
         <span class="nav-settings__copy">
           <strong>AFKING FUNDING ALERT</strong>
           <small>Warn when fewer than 7 funded days remain</small>
@@ -196,6 +197,13 @@ export function mountSettingsMenu(root = document) {
       writeAfkingLowFundWarningPreference(afkingFundingWarning.checked);
     });
   }
+  const afkingFundingWarningRow = panel.querySelector(
+    '[data-bind="settings-afking-funding-warning-row"]',
+  );
+  const unsubscribeAfkingSubscription = subscribe('app.afkingSubscription', (subscription) => {
+    if (!afkingFundingWarningRow) return;
+    afkingFundingWarningRow.hidden = subscription?.active !== true;
+  });
 
   const allInRow = panel.querySelector('[data-bind="settings-all-in-row"]');
   const allIn = panel.querySelector('[data-bind="settings-all-in-button"]');
@@ -230,6 +238,7 @@ export function mountSettingsMenu(root = document) {
 
   // Page-lifetime mount, with an explicit teardown seam for focused tests.
   wrapper.destroySettingsMenu = () => {
+    unsubscribeAfkingSubscription();
     unsubscribeEligibility();
     doc.removeEventListener('pointerdown', onPointerDown);
     doc.removeEventListener('keydown', onKeyDown);

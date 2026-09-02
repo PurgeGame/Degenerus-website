@@ -112,6 +112,8 @@ export const VOLUME_WINDOW = {
 // to the other testnet clock overlay so entry gating matches the contract.
 export const CRAPS_SCHEDULE = Object.freeze({
   daySeconds: 1_200,
+  // Nominal block interval; sizes block-count lookbacks derived from daySeconds.
+  blockSeconds: 2,
   anchorSeconds: 82_620,
   openerCloseSeconds: 0,
   clockAlignSeconds: 300,

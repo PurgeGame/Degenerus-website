@@ -16,12 +16,15 @@ const {
   candidateRecordPayoutWei,
   candidateClaimsRecord,
   decodeRecordClockSlot,
+  diceRunCandidateFromApiPayload,
   diceRunRecordFromReceipt,
   fetchRecords,
   formatRecordValue,
   normalizeRecords,
+  readLiveDiceRunRecord,
   recordClaimTarget,
   recordClaimTargetForMark,
+  __diceRunChainFallbackRunsForTest,
   __resetRecordsReadersForTest,
   __setRecordsReadersForTest,
   shortAddress,
@@ -49,7 +52,7 @@ const {
   recordBountyTransactionQuote,
   renderSnapshotKey,
 } = await import('../app-records-rail.js');
-const { CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
+const { CHAIN, CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
 const { ethers } = await import('../../app/contracts.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -710,6 +713,145 @@ describe('live bounty pool', () => {
     } finally {
       __resetRecordsReadersForTest();
     }
+  });
+
+  test('fetchRecords reuses the single /records fetch for the Dice Run reader', async () => {
+    let jsonCalls = 0;
+    let receivedPayload;
+    __setRecordsReadersForTest({
+      json: async () => {
+        jsonCalls += 1;
+        return {
+          recordPool: '0',
+          records: [],
+          diceRun: { player: '0xa', value: '9' },
+        };
+      },
+      pool: async () => 0n,
+      diceRun: async ({ payload } = {}) => { receivedPayload = payload; return null; },
+    });
+    try {
+      await fetchRecords();
+      assert.equal(jsonCalls, 1, '/records is fetched exactly once');
+      assert.equal(
+        receivedPayload?.diceRun?.value,
+        '9',
+        'the Dice Run reader receives the SAME payload — no second fetch',
+      );
+    } finally {
+      __resetRecordsReadersForTest();
+    }
+  });
+
+  describe('diceRunCandidateFromApiPayload', () => {
+    test('a real held row becomes a receipt-lookup candidate', () => {
+      const candidate = diceRunCandidateFromApiPayload({
+        player: '0xABCDEF0123456789012345678901234567890123',
+        value: '2345678',
+        transactionHash: `0x${'ab'.repeat(32)}`,
+        blockNumber: 555,
+        logIndex: 2,
+      });
+      assert.deepEqual(candidate, {
+        player: '0xabcdef0123456789012345678901234567890123',
+        value: 2_345_678n,
+        transactionHash: `0x${'ab'.repeat(32)}`,
+        blockNumber: 555,
+        logIndex: 2,
+      });
+    });
+
+    test('a zero-value/zero-player row is a confirmed "no record yet" — null, not a fallback', () => {
+      assert.equal(diceRunCandidateFromApiPayload({
+        player: '0x0000000000000000000000000000000000000000',
+        value: '0',
+      }), null);
+      assert.equal(diceRunCandidateFromApiPayload(null), undefined);
+    });
+
+    test('a malformed row (bad hash/block) signals the chain fallback', () => {
+      assert.equal(diceRunCandidateFromApiPayload({
+        player: '0xabcdef0123456789012345678901234567890123',
+        value: '9',
+        transactionHash: 'not-a-hash',
+        blockNumber: 5,
+      }), undefined);
+      assert.equal(diceRunCandidateFromApiPayload({
+        player: '0xabcdef0123456789012345678901234567890123',
+        value: '9',
+        transactionHash: `0x${'ab'.repeat(32)}`,
+        blockNumber: -1,
+      }), undefined);
+    });
+  });
+
+  describe('readLiveDiceRunRecord API-first + fallback', () => {
+    test('builds the record straight from the diceRun payload, no chain log scan', async () => {
+      const priorRpcUrl = CHAIN.rpcUrl;
+      CHAIN.rpcUrl = '';
+      __resetRecordsReadersForTest();
+      try {
+        const before = __diceRunChainFallbackRunsForTest();
+        const record = await readLiveDiceRunRecord({
+          payload: {
+            diceRun: {
+              player: '0xABCDEF0123456789012345678901234567890123',
+              value: '2345678',
+              transactionHash: `0x${'ab'.repeat(32)}`,
+              blockNumber: 555,
+              logIndex: 2,
+            },
+          },
+        });
+        assert.equal(record.player, '0xabcdef0123456789012345678901234567890123');
+        assert.equal(record.value, 2_345_678n);
+        assert.equal(record.blockNumber, 555);
+        assert.equal(
+          __diceRunChainFallbackRunsForTest(),
+          before,
+          'the API path never falls back to the BigRecordUpdated log scan',
+        );
+      } finally {
+        CHAIN.rpcUrl = priorRpcUrl;
+        __resetRecordsReadersForTest();
+      }
+    });
+
+    test('a diceRun key confirming no holder yet returns null without a chain fallback', async () => {
+      const before = __diceRunChainFallbackRunsForTest();
+      const record = await readLiveDiceRunRecord({
+        payload: { diceRun: { player: '0x0000000000000000000000000000000000000000', value: '0' } },
+      });
+      assert.equal(record, null);
+      assert.equal(__diceRunChainFallbackRunsForTest(), before);
+    });
+
+    test('memoizes the chain fallback for 5 minutes so the 15s poller does not rescan', async () => {
+      const priorRpcUrl = CHAIN.rpcUrl;
+      CHAIN.rpcUrl = '';
+      __resetRecordsReadersForTest();
+      try {
+        const before = __diceRunChainFallbackRunsForTest();
+        const first = await readLiveDiceRunRecord({ payload: { recordPool: '0', records: [] } });
+        assert.equal(first, null);
+        assert.equal(
+          __diceRunChainFallbackRunsForTest(),
+          before + 1,
+          'no diceRun key falls back to the chain scan',
+        );
+
+        const second = await readLiveDiceRunRecord({ payload: { records: [] } });
+        assert.equal(second, null);
+        assert.equal(
+          __diceRunChainFallbackRunsForTest(),
+          before + 1,
+          'memoized: the 15s timer does not rescan within 5 minutes',
+        );
+      } finally {
+        CHAIN.rpcUrl = priorRpcUrl;
+        __resetRecordsReadersForTest();
+      }
+    });
   });
 });
 

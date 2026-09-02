@@ -81,6 +81,8 @@ export const VOLUME_WINDOW = {
 // 23:20 UTC, the next five on four-hour walls, and the event at 22:42 UTC.
 export const CRAPS_SCHEDULE = Object.freeze({
   daySeconds: 86_400,
+  // Nominal block interval; sizes block-count lookbacks derived from daySeconds.
+  blockSeconds: 12,
   anchorSeconds: 82_620,
   openerCloseSeconds: 1_200,
   clockAlignSeconds: 180,

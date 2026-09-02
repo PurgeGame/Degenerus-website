@@ -195,8 +195,8 @@ describe('coinflip stake reads', () => {
     coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetBackingReaderForTest();
     coinflipMod.__resetWidgetBalancesReaderForTest();
-    coinflipMod.__resetBiggestFlipReaderForTest();
     coinflipMod.__resetStakeReadContractFactoryForTest();
+    coinflipMod.__resetCoinflipDayFetcherForTest();
     contractsMod.clearProvider();
   });
 
@@ -216,77 +216,6 @@ describe('coinflip stake reads', () => {
       stored + carry,
       'the normalized settings shape uses carryWei too',
     );
-  });
-
-  test('ties the all-time Biggest Flip to its exact resolved day and loss', async () => {
-    const base = Number(CHAIN.deployBlock);
-    const transactionHash = '0xrecord';
-    const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
-    const recordWei = 6_195_297n * 10n ** 18n;
-    const recordLog = {
-      blockNumber: base + 2_644,
-      index: 18,
-      transactionHash,
-      args: { player, recordAmount: recordWei },
-    };
-    const stakeLog = {
-      blockNumber: base + 2_644,
-      index: 17,
-      transactionHash,
-      args: { player, day: 10, amount: recordWei, newTotal: recordWei },
-    };
-    let historyReads = 0;
-    const contract = {
-      filters: {
-        BiggestFlipUpdated: () => ({ type: 'record' }),
-        CoinflipStakeUpdated: (wantedPlayer) => ({
-          type: 'stake', player: String(wantedPlayer || '').toLowerCase(),
-        }),
-      },
-      biggestFlipEver: async () => recordWei,
-      currentBounty: async () => 1_750n * 10n ** 18n,
-      bountyOwedTo: async () => '0x0000000000000000000000000000000000000000',
-      bountyLocked: async () => { throw new Error('older deploy has no getter'); },
-      getCoinflipDayResult: async (day) => {
-        assert.equal(Number(day), 10, 'reads the record setter\'s target day');
-        return [1, false];
-      },
-      queryFilter: async (filter, from, to) => {
-        historyReads += 1;
-        const logs = filter.type === 'record' ? [recordLog]
-          : filter.type === 'stake' && filter.player === player ? [stakeLog]
-            : [];
-        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
-      },
-    };
-    contractsMod.setProvider({
-      ...makeFakeProvider(CONNECTED),
-      getBlockNumber: async () => base + 4_000,
-    });
-    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
-
-    assert.deepEqual(await coinflipMod.readBiggestFlipRecord({ resolveResult: false }), {
-      recordWei,
-      bountyWei: 1_750n * 10n ** 18n,
-      armedBy: null,
-      locked: false,
-      claimWei: recordWei + 1n,
-      lockWei: recordWei + recordWei / 10n,
-      result: null,
-      recordDay: null,
-    }, 'public record and bounty amounts do not wait on historical color lookup');
-    assert.equal(historyReads, 0, 'the fast headline read performs no log scan');
-    assert.deepEqual(await coinflipMod.readBiggestFlipRecord(), {
-      recordWei,
-      bountyWei: 1_750n * 10n ** 18n,
-      armedBy: null,
-      locked: false,
-      claimWei: recordWei + 1n,
-      lockWei: recordWei + recordWei / 10n,
-      result: 'loss',
-      recordDay: 10,
-    });
-    assert.ok(historyReads > 0, 'the follow-up resolves immutable win/loss color');
   });
 
   test('replayed previews override stale stored auto-rebuy carry', () => {
@@ -534,6 +463,9 @@ describe('coinflip stake reads', () => {
       getBlockNumber: async () => base + 400,
     });
     coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+    // readResolvedCoinflipStake is API-first now — force the fetch to throw so
+    // this test deterministically exercises the (still-correct) chain fallback.
+    coinflipMod.__setCoinflipDayFetcherForTest(async () => { throw new Error('offline'); });
 
     assert.equal(
       await coinflipMod.readResolvedCoinflipStake({ player: CONTRACTS.SDGNRS, day: 168 }),
@@ -584,6 +516,7 @@ describe('coinflip stake reads', () => {
       getBlockNumber: async () => base + 400,
     });
     coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+    coinflipMod.__setCoinflipDayFetcherForTest(async () => { throw new Error('offline'); });
 
     assert.equal(
       await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 169 }),
@@ -687,6 +620,176 @@ describe('coinflip stake reads', () => {
       if (priorStorage === undefined) delete globalThis.localStorage;
       else globalThis.localStorage = priorStorage;
     }
+  });
+
+  test('resolved day from the API with playerStake skips the CoinflipStakeUpdated lookup entirely', async () => {
+    const unit = 10n ** 18n;
+    const base = Number(CHAIN.deployBlock);
+    const seen = [];
+    let queryFilterCalls = 0;
+    const contract = {
+      filters: {
+        CoinflipStakeUpdated: () => ({ type: 'stake' }),
+        CoinflipDayResolved: () => ({ type: 'resolved' }),
+        CoinflipClaimState: () => ({ type: 'state' }),
+      },
+      previewClaimCoinflips: async (player, overrides) => {
+        seen.push(['claimable', overrides?.blockTag]);
+        return 1_467_374n * unit;
+      },
+      previewSalvageFlipBacking: async (player, overrides) => {
+        seen.push(['backing', overrides?.blockTag]);
+        return (1_467_374n + 919_901n) * unit;
+      },
+      queryFilter: async () => { queryFilterCalls += 1; return []; },
+    };
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+    coinflipMod.__setCoinflipDayFetcherForTest(async (path) => {
+      assert.equal(path, `/coinflip/day/169?player=${CONNECTED}`);
+      return {
+        win: true,
+        rewardPercent: 120,
+        blockNumber: base + 300,
+        previousResolvedBlock: base + 100,
+        playerStake: '86906000000000000000000',
+        playerStakeBlock: base + 250,
+      };
+    });
+
+    assert.equal(
+      await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 169 }),
+      1_006_807n * unit,
+      'stored stake comes straight from the API playerStake; carry replays the same preview pair',
+    );
+    assert.deepEqual(seen, [
+      ['claimable', base + 299],
+      ['backing', base + 299],
+    ]);
+    assert.equal(
+      queryFilterCalls,
+      0,
+      'no CoinflipDayResolved or CoinflipStakeUpdated scan runs when playerStake is present',
+    );
+  });
+
+  test('resolved day from the API without playerStake runs one bounded CoinflipStakeUpdated lookup and never walks CoinflipDayResolved', async () => {
+    const unit = 10n ** 18n;
+    const base = Number(CHAIN.deployBlock);
+    const stakeUpdate = { blockNumber: base + 250, index: 4, args: { newTotal: 86_906n * unit } };
+    const queries = [];
+    const contract = {
+      filters: {
+        CoinflipStakeUpdated: (player, day) => ({
+          type: 'stake', player: String(player).toLowerCase(), day: Number(day),
+        }),
+        CoinflipDayResolved: (day) => ({ type: 'resolved', day: Number(day) }),
+        CoinflipClaimState: (player) => ({ type: 'state', player: String(player).toLowerCase() }),
+      },
+      previewClaimCoinflips: async () => 1_467_374n * unit,
+      previewSalvageFlipBacking: async () => (1_467_374n + 919_901n) * unit,
+      queryFilter: async (filter, from, to) => {
+        queries.push({ filter, from, to });
+        const logs = filter.type === 'stake' && filter.day === 169 ? [stakeUpdate] : [];
+        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+      },
+    };
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+    coinflipMod.__setCoinflipDayFetcherForTest(async () => ({
+      win: true,
+      blockNumber: base + 300,
+      previousResolvedBlock: base + 100,
+      playerStake: null,
+    }));
+
+    assert.equal(
+      await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 169 }),
+      1_006_807n * unit,
+    );
+    assert.ok(
+      queries.every((q) => q.filter.type === 'stake'),
+      'the API already supplied both resolution blocks — no CoinflipDayResolved walk runs',
+    );
+    assert.equal(queries.length, 1, 'a single bounded queryFilter call, not a chunked deploy-to-head walk');
+  });
+
+  test('an unresolved day from the API returns null and memoizes it in-memory for 60s', async () => {
+    let fetchCalls = 0;
+    coinflipMod.__setCoinflipDayFetcherForTest(async () => {
+      fetchCalls += 1;
+      return { win: null, blockNumber: null, previousResolvedBlock: null, playerStake: null };
+    });
+
+    assert.equal(await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 999 }), null);
+    assert.equal(fetchCalls, 1);
+    assert.equal(await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 999 }), null);
+    assert.equal(fetchCalls, 1, 'the 60s negative memo skips the second fetch for the same unresolved day');
+  });
+
+  test('an API throw falls back to a 20-chunk-bounded chain scan and memoizes the failure 5 minutes', async () => {
+    const unit = 10n ** 18n;
+    const base = Number(CHAIN.deployBlock);
+    const head = base + 100_000;
+    const boundedFloor = head - 20 * 1_800; // RESOLVED_DAY_FALLBACK_LOOKBACK_CHUNKS * LOG_CHUNK_BLOCKS
+    const previousResolution = { blockNumber: boundedFloor + 500, index: 1 };
+    const stakeUpdate = {
+      blockNumber: boundedFloor + 1_400, index: 2, args: { newTotal: 5_000n * unit },
+    };
+    const resolution = { blockNumber: boundedFloor + 1_500, index: 3 };
+    const queries = [];
+    const contract = {
+      filters: {
+        CoinflipDayResolved: (day) => ({ type: 'resolved', day: Number(day) }),
+        CoinflipStakeUpdated: (player, day) => ({
+          type: 'stake', player: String(player).toLowerCase(), day: Number(day),
+        }),
+        CoinflipClaimState: (player) => ({ type: 'state', player: String(player).toLowerCase() }),
+      },
+      previewClaimCoinflips: async () => 100n * unit,
+      previewSalvageFlipBacking: async () => 100n * unit,
+      queryFilter: async (filter, from, to) => {
+        queries.push({ filter, from, to });
+        let logs = [];
+        if (filter.type === 'resolved' && filter.day === 41) logs = [resolution];
+        if (filter.type === 'resolved' && filter.day === 40) logs = [previousResolution];
+        if (filter.type === 'stake' && filter.day === 41) logs = [stakeUpdate];
+        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+      },
+    };
+    contractsMod.setProvider({ ...makeFakeProvider(CONNECTED), getBlockNumber: async () => head });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+    let apiCalls = 0;
+    coinflipMod.__setCoinflipDayFetcherForTest(async () => {
+      apiCalls += 1;
+      throw new Error('API unavailable');
+    });
+
+    assert.equal(
+      await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 41 }),
+      5_000n * unit,
+    );
+    assert.equal(apiCalls, 1);
+    const resolvedQueries = queries.filter((q) => q.filter.type === 'resolved');
+    assert.ok(resolvedQueries.length > 0, 'sanity: the resolved-day scan actually ran');
+    assert.ok(
+      resolvedQueries.every((q) => q.from >= boundedFloor),
+      'the CoinflipDayResolved walk never crosses the 36,000-block lookback floor',
+    );
+    assert.equal(
+      Math.min(...resolvedQueries.map((q) => q.from)),
+      boundedFloor,
+      'the walk is bounded to the lookback floor, not the deploy block',
+    );
+
+    // A second call (a different, uncached day) inside the 5-minute window must
+    // not retry the API — only the bounded chain fallback may run.
+    assert.equal(await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 42 }), null);
+    assert.equal(apiCalls, 1, 'the API circuit breaker skips the fetch while memoized');
+
+    coinflipMod.__expireCoinflipDayFallbackMemoForTest();
+    await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 43 });
+    assert.equal(apiCalls, 2, 'the next poll after the memo expires retries the API');
   });
 });
 

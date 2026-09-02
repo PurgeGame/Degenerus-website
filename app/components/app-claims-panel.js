@@ -217,21 +217,22 @@ class AppClaimsPanel extends HTMLElement {
     try {
       // Account-switcher (2026-07-16): mode 'combined' has no single address
       // to fetch /pending for — build rows from app.playerCombined instead
-      // (still fetches the global /last-day row for the headline's day-payout
-      // sub-line, which no-ops when #pinnedAddress stays null below).
+      // (the headline's day-payout sub-line no-ops when #pinnedAddress stays
+      // null below).
       const mode = get('ui.mode');
+      // The sealed last-day payload is polling.js's event-driven single source
+      // of truth (app.lastDay). Re-fetching the same immutable ~13KB record on
+      // this panel's own 30s cadence was the exact transfer waste polling.js's
+      // no-lastDay-timer design exists to avoid; read the store instead (the
+      // app.lastDay subscription below re-renders when it moves).
+      const lastDayResult = get('app.lastDay') || null;
+      this.#lastDayData = lastDayResult;
+      this.#pinnedDay = (lastDayResult && typeof lastDayResult.day === 'number') ? lastDayResult.day : null;
       if (mode === 'combined') {
         this.#pinnedAddress = null;
         this.#pendingData = null;
         this.#dashboardData = null;
         this.#combinedData = get('app.playerCombined');
-        const lastDayResult = await fetchJSON(
-          `/game/jackpot/last-day`,
-          { signal, force },
-        ).catch(() => null);
-        if (signal.aborted) return;
-        this.#lastDayData = lastDayResult || null;
-        this.#pinnedDay = (lastDayResult && typeof lastDayResult.day === 'number') ? lastDayResult.day : null;
         this.#render();
         return;
       }
@@ -242,17 +243,16 @@ class AppClaimsPanel extends HTMLElement {
         || null;
       this.#pinnedAddress = addr;
 
-      // Build URL list — /pending + /player/:address require an address;
-      // /last-day is global. fetchJSON prepends API_BASE (== CHAIN.indexerBase).
+      // Build URL list — /pending + /player/:address require an address.
+      // fetchJSON prepends API_BASE (== CHAIN.indexerBase). The last-day
+      // payload comes from the store above, never from this cycle's network.
       const urls = addr
         ? [
             `/player/${addr}/pending`,
-            `/game/jackpot/last-day`,
             `/player/${addr}`,
           ]
         : [
             null,
-            `/game/jackpot/last-day`,
             null,
           ];
 
@@ -263,13 +263,11 @@ class AppClaimsPanel extends HTMLElement {
       // these results to avoid overwriting fresher data.
       if (signal.aborted) return;
 
-      const [pending, lastDay, dashboard] = results.map(
+      const [pending, dashboard] = results.map(
         (r) => (r.status === 'fulfilled' ? r.value : null),
       );
       this.#pendingData = pending?.pending || null;
-      this.#lastDayData = lastDay || null;
       this.#dashboardData = dashboard || null;
-      this.#pinnedDay = (lastDay && typeof lastDay.day === 'number') ? lastDay.day : null;
 
       this.#render();
     } catch (_e) {
@@ -353,7 +351,16 @@ class AppClaimsPanel extends HTMLElement {
       this.#combinedData = payload;
       if (get('ui.mode') === 'combined') this.#render();
     });
-    this.#unsubs.push(u1, u2, u3, u4);
+    // polling.js publishes app.lastDay event-driven (start, day rollover,
+    // chain completion). Re-render with the fresh payload instead of ever
+    // fetching /game/jackpot/last-day from this panel.
+    const u5 = subscribe('app.lastDay', (payload) => {
+      const lastDay = payload || null;
+      this.#lastDayData = lastDay;
+      this.#pinnedDay = (lastDay && typeof lastDay.day === 'number') ? lastDay.day : null;
+      this.#render();
+    });
+    this.#unsubs.push(u1, u2, u3, u4, u5);
   }
 
   // ---------------------------------------------------------------------

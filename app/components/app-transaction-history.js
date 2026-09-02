@@ -30,6 +30,17 @@ const RPC_BATCH_SIZE = 50;
 const AFKING_LOG_CHUNK_BLOCKS = 1_800;
 const AFKING_LOG_REORG_BLOCKS = 12;
 const AFKING_HISTORY_CURSOR_CAP = 16;
+const AFKING_HISTORY_API_NAMES = [
+  'SubscriptionUpdated', 'AfkingDelivered', 'LootBoxBuy',
+  'WhalePassPurchased', 'LazyPassPurchased', 'DeityPassPurchased',
+].join(',');
+// A page caps at 2000 rows server-side; 25 pages covers 50k events, far past
+// any real player's lifetime AFKing/pass purchase count.
+const AFKING_HISTORY_API_MAX_PAGES = 25;
+// A dead/old API must not get hammered on every history open, but a 404 also
+// must not calcify into a permanent "route missing" verdict beyond this
+// session.
+const AFKING_HISTORY_API_FAILURE_MEMO_MS = 5 * 60 * 1000;
 const HISTORY_TICKETS_PER_PACK = 10;
 const TOKEN_UNIT = 10n ** 18n;
 const ASSET_ORDER = Object.freeze([
@@ -78,6 +89,8 @@ const AFKING_HISTORY_ABI = Object.freeze([
   'event DeityPassPurchased(address indexed buyer,uint8 symbolId,uint256 price,uint24 level)',
 ]);
 const _afkingHistoryCursors = new Map();
+const _afkingHistoryApiFailureMemo = new Map();
+let _fetch = fetchJSON;
 
 function _lower(value) {
   return String(value || '').toLowerCase();
@@ -142,12 +155,125 @@ function _eventItem(log, parsed) {
   return item;
 }
 
-/** Lazy chain-backed AFKing + pass purchase stream; called only after history opens. */
+function _afkingHistoryApiFailedRecently(owner) {
+  const expiresAt = _afkingHistoryApiFailureMemo.get(owner);
+  if (expiresAt == null) return false;
+  if (Date.now() >= expiresAt) {
+    _afkingHistoryApiFailureMemo.delete(owner);
+    return false;
+  }
+  return true;
+}
+
+/** Flatten one EventRow into the same shape `_eventItem` builds from a raw log. */
+function _apiEventItem(row) {
+  const eventName = String(row?.name || '');
+  const args = row?.args || {};
+  const item = {
+    eventName,
+    blockNumber: String(row?.blockNumber ?? ''),
+    logIndex: Number(row?.logIndex ?? 0),
+    transactionHash: String(row?.transactionHash || '').toLowerCase(),
+    player: _lower(args.player ?? args.buyer),
+  };
+  if (eventName === 'SubscriptionUpdated') {
+    item.dailyQuantity = Number(args.dailyQuantity ?? 0);
+    item.useTickets = args.useTickets === true || String(args.useTickets).toLowerCase() === 'true';
+  } else if (eventName === 'AfkingDelivered') {
+    item.day = Number(args.day ?? 0);
+    item.weiIn = String(args.weiIn ?? 0);
+  } else if (eventName === 'LootBoxBuy') {
+    item.amount = String(args.amount ?? 0);
+  } else if (eventName === 'WhalePassPurchased') {
+    item.quantity = Number(args.quantity ?? 0);
+    item.weiIn = String(args.weiIn ?? 0);
+  } else if (eventName === 'LazyPassPurchased') {
+    item.startLevel = Number(args.startLevel ?? 0);
+    item.weiIn = String(args.weiIn ?? 0);
+  } else if (eventName === 'DeityPassPurchased') {
+    item.symbolId = Number(args.symbolId ?? 0);
+    item.price = String(args.price ?? 0);
+    item.level = Number(args.level ?? 0);
+  }
+  return item;
+}
+
+/**
+ * API-first AFKing/pass purchase read, paging on `truncated` until the API
+ * catches up to its own head. Returns null (never a bare array) on any
+ * failure so the caller can fall back to the chain scan.
+ */
+async function _apiAfkingHistory(owner) {
+  if (_afkingHistoryApiFailedRecently(owner)) return null;
+  try {
+    const items = [];
+    let since = null;
+    for (let page = 0; page < AFKING_HISTORY_API_MAX_PAGES; page += 1) {
+      const query = since == null ? '' : `&since=${encodeURIComponent(since)}`;
+      const payload = await _fetch(`/player/${owner}/facts?names=${AFKING_HISTORY_API_NAMES}${query}`);
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      for (const row of events) items.push(_apiEventItem(row));
+      if (!payload?.truncated || events.length === 0) break;
+      const lastBlock = Number(events[events.length - 1]?.blockNumber);
+      if (!Number.isFinite(lastBlock)) break;
+      since = lastBlock;
+    }
+    return { items };
+  } catch (_e) {
+    _afkingHistoryApiFailureMemo.set(owner, Date.now() + AFKING_HISTORY_API_FAILURE_MEMO_MS);
+    return null;
+  }
+}
+
+function _afkingHistoryStorageKey(cursorKey) {
+  return [
+    'afking-purchase-history:v1',
+    String(CONTRACTS?.GAME || 'game').toLowerCase(),
+    Math.max(0, Number(CHAIN?.deployBlock) || 0),
+    cursorKey,
+  ].join(':');
+}
+
+/** Persisted mirror of the chain-fallback cursor: a reload pays only the
+ * reorg-overlap tail instead of re-scanning deploy→head. */
+function _reviveAfkingHistoryState(cursorKey, state) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const parsed = JSON.parse(localStorage.getItem(_afkingHistoryStorageKey(cursorKey)));
+    if (!parsed || !Number.isSafeInteger(Number(parsed.scannedTo)) || !Array.isArray(parsed.items)) return;
+    state.scannedTo = Number(parsed.scannedTo);
+    for (const item of parsed.items) {
+      if (!item || typeof item !== 'object') continue;
+      const identity = `${item.transactionHash}:${item.logIndex}`;
+      state.items.set(identity, item);
+    }
+  } catch (_e) { /* corrupt/absent — cold scan as before */ }
+}
+
+function _persistAfkingHistoryState(cursorKey, state) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (!Number.isSafeInteger(Number(state.scannedTo))) return;
+    localStorage.setItem(_afkingHistoryStorageKey(cursorKey), JSON.stringify({
+      scannedTo: state.scannedTo,
+      items: [...state.items.values()],
+    }));
+  } catch (_e) { /* quota/serialization — the in-memory cursor still works */ }
+}
+
+/**
+ * API-first AFKing + pass purchase stream; called only after history opens.
+ * The chain log scan below survives only as a fallback when the API throws.
+ */
 export async function loadAfkingPurchaseHistory(address, { provider = null } = {}) {
   const owner = _lower(address);
+  if (!/^0x[0-9a-f]{40}$/.test(owner)) return { items: [] };
+
+  const apiResult = await _apiAfkingHistory(owner);
+  if (apiResult) return apiResult;
+
   const reader = provider || _historyReadProvider();
-  if (!/^0x[0-9a-f]{40}$/.test(owner)
-    || !reader
+  if (!reader
     || typeof reader.getBlockNumber !== 'function'
     || typeof reader.getLogs !== 'function'
     || !CONTRACTS?.GAME) return { items: [] };
@@ -157,6 +283,7 @@ export async function loadAfkingPurchaseHistory(address, { provider = null } = {
   let state = _afkingHistoryCursors.get(cursorKey);
   if (!state || state.provider !== reader) {
     state = { provider: reader, scannedTo: null, items: new Map(), pending: null };
+    _reviveAfkingHistoryState(cursorKey, state);
     _afkingHistoryCursors.set(cursorKey, state);
     while (_afkingHistoryCursors.size > AFKING_HISTORY_CURSOR_CAP) {
       _afkingHistoryCursors.delete(_afkingHistoryCursors.keys().next().value);
@@ -207,6 +334,7 @@ export async function loadAfkingPurchaseHistory(address, { provider = null } = {
     }
     state.items = nextItems;
     state.scannedTo = head;
+    _persistAfkingHistoryState(cursorKey, state);
     const items = [...nextItems.values()].sort((a, b) => (
       Number(a.blockNumber || 0) - Number(b.blockNumber || 0)
       || Number(a.logIndex || 0) - Number(b.logIndex || 0)
@@ -1115,6 +1243,18 @@ let _historyLoader = loadTransactionHistory;
 /** Test-only dependency seam; pass null to restore production loading. */
 export function setTransactionHistoryLoaderForTest(loader) {
   _historyLoader = typeof loader === 'function' ? loader : loadTransactionHistory;
+}
+
+/** Test-only /player/:address/facts fetch seam for the AFKing history read. */
+export function __setAfkingHistoryFetcherForTest(fetcher) {
+  _fetch = typeof fetcher === 'function' ? fetcher : fetchJSON;
+}
+
+/** Test-only reset: clears the in-memory cursor cache and API failure memo. */
+export function __resetAfkingHistoryForTest() {
+  _afkingHistoryCursors.clear();
+  _afkingHistoryApiFailureMemo.clear();
+  _fetch = fetchJSON;
 }
 
 function _selectHasValue(select, value) {

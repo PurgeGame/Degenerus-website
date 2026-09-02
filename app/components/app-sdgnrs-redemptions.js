@@ -28,7 +28,12 @@ import {
 } from './reveal-overlay.js';
 
 const PENDING_SOURCE = 'sdgnrs-redemptions';
-const POLL_MS = 12_000;
+// 30s like the other Pending-tray watchers (whale-pass, launch-claims):
+// redemption maturity is period-boundary-based, and the previous 12s cadence
+// made this the fastest poll in the app for a state that moves the slowest —
+// each tick re-running the (incremental) 120k-block log discovery plus a
+// per-period read pair.
+const POLL_MS = 30_000;
 const MAX_RECENT_RESULTS = 6;
 
 export function pendingSdgnrsRedemptionsKey(chainId, address) {

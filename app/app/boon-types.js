@@ -2,7 +2,7 @@
 // Mirrored from contracts/DeityBoonViewer.sol. Per Phase 44 D-05.
 //
 // Single-day boons issued by deities; expire at end of their issue day.
-// Reserved/unused IDs (4, 10, 11, 12, 20, 21) are omitted. 34 entries total.
+// Reserved/unused IDs (4, 10, 11, 12, 20, 21) are omitted. 37 entries total.
 //
 // This module is imported by both <jackpot-panel> (handoff work) and
 // <boons-panel> (Phase 44 BOON-03) — neither component should redefine
@@ -43,6 +43,9 @@ export const BOON_TYPE_NAMES = {
   38: 'DGN_WWXRP_4',
   39: 'DGN_WWXRP_8',
   40: 'DGN_WWXRP_12',
+  41: 'CRAPS_5',
+  42: 'CRAPS_10',
+  43: 'CRAPS_15',
 };
 
 // Full human-readable names for tooltips. WHPASS has no numeric boost (pass-type).
@@ -81,6 +84,9 @@ export const BOON_FULL_NAMES = {
   38: '4% BONUS WWXRP BET',
   39: '8% BONUS WWXRP BET',
   40: '12% BONUS WWXRP BET',
+  41: 'Craps bankroll return +5%',
+  42: 'Craps bankroll return +10%',
+  43: 'Craps bankroll return +15%',
 };
 
 // Percent boost parsed from the numeric suffix of each BOON_TYPE_NAMES entry.

@@ -35,7 +35,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { sharedReadProvider } from './read-provider.js';
+import { sharedReadProvider, registerReadCacheInvalidator } from './read-provider.js';
 import { get, getActingAddress } from './store.js';
 // Same first-touch referral the ticket/lootbox path sends (ZeroHash when none).
 import { readAffiliateCode } from './lootbox.js';
@@ -198,6 +198,7 @@ export function __setDeityReadContractFactoryForTest(fn) {
 /** Test-only: restore the real deity NFT catalog reader. */
 export function __resetDeityReadContractFactoryForTest() {
   _deityReadContractFactory = null;
+  _deityCatalogCache = null;
 }
 
 /** Test-only: inject { game, token } for AFKing subscription reads. */
@@ -310,6 +311,16 @@ async function _retryDeityRpc(read, attempts = 4) {
   throw lastError;
 }
 
+// Four panels (deity desk, pass section, tickets inventory, degenerette) poll
+// the catalog on independent 30-60s timers. Ownership changes only on a deity
+// purchase, so a short shared window collapses those into one Multicall3 read;
+// a confirmed transaction (registerReadCacheInvalidator below) busts it, so a
+// player's own purchase reflects immediately. Test factories bypass it — the
+// fakes exist to exercise the real read path per call.
+const DEITY_CATALOG_TTL_MS = 20_000;
+let _deityCatalogCache = null; // { promise, expiresAt }
+registerReadCacheInvalidator(() => { _deityCatalogCache = null; });
+
 /**
  * Read the authoritative deity-pass symbol catalog from the soulbound NFT.
  * Returns null rather than treating an RPC failure as 32 available symbols.
@@ -317,6 +328,27 @@ async function _retryDeityRpc(read, attempts = 4) {
  * @returns {Promise<null|{issuedCount:number,takenSymbols:Set<number>,ownersBySymbol:Map<number,string>}>}
  */
 export async function readDeityPassCatalog() {
+  if (!_deityReadContractFactory) {
+    if (_deityCatalogCache && _deityCatalogCache.expiresAt > Date.now()) {
+      return _deityCatalogCache.promise;
+    }
+    const entry = {
+      expiresAt: Date.now() + DEITY_CATALOG_TTL_MS,
+      promise: _readDeityPassCatalogUncached(),
+    };
+    _deityCatalogCache = entry;
+    entry.promise.then((catalog) => {
+      // A failed read must not stick for the TTL — the next caller retries.
+      if (catalog == null && _deityCatalogCache === entry) _deityCatalogCache = null;
+    }, () => {
+      if (_deityCatalogCache === entry) _deityCatalogCache = null;
+    });
+    return entry.promise;
+  }
+  return _readDeityPassCatalogUncached();
+}
+
+async function _readDeityPassCatalogUncached() {
   const contract = _deityReadContract();
   if (!contract) return null;
 

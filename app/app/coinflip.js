@@ -40,6 +40,10 @@ import {
 } from './read-provider.js';
 import { readPurchaseInfo } from './purchase-info.js';
 import { getActingAddress } from './store.js';
+// Money-in writer: never import fetchJSON/./api.js directly here (enforced by
+// app/__tests__/money-in-db-independence.test.js). The one API call site for
+// readResolvedCoinflipStake lives in coinflip-day-status.js instead.
+import { fetchCoinflipDayJSON } from './coinflip-day-status.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -63,19 +67,6 @@ const COINFLIP_ABI = [
   'function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay)',
   'function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external',
   'function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external',
-  // Audit 0a1dc11f6 retired the bounty ladder and unified the four all-time records
-  // onto ONE shared FLIP pool. Both surfaces are declared: the app must keep working
-  // against a deployment on either side of that change, and every call site guards
-  // individually rather than inside one Promise.all (see readBiggestFlipRecord).
-  'function recordPool() external view returns (uint128)',
-  'function biggestFlipEver() external view returns (uint128)',
-  'function biggestSpinEver() external view returns (uint128)',
-  'function biggestLuckboxEver() external view returns (uint128)',
-  'function biggestBuyEver() external view returns (uint128)',
-  // RETIRED in 0a1dc11f6 — kept so an older live deployment still reads.
-  'function currentBounty() external view returns (uint128)',
-  'function bountyOwedTo() external view returns (address)',
-  'function bountyLocked() external view returns (bool)',
   // Packed three-state result: 0 unresolved, 1 resolved loss, 50..156 win.
   'function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win)',
   // Coinflip.sol:46 — CoinflipDeposit emitted on every deposit (CF-05).
@@ -86,8 +77,6 @@ const COINFLIP_ABI = [
   // kind: 0 FLIP, 1 SPIN, 2 LUCKBOX, 3 BUY. `paid == 0` is a bare ratchet, not a claim.
   'event BigRecordUpdated(uint8 indexed kind, address indexed player, uint256 value, uint128 paid, uint256 sdgnrsPaid)',
   'event CoinflipDayResolved(uint24 indexed day, bool win, uint16 rewardPercent, uint128 recordPoolAfter)',
-  // RETIRED — kept so a queryFilter walk over pre-#34 blocks still decodes.
-  'event BiggestFlipUpdated(address indexed player, uint256 recordAmount)',
   'event CoinflipClaimState(address indexed player, uint128 claimableStored, uint128 autoRebuyCarry, uint24 lastClaim)',
   'event CoinflipAutoRebuyToggled(address indexed player, bool enabled)',
   'event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount)',
@@ -163,7 +152,6 @@ let _reverseFlipQuoteReader = null;
 let _bafFlipEveReader = null;
 let _upcomingFlipBonusReader = null;
 let _resolvedFlipBonusWordReader = null;
-let _biggestFlipReader = null;
 let _stakeReadContractFactory = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
 // false = legacy deploy (storage-slot quote + no-arg reverseFlip). Probed once
@@ -185,15 +173,28 @@ let _bafFlipEveInflight = null;
 let _upcomingFlipBonusInflight = null;
 const _resolvedFlipBonusCache = new Map();
 const _resolvedFlipBonusInflight = new Map();
-let _biggestFlipInflight = null;
-let _biggestFlipLocator = null;
 const LOG_CHUNK_BLOCKS = 1_800;
 // v1 persisted only CoinflipStakeUpdated.newTotal and therefore permanently
 // under-reported any day resolved with auto-rebuy carry (most visibly sDGNRS).
 // v2 used the most recent emitted carry, which is stale when an ordinary
 // player lets auto-rebuy roll through more than one unclaimed day.
 const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v3';
-const BIGGEST_FLIP_LOCATOR_STORAGE_PREFIX = 'coinflip_biggest_record_v1';
+// readResolvedCoinflipStake is API-first (GET /coinflip/day/:day?player=).
+// The chain scan below survives only as a fallback: bounded to a 20-chunk
+// (36,000-block) lookback when the API throws (instead of walking all the way
+// to the deploy block), and memoized 5 minutes so the daily-flip refresh
+// timer does not re-hit chain every cycle while the API stays down. An
+// unresolved day (API `win: null`) is a distinct short-lived negative memo —
+// 60s, in-memory only, never persisted — since that day can resolve at any
+// moment.
+const RESOLVED_DAY_API_PATH_PREFIX = '/coinflip/day/';
+const RESOLVED_DAY_UNRESOLVED_MEMO_MS = 60_000;
+const RESOLVED_DAY_API_FALLBACK_MEMO_MS = 5 * 60 * 1000;
+const RESOLVED_DAY_FALLBACK_LOOKBACK_CHUNKS = 20;
+const RESOLVED_DAY_FALLBACK_LOOKBACK_BLOCKS = RESOLVED_DAY_FALLBACK_LOOKBACK_CHUNKS * LOG_CHUNK_BLOCKS;
+let _fetchCoinflipDayJSON = fetchCoinflipDayJSON;
+let _coinflipDayApiFallbackUntil = 0;
+const _coinflipDayUnresolvedMemo = new Map();
 
 /** Test-only: replace the live current-day stake read. */
 export function __setCurrentStakeReaderForTest(fn) {
@@ -223,6 +224,8 @@ export function __setResolvedStakeReaderForTest(fn) {
   _resolvedStakeReader = typeof fn === 'function' ? fn : null;
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
+  _coinflipDayApiFallbackUntil = 0;
+  _coinflipDayUnresolvedMemo.clear();
 }
 
 /** Test-only: replace the live previewClaimCoinflips read. */
@@ -278,13 +281,6 @@ export function __setResolvedFlipBonusWordReaderForTest(fn) {
   _resolvedFlipBonusInflight.clear();
 }
 
-/** Test-only: replace the chain-global Biggest Flip / bounty read. */
-export function __setBiggestFlipReaderForTest(fn) {
-  _biggestFlipReader = typeof fn === 'function' ? fn : null;
-  _biggestFlipInflight = null;
-  _biggestFlipLocator = null;
-}
-
 /** Test-only: restore the production current-day stake reader. */
 export function __resetCurrentStakeReaderForTest() {
   _currentStakeReader = null;
@@ -317,6 +313,8 @@ export function __resetResolvedStakeReaderForTest() {
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
   _publicReadProvider = null;
+  _coinflipDayApiFallbackUntil = 0;
+  _coinflipDayUnresolvedMemo.clear();
 }
 
 /** Test-only: restore the production claimable reader. */
@@ -377,14 +375,6 @@ export function __resetResolvedFlipBonusWordReaderForTest() {
   _resolvedFlipBonusWordReader = null;
   _resolvedFlipBonusCache.clear();
   _resolvedFlipBonusInflight.clear();
-  _publicReadProvider = null;
-}
-
-/** Test-only: restore the production Biggest Flip / bounty read. */
-export function __resetBiggestFlipReaderForTest() {
-  _biggestFlipReader = null;
-  _biggestFlipInflight = null;
-  _biggestFlipLocator = null;
   _publicReadProvider = null;
 }
 
@@ -1122,188 +1112,6 @@ export async function readClaimableCoinflip({ player } = {}) {
   }
 }
 
-function _biggestFlipLocatorStorageKey() {
-  return `${BIGGEST_FLIP_LOCATOR_STORAGE_PREFIX}:${CHAIN.id}:${String(CONTRACTS.COINFLIP || '').toLowerCase()}`;
-}
-
-function _loadBiggestFlipLocator() {
-  if (_biggestFlipLocator) return _biggestFlipLocator;
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = JSON.parse(localStorage.getItem(_biggestFlipLocatorStorageKey()) || 'null');
-    const recordWei = BigInt(raw?.recordWei ?? -1);
-    const day = Number(raw?.day);
-    const blockNumber = Number(raw?.blockNumber);
-    const result = raw?.result === 'win' || raw?.result === 'loss' ? raw.result : null;
-    if (recordWei < 0n || !Number.isInteger(day) || day < 0
-      || !Number.isInteger(blockNumber) || blockNumber < 0) return null;
-    _biggestFlipLocator = {
-      recordWei,
-      day,
-      blockNumber,
-      player: String(raw?.player || '').toLowerCase() || null,
-      result,
-    };
-    return _biggestFlipLocator;
-  } catch (_e) {
-    return null;
-  }
-}
-
-function _storeBiggestFlipLocator(locator) {
-  _biggestFlipLocator = locator;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(_biggestFlipLocatorStorageKey(), JSON.stringify({
-        ...locator,
-        recordWei: String(locator.recordWei),
-      }));
-    }
-  } catch (_e) { /* private browsing / quota */ }
-}
-
-function _eventArg(log, name, index) {
-  return log?.args?.[name] ?? log?.args?.[index];
-}
-
-/** Locate the record-setting stake once, then retain its immutable target day. */
-async function _resolveBiggestFlipLocator(contract, provider, recordWei) {
-  const cached = _loadBiggestFlipLocator();
-  if (cached?.recordWei === recordWei) return cached;
-  if (recordWei <= 0n || typeof contract?.queryFilter !== 'function') return null;
-  const recordFilter = contract.filters?.BiggestFlipUpdated?.();
-  if (!recordFilter) return null;
-
-  const head = Number(await readProviderBlockNumber(provider));
-  const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
-  const lowerBlock = cached?.blockNumber >= deployBlock ? cached.blockNumber : deployBlock;
-  let recordLog = await _latestLog(contract, recordFilter, lowerBlock, head);
-  if (recordLog && BigInt(_eventArg(recordLog, 'recordAmount', 1) ?? 0) !== recordWei
-    && lowerBlock > deployBlock) {
-    recordLog = await _latestLog(contract, recordFilter, deployBlock, head);
-  }
-  if (!recordLog || BigInt(_eventArg(recordLog, 'recordAmount', 1) ?? 0) !== recordWei) return null;
-
-  const player = String(_eventArg(recordLog, 'player', 0) || '').toLowerCase();
-  const blockNumber = Number(recordLog.blockNumber);
-  const stakeFilter = contract.filters?.CoinflipStakeUpdated?.(player || null, null);
-  if (!stakeFilter || !Number.isInteger(blockNumber)) return null;
-  const recordTx = String(recordLog.transactionHash || '').toLowerCase();
-  const recordIndex = _logIndex(recordLog);
-  const stakes = await contract.queryFilter(stakeFilter, blockNumber, blockNumber);
-  const matching = stakes.filter((log) => {
-    const tx = String(log?.transactionHash || '').toLowerCase();
-    if (recordTx && tx && tx !== recordTx) return false;
-    const index = _logIndex(log);
-    return recordIndex < 0 || index < 0 || index < recordIndex;
-  });
-  const stakeLog = matching.at(-1) || null;
-  const day = Number(_eventArg(stakeLog, 'day', 1));
-  if (!Number.isInteger(day) || day < 0) return null;
-
-  const locator = { recordWei, day, blockNumber, player: player || null, result: null };
-  _storeBiggestFlipLocator(locator);
-  return locator;
-}
-
-async function _resolveBiggestFlipResult(contract, locator) {
-  if (!locator) return null;
-  if (locator.result === 'win' || locator.result === 'loss') return locator.result;
-  const raw = await contract.getCoinflipDayResult(locator.day);
-  const rewardPercent = Number(raw?.rewardPercent ?? raw?.[0] ?? 0);
-  if (!Number.isFinite(rewardPercent) || rewardPercent <= 0) return null;
-  const result = Boolean(raw?.win ?? raw?.[1]) ? 'win' : 'loss';
-  _storeBiggestFlipLocator({ ...locator, result });
-  return result;
-}
-
-/**
- * Price the deposit needed to take the bounty right now, and the one that also
- * locks it. Both thresholds use the standing record, including when a larger
- * losing flip was what most recently ratcheted that record.
- */
-function _bountyBars(recordWei, armed, locked) {
-  if (recordWei === 0n) return { claimWei: 1n, lockWei: null };
-  if (locked) {
-    const override = recordWei * 2n;
-    return { claimWei: override, lockWei: override };
-  }
-  const onePercent = recordWei / 100n;
-  const claimWei = armed
-    ? recordWei + (onePercent === 0n ? 1n : onePercent)
-    : recordWei + 1n;
-  return { claimWei, lockWei: recordWei + recordWei / 10n };
-}
-
-/**
- * Read the global Biggest Flip record, its resolved win/loss, and the live
- * bounty. The record setter's target day is reconstructed from its immutable
- * event pair once and cached; unresolved records remain neutral until that
- * exact day's on-chain three-state result becomes nonzero.
- *
- * @returns {Promise<null|{recordWei: bigint, bountyWei: bigint, armedBy: string|null,
- *                        locked: boolean, claimWei: bigint, lockWei: bigint|null,
- *                        result: ('win'|'loss'|null), recordDay: number|null}>}
- */
-export async function readBiggestFlipRecord({ resolveResult = true } = {}) {
-  if (_biggestFlipReader) return _biggestFlipReader({ resolveResult });
-  if (_biggestFlipInflight) return _biggestFlipInflight;
-  const request = (async () => {
-    try {
-      const provider = _readerProvider();
-      if (!provider || !CONTRACTS.COINFLIP) return null;
-      const coinflip = _stakeReadContract(provider);
-      // ⛔ EVERY GETTER IS READ INDEPENDENTLY, DELIBERATELY.
-      // These used to sit in one bare Promise.all, so a single missing getter rejected
-      // the whole thing and the outer catch returned null — blanking the entire panel
-      // rather than the one field that was gone. Audit 0a1dc11f6 then removed THREE of
-      // them at once (currentBounty / bountyOwedTo / bountyLocked, replaced by the
-      // shared recordPool), which would have silently emptied the record UI on run #34.
-      // Guarding per-call also keeps the app working against an older deployment.
-      const opt = (fn) => Promise.resolve().then(fn).catch(() => null);
-      const [record, pool, legacyBounty, owner, locked] = await Promise.all([
-        opt(() => coinflip.biggestFlipEver()),
-        opt(() => coinflip.recordPool()),      // 0a1dc11f6+ — the shared record pool
-        opt(() => coinflip.currentBounty()),   // pre-0a1dc11f6 — the retired per-day bounty
-        opt(() => coinflip.bountyOwedTo()),
-        opt(() => coinflip.bountyLocked()),
-      ]);
-      // The pool succeeds the bounty as "the FLIP a record claim pays from", so the
-      // panel's existing amount slot keeps meaning the same thing on both deployments.
-      const bounty = pool ?? legacyBounty;
-      const recordWei = BigInt(record ?? 0);
-      let locator = null;
-      let result = null;
-      if (resolveResult) {
-        try {
-          locator = await _resolveBiggestFlipLocator(coinflip, provider, recordWei);
-          result = await _resolveBiggestFlipResult(coinflip, locator);
-        } catch (_e) { /* amount + bounty remain useful if historical RPC reads fail */ }
-      }
-      const ownerText = String(owner || '').toLowerCase();
-      const armed = !/^0x0{40}$/.test(ownerText) && Boolean(ownerText);
-      const isLocked = Boolean(locked);
-      return {
-        recordWei,
-        bountyWei: BigInt(bounty ?? 0),
-        armedBy: armed ? ownerText : null,
-        locked: isLocked,
-        ..._bountyBars(recordWei, armed, isLocked),
-        result,
-        recordDay: locator?.day ?? null,
-      };
-    } catch (_e) {
-      return null;
-    }
-  })();
-  _biggestFlipInflight = request;
-  try {
-    return await request;
-  } finally {
-    if (_biggestFlipInflight === request) _biggestFlipInflight = null;
-  }
-}
-
 /**
  * Read all FLIP the player could withdraw from the coinflip position.
  *
@@ -1518,6 +1326,205 @@ export async function readCoinflipDisplaySnapshot({ player, blockTag = null } = 
   }
 }
 
+/** Test-only: replace the /coinflip/day/:day fetch behind readResolvedCoinflipStake. */
+export function __setCoinflipDayFetcherForTest(fn) {
+  _fetchCoinflipDayJSON = typeof fn === 'function' ? fn : fetchCoinflipDayJSON;
+}
+
+/** Test-only: restore the production /coinflip/day/:day fetch and clear its memos. */
+export function __resetCoinflipDayFetcherForTest() {
+  _fetchCoinflipDayJSON = fetchCoinflipDayJSON;
+  _coinflipDayApiFallbackUntil = 0;
+  _coinflipDayUnresolvedMemo.clear();
+}
+
+/** Test-only: simulate the API-failure circuit breaker having elapsed. */
+export function __expireCoinflipDayFallbackMemoForTest() {
+  _coinflipDayApiFallbackUntil = 0;
+}
+
+function _coinflipDayUnresolvedMemoActive(key) {
+  const expiresAt = _coinflipDayUnresolvedMemo.get(key);
+  if (expiresAt == null) return false;
+  if (Date.now() >= expiresAt) {
+    _coinflipDayUnresolvedMemo.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Shared tail once a resolved day's block boundaries are known, regardless of
+ * whether they came from the API or a chain-walked CoinflipDayResolved pair.
+ *
+ * `storedStakeOverride` (the API's `playerStake`) skips the CoinflipStakeUpdated
+ * lookup entirely. `resolvedLogBoundary` is the real CoinflipDayResolved log
+ * when the caller has one (the chain-fallback path) — the older-deployment
+ * CoinflipClaimState fallback needs its exact same-block log ORDER to never
+ * pick up a carry update that landed after the resolution. The API only gives
+ * a block number, so that leg synthesizes a boundary with a maximal index,
+ * which very rarely (same-block, post-resolution ClaimState) over-reports the
+ * carry — an accepted approximation for a tertiary fallback the preview-replay
+ * leg above it almost always short-circuits.
+ */
+async function _readResolvedCoinflipStakeTail({
+  contract,
+  target,
+  dayNumber,
+  deployBlock,
+  resolvedBlock,
+  previousBlock,
+  hasPrevious,
+  storedStakeOverride,
+  resolvedLogBoundary = null,
+}) {
+  let storedStake;
+  if (storedStakeOverride != null) {
+    storedStake = storedStakeOverride;
+  } else {
+    // Credits for day N accumulate around the preceding day. Use the previous
+    // resolution to bound that window, plus one full observed day-span of
+    // headroom for credits that land shortly before its resolution.
+    const observedSpan = hasPrevious
+      ? Math.max(LOG_CHUNK_BLOCKS, resolvedBlock - previousBlock)
+      : LOG_CHUNK_BLOCKS * 2;
+    const stakeLowerBlock = Math.max(deployBlock, previousBlock - observedSpan);
+    const stakeLog = await _latestLog(
+      contract,
+      contract.filters.CoinflipStakeUpdated(target, dayNumber),
+      stakeLowerBlock,
+      resolvedBlock,
+    );
+    storedStake = stakeLog == null
+      ? 0n
+      : BigInt(stakeLog.args?.newTotal ?? stakeLog.args?.[3] ?? 0);
+  }
+
+  // Read both previews immediately before the day's resolution. Their
+  // common claimable/banked legs cancel, leaving only the rolling carry
+  // after every earlier resolved day has been replayed. This is what the
+  // contract adds to day N's stored stake when that day is eventually
+  // settled. It fixes multi-day auto-rebuy accounts whose last emitted
+  // CoinflipClaimState predates one or more intervening wins/losses.
+  if (
+    resolvedBlock > deployBlock
+    && typeof contract.previewClaimCoinflips === 'function'
+    && typeof contract.previewSalvageFlipBacking === 'function'
+  ) {
+    const historicalBlock = resolvedBlock - 1;
+    const [claimableResult, backingResult] = await Promise.allSettled([
+      contract.previewClaimCoinflips(target, { blockTag: historicalBlock }),
+      contract.previewSalvageFlipBacking(target, { blockTag: historicalBlock }),
+    ]);
+    const claimable = _fulfilledBigInt(claimableResult);
+    const backing = _fulfilledBigInt(backingResult);
+    if (claimable != null && backing != null) {
+      const carry = backing > claimable ? backing - claimable : 0n;
+      return storedStake + carry;
+    }
+  }
+
+  // Older deployments and non-archive RPCs may not support the historical
+  // views. Retain the event reconstruction as a best-effort fallback.
+  let rebuyInfo = null;
+  try { rebuyInfo = await contract.coinflipAutoRebuyInfo(target); }
+  catch (_e) { /* older deployments degrade to stored stake */ }
+  const isSdgnrs = CONTRACTS.SDGNRS
+    && String(target).toLowerCase() === String(CONTRACTS.SDGNRS).toLowerCase();
+  const mayHaveCarry = isSdgnrs
+    || Boolean(rebuyInfo?.enabled ?? rebuyInfo?.[0])
+    || BigInt(rebuyInfo?.carry ?? rebuyInfo?.[2] ?? 0) > 0n;
+  if (!mayHaveCarry) return storedStake;
+
+  const priorState = await _latestLogBefore(
+    contract,
+    contract.filters.CoinflipClaimState(target),
+    deployBlock,
+    resolvedLogBoundary || { blockNumber: resolvedBlock, index: Number.MAX_SAFE_INTEGER },
+  );
+  const carry = priorState == null
+    ? 0n
+    : BigInt(priorState.args?.autoRebuyCarry ?? priorState.args?.[2] ?? 0);
+  return storedStake + carry;
+}
+
+/**
+ * Chain fallback: walk CoinflipDayResolved backward from head to find day N's
+ * (and day N-1's) resolution block, then run the shared tail above.
+ *
+ * `boundedLookback` bounds the CoinflipDayResolved search to
+ * RESOLVED_DAY_FALLBACK_LOOKBACK_BLOCKS instead of the deploy block — used
+ * when this only runs because the API threw, so one still-unbounded RPC walk
+ * cannot replace the 122-call-per-refresh cost the API path exists to avoid.
+ */
+async function _readResolvedCoinflipStakeFromChain({ target, dayNumber, boundedLookback }) {
+  const provider = _readerProvider();
+  if (!provider || !CONTRACTS.COINFLIP) return null;
+  const contract = _stakeReadContract(provider);
+  const head = Number(await readProviderBlockNumber(provider));
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
+  const resolvedLowerBlock = boundedLookback
+    ? Math.max(deployBlock, head - RESOLVED_DAY_FALLBACK_LOOKBACK_BLOCKS)
+    : deployBlock;
+  const resolved = await _latestLog(
+    contract,
+    contract.filters.CoinflipDayResolved(dayNumber),
+    resolvedLowerBlock,
+    head,
+  );
+  if (!resolved) return null;
+
+  const previous = dayNumber > 0
+    ? await _latestLog(
+        contract,
+        contract.filters.CoinflipDayResolved(dayNumber - 1),
+        resolvedLowerBlock,
+        Number(resolved.blockNumber),
+      )
+    : null;
+  const resolvedBlock = Number(resolved.blockNumber);
+  const previousBlock = previous ? Number(previous.blockNumber) : resolvedBlock;
+
+  return _readResolvedCoinflipStakeTail({
+    contract,
+    target,
+    dayNumber,
+    deployBlock,
+    resolvedBlock,
+    previousBlock,
+    hasPrevious: Boolean(previous),
+    resolvedLogBoundary: resolved,
+  });
+}
+
+/** API-first success path: the day is resolved, bound the remaining chain work. */
+async function _readResolvedCoinflipStakeFromApi({ target, dayNumber, apiDay }) {
+  const resolvedBlock = Number(apiDay.blockNumber);
+  if (!Number.isSafeInteger(resolvedBlock) || resolvedBlock < 0) return null;
+  const provider = _readerProvider();
+  if (!provider || !CONTRACTS.COINFLIP) return null;
+  const contract = _stakeReadContract(provider);
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
+  const hasPrevious = apiDay.previousResolvedBlock != null
+    && Number.isSafeInteger(Number(apiDay.previousResolvedBlock));
+  const previousBlock = hasPrevious ? Number(apiDay.previousResolvedBlock) : resolvedBlock;
+  let storedStakeOverride;
+  if (apiDay.playerStake != null) {
+    try { storedStakeOverride = BigInt(apiDay.playerStake); }
+    catch (_e) { /* malformed row — fall through to the bounded stake lookup */ }
+  }
+  return _readResolvedCoinflipStakeTail({
+    contract,
+    target,
+    dayNumber,
+    deployBlock,
+    resolvedBlock,
+    previousBlock,
+    hasPrevious,
+    storedStakeOverride,
+  });
+}
+
 /**
  * Read the cumulative stake for one completed flip day.
  *
@@ -1528,6 +1535,13 @@ export async function readCoinflipDisplaySnapshot({ player, blockTag = null } = 
  * `depositedAmount` is merely the newest day, while `coinflipAmount()` is the
  * still-unresolved next day. The final exact-day event is immutable, so reads
  * are cached by player/day.
+ *
+ * API-first: GET /coinflip/day/:day?player=<addr>. An unresolved day
+ * (`win: null`) is a real answer — return null and memo it in-memory for 60s
+ * so the refresh timer does not re-poll a day that has not settled yet. A
+ * resolved day's `blockNumber`/`previousResolvedBlock`/`playerStake` bound (or
+ * entirely skip) the chain work below. If the fetch itself throws, fall back
+ * to the bounded chain scan and memo that failure 5 minutes.
  *
  * @param {{player?: string, day: number|string|bigint}} args
  * @returns {Promise<bigint|null>} 0 for a resolved day with no stake; null when unreadable
@@ -1554,92 +1568,32 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
         return value == null ? null : BigInt(value);
       }
 
-      const provider = _readerProvider();
-      if (!provider || !CONTRACTS.COINFLIP) return null;
-      const contract = _stakeReadContract(provider);
-      const head = Number(await readProviderBlockNumber(provider));
-      const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
-      const resolved = await _latestLog(
-        contract,
-        contract.filters.CoinflipDayResolved(dayNumber),
-        deployBlock,
-        head,
-      );
-      if (!resolved) return null;
+      if (_coinflipDayUnresolvedMemoActive(key)) return null;
 
-      // Credits for day N accumulate around the preceding day. Use the previous
-      // resolution to bound that window, plus one full observed day-span of
-      // headroom for credits that land shortly before its resolution.
-      const previous = dayNumber > 0
-        ? await _latestLog(
-            contract,
-            contract.filters.CoinflipDayResolved(dayNumber - 1),
-            deployBlock,
-            Number(resolved.blockNumber),
-          )
-        : null;
-      const resolvedBlock = Number(resolved.blockNumber);
-      const previousBlock = previous ? Number(previous.blockNumber) : resolvedBlock;
-      const observedSpan = previous
-        ? Math.max(LOG_CHUNK_BLOCKS, resolvedBlock - previousBlock)
-        : LOG_CHUNK_BLOCKS * 2;
-      const stakeLowerBlock = Math.max(deployBlock, previousBlock - observedSpan);
-      const stakeLog = await _latestLog(
-        contract,
-        contract.filters.CoinflipStakeUpdated(target, dayNumber),
-        stakeLowerBlock,
-        resolvedBlock,
-      );
-      const storedStake = stakeLog == null
-        ? 0n
-        : BigInt(stakeLog.args?.newTotal ?? stakeLog.args?.[3] ?? 0);
-
-      // Read both previews immediately before the day's resolution. Their
-      // common claimable/banked legs cancel, leaving only the rolling carry
-      // after every earlier resolved day has been replayed. This is what the
-      // contract adds to day N's stored stake when that day is eventually
-      // settled. It fixes multi-day auto-rebuy accounts whose last emitted
-      // CoinflipClaimState predates one or more intervening wins/losses.
-      if (
-        resolvedBlock > deployBlock
-        && typeof contract.previewClaimCoinflips === 'function'
-        && typeof contract.previewSalvageFlipBacking === 'function'
-      ) {
-        const historicalBlock = resolvedBlock - 1;
-        const [claimableResult, backingResult] = await Promise.allSettled([
-          contract.previewClaimCoinflips(target, { blockTag: historicalBlock }),
-          contract.previewSalvageFlipBacking(target, { blockTag: historicalBlock }),
-        ]);
-        const claimable = _fulfilledBigInt(claimableResult);
-        const backing = _fulfilledBigInt(backingResult);
-        if (claimable != null && backing != null) {
-          const carry = backing > claimable ? backing - claimable : 0n;
-          return storedStake + carry;
+      if (Date.now() >= _coinflipDayApiFallbackUntil) {
+        let apiDay = null;
+        try {
+          apiDay = await _fetchCoinflipDayJSON(
+            `${RESOLVED_DAY_API_PATH_PREFIX}${dayNumber}?player=${encodeURIComponent(target)}`,
+          );
+        } catch (_apiError) {
+          _coinflipDayApiFallbackUntil = Date.now() + RESOLVED_DAY_API_FALLBACK_MEMO_MS;
+          return await _readResolvedCoinflipStakeFromChain({
+            target, dayNumber, boundedLookback: true,
+          });
         }
+        if (!apiDay || apiDay.win == null) {
+          _coinflipDayUnresolvedMemo.set(key, Date.now() + RESOLVED_DAY_UNRESOLVED_MEMO_MS);
+          return null;
+        }
+        return await _readResolvedCoinflipStakeFromApi({ target, dayNumber, apiDay });
       }
 
-      // Older deployments and non-archive RPCs may not support the historical
-      // views. Retain the event reconstruction as a best-effort fallback.
-      let rebuyInfo = null;
-      try { rebuyInfo = await contract.coinflipAutoRebuyInfo(target); }
-      catch (_e) { /* older deployments degrade to stored stake */ }
-      const isSdgnrs = CONTRACTS.SDGNRS
-        && String(target).toLowerCase() === String(CONTRACTS.SDGNRS).toLowerCase();
-      const mayHaveCarry = isSdgnrs
-        || Boolean(rebuyInfo?.enabled ?? rebuyInfo?.[0])
-        || BigInt(rebuyInfo?.carry ?? rebuyInfo?.[2] ?? 0) > 0n;
-      if (!mayHaveCarry) return storedStake;
-
-      const priorState = await _latestLogBefore(
-        contract,
-        contract.filters.CoinflipClaimState(target),
-        deployBlock,
-        resolved,
-      );
-      const carry = priorState == null
-        ? 0n
-        : BigInt(priorState.args?.autoRebuyCarry ?? priorState.args?.[2] ?? 0);
-      return storedStake + carry;
+      // The API circuit breaker is armed — skip straight to the bounded chain
+      // fallback rather than hammer a still-down/old API every refresh.
+      return await _readResolvedCoinflipStakeFromChain({
+        target, dayNumber, boundedLookback: true,
+      });
     } catch (_e) {
       return null;
     }

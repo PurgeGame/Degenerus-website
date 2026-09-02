@@ -61,9 +61,37 @@ function run(entry) {
   });
 }
 
+// Same-interval polls fire on one shared per-session grid rather than at their
+// individual registration/resume phases. A dozen panels poll /player/:addr on
+// their own 30s timers; spread across the window, each tick misses api.js's 1s
+// in-flight/recent window and pays its own request. Landing them in one burst
+// collapses identical URLs to a single request, and chain reads issued in the
+// same burst batch into one Multicall3 aggregate (read-provider's ~20ms
+// stall window). The grid offset is random per page load, so separate clients
+// stay spread and the origin sees no cross-client herd.
+const SESSION_PHASE_MS = Math.floor(Math.random() * 2_147_483_647);
+
+function alignedFirstDelay(intervalMs) {
+  const remainder = (Date.now() + SESSION_PHASE_MS) % intervalMs;
+  let delay = intervalMs - remainder;
+  // A boundary landing right after registration would fire a near-immediate
+  // tick on top of the component's own mount-time refresh. Sliding one grid
+  // step keeps the phase and preserves "registration does not fire up front".
+  if (delay < intervalMs / 4) delay += intervalMs;
+  return delay;
+}
+
 function arm(entry) {
   if (entry.timer != null || isPaused()) return;
-  entry.timer = setInterval(() => run(entry), entry.intervalMs);
+  // First tick via setTimeout onto the aligned grid, then a plain interval.
+  // setTimeout and setInterval share one handle map (HTML spec; Node's
+  // clearInterval also cancels a Timeout), so disarm() cancels either phase.
+  entry.timer = setTimeout(() => {
+    run(entry);
+    if (!entries.has(entry) || isPaused()) { entry.timer = null; return; }
+    entry.timer = setInterval(() => run(entry), entry.intervalMs);
+    if (entry.timer && typeof entry.timer.unref === 'function') entry.timer.unref();
+  }, alignedFirstDelay(entry.intervalMs));
   // Node (tests) returns a Timeout with unref; browsers return a number.
   if (entry.timer && typeof entry.timer.unref === 'function') entry.timer.unref();
 }

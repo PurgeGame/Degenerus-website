@@ -28,8 +28,8 @@ describe('active boon product mapping', () => {
       | (3n << 168n)
     );
     const slot1 = (
-      // Accumulated activity amount is presented exactly, not rounded to tier.
-      75n | (61n << 24n)
+      // Craps +10 from a lootbox yesterday: active through day 63.
+      ((61n << 3n) | 2n)
       // Lazy -25 deity boon from today.
       | (62n << 128n) | (62n << 152n) | (2n << 176n)
       // ETH +8 lootbox boon from yesterday: active through day 63.
@@ -40,15 +40,14 @@ describe('active boon product mapping', () => {
       | (((60n << 3n) | 1n) << 232n)
     );
     const rows = decodePackedBoons(slot0, slot1, day);
-    assert.deepEqual(rows.map((row) => row.boonType), [2, 8, 15, 19, 30, 33, 38]);
-    assert.equal(rows.find((row) => row.boonType === 19)?.boostAmount, 75);
+    assert.deepEqual(rows.map((row) => row.boonType), [2, 8, 15, 30, 42, 33, 38]);
     assert.equal(
-      boonIndicatorModel({ day: 62, boons: rows }, 'activity').label,
-      'BOON +37.5 RATING',
+      boonIndicatorModel({ day: 62, boons: rows }, 'craps').label,
+      'BOON +10%',
     );
     assert.match(
-      boonIndicatorModel({ day: 62, boons: rows }, 'activity').title,
-      /\+75 quest streak, worth 37\.5 Degen Rating/,
+      boonIndicatorModel({ day: 62, boons: rows }, 'craps').title,
+      /bankroll return from your next paid Craps entry/,
     );
   });
 
@@ -72,6 +71,7 @@ describe('active boon product mapping', () => {
         { boonType: 34, consumed: false },
         { boonType: 37, consumed: false },
         { boonType: 40, consumed: false },
+        { boonType: 43, consumed: false },
       ],
     };
     assert.equal(boonIndicatorModel(payload, 'coinflip').label, 'BOON +25%');
@@ -85,6 +85,7 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'degenerette-eth').label, '12% BONUS ETH BET');
     assert.equal(boonIndicatorModel(payload, 'degenerette-flip').label, '12% BONUS FLIP BET');
     assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, '12% BONUS WWXRP BET');
+    assert.equal(boonIndicatorModel(payload, 'craps').label, 'BOON +15%');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
   });
 
@@ -107,9 +108,13 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(32).effect, '4% BONUS ETH BET');
     assert.equal(boonTypePresentation(36).effect, '8% BONUS FLIP BET');
     assert.equal(boonTypePresentation(40).effect, '12% BONUS WWXRP BET');
+    assert.equal(boonTypePresentation(41).effect, '5% MORE CRAPS BANKROLL RETURN');
+    assert.equal(boonTypePresentation(42).effect, '10% MORE CRAPS BANKROLL RETURN');
+    assert.equal(boonTypePresentation(43).effect, '15% MORE CRAPS BANKROLL RETURN');
     assert.equal(boonTypePresentation(32).name, 'Degenerette');
     assert.equal(boonTypePresentation(36).name, 'Degenerette');
     assert.equal(boonTypePresentation(40).name, 'Degenerette');
+    assert.equal(boonTypePresentation(42).name, 'Craps');
   });
 
   test('exposes the affected product for color-coded Deity boon controls', () => {
@@ -134,6 +139,7 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypeVisual(32).icon, '/badges-circular/crypto_06_ethereum_green.svg');
     assert.equal(boonTypeVisual(36).icon, '/whitepaper/flame-logo-split.svg');
     assert.equal(boonTypeVisual(40).icon, '/shared/coinflip-face-red.svg');
+    assert.equal(boonTypeVisual(42).icon, '/badges-circular/dice_04_5_silver.svg');
     assert.doesNotMatch([
       boonTypeVisual(32).icon,
       boonTypeVisual(36).icon,
@@ -155,6 +161,9 @@ describe('active boon product mapping', () => {
     assert.equal(BOON_TYPE_NAMES[40], 'DGN_WWXRP_12');
     assert.equal(BOON_FULL_NAMES[36], '8% BONUS FLIP BET');
     assert.equal(BOON_BOOST_PCT[40], 12);
+    assert.equal(BOON_TYPE_NAMES[42], 'CRAPS_10');
+    assert.equal(BOON_FULL_NAMES[42], 'Craps bankroll return +10%');
+    assert.equal(BOON_BOOST_PCT[43], 15);
   });
 
   test('consumed boons do not remain lit beside a product', () => {
@@ -194,11 +203,13 @@ describe('active boon product mapping', () => {
       { boonType: 22, consumed: false },
       { boonType: 3, consumed: false },
       { boonType: 34, consumed: false },
+      { boonType: 43, consumed: false },
     ] };
     assert.equal(boonBoostBps(payload, 'purchase'), 2500);
     assert.equal(boonBoostBps(payload, 'lootbox'), 2500);
     assert.equal(boonBoostBps(payload, 'coinflip'), 2500);
     assert.equal(boonBoostBps(payload, 'degenerette-eth'), 1200);
+    assert.equal(boonBoostBps(payload, 'craps'), 1500);
     assert.equal(boonBoostDelta(5_000n, payload, 'lootbox'), 1_250n);
     const flip = 10n ** 18n;
     assert.equal(coinflipBoonBoostDelta(50_000n * flip, payload), 12_500n * flip);

@@ -807,7 +807,12 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
   test('the Craps day level quest is named, clickable, and routes to its paid buy-in', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);
+    const optionsListener = (event) => {
+      event.detail.today = { day: 7, price: '17300' };
+      event.detail.tomorrow = { day: 8, price: '25000' };
+    };
     document.addEventListener('quest:activate', listener);
+    document.addEventListener('quest:craps-options', optionsListener);
     _fetchHandler = async () => makeQuestsPayload({
       levelQuest: {
         level: 7,
@@ -842,10 +847,28 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       '/badges-circular/dice_01_2_blue.svg');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'BUY CRAPS DAY',
+      'BUY TOMORROW · 25,000 FLIP',
+    );
+    assert.equal(el.querySelector('[data-bind="qst-action-ticket"]').hidden, false,
+      'Today is offered while Battle 1 is still unresolved');
+    assert.equal(el.querySelector('[data-bind="qst-action-ticket"]').textContent,
+      'TODAY · 17,300 FLIP');
+    assert.equal(el.querySelector('[data-bind="qst-action-lootbox"]').textContent,
+      'TOMORROW · 25,000 FLIP');
+    assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      /Reserve tomorrow's Normal Craps day for 25,000 FLIP\. Paid with FLIP; comps stay banked\./);
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
+      'CONFIRM · BUY TOMORROW · 25,000 FLIP');
+
+    el.querySelector('[data-bind="qst-action-ticket"]').dispatchEvent({ type: 'click' });
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY TODAY · 17,300 FLIP',
     );
     assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      /Buy one future Craps day with FLIP\. Awarded comps stay banked/);
+      /Buy today's still-open Normal Craps day for 17,300 FLIP\. Paid with FLIP; comps stay banked\./);
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
+      'CONFIRM · BUY TODAY · 17,300 FLIP');
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
       questType: 11,
@@ -853,9 +876,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       variant: 'level',
       submit: true,
       level: 7,
+      crapsDay: 'today',
     }]);
 
     document.removeEventListener('quest:activate', listener);
+    document.removeEventListener('quest:craps-options', optionsListener);
     el.disconnectedCallback();
   });
 

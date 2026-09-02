@@ -92,6 +92,12 @@ describe('burnSdgnrs', () => {
     storeMod.update('connected.address', CONNECTED);
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider());
+    // Every discovery test below exercises the chain-scan path unless it
+    // explicitly installs its own fetcher stub; default to an always-failing
+    // fetch so no test accidentally reaches the real indexer API.
+    sdgnrsMod.__setSdgnrsFetcherForTest(async () => {
+      throw new Error('sdgnrs API not stubbed in this test');
+    });
   });
 
   afterEach(() => {
@@ -323,5 +329,82 @@ describe('burnSdgnrs', () => {
       25n * TOKEN,
       'overlap logs replace by identity instead of double-counting',
     );
+  });
+
+  test('discovery reads redemptions from the API before touching the chain log scan', async () => {
+    const fetchCalls = [];
+    sdgnrsMod.__setSdgnrsFetcherForTest(async (path) => {
+      fetchCalls.push(path);
+      return {
+        toBlock: 999,
+        events: [
+          {
+            name: 'RedemptionSubmitted',
+            args: {
+              player: CONNECTED, sdgnrsAmount: String(25n * TOKEN),
+              ethValueOwed: '4', flipEscrowed: '5', periodIndex: '67',
+            },
+            blockNumber: 12345, logIndex: 0, transactionHash: '0xaa',
+          },
+          {
+            name: 'RedemptionClaimed',
+            args: {
+              player: CONNECTED, roll: '142', ethPayout: '2', lootboxEth: '2', flipPaid: '900',
+            },
+            blockNumber: 12346, logIndex: 1, transactionHash: '0xbb',
+          },
+        ],
+      };
+    });
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({
+      pending: [8n, 156, 500n],
+      roll: 0,
+    }));
+    contractsMod.setProvider({
+      ...makeFakeProvider(),
+      getBlockNumber: async () => Number(CHAIN.deployBlock) + 100,
+      getLogs: async () => { throw new Error('must not scan chain when the API answers'); },
+    });
+
+    const discovered = await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
+    assert.deepEqual(fetchCalls, [`/player/${CONNECTED.toLowerCase()}/sdgnrs-redemptions`]);
+    assert.equal(discovered.periods.length, 1);
+    assert.equal(discovered.periods[0].periodIndex, 67);
+    assert.equal(discovered.periods[0].sdgnrsAmount, 25n * TOKEN);
+    assert.equal(discovered.claims.length, 1);
+    assert.equal(discovered.claims[0].roll, 142);
+    assert.equal(discovered.claims[0].flipPaid, 900n);
+  });
+
+  test('falls back to the chain scan on an API failure and memoizes it for later polls', async () => {
+    const base = Number(CHAIN.deployBlock);
+    let head = base + 20;
+    const ranges = [];
+    let fetchCalls = 0;
+    sdgnrsMod.__setSdgnrsFetcherForTest(async () => {
+      fetchCalls += 1;
+      const error = new Error('API 404');
+      error.status = 404;
+      throw error;
+    });
+    contractsMod.setProvider({
+      ...makeFakeProvider(),
+      getBlockNumber: async () => head,
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([Number(fromBlock), Number(toBlock)]);
+        return [];
+      },
+    });
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ pending: [0n, 0, 0n], roll: 0 }));
+
+    await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
+    assert.equal(fetchCalls, 1, 'the first read attempts the API once');
+    assert.equal(ranges.length, 1, 'an API failure falls back to a chain scan');
+
+    head += 5;
+    invalidateReadCache();
+    await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
+    assert.equal(fetchCalls, 1, 'a memoized failure is not retried within the 5-minute window');
+    assert.equal(ranges.length, 2, 'the chain fallback keeps serving reads while the API is memoized');
   });
 });

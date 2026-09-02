@@ -32,6 +32,10 @@ import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
 import { permissionlessReadProvider, readProviderBlockNumber } from './read-provider.js';
 import { readPurchaseInfo } from './purchase-info.js';
+// Money-in writer: never import fetchJSON/./api.js directly here (enforced by
+// app/__tests__/money-in-db-independence.test.js). The one API call site for
+// readRoundWinners lives in parimutuel-winners.js instead.
+import { fetchParimutuelWinnersJSON } from './parimutuel-winners.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures from DegenerusParimutuel.sol.
@@ -165,6 +169,23 @@ function _questContract() {
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
   _readProvider = null;
+}
+
+// readRoundWinners is API-first (GET /game/parimutuel/:market/:round/winners);
+// the backward BetPlaced scan below survives only as a fallback when that
+// fetch throws (network / 5xx / 404 from an old API). It runs on a claim
+// click, not a timer, so there is no 5-minute failure memo here — the next
+// click just tries the API again.
+let _fetchWinnersJSON = fetchParimutuelWinnersJSON;
+
+/** Test-only: replace the winners-route fetch used by readRoundWinners. */
+export function __setWinnersFetcherForTest(fetcher) {
+  _fetchWinnersJSON = typeof fetcher === 'function' ? fetcher : fetchParimutuelWinnersJSON;
+}
+
+/** Test-only: restore the production winners-route fetch. */
+export function __resetWinnersFetcherForTest() {
+  _fetchWinnersJSON = fetchParimutuelWinnersJSON;
 }
 
 function _buildContract(signerOrProvider) {
@@ -514,13 +535,35 @@ export async function claimGrowth({ player, rounds } = {}) {
 }
 
 /**
- * Discover recent bettors on a settled round directly from indexed placement
- * logs. The caller supplies the winning count; scanning stops as soon as every
- * winner has been found, and gracefully returns a partial list when an RPC
- * history cap is reached. A partial list is still safe because the batch crank
- * skips junk/stale entries after its first race-probe player.
+ * Cap and dedupe a winners list the same way regardless of source (API rows
+ * or decoded BetPlaced logs), so both paths honor expectedCount/maxPlayers
+ * identically.
+ */
+function _cappedWinnerAddresses(addresses, target, maxPlayers) {
+  const found = new Map();
+  for (const raw of addresses) {
+    const player = String(raw || '');
+    if (!/^0x[0-9a-fA-F]{40}$/.test(player)) continue;
+    found.set(player.toLowerCase(), player);
+    if (target > 0 && found.size >= target) break;
+    if (found.size >= maxPlayers) break;
+  }
+  return Array.from(found.values());
+}
+
+/**
+ * Discover recent bettors on a settled round.
+ *
+ * API-first: GET /game/parimutuel/:market/:round/winners?over=<0|1>. The
+ * backward BetPlaced eth_getLogs scan below survives ONLY as a fallback when
+ * that fetch throws (network / 5xx / 404 from an old API) — the caller
+ * supplies the winning count, scanning stops as soon as every winner has been
+ * found, and it gracefully returns a partial list when an RPC history cap is
+ * reached. A partial list is still safe because the batch crank skips
+ * junk/stale entries after its first race-probe player.
  */
 export async function readRoundWinners({
+  market = 'growth',
   round,
   outcome,
   expectedCount = 0,
@@ -530,6 +573,22 @@ export async function readRoundWinners({
   if (!Number.isInteger(r) || r <= 0 || ![SIDE_OVER, SIDE_UNDER].includes(Number(outcome))) {
     return [];
   }
+  const wantOver = Number(outcome) === SIDE_OVER;
+  const target = Math.min(
+    Math.max(0, Number(expectedCount) || 0),
+    Math.max(1, Number(maxPlayers) || 100),
+  );
+
+  try {
+    const path = `/game/parimutuel/${encodeURIComponent(market || 'growth')}/${r}/winners`
+      + `?over=${wantOver ? 1 : 0}`;
+    const payload = await _fetchWinnersJSON(path);
+    const rows = Array.isArray(payload?.winners) ? payload.winners : [];
+    return _cappedWinnerAddresses(rows.map((row) => row?.player), target, maxPlayers);
+  } catch (_apiError) {
+    // Fall through to the chain scan below on any thrown error.
+  }
+
   // This discovery only runs immediately before a wallet write. If the wallet
   // disappeared, do not spin up the public fallback RPC just to build a
   // best-effort community tail; the clicked player's normal claim path remains
@@ -543,11 +602,6 @@ export async function readRoundWinners({
 
   const filterFactory = contract.filters.BetPlaced;
   if (typeof filterFactory !== 'function') return [];
-  const wantOver = Number(outcome) === SIDE_OVER;
-  const target = Math.min(
-    Math.max(0, Number(expectedCount) || 0),
-    Math.max(1, Number(maxPlayers) || 100),
-  );
   const found = new Map();
 
   let head;

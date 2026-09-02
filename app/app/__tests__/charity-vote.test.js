@@ -108,11 +108,23 @@ describe('GNRUS charity approval voting', () => {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
     };
+    // The chain scan is a fallback now — force the API leg to throw so every
+    // call in this test exercises the log-scan path deterministically.
+    charityVoteMod.__setGnrusFundingFetcherForTest(async () => { throw new Error('offline'); });
 
     assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 12n);
     assert.equal(calls.length, 2, 'the initial history uses bounded 50,000-block reads');
     assert.ok(calls.every((call) => call.address && call.topics?.length === 1));
 
+    assert.equal(
+      await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }),
+      12n,
+      'a poll inside the 5-minute failure memo returns the cached total',
+    );
+    assert.equal(calls.length, 2, 'the memoized fallback window skips the chain scan entirely');
+
+    // Only the next poll after the memo expires may retry either leg.
+    charityVoteMod.__expireGnrusFundingFallbackMemoForTest();
     head += 10;
     events = [
       events[0],
@@ -123,6 +135,48 @@ describe('GNRUS charity approval voting', () => {
       'the cached old event is retained while the overlapping tail is replaced, not duplicated');
     assert.equal(calls.length, 3, 'a refresh reads only the short reorg tail');
     assert.ok(charityVoteMod.gnrusLifetimeFundingCacheKey().includes(`:${deploy}:`));
+  });
+
+  test('reads GNRUS lifetime funding from the API sum route with no extra scaling', async () => {
+    let requested = null;
+    charityVoteMod.__setGnrusFundingFetcherForTest(async (path) => {
+      requested = path;
+      return { toBlock: 900, count: 4, sum: '48000000000000000000' };
+    });
+
+    const total = await charityVoteMod.readGnrusLifetimeFunding();
+    assert.equal(requested, '/game/facts/sum?name=YieldSurplusDistributed&arg=perRecipientShare');
+    assert.equal(total, 48n * TOKEN, 'the API sum is used directly — GNRUS already gets one exact share per event');
+  });
+
+  test('memoizes an API failure for 5 minutes so the 30s poller does not hammer either leg', async () => {
+    let apiCalls = 0;
+    let chainCalls = 0;
+    charityVoteMod.__setGnrusFundingFetcherForTest(async () => {
+      apiCalls += 1;
+      throw new Error('API down');
+    });
+    const provider = {
+      getBlockNumber: async () => Number(CHAIN.deployBlock) + 10,
+      getLogs: async () => { chainCalls += 1; return []; },
+    };
+    const values = new Map();
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+
+    assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 0n);
+    assert.equal(apiCalls, 1);
+    assert.equal(chainCalls, 1);
+
+    assert.equal(await charityVoteMod.readGnrusLifetimeFunding({ provider, storage }), 0n);
+    assert.equal(apiCalls, 1, 'the API is not retried while the failure memo is armed');
+    assert.equal(chainCalls, 1, 'the chain fallback does not re-run while memoized');
+
+    charityVoteMod.__expireGnrusFundingFallbackMemoForTest();
+    await charityVoteMod.readGnrusLifetimeFunding({ provider, storage });
+    assert.equal(apiCalls, 2, 'the next poll after the memo expires retries the API');
   });
 
   test('preflights and sends the selected approval through the connected signer', async () => {

@@ -11,6 +11,7 @@
  * contract.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 globalThis.HTMLElement ??= class HTMLElement {};
@@ -49,7 +50,9 @@ import {
   crapsReplayPrizeAmounts,
   loadCrapsReplayProfiles,
   openCrapsReplayTable,
+  protocolSeatLabel,
 } from '../../craps/replay-adapter.js';
+import { CONTRACTS } from '../../app/chain-config.js';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
   SIM_CRAPS_REPLAY_FEATURED,
@@ -944,4 +947,26 @@ test('live Discord identity overlays the sealed seat labels, and an outage keeps
   );
   assert.equal(bare.viewerLabel, base.viewerLabel);
   assert.equal(bare.viewerDiscordPfp, base.viewerDiscordPfp);
+});
+
+test('protocol seats are named from the active chain profile, not hardcoded', () => {
+  // The vault is auto-seated at every scheduled window and sDGNRS spends banked day passes, so
+  // both sit in ordinary fields and would otherwise render as an anonymous "Seat 12".
+  assert.equal(protocolSeatLabel(CONTRACTS.VAULT), 'The Vault');
+  assert.equal(protocolSeatLabel(CONTRACTS.SDGNRS), 'sDGNRS');
+
+  // Addresses arrive from the bundle in mixed case; the lookup must not care.
+  assert.equal(protocolSeatLabel(CONTRACTS.VAULT.toUpperCase().replace('0X', '0x')), 'The Vault');
+
+  // An ordinary wallet keeps its own identity, and junk never resolves to a protocol name.
+  assert.equal(protocolSeatLabel('0x1111111111111111111111111111111111111111'), null);
+  assert.equal(protocolSeatLabel(null), null);
+  assert.equal(protocolSeatLabel(undefined), null);
+  assert.equal(protocolSeatLabel(''), null);
+
+  // ⛔ The addresses must come from chain-config, which the launcher republishes per run. A
+  // literal here would label the PREVIOUS run's vault and eventually brand a stranger's wallet.
+  const src = readFileSync(new URL('../../craps/replay-adapter.js', import.meta.url), 'utf8');
+  assert.match(src, /CONTRACTS\?\.VAULT/, 'vault label must read the active chain profile');
+  assert.match(src, /CONTRACTS\?\.SDGNRS/, 'sDGNRS label must read the active chain profile');
 });

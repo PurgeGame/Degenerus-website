@@ -427,18 +427,23 @@ describe('normalizeSequence', () => {
       kind: 'lootbox',
       legs: [
         { legType: 'reward', rewardType: 9, amount: 2_000n, label: 'Whale boon' },
+        { legType: 'reward', rewardType: 14, amount: 42n, label: 'Craps boon' },
         { legType: 'reward', rewardType: 12, amount: 1n, label: 'Quest streak shield' },
         { legType: 'reward', rewardType: 99, label: 'Unknown protocol reward #99' },
       ],
     });
-    assert.deepEqual(seq.cards.map((card) => card.type), ['boon', 'quest-shield', 'reward']);
+    assert.deepEqual(seq.cards.map((card) => card.type), ['boon', 'boon', 'quest-shield', 'reward']);
     assert.equal(seq.cards[0].label, 'WHALE PASS BOON');
     assert.equal(seq.cards[0].value, '−20%');
     assert.equal(seq.cards[0].sub, '');
-    assert.equal(seq.cards[1].label, 'QUEST SHIELD');
-    assert.equal(seq.cards[1].value, '1 DAY');
+    assert.equal(seq.cards[1].label, 'CRAPS BOON');
+    assert.equal(seq.cards[1].value, '+10%');
     assert.equal(seq.cards[1].sub, '');
-    assert.doesNotMatch(seq.cards[2].label, /bonus/i);
+    assert.equal(seq.cards[1].icon, '/badges-circular/dice_04_5_silver.svg');
+    assert.equal(seq.cards[2].label, 'QUEST SHIELD');
+    assert.equal(seq.cards[2].value, '1 DAY');
+    assert.equal(seq.cards[2].sub, '');
+    assert.doesNotMatch(seq.cards[3].label, /bonus/i);
   });
 
   test('lootbox boon cards expose their exact strength and affected action', () => {
@@ -450,6 +455,7 @@ describe('normalizeSequence', () => {
         { legType: 'reward', rewardType: 10, amount: 25n },
         { legType: 'reward', rewardType: 11, amount: 5_000n },
         { legType: 'reward', rewardType: 13, amount: 37n },
+        { legType: 'reward', rewardType: 14, amount: 42n },
       ],
     });
     assert.deepEqual(
@@ -460,13 +466,14 @@ describe('normalizeSequence', () => {
         ['RATING BOON', '+12.5'],
         ['LAZY PASS BOON', '−50%'],
         ['FLIP DEGENERETTE BOON', '+12%'],
+        ['CRAPS BOON', '+10%'],
       ],
     );
     assert.ok(seq.cards.every((card) => card.sub === ''),
       'boon cards stop after the exact type and size');
     assert.deepEqual(seq.cards.map((card) => card.boonStrength),
-      ['mid', 'high', 'mid', 'high', 'high']);
-    assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3]);
+      ['mid', 'high', 'mid', 'high', 'high', 'mid']);
+    assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3, 2]);
     assert.equal(seq.cards[0].icon,
       '/app/assets/lootbox/degenerus-lootbox-case-medium-v27-approved-locked-front.webp');
     assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
@@ -2907,7 +2914,7 @@ describe('reveal-overlay element', () => {
   test('sDGNRS rewards use the three-flame ETH mark in a normal purple badge', async () => {
     queueReveal({
       kind: 'lootbox', lootboxIndex: 48,
-      legs: [{ legType: 'dgnrs', amount: 12n * 10n ** 18n }],
+      legs: [{ legType: 'dgnrs', amount: 44_200_000n * 10n ** 18n }],
     });
     const el = instantiate();
     await tick();
@@ -2942,8 +2949,26 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.rvl-stage--lootbox \.rvl-card--dgnrs \.rvl-card-value\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s,
-      'long sDGNRS values truncate inside their allotted Luckbox reward card',
+      /\.rvl-stage--lootbox \.rvl-card--dgnrs\.rvl-card--mini \.rvl-card-value\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s,
+      'multi-card compact receipt tiles may still contain an exact sDGNRS amount',
+    );
+    const stagedCard = el.querySelector('[data-bind="rvl-summary"]')
+      ?.querySelector('.rvl-card--dgnrs');
+    const stagedValue = stagedCard?.querySelector('.rvl-card-value');
+    assert.match(stagedCard?.className || '', /\brvl-card--mini\b/,
+      'the singleton receipt retains the shared compact-card DOM class');
+    assert.equal(stagedValue?.textContent, '44,200,000');
+    assert.equal(stagedValue?.classList.contains('rvl-card-value--long'), false,
+      'the screenshot-sized value is handled by the singleton rule before the long tier');
+    assert.match(
+      APP_CSS,
+      /\.rvl-stage--lootbox > \.rvl-card-zone \.rvl-card--dgnrs \.rvl-card-value--long\s*\{[^}]*font-size:\s*clamp\(1\.5rem, 5vw, 1\.75rem\);[^}]*letter-spacing:\s*-0\.035em;/s,
+      'the active reward overrides the larger generic Luckbox type instead of ellipsizing',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-stage--lootbox \.rvl-summary-grid\[data-card-count="1"\] \.rvl-card--dgnrs \.rvl-card-value\s*\{[^}]*overflow:\s*visible;[^}]*font-size:\s*clamp\(1\.4rem, 7vw, 1\.85rem\);[^}]*text-overflow:\s*clip;/s,
+      'the singleton hero receipt shows the complete screenshot-sized amount even though its card is compact in the DOM',
     );
     assert.match(
       APP_CSS,

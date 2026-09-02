@@ -672,7 +672,12 @@ class AppPoolProgress extends HTMLElement {
       subscribe('app.poolBenchmarks', () => this.#render()),
     );
     this.#paintCountdown();
-    this.#countdownTimer = setInterval(() => this.#paintCountdown(), 250);
+    this.#countdownTimer = setInterval(() => {
+      // Wall-clock countdown: hidden ticks skip the DOM write; the first
+      // visible tick (≤250ms after return) repaints the exact current value.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      this.#paintCountdown();
+    }, 250);
     try { this.#countdownTimer?.unref?.(); } catch (_e) { /* browser timer */ }
   }
 

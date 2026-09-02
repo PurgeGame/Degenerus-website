@@ -52,6 +52,7 @@ import { degenScoreLootTier } from '../app/activity-score.js';
 import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from './reveal-overlay.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';
 import './app-wwxrp-burn.js';
@@ -242,6 +243,7 @@ class AppParimutuelPanel extends HTMLElement {
   #decimatorBurnListener = null;
   #resultAbortListener = null;
   #pollHandle = null;
+  #lastRefreshStartedAt = 0;
   #postActionRefreshHandle = null;
   #busyResetHandle = null;
   #busy = false;
@@ -301,8 +303,10 @@ class AppParimutuelPanel extends HTMLElement {
       catch (_e) { /* defensive */ }
       this.#resultAbortListener = null;
     }
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_e) { /* defensive */ }
+    }
     for (const h of [
-      this.#pollHandle,
       this.#postActionRefreshHandle,
       this.#busyResetHandle,
       this.#errorTimer,
@@ -323,6 +327,7 @@ class AppParimutuelPanel extends HTMLElement {
   // -----------------------------------------------------------------------
 
   async #refresh() {
+    this.#lastRefreshStartedAt = Date.now();
     const seq = ++this.#fetchSeq;
     const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
       || get('viewing.address')
@@ -628,12 +633,17 @@ class AppParimutuelPanel extends HTMLElement {
   // -----------------------------------------------------------------------
 
   #armPoll() {
-    if (this.#pollHandle != null) {
-      try { clearTimeout(this.#pollHandle); } catch (_e) { /* defensive */ }
-    }
-    if (typeof setTimeout !== 'function') return;
-    const hot = decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
-    this.#pollHandle = _setTimeoutUnref(() => this.#refresh(), hot ? POLL_HOT_MS : POLL_IDLE_MS);
+    // Shared scheduler at the hot cadence with an internal idle gate: the tick
+    // itself is free, and a skipped tick costs nothing, so the panel keeps the
+    // 5s reactivity inside a Decimator window while idling at ~30s the rest of
+    // the time — and, unlike the old private setTimeout chain, it stops in
+    // hidden tabs and during reveal takeovers. Registration is per mount.
+    if (typeof this.#pollHandle === 'function') return;
+    this.#pollHandle = registerComponentPoll(() => {
+      const hot = decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
+      if (!hot && Date.now() - this.#lastRefreshStartedAt < POLL_IDLE_MS) return undefined;
+      return this.#refresh();
+    }, POLL_HOT_MS);
   }
 
   // -----------------------------------------------------------------------

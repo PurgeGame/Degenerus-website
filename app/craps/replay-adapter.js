@@ -13,8 +13,33 @@ import {
   replayCrapsViewport,
 } from './replay-engine.js';
 import { fetchProfiles } from '../app/profiles.js';
+import { CONTRACTS } from '../app/chain-config.js';
 
 const TEN = 10n;
+
+/**
+ * PROTOCOL SEATS, labelled from the ACTIVE chain profile rather than hardcoded.
+ *
+ * Both of these play ordinary craps fields: the vault is auto-seated at every scheduled window
+ * (`setVaultBoard` steers the board it plays), and sDGNRS spends banked day passes. They are
+ * indistinguishable from a player in the sealed bundle, so without this they render as an
+ * anonymous `Seat 12` next to real wallets.
+ *
+ * ⛔ Read from `chain-config`, never written out here. The launcher republishes that file with
+ * every run's freshly-deployed addresses, so these labels follow a redeploy with no edit — a
+ * hardcoded address would keep labelling the PREVIOUS run's vault and, worse, would eventually
+ * pin a stranger's wallet with a protocol name.
+ */
+const CRAPS_PROTOCOL_SEATS = Object.freeze(new Map(
+  [[CONTRACTS?.VAULT, 'The Vault'], [CONTRACTS?.SDGNRS, 'sDGNRS']]
+    .filter(([address]) => typeof address === 'string' && address.length > 0)
+    .map(([address, name]) => [address.toLowerCase(), name]),
+));
+
+/** A protocol seat's display name, or null for an ordinary wallet. */
+export function protocolSeatLabel(address) {
+  return CRAPS_PROTOCOL_SEATS.get(String(address ?? '').toLowerCase()) ?? null;
+}
 const CRAPS_PROFILE_BATCH_SIZE = 8;
 const CRAPS_PROFILE_MAX_ADDRESSES = 160;
 
@@ -188,7 +213,7 @@ function tablePlayer(trace, clock, manifest, profiles = null) {
   return Object.freeze({
     betId: player.betId,
     player: player.player,
-    label: identity?.name || player.name,
+    label: protocolSeatLabel(player.player) || identity?.name || player.name,
     discordPfp: identity?.avatar || player.avatarUrl,
     entryMultiple: player.entryMultiple,
     chips: boardChipCounts(player, manifest),
@@ -324,7 +349,7 @@ export function createCrapsReplayTableModel(artifacts, {
     entryLabel: replayLane === 'high' ? 'HIGH ROLLER BATTLE' : 'MAIN BATTLE',
     viewerBetId: viewer.betId,
     originalViewerBetId: originalViewer.betId,
-    viewerLabel: viewerIdentity?.name || viewer.name,
+    viewerLabel: protocolSeatLabel(viewer.player) || viewerIdentity?.name || viewer.name,
     viewerDiscordPfp: viewerIdentity?.avatar || viewer.avatarUrl,
     viewerResult: Object.freeze({
       stop: viewer.stop,

@@ -54,7 +54,7 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
   );
 });
 
-test('future slates count to rollover and stop spending comps one battle period early', () => {
+test('future slates keep using available comps after the final battle until rollover', () => {
   const clock = {
     daySeconds: 86_400,
     anchorSeconds: 0,
@@ -63,22 +63,22 @@ test('future slates count to rollover and stop spending comps one battle period 
     routinePeriodSeconds: 14_400,
     eventLeadSeconds: 900,
   };
-  const beforeCutoff = crapsEntry.crapsEntryState({
+  const afterFinalBattle = crapsEntry.crapsEntryState({
     day: 42,
-    nowMs: 71_999_000,
+    nowMs: 85_500_000,
     clock,
   });
-  assert.equal(beforeCutoff.nextDayAtMs, 86_400_000);
-  assert.equal(beforeCutoff.passCutoffAtMs, 72_000_000,
-    'mainnet comps close four hours before the next day rolls');
-  assert.equal(beforeCutoff.futurePassOpen, true);
-
-  const atCutoff = crapsEntry.crapsEntryState({ day: 42, nowMs: 72_000_000, clock });
-  assert.equal(atCutoff.futurePassOpen, false,
-    'the exact cutoff no longer lets the automatic payment path spend a comp');
-  assert.equal(crapsEntry.crapsBattleCountdownLabel(atCutoff.nextDayAtMs, 72_000_000), '4h');
-  assert.equal((componentSource.match(/const compEligible = state\.futurePassOpen && !this\.#forceFlipDay/g) || []).length, 2,
-    'both rendering and the last-second transaction path enforce the cutoff');
+  assert.equal(afterFinalBattle.currentPeriod, 7,
+    'the event battle has closed for the day');
+  assert.equal(afterFinalBattle.dayEntryKind, 'future-day');
+  assert.equal(afterFinalBattle.dayEntryDay, 43,
+    'the reservation still targets a strictly future contract day');
+  assert.equal(afterFinalBattle.nextDayAtMs, 86_400_000);
+  assert.equal(crapsEntry.crapsBattleCountdownLabel(afterFinalBattle.nextDayAtMs, 85_500_000), '15m');
+  assert.doesNotMatch(componentSource, /passCutoffAtMs|futurePassOpen/,
+    'the UI does not invent an earlier cutoff for a contract-valid future day');
+  assert.equal((componentSource.match(/const compEligible = !this\.#forceFlipDay/g) || []).length, 2,
+    'rendering and the last-second transaction path both retain automatic comp use');
   assert.match(componentSource, /const usePass = kind === 'future-day' && compEligible && selectedPasses > 0/);
 });
 
@@ -97,6 +97,8 @@ test('the legacy launcher omits the retired goal presentation', () => {
 });
 
 test('the compact surface keeps ten chips and packs the audited contract order', () => {
+  assert.deepEqual([0, 1, 2, 3].map(crapsEntry.crapsEntryNextSpotCount), [1, 2, 3, 0],
+    'spot clicks add through three chips and the fourth click clears the stack');
   assert.equal(crapsEntry.packCrapsEntryBoard({
     passLine: 1,
     place4: 2,
@@ -160,13 +162,57 @@ test('a lobby result stays sealed while the connected wallet has an unseen repla
   }), false);
 });
 
-test('winner-list goal colors and total lane buy-ins come from sealed result data', () => {
+test('winner-list goal colors and actual winner buy-ins come from sealed result data', () => {
   assert.equal(crapsEntry.crapsWinnerGoalResult({ winningStop: 1 }), 'met');
   assert.equal(crapsEntry.crapsWinnerGoalResult({ winningStop: 0 }), 'missed');
   assert.equal(crapsEntry.crapsWinnerGoalResult({ winningStop: null }), 'unknown');
   const result = { buyInWei: '500000000000000000000', highMultiple: 10 };
   assert.equal(crapsEntry.crapsWinnerListBuyInWei(result, false), '500000000000000000000');
   assert.equal(crapsEntry.crapsWinnerListBuyInWei(result, true), '5000000000000000000000');
+  assert.equal(crapsEntry.crapsWinnerListBuyInWei({
+    ...result,
+    entryMultiple: 100,
+  }, false), '50000000000000000000000',
+  'a High Roller who wins the shared main field still shows the 100x price they paid');
+});
+
+test('result Added amount and color include an actual progressive payout', () => {
+  assert.equal(crapsEntry.crapsAddedResultWei('800', null), 800n);
+  assert.equal(crapsEntry.crapsAddedResultWei('800', '2000'), 2800n,
+    'the purple Added figure includes both the normal boost and progressive payout');
+  assert.equal(crapsEntry.crapsAddedResultWei(null, '2000'), null,
+    'the UI does not present a partial Added amount when its normal boost is unknown');
+  assert.equal(crapsEntry.crapsAddedResultTone(null), 'added');
+  assert.equal(crapsEntry.crapsAddedResultTone('0'), 'added');
+  assert.equal(crapsEntry.crapsAddedResultTone('1'), 'progressive');
+});
+
+test('the winner total counts day passes, so the boost can never exceed it', () => {
+  // REGRESSION (run #45, day 68 battle 5): the card read a +269K boost against a 158.9K
+  // total. Both figures were right; they were just different things. `_splitAward` spends
+  // half the ADMITTED boost on day passes and SUBTRACTS what it banks from the liquid pot,
+  // so the FLIP payment is the award MINUS the passes. Counting only the FLIP made a
+  // component of the award look bigger than the award. Real numbers from that battle:
+  // 2,690 boost units admitted = 269,000 FLIP, 5 normal passes at 22,800 = 114,000 banked,
+  // 158,900 FLIP credited. 158,900 + 114,000 = 272,900, which covers the boost.
+  const wei = 10n ** 18n;
+  const withPasses = {
+    totalWonWei: 158_900n * wei,
+    winnerPassWei: 114_000n * wei,
+    winnerBoostWei: 269_000n * wei,
+  };
+  assert.equal(crapsEntry.crapsWinnerTotalLabel(withPasses), '272.9K',
+    'the pass award is part of what the battle paid and belongs in the total');
+  assert.ok(withPasses.winnerBoostWei <= withPasses.totalWonWei + withPasses.winnerPassWei,
+    'the boost is a COMPONENT of the total, so it must never exceed it');
+  // A battle that banked nothing in passes is unchanged.
+  assert.equal(crapsEntry.crapsWinnerTotalLabel({ totalWonWei: 158_900n * wei, winnerPassWei: 0n }),
+    '158.9K', 'no split means no change to the reported total');
+  // The still-loading shape keeps its `>=` marker and still counts known passes.
+  assert.equal(crapsEntry.crapsWinnerTotalLabel({ amountWei: 158_900n * wei, winnerPassWei: 114_000n * wei }),
+    '\u2265272.9K', 'a partial total still counts the passes it already knows about');
+  // A result with no pass field at all (a lane that never split) must not throw.
+  assert.equal(crapsEntry.crapsWinnerTotalLabel({ totalWonWei: 1_000n * wei }), '1,000');
 });
 
 test('winner-list results follow the selected main or High Roller lane', () => {
@@ -300,6 +346,11 @@ test('winner totals retain a visible, honest chain lower bound while the indexer
     amountWei: 5_000n * wei,
     totalWonWei: 25_000n * wei,
   }), '25K');
+  assert.equal(crapsEntry.crapsWinnerTotalLabel({
+    amountWei: 5_000n * wei,
+    progressivePaidWei: 20_000n * wei,
+    totalWonWei: null,
+  }), '≥25K', 'a chain-native Run It Up payment remains in the known lower bound');
   assert.equal(crapsEntry.crapsWinnerTotalLabel(null), '—');
 });
 
@@ -509,14 +560,19 @@ test('the widget occupies the third play-grid track and loads with the idle pane
     'the click selector, quest-focus selector, and one generated template cover all seven windows');
 });
 
-test('the split header presents Craps Autobattle and the Run It Up jackpot', () => {
+test('the unified signboard presents Craps Autobattle and the Run It Up jackpot', () => {
   assert.match(componentSource, /craps-entry__identity craps-entry__identity--craps/);
-  assert.match(componentSource, /craps-autobattle-balanced-badges-v2\.webp/);
-  assert.match(componentSource, /alt="CRAPS AUTOBATTLE bookended by silver and blue dice badges"/,
-    'the combined logo preserves both circular dice badges');
+  assert.match(componentSource, /craps-autobattle-integrated-swords-v8\.webp/,
+    'the approved lockup is one transparent asset, so its swords cannot clip either word');
+  assert.doesNotMatch(componentSource, /craps-entry__craps-(?:logo-base|logo-finish|swords)/,
+    'the live header does not reconstruct the lockup from overlapping image layers');
+  assert.match(componentSource, /alt="CRAPS AUTO BATTLE bookended by silver and blue dice badges, with crossed swords between AUTO and BATTLE"/,
+    'the combined logo preserves both circular dice badges and the battle mark');
   assert.doesNotMatch(componentSource, /dgnBadgePath|dgn-traits\.js/,
     'the finished logo does not reconstruct itself from unrelated game badges');
   assert.doesNotMatch(componentSource, /7 DAILY AUTOBATTLES/);
+  assert.match(componentSource, /craps-entry__runup-kicker"[^>]*>FEATURING THE</);
+  assert.match(componentSource, /craps-entry__runup-submark"[^>]*>PROGRESSIVE JACKPOT</);
   assert.match(componentSource, /<header class="craps-entry__head">[\s\S]*?data-bind="craps-progressive"[\s\S]*?<\/header>/);
   assert.match(componentSource, /data-bind="craps-progressive-amount"/);
   assert.match(componentSource, /run-it-up-progressive-jackpot-logo-v2\.webp/,
@@ -524,19 +580,55 @@ test('the split header presents Craps Autobattle and the Run It Up jackpot', () 
   assert.match(componentSource, /Run It Up Progressive Jackpot/,
     'accessible meter copy matches the finished logo');
   assert.match(componentSource, /readCrapsProgressivePool\(\)/);
-  assert.match(cssSource, /\.craps-entry__head\s*\{[^}]*grid-template-columns:\s*50% 50%/s,
-    'the divider is an explicit midpoint instead of favoring either logo');
-  assert.match(cssSource, /\.craps-entry__header-metrics\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*grid-row:\s*2[^}]*grid-template-columns:\s*50% 50%/s,
-    'both metrics occupy one structural footer row across the split header');
-  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*height:\s*100%[^}]*align-items:\s*center[^}]*justify-content:\s*center/s);
-  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*display:\s*grid[^}]*height:\s*100%[^}]*place-items:\s*center/s);
-  assert.match(cssSource, /\.craps-entry__progressive-value\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*baseline[^}]*justify-content:\s*center/s,
-    'the right number-and-FLIP line is vertically centered as one unit');
-  assert.match(componentSource, /class="craps-entry__progressive-value"><output data-bind="craps-progressive-amount"[^>]*>—<\/output><em>FLIP<\/em><\/span>/);
-  assert.match(cssSource, /\.craps-entry__identity--craps\s*\{[^}]*linear-gradient\(105deg,rgba\(5,72,49,\.94\),rgba\(3,34,26,\.9\)\)/s,
-    'the Craps Autobattle identity sits on its own dark felt-green field');
-  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*linear-gradient\(180deg,rgba\(79,43,111,\.46\),rgba\(29,16,44,\.62\)\)/s,
-    'the jackpot number keeps a deliberate purple display field');
+  assert.match(cssSource, /\.craps-entry__head\s*\{[^}]*min-height:\s*5rem[^}]*grid-template-rows:\s*minmax\(0,1fr\) 1\.62rem[^}]*background:\s*linear-gradient\(180deg,#e8edf0/s,
+    'one chrome chassis contains both logos and the counter rail');
+  assert.match(componentSource, /<div class="craps-entry__display-face">[\s\S]*?<div class="craps-entry__logo-deck">[\s\S]*?<div class="craps-entry__header-metrics">/s,
+    'the logo and counter rows share one structural display face');
+  assert.match(cssSource, /\.craps-entry__display-face\s*\{[^}]*grid-template-rows:\s*minmax\(0,1fr\) 1\.62rem[^}]*radial-gradient\(ellipse at 50% -18%,rgba\(36,175,112,\.2\),transparent 72%\),linear-gradient\(180deg,#10372a 0,#082117 46%,#04150e 74%,#020b07 100%\)/s,
+    'one uninterrupted deep-emerald gradient spans the complete inner sign');
+  assert.match(cssSource, /\.craps-entry__identity\s*\{[^}]*place-items:\s*center/s,
+    'each brand lockup is centered on both axes within its exact half');
+  assert.match(cssSource, /\.craps-entry__craps-logo\s*\{[^}]*width:\s*93%[^}]*justify-self:\s*center/s,
+    'the reduced-width Auto Battle artwork does not cling to the left grid edge');
+  assert.doesNotMatch(cssSource, /\.craps-entry__craps-logo::(?:before|after)/,
+    'the corrected production asset needs no clipped CSS layer over its wordmark or dice badges');
+  assert.match(cssSource, /\.craps-entry__logo-deck\s*\{[^}]*grid-template-columns:\s*50% 50%[^}]*border:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
+    'the logo row contributes no separate panel surface');
+  assert.doesNotMatch(cssSource, /\.craps-entry__logo-deck::before/,
+    'the shared logo background has no center rule splitting it into two panels');
+  assert.match(cssSource, /\.craps-entry__header-metrics\s*\{[^}]*grid-row:\s*2[^}]*grid-template-columns:\s*50% 50%/s,
+    'both metrics occupy one structural footer row across the shared header');
+  assert.match(cssSource, /\.craps-entry__header-metrics\s*\{[^}]*border:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
+    'the counter row contributes no boundary or separate background');
+  assert.match(cssSource, /\.craps-entry__runup-submark\s*\{[^}]*width:\s*68%[^}]*border-radius:\s*0[^}]*clip-path:\s*none/s,
+    'Progressive Jackpot uses a straight recessed light rail instead of another oval');
+  assert.doesNotMatch(cssSource, /\.craps-entry__identity--runup::after/,
+    'the logo bay has no masking panel that can read as a stray dark rectangle');
+  assert.match(cssSource, /\.craps-entry__run-it-up-mark img\s*\{[^}]*clip-path:\s*inset\(0 0 31% 0\)/s,
+    'the baked-in plaque is cropped directly at the artwork edge');
+  assert.doesNotMatch(cssSource, /\.craps-entry__head::(?:before|after)/,
+    'the cabinet does not add decorative corner rivets');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*width:\s*calc\(100% - \.72rem\)[^}]*height:\s*calc\(100% - \.16rem\)[^}]*place-self:\s*center[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+    'the silver plaque is geometrically centered in the complete left bay');
+  assert.match(cssSource, /\.craps-entry__added-key\s*\{[^}]*place-items:\s*center start[^}]*line-height:\s*\.94/s,
+    'the two-line Added Yesterday key has enough compact-layout line height');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*border:\s*1px solid rgba\(190,204,213,\.78\)[^}]*border-radius:\s*\.16rem[^}]*background:\s*linear-gradient\(180deg,rgba\(203,217,225,\.28\)/s,
+    'Added sits in a restrained rectangular silver counter well');
+  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*border:\s*1px solid rgba\(222,174,65,\.8\)[^}]*border-radius:\s*\.16rem[^}]*background:\s*linear-gradient\(180deg,rgba\(226,177,68,\.25\)/s,
+    'the Run It Up jackpot sits in the matching rectangular gold counter well');
+  assert.doesNotMatch(cssSource, /\.craps-entry__(?:daily-added|progressive-meter)(?:::before)?\s*\{[^}]*clip-path:/s,
+    'the counter wells have no pointed badge ends or nested plaque layer');
+  assert.match(cssSource, /\.craps-entry__progressive-value\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+    'the right FLIP mark and number are vertically centered as one unit');
+  assert.equal((componentSource.match(/class="craps-entry__flip-mark"/g) || []).length, 2,
+    'both signboard numbers use the same FLIP mark');
+  assert.match(componentSource, /class="craps-entry__progressive-value"><img class="craps-entry__flip-mark"[\s\S]*?<output data-bind="craps-progressive-amount"[^>]*>—<\/output><\/span>/);
+  assert.match(cssSource, /\.craps-entry__daily-added > strong\s*\{[^}]*color:\s*#58d5ff/s,
+    'Added is the blue half of the shared meter');
+  assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*color:\s*#d69cff/s,
+    'Run It Up keeps its purple number inside the gold plaque');
+  assert.match(cssSource, /\.craps-entry__runup-kicker\s*\{[^}]*top:\s*\.31rem[^}]*left:\s*47%/s,
+    'FEATURING THE stays lowered and shifted over UN IT');
   assert.doesNotMatch(componentSource, /data-bind="craps-entry-day"/);
   const wei = 10n ** 18n;
   assert.equal(crapsEntry.crapsHeaderBoostLabel(999n * wei), '999');
@@ -588,8 +680,10 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.doesNotMatch(componentSource, /<small>FLIP<\/small>|craps-full-day-(?:entry|pot)-unit/,
     'the combined wager split has no repeated micro FLIP labels');
   assert.match(componentSource,
-    /data-bind="craps-added-banner"[\s\S]*?<strong><output data-bind="craps-added-total"[^>]*>—<\/output><em>FLIP<\/em><\/strong>[\s\S]*?<span class="craps-entry__added-key"><b data-bind="craps-added-label">ADDED<\/b><small data-bind="craps-added-period">PER DAY<\/small><\/span>/,
-    'the amount and FLIP share a baseline while the Added period owns the two-level key at right');
+    /data-bind="craps-added-banner"[\s\S]*?<img class="craps-entry__flip-mark"[^>]*face\.svg[^>]*>[\s\S]*?<strong><output data-bind="craps-added-total"[^>]*>—<\/output><\/strong>[\s\S]*?<span class="craps-entry__added-key"><b data-bind="craps-added-label">ADDED<\/b><small data-bind="craps-added-period">PER DAY<\/small><\/span>/,
+    'the FLIP mark leads the amount while the Added period owns the two-level key at right');
+  assert.doesNotMatch(componentSource, /craps-entry__(?:daily-added|progressive-meter)[^`]*?<em>FLIP<\/em>/s,
+    'the physical FLIP marks replace redundant text units in the signboard rail');
   assert.doesNotMatch(componentSource, /AVG ADDED|average added per day/,
     'the rail says only Added per day or Added yesterday');
   assert.match(componentSource, /readCrapsAddedPerDay\(day\)/,
@@ -604,10 +698,10 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the selected average-or-yesterday amount no longer carries a redundant plus sign');
   assert.match(componentSource, /including the daily Run It Up funding/,
     'the accessible headline makes the jackpot contribution explicit');
-  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*background:\s*linear-gradient\(180deg,rgba\(5,80,55,\.92\),rgba\(3,45,33,\.96\)\)[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong\s*\{[^}]*color:\s*#d8b4fe/s,
-    'the daily addition keeps its green field while using the purple Added key');
-  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__head\s*\{[^}]*grid-template-rows:\s*minmax\(0,1fr\) 1\.86rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong,body\.layout-basic \.craps-entry__progressive-meter\s*\{[^}]*font-size:\s*1\.15rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong em,body\.layout-basic \.craps-entry__added-key,body\.layout-basic \.craps-entry__progressive-meter em\s*\{[^}]*font-size:\s*\.46rem/s,
-    'desktop keeps the jackpot rail compact without shrinking its labels to mobile size');
+  assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*background:\s*linear-gradient\(180deg,rgba\(203,217,225,\.28\)[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong\s*\{[^}]*color:\s*#58d5ff/s,
+    'the daily addition keeps its blue readout inside the silver plaque');
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__head\s*\{[^}]*min-height:\s*5\.66rem[^}]*grid-template-rows:\s*minmax\(0,1fr\) 2\.02rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong,body\.layout-basic \.craps-entry__progressive-meter\s*\{[^}]*font-size:\s*1\.15rem[^}]*\}[\s\S]*?\.craps-entry__added-key\s*\{[^}]*font-size:\s*\.46rem[^}]*line-height:\s*\.9[^}]*\}[\s\S]*?\.craps-entry__flip-mark\s*\{[^}]*width:\s*1\.5rem/s,
+    'desktop gives Added Yesterday more rail height and line spacing without shrinking it');
   assert.equal((componentSource.match(/data-bind="craps-added-total"/g) || []).length, 1);
   assert.doesNotMatch(componentSource, /craps-battle-added/);
   assert.match(componentSource, /snapshot\?\.yesterdayTotalAddedWei/);
@@ -648,8 +742,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource,
     /class="craps-entry__result-buyin"[\s\S]*?data-bind="craps-battle-buyin"[\s\S]*?<td class="craps-entry__entrants" data-bind="craps-battle-entrants"/,
     'the total buy-in sits at the result block’s right edge beside entrants');
-  assert.match(componentSource, /paintCrapsAddedValue\([\s\S]*?laneResult && !concealed \? laneResult\.winnerBoostWei : null/s,
-    'the Added column follows the selected lane and only exposes an attributable boost');
+  assert.match(componentSource, /paintCrapsAddedValue\([\s\S]*?laneResult && !concealed \? laneResult\.winnerBoostWei : null,\s*laneResult && !concealed \? laneResult\.progressivePaidWei : null/s,
+    'the Added column follows the selected lane and receives its attributed progressive payout state');
   assert.match(componentSource, /crapsWinnerTotalLabel\(laneResult\)/,
     'the result shows the exact total or an explicit lower bound while attribution loads');
   assert.match(componentSource, /crapsWinnerResultForLane\(result, this\.#highRoller\)/,
@@ -689,9 +783,11 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'owned seats use plain status text rather than disabled button copy');
   assert.match(componentSource,
     /button\.dataset\.state === 'entered'[\s\S]*?this\.#openBoard\(button,[\s\S]*?button\.dataset\.state === 'amend'[\s\S]*?this\.#amend\(button\)/s,
-    'ENTERED reopens that slip board while AMEND ENTRY submits its changed layout');
-  assert.match(componentSource, /\? entryNeedsAmend \? 'AMEND ENTRY' : 'ENTERED'/,
-    'a changed board promotes the individual battle action from ENTERED to AMEND ENTRY');
+    'ENTERED reopens that slip board while CHANGE BET submits its changed layout');
+  assert.match(componentSource, /\? entryNeedsAmend \? 'CHANGE BET' : 'ENTERED'/,
+    'a changed board promotes the individual battle action from ENTERED to CHANGE BET');
+  assert.doesNotMatch(componentSource, /AMEND ENTRY|AMENDING…/,
+    'internal amendment terminology is not exposed in the player-facing action');
   assert.match(componentSource, /amendCrapsSlip\(\{ betId, contractChips: this\.#contractChips \}\)/,
     'the amendment action uses the deployed amendSlip adapter');
   assert.match(componentSource,
@@ -730,17 +826,58 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource,
     /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-chance">15<\/output>%[\s\S]*?HOT SHOOTER BONUS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
     'the random equation and right-side Normal/High Roller selector share one thin strip');
-  assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*><span>PLACE<\/span><span>YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
+  assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*aria-live="polite"[^>]*><span data-craps-place-prompt="top">PLACE<\/span><span data-craps-place-prompt="bottom">YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
     'the readable two-line betting callout owns the middle section before the lane selector');
   assert.match(cssSource, /\.craps-entry__surface-strip\s*\{[^}]*grid-template-columns:\s*minmax\(0,1\.35fr\) minmax\(3\.2rem,\.34fr\) minmax\(6\.7rem,\.92fr\)/s);
   assert.match(cssSource, /\.craps-entry__place-prompt\s*\{[^}]*color:\s*#ff8588[^}]*font-size:\s*\.39rem/s,
     'the center callout is red and large enough to read');
+  assert.match(componentSource,
+    /class="craps-entry__lane"[^>]*role="group"[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/,
+    'Low Stakes and High Roller remain one mutually exclusive control');
+  assert.match(componentSource, /data-craps-lane="normal"[^>]*>[\s\S]*?<span>LOW<br>STAKES<\/span>/,
+    'the standard lane uses the approved Low Stakes label');
+  assert.match(componentSource, /data-craps-lane="high"[^>]*>[\s\S]*?<span>HIGH<br>ROLLER<\/span>/,
+    'both lane labels use the larger two-line treatment');
+  assert.match(cssSource, /\.craps-entry__lane button > span\s*\{[^}]*font-size:\s*0\.44rem[^}]*line-height:\s*0\.88/s,
+    'the stacked lane copy is larger without increasing the header height');
+  assert.doesNotMatch(componentSource, /data-craps-lane="normal"[^>]*>[\s\S]*?<span>NORMAL<\/span>/,
+    'the retired Normal label is not rendered in the lane selector');
+  assert.match(cssSource,
+    /\.craps-entry__lane\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)[^}]*overflow:\s*hidden[^}]*border:[^}]*border-radius:\s*4px/s,
+    'the lane selector uses one shared segmented housing');
+  assert.match(cssSource, /\.craps-entry__lane button \+ button\s*\{[^}]*border-left:/s,
+    'one internal divider separates the two lane segments');
+  assert.match(cssSource, /Approved Craps entry felt:[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/s,
+    'the approved felt header shares the wager grid’s six exact column guides');
+  assert.match(cssSource, /\.craps-entry__surface-strip::before\s*\{[^}]*inset:\s*0 33\.333% 0 0[^}]*background:\s*linear-gradient\(180deg, rgba\(1, 46, 29, 0\.86\), rgba\(0, 24, 15, 0\.78\)\)/s,
+    'one continuous dark-green strip backs the Random bonus and Place Your Bets copy');
+  assert.match(cssSource, /\.craps-entry__betting\s*\{[^}]*community-coinflip-felt-v6\.webp[^}]*center top \/ cover no-repeat/s,
+    'the Craps board reuses the production Community Coinflip felt instead of approximating its cloth');
+  assert.match(cssSource, /\.craps-entry__lobby\s*\{[^}]*border-radius:\s*0/s,
+    'the combined entry-options and results table has square corners throughout');
+  assert.match(cssSource, /Approved Craps entry felt:[\s\S]*?\.craps-entry__betting\s*\{[^}]*border-radius:\s*0 0 4px 4px/s,
+    'the felt starts with square top corners and keeps its lower outer corners rounded');
+  assert.match(cssSource, /\[data-craps-lane="normal"\]\[aria-pressed="true"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #f2f3f3, #aeb4b7\)/s,
+    'selected Low Stakes uses the silver state');
+  assert.match(cssSource, /\[data-craps-lane="high"\]\[aria-pressed="true"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #f8d56c, #c98b18\)/s,
+    'selected High Roller uses the gold state');
   assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__betting\s*\{[^}]*flex:\s*1 1 auto[^}]*grid-template-rows:\s*auto minmax\(0,1fr\)[^}]*\}[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.craps-entry__mini-felt\s*\{[^}]*grid-row:\s*2[^}]*grid-template-rows:\s*minmax\(2\.35rem,1\.35fr\) minmax\(1\.74rem,1fr\)/s,
     'the desktop betting felt, rather than the lobby, consumes the neighboring widgets’ extra height');
   assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__listing tbody :is\(th,td\)\s*\{[^}]*font-size:\s*\.57rem[^}]*\}[\s\S]*?\.craps-entry__money strong\s*\{[^}]*font-size:\s*\.6rem/s,
     'desktop lobby copy steps up when the full three-column row has room');
   assert.equal((componentSource.match(/data-craps-bet="(?:place-[45689]|place-10|hard-[48]|pass|dont-pass)"/g) || []).length, 10,
     'the felt exposes all ten supported contract betting spots as large tap targets');
+  assert.match(componentSource,
+    /data-craps-bet="pass"[\s\S]*?data-craps-how-to-play[\s\S]*?data-craps-bet="hard-8"/,
+    'the rules spot occupies the half of the old double-width Pass cell that was freed');
+  assert.doesNotMatch(componentSource, /craps-entry__how-icon/,
+    'How To Play is text-only rather than another info-icon button');
+  assert.match(componentSource,
+    /\[data-craps-how-to-play\][\s\S]*?new CustomEvent\('craps-rules:open',[\s\S]*?detail: \{ trigger: howToPlay \}/,
+    'the inline rules spot asks the shared rules popup to open and identifies its focus return target');
+  assert.match(cssSource,
+    /\[data-craps-bet="pass"\]\s*\{\s*grid-column:\s*2;\s*\}[\s\S]*?\[data-craps-how-to-play\]\s*\{\s*grid-column:\s*3;/,
+    'Pass and How To Play each occupy one of the six equal lower-row spots');
   assert.match(componentSource, /dice_01_2_silver\.svg[\s\S]*?dice_01_2_blue\.svg[\s\S]*?HARD <b>4<\/b>/,
     'Hard 4 carries bare silver and blue dice faces');
   assert.match(componentSource, /dice_03_4_silver\.svg[\s\S]*?dice_03_4_blue\.svg[\s\S]*?HARD <b>8<\/b>/,
@@ -753,15 +890,29 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the six place numbers use the larger felt-scale type');
   assert.match(cssSource, /\.craps-entry__pays\s*\{[^}]*font:\s*1000 \.39rem\/1/s,
     'place odds remain readable beneath the larger numbers');
-  assert.match(cssSource, /\[data-craps-bet="pass"\] \.craps-entry__bet-label\s*\{[^}]*font-size:\s*\.9rem/s);
+  assert.match(cssSource, /\[data-craps-bet="pass"\] \.craps-entry__bet-label\s*\{[^}]*left:\s*50%[^}]*font-size:\s*\.68rem/s);
+  assert.match(cssSource, /\.craps-entry__how-to-play\s*\{[^}]*border-color:[^}]*background:[^}]*!important/s,
+    'the rules control reads as a distinct but coherent felt spot');
   assert.match(cssSource, /\.craps-entry__bet-spot--hard \.craps-entry__bet-label b\s*\{[^}]*font-size:\s*\.76rem/s,
     'the compact lower row scales its most important labels too');
   assert.match(cssSource, /@media \(max-width: 768px\)[^{]*\{[^}]*\.craps-entry__mini-felt\s*\{[^}]*grid-template-rows:\s*2\.75rem 2\.5rem/s,
     'narrow screens enlarge both whole-cell tap targets without resizing the chip artwork');
+  assert.match(cssSource, /\.craps-entry__betting\s*\{[^}]*community-coinflip-felt-v6\.webp[^}]*#06351f/s,
+    'one rich green felt texture spans the complete wager table');
+  assert.match(cssSource, /\.craps-entry__mini-felt\s*\{[^}]*background:\s*transparent/s,
+    'the board cells do not lay a second disconnected felt panel over that table');
   assert.match(componentSource, /CRAPS_ENTRY_MAX_CHIPS_PER_BET = 3/);
   assert.match(componentSource, /CRAPS_ENTRY_MAX_PLACED_CHIPS = 7/);
-  assert.match(componentSource, /3 RANDOM MINIMUM · Tap RANDOM to reclaim the last placed chip\./,
-    'an eighth placement attempt explains the three-Random floor immediately');
+  assert.match(componentSource, /const clearedFullSpot = current >= CRAPS_ENTRY_MAX_CHIPS_PER_BET;\s*const nextCount = crapsEntryNextSpotCount\(current\);\s*if \(nextCount === 0\) \{\s*delete next\[field\];\s*this\.#boardHistory = this\.#boardHistory\.filter\(\(placedField\) => placedField !== field\);/,
+    'a fourth click clears all three chips from that spot and removes them from placement history');
+  assert.match(componentSource, /if \(!clearedFullSpot\) this\.#resetPlacePrompt\(\);[\s\S]*?this\.#render\(\);\s*if \(clearedFullSpot\) this\.#flashPlacePrompt\('MAX 3', 'PER SLOT'\);/,
+    'clearing a full spot briefly explains the per-slot cap after removing its chips');
+  assert.match(componentSource, /if \(crapsEntryBoardSummary\(next\)\.placed >= CRAPS_ENTRY_MAX_PLACED_CHIPS\) \{\s*this\.#flashPlacePrompt\('MINIMUM 3', 'RANDOM'\);/,
+    'an eighth placement attempt briefly explains the three-Random floor');
+  assert.match(componentSource, /CRAPS_ENTRY_LIMIT_PROMPT_MS = 1_200[\s\S]*?#flashPlacePrompt\(top, bottom\)[\s\S]*?this\.#paintPlacePrompt\('PLACE', 'YOUR BETS', 'Place your bets'\);\s*}, CRAPS_ENTRY_LIMIT_PROMPT_MS\)/,
+    'limit feedback restores the default prompt after a short delay');
+  assert.match(componentSource, /Three chips on this spot\. Tap to clear all three\./,
+    'full spots explain that the next click clears the complete stack');
   assert.match(componentSource, /Three chips must remain random\. Tap Random to reclaim the last placed chip\./,
     'capped spots expose the same reason to touch and assistive users');
   assert.match(componentSource, /#cycleInlineBet\(betSpot\.dataset\.crapsBet\)/);
@@ -849,6 +1000,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(cssSource, /\.craps-entry__pass-count\s*\{[^}]*border-radius:\s*999px/s);
   assert.match(cssSource, /\.craps-entry__action > button\s*\{[^}]*width:\s*min\(100%,5\.2rem\)[^}]*height:\s*\.94rem[^}]*background:\s*linear-gradient\(180deg,#f5c842,#b8790a\)[^}]*font-size:\s*\.43rem/s,
     'buy-in buttons remain compact yellow controls with readable type');
+  assert.match(cssSource, /@media \(max-width: 768px\)[\s\S]*?\.craps-entry__action > button,[\s\S]*?\.craps-entry__entered\s*\{[^}]*height:\s*2\.25rem[^}]*min-height:\s*2\.25rem[^}]*font-size:\s*0\.62rem[^}]*line-height:\s*1/s,
+    'mobile buy-in controls override the generic 44px rule with denser buttons and larger labels');
   assert.doesNotMatch(cssSource, /button\[data-state="pass"\]\s*\{[^}]*(?:#168a4b|#0d5a32)/s,
     'pass-funded purchases retain the yellow buy-in treatment');
   assert.match(cssSource, /button\[data-state="pass"\]\s*\{[^}]*word-spacing:\s*\.12rem/s,
@@ -867,14 +1020,16 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the old oval boost badge is fully removed');
   assert.match(cssSource, /\.craps-entry__result-total strong\s*\{[^}]*color:\s*#86efac/s,
     'the total-won amount keeps the green win color');
-  assert.match(cssSource, /\.craps-entry__result-added strong\s*\{[^}]*color:\s*#d8b4fe/s,
-    'the Added amount uses the shared purple funding color');
+  assert.match(cssSource, /\.craps-entry__result-added\[data-state="ready"\] strong\s*\{[^}]*color:\s*#58d5ff/s,
+    'ordinary Added winnings match the blue amount in the top Added display');
+  assert.match(cssSource, /\.craps-entry__result-added\[data-state="ready"\]\[data-tone="progressive"\] strong\s*\{[^}]*color:\s*#d69cff/s,
+    'an attributed progressive hit switches only that Added amount to purple');
   assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*white-space:\s*nowrap/s,
     'daily Added uses the available width for its amount, unit, and stacked period key');
   assert.match(cssSource, /\.craps-entry__result small\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
     'the compact battle/day row labels cannot spill into adjacent columns');
-  assert.match(componentSource, /winnerLabel\.textContent = `BATTLE \$\{battle\.number\}`/,
-    'each result retains a concise row identity beneath the shared WINNER heading');
+  assert.doesNotMatch(componentSource, /craps-battle-winner-label|winnerLabel\.textContent = `BATTLE/,
+    'resolved rows do not repeat their battle numbers beneath the shared WINNER heading');
   assert.match(componentSource, /`DAY \$\{previousEvent\.day\} EVENT`/,
     'the previous-event row label stays concise beneath the shared heading');
   assert.doesNotMatch(cssSource, /\.craps-entry__result:not\(\[hidden\]\)\s*\{[^}]*display:\s*grid/s);
@@ -883,8 +1038,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'completed winner rows use one neutral result state without reviving Goal');
   assert.doesNotMatch(cssSource, /data-goal-result/);
   assert.match(cssSource, /data-state="entered"/);
-  assert.match(cssSource, /button\[data-state="amend"\]/,
-    'the pending amendment has a distinct clickable action treatment');
+  assert.match(cssSource, /button\[data-state="amend"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, rgba\(22, 101, 52, 0\.88\), rgba\(20, 83, 45, 0\.82\)\)[^}]*color:\s*#dcfce7/s,
+    'CHANGE BET retains the green owned-entry button treatment');
   assert.match(cssSource, /data-state="upgrade"/);
   assert.match(cssSource, /shopping-cart-cursor\.svg/);
 });

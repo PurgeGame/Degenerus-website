@@ -9,6 +9,7 @@
 import { claimWhalePass, readWhalePassClaimAmount } from './claims.js';
 import { clearPendingActions, publishPendingActions } from './pending-actions.js';
 import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
+import { registerComponentPoll } from './component-poll.js';
 
 const SOURCE = 'whale-pass-claims';
 const WATCH_INTERVAL_MS = 30_000;
@@ -171,10 +172,9 @@ export function startWhalePassClaims({ getAddress } = {}) {
   if (_running) return;
   _running = true;
   _getAddress = typeof getAddress === 'function' ? getAddress : null;
-  if (typeof setInterval === 'function') {
-    _timer = setInterval(refreshWhalePassClaims, WATCH_INTERVAL_MS);
-    try { _timer?.unref?.(); } catch (_e) { /* browser timer */ }
-  }
+  // Shared scheduler, not a raw setInterval: the claim balance only moves at
+  // jackpot resolutions, and a hidden tab has no business re-reading it.
+  _timer = registerComponentPoll(refreshWhalePassClaims, WATCH_INTERVAL_MS);
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     _jackpotRevealListener = () => { void refreshWhalePassClaims(); };
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
@@ -184,7 +184,7 @@ export function startWhalePassClaims({ getAddress } = {}) {
 
 export function stopWhalePassClaims() {
   if (_timer != null) {
-    try { clearInterval(_timer); } catch (_e) { /* defensive */ }
+    try { _timer(); } catch (_e) { /* defensive */ }
   }
   _timer = null;
   if (_jackpotRevealListener && typeof document !== 'undefined') {

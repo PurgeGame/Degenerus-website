@@ -7,6 +7,10 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+// READ transport only. Everything money-in below still goes wallet -> contract,
+// and the lobby window keeps its eth_getLogs path as a fallback, so a dead API
+// costs the lobby bandwidth rather than correctness.
+import { fetchCrapsEventsJSON } from './craps-events.js';
 import {
   permissionlessReadProvider,
   readContractStorage,
@@ -114,9 +118,21 @@ export const CRAPS_LOBBY_EVENT_ABI = Object.freeze([
   // The other half of the main allocation goes straight to Run It Up. It is
   // separate from ladder rollovers, which are already part of the boost total.
   'event CrapsProgressiveFunded(uint24 indexed day,uint256 contribution,uint256 balance)',
+  // The main-field winner's Run It Up award. This is emitted in the same
+  // finalization transaction as CrapsBattlePaid, so the lobby can paint an
+  // actual hit without waiting for the optional indexed total projection.
+  'event CrapsProgressivePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,bool rare,uint16 poolBps,uint256 peak,uint256 scoreBps,uint256 candidate,uint256 paid,uint256 balance)',
   // Protocol money a winner's standing would not admit, banked instead of paid.
   // Source 1 = main, 2 = contested high lane, 3 = sole high lane.
   'event CrapsProgressiveRolled(bytes32 indexed battleKey,uint8 indexed source,uint256 amount,uint256 balance)',
+  // Protocol money the winner WAS awarded but received as DAY PASSES instead of FLIP.
+  // `_splitAward` spends half the ADMITTED boost on passes and subtracts what it banks from
+  // the liquid pot, so the FLIP payment alone UNDERSTATES the award — which is exactly how a
+  // battle came to show "+269K boost" against a "158.9K" total (day 68 battle 5, run #45:
+  // 2,690 boost units admitted, 5 normal passes at 22,800 = 114,000 FLIP banked).
+  // banked = grossProtocol - liquidFlip. Sources match the rollover tags: 1 main,
+  // 2 contested high lane, 3 sole high lane.
+  'event CrapsProtocolAwardSplit(bytes32 indexed battleKey,address indexed player,uint8 indexed source,uint256 grossProtocol,uint256 liquidFlip)',
 ]);
 
 const TEST_ADDRESS = '0x0000000000000000000000000000000000000001';
@@ -127,7 +143,20 @@ const CRAPS_BONUS_CHIPS = 10n;
 // term `postedStake` is still `(played / 10) * 7` — the ceiling, not any one slip's count.
 const CRAPS_PICKED_CHIPS = 7n;
 const CRAPS_FLIP_WEI = 10n ** 18n;
-const CRAPS_LOG_LOOKBACK_BLOCKS = 45_000;
+// The fold reads yesterday, today and tomorrow only, so the window is sized
+// from the chain's day length rather than a flat block count: four days of
+// blocks, floored at 1,800 and capped at the 45,000 a 12s-block mainnet day
+// needs. A 1,200s testnet day therefore asks for ~2,400 blocks, not 45,000.
+const CRAPS_LOG_LOOKBACK_MAX_BLOCKS = 45_000;
+const CRAPS_LOG_LOOKBACK_MIN_BLOCKS = 1_800;
+const CRAPS_LOG_LOOKBACK_DAYS = 4;
+function crapsLogLookbackBlocks() {
+  const daySeconds = Number(CHAIN.daySeconds);
+  const blockSeconds = Number(CHAIN.blockSeconds);
+  if (!(daySeconds > 0) || !(blockSeconds > 0)) return CRAPS_LOG_LOOKBACK_MAX_BLOCKS;
+  const blocks = Math.ceil((CRAPS_LOG_LOOKBACK_DAYS * daySeconds) / blockSeconds);
+  return Math.min(CRAPS_LOG_LOOKBACK_MAX_BLOCKS, Math.max(CRAPS_LOG_LOOKBACK_MIN_BLOCKS, blocks));
+}
 // Blocks re-read behind the incremental cursor so a shallow reorg cannot leave
 // a rewritten log in the merged window.
 const CRAPS_LOG_REORG_TAIL_BLOCKS = 12;
@@ -154,6 +183,18 @@ const CRAPS_BOOST_ROUND_STEP = 10n;
 // read straight out of GAME's storage at keccak256(abi.encode(index, 34)).
 const CRAPS_SETTLEMENT_WORD_SLOT = 34n;
 /** `_ROLL_SRC_MAIN` — main-winner boost denied by standing and banked instead. */
+// `_SPLIT_SRC_*` reuse the rollover numbering (CrapsBattle.sol:934) — same tags, different
+// question: ROLLED is protocol money standing DENIED, SPLIT is protocol money the winner got
+// as passes. A battle can carry both, and they are not interchangeable.
+const CRAPS_SPLIT_SRC_MAIN = 1;
+const CRAPS_SPLIT_SRC_HIGH_CONTESTED = 2;
+const CRAPS_SPLIT_SRC_HIGH_SOLE = 3;
+// ⛔ 4 = `_SPLIT_SRC_PROGRESSIVE`, AND IT MUST NEVER BE ADDED TO A TOTAL. The progressive is the
+// one lane whose event is emitted BEFORE its split (`CrapsBattle.sol:3937` then `:3942`), so
+// `CrapsProgressivePaid.paid` — the figure behind `progressivePaidWei` — ALREADY contains the
+// pass slice: "the WHOLE gross award leaves the pool, pass slice included". Every other lane
+// emits AFTER its subtraction and therefore understates. Counting source 4 double-counts it.
+const CRAPS_SPLIT_SRC_PROGRESSIVE = 4;
 const CRAPS_ROLL_SRC_MAIN = 1;
 /** `_ROLL_SRC_HIGH_CONTESTED` — contested high-winner boost denied by standing. */
 const CRAPS_ROLL_SRC_HIGH_CONTESTED = 2;
@@ -405,9 +446,58 @@ export function crapsBonusDayTerms(wordValue) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Log decoding is the lobby's dominant main-thread cost: the retained window
+// holds thousands of logs and every refresh re-folds all of them. Two memos
+// keep that fold cheap. The topic index skips ethers' per-call fragment scan
+// (Interface#parseLog re-hashes EVERY event signature on EVERY log), and the
+// per-log memo makes a re-fold over already-seen logs pure Map lookups.
+// Keyed on log identity per Interface, so a test log, a stale window, or a
+// second ABI can never be served another decoder's result.
+// ---------------------------------------------------------------------------
+const _topicIndexByInterface = new WeakMap(); // Interface -> Map(topic0 -> EventFragment)
+const _parsedByLog = new WeakMap(); // log -> Map(Interface -> LogDescription | null)
+
+function topicIndexFor(iface) {
+  let index = _topicIndexByInterface.get(iface);
+  if (!index) {
+    index = new Map();
+    iface.forEachEvent((fragment) => {
+      if (!fragment.anonymous) index.set(fragment.topicHash.toLowerCase(), fragment);
+    });
+    _topicIndexByInterface.set(iface, index);
+  }
+  return index;
+}
+
+function decodeCrapsLog(iface, log) {
+  const topic0 = String(log?.topics?.[0] ?? '').toLowerCase();
+  const fragment = topicIndexFor(iface).get(topic0);
+  if (!fragment) return null;
+  try {
+    const args = iface.decodeEventLog(fragment, log.data, log.topics);
+    return new ethers.LogDescription(fragment, fragment.topicHash, args);
+  } catch (_error) { return null; }
+}
+
+function memoParseCrapsLog(iface, log) {
+  if (!log || typeof log !== 'object') return null;
+  let byInterface = _parsedByLog.get(log);
+  if (byInterface?.has(iface)) return byInterface.get(iface);
+  const parsed = decodeCrapsLog(iface, log);
+  if (!byInterface) {
+    byInterface = new Map();
+    _parsedByLog.set(log, byInterface);
+  }
+  byInterface.set(iface, parsed);
+  return parsed;
+}
+
 function parsedCrapsLog(log, parser) {
   if (log?.parsed) return log.parsed;
-  try { return parser?.interface?.parseLog?.(log) ?? null; }
+  const iface = parser?.interface;
+  if (iface instanceof ethers.Interface) return memoParseCrapsLog(iface, log);
+  try { return iface?.parseLog?.(log) ?? null; }
   catch (_error) { return null; }
 }
 
@@ -523,18 +613,27 @@ export function crapsBonusScheduleFromLogs(dayValue, logs = [], parser = crapsRe
 }
 
 // ---------------------------------------------------------------------------
-// Incremental craps log window.
+// Incremental craps event window.
 //
-// The lobby snapshot and the bonus schedule both derive from the same bounded
-// lookback of CrapsBattle logs. Refetching that whole window on every lobby
-// refresh moved megabytes of identical JSON per poll and left every response
-// pinned in the shared log cache under a fresh block-range key — the
+// The lobby snapshot, the bonus schedule and the Added rail all derive from the
+// same bounded lookback of CrapsBattle events. Refetching that whole window on
+// every lobby refresh moved megabytes of identical JSON per poll and left every
+// response pinned in the shared log cache under a fresh block-range key — the
 // renderer's single largest steady-state allocation. One module-level window
-// holds the merged logs instead: the first read pays for the full lookback,
+// holds the merged rows instead: the first read pays for the full lookback,
 // every later read fetches only the blocks past the cursor plus a short reorg
 // tail, prunes what slid out of the lookback, and reuses the rest. Reads are
 // serialized so concurrent callers extend one cursor rather than racing two
 // full scans.
+//
+// The window is API-FIRST. `/game/craps/events` serves the same 45,000-block
+// lookback out of the indexer's craps_* tables, already decoded, so the browser
+// no longer runs a 5.6 MB eth_getLogs scan on every page load. The chain path
+// below survives ONLY as the fallback for an API that is down or too old to
+// serve the route; a failure is memoised for five minutes so a permanently
+// missing route is not re-probed on every 30s poll, and neither window is ever
+// re-scanned from the deploy block twice in one browser because both persist
+// their cursor (and their rows) to localStorage.
 // ---------------------------------------------------------------------------
 
 /** Every event the lobby snapshot parses; a superset of the schedule's pair. */
@@ -551,12 +650,33 @@ const CRAPS_WINDOW_EVENT_NAMES = Object.freeze([
   'CrapsHighRollerDayOpened',
   'CrapsHighRollerPaid',
   'CrapsProgressiveFunded',
+  'CrapsProgressivePaid',
   'CrapsProgressiveRolled',
+  'CrapsProtocolAwardSplit',
 ]);
+
+/** The indexed mirror of the window above. Same names, same lookback, decoded. */
+const CRAPS_EVENTS_ROUTE = '/game/craps/events';
+// An API too old to serve the route answers 404 forever. Re-probing that on
+// every 30s poll would be a guaranteed miss and a guaranteed 45k-block chain
+// scan behind it, so one failure parks the API for five minutes.
+const CRAPS_API_FAILURE_MEMO_MS = 5 * 60 * 1_000;
+const CRAPS_WINDOW_STORAGE_PREFIX = 'craps-window-';
+// localStorage is one small synchronous budget shared by the whole origin. A
+// busy craps day's window runs to thousands of rows and megabytes of JSON;
+// mirroring that would blow the quota AND cost a multi-megabyte stringify on
+// every poll, to save a fetch the in-memory window already covers for the life
+// of the tab. Past either cap the mirror is DROPPED rather than half-written:
+// a partial window would silently shorten the lookback the fold depends on.
+const CRAPS_WINDOW_PERSIST_MAX_ROWS = 3_000;
+const CRAPS_WINDOW_PERSIST_MAX_BYTES = 1_500_000;
 
 let _crapsWindowTopics = null;
 let _crapsLogWindow = null; // { provider, address, fromBlock, toBlock, logs }
+let _crapsApiWindow = null; // { address, fromBlock, toBlock, events }
 let _crapsLogWindowChain = Promise.resolve();
+let _crapsEventsFetcher = null;
+let _crapsApiFailedAt = 0;
 
 function crapsWindowTopicHashes() {
   if (!_crapsWindowTopics) {
@@ -568,15 +688,209 @@ function crapsWindowTopicHashes() {
   return _crapsWindowTopics;
 }
 
-async function readCrapsWindowLogsUnserialized(provider, latestBlock) {
+function crapsWindowStorageKey(kind) {
+  return `${CRAPS_WINDOW_STORAGE_PREFIX}${kind}:v1:${CHAIN.id}:`
+    + `${String(contractAddress() ?? '').toLowerCase()}:${Number(CHAIN.deployBlock) || 0}`;
+}
+
+function crapsWindowStorage() {
+  try { return typeof localStorage === 'undefined' ? null : localStorage; }
+  catch (_error) { return null; }
+}
+
+/**
+ * Mirror a merged window so a reload pays the reorg tail rather than the whole
+ * lookback. Skipped under a test contract factory for the same reason sdgnrs.js
+ * skips it: a fake provider must never meet a previous session's window.
+ */
+function persistCrapsWindow(kind, payload, rows) {
+  if (_contractFactory) return;
+  const store = crapsWindowStorage();
+  if (!store) return;
+  const key = crapsWindowStorageKey(kind);
+  try {
+    if (rows.length > CRAPS_WINDOW_PERSIST_MAX_ROWS) {
+      store.removeItem(key);
+      return;
+    }
+    const serialized = JSON.stringify(payload);
+    if (serialized.length > CRAPS_WINDOW_PERSIST_MAX_BYTES) {
+      store.removeItem(key);
+      return;
+    }
+    store.setItem(key, serialized);
+  } catch (_error) { /* quota or serialization — the memory window still works */ }
+}
+
+function reviveCrapsWindow(kind) {
+  if (_contractFactory) return null;
+  const store = crapsWindowStorage();
+  if (!store) return null;
+  try {
+    const parsed = JSON.parse(store.getItem(crapsWindowStorageKey(kind)));
+    if (!parsed
+      || !Number.isSafeInteger(Number(parsed.fromBlock))
+      || !Number.isSafeInteger(Number(parsed.toBlock))
+      || !Array.isArray(parsed.rows)) return null;
+    return {
+      fromBlock: Number(parsed.fromBlock),
+      toBlock: Number(parsed.toBlock),
+      rows: parsed.rows,
+    };
+  } catch (_error) { return null; }
+}
+
+function forgetPersistedCrapsWindows() {
+  const store = crapsWindowStorage();
+  if (!store) return;
+  const keys = new Set([crapsWindowStorageKey('api'), crapsWindowStorageKey('logs')]);
+  try {
+    const size = Number(store.length ?? 0);
+    for (let index = 0; index < size; index += 1) {
+      const key = store.key?.(index);
+      if (typeof key === 'string' && key.startsWith(CRAPS_WINDOW_STORAGE_PREFIX)) keys.add(key);
+    }
+  } catch (_error) { /* a shim without enumeration still clears the two known keys */ }
+  for (const key of keys) {
+    try { store.removeItem(key); } catch (_error) { /* best effort */ }
+  }
+}
+
+function crapsEventsFetcher() {
+  return typeof _crapsEventsFetcher === 'function' ? _crapsEventsFetcher : fetchCrapsEventsJSON;
+}
+
+function crapsApiMemoActive() {
+  return _crapsApiFailedAt > 0 && (Date.now() - _crapsApiFailedAt) < CRAPS_API_FAILURE_MEMO_MS;
+}
+
+/**
+ * Wrap one indexed EventRow as the shape `parsedCrapsLog` already fast-paths.
+ *
+ * `parsed` carries the decoded name and NAMED args, so every `args.foo ?? args[N]`
+ * read in the folds resolves on the name and no Interface is ever consulted.
+ * `topics`/`data` stay present but empty: nothing decodes these rows, and an
+ * absent field would make a shared consumer reach into undefined.
+ */
+function crapsEventRowLog(row) {
+  const name = String(row?.name ?? '');
+  if (!name) return null;
+  const blockNumber = Number(row?.blockNumber);
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) return null;
+  return {
+    parsed: { name, args: row?.args ?? {} },
+    blockNumber,
+    logIndex: Number(row?.logIndex ?? 0),
+    transactionHash: row?.transactionHash ?? null,
+    topics: [],
+    data: '0x',
+  };
+}
+
+function crapsEventRowPayload(log) {
+  return {
+    name: log?.parsed?.name,
+    args: log?.parsed?.args ?? {},
+    blockNumber: Number(log?.blockNumber ?? 0),
+    logIndex: Number(log?.logIndex ?? 0),
+    transactionHash: log?.transactionHash ?? null,
+  };
+}
+
+async function readCrapsApiWindowUnserialized() {
+  const address = contractAddress();
+  if (_crapsApiWindow == null) {
+    const revived = reviveCrapsWindow('api');
+    if (revived) {
+      const events = revived.rows.map(crapsEventRowLog).filter(Boolean);
+      _crapsApiWindow = {
+        address,
+        fromBlock: revived.fromBlock,
+        toBlock: revived.toBlock,
+        events,
+      };
+    }
+  }
+  const cached = _crapsApiWindow;
+  const reusable = Boolean(cached
+    && cached.address === address
+    && Number.isSafeInteger(cached.toBlock));
+  // The tail the indexer is asked to re-serve. Anything the merge retains must
+  // sit strictly below it, so a rewritten block arrives once and only once.
+  const since = reusable ? cached.toBlock - CRAPS_LOG_REORG_TAIL_BLOCKS : null;
+  const lookbackQuery = `lookback=${crapsLogLookbackBlocks()}`;
+  const payload = await crapsEventsFetcher()(
+    since != null && since > 0
+      ? `${CRAPS_EVENTS_ROUTE}?${lookbackQuery}&since=${since}`
+      : `${CRAPS_EVENTS_ROUTE}?${lookbackQuery}`,
+  );
+  const toBlock = Number(payload?.toBlock);
+  if (!Number.isSafeInteger(toBlock) || toBlock < 0) {
+    throw new Error('The craps events API returned no cursor.');
+  }
+  const fresh = (Array.isArray(payload?.events) ? payload.events : [])
+    .map(crapsEventRowLog)
+    .filter(Boolean);
+  const deployBlock = Number(CHAIN.deployBlock ?? 0);
+  const lookbackFrom = Math.max(deployBlock, toBlock - crapsLogLookbackBlocks());
+  // A cursor that moved BACKWARD is an indexer rollback, not a tail: never
+  // retain rows the new head no longer covers.
+  const cutoff = since == null ? null : Math.min(since, toBlock);
+  const retained = cutoff == null
+    ? []
+    : cached.events.filter((log) => log.blockNumber <= cutoff && log.blockNumber >= lookbackFrom);
+  const events = retained.length ? retained.concat(fresh) : fresh;
+  const responseFrom = Number(payload?.fromBlock);
+  const fromBlock = reusable
+    ? Math.max(lookbackFrom, Math.min(cached.fromBlock, toBlock))
+    : (Number.isSafeInteger(responseFrom) ? Math.max(deployBlock, responseFrom) : lookbackFrom);
+  _crapsApiWindow = { address, fromBlock, toBlock, events };
+  persistCrapsWindow(
+    'api',
+    { fromBlock, toBlock, rows: events.map(crapsEventRowPayload) },
+    events,
+  );
+  return events;
+}
+
+function crapsChainLogPayload(log) {
+  return {
+    blockNumber: Number(log?.blockNumber ?? 0),
+    logIndex: Number(log?.logIndex ?? log?.index ?? 0),
+    transactionHash: log?.transactionHash ?? null,
+    topics: Array.isArray(log?.topics) ? [...log.topics] : [],
+    data: log?.data ?? '0x',
+  };
+}
+
+async function readCrapsChainWindowUnserialized(provider) {
+  if (typeof provider?.getLogs !== 'function') {
+    throw new Error('No chain read provider is available for the craps window.');
+  }
+  const latestBlock = Number(await readProviderBlockNumber(provider));
   const address = contractAddress();
   const deployBlock = Number(CHAIN.deployBlock ?? 0);
-  const windowFrom = Math.max(deployBlock, latestBlock - CRAPS_LOG_LOOKBACK_BLOCKS);
+  const windowFrom = Math.max(deployBlock, latestBlock - crapsLogLookbackBlocks());
+  if (_crapsLogWindow == null) {
+    const revived = reviveCrapsWindow('logs');
+    // A revived window carries NO provider: it was written by a previous
+    // session under this chain + address + deploy block, which is the whole
+    // key, so the next transport may adopt it.
+    if (revived) {
+      _crapsLogWindow = {
+        provider: null,
+        address,
+        fromBlock: revived.fromBlock,
+        toBlock: revived.toBlock,
+        logs: revived.rows,
+      };
+    }
+  }
   const cached = _crapsLogWindow;
   // Provider identity is part of the key: a failover replacement or a test
-  // stub must never inherit another transport's merged history.
+  // stub must never inherit another live transport's merged history.
   const reusable = Boolean(cached
-    && cached.provider === provider
+    && (cached.provider == null || cached.provider === provider)
     && cached.address === address
     && cached.fromBlock <= windowFrom
     && cached.toBlock <= latestBlock);
@@ -597,37 +911,68 @@ async function readCrapsWindowLogsUnserialized(provider, latestBlock) {
     : [];
   const logs = retained.length ? retained.concat(fresh) : fresh;
   _crapsLogWindow = { provider, address, fromBlock: windowFrom, toBlock: latestBlock, logs };
+  persistCrapsWindow(
+    'logs',
+    { fromBlock: windowFrom, toBlock: latestBlock, rows: logs.map(crapsChainLogPayload) },
+    logs,
+  );
   return logs;
 }
 
-function readCrapsWindowLogs(provider, latestBlock) {
-  const run = () => readCrapsWindowLogsUnserialized(provider, latestBlock);
+async function readCrapsWindowUnserialized(provider) {
+  // A test contract factory means a stubbed chain, and every existing craps
+  // test drives that stub's getLogs. Never let the API answer for it.
+  if (!_contractFactory && !crapsApiMemoActive()) {
+    try {
+      return await readCrapsApiWindowUnserialized();
+    } catch (_error) {
+      _crapsApiFailedAt = Date.now();
+    }
+  }
+  return readCrapsChainWindowUnserialized(provider);
+}
+
+function readCrapsWindowLogs(provider) {
+  const run = () => readCrapsWindowUnserialized(provider);
   const read = _crapsLogWindowChain.then(run, run);
   _crapsLogWindowChain = read.then(() => undefined, () => undefined);
   return read;
 }
 
-export function __resetCrapsLogWindowForTest() {
-  _crapsLogWindow = null;
-  _crapsLogWindowChain = Promise.resolve();
+/** Rows of one or two of the window's event names, decoded once and memoised. */
+function crapsWindowRowsNamed(logs, names, parser) {
+  return logs.filter((log) => names.has(parsedCrapsLog(log, parser)?.name));
 }
 
-/** Read the current day's published schedule directly from CrapsBattle logs. */
+export function __resetCrapsLogWindowForTest() {
+  _crapsLogWindow = null;
+  _crapsApiWindow = null;
+  _crapsLogWindowChain = Promise.resolve();
+  _crapsApiFailedAt = 0;
+  forgetPersistedCrapsWindows();
+}
+
+export function __setCrapsEventsFetcherForTest(fetcher) {
+  _crapsEventsFetcher = typeof fetcher === 'function' ? fetcher : null;
+}
+
+const CRAPS_SCHEDULE_EVENT_NAMES = Object.freeze(new Set([
+  'CrapsBonusOpened',
+  'CrapsBonusDonated',
+]));
+
+/** Read the current day's published schedule from the shared craps window. */
 export async function readCrapsBonusSchedule(dayValue) {
   if (!isCrapsAvailable()) return null;
   const day = Number(dayValue);
   if (!Number.isInteger(day) || day <= 0) return null;
-  const provider = readerProvider();
-  if (!provider?.getBlockNumber || !provider?.getLogs) return null;
-  const latestBlock = Number(await readProviderBlockNumber(provider));
-  const iface = interfaceForCraps();
-  const wanted = new Set([
-    iface.getEvent('CrapsBonusOpened').topicHash.toLowerCase(),
-    iface.getEvent('CrapsBonusDonated').topicHash.toLowerCase(),
-  ]);
-  const logs = (await readCrapsWindowLogs(provider, latestBlock))
-    .filter((log) => wanted.has(String(log?.topics?.[0] ?? '').toLowerCase()));
-  return crapsBonusScheduleFromLogs(day, logs);
+  const parser = crapsLobbyReceiptParser();
+  const logs = crapsWindowRowsNamed(
+    await readCrapsWindowLogs(readerProvider()),
+    CRAPS_SCHEDULE_EVENT_NAMES,
+    parser,
+  );
+  return crapsBonusScheduleFromLogs(day, logs, parser);
 }
 
 /**
@@ -672,28 +1017,29 @@ export function crapsAddedPerDayFromLogs(
   return totalFor(day) ?? totalFor(day - 1);
 }
 
-/** A narrow indexed query keeps the Added rail independent of the full lobby scan. */
+const CRAPS_FUNDING_EVENT_NAMES = Object.freeze(new Set([
+  'CrapsHighRollerDayOpened',
+  'CrapsProgressiveFunded',
+]));
+
+/**
+ * The Added rail reads the SHARED window rather than a second query of its own.
+ *
+ * Its old narrow eth_getLogs was uncached and ran on every poll and every
+ * gameState publish beside the lobby's own scan, so the rail cost a full
+ * lookback per refresh to recover two numbers the lobby had already fetched.
+ */
 export async function readCrapsAddedPerDay(dayValue) {
   if (!isCrapsAvailable()) return null;
   const day = Number(dayValue);
   if (!Number.isInteger(day) || day <= 0) return null;
-  const provider = readerProvider();
-  if (!provider?.getBlockNumber || !provider?.getLogs) return null;
-  const latestBlock = Number(await readProviderBlockNumber(provider));
-  const iface = interfaceForCrapsLobby();
-  const dayTopics = [day, day - 1]
-    .filter((value) => value > 0)
-    .map((value) => ethers.zeroPadValue(ethers.toBeHex(value), 32));
-  const logs = await provider.getLogs({
-    address: contractAddress(),
-    fromBlock: Math.max(Number(CHAIN.deployBlock ?? 0), latestBlock - CRAPS_LOG_LOOKBACK_BLOCKS),
-    toBlock: latestBlock,
-    topics: [[
-      iface.getEvent('CrapsHighRollerDayOpened').topicHash,
-      iface.getEvent('CrapsProgressiveFunded').topicHash,
-    ], dayTopics],
-  });
-  return crapsAddedPerDayFromLogs(day, logs, { interface: iface });
+  const parser = crapsLobbyReceiptParser();
+  const logs = crapsWindowRowsNamed(
+    await readCrapsWindowLogs(readerProvider()),
+    CRAPS_FUNDING_EVENT_NAMES,
+    parser,
+  );
+  return crapsAddedPerDayFromLogs(day, logs, parser);
 }
 
 function crapsLobbyReceiptParser() {
@@ -815,6 +1161,7 @@ export function crapsLobbySnapshotFromLogs(
   const finalizedByKey = new Map();
   const paidByKey = new Map();
   const highPaidByKey = new Map();
+  const progressivePaidByKey = new Map();
   const ownedBets = new Map();
   const dayTickets = new Map();
   const playerWindows = Array(CRAPS_BONUS_WINDOWS).fill(null);
@@ -840,6 +1187,13 @@ export function crapsLobbySnapshotFromLogs(
   const contestedHighRolledWei = new Map();
   // What a sole lane BANKED rather than staked, by battle key (roll source 3).
   const soleRolledWei = new Map();
+  // What each winner was paid in DAY PASSES rather than FLIP (split sources 1 and 2).
+  // Same value the contract itself put on them, since it is the contract's own subtraction.
+  const mainPassWei = new Map();
+  const contestedHighPassWei = new Map();
+  // A SOLE rider's award splits too (CrapsBattle.sol:3445), even though its FLIP return
+  // arrives through CrapsBetSettled rather than CrapsHighRollerPaid.
+  const soleHighPassWei = new Map();
 
   // High is a per-window property for a day ticket: a paid High Roller day
   // starts with all seven bits, while an ordinary ticket can acquire them one
@@ -1035,6 +1389,13 @@ export function crapsLobbySnapshotFromLogs(
           args.contribution ?? args[1],
           'Run It Up daily contribution',
         ));
+      } else if (parsed.name === 'CrapsProgressivePaid') {
+        const battleKey = String(args.battleKey ?? args[1]).toLowerCase();
+        progressivePaidByKey.set(battleKey, Object.freeze({
+          betId: asUint(args.betId ?? args[0], 'Run It Up winning bet').toString(),
+          winner: String(args.player ?? args[2]).toLowerCase(),
+          amountWei: asUint(args.paid ?? args[8], 'Run It Up payout'),
+        }));
       } else if (parsed.name === 'CrapsHighRollerPaid') {
         // Emitted for a sole lane as its seat settles (even at zero, which is
         // that lane's final word) and once for a contested one. Its presence is
@@ -1060,6 +1421,27 @@ export function crapsLobbySnapshotFromLogs(
           contestedHighRolledWei.set(key, (contestedHighRolledWei.get(key) ?? 0n) + amount);
         } else if (source === CRAPS_ROLL_SRC_HIGH_SOLE) {
           soleRolledWei.set(key, (soleRolledWei.get(key) ?? 0n) + amount);
+        }
+      } else if (parsed.name === 'CrapsProtocolAwardSplit') {
+        // What the split BANKED as passes is the gross award minus what stayed liquid.
+        // Accumulated rather than set: one battle can split on both lanes, and a lane that
+        // banks nothing simply never emits.
+        const source = Number(asUint(args.source ?? args[2], 'Craps award split source'));
+        const key = String(args.battleKey ?? args[0]).toLowerCase();
+        const gross = asUint(args.grossProtocol ?? args[3], 'Craps award gross');
+        const liquid = asUint(args.liquidFlip ?? args[4], 'Craps award liquid');
+        const banked = gross > liquid ? gross - liquid : 0n;
+        if (banked !== 0n) {
+          if (source === CRAPS_SPLIT_SRC_MAIN) {
+            mainPassWei.set(key, (mainPassWei.get(key) ?? 0n) + banked);
+          } else if (source === CRAPS_SPLIT_SRC_HIGH_CONTESTED) {
+            contestedHighPassWei.set(key, (contestedHighPassWei.get(key) ?? 0n) + banked);
+          } else if (source === CRAPS_SPLIT_SRC_HIGH_SOLE) {
+            soleHighPassWei.set(key, (soleHighPassWei.get(key) ?? 0n) + banked);
+          } else if (source === CRAPS_SPLIT_SRC_PROGRESSIVE) {
+            // DELIBERATELY DROPPED, not forgotten — see the constant. The progressive's own
+            // payment figure already carries this value, so banking it here would count it twice.
+          }
         }
       } else if (parsed.name === 'CrapsBonusArmed') {
         const battleKey = String(args.battleKey ?? args[0]).toLowerCase();
@@ -1096,6 +1478,25 @@ export function crapsLobbySnapshotFromLogs(
       .filter((window) => window && paidByKey.has(window.battleKey))
       .map((window) => armedByKey.get(window.battleKey)),
   ].filter((index) => index != null))]);
+  /** The copies the named winner actually bought for this particular window. */
+  const winnerEntryMultiple = (betId, window, { highLane = false } = {}) => {
+    const key = String(betId ?? '');
+    const direct = publicWindowEntries.get(key);
+    if (direct?.day === window?.day && direct?.period === window?.period) {
+      return direct.multiple;
+    }
+    const ticket = [...publicDayTickets.values()].find((candidate) => (
+      candidate.betId != null && String(candidate.betId) === key
+    ));
+    if (ticket && window) {
+      return (ticket.highMask & (1 << window.period))
+        ? highMultipleByDay.get(window.day) ?? null
+        : 1;
+    }
+    // A CrapsHighRollerPaid winner necessarily bought the day's high multiple,
+    // even when the originating placement log has fallen outside the lookback.
+    return highLane ? highMultipleByDay.get(window?.day) ?? null : null;
+  };
   /**
    * The HIGH lane's boost base for one window, in FLIP wei.
    *
@@ -1186,7 +1587,16 @@ export function crapsLobbySnapshotFromLogs(
     const winnerBoostWei = mainBoostWei == null
       ? null
       : mainBoostWei > deniedMainBoostWei ? mainBoostWei - deniedMainBoostWei : 0n;
+    // Passes are protocol money the winner WAS paid; the FLIP payment is that same award
+    // minus them. Carried beside the boost so the total can count both.
+    const winnerPassWei = mainPassWei.get(window.battleKey) ?? 0n;
     const highPaid = highPaidByKey.get(window.battleKey) ?? null;
+    const progressivePaid = progressivePaidByKey.get(window.battleKey) ?? null;
+    const progressivePaidWei = progressivePaid
+      && progressivePaid.betId === paid.betId
+      && progressivePaid.winner === String(paid.winner).toLowerCase()
+        ? progressivePaid.amountWei
+        : 0n;
     const deniedHighBoostWei = contestedHighRolledWei.get(window.battleKey) ?? 0n;
     const highWinnerBoostWei = highPaid?.bankrollRider || highBoostWei == null
       ? null
@@ -1198,9 +1608,12 @@ export function crapsLobbySnapshotFromLogs(
       winningStop: final?.winningStop ?? null,
       buyInWei: window.buyInWei,
       highMultiple: highMultipleByDay.get(window.day) ?? null,
+      entryMultiple: winnerEntryMultiple(paid.betId, window),
       bonusMultiplier,
       mainBoostWei,
       winnerBoostWei,
+      winnerPassWei,
+      progressivePaidWei,
       highBoostWei,
       ...(highPaid ? {
         highResult: Object.freeze({
@@ -1209,7 +1622,11 @@ export function crapsLobbySnapshotFromLogs(
           // the goal. A contested lane always names its comparator winner, but
           // its payment event does not restate that run's stop.
           winningStop: highPaid.bankrollRider ? (highPaid.amountWei > 0n ? 1 : 0) : null,
+          entryMultiple: winnerEntryMultiple(highPaid.betId, window, { highLane: true }),
           winnerBoostWei: highWinnerBoostWei,
+          // The two lane shapes split under different tags, so read the one this lane ran.
+          winnerPassWei: (highPaid.bankrollRider ? soleHighPassWei : contestedHighPassWei)
+            .get(window.battleKey) ?? 0n,
         }),
       } : {}),
       // What the protocol put into THIS window, both lanes. A side lane still
@@ -1245,14 +1662,10 @@ export function crapsLobbySnapshotFromLogs(
       return a === b ? 0 : a < b ? -1 : 1;
     }));
   };
-  const entryMultipleFor = (entry, window) => {
-    if (entry.remainder !== 0) return entry.multiple;
-    const ticket = [...publicDayTickets.values()].find((candidate) => (
-      candidate.betId != null && String(candidate.betId) === String(entry.betId)
-    ));
-    const high = Boolean(ticket?.highMask & (1 << window.period));
-    return high ? highMultipleByDay.get(window.day) ?? null : 1;
-  };
+  const entryMultipleFor = (entry, window) => (
+    winnerEntryMultiple(entry.betId, window, { highLane: entry.remainder !== 0 && entry.multiple > 1 })
+      ?? entry.multiple
+  );
   const resolvedReplays = Object.freeze([...ownedBets.values()]
     .flatMap((entry) => {
       const windows = entry.remainder === 0
@@ -1547,13 +1960,28 @@ export function crapsLobbySnapshotWithWinnerTotals(snapshot, totals = []) {
   const enrichLane = (result, lane) => {
     if (!result || typeof result !== 'object') return result ?? null;
     const match = byWinner.get(winnerKey(result, lane));
+    const chainProgressive = typeof result.progressivePaidWei === 'bigint'
+      ? result.progressivePaidWei
+      : null;
+    // The chain event and indexed projection normally agree. Prefer a positive
+    // chain value so a just-finalized hit cannot briefly disappear behind a
+    // stale zero response; otherwise the projection can fill an older snapshot.
+    const progressivePaidWei = chainProgressive != null && chainProgressive > 0n
+      ? chainProgressive
+      : match?.progressivePaidWei ?? chainProgressive;
+    const totalWonWei = match?.runPaidWei == null
+      ? null
+      : match.runPaidWei
+        + match.battlePaidWei
+        + match.highPaidWei
+        + (progressivePaidWei ?? 0n);
     return Object.freeze({
       ...result,
       runPaidWei: match?.runPaidWei ?? null,
       battlePaidWei: match?.battlePaidWei ?? null,
       highPaidWei: match?.highPaidWei ?? null,
-      progressivePaidWei: match?.progressivePaidWei ?? null,
-      totalWonWei: match?.totalWonWei ?? null,
+      progressivePaidWei,
+      totalWonWei,
     });
   };
   const enrichResult = (result) => {
@@ -1601,19 +2029,25 @@ export async function readCrapsSettlementWord(index, providerOverride = null, bl
   return word === 0n ? null : word;
 }
 
-/** One RPC log read powers schedule terms, completed rows, and the prior-day boost. */
+/** One window read powers schedule terms, completed rows, and the prior-day boost. */
 export async function readCrapsLobbySnapshot(dayValue, player = null) {
   if (!isCrapsAvailable()) return null;
   const day = Number(dayValue);
   if (!Number.isInteger(day) || day <= 0) return null;
   const provider = readerProvider();
-  if (!provider?.getBlockNumber || !provider?.getLogs) return null;
-  const latestBlock = Number(await readProviderBlockNumber(provider));
-  const logs = await readCrapsWindowLogs(provider, latestBlock);
+  const logs = await readCrapsWindowLogs(provider);
   const parser = crapsLobbyReceiptParser();
   const shell = crapsLobbySnapshotFromLogs(day, logs, { parser, player });
+  // Settlement words are chain storage and stay chain reads. Pin them to one
+  // head so a batch cannot straddle a block, and only pay for the head read
+  // when a window actually needs a word.
+  let blockTag = 'latest';
+  if (shell.requiredWordIndexes.length > 0 && typeof provider?.getBlockNumber === 'function') {
+    try { blockTag = Number(await readProviderBlockNumber(provider)); }
+    catch (_error) { blockTag = 'latest'; }
+  }
   const words = new Map(await Promise.all(shell.requiredWordIndexes.map(async (index) => {
-    try { return [String(index), await readCrapsSettlementWord(index, provider, latestBlock)]; }
+    try { return [String(index), await readCrapsSettlementWord(index, provider, blockTag)]; }
     catch (_error) { return [String(index), null]; }
   })));
   return crapsLobbySnapshotFromLogs(day, logs, { parser, wordsByIndex: words, player });
@@ -1635,9 +2069,14 @@ export function __setCrapsContractFactoryForTest(factory, address = TEST_ADDRESS
 }
 
 export function __resetCrapsContractFactoryForTest() {
+  // Clear the persisted windows under the OVERRIDE address first, then again
+  // under the real one: the two keys differ, and a survivor would be revived by
+  // the next test as if it were this session's own scan.
+  __resetCrapsLogWindowForTest();
   _contractFactory = null;
   _addressOverride = undefined;
   _readProvider = null;
+  _crapsEventsFetcher = null;
   __resetCrapsLogWindowForTest();
 }
 
@@ -1646,7 +2085,7 @@ export function crapsReceiptParser() {
     interface: {
       parseLog(log) {
         if (log?.parsed) return log.parsed;
-        try { return interfaceForCraps().parseLog(log); } catch (_error) { return null; }
+        return memoParseCrapsLog(interfaceForCraps(), log);
       },
     },
   };

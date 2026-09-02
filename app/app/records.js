@@ -85,6 +85,18 @@ let _readRecordPool = readLiveRecordPool;
 let _readRecordClocks = readLiveRecordClocks;
 let _readRecordMarks = readLiveRecordMarks;
 let _readDiceRunRecord = readLiveDiceRunRecord;
+// readLiveDiceRunRecord is API-first off the SAME /records payload fetchRecords
+// already fetches (no second call): a `diceRun` key present means the API
+// carries kind-4 support, so it is used directly. Its absence (older API) or
+// the shared fetch throwing falls back to the existing persisted BigRecordUpdated
+// chain scan below, which is then memoized 5 minutes so the 15s poller does not
+// re-run it every tick while the API stays behind.
+const DICE_RUN_CHAIN_FALLBACK_MEMO_MS = 5 * 60 * 1000;
+let _diceRunChainFallbackMemoUntil = 0;
+// Test-only observability: how many times the chain-scan branch actually ran
+// (as opposed to short-circuiting on the memo above). There is no other way to
+// see the memo take effect without a live network read.
+let _diceRunChainFallbackRuns = 0;
 
 /**
  * Per-kind presentation facts.
@@ -443,17 +455,64 @@ async function fetchDiceRunLogRange(provider, filter, fromBlock, toBlock) {
   }
 }
 
+// Persisted mirror of the in-memory window, keyed on chain + contract +
+// deploy block so a redeploy busts it. Without it every page RELOAD paid a
+// fresh deploy→head getLogs rescan (the in-memory cache only helps within one
+// session); with it a reload pays only the 12-block reorg tail, the same
+// incremental pattern launch-claims/wwxrp-draw/charity-vote already persist.
+// Record events are rare, so the serialized array stays tiny.
+function _diceRunLogCacheKey(address, deployBlock) {
+  return `dice-run-logs:v1:${CHAIN.id}:${address}:${deployBlock}`;
+}
+
+function _readPersistedDiceRunWindow(address, deployBlock) {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const parsed = JSON.parse(localStorage.getItem(_diceRunLogCacheKey(address, deployBlock)));
+    if (!parsed
+      || Number(parsed.fromBlock) !== deployBlock
+      || !Number.isSafeInteger(Number(parsed.toBlock))
+      || !Array.isArray(parsed.logs)) return null;
+    return { toBlock: Number(parsed.toBlock), logs: parsed.logs };
+  } catch (_e) { return null; }
+}
+
+function _writePersistedDiceRunWindow(address, deployBlock, toBlock, logs) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(_diceRunLogCacheKey(address, deployBlock), JSON.stringify({
+      fromBlock: deployBlock,
+      toBlock,
+      // Keep only what candidate decoding needs: parseLog reads topics+data,
+      // provenance reads transactionHash/blockNumber/index.
+      logs: logs.map((log) => ({
+        blockNumber: Number(log?.blockNumber),
+        index: Number(log?.index ?? log?.logIndex ?? -1),
+        transactionHash: log?.transactionHash ?? null,
+        topics: Array.isArray(log?.topics) ? [...log.topics] : [],
+        data: log?.data ?? '0x',
+      })),
+    }));
+  } catch (_e) { /* quota/serialization — the in-memory window still works */ }
+}
+
 async function readDiceRunRecordLogs(provider, latestBlock) {
   const address = normalizedRecordAddress(CONTRACTS.COINFLIP);
   if (!address) return [];
   const deployBlock = Math.max(0, Number(CHAIN.deployBlock ?? 0));
-  const cached = _diceRunLogWindow;
+  let cached = _diceRunLogWindow;
   const reusable = Boolean(cached
     && cached.provider === provider
     && cached.address === address
     && cached.fromBlock === deployBlock
     && cached.toBlock <= latestBlock);
-  const fetchFrom = reusable
+  if (!reusable) {
+    const persisted = _readPersistedDiceRunWindow(address, deployBlock);
+    cached = persisted && persisted.toBlock <= latestBlock
+      ? { logs: persisted.logs, toBlock: persisted.toBlock }
+      : null;
+  }
+  const fetchFrom = cached
     ? Math.max(deployBlock, cached.toBlock - DICE_RUN_LOG_REORG_TAIL_BLOCKS + 1)
     : deployBlock;
   const iface = bigRecordEventInterface();
@@ -466,7 +525,7 @@ async function readDiceRunRecordLogs(provider, latestBlock) {
     fetchFrom,
     latestBlock,
   );
-  const retained = reusable
+  const retained = cached
     ? cached.logs.filter((log) => Number(log?.blockNumber) < fetchFrom)
     : [];
   const logs = retained.length ? retained.concat(fresh) : fresh;
@@ -477,16 +536,53 @@ async function readDiceRunRecordLogs(provider, latestBlock) {
     toBlock: latestBlock,
     logs,
   };
+  _writePersistedDiceRunWindow(address, deployBlock, latestBlock, logs);
   return logs;
+}
+
+/**
+ * Normalize the `/records` payload's `diceRun` fragment into the candidate
+ * shape `diceRunRecordFromReceipt` expects.
+ *
+ * Returns `null` when the fragment is present and confirms no record is held
+ * yet — a complete, legitimate API answer, not a reason to fall back. Returns
+ * `undefined` when the fragment is missing or too malformed to trust (no
+ * player/value, or an unusable transactionHash/blockNumber), which tells the
+ * caller to use the chain fallback instead.
+ */
+export function diceRunCandidateFromApiPayload(diceRun) {
+  if (diceRun == null || typeof diceRun !== 'object') return undefined;
+  const player = normalizedRecordAddress(diceRun.player);
+  const value = toBigInt(diceRun.value);
+  if (!player || value <= 0n) return null;
+  const transactionHash = String(diceRun.transactionHash ?? '').toLowerCase();
+  const blockNumber = Number(diceRun.blockNumber);
+  if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
+    || !Number.isSafeInteger(blockNumber) || blockNumber < 0) return undefined;
+  const rawLogIndex = Number(diceRun.logIndex);
+  return {
+    player,
+    value,
+    transactionHash,
+    blockNumber,
+    logIndex: Number.isSafeInteger(rawLogIndex) ? rawLogIndex : -1,
+  };
+}
+
+/** Test-only observability: how many times the chain-scan fallback actually ran. */
+export function __diceRunChainFallbackRunsForTest() {
+  return _diceRunChainFallbackRuns;
 }
 
 /**
  * Recover the current Dice Run record holder and replay provenance from chain.
  * This closes the gap left by `/records` deployments that still emit only the
- * original kinds 0–3.
+ * original kinds 0–3, and survives as a fallback for the API-first path below.
  */
-export async function readLiveDiceRunRecord() {
+async function _readLiveDiceRunRecordFromChain() {
+  if (Date.now() < _diceRunChainFallbackMemoUntil) return _lastLiveDiceRunRecord;
   if (_diceRunReadInflight) return _diceRunReadInflight;
+  _diceRunChainFallbackRuns += 1;
   const request = (async () => {
     try {
       const provider = recordPoolProvider();
@@ -527,7 +623,51 @@ export async function readLiveDiceRunRecord() {
     return await request;
   } finally {
     if (_diceRunReadInflight === request) _diceRunReadInflight = null;
+    _diceRunChainFallbackMemoUntil = Date.now() + DICE_RUN_CHAIN_FALLBACK_MEMO_MS;
   }
+}
+
+/**
+ * API-first: build the Dice Run record straight from the `diceRun` fragment of
+ * the SAME `/records` payload `fetchRecords` already fetched (never a second
+ * call). The receipt fetch below (to recover the Craps battle replay) is the
+ * only chain read this path needs; the BigRecordUpdated log scan is skipped
+ * entirely.
+ */
+async function _readDiceRunRecordFromApi(diceRun) {
+  const candidate = diceRunCandidateFromApiPayload(diceRun);
+  if (candidate === null) return null;
+  if (candidate === undefined) return _readLiveDiceRunRecordFromChain();
+  try {
+    const provider = recordPoolProvider();
+    let receipt = null;
+    if (provider) {
+      try { receipt = await readTransactionReceipt(candidate.transactionHash, { provider }); }
+      catch (_e) { /* holder identity still renders while receipt RPC retries */ }
+    }
+    const record = diceRunRecordFromReceipt(candidate, receipt);
+    if (record) _lastLiveDiceRunRecord = record;
+    return record ?? _lastLiveDiceRunRecord;
+  } catch (_e) {
+    return _readLiveDiceRunRecordFromChain();
+  }
+}
+
+/**
+ * Recover the current Dice Run record holder and replay provenance.
+ *
+ * API-first: `payload` is the SAME `/records` response `fetchRecords` already
+ * fetched. A `diceRun` key present is used directly (with one receipt read to
+ * recover the Craps battle replay); its absence (older API) or `payload` being
+ * unavailable (the shared fetch threw) falls back to the persisted
+ * BigRecordUpdated chain scan, memoized 5 minutes so the 15s poller does not
+ * re-run it every tick.
+ */
+export async function readLiveDiceRunRecord({ payload } = {}) {
+  if (payload && typeof payload === 'object' && 'diceRun' in payload) {
+    return _readDiceRunRecordFromApi(payload.diceRun);
+  }
+  return _readLiveDiceRunRecordFromChain();
 }
 
 /**
@@ -819,12 +959,20 @@ export function normalizeRecords(
 
 /** GET indexed history plus the chain-authoritative pool, clocks, and marks. */
 export async function fetchRecords() {
+  // The Dice Run reader is chained off this SAME promise (not a fresh call)
+  // so `/records` is fetched exactly once even though its payload feeds both
+  // the four-record normalize below and the diceRun key check.
+  const payloadPromise = _fetchRecordsJSON('/records');
+  const diceRunPromise = payloadPromise.then(
+    (payload) => _readDiceRunRecord({ payload }),
+    () => _readDiceRunRecord({ payload: null }),
+  );
   const [payloadResult, poolResult, clocksResult, marksResult, diceRunResult] = await Promise.allSettled([
-    _fetchRecordsJSON('/records'),
+    payloadPromise,
     Promise.resolve().then(() => _readRecordPool()),
     Promise.resolve().then(() => _readRecordClocks()),
     Promise.resolve().then(() => _readRecordMarks()),
-    Promise.resolve().then(() => _readDiceRunRecord()),
+    diceRunPromise,
   ]);
   if (payloadResult.status === 'fulfilled') _lastRecordsPayload = payloadResult.value;
   return normalizeRecords(
@@ -873,7 +1021,16 @@ export function __resetRecordsReadersForTest() {
   _diceRunReadInflight = null;
   _lastLiveDiceRunRecord = null;
   _diceRunLogWindow = null;
+  _diceRunChainFallbackMemoUntil = 0;
+  _diceRunChainFallbackRuns = 0;
   _lastRecordsPayload = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const address = normalizedRecordAddress(CONTRACTS.COINFLIP);
+      const deployBlock = Math.max(0, Number(CHAIN.deployBlock ?? 0));
+      if (address) localStorage.removeItem(_diceRunLogCacheKey(address, deployBlock));
+    }
+  } catch (_e) { /* test shims without removeItem */ }
 }
 
 // Discord display identity now lives in ./profiles.js so components that do

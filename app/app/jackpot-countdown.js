@@ -55,7 +55,13 @@ export function mountJackpotCountdown({
     host.title = `Next jackpot in ${text}`;
   };
   paint();
-  const timer = setTimer(paint, 250);
+  const tick = () => {
+    // Wall-clock-derived, so skipped hidden ticks cost nothing: the first
+    // visible tick (≤250ms after return) repaints the exact current value.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    paint();
+  };
+  const timer = setTimer(tick, 250);
   try { timer?.unref?.(); } catch (_e) { /* browser timers have no unref */ }
   return () => clearTimer(timer);
 }

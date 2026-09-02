@@ -53,6 +53,7 @@ import {
 } from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { degeneretteLimits } from '../app/degenerette.js';
+import { CRAPS_FUTURE_DAY_PRICES } from '../app/craps.js';
 import {
   applyDgnTicketAccent,
   dgnBadgePath,
@@ -498,6 +499,7 @@ class AppQuestPanel extends HTMLElement {
   #pinnedAddress = null;
   #questDialogModel = null;
   #questDialogChoice = 'ticket';
+  #questCrapsOptions = null;
   #questActionAmount = null;
   #questLootboxQuantity = 1;
   #questDialogReturnFocus = null;
@@ -744,14 +746,10 @@ class AppQuestPanel extends HTMLElement {
     close?.addEventListener?.('click', () => this.#closeQuestDialog());
     backdrop?.addEventListener?.('click', () => this.#closeQuestDialog());
     ticket?.addEventListener?.('click', () => {
-      this.#questDialogChoice = 'ticket';
-      this.#resetQuestActionAmount();
-      this.#renderQuestDialog();
+      this.#setQuestDialogChoice('ticket');
     });
     lootbox?.addEventListener?.('click', () => {
-      this.#questDialogChoice = 'lootbox';
-      this.#resetQuestActionAmount();
-      this.#renderQuestDialog();
+      this.#setQuestDialogChoice('lootbox');
     });
     actionAmount?.addEventListener?.('change', () => {
       const parsed = this.#parseQuestActionAmount(actionAmount.value);
@@ -865,6 +863,39 @@ class AppQuestPanel extends HTMLElement {
       }
       document.dispatchEvent(activation);
     } catch (_e) { /* detached/headless document */ }
+  }
+
+  #readCrapsDayOptions() {
+    const fallbackTomorrow = Object.freeze({
+      day: null,
+      price: CRAPS_FUTURE_DAY_PRICES.normal.toString(),
+    });
+    const detail = { today: null, tomorrow: fallbackTomorrow };
+    try {
+      let request;
+      if (typeof CustomEvent === 'function') {
+        request = new CustomEvent('quest:craps-options', { detail });
+      } else {
+        request = new Event('quest:craps-options');
+        Object.defineProperty(request, 'detail', { configurable: true, value: detail });
+      }
+      document.dispatchEvent(request);
+    } catch (_error) { /* the mounted Craps widget supplies richer live terms */ }
+    if (!detail.tomorrow) detail.tomorrow = fallbackTomorrow;
+    return detail;
+  }
+
+  #setQuestDialogChoice(controlChoice) {
+    const isCrapsDay = Number(this.#questDialogModel?.questType) === 11;
+    if (isCrapsDay) {
+      const next = controlChoice === 'ticket' ? 'today' : 'tomorrow';
+      if (next === 'today' && !this.#questCrapsOptions?.today) return;
+      this.#questDialogChoice = next;
+    } else {
+      this.#questDialogChoice = controlChoice === 'lootbox' ? 'lootbox' : 'ticket';
+    }
+    this.#resetQuestActionAmount();
+    this.#renderQuestDialog();
   }
 
   #questAdjustConfig(model = this.#questDialogModel) {
@@ -1115,7 +1146,21 @@ class AppQuestPanel extends HTMLElement {
       return { label: 'OPEN CRAPS BATTLE', target: 1n, completes: true };
     }
     if (originalType === 11) {
-      return { label: 'BUY CRAPS DAY', target: 1n, completes: true };
+      const useToday = this.#questDialogChoice === 'today'
+        && this.#questCrapsOptions?.today;
+      const crapsDay = useToday ? 'today' : 'tomorrow';
+      const option = useToday
+        ? this.#questCrapsOptions.today
+        : this.#questCrapsOptions?.tomorrow;
+      let price = CRAPS_FUTURE_DAY_PRICES.normal;
+      try { price = BigInt(option?.price ?? price); } catch (_error) { /* fixed fallback */ }
+      return {
+        label: `BUY ${crapsDay.toUpperCase()} · ${price.toLocaleString('en-US')} FLIP`,
+        target: 1n,
+        price,
+        crapsDay,
+        completes: true,
+      };
     }
     return { label: 'SET UP QUEST', target: required, completes: true };
   }
@@ -1160,7 +1205,8 @@ class AppQuestPanel extends HTMLElement {
     const dialog = this.querySelector('[data-bind="qst-action-dialog"]');
     if (!dialog) return;
     this.#questDialogModel = { ...model };
-    this.#questDialogChoice = 'ticket';
+    this.#questDialogChoice = Number(model?.questType) === 11 ? 'tomorrow' : 'ticket';
+    this.#questCrapsOptions = null;
     this.#questLootboxQuantity = 1;
     this.#resetQuestActionAmount();
     this.#prepareQuestDgnDraft(this.#questDialogModel);
@@ -1207,6 +1253,16 @@ class AppQuestPanel extends HTMLElement {
     const requirement = this.querySelector('[data-bind="qst-action-requirement"]');
     const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
     const hasPurchaseChoice = Number(model.questType) === 1;
+    const isCrapsDay = Number(model.questType) === 11;
+    if (isCrapsDay) {
+      this.#questCrapsOptions = this.#readCrapsDayOptions();
+      if (this.#questDialogChoice === 'today' && !this.#questCrapsOptions.today) {
+        this.#questDialogChoice = 'tomorrow';
+      }
+    } else {
+      this.#questCrapsOptions = null;
+    }
+    const hasActionChoice = hasPurchaseChoice || isCrapsDay;
     const isDgn = Number(model.questType) === 7 || Number(model.questType) === 8;
     const isLootboxPurchase = Number(model.questType) === 6
       || (hasPurchaseChoice && this.#questDialogChoice === 'lootbox');
@@ -1266,21 +1322,38 @@ class AppQuestPanel extends HTMLElement {
       } else if (type === 10) {
         copy.textContent = 'Choose and enter any open paid Craps battle.';
       } else if (type === 11) {
-        copy.textContent = 'Buy one future Craps day with FLIP. Awarded comps stay banked because using one does not count as a purchase.';
+        copy.textContent = action.crapsDay === 'today'
+          ? `Buy today's still-open Normal Craps day for ${BigInt(action.price).toLocaleString('en-US')} FLIP. Paid with FLIP; comps stay banked.`
+          : `Reserve tomorrow's Normal Craps day for ${BigInt(action.price).toLocaleString('en-US')} FLIP. Paid with FLIP; comps stay banked.`;
       } else {
         copy.textContent = 'Confirm to open the matching quest action.';
       }
     }
-    if (choice) choice.hidden = !hasPurchaseChoice;
+    if (choice) {
+      choice.hidden = !hasActionChoice;
+      choice.setAttribute?.('aria-label', isCrapsDay ? 'Craps day to buy' : 'Quest purchase type');
+    }
     if (ticket) {
-      ticket.textContent = 'TICKET';
-      ticket.classList?.toggle('is-selected', this.#questDialogChoice === 'ticket');
-      ticket.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'ticket'));
+      const selected = isCrapsDay
+        ? this.#questDialogChoice === 'today'
+        : this.#questDialogChoice === 'ticket';
+      ticket.hidden = isCrapsDay && !this.#questCrapsOptions?.today;
+      ticket.textContent = isCrapsDay && this.#questCrapsOptions?.today
+        ? `TODAY · ${BigInt(this.#questCrapsOptions.today.price).toLocaleString('en-US')} FLIP`
+        : 'TICKET';
+      ticket.classList?.toggle('is-selected', selected);
+      ticket.setAttribute?.('aria-pressed', String(selected));
     }
     if (lootbox) {
-      lootbox.textContent = 'LUCKBOX';
-      lootbox.classList?.toggle('is-selected', this.#questDialogChoice === 'lootbox');
-      lootbox.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'lootbox'));
+      const selected = isCrapsDay
+        ? this.#questDialogChoice === 'tomorrow'
+        : this.#questDialogChoice === 'lootbox';
+      lootbox.hidden = false;
+      lootbox.textContent = isCrapsDay
+        ? `TOMORROW · ${BigInt(this.#questCrapsOptions?.tomorrow?.price ?? CRAPS_FUTURE_DAY_PRICES.normal).toLocaleString('en-US')} FLIP`
+        : 'LUCKBOX';
+      lootbox.classList?.toggle('is-selected', selected);
+      lootbox.setAttribute?.('aria-pressed', String(selected));
     }
     if (adjust) adjust.hidden = !adjustConfig;
     if (lootboxQuantityField) lootboxQuantityField.hidden = !isLootboxPurchase;
@@ -1361,7 +1434,7 @@ class AppQuestPanel extends HTMLElement {
       confirm.disabled = blocked;
       confirm.textContent = blocked
         ? `DAILY QUEST FIRST · ${action.label}`
-        : completes && !isDgn && !hasPurchaseChoice
+        : completes && !isDgn && !hasActionChoice
           && !isLootboxPurchase ? 'CONFIRM'
           : `${completes ? 'CONFIRM' : "WON'T COMPLETE"} · ${action.label}`;
       confirm.setAttribute?.('title', completes
@@ -1385,6 +1458,7 @@ class AppQuestPanel extends HTMLElement {
       ...(action.adjustable ? { configuredAmount: true } : {}),
       ...(model.level != null ? { level: Number(model.level) } : {}),
       ...(action.purchaseKind ? { purchaseKind: action.purchaseKind } : {}),
+      ...(Number(model.questType) === 11 ? { crapsDay: action.crapsDay } : {}),
       ...(action.lootboxQuantity > 1 ? {
         lootboxQuantity: Number(action.lootboxQuantity),
         lootboxAmountWei: String(action.lootboxAmountWei ?? 0n),
@@ -1417,6 +1491,7 @@ class AppQuestPanel extends HTMLElement {
     }
     const returnFocus = this.#questDialogReturnFocus;
     this.#questDialogModel = null;
+    this.#questCrapsOptions = null;
     this.#questActionAmount = null;
     this.#questDgnPerSpin = 0n;
     this.#questDgnTraitIds = null;

@@ -7,6 +7,7 @@ import { ethers, getProvider, sendTx } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
+import { fetchJSON } from './api.js';
 
 const DRAW_ABI = [
   'event DrawEntered(uint24 indexed day, address indexed player, uint8 bucket, uint32 entryIndex, uint256 burnAmount, uint256 effectiveScore, uint256 cumulativeScore)',
@@ -20,9 +21,14 @@ const DRAW_ABI = [
 const LOG_CHUNK_BLOCKS = 20_000;
 const MAX_SCAN_CHUNKS = 12;
 const CACHE_VERSION = 1;
+// A dead/old API must not get hammered every poll, but a 404 also must not
+// calcify into a permanent "route missing" verdict beyond this session.
+const DRAW_DAYS_API_FAILURE_MEMO_MS = 5 * 60 * 1000;
 const _memoryCache = new Map();
+const _drawDaysApiFailureMemo = new Map();
 let _contractFactory = null;
 let _readProvider = null;
+let _fetch = fetchJSON;
 
 function _readerProvider() {
   if (!_readProvider) _readProvider = sharedReadProvider();
@@ -81,15 +87,61 @@ function _structured(error, fallback) {
   return wrapped;
 }
 
+function _drawDaysApiFailedRecently(owner) {
+  const expiresAt = _drawDaysApiFailureMemo.get(owner);
+  if (expiresAt == null) return false;
+  if (Date.now() >= expiresAt) {
+    _drawDaysApiFailureMemo.delete(owner);
+    return false;
+  }
+  return true;
+}
+
+/** API-first draw-day discovery. Returns null (never a bare array) on failure. */
+async function _apiDrawDays(player, cache) {
+  const owner = String(player || '').toLowerCase();
+  if (!owner || _drawDaysApiFailedRecently(owner)) return null;
+  try {
+    const payload = await _fetch(`/player/${owner}/wwxrp-draws`);
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const days = new Set(cache.days);
+    for (const row of events) {
+      if (String(row?.name) !== 'DrawEntered') continue;
+      const day = Number(row?.args?.day);
+      if (Number.isInteger(day) && day >= 0) days.add(day);
+    }
+    const toBlock = Number(payload?.toBlock);
+    const next = {
+      version: CACHE_VERSION,
+      throughBlock: Number.isFinite(toBlock) ? toBlock : cache.throughBlock,
+      days: [...days].sort((a, b) => a - b),
+    };
+    _writeCache(player, next);
+    return { days: next.days, complete: true };
+  } catch (_e) {
+    _drawDaysApiFailureMemo.set(owner, Date.now() + DRAW_DAYS_API_FAILURE_MEMO_MS);
+    return null;
+  }
+}
+
 /**
- * Discover every draw day owned by `player`. Scans are deployment-scoped and
- * cursor-cached; an RPC range limit falls back to bounded chunks and resumes
- * on the next refresh instead of silently skipping a range.
+ * Discover every draw day owned by `player`. API-first; the chain scan below
+ * survives only as a fallback when the API throws, and only when the caller
+ * allows it (a high-frequency, non-timer trigger such as a gameState publish
+ * should pass `allowChainFallback: false` and settle for the cached days).
+ * Scans are deployment-scoped and cursor-cached; an RPC range limit falls
+ * back to bounded chunks and resumes on the next refresh instead of silently
+ * skipping a range.
  */
-export async function readPlayerWwxrpDrawDays({ player } = {}) {
-  const provider = _readerProvider();
-  if (!player || !provider || !CONTRACTS.WWXRP) return { days: [], complete: false };
+export async function readPlayerWwxrpDrawDays({ player, allowChainFallback = true } = {}) {
+  if (!player) return { days: [], complete: false };
   const cache = _readCache(player);
+  const apiResult = await _apiDrawDays(player, cache);
+  if (apiResult) return apiResult;
+  if (!allowChainFallback) return { days: [...cache.days], complete: false };
+
+  const provider = _readerProvider();
+  if (!provider || !CONTRACTS.WWXRP) return { days: [...cache.days], complete: false };
   let head;
   try { head = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 })); }
   catch (_e) { return { days: [...cache.days], complete: false }; }
@@ -205,8 +257,15 @@ export function __setWwxrpDrawContractFactoryForTest(factory) {
   _contractFactory = typeof factory === 'function' ? factory : null;
 }
 
+/** Test-only /player/:address/wwxrp-draws fetch seam. */
+export function __setWwxrpDrawFetcherForTest(fetcher) {
+  _fetch = typeof fetcher === 'function' ? fetcher : fetchJSON;
+}
+
 export function __resetWwxrpDrawForTest() {
   _contractFactory = null;
   _readProvider = null;
   _memoryCache.clear();
+  _fetch = fetchJSON;
+  _drawDaysApiFailureMemo.clear();
 }

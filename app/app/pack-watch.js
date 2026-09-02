@@ -29,6 +29,7 @@ import { fetchJSON } from './api.js';
 import { get } from './store.js';
 import { readGameState } from './game-state.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
+import { registerComponentPoll } from './component-poll.js';
 import { dgnPartitionTicketEntries } from './dgn-traits.js';
 import {
   JACKPOT_TICKET_PROCESSING_LEVELS,
@@ -1772,10 +1773,10 @@ export function startPackWatch({ getAddress } = {}) {
     document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, _lootboxCompleteListener);
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
   }
-  _timer = setInterval(refreshPackWatch, WATCH_INTERVAL_MS);
-  if (_timer && typeof _timer.unref === 'function') {
-    try { _timer.unref(); } catch (_e) { /* defensive */ }
-  }
+  // Shared scheduler, not a raw setInterval: the six-level inspection wave is
+  // one of the heaviest recurring reads in the app and must stop in a hidden
+  // tab; purchase/reveal/TX listeners above still refresh it immediately.
+  _timer = registerComponentPoll(refreshPackWatch, WATCH_INTERVAL_MS);
   refreshPackWatch();
 }
 
@@ -1814,7 +1815,7 @@ export function refreshPackWatch() {
 /** Stop the loop (tests + teardown). */
 export function stopPackWatch() {
   if (_timer != null) {
-    try { clearInterval(_timer); } catch (_e) { /* defensive */ }
+    try { _timer(); } catch (_e) { /* defensive */ }
   }
   _timer = null;
   if (_awardSeedTimer != null) {

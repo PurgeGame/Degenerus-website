@@ -426,12 +426,27 @@ function resolvedDayFromGameState(payload) {
  * app.lastDay (rather than only the previous game-state sample) is important:
  * if the first jackpot request races the indexer at rollover and returns the
  * old day, every 15s state sample keeps retrying until the draw catches up.
+ *
+ * /game/state is pure indexed state with no volatile fields — between protocol
+ * events consecutive polls return byte-identical JSON (the API serves it from
+ * a 2s TTL cache). store.js has no equality check, so an unconditional publish
+ * re-runs every app.gameState subscriber each 15s tick, and several treat any
+ * publish as a data-changed signal (work-queue reloads, lobby refreshes). Skip
+ * the store write when nothing changed; the lastDay catch-up below still runs
+ * every tick, because app.lastDay can lag behind a steady game state.
  */
+let _lastPublishedGameStateJson = null;
+
 function publishGameState(payload, refreshLastDay) {
   const displayedPayload = get('app.lastDay');
   const displayedDay = Number(displayedPayload?.day);
   const nextDay = resolvedDayFromGameState(payload);
-  update('app.gameState', payload);
+  let payloadJson = null;
+  try { payloadJson = JSON.stringify(payload); } catch { payloadJson = null; }
+  if (payloadJson == null || payloadJson !== _lastPublishedGameStateJson) {
+    _lastPublishedGameStateJson = payloadJson;
+    update('app.gameState', payload);
+  }
   if (nextDay != null
     && (!Number.isInteger(displayedDay)
       || displayedDay <= 0
@@ -1074,6 +1089,10 @@ export function start({ playerAddress = null } = {}) {
   _forceGameCycle = game;
   _forceLastDayCycle = lastDay;
   _forcePlayerCycle = player;
+  // A fresh start() (boot, account switch, return-from-hidden) republishes the
+  // next game sample once even if it matches the pre-pause payload, so any
+  // subscriber that mounted or reset while timers were down gets a publish.
+  _lastPublishedGameStateJson = null;
   // Gold-rush cadence restarts at the floor: a tab that comes back after ten minutes
   // hidden should react to the next move promptly, not inherit a 60s backed-off gap.
   _goldRushLastBlock = null;

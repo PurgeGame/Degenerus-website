@@ -38,6 +38,7 @@ const PENDING_SOURCE = 'craps-resolutions';
 const CRAPS_ENTRY_RANDOM_CHIPS = 10;
 const CRAPS_ENTRY_MAX_PLACED_CHIPS = 7;
 const CRAPS_ENTRY_MAX_CHIPS_PER_BET = 3;
+const CRAPS_ENTRY_LIMIT_PROMPT_MS = 1_200;
 const CRAPS_ENTRY_HOT_SHOOTER_CHANCES = Object.freeze([15, 14, 12, 11, 9, 8, 6, 5]);
 
 // Mirror the lazy component's local revision onto this newly-added transitive
@@ -95,6 +96,11 @@ function normalizedEntryBoardCounts(bets = {}) {
       : 0;
     return [field, count];
   })));
+}
+
+export function crapsEntryNextSpotCount(count = 0) {
+  const current = Math.max(0, Math.min(CRAPS_ENTRY_MAX_CHIPS_PER_BET, Math.trunc(Number(count) || 0)));
+  return current >= CRAPS_ENTRY_MAX_CHIPS_PER_BET ? 0 : current + 1;
 }
 
 /** Pack the inline launcher's readable board with the contract's audited leg order. */
@@ -321,17 +327,12 @@ export function crapsEntryState({ day = null, nowMs = Date.now(), clock = CRAPS_
   const cycleStart = cycleStartAt(nowMs, clock);
   const closeTimes = closeOffsets(clock).map((offset) => (cycleStart + offset) * 1000);
   const nextDayAtMs = (cycleStart + clock.daySeconds) * 1000;
-  // A comp must be committed one normal battle period before rollover: four
-  // hours on mainnet and the equivalent scaled period on the testnet clock.
-  const passCutoffAtMs = nextDayAtMs - (clock.routinePeriodSeconds * 1000);
   const dayEntryKind = currentPeriod === 0 ? 'day' : 'future-day';
   const dayEntryDay = currentDay == null ? null : currentDay + (dayEntryKind === 'future-day' ? 1 : 0);
   return Object.freeze({
     day: currentDay,
     currentPeriod,
     nextDayAtMs,
-    passCutoffAtMs,
-    futurePassOpen: Number(nowMs) < passCutoffAtMs,
     dayEntryKind,
     dayEntryDay,
     fullDayOpen: currentDay != null,
@@ -618,14 +619,42 @@ export function crapsHeaderAddedMetric(snapshot = null, fallbackPerDayWei = null
   });
 }
 
+/** Keep ordinary protocol-added winnings blue; reserve purple for an actual progressive hit. */
+export function crapsAddedResultTone(progressivePaidWei = 0) {
+  try {
+    return BigInt(progressivePaidWei ?? 0) > 0n ? 'progressive' : 'added';
+  } catch (_error) {
+    return 'added';
+  }
+}
+
+/** The Added result is the winner's regular boost plus any Run It Up payout. */
+export function crapsAddedResultWei(boostWei, progressivePaidWei = 0) {
+  if (boostWei == null) return null;
+  try {
+    const boost = BigInt(boostWei);
+    const progressive = BigInt(progressivePaidWei ?? 0);
+    return boost < 0n || progressive < 0n ? null : boost + progressive;
+  } catch (_error) {
+    return null;
+  }
+}
+
 /** Paint the resolved boost in the shared results table's plain Added column. */
-function paintCrapsAddedValue(container, output, value) {
+function paintCrapsAddedValue(container, output, boostWei, progressivePaidWei = 0) {
+  const value = crapsAddedResultWei(boostWei, progressivePaidWei);
   const amount = compactWei(value);
   const ready = value != null && amount !== '—';
+  const tone = crapsAddedResultTone(progressivePaidWei);
   if (output) output.textContent = ready ? `+${amount}` : '—';
   if (!container) return;
   container.dataset.state = ready ? 'ready' : 'unavailable';
-  const label = ready ? `${amount} FLIP boost included in total won` : 'Boost unavailable';
+  container.dataset.tone = tone;
+  const label = ready
+    ? tone === 'progressive'
+      ? `${amount} FLIP added, including the Run It Up Progressive payout, in total won`
+      : `${amount} FLIP boost included in total won`
+    : 'Boost unavailable';
   container.setAttribute('aria-label', label);
   container.title = ready ? label : '';
 }
@@ -729,14 +758,19 @@ export function crapsWinnerGoalResult(result) {
   return stop === 1 ? 'met' : stop === 0 ? 'missed' : 'unknown';
 }
 
-/** Total WAGER + BATTLE buy-in for the lane currently selected in the lobby. */
+/** Total WAGER + BATTLE buy-in the named winner actually paid for this window. */
 export function crapsWinnerListBuyInWei(result, highRoller = false) {
   if (result?.buyInWei == null) return null;
   let base;
   try { base = BigInt(result.buyInWei); } catch (_error) { return null; }
   if (base < 0n) return null;
-  if (!highRoller) return base.toString();
-  const multiple = Number(result.highMultiple);
+  // A High Roller still competes in the main field. Keying this number only to
+  // the currently selected lane made a 100x winner look as though they bought
+  // the 1x seat (day 86 battle 4: 60,000 displayed as 600).
+  const sealedMultiple = Number(result.entryMultiple);
+  const multiple = Number.isInteger(sealedMultiple) && sealedMultiple >= 1 && sealedMultiple <= 256
+    ? sealedMultiple
+    : highRoller ? Number(result.highMultiple) : 1;
   if (!Number.isInteger(multiple) || multiple < 1 || multiple > 256) return null;
   return (base * BigInt(multiple)).toString();
 }
@@ -800,9 +834,20 @@ export function crapsWinnerReplayRequest(result) {
 /** Exact indexed total when known; otherwise an honest lower bound from the chain prize. */
 export function crapsWinnerTotalLabel(result) {
   if (!result || typeof result !== 'object') return '—';
-  if (result.totalWonWei != null) return compactWei(result.totalWonWei);
+  // ⭐ PASSES ARE PART OF WHAT THE BATTLE PAID. `_splitAward` spends half the admitted boost
+  // on day passes and SUBTRACTS them from the liquid pot, so the FLIP payment alone is the
+  // award minus the passes. Reporting only the FLIP made the boost read LARGER than the
+  // total it is part of (day 68 battle 5, run #45: a 269K boost against a 158.9K total,
+  // because 114K of it was paid as 5 passes). Count them at the contract's own valuation.
+  const passes = typeof result.winnerPassWei === 'bigint' ? result.winnerPassWei : 0n;
+  if (result.totalWonWei != null) return compactWei(result.totalWonWei + passes);
   if (result.amountWei == null) return '—';
-  const knownPayment = compactWei(result.amountWei);
+  // CrapsProgressivePaid is available in the same chain log window as the
+  // battle prize, even when the run-total projection is still catching up.
+  const progressive = typeof result.progressivePaidWei === 'bigint'
+    ? result.progressivePaidWei
+    : 0n;
+  const knownPayment = compactWei(result.amountWei + progressive + passes);
   return knownPayment === '—' ? '—' : `≥${knownPayment}`;
 }
 
@@ -852,6 +897,7 @@ export class AppCrapsEntry extends HTMLElement {
   #boardSet = false;
   #busyKey = null;
   #message = '';
+  #placePromptTimer = null;
   #forceFlipDay = false;
   #questActivationListening = false;
   #storeListener = () => {
@@ -916,6 +962,13 @@ export class AppCrapsEntry extends HTMLElement {
     }));
   };
   #clickListener = (event) => {
+    const howToPlay = event?.target?.closest?.('[data-craps-how-to-play]');
+    if (howToPlay && !howToPlay.disabled) {
+      this.ownerDocument?.dispatchEvent?.(new CustomEvent('craps-rules:open', {
+        detail: { trigger: howToPlay },
+      }));
+      return;
+    }
     const replay = event?.target?.closest?.('[data-craps-winner-replay]');
     if (replay && !replay.disabled) {
       void this.#openWinnerReplay(replay);
@@ -1012,6 +1065,7 @@ export class AppCrapsEntry extends HTMLElement {
     }
     this.#timer = null;
     this.#refreshTimer = null;
+    this.#resetPlacePrompt();
     this.#stopReplayPoll();
     if (this.#replayLifecycleListening) {
       this.#replayLifecycleListening = false;
@@ -1037,27 +1091,34 @@ export class AppCrapsEntry extends HTMLElement {
     this.innerHTML = `
       <section class="craps-entry" aria-labelledby="craps-entry-title">
         <header class="craps-entry__head">
-          <section class="craps-entry__identity craps-entry__identity--craps"
-                   aria-label="Craps Autobattle, added FLIP per day unavailable">
-            <h2 class="craps-entry__craps-logo" id="craps-entry-title">
-              <img src="/app/assets/craps/craps-autobattle-balanced-badges-v2.webp" width="1600" height="380"
-                   loading="lazy" decoding="async" alt="CRAPS AUTOBATTLE bookended by silver and blue dice badges">
-            </h2>
-          </section>
-          <section class="craps-entry__identity craps-entry__identity--runup" aria-label="Run It Up Progressive Jackpot">
-            <span class="craps-entry__run-it-up-mark" aria-hidden="true">
-              <img src="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2.webp" width="1400" height="517"
-                   loading="lazy" decoding="async" alt="">
-            </span>
-          </section>
-          <div class="craps-entry__header-metrics">
-            <span class="craps-entry__daily-added" data-bind="craps-added-banner" data-state="loading"
-                  aria-label="Added FLIP per day unavailable">
-              <strong><output data-bind="craps-added-total" aria-live="polite">—</output><em>FLIP</em></strong>
-              <span class="craps-entry__added-key"><b data-bind="craps-added-label">ADDED</b><small data-bind="craps-added-period">PER DAY</small></span>
-            </span>
-            <strong class="craps-entry__progressive-meter" data-bind="craps-progressive" data-state="loading"
-                    aria-label="Run It Up Progressive Jackpot amount unavailable"><span class="craps-entry__progressive-value"><output data-bind="craps-progressive-amount" aria-live="polite">—</output><em>FLIP</em></span></strong>
+          <div class="craps-entry__display-face">
+            <div class="craps-entry__logo-deck">
+              <section class="craps-entry__identity craps-entry__identity--craps"
+                       aria-label="Craps Autobattle, added FLIP per day unavailable">
+                <h2 class="craps-entry__craps-logo" id="craps-entry-title">
+                  <img class="craps-entry__craps-lockup" src="/app/assets/craps/craps-autobattle-integrated-swords-v8.webp" width="2025" height="466"
+                       loading="lazy" decoding="async" alt="CRAPS AUTO BATTLE bookended by silver and blue dice badges, with crossed swords between AUTO and BATTLE">
+                </h2>
+              </section>
+              <section class="craps-entry__identity craps-entry__identity--runup" aria-label="Run It Up Progressive Jackpot">
+                <span class="craps-entry__runup-kicker" aria-hidden="true">FEATURING THE</span>
+                <span class="craps-entry__run-it-up-mark" aria-hidden="true">
+                  <img src="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2.webp" width="1400" height="517"
+                       loading="lazy" decoding="async" alt="">
+                </span>
+                <span class="craps-entry__runup-submark" aria-hidden="true">PROGRESSIVE JACKPOT</span>
+              </section>
+            </div>
+            <div class="craps-entry__header-metrics">
+              <span class="craps-entry__daily-added" data-bind="craps-added-banner" data-state="loading"
+                    aria-label="Added FLIP per day unavailable">
+                <img class="craps-entry__flip-mark" src="/shared/flip-chips/face.svg" width="64" height="64" alt="">
+                <strong><output data-bind="craps-added-total" aria-live="polite">—</output></strong>
+                <span class="craps-entry__added-key"><b data-bind="craps-added-label">ADDED</b><small data-bind="craps-added-period">PER DAY</small></span>
+              </span>
+              <strong class="craps-entry__progressive-meter" data-bind="craps-progressive" data-state="loading"
+                      aria-label="Run It Up Progressive Jackpot amount unavailable"><span class="craps-entry__progressive-value"><img class="craps-entry__flip-mark" src="/shared/flip-chips/face.svg" width="64" height="64" alt=""><output data-bind="craps-progressive-amount" aria-live="polite">—</output></span></strong>
+            </div>
           </div>
         </header>
 
@@ -1089,7 +1150,7 @@ export class AppCrapsEntry extends HTMLElement {
                       <small>RESULT READY</small><strong>VIEW IN PENDING</strong>
                     </div>
                     <div class="craps-entry__result-grid" data-bind="craps-battle-result-details">
-                      <span><small data-bind="craps-battle-winner-label">WINNER</small><strong data-bind="craps-battle-winner">—</strong></span>
+                      <span><strong data-bind="craps-battle-winner">—</strong></span>
                       <span class="craps-entry__result-total"><strong><output data-bind="craps-battle-payout">—</output></strong></span>
                       <span class="craps-entry__result-added" data-bind="craps-battle-boost-detail"><strong><output data-bind="craps-battle-boost">—</output></strong></span>
                       <span class="craps-entry__result-buyin"><strong><output data-bind="craps-battle-buyin">—</output></strong></span>
@@ -1134,10 +1195,10 @@ export class AppCrapsEntry extends HTMLElement {
               <span class="craps-entry__bonus-equation-line"><strong><output data-bind="craps-random-count">10</output></strong><small>RANDOM</small><b>=</b>
                 <strong class="craps-entry__hot-value"><output data-bind="craps-hot-shooter-chance">15</output>%</strong><small>HOT SHOOTER BONUS</small></span>
             </span>
-            <strong class="craps-entry__place-prompt" aria-label="Place your bets"><span>PLACE</span><span>YOUR BETS</span></strong>
+            <strong class="craps-entry__place-prompt" aria-label="Place your bets" aria-live="polite" aria-atomic="true"><span data-craps-place-prompt="top">PLACE</span><span data-craps-place-prompt="bottom">YOUR BETS</span></strong>
             <div class="craps-entry__lane" role="group" aria-label="Craps entry lane">
-              <button type="button" data-craps-lane="normal" aria-pressed="true"><span>NORMAL</span><strong class="craps-entry__pass-count" data-bind="craps-normal-passes" hidden>0</strong></button>
-              <button type="button" data-craps-lane="high" aria-pressed="false"><span>HIGH ROLLER</span><strong class="craps-entry__pass-count" data-bind="craps-high-passes" hidden>0</strong></button>
+              <button type="button" data-craps-lane="normal" aria-pressed="true"><span>LOW<br>STAKES</span><strong class="craps-entry__pass-count" data-bind="craps-normal-passes" hidden>0</strong></button>
+              <button type="button" data-craps-lane="high" aria-pressed="false"><span>HIGH<br>ROLLER</span><strong class="craps-entry__pass-count" data-bind="craps-high-passes" hidden>0</strong></button>
             </div>
           </div>
 
@@ -1153,6 +1214,7 @@ export class AppCrapsEntry extends HTMLElement {
             <div class="craps-entry__line-row">
               <button class="craps-entry__bet-spot craps-entry__bet-spot--hard" type="button" data-craps-bet="hard-4" data-count="0"><span class="craps-entry__hard-dice" aria-hidden="true"><img src="/symbols/dice_01_2_silver.svg" alt=""><img src="/symbols/dice_01_2_blue.svg" alt=""></span><span class="craps-entry__bet-label">HARD <b>4</b></span><span class="craps-entry__pays">7:1</span><span class="craps-entry__chip-stack"><img data-craps-stack src="/shared/flip-chips/coin-high-red.svg" alt=""></span></button>
               <button class="craps-entry__bet-spot" type="button" data-craps-bet="pass" data-count="0"><span class="craps-entry__bet-label">PASS</span><span class="craps-entry__pays">1:1</span><span class="craps-entry__chip-stack"><img data-craps-stack src="/shared/flip-chips/coin-high-red.svg" alt=""></span></button>
+              <button class="craps-entry__bet-spot craps-entry__how-to-play" type="button" data-craps-how-to-play aria-label="How to play Craps Autobattle" aria-haspopup="dialog"><span class="craps-entry__bet-label">HOW TO<br>PLAY</span></button>
               <button class="craps-entry__bet-spot craps-entry__bet-spot--hard" type="button" data-craps-bet="hard-8" data-count="0"><span class="craps-entry__hard-dice" aria-hidden="true"><img src="/symbols/dice_03_4_silver.svg" alt=""><img src="/symbols/dice_03_4_blue.svg" alt=""></span><span class="craps-entry__bet-label">HARD <b>8</b></span><span class="craps-entry__pays">9:1</span><span class="craps-entry__chip-stack"><img data-craps-stack src="/shared/flip-chips/coin-high-red.svg" alt=""></span></button>
               <button class="craps-entry__bet-spot craps-entry__bet-spot--dont" type="button" data-craps-bet="dont-pass" data-count="0"><span class="craps-entry__bet-label">DON'T<br>PASS</span><span class="craps-entry__pays">3:4</span><span class="craps-entry__chip-stack"><img data-craps-stack src="/shared/flip-chips/coin-high-red.svg" alt=""></span></button>
               <button class="craps-entry__bet-spot craps-entry__random-slot" type="button" data-craps-random data-random-count="10" aria-label="10 random chips remaining"><span class="craps-entry__bet-label">RANDOM</span><span class="craps-entry__random-stack" aria-hidden="true"><img data-craps-random-stack="left" src="/shared/flip-chips/stack-5-high-red.svg" alt=""><img data-craps-random-stack="right" src="/shared/flip-chips/stack-5-high-red.svg" alt=""></span></button>
@@ -1212,7 +1274,7 @@ export class AppCrapsEntry extends HTMLElement {
       const laneHigh = lane.dataset.crapsLane === 'high';
       const count = laneHigh ? highPasses : normalPasses;
       lane.setAttribute('aria-pressed', String(selected));
-      lane.setAttribute('aria-label', `${laneHigh ? 'High Roller' : 'Normal'} Craps lane${count > 0 ? `, ${count.toLocaleString('en-US')} ${count === 1 ? 'comp' : 'comps'} available` : ''}`);
+      lane.setAttribute('aria-label', `${laneHigh ? 'High Roller' : 'Low Stakes'} Craps lane${count > 0 ? `, ${count.toLocaleString('en-US')} ${count === 1 ? 'comp' : 'comps'} available` : ''}`);
       lane.disabled = this.#busyKey != null;
     }
     this.#paintInlineBoard();
@@ -1255,7 +1317,7 @@ export class AppCrapsEntry extends HTMLElement {
 
     const selectedPasses = this.#highRoller ? highPasses : normalPasses;
     const passInventoryReady = !connectedPlayer || this.#passCredits != null;
-    const compEligible = state.futurePassOpen && !this.#forceFlipDay;
+    const compEligible = !this.#forceFlipDay;
     const usePass = futureDay && compEligible && selectedPasses > 0;
     const dayReady = dayEntryDay != null
       && (futureDay || (terms?.complete && multiple != null))
@@ -1293,7 +1355,7 @@ export class AppCrapsEntry extends HTMLElement {
     // Tomorrow's word has not been drawn, so its row abandons the WAGER + BATTLE
     // columns: one spanned cell carries the combined face-cost range instead of
     // two per-column ranges pretending to be independent draws.
-    const combinedTomorrowRange = `Tomorrow's ${this.#highRoller ? 'High Roller' : 'Normal'} slate draws a combined seven-battle buy-in between ${futureFaceRange.low.toLocaleString('en-US')} and ${futureFaceRange.high.toLocaleString('en-US')} FLIP.`;
+    const combinedTomorrowRange = `Tomorrow's ${this.#highRoller ? 'High Roller' : 'Low Stakes'} slate draws a combined seven-battle buy-in between ${futureFaceRange.low.toLocaleString('en-US')} and ${futureFaceRange.high.toLocaleString('en-US')} FLIP.`;
     bindText('craps-full-day-entry', futureDay
       ? compactRange(futureFaceRange)
       : dayRolling ? 'ROLLING' : formatCrapsCompactFlip(dayEntry));
@@ -1380,13 +1442,13 @@ export class AppCrapsEntry extends HTMLElement {
         || this.#busyKey === `upgrade-${dayUpgradeMask}`
         || this.#busyKey === `amend-${dayTicket?.betId}`;
       dayButton.textContent = dayBusy
-        ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
+        ? this.#busyKey?.startsWith?.('amend-') ? 'CHANGING…' : 'ENTERING…'
         : dayCanUpgrade
           ? `UPGRADE ${formatCrapsCompactFlip(dayUpgradePrice)}`
           : dayUpgradeWhenOpen
             ? 'UPGRADE WHEN OPEN'
           : dayAmendable
-            ? dayNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+            ? dayNeedsAmend ? 'CHANGE BET' : 'ENTERED'
             : dayEntered
               ? 'ENTERED'
             : usePass
@@ -1395,17 +1457,17 @@ export class AppCrapsEntry extends HTMLElement {
       dayButton.setAttribute('aria-label', dayCanUpgrade
         ? `Upgrade the remaining open battles on your day ticket for ${dayUpgradePrice} FLIP.`
         : dayUpgradeWhenOpen
-          ? 'This is a Normal reservation. Its High Roller upgrade becomes available when that day opens and its exact terms land on-chain.'
+          ? 'This is a Low Stakes reservation. Its High Roller upgrade becomes available when that day opens and its exact terms land on-chain.'
         : dayAmendable
           ? dayNeedsAmend
-            ? 'Amend this Craps slate with the changed chip placement.'
+            ? 'Change this Craps slate to the displayed chip placement.'
             : 'Entered in this Craps slate. Edit its chip placement.'
           : dayEntered
             ? 'This wallet is already entered for this Craps slate.'
           : dayReady
             ? usePass
-              ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve all seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
-              : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
+              ? `Use one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp to reserve all seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
+              : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
             : 'Full-day Craps terms are loading');
     }
     if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
@@ -1468,11 +1530,11 @@ export class AppCrapsEntry extends HTMLElement {
       const tomorrowBusy = this.#busyKey === 'future-day'
         || this.#busyKey === `amend-${tomorrowTicket?.betId}`;
       tomorrowButton.textContent = tomorrowBusy
-        ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
+        ? this.#busyKey?.startsWith?.('amend-') ? 'CHANGING…' : 'ENTERING…'
         : tomorrowUpgradeWhenOpen
           ? 'UPGRADE WHEN OPEN'
         : tomorrowAmendable
-          ? tomorrowNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+          ? tomorrowNeedsAmend ? 'CHANGE BET' : 'ENTERED'
           : tomorrowTicket
             ? 'ENTERED'
           : tomorrowUsePass
@@ -1480,16 +1542,16 @@ export class AppCrapsEntry extends HTMLElement {
             : `${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
       tomorrowButton.setAttribute('aria-label', tomorrowAmendable
         ? tomorrowNeedsAmend
-          ? 'Amend tomorrow\'s Craps slate with the changed chip placement.'
+          ? 'Change tomorrow\'s Craps slate to the displayed chip placement.'
           : 'Entered in tomorrow\'s Craps slate. Edit its chip placement.'
         : tomorrowUpgradeWhenOpen
-          ? 'This is a Normal reservation. Its High Roller upgrade becomes available when tomorrow opens and its exact terms land on-chain.'
+          ? 'This is a Low Stakes reservation. Its High Roller upgrade becomes available when tomorrow opens and its exact terms land on-chain.'
         : tomorrowTicket
           ? 'This wallet is already entered for tomorrow\'s Craps slate.'
         : tomorrowReady
           ? tomorrowUsePass
-            ? `Use one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp to reserve tomorrow's seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available.`
-            : `Reserve tomorrow's seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane for ${tomorrowPrice} FLIP.`
+            ? `Use one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp to reserve tomorrow's seven battles. ${selectedPasses.toLocaleString('en-US')} ${selectedPasses === 1 ? 'comp' : 'comps'} available.`
+            : `Reserve tomorrow's seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane for ${tomorrowPrice} FLIP.`
           : 'Tomorrow\'s Craps comp balance is loading.');
     }
     if (tomorrowEnteredStatus) {
@@ -1566,7 +1628,6 @@ export class AppCrapsEntry extends HTMLElement {
       const resultLocked = row.querySelector('[data-bind="craps-battle-result-locked"]');
       const resultDetails = row.querySelector('[data-bind="craps-battle-result-details"]');
       const winner = row.querySelector('[data-bind="craps-battle-winner"]');
-      const winnerLabel = row.querySelector('[data-bind="craps-battle-winner-label"]');
       const payout = row.querySelector('[data-bind="craps-battle-payout"]');
       const boost = row.querySelector('[data-bind="craps-battle-boost"]');
       const boostDetail = row.querySelector('[data-bind="craps-battle-boost-detail"]');
@@ -1621,12 +1682,6 @@ export class AppCrapsEntry extends HTMLElement {
       if (resultBox) resultBox.hidden = !result;
       if (resultLocked) resultLocked.hidden = !concealed;
       if (resultDetails) resultDetails.hidden = concealed;
-      if (winnerLabel) {
-        winnerLabel.textContent = `BATTLE ${battle.number}`;
-        winnerLabel.setAttribute('aria-label', this.#highRoller
-          ? `Battle ${battle.number} High Roller result`
-          : `Battle ${battle.number} result`);
-      }
       this.#paintWinner(winner, concealed
         ? null
         : laneResult?.winner ?? (result && this.#highRoller ? 'NO WINNER' : null));
@@ -1640,6 +1695,7 @@ export class AppCrapsEntry extends HTMLElement {
         boostDetail,
         boost,
         laneResult && !concealed ? laneResult.winnerBoostWei : null,
+        laneResult && !concealed ? laneResult.progressivePaidWei : null,
       );
       if (resultBuyIn) {
         resultBuyIn.textContent = laneResult && !concealed
@@ -1674,11 +1730,11 @@ export class AppCrapsEntry extends HTMLElement {
           || this.#busyKey === `upgrade-${upgradeMask}`
           || this.#busyKey === `amend-${entry?.betId}`;
         button.textContent = entryBusy
-          ? this.#busyKey?.startsWith?.('amend-') ? 'AMENDING…' : 'ENTERING…'
+          ? this.#busyKey?.startsWith?.('amend-') ? 'CHANGING…' : 'ENTERING…'
           : canUpgrade
             ? `UPGRADE ${formatCrapsCompactFlip(upgradePrice)}`
             : amendable
-              ? entryNeedsAmend ? 'AMEND ENTRY' : 'ENTERED'
+              ? entryNeedsAmend ? 'CHANGE BET' : 'ENTERED'
               : entry
                 ? 'ENTERED'
               : battle.state === 'closed'
@@ -1686,7 +1742,7 @@ export class AppCrapsEntry extends HTMLElement {
                 : `${price == null ? '—' : formatCrapsCompactFlip(price)} FLIP`;
         button.setAttribute('aria-label', amendable
           ? entryNeedsAmend
-            ? `Amend Battle ${battle.number} with the changed chip placement.`
+            ? `Change Battle ${battle.number} to the displayed chip placement.`
             : `Entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}. Edit its chip placement.`
           : entry && !canUpgrade
             ? `This wallet is entered in Battle ${battle.number}${entry.high ? ' as High Roller' : ''}.`
@@ -1755,6 +1811,7 @@ export class AppCrapsEntry extends HTMLElement {
       previousEventBoostDetail,
       previousEventBoost,
       previousEventConcealed ? null : previousEventLaneResult?.winnerBoostWei,
+      previousEventConcealed ? null : previousEventLaneResult?.progressivePaidWei,
     );
     bindText('craps-previous-event-buyin', compactWei(
       previousEventConcealed ? null : crapsWinnerListBuyInWei(previousEventLaneResult, this.#highRoller),
@@ -2303,12 +2360,12 @@ export class AppCrapsEntry extends HTMLElement {
       const randomMinimumReached = summary.placed >= CRAPS_ENTRY_MAX_PLACED_CHIPS
         && count < CRAPS_ENTRY_MAX_CHIPS_PER_BET;
       spot.setAttribute('aria-label', `${readable}, ${count} ${count === 1 ? 'chip' : 'chips'}. ${count >= CRAPS_ENTRY_MAX_CHIPS_PER_BET
-        ? 'Tap to return this stack to random.'
+        ? 'Three chips on this spot. Tap to clear all three.'
         : randomMinimumReached
           ? 'Three chips must remain random. Tap Random to reclaim the last placed chip.'
           : 'Tap to add a chip, three maximum.'}`);
       spot.title = count >= CRAPS_ENTRY_MAX_CHIPS_PER_BET
-        ? 'Tap to return this stack to RANDOM'
+        ? '3 chips · tap to clear this spot'
         : randomMinimumReached
           ? '3 RANDOM minimum · reclaim one before placing another'
           : 'Tap anywhere to add a chip · 3 max';
@@ -2334,13 +2391,40 @@ export class AppCrapsEntry extends HTMLElement {
       : 'All 10 chips will be placed randomly';
   }
 
+  #paintPlacePrompt(top, bottom, label) {
+    const prompt = this.querySelector('.craps-entry__place-prompt');
+    const topLine = prompt?.querySelector('[data-craps-place-prompt="top"]');
+    const bottomLine = prompt?.querySelector('[data-craps-place-prompt="bottom"]');
+    if (!prompt || !topLine || !bottomLine) return;
+    topLine.textContent = top;
+    bottomLine.textContent = bottom;
+    prompt.setAttribute('aria-label', label);
+  }
+
+  #resetPlacePrompt() {
+    if (this.#placePromptTimer != null) globalThis.clearTimeout?.(this.#placePromptTimer);
+    this.#placePromptTimer = null;
+    this.#paintPlacePrompt('PLACE', 'YOUR BETS', 'Place your bets');
+  }
+
+  #flashPlacePrompt(top, bottom) {
+    if (this.#placePromptTimer != null) globalThis.clearTimeout?.(this.#placePromptTimer);
+    this.#paintPlacePrompt(top, bottom, `${top} ${bottom}`);
+    this.#placePromptTimer = globalThis.setTimeout?.(() => {
+      this.#placePromptTimer = null;
+      this.#paintPlacePrompt('PLACE', 'YOUR BETS', 'Place your bets');
+    }, CRAPS_ENTRY_LIMIT_PROMPT_MS) ?? null;
+  }
+
   #cycleInlineBet(id) {
     if (this.#busyKey != null) return;
     const field = CRAPS_ENTRY_BET_FIELDS[String(id ?? '')];
     if (!field) return;
     const next = { ...normalizedEntryBoardCounts(this.#boardBets) };
     const current = next[field] ?? 0;
-    if (current >= CRAPS_ENTRY_MAX_CHIPS_PER_BET) {
+    const clearedFullSpot = current >= CRAPS_ENTRY_MAX_CHIPS_PER_BET;
+    const nextCount = crapsEntryNextSpotCount(current);
+    if (nextCount === 0) {
       delete next[field];
       this.#boardHistory = this.#boardHistory.filter((placedField) => placedField !== field);
     } else {
@@ -2352,8 +2436,7 @@ export class AppCrapsEntry extends HTMLElement {
         this.#boardHistory = this.#boardHistory.filter((placedField) => placedField !== exclusive);
       }
       if (crapsEntryBoardSummary(next).placed >= CRAPS_ENTRY_MAX_PLACED_CHIPS) {
-        this.#message = '3 RANDOM MINIMUM · Tap RANDOM to reclaim the last placed chip.';
-        this.#render();
+        this.#flashPlacePrompt('MINIMUM 3', 'RANDOM');
         this.querySelector('[data-craps-random]')?.animate?.([
           { transform: 'scale(1)' },
           { transform: 'scale(1.055)' },
@@ -2361,14 +2444,16 @@ export class AppCrapsEntry extends HTMLElement {
         ], { duration: 220, easing: 'ease-out' });
         return;
       }
-      next[field] = current + 1;
+      next[field] = nextCount;
       this.#boardHistory.push(field);
     }
+    if (!clearedFullSpot) this.#resetPlacePrompt();
     this.#boardBets = next;
     this.#boardSet = true;
     this.#contractChips = packCrapsEntryBoard(next);
     this.#message = '';
     this.#render();
+    if (clearedFullSpot) this.#flashPlacePrompt('MAX 3', 'PER SLOT');
   }
 
   #reclaimInlineBet() {
@@ -2376,6 +2461,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#boardHistory.length === 0) this.#boardHistory = entryBoardHistory(this.#boardBets);
     const field = this.#boardHistory.pop();
     if (!field) return;
+    this.#resetPlacePrompt();
     const next = { ...normalizedEntryBoardCounts(this.#boardBets) };
     if (next[field] <= 1) delete next[field];
     else next[field] -= 1;
@@ -2405,7 +2491,7 @@ export class AppCrapsEntry extends HTMLElement {
       this.#message = editingEntry
         ? wager.contractChips === entryChips
           ? 'Entry board unchanged.'
-          : 'Chip placement changed. Select AMEND ENTRY to update it.'
+          : 'Chip placement changed. Select CHANGE BET to update it.'
         : 'Your board is set for the Buy In buttons.';
       this.#render();
       return true;
@@ -2461,14 +2547,14 @@ export class AppCrapsEntry extends HTMLElement {
       const result = await amendCrapsSlip({ betId, contractChips: this.#contractChips });
       await this.#refreshSchedule(true);
       this.#applyAmendedBoard(betId, this.#contractChips);
-      this.#message = 'Entry amended with your new board.';
+      this.#message = 'Entry changed to your new board.';
       this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
         detail: { kind: 'amend', betId, contractChips: this.#contractChips, result },
         bubbles: true,
         composed: true,
       }));
     } catch (error) {
-      this.#message = String(error?.userMessage || error?.message || 'The Craps entry was not amended. Try again.');
+      this.#message = String(error?.userMessage || error?.message || 'The Craps bet was not changed. Try again.');
     } finally {
       if (this.#busyKey === busyKey) this.#busyKey = null;
       this.#render();
@@ -2519,7 +2605,7 @@ export class AppCrapsEntry extends HTMLElement {
     const selectedPasses = Number(this.#highRoller
       ? this.#passCredits?.high ?? 0
       : this.#passCredits?.normal ?? 0);
-    const compEligible = state.futurePassOpen && !this.#forceFlipDay;
+    const compEligible = !this.#forceFlipDay;
     if (kind === 'future-day' && compEligible && this.#passCredits == null) return;
     const usePass = kind === 'future-day' && compEligible && selectedPasses > 0;
 
@@ -2550,9 +2636,9 @@ export class AppCrapsEntry extends HTMLElement {
       const result = await placeCrapsBonusEntry(wager);
       this.#message = kind === 'future-day'
         ? usePass
-          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Normal'} Craps comp.`
-          : `Next slate purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`
-        : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Normal'} lane.`;
+          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp.`
+          : `Next slate purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`
+        : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`;
       if (kind === 'future-day') this.#forceFlipDay = false;
       await this.#refreshSchedule(true);
       this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {

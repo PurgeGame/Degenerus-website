@@ -15,6 +15,7 @@ import {
   sharedReadProvider,
 } from './read-provider.js';
 import { get } from './store.js';
+import { fetchJSON } from './api.js';
 
 const GNRUS_VOTE_ABI = [
   'function currentLevel() external view returns (uint24)',
@@ -46,6 +47,19 @@ let _voteWriter = null;
 let _publicProvider = null;
 let _gnrusFundingCache = null;
 
+// readGnrusLifetimeFunding is API-first (GET /game/facts/sum). The chain scan
+// below (YieldSurplusDistributed from deploy, localStorage-summed) survives
+// ONLY as a fallback when that fetch throws. The 30s poller must not hammer a
+// down/old API or re-run the chain fallback every tick, so a failure arms a
+// 5-minute circuit breaker: while armed, readGnrusLifetimeFunding skips BOTH
+// legs and returns the last known total; only the next call after the memo
+// expires retries the API.
+const GNRUS_FUNDING_API_PATH = '/game/facts/sum?name=YieldSurplusDistributed&arg=perRecipientShare';
+const GNRUS_FUNDING_FALLBACK_MEMO_MS = 5 * 60 * 1000;
+let _fetchGnrusFundingJSON = fetchJSON;
+let _gnrusFundingFallbackUntil = 0;
+let _lastGnrusFundingWei = null;
+
 /** Test-only contract seams. */
 export function __setContractFactoriesForTest({ gnrus, sdgnrs } = {}) {
   _gnrusContractFactory = typeof gnrus === 'function' ? gnrus : null;
@@ -58,6 +72,16 @@ export function __setCharityVoteDepsForTest({ readState, vote } = {}) {
   _voteWriter = typeof vote === 'function' ? vote : null;
 }
 
+/** Test-only: replace the /game/facts/sum fetch behind readGnrusLifetimeFunding. */
+export function __setGnrusFundingFetcherForTest(fetcher) {
+  _fetchGnrusFundingJSON = typeof fetcher === 'function' ? fetcher : fetchJSON;
+}
+
+/** Test-only: simulate the 5-minute API-failure memo having elapsed. */
+export function __expireGnrusFundingFallbackMemoForTest() {
+  _gnrusFundingFallbackUntil = 0;
+}
+
 /** Test-only reset. */
 export function __resetCharityVoteForTest() {
   _gnrusContractFactory = null;
@@ -66,6 +90,9 @@ export function __resetCharityVoteForTest() {
   _voteWriter = null;
   _publicProvider = null;
   _gnrusFundingCache = null;
+  _fetchGnrusFundingJSON = fetchJSON;
+  _gnrusFundingFallbackUntil = 0;
+  _lastGnrusFundingWei = null;
 }
 
 export function gnrusLifetimeFundingCacheKey() {
@@ -153,10 +180,43 @@ function _fundingAmountFromLog(log) {
 
 /**
  * Cumulative ETH-equivalent credited to GNRUS by every yield distribution in
- * this deployment. A short tail is replaced on each read so shallow reorgs do
- * not double-count or strand an orphaned event; older events stay cached.
+ * this deployment.
+ *
+ * API-first: GET /game/facts/sum?name=YieldSurplusDistributed&arg=perRecipientShare sums
+ * the exact same `perRecipientShare` log amounts the chain scan below sums —
+ * GNRUS is credited exactly one share per event (DegenerusGameJackpotModule
+ * .sol:172-175), so the sum needs no further scaling. The chain scan (a short
+ * reorg tail replayed on each read, older events cached in localStorage)
+ * survives only as a fallback when the API throws.
  */
 export async function readGnrusLifetimeFunding({ provider, storage } = {}) {
+  const now = Date.now();
+  if (now < _gnrusFundingFallbackUntil) {
+    if (_lastGnrusFundingWei != null) return _lastGnrusFundingWei;
+    throw new Error('GNRUS funding is temporarily unavailable.');
+  }
+
+  try {
+    const payload = await _fetchGnrusFundingJSON(GNRUS_FUNDING_API_PATH);
+    const sum = BigInt(payload?.sum ?? 0);
+    _lastGnrusFundingWei = sum;
+    return sum;
+  } catch (_apiError) {
+    // Network / 5xx / 404 from an old API — chain fallback below, then arm
+    // the circuit breaker so the 30s timer does not retry either leg until
+    // the memo expires.
+  }
+
+  try {
+    const result = await _readGnrusLifetimeFundingFromChain({ provider, storage });
+    _lastGnrusFundingWei = result;
+    return result;
+  } finally {
+    _gnrusFundingFallbackUntil = Date.now() + GNRUS_FUNDING_FALLBACK_MEMO_MS;
+  }
+}
+
+async function _readGnrusLifetimeFundingFromChain({ provider, storage } = {}) {
   if (!CONTRACTS.GAME) throw new Error('GNRUS funding is unavailable on this network.');
   const reader = provider || sharedReadProvider();
   if (!reader || typeof reader.getBlockNumber !== 'function'

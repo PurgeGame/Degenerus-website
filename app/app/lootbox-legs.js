@@ -16,6 +16,7 @@
 //       rewardType: 2=CoinflipBoon 4=Boost5 5=Boost15 6=Boost25 8=DecimatorBoost
 //                   9=WhaleBoon 10=ActivityBoon/DeityPassBoon 11=LazyPassBoon
 //                   12=QuestShield 13=DegeneretteBoon (amount = boonType 32-40)
+//                   14=CrapsBoon (amount = boonType 41-43)
 //   modules/DegenerusGameDegeneretteModule.sol
 //     BoxSpin(player, betId, packedSpins, payout, ethShare)
 //       betId: bit 63 = box-origin sentinel, bits 62-60 = spin type
@@ -983,6 +984,7 @@ export const REWARD_TYPE_LABELS = Object.freeze({
   11: 'Lazy pass discount boon',
   12: 'Quest streak shield',
   13: 'Degenerette boon',
+  14: 'Craps boon',
 });
 
 export function rewardTypeLabel(rewardType) {
@@ -1017,6 +1019,7 @@ const BOON_REVEAL_LABELS = Object.freeze({
   'degenerette-eth': 'ETH DEGENERETTE BOON',
   'degenerette-flip': 'FLIP DEGENERETTE BOON',
   'degenerette-wwxrp': 'WWXRP DEGENERETTE BOON',
+  craps: 'CRAPS BOON',
 });
 
 function _exactBoonReveal(boonType) {
@@ -1132,6 +1135,19 @@ export function lootboxRewardPresentation(
       detail: '',
     };
   }
+  if (type === 14) {
+    // Type 14 carries the exact Craps boonType in `amount`: 41/42/43 map to
+    // +5/+10/+15% of the next paid entry's bankroll return.
+    const rolledBoonType = Number(_rewardAmount(amount));
+    const rolled = rolledBoonType >= 41 && rolledBoonType <= 43
+      ? _exactBoonReveal(rolledBoonType)
+      : null;
+    return rolled || {
+      label: 'CRAPS BOON',
+      value: 'BOOST',
+      detail: '',
+    };
+  }
   return {
     label: rewardTypeLabel(type).toUpperCase(),
     value: '?',
@@ -1188,6 +1204,11 @@ export function lootboxRewardVisual(
   if (type === 13) {
     const rolledType = Number(raw);
     if (rolledType >= 32 && rolledType <= 40) return boonTypePresentation(rolledType);
+  }
+  if (type === 14) {
+    const rolledType = Number(raw);
+    if (rolledType >= 41 && rolledType <= 43) return boonTypePresentation(rolledType);
+    return boonVisualForProduct('craps');
   }
   return boonVisualForProduct('unknown');
 }

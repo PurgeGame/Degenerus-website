@@ -28,20 +28,13 @@ import {
   summarizeBafAwards,
 } from '../app/jackpot-resolutions.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 import { openDecimatorDraw } from './app-decimator-draw-overlay.js';
 import { openBafResolution } from './app-baf-resolution-overlay.js';
 import { formatBafWhalePassHalves } from './app-baf-resolution-overlay.js';
 
 const PENDING_SOURCE = 'jackpot-resolutions';
 const POLL_MS = 15_000;
-
-function _setTimeoutUnref(fn, ms) {
-  const handle = setTimeout(fn, ms);
-  if (handle && typeof handle.unref === 'function') {
-    try { handle.unref(); } catch (_e) { /* browser timer */ }
-  }
-  return handle;
-}
 
 function _big(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
@@ -282,15 +275,21 @@ class AppJackpotResolutions extends HTMLElement {
       try { unsub(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#pollHandle != null) clearTimeout(this.#pollHandle);
+    if (typeof this.#pollHandle === 'function') {
+      try { this.#pollHandle(); } catch (_e) { /* defensive */ }
+    }
     this.#pollHandle = null;
     clearPendingActions(PENDING_SOURCE);
     this.#initialized = false;
   }
 
   #armPoll() {
-    if (this.#pollHandle != null) clearTimeout(this.#pollHandle);
-    this.#pollHandle = _setTimeoutUnref(() => this.#refresh(), POLL_MS);
+    // Shared scheduler (visibility- and reveal-gated, single-flight) instead of
+    // a private always-on setTimeout chain: this watcher is mounted headless on
+    // every page load and its 15s claim-state chain reads must stop in a
+    // hidden tab. Registration is idempotent per mount.
+    if (typeof this.#pollHandle === 'function') return;
+    this.#pollHandle = registerComponentPoll(() => this.#refresh(), POLL_MS);
   }
 
   async #refresh() {

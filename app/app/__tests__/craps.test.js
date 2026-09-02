@@ -3,11 +3,26 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import { ethers } from '../contracts.js';
 import * as contracts from '../contracts.js';
-import { CONTRACTS } from '../chain-config.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
 import * as craps from '../craps.js';
 import * as crapsResults from '../craps-results.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
+
+// The craps window mirrors itself to localStorage so a reload pays a 12-block
+// tail instead of the whole lookback. node has no Web Storage without a flag,
+// so the suite supplies a real (enumerable) in-memory one.
+if (typeof globalThis.localStorage === 'undefined') {
+  const cells = new Map();
+  globalThis.localStorage = {
+    get length() { return cells.size; },
+    key: (index) => [...cells.keys()][index] ?? null,
+    getItem: (key) => (cells.has(String(key)) ? cells.get(String(key)) : null),
+    setItem: (key, value) => { cells.set(String(key), String(value)); },
+    removeItem: (key) => { cells.delete(String(key)); },
+    clear: () => { cells.clear(); },
+  };
+}
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const BETS = Object.freeze({
@@ -447,6 +462,7 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
     winningStop: 1,
     buyInWei: (bankrolls[6] + 200n) * wei,
     highMultiple: 10,
+    entryMultiple: null,
     bonusMultiplier: craps.crapsBonusMultiplier({
       battleKey: previous[6].key,
       wordValue: previous[6].word,
@@ -461,6 +477,9 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
       battleKey: previous[6].key,
       wordValue: previous[6].word,
     }),
+    // Nothing was split into passes in this fixture.
+    winnerPassWei: 0n,
+    progressivePaidWei: 0n,
     // The event window ran no high lane, so its side figure is a known zero.
     highBoostWei: 0n,
     boostWei: craps.crapsRealizedBoostWei({
@@ -567,13 +586,119 @@ test('lobby history preserves the High Roller payment and sole-rider goal verdic
     amountWei: 9_000n * wei,
     bankrollRider: false,
     winningStop: null,
+    entryMultiple: 10,
     winnerBoostWei: null,
+    // No CrapsProtocolAwardSplit in this fixture, so nothing of the lane award was
+    // paid in passes. Zero, not null: absence of a split is a known zero, not unknown.
+    winnerPassWei: 0n,
   }, 'a contested lane exposes its own comparator winner and prize');
   assert.equal(snapshot.results[1].highResult.winner, soleWinner);
   assert.equal(snapshot.results[1].highResult.winningStop, 1,
     'a non-zero sole rider payment proves that its run latched the goal');
   assert.equal(snapshot.results[2].highResult.winningStop, 0,
     'the required zero rider event proves that the sole run missed the goal');
+});
+
+test('lobby winners retain their paid multiple and chain-native Run It Up award', () => {
+  const day = 86;
+  const period = 3;
+  const slot = BigInt(day * 8 + period + 1);
+  const betId = (slot << 64n) | 4n;
+  const wei = 10n ** 18n;
+  const battleKey = `0x${'de'.repeat(32)}`;
+  const winner = '0xffae3d078f451bc206a69ad77c94a6ee999de61a';
+  const snapshot = craps.crapsLobbySnapshotFromLogs(day, [
+    {
+      parsed: {
+        name: 'CrapsHighRollerDayOpened',
+        args: { day: BigInt(day), multiplier: 100n, mainBoostBudget: 0n, highRollerBoostBudget: 0n },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBonusOpened',
+        args: {
+          battleKey,
+          slot,
+          seed: 0n,
+          bankroll: 400n * wei,
+          goal: 2_000n * wei,
+          boardStake: 140n * wei,
+          battleStake: 200n * wei,
+        },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsSlipPlaced',
+        args: {
+          player: winner,
+          bet: (betId << 32n) | (99n << 160n),
+        },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBattleFinalized',
+        args: {
+          battleKey,
+          winningStop: 1n,
+          winnerId: 4n,
+          winningPeak: 10_000n,
+          winningEnd: 8_000n,
+          winningScoreBps: 250_000n,
+          pot: 8_300n * wei,
+        },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsBattlePaid',
+        args: { betId, battleKey, player: winner, amount: 8_300n * wei },
+      },
+    },
+    {
+      parsed: {
+        name: 'CrapsProgressivePaid',
+        args: {
+          betId,
+          battleKey,
+          player: winner,
+          rare: false,
+          poolBps: 500n,
+          peak: 10_000n,
+          scoreBps: 250_000n,
+          candidate: 60_000n * wei,
+          paid: 60_000n * wei,
+          balance: 1_140_000n * wei,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(snapshot.results[period].entryMultiple, 100,
+    'the shared main-field row remembers that its winner bought a 100x seat');
+  assert.equal(snapshot.results[period].progressivePaidWei, 60_000n * wei,
+    'the finalization log is enough to identify a Run It Up hit');
+
+  const enriched = craps.crapsLobbySnapshotWithWinnerTotals(snapshot, [{
+    day,
+    period,
+    battleKey,
+    lane: 'main',
+    betId: betId.toString(),
+    winner,
+    bankrollRider: null,
+    runPaidWei: 400_000n * wei,
+    battlePaidWei: 8_300n * wei,
+    highPaidWei: 0n,
+    progressivePaidWei: 0n,
+    totalWonWei: 408_300n * wei,
+  }]);
+  assert.equal(enriched.results[period].progressivePaidWei, 60_000n * wei,
+    'a stale indexed zero cannot erase a positive chain event');
+  assert.equal(enriched.results[period].totalWonWei, 468_300n * wei,
+    'the total is recomputed with the authoritative progressive amount');
 });
 
 test('a day budget splits across its windows exactly as _windowShare does', () => {
@@ -1241,4 +1366,308 @@ test('contract errors map to actionable craps copy', () => {
   assert.match(reasonMap.decodeRevertReason({ revert: { name: 'OddsAboveAllowance' } }).userMessage, /odds/i);
   assert.match(reasonMap.decodeRevertReason({ revert: { name: 'BadGoal' } }).userMessage, /twice/i);
   assert.match(reasonMap.decodeRevertReason({ revert: { name: 'NothingToUpgrade' } }).userMessage, /already/i);
+});
+
+// ---------------------------------------------------------------------------
+// The shared craps window: API-first, chain-fallback, persisted.
+//
+// The lobby, the schedule and the Added rail all fold ONE window. These tests
+// pin the two transports to the same fixture and assert the fold cannot tell
+// them apart — the whole premise of serving the window from the indexer.
+// ---------------------------------------------------------------------------
+
+const WINDOW_HEAD = 46_300_000;
+const WINDOW_LOOKBACK = 45_000;
+const WINDOW_TAIL = 12;
+const WINDOW_DAY = 42;
+// Digits only. An address with letters comes back checksummed from an ethers
+// decode and lowercase from the API, and the winner fields are deliberately
+// NOT lowercased, so a mixed-case fixture would test the casing rather than
+// the transport.
+const WINDOW_PLAYER = '0x1234512345123451234512345123451234512345';
+const WINDOW_DONOR = '0x9876598765987659876598765987659876598765';
+const WINDOW_WEI = 10n ** 18n;
+
+function windowInterface() {
+  return new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
+}
+
+/** One fixture, rendered as the indexer's EventRow. */
+function crapsEventRow(iface, fixture) {
+  const args = {};
+  for (const input of iface.getEvent(fixture.name).inputs) {
+    const value = fixture.args[input.name];
+    args[input.name] = input.type === 'bool'
+      ? Boolean(value)
+      : input.type === 'address' || input.type.startsWith('bytes')
+        ? String(value).toLowerCase()
+        // uint/int arrive as DECIMAL STRINGS: the indexer stringifies BigInt.
+        : String(value);
+  }
+  return {
+    name: fixture.name,
+    args,
+    blockNumber: fixture.blockNumber,
+    logIndex: fixture.logIndex,
+    transactionHash: fixture.txHash,
+  };
+}
+
+/** The same fixture, rendered as the raw log eth_getLogs would return. */
+function crapsChainLog(iface, fixture, address) {
+  const fragment = iface.getEvent(fixture.name);
+  const { data, topics } = iface.encodeEventLog(
+    fragment,
+    fragment.inputs.map((input) => fixture.args[input.name]),
+  );
+  return {
+    address,
+    blockNumber: fixture.blockNumber,
+    index: fixture.logIndex,
+    transactionHash: fixture.txHash,
+    topics,
+    data,
+  };
+}
+
+/** Every event name the window carries, in one coherent day-42 lobby. */
+function crapsWindowFixtures() {
+  const keyA = `0x${'1'.padStart(64, '0')}`;
+  const keyB = `0x${'2'.padStart(64, '0')}`;
+  const slotA = BigInt(WINDOW_DAY) * 8n + 1n;
+  const slotB = BigInt(WINDOW_DAY) * 8n + 2n;
+  const betId = (slotA << 64n) | 7n;
+  const opened = (battleKey, slot) => ({
+    battleKey,
+    slot,
+    seed: 25_000n * WINDOW_WEI,
+    bankroll: 300n * WINDOW_WEI,
+    goal: 1_500n * WINDOW_WEI,
+    boardStake: 42n * WINDOW_WEI,
+    battleStake: 200n * WINDOW_WEI,
+  });
+  return [
+    { name: 'CrapsHighRollerDayOpened', args: { day: 42n, multiplier: 10n, mainBoostBudget: 1_000n * WINDOW_WEI, highRollerBoostBudget: 500n * WINDOW_WEI } },
+    { name: 'CrapsProgressiveFunded', args: { day: 42n, contribution: 1_000n * WINDOW_WEI, balance: 9_000n * WINDOW_WEI } },
+    { name: 'CrapsBonusOpened', args: opened(keyA, slotA) },
+    { name: 'CrapsBonusOpened', args: opened(keyB, slotB) },
+    { name: 'CrapsBonusDonated', args: { battleKey: keyA, donor: WINDOW_DONOR, amount: 7n * WINDOW_WEI, seed: 7n * WINDOW_WEI } },
+    { name: 'CrapsSlipPlaced', args: { player: WINDOW_PLAYER, bet: (betId << 32n) | 5n } },
+    { name: 'CrapsSlipAmended', args: { betId, chips: 5n } },
+    { name: 'CrapsDayReserved', args: { player: WINDOW_PLAYER, day: 43n, highRoller: true } },
+    { name: 'CrapsDayWindowsUpgraded', args: { player: WINDOW_PLAYER, day: 42n, upgradedMask: 3n, burned: 4_500n * WINDOW_WEI } },
+    { name: 'CrapsBonusArmed', args: { battleKey: keyA, slot: slotA, index: 901n } },
+    { name: 'CrapsBattleFinalized', args: { battleKey: keyA, winningStop: 1n, winnerId: 2n, winningPeak: 4_000n * WINDOW_WEI, winningEnd: 3_200n * WINDOW_WEI, winningScoreBps: 130_000n, pot: 900n * WINDOW_WEI } },
+    { name: 'CrapsBattlePaid', args: { betId, battleKey: keyA, player: WINDOW_PLAYER, amount: 1_100n * WINDOW_WEI } },
+    { name: 'CrapsHighRollerPaid', args: { betId, battleKey: keyA, player: WINDOW_PLAYER, amount: 400n * WINDOW_WEI, bankrollRider: false } },
+    { name: 'CrapsProgressivePaid', args: { betId, battleKey: keyA, player: WINDOW_PLAYER, rare: false, poolBps: 250n, peak: 4_000n * WINDOW_WEI, scoreBps: 130_000n, candidate: 800n * WINDOW_WEI, paid: 700n * WINDOW_WEI, balance: 8_300n * WINDOW_WEI } },
+    { name: 'CrapsProgressiveRolled', args: { battleKey: keyA, source: 1n, amount: 50n * WINDOW_WEI, balance: 8_350n * WINDOW_WEI } },
+    { name: 'CrapsProtocolAwardSplit', args: { battleKey: keyA, player: WINDOW_PLAYER, source: 1n, grossProtocol: 300n * WINDOW_WEI, liquidFlip: 200n * WINDOW_WEI } },
+  ].map((fixture, index) => ({
+    ...fixture,
+    blockNumber: WINDOW_HEAD - 200 + index,
+    logIndex: index,
+    txHash: `0x${String(index + 1).padStart(64, '0')}`,
+  }));
+}
+
+function windowProvider(logs = []) {
+  const calls = [];
+  return {
+    calls,
+    getNetwork: async () => ({ chainId: 84532n }),
+    getBlockNumber: async () => WINDOW_HEAD,
+    getStorage: async () => `0x${'abc'.padStart(64, '0')}`,
+    getLogs: async (filter) => {
+      calls.push(filter);
+      const from = Number(filter.fromBlock);
+      const to = Number(filter.toBlock);
+      return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+    },
+  };
+}
+
+/** Drop the test contract factory (the API is skipped under one) but keep a real address. */
+function useWindowTransport(logs = []) {
+  craps.__setCrapsContractFactoryForTest(null, CONTRACTS.CRAPS);
+  craps.__resetCrapsLogWindowForTest();
+  const provider = windowProvider(logs);
+  contracts.setProvider(provider);
+  return provider;
+}
+
+function windowApiKey() {
+  return `craps-window-api:v1:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
+    + `:${Number(CHAIN.deployBlock) || 0}`;
+}
+
+test('the indexed craps window folds to exactly the snapshot the log window folds to', async () => {
+  const iface = windowInterface();
+  const fixtures = crapsWindowFixtures();
+  const provider = useWindowTransport(
+    fixtures.map((fixture) => crapsChainLog(iface, fixture, CONTRACTS.CRAPS)),
+  );
+
+  craps.__setCrapsEventsFetcherForTest(async () => ({
+    fromBlock: WINDOW_HEAD - WINDOW_LOOKBACK,
+    toBlock: WINDOW_HEAD,
+    lookbackBlocks: WINDOW_LOOKBACK,
+    events: fixtures.map((fixture) => crapsEventRow(iface, fixture)),
+  }));
+  const fromApi = await craps.readCrapsLobbySnapshot(WINDOW_DAY, WINDOW_PLAYER);
+  assert.equal(provider.calls.length, 0, 'a healthy API must never reach eth_getLogs');
+  assert.equal(fromApi.day, WINDOW_DAY);
+  // Proof the fold actually consumed the rows rather than shrugging at them.
+  assert.equal(fromApi.schedule.windows[0].battleStakeFlip, 200n);
+  assert.equal(fromApi.results[0].winner, WINDOW_PLAYER);
+  assert.equal(fromApi.results[0].progressivePaidWei, 700n * WINDOW_WEI);
+  assert.equal(fromApi.results[0].winnerPassWei, 100n * WINDOW_WEI);
+  assert.equal(fromApi.playerEntries.windows[0].chips, 5);
+  assert.deepEqual(fromApi.requiredWordIndexes, ['901']);
+
+  craps.__resetCrapsLogWindowForTest();
+  craps.__setCrapsEventsFetcherForTest(async () => { throw new Error('no such route'); });
+  const fromChain = await craps.readCrapsLobbySnapshot(WINDOW_DAY, WINDOW_PLAYER);
+  assert.ok(provider.calls.length >= 1, 'a dead API must fall back to the chain');
+  assert.deepEqual(fromApi, fromChain);
+});
+
+test('the craps window refresh asks for the reorg tail and replaces the rows inside it', async () => {
+  const iface = windowInterface();
+  const provider = useWindowTransport();
+  const dayOpened = (blockNumber, mainBoostBudget) => crapsEventRow(iface, {
+    name: 'CrapsHighRollerDayOpened',
+    blockNumber,
+    logIndex: 0,
+    txHash: `0x${'1'.padStart(64, '0')}`,
+    args: { day: 42n, multiplier: 10n, mainBoostBudget, highRollerBoostBudget: 500n * WINDOW_WEI },
+  });
+  const funded = (blockNumber, contribution) => crapsEventRow(iface, {
+    name: 'CrapsProgressiveFunded',
+    blockNumber,
+    logIndex: 1,
+    txHash: `0x${'2'.padStart(64, '0')}`,
+    args: { day: 42n, contribution, balance: 9_000n * WINDOW_WEI },
+  });
+  const responses = [
+    {
+      fromBlock: WINDOW_HEAD - WINDOW_LOOKBACK,
+      toBlock: WINDOW_HEAD,
+      events: [
+        dayOpened(WINDOW_HEAD - 100, 1_000n * WINDOW_WEI),
+        funded(WINDOW_HEAD - 5, 1_000n * WINDOW_WEI),
+      ],
+    },
+    // The tail re-serves a rewritten block. The row below the tail survives.
+    {
+      fromBlock: WINDOW_HEAD - WINDOW_TAIL + 1,
+      toBlock: WINDOW_HEAD + 3,
+      events: [funded(WINDOW_HEAD - 5, 4_000n * WINDOW_WEI)],
+    },
+  ];
+  const paths = [];
+  craps.__setCrapsEventsFetcherForTest(async (path) => {
+    paths.push(path);
+    return responses[paths.length - 1];
+  });
+
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 5_000n * WINDOW_WEI);
+  assert.deepEqual(paths, [
+    '/game/craps/events?lookback=45000',
+    `/game/craps/events?lookback=45000&since=${WINDOW_HEAD - WINDOW_TAIL}`,
+  ]);
+  assert.equal(provider.calls.length, 0);
+});
+
+test('the craps window mirrors its cursor to localStorage so a reload pays only the tail', async () => {
+  const iface = windowInterface();
+  const fixtures = crapsWindowFixtures();
+  const provider = useWindowTransport();
+  craps.__setCrapsEventsFetcherForTest(async () => ({
+    fromBlock: WINDOW_HEAD - WINDOW_LOOKBACK,
+    toBlock: WINDOW_HEAD,
+    events: fixtures.map((fixture) => crapsEventRow(iface, fixture)),
+  }));
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+
+  const stored = JSON.parse(globalThis.localStorage.getItem(windowApiKey()));
+  assert.equal(stored.toBlock, WINDOW_HEAD);
+  assert.equal(stored.fromBlock, WINDOW_HEAD - WINDOW_LOOKBACK);
+  assert.equal(stored.rows.length, fixtures.length);
+  assert.equal(stored.rows[0].name, 'CrapsHighRollerDayOpened');
+
+  // A reload is a fresh module instance with an empty memory window. It must
+  // revive the mirror and ask only for the reorg tail.
+  const reloaded = await import('../craps.js?reload=craps-window-persistence');
+  const paths = [];
+  reloaded.__setCrapsEventsFetcherForTest(async (path) => {
+    paths.push(path);
+    return { fromBlock: WINDOW_HEAD - WINDOW_TAIL + 1, toBlock: WINDOW_HEAD, events: [] };
+  });
+  try {
+    assert.equal(await reloaded.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+    assert.deepEqual(paths, [`/game/craps/events?lookback=45000&since=${WINDOW_HEAD - WINDOW_TAIL}`]);
+    assert.equal(provider.calls.length, 0, 'a revived window never rescans the chain');
+  } finally {
+    reloaded.__resetCrapsContractFactoryForTest();
+  }
+});
+
+test('a dead craps events route falls back to the chain and is not re-probed for five minutes', async () => {
+  const iface = windowInterface();
+  const fixtures = crapsWindowFixtures();
+  const provider = useWindowTransport(
+    fixtures.map((fixture) => crapsChainLog(iface, fixture, CONTRACTS.CRAPS)),
+  );
+  let fetches = 0;
+  craps.__setCrapsEventsFetcherForTest(async () => {
+    fetches += 1;
+    const error = new Error('API 404: /game/craps/events');
+    error.status = 404;
+    throw error;
+  });
+
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(fetches, 1, 'the five-minute memo parks a route an old API cannot serve');
+  assert.equal(provider.calls.length, 2, 'both refreshes came off the chain window');
+  assert.equal(
+    Number(provider.calls[1].fromBlock),
+    WINDOW_HEAD - WINDOW_TAIL + 1,
+    'and the second one only re-read the reorg tail',
+  );
+  assert.equal(globalThis.localStorage.getItem(windowApiKey()), null);
+
+  // The memo lives in memory only, so a new session probes the route again.
+  craps.__resetCrapsLogWindowForTest();
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(fetches, 2);
+});
+
+test('the Added rail folds the shared craps window instead of opening its own query', async () => {
+  const iface = windowInterface();
+  const fixtures = crapsWindowFixtures();
+  const provider = useWindowTransport(
+    fixtures.map((fixture) => crapsChainLog(iface, fixture, CONTRACTS.CRAPS)),
+  );
+  craps.__setCrapsEventsFetcherForTest(async () => ({
+    fromBlock: WINDOW_HEAD - WINDOW_LOOKBACK,
+    toBlock: WINDOW_HEAD,
+    events: fixtures.map((fixture) => crapsEventRow(iface, fixture)),
+  }));
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(provider.calls.length, 0, 'the rail no longer runs an eth_getLogs of its own');
+
+  // Degraded to the chain, the rail still extends the LOBBY's cursor rather
+  // than paying a second full lookback for two numbers.
+  craps.__resetCrapsLogWindowForTest();
+  craps.__setCrapsEventsFetcherForTest(async () => { throw new Error('no such route'); });
+  await craps.readCrapsLobbySnapshot(WINDOW_DAY, WINDOW_PLAYER);
+  assert.equal(provider.calls.length, 1);
+  assert.equal(Number(provider.calls[0].fromBlock), WINDOW_HEAD - WINDOW_LOOKBACK);
+  assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
+  assert.equal(provider.calls.length, 2);
+  assert.equal(Number(provider.calls[1].fromBlock), WINDOW_HEAD - WINDOW_TAIL + 1);
+  assert.deepEqual(provider.calls[1].topics.length, 1, 'and it reuses the window filter');
 });

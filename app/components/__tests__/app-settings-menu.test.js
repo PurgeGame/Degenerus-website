@@ -25,6 +25,13 @@ describe('top-bar player settings', () => {
     assert.match(settings, /subscribe\('ui\.allInEligible'/,
       'ALL IN preference row follows raw live eligibility');
     assert.match(settings, /allInRow\.hidden = eligible !== true/);
+    assert.match(settings,
+      /<label class="nav-settings__row nav-settings__row--toggle"\s+data-bind="settings-afking-funding-warning-row" hidden>\s+<span class="nav-settings__copy">\s+<strong>AFKING FUNDING ALERT<\/strong>/,
+      'the AFKing alert setting starts hidden while subscription state is unknown');
+    assert.match(settings, /subscribe\('app\.afkingSubscription'/,
+      'the AFKing alert setting follows live subscription state');
+    assert.match(settings, /afkingFundingWarningRow\.hidden = subscription\?\.active !== true/,
+      'the AFKing alert setting is shown only for an active subscription');
     for (const mode of ['on', 'view', 'off']) {
       assert.match(settings, new RegExp(`data-bounties-mode="${mode}"`));
     }

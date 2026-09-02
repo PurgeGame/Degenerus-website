@@ -11,6 +11,7 @@ import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { get } from './store.js';
 import { permissionlessReadProvider, readProviderBlockNumber } from './read-provider.js';
+import { fetchJSON } from './api.js';
 
 const SDGNRS_ABI = [
   'function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)',
@@ -42,6 +43,9 @@ export const SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT = 'degenerus:open-sdgnrs-c
 export const SDGNRS_REDEMPTION_LOOKBACK_BLOCKS = 120_000;
 const SDGNRS_LOG_CHUNK_BLOCKS = 5_000;
 const SDGNRS_REORG_OVERLAP_BLOCKS = 12;
+// A dead/old API must not get hammered every 30s poll, but a 404 also must
+// not calcify into a permanent "route missing" verdict beyond this session.
+const SDGNRS_REDEMPTION_API_FAILURE_MEMO_MS = 5 * 60 * 1000;
 
 /** Compact a burned sDGNRS amount to at most two significant figures. */
 export function formatSdgnrsRedemptionAmount(value) {
@@ -77,6 +81,8 @@ let _contractFactory = null;
 let _ifaceCache = null;
 const _redemptionLogStates = new Map();
 const _redemptionStateInflight = new Map();
+let _fetch = fetchJSON;
+const _redemptionApiFailureMemo = new Map();
 
 /** Test-only contract-construction seam. */
 export function __setContractFactoryForTest(factory) {
@@ -89,6 +95,13 @@ export function __resetContractFactoryForTest() {
   _ifaceCache = null;
   _redemptionLogStates.clear();
   _redemptionStateInflight.clear();
+  _fetch = fetchJSON;
+  _redemptionApiFailureMemo.clear();
+}
+
+/** Test-only /player/:address/sdgnrs-redemptions fetch seam. */
+export function __setSdgnrsFetcherForTest(fetcher) {
+  _fetch = typeof fetcher === 'function' ? fetcher : fetchJSON;
 }
 
 function _readProvider() {
@@ -301,6 +314,47 @@ async function _fetchRedemptionLogRange(provider, filter, fromBlock, toBlock) {
   }
 }
 
+// Persisted mirror of a player's redemption-log window. Without it every page
+// load re-paid the full 120,000-block chunked scan before the cursor went
+// incremental; with it a reload pays only the reorg-overlap tail. Keyed on
+// chain + SDGNRS address + deploy block so a redeploy busts it. Skipped
+// entirely when a test contract factory is installed (fake providers must not
+// meet a previous session's window).
+function _redemptionLogStorageKey(stateKey) {
+  return `sdgnrs-redemption-logs:v1:${CONTRACTS.SDGNRS}:${Number(CHAIN.deployBlock) || 0}:${stateKey}`;
+}
+
+function _reviveRedemptionLogState(stateKey, state) {
+  try {
+    if (typeof localStorage === 'undefined' || _contractFactory) return;
+    const parsed = JSON.parse(localStorage.getItem(_redemptionLogStorageKey(stateKey)));
+    if (!parsed
+      || !Number.isSafeInteger(Number(parsed.lastScannedBlock))
+      || !Array.isArray(parsed.logs)) return;
+    state.lastScannedBlock = Number(parsed.lastScannedBlock);
+    for (const log of parsed.logs) state.logs.set(_redemptionLogKey(log), log);
+  } catch (_e) { /* corrupt/absent — cold scan as before */ }
+}
+
+function _persistRedemptionLogState(stateKey, state) {
+  try {
+    if (typeof localStorage === 'undefined' || _contractFactory) return;
+    if (!Number.isSafeInteger(Number(state.lastScannedBlock))) return;
+    localStorage.setItem(_redemptionLogStorageKey(stateKey), JSON.stringify({
+      lastScannedBlock: state.lastScannedBlock,
+      // Only what downstream touches: parseLog reads topics+data, dedupe and
+      // pruning read transactionHash/blockNumber/index.
+      logs: [...state.logs.values()].map((log) => ({
+        blockNumber: Number(log?.blockNumber ?? 0),
+        index: Number(log?.index ?? log?.logIndex ?? 0),
+        transactionHash: log?.transactionHash ?? null,
+        topics: Array.isArray(log?.topics) ? [...log.topics] : [],
+        data: log?.data ?? '0x',
+      })),
+    }));
+  } catch (_e) { /* quota/serialization — memory window still works */ }
+}
+
 async function _recentRedemptionLogs(provider, player) {
   if (!provider || typeof provider.getLogs !== 'function') return [];
   let head;
@@ -325,6 +379,7 @@ async function _recentRedemptionLogs(provider, player) {
   let state = _redemptionLogStates.get(key);
   if (!state) {
     state = { lastScannedBlock: null, logs: new Map(), pending: null };
+    _reviveRedemptionLogState(key, state);
     _redemptionLogStates.set(key, state);
   }
   if (state.pending) return state.pending;
@@ -345,12 +400,63 @@ async function _recentRedemptionLogs(provider, player) {
     const scanned = await _fetchRedemptionLogRange(provider, filter, fromBlock, head);
     for (const log of scanned.logs) state.logs.set(_redemptionLogKey(log), log);
     state.lastScannedBlock = scanned.completeThrough;
+    _persistRedemptionLogState(key, state);
     return [...state.logs.values()];
   })().finally(() => {
     if (state.pending === request) state.pending = null;
   });
   state.pending = request;
   return request;
+}
+
+/** `log.parsed` fast path first (API-sourced rows), raw ethers decode otherwise. */
+function _parseRedemptionLog(log) {
+  if (log?.parsed) return log.parsed;
+  try { return _iface().parseLog(log); } catch (_e) { return null; }
+}
+
+function _redemptionApiFailedRecently(owner) {
+  const expiresAt = _redemptionApiFailureMemo.get(owner);
+  if (expiresAt == null) return false;
+  if (Date.now() >= expiresAt) {
+    _redemptionApiFailureMemo.delete(owner);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * API-first redemption event read. Wraps each EventRow as the shape the
+ * existing `_parseRedemptionLog` fast path already honors, so the discovery
+ * fold below runs unchanged regardless of source. Returns null (never [])
+ * on any failure so the caller can tell "no rows" from "couldn't ask".
+ */
+async function _apiRedemptionLogs(player) {
+  const owner = String(player || '').toLowerCase();
+  if (!owner || _redemptionApiFailedRecently(owner)) return null;
+  try {
+    const payload = await _fetch(`/player/${owner}/sdgnrs-redemptions`);
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    return events.map((row) => ({
+      parsed: { name: row?.name, args: row?.args || {} },
+      blockNumber: Number(row?.blockNumber ?? 0),
+      logIndex: Number(row?.logIndex ?? 0),
+      transactionHash: row?.transactionHash ?? null,
+      topics: [],
+      data: '0x',
+    }));
+  } catch (_e) {
+    _redemptionApiFailureMemo.set(owner, Date.now() + SDGNRS_REDEMPTION_API_FAILURE_MEMO_MS);
+    return null;
+  }
+}
+
+async function _redemptionLogsFor(player) {
+  const apiLogs = await _apiRedemptionLogs(player);
+  if (apiLogs) return apiLogs;
+  const provider = _readProvider();
+  if (!provider) return [];
+  return _recentRedemptionLogs(provider, player);
 }
 
 /**
@@ -360,14 +466,12 @@ async function _recentRedemptionLogs(provider, player) {
  */
 export async function discoverSdgnrsRedemptions({ player, periodIndexes = [] } = {}) {
   if (!player) return { periods: [], claims: [] };
-  const provider = _readProvider();
-  if (!provider) return { periods: [], claims: [] };
-  const logs = await _recentRedemptionLogs(provider, player);
+  const logs = await _redemptionLogsFor(player);
   const periods = new Map();
   const claims = [];
   for (const log of Array.isArray(logs) ? logs : []) {
     try {
-      const parsed = _iface().parseLog(log);
+      const parsed = _parseRedemptionLog(log);
       if (!parsed) continue;
       const owner = String(parsed.args.player ?? parsed.args[0] ?? '').toLowerCase();
       if (!_sameAddress(owner, player)) continue;

@@ -38,6 +38,7 @@ import { update as updateBeta } from '../app/reactive-store.js';
 import { subscribe as subscribeApp, getViewedAddress, get as getApp } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState, gameDay } from '../app/game-state.js';
+import { registerComponentPoll } from '../app/component-poll.js';
 
 // Account-switcher (2026-07-16) identity-panel note — matches app-quest-panel.js /
 // app-activity-panel.js copy. Boons are per-account event history; combine.js has
@@ -45,17 +46,6 @@ import { readGameState, gameDay } from '../app/game-state.js';
 const COMBINED_NOTE = 'Per-account stat. Pick a single account.';
 
 const POLL_INTERVAL_MS = 30_000; // Phase 56 D-04 / Phase 61 D-04 LOCKED.
-
-// Wraps setTimeout with .unref() in Node.js (no-op in browsers). Used for the
-// 30s poll tick so node:test processes exit cleanly when no other open handles
-// remain. Mirrors app-quest-panel.js _setIntervalUnref.
-function _setTimeoutUnref(fn, ms) {
-  const h = setTimeout(fn, ms);
-  if (h && typeof h.unref === 'function') {
-    try { h.unref(); } catch (_) { /* defensive */ }
-  }
-  return h;
-}
 
 class AppBoonsPanel extends HTMLElement {
   // Idempotency-guard pattern (Phase 60 / 61 / 62-01 / 62-02 / 62-03 / 62-04).
@@ -84,10 +74,10 @@ class AppBoonsPanel extends HTMLElement {
       try { this.#pollAbort.abort(); } catch (_e) { /* defensive */ }
       this.#pollAbort = null;
     }
-    if (this.#pollTimer != null) {
-      try { clearTimeout(this.#pollTimer); } catch (_e) { /* defensive */ }
-      this.#pollTimer = null;
+    if (typeof this.#pollTimer === 'function') {
+      try { this.#pollTimer(); } catch (_e) { /* defensive */ }
     }
+    this.#pollTimer = null;
   }
 
   // -----------------------------------------------------------------------
@@ -150,13 +140,15 @@ class AppBoonsPanel extends HTMLElement {
     }
     this.#pollAbort = new AbortController();
     const signal = this.#pollAbort.signal;
-    const tick = async () => {
+    // Shared scheduler, not a private setTimeout chain: same 30s cadence, but
+    // the poll pauses in hidden tabs / during reveals and single-flights.
+    if (typeof this.#pollTimer === 'function') {
+      try { this.#pollTimer(); } catch (_e) { /* defensive */ }
+    }
+    this.#pollTimer = registerComponentPoll(async () => {
       if (signal.aborted) return;
       try { await this.#refreshBoons(); } catch (_e) { /* network blip — next cycle retries */ }
-      if (signal.aborted) return;
-      this.#pollTimer = _setTimeoutUnref(tick, POLL_INTERVAL_MS);
-    };
-    this.#pollTimer = _setTimeoutUnref(tick, POLL_INTERVAL_MS);
+    }, POLL_INTERVAL_MS);
   }
 
   // -----------------------------------------------------------------------
