@@ -154,6 +154,7 @@ const CRAPS_REPLAY_POLL_JITTER_MS = 300;
 // and each unsettled battle was holding a 1 Hz 404 loop open indefinitely.
 const CRAPS_REPLAY_POLL_FAST_ATTEMPTS = 10;
 const CRAPS_REPLAY_POLL_MAX_MS = 30_000;
+const CRAPS_SETTLE_WATCH_MS = 5_000;
 const CRAPS_REPLAY_TERMINAL_STATES = new Set(['ready', 'failed', 'build-unavailable']);
 
 /**
@@ -863,6 +864,11 @@ export class AppCrapsEntry extends HTMLElement {
   #unsubs = [];
   #timer = null;
   #refreshTimer = null;
+  // True while some battle has closed and its result has not arrived: the
+  // window between the chain finalizing and the indexer/replay pipeline
+  // catching up, where the row reads SETTLING.
+  #awaitingSettlement = false;
+  #settleWatchTimer = null;
   #progressiveWei = null;
   #progressivePending = false;
   #progressiveSeq = 0;
@@ -1051,6 +1057,14 @@ export class AppCrapsEntry extends HTMLElement {
         void this.#refreshSchedule();
       }, 30_000);
     }
+    if (this.#settleWatchTimer == null) {
+      // SETTLING is the one state a player actively watches. The lobby window
+      // is a 2s-cached indexer read, so while a closed battle awaits its
+      // result, refresh it every 5s instead of waiting out the 30s cycle.
+      this.#settleWatchTimer = registerComponentPoll(() => {
+        if (this.#awaitingSettlement) void this.#refreshSchedule();
+      }, CRAPS_SETTLE_WATCH_MS);
+    }
     this.#render();
     void this.#refreshProgressive();
     void this.#refreshAddedPerDay();
@@ -1063,8 +1077,12 @@ export class AppCrapsEntry extends HTMLElement {
     if (typeof this.#refreshTimer === 'function') {
       try { this.#refreshTimer(); } catch (_e) { /* defensive */ }
     }
+    if (typeof this.#settleWatchTimer === 'function') {
+      try { this.#settleWatchTimer(); } catch (_e) { /* defensive */ }
+    }
     this.#timer = null;
     this.#refreshTimer = null;
+    this.#settleWatchTimer = null;
     this.#resetPlacePrompt();
     this.#stopReplayPoll();
     if (this.#replayLifecycleListening) {
@@ -1575,11 +1593,13 @@ export class AppCrapsEntry extends HTMLElement {
     const currentDayTicket = state.day == null
       ? null
       : playerEntries?.days?.[String(state.day)] ?? null;
+    let awaitingSettlement = false;
     state.battles.forEach((battle, index) => {
       const row = rows[index];
       if (!row) return;
       const battleTerms = terms?.windows?.[index] ?? null;
       const result = snapshot?.results?.[index] ?? null;
+      if (battle.state === 'closed' && !result) awaitingSettlement = true;
       const laneResult = crapsWinnerResultForLane(result, this.#highRoller);
       const concealed = Boolean(result && this.#resultNeedsReveal(result));
       const ready = Boolean(battleTerms && multiple != null);
@@ -1756,6 +1776,7 @@ export class AppCrapsEntry extends HTMLElement {
       }
       if (enteredStatus) enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || amendable;
     });
+    this.#awaitingSettlement = awaitingSettlement;
 
     const previousEvent = crapsPreviousEventDuringRollover({
       day: state.day,
