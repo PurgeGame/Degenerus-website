@@ -38,8 +38,11 @@ test('the Craps entry pins the table module generation that supplies its public 
 });
 
 test('the Craps bonus reveal has a complete private lifecycle before the table is imported', () => {
+  assert.match(CRAPS_TABLE, /#prepareBonusReveal\(onDone\)\s*\{/);
+  assert.match(CRAPS_TABLE, /#beginBonusReveal\(\)\s*\{/);
   assert.match(CRAPS_TABLE, /#startBonusReveal\(onDone\)\s*\{/);
   assert.match(CRAPS_TABLE, /#settleBonusReveal\(\{ landed = false \} = \{\}\)\s*\{/);
-  assert.match(CRAPS_TABLE, /this\.#startBonusReveal\(beginRolls\)/);
+  assert.match(CRAPS_TABLE, /this\.#prepareBonusReveal\(beginRolls\)/);
+  assert.match(CRAPS_TABLE, /this\.#startBonusReveal\(onDone\)/);
   assert.match(CRAPS_TABLE, /this\.#settleBonusReveal\(\{ landed: true \}\)/);
 });

@@ -833,16 +833,31 @@ async function _purchaseWalletBalance(provider, signer) {
   }
 }
 
+function _purchaseCallArgsWithSender(callArgs, sender) {
+  if (!Array.isArray(callArgs) || callArgs.length === 0 || !sender) return callArgs;
+  const next = [...callArgs];
+  const last = next[next.length - 1];
+  next[next.length - 1] = {
+    ...(last && typeof last === 'object' && !Array.isArray(last) ? last : {}),
+    from: sender,
+  };
+  return next;
+}
+
 /**
  * Internal protocol balances can pay purchase value, but never the connected
  * wallet's network fee. Check the exact value shortfall first, then (after the
  * authoritative static call) compare a padded gas estimate with the live
- * native balance. Capability/read failures degrade to the wallet's normal
- * send path; a known shortage fails before opening a doomed confirmation.
+ * native balance. The caller supplies the public read provider here: some
+ * injected wallet RPCs add an inflated fee cap to eth_estimateGas, which can
+ * produce a false "gas required exceeds allowance" result for a funded
+ * account. A successful public estimate is also returned to the transaction
+ * so ethers does not immediately repeat the broken wallet-side estimate.
+ * Capability/read failures degrade to the wallet's normal send path; a known
+ * shortage fails before opening a doomed confirmation.
  */
 async function _assertPurchaseWalletBudget({
   provider,
-  signer,
   contract,
   method,
   callArgs,
@@ -852,25 +867,41 @@ async function _assertPurchaseWalletBudget({
 }) {
   const internalFundingWei = BigInt(payment?.claimableUsedWei ?? 0n)
     + BigInt(payment?.afkingUsedWei ?? 0n);
-  if (internalFundingWei <= 0n || balanceWei == null) return;
+  if (internalFundingWei <= 0n) return null;
 
   const walletValueWei = BigInt(payment?.msgValueWei ?? 0n);
   // Equality is also unaffordable: it leaves no native ETH for a non-zero fee.
-  if (balanceWei <= walletValueWei) {
+  if (balanceWei != null && balanceWei <= walletValueWei) {
     throw _purchaseWalletFundingError(payment, {
       balanceWei,
       requiredWei: walletValueWei + 1n,
     });
   }
-  if (!includeGas
-    || typeof contract?.[method]?.estimateGas !== 'function'
-    || typeof provider?.getFeeData !== 'function') return;
+  if (!includeGas || typeof contract?.[method]?.estimateGas !== 'function') return null;
 
   const [estimateResult, feeResult] = await Promise.allSettled([
     contract[method].estimateGas(...callArgs),
-    provider.getFeeData(),
+    typeof provider?.getFeeData === 'function' ? provider.getFeeData() : null,
   ]);
-  if (feeResult.status === 'rejected') return;
+
+  // A public estimate failure is not proof that the wallet lacks ETH. In
+  // particular, geth uses the same allowance wording for an execution that
+  // cannot fit inside an RPC gas cap. Fall back to the wallet rather than
+  // manufacturing another false balance error.
+  if (estimateResult.status === 'rejected') return null;
+
+  let estimatedGas;
+  try { estimatedGas = BigInt(estimateResult.value ?? 0n); }
+  catch (_e) { return null; }
+  if (estimatedGas <= 0n) return null;
+  const gasLimit = gasEstimateWithHeadroom(estimatedGas);
+
+  // Even when fee data is temporarily unavailable, keep the public gasLimit;
+  // that is the part which prevents JsonRpcSigner from asking the injected
+  // wallet to perform the same faulty estimate again.
+  if (feeResult.status === 'rejected' || feeResult.value == null) {
+    return { gasLimit, balanceWei, requiredWei: null, hasWideMargin: false };
+  }
 
   let feePerGas;
   try {
@@ -878,26 +909,35 @@ async function _assertPurchaseWalletBudget({
       feeResult.value?.maxFeePerGas ?? feeResult.value?.gasPrice ?? 0n,
     );
   } catch (_e) {
-    return;
+    return { gasLimit, balanceWei, requiredWei: null, hasWideMargin: false };
   }
-  if (feePerGas <= 0n) return;
-  if (estimateResult.status === 'rejected') {
-    if (decodeRevertReason(estimateResult.reason).code === 'InsufficientWalletFunds'
-      || balanceWei < walletValueWei + 21_000n * feePerGas) {
-      throw _purchaseWalletFundingError(payment, { balanceWei });
-    }
-    return;
+  if (feePerGas <= 0n) {
+    return { gasLimit, balanceWei, requiredWei: null, hasWideMargin: false };
   }
 
-  let estimatedGas;
-  try { estimatedGas = BigInt(estimateResult.value ?? 0n); }
-  catch (_e) { return; }
-  if (estimatedGas <= 0n) return;
-  const requiredWei = walletValueWei
-    + gasEstimateWithHeadroom(estimatedGas) * feePerGas;
-  if (balanceWei < requiredWei) {
+  const requiredWei = walletValueWei + gasLimit * feePerGas;
+  if (balanceWei != null && balanceWei < requiredWei) {
     throw _purchaseWalletFundingError(payment, { balanceWei, requiredWei });
   }
+  return {
+    gasLimit,
+    balanceWei,
+    requiredWei,
+    // Only overrule a later wallet "insufficient" response when the public
+    // quote shows ample room, not when the account merely clears the estimate.
+    hasWideMargin: balanceWei != null && balanceWei >= requiredWei * 2n,
+  };
+}
+
+function _purchaseWalletQuoteError(error) {
+  const userMessage = 'Your wallet rejected a valid gas quote. Reconnect the wallet and try again.';
+  const wrapped = new Error(userMessage);
+  wrapped.name = 'PurchaseWalletQuoteError';
+  wrapped.code = 'WalletGasQuoteRejected';
+  wrapped.userMessage = userMessage;
+  wrapped.recoveryAction = 'Refresh or reconnect the wallet, then retry the purchase.';
+  wrapped.cause = error;
+  return wrapped;
 }
 
 /**
@@ -988,6 +1028,12 @@ export async function purchaseEth(args) {
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
   const signerContract = signer ? _buildContract(signer) : null;
+  const purchaseReader = signer ? permissionlessReadProvider(provider) : null;
+  const purchaseReadContract = purchaseReader ? _buildContract(purchaseReader) : null;
+  let signerAddress = null;
+  if (signer && typeof signer.getAddress === 'function') {
+    try { signerAddress = await signer.getAddress(); } catch (_e) { /* sendTx reports session errors */ }
+  }
   // Audit c19a1088 funds the foil leg through the SAME canonical waterfall as every
   // other purchase (claimable, then prepaid AFKing), so the old `&& !foil` carve-out
   // is obsolete: the module now taps AFKing principal instead of reverting on it.
@@ -997,7 +1043,7 @@ export async function purchaseEth(args) {
   // reads fail, so a stale read cannot brick the purchase.
   const useAfkingForPurchase = args.useAfking === true;
   const payment = await _purchaseFundingFor(
-    signerContract,
+    purchaseReadContract || signerContract,
     buyer,
     totalCostWei,
     {
@@ -1014,13 +1060,14 @@ export async function purchaseEth(args) {
   const usesInternalFunding = BigInt(payment.claimableUsedWei ?? 0n) > 0n
     || BigInt(payment.afkingUsedWei ?? 0n) > 0n;
   const walletBalanceWei = signer && usesInternalFunding
-    ? await _purchaseWalletBalance(provider, signer)
+    ? await _purchaseWalletBalance(purchaseReader || provider, signer)
     : null;
 
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
   // Trailing overrides object rides through staticCall(...args) so the sim
   // carries the same msg.value as the real tx (value-accurate pre-flight).
   const entryQuantityScaled = entriesScaledFromTickets(ticketQuantity);
+  let gasPlan = null;
   if (signer) {
     const method = presaleBoxAmountWei > 0n ? 'buyLootboxAndPresaleBox' : 'purchase';
     const callArgs = presaleBoxAmountWei > 0n
@@ -1029,7 +1076,11 @@ export async function purchaseEth(args) {
       : [buyer, entryQuantityScaled, boxOrder, affiliateCode, payment.payKind, foil,
         { value: payment.msgValueWei }];
     await _assertPurchaseWalletBudget({
-      provider, signer, contract: signerContract, method, callArgs, payment,
+      provider: purchaseReader || provider,
+      contract: purchaseReadContract || signerContract,
+      method,
+      callArgs: _purchaseCallArgsWithSender(callArgs, signerAddress),
+      payment,
       balanceWei: walletBalanceWei,
     });
     const sim = await requireStaticCall(
@@ -1043,8 +1094,12 @@ export async function purchaseEth(args) {
         ? _structuredPresaleRevertError(sim.error, `static-call ${method}`)
         : _structuredRevertError(sim.error, `static-call ${method}`);
     }
-    await _assertPurchaseWalletBudget({
-      provider, signer, contract: signerContract, method, callArgs, payment,
+    gasPlan = await _assertPurchaseWalletBudget({
+      provider: purchaseReader || provider,
+      contract: purchaseReadContract || signerContract,
+      method,
+      callArgs: _purchaseCallArgsWithSender(callArgs, signerAddress),
+      payment,
       balanceWei: walletBalanceWei,
       includeGas: true,
     });
@@ -1064,7 +1119,10 @@ export async function purchaseEth(args) {
             affiliateCode,
             payment.payKind,
             presaleBoxAmountWei,
-            { value: payment.msgValueWei }
+            {
+              value: payment.msgValueWei,
+              ...(gasPlan?.gasLimit ? { gasLimit: gasPlan.gasLimit } : {}),
+            }
           );
         }
         return c.purchase(
@@ -1074,7 +1132,10 @@ export async function purchaseEth(args) {
           affiliateCode,
           payment.payKind,
           foil,
-          { value: payment.msgValueWei }
+          {
+            value: payment.msgValueWei,
+            ...(gasPlan?.gasLimit ? { gasLimit: gasPlan.gasLimit } : {}),
+          }
         );
       },
       `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
@@ -1084,6 +1145,10 @@ export async function purchaseEth(args) {
       { onSubmitted: args.onSubmitted },
     );
   } catch (error) {
+    if (gasPlan?.hasWideMargin
+      && decodeRevertReason(error).code === 'InsufficientWalletFunds') {
+      throw _purchaseWalletQuoteError(error);
+    }
     if (presaleBoxAmountWei > 0n) {
       throw _structuredPresaleRevertError(error, 'send buyLootboxAndPresaleBox');
     }

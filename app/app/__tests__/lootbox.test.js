@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
+import * as readProviderMod from '../read-provider.js';
 import { decodeRevertReason } from '../reason-map.js';
 import { CONTRACTS } from '../chain-config.js';
 
@@ -66,6 +67,7 @@ function makeFakeContract(opts = {}) {
   const purchase = Object.assign(
     async (...args) => {
       calls.purchase.push(args);
+      if (opts.purchaseShouldReject) throw opts.purchaseShouldReject;
       return makeFakeTx(makeFakeReceipt(opts.purchaseLogs));
     },
     { staticCall: staticCallStub('purchase') },
@@ -585,6 +587,130 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       'the exact purchase supplies the gas budget');
     assert.equal(lastFakeContract._calls.purchase.length, 0,
       'a doomed wallet confirmation is never opened');
+  });
+
+  test('AFKing-funded purchase pins the public gas estimate when the wallet has ample gas ETH', async () => {
+    const total = lootboxMod.LOOTBOX_MIN_WEI;
+    const estimate = 330_322n;
+    lastFakeContract = makeFakeContract({
+      afkingRaw: total,
+      purchaseGasEstimate: estimate,
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, {
+      // Mirrors the reported wallet after applying the protocol's display scale.
+      balanceWei: 619_093_901_293_475n,
+      maxFeePerGas: 11_000_000n,
+    }));
+
+    const out = await lootboxMod.purchaseEth({
+      ticketQuantity: 0,
+      lootboxQuantity: 1,
+      preferClaimable: false,
+      useAfking: true,
+    });
+
+    const [sent] = lastFakeContract._calls.purchase;
+    assert.equal(out.payment.afkingUsedWei, total);
+    assert.equal(sent[6].value, 0n, 'AFKing covers the protocol value');
+    assert.equal(sent[6].gasLimit, contractsMod.gasEstimateWithHeadroom(estimate),
+      'the public estimate is pinned so the injected wallet does not repeat it');
+    assert.equal(lastFakeContract._calls.purchaseEstimate.length, 1);
+    assert.deepEqual(lastFakeContract._calls.purchaseEstimate[0].at(-1), {
+      value: 0n,
+      from: CONNECTED,
+    }, 'the public estimate simulates the connected gas payer');
+  });
+
+  test('BrowserProvider purchase never asks the injected wallet to re-estimate an AFKing-funded buy', async () => {
+    const walletRpcMethods = [];
+    const injected = {
+      async request({ method }) {
+        walletRpcMethods.push(method);
+        if (method === 'eth_chainId') return '0x14a34';
+        if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [CONNECTED];
+        if (method === 'eth_estimateGas') {
+          throw Object.assign(new Error('gas required exceeds allowance (18422)'), {
+            code: 'INSUFFICIENT_FUNDS',
+          });
+        }
+        throw new Error(`Unexpected wallet RPC method: ${method}`);
+      },
+      on() {},
+      removeListener() {},
+    };
+    const walletProvider = new contractsMod.ethers.BrowserProvider(injected, 84532);
+    contractsMod.setProvider(walletProvider);
+
+    const total = lootboxMod.LOOTBOX_MIN_WEI;
+    const walletContract = makeFakeContract({
+      afkingRaw: total,
+      purchaseInfo: [11, true, false, false, total],
+    });
+    const publicContract = makeFakeContract({
+      afkingRaw: total,
+      purchaseGasEstimate: 330_322n,
+    });
+    const publicReader = {
+      getBalance: async () => 619_093_901_293_475n,
+      getFeeData: async () => ({ maxFeePerGas: 11_000_000n }),
+    };
+    readProviderMod._setSharedReadProviderForTests(publicReader);
+    lootboxMod.__setContractFactoryForTest((runner) => (
+      runner === publicReader ? publicContract : walletContract
+    ));
+
+    try {
+      await lootboxMod.purchaseEth({
+        ticketQuantity: 0,
+        lootboxQuantity: 1,
+        preferClaimable: false,
+        useAfking: true,
+      });
+    } finally {
+      readProviderMod._resetSharedReadProviderForTests();
+    }
+
+    assert.equal(publicContract._calls.purchaseEstimate.length, 1,
+      'the public reader supplies the estimate');
+    assert.equal(walletContract._calls.purchaseEstimate.length, 0,
+      'the injected wallet contract is never used for estimation');
+    assert.ok(walletContract._calls.purchase[0][6].gasLimit > 0n,
+      'the wallet request already includes the public gas limit');
+    assert.equal(walletRpcMethods.includes('eth_estimateGas'), false,
+      'the injected wallet never receives eth_estimateGas');
+  });
+
+  test('an ample public gas budget does not get mislabeled when the wallet still rejects it', async () => {
+    const walletError = Object.assign(new Error('insufficient funds for gas'), {
+      code: 'INSUFFICIENT_FUNDS',
+    });
+    lastFakeContract = makeFakeContract({
+      afkingRaw: lootboxMod.LOOTBOX_MIN_WEI,
+      purchaseGasEstimate: 330_322n,
+      purchaseShouldReject: walletError,
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, {
+      balanceWei: 619_093_901_293_475n,
+      maxFeePerGas: 11_000_000n,
+    }));
+
+    await assert.rejects(
+      lootboxMod.purchaseEth({
+        ticketQuantity: 0,
+        lootboxQuantity: 1,
+        preferClaimable: false,
+        useAfking: true,
+      }),
+      (error) => {
+        assert.equal(error.code, 'WalletGasQuoteRejected');
+        assert.match(error.userMessage, /valid gas quote/i);
+        assert.equal(error.cause?.cause, walletError,
+          'sendTx diagnostics remain reachable under the honest UI error');
+        return true;
+      },
+    );
   });
 
   // Audit c19a1088 funds the foil leg through the canonical spend waterfall, so AFKing

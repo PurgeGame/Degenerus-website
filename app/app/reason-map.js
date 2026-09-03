@@ -70,7 +70,7 @@ const INSUFFICIENT_WALLET_FUNDS = {
   userMessage: "This wallet doesn't have enough ETH to cover the transaction and network fee.",
   recoveryAction: 'Add ETH or lower the amount, leaving a little extra for gas.',
 };
-const WALLET_FUNDS_TEXT = /(?:\boutoffunds\b|\bout of funds\b|insufficient (?:funds|balance) (?:for|to cover) (?:gas|the transaction|transaction|intrinsic|transfer|value)|funds for gas \* price \+ value|(?:funds|gas) required exceeds allowance|(?:sender|wallet|account)(?:'s)? (?:balance )?(?:is )?too low|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
+const WALLET_FUNDS_TEXT = /(?:\boutoffunds\b|\bout of funds\b|insufficient (?:funds|balance) (?:for|to cover) (?:gas|the transaction|transaction|intrinsic|transfer|value)|funds for gas \* price \+ value|funds required exceeds allowance|(?:sender|wallet|account)(?:'s)? (?:balance )?(?:is )?too low|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
 
 function _walletFundsMapping(error) {
   const pending = [error];

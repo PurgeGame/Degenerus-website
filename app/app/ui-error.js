@@ -3,7 +3,7 @@
 // UI boundary that prevents raw provider/RPC blobs from taking over a widget.
 
 const RAW_PROVIDER_DETAIL = /(?:CALL_EXCEPTION|UNKNOWN_ERROR|execution reverted|missing revert data|could not coalesce|estimateGas|json-rpc|request body|ethers(?:\.js)?|\{\s*"(?:code|error|method)"|0x[0-9a-f]{40,})/i;
-const INSUFFICIENT_FUNDS_DETAIL = /(?:\bINSUFFICIENT_FUNDS\b|\bOutOfFunds\b|insufficient (?:funds|balance)(?: for| to cover)|funds for gas \* price \+ value|(?:funds|gas) required exceeds allowance|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
+const INSUFFICIENT_FUNDS_DETAIL = /(?:\bINSUFFICIENT_FUNDS\b|\bOutOfFunds\b|insufficient (?:funds|balance)(?: for| to cover)|funds for gas \* price \+ value|funds required exceeds allowance|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
 const DEFAULT_TX_ERROR = 'Transaction did not go through. Try again.';
 
 function _oneLine(value) {
@@ -66,6 +66,9 @@ export function compactUiError(error, fallback = 'Transaction did not go through
   }
   if (code === 'RngNotReady' || /rng.*not ready|random outcome.*generat/i.test(joined)) {
     return 'RNG is not ready yet.';
+  }
+  if (codes.includes('WalletGasQuoteRejected')) {
+    return 'Your wallet rejected a valid gas quote. Reconnect the wallet and try again.';
   }
   if (INSUFFICIENT_FUNDS_DETAIL.test(joined)
     || /exceeds? (?:your )?(?:balance|funds)|more than the balance/i.test(joined)) {

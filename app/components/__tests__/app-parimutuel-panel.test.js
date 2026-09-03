@@ -430,8 +430,8 @@ describe('app-parimutuel-panel', () => {
     assert.doesNotMatch(DAILY_FLIP_SOURCE, /record-strip|readBiggestFlipRecord/,
       'the record rail no longer consumes space in the daily coinflip');
     assert.match(PARI_SOURCE,
-      /<div class="pari-error"[\s\S]*?<app-wwxrp-burn><\/app-wwxrp-burn>/,
-      'WWXRP is mounted after the book and error surfaces at the bottom of Side Bets');
+      /<div class="pari-bet-container pari-bet-container--wwxrp">\s*<app-wwxrp-burn><\/app-wwxrp-burn>\s*<\/div>\s*<div class="pari-bet-container pari-bet-container--growth"\s*data-bind="pari-growth-container" hidden>/,
+      'WWXRP and Growth mount in separate sibling containers');
     assert.match(WWXRP_SOURCE,
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
@@ -442,8 +442,8 @@ describe('app-parimutuel-panel', () => {
       /\.pari-wwxrp__identity > strong:not\(\.pari-wwxrp__balance\)\s*\{[^}]*display:\s*inline/s,
       'the compact Incinerator still identifies itself as WWXRP');
     assert.match(APP_CSS,
-      /\.app-parimutuel\.has-live-book \.pari-books\s*\{[^}]*grid-column:\s*2[^}]*\}[\s\S]*?\.app-parimutuel\.has-live-book > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1/s,
-      'the Incinerator leads on the left while Growth occupies the right lane');
+      /\.side-bets-rail \.pari-bet-container--wwxrp\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.side-bets-rail \.pari-bet-container--growth\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1/s,
+      'only the peer containers own the desktop lanes');
     assert.match(APP_CSS,
       /\.app-parimutuel\.has-live-book \.pari-wwxrp\s*\{[^}]*grid-template-columns:\s*2\.3rem minmax\(0, 1fr\) clamp\(6\.25rem, 12vw, 8\.5rem\) 4\.4rem/s,
       'the branded Incinerator reserves compact lanes for its coin, input, and burn key');
@@ -457,14 +457,14 @@ describe('app-parimutuel-panel', () => {
       /\.app-parimutuel\.has-live-book \.pari-wwxrp__amount\s*\{[^}]*height:\s*1\.5rem[^}]*border-radius:\s*999px/s,
       'the inline WWXRP amount and MAX action form one compact pill');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > \.pari-bet-container--wwxrp\s*\{[^}]*width:\s*min\(100%, 30\.7rem\);[^}]*grid-column:\s*1 \/ -1/s,
       'the Incinerator reclaims the book lane when Growth is closed');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\)\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent/s,
-      'an Incinerator-only row drops the redundant amber market shell');
+      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent/s,
+      'the parent is layout-only instead of drawing shared card chrome');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > app-wwxrp-burn\s*\{[^}]*width:\s*min\(100%, 30\.7rem\)/s,
-      'the Incinerate key aligns with the burn key in the utility rail below');
+      /@media \(max-width: 768px\)\s*\{\s*body\.layout-basic \.side-bets-rail \.app-parimutuel\s*\{[\s\S]*?\.side-bets-rail \.pari-bet-container--wwxrp,[\s\S]*?\.side-bets-rail \.pari-bet-container--growth,[\s\S]*?\{[^}]*grid-column:\s*1/s,
+      'mobile stacks the complete containers instead of reshuffling their contents');
     assert.match(APP_CSS,
       /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head today"[^}]*"context today"/s,
       'the open Growth identity and context stack beside the actions');
@@ -477,6 +477,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
     assert.equal(growthCard(el).hidden, true);
     assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, true,
+      'the closed Growth container vacates its entire grid lane');
     assert.equal(el.querySelector('[data-bind="pari-empty"]'), null);
     assert.doesNotMatch(PARI_SOURCE, /Books are closed|pari-empty/,
       'closed books leave no placeholder copy or dead box behind');
@@ -818,6 +820,8 @@ describe('app-parimutuel-panel', () => {
 
     const card = growthCard(el);
     assert.equal(card.hidden, false);
+    assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, false,
+      'an open Growth market reveals its independent container');
     assert.match(card.querySelector('.pari-book__title').textContent, /GROWTH BET · Level 42/);
     assert.equal(card.querySelector('.pari-book__ask'), null,
       'the live book does not repeat the wager as a question');

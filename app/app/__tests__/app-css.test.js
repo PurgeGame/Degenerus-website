@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-25300 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-25600 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -339,6 +339,9 @@ describe('app.css LOC budget', () => {
     // z-index/pointer-events repair on .rvl-ticket-actions. ~68 lines of
     // headroom; the overdue component-stylesheet split noted at 8800 above
     // still has not happened, and this file is now ten times that budget.
-    assert.ok(cssLines.length <= 25_300, `total <=25300, got ${cssLines.length}`);
+    // 25300 → 25600 covers the approved compact Craps entry table: one shared
+    // six-column felt, wager/lane control states, and its phone-height pass.
+    // This refines an existing surface and leaves only narrow repair headroom.
+    assert.ok(cssLines.length <= 25_600, `total <=25600, got ${cssLines.length}`);
   });
 });

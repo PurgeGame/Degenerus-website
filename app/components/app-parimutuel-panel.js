@@ -653,14 +653,19 @@ class AppParimutuelPanel extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-parimutuel">
-        <div class="pari-books" data-bind="pari-books" hidden>
-          <!-- Decimator comes first deliberately: its x4/x99 burn window is
-               level-gated and must not sit below the Growth book. -->
-          <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
-          <article class="pari-book" data-bind="pari-growth" hidden></article>
+        <div class="pari-bet-container pari-bet-container--wwxrp">
+          <app-wwxrp-burn></app-wwxrp-burn>
+        </div>
+        <div class="pari-bet-container pari-bet-container--growth"
+             data-bind="pari-growth-container" hidden>
+          <div class="pari-books" data-bind="pari-books" hidden>
+            <!-- Decimator comes first deliberately: its x4/x99 burn window is
+                 level-gated and must not sit below the Growth book. -->
+            <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
+            <article class="pari-book" data-bind="pari-growth" hidden></article>
+          </div>
         </div>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
-        <app-wwxrp-burn></app-wwxrp-burn>
       </section>
     `;
   }
@@ -669,10 +674,12 @@ class AppParimutuelPanel extends HTMLElement {
     this.#renderBook();
     this.#renderDecimator();
     const books = this.querySelector('[data-bind="pari-books"]');
+    const growthContainer = this.querySelector('[data-bind="pari-growth-container"]');
     const growth = this.querySelector('[data-bind="pari-growth"]');
     const decimator = this.querySelector('[data-bind="pari-decimator"]');
     const hasLiveBook = Boolean((growth && !growth.hidden) || (decimator && !decimator.hidden));
     if (books) books.hidden = !hasLiveBook;
+    if (growthContainer) growthContainer.hidden = !hasLiveBook;
     const panel = this.querySelector('.app-parimutuel');
     if (panel?.classList) {
       if (hasLiveBook) panel.classList.add('has-live-book');

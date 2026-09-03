@@ -13324,15 +13324,14 @@ body.layout-basic .pari-error {
 }
 body.layout-basic .pari-error[hidden] { display: none !important; }
 
-/* WWXRP lives with the side wagers. margin-top:auto pins it to the bottom of
-   the equal-height Side Bets column without disturbing open or settled books. */
-body.layout-basic .app-parimutuel > app-wwxrp-burn {
+/* WWXRP owns one isolated side-bet container instead of participating in the
+   Growth book's layout. The custom element fills only that container. */
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn {
   display: block;
+  width: 100%;
   min-width: 0;
-  margin-top: auto;
-  padding-top: 0.08rem;
 }
-body.layout-basic .app-parimutuel > app-wwxrp-burn[hidden] {
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden] {
   display: none !important;
 }
 body.layout-basic .pari-wwxrp {
@@ -16254,9 +16253,9 @@ body.layout-basic .play-grid .app-quest-panel::before {
   pointer-events: none;
 }
 
-/* Side Bets is one compact utility row: live Growth book and Incinerator.
-   A closed Growth book disappears completely; the Incinerator simply expands
-   into the available lane without a placeholder card. */
+/* Growth and WWXRP are separate layout containers. The panel only arranges
+   those two peers; neither component is allowed to claim the other's grid
+   lane or inherit shared card chrome. */
 body.layout-basic .side-bets-rail { display: block; min-width: 0; margin: 0 0 clamp(0.7rem, 1.6vw, 1rem); }
 body.layout-basic .side-bets-rail > app-parimutuel-panel { display: block; min-width: 0; }
 
@@ -16265,16 +16264,8 @@ body.layout-basic .side-bets-rail .app-parimutuel {
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: auto auto;
-  align-items: center;
+  align-items: stretch;
   gap: 0.42rem 0.55rem;
-  margin: 0;
-  padding: 0.44rem 0.52rem;
-}
-
-/* With no live book, the Incinerator is the entire surface. Remove the amber
-   market shell (and its empty full-width runway), then line the compact rail's
-   action edge up with the DGNRS burn key directly below it. */
-body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
   margin: 0;
   padding: 0;
   border: 0;
@@ -16282,18 +16273,37 @@ body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
   box-shadow: none;
 }
 
+body.layout-basic .side-bets-rail .pari-bet-container {
+  display: grid;
+  min-width: 0;
+  align-self: stretch;
+  isolation: isolate;
+}
+body.layout-basic .side-bets-rail .pari-bet-container[hidden] { display: none !important; }
+body.layout-basic .side-bets-rail .pari-bet-container--wwxrp { grid-column: 1; grid-row: 1; }
+body.layout-basic .side-bets-rail .pari-bet-container--growth { grid-column: 2; grid-row: 1; }
+body.layout-basic .side-bets-rail .pari-bet-container--wwxrp > app-wwxrp-burn,
+body.layout-basic .side-bets-rail .pari-bet-container--growth > .pari-books {
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+}
+
+/* With no live book, the Incinerator is the entire row and lines up with the
+   DGNRS burn key directly below it. */
+body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+
 body.layout-basic .side-bets-rail .pari-books {
-  grid-column: 1;
-  grid-row: 1;
   align-self: stretch;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 
 body.layout-basic .side-bets-rail .pari-books[hidden] { display: none !important; }
 
-body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn { width: 100%; min-width: 0; grid-column: 2; grid-row: 1; align-self: center; margin-top: 0; padding-top: 0; }
-
-body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
+body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp {
   width: min(100%, 30.7rem);
   grid-column: 1 / -1;
   justify-self: start;
@@ -16370,21 +16380,21 @@ body.layout-basic .side-bets-rail .pari-error {
   margin-top: 0;
 }
 
-@media (max-width: 580px) {
+@media (max-width: 768px) {
   body.layout-basic .side-bets-rail .app-parimutuel {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;
   }
 
-  body.layout-basic .side-bets-rail .pari-books,
-  body.layout-basic .side-bets-rail .app-parimutuel > app-wwxrp-burn,
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn,
+  body.layout-basic .side-bets-rail .pari-bet-container--wwxrp,
+  body.layout-basic .side-bets-rail .pari-bet-container--growth,
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp,
   body.layout-basic .side-bets-rail .pari-error {
     grid-column: 1;
     grid-row: auto;
   }
 
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > app-wwxrp-burn {
+  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp {
     width: 100%;
   }
 
@@ -25281,12 +25291,9 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 }
 .rvl-card--mini .rvl-craps-pass-badge__windows { display: none; }
 
-/* Growth and the Incinerator are peer cards. Closed Growth does not repeat the
-   page-level meter, and WWXRP keeps its amount control deliberately compact. */
+/* Closed Growth does not repeat the page-level meter. Inside its isolated
+   container, WWXRP keeps its own controls deliberately compact. */
 body.layout-basic .side-bets-rail .pari-book--settled .pari-thermometer { display: none; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book { align-items: stretch; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-books { grid-column: 2; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book > app-wwxrp-burn { grid-column: 1; align-self: stretch; }
 body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp {
   isolation: isolate;
   height: 100%;

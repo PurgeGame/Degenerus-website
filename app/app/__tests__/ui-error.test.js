@@ -33,14 +33,6 @@ describe('player-facing error boundary', () => {
     assert.ok(message.length <= 110);
   });
 
-  test('recognizes a nonzero wallet whose gas allowance is still too low', () => {
-    const message = compactUiError({
-      code: 'CALL_EXCEPTION',
-      shortMessage: 'gas required exceeds allowance (18422)',
-    });
-    assert.equal(message, "This wallet doesn't have enough ETH for the transaction and gas.");
-  });
-
   test('keeps controlled short messages but rejects an unsafe fallback', () => {
     assert.equal(
       compactUiError({ userMessage: 'That symbol was already claimed.' }),
@@ -49,6 +41,18 @@ describe('player-facing error boundary', () => {
     assert.equal(
       briefTxError(new Error(`provider exploded ${'x'.repeat(200)}`), `0x${'ef'.repeat(100)}`),
       'Transaction did not go through. Try again.',
+    );
+  });
+
+  test('a verified public gas quote outranks a nested wallet insufficient-funds error', () => {
+    const message = compactUiError({
+      code: 'WalletGasQuoteRejected',
+      userMessage: 'Your wallet rejected a valid gas quote. Reconnect the wallet and try again.',
+      cause: { code: 'INSUFFICIENT_FUNDS', message: 'insufficient funds for gas' },
+    });
+    assert.equal(
+      message,
+      'Your wallet rejected a valid gas quote. Reconnect the wallet and try again.',
     );
   });
 });

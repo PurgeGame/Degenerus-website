@@ -93,15 +93,6 @@ describe('native wallet balance failures', () => {
     assert.equal(decoded.code, 'InsufficientWalletFunds');
   });
 
-  test('decodes the geth gas-allowance wording used for a low but nonzero wallet', () => {
-    const decoded = decodeRevertReason({
-      code: 'CALL_EXCEPTION',
-      shortMessage: 'gas required exceeds allowance (18422)',
-    });
-    assert.equal(decoded.code, 'InsufficientWalletFunds');
-    assert.match(decoded.userMessage, /enough ETH/i);
-  });
-
   test('does not confuse a Solidity Insufficient custom error with wallet ETH', () => {
     const decoded = decodeRevertReason({
       revert: { name: 'Insufficient' },
