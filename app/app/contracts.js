@@ -170,11 +170,42 @@ export function requireSelf() {
 // — never throws on read paths so panels keep rendering.
 // ---------------------------------------------------------------------------
 
+function _normalizeProviderChainId(value) {
+  let candidate = value;
+  if (!['string', 'number', 'bigint'].includes(typeof candidate)) return null;
+  if (typeof candidate === 'string') {
+    candidate = candidate.trim();
+    if (!candidate) return null;
+    const caip = /^eip155:(.+)$/i.exec(candidate);
+    if (caip) candidate = caip[1];
+  }
+  try {
+    const parsed = Number(BigInt(candidate));
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+async function _liveProviderChainId(provider) {
+  // BrowserProvider.getNetwork() may still hold the chain detected before an
+  // injected wallet completed wallet_switchEthereumChain. eth_chainId goes
+  // through to the EIP-1193 wallet and is authoritative for a write gate.
+  if (typeof provider?.send === 'function') {
+    try {
+      const raw = await provider.send('eth_chainId', []);
+      const parsed = _normalizeProviderChainId(raw);
+      if (parsed != null) return parsed;
+    } catch (_e) { /* fall back for non-EIP-1193 provider test doubles */ }
+  }
+  const network = await provider.getNetwork();
+  return _normalizeProviderChainId(network?.chainId);
+}
+
 export async function assertChainOrBlank() {
   if (!_provider) return true;
   try {
-    const network = await _provider.getNetwork();
-    return Number(network.chainId) === CHAIN.id;
+    return await _liveProviderChainId(_provider) === CHAIN.id;
   } catch {
     return true;   // degrade open — read paths must keep working
   }
@@ -186,8 +217,8 @@ export async function assertChainOrBlank() {
 
 export async function assertChain() {
   if (!_provider) throw new Error('Wallet not connected');
-  const network = await _provider.getNetwork();
-  if (Number(network.chainId) !== CHAIN.id) {
+  const chainId = await _liveProviderChainId(_provider);
+  if (chainId !== CHAIN.id) {
     throw new Error(`Wrong network — switch to ${CHAIN.name}.`);
   }
   return true;

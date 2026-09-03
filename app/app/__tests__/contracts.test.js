@@ -577,4 +577,17 @@ describe('assertChain write-side gate', () => {
     const ok = await assertChain();
     assert.equal(ok, true);
   });
+
+  test('uses live eth_chainId when ethers still caches the pre-switch network', async () => {
+    const provider = makeProvider({ chainId: 1 });
+    provider.send = async (method) => {
+      assert.equal(method, 'eth_chainId');
+      return '0x14a34';
+    };
+    setProvider(provider);
+
+    const ok = await assertChain();
+
+    assert.equal(ok, true);
+  });
 });

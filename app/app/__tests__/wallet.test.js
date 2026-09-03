@@ -463,6 +463,28 @@ describe('autoReconnect', () => {
     const chainUpdate = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(chainUpdate[1], false);
   });
+
+  test('uses the wallet\'s live eth_chainId instead of an ethers-cached network', async () => {
+    const accounts = ['0xABCDef0000000000000000000000000000000003'];
+    _localStore.set('lastWalletRdns', 'io.metamask');
+    _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
+    _discoverReturn = makeMockBrowserProvider({
+      chainId: 1,
+      accounts,
+      requestImpl: async ({ method }) => {
+        if (method === 'eth_accounts') return accounts;
+        if (method === 'eth_chainId') return '0x14a34';
+        return null;
+      },
+    });
+
+    await wallet.autoReconnect();
+
+    const chainUpdate = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
+    assert.ok(chainUpdate, 'ui.chainOk was set');
+    assert.equal(chainUpdate[1], true,
+      'the raw EIP-1193 chain is authoritative after a mobile wallet switch');
+  });
 });
 
 // ===========================================================================
@@ -768,6 +790,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const requestCalls = [];
     const wcListeners = {};
     const wcInstance = {
+      isWalletConnect: true,
       session,
       get accounts() { return accounts; },
       set accounts(v) { accounts = v; },

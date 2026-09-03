@@ -271,17 +271,23 @@ export async function ensureConfiguredWalletChain() {
     }
   }
 
+  // The EIP-1193 provider is the live source of truth. ethers' BrowserProvider
+  // can retain the network it first detected, so a wallet that already switched
+  // successfully must be allowed to repair that stale wrapper without showing
+  // another switch prompt.
+  const currentChainId = await _readEip1193ChainId(raw);
+  if (currentChainId === CHAIN.id) {
+    _refreshConnectedBrowserProvider(raw);
+    await _syncConnectedChain(raw);
+    return true;
+  }
+
   const switched = await switchToSepolia(raw);
   if (!switched) return false;
-  if (raw.isWalletConnect === true) {
-    const activeChainId = await _readEip1193ChainId(raw);
-    const chainOk = activeChainId === CHAIN.id;
-    if (chainOk) _refreshWcBrowserProvider(raw);
-    update('ui.chainOk', chainOk);
-    return chainOk;
-  }
-  update('ui.chainOk', true);
-  return true;
+  const activeChainId = await _syncConnectedChain(raw);
+  const chainOk = activeChainId === CHAIN.id;
+  if (chainOk) _refreshConnectedBrowserProvider(raw);
+  return chainOk;
 }
 
 /**
@@ -363,12 +369,37 @@ function _isConfiguredChainId(value) {
 }
 
 async function _readEip1193ChainId(raw) {
+  // WalletConnect exposes its active CAIP/EVM chain directly. Reading that
+  // property avoids turning a silent reconnect into an RPC request while still
+  // normalizing restored hex/CAIP forms.
+  if (raw?.isWalletConnect === true) {
+    const walletConnectChainId = _normalizeChainId(raw.chainId);
+    if (walletConnectChainId != null) return walletConnectChainId;
+  }
   try {
     const value = await raw?.request?.({ method: 'eth_chainId' });
     const parsed = _normalizeChainId(value);
     if (parsed != null) return parsed;
   } catch (_e) { /* fall back to the provider's public chainId below */ }
   return _normalizeChainId(raw?.chainId);
+}
+
+async function _syncConnectedChain(raw, browserProvider = null) {
+  let chainId = await _readEip1193ChainId(raw);
+  if (chainId == null && browserProvider) {
+    const network = await browserProvider.getNetwork().catch(() => null);
+    chainId = _normalizeChainId(network?.chainId);
+  }
+  update('connected.chainId', chainId);
+  update('ui.chainOk', chainId == null ? null : chainId === CHAIN.id);
+  return chainId;
+}
+
+function _refreshConnectedBrowserProvider(raw) {
+  if (raw?.isWalletConnect === true) return _refreshWcBrowserProvider(raw);
+  const browserProvider = new BrowserProvider(raw, 'any');
+  setProvider(browserProvider);
+  return browserProvider;
 }
 
 export function onUserPickedWallet(info) {
@@ -486,8 +517,8 @@ export async function connectWalletConnect() {
   update('connected.address', addr);
   update('connected.rdns', 'walletconnect:v2');
   localStorage.setItem('lastWalletRdns', 'walletconnect:v2');
-  const chainOk = _isConfiguredChainId(wc.chainId);
-  update('ui.chainOk', chainOk);
+  const activeChainId = await _syncConnectedChain(wc, browserProvider);
+  const chainOk = activeChainId === CHAIN.id;
 
   emitConnected(addr);
   if (!chainOk) {
@@ -501,10 +532,9 @@ export async function connectWalletConnect() {
       // Do not publish a signable state merely because the switch request
       // resolved. Verify WC's active CAIP chain, then discard the wrapper that
       // may already have cached the wallet's pre-switch Ethereum network.
-      const activeChainId = await _readEip1193ChainId(wc);
-      if (activeChainId !== CHAIN.id) return;
-      _refreshWcBrowserProvider(wc);
-      update('ui.chainOk', true);
+      const switchedChainId = await _syncConnectedChain(wc);
+      if (switchedChainId !== CHAIN.id) return;
+      _refreshConnectedBrowserProvider(wc);
     }).catch(() => {});
   }
   return browserProvider;
@@ -611,9 +641,7 @@ export async function connectWithPicker() {
   const addr = accounts[0].toLowerCase();
   update('connected.address', addr);
   update('connected.rdns', rdns || null);
-
-  const network = await browserProvider.getNetwork().catch(() => null);
-  update('ui.chainOk', network ? _isConfiguredChainId(network.chainId) : null);
+  await _syncConnectedChain(raw, browserProvider);
 
   emitConnected(addr);
   return browserProvider;
@@ -638,7 +666,7 @@ export async function connectLegacy() {
     // No wallet at all — UI shows install CTA via wallet-picker zero-state in plan 58-03.
     return null;
   }
-  const browserProvider = new BrowserProvider(eth);
+  const browserProvider = new BrowserProvider(eth, 'any');
   // WR-05: attach EIP-1193 listeners BEFORE eth_requestAccounts so
   // chainChanged/accountsChanged events fired during the wallet's startup /
   // permission-grant flow (e.g., MetaMask Snap chain init) are not lost.
@@ -653,9 +681,7 @@ export async function connectLegacy() {
   const addr = accounts[0].toLowerCase();
   update('connected.address', addr);
   update('connected.rdns', 'legacy:window.ethereum');
-
-  const network = await browserProvider.getNetwork().catch(() => null);
-  update('ui.chainOk', network ? _isConfiguredChainId(network.chainId) : null);
+  await _syncConnectedChain(eth, browserProvider);
 
   emitConnected(addr);
   return browserProvider;
@@ -674,7 +700,7 @@ export async function autoReconnect() {
   if (rdns === 'legacy:window.ethereum') {
     const eth = (typeof globalThis !== 'undefined' && globalThis.window) ? globalThis.window.ethereum : null;
     if (!eth) return false;
-    const browserProvider = new BrowserProvider(eth);
+    const browserProvider = new BrowserProvider(eth, 'any');
     // WR-05: attach listeners BEFORE eth_accounts so wallet-startup events
     // are not lost.
     attachListeners(browserProvider, eth);
@@ -683,8 +709,7 @@ export async function autoReconnect() {
     setProvider(browserProvider);
     update('connected.address', accounts[0].toLowerCase());
     update('connected.rdns', 'legacy:window.ethereum');
-    const net = await browserProvider.getNetwork().catch(() => null);
-    update('ui.chainOk', net ? _isConfiguredChainId(net.chainId) : null);
+    await _syncConnectedChain(eth, browserProvider);
     return true;
   }
 
@@ -704,7 +729,7 @@ export async function autoReconnect() {
       setProvider(browserProvider);
       update('connected.address', String(wc.accounts[0]).toLowerCase());
       update('connected.rdns', 'walletconnect:v2');
-      update('ui.chainOk', _isConfiguredChainId(wc.chainId));
+      await _syncConnectedChain(wc, browserProvider);
       return true;
     } catch (_) {
       return false;
@@ -730,9 +755,7 @@ export async function autoReconnect() {
   setProvider(browserProvider);
   update('connected.address', accounts[0].toLowerCase());
   update('connected.rdns', browserProvider.providerInfo?.rdns || null);
-
-  const network = await browserProvider.getNetwork().catch(() => null);
-  update('ui.chainOk', network ? _isConfiguredChainId(network.chainId) : null);
+  await _syncConnectedChain(raw, browserProvider);
 
   return true;
 }
@@ -760,6 +783,7 @@ function attachListeners(browserProvider, rawProvider = null) {
       update('viewing.address', null);
       update('connected.address', null);
       update('connected.rdns', null);
+      update('connected.chainId', null);
       update('ui.mode', 'self');
       update('approvals.list', []);
       localStorage.removeItem('lastWalletRdns');
@@ -772,12 +796,7 @@ function attachListeners(browserProvider, rawProvider = null) {
       // per-account chain settings, e.g., MetaMask Snap, Coinbase Wallet).
       // Re-derive ui.chainOk so the banner / button-enable state stay in sync
       // even before any user-driven write triggers assertChain().
-      if (eth?.isWalletConnect === true) {
-        update('ui.chainOk', _isConfiguredChainId(eth.chainId));
-      } else {
-        const network = await browserProvider.getNetwork().catch(() => null);
-        update('ui.chainOk', network ? _isConfiguredChainId(network.chainId) : null);
-      }
+      await _syncConnectedChain(eth, browserProvider);
       // DO NOT touch ui.mode here — view-mode is derived from viewing.address vs
       // connected.address (handled in plan 58-02 store.js deriveMode subscriber).
       document.dispatchEvent(new CustomEvent('wallet-connected', {
@@ -793,12 +812,13 @@ function attachListeners(browserProvider, rawProvider = null) {
     // only the numeric form as valid leaves a restored Base Sepolia session
     // falsely stuck on the Wrong Network banner after a page reload.
     const chainOk = _isConfiguredChainId(hexId);
-    if (chainOk && eth?.isWalletConnect === true) {
+    if (chainOk) {
       // The existing BrowserProvider may have detected the wallet's old chain
-      // between pairing and this event. A fresh wrapper is the only reliable
+      // before this event. A fresh wrapper is the only reliable
       // way to clear ethers' pinned network promise before a purchase preflight.
-      _refreshWcBrowserProvider(eth);
+      _refreshConnectedBrowserProvider(eth);
     }
+    update('connected.chainId', _normalizeChainId(hexId));
     update('ui.chainOk', chainOk);
     // CRITICAL: NO page refresh on chainChanged — preserves ?as= URL state for
     // view-mode users (T-58-06). The store update is sufficient to drive UI re-render.
@@ -810,6 +830,7 @@ function attachListeners(browserProvider, rawProvider = null) {
     update('viewing.address', null);
     update('connected.address', null);
     update('connected.rdns', null);
+    update('connected.chainId', null);
     update('ui.mode', 'self');
     update('approvals.list', []);
     localStorage.removeItem('lastWalletRdns');
@@ -828,6 +849,7 @@ export function disconnect() {
   update('viewing.address', null);
   update('connected.address', null);
   update('connected.rdns', null);
+  update('connected.chainId', null);
   update('ui.mode', 'self');
   update('approvals.list', []);
   localStorage.removeItem('lastWalletRdns');
@@ -858,14 +880,7 @@ async function _attachSilentlyFor(addr) {
     if (getProvider()) {
       // Provider already live (our own connect flow) — only the chain flag can
       // be stale here.
-      if (_eip1193?.isWalletConnect === true) {
-        // Avoid teaching ethers' BrowserProvider the pre-switch chain during
-        // connectWalletConnect()'s wallet-connected bridge event.
-        update('ui.chainOk', _isConfiguredChainId(_eip1193.chainId));
-        return;
-      }
-      const net = await getProvider().getNetwork().catch(() => null);
-      update('ui.chainOk', net ? _isConfiguredChainId(net.chainId) : null);
+      await _syncConnectedChain(_eip1193, getProvider());
       return;
     }
     const browserProvider = await BrowserProvider.discover({ timeout: 1000, anyProvider: true })
@@ -877,8 +892,7 @@ async function _attachSilentlyFor(addr) {
     if (!match) return;   // a different wallet is attached; do not hijack it
     attachListeners(browserProvider, raw);
     setProvider(browserProvider);
-    const network = await browserProvider.getNetwork().catch(() => null);
-    update('ui.chainOk', network ? _isConfiguredChainId(network.chainId) : null);
+    await _syncConnectedChain(raw, browserProvider);
   } catch (_e) {
     /* best effort — the UI stays read-only rather than breaking */
   }
@@ -903,6 +917,7 @@ if (typeof document !== 'undefined') {
       update('viewing.address', null);
       update('connected.address', null);
       update('connected.rdns', null);
+      update('connected.chainId', null);
       update('ui.mode', 'self');
       update('approvals.list', []);
       localStorage.removeItem('lastWalletRdns');
