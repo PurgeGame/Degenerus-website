@@ -65,12 +65,16 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 //   constants and its runtime hash is unique per run. The indexer publishes
 //   keccak256(live code) (indexer/main.ts), so a staged guess makes every replay fail
 //   CLOSED — the battle simply does not open. Always read it back from chain after deploy.
+// 0x45c30da1… — run #47 at CrapsBattle 0x5e237980…. The live Base Sepolia bytecode
+//   hashes to the manifest value, the 0880d134c differential suite passes 7/7,
+//   and 21 consecutive published fields report every entrant replayed successfully.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
   '0xff6c3a41a60f9eb5d5ef16553282ae304a739949a321e08ad5b83e3aabfcb4c2',
   '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796',
   '0x022f73dbdd170c87a2074ace604fdadfaaf06f1b18f01faf785b77709d862639',
+  '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;

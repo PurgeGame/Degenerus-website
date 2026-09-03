@@ -68,6 +68,7 @@ const clone = (value) => structuredClone(value);
 const MANIFEST = validateCrapsReplayManifest(SIM_CRAPS_REPLAY_MANIFEST);
 const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
+const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 
 function contestedHighRollerFixture() {
   const existing = clone(ALL_PLAYERS.find((player) => player.entryMultiple > 1));
@@ -92,6 +93,16 @@ test('the differentially verified run-44 Craps runtime is explicitly replayable'
   assert.equal(
     assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
     RUN_44_CRAPS_RUNTIME_HASH,
+  );
+});
+
+test('the differentially verified run-47 Craps runtime is explicitly replayable', () => {
+  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  manifest.ruleset.contract = CONTRACTS.CRAPS;
+  manifest.ruleset.runtimeCodeHash = RUN_47_CRAPS_RUNTIME_HASH;
+  assert.equal(
+    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
+    RUN_47_CRAPS_RUNTIME_HASH,
   );
 });
 
