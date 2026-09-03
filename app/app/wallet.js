@@ -118,6 +118,114 @@ export function getEip1193() {
   return _eip1193;
 }
 
+// WalletConnect publishes a signing request asynchronously, after the tap
+// that started it has lost browser "user activation". Mobile popup blockers
+// can therefore discard the SDK's new-tab redirect. Once the request is on
+// the relay, navigate this tab to the wallet's exact request deep link instead.
+const WC_DEEPLINK_CHOICE_KEY = 'WALLETCONNECT_DEEPLINK_CHOICE';
+const WC_REQUEST_SENT_EVENT = 'session_request_sent';
+const WC_APPROVAL_METHODS = new Set([
+  'eth_sendTransaction',
+  'eth_sign',
+  'eth_signTransaction',
+  'eth_signTypedData',
+  'eth_signTypedData_v3',
+  'eth_signTypedData_v4',
+  'personal_sign',
+  'wallet_addEthereumChain',
+  'wallet_sendCalls',
+  'wallet_switchEthereumChain',
+  'wallet_watchAsset',
+]);
+const _wcAutomaticHandoffClients = new WeakSet();
+
+function _isMobileWalletHandoffContext() {
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  try {
+    if (win?.matchMedia?.('(pointer:coarse)')?.matches) return true;
+  } catch (_e) { /* user-agent fallback below */ }
+  const nav = (typeof globalThis !== 'undefined') ? globalThis.navigator : null;
+  if (nav?.userAgentData?.mobile === true) return true;
+  if (nav?.platform === 'MacIntel' && Number(nav?.maxTouchPoints) > 1) return true;
+  return /Android|webOS|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i
+    .test(String(nav?.userAgent || ''));
+}
+
+function _safeWalletDeepLink(value) {
+  const href = typeof value === 'string' ? value.trim() : '';
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(href);
+  if (!match) return '';
+  const protocol = match[1].toLowerCase();
+  if (['javascript', 'data', 'vbscript', 'file', 'blob'].includes(protocol)) return '';
+  return href;
+}
+
+function _walletConnectDeepLinkChoice(provider) {
+  let stored = null;
+  try {
+    const raw = globalThis.localStorage?.getItem?.(WC_DEEPLINK_CHOICE_KEY);
+    stored = raw ? JSON.parse(raw) : null;
+  } catch (_e) { /* use the connected wallet's session metadata below */ }
+
+  const redirect = provider?.session?.peer?.metadata?.redirect;
+  return _safeWalletDeepLink(stored?.href)
+    || _safeWalletDeepLink(redirect?.native)
+    || _safeWalletDeepLink(redirect?.universal);
+}
+
+function _formatWalletConnectRequestDeepLink(baseHref, requestId, sessionTopic) {
+  const base = String(baseHref).endsWith('/')
+    ? String(baseHref).slice(0, -1)
+    : String(baseHref);
+  return `${base}/wc?requestId=${encodeURIComponent(String(requestId))}`
+    + `&sessionTopic=${encodeURIComponent(String(sessionTopic))}`;
+}
+
+function _openWalletDeepLinkInPlace(href) {
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  if (!win || !_safeWalletDeepLink(href)) return false;
+
+  // Top-level navigation is not a popup and remains available after the
+  // original click's transient activation has expired.
+  try {
+    if (typeof win.location?.assign === 'function') {
+      win.location.assign(href);
+      return true;
+    }
+  } catch (_e) { /* `_self` fallback below */ }
+
+  try {
+    if (typeof win.open === 'function') {
+      return win.open(href, '_self', 'noreferrer noopener') !== null;
+    }
+  } catch (_e) { /* unsupported host/browser */ }
+  return false;
+}
+
+function _installWalletConnectAutomaticHandoff(provider) {
+  if (provider?.isWalletConnect !== true) return;
+  const client = provider?.signer?.client;
+  if (!client || typeof client.on !== 'function' || _wcAutomaticHandoffClients.has(client)) return;
+
+  const onRequestSent = (event) => {
+    if (!_isMobileWalletHandoffContext()) return;
+    const topic = String(event?.topic || '');
+    const currentTopic = String(provider?.session?.topic || '');
+    const method = String(event?.request?.method || '');
+    if (!topic || topic !== currentTopic || event?.id == null || !WC_APPROVAL_METHODS.has(method)) return;
+    const baseHref = _walletConnectDeepLinkChoice(provider);
+    if (!baseHref) return;
+    _openWalletDeepLinkInPlace(
+      _formatWalletConnectRequestDeepLink(baseHref, event.id, topic),
+    );
+  };
+
+  try {
+    client.on(WC_REQUEST_SENT_EVENT, onRequestSent);
+    _wcAutomaticHandoffClients.add(client);
+  } catch (_e) { /* older/nonstandard providers keep their existing behavior */ }
+}
+
 function _walletConnectSessionHasChain(provider, chainId) {
   const namespaces = provider?.session?.namespaces;
   if (!namespaces || typeof namespaces !== 'object') return false;
@@ -619,6 +727,7 @@ function attachListeners(browserProvider, rawProvider = null) {
   const eth = _rawFor(browserProvider, rawProvider);
   if (!eth || typeof eth.on !== 'function' || eth === browserProvider) return;
   _eip1193 = eth;
+  _installWalletConnectAutomaticHandoff(eth);
 
   eth.on('accountsChanged', async (accounts) => {
     abortAllInflight();

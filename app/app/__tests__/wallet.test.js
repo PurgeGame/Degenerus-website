@@ -25,14 +25,27 @@ import assert from 'node:assert/strict';
 const _events = [];                               // captured CustomEvents (dispatchEvent calls)
 const _docListeners = new Map();                  // bridge listeners installed at module init
 const _localStore = new Map();
+const _locationAssignCalls = [];
+const _windowOpenCalls = [];
 let _reloadCalled = false;
 
 globalThis.window = {
   addEventListener: () => {},
+  matchMedia: (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }),
   location: {
     get search() { return ''; },
     get href() { return 'http://localhost/'; },
+    assign: (...args) => { _locationAssignCalls.push(args); },
     reload: () => { _reloadCalled = true; },
+  },
+  open: (...args) => {
+    _windowOpenCalls.push(args);
+    return null;
   },
 };
 
@@ -208,6 +221,14 @@ beforeEach(() => {
   _storeUpdates.length = 0;   // drop initial-fire history from re-install
   _events.length = 0;
   _localStore.clear();
+  _locationAssignCalls.length = 0;
+  _windowOpenCalls.length = 0;
+  window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
   _reloadCalled = false;
   _discoverCalls = [];
   _discoverReturn = null;
@@ -219,6 +240,165 @@ beforeEach(() => {
 
 afterEach(() => {
   teardownStoreSubscribers();
+});
+
+// ===========================================================================
+// WalletConnect mobile approval handoff
+// ===========================================================================
+
+describe('WalletConnect mobile approval handoff', () => {
+  beforeEach(() => {
+    window.matchMedia = (query) => ({
+      matches: query === '(pointer:coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+  });
+
+  function makeClient() {
+    const listeners = new Map();
+    return {
+      on(event, fn) {
+        const set = listeners.get(event) || new Set();
+        set.add(fn);
+        listeners.set(event, set);
+      },
+      emit(event, payload) {
+        for (const fn of [...(listeners.get(event) || [])]) fn(payload);
+      },
+      listenerCount(event) { return listeners.get(event)?.size || 0; },
+    };
+  }
+
+  function attachWalletConnect(client, session = { topic: 'mobile-session' }) {
+    const raw = {
+      isWalletConnect: true,
+      session,
+      signer: { client },
+      on() {},
+      request: async () => null,
+    };
+    wallet._testAttachListeners({
+      provider: raw,
+      getNetwork: async () => ({ chainId: 84532n }),
+    }, raw);
+    return raw;
+  }
+
+  test('foregrounds MetaMask in the same tab when a transaction request is published', () => {
+    const client = makeClient();
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'https://metamask.app.link',
+      name: 'MetaMask',
+    }));
+    attachWalletConnect(client);
+
+    assert.equal(client.listenerCount('session_request_sent'), 1,
+      'connecting installs the WalletConnect request listener');
+    client.emit('session_request_sent', {
+      topic: 'mobile-session',
+      id: 2468,
+      request: { method: 'eth_sendTransaction' },
+    });
+
+    assert.deepEqual(_locationAssignCalls, [[
+      'https://metamask.app.link/wc?requestId=2468&sessionTopic=mobile-session',
+    ]]);
+    assert.equal(_windowOpenCalls.length, 0,
+      'same-tab navigation does not depend on a popup being allowed');
+  });
+
+  test('uses session metadata, ignores unrelated requests, and installs only once', () => {
+    const client = makeClient();
+    const session = {
+      topic: 'metadata-session',
+      peer: {
+        metadata: {
+          name: 'MetaMask',
+          redirect: { native: 'metamask://' },
+        },
+      },
+    };
+    const raw = attachWalletConnect(client, session);
+    wallet._testAttachListeners({
+      provider: raw,
+      getNetwork: async () => ({ chainId: 84532n }),
+    }, raw);
+    assert.equal(client.listenerCount('session_request_sent'), 1,
+      're-attaching the provider does not duplicate redirects');
+
+    client.emit('session_request_sent', {
+      topic: 'metadata-session',
+      id: 1,
+      request: { method: 'eth_chainId' },
+    });
+    client.emit('session_request_sent', {
+      topic: 'different-session',
+      id: 2,
+      request: { method: 'eth_sendTransaction' },
+    });
+    assert.equal(_locationAssignCalls.length, 0);
+
+    client.emit('session_request_sent', {
+      topic: 'metadata-session',
+      id: 3,
+      request: { method: 'eth_sendTransaction' },
+    });
+    assert.deepEqual(_locationAssignCalls, [[
+      'metamask://wc?requestId=3&sessionTopic=metadata-session',
+    ]]);
+  });
+
+  test('does not redirect injected wallets or unsafe stored links', () => {
+    const injectedClient = makeClient();
+    wallet._testAttachListeners({
+      provider: null,
+      getNetwork: async () => ({ chainId: 84532n }),
+    }, {
+      isWalletConnect: false,
+      signer: { client: injectedClient },
+      on() {},
+      request: async () => null,
+    });
+    assert.equal(injectedClient.listenerCount('session_request_sent'), 0);
+
+    const unsafeClient = makeClient();
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'javascript:alert(1)',
+      name: 'Bad link',
+    }));
+    attachWalletConnect(unsafeClient, { topic: 'unsafe-session' });
+    unsafeClient.emit('session_request_sent', {
+      topic: 'unsafe-session',
+      id: 4,
+      request: { method: 'eth_sendTransaction' },
+    });
+    assert.equal(_locationAssignCalls.length, 0);
+    assert.equal(_windowOpenCalls.length, 0);
+  });
+
+  test('does not pull a desktop WalletConnect user away from the dapp', () => {
+    window.matchMedia = (query) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+    const client = makeClient();
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'https://metamask.app.link',
+      name: 'MetaMask',
+    }));
+    attachWalletConnect(client, { topic: 'desktop-session' });
+    client.emit('session_request_sent', {
+      topic: 'desktop-session',
+      id: 5,
+      request: { method: 'eth_sendTransaction' },
+    });
+    assert.equal(_locationAssignCalls.length, 0);
+    assert.equal(_windowOpenCalls.length, 0);
+  });
 });
 
 // ===========================================================================
