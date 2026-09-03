@@ -40,6 +40,7 @@ function makeFakeContract(opts = {}) {
   const calls = {
     purchase: [],
     purchaseStatic: [],
+    purchaseEstimate: [],
     buyLootboxAndPresaleBox: [],
     buyLootboxAndPresaleBoxStatic: [],
     buyPresaleBox: [],
@@ -62,14 +63,22 @@ function makeFakeContract(opts = {}) {
     }
     return undefined;
   };
+  const purchase = Object.assign(
+    async (...args) => {
+      calls.purchase.push(args);
+      return makeFakeTx(makeFakeReceipt(opts.purchaseLogs));
+    },
+    { staticCall: staticCallStub('purchase') },
+  );
+  if (opts.purchaseGasEstimate != null) {
+    purchase.estimateGas = async (...args) => {
+      calls.purchaseEstimate.push(args);
+      if (opts.purchaseEstimateShouldRevert) throw opts.purchaseEstimateShouldRevert;
+      return BigInt(opts.purchaseGasEstimate);
+    };
+  }
   const c = {
-    purchase: Object.assign(
-      async (...args) => {
-        calls.purchase.push(args);
-        return makeFakeTx(makeFakeReceipt(opts.purchaseLogs));
-      },
-      { staticCall: staticCallStub('purchase') }
-    ),
+    purchase,
     buyLootboxAndPresaleBox: Object.assign(
       async (...args) => {
         calls.buyLootboxAndPresaleBox.push(args);
@@ -125,9 +134,9 @@ function makeFakeContract(opts = {}) {
   return c;
 }
 
-function makeFakeProvider(connectedAddr) {
+function makeFakeProvider(connectedAddr, opts = {}) {
   let signerReads = 0;
-  return {
+  const provider = {
     // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => {
@@ -136,6 +145,13 @@ function makeFakeProvider(connectedAddr) {
     },
     getSignerReadCount: () => signerReads,
   };
+  if (opts.balanceWei != null) {
+    provider.getBalance = async () => BigInt(opts.balanceWei);
+  }
+  if (opts.maxFeePerGas != null) {
+    provider.getFeeData = async () => ({ maxFeePerGas: BigInt(opts.maxFeePerGas) });
+  }
+  return provider;
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
@@ -534,6 +550,41 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       'DirectEth keeps claimable disabled while the contract consumes AFKing credit');
     assert.equal(args[6].value, total - funding);
     assert.equal(result.payment.afkingUsedWei, funding);
+  });
+
+  test('AFKing-funded purchase with some wallet ETH but too little for gas stops before the popup', async () => {
+    const total = lootboxMod.LOOTBOX_MIN_WEI;
+    lastFakeContract = makeFakeContract({
+      afkingRaw: total,
+      purchaseGasEstimate: 50_000n,
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, {
+      balanceWei: 5_000n,
+      maxFeePerGas: 1n,
+    }));
+
+    await assert.rejects(
+      lootboxMod.purchaseEth({
+        ticketQuantity: 0,
+        lootboxQuantity: 1,
+        preferClaimable: false,
+        useAfking: true,
+      }),
+      (error) => {
+        assert.equal(error.code, 'InsufficientWalletFunds');
+        assert.match(error.userMessage, /AFKing funding.*network gas/i);
+        assert.equal(error.balanceWei, 5_000n, 'the wallet was low, not literally empty');
+        assert.ok(error.requiredWei > error.balanceWei);
+        return true;
+      },
+    );
+    assert.equal(lastFakeContract._calls.purchaseStatic.length, 1,
+      'the contract purchase itself remains valid with AFKing funding');
+    assert.equal(lastFakeContract._calls.purchaseEstimate.length, 1,
+      'the exact purchase supplies the gas budget');
+    assert.equal(lastFakeContract._calls.purchase.length, 0,
+      'a doomed wallet confirmation is never opened');
   });
 
   // Audit c19a1088 funds the foil leg through the canonical spend waterfall, so AFKing

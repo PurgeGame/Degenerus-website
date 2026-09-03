@@ -949,7 +949,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-desk-bonus-slot
 /* BUY IN: the machined brass counter key. */
 body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(255, 224, 158, 0.78);
   border-radius: 5px;
   background:
@@ -966,22 +966,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
   transition: border-color 0.15s ease, filter 0.15s ease, transform 0.15s ease;
 }
 
-/* Quiet ready cue: the key's lamp breathes very slowly when a buy can go. */
-body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:not(:disabled) {
-  animation: dec-desk-key-ready 4.2s ease-in-out infinite;
-}
-
-@keyframes dec-desk-key-ready {
-  0%, 100% { box-shadow:
-    inset 0 1px 0 rgba(255, 248, 223, 0.58),
-    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
-    0 5px 15px rgba(196, 126, 25, 0.2); }
-  50% { box-shadow:
-    inset 0 1px 0 rgba(255, 248, 223, 0.58),
-    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
-    0 5px 19px rgba(216, 143, 35, 0.31); }
-}
-
 body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]::before {
   position: absolute;
   inset: 3px;
@@ -990,6 +974,33 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]::
   box-shadow: inset 0 1px 0 rgba(255, 248, 220, 0.16);
   content: '';
   pointer-events: none;
+}
+
+/* Once the order has a real total, a separate outline breathes around the key.
+   Opacity and light change without scaling the ring, so the edges stay crisp. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write][data-buy-ready="true"]:not(:disabled)::after {
+  position: absolute;
+  inset: -3px;
+  border: 1px solid rgba(255, 226, 164, 0.52);
+  border-radius: 7px;
+  box-shadow: 0 0 5px rgba(232, 169, 62, 0.2);
+  content: '';
+  opacity: 0.38;
+  pointer-events: none;
+  animation: dec-buy-ready-outline 2.8s ease-in-out infinite;
+}
+
+@keyframes dec-buy-ready-outline {
+  0%, 100% {
+    border-color: rgba(255, 226, 164, 0.42);
+    box-shadow: 0 0 4px rgba(232, 169, 62, 0.16);
+    opacity: 0.38;
+  }
+  50% {
+    border-color: rgba(255, 239, 198, 0.78);
+    box-shadow: 0 0 10px rgba(240, 181, 72, 0.38);
+    opacity: 0.78;
+  }
 }
 
 body.layout-basic .app-decimator-panel .dec-buy-cta__action,
@@ -1398,8 +1409,9 @@ body.layout-basic .app-decimator-panel .dec-foil {
     transition: none;
   }
 
-  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:not(:disabled) {
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write][data-buy-ready="true"]:not(:disabled)::after {
     animation: none;
+    opacity: 0.55;
   }
 }
 

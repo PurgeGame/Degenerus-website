@@ -1242,6 +1242,11 @@ app-craps-table {
   --craps-dice-lock-glow: rgba(60, 255, 122, 0.92);
 }
 
+.craps-dice-bay__lock-readout[data-roll-event="point-hit"] {
+  --craps-dice-lock-color: #6ef08c;
+  --craps-dice-lock-glow: rgba(60, 255, 122, 0.92);
+}
+
 .craps-dice-bay__lock-readout[data-seven-outcome="crap-out"] {
   --craps-dice-lock-color: #ff626b;
   --craps-dice-lock-glow: rgba(255, 50, 61, 0.92);
@@ -1266,13 +1271,9 @@ app-craps-table {
   font-weight: 1000;
   line-height: 1;
   text-align: center;
-  text-shadow:
-    -2px -2px 0 rgba(24, 15, 3, 0.88),
-    2px -2px 0 rgba(24, 15, 3, 0.88),
-    -2px 2px 0 rgba(24, 15, 3, 0.88),
-    2px 2px 0 rgba(24, 15, 3, 0.88),
-    0 0 0.65rem var(--craps-dice-lock-glow);
+  text-shadow: none;
   transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
   opacity: 0;
 }
 
@@ -1282,10 +1283,17 @@ app-craps-table {
   font-weight: 1000;
   letter-spacing: 0.13em;
   line-height: 1;
+  text-shadow: 0 1px 2px rgba(15, 9, 2, 0.96), 0 0 0.34rem var(--craps-dice-lock-glow);
 }
 
 .craps-dice-bay__lock-label[hidden] { display: none; }
-.craps-dice-bay__lock-number > span { line-height: 0.9; white-space: nowrap; }
+.craps-dice-bay__lock-number > span {
+  line-height: 0.9;
+  white-space: nowrap;
+  -webkit-text-stroke: 0.055em rgba(24, 15, 3, 0.92);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 2px rgba(15, 9, 2, 0.92), 0 0 0.65rem var(--craps-dice-lock-glow);
+}
 .craps-dice-bay__lock-readout[data-roll-event="seven-out"] .craps-dice-bay__lock-number {
   font-size: clamp(1.28rem, 2.75vw, 2rem);
 }
@@ -4259,10 +4267,10 @@ app-craps-table {
 }
 
 @keyframes craps-dice-number-pop {
-  0% { opacity: 0; transform: translate(-50%, -38%) scale(0.5); filter: blur(2px); }
-  24% { opacity: 1; transform: translate(-50%, -58%) scale(1.24); filter: none; }
-  78% { opacity: 1; transform: translate(-50%, -58%) scale(1); filter: none; }
-  100% { opacity: 0; transform: translate(-50%, -82%) scale(0.9); filter: none; }
+  0% { opacity: 0; transform: translate(-50%, -44%) scale(0.78); }
+  20% { opacity: 1; transform: translate(-50%, -58%) scale(1.06); }
+  34%, 78% { opacity: 1; transform: translate(-50%, -58%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -76%) scale(0.96); }
 }
 
 @keyframes craps-winner-chip-arrive {
@@ -5893,5 +5901,89 @@ app-craps-table {
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-winner-payoff__copy > strong {
     gap: 0.12rem;
     font-size: 1rem;
+  }
+}
+
+/* Finished battles become a compact result list. The winner keeps the rack
+   that explains the winning run; everyone else trades the now-empty trough
+   for a full-width identity and a clearer LAST result directly below it. */
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"]) .craps-battle-board__rows {
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack[data-battle-winner="true"] {
+  min-height: 2.7rem;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) {
+  --craps-finished-last-indent: 3.12rem;
+  min-height: 2.2rem;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-areas:
+    "identity amount"
+    "last amount";
+  grid-template-rows: auto auto;
+  gap: 0.05rem 0.35rem;
+  padding: 0.14rem 1.34rem 0.14rem 0.2rem;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__well {
+  display: none;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__amount {
+  height: auto;
+  align-self: center;
+  padding: 0;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  align-self: start;
+  justify-self: stretch;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.22rem;
+  margin-left: var(--craps-finished-last-indent);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last small {
+  font-size: 0.28rem;
+  letter-spacing: 0.08em;
+}
+
+.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last strong {
+  overflow: visible;
+  font-size: clamp(0.44rem, 1vw, 0.54rem);
+  text-align: left;
+  text-overflow: clip;
+}
+
+@media (max-width: 860px) {
+  .craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+    .craps-battle-rack:not([data-battle-winner="true"]) {
+    --craps-finished-last-indent: 2.06rem;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .craps-table-rail:has(.craps-run-rail[data-phase="complete"])
+    .craps-battle-rack:not([data-battle-winner="true"]) {
+    --craps-finished-last-indent: 1.56rem;
   }
 }

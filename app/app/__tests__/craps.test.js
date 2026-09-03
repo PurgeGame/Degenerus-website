@@ -6,6 +6,7 @@ import * as contracts from '../contracts.js';
 import { CHAIN, CONTRACTS } from '../chain-config.js';
 import * as craps from '../craps.js';
 import * as crapsResults from '../craps-results.js';
+import * as readProvider from '../read-provider.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
 
@@ -114,6 +115,7 @@ beforeEach(() => {
 
 afterEach(() => {
   craps.__resetCrapsContractFactoryForTest();
+  readProvider._resetSharedReadProviderForTests();
   contracts.clearProvider();
   store.__resetForTest();
 });
@@ -1298,7 +1300,7 @@ test('scheduled entries, amendments, future days, and upgrades use their distinc
     method: 'enterBonusBattle',
     contractArgs: [3, 0x1241111, 1],
   });
-  assert.deepEqual(contract._calls['static:enterBonusBattle'], [[3, 0x1241111, 1]]);
+  assert.deepEqual(contract._calls['static:enterBonusBattle'], [[3, 0x1241111, 1, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.enterBonusBattle, [[3, 0x1241111, 1]]);
 
   await craps.placeCrapsBonusEntry({
@@ -1306,7 +1308,7 @@ test('scheduled entries, amendments, future days, and upgrades use their distinc
     method: 'enterBonusDay',
     contractArgs: [0x1241111, 1],
   });
-  assert.deepEqual(contract._calls['static:enterBonusDay'], [[0x1241111, 1]]);
+  assert.deepEqual(contract._calls['static:enterBonusDay'], [[0x1241111, 1, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.enterBonusDay, [[0x1241111, 1]]);
 
   await craps.placeCrapsBonusEntry({
@@ -1314,7 +1316,7 @@ test('scheduled entries, amendments, future days, and upgrades use their distinc
     method: 'buyFutureCrapsDays',
     contractArgs: [43, 1, true, 0x1241111],
   });
-  assert.deepEqual(contract._calls['static:buyFutureCrapsDays'], [[43, 1, true, 0x1241111]]);
+  assert.deepEqual(contract._calls['static:buyFutureCrapsDays'], [[43, 1, true, 0x1241111, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.buyFutureCrapsDays, [[43, 1, true, 0x1241111]]);
 
   await craps.placeCrapsBonusEntry({
@@ -1322,16 +1324,57 @@ test('scheduled entries, amendments, future days, and upgrades use their distinc
     method: 'applyCrapsPasses',
     contractArgs: [44, 1, false, 0x1241111],
   });
-  assert.deepEqual(contract._calls['static:applyCrapsPasses'], [[44, 1, false, 0x1241111]]);
+  assert.deepEqual(contract._calls['static:applyCrapsPasses'], [[44, 1, false, 0x1241111, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.applyCrapsPasses, [[44, 1, false, 0x1241111]]);
 
   await craps.amendCrapsSlip({ betId: '6206227746803369984', contractChips: 0x1241111 });
-  assert.deepEqual(contract._calls['static:amendSlip'], [['6206227746803369984', 0x1241111]]);
+  assert.deepEqual(contract._calls['static:amendSlip'], [['6206227746803369984', 0x1241111, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.amendSlip, [['6206227746803369984', 0x1241111]]);
 
   await craps.upgradeCrapsDayWindows({ day: 42, periodMask: 0b0010101 });
-  assert.deepEqual(contract._calls['static:upgradeDayWindows'], [[42, 0b0010101]]);
+  assert.deepEqual(contract._calls['static:upgradeDayWindows'], [[42, 0b0010101, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.upgradeDayWindows, [[42, 0b0010101]]);
+});
+
+test('scheduled Craps preflight stays on the public reader before a browser-wallet send', async () => {
+  const walletRequests = [];
+  const browserProvider = new ethers.BrowserProvider({
+    request: async ({ method }) => {
+      walletRequests.push(method);
+      if (method === 'eth_chainId') return CHAIN.hexId;
+      if (method === 'eth_accounts') return [PLAYER];
+      throw new Error(`Unexpected wallet request: ${method}`);
+    },
+  }, 'any');
+  const publicReader = { transport: 'public' };
+  const publicContract = fakeContract();
+  const walletContract = fakeContract();
+  const runners = [];
+  contracts.setProvider(browserProvider);
+  readProvider._setSharedReadProviderForTests(publicReader);
+  craps.__setCrapsContractFactoryForTest((runner) => {
+    runners.push(runner);
+    return runner === publicReader ? publicContract : walletContract;
+  });
+
+  await craps.placeCrapsBonusEntry({
+    valid: true,
+    method: 'enterBonusBattle',
+    contractArgs: [3, 0x1241111, 1],
+  });
+
+  assert.equal(runners[0], publicReader,
+    'the simulation is composed on the shared public RPC, not the wallet transport');
+  assert.equal(runners.includes(publicReader), true);
+  assert.equal(walletRequests.includes('eth_call'), false,
+    'the browser wallet is not asked to service a read-only eth_call');
+  assert.equal(publicContract._calls['static:enterBonusBattle'].length, 1);
+  const simulationArgs = publicContract._calls['static:enterBonusBattle'][0];
+  assert.deepEqual(simulationArgs.slice(0, 3), [3, 0x1241111, 1]);
+  assert.equal(simulationArgs[3]?.from?.toLowerCase(), PLAYER,
+    'the public simulation preserves the connected wallet as msg.sender');
+  assert.deepEqual(walletContract._calls.enterBonusBattle, [[3, 0x1241111, 1]],
+    'only the actual transaction is composed with the fresh wallet signer');
 });
 
 test('receipt parsing decodes the packed slip echo the contract really emits', () => {

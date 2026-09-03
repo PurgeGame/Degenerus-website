@@ -1468,9 +1468,14 @@ export function crapsDiceCallout(frame = {}, { comeOut = false } = {}) {
   const total = Number.isInteger(numericTotal) && numericTotal >= 2 && numericTotal <= 12
     ? String(numericTotal)
     : '—';
+  const pointHit = frame?.pointMade === true
+    || /\bpoint\s+(?:4|5|6|8|9|10)\s+(?:made|hit)\b/i.test(String(frame?.label ?? ''));
   const event = crapsRollHistoryEvent(frame);
   if (event === 'seven-out') {
     return Object.freeze({ event, label: '', value: '7 OUT' });
+  }
+  if (pointHit) {
+    return Object.freeze({ event: 'point-hit', label: 'POINT', value: 'HIT' });
   }
   if (event === 'point-set'
     || (comeOut && CRAPS_POINT_NUMBERS.includes(numericTotal))) {
@@ -4063,6 +4068,7 @@ class AppCrapsTable extends HTMLElement {
                        role="listitem"
                        data-battle-key="${escapeHtml(entry.key)}"
                        data-battle-local="${String(entry.local)}"
+                       data-battle-winner="${String(entry.battleWinner === true)}"
                        data-battle-opponent-index="${entry.opponentIndex}"
                        data-on-felt="${String(onFelt)}"
                        data-state="${escapeHtml(entry.state)}"

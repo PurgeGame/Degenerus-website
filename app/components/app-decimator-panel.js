@@ -1319,7 +1319,8 @@ class AppDecimatorPanel extends HTMLElement {
             </span>
           </span>
           <!-- CF-15: data-write triggers Phase 58 view-mode disable manager. -->
-          <button type="button" class="dec-buy-cta" data-write data-bind="dec-buy-cta">
+          <button type="button" class="dec-buy-cta" data-write data-bind="dec-buy-cta"
+                  data-buy-ready="false">
             <span class="dec-buy-cta__action" data-bind="dec-buy-cta-action">CLICK TO ADD</span>
             <strong class="dec-buy-cta__amount" data-bind="dec-buy-cta-amount" hidden></strong>
           </button>
@@ -3266,7 +3267,7 @@ class AppDecimatorPanel extends HTMLElement {
     this.#updateTotalLabel();
   }
 
-  #setBuyLabel(action, amount = '') {
+  #setBuyLabel(action, amount = '', ready = false) {
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     const actionEl = this.querySelector('[data-bind="dec-buy-cta-action"]');
     const amountEl = this.querySelector('[data-bind="dec-buy-cta-amount"]');
@@ -3276,6 +3277,7 @@ class AppDecimatorPanel extends HTMLElement {
     actionEl.textContent = actionText;
     amountEl.textContent = amountText;
     amountEl.hidden = !amountText;
+    btn.setAttribute('data-buy-ready', String(Boolean(ready)));
     btn.setAttribute('aria-label', amountText ? `${actionText} ${amountText}` : actionText);
   }
 
@@ -3323,7 +3325,7 @@ class AppDecimatorPanel extends HTMLElement {
         ? `for ${ticketCount} ${tq === 1 ? 'ticket' : 'tickets'}`
         : 'for tickets';
       this.#setBoxOptionsBuyAmount('');
-      this.#setBuyLabel(burn ? `Burn ${burn}` : 'Burn FLIP', output);
+      this.#setBuyLabel(burn ? `Burn ${burn}` : 'Burn FLIP', output, tq > 0);
       this.#renderFlipCredit(null);
       return;
     }
@@ -3346,7 +3348,7 @@ class AppDecimatorPanel extends HTMLElement {
     }
     const action = totalWei > 0n ? 'BUY IN' : 'CLICK TO ADD';
     this.#setBoxOptionsBuyAmount(amount);
-    this.#setBuyLabel(action, amount);
+    this.#setBuyLabel(action, amount, totalWei > 0n);
     const recordBountyWei = purchaseRecordBountyWei({
       state: get('app.records'),
       tickets: tq,

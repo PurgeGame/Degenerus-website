@@ -33,6 +33,14 @@ describe('player-facing error boundary', () => {
     assert.ok(message.length <= 110);
   });
 
+  test('recognizes a nonzero wallet whose gas allowance is still too low', () => {
+    const message = compactUiError({
+      code: 'CALL_EXCEPTION',
+      shortMessage: 'gas required exceeds allowance (18422)',
+    });
+    assert.equal(message, "This wallet doesn't have enough ETH for the transaction and gas.");
+  });
+
   test('keeps controlled short messages but rejects an unsafe fallback', () => {
     assert.equal(
       compactUiError({ userMessage: 'That symbol was already claimed.' }),

@@ -521,14 +521,36 @@ export async function openCrapsReplayTable(table, {
   fetchImpl,
   loadProfiles = fetchProfiles,
   loadSettlementWord = readCrapsSettlementWord,
+  onReplayDegraded = null,
   ...openOptions
 } = {}) {
-  const artifacts = await loadCrapsReplay({
-    battleKey,
-    viewerBetId,
-    highRollerBetIds,
-    fetchImpl,
-  });
+  let artifacts;
+  let highRollerFallback = false;
+  try {
+    artifacts = await loadCrapsReplay({
+      battleKey,
+      viewerBetId,
+      highRollerBetIds,
+      fetchImpl,
+    });
+  } catch (error) {
+    // The side-lane roster is an enhancement over the viewer's complete main
+    // replay. One stale/missing High Roller seat shard must not turn a replay
+    // that already passed the launcher's base preload into "unavailable".
+    // Retry the exact base request; if that is unhealthy too, its error still
+    // escapes and the launcher retains the honest failure state.
+    if (!Array.isArray(highRollerBetIds) || highRollerBetIds.length === 0) throw error;
+    artifacts = await loadCrapsReplay({
+      battleKey,
+      viewerBetId,
+      highRollerBetIds: [],
+      fetchImpl,
+    });
+    highRollerFallback = true;
+    try {
+      if (typeof onReplayDegraded === 'function') onReplayDegraded(error);
+    } catch (_diagnosticError) { /* diagnostics cannot block a verified replay */ }
+  }
   if (!artifacts.ready) return artifacts;
   let mainModel = createCrapsReplayTableModel(artifacts);
   let profiles = null;
@@ -678,5 +700,5 @@ export async function openCrapsReplayTable(table, {
 
   const model = highModel ?? mainModel;
   openModel(model, { lane: highModel ? 'high' : 'main' });
-  return Object.freeze({ ...artifacts, model, mainModel, highModel });
+  return Object.freeze({ ...artifacts, model, mainModel, highModel, highRollerFallback });
 }

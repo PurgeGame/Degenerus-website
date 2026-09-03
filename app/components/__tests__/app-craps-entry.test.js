@@ -1287,6 +1287,39 @@ test('replay polling is one-second jittered, visibility-aware, and stops on term
     'the scheduler paces off the battle that has been waiting the least');
 });
 
+test('caught replay failures emit privacy-safe diagnostics from every open path', () => {
+  const rawAddress = '0xab12000000000000000000000000000000000000';
+  const rawBetId = '4537899042132549697537';
+  const diagnostic = crapsEntry.crapsReplayDiagnostic({
+    name: 'CrapsReplayValidationError',
+    path: `collection.players.${rawBetId}`,
+    message: `Craps replay ${rawBetId} for ${rawAddress} failed at https://example.invalid/private`,
+  }, 'pending-open');
+  assert.equal(diagnostic.kind, 'error');
+  assert.equal(diagnostic.data.src, 'craps-replay:pending-open');
+  assert.match(diagnostic.data.m, /CrapsReplayValidationError/);
+  assert.doesNotMatch(diagnostic.data.m, new RegExp(rawAddress, 'i'));
+  assert.doesNotMatch(diagnostic.data.m, new RegExp(rawBetId));
+  assert.doesNotMatch(diagnostic.data.m, /example\.invalid/);
+
+  const previousQueue = globalThis.__telemetryQ;
+  const queue = [];
+  globalThis.__telemetryQ = queue;
+  try {
+    crapsEntry.reportCrapsReplayFailure(new TypeError('Craps replay board is invalid'), 'winner-open');
+    assert.equal(queue.length, 1);
+    assert.equal(queue[0].data.src, 'craps-replay:winner-open');
+  } finally {
+    if (previousQueue === undefined) delete globalThis.__telemetryQ;
+    else globalThis.__telemetryQ = previousQueue;
+  }
+
+  assert.match(componentSource, /reportCrapsReplayFailure\(error, 'preload'\)/);
+  assert.match(componentSource, /reportCrapsReplayFailure\(error, 'winner-open'\)/);
+  assert.match(componentSource, /reportCrapsReplayFailure\(error, 'pending-open'\)/);
+  assert.match(componentSource, /onReplayDegraded: \(error\) => reportCrapsReplayFailure\(error, 'side-lane'\)/);
+});
+
 test('winner cells wear the linked Discord identity and never lose the address', () => {
   assert.match(componentSource, /from '\.\.\/app\/profiles\.js'/,
     'identity rides the shared profiles module, not a private fetch');

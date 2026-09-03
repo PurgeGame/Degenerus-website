@@ -30,3 +30,14 @@ test('the between-dice seven is green for a come-out win and red for crap-out', 
   assert.match(cssSource, /\[data-seven-outcome="crap-out"\][\s\S]*?--craps-dice-lock-color:\s*#ff626b/s);
   assert.match(cssSource, /\.craps-dice-bay__lock-number[\s\S]*?color:\s*var\(--craps-dice-lock-color\)/s);
 });
+
+test('the expanding number uses one clean stroke instead of four separating shadows', () => {
+  assert.match(cssSource,
+    /\.craps-dice-bay__lock-number > span\s*\{[^}]*-webkit-text-stroke:\s*0\.055em[^}]*paint-order:\s*stroke fill/s);
+  assert.doesNotMatch(cssSource,
+    /\.craps-dice-bay__lock-number\s*\{[^}]*-2px -2px 0/s,
+    'the wrapper no longer scales a four-corner faux outline');
+  assert.match(cssSource,
+    /@keyframes craps-dice-number-pop\s*\{[\s\S]*?scale\(0\.78\)[\s\S]*?scale\(1\.06\)[\s\S]*?34%, 78%[^}]*scale\(1\)/s,
+    'the pop retains a small snap without the old 0.5x to 1.24x outline distortion');
+});

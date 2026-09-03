@@ -3,7 +3,7 @@
 // UI boundary that prevents raw provider/RPC blobs from taking over a widget.
 
 const RAW_PROVIDER_DETAIL = /(?:CALL_EXCEPTION|UNKNOWN_ERROR|execution reverted|missing revert data|could not coalesce|estimateGas|json-rpc|request body|ethers(?:\.js)?|\{\s*"(?:code|error|method)"|0x[0-9a-f]{40,})/i;
-const INSUFFICIENT_FUNDS_DETAIL = /(?:\bINSUFFICIENT_FUNDS\b|\bOutOfFunds\b|insufficient (?:funds|balance)(?: for| to cover)|funds for gas \* price \+ value|funds required exceeds allowance|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
+const INSUFFICIENT_FUNDS_DETAIL = /(?:\bINSUFFICIENT_FUNDS\b|\bOutOfFunds\b|insufficient (?:funds|balance)(?: for| to cover)|funds for gas \* price \+ value|(?:funds|gas) required exceeds allowance|doesn['’]t have enough funds|not enough funds to (?:send|cover))/i;
 const DEFAULT_TX_ERROR = 'Transaction did not go through. Try again.';
 
 function _oneLine(value) {

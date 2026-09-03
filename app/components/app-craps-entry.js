@@ -185,6 +185,44 @@ export function crapsReplayFailureStatus(error) {
   return sealedDataFailure ? 'build-unavailable' : 'retrying';
 }
 
+function sanitizedReplayDiagnosticValue(value) {
+  return String(value ?? '')
+    .replace(/https?:\/\/[^\s)]+/gi, '[url]')
+    .replace(/\b0x[0-9a-f]{8,}\b/gi, '[hex]')
+    .replace(/\b[0-9]{8,}\b/g, '[id]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .trim();
+}
+
+/** Describe a swallowed replay exception without retaining wallet, bet, battle, or URL data. */
+export function crapsReplayDiagnostic(error, stage = 'open') {
+  let name = '';
+  let path = '';
+  let message = '';
+  try { name = sanitizedReplayDiagnosticValue(error?.name); } catch (_error) { /* hostile error */ }
+  try { path = sanitizedReplayDiagnosticValue(error?.path); } catch (_error) { /* hostile error */ }
+  try { message = sanitizedReplayDiagnosticValue(error?.message); } catch (_error) { /* hostile error */ }
+  const safeStage = String(stage ?? 'open').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 40) || 'open';
+  return {
+    kind: 'error',
+    t: Date.now(),
+    data: {
+      m: [name || 'Error', path, message].filter(Boolean).join(' | ').slice(0, 300),
+      src: `craps-replay:${safeStage}`,
+    },
+  };
+}
+
+/** Queue caught replay failures for the same best-effort telemetry path as global errors. */
+export function reportCrapsReplayFailure(error, stage = 'open') {
+  const diagnostic = crapsReplayDiagnostic(error, stage);
+  try {
+    const queue = globalThis.__telemetryQ;
+    if (queue && typeof queue.push === 'function') queue.push(diagnostic);
+  } catch (_error) { /* diagnostics can never affect replay control flow */ }
+  return diagnostic;
+}
+
 export function crapsReplayLoaderState(artifacts) {
   if (artifacts?.ready === true) {
     // The loader already retains immutable JSON in its bounded cache. Keep the
@@ -2377,6 +2415,7 @@ export class AppCrapsEntry extends HTMLElement {
           });
           return { identity, state: { ...crapsReplayLoaderState(artifacts), attempts } };
         } catch (error) {
+          reportCrapsReplayFailure(error, 'preload');
           const failureStatus = crapsReplayFailureStatus(error);
           return {
             identity,
@@ -2423,6 +2462,7 @@ export class AppCrapsEntry extends HTMLElement {
       const result = await openCrapsReplayTable(table, {
         ...replay,
         fetchImpl: crapsReplayFetch,
+        onReplayDegraded: (error) => reportCrapsReplayFailure(error, 'side-lane'),
       });
       if (!result.ready) {
         this.#message = crapsReplayStatusCopy(crapsReplayLoaderState(result));
@@ -2431,6 +2471,7 @@ export class AppCrapsEntry extends HTMLElement {
       this.#message = '';
       return true;
     } catch (error) {
+      reportCrapsReplayFailure(error, 'winner-open');
       this.#message = crapsReplayFailureStatus(error) === 'build-unavailable'
         ? 'Replay unavailable for this build.'
         : 'Replay temporarily unavailable. Try again.';
@@ -2466,6 +2507,7 @@ export class AppCrapsEntry extends HTMLElement {
         highPayoutWei: replay.highPayoutWei,
         highWinningStop: replay.highWinningStop,
         highBankrollRider: replay.highBankrollRider,
+        onReplayDegraded: (error) => reportCrapsReplayFailure(error, 'side-lane'),
         onResolutionAcknowledged: () => {
           if (resolutionWasSeen(address, replay)) return;
           markResolutionSeen(address, replay);
@@ -2476,6 +2518,7 @@ export class AppCrapsEntry extends HTMLElement {
         },
       });
     } catch (error) {
+      reportCrapsReplayFailure(error, 'pending-open');
       this.#replayStates.set(resolutionIdentity(replay), {
         ready: false,
         status: crapsReplayFailureStatus(error),

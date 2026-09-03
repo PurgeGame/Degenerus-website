@@ -1124,6 +1124,8 @@ test('the transient seven distinguishes a come-out win from seven-out', async ()
   assert.equal(crapsSevenRollOutcome({ total: 6, label: 'POINT 6 MADE' }, { comeOut: false }), '');
   assert.deepEqual(crapsDiceCallout({ total: 6, label: 'POINT 6 SET' }, { comeOut: true }),
     { event: 'point-set', label: 'POINT', value: '6' });
+  assert.deepEqual(crapsDiceCallout({ total: 6, label: 'POINT 6 MADE' }, { comeOut: false }),
+    { event: 'point-hit', label: 'POINT', value: 'HIT' });
   assert.deepEqual(crapsDiceCallout({ total: 7, label: 'SEVEN OUT' }),
     { event: 'seven-out', label: '', value: '7 OUT' });
   assert.deepEqual(crapsDiceCallout({ total: 7, label: 'COME-OUT 7' }, { comeOut: true }),
@@ -1529,6 +1531,9 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /data-bind="craps-battle-rows"/);
   assert.match(COMPONENT_SRC, /class="craps-battle-rack__identity"[\s\S]*?class="craps-battle-rack__amount\$\{[\s\S]*?\$\{amountMarkup\}[\s\S]*?class="craps-battle-rack__last"[\s\S]*?class="craps-battle-rack__well"/s,
     'every featured rack prints its bankroll, latest personal result, and chip well as separate readings');
+  assert.match(COMPONENT_SRC,
+    /data-battle-winner="\$\{String\(entry\.battleWinner === true\)\}"/,
+    'finished rows identify the actual battle winner instead of inferring it from rank or balance');
   assert.doesNotMatch(COMPONENT_SRC, /class="craps-battle-rack__amount"[\s\S]{0,180}?<small>FLIP<\/small>/s,
     'rack balances do not repeat a visible FLIP unit label');
   assert.match(COMPONENT_SRC, /aria-label="Live top ten including you\. Tap up to two opponents to show their chips on the felt\.[^"]+"[\s\S]*?<strong>LIVE TOP 10<\/strong><small>TAP PLAYERS · MAX 2<\/small>/s,
@@ -1940,6 +1945,8 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'a seven-out pops red');
   assert.match(CSS_SRC, /data-roll-event="point-set"[\s\S]*?#76e6dc/s,
     'a newly established point gets its own teal callout');
+  assert.match(CSS_SRC, /data-roll-event="point-hit"[\s\S]*?#6ef08c/s,
+    'a made point announces POINT HIT in the winning green treatment');
   assert.match(CSS_SRC, /@keyframes craps-dice-number-pop/);
   assert.doesNotMatch(CSS_SRC, /craps-dice-flash|craps-dice-badge-lock|img\.is-locking/,
     'the resolved state does not add a third dice beat');
@@ -1970,6 +1977,15 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'the featured balance hugs the tray’s left edge');
   assert.match(CSS_SRC, /\.craps-battle-rack\s*\{[\s\S]*?grid-template-columns:\s*minmax\(6\.2rem, 0\.78fr\)\s*minmax\(2\.6rem, 0\.22fr\)\s*minmax\(2\.6rem, 0\.22fr\)\s*minmax\(4\.1rem, 1fr\);[\s\S]*?grid-template-areas:\s*"identity amount last well"/s,
     'desktop rows align identity, amount, latest result, and chip rack in dedicated columns');
+  assert.match(CSS_SRC,
+    /\.craps-table-rail:has\(\.craps-run-rail\[data-phase="complete"\]\)[\s\S]*?\.craps-battle-rack:not\(\[data-battle-winner="true"\]\)\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) max-content;[^}]*grid-template-areas:\s*"identity amount"\s*"last amount";/s,
+    'completed losers give the rack width back to their name and place LAST beneath it');
+  assert.match(CSS_SRC,
+    /\.craps-battle-rack:not\(\[data-battle-winner="true"\]\) \.craps-battle-rack__well\s*\{\s*display:\s*none;/s,
+    'completed losers no longer carry an empty visual rack');
+  assert.match(CSS_SRC,
+    /\.craps-battle-rack:not\(\[data-battle-winner="true"\]\) \.craps-battle-rack__last\s*\{[^}]*margin-left:\s*var\(--craps-finished-last-indent\);[^}]*border:\s*0;[^}]*background:\s*transparent;/s,
+    'the final LAST reading is a prominent identity line rather than another cramped box');
   assert.match(COMPONENT_SRC, /const avatar = `<b>\$\{escapeHtml\(entry\.initials\)\}<\/b>\$\{entry\.avatar[\s\S]*?<img src="\$\{escapeHtml\(entry\.avatar\)\}" alt="" decoding="async" referrerpolicy="no-referrer">`/s,
     'Discord portraits layer over a durable initials fallback');
   assert.match(COMPONENT_SRC, /querySelectorAll\('\.craps-battle-rack__avatar img'\)[\s\S]*?addEventListener\?\.\('error', \(\) => portrait\.remove\?\.\(\), \{ once: true \}\)/s,

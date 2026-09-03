@@ -6,6 +6,7 @@
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
+import { get } from './store.js';
 import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from './chain-config.js';
 // READ transport only. Everything money-in below still goes wallet -> contract,
 // and the lobby window keeps its eth_getLogs path as a fallback, so a dead API
@@ -2063,6 +2064,25 @@ function structuredRevert(error, fallback) {
   return wrapped;
 }
 
+/**
+ * Simulate a Craps write without sending an eth_call through the connected
+ * browser wallet. WalletConnect relays can leave that permissionless request
+ * waiting in the wallet app, so the real transaction request never follows.
+ * The public RPC still receives the connected account as `from`, preserving
+ * every msg.sender-dependent allowance, balance, ownership, and entry check.
+ */
+async function requireCrapsWritePreflight(method, args, fallback) {
+  const sender = String(get('connected.address') ?? '');
+  const reader = readerProvider();
+  if (!reader || !ethers.isAddress(sender)) return;
+  const simulation = await requireStaticCall(
+    buildContract(reader),
+    method,
+    [...args, { from: sender }],
+  );
+  if (!simulation.ok) throw structuredRevert(simulation.error, fallback);
+}
+
 export function __setCrapsContractFactoryForTest(factory, address = TEST_ADDRESS) {
   _contractFactory = factory;
   _addressOverride = address;
@@ -2165,12 +2185,7 @@ export async function placeCrapsBonusEntry(wager, { onSubmitted } = {}) {
   const expectedArgs = method === 'enterBonusDay' ? 2 : method === 'enterBonusBattle' ? 3 : 4;
   if (args.length !== expectedArgs) throw new Error('The scheduled craps entry has the wrong call shape.');
 
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (signer) {
-    const simulation = await requireStaticCall(buildContract(signer), method, args, signer);
-    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps entry was rejected.');
-  }
+  await requireCrapsWritePreflight(method, args, 'Craps entry was rejected.');
   const receipt = await sendTx(
     (freshSigner) => buildContract(freshSigner)[method](...args),
     method === 'applyCrapsPasses'
@@ -2191,12 +2206,7 @@ export async function amendCrapsSlip({ betId, contractChips, onSubmitted } = {})
   if (id === 0n) throw new Error('Choose a Craps entry to amend.');
   if (chips > CRAPS_EVENT_CHIPS_MASK) throw new Error('The Craps board is not a packed uint32.');
   const args = [id.toString(), Number(chips)];
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (signer) {
-    const simulation = await requireStaticCall(buildContract(signer), 'amendSlip', args, signer);
-    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps amendment was rejected.');
-  }
+  await requireCrapsWritePreflight('amendSlip', args, 'Craps amendment was rejected.');
   const receipt = await sendTx(
     (freshSigner) => buildContract(freshSigner).amendSlip(...args),
     'Amend Craps entry',
@@ -2217,12 +2227,7 @@ export async function upgradeCrapsDayWindows({ day, periodMask, onSubmitted } = 
     throw new Error('Choose at least one open Craps battle to upgrade.');
   }
   const args = [entryDay, mask];
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (signer) {
-    const simulation = await requireStaticCall(buildContract(signer), 'upgradeDayWindows', args, signer);
-    if (!simulation.ok) throw structuredRevert(simulation.error, 'Craps upgrade was rejected.');
-  }
+  await requireCrapsWritePreflight('upgradeDayWindows', args, 'Craps upgrade was rejected.');
   const receipt = await sendTx(
     (freshSigner) => buildContract(freshSigner).upgradeDayWindows(...args),
     'Upgrade Craps day windows',

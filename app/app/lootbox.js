@@ -789,6 +789,117 @@ async function _purchaseFundingFor(
   );
 }
 
+function _purchaseWalletFundingError(payment, { balanceWei = null, requiredWei = null } = {}) {
+  let walletValueWei = 0n;
+  let afkingUsedWei = 0n;
+  let claimableUsedWei = 0n;
+  try { walletValueWei = BigInt(payment?.msgValueWei ?? 0n); } catch (_e) { /* keep zero */ }
+  try { afkingUsedWei = BigInt(payment?.afkingUsedWei ?? 0n); } catch (_e) { /* keep zero */ }
+  try { claimableUsedWei = BigInt(payment?.claimableUsedWei ?? 0n); } catch (_e) { /* keep zero */ }
+
+  const usesAfking = afkingUsedWei > 0n;
+  const usesClaimable = claimableUsedWei > 0n;
+  const internalLabel = usesAfking && usesClaimable
+    ? 'AFKing and claimable funds'
+    : usesAfking ? 'AFKing funding' : usesClaimable ? 'Claimable funds' : null;
+  const gasOnly = walletValueWei === 0n;
+  const userMessage = internalLabel
+    ? gasOnly
+      ? `With ${internalLabel} applied, your wallet still needs more ETH for network gas.`
+      : `With ${internalLabel} applied, your wallet needs more ETH for the rest of the purchase and network gas.`
+    : "This wallet doesn't have enough ETH for the transaction and gas.";
+  const error = new Error(userMessage);
+  error.name = 'PurchaseFundingError';
+  error.code = 'InsufficientWalletFunds';
+  error.userMessage = userMessage;
+  error.recoveryAction = 'Add ETH to the connected wallet and try again.';
+  error.balanceWei = balanceWei;
+  error.requiredWei = requiredWei;
+  return error;
+}
+
+async function _purchaseWalletBalance(provider, signer) {
+  if (typeof provider?.getBalance !== 'function' || typeof signer?.getAddress !== 'function') {
+    return null;
+  }
+  let address;
+  try { address = await signer.getAddress(); }
+  catch (_e) { return null; }
+  try {
+    return BigInt(await provider.getBalance(address, 'pending'));
+  } catch (_pendingError) {
+    try { return BigInt(await provider.getBalance(address)); }
+    catch (_latestError) { return null; }
+  }
+}
+
+/**
+ * Internal protocol balances can pay purchase value, but never the connected
+ * wallet's network fee. Check the exact value shortfall first, then (after the
+ * authoritative static call) compare a padded gas estimate with the live
+ * native balance. Capability/read failures degrade to the wallet's normal
+ * send path; a known shortage fails before opening a doomed confirmation.
+ */
+async function _assertPurchaseWalletBudget({
+  provider,
+  signer,
+  contract,
+  method,
+  callArgs,
+  payment,
+  balanceWei,
+  includeGas = false,
+}) {
+  const internalFundingWei = BigInt(payment?.claimableUsedWei ?? 0n)
+    + BigInt(payment?.afkingUsedWei ?? 0n);
+  if (internalFundingWei <= 0n || balanceWei == null) return;
+
+  const walletValueWei = BigInt(payment?.msgValueWei ?? 0n);
+  // Equality is also unaffordable: it leaves no native ETH for a non-zero fee.
+  if (balanceWei <= walletValueWei) {
+    throw _purchaseWalletFundingError(payment, {
+      balanceWei,
+      requiredWei: walletValueWei + 1n,
+    });
+  }
+  if (!includeGas
+    || typeof contract?.[method]?.estimateGas !== 'function'
+    || typeof provider?.getFeeData !== 'function') return;
+
+  const [estimateResult, feeResult] = await Promise.allSettled([
+    contract[method].estimateGas(...callArgs),
+    provider.getFeeData(),
+  ]);
+  if (feeResult.status === 'rejected') return;
+
+  let feePerGas;
+  try {
+    feePerGas = BigInt(
+      feeResult.value?.maxFeePerGas ?? feeResult.value?.gasPrice ?? 0n,
+    );
+  } catch (_e) {
+    return;
+  }
+  if (feePerGas <= 0n) return;
+  if (estimateResult.status === 'rejected') {
+    if (decodeRevertReason(estimateResult.reason).code === 'InsufficientWalletFunds'
+      || balanceWei < walletValueWei + 21_000n * feePerGas) {
+      throw _purchaseWalletFundingError(payment, { balanceWei });
+    }
+    return;
+  }
+
+  let estimatedGas;
+  try { estimatedGas = BigInt(estimateResult.value ?? 0n); }
+  catch (_e) { return; }
+  if (estimatedGas <= 0n) return;
+  const requiredWei = walletValueWei
+    + gasEstimateWithHeadroom(estimatedGas) * feePerGas;
+  if (balanceWei < requiredWei) {
+    throw _purchaseWalletFundingError(payment, { balanceWei, requiredWei });
+  }
+}
+
 /**
  * @param {{ticketQuantity: number, boxOrder?: bigint, boxSelection?: object,
  *          boxCostWei?: bigint, lootboxQuantity?: number, lootBoxAmountWei?: bigint,
@@ -897,6 +1008,15 @@ export async function purchaseEth(args) {
     },
   );
 
+  // AFKing/claimable balances can cover the protocol value while the native
+  // wallet is still too low to submit the transaction. Read the signer rather
+  // than the beneficiary because an approved operator pays their own gas.
+  const usesInternalFunding = BigInt(payment.claimableUsedWei ?? 0n) > 0n
+    || BigInt(payment.afkingUsedWei ?? 0n) > 0n;
+  const walletBalanceWei = signer && usesInternalFunding
+    ? await _purchaseWalletBalance(provider, signer)
+    : null;
+
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
   // Trailing overrides object rides through staticCall(...args) so the sim
   // carries the same msg.value as the real tx (value-accurate pre-flight).
@@ -908,6 +1028,10 @@ export async function purchaseEth(args) {
         presaleBoxAmountWei, { value: payment.msgValueWei }]
       : [buyer, entryQuantityScaled, boxOrder, affiliateCode, payment.payKind, foil,
         { value: payment.msgValueWei }];
+    await _assertPurchaseWalletBudget({
+      provider, signer, contract: signerContract, method, callArgs, payment,
+      balanceWei: walletBalanceWei,
+    });
     const sim = await requireStaticCall(
       signerContract,
       method,
@@ -919,6 +1043,11 @@ export async function purchaseEth(args) {
         ? _structuredPresaleRevertError(sim.error, `static-call ${method}`)
         : _structuredRevertError(sim.error, `static-call ${method}`);
     }
+    await _assertPurchaseWalletBudget({
+      provider, signer, contract: signerContract, method, callArgs, payment,
+      balanceWei: walletBalanceWei,
+      includeGas: true,
+    });
   }
 
   // Phase 58 chokepoint — closure form mandatory.

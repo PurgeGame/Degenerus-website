@@ -532,6 +532,51 @@ test('a contested High Roller replay runs its exact side field before the main b
   __resetCrapsReplayLoaderForTest();
 });
 
+test('a missing optional High Roller shard falls back to the complete main replay', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const { existing: viewer, promoted: rival } = contestedHighRollerFixture();
+  const viewerShardIndex = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const rivalShardIndex = crapsReplayShardIndex(rival.seat, MANIFEST.field.shardSize);
+  const bodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[viewerShardIndex], SIM_CRAPS_REPLAY_SHARDS[viewerShardIndex]],
+  ]);
+  const opened = [];
+  const degraded = [];
+
+  const loaded = await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
+    viewerBetId: viewer.betId,
+    highRollerBetIds: [viewer.betId, rival.betId],
+    highRollerEntrants: 2,
+    highWinnerBetId: rival.betId,
+    highWinner: rival.player,
+    highPayoutWei: (8_000n * 10n ** 18n).toString(),
+    highBankrollRider: false,
+    fetchImpl: async (path) => ({
+      ok: bodies.has(path),
+      status: bodies.has(path) ? 200 : 503,
+      json: async () => clone(bodies.get(path)),
+    }),
+    loadProfiles: async () => new Map(),
+    onReplayDegraded: (error) => degraded.push(error),
+  });
+
+  assert.equal(loaded.ready, true);
+  assert.equal(loaded.highRollerFallback, true);
+  assert.deepEqual(loaded.highRollers, []);
+  assert.equal(degraded.length, 1, 'the launcher can report the optional side-lane failure');
+  assert.match(degraded[0]?.message ?? '', /HTTP 503/);
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].replayLane, 'main',
+    'an unavailable side-lane shard cannot block the viewer\'s complete main replay');
+  assert.equal(Object.hasOwn(opened[0], 'onReplayDegraded'), false,
+    'diagnostic callbacks are adapter-only and never leak into the table model');
+  __resetCrapsReplayLoaderForTest();
+});
+
 test('shard lookup is exact at the 256-seat production boundary', () => {
   // The fixture uses a small shard size so several boundaries fit in a checked-in file. The
   // PRODUCTION size is 256, and seats 1 / 256 / 257 are the arithmetic that matters.

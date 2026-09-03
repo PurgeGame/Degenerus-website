@@ -730,6 +730,41 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
   });
 
+  test('Buy button pulses only while a priced order is ready', async () => {
+    const el = instantiate();
+    await settle(60);
+    const btn = el.querySelector('[data-bind="dec-buy-cta"]');
+    const tickets = el.querySelector('[name="dec-tickets"]');
+
+    assert.equal(btn.getAttribute('data-buy-ready'), 'false',
+      'the empty CLICK TO ADD state stays quiet');
+    tickets.value = '1';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(btn.getAttribute('data-buy-ready'), 'true',
+      'a quoted ticket order arms the ready outline');
+    tickets.value = '0';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(btn.getAttribute('data-buy-ready'), 'false',
+      'clearing the order removes the ready outline');
+
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-cta\[data-write\]\[data-buy-ready="true"\]:not\(:disabled\)::after\s*\{[^}]*inset:\s*-3px;[^}]*animation:\s*dec-buy-ready-outline 2\.8s ease-in-out infinite;/s,
+      'only an enabled, ready action receives the fixed-size glowing ring',
+    );
+    assert.doesNotMatch(
+      PURCHASE_DESK_CSS,
+      /\.dec-buy-cta\[data-write\]:not\(:disabled\)\s*\{[^}]*animation:/s,
+      'merely being enabled is not enough to pulse an empty action',
+    );
+    assert.match(
+      PURCHASE_DESK_CSS,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\[data-buy-ready="true"\]:not\(:disabled\)::after\s*\{[^}]*animation:\s*none;[^}]*opacity:\s*0\.55;/s,
+      'reduced-motion users keep a quiet static readiness outline',
+    );
+    el.disconnectedCallback();
+  });
+
   test('purchase header uses one accessible overview link with detailed follow-ons', () => {
     const el = instantiate();
     assert.match(el.innerHTML, /<h2 class="dec-purchase-heading">BUY IN<\/h2>/,
