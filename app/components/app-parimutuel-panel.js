@@ -1,11 +1,8 @@
-// /app/components/app-parimutuel-panel.js — the Growth side bet and Decimator entry.
-// only while there is something to do with them (user ask).
+// /app/components/app-parimutuel-panel.js — compact side-bet tools.
 //
-// Visibility rule — the panel hides itself unless at least one of:
-//   - the GROWTH book is open (jackpot phase; round = level),
-//   - the viewed player has an unclaimed payout on a recent round.
-// Nothing else on the page moves when it appears: it sits between the jackpot
-// hero and the primary duo, so an open window reads as an interruption.
+// The WWXRP Incinerator permanently owns the first lane. The second lane shows
+// Growth/Decimator whenever one is actionable, and otherwise becomes a LINK
+// donation control with a live FLIP reward quote.
 //
 // Reads: DegenerusParimutuel.marketState, three rounds back (the open round plus
 // two settled ones — the claim + result surface). The view returns `openRound`
@@ -20,6 +17,7 @@
 //   compact choices and the live book split appears once below them
 //   CLAIM                — published into the shared bottom action tray, then
 //                          claim over the selected round
+//   LINK DONATION        — owned by app-link-donation.js through donateLink
 //
 // T-58-18: every server- and chain-derived string lands via textContent.
 
@@ -56,6 +54,7 @@ import { registerComponentPoll } from '../app/component-poll.js';
 import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';
 import './app-wwxrp-burn.js';
+import './app-link-donation.js';
 
 const POLL_IDLE_MS = 30_000;
 const POLL_HOT_MS = 5_000;
@@ -665,6 +664,10 @@ class AppParimutuelPanel extends HTMLElement {
             <article class="pari-book" data-bind="pari-growth" hidden></article>
           </div>
         </div>
+        <div class="pari-bet-container pari-bet-container--link"
+             data-bind="pari-link-container">
+          <app-link-donation></app-link-donation>
+        </div>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
       </section>
     `;
@@ -675,11 +678,13 @@ class AppParimutuelPanel extends HTMLElement {
     this.#renderDecimator();
     const books = this.querySelector('[data-bind="pari-books"]');
     const growthContainer = this.querySelector('[data-bind="pari-growth-container"]');
+    const linkContainer = this.querySelector('[data-bind="pari-link-container"]');
     const growth = this.querySelector('[data-bind="pari-growth"]');
     const decimator = this.querySelector('[data-bind="pari-decimator"]');
     const hasLiveBook = Boolean((growth && !growth.hidden) || (decimator && !decimator.hidden));
     if (books) books.hidden = !hasLiveBook;
     if (growthContainer) growthContainer.hidden = !hasLiveBook;
+    if (linkContainer) linkContainer.hidden = hasLiveBook;
     const panel = this.querySelector('.app-parimutuel');
     if (panel?.classList) {
       if (hasLiveBook) panel.classList.add('has-live-book');

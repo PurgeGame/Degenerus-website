@@ -156,15 +156,22 @@ class AppWwxrpBurn extends HTMLElement {
         <span class="pari-wwxrp__identity">
           <small>DAILY INCINERATOR</small>
           <strong>WWXRP</strong>
-          <strong class="pari-wwxrp__balance" data-bind="wwxrp-balance-wrap">
+        </span>
+        <span class="pari-wwxrp__balance" data-bind="wwxrp-balance-wrap">
+          <small>BALANCE</small>
+          <strong>
             <span data-bind="wwxrp-balance">—</span>
+            <em>WWXRP</em>
           </strong>
         </span>
         <span class="pari-wwxrp__amount">
-          <input type="text" data-bind="wwxrp-amount" inputmode="decimal"
-                 aria-label="WWXRP to burn">
-          <span>WWXRP</span>
-          <button type="button" data-bind="wwxrp-max">MAX</button>
+          <small>AMOUNT TO BURN</small>
+          <span class="pari-wwxrp__amount-control">
+            <input type="text" data-bind="wwxrp-amount" inputmode="decimal"
+                   autocomplete="off" spellcheck="false" aria-label="WWXRP to burn">
+            <span class="pari-wwxrp__unit">WWXRP</span>
+            <button type="button" data-bind="wwxrp-max">MAX</button>
+          </span>
         </span>
         <button type="button" class="pari-wwxrp__burn" data-write data-write-locked
                 data-write-lock-title="WWXRP balance is loading"

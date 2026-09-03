@@ -171,7 +171,7 @@ describe('index.html basic-mode skeleton', () => {
       'the DGNRS rail immediately follows Side Bets');
     assert.match(appCss,
       /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'Growth and the Incinerator split the review-width rail evenly');
+      'WWXRP and the Growth/LINK lane split the review-width rail evenly');
     assert.match(appCss, /@media \(max-width: 580px\)[\s\S]*?\.side-bets-rail \.app-parimutuel/s,
       'the rail stacks only on genuinely narrow phones');
     assert.doesNotMatch(html.slice(sideBets, sideBetsEnd), /SIDE BETS/,
@@ -397,6 +397,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/styles/records-rail.css',
       '/app/styles/baf-resolution.css',
       '/app/styles/baf-eve.css',
+      '/app/styles/link-donation.css',
     ]) {
       assert.match(html, new RegExp(`<link rel="stylesheet" data-href="${href.replaceAll('.', '\\.')}">`));
       assert.doesNotMatch(html, new RegExp(`<link rel="stylesheet" href="${href.replaceAll('.', '\\.')}"`));

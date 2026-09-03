@@ -1550,6 +1550,42 @@ function useWindowTransport(logs = []) {
   return provider;
 }
 
+test('an AlreadyInBonus repair reads only the affected player entry topics from chain', async () => {
+  const iface = windowInterface();
+  const slot = BigInt(WINDOW_DAY) * 8n;
+  const betId = (slot << 64n) | 77n;
+  const fixture = {
+    name: 'CrapsSlipPlaced',
+    args: { player: WINDOW_PLAYER, bet: (betId << 32n) | 0x1241111n },
+    blockNumber: WINDOW_HEAD - 2,
+    logIndex: 0,
+    txHash: `0x${'77'.padStart(64, '0')}`,
+  };
+  const provider = useWindowTransport([
+    crapsChainLog(iface, fixture, CONTRACTS.CRAPS),
+  ]);
+
+  const entries = await craps.readCrapsPlayerEntriesOnChain(WINDOW_DAY, WINDOW_PLAYER);
+
+  assert.equal(provider.calls.length, 1);
+  assert.equal(Number(provider.calls[0].fromBlock), WINDOW_HEAD - WINDOW_LOOKBACK);
+  assert.equal(Number(provider.calls[0].toBlock), WINDOW_HEAD);
+  assert.deepEqual(new Set(provider.calls[0].topics[0]), new Set([
+    iface.getEvent('CrapsSlipPlaced').topicHash,
+    iface.getEvent('CrapsDayReserved').topicHash,
+    iface.getEvent('CrapsDayWindowsUpgraded').topicHash,
+  ]));
+  assert.equal(
+    provider.calls[0].topics[1].toLowerCase(),
+    ethers.zeroPadValue(WINDOW_PLAYER, 32).toLowerCase(),
+    'the second topic pins the exact connected wallet',
+  );
+  assert.equal(entries.player, WINDOW_PLAYER);
+  assert.equal(entries.days[String(WINDOW_DAY)].betId, betId.toString());
+  assert.equal(entries.days[String(WINDOW_DAY)].chips, 0x1241111);
+  assert.equal(entries.windows.every((entry) => entry == null), true);
+});
+
 function windowApiKey() {
   return `craps-window-api:v1:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
     + `:${Number(CHAIN.deployBlock) || 0}`;

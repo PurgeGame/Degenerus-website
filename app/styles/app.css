@@ -13326,22 +13326,26 @@ body.layout-basic .pari-error[hidden] { display: none !important; }
 
 /* WWXRP owns one isolated side-bet container instead of participating in the
    Growth book's layout. The custom element fills only that container. */
-body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn {
-  display: block;
-  width: 100%;
-  min-width: 0;
-}
-body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden] {
-  display: none !important;
-}
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn,
+body.layout-basic .pari-bet-container--link > app-link-donation { display: block; width: 100%; min-width: 0; }
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden],
+body.layout-basic .pari-bet-container--link > app-link-donation[hidden] { display: none !important; }
 body.layout-basic .pari-wwxrp {
-  position: relative; box-sizing: border-box; display: grid;
-  min-width: 0; min-height: 3.15rem;
-  grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem;
-  grid-template-rows: 1fr 1fr; align-items: stretch;
-  gap: 0.08rem 0.38rem; padding: 0.2rem 0.22rem 0.2rem 0.3rem;
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  height: 100%;
+  min-width: 0;
+  min-height: 4.9rem;
+  grid-template-areas: "mark identity amount burn" "mark balance amount burn";
+  grid-template-columns: 3.8rem minmax(8.5rem, 0.78fr) minmax(9.5rem, 1.22fr) 6.9rem;
+  grid-template-rows: repeat(2, minmax(1.65rem, auto));
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.42rem 0.5rem;
   overflow: hidden;
-  border: 1px solid rgba(199, 91, 107, 0.54); border-radius: 10px;
+  border: 1px solid rgba(199, 91, 107, 0.54);
+  border-radius: 10px;
   background:
     linear-gradient(90deg, rgba(154, 26, 42, 0.13), transparent 28%, rgba(111, 12, 27, 0.1)),
     radial-gradient(circle at 2.15rem 50%, rgba(237, 14, 17, 0.18), transparent 4.5rem),
@@ -13354,90 +13358,141 @@ body.layout-basic .pari-wwxrp {
     0 0 20px rgba(183, 30, 47, 0.06);
 }
 body.layout-basic .pari-wwxrp__mark {
-  display: grid; width: 2.55rem; height: 2.55rem;
-  grid-column: 1; grid-row: 1 / -1;
-  align-self: center; place-items: center;
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  grid-area: mark;
+  place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(255, 122, 124, 0.46); border-radius: 50%; background: #18090c;
+  border: 1px solid rgba(255, 122, 124, 0.52);
+  border-radius: 50%;
+  background: #18090c;
   box-shadow:
     inset 0 1px rgba(255, 225, 218, 0.1),
     0 0 12px rgba(237, 14, 17, 0.24),
     0 2px 6px rgba(0, 0, 0, 0.55);
 }
-body.layout-basic .pari-wwxrp__mark img {
-  display: block; width: 2.35rem; height: 2.35rem; object-fit: contain;
-}
+body.layout-basic .pari-wwxrp__mark img { display: block; width: 3.2rem; height: 3.2rem; object-fit: contain; }
 body.layout-basic .pari-wwxrp__identity {
-  display: flex; min-width: 0;
-  grid-column: 2; grid-row: 1;
-  align-self: end; align-items: baseline;
-  gap: 0.3rem; padding-top: 0.15rem;
+  display: grid;
+  min-width: 0;
+  grid-area: identity;
+  align-content: center;
+  gap: 0.28rem;
 }
 body.layout-basic .pari-wwxrp__identity small {
   overflow: hidden;
-  color: rgba(254, 202, 202, 0.55);
-  font: 900 0.4rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.09em;
+  color: rgba(254, 202, 202, 0.62);
+  font: 900 0.48rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body.layout-basic .pari-wwxrp__identity strong {
+body.layout-basic .pari-wwxrp__identity > strong {
   overflow: hidden;
-  color: #fca5a5;
-  font: 950 0.64rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.08em;
+  color: #fecaca;
+  font: 950 0.94rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.12em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body.layout-basic .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance) { display: inline; }
 body.layout-basic .pari-wwxrp__balance {
-  display: block; min-width: 0;
-  margin-left: auto;
-  overflow: hidden;
-  color: #f87171;
-  font: 800 clamp(0.58rem, 1.1vw, 0.72rem)/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  display: grid;
+  min-width: 0;
+  grid-area: balance;
+  align-content: center;
+  gap: 0.14rem;
+  padding: 0;
+}
+body.layout-basic .pari-wwxrp__balance > small,
+body.layout-basic .pari-wwxrp__amount > small {
+  color: rgba(254, 202, 202, 0.48);
+  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+}
+body.layout-basic .pari-wwxrp__balance > strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.24rem;
+  color: #fda4af;
+  font: 850 0.96rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  text-align: right;
-  text-overflow: ellipsis;
   text-shadow: 0 0 8px rgba(239, 68, 68, 0.48);
   white-space: nowrap;
 }
-body.layout-basic .pari-wwxrp__amount {
-  box-sizing: border-box; display: grid; min-width: 0; height: 1.22rem;
-  grid-column: 2; grid-row: 2;
-  grid-template-columns: minmax(1.6rem, 1fr) auto auto;
-  align-self: start; align-items: center;
+body.layout-basic .pari-wwxrp__balance > strong > span {
+  min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(248, 113, 113, 0.34); border-radius: 5px;
-  background: rgba(20, 8, 12, 0.78);
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.42);
+  text-overflow: ellipsis;
+}
+body.layout-basic .pari-wwxrp__balance em {
+  color: rgba(254, 202, 202, 0.5);
+  font: 900 0.38rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+body.layout-basic .pari-wwxrp__amount { display: grid; width: min(100%, 9.25rem); min-width: 0; grid-area: amount; justify-self: end; gap: 0.26rem; }
+body.layout-basic .pari-wwxrp__amount-control {
+  box-sizing: border-box;
+  display: grid;
+  min-width: 0;
+  height: 2.08rem;
+  grid-template-columns: minmax(2.5rem, 1fr) auto 2.65rem;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(19, 9, 13, 0.94), rgba(7, 5, 7, 0.9));
+  box-shadow: inset 0 1px 7px rgba(0, 0, 0, 0.62), 0 1px rgba(255, 255, 255, 0.035);
+}
+body.layout-basic .pari-wwxrp__amount-control:focus-within {
+  border-color: rgba(254, 202, 202, 0.78);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.12), inset 0 1px 6px rgba(0, 0, 0, 0.56);
 }
 body.layout-basic .pari-wwxrp__amount input {
-  box-sizing: border-box; width: 100%; min-width: 0; min-height: 0; height: 100%;
-  padding: 0 0.28rem;
-  border: 0; outline: 0; background: transparent;
-  color: #fecaca;
-  font: 850 0.62rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 0.42rem;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff1f2;
+  font: 850 0.82rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  box-shadow: none;
+  appearance: textfield;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
 }
-body.layout-basic .pari-wwxrp__amount input:focus-visible {
-  box-shadow: inset 0 0 0 1px rgba(254, 202, 202, 0.7);
-}
+body.layout-basic .pari-wwxrp__amount input:focus,
+body.layout-basic .pari-wwxrp__amount input:focus-visible { border: 0; border-radius: 0; box-shadow: none; }
 body.layout-basic .pari-wwxrp__amount input[aria-invalid="true"] { color: #fca5a5; }
-body.layout-basic .pari-wwxrp__amount > span {
-  padding-right: 0.25rem;
-  color: rgba(254, 202, 202, 0.5);
-  font: 900 0.34rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.04em;
+body.layout-basic .pari-wwxrp__unit {
+  display: flex;
+  align-items: center;
+  padding-right: 0.42rem;
+  color: rgba(254, 202, 202, 0.46);
+  font: 900 0.38rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.055em;
 }
 body.layout-basic .pari-wwxrp__amount button {
-  box-sizing: border-box; min-height: 0; height: 100%;
-  padding: 0 0.3rem;
-  border: 0; border-left: 1px solid rgba(248, 113, 113, 0.24);
-  background: rgba(153, 27, 27, 0.22); color: #fca5a5;
-  font: 900 0.42rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.04em;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 0.36rem;
+  border: 0;
+  border-left: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(153, 27, 27, 0.24);
+  color: #fda4af;
+  font: 900 0.46rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.055em;
   cursor: pointer;
 }
 body.layout-basic .pari-wwxrp__amount button:hover:not(:disabled) {
@@ -13445,20 +13500,30 @@ body.layout-basic .pari-wwxrp__amount button:hover:not(:disabled) {
 }
 body.layout-basic .pari-wwxrp__amount button:disabled { opacity: 0.42; cursor: default; }
 body.layout-basic .pari-wwxrp__burn[data-write] {
-  position: relative; box-sizing: border-box; display: grid;
-  width: 5.3rem; min-width: 5.3rem; min-height: 2.55rem;
-  grid-column: 3; grid-row: 1 / -1;
-  grid-template-columns: 1.34rem auto;
-  align-self: center; align-items: center; justify-content: center;
-  gap: 0.42rem; margin: 0; padding: 0.32rem 0.72rem 0.32rem 0.48rem;
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  width: 6.9rem;
+  min-width: 6.9rem;
+  min-height: 3.8rem;
+  grid-area: burn;
+  grid-template-columns: 1.42rem auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.48rem;
+  margin: 0;
+  padding: 0.38rem 0.8rem 0.38rem 0.58rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 120, 111, 0.92); border-radius: 8px;
+  border: 1px solid rgba(255, 120, 111, 0.92);
+  border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(54, 0, 7, 0.6) 0 1.72rem, transparent 1.72rem),
     radial-gradient(circle at 62% -40%, rgba(255, 180, 142, 0.36), transparent 66%),
     linear-gradient(180deg, #d32c34 0%, #a1121d 48%, #700810 100%);
-  color: #fff7ec; font: 950 0.66rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.11em; text-align: center;
+  color: #fff7ec;
+  font: 950 0.72rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em;
+  text-align: center;
   box-shadow:
     inset 0 1px rgba(255, 239, 220, 0.22),
     inset 0 -2px rgba(58, 0, 5, 0.76),
@@ -13492,8 +13557,9 @@ body.layout-basic .pari-wwxrp__burn[data-write]:disabled {
 }
 body.layout-basic .pari-wwxrp__burn[data-write]:disabled::before { filter: grayscale(1) opacity(0.35); }
 body.layout-basic .pari-wwxrp__feedback {
-  grid-column: 1 / -1;
-  margin: 0.08rem 0 0;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  margin: 0;
   color: #86efac;
   font: 850 0.48rem/1.25 "Inter", system-ui, sans-serif;
   letter-spacing: 0.045em;
@@ -13501,6 +13567,59 @@ body.layout-basic .pari-wwxrp__feedback {
 }
 body.layout-basic .pari-wwxrp__feedback[data-state="error"] { color: #fca5a5; }
 body.layout-basic .pari-wwxrp__feedback[hidden] { display: none !important; }
+
+/* The Incinerator compacts against its own card width, not Growth's state. */
+@container (max-width: 38rem) {
+  body.layout-basic .pari-wwxrp {
+    min-height: 4.4rem;
+    grid-template-areas: "mark identity amount burn" "mark balance amount burn";
+    grid-template-columns: 2.95rem minmax(5.3rem, 0.78fr) minmax(7rem, 1.22fr) 5.3rem;
+    grid-template-rows: repeat(2, minmax(1.52rem, auto));
+    gap: 0.2rem 0.44rem;
+    padding: 0.3rem 0.36rem;
+  }
+  body.layout-basic .pari-wwxrp__mark { width: 2.75rem; height: 2.75rem; }
+  body.layout-basic .pari-wwxrp__mark img { width: 2.52rem; height: 2.52rem; }
+  body.layout-basic .pari-wwxrp__identity { gap: 0.12rem; }
+  body.layout-basic .pari-wwxrp__identity small { font-size: 0.4rem; }
+  body.layout-basic .pari-wwxrp__identity > strong { font-size: 0.68rem; }
+  body.layout-basic .pari-wwxrp__balance { gap: 0.12rem; padding: 0; }
+  body.layout-basic .pari-wwxrp__balance > small { font-size: 0.34rem; }
+  body.layout-basic .pari-wwxrp__balance > strong { font-size: 0.7rem; }
+  body.layout-basic .pari-wwxrp__balance em { font-size: 0.3rem; }
+  body.layout-basic .pari-wwxrp__amount { width: min(100%, 9.25rem); gap: 0.18rem; }
+  body.layout-basic .pari-wwxrp__amount > small { font-size: 0.34rem; }
+  body.layout-basic .pari-wwxrp__amount-control { height: 1.82rem; grid-template-columns: minmax(1.8rem, 1fr) auto 2.35rem; }
+  body.layout-basic .pari-wwxrp__amount input { padding-inline: 0.28rem; font-size: 0.62rem; }
+  body.layout-basic .pari-wwxrp__unit { padding-right: 0.25rem; font-size: 0.3rem; }
+  body.layout-basic .pari-wwxrp__amount button { padding-inline: 0.2rem; font-size: 0.38rem; }
+  body.layout-basic .pari-wwxrp__burn[data-write] {
+    width: 5.3rem;
+    min-width: 5.3rem;
+    min-height: 3.55rem;
+    grid-template-columns: 1.15rem auto;
+    gap: 0.34rem;
+    padding: 0.32rem 0.58rem 0.32rem 0.42rem;
+    font-size: 0.64rem;
+  }
+  body.layout-basic .pari-wwxrp__burn[data-write]::before { width: 1.15rem; height: 1.52rem; background-size: 0.88rem 1.2rem; }
+  body.layout-basic .pari-wwxrp__feedback { grid-column: 2 / 4; grid-row: 3; }
+}
+
+@container (max-width: 26rem) {
+  body.layout-basic .pari-wwxrp { grid-template-columns: 2.75rem minmax(5.4rem, 0.82fr) minmax(6.4rem, 1.18fr) 4.9rem; gap-inline: 0.34rem; }
+  body.layout-basic .pari-wwxrp__mark { width: 2.55rem; height: 2.55rem; }
+  body.layout-basic .pari-wwxrp__mark img { width: 2.35rem; height: 2.35rem; }
+  body.layout-basic .pari-wwxrp__burn[data-write] { width: 4.9rem; min-width: 4.9rem; }
+  body.layout-basic .pari-wwxrp__amount > small { display: none; }
+  body.layout-basic .pari-wwxrp__balance em { display: none; }
+}
+
+@container (max-width: 21rem) {
+  body.layout-basic .pari-wwxrp { grid-template-areas: "identity amount burn" "balance amount burn"; grid-template-columns: minmax(5rem, 0.82fr) minmax(6rem, 1.18fr) 4.5rem; }
+  body.layout-basic .pari-wwxrp__mark { display: none; }
+  body.layout-basic .pari-wwxrp__burn[data-write] { width: 4.5rem; min-width: 4.5rem; }
+}
 
 /* A reveal card whose face IS a ticket (deferred ticket reveals — the four
    symbols are known by the time this pops; see app/app/pack-watch.js). The
@@ -16196,7 +16315,7 @@ body.layout-basic .craps-entry__chip-stack { position: absolute; z-index: 4; top
 body.layout-basic .craps-entry__bet-spot.has-chip .craps-entry__chip-stack { display: grid; } body.layout-basic .craps-entry__chip-stack img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; } body.layout-basic .craps-entry__line-row .craps-entry__chip-stack { top: 52%; left: 68%; width: min(58%,1.48rem); height: 80%; } body.layout-basic .craps-entry__bet-spot.is-full { box-shadow: inset 0 0 0 1px rgba(255,213,110,.64),0 0 .45rem rgba(255,213,110,.14); }
 body.layout-basic .craps-entry__random-slot { border-color: rgba(125,211,252,.6); background: radial-gradient(circle at 70% 55%,rgba(56,189,248,.12),transparent 62%),rgba(5,46,54,.34) !important; box-shadow: inset 0 0 0 1px rgba(191,238,255,.12),0 0 .45rem rgba(56,189,248,.12); } body.layout-basic .craps-entry__line-row .craps-entry__random-slot .craps-entry__bet-label { z-index: 6; top: .07rem; left: .04rem; width: auto; padding: .035rem .045rem; border-radius: 2px; background: rgba(1,31,35,.76); color: #bfeeff; font-size: .38rem; letter-spacing: .01em; line-height: 1; text-align: left; transform: none; }
 body.layout-basic .craps-entry__random-stack { position: absolute; z-index: 4; top: 50%; right: 4%; display: flex; width: min(72%,2.35rem); height: 72%; align-items: flex-end; justify-content: flex-end; gap: 5%; transform: translateY(-50%); } body.layout-basic .craps-entry__random-stack img { display: block; width: 47%; height: 100%; flex: 0 0 47%; object-fit: contain; object-position: center bottom; } body.layout-basic .craps-entry__random-stack img[hidden] { display: none; }
-body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); } body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 17%; } body.layout-basic .craps-entry__col-wager { width: 16%; } body.layout-basic .craps-entry__col-operator { width: 3%; } body.layout-basic .craps-entry__col-battle { width: 17%; } body.layout-basic .craps-entry__col-action { width: 29%; } body.layout-basic .craps-entry__col-entrants { width: 18%; }
+body.layout-basic .craps-entry__lobby { position: relative; z-index: 1; min-width: 0; overflow: hidden; border: 1px solid rgba(248,113,113,.22); border-radius: 7px; background: rgba(13,17,23,.6); } body.layout-basic .craps-entry__message { position: relative; z-index: 2; margin: 0; padding: .24rem .38rem; border: 1px solid rgba(251,191,36,.35); border-radius: 4px; background: rgba(69,26,3,.86); color: #fde68a; font-size: .55rem; font-weight: 850; line-height: 1.25; text-align: center; } body.layout-basic .craps-entry__message[hidden] { display: none !important; } body.layout-basic .craps-entry__listing { width: 100%; border-collapse: collapse; table-layout: fixed; color: #f8fafc; } body.layout-basic .craps-entry__col-close { width: 17%; } body.layout-basic .craps-entry__col-wager { width: 16%; } body.layout-basic .craps-entry__col-operator { width: 3%; } body.layout-basic .craps-entry__col-battle { width: 17%; } body.layout-basic .craps-entry__col-action { width: 29%; } body.layout-basic .craps-entry__col-entrants { width: 18%; }
 body.layout-basic .craps-entry__listing thead { background: rgba(0,0,0,.3); } body.layout-basic .craps-entry__listing thead th { height: .72rem; padding: .07rem .06rem; overflow: hidden; color: #a8b2bf; font-size: .39rem; font-weight: 950; letter-spacing: .005em; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing thead .craps-entry__battle-key { color: #fde68a; } body.layout-basic .craps-entry__listing thead th:nth-child(5),body.layout-basic .craps-entry__listing thead th:last-child { text-align: center; } body.layout-basic .craps-entry__listing tbody tr { height: 1.42rem; transition: background 120ms ease,opacity 120ms ease; } body.layout-basic .craps-entry__listing tbody tr + tr { border-top: 1px solid rgba(148,163,184,.11); } body.layout-basic .craps-entry__listing tbody tr:nth-child(odd):not(.craps-entry__day-buy):not(.craps-entry__results-head) { background: rgba(255,255,255,.014); }
 body.layout-basic .craps-entry__listing tbody :is(th,td) { min-width: 0; padding: .1rem .11rem; overflow: hidden; font-size: .53rem; font-weight: 900; text-align: left; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th { padding-left: .18rem; } body.layout-basic .craps-entry__listing tbody th :is(strong,time,small) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__listing tbody th time { color: #e2e8f0; font: 950 .58rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; }
 body.layout-basic .craps-entry__money strong { display: block; min-width: 0; overflow: hidden; color: #f8fafc; font: 950 .56rem/1 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; } body.layout-basic .craps-entry__battle-fee strong { color: #fde68a; } body.layout-basic .craps-entry__operator { padding-inline: 0 !important; color: #788493 !important; font: 950 .46rem/1 "Inter",system-ui,sans-serif !important; text-align: center !important; } body.layout-basic .craps-entry__listing :is(th,td).craps-entry__wager { padding-right: .08rem; text-align: right !important; } body.layout-basic .craps-entry__entrants { color: #a7f3d0; font: 1000 .5rem/1 ui-monospace,SFMono-Regular,Menlo,monospace !important; font-variant-numeric: tabular-nums; text-align: center !important; }
@@ -16280,34 +16399,28 @@ body.layout-basic .side-bets-rail .pari-bet-container {
   isolation: isolate;
 }
 body.layout-basic .side-bets-rail .pari-bet-container[hidden] { display: none !important; }
-body.layout-basic .side-bets-rail .pari-bet-container--wwxrp { grid-column: 1; grid-row: 1; }
-body.layout-basic .side-bets-rail .pari-bet-container--growth { grid-column: 2; grid-row: 1; }
+body.layout-basic .side-bets-rail .pari-bet-container--wwxrp {
+  grid-column: 1;
+  grid-row: 1;
+  container-type: inline-size;
+}
+body.layout-basic .side-bets-rail .pari-bet-container--growth,
+body.layout-basic .side-bets-rail .pari-bet-container--link {
+  grid-column: 2;
+  grid-row: 1;
+}
+body.layout-basic .side-bets-rail .pari-bet-container--link { container-type: inline-size; }
 body.layout-basic .side-bets-rail .pari-bet-container--wwxrp > app-wwxrp-burn,
-body.layout-basic .side-bets-rail .pari-bet-container--growth > .pari-books {
+body.layout-basic .side-bets-rail .pari-bet-container--growth > .pari-books,
+body.layout-basic .side-bets-rail .pari-bet-container--link > app-link-donation {
   width: 100%;
   min-width: 0;
   align-self: stretch;
 }
 
-/* With no live book, the Incinerator is the entire row and lines up with the
-   DGNRS burn key directly below it. */
-body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) {
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0;
-}
-
-body.layout-basic .side-bets-rail .pari-books {
-  align-self: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-}
+body.layout-basic .side-bets-rail .pari-books { align-self: stretch; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
 
 body.layout-basic .side-bets-rail .pari-books[hidden] { display: none !important; }
-
-body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp {
-  width: min(100%, 30.7rem);
-  grid-column: 1 / -1;
-  justify-self: start;
-}
 
 /* Growth stacks identity + benchmark beside controls instead of spending a
    full heading row above them. */
@@ -16340,19 +16453,6 @@ body.layout-basic .side-bets-rail .pari-book--open > .pari-today {
 
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__title { overflow: hidden; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-clock { display: none; }
-body.layout-basic .side-bets-rail .pari-wwxrp { grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem; gap: 0.08rem 0.35rem; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp {
-  grid-template-columns: minmax(0, 1fr) 4.4rem;
-  padding-left: 0.22rem;
-}
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: none; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book :is(
-  .pari-wwxrp__identity,
-  .pari-wwxrp__amount
-) { grid-column: 1; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 2; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small,
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount > span { display: none; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__bench { font-size: 0.57rem; letter-spacing: 0.025em; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-book__target { display: block; margin-top: 0.06rem; white-space: nowrap; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-today { gap: 0.12rem; }
@@ -16364,23 +16464,13 @@ body.layout-basic .side-bets-rail .pari-book--open :is(.pari-split__labels, .par
 body.layout-basic .side-bets-rail .pari-book--open .pari-prebet-bonus__value { font-size: 0.56rem; }
 body.layout-basic .side-bets-rail .pari-book--open .pari-prebet-bonus { gap: 0.18rem; margin-top: 0.08rem; }
 
-/* WWXRP gives up decorative key width before its amount field; the full key
-   returns when the instruments stack. */
-@media (min-width: 581px) {
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn[data-write] { width: 4.4rem; min-width: 4.4rem; grid-template-columns: 1.05rem auto; gap: 0.25rem; padding: 0.28rem 0.4rem 0.28rem 0.3rem; font-size: 0.58rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn[data-write]::before { width: 1.05rem; height: 1.48rem; background-size: 0.82rem 1.12rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-template-columns: minmax(0, 1fr) 1.65rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount input { padding-inline: 0.12rem; font-size: 0.56rem; text-align: center; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount button { width: 1.65rem; min-width: 0; padding-inline: 0.16rem; font-size: 0.36rem; }
-}
-
 body.layout-basic .side-bets-rail .pari-error {
   grid-column: 1 / -1;
   grid-row: 2;
   margin-top: 0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 580px) {
   body.layout-basic .side-bets-rail .app-parimutuel {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;
@@ -16388,33 +16478,11 @@ body.layout-basic .side-bets-rail .pari-error {
 
   body.layout-basic .side-bets-rail .pari-bet-container--wwxrp,
   body.layout-basic .side-bets-rail .pari-bet-container--growth,
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp,
+  body.layout-basic .side-bets-rail .pari-bet-container--link,
   body.layout-basic .side-bets-rail .pari-error {
     grid-column: 1;
     grid-row: auto;
   }
-
-  body.layout-basic .side-bets-rail .app-parimutuel:not(.has-live-book) > .pari-bet-container--wwxrp {
-    width: 100%;
-  }
-
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small {
-    display: inline;
-  }
-
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp {
-    grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem;
-    padding-left: 0.3rem;
-  }
-
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: grid; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book :is(
-    .pari-wwxrp__identity,
-    .pari-wwxrp__amount
-  ) { grid-column: 2; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 3; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance),
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount > span { display: inline; }
 }
 
 @media (max-width: 380px) { body.layout-basic .side-bets-rail .pari-book--open { grid-template-areas: "head" "context" "today"; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; } }
@@ -25291,68 +25359,8 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 }
 .rvl-card--mini .rvl-craps-pass-badge__windows { display: none; }
 
-/* Closed Growth does not repeat the page-level meter. Inside its isolated
-   container, WWXRP keeps its own controls deliberately compact. */
+/* Closed Growth does not repeat the page-level meter. */
 body.layout-basic .side-bets-rail .pari-book--settled .pari-thermometer { display: none; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp {
-  isolation: isolate;
-  height: 100%;
-  grid-template-columns: 2.3rem minmax(0, 1fr) clamp(6.25rem, 12vw, 8.5rem) 4.4rem;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0.3rem;
-  padding: 0.32rem 0.38rem;
-  border-color: rgba(244, 63, 94, 0.58);
-  background:
-    radial-gradient(circle at 1.8rem 50%, rgba(244, 63, 94, 0.24), transparent 5.2rem),
-    linear-gradient(100deg, rgba(127, 29, 29, 0.28), transparent 44%),
-    repeating-linear-gradient(115deg, transparent 0 13px, rgba(255, 255, 255, 0.014) 13px 14px),
-    linear-gradient(180deg, #211419 0%, #100c0f 58%, #180d12 100%);
-  box-shadow: inset 0 1px rgba(255, 228, 230, 0.1), inset 0 -1px rgba(76, 5, 25, 0.7), 0 8px 20px rgba(0, 0, 0, 0.28);
-}
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: grid; width: 2.3rem; height: 2.3rem; grid-column: 1; grid-row: 1; align-self: center; border-color: rgba(251, 113, 133, 0.7); background: radial-gradient(circle, #3f1019, #16090d 72%); box-shadow: inset 0 1px rgba(255, 228, 230, 0.12), 0 0 16px rgba(244, 63, 94, 0.3); }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark img { width: 2.08rem; height: 2.08rem; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity {
-  display: grid;
-  min-width: 0;
-  grid-column: 2;
-  grid-row: 1;
-  grid-template-areas: "brand balance" "token balance";
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-self: stretch;
-  align-content: center;
-  gap: 0.1rem 0.42rem;
-  padding-top: 0;
-}
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity small { display: block; grid-area: brand; color: #fda4af; font-size: 0.52rem; letter-spacing: 0.1em; text-shadow: 0 0 8px rgba(244, 63, 94, 0.3); }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity > strong:not(.pari-wwxrp__balance) { display: block; grid-area: token; color: #fff1f2; font-size: 0.58rem; letter-spacing: 0.16em; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__balance { display: flex; grid-area: balance; align-self: center; align-items: center; margin-left: 0; padding: 0.2rem 0.34rem; border: 1px solid rgba(251, 113, 133, 0.28); border-radius: 999px; background: rgba(69, 10, 22, 0.46); font-size: 0.62rem; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 3; grid-row: 1; align-self: center; }
-body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 4; grid-row: 1; }
-
-@media (min-width: 581px) {
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { height: 1.5rem; grid-template-columns: minmax(0, 1fr) 2.15rem; border-radius: 999px; background: rgba(12, 7, 10, 0.82); box-shadow: inset 0 1px 5px rgba(0, 0, 0, 0.52); }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount:focus-within { border-color: rgba(254, 202, 202, 0.72); box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.12), inset 0 1px 5px rgba(0, 0, 0, 0.52); }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount input { padding-inline: 0.5rem; font-size: 0.62rem; letter-spacing: 0.03em; text-align: right; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount input:focus-visible { box-shadow: none; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount button { width: 2.15rem; min-width: 0; padding-inline: 0; font-size: 0.42rem; letter-spacing: 0.02em; }
-}
-
-@media (max-width: 580px) {
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp { grid-template-columns: 2.55rem minmax(0, 1fr) 5.3rem; grid-template-rows: 1fr 1fr; gap: 0.08rem 0.35rem; padding: 0.2rem 0.22rem 0.2rem 0.3rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { width: 2.55rem; height: 2.55rem; grid-column: 1; grid-row: 1 / -1; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark img { width: 2.35rem; height: 2.35rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity { grid-column: 2; grid-row: 1; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 2; grid-row: 2; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 3; grid-row: 1 / -1; }
-}
-
-@media (min-width: 581px) and (max-width: 680px) {
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp { grid-template-columns: minmax(0, 1fr) 6.25rem 4.4rem; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__mark { display: none; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__identity { grid-column: 1; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__amount { grid-column: 2; }
-  body.layout-basic .side-bets-rail .app-parimutuel.has-live-book .pari-wwxrp__burn { grid-column: 3; }
-}
 
 /* A changed board remains the same green owned-entry action, with its label
    carrying the distinction instead of switching to a purchase-colored state. */

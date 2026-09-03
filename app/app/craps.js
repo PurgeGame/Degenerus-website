@@ -656,6 +656,16 @@ const CRAPS_WINDOW_EVENT_NAMES = Object.freeze([
   'CrapsProtocolAwardSplit',
 ]);
 
+// These are the only lobby events whose first indexed topic is the player.
+// A narrow player-filtered query can therefore repair a just-submitted entry
+// before the API window catches the same block, without re-reading the large
+// public lobby window from chain.
+const CRAPS_PLAYER_ENTRY_EVENT_NAMES = Object.freeze([
+  'CrapsSlipPlaced',
+  'CrapsDayReserved',
+  'CrapsDayWindowsUpgraded',
+]);
+
 /** The indexed mirror of the window above. Same names, same lookback, decoded. */
 const CRAPS_EVENTS_ROUTE = '/game/craps/events';
 // An API too old to serve the route answers 404 forever. Re-probing that on
@@ -673,6 +683,7 @@ const CRAPS_WINDOW_PERSIST_MAX_ROWS = 3_000;
 const CRAPS_WINDOW_PERSIST_MAX_BYTES = 1_500_000;
 
 let _crapsWindowTopics = null;
+let _crapsPlayerEntryTopics = null;
 let _crapsLogWindow = null; // { provider, address, fromBlock, toBlock, logs }
 let _crapsApiWindow = null; // { address, fromBlock, toBlock, events }
 let _crapsLogWindowChain = Promise.resolve();
@@ -687,6 +698,16 @@ function crapsWindowTopicHashes() {
     );
   }
   return _crapsWindowTopics;
+}
+
+function crapsPlayerEntryTopicHashes() {
+  if (!_crapsPlayerEntryTopics) {
+    const iface = interfaceForCrapsLobby();
+    _crapsPlayerEntryTopics = Object.freeze(
+      CRAPS_PLAYER_ENTRY_EVENT_NAMES.map((name) => iface.getEvent(name).topicHash),
+    );
+  }
+  return _crapsPlayerEntryTopics;
 }
 
 function crapsWindowStorageKey(kind) {
@@ -2052,6 +2073,40 @@ export async function readCrapsLobbySnapshot(dayValue, player = null) {
     catch (_error) { return [String(index), null]; }
   })));
   return crapsLobbySnapshotFromLogs(day, logs, { parser, wordsByIndex: words, player });
+}
+
+/**
+ * Read only one wallet's entry-bearing events from the current chain window.
+ *
+ * This is an on-demand consistency repair for the short interval after a
+ * transaction lands but before the indexed lobby window reaches that block.
+ * Every selected event indexes `player` first, so the response stays tiny even
+ * on a busy day. Callers intentionally use it only after an authoritative
+ * `AlreadyInBonus` preflight rather than adding another request to normal polls.
+ */
+export async function readCrapsPlayerEntriesOnChain(dayValue, player) {
+  if (!isCrapsAvailable()) return null;
+  const day = Number(dayValue);
+  if (!Number.isInteger(day) || day <= 0 || !ethers.isAddress(String(player ?? ''))) return null;
+  const provider = readerProvider();
+  if (typeof provider?.getLogs !== 'function') return null;
+  const normalizedPlayer = ethers.getAddress(String(player)).toLowerCase();
+  const latestBlock = Number(await readProviderBlockNumber(provider, { maxAgeMs: 0 }));
+  const deployBlock = Number(CHAIN.deployBlock ?? 0);
+  const fromBlock = Math.max(deployBlock, latestBlock - crapsLogLookbackBlocks());
+  const logs = await provider.getLogs({
+    address: contractAddress(),
+    fromBlock,
+    toBlock: latestBlock,
+    topics: [
+      crapsPlayerEntryTopicHashes(),
+      ethers.zeroPadValue(normalizedPlayer, 32),
+    ],
+  });
+  return crapsLobbySnapshotFromLogs(day, logs, {
+    parser: crapsLobbyReceiptParser(),
+    player: normalizedPlayer,
+  })?.playerEntries ?? null;
 }
 
 function structuredRevert(error, fallback) {

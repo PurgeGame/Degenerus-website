@@ -2,7 +2,7 @@
 // Run: cd website && node --test app/components/__tests__/app-parimutuel-panel.test.js
 //
 // Covers the part of the widget that has rules rather than pixels:
-//   - it shows only the compact Incinerator when Growth is closed
+//   - it shows the Incinerator and LINK reward quote when Growth is closed
 //   - an open GROWTH book renders the round, the book counts, the payout quotes
 //     and two bet buttons
 //   - a held position replaces the buttons with the "your bet" marker
@@ -335,6 +335,15 @@ async function mountWwxrp() {
   return el;
 }
 
+async function mountLinkDonation() {
+  const Ctor = customElements.get('app-link-donation');
+  const el = new Ctor();
+  _docBody.appendChild(el);
+  el.connectedCallback();
+  await flush();
+  return el;
+}
+
 function panelOf(el) { return el.querySelector('.app-parimutuel'); }
 function growthCard(el) { return el.querySelector('[data-bind="pari-growth"]'); }
 function decimatorCard(el) { return el.querySelector('[data-bind="pari-decimator"]'); }
@@ -342,10 +351,13 @@ function decimatorCard(el) { return el.querySelector('[data-bind="pari-decimator
 const revealMod = await import('../reveal-overlay.js');
 const { thermometerScale, decimatorWindowIsOpen } = await import('../app-parimutuel-panel.js');
 const wwxrpWidget = await import('../app-wwxrp-burn.js');
+const linkDonationWidget = await import('../app-link-donation.js');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const LINK_DONATION_CSS = readFileSync(new URL('../../styles/link-donation.css', import.meta.url), 'utf8');
 const PARI_SOURCE = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
 const DAILY_FLIP_SOURCE = readFileSync(new URL('../app-daily-flip.js', import.meta.url), 'utf8');
 const WWXRP_SOURCE = readFileSync(new URL('../app-wwxrp-burn.js', import.meta.url), 'utf8');
+const LINK_DONATION_SOURCE = readFileSync(new URL('../app-link-donation.js', import.meta.url), 'utf8');
 
 test('thermometer color scale is target-anchored and becomes solid green after crossing', () => {
   const below = thermometerScale(50n, 100n);
@@ -386,6 +398,13 @@ test('WWXRP footer keeps decimal parsing exact and compacts large balances', () 
   assert.equal(wwxrpWidget.formatWwxrpBalance(999_999n * FLIP), '1M');
 });
 
+test('LINK donation rail parses inputs exactly and compacts quote values', () => {
+  assert.equal(linkDonationWidget.parseLinkDonationAmount('1.25'), 125n * (10n ** 16n));
+  assert.equal(linkDonationWidget.parseLinkDonationAmount('1.1234567890123456789'), null);
+  assert.equal(linkDonationWidget.formatLinkDonationAmount(999n * FLIP), '999');
+  assert.equal(linkDonationWidget.formatLinkDonationAmount(100_000n * FLIP), '100K');
+});
+
 // ---------------------------------------------------------------------------
 
 describe('app-parimutuel-panel', () => {
@@ -410,13 +429,14 @@ describe('app-parimutuel-panel', () => {
   afterEach(() => {
     for (const child of _docBody.children || []) child.disconnectedCallback?.();
     wwxrpWidget.__resetWwxrpBurnWidgetDepsForTest();
+    linkDonationWidget.__resetLinkDonationWidgetDepsForTest();
     pari.__resetContractFactoryForTest();
     pari.__resetQuestFactoryForTest();
     decimatorMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });
 
-  test('keeps only the compact Incinerator row when no live book is open', async () => {
+  test('shows WWXRP beside the LINK donation quote when no live book is open', async () => {
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
     assert.doesNotMatch(el.innerHTML, /SIDE BETS|panel-header|pari-learn-link/,
@@ -430,40 +450,43 @@ describe('app-parimutuel-panel', () => {
     assert.doesNotMatch(DAILY_FLIP_SOURCE, /record-strip|readBiggestFlipRecord/,
       'the record rail no longer consumes space in the daily coinflip');
     assert.match(PARI_SOURCE,
-      /<div class="pari-bet-container pari-bet-container--wwxrp">\s*<app-wwxrp-burn><\/app-wwxrp-burn>\s*<\/div>\s*<div class="pari-bet-container pari-bet-container--growth"\s*data-bind="pari-growth-container" hidden>/,
-      'WWXRP and Growth mount in separate sibling containers');
+      /<div class="pari-bet-container pari-bet-container--wwxrp">\s*<app-wwxrp-burn><\/app-wwxrp-burn>\s*<\/div>/,
+      'WWXRP owns the first side-bet container');
+    assert.match(PARI_SOURCE,
+      /<div class="pari-bet-container pari-bet-container--growth"[\s\S]*?<\/div>\s*<div class="pari-bet-container pari-bet-container--link"\s*data-bind="pari-link-container">\s*<app-link-donation><\/app-link-donation>/,
+      'Growth and the idle LINK replacement remain separate sibling containers');
     assert.match(WWXRP_SOURCE,
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
     assert.match(APP_CSS,
       /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'Growth and the Incinerator receive equal desktop lanes');
+      'the two visible instruments receive equal desktop lanes');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__identity > strong:not\(\.pari-wwxrp__balance\)\s*\{[^}]*display:\s*inline/s,
-      'the compact Incinerator still identifies itself as WWXRP');
+      /\.pari-bet-container--wwxrp\s*\{[^}]*grid-column:\s*1;[^}]*container-type:\s*inline-size/s,
+      'WWXRP owns and responds to the first container');
     assert.match(APP_CSS,
-      /\.side-bets-rail \.pari-bet-container--wwxrp\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.side-bets-rail \.pari-bet-container--growth\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1/s,
-      'only the peer containers own the desktop lanes');
+      /\.pari-bet-container--growth,\s*body\.layout-basic \.side-bets-rail \.pari-bet-container--link\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1/s,
+      'Growth and LINK alternate in the second desktop lane');
     assert.match(APP_CSS,
-      /\.app-parimutuel\.has-live-book \.pari-wwxrp\s*\{[^}]*grid-template-columns:\s*2\.3rem minmax\(0, 1fr\) clamp\(6\.25rem, 12vw, 8\.5rem\) 4\.4rem/s,
-      'the branded Incinerator reserves compact lanes for its coin, input, and burn key');
-    assert.match(APP_CSS,
-      /\.app-parimutuel\.has-live-book \.pari-wwxrp__mark\s*\{[^}]*display:\s*grid[^}]*grid-column:\s*1/s,
-      'the live card restores the WWXRP coin mark');
-    assert.match(APP_CSS,
-      /\.app-parimutuel\.has-live-book \.pari-wwxrp__identity small\s*\{[^}]*display:\s*block[^}]*grid-area:\s*brand/s,
-      'the Daily Incinerator branding is visible in the live row');
-    assert.match(APP_CSS,
-      /\.app-parimutuel\.has-live-book \.pari-wwxrp__amount\s*\{[^}]*height:\s*1\.5rem[^}]*border-radius:\s*999px/s,
-      'the inline WWXRP amount and MAX action form one compact pill');
-    assert.match(APP_CSS,
-      /\.side-bets-rail \.app-parimutuel:not\(\.has-live-book\) > \.pari-bet-container--wwxrp\s*\{[^}]*width:\s*min\(100%, 30\.7rem\);[^}]*grid-column:\s*1 \/ -1/s,
-      'the Incinerator reclaims the book lane when Growth is closed');
+      /@container \(max-width: 38rem\)\s*\{[\s\S]*?\.pari-wwxrp\s*\{[^}]*grid-template-areas:[^}]*"mark identity amount burn"[^}]*"mark balance amount burn"/s,
+      'the Incinerator responds to its own lane width');
+    assert.match(LINK_DONATION_CSS,
+      /\.pari-link\s*\{[^}]*grid-template-areas:[^}]*"mark identity quote donate"[^}]*"mark balance amount donate"/s,
+      'the LINK card gives its reward quote a first-class lane');
+    assert.match(LINK_DONATION_CSS,
+      /@container \(max-width: 38rem\)[\s\S]*?\.pari-link\s*\{[^}]*min-height:\s*4\.4rem;[^}]*grid-template-columns:\s*2\.95rem minmax\(5\.3rem, 0\.78fr\) minmax\(7rem, 1\.22fr\) 5\.3rem/s,
+      'LINK uses the same compact height and column proportions as WWXRP');
+    assert.match(LINK_DONATION_CSS,
+      /\.pari-link__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
+      'the LINK entry control is compact and right-aligned');
+    assert.match(LINK_DONATION_CSS,
+      /\.pari-link__amount input\s*\{[^}]*border-radius:\s*0;[^}]*text-align:\s*right;[^}]*box-shadow:\s*none/s,
+      'LINK has one field frame, not a rounded input nested inside another frame');
     assert.match(APP_CSS,
       /\.side-bets-rail \.app-parimutuel\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent/s,
       'the parent is layout-only instead of drawing shared card chrome');
     assert.match(APP_CSS,
-      /@media \(max-width: 768px\)\s*\{\s*body\.layout-basic \.side-bets-rail \.app-parimutuel\s*\{[\s\S]*?\.side-bets-rail \.pari-bet-container--wwxrp,[\s\S]*?\.side-bets-rail \.pari-bet-container--growth,[\s\S]*?\{[^}]*grid-column:\s*1/s,
+      /@media \(max-width: 580px\)\s*\{\s*body\.layout-basic \.side-bets-rail \.app-parimutuel\s*\{[\s\S]*?\.pari-bet-container--wwxrp,[\s\S]*?\.pari-bet-container--growth,[\s\S]*?\.pari-bet-container--link,[\s\S]*?\{[^}]*grid-column:\s*1/s,
       'mobile stacks the complete containers instead of reshuffling their contents');
     assert.match(APP_CSS,
       /\.side-bets-rail \.pari-book--open\s*\{[^}]*grid-template-areas:[^}]*"head today"[^}]*"context today"/s,
@@ -471,14 +494,13 @@ describe('app-parimutuel-panel', () => {
     assert.match(APP_CSS,
       /\.side-bets-rail \.pari-book--open \.pari-side__target\s*\{[^}]*display:\s*none/s,
       'the exact target appears once in context instead of bloating both buttons');
-    assert.match(APP_CSS,
-      /@media \(min-width: 581px\)[\s\S]*?\.pari-wwxrp__burn\[data-write\][^}]*width:\s*4\.4rem/s,
-      'the adjacent Incinerator yields decorative key width while both tools share a row');
     assert.equal(panelOf(el).hidden, false, 'permanent full-width rail remains mounted');
     assert.equal(growthCard(el).hidden, true);
     assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, true,
       'the closed Growth container vacates its entire grid lane');
+    assert.equal(el.querySelector('[data-bind="pari-link-container"]').hidden, false,
+      'the LINK quote takes Growth\'s lane while the book is closed');
     assert.equal(el.querySelector('[data-bind="pari-empty"]'), null);
     assert.doesNotMatch(PARI_SOURCE, /Books are closed|pari-empty/,
       'closed books leave no placeholder copy or dead box behind');
@@ -525,21 +547,27 @@ describe('app-parimutuel-panel', () => {
 
     assert.equal(burned, 25n * FLIP);
     assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /WWXRP INCINERATED/);
+    assert.match(WWXRP_SOURCE,
+      /class="pari-wwxrp__balance"[\s\S]*?<small>BALANCE<\/small>[\s\S]*?class="pari-wwxrp__amount"[\s\S]*?<small>AMOUNT TO BURN<\/small>/,
+      'balance and editable amount are labeled as separate pieces of information');
     assert.match(APP_CSS,
-      /\.pari-wwxrp\s*\{[^}]*min-height:\s*3\.15rem[^}]*grid-template-columns:\s*2\.55rem minmax\(0, 1fr\) 5\.3rem/s,
-      'the Incinerator uses the same compact rail rhythm as the utility strip below');
+      /\.pari-wwxrp\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*4\.9rem[^}]*"mark identity amount burn"[^}]*"mark balance amount burn"/s,
+      'the wide Incinerator uses the same two-row card chassis as LINK');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*width:\s*5\.3rem[^}]*min-height:\s*2\.55rem/s,
-      'the action is a full-height rail key instead of the old tiny pill');
+      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*width:\s*6\.9rem[^}]*min-height:\s*3\.8rem/s,
+      'the action remains a full-height rail key');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*grid-template-columns:\s*1\.34rem auto;[^}]*padding:\s*0\.32rem 0\.72rem 0\.32rem 0\.48rem;[^}]*font:\s*950 0\.66rem\/1/s,
-      'the WWXRP action shares the exact proportions and type hierarchy of the sDGNRS burn key');
+      /\.pari-wwxrp__balance\s*\{[^}]*grid-area:\s*balance;[^}]*padding:\s*0;/s,
+      'the wallet balance reads as a labeled metric instead of floating over the input');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__amount\s*\{[^}]*grid-column:\s*2;[^}]*grid-template-columns:\s*minmax\(1\.6rem, 1fr\) auto auto;/s,
-      'the compact amount/MAX field occupies the lane directly beside BURN');
+      /\.pari-wwxrp__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
+      'the entry field stays compact and aligned against the action key');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__amount input\s*\{[^}]*min-height:\s*0;[^}]*height:\s*100%/s,
-      'mobile touch-target defaults cannot clip the inline amount text');
+      /\.pari-wwxrp__amount-control\s*\{[^}]*grid-template-columns:\s*minmax\(2\.5rem, 1fr\) auto 2\.65rem/s,
+      'the value, WWXRP unit, and utility-sized MAX action form one clear control');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__amount input\s*\{[^}]*text-align:\s*right;[^}]*box-shadow:\s*none;[^}]*appearance:\s*textfield/s,
+      'the inner input is flat and right-aligned instead of drawing an oval inside its frame');
     assert.match(APP_CSS,
       /\.pari-wwxrp__amount button\s*\{[^}]*min-height:\s*0;[^}]*height:\s*100%/s,
       'mobile touch-target defaults cannot clip the MAX label');
@@ -581,6 +609,49 @@ describe('app-parimutuel-panel', () => {
     resolveViewed({ wwxrpBalance: 0n });
     await flush();
     assert.equal(balance.textContent, '0');
+  });
+
+  test('LINK donation widget quotes FLIP from the entered amount and donates inline', async () => {
+    let donated = null;
+    linkDonationWidget.__setLinkDonationWidgetDepsForTest({
+      read: async () => ({
+        balanceWei: 500n * FLIP,
+        creditWei: 0n,
+        subscriptionBalanceWei: 0n,
+        ethPerLinkWei: FLIP / 100n,
+        mintPriceWei: 4n * FLIP / 100n,
+      }),
+      donate: async ({ amount }) => {
+        donated = amount;
+        return { receipt: { status: 1 } };
+      },
+    });
+
+    const el = await mountLinkDonation();
+    const input = el.querySelector('[data-bind="link-amount"]');
+    const donate = el.querySelector('[data-bind="link-donate"]');
+    assert.equal(el.querySelector('[data-bind="link-balance"]').textContent, '500');
+    assert.equal(input.value, '1');
+    assert.equal(el.querySelector('[data-bind="link-quote-input"]').textContent, '1 LINK');
+    assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '749 FLIP');
+    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '3× REWARD');
+    assert.equal(donate.disabled, false);
+
+    input.value = '200';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '100K FLIP',
+      'the amount-weighted reward updates as the player types');
+    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '2× REWARD');
+    donate.click();
+    await flush();
+
+    assert.equal(donated, 200n * FLIP);
+    assert.match(el.querySelector('[data-bind="link-feedback"]').textContent, /LINK DONATED/);
+    assert.match(LINK_DONATION_SOURCE, /linkDonationFlipQuote\(\{/,
+      'the compact widget consumes the shared authoritative quote helper');
+    assert.match(LINK_DONATION_SOURCE,
+      /subscriptionBalanceWei:[\s\S]*ethPerLinkWei:[\s\S]*mintPriceWei:/,
+      'the visible FLIP figure is derived from all live reward inputs');
   });
 
   test('uses the chain level when the indexed game snapshot disagrees', async () => {
@@ -822,6 +893,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(card.hidden, false);
     assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, false,
       'an open Growth market reveals its independent container');
+    assert.equal(el.querySelector('[data-bind="pari-link-container"]').hidden, true,
+      'Growth replaces the idle LINK donation card instead of sharing its lane');
     assert.match(card.querySelector('.pari-book__title').textContent, /GROWTH BET · Level 42/);
     assert.equal(card.querySelector('.pari-book__ask'), null,
       'the live book does not repeat the wager as a question');

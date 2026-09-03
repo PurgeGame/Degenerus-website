@@ -1,7 +1,7 @@
 // Compact launcher for the seven scheduled Craps battles. Players set one
 // reusable chip board here, then use the dense schedule rows to buy seats.
 
-import { get, subscribe } from '../app/store.js';
+import { deriveCanSign, get, subscribe } from '../app/store.js';
 import { gameDay } from '../app/game-state.js';
 import { CHAIN, CRAPS_SCHEDULE } from '../app/chain-config.js';
 import { loadCrapsReplay } from '../craps/replay-contract.js';
@@ -20,6 +20,7 @@ import {
   placeCrapsBonusEntry,
   readCrapsPassCredits,
   readCrapsLobbySnapshot,
+  readCrapsPlayerEntriesOnChain,
   readCrapsProgressivePool,
   upgradeCrapsDayWindows,
 } from '../app/craps.js';
@@ -1302,7 +1303,7 @@ export class AppCrapsEntry extends HTMLElement {
                 <td class="craps-entry__money craps-entry__wager craps-entry__rolling-terms" data-bind="craps-full-day-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-full-day-entry">ROLLING</strong><small class="craps-entry__range-note" data-bind="craps-full-day-range-note" hidden>7 BATTLES</small></span></td>
                 <td class="craps-entry__operator" data-bind="craps-full-day-separator" hidden>+</td>
                 <td class="craps-entry__money craps-entry__battle-fee" data-bind="craps-full-day-pot-cell" hidden><strong data-bind="craps-full-day-pot">—</strong></td>
-                <td class="craps-entry__action"><button type="button" data-craps-entry="day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-day-entered" hidden>ENTERED</span></td>
+                <td class="craps-entry__action"><button type="button" data-write data-craps-entry="day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-day-entered" hidden>ENTERED</span></td>
                 <td class="craps-entry__entrants" data-bind="craps-day-entrants">—</td>
               </tr>
               ${Array.from({ length: CRAPS_BATTLES_PER_DAY }, (_, period) => `
@@ -1312,7 +1313,7 @@ export class AppCrapsEntry extends HTMLElement {
                   <td class="craps-entry__operator craps-entry__open-cell" hidden>+</td>
                   <td class="craps-entry__money craps-entry__battle-fee craps-entry__open-cell" hidden><strong data-bind="craps-battle-pot">—</strong></td>
                   <td class="craps-entry__action craps-entry__open-cell">
-                    <button type="button" data-craps-entry="window" data-craps-period="${period}">— FLIP</button>
+                    <button type="button" data-write data-craps-entry="window" data-craps-period="${period}">— FLIP</button>
                     <span class="craps-entry__entered" data-bind="craps-battle-entered" hidden>ENTERED</span>
                   </td>
                   <td class="craps-entry__result" data-bind="craps-battle-result" colspan="5" hidden>
@@ -1332,7 +1333,7 @@ export class AppCrapsEntry extends HTMLElement {
               <tr class="craps-entry__day-buy craps-entry__day-buy--tomorrow" data-bind="craps-tomorrow-row" data-state="open" hidden>
                 <th scope="row"><time data-bind="craps-tomorrow-countdown">—</time></th>
                 <td class="craps-entry__money craps-entry__tomorrow-range" data-bind="craps-tomorrow-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">4.2K – 126K</strong><small>7 BATTLES</small></span></td>
-                <td class="craps-entry__action"><button type="button" data-craps-entry="future-day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
+                <td class="craps-entry__action"><button type="button" data-write data-craps-entry="future-day" data-terms="loading">— FLIP</button><span class="craps-entry__entered" data-bind="craps-tomorrow-entered" hidden>ENTERED</span></td>
                 <td class="craps-entry__entrants" data-bind="craps-tomorrow-entrants">—</td>
               </tr>
               <tr class="craps-entry__results-head" data-bind="craps-results-head" hidden>
@@ -1358,6 +1359,9 @@ export class AppCrapsEntry extends HTMLElement {
             </tbody>
           </table>
         </div>
+
+        <p class="craps-entry__message" data-bind="craps-entry-message"
+           role="status" aria-live="polite" aria-atomic="true" hidden></p>
 
         <section class="craps-entry__betting" aria-label="Craps betting board">
           <div class="craps-entry__surface-strip" aria-label="Entry lane and Hot Shooter bonus status">
@@ -1407,6 +1411,7 @@ export class AppCrapsEntry extends HTMLElement {
     const terms = this.#termsFor(state);
     const multiple = this.#highRoller ? terms?.highMult ?? null : 1;
     const connectedPlayer = String(get('connected.address') ?? '').toLowerCase();
+    const canSign = deriveCanSign();
     this.#winnerReplayTargets.clear();
     const futureDay = state.dayEntryKind === 'future-day';
     const dayEntryDay = state.dayEntryDay;
@@ -1414,6 +1419,22 @@ export class AppCrapsEntry extends HTMLElement {
       const node = this.querySelector(`[data-bind="${name}"]`);
       if (node) node.textContent = value;
     };
+    const bindWriteAvailability = (button, domainLocked, reason) => {
+      if (!button) return;
+      if (domainLocked) {
+        button.setAttribute('data-write-locked', '');
+        button.setAttribute('data-write-lock-title', reason || 'Craps action unavailable');
+      } else {
+        button.removeAttribute('data-write-locked');
+        button.removeAttribute('data-write-lock-title');
+      }
+      button.disabled = Boolean(domainLocked || !canSign);
+    };
+    const messageNode = this.querySelector('[data-bind="craps-entry-message"]');
+    if (messageNode) {
+      messageNode.textContent = this.#message;
+      messageNode.hidden = !this.#message;
+    }
     const bindEntryTarget = (button, entry) => {
       if (!button) return;
       if (entry?.betId != null) {
@@ -1599,9 +1620,11 @@ export class AppCrapsEntry extends HTMLElement {
       if (dayCanUpgrade) dayButton.dataset.crapsUpgrade = String(dayUpgradeMask);
       bindEntryTarget(dayButton, dayTicket);
       dayButton.hidden = plainDayEntered && !dayAmendable;
-      dayButton.disabled = this.#busyKey != null
+      const dayDomainLocked = this.#busyKey != null
         || dayUpgradeWhenOpen
         || (dayEntered ? !dayCanUpgrade && !dayAmendable : !dayReady);
+      bindWriteAvailability(dayButton, dayDomainLocked,
+        dayUpgradeWhenOpen ? 'This Craps upgrade is not open yet.' : 'This Craps entry is not currently available.');
       dayButton.dataset.terms = dayReady ? 'ready' : 'loading';
       dayButton.dataset.state = dayCanUpgrade || dayUpgradeWhenOpen
         ? 'upgrade'
@@ -1687,10 +1710,12 @@ export class AppCrapsEntry extends HTMLElement {
     if (tomorrowButton) {
       bindEntryTarget(tomorrowButton, tomorrowTicket);
       tomorrowButton.hidden = !showTomorrow || Boolean(tomorrowTicket && !tomorrowAmendable);
-      tomorrowButton.disabled = !showTomorrow
+      const tomorrowDomainLocked = !showTomorrow
         || this.#busyKey != null
         || tomorrowUpgradeWhenOpen
         || (!tomorrowTicket && !tomorrowReady);
+      bindWriteAvailability(tomorrowButton, tomorrowDomainLocked,
+        tomorrowUpgradeWhenOpen ? 'This Craps upgrade is not open yet.' : 'This Craps entry is not currently available.');
       tomorrowButton.dataset.terms = tomorrowReady ? 'ready' : 'loading';
       tomorrowButton.dataset.state = tomorrowUpgradeWhenOpen
         ? 'upgrade'
@@ -1898,10 +1923,12 @@ export class AppCrapsEntry extends HTMLElement {
         if (canUpgrade) button.dataset.crapsUpgrade = String(upgradeMask);
         bindEntryTarget(button, entry);
         button.hidden = Boolean(result) || Boolean(entry && !canUpgrade && !amendable);
-        button.disabled = this.#busyKey != null
+        const windowDomainLocked = this.#busyKey != null
           || (entry
             ? !canUpgrade && !amendable
             : !battle.joinable || !ready);
+        bindWriteAvailability(button, windowDomainLocked,
+          battle.joinable ? 'This Craps entry is not currently available.' : 'This Craps battle is closed.');
         button.dataset.state = canUpgrade
           ? 'upgrade'
           : amendable
@@ -2896,7 +2923,25 @@ export class AppCrapsEntry extends HTMLElement {
           }
           const message = String(error?.userMessage || error?.message || 'Craps entry was not submitted. Try again.');
           this.#message = message;
+          const player = String(get('connected.address') ?? '').toLowerCase();
+          const freshPlayerEntriesRead = error?.code === 'AlreadyInBonus' && player
+            ? readCrapsPlayerEntriesOnChain(state.day, player).catch(() => null)
+            : Promise.resolve(null);
           try { await this.#refreshSchedule(true); } catch (_refreshError) { /* retain the transaction error */ }
+          const freshPlayerEntries = await freshPlayerEntriesRead;
+          if (
+            freshPlayerEntries?.player === player
+            && this.#scheduleDay === state.day
+            && this.#schedulePlayer === player
+          ) {
+            const baseSnapshot = this.#snapshot?.day === state.day
+              ? this.#snapshot
+              : Object.freeze({ day: state.day });
+            this.#snapshot = Object.freeze({
+              ...baseSnapshot,
+              playerEntries: freshPlayerEntries,
+            });
+          }
           return { ok: false, error, message };
         }
       }

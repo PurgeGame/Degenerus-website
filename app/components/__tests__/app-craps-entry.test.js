@@ -635,6 +635,24 @@ test('the widget occupies the third play-grid track and loads with the idle pane
     'the click selector, quest-focus selector, and one generated template cover all seven windows');
 });
 
+test('Craps entry failures are visible and duplicate-entry state repairs from chain', () => {
+  assert.match(componentSource,
+    /class="craps-entry__message" data-bind="craps-entry-message"\s+role="status" aria-live="polite" aria-atomic="true" hidden/,
+    'handled wallet and preflight failures have a visible live region');
+  assert.match(componentSource,
+    /const messageNode = this\.querySelector\('\[data-bind="craps-entry-message"\]'\);[\s\S]*?messageNode\.textContent = this\.#message;[\s\S]*?messageNode\.hidden = !this\.#message;/,
+    'the component paints rather than silently stores its action message');
+  assert.match(componentSource,
+    /error\?\.code === 'AlreadyInBonus'[\s\S]*?readCrapsPlayerEntriesOnChain\(state\.day, player\)[\s\S]*?playerEntries: freshPlayerEntries/,
+    'an authoritative duplicate-entry rejection replaces a stale indexed projection with wallet-filtered chain state');
+  assert.equal((componentSource.match(/<button type="button" data-write data-craps-entry=/g) || []).length, 3,
+    'all three entry-button templates participate in the shared wallet/write gate');
+  assert.match(componentSource, /button\.disabled = Boolean\(domainLocked \|\| !canSign\)/,
+    'component domain locks and wallet signing state compose without enabling each other');
+  assert.match(cssSource, /\.craps-entry__message\s*\{[^}]*color:\s*#fde68a/,
+    'the compact status remains legible against the Craps felt on phone');
+});
+
 test('the unified signboard presents Craps Autobattle and the Run It Up jackpot', () => {
   assert.match(componentSource, /craps-entry__identity craps-entry__identity--craps/);
   assert.match(componentSource, /craps-autobattle-integrated-swords-v8\.webp/,
