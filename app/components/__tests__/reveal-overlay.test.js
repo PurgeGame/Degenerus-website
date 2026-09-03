@@ -2473,6 +2473,11 @@ describe('reveal-overlay element', () => {
     assert.ok(el.querySelector('.rvl-pack-wordmark'), 'Degenerus wordmark is on the wrapper');
     assert.ok(el.querySelector('[data-bind="rvl-pack-edition"]'));
     assert.ok(el.querySelector('[data-bind="rvl-pack-level"]'));
+    assert.match(APP_CSS,
+      /@media \(max-width: 620px\) \{[\s\S]*?\.rvl-vessel--pack:not\(\.rvl-vessel--foil-pack\)[^{]*\.rvl-pack-edition\s*\{[^}]*display:\s*none;/,
+      'phones omit the redundant TICKET PACK row while retaining the foil edition tag');
+    assert.match(APP_CSS, /\.rvl-pack-count\s*\{[^}]*flex:\s*0 0 auto;/s,
+      'the ticket quantity cannot collapse inside the clipped wrapper');
     assert.doesNotMatch(REVEAL_SRC, /TAP TO TEAR|TAP TO REVEAL FOIL/,
       'the pack graphic is the visual instruction');
     assert.match(REVEAL_SRC, /vessel\.setAttribute\('role', 'button'\)/,

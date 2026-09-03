@@ -4885,7 +4885,7 @@ describe('foil faces track the spin presentation', () => {
       'and the ring becomes a steady lit state instead of disappearing');
   });
 
-  test('the panel publishes opening and lock frames without repainting foils on every reel tick', () => {
+  test('the panel publishes every painted frame while keeping the lock pop lock-only', () => {
     const src = REPLAY_PANEL_SRC;
     const from = src.indexOf('const emitSpinProgress = (liveTraits');
     assert.ok(from > 0, 'the panel publishes its live and committed faces');
@@ -4902,6 +4902,8 @@ describe('foil faces track the spin presentation', () => {
       'the published byte is packed the way the contract packs it, in CONTRACT quadrant order');
     assert.match(emit, /liveTraits,/,
       'the same progress payload carries the exact cycling faces separately');
+    assert.doesNotMatch(emit, /announcedCommits/,
+      'live face changes are not throttled behind the committed count');
     assert.match(emit, /if \(!announce\) return;/,
       'and a silent restore replays no presentation');
 
@@ -4914,10 +4916,13 @@ describe('foil faces track the spin presentation', () => {
     assert.match(frame, /liveTraits\[contractQ\] = shownTrait;/,
       'the event byte is the exact trait packed for the badge currently on screen');
     assert.match(frame,
-      /if \(lockedQuadrant != null\) \{\s*emitSpinProgress\(liveTraits\);\s*this\.#sfxLock/,
-      'only a durable reel stop synchronously repaints the secondary foil cabinet');
+      /this\.#syncOwnedGoldState\(quads\);\s*emitSpinProgress\(liveTraits\);\s*\/\/ Ordinary frames/,
+      'every painted reel frame reaches the foil cabinet before lock-only effects branch');
+    assert.match(frame,
+      /if \(lockedQuadrant != null\) \{\s*this\.#sfxLock/,
+      'the brighter lock cue remains exclusive to a durable reel stop');
     assert.equal((frame.match(/emitSpinProgress\(liveTraits\)/g) || []).length, 1,
-      'the ordinary 80ms reel tick has no second host repaint path');
+      'each reel tick publishes exactly one foil update');
 
     // The same frame loop uses the same both-locked test to commit a
     // quadrant's ownership colour. If these two ever disagree, the foil card
@@ -6270,7 +6275,7 @@ describe('the LCD key turns the Mine FLIP crank while results are pending', () =
     assert.doesNotMatch(pointerOverride, /data-jp-action/,
       'the visual glyph hook cannot accidentally make an inert key clickable');
     assert.ok(
-      INDEX_SRC.indexOf('/app/styles/app.css') < INDEX_SRC.indexOf('/app/styles/daily-drawing.css'),
+      INDEX_SRC.indexOf('/app/styles/app.min.css') < INDEX_SRC.indexOf('/app/styles/daily-drawing.css'),
       'the narrow exception loads after the broad stale-board lock in the real page cascade',
     );
     assert.match(pointerOverride,

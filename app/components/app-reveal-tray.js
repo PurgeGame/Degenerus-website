@@ -418,6 +418,37 @@ export function bingoPendingSummary(item) {
   };
 }
 
+export function crapsPendingSummary(item) {
+  const label = String(item?.label || '').replace(/\s+BATTLE\s*$/i, '').trim();
+  const amount = abbreviatePendingTokenAmounts(label || 'CRAPS').toUpperCase();
+  const phase = String(item?.phase || '');
+  const status = item?.state === 'ready'
+    ? 'VIEW RESULT'
+    : phase === 'pending'
+      ? 'WAITING TO SETTLE'
+      : phase === 'settling'
+        ? 'SETTLING'
+        : ['failed', 'build-unavailable'].includes(phase)
+          ? 'REPLAY UNAVAILABLE'
+          : 'PREPARING RESULT';
+  return { amount, status, text: `${amount} · ${status}` };
+}
+
+function _appendCrapsPendingLabel(label, item) {
+  const summary = crapsPendingSummary(item);
+  label.classList?.add('rrt-craps-summary');
+  const amount = document.createElement('span');
+  amount.className = 'rrt-craps-summary__amount';
+  amount.textContent = summary.amount;
+  const status = document.createElement('span');
+  status.className = 'rrt-craps-summary__status';
+  status.textContent = summary.status;
+  status.setAttribute('data-state', item?.state === 'ready' ? 'ready' : 'waiting');
+  label.appendChild(amount);
+  label.appendChild(status);
+  return summary;
+}
+
 function _compactActionLabel(item) {
   const label = _luckboxUiText(item?.label || _kindLabel(item?.kind)).trim();
   if (item?.kind === 'tickets') {
@@ -1415,7 +1446,9 @@ class AppRevealTray extends HTMLElement {
               ? lootboxPendingSummary(item).text
             : compactDecimator
               ? _compactActionLabel(item)
-            : _luckboxUiText(item.label || item.shortLabel || 'Open')
+              : item.kind === 'craps'
+                ? crapsPendingSummary(item).text
+                : _luckboxUiText(item.label || item.shortLabel || 'Open')
         : _luckboxUiText(`${actionVerb}: ${item.label}${item.detail ? `. ${item.detail}` : ''}`));
       button.title = `${compactFoilMatch
         ? foilMatchPendingSummary(item).text
@@ -1591,6 +1624,8 @@ class AppRevealTray extends HTMLElement {
       } else if (compactBingo) {
         label.classList?.add('rrt-bingo-summary');
         label.textContent = bingoPendingSummary(item).label;
+      } else if (item.kind === 'craps') {
+        _appendCrapsPendingLabel(label, item);
       } else if (compactLootbox) {
         _appendLootboxPendingLabel(label, item);
       } else if (compact && passive && item.kind === 'tickets') {

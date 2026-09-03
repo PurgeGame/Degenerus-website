@@ -1376,7 +1376,18 @@ test('contract errors map to actionable craps copy', () => {
 // them apart — the whole premise of serving the window from the indexer.
 // ---------------------------------------------------------------------------
 
-const WINDOW_HEAD = 46_300_000;
+// ⛔ WINDOW_HEAD MUST SIT ABOVE THE LIVE DEPLOY BLOCK — do not hardcode it again.
+// readCrapsLobbySnapshot clamps its scan floor with
+//   lookbackFrom = Math.max(deployBlock, toBlock - lookback)      (app/app/craps.js:835)
+// which is correct: never scan below the deploy. But these tests assert the UNCLAMPED
+// `WINDOW_HEAD - WINDOW_LOOKBACK`, because what they exercise is the cursor EXTENDING,
+// not the clamp. A literal head therefore works only until the real chain passes it.
+// It did: this was 46_300_000, run #45 deployed at 46,230,333 (clamp dormant, tests green)
+// and run #46 at 46,321,273 (clamp fires, fromBlock comes back as the deploy block) — the
+// run #47 launcher failed its step-0 website gate on exactly that, having touched nothing.
+// Deriving the head keeps the margin true for every future run; +100k is ~2 days of Base
+// blocks, comfortably clear of WINDOW_LOOKBACK.
+const WINDOW_HEAD = (Number(CHAIN.deployBlock) || 0) + 100_000;
 const WINDOW_LOOKBACK = 2_400;
 const WINDOW_TAIL = 12;
 const WINDOW_DAY = 42;

@@ -141,9 +141,15 @@ describe('index.html basic-mode skeleton', () => {
     for (const bind of [
       'pass-summary-subscription',
       'pass-summary-funding',
-      'pass-summary-deity',
-      'pass-summary-active-pass',
+      'pass-summary-buy-lazy-price',
+      'pass-summary-buy-whale-price',
+      'pass-summary-buy-deity-price',
     ]) assert.match(detailsMatch[1], new RegExp(`data-bind="${bind}"`));
+    assert.doesNotMatch(detailsMatch[1], /pass-summary-(?:deity|active-pass)/,
+      'the closed shop bar does not duplicate owned-pass state');
+    for (const product of ['lazy', 'whale', 'deity']) {
+      assert.match(detailsMatch[1], new RegExp(`data-pass-quickbuy="${product}"`));
+    }
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
@@ -170,7 +176,7 @@ describe('index.html basic-mode skeleton', () => {
       'the rail stacks only on genuinely narrow phones');
     assert.doesNotMatch(html.slice(sideBets, sideBetsEnd), /SIDE BETS/,
       'the compact rail has no redundant Side Bets label');
-    assert.match(html, /href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
+    assert.match(html, /data-href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
   });
 
   test('Tickets, AFKING PASSES, Transaction History, and Referrals share one disclosure-bar treatment', () => {
@@ -272,11 +278,25 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/view-mode-banner.js',
       '/app/components/last-day-jackpot.js',
       '/app/components/replay-panel.js',
-      '/app/components/app-decimator-panel.js',
-      '/app/components/app-daily-flip.js',
+      '/app/components/app-all-in-machine-control.js',
     ]) {
       assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
     }
+    for (const src of [
+      '/app/components/app-decimator-panel.js',
+      '/app/components/app-daily-flip.js',
+    ]) {
+      assert.ok(!html.includes(`src="${src}"`), `post-hero module is not parser-eager: ${src}`);
+      assert.ok(html.includes(`'${src}'`), `post-hero module is registered: ${src}`);
+    }
+    assert.match(html, /new IntersectionObserver\([\s\S]*?rootMargin: '200px 0px'/,
+      'narrow layouts fetch large panels shortly before they enter the viewport');
+    assert.match(html, /afterWindowLoad\(\(\) => loadInBatches\(\[[\s\S]*?\.\.\.POST_HERO_MODULES,[\s\S]*?\.\.\.IDLE_MODULES,[\s\S]*?\.\.\.LAZY_PANELS\.map/,
+      'window load is the non-scrolling backstop for every deferred panel');
+    assert.match(html, /const batchSize = window\.matchMedia\('\(max-width: 1099px\)'\)\.matches \? 1 : 2/,
+      'phones admit only one deferred root module at a time');
+    assert.match(html, /pending\.splice\(0, batchSize\)[\s\S]*?setTimeout\(\(\) => idle\(next\), 250\)/,
+      'post-load module work is bounded and yields between batches');
     // Cold-load module diet (2026-08-13; second tier 2026-08-14): these load
     // through the inline LAZY_PANELS / IDLE_MODULES registrations instead of
     // eager script tags.
@@ -325,8 +345,10 @@ describe('index.html basic-mode skeleton', () => {
       'the no-build local workflow recognizes every loopback hostname');
     assert.match(html, /const moduleRevision = DEV_MODULE_HOSTS\.has\(window\.location\.hostname\)[\s\S]*?Date\.now\(\)\.toString\(36\)/,
       'one per-navigation revision is minted only for local development');
-    assert.match(html, /const importModule = \(src\) => import\(`\$\{src\}\$\{moduleRevision\}`\)/,
-      'lazy imports use the coherent local navigation revision');
+    assert.match(html, /const importModule = \(src\)[\s\S]*?await Promise\.all\([\s\S]*?return import\(`\$\{src\}\$\{moduleRevision\}`\)/,
+      'deduplicated lazy imports wait for scoped styles and use the coherent local navigation revision');
+    assert.match(html, /if \(moduleLoads\.has\(src\)\) return moduleLoads\.get\(src\)/,
+      'viewport and post-load schedulers share one root import per module');
     assert.doesNotMatch(html, /\bimport\(src\)/,
       'no lazy path bypasses the local revision helper');
   });
@@ -352,8 +374,8 @@ describe('index.html basic-mode skeleton', () => {
     );
     assert.match(
       html,
-      /href="\/app\/styles\/app\.css\?v=reveal-controls-[^"]+"/,
-      'the matching hit-target and layout CSS receives the same explicit cache cutover',
+      /href="\/app\/styles\/app\.min\.css\?v=mobile-perf-[^"]+"/,
+      'the generated production stylesheet has an explicit cache cutover',
     );
   });
 
@@ -364,9 +386,24 @@ describe('index.html basic-mode skeleton', () => {
     );
     assert.doesNotMatch(
       html,
-      /fetchpriority="high" href="\/app\/assets\/jackpot\/golden-ticket-frame-v1\.webp"/,
-      'the much larger non-LCP frame does not compete in the high-priority lane',
+      /<link rel="preload"[^>]*golden-ticket-frame-v1\.webp/,
+      'the much larger conditional ticket frame does not compete during navigation',
     );
+  });
+
+  test('large panel-only stylesheets do not compete with the first screen', () => {
+    for (const href of [
+      '/app/styles/craps-table.css',
+      '/app/styles/records-rail.css',
+      '/app/styles/baf-resolution.css',
+      '/app/styles/baf-eve.css',
+    ]) {
+      assert.match(html, new RegExp(`<link rel="stylesheet" data-href="${href.replaceAll('.', '\\.')}">`));
+      assert.doesNotMatch(html, new RegExp(`<link rel="stylesheet" href="${href.replaceAll('.', '\\.')}"`));
+      assert.ok(html.includes(`'${href}'`), `deferred stylesheet is owned by a module: ${href}`);
+    }
+    assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
+      'component upgrade waits for its scoped stylesheet');
   });
 
   // Import-map targets are BARE specifiers at the call site (`from 'ethers'`),

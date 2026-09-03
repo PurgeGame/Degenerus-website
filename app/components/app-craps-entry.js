@@ -259,19 +259,67 @@ function resolutionIdentity(replay) {
   return `${String(replay?.battleKey || '').toLowerCase()}:${String(replay?.viewerBetId || '')}`;
 }
 
-/** Keep public lobby results sealed while this wallet still owns an unseen replay. */
-export function crapsResultNeedsReveal(result, {
+function unseenResultReplays(result, {
   address,
   replays = [],
   wasSeen = () => false,
 } = {}) {
   const scope = String(address ?? '').toLowerCase();
   const battleKey = String(result?.battleKey ?? '').toLowerCase();
-  if (!scope || !battleKey || !Array.isArray(replays)) return false;
-  return replays.some((replay) => (
+  if (!scope || !battleKey || !Array.isArray(replays)) return [];
+  return replays.filter((replay) => (
     String(replay?.battleKey ?? '').toLowerCase() === battleKey
     && !wasSeen(scope, replay)
   ));
+}
+
+/** The lobby keeps owned outcomes sealed, but only calls them ready once the
+ * replay loader has the complete artifact bundle that Pending can open. */
+export function crapsResultRevealState(result, {
+  address,
+  replays = [],
+  states = new Map(),
+  wasSeen = () => false,
+} = {}) {
+  const matching = unseenResultReplays(result, { address, replays, wasSeen });
+  if (matching.length === 0) return null;
+  const loaders = matching.map((replay) => states?.get?.(resolutionIdentity(replay)) ?? null);
+  if (loaders.some((loader) => loader?.ready === true)) return 'ready';
+  if (loaders.every((loader) => ['failed', 'build-unavailable'].includes(loader?.status))) {
+    return 'unavailable';
+  }
+  return 'waiting';
+}
+
+export function crapsResultRevealCopy(state) {
+  if (state === 'ready') {
+    return {
+      status: 'RESULT READY',
+      route: 'VIEW IN PENDING',
+      aria: 'result ready; view it in Pending to reveal',
+    };
+  }
+  if (state === 'unavailable') {
+    return {
+      status: 'REPLAY UNAVAILABLE',
+      route: 'CLEAR IN PENDING',
+      aria: 'replay unavailable; clear it in Pending',
+    };
+  }
+  return {
+    status: 'RESULT SETTLING',
+    route: 'STATUS IN PENDING',
+    aria: 'result is still settling; follow its status in Pending',
+  };
+}
+
+/** Keep public lobby results sealed while this wallet still owns an unseen replay. */
+export function crapsResultNeedsReveal(result, {
+  address,
+  replays = [],
+  wasSeen = () => false,
+} = {}) {
+  return unseenResultReplays(result, { address, replays, wasSeen }).length > 0;
 }
 
 function positiveDay(value) {
@@ -349,23 +397,47 @@ export function crapsEntryState({ day = null, nowMs = Date.now(), clock = CRAPS_
   });
 }
 
-export function crapsDayQuestPurchaseOptions({ state = null, todayPrice = null } = {}) {
+export function crapsDayQuestPurchaseOptions({
+  state = null,
+  todayPrice = null,
+  playerEntries = null,
+} = {}) {
   const day = positiveDay(state?.day);
   let livePrice = null;
   try {
     const parsed = BigInt(todayPrice);
     if (parsed > 0n) livePrice = parsed;
   } catch (_error) { /* today remains unavailable until exact terms load */ }
-  const todayOpen = day != null && Number(state?.currentPeriod) === 0 && livePrice != null;
+  const ownedDays = playerEntries?.days && typeof playerEntries.days === 'object'
+    ? playerEntries.days
+    : {};
+  const alreadyEnteredToday = day != null && (
+    Boolean(ownedDays[String(day)])
+    || (Array.isArray(playerEntries?.windows) && playerEntries.windows.some(Boolean))
+  );
+  const todayOpen = day != null
+    && Number(state?.currentPeriod) === 0
+    && livePrice != null
+    && !alreadyEnteredToday;
+  let futureDay = day == null ? null : day + 1;
+  while (futureDay != null
+    && futureDay <= 0xFFFFFF
+    && Boolean(ownedDays[String(futureDay)])) {
+    futureDay += 1;
+  }
+  if (futureDay != null && futureDay > 0xFFFFFF) futureDay = null;
   return Object.freeze({
     today: todayOpen
       ? Object.freeze({ day, price: livePrice.toString() })
       : null,
-    tomorrow: day == null
+    // Keep the `tomorrow` property for the quest panel's two-choice API, but
+    // the option itself advances past any day already reserved by a comp.
+    tomorrow: futureDay == null
       ? null
       : Object.freeze({
-          day: day + 1,
+          day: futureDay,
           price: CRAPS_FUTURE_DAY_PRICES.normal.toString(),
+          label: futureDay === day + 1 ? 'TOMORROW' : `DAY ${futureDay}`,
         }),
   });
 }
@@ -420,7 +492,7 @@ export function crapsEntryTerms({ wordValue = 0, schedule = null } = {}) {
   });
 }
 
-export function crapsEntrySelection({ day = null, kind, period = null } = {}) {
+export function crapsEntrySelection({ day = null, kind, period = null, targetDay = null } = {}) {
   const currentDay = positiveDay(day);
   const normalizedKind = ['day', 'future-day', 'window'].includes(kind) ? kind : null;
   if (!normalizedKind) throw new Error('Choose a full-day or individual Craps entry.');
@@ -429,9 +501,19 @@ export function crapsEntrySelection({ day = null, kind, period = null } = {}) {
     && (!Number.isInteger(normalizedPeriod) || normalizedPeriod < 0 || normalizedPeriod >= CRAPS_BATTLES_PER_DAY)) {
     throw new Error('Choose one of the seven Craps battles.');
   }
+  const requestedFutureDay = normalizedKind === 'future-day' && targetDay != null
+    ? positiveDay(targetDay)
+    : null;
+  if (normalizedKind === 'future-day'
+    && targetDay != null
+    && (currentDay == null || requestedFutureDay == null || requestedFutureDay <= currentDay)) {
+    throw new Error('Choose an unreserved future Craps day.');
+  }
   const entryDay = currentDay == null
     ? null
-    : currentDay + (normalizedKind === 'future-day' ? 1 : 0);
+    : normalizedKind === 'future-day'
+      ? requestedFutureDay ?? currentDay + 1
+      : currentDay;
   const daySlot = entryDay == null ? null : BigInt(entryDay) * 8n;
   const battleSlot = daySlot == null
     ? null
@@ -457,13 +539,14 @@ export function crapsEntryWager({
   day = null,
   kind,
   period = null,
+  targetDay = null,
   buyInFlip = null,
   highRoller = false,
   highMult = null,
   contractChips = 0,
   usePass = false,
 } = {}) {
-  const selection = crapsEntrySelection({ day, kind, period });
+  const selection = crapsEntrySelection({ day, kind, period, targetDay });
   const packed = Number(contractChips);
   if (!Number.isInteger(packed) || packed < 0 || packed > 0xFFFFFFFF) {
     throw new Error('The Craps board is not a packed uint32.');
@@ -927,22 +1010,46 @@ export class AppCrapsEntry extends HTMLElement {
     }
   };
   #questActivateListener = (event) => {
-    const questType = Number(event?.detail?.questType);
+    const detail = event?.detail;
+    const questType = Number(detail?.questType);
     if (questType !== 10 && questType !== 11) return;
     if (questType === 11) {
-      const requestedDay = event?.detail?.crapsDay === 'today' ? 'today' : 'tomorrow';
+      const requestedDay = detail?.crapsDay === 'today' ? 'today' : 'tomorrow';
+      const targetDay = positiveDay(detail?.crapsTargetDay);
       const state = crapsEntryState({ day: currentDayFromStore() });
-      if (requestedDay === 'today' && state.currentPeriod !== 0) return;
       // A quest day is always a paid Normal-lane entry. Calling #buy here makes
       // CONFIRM the purchase action instead of a focus-only routing hint.
       this.#forceFlipDay = true;
       this.#highRoller = false;
       this.#message = '';
-      void this.#buy(requestedDay === 'today' ? 'day' : 'future-day', null)
-        .finally(() => {
+      const purchase = requestedDay === 'today' && state.currentPeriod !== 0
+        ? Promise.resolve({
+            ok: false,
+            message: "Today's full Craps slate has already started. Choose a future day.",
+          })
+        : this.#buy(
+            requestedDay === 'today' ? 'day' : 'future-day',
+            null,
+            {
+              targetDay: requestedDay === 'today' ? null : targetDay,
+              advancePastReserved: requestedDay !== 'today',
+            },
+          );
+      // The mutable event detail is the synchronous acknowledgement channel
+      // back to the quest sheet. It keeps the sheet open until preflight and
+      // the wallet transaction have genuinely succeeded.
+      detail.crapsHandled = true;
+      detail.crapsPurchase = purchase;
+      void purchase.then(
+        () => {
           this.#forceFlipDay = false;
           this.#render();
-        });
+        },
+        () => {
+          this.#forceFlipDay = false;
+          this.#render();
+        },
+      );
       return;
     } else {
       this.#forceFlipDay = false;
@@ -962,9 +1069,16 @@ export class AppCrapsEntry extends HTMLElement {
     if (!detail || typeof detail !== 'object') return;
     const state = crapsEntryState({ day: currentDayFromStore() });
     const terms = this.#termsFor(state);
+    const connectedPlayer = String(get('connected.address') ?? '').toLowerCase();
+    const snapshot = this.#snapshot?.day === state.day ? this.#snapshot : null;
+    const playerEntries = connectedPlayer
+      && snapshot?.playerEntries?.player === connectedPlayer
+      ? snapshot.playerEntries
+      : null;
     Object.assign(detail, crapsDayQuestPurchaseOptions({
       state,
       todayPrice: terms?.complete ? terms.buyInFlip : null,
+      playerEntries,
     }));
   };
   #clickListener = (event) => {
@@ -1165,7 +1279,7 @@ export class AppCrapsEntry extends HTMLElement {
                   </td>
                   <td class="craps-entry__result" data-bind="craps-battle-result" colspan="5" hidden>
                     <div class="craps-entry__result-locked" data-bind="craps-battle-result-locked" hidden>
-                      <small>RESULT READY</small><strong>VIEW IN PENDING</strong>
+                      <small data-bind="craps-battle-result-status">RESULT SETTLING</small><strong data-bind="craps-battle-result-route">STATUS IN PENDING</strong>
                     </div>
                     <div class="craps-entry__result-grid" data-bind="craps-battle-result-details">
                       <span><strong data-bind="craps-battle-winner">—</strong></span>
@@ -1191,7 +1305,7 @@ export class AppCrapsEntry extends HTMLElement {
                   data-bind="craps-previous-event-row" data-state="completed" hidden>
                 <td class="craps-entry__result" colspan="5">
                   <div class="craps-entry__result-locked" data-bind="craps-previous-event-result-locked" hidden>
-                    <small>RESULT READY</small><strong>VIEW IN PENDING</strong>
+                    <small data-bind="craps-previous-event-result-status">RESULT SETTLING</small><strong data-bind="craps-previous-event-result-route">STATUS IN PENDING</strong>
                   </div>
                   <div class="craps-entry__result-grid" data-bind="craps-previous-event-result-details">
                     <span><small data-bind="craps-previous-event-label">PREVIOUS EVENT</small><strong data-bind="craps-previous-event-winner">—</strong></span>
@@ -1601,7 +1715,9 @@ export class AppCrapsEntry extends HTMLElement {
       const result = snapshot?.results?.[index] ?? null;
       if (battle.state === 'closed' && !result) awaitingSettlement = true;
       const laneResult = crapsWinnerResultForLane(result, this.#highRoller);
-      const concealed = Boolean(result && this.#resultNeedsReveal(result));
+      const revealState = result ? this.#resultRevealState(result) : null;
+      const concealed = revealState != null;
+      const revealCopy = crapsResultRevealCopy(revealState);
       const ready = Boolean(battleTerms && multiple != null);
       const price = ready ? battleTerms.buyInFlip * BigInt(multiple) : null;
       const entryPrice = ready ? battleTerms.bankrollFlip * BigInt(multiple) : null;
@@ -1646,6 +1762,8 @@ export class AppCrapsEntry extends HTMLElement {
       const enteredStatus = row.querySelector('[data-bind="craps-battle-entered"]');
       const resultBox = row.querySelector('[data-bind="craps-battle-result"]');
       const resultLocked = row.querySelector('[data-bind="craps-battle-result-locked"]');
+      const resultStatus = row.querySelector('[data-bind="craps-battle-result-status"]');
+      const resultRoute = row.querySelector('[data-bind="craps-battle-result-route"]');
       const resultDetails = row.querySelector('[data-bind="craps-battle-result-details"]');
       const winner = row.querySelector('[data-bind="craps-battle-winner"]');
       const payout = row.querySelector('[data-bind="craps-battle-payout"]');
@@ -1700,7 +1818,12 @@ export class AppCrapsEntry extends HTMLElement {
         }
       }
       if (resultBox) resultBox.hidden = !result;
-      if (resultLocked) resultLocked.hidden = !concealed;
+      if (resultLocked) {
+        resultLocked.hidden = !concealed;
+        resultLocked.dataset.state = revealState ?? 'revealed';
+      }
+      if (resultStatus) resultStatus.textContent = revealCopy.status;
+      if (resultRoute) resultRoute.textContent = revealCopy.route;
       if (resultDetails) resultDetails.hidden = concealed;
       this.#paintWinner(winner, concealed
         ? null
@@ -1728,7 +1851,7 @@ export class AppCrapsEntry extends HTMLElement {
         `Battle ${battle.number}`,
       );
       if (concealed) {
-        row.setAttribute('aria-label', `Battle ${battle.number} result ready; view it in Pending to reveal`);
+        row.setAttribute('aria-label', `Battle ${battle.number} ${revealCopy.aria}`);
       } else {
         row.removeAttribute('aria-label');
       }
@@ -1785,10 +1908,16 @@ export class AppCrapsEntry extends HTMLElement {
     });
     const previousEventEntrants = snapshot?.entrants?.previousEvent ?? this.#previousEventEntrants;
     const previousEventLaneResult = crapsWinnerResultForLane(previousEvent, this.#highRoller);
-    const previousEventConcealed = Boolean(previousEvent && this.#resultNeedsReveal(previousEvent));
+    const previousEventRevealState = previousEvent
+      ? this.#resultRevealState(previousEvent)
+      : null;
+    const previousEventConcealed = previousEventRevealState != null;
+    const previousEventRevealCopy = crapsResultRevealCopy(previousEventRevealState);
     const previousEventRow = this.querySelector('[data-bind="craps-previous-event-row"]');
     const previousEventWinner = this.querySelector('[data-bind="craps-previous-event-winner"]');
     const previousEventLocked = this.querySelector('[data-bind="craps-previous-event-result-locked"]');
+    const previousEventStatus = this.querySelector('[data-bind="craps-previous-event-result-status"]');
+    const previousEventRoute = this.querySelector('[data-bind="craps-previous-event-result-route"]');
     const previousEventDetails = this.querySelector('[data-bind="craps-previous-event-result-details"]');
     const previousEventEntrantNode = this.querySelector('[data-bind="craps-previous-event-entrants"]');
     const previousEventReplay = this.querySelector('.craps-entry__previous-event [data-craps-winner-replay]');
@@ -1800,13 +1929,18 @@ export class AppCrapsEntry extends HTMLElement {
         : previousEvent ? 'revealed' : 'pending';
       previousEventRow.setAttribute('aria-label', previousEvent
         ? previousEventConcealed
-          ? `Day ${previousEvent.day} event result ready; view it in Pending to reveal`
+          ? `Day ${previousEvent.day} event ${previousEventRevealCopy.aria}`
           : previousEventLaneResult
             ? `Day ${previousEvent.day} ${this.#highRoller ? 'High Roller ' : ''}result`
             : `Day ${previousEvent.day} High Roller result, no winner`
         : 'Previous Craps event result unavailable');
     }
-    if (previousEventLocked) previousEventLocked.hidden = !previousEventConcealed;
+    if (previousEventLocked) {
+      previousEventLocked.hidden = !previousEventConcealed;
+      previousEventLocked.dataset.state = previousEventRevealState ?? 'revealed';
+    }
+    if (previousEventStatus) previousEventStatus.textContent = previousEventRevealCopy.status;
+    if (previousEventRoute) previousEventRoute.textContent = previousEventRevealCopy.route;
     if (previousEventDetails) previousEventDetails.hidden = previousEventConcealed;
     bindText('craps-previous-event-label', previousEvent
       ? `DAY ${previousEvent.day} EVENT`
@@ -1937,9 +2071,14 @@ export class AppCrapsEntry extends HTMLElement {
   }
 
   #resultNeedsReveal(result) {
-    return crapsResultNeedsReveal(result, {
+    return this.#resultRevealState(result) != null;
+  }
+
+  #resultRevealState(result) {
+    return crapsResultRevealState(result, {
       address: this.#schedulePlayer,
       replays: this.#resolvedReplays,
+      states: this.#replayStates,
       wasSeen: resolutionWasSeen,
     });
   }
@@ -2257,6 +2396,7 @@ export class AppCrapsEntry extends HTMLElement {
       }));
       if (seq !== this.#replaySeq || address !== this.#schedulePlayer) return;
       for (const { identity, state } of outcomes) this.#replayStates.set(identity, state);
+      this.#render();
       this.#publishResolvedReplays();
     } finally {
       if (seq === this.#replaySeq) {
@@ -2341,12 +2481,14 @@ export class AppCrapsEntry extends HTMLElement {
         status: crapsReplayFailureStatus(error),
         pointer: null,
       });
+      this.#render();
       this.#publishResolvedReplays();
       this.#scheduleReplayPoll();
       return false;
     }
     if (!result.ready) {
       this.#replayStates.set(resolutionIdentity(replay), crapsReplayLoaderState(result));
+      this.#render();
       this.#publishResolvedReplays();
       this.#scheduleReplayPoll();
       return false;
@@ -2609,41 +2751,72 @@ export class AppCrapsEntry extends HTMLElement {
     }
   }
 
-  async #buy(requestedKind, period) {
+  async #buy(requestedKind, period, {
+    targetDay = null,
+    advancePastReserved = false,
+  } = {}) {
+    const fail = (message) => {
+      this.#message = String(message || 'Craps entry was not submitted. Try again.');
+      this.#render();
+      return { ok: false, message: this.#message };
+    };
+    if (this.#busyKey != null) return fail('Another Craps action is already in progress.');
     const state = crapsEntryState({ day: currentDayFromStore() });
+    if (state.day == null) return fail('The current Craps day is still loading. Try again.');
     const kind = requestedKind === 'day'
       ? state.dayEntryKind
       : requestedKind === 'future-day'
         ? 'future-day'
         : 'window';
     const battle = kind === 'window' ? state.battles[period] : null;
-    if (kind === 'window' && (!battle || !battle.joinable)) return;
-    const selection = crapsEntrySelection({ day: state.day, kind, period });
+    if (kind === 'window' && (!battle || !battle.joinable)) {
+      return fail('That Craps battle is no longer open. Choose another battle.');
+    }
     const terms = this.#termsFor(state);
     const selectedTerms = kind === 'window' ? terms?.windows?.[period] : terms;
     const highMult = terms?.highMult ?? null;
-    if (kind !== 'future-day' && (!selectedTerms || (this.#highRoller && highMult == null))) return;
+    if (kind !== 'future-day' && (!selectedTerms || (this.#highRoller && highMult == null))) {
+      return fail('The Craps buy-in is still loading. Try again.');
+    }
     const selectedPasses = Number(this.#highRoller
       ? this.#passCredits?.high ?? 0
       : this.#passCredits?.normal ?? 0);
     const compEligible = !this.#forceFlipDay;
-    if (kind === 'future-day' && compEligible && this.#passCredits == null) return;
+    if (kind === 'future-day' && compEligible && this.#passCredits == null) {
+      return fail('Your Craps comps are still loading. Try again.');
+    }
     const usePass = kind === 'future-day' && compEligible && selectedPasses > 0;
 
-    const baseWager = crapsEntryWager({
-      day: state.day,
-      kind,
-      period,
-      buyInFlip: kind === 'day' ? terms.buyInFlip : selectedTerms?.buyInFlip,
-      highRoller: this.#highRoller,
-      highMult,
-      contractChips: this.#contractChips,
-      usePass,
-    });
-    const wager = Object.freeze({
-      ...baseWager,
-      chips: { ...this.#boardBets },
-    });
+    let selection;
+    let wager;
+    const buildWager = (entryTargetDay) => {
+      selection = crapsEntrySelection({
+        day: state.day,
+        kind,
+        period,
+        targetDay: entryTargetDay,
+      });
+      const baseWager = crapsEntryWager({
+        day: state.day,
+        kind,
+        period,
+        targetDay: entryTargetDay,
+        buyInFlip: kind === 'day' ? terms.buyInFlip : selectedTerms?.buyInFlip,
+        highRoller: this.#highRoller,
+        highMult,
+        contractChips: this.#contractChips,
+        usePass,
+      });
+      wager = Object.freeze({
+        ...baseWager,
+        chips: { ...this.#boardBets },
+      });
+    };
+    try {
+      buildWager(targetDay);
+    } catch (error) {
+      return fail(error?.message);
+    }
 
     const busyKey = requestedKind === 'day'
       ? 'day'
@@ -2654,21 +2827,50 @@ export class AppCrapsEntry extends HTMLElement {
     this.#message = '';
     this.#render();
     try {
-      const result = await placeCrapsBonusEntry(wager);
+      let result;
+      let reservationRetries = 0;
+      let purchaseCompleted = false;
+      while (!purchaseCompleted) {
+        try {
+          result = await placeCrapsBonusEntry(wager);
+          purchaseCompleted = true;
+        } catch (error) {
+          const canAdvance = advancePastReserved
+            && kind === 'future-day'
+            && error?.code === 'DayNotReservable'
+            && selection.entryDay < 0xFFFFFF
+            && reservationRetries < 32;
+          if (canAdvance) {
+            reservationRetries += 1;
+            try {
+              buildWager(selection.entryDay + 1);
+            } catch (buildError) {
+              const message = String(buildError?.message || 'Choose an unreserved future Craps day.');
+              this.#message = message;
+              return { ok: false, error: buildError, message };
+            }
+            continue;
+          }
+          const message = String(error?.userMessage || error?.message || 'Craps entry was not submitted. Try again.');
+          this.#message = message;
+          try { await this.#refreshSchedule(true); } catch (_refreshError) { /* retain the transaction error */ }
+          return { ok: false, error, message };
+        }
+      }
       this.#message = kind === 'future-day'
         ? usePass
-          ? `Next slate reserved with one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp.`
-          : `Next slate purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`
+          ? `Day ${selection.entryDay} reserved with one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp.`
+          : `Day ${selection.entryDay} purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`
         : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`;
-      if (kind === 'future-day') this.#forceFlipDay = false;
-      await this.#refreshSchedule(true);
-      this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
-        detail: { kind, period, day: selection.entryDay, battleSlot: selection.battleSlot, wager, result },
-        bubbles: true,
-        composed: true,
-      }));
-    } catch (error) {
-      this.#message = String(error?.userMessage || error?.message || 'Craps entry was not submitted. Try again.');
+      try { await this.#refreshSchedule(true); } catch (_refreshError) { /* the purchase still succeeded */ }
+      try {
+        this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {
+          detail: { kind, period, day: selection.entryDay, battleSlot: selection.battleSlot, wager, result },
+          bubbles: true,
+          composed: true,
+        }));
+      } catch (_eventError) { /* transaction success is authoritative */ }
+      return { ok: true, result, wager, day: selection.entryDay };
     } finally {
       if (this.#busyKey === busyKey) this.#busyKey = null;
       this.#render();

@@ -432,9 +432,14 @@ export function buildReferralBonusPendingAction({
   return {
     id: `referral-bonus:${player}:${level}`,
     dismissScope: player,
-    // Claimable and already-paid are two states of the same level bonus. A
-    // keeper settling it after CLEAR must not manufacture a second reminder.
-    dismissKey: `referral-bonus:${level}`,
+    dismissKey: `referral-bonus:${level}:${alreadyClaimed ? 'reward' : 'claim'}`,
+    // Claimable and already-paid are two states of the same level bonus. Keep
+    // both legacy phase keys so existing browser tombstones still work while
+    // a new CLEAR covers the transition in either direction.
+    dismissIds: [
+      `referral-bonus:${level}:claim`,
+      `referral-bonus:${level}:reward`,
+    ],
     kind: 'affiliate-bonus',
     kindLabel: 'REFERRAL BONUS',
     label: `L${level} REFERRAL BONUS`,
@@ -511,8 +516,13 @@ async function _wwxrpItems(address, days) {
     return {
       id: `wwxrp-draw:${address}:${row.day}`,
       dismissScope: address,
-      // Preserve one logical identity across unclaimed -> paid indexing.
-      dismissKey: `wwxrp-draw:${row.day}`,
+      dismissKey: `wwxrp-draw:${row.day}:${claimable ? 'claim' : 'won'}`,
+      // Preserve the pre-fix phase keys and tombstone both sides of the
+      // unclaimed -> paid indexing handoff.
+      dismissIds: [
+        `wwxrp-draw:${row.day}:claim`,
+        `wwxrp-draw:${row.day}:won`,
+      ],
       kind: 'wwxrp-draw',
       kindLabel: `DAY ${row.day}`,
       label: `D${row.day} WWXRP · WON ${amount} FLIP`,

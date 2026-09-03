@@ -139,27 +139,61 @@ test('High Roller selection exposes only the High Roller entrant field', () => {
     'missing lane data never falls back to the combined field');
 });
 
-test('a lobby result stays sealed while the connected wallet has an unseen replay', () => {
+test('a lobby result stays sealed and only claims readiness once its replay can open', () => {
   const address = '0xAB12000000000000000000000000000000000000';
   const battleKey = `0x${'ab'.repeat(32)}`;
   const result = { battleKey, winner: address.toLowerCase() };
   const replays = [{ battleKey, viewerBetId: '17' }];
+  const identity = `${battleKey.toLowerCase()}:17`;
 
   assert.equal(crapsEntry.crapsResultNeedsReveal(result, {
     address,
     replays,
     wasSeen: () => false,
   }), true);
+  assert.equal(crapsEntry.crapsResultRevealState(result, {
+    address,
+    replays,
+    states: new Map([[identity, { ready: false, status: 'settling' }]]),
+  }), 'waiting');
+  assert.deepEqual(crapsEntry.crapsResultRevealCopy('waiting'), {
+    status: 'RESULT SETTLING',
+    route: 'STATUS IN PENDING',
+    aria: 'result is still settling; follow its status in Pending',
+  });
+  assert.equal(crapsEntry.crapsResultRevealState(result, {
+    address,
+    replays,
+    states: new Map([[identity, { ready: true, status: 'ready' }]]),
+  }), 'ready');
+  assert.deepEqual(crapsEntry.crapsResultRevealCopy('ready'), {
+    status: 'RESULT READY',
+    route: 'VIEW IN PENDING',
+    aria: 'result ready; view it in Pending to reveal',
+  });
+  assert.equal(crapsEntry.crapsResultRevealState(result, {
+    address,
+    replays,
+    states: new Map([[identity, { ready: false, status: 'build-unavailable' }]]),
+  }), 'unavailable');
   assert.equal(crapsEntry.crapsResultNeedsReveal(result, {
     address,
     replays,
     wasSeen: () => true,
   }), false);
+  assert.equal(crapsEntry.crapsResultRevealState(result, {
+    address,
+    replays,
+    wasSeen: () => true,
+  }), null);
   assert.equal(crapsEntry.crapsResultNeedsReveal({ battleKey: `0x${'cd'.repeat(32)}` }, {
     address,
     replays,
     wasSeen: () => false,
   }), false);
+  assert.match(componentSource,
+    /data-bind="craps-battle-result-status">RESULT SETTLING<\/small><strong data-bind="craps-battle-result-route">STATUS IN PENDING/,
+    'the static shell never advertises a replay as ready before loader state arrives');
 });
 
 test('winner-list goal colors and actual winner buy-ins come from sealed result data', () => {
@@ -383,7 +417,7 @@ test('the Craps day quest offers exact Today terms only before Battle 1 resolves
   });
   assert.deepEqual(beforeFirstResolution, {
     today: { day: 42, price: '17300' },
-    tomorrow: { day: 43, price: '25000' },
+    tomorrow: { day: 43, price: '25000', label: 'TOMORROW' },
   });
 
   assert.deepEqual(crapsEntry.crapsDayQuestPurchaseOptions({
@@ -391,12 +425,30 @@ test('the Craps day quest offers exact Today terms only before Battle 1 resolves
     todayPrice: 17_300n,
   }), {
     today: null,
-    tomorrow: { day: 43, price: '25000' },
+    tomorrow: { day: 43, price: '25000', label: 'TOMORROW' },
   });
   assert.equal(crapsEntry.crapsDayQuestPurchaseOptions({
     state: { day: 42, currentPeriod: 0 },
     todayPrice: null,
   }).today, null, 'Today stays hidden until its exact live price is available');
+
+  assert.deepEqual(crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 0 },
+    todayPrice: 17_300n,
+    playerEntries: {
+      days: { 42: { betId: '336' }, 43: { source: 'comp' }, 44: { source: 'paid' } },
+      windows: Array(7).fill(null),
+    },
+  }), {
+    today: null,
+    tomorrow: { day: 45, price: '25000', label: 'DAY 45' },
+  }, 'an owned current slate is hidden and comp-reserved future days are skipped');
+
+  assert.equal(crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 0 },
+    todayPrice: 17_300n,
+    playerEntries: { days: {}, windows: [{ betId: '337' }] },
+  }).today, null, 'a direct current battle also makes the whole-day Today option invalid');
 });
 
 test('lobby order keeps the next event first, tomorrow above newest settled history', () => {
@@ -487,6 +539,22 @@ test('entry selections use the reserved day slot and numbered battle slots', () 
     tableIndex: '344',
     entryLabel: 'DAY 43 · RESERVE ALL 7 BATTLES',
   });
+  assert.deepEqual(crapsEntry.crapsEntrySelection({
+    day: 42,
+    kind: 'future-day',
+    targetDay: 45,
+  }), {
+    entryKind: 'future-day',
+    entryDay: 45,
+    entryPeriod: null,
+    battleSlot: '360',
+    tableIndex: '360',
+    entryLabel: 'DAY 45 · RESERVE ALL 7 BATTLES',
+  });
+  assert.throws(
+    () => crapsEntry.crapsEntrySelection({ day: 42, kind: 'future-day', targetDay: 42 }),
+    /future Craps day/,
+  );
   assert.throws(
     () => crapsEntry.crapsEntrySelection({ day: 42, kind: 'window', period: 7 }),
     /seven Craps battles/,
@@ -516,6 +584,13 @@ test('lobby rows build exact normal, High Roller, and future-day contract calls'
   assert.deepEqual(futureNormal.contractArgs, [43, 1, false, board]);
   assert.equal(futureNormal.totalFlip, '25000');
   assert.equal(futureNormal.payment, 'flip');
+
+  const futureAfterComp = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'future-day', targetDay: 44, contractChips: board,
+  });
+  assert.deepEqual(futureAfterComp.contractArgs, [44, 1, false, board]);
+  assert.equal(futureAfterComp.entryDay, 44);
+  assert.equal(futureAfterComp.totalFlip, '25000');
 
   const futurePass = crapsEntry.crapsEntryWager({
     day: 42, kind: 'future-day', contractChips: board, usePass: true,
@@ -811,8 +886,14 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.doesNotMatch(componentSource, /data-bind="craps-status"|craps-entry__status/,
     'quest routing and transaction feedback never inserts a red row into the widget');
   assert.match(componentSource,
-    /requestedDay === 'today' \? 'day' : 'future-day',[\s\S]*?\.finally\(\(\) => \{[\s\S]*?this\.#forceFlipDay = false/,
-    'the paid day quest submits the selected slate directly and restores normal comp handling afterward');
+    /targetDay = positiveDay\(detail\?\.crapsTargetDay\)[\s\S]*?detail\.crapsHandled = true;[\s\S]*?detail\.crapsPurchase = purchase;[\s\S]*?this\.#forceFlipDay = false/,
+    'the paid day quest submits the exact unreserved slate and acknowledges its result to the quest sheet');
+  assert.match(componentSource,
+    /advancePastReserved[\s\S]*?error\?\.code === 'DayNotReservable'[\s\S]*?buildWager\(selection\.entryDay \+ 1\)/,
+    'a stale reservation snapshot advances past a comp-owned day during preflight without making the player click twice');
+  assert.match(componentSource,
+    /crapsDayQuestPurchaseOptions\(\{[\s\S]*?playerEntries,[\s\S]*?\}\)/,
+    'quest options account for days already reserved by paid entries or comps');
   assert.doesNotMatch(componentSource, /CRAPS DAY QUEST ·/,
     'the old focus-only red quest banner is gone');
   assert.doesNotMatch(componentSource, /Full slate before Battle 1 · or enter one battle\./,

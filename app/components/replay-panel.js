@@ -3762,10 +3762,9 @@ class ReplayPanel extends HTMLElement {
     let finalLockSettling = false;
     // Phase 64 (app embed): publish two separate views of the reel state.
     // `traits` contains durable locks only: a quadrant commits once BOTH its
-    // colour and symbol stop. `liveTraits` snapshots the exact four badges on
-    // that lock frame, which lets the bonus presentation light the face that
-    // actually landed. Publishing on lock frames instead of every 80ms tick
-    // keeps the secondary foil cabinet out of the reel's animation hot path.
+    // colour and symbol stop. `liveTraits` is the exact badge painted on this
+    // frame, including still-cycling reels. Hosts can therefore replace a
+    // transient lamp on every frame without losing already-committed locks.
     // The opening emit contains four nulls in both arrays and clears the prior
     // roll before the first new frame is painted.
     const emitSpinProgress = (liveTraits = [null, null, null, null]) => {
@@ -3930,11 +3929,11 @@ class ReplayPanel extends HTMLElement {
           }
         }
         this.#syncOwnedGoldState(quads);
+        emitSpinProgress(liveTraits);
         // Ordinary frames get one terse digital pulse whose pitch/volume
         // follows the blue count. A lock frame substitutes its red/blue/gold
         // cue instead of stacking both sounds on the same animation frame.
         if (lockedQuadrant != null) {
-          emitSpinProgress(liveTraits);
           this.#sfxLock({
             winnable: this.#quadOwned[lockedQuadrant],
             gold: !this.#bonusPhase

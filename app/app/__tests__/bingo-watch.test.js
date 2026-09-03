@@ -482,6 +482,47 @@ describe('bingo event watcher', () => {
       'the unchanged API proof stays cleared after a remount');
   });
 
+  test('a cleared Bingo claim does not return under its later receipt id', async () => {
+    let snapshot = {
+      player: PLAYER,
+      claimable: [{
+        player: PLAYER,
+        level: 36,
+        quadrant: 1,
+        symbol: 9,
+        slots: [1, 2, 3, 4, 5, 6, 7, 8],
+      }],
+      claimed: [],
+    };
+    bingo.__setBingoReadersForTest({ index: async () => snapshot });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    const [claim] = pending.getPendingActions().filter((row) => row.kind === 'bingo');
+    await pending.dismissPendingActionItems([claim]);
+    snapshot = {
+      player: PLAYER,
+      claimable: [],
+      claimed: [{
+        id: '0xafterclear:4',
+        transactionHash: '0xafterclear',
+        logIndex: 4,
+        blockNumber: TEST_BLOCK + 1,
+        player: PLAYER,
+        level: 36,
+        symbol: 9,
+        tier: 'regular',
+        flipReward: '1',
+        dgnrsPaid: '0',
+      }],
+    };
+    await bingo.refreshBingoWatch();
+
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
+      'the event hash is a lifecycle detail, not a new Pending item');
+  });
+
   test('migrates old per-quadrant tombstones to suppress the whole level', async () => {
     const storageKey = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME).toLowerCase()}:${PLAYER.toLowerCase()}`;
     localStorage.setItem(storageKey, JSON.stringify({

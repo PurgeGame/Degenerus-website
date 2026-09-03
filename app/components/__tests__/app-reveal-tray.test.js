@@ -440,7 +440,9 @@ describe('<app-reveal-tray>', () => {
     let action = el.querySelector('.rrt-action--craps');
     assert.ok(action, 'the finalized owned run is visible while its replay is assembled');
     assert.ok(action.className.includes('rrt-action--compact'));
-    assert.equal(action.querySelector('.rrt-action__label').textContent, '200 FLIP\nBATTLE');
+    assert.equal(action.querySelector('.rrt-craps-summary__amount').textContent, '200 FLIP');
+    assert.equal(action.querySelector('.rrt-craps-summary__status').textContent, 'SETTLING');
+    assert.equal(action.getAttribute('aria-label'), '200 FLIP · SETTLING');
     assert.equal(action.querySelector('.rrt-action__kind'), null);
     assert.equal(action.querySelector('.rrt-action__cta'), null,
       'the compact battle receipt has no trailing status or VIEW copy');
@@ -460,14 +462,30 @@ describe('<app-reveal-tray>', () => {
     }]);
     action = el.querySelector('.rrt-action--craps');
     assert.equal(action.querySelector('.rrt-action__cta'), null);
-    assert.equal(action.getAttribute('aria-label'), '200 FLIP\nBATTLE');
+    assert.equal(action.querySelector('.rrt-craps-summary__amount').textContent, '200 FLIP');
+    assert.equal(action.querySelector('.rrt-craps-summary__status').textContent, 'VIEW RESULT');
+    assert.equal(action.querySelector('.rrt-craps-summary__status').getAttribute('data-state'),
+      'ready');
+    assert.equal(action.getAttribute('aria-label'), '200 FLIP · VIEW RESULT');
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1, 'the ready receipt opens the owned replay result');
+    assert.deepEqual(trayModule.crapsPendingSummary({
+      label: '4,000 FLIP\nBATTLE',
+      state: 'waiting',
+      phase: 'settling',
+    }), {
+      amount: '4K FLIP',
+      status: 'SETTLING',
+      text: '4K FLIP · SETTLING',
+    });
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css,
-      /\.rrt-action--craps\.rrt-action--compact \.rrt-action__label\s*\{[^}]*white-space:\s*pre-line/s,
-      'the compact receipt preserves the requested line break');
+      /\.rrt-action--craps\.rrt-action--compact\s*\{[^}]*min-width:\s*9rem[^}]*grid-template-columns:\s*2\.35rem minmax\(4\.6rem, auto\)/s,
+      'the compact receipt reserves enough room for the amount and status');
+    assert.match(css,
+      /\.rrt-action--craps\.rrt-action--compact \.rrt-action__label\s*\{[^}]*overflow:\s*visible[^}]*white-space:\s*nowrap/s,
+      'the compact receipt does not ellipsize or split its status into stray lines');
     el.disconnectedCallback();
   });
 

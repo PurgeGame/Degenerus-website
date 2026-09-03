@@ -806,7 +806,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
   test('the Craps day level quest is named, clickable, and routes to its paid buy-in', async () => {
     const events = [];
-    const listener = (event) => events.push(event.detail);
+    const listener = (event) => {
+      events.push({ ...event.detail });
+      event.detail.crapsHandled = true;
+      event.detail.crapsPurchase = Promise.resolve({ ok: true });
+    };
     const optionsListener = (event) => {
       event.detail.today = { day: 7, price: '17300' };
       event.detail.tomorrow = { day: 8, price: '25000' };
@@ -856,7 +860,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('[data-bind="qst-action-lootbox"]').textContent,
       'TOMORROW · 25,000 FLIP');
     assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      /Reserve tomorrow's Normal Craps day for 25,000 FLIP\. Paid with FLIP; comps stay banked\./);
+      /Reserve tomorrow's Normal Craps day for 25,000 FLIP\.[\s\S]*next unreserved day\.[\s\S]*Paid with FLIP; comps stay banked\./);
     assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
       'CONFIRM · BUY TOMORROW · 25,000 FLIP');
 
@@ -870,6 +874,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
       'CONFIRM · BUY TODAY · 17,300 FLIP');
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    await settle(5);
     assert.deepEqual(events, [{
       questType: 11,
       target: '1',
@@ -877,7 +882,73 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       submit: true,
       level: 7,
       crapsDay: 'today',
+      crapsTargetDay: 7,
     }]);
+    assert.equal(el.querySelector('[data-bind="qst-action-dialog"]').hidden, true,
+      'the sheet closes only after the Craps purchase handler reports success');
+
+    document.removeEventListener('quest:activate', listener);
+    document.removeEventListener('quest:craps-options', optionsListener);
+    el.disconnectedCallback();
+  });
+
+  test('the Craps day quest skips a comp-reserved day and keeps transaction errors visible', async () => {
+    let submitted = null;
+    const listener = (event) => {
+      submitted = { ...event.detail };
+      event.detail.crapsHandled = true;
+      event.detail.crapsPurchase = Promise.resolve({
+        ok: false,
+        message: 'That future Craps day is already reserved. Choose another future day.',
+      });
+    };
+    const optionsListener = (event) => {
+      event.detail.today = null;
+      event.detail.tomorrow = { day: 9, price: '25000', label: 'DAY 9' };
+    };
+    document.addEventListener('quest:activate', listener);
+    document.addEventListener('quest:craps-options', optionsListener);
+    _fetchHandler = async () => makeQuestsPayload({
+      levelQuest: {
+        level: 7,
+        questType: 11,
+        progress: '0',
+        target: '1',
+        completed: false,
+        eligible: true,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    el.querySelectorAll('.qst-slot')[2].dispatchEvent({ type: 'click' });
+    const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
+    assert.equal(el.querySelector('[data-bind="qst-action-lootbox"]').textContent,
+      'DAY 9 · 25,000 FLIP');
+    assert.equal(el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY DAY 9 · 25,000 FLIP');
+    assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      /earlier comp reservation stays untouched/);
+
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    await settle(5);
+
+    assert.deepEqual(submitted, {
+      questType: 11,
+      target: '1',
+      variant: 'level',
+      submit: true,
+      level: 7,
+      crapsDay: 'tomorrow',
+      crapsTargetDay: 9,
+    });
+    assert.equal(dialog.hidden, false, 'a failed preflight does not dismiss the sheet');
+    assert.equal(el.querySelector('.qst-action-dialog__card').getAttribute('data-state'), 'error');
+    const error = el.querySelector('[data-bind="qst-action-error"]');
+    assert.equal(error.hidden, false);
+    assert.match(error.textContent, /already reserved/);
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').disabled, false,
+      'the corrected purchase can be retried from the same sheet');
 
     document.removeEventListener('quest:activate', listener);
     document.removeEventListener('quest:craps-options', optionsListener);

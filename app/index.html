@@ -43,7 +43,6 @@
        LCP resource; give that 2.6KB SVG priority instead of making the 172KB
        headline frame compete with critical CSS. KEEP THE -vNN SUFFIXES IN
        SYNC with the stylesheets when art bumps. -->
-  <link rel="preload" as="image" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
   <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v9.webp">
   <link rel="preload" as="image" fetchpriority="high" href="/app/assets/jackpot/daily-drawing-foil-routing-v5.svg">
   <!-- Inter is self-hosted (shared/nav.css @font-face). Preloading the latin
@@ -52,15 +51,15 @@
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/shared/fonts/inter-var-latin-v20.woff2">
   <!-- Stylesheet tiers (2026-08-15 LCP round). BLOCKING sheets style what is
        visible at first paint: the shell/nav/skeleton, the testnet banner
-       (status-indicators.css), the static gold-rush hero (app.css), the
+       (status-indicators.css), the static gold-rush hero (app.min.css), the
        drawing-machine chrome (jackpot/daily-drawing), nav chrome
        (settings-menu) and the top-of-page wallet banner slot.
-       DEFERRED sheets (media="print" + onload swap) style surfaces that only
-       JS can put on screen — closed drawers, hidden dialogs, event-gated
-       overlays, below-the-fold idle-tier panels — so they download in
-       parallel without blocking the hero's first paint. The onload swap keeps
-       each <link> in its original cascade position, so override order
-       ("loaded after app.css" comments in the sheets) is unchanged.
+       DEFERRED sheets use media="print" + onload when they are lightweight
+       and broadly shared. Large component-owned sheets keep their href in
+       data-href and are requested with their module, so they do not compete
+       with the phone's first screen. Both forms retain the original <link>
+       position, so cascade order ("loaded after app.css" comments in the
+       sheets) is unchanged.
        ⚠ Keep any sheet that styles STATIC index.html markup in the blocking
        tier — a deferred sheet here means a flash of unstyled content. -->
   <link rel="stylesheet" href="/shared/nav.css">
@@ -75,19 +74,19 @@
   <link rel="stylesheet" href="/app/styles/viewer.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/app.css?v=reveal-controls-20260829">
-  <link rel="stylesheet" href="/app/styles/sdgnrs-burn-rail.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/app.min.css?v=mobile-perf-20260903">
+  <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css">
-  <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css">
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
-  <link rel="stylesheet" href="/app/styles/afking-funding-warning.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
   <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/craps-table.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/baf-eve.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/records-rail.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/baf-resolution.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" data-href="/app/styles/craps-table.css">
+  <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
+  <link rel="stylesheet" data-href="/app/styles/records-rail.css">
+  <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
   <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" onload="this.media='all';this.onload=null">
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
   <!-- BUY IN is part of the static three-column hero, so its final visual
@@ -96,19 +95,17 @@
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
-       dependency graph alone. The vendored files are esm.sh `?bundle` builds —
-       each one self-contained with zero external imports — so this is still a
-       no-build site: static files plus an import map, no bundler.
-       Versions are pinned in db/vendor-modules.sh; MANIFEST.txt records the
-       sha256 and source URL of every file. `./db/vendor-modules.sh --check`
-       verifies the tree matches the manifest.
+       dependency graph alone. GSAP and lean-qr are self-contained esm.sh
+       `?bundle` builds tracked by app/vendor/MANIFEST.txt. Ethers is built
+       locally from the exact same pinned version with only the APIs this app
+       uses; `npm run check:vendor` prevents a stale generated module.
        @walletconnect stays on esm.sh: its bundle still fans out into @msgpack
        sub-modules, and it is lazy-loaded (connect click only), so it is off the
        cold-load path. Revisit when a real WalletConnect project id lands. -->
   <script type="importmap">
   {
     "imports": {
-      "ethers": "/app/vendor/ethers.mjs",
+      "ethers": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
       "gsap": "/app/vendor/gsap.mjs",
       "gsap/Flip": "/app/vendor/gsap-flip.mjs",
       "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
@@ -352,31 +349,33 @@
            all-symbols × per-level chart (app-tickets-inventory.js) -->
       <app-tickets-inventory></app-tickets-inventory>
 
-      <!-- Collapsed passes (user call: tickets+lootboxes live in the buy
-           panel now, so the packs panel is gone and this is just passes) -->
+      <!-- Collapsed passes: subscription coverage plus three purchase
+           shortcuts. Owned passes deliberately live on their own surfaces
+           (for example, Deity ownership belongs to app-deity-desk above). -->
       <details class="more-ways section-disclosure" id="afking-passes">
         <summary class="more-ways__summary section-disclosure__bar">
           <span class="section-disclosure__title">AFKING PASSES</span>
-          <span class="more-ways__summary-closed" data-bind="pass-summary-closed" hidden>
+          <span class="more-ways__summary-closed" data-bind="pass-summary-closed">
             <span class="more-ways__sub-state" data-bind="pass-summary-state" hidden>
               <b data-bind="pass-summary-subscription"></b>
               <b data-bind="pass-summary-funding" hidden></b>
             </span>
-            <span class="more-ways__deity-ticket" data-bind="pass-summary-deity" hidden>
-              <span class="deity-pass-lockup more-ways__deity-lockup">
-                <img class="deity-pass-lockup__symbol" data-bind="pass-summary-deity-badge"
-                     src="" alt="">
-                <img class="deity-pass-lockup__frame"
-                     src="/app/assets/deity-pass-lockup-v3.webp"
-                     width="1400" height="320" alt="Deity Pass">
-              </span>
-              <span class="more-ways__deity-copy">
-                <b data-bind="pass-summary-deity-name"></b>
-              </span>
-            </span>
-            <span class="more-ways__active-pass" data-bind="pass-summary-active-pass" hidden>
-              <i data-bind="pass-summary-active-pass-sigil" aria-hidden="true"></i>
-              <b data-bind="pass-summary-active-pass-label"></b>
+            <span class="more-ways__quickbuys" aria-label="Quick buy passes">
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--lazy"
+                      data-write data-pass-quickbuy="lazy" aria-label="Quick buy Lazy pass">
+                <i aria-hidden="true">10</i>
+                <span><b data-bind="pass-summary-buy-lazy-name">BUY LAZY</b><small data-bind="pass-summary-buy-lazy-price">CHECKING…</small></span>
+              </button>
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--whale"
+                      data-write data-pass-quickbuy="whale" aria-label="Quick buy Whale pass">
+                <i aria-hidden="true">100</i>
+                <span><b data-bind="pass-summary-buy-whale-name">BUY WHALE</b><small data-bind="pass-summary-buy-whale-price">CHECKING…</small></span>
+              </button>
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--deity"
+                      data-write data-pass-quickbuy="deity" aria-label="Choose a Deity pass symbol">
+                <i aria-hidden="true">✦</i>
+                <span><b data-bind="pass-summary-buy-deity-name">BUY DEITY</b><small data-bind="pass-summary-buy-deity-price">CHECKING…</small></span>
+              </button>
             </span>
           </span>
           <span class="section-disclosure__chevron" aria-hidden="true"></span>
@@ -464,9 +463,9 @@
   <script type="module" src="/app/components/app-pool-progress.js"></script>
   <script type="module" src="/app/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
-  <script type="module" src="/app/components/app-daily-flip.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
-  <script type="module" src="/app/components/app-decimator-panel.js"></script>
+  <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
+       eager; the two large outer hero columns are scheduled below. -->
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
   <script type="module">
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
@@ -489,6 +488,29 @@
     const LAZY_PANELS = [
       ['afking-passes', '/app/components/app-pass-section.js'],
     ];
+    // These are visible hero columns, but on a phone they sit below the Daily
+    // Drawing. skeleton.css reserves their measured heights. The viewport
+    // scheduler fetches each shortly before it scrolls into view; wide layouts
+    // start both immediately because all three columns are visible.
+    const POST_HERO_MODULES = [
+      '/app/components/app-decimator-panel.js',
+      '/app/components/app-daily-flip.js',
+    ];
+    // These scoped sheets belong exclusively to late modules. A print-media
+    // link still downloads during HTML parsing, so it was costing narrow cold
+    // loads hundreds of kilobytes before any corresponding panel existed.
+    // Leaving the href absent preserves cascade position without requesting it;
+    // the module loader attaches it and waits, preventing a flash on upgrade.
+    const MODULE_STYLES = new Map([
+      ['/app/components/app-pass-section.js', ['/app/styles/deity-pass-purchase.css']],
+      ['/app/components/app-craps-entry.js', ['/app/styles/craps-table.css']],
+      ['/app/components/app-baf-eve.js', ['/app/styles/baf-eve.css']],
+      ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
+      ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css']],
+      ['/app/components/app-sdgnrs-burn-rail.js', ['/app/styles/sdgnrs-burn-rail.css']],
+      ['/app/components/app-jackpot-resolutions.js', ['/app/styles/baf-resolution.css']],
+      ['/app/components/app-afking-funding-warning.js', ['/app/styles/afking-funding-warning.css']],
+    ]);
     const IDLE_MODULES = [
       // Second lazy-tier pass (C16, 2026-08-14): below-the-fold main-column
       // panels and event-driven chrome/dialogs, each verified ZERO static
@@ -522,6 +544,27 @@
       // it must never compete with the panels it measures.
       '/app/app/telemetry.js',
     ];
+    // Empty custom-element hosts collapse before upgrade, so observe stable
+    // section boundaries where several panels share a row. A 200px lookahead
+    // is enough to hide module latency during an ordinary scroll without
+    // letting multi-megabyte below-fold graphs compete with mobile LCP.
+    const VIEWPORT_MODULES = [
+      ['app-decimator-panel', '/app/components/app-decimator-panel.js'],
+      ['app-daily-flip', '/app/components/app-daily-flip.js'],
+      ['app-baf-eve', '/app/components/app-baf-eve.js'],
+      ['app-decimator-burn', '/app/components/app-decimator-burn.js'],
+      ['.play-grid', '/app/components/app-quest-panel.js'],
+      ['.play-grid', '/app/components/app-degenerette-panel.js'],
+      ['.play-grid', '/app/components/app-craps-entry.js'],
+      ['.play-grid', '/app/components/app-craps-rules.js'],
+      ['app-records-rail', '/app/components/app-records-rail.js'],
+      ['app-deity-desk', '/app/components/app-deity-desk.js'],
+      ['app-tickets-inventory', '/app/components/app-tickets-inventory.js'],
+      ['app-parimutuel-panel', '/app/components/app-parimutuel-panel.js'],
+      ['app-sdgnrs-burn-rail', '/app/components/app-sdgnrs-burn-rail.js'],
+      ['app-transaction-history', '/app/components/app-transaction-history.js'],
+      ['app-affiliate-panel', '/app/components/app-affiliate-panel.js'],
+    ];
     // A hard reload only applies its cache bypass to navigation-time fetches.
     // These modules arrive later from an idle callback, so reused Firefox and
     // Chromium profiles can otherwise keep different pre-edit generations of
@@ -531,18 +574,115 @@
     const moduleRevision = DEV_MODULE_HOSTS.has(window.location.hostname)
       ? `?dev=${Date.now().toString(36)}`
       : '';
-    const importModule = (src) => import(`${src}${moduleRevision}`);
+    const styleLoads = new Map();
+    const moduleLoads = new Map();
+    const loadStyle = (href) => {
+      if (styleLoads.has(href)) return styleLoads.get(href);
+      const link = document.querySelector(`link[data-href="${href}"]`);
+      if (!link || link.hasAttribute('href')) return Promise.resolve();
+      const loaded = new Promise((resolve) => {
+        link.addEventListener('load', resolve, { once: true });
+        link.addEventListener('error', resolve, { once: true });
+        link.setAttribute('href', href);
+      });
+      styleLoads.set(href, loaded);
+      return loaded;
+    };
+    const importModule = (src) => {
+      if (moduleLoads.has(src)) return moduleLoads.get(src);
+      const loaded = (async () => {
+        await Promise.all((MODULE_STYLES.get(src) || []).map(loadStyle));
+        return import(`${src}${moduleRevision}`);
+      })();
+      moduleLoads.set(src, loaded);
+      loaded.catch(() => { if (moduleLoads.get(src) === loaded) moduleLoads.delete(src); });
+      return loaded;
+    };
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
+    const requestModule = (src) => {
+      void importModule(src).catch((error) => console.error(`Unable to load ${src}`, error));
+    };
+    const afterWindowLoad = (fn) => {
+      const schedule = () => idle(fn);
+      if (document.readyState === 'complete') schedule();
+      else window.addEventListener('load', schedule, { once: true });
+    };
+    const loadInBatches = (sources) => {
+      const pending = [...new Set(sources)];
+      const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
+      const next = () => {
+        if (pending.length === 0) return;
+        const batch = pending.splice(0, batchSize);
+        void Promise.allSettled(batch.map(importModule))
+          .then(() => setTimeout(() => idle(next), 250));
+      };
+      next();
+    };
+
+    // Desktop exposes every hero column at once. Phones request each large
+    // neighbor only as it approaches the viewport.
+    if (window.matchMedia('(min-width: 1100px)').matches) {
+      for (const src of POST_HERO_MODULES) requestModule(src);
+    }
+
+    if ('IntersectionObserver' in window) {
+      const modulesByHost = new Map();
+      for (const [selector, src] of VIEWPORT_MODULES) {
+        const host = document.querySelector(selector);
+        if (!host) continue;
+        const sources = modulesByHost.get(host) || [];
+        sources.push(src);
+        modulesByHost.set(host, sources);
+      }
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer.unobserve(entry.target);
+          for (const src of modulesByHost.get(entry.target) || []) requestModule(src);
+        }
+      }, { rootMargin: '200px 0px' });
+      for (const host of modulesByHost.keys()) observer.observe(host);
+    }
+
     for (const [detailsId, src] of LAZY_PANELS) {
       const host = document.getElementById(detailsId);
-      if (!host) { importModule(src); continue; }
+      if (!host) { afterWindowLoad(() => requestModule(src)); continue; }
       let requested = false;
-      const load = () => { if (!requested) { requested = true; importModule(src); } };
+      const load = () => { if (!requested) { requested = true; requestModule(src); } };
       host.addEventListener('toggle', load, { once: true });
+      // The closed AFKING bar contains real purchase shortcuts. Warm its lazy
+      // module on intent, then hand the click to the upgraded component while
+      // preventing the surrounding <summary> from opening accidentally.
+      const warmQuickBuy = (event) => {
+        if (event.target?.closest?.('[data-pass-quickbuy]')) load();
+      };
+      host.addEventListener('pointerdown', warmQuickBuy, { passive: true });
+      host.addEventListener('focusin', warmQuickBuy);
+      host.addEventListener('click', async (event) => {
+        const quickBuy = event.target?.closest?.('[data-pass-quickbuy]');
+        if (!quickBuy || !host.contains(quickBuy)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (quickBuy.disabled) return;
+        try {
+          await importModule(src);
+          const passSection = host.querySelector('app-pass-section');
+          await passSection?.quickBuyPass?.(quickBuy.dataset.passQuickbuy);
+        } catch (error) {
+          console.error(`Unable to start ${quickBuy.dataset.passQuickbuy} pass purchase`, error);
+          host.open = true;
+        }
+      });
       if (host.open) load();
-      idle(load);
     }
-    idle(() => { for (const src of IDLE_MODULES) importModule(src); });
+    // Window load is the LCP-safe backstop: every panel still initializes in a
+    // tab that never scrolls, but root imports are capped at two at a time so
+    // network, parsing and the API do not receive one synchronized burst.
+    afterWindowLoad(() => loadInBatches([
+      ...POST_HERO_MODULES,
+      ...IDLE_MODULES,
+      ...LAZY_PANELS.map(([, src]) => src),
+    ]));
   </script>
 </body>
 </html>

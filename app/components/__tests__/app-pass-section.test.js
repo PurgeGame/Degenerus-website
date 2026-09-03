@@ -288,6 +288,7 @@ const PANEL_SRC = readFileSync(
 );
 const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
+const PASS_SOURCE = readFileSync(new URL('../app-pass-section.js', import.meta.url), 'utf8');
 const DEITY_CSS = readFileSync(new URL('../../styles/deity-pass-purchase.css', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
@@ -562,64 +563,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'phone categories fold to four equally sized symbol slots');
   });
 
-  test('closed AFKING drawer summarizes the subscription, prepaid days, Deity art, and active pass', async () => {
-    const {
-      activePassSummary,
-      afkingClosedSummary,
-      inferActiveWhalePassCount,
-    } = await import('../app-pass-section.js');
-    const tickets = Array.from({ length: 12 }, (_unused, index) => ({
-      level: 101 + index,
-      entryCount: (101 + index) % 2 === 0 ? 8 : 4,
-    }));
-    assert.equal(inferActiveWhalePassCount(tickets, 100), 3,
-      'all four half-pass residue lanes preserve a stacked quantity');
-    assert.deepEqual(activePassSummary({
-      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
-      tickets,
-    }, 100), {
-      kind: 'whale',
-      sigil: '100',
-      label: '3 ACTIVE WHALE PASSES',
-    });
-    const twoWhaleStreams = Array.from({ length: 12 }, (_unused, index) => ({
-      level: 101 + index,
-      entryCount: 4,
-    }));
-    assert.deepEqual(activePassSummary({
-      scoreBreakdown: { passBonus: { kind: 'deity', points: 80 } },
-      tickets: twoWhaleStreams,
-    }, 100), {
-      kind: 'whale',
-      sigil: '100',
-      label: '2 ACTIVE WHALE PASSES',
-    }, 'Deity score precedence does not hide two active Whale ticket streams');
-    const elevenHalfPasses = Array.from({ length: 24 }, (_unused, index) => ({
-      level: 101 + index,
-      entryCount: [12, 12, 12, 8][index % 4],
-    }));
-    assert.equal(inferActiveWhalePassCount(elevenHalfPasses, 100), 5.5,
-      'an odd jackpot half-pass award remains a visible half instead of becoming six passes');
-    assert.equal(activePassSummary({
-      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
-      tickets: elevenHalfPasses,
-    }, 100)?.label, '5½ ACTIVE WHALE PASSES');
-    const jackpotStack = Array.from({ length: 24 }, (_unused, index) => {
-      const level = 101 + index;
-      const halfPassesByLane = [99, 100, 100, 99];
-      return { level, entryCount: halfPassesByLane[level & 3] * 4 };
-    });
-    assert.equal(inferActiveWhalePassCount(jackpotStack, 100), 199,
-      'jackpot-awarded stacks are not clipped to the 100-pass purchase limit');
-    assert.equal(activePassSummary({
-      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
-      tickets: jackpotStack,
-    }, 100)?.label, '199 ACTIVE WHALE PASSES');
-    assert.equal(inferActiveWhalePassCount([{ level: 101, entryCount: 4 }], 100), 0,
-      'one ordinary future ticket is not mislabeled as a Whale pass');
-    assert.equal(activePassSummary({
-      scoreBreakdown: { passBonus: { kind: 'whale_10', points: 10 } },
-    }, 100)?.label, 'ACTIVE LAZY PASS');
+  test('closed AFKING drawer keeps subscription info and exposes three quick buys without owned passes', async () => {
+    const { afkingClosedSummary } = await import('../app-pass-section.js');
     assert.deepEqual(afkingClosedSummary({
       active: true,
       hasToken: true,
@@ -632,24 +577,28 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       funding: 'FUNDED FOR: 5 DAYS',
       fundedDays: 5n,
     });
-    assert.match(INDEX_HTML, /data-bind="pass-summary-deity-badge"/);
+    assert.deepEqual(
+      [...INDEX_HTML.matchAll(/data-pass-quickbuy="(lazy|whale|deity)"/g)].map((match) => match[1]),
+      ['lazy', 'whale', 'deity'],
+      'the closed bar has one shortcut for each purchasable pass type',
+    );
+    assert.doesNotMatch(INDEX_HTML, /pass-summary-(?:deity|active-pass)/,
+      'owned Deity, Whale, and Lazy state is not duplicated in the shop bar');
+    assert.ok(INDEX_HTML.indexOf('<app-deity-desk>') < INDEX_HTML.indexOf('id="afking-passes"'),
+      'the dedicated Deity bar remains the ownership surface above the pass shop');
+    assert.match(PASS_SOURCE, /async quickBuyPass\(product\)[\s\S]*?#onLazyBuyClick\(\)[\s\S]*?#onWhaleBuyClick\(\)/,
+      'summary shortcuts reuse the existing transaction implementations');
     assert.match(INDEX_HTML,
-      /class="deity-pass-lockup more-ways__deity-lockup"[\s\S]*?data-bind="pass-summary-deity-badge"[\s\S]*?deity-pass-lockup-v3\.webp/,
-      'the owned-pass chip places the real selected symbol inside the shared identity art');
-    assert.match(STATUS_CSS,
-      /\.more-ways__deity-lockup\s*\{[^}]*width:\s*7\.2rem/s,
-      'the integrated identity remains compact enough for the closed strip');
-    assert.match(STATUS_CSS,
-      /\.more-ways__deity-ticket\[data-symbol="ethereum"\][\s\S]*?\.deity-pass-lockup__symbol\s*\{[^}]*scale\(1\.14\)/s,
-      'the compact God of Ethereum portrait enlarges its unusually small source glyph');
+      /data-pass-quickbuy[\s\S]*?event\.preventDefault\(\)[\s\S]*?quickBuyPass/,
+      'a quick-buy click loads the lazy component without toggling the summary');
     assert.match(STATUS_CSS, /\.more-ways\[open\][^{]*\.more-ways__summary-closed\s*\{[^}]*display:\s*none/s,
       'summary details disappear when the full pass desk is open');
     assert.match(STATUS_CSS,
-      /@media \(max-width: 620px\)[\s\S]*?\.more-ways__summary-closed\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[\s\S]*?\.more-ways__sub-state\s*\{[^}]*grid-column:\s*1 \/ -1/s,
-      'Whale/Lazy and Deity pass summaries share one line beneath subscription state');
+      /@media \(max-width: 620px\)[\s\S]*?\.more-ways__quickbuys\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
+      'all three quick buys remain uniformly sized on phones');
     assert.match(STATUS_CSS,
       /\.more-ways__sub-state\s*\{[^}]*min-height:\s*2\.15rem[\s\S]*?\.more-ways__sub-state > b\s*\{[^}]*min-height:\s*2\.15rem/s,
-      'subscription coverage uses the same height as the neighboring Deity and Whale chips');
+      'subscription coverage keeps its compact two-part presentation');
   });
 
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {

@@ -108,6 +108,13 @@ describe('launch referral bonus action', () => {
     assert.equal(action.kindLabel, 'REFERRAL BONUS');
     assert.equal(action.write, false, 'an already-paid reward is a presentation, not a write');
     assert.equal(action.shortLabel, 'View Referral Bonus');
+    const claimableAction = launch.buildReferralBonusPendingAction({
+      address: PLAYER,
+      bonus: { level: LEVEL, amountWei: 89_400n * UNIT, claimed: false },
+    });
+    assert.ok(action.dismissIds.includes(claimableAction.dismissKey));
+    assert.ok(claimableAction.dismissIds.includes(action.dismissKey),
+      'claimable and already-paid are one lifecycle for CLEAR');
 
     assert.equal(await action.run(), true);
     assert.equal(claims, 0);

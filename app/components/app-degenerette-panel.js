@@ -2789,8 +2789,7 @@ class AppDegenerettePanel extends HTMLElement {
       // keeps older rows recoverable after the newest active card is retired.
       placeBtn.disabled = (
         this.#clearingPendingBets
-        ||
-        this.#state === STATE.PLACING
+        || this.#state === STATE.PLACING
         || this.#state === STATE.REQUESTING_RNG
         || this.#state === STATE.RESOLVING
       );

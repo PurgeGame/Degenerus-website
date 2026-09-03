@@ -500,6 +500,8 @@ class AppQuestPanel extends HTMLElement {
   #questDialogModel = null;
   #questDialogChoice = 'ticket';
   #questCrapsOptions = null;
+  #questDialogSubmitting = false;
+  #questDialogError = '';
   #questActionAmount = null;
   #questLootboxQuantity = 1;
   #questDialogReturnFocus = null;
@@ -719,6 +721,8 @@ class AppQuestPanel extends HTMLElement {
             <span>QUEST ACTION</span>
             <strong data-bind="qst-action-requirement">—</strong>
           </div>
+          <p class="qst-action-error" data-bind="qst-action-error"
+             role="alert" aria-live="assertive" hidden></p>
           <button type="button" class="qst-action-confirm" data-bind="qst-action-confirm">
             CONFIRM QUEST ACTION
           </button>
@@ -787,7 +791,7 @@ class AppQuestPanel extends HTMLElement {
       ?.addEventListener?.('click', () => this.#stepQuestDgn('spins', -1));
     this.querySelector('[data-bind="qst-action-dgn-spins-up"]')
       ?.addEventListener?.('click', () => this.#stepQuestDgn('spins', 1));
-    confirm?.addEventListener?.('click', () => this.#confirmQuestDialog());
+    confirm?.addEventListener?.('click', () => { void this.#confirmQuestDialog(); });
     dialog?.addEventListener?.('keydown', (event) => {
       if (event?.key !== 'Escape') return;
       try { event.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
@@ -869,6 +873,7 @@ class AppQuestPanel extends HTMLElement {
     const fallbackTomorrow = Object.freeze({
       day: null,
       price: CRAPS_FUTURE_DAY_PRICES.normal.toString(),
+      label: 'TOMORROW',
     });
     const detail = { today: null, tomorrow: fallbackTomorrow };
     try {
@@ -894,6 +899,7 @@ class AppQuestPanel extends HTMLElement {
     } else {
       this.#questDialogChoice = controlChoice === 'lootbox' ? 'lootbox' : 'ticket';
     }
+    this.#questDialogError = '';
     this.#resetQuestActionAmount();
     this.#renderQuestDialog();
   }
@@ -1152,13 +1158,20 @@ class AppQuestPanel extends HTMLElement {
       const option = useToday
         ? this.#questCrapsOptions.today
         : this.#questCrapsOptions?.tomorrow;
+      const optionLabel = useToday
+        ? 'TODAY'
+        : String(option?.label || 'TOMORROW').toUpperCase();
       let price = CRAPS_FUTURE_DAY_PRICES.normal;
       try { price = BigInt(option?.price ?? price); } catch (_error) { /* fixed fallback */ }
       return {
-        label: `BUY ${crapsDay.toUpperCase()} · ${price.toLocaleString('en-US')} FLIP`,
+        label: `BUY ${optionLabel} · ${price.toLocaleString('en-US')} FLIP`,
         target: 1n,
         price,
         crapsDay,
+        crapsDayLabel: optionLabel,
+        crapsTargetDay: option?.day != null && Number.isInteger(Number(option.day))
+          ? Number(option.day)
+          : null,
         completes: true,
       };
     }
@@ -1207,6 +1220,8 @@ class AppQuestPanel extends HTMLElement {
     this.#questDialogModel = { ...model };
     this.#questDialogChoice = Number(model?.questType) === 11 ? 'tomorrow' : 'ticket';
     this.#questCrapsOptions = null;
+    this.#questDialogSubmitting = false;
+    this.#questDialogError = '';
     this.#questLootboxQuantity = 1;
     this.#resetQuestActionAmount();
     this.#prepareQuestDgnDraft(this.#questDialogModel);
@@ -1251,6 +1266,7 @@ class AppQuestPanel extends HTMLElement {
     const dgnBetLimit = this.querySelector('[data-bind="qst-action-dgn-bet-limit"]');
     const dgnSpinsLimit = this.querySelector('[data-bind="qst-action-dgn-spins-limit"]');
     const requirement = this.querySelector('[data-bind="qst-action-requirement"]');
+    const actionError = this.querySelector('[data-bind="qst-action-error"]');
     const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
     const hasPurchaseChoice = Number(model.questType) === 1;
     const isCrapsDay = Number(model.questType) === 11;
@@ -1280,7 +1296,11 @@ class AppQuestPanel extends HTMLElement {
       : 'primary';
     const completes = action.completes !== false;
     const blocked = Boolean(model.isGated);
-    const actionState = blocked ? 'locked' : completes ? 'ready' : 'partial';
+    const actionState = this.#questDialogError
+      ? 'error'
+      : this.#questDialogSubmitting
+        ? 'submitting'
+        : blocked ? 'locked' : completes ? 'ready' : 'partial';
     card?.setAttribute?.('data-variant', variant);
     card?.setAttribute?.('data-state', actionState);
     if (role) role.textContent = `${String(model.role || 'QUEST')} QUEST`;
@@ -1297,9 +1317,13 @@ class AppQuestPanel extends HTMLElement {
       rewardExtra.hidden = !model.rewardExtraText;
     }
     if (state) {
-      state.textContent = blocked
-        ? 'DAILY QUEST REQUIRED'
-        : completes ? 'COMPLETES QUEST' : 'PARTIAL PROGRESS';
+      state.textContent = this.#questDialogError
+        ? 'PURCHASE NOT SENT'
+        : this.#questDialogSubmitting
+          ? 'CHECKING PURCHASE'
+          : blocked
+            ? 'DAILY QUEST REQUIRED'
+            : completes ? 'COMPLETES QUEST' : 'PARTIAL PROGRESS';
     }
     if (copy) {
       const type = Number(model.questType);
@@ -1324,7 +1348,9 @@ class AppQuestPanel extends HTMLElement {
       } else if (type === 11) {
         copy.textContent = action.crapsDay === 'today'
           ? `Buy today's still-open Normal Craps day for ${BigInt(action.price).toLocaleString('en-US')} FLIP. Paid with FLIP; comps stay banked.`
-          : `Reserve tomorrow's Normal Craps day for ${BigInt(action.price).toLocaleString('en-US')} FLIP. Paid with FLIP; comps stay banked.`;
+          : action.crapsDayLabel === 'TOMORROW'
+            ? `Reserve tomorrow's Normal Craps day for ${BigInt(action.price).toLocaleString('en-US')} FLIP. If a comp already reserved it, this advances to the next unreserved day. Paid with FLIP; comps stay banked.`
+            : `Reserve the Normal Craps slate for ${action.crapsDayLabel} with ${BigInt(action.price).toLocaleString('en-US')} FLIP. Your earlier comp reservation stays untouched.`;
       } else {
         copy.textContent = 'Confirm to open the matching quest action.';
       }
@@ -1341,6 +1367,7 @@ class AppQuestPanel extends HTMLElement {
       ticket.textContent = isCrapsDay && this.#questCrapsOptions?.today
         ? `TODAY · ${BigInt(this.#questCrapsOptions.today.price).toLocaleString('en-US')} FLIP`
         : 'TICKET';
+      ticket.disabled = this.#questDialogSubmitting;
       ticket.classList?.toggle('is-selected', selected);
       ticket.setAttribute?.('aria-pressed', String(selected));
     }
@@ -1350,8 +1377,9 @@ class AppQuestPanel extends HTMLElement {
         : this.#questDialogChoice === 'lootbox';
       lootbox.hidden = false;
       lootbox.textContent = isCrapsDay
-        ? `TOMORROW · ${BigInt(this.#questCrapsOptions?.tomorrow?.price ?? CRAPS_FUTURE_DAY_PRICES.normal).toLocaleString('en-US')} FLIP`
+        ? `${String(this.#questCrapsOptions?.tomorrow?.label || 'TOMORROW').toUpperCase()} · ${BigInt(this.#questCrapsOptions?.tomorrow?.price ?? CRAPS_FUTURE_DAY_PRICES.normal).toLocaleString('en-US')} FLIP`
         : 'LUCKBOX';
+      lootbox.disabled = this.#questDialogSubmitting;
       lootbox.classList?.toggle('is-selected', selected);
       lootbox.setAttribute?.('aria-pressed', String(selected));
     }
@@ -1426,13 +1454,19 @@ class AppQuestPanel extends HTMLElement {
       if (dgnSpinsLimit) dgnSpinsLimit.textContent = `MAX ${limits?.maxSpins ?? 5}`;
     }
     if (requirement) requirement.textContent = action.label;
+    if (actionError) {
+      actionError.textContent = this.#questDialogError;
+      actionError.hidden = !this.#questDialogError;
+    }
     if (copy && model.isGated) {
       copy.textContent = 'Complete the daily quest first. You can still preview the exact action here.';
     }
     if (confirm) {
       confirm.classList?.toggle('is-incomplete', !completes);
-      confirm.disabled = blocked;
-      confirm.textContent = blocked
+      confirm.disabled = blocked || this.#questDialogSubmitting;
+      confirm.textContent = this.#questDialogSubmitting
+        ? 'CHECKING PURCHASE…'
+        : blocked
         ? `DAILY QUEST FIRST · ${action.label}`
         : completes && !isDgn && !hasActionChoice
           && !isLootboxPurchase ? 'CONFIRM'
@@ -1445,11 +1479,12 @@ class AppQuestPanel extends HTMLElement {
     }
   }
 
-  #confirmQuestDialog() {
+  async #confirmQuestDialog() {
     const model = this.#questDialogModel;
-    if (!model || model.isGated
+    if (!model || model.isGated || this.#questDialogSubmitting
       || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
     const action = this.#questAction(model);
+    const isCrapsDay = Number(model.questType) === 11;
     const detail = {
       questType: Number(model.questType),
       target: String(action.target ?? 0n),
@@ -1458,7 +1493,10 @@ class AppQuestPanel extends HTMLElement {
       ...(action.adjustable ? { configuredAmount: true } : {}),
       ...(model.level != null ? { level: Number(model.level) } : {}),
       ...(action.purchaseKind ? { purchaseKind: action.purchaseKind } : {}),
-      ...(Number(model.questType) === 11 ? { crapsDay: action.crapsDay } : {}),
+      ...(isCrapsDay ? {
+        crapsDay: action.crapsDay,
+        ...(action.crapsTargetDay != null ? { crapsTargetDay: action.crapsTargetDay } : {}),
+      } : {}),
       ...(action.lootboxQuantity > 1 ? {
         lootboxQuantity: Number(action.lootboxQuantity),
         lootboxAmountWei: String(action.lootboxAmountWei ?? 0n),
@@ -1470,6 +1508,11 @@ class AppQuestPanel extends HTMLElement {
         heroQuadrant: this.#questDgnHero,
       } : {}),
     };
+    if (isCrapsDay) {
+      this.#questDialogSubmitting = true;
+      this.#questDialogError = '';
+      this.#renderQuestDialog();
+    }
     try {
       let activation;
       if (typeof CustomEvent === 'function') {
@@ -1479,8 +1522,51 @@ class AppQuestPanel extends HTMLElement {
         Object.defineProperty(activation, 'detail', { configurable: true, value: detail });
       }
       document.dispatchEvent(activation);
-    } catch (_e) { /* detached/headless document */ }
-    this.#closeQuestDialog({ restoreFocus: false });
+    } catch (error) {
+      if (!isCrapsDay) {
+        this.#closeQuestDialog({ restoreFocus: false });
+        return;
+      }
+      if (this.#questDialogModel !== model) return;
+      this.#questDialogSubmitting = false;
+      this.#questDialogError = String(error?.message || 'The Craps purchase could not be started. Try again.');
+      this.#renderQuestDialog();
+      return;
+    }
+    if (!isCrapsDay) {
+      this.#closeQuestDialog({ restoreFocus: false });
+      return;
+    }
+    const purchase = detail.crapsPurchase;
+    if (detail.crapsHandled !== true || !purchase || typeof purchase.then !== 'function') {
+      if (this.#questDialogModel !== model) return;
+      this.#questDialogSubmitting = false;
+      this.#questDialogError = 'The Craps purchase is still loading. Try again.';
+      this.#renderQuestDialog();
+      return;
+    }
+    let outcome;
+    try {
+      outcome = await purchase;
+    } catch (error) {
+      outcome = {
+        ok: false,
+        message: String(error?.userMessage || error?.message || 'The Craps purchase was not submitted. Try again.'),
+      };
+    }
+    if (this.#questDialogModel !== model) return;
+    this.#questDialogSubmitting = false;
+    if (outcome?.ok === true) {
+      this.#closeQuestDialog({ restoreFocus: false });
+      return;
+    }
+    this.#questDialogError = String(
+      outcome?.message
+      || outcome?.error?.userMessage
+      || outcome?.error?.message
+      || 'The Craps purchase was not submitted. Try again.',
+    );
+    this.#renderQuestDialog();
   }
 
   #closeQuestDialog({ restoreFocus = true } = {}) {
@@ -1492,6 +1578,8 @@ class AppQuestPanel extends HTMLElement {
     const returnFocus = this.#questDialogReturnFocus;
     this.#questDialogModel = null;
     this.#questCrapsOptions = null;
+    this.#questDialogSubmitting = false;
+    this.#questDialogError = '';
     this.#questActionAmount = null;
     this.#questDgnPerSpin = 0n;
     this.#questDgnTraitIds = null;

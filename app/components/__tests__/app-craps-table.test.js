@@ -2268,7 +2268,7 @@ test('standalone demo and main app both mount the same component', () => {
   assert.match(DEMO_SCRIPT_SRC, /tableIndex:/);
   assert.match(DEMO_SCRIPT_SRC, /screen:\s*params\.get\('screen'\) === 'placement' \? 'placement' : 'battle'/,
     'the demo defaults to battle and exposes the isolated placement screen by query');
-  assert.match(INDEX_SRC, /href="\/app\/styles\/craps-table\.css"/);
+  assert.match(INDEX_SRC, /data-href="\/app\/styles\/craps-table\.css"/);
   assert.match(INDEX_SRC, /<app-craps-table><\/app-craps-table>/);
   assert.doesNotMatch(
     INDEX_SRC,

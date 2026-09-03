@@ -184,6 +184,9 @@ export function clearPendingActions(source) {
  */
 export async function dismissPendingActionItems(items = null, { drain = false } = {}) {
   let rows = Array.isArray(items) ? [...items] : _snapshot();
+  // A visual surface may supply only its actionable subset. CLEAR still owns
+  // the full manifest, including waiting rows that have not painted yet.
+  if (drain && Array.isArray(items)) rows.push(..._snapshot());
   const dismissedRows = new Set();
   const invokedOwners = new Set();
   const failures = [];

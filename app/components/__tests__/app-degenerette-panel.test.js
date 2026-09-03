@@ -1789,7 +1789,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
   });
 
   test('completed results have one authoritative full-screen reveal path', () => {
-    assert.match(PANEL_SRC, /import \{ queueReveal \} from '\.\/reveal-overlay\.js'/);
+    assert.match(PANEL_SRC, /import \{ queueReveal \} from '\.\/reveal-queue\.js'/);
     assert.match(PANEL_SRC, /buildDegeneretteRevealSequence\(\{/,
       'receipt, DB, and chain recovery share a normalized sequence builder');
     assert.match(PANEL_SRC, /queueReveal\(sequence\)/,

@@ -6542,7 +6542,8 @@ body.layout-basic .rrt-action--compact .rrt-action__label {
   text-transform: uppercase;
 }
 body.layout-basic .rrt-action--craps.rrt-action--compact {
-  min-width: 7.2rem;
+  min-width: 9rem;
+  grid-template-columns: 2.35rem minmax(4.6rem, auto);
   padding: 0.34rem 0.72rem;
   border-color: rgba(148, 163, 184, 0.46);
   background:
@@ -6570,9 +6571,28 @@ body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__icon-back 
   filter: brightness(0.9) drop-shadow(0 1px 4px rgba(19, 23, 247, 0.4));
 }
 body.layout-basic .rrt-action--craps.rrt-action--compact .rrt-action__label {
-  line-height: 1.08;
-  text-align: center;
-  white-space: pre-line;
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 0.12rem;
+  overflow: visible;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+body.layout-basic .rrt-craps-summary__amount {
+  color: #e2e8f0;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.055em;
+}
+body.layout-basic .rrt-craps-summary__status {
+  color: #9ca3b4;
+  font-size: 0.46rem;
+  letter-spacing: 0.075em;
+}
+body.layout-basic .rrt-craps-summary__status[data-state="ready"] {
+  color: #fde68a;
 }
 body.layout-basic .rrt-action--bingo.rrt-action--compact {
   grid-template-columns: 2.35rem auto;
@@ -7682,6 +7702,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   position: relative;
   z-index: 1;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: 0.32em;
@@ -17219,6 +17240,16 @@ body.layout-basic .qst-action-dialog__card[data-state="locked"] .qst-action-dial
   background: rgba(185, 28, 28, 0.12);
   color: #fca5a5;
 }
+body.layout-basic .qst-action-dialog__card[data-state="submitting"] .qst-action-dialog__state {
+  border-color: rgba(125, 211, 252, 0.52);
+  background: rgba(2, 132, 199, 0.13);
+  color: #bae6fd;
+}
+body.layout-basic .qst-action-dialog__card[data-state="error"] .qst-action-dialog__state {
+  border-color: rgba(248, 113, 113, 0.58);
+  background: rgba(185, 28, 28, 0.15);
+  color: #fecaca;
+}
 @keyframes qst-action-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -17475,6 +17506,18 @@ body.layout-basic .qst-action-requirement strong {
   line-height: 1.2;
   text-align: right;
 }
+body.layout-basic .qst-action-error {
+  margin: 0;
+  padding: 0.58rem 0.68rem;
+  border: 1px solid rgba(248, 113, 113, 0.52);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+body.layout-basic .qst-action-error[hidden] { display: none !important; }
 body.layout-basic .qst-action-confirm {
   position: relative;
   display: inline-flex;
@@ -25106,6 +25149,12 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
   .rvl-ticket-actions { gap: 0.35rem; }
   .rvl-ticket-actions > .rvl-open-all-cta {
     max-width: calc(100vw - 1.4rem);
+  }
+  /* The wrapper and ticket count already identify a normal pack. Drop the
+     redundant edition row so LEVEL and the quantity both stay inside the
+     clipped foil silhouette on phones. Foil packs retain their FOIL PACK tag. */
+  body.layout-basic .rvl-vessel--pack:not(.rvl-vessel--foil-pack) > .rvl-pack > .rvl-pack-brand > .rvl-pack-edition {
+    display: none;
   }
   .rvl-vessel-pack-actions {
     grid-template-columns: minmax(2.7rem, 1fr) minmax(0, 15rem) minmax(2.7rem, 1fr);

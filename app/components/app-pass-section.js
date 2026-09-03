@@ -268,62 +268,6 @@ export function projectedPassScoreGain(scoreBreakdown, passBonusPoints) {
     + Math.max(0, finite(passBonusPoints) - currentPass);
 }
 
-/**
- * Infer how many live Whale-pass equivalents are represented by the indexed
- * future queue. One full pass is two half-pass units; each half-pass produces
- * one whole ticket per four-level cycle. Reading all four residue lanes keeps
- * odd jackpot awards exact instead of silently flooring (11 halves = 5½ passes).
- * Taking the lowest repeated whole-ticket count in each lane ignores one-off
- * ticket buys while preserving stacked Whale quantities.
- */
-export function inferActiveWhalePassCount(tickets, currentLevel) {
-  const level = Math.max(0, Math.trunc(Number(currentLevel) || 0));
-  const lanes = [[], [], [], []];
-  for (const row of Array.isArray(tickets) ? tickets : []) {
-    const target = Math.trunc(Number(row?.level));
-    const entries = Math.max(0, Math.trunc(Number(row?.entryCount) || 0));
-    if (!Number.isInteger(target) || target <= level || target > level + 24 || entries < 4) continue;
-    lanes[target & 3].push(Math.floor(entries / 4));
-  }
-  const repeated = lanes.filter((lane) => lane.length >= 3);
-  // A single ordinary future ticket is not evidence of a Whale pass. Require
-  // the repeating queue signature here; callers with an authoritative active
-  // whale score can still fall back to one pass while the indexer catches up.
-  if (repeated.length !== 4) return 0;
-  const inferredHalfPasses = repeated.reduce((sum, lane) => sum + Math.min(...lane), 0);
-  // Purchase quantity is capped at 100, but jackpot awards are not. Do not
-  // apply the checkout cap to an already-owned stack (398 halves = 199 passes).
-  return Math.max(0, inferredHalfPasses) / 2;
-}
-
-function formatActiveWhalePassCount(count) {
-  const halfPasses = Math.max(0, Math.round(Number(count || 0) * 2));
-  const whole = Math.floor(halfPasses / 2);
-  return halfPasses % 2 === 0 ? String(whole) : (whole ? `${whole}½` : '½');
-}
-
-/** Compact active premium-pass status for the closed AFKING drawer. */
-export function activePassSummary(playerData, currentLevel) {
-  const kind = String(playerData?.scoreBreakdown?.passBonus?.kind || '').toLowerCase();
-  // Deity is the higher activity-score tier, so a player who owns both reports
-  // `kind: deity` even though their Whale ticket streams remain active. Read
-  // those streams independently instead of hiding the Whale passes behind the
-  // Deity score label.
-  const inferredWhales = inferActiveWhalePassCount(playerData?.tickets, currentLevel);
-  if (kind === 'whale_100' || inferredWhales > 0) {
-    const count = inferredWhales || 1;
-    return {
-      kind: 'whale',
-      sigil: '100',
-      label: `${formatActiveWhalePassCount(count)} ACTIVE WHALE PASS${count === 1 ? '' : 'ES'}`,
-    };
-  }
-  if (kind === 'whale_10') {
-    return { kind: 'lazy', sigil: '10', label: 'ACTIVE LAZY PASS' };
-  }
-  return null;
-}
-
 /** Exact subscription and prepaid-day copy used only by the closed drawer. */
 export function afkingClosedSummary(state, mintPriceWei) {
   if (!state) return { subscription: null, funding: null, fundedDays: null };
@@ -407,6 +351,7 @@ class AppPassSection extends HTMLElement {
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
     this.#renderCombinedGate();
+    this.#renderClosedDrawerSummary();
     this.#startPolling();
     // Eager first cycle on mount — no need to wait 30s.
     this.#runPollCycle();
@@ -454,6 +399,54 @@ class AppPassSection extends HTMLElement {
       try { u(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
+  }
+
+  /**
+   * Entry point for the three controls that live in the closed <summary>.
+   * Lazy and Whale reuse the exact expanded-desk transaction paths; Deity
+   * opens the desk and symbol picker because its symbol is part of the buy.
+   */
+  async quickBuyPass(product) {
+    const kind = String(product || '').toLowerCase();
+    if (!['lazy', 'whale', 'deity'].includes(kind)
+      || get('ui.mode') === 'combined'
+      || !deriveCanSign()) {
+      return false;
+    }
+
+    const drawer = this.#passDrawer();
+    if (kind === 'deity') {
+      if (drawer) drawer.open = true;
+      if (!this.#deityCatalog) await this.#runPollCycle();
+      this.#openDeityDialog();
+      return this.#deityDialogOpen;
+    }
+
+    if (!this.#pricingData) await this.#refreshPurchasePricing({ fresh: true });
+    if (kind === 'lazy') {
+      const boonOpen = passBoonDiscountBps(this.#actingBoonPayload(), 'lazy') > 0;
+      if (!this.#pricingData?.lazyOpen && !boonOpen) {
+        this.#renderClosedDrawerSummary();
+        return false;
+      }
+    } else {
+      this.#syncQuickWhaleQuantity();
+    }
+
+    const pending = kind === 'lazy'
+      ? this.#onLazyBuyClick()
+      : this.#onWhaleBuyClick();
+    this.#renderClosedDrawerSummary();
+    await pending;
+    this.#renderClosedDrawerSummary();
+
+    const error = this.querySelector(`[data-bind="pass-${kind}-error"]`);
+    if (error && !error.hidden && drawer) {
+      drawer.open = true;
+      try { error.focus?.({ preventScroll: true }); } catch (_) { /* defensive */ }
+      return false;
+    }
+    return true;
   }
 
   // ---------------------------------------------------------------------
@@ -1097,9 +1090,46 @@ class AppPassSection extends HTMLElement {
     this.#renderClosedDrawerSummary();
   }
 
-  #renderClosedDrawerSummary() {
-    const drawer = this.closest?.('#afking-passes')
+  #passDrawer() {
+    return this.closest?.('#afking-passes')
       || (typeof document !== 'undefined' ? document.querySelector?.('#afking-passes') : null);
+  }
+
+  #syncQuickWhaleQuantity() {
+    const input = this.querySelector('[name="pass-whale-qty"]');
+    const requested = Math.max(1, Math.min(100, Math.trunc(Number(input?.value) || 1)));
+    const passLevel = Number(this.#pricingData?.currentLevel) + 1;
+    const hasBoon = passBoonDiscountBps(this.#actingBoonPayload(), 'whale') > 0;
+    // The standard-price x99 checkout becomes a century pass and the contract
+    // requires two. Keep the shortcut valid instead of sending a doomed qty-1.
+    const minimum = Number.isInteger(passLevel) && passLevel % 100 === 0 && !hasBoon ? 2 : 1;
+    const quantity = Math.max(minimum, requested);
+    if (input) input.value = String(quantity);
+    return quantity;
+  }
+
+  #renderSummaryQuickBuy(drawer, product, {
+    name,
+    detail,
+    locked = false,
+    lockTitle = '',
+    busy = false,
+    ariaLabel,
+  }) {
+    const button = drawer.querySelector(`[data-pass-quickbuy="${product}"]`);
+    if (!button) return;
+    const nameNode = drawer.querySelector(`[data-bind="pass-summary-buy-${product}-name"]`);
+    const detailNode = drawer.querySelector(`[data-bind="pass-summary-buy-${product}-price"]`);
+    if (nameNode) nameNode.textContent = name;
+    if (detailNode) detailNode.textContent = detail;
+    button.setAttribute('aria-busy', String(busy));
+    button.setAttribute('data-state', busy ? 'busy' : locked ? 'locked' : 'ready');
+    _setDomainWriteLock(button, locked || busy, busy ? 'Purchase pending' : lockTitle);
+    button.setAttribute('aria-label', ariaLabel);
+  }
+
+  #renderClosedDrawerSummary() {
+    const drawer = this.#passDrawer();
     if (!drawer) return;
     const closed = drawer.querySelector('[data-bind="pass-summary-closed"]');
     if (!closed) return;
@@ -1122,38 +1152,74 @@ class AppPassSection extends HTMLElement {
       stateGroup.setAttribute('data-active', String(Boolean(this.#afkingState?.active)));
     }
 
-    const deityId = this.#ownedDeitySymbolId();
-    const deity = drawer.querySelector('[data-bind="pass-summary-deity"]');
-    if (deity) {
-      deity.hidden = deityId == null;
-      if (deityId == null) deity.removeAttribute('data-symbol');
-    }
-    if (deityId != null) {
-      const badge = passSymbolBadge(deityId);
-      const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
-      if (deity) deity.setAttribute('data-symbol', symbol.toLowerCase());
-      const badgeImage = drawer.querySelector('[data-bind="pass-summary-deity-badge"]');
-      const deityName = drawer.querySelector('[data-bind="pass-summary-deity-name"]');
-      if (badgeImage) {
-        badgeImage.src = badge.path;
-        badgeImage.alt = `${symbol} deity pass`;
-      }
-      if (deityName) deityName.textContent = `GOD OF ${symbol.toUpperCase()}`;
-    }
+    const lazyCost = this.#lazyPurchasePrice();
+    const lazyBoonOpen = passBoonDiscountBps(this.#actingBoonPayload(), 'lazy') > 0;
+    const lazyOpen = Boolean(
+      lazyCost != null && (this.#pricingData?.lazyOpen || lazyBoonOpen),
+    );
+    this.#renderSummaryQuickBuy(drawer, 'lazy', {
+      name: 'BUY LAZY',
+      detail: this.#busyLazy
+        ? 'PENDING…'
+        : lazyCost == null
+          ? 'CHECKING…'
+          : lazyOpen ? `${formatPassEth(lazyCost)} ETH` : 'CLOSED',
+      locked: !lazyOpen,
+      lockTitle: lazyCost == null
+        ? 'Checking the live Lazy pass price'
+        : 'Lazy pass purchase window is closed',
+      busy: this.#busyLazy,
+      ariaLabel: lazyOpen
+        ? `Quick buy Lazy pass for ${formatPassEth(lazyCost)} ETH`
+        : 'Lazy pass purchase unavailable',
+    });
 
-    const premium = activePassSummary(this.#playerData, this.#pricingData?.currentLevel);
-    const activePass = drawer.querySelector('[data-bind="pass-summary-active-pass"]');
-    const activePassSigil = drawer.querySelector('[data-bind="pass-summary-active-pass-sigil"]');
-    const activePassLabel = drawer.querySelector('[data-bind="pass-summary-active-pass-label"]');
-    if (activePass) {
-      activePass.hidden = !premium;
-      if (premium) activePass.setAttribute('data-kind', premium.kind);
-      else activePass.removeAttribute('data-kind');
-    }
-    if (activePassSigil) activePassSigil.textContent = premium?.sigil || '';
-    if (activePassLabel) activePassLabel.textContent = premium?.label || '';
+    const whaleQuantity = this.#syncQuickWhaleQuantity();
+    const whaleCost = this.#whalePurchasePrice(whaleQuantity);
+    this.#renderSummaryQuickBuy(drawer, 'whale', {
+      name: whaleQuantity > 1 ? `BUY WHALE ×${whaleQuantity}` : 'BUY WHALE',
+      detail: this.#busyWhale
+        ? 'PENDING…'
+        : whaleCost == null ? 'CHECKING…' : `${formatPassEth(whaleCost)} ETH`,
+      locked: whaleCost == null,
+      lockTitle: 'Checking the live Whale pass price',
+      busy: this.#busyWhale,
+      ariaLabel: whaleCost == null
+        ? 'Whale pass price unavailable'
+        : `Quick buy ${whaleQuantity} Whale pass${whaleQuantity === 1 ? '' : 'es'} for ${formatPassEth(whaleCost)} ETH`,
+    });
 
-    closed.hidden = !afking.subscription && deityId == null && !premium;
+    const catalogKnown = this.#deityCatalog?.takenSymbols instanceof Set;
+    const ownsDeity = this.#ownedDeitySymbolId() != null;
+    const deitySoldOut = catalogKnown && this.#deityCatalog.takenSymbols.size >= 32;
+    const deityCost = this.#deityPurchasePrice();
+    const deityBusy = this.#busySymbols.size > 0;
+    const deityLocked = !catalogKnown || ownsDeity || deitySoldOut || deityCost == null;
+    const deityLockTitle = !catalogKnown || deityCost == null
+      ? 'Checking Deity pass availability'
+      : deitySoldOut
+        ? 'All Deity pass symbols are taken'
+        : ownsDeity
+          ? 'Deity pass unavailable for this account'
+          : '';
+    this.#renderSummaryQuickBuy(drawer, 'deity', {
+      name: 'BUY DEITY',
+      detail: deityBusy
+        ? 'PENDING…'
+        : deitySoldOut
+          ? 'SOLD OUT'
+          : deityCost == null ? 'CHECKING…' : `${formatPassEth(deityCost)} ETH`,
+      locked: deityLocked,
+      lockTitle: deityLockTitle,
+      busy: deityBusy,
+      ariaLabel: deityLocked
+        ? 'Deity pass purchase unavailable'
+        : `Choose a Deity pass symbol for ${formatPassEth(deityCost)} ETH`,
+    });
+
+    // Ownership is intentionally absent here. The strip is subscription info
+    // plus purchase actions; owned Deity identity stays in app-deity-desk.
+    closed.hidden = false;
   }
 
   #renderPassScoreBenefits() {
@@ -1886,7 +1952,12 @@ class AppPassSection extends HTMLElement {
       this.#renderLazyError(msg);
     } finally {
       if (btn) btn.disabled = false;
-      setTimeout(() => { this.#busyLazy = false; }, DEBOUNCE_MS);
+      this.#renderClosedDrawerSummary();
+      setTimeout(() => {
+        this.#busyLazy = false;
+        this.#renderLazyBuyLabel();
+        this.#renderClosedDrawerSummary();
+      }, DEBOUNCE_MS);
     }
   }
 
@@ -1975,6 +2046,7 @@ class AppPassSection extends HTMLElement {
       setTimeout(() => {
         this.#busyWhale = false;
         this.#renderWhaleBuyLabel();
+        this.#renderClosedDrawerSummary();
       }, DEBOUNCE_MS);
     }
   }
@@ -2078,6 +2150,7 @@ class AppPassSection extends HTMLElement {
       setTimeout(() => {
         this.#busySymbols.delete(symbolId);
         this.#renderDeityCatalog();
+        this.#renderClosedDrawerSummary();
       }, DEBOUNCE_MS);
     }
   }
