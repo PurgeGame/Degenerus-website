@@ -354,6 +354,45 @@ async function _sendTxRaw(buildTx, action, { onSubmitted } = {}) {
 // Returns true on success, false on user-rejection (4001) or fallback failure.
 // ---------------------------------------------------------------------------
 
+function _walletRpcErrorCode(error) {
+  // Mobile bridges often wrap the useful provider error under a generic
+  // -32603 envelope, and some serialize its numeric code as a string.
+  const candidates = [
+    error?.data?.originalError?.code,
+    error?.data?.code,
+    error?.info?.error?.code,
+    error?.error?.code,
+    error?.cause?.code,
+    error?.code,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (typeof candidate === 'string' && /^-?\d+$/.test(candidate.trim())) {
+      return Number(candidate);
+    }
+  }
+  return null;
+}
+
+function _walletRpcErrorText(error) {
+  return [
+    error?.data?.originalError?.message,
+    error?.data?.message,
+    error?.info?.error?.message,
+    error?.error?.message,
+    error?.cause?.message,
+    error?.message,
+  ].filter(Boolean).join(' ');
+}
+
+function _isUnknownWalletChain(error) {
+  const code = _walletRpcErrorCode(error);
+  if (code === 4902) return true;
+  return code === -32603
+    && /(unknown|unrecognized|unsupported|not (?:added|found)).*chain|chain.*(?:unknown|unrecognized|unsupported|not (?:added|found))/i
+      .test(_walletRpcErrorText(error));
+}
+
 export async function switchToSepolia(eip1193Provider) {
   try {
     await eip1193Provider.request({
@@ -362,7 +401,7 @@ export async function switchToSepolia(eip1193Provider) {
     });
     return true;
   } catch (err) {
-    if (err.code === 4902) {
+    if (_isUnknownWalletChain(err)) {
       // Chain not added to wallet — add it then retry switch.
       try {
         await eip1193Provider.request({
@@ -378,7 +417,7 @@ export async function switchToSepolia(eip1193Provider) {
         return false;
       }
     }
-    if (err.code === 4001) return false;   // user rejected — silent
+    if (_walletRpcErrorCode(err) === 4001) return false;   // user rejected — silent
     return false;
   }
 }

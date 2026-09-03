@@ -37,7 +37,7 @@
 import { BrowserProvider } from 'ethers';
 import { CHAIN, WALLETCONNECT_PROJECT_ID } from './chain-config.js';
 import { update, get } from './store.js';
-import { setProvider, clearProvider, switchToSepolia } from './contracts.js';
+import { setProvider, getProvider, clearProvider, switchToSepolia } from './contracts.js';
 import { abortAllInflight } from './polling.js';
 
 // ---------------------------------------------------------------------------
@@ -284,7 +284,9 @@ export async function ensureConfiguredWalletChain() {
 
   const switched = await switchToSepolia(raw);
   if (!switched) return false;
-  const activeChainId = await _syncConnectedChain(raw);
+  // Several mobile wallets resolve the approval request before eth_chainId
+  // and chainChanged catch up in the returning browser tab.
+  const activeChainId = await _waitForConfiguredChain(raw);
   const chainOk = activeChainId === CHAIN.id;
   if (chainOk) _refreshConnectedBrowserProvider(raw);
   return chainOk;
@@ -401,6 +403,48 @@ function _refreshConnectedBrowserProvider(raw) {
   setProvider(browserProvider);
   return browserProvider;
 }
+
+const CHAIN_SETTLE_DELAYS_MS = [0, 100, 250, 500, 1_000];
+
+async function _waitForConfiguredChain(raw, browserProvider = null) {
+  let chainId = null;
+  for (const delayMs of CHAIN_SETTLE_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    chainId = await _syncConnectedChain(raw, browserProvider);
+    if (chainId === CHAIN.id) return chainId;
+  }
+  return chainId;
+}
+
+async function _recheckConnectedChainOnResume() {
+  const raw = _eip1193;
+  if (!raw || !get('connected.address')) return null;
+  const wasCorrect = get('ui.chainOk') === true;
+  const chainId = await _syncConnectedChain(raw, getProvider());
+  // Mobile browsers can suspend the page while the wallet changes networks
+  // and drop chainChanged. If this resume read repairs a mismatch, also replace
+  // the ethers wrapper that may still remember the pre-switch network.
+  if (!wasCorrect && chainId === CHAIN.id && raw === _eip1193) {
+    _refreshConnectedBrowserProvider(raw);
+  }
+  return chainId;
+}
+
+function _installChainResumeChecks() {
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  const doc = (typeof globalThis !== 'undefined') ? globalThis.document : null;
+  const recheck = () => {
+    if (doc?.visibilityState && doc.visibilityState !== 'visible') return null;
+    return _recheckConnectedChainOnResume().catch(() => null);
+  };
+  try { win?.addEventListener?.('focus', recheck); } catch (_e) { /* headless */ }
+  try { win?.addEventListener?.('pageshow', recheck); } catch (_e) { /* headless */ }
+  try { doc?.addEventListener?.('visibilitychange', recheck); } catch (_e) { /* headless */ }
+}
+
+_installChainResumeChecks();
 
 export function onUserPickedWallet(info) {
   if (_pickerResolve) {
@@ -532,7 +576,7 @@ export async function connectWalletConnect() {
       // Do not publish a signable state merely because the switch request
       // resolved. Verify WC's active CAIP chain, then discard the wrapper that
       // may already have cached the wallet's pre-switch Ethereum network.
-      const switchedChainId = await _syncConnectedChain(wc);
+      const switchedChainId = await _waitForConfiguredChain(wc);
       if (switchedChainId !== CHAIN.id) return;
       _refreshConnectedBrowserProvider(wc);
     }).catch(() => {});

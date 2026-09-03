@@ -24,13 +24,17 @@ import assert from 'node:assert/strict';
 
 const _events = [];                               // captured CustomEvents (dispatchEvent calls)
 const _docListeners = new Map();                  // bridge listeners installed at module init
+const _windowListeners = new Map();               // mobile resume listeners installed at module init
 const _localStore = new Map();
 const _locationAssignCalls = [];
 const _windowOpenCalls = [];
 let _reloadCalled = false;
 
 globalThis.window = {
-  addEventListener: () => {},
+  addEventListener: (type, fn) => {
+    if (!_windowListeners.has(type)) _windowListeners.set(type, []);
+    _windowListeners.get(type).push(fn);
+  },
   matchMedia: (query) => ({
     matches: false,
     media: query,
@@ -50,6 +54,7 @@ globalThis.window = {
 };
 
 globalThis.document = {
+  visibilityState: 'visible',
   addEventListener: (type, fn) => {
     if (!_docListeners.has(type)) _docListeners.set(type, []);
     _docListeners.get(type).push(fn);
@@ -484,6 +489,59 @@ describe('autoReconnect', () => {
     assert.ok(chainUpdate, 'ui.chainOk was set');
     assert.equal(chainUpdate[1], true,
       'the raw EIP-1193 chain is authoritative after a mobile wallet switch');
+  });
+
+  test('rechecks the live chain when a mobile browser tab regains focus', async () => {
+    const accounts = ['0xABCDef0000000000000000000000000000000004'];
+    let liveChainId = '0x1';
+    _localStore.set('lastWalletRdns', 'io.metamask');
+    _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
+    _discoverReturn = makeMockBrowserProvider({
+      chainId: 1,
+      accounts,
+      requestImpl: async ({ method }) => {
+        if (method === 'eth_accounts') return accounts;
+        if (method === 'eth_chainId') return liveChainId;
+        return null;
+      },
+    });
+    await wallet.autoReconnect();
+    assert.equal(storeMod.get('ui.chainOk'), false);
+
+    liveChainId = '0x14a34';
+    const focus = _windowListeners.get('focus')?.[0];
+    assert.ok(focus, 'mobile resume chain check is installed');
+    await focus();
+
+    assert.equal(storeMod.get('ui.chainOk'), true,
+      'returning from the wallet repairs a missed chainChanged event');
+  });
+
+  test('waits for a mobile wallet to publish its new chain after switch approval', async () => {
+    const accounts = ['0xABCDef0000000000000000000000000000000005'];
+    let chainReads = 0;
+    _localStore.set('lastWalletRdns', 'io.metamask');
+    _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
+    _discoverReturn = makeMockBrowserProvider({
+      chainId: 1,
+      accounts,
+      requestImpl: async ({ method }) => {
+        if (method === 'eth_accounts') return accounts;
+        if (method === 'eth_chainId') {
+          chainReads += 1;
+          return chainReads <= 3 ? '0x1' : '0x14a34';
+        }
+        if (method === 'wallet_switchEthereumChain') return null;
+        return null;
+      },
+    });
+    await wallet.autoReconnect();
+
+    const switched = await wallet.ensureConfiguredWalletChain();
+
+    assert.equal(switched, true);
+    assert.ok(chainReads >= 4, 'the app waits past the wallet\'s stale first response');
+    assert.equal(storeMod.get('ui.chainOk'), true);
   });
 });
 

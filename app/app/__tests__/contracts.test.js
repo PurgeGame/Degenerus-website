@@ -540,6 +540,31 @@ describe('switchToSepolia 4902 fallback', () => {
     const addEntry = calls[1].params[0];
     assert.equal(addEntry.chainId, '0x14a34');
   });
+
+  test('recognizes a string 4902 nested inside a mobile-wallet RPC error', async () => {
+    const calls = [];
+    let firstSwitch = true;
+    const eip = {
+      request: async ({ method, params }) => {
+        calls.push({ method, params });
+        if (method === 'wallet_switchEthereumChain' && firstSwitch) {
+          firstSwitch = false;
+          const error = new Error('Internal JSON-RPC error');
+          error.code = -32603;
+          error.data = { originalError: { code: '4902', message: 'Unknown chain' } };
+          throw error;
+        }
+        return null;
+      },
+    };
+
+    assert.equal(await contractsMod.switchToSepolia(eip), true);
+    assert.deepEqual(calls.map(({ method }) => method), [
+      'wallet_switchEthereumChain',
+      'wallet_addEthereumChain',
+      'wallet_switchEthereumChain',
+    ]);
+  });
 });
 
 // ===========================================================================
