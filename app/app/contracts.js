@@ -26,6 +26,12 @@ import { compactUiError } from './ui-error.js';
 
 // Module-level state — only the BrowserProvider; NO signer cache (WLT-03 fix structural).
 let _provider = null;
+// wallet.js owns the raw EIP-1193 / WalletConnect lifecycle needed to switch,
+// add, or re-pair a chain. The write chokepoint owns WHEN that repair runs.
+// Injection keeps contracts.js independent of wallet.js and avoids a circular
+// module dependency while guaranteeing every sendTx consumer gets the fix.
+let _chainSwitchHandler = null;
+let _chainSwitchFlight = null;
 
 // eth_estimateGas is a snapshot. A purchase or resolver can cross a storage
 // boundary between simulation and mining (for example, another player moves a
@@ -121,6 +127,12 @@ function _signerWithGasHeadroom(signer) {
 export function setProvider(browserProvider) { _provider = browserProvider; }
 export function getProvider() { return _provider; }
 export function clearProvider() { _provider = null; }
+
+/** Register wallet.js's user-initiated chain repair for the shared write gate. */
+export function setChainSwitchHandler(handler) {
+  _chainSwitchHandler = typeof handler === 'function' ? handler : null;
+  if (!_chainSwitchHandler) _chainSwitchFlight = null;
+}
 
 // ---------------------------------------------------------------------------
 // requireSelf — chokepoint guard (RESEARCH §Pattern 4 layer 3).
@@ -224,6 +236,43 @@ export async function assertChain() {
   return true;
 }
 
+/**
+ * Make the active wallet ready for a write, requesting this deployment's chain
+ * when necessary. Concurrent callers share one wallet prompt, and the live
+ * provider is checked again after the wallet reports success—never trust a
+ * resolved switch request or ethers' cached pre-switch network on its own.
+ */
+export async function ensureWriteChain() {
+  if (!_provider) throw new Error('Wallet not connected');
+  if (await _liveProviderChainId(_provider) === CHAIN.id) return true;
+
+  const startingAddress = String(get('connected.address') || '').toLowerCase();
+  if (typeof _chainSwitchHandler === 'function') {
+    let flight = _chainSwitchFlight;
+    if (!flight) {
+      const handler = _chainSwitchHandler;
+      flight = Promise.resolve().then(() => handler());
+      _chainSwitchFlight = flight;
+    }
+    try {
+      await flight;
+    } finally {
+      if (_chainSwitchFlight === flight) _chainSwitchFlight = null;
+    }
+
+    // A WalletConnect namespace repair may require a new pairing. Never let
+    // the action silently continue if that pairing selected another account.
+    const currentAddress = String(get('connected.address') || '').toLowerCase();
+    if (startingAddress && currentAddress !== startingAddress) {
+      throw new Error('Account changed mid-flow — please retry.');
+    }
+    if (!_provider) throw new Error('Wallet not connected');
+    if (await _liveProviderChainId(_provider) === CHAIN.id) return true;
+  }
+
+  throw new Error(`Wrong network — switch to ${CHAIN.name}.`);
+}
+
 // ---------------------------------------------------------------------------
 // sendTx — the Phase 60+ chokepoint API.
 //
@@ -273,8 +322,10 @@ export async function sendTx(buildTx, action, options = {}) {
 async function _sendTxRaw(buildTx, action, { onSubmitted } = {}) {
   // 1. Chokepoint FIRST — throws BEFORE any provider/signer touch (T-58-02).
   requireSelf();
-  // 2. Chain assertion — write-side throw on mismatch (T-58-03).
-  await assertChain();
+  // 2. Repair a mismatch from the originating tap, then re-run the ownership
+  // guard because WalletConnect may have needed a fresh pairing.
+  await ensureWriteChain();
+  requireSelf();
   // 3. Re-derive signer EVERY call — the WLT-03 fix; no module-level cache (T-58-01).
   const signer = await _provider.getSigner();
   const freshAddress = (await signer.getAddress()).toLowerCase();

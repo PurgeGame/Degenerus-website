@@ -1149,6 +1149,9 @@ test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-e
   assert.equal(crapsRollHistoryEvent(frames[0]), 'point-set');
   assert.equal(crapsRollHistoryEvent(frames[2]), 'seven-out');
   assert.equal(crapsRollHistoryEvent(frames[3]), '', 'a come-out seven is not a seven-out');
+  assert.equal(crapsRollHistoryEvent({ label: 'POINT 8 MADE' }), 'point-hit');
+  assert.equal(crapsRollHistoryEvent({ pointMade: true }), 'point-hit',
+    'an explicit replay point-made flag marks LAST 5 even without label copy');
 
   const starting = crapsRollHistorySlots(frames, -1);
   assert.deepEqual(
@@ -1882,6 +1885,10 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'only the blank target slot receives the moving cursor treatment');
   assert.match(CSS_SRC, /\.craps-roll-history li\[data-roll-event="point-set"\][\s\S]*?\.craps-roll-history li\[data-roll-event="seven-out"\]/s,
     'point establishment and seven-out have distinct history treatments');
+  assert.match(COMPONENT_SRC, /event === 'point-hit' \? 'POINT HIT'/,
+    'a made point leaves an explicit POINT HIT marker in LAST 5');
+  assert.match(CSS_SRC, /\.craps-roll-history li\[data-roll-event="point-hit"\]\s*\{[\s\S]*?#83f3a7/s,
+    'the LAST 5 point-hit marker receives a distinct winning-green treatment');
   const phoneResolverCss = CSS_SRC.slice(
     CSS_SRC.indexOf('/* Phone resolvers are a fitted table'),
     CSS_SRC.indexOf('/* A phone held sideways'),

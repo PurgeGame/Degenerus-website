@@ -1,9 +1,19 @@
 // /app/app/__tests__/static-call.test.js — APP-05 unit (D-10 LOCKED)
 // Run: node --test website/app/app/__tests__/static-call.test.js
 
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { requireStaticCall } from '../static-call.js';
+import {
+  clearProvider,
+  setChainSwitchHandler,
+  setProvider,
+} from '../contracts.js';
+
+afterEach(() => {
+  clearProvider();
+  setChainSwitchHandler(null);
+});
 
 describe('requireStaticCall happy path', () => {
   test('returns {ok:true, simResult} on successful staticCall', async () => {
@@ -101,5 +111,39 @@ describe('requireStaticCall signer handling', () => {
     const result = await requireStaticCall(contract, 'mint', [], null);
     assert.equal(connectCalled, false);
     assert.equal(result.ok, true);
+  });
+
+  test('wrong-chain signed preflight switches first and reconnects to the refreshed signer', async () => {
+    const oldSigner = { id: 'pre-switch' };
+    const freshSigner = { id: 'base-sepolia' };
+    const oldProvider = {
+      send: async () => '0x1',
+      getSigner: async () => oldSigner,
+    };
+    const freshProvider = {
+      send: async () => '0x14a34',
+      getSigner: async () => freshSigner,
+    };
+    let connectedSigner = null;
+    const connectedContract = {
+      mint: { staticCall: async () => 'switched-result' },
+    };
+    const contract = {
+      connect(signer) {
+        connectedSigner = signer;
+        return connectedContract;
+      },
+    };
+    setProvider(oldProvider);
+    setChainSwitchHandler(async () => {
+      setProvider(freshProvider);
+      return true;
+    });
+
+    const result = await requireStaticCall(contract, 'mint', [], oldSigner);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.simResult, 'switched-result');
+    assert.equal(connectedSigner, freshSigner, 'the pinned pre-switch signer is discarded');
   });
 });

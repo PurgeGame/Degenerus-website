@@ -406,14 +406,12 @@ export class AppSdgnrsBurnRail extends HTMLElement {
     const burn = this.querySelector('[data-bind="sdr-burn"]');
     const hasMinimum = balances.sdgnrs >= TOKEN_WEI || balances.dgnrs >= TOKEN_WEI;
     const owns = this.#ownsDisplayedBalances();
-    const locked = !balances.known || !owns || !hasMinimum || get('ui.chainOk') === false;
+    const locked = !balances.known || !owns || !hasMinimum;
     const reason = !balances.known
       ? 'Balance is loading'
       : !owns
         ? 'Open your own wallet view to burn DGNRS'
-        : !hasMinimum
-          ? 'Minimum burn is 1 sDGNRS or DGNRS'
-          : 'Switch to the supported network to burn';
+        : 'Minimum burn is 1 sDGNRS or DGNRS';
     _setWriteLock(burn, locked, reason);
   }
 }

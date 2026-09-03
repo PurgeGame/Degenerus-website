@@ -353,6 +353,24 @@ describe('index.html basic-mode skeleton', () => {
       'no lazy path bypasses the local revision helper');
   });
 
+  test('the Craps replay graph cannot mix cached validator generations', () => {
+    const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+    assert.ok(mapMatch, 'index.html carries an import map');
+    const map = JSON.parse(mapMatch[1]);
+    const revision = '?v=craps-0880d134c-45c30da1';
+    for (const modulePath of [
+      '/app/craps/replay-contract.js',
+      '/app/craps/replay-engine.js',
+      '/app/craps/replay-adapter.js',
+    ]) {
+      assert.equal(
+        map.imports?.[modulePath],
+        `${modulePath}${revision}`,
+        `${modulePath} is pinned to the current verified replay generation`,
+      );
+    }
+  });
+
   test('the on-demand reveal engine and its stylesheet cannot reuse the broken control generation', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');

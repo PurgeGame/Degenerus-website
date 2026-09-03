@@ -37,7 +37,13 @@
 import { BrowserProvider } from 'ethers';
 import { CHAIN, WALLETCONNECT_PROJECT_ID } from './chain-config.js';
 import { update, get } from './store.js';
-import { setProvider, getProvider, clearProvider, switchToSepolia } from './contracts.js';
+import {
+  setProvider,
+  getProvider,
+  clearProvider,
+  setChainSwitchHandler,
+  switchToSepolia,
+} from './contracts.js';
 import { abortAllInflight } from './polling.js';
 
 // ---------------------------------------------------------------------------
@@ -248,7 +254,7 @@ function _walletConnectSessionHasChain(provider, chainId) {
  * already authorize the chain use the normal switch/add flow.
  */
 export async function ensureConfiguredWalletChain() {
-  const raw = getEip1193();
+  let raw = getEip1193();
   if (!raw) return false;
 
   if (
@@ -265,10 +271,24 @@ export async function ensureConfiguredWalletChain() {
     // explicit reset for providers that do not emit it until a later tick.
     disconnect();
     try {
-      return Boolean(await connectWalletConnect());
+      // The caller is already the authoritative, awaited switch flow. Suppress
+      // connectWalletConnect's normal fire-and-forget convenience switch so a
+      // replacement session receives exactly one request and cannot report
+      // ready while it is still active on Ethereum mainnet.
+      const connected = await connectWalletConnect({ requestConfiguredChain: false });
+      if (!connected) return false;
     } catch (_e) {
       return false;
     }
+    raw = getEip1193();
+    if (!raw) return false;
+    // A wallet may approve another single-chain namespace. Do not recurse into
+    // an endless disconnect/pair loop; leave the write safely blocked instead.
+    if (
+      raw.isWalletConnect === true
+      && raw.session
+      && !_walletConnectSessionHasChain(raw, CHAIN.id)
+    ) return false;
   }
 
   // The EIP-1193 provider is the live source of truth. ethers' BrowserProvider
@@ -291,6 +311,11 @@ export async function ensureConfiguredWalletChain() {
   if (chainOk) _refreshConnectedBrowserProvider(raw);
   return chainOk;
 }
+
+// sendTx and signed static preflights arrive here only from an explicit player
+// action. That preserves silent reconnect while making the same tap request
+// Base Sepolia, wait for mobile propagation, and continue the original write.
+setChainSwitchHandler(ensureConfiguredWalletChain);
 
 /**
  * Whether this browser currently exposes an installed EIP-1193/EIP-6963
@@ -541,7 +566,7 @@ async function _ensureWcProvider() {
 // chokepoint (Phase 58) is reused verbatim (CF-04, no new chokepoint).
 // ---------------------------------------------------------------------------
 
-export async function connectWalletConnect() {
+export async function connectWalletConnect({ requestConfiguredChain = true } = {}) {
   const wc = await _ensureWcProvider();
   if (!wc.session || !wc.accounts || wc.accounts.length === 0) {
     // No persisted session — open the QR modal / deep-link to mobile wallet.
@@ -565,7 +590,7 @@ export async function connectWalletConnect() {
   const chainOk = activeChainId === CHAIN.id;
 
   emitConnected(addr);
-  if (!chainOk) {
+  if (!chainOk && requestConfiguredChain) {
     // Pairing must finish before MetaMask Mobile will accept a custom-chain
     // request. Start the switch immediately, but do not await it: a rejected,
     // unsupported, or deep-link-blocked switch must not undo the successful
@@ -839,7 +864,7 @@ function attachListeners(browserProvider, rawProvider = null) {
       // WR-02: a new account may be on a different chain (some wallets allow
       // per-account chain settings, e.g., MetaMask Snap, Coinbase Wallet).
       // Re-derive ui.chainOk so the banner / button-enable state stay in sync
-      // even before any user-driven write triggers assertChain().
+      // even before any user-driven write triggers ensureWriteChain().
       await _syncConnectedChain(eth, browserProvider);
       // DO NOT touch ui.mode here — view-mode is derived from viewing.address vs
       // connected.address (handled in plan 58-02 store.js deriveMode subscriber).
@@ -914,10 +939,10 @@ export function disconnect() {
  * nav.js bridge). Silent: eth_accounts only, never eth_requestAccounts.
  *
  * Without this the bridge left the store half-connected — an address, but no
- * provider and no `ui.chainOk`. deriveCanSign() requires chainOk === true, so
- * every [data-write] button (Flip, Buy, Claim) sat disabled while the wallet
- * looked connected, and any that did fire hit `assertChain`'s "Wallet not
- * connected" because contracts.js had no provider.
+ * provider and no resolved `ui.chainOk`. Every [data-write] button (Flip, Buy,
+ * Claim) therefore sat disabled while the wallet looked connected, and any
+ * forced click hit the write gate's "Wallet not connected" because
+ * contracts.js had no provider.
  */
 async function _attachSilentlyFor(addr) {
   try {

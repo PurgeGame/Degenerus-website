@@ -398,6 +398,20 @@ describe('[data-write] disable manager (DD-02)', () => {
     assert.equal(btn.title, '', 'tooltip cleared');
   });
 
+  test('wrong-chain connected wallet keeps [data-write] enabled so its click can request a switch', async () => {
+    const btn = makeWriteButton();
+    _docBody.appendChild(btn);
+    btn.disabled = true;
+
+    storeMod.update('connected.address', '0xab12000000000000000000000000000000000000');
+    storeMod.update('ui.chainOk', false);
+    await flushMicrotasks();
+
+    assert.equal(storeMod.deriveCanSign(), true, 'wrong-chain wallet may initiate chain repair');
+    assert.equal(btn.disabled, false, 'write remains tappable');
+    assert.equal(btn.title, '', 'no misleading connect-wallet tooltip');
+  });
+
   test('canSign never overrides a component-owned data-write lock', async () => {
     const btn = makeWriteButton();
     btn.setAttribute('data-write-locked', '');

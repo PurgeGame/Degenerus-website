@@ -477,6 +477,9 @@ describe('app-parimutuel-panel', () => {
       /@container \(max-width: 38rem\)[\s\S]*?\.pari-link\s*\{[^}]*min-height:\s*4\.4rem;[^}]*grid-template-columns:\s*2\.95rem minmax\(5\.3rem, 0\.78fr\) minmax\(7rem, 1\.22fr\) 5\.3rem/s,
       'LINK uses the same compact height and column proportions as WWXRP');
     assert.match(LINK_DONATION_CSS,
+      /@container \(max-width: 38rem\)[\s\S]*?\.pari-link__amount > small\s*\{\s*display:\s*none;/s,
+      'the redundant compact donation caption cannot force LINK taller than WWXRP');
+    assert.match(LINK_DONATION_CSS,
       /\.pari-link__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
       'the LINK entry control is compact and right-aligned');
     assert.match(LINK_DONATION_CSS,
@@ -563,7 +566,7 @@ describe('app-parimutuel-panel', () => {
       /\.pari-wwxrp__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
       'the entry field stays compact and aligned against the action key');
     assert.match(APP_CSS,
-      /\.pari-wwxrp__amount-control\s*\{[^}]*grid-template-columns:\s*minmax\(2\.5rem, 1fr\) auto 2\.65rem/s,
+      /\.pari-wwxrp__amount-control\s*\{[^}]*height:\s*1\.82rem;[^}]*grid-template-columns:\s*minmax\(1\.8rem, 1fr\) auto 2\.35rem/s,
       'the value, WWXRP unit, and utility-sized MAX action form one clear control');
     assert.match(APP_CSS,
       /\.pari-wwxrp__amount input\s*\{[^}]*text-align:\s*right;[^}]*box-shadow:\s*none;[^}]*appearance:\s*textfield/s,
@@ -574,14 +577,11 @@ describe('app-parimutuel-panel', () => {
     assert.match(WWXRP_SOURCE,
       /data-bind="wwxrp-burn-label">BURN<\/b>/,
       'the WWXRP action keeps its BURN label in a stable child during refreshes');
-    const flameRule = APP_CSS.match(
-      /\.pari-wwxrp__burn\[data-write\]::before\s*\{[^}]*\}/s,
-    )?.[0] || '';
-    assert.match(flameRule,
-      /width:\s*1\.34rem;[^}]*height:\s*1\.72rem;[^}]*flame-center-silver\.svg/s,
-      'the CSS-owned flame cannot be erased by a label refresh');
-    assert.doesNotMatch(flameRule, /border-right:/,
-      'the WWXRP flame has no stray divider line');
+    assert.match(APP_CSS,
+      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*place-items:\s*center;[^}]*gap:\s*0;[^}]*padding:\s*0\.4rem;/s,
+      'BURN uses the same centered one-piece action treatment as DONATE');
+    assert.doesNotMatch(APP_CSS, /\.pari-wwxrp__burn\[data-write\]::before/,
+      'the mismatched split flame compartment is removed');
   });
 
   test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {

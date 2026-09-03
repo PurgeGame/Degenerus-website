@@ -543,6 +543,37 @@ describe('autoReconnect', () => {
     assert.ok(chainReads >= 4, 'the app waits past the wallet\'s stale first response');
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
+
+  test('registers automatic chain repair with the shared transaction gate', async () => {
+    const accounts = ['0xABCDef0000000000000000000000000000000006'];
+    const methods = [];
+    let liveChainId = '0x1';
+    _localStore.set('lastWalletRdns', 'io.metamask');
+    _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
+    _discoverReturn = makeMockBrowserProvider({
+      chainId: 1,
+      accounts,
+      requestImpl: async ({ method }) => {
+        methods.push(method);
+        if (method === 'eth_accounts') return accounts;
+        if (method === 'eth_chainId') return liveChainId;
+        if (method === 'wallet_switchEthereumChain') {
+          liveChainId = '0x14a34';
+          return null;
+        }
+        return null;
+      },
+    });
+    await wallet.autoReconnect();
+    assert.equal(storeMod.get('ui.chainOk'), false);
+
+    const ready = await contractsMod.ensureWriteChain();
+
+    assert.equal(ready, true);
+    assert.ok(methods.includes('wallet_switchEthereumChain'),
+      'the transaction gate invokes the wallet-owned switch flow');
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
 });
 
 // ===========================================================================
@@ -1118,6 +1149,58 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(wcInstance._disconnectCalls.length, 1, 'stale session is retired');
     assert.equal(wcInstance._connectCalls.length, 1, 'replacement session is paired');
     assert.equal(storeMod.get('connected.address'), account.toLowerCase());
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
+
+  test('after WC re-pair, waits for an explicit Base Sepolia switch before reporting ready', async () => {
+    const account = '0xBb00000000000000000000000000000000000078';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'stale-mainnet-session',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`],
+            chains: ['eip155:1'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 1,
+      connectImpl: async () => {
+        wcInstance._setSession({
+          topic: 'fresh-multichain-session',
+          namespaces: {
+            eip155: {
+              accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
+              chains: ['eip155:1', 'eip155:84532'],
+            },
+          },
+        });
+        wcInstance._setAccounts([account]);
+      },
+      requestImpl: async (payload, wc) => {
+        if (payload.method === 'wallet_switchEthereumChain') {
+          wc.chainId = 84532;
+          return null;
+        }
+        return null;
+      },
+    });
+    wcInstance.isWalletConnect = true;
+    wallet._testInjectWcFactory(factory);
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    await wallet.autoReconnect();
+
+    const result = await wallet.ensureConfiguredWalletChain();
+
+    assert.equal(result, true);
+    assert.equal(wcInstance._disconnectCalls.length, 1);
+    assert.equal(wcInstance._connectCalls.length, 1);
+    assert.equal(
+      wcInstance._requestCalls.filter(({ method }) => method === 'wallet_switchEthereumChain').length,
+      1,
+      'the replacement session receives one awaited switch request',
+    );
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 

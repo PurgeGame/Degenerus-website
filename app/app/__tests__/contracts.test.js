@@ -5,7 +5,8 @@
 // Covers:
 //   - requireSelf throws on view-mode + on connected≠viewing + on missing connection
 //   - sendTx aborts BEFORE provider.getSigner() in view-mode (devtools-bypass defense)
-//   - sendTx wrong-chain throws BEFORE getSigner
+//   - sendTx wrong-chain auto-repairs when wallet.js provides a switch handler,
+//     otherwise throws BEFORE getSigner
 //   - sendTx re-derives signer EVERY call (no module-level cache)
 //   - sendTx throws "Account changed mid-flow" when signer.getAddress mismatches connected
 //   - sendTx receipt.status===0 → throws "Reverted" (preserves /beta/mint.js bug-class fix)
@@ -47,6 +48,7 @@ import * as contractsMod from '../contracts.js';
 
 const {
   setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
+  ensureWriteChain, setChainSwitchHandler,
   gasEstimateWithHeadroom, TX_CONFIRMED_EVENT,
 } = contractsMod;
 
@@ -90,6 +92,7 @@ function makeProvider({
 beforeEach(() => {
   resetStore();
   clearProvider();
+  setChainSwitchHandler(null);
 });
 
 // ===========================================================================
@@ -163,6 +166,7 @@ describe('sendTx operator + combined modes', () => {
     // connected = operator (the signer); viewing = owner acted for.
     storeMod.update('ui.mode', 'operator');
     storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    storeMod.update('approvals.list', ['0xbbbb000000000000000000000000000000000002']);
     storeMod.update('viewing.address', '0xbbbb000000000000000000000000000000000002');
     const buildTx = (s) => Promise.resolve({ hash: '0x', wait: async () => ({ status: 1 }) });
     const receipt = await sendTx(buildTx, 'operator-act');
@@ -208,6 +212,68 @@ describe('sendTx wrong-chain enforcement (T-58-03)', () => {
     storeMod.update('viewing.address', null);
     await assert.rejects(sendTx(() => Promise.resolve({}), 'test'), /Wrong network/);
     assert.equal(provider.getSignerCallCount(), 0, 'getSigner NOT called on wrong chain');
+  });
+
+  test('requests the configured chain, verifies it live, then continues the original write', async () => {
+    let liveChainId = 1;
+    let switchCalls = 0;
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    provider.send = async (method) => {
+      assert.equal(method, 'eth_chainId');
+      return `0x${liveChainId.toString(16)}`;
+    };
+    setProvider(provider);
+    setChainSwitchHandler(async () => {
+      switchCalls += 1;
+      liveChainId = 84532;
+      return true;
+    });
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+
+    const receipt = await sendTx(
+      () => Promise.resolve({ hash: '0xswitched', wait: async () => ({ status: 1 }) }),
+      'test',
+    );
+
+    assert.equal(receipt.status, 1);
+    assert.equal(switchCalls, 1, 'the wallet chain repair runs once');
+    assert.equal(provider.getSignerCallCount(), 1, 'signer is requested only after live-chain verification');
+  });
+
+  test('does not reach the signer when the wallet stays on the wrong chain', async () => {
+    const provider = makeProvider({ chainId: 1 });
+    setProvider(provider);
+    setChainSwitchHandler(async () => false);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+
+    await assert.rejects(sendTx(() => Promise.resolve({}), 'test'), /Wrong network/);
+    assert.equal(provider.getSignerCallCount(), 0);
+  });
+
+  test('coalesces simultaneous wrong-chain repair requests', async () => {
+    let liveChainId = 1;
+    let switchCalls = 0;
+    let finishSwitch;
+    const switchPending = new Promise((resolve) => { finishSwitch = resolve; });
+    const provider = makeProvider({ chainId: 1 });
+    provider.send = async () => `0x${liveChainId.toString(16)}`;
+    setProvider(provider);
+    setChainSwitchHandler(async () => {
+      switchCalls += 1;
+      await switchPending;
+      liveChainId = 84532;
+      return true;
+    });
+
+    const first = ensureWriteChain();
+    const second = ensureWriteChain();
+    await Promise.resolve();
+    finishSwitch();
+
+    assert.deepEqual(await Promise.all([first, second]), [true, true]);
+    assert.equal(switchCalls, 1, 'one wallet prompt serves both callers');
   });
 });
 

@@ -5,7 +5,8 @@
 // Covers:
 //   - get/update/subscribe baseline (Proxy-namespaced state, ancestor-walk notify)
 //   - batch({updates}) — multi-path with deduped notifications
-//   - deriveCanSign 4-state matrix (mode/chainOk/connected.address)
+//   - deriveCanSign matrix (mode/known chain/connected.address), including an
+//     actionable wrong-chain session for automatic network repair
 //   - getViewedAddress precedence (viewing || connected || null)
 //   - ui.mode auto-derivation (view-mode whenever viewing.address && (!connected || viewing!==connected))
 //   - Direct update('ui.mode','self') honored when viewing.address null (regression gate for 58-01)
@@ -144,9 +145,16 @@ describe('deriveCanSign', () => {
     assert.equal(deriveCanSign(), false);
   });
 
-  test('deriveCanSign returns false when chainOk===false', () => {
+  test('deriveCanSign returns true when chainOk===false so a write can request the switch', () => {
     update('ui.mode', 'self');
     update('ui.chainOk', false);
+    update('connected.address', '0xaaaa000000000000000000000000000000000001');
+    assert.equal(deriveCanSign(), true);
+  });
+
+  test('deriveCanSign returns false while the connected wallet chain is still unknown', () => {
+    update('ui.mode', 'self');
+    update('ui.chainOk', null);
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
     assert.equal(deriveCanSign(), false);
   });

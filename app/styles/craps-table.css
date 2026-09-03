@@ -5093,6 +5093,16 @@ app-craps-table {
 
 .craps-roll-history li[data-roll-event="point-set"]::after { color: #76e6dc; }
 
+.craps-roll-history li[data-roll-event="point-hit"] {
+  border-color: rgba(79, 220, 130, 0.74);
+  background:
+    linear-gradient(180deg, rgba(46, 180, 104, 0.22), transparent 64%),
+    rgba(8, 45, 28, 0.8);
+  box-shadow: inset 0 -0.13rem rgba(79, 220, 130, 0.58);
+}
+
+.craps-roll-history li[data-roll-event="point-hit"]::after { color: #83f3a7; }
+
 .craps-roll-history li[data-roll-event="seven-out"] {
   border-color: rgba(255, 88, 98, 0.76);
   background:

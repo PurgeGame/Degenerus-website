@@ -262,6 +262,7 @@ body.layout-basic .pari-link__feedback[hidden] { display: none !important; }
   body.layout-basic .pari-link__quote [data-bind="link-quote-input"],
   body.layout-basic .pari-link__quote i { display: none; }
   body.layout-basic .pari-link__quote > em { padding-inline: 0.18rem; font-size: 0.26rem; }
+  body.layout-basic .pari-link__amount > small { display: none; }
   body.layout-basic .pari-link__amount { width: min(100%, 9.25rem); }
   body.layout-basic .pari-link__amount-control { height: 1.82rem; grid-template-columns: minmax(1.8rem, 1fr) auto 2.35rem; }
   body.layout-basic .pari-link__donate[data-write] { width: 5.3rem; min-width: 5.3rem; min-height: 3.55rem; font-size: 0.64rem; }

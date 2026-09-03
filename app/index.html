@@ -103,6 +103,11 @@
        @walletconnect stays on esm.sh: its bundle still fans out into @msgpack
        sub-modules, and it is lazy-loaded (connect click only), so it is off the
        cold-load path. Revisit when a real WalletConnect project id lands. -->
+  <!-- Keep the three replay modules on one URL generation. A bare local
+       static server can otherwise cache replay-contract.js after the lazy
+       launcher itself has refreshed, producing a false "unsupported ruleset"
+       for a hash already shipped by the current app. Bump the shared suffix
+       whenever the verified replay engine/runtime generation changes. -->
   <script type="importmap">
   {
     "imports": {
@@ -111,6 +116,9 @@
       "gsap/Flip": "/app/vendor/gsap-flip.mjs",
       "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
       "lean-qr": "/app/vendor/lean-qr.mjs",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-0880d134c-45c30da1",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-0880d134c-45c30da1",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-0880d134c-45c30da1",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-20260829",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }

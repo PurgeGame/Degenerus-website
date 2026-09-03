@@ -39,7 +39,9 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 //      TypeScript port to the deployed Solidity;
 //   2. regenerate this repo's fixture through the production serializer
 //      (`cd degenerus-sim && npx tsx scripts/craps-replay-fixture.ts --write`);
-//   3. add the hash here.
+//   3. add the hash here;
+//   4. bump the shared Craps replay import-map suffix in `app/index.html`, so a
+//      local preview cannot pair a new launcher with this module's prior generation.
 //
 // 0x7fa2e3de… — audit 484a5d60b, the build the engine was first ported against.
 // 0x300a278f… — audit 0b34a4713 (the craps RNG-gate redeploy). Settlement is byte-identical:

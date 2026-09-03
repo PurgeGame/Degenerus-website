@@ -22,6 +22,8 @@
 //      walks every [data-write] element in the document and sets:
 //        disabled = !canSign
 //        title    = canSign ? '' : 'Connect to your own wallet to act'
+//      A connected wrong-chain wallet remains actionable: its click enters
+//      contracts.js's write gate, which requests the configured chain first.
 //      A MutationObserver covers Phase 60+ panels that mount [data-write]
 //      buttons after this module's init. Operator mode is writable
 //      (deriveCanSign() includes it — see store.js), so this manager leaves
@@ -145,7 +147,8 @@ export function setupBanner() {
  * toggle disabled + title based on the current canSign value.
  *
  * canSign === true  → enabled unless the owning component set
- *                     data-write-locked for a domain-state reason
+ *                     data-write-locked for a domain-state reason; includes
+ *                     a known wrong chain so the click can request its switch
  * canSign === false → disabled, title='Connect to your own wallet to act'
  */
 export function refreshDataWriteButtons() {

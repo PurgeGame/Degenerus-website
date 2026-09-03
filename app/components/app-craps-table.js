@@ -1458,6 +1458,7 @@ const CRAPS_ROLL_HISTORY_SLOT_COUNT = 5;
 export function crapsRollHistoryEvent(frame = {}) {
   const label = String(frame?.label ?? '');
   if (frame?.sevenOut === true || /\bseven(?:\s|-)?out\b/i.test(label)) return 'seven-out';
+  if (frame?.pointMade === true || /\bpoint\s+(?:4|5|6|8|9|10)\s+(?:made|hit)\b/i.test(label)) return 'point-hit';
   if (frame?.pointSet === true || /\bpoint\s+(?:4|5|6|8|9|10)\s+set\b/i.test(label)) return 'point-set';
   return '';
 }
@@ -1468,14 +1469,12 @@ export function crapsDiceCallout(frame = {}, { comeOut = false } = {}) {
   const total = Number.isInteger(numericTotal) && numericTotal >= 2 && numericTotal <= 12
     ? String(numericTotal)
     : '—';
-  const pointHit = frame?.pointMade === true
-    || /\bpoint\s+(?:4|5|6|8|9|10)\s+(?:made|hit)\b/i.test(String(frame?.label ?? ''));
   const event = crapsRollHistoryEvent(frame);
   if (event === 'seven-out') {
     return Object.freeze({ event, label: '', value: '7 OUT' });
   }
-  if (pointHit) {
-    return Object.freeze({ event: 'point-hit', label: 'POINT', value: 'HIT' });
+  if (event === 'point-hit') {
+    return Object.freeze({ event, label: 'POINT', value: 'HIT' });
   }
   if (event === 'point-set'
     || (comeOut && CRAPS_POINT_NUMBERS.includes(numericTotal))) {
@@ -3341,7 +3340,7 @@ class AppCrapsTable extends HTMLElement {
       const outcome = String(frame?.label ?? 'Resolved roll').trim() || 'Resolved roll';
       const total = clampInteger(frame?.total, 2, 12, 0) || '—';
       const event = crapsRollHistoryEvent(frame);
-      const marker = event === 'point-set' ? 'POINT' : event === 'seven-out' ? '7 OUT' : '';
+      const marker = event === 'point-set' ? 'POINT' : event === 'point-hit' ? 'POINT HIT' : event === 'seven-out' ? '7 OUT' : '';
       const survivalSettled = typeof frame?.survival?.survived === 'boolean'
         && this.#settledSurvivalShooters.has(this.#endedShooterAtFrame(frameIndex));
       const survival = survivalSettled ? (frame.survival.survived ? 'survived' : 'bust') : '';

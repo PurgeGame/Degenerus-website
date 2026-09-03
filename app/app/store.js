@@ -3,7 +3,9 @@
 // EXTENDS the 58-01 minimal shim (preserved API: get/update/subscribe + namespaces).
 // Adds:
 //   - batch({updates}) — multi-path with deduplicated subscriber notifications
-//   - deriveCanSign() — true iff (mode==='self' || 'operator') AND chainOk===true AND connected.address truthy
+//   - deriveCanSign() — true iff a connected self/operator session may initiate
+//     a write; a known wrong chain remains actionable so the write can request
+//     the configured network before signing
 //   - getViewedAddress() — viewing.address || connected.address || null (polling target precedence)
 //   - getActingAddress() — the address a WRITE acts on: connected in 'self', viewing in
 //     'operator', null in 'view'/'combined' (account-switcher / operator-mode CORE layer)
@@ -173,9 +175,9 @@ export function batch({ updates }) {
 // ---------------------------------------------------------------------------
 
 /**
- * deriveCanSign — true iff the active session can sign transactions.
+ * deriveCanSign — true iff the active session can initiate a wallet write.
  *   ui.mode === 'self' OR 'operator'  (self OR an approved operator acting for another)
- *   ui.chainOk === true               (on Sepolia)
+ *   ui.chainOk is boolean             (known; false is repaired by the write gate)
  *   connected.address                 (wallet attached — the signer in both modes)
  * 'view' and 'combined' are read-only.
  */
@@ -183,7 +185,9 @@ export function deriveCanSign() {
   const mode = getPath(_state, 'ui.mode');
   const chain = getPath(_state, 'ui.chainOk');
   const addr = getPath(_state, 'connected.address');
-  return (mode === 'self' || mode === 'operator') && chain === true && Boolean(addr);
+  return (mode === 'self' || mode === 'operator')
+    && (chain === true || chain === false)
+    && Boolean(addr);
 }
 
 /**
