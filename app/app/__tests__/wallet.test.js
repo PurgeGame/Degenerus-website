@@ -570,7 +570,7 @@ describe('accountsChanged listener', () => {
 // ===========================================================================
 
 describe('chainChanged listener', () => {
-  test('updates ui.chainOk based on hex equality with CHAIN.hexId; does NOT reload', async () => {
+  test('normalizes EIP-1193 and WalletConnect chain ids; does NOT reload', async () => {
     _localStore.set('lastWalletRdns', 'io.metamask');
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
     const bp = makeMockBrowserProvider({});
@@ -591,6 +591,14 @@ describe('chainChanged listener', () => {
     fn('0x14a34');
     const right = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(right[1], true);
+
+    fn(84532);
+    const numeric = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
+    assert.equal(numeric[1], true);
+
+    fn('eip155:84532');
+    const caip = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
+    assert.equal(caip[1], true);
 
     // CRITICAL: never reloaded
     assert.equal(_reloadCalled, false, 'window.location.reload NEVER called on chainChanged');
@@ -881,6 +889,25 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const addrUpd = _storeUpdates.find((u) => u[0] === 'connected.address' && u[1] !== null);
     assert.ok(addrUpd, 'connected.address updated');
     assert.equal(addrUpd[1], '0xbb00000000000000000000000000000000000077');
+  });
+
+  test('autoReconnect WC branch accepts a restored hex Base Sepolia chain id', async () => {
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    const { factory } = makeMockWcFactory({
+      session: { topic: 'persisted-hex-chain' },
+      accounts: ['0xBb00000000000000000000000000000000000077'],
+      chainId: '0x14a34',
+    });
+    wallet._testInjectWcFactory(factory);
+    _storeUpdates.length = 0;
+
+    const result = await wallet.autoReconnect();
+
+    assert.equal(result, true, 'silent reconnect returns true');
+    const chainUpdate = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
+    assert.ok(chainUpdate, 'ui.chainOk was set');
+    assert.equal(chainUpdate[1], true,
+      'equivalent EIP-1193 chain-id encodings must not show Wrong Network');
   });
 
   test('autoReconnect WC branch: with NO persisted session returns false and does not call wc.connect', async () => {
