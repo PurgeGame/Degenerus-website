@@ -104,7 +104,7 @@ import {
   LOOTBOX_REVEAL_ABORT_EVENT,
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   LOOTBOX_REVEAL_QUEUED_EVENT,
-} from './reveal-overlay.js';
+} from './reveal-queue.js';
 import { registerComponentPoll } from '../app/component-poll.js';
 import './boon-product-indicator.js';
 import './quest-objective-indicator.js';

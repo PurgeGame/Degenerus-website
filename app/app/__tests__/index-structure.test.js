@@ -26,6 +26,7 @@ const htmlPath = resolvePath(__dirname, '../../index.html');
 const html = readFileSync(htmlPath, 'utf8');
 const onboarding = readFileSync(resolvePath(__dirname, '../../components/app-onboarding.js'), 'utf8');
 const appCss = readFileSync(resolvePath(__dirname, '../../styles/app.css'), 'utf8');
+const revealQueue = readFileSync(resolvePath(__dirname, '../../components/reveal-queue.js'), 'utf8');
 
 describe('index.html basic-mode skeleton', () => {
   test('body carries the layout-basic class', () => {
@@ -330,7 +331,7 @@ describe('index.html basic-mode skeleton', () => {
       'no lazy path bypasses the local revision helper');
   });
 
-  test('the eager reveal engine and its stylesheet cannot reuse the broken control generation', () => {
+  test('the on-demand reveal engine and its stylesheet cannot reuse the broken control generation', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
@@ -341,18 +342,30 @@ describe('index.html basic-mode skeleton', () => {
     );
     assert.doesNotMatch(
       html,
-      /<script type="module" src="\/app\/components\/reveal-overlay\.js"><\/script>/,
-      'the eager tag cannot bypass the import-map revision',
+      /<script type="module"[^>]*>[\s\S]*?import '\/app\/components\/reveal-overlay\.js';[\s\S]*?<\/script>|<script type="module" src="\/app\/components\/reveal-overlay\.js"><\/script>/,
+      'the large visual engine stays out of the eager module graph',
     );
     assert.match(
-      html,
-      /<script type="module">\s*import '\/app\/components\/reveal-overlay\.js';\s*<\/script>/,
-      'the eager reveal engine enters through the same mapped module identity as its importers',
+      revealQueue,
+      /_overlayLoadPromise = import\('\.\/reveal-overlay\.js'\)/,
+      'the first queued prize loads the cache-mapped engine on demand',
     );
     assert.match(
       html,
       /href="\/app\/styles\/app\.css\?v=reveal-controls-[^"]+"/,
       'the matching hit-target and layout CSS receives the same explicit cache cutover',
+    );
+  });
+
+  test('the current mobile LCP background is discovered during HTML parsing', () => {
+    assert.match(
+      html,
+      /<link rel="preload" as="image" fetchpriority="high" href="\/app\/assets\/jackpot\/daily-drawing-foil-routing-v5\.svg">/,
+    );
+    assert.doesNotMatch(
+      html,
+      /fetchpriority="high" href="\/app\/assets\/jackpot\/golden-ticket-frame-v1\.webp"/,
+      'the much larger non-LCP frame does not compete in the high-priority lane',
     );
   });
 

@@ -25,7 +25,7 @@ import {
   LOOTBOX_REVEAL_ABORT_EVENT,
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   queueReveal,
-} from './reveal-overlay.js';
+} from './reveal-queue.js';
 
 const PENDING_SOURCE = 'sdgnrs-redemptions';
 // 30s like the other Pending-tray watchers (whale-pass, launch-claims):

@@ -18,7 +18,7 @@ import {
 import { clearPendingActions, publishPendingActions } from './pending-actions.js';
 import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
 import { readProviderBlockNumber, sharedReadProvider } from './read-provider.js';
-import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-queue.js';
 import { registerComponentPoll } from './component-poll.js';
 import { fetchJSON } from './api.js';
 
@@ -432,7 +432,9 @@ export function buildReferralBonusPendingAction({
   return {
     id: `referral-bonus:${player}:${level}`,
     dismissScope: player,
-    dismissKey: `referral-bonus:${level}:${alreadyClaimed ? 'reward' : 'claim'}`,
+    // Claimable and already-paid are two states of the same level bonus. A
+    // keeper settling it after CLEAR must not manufacture a second reminder.
+    dismissKey: `referral-bonus:${level}`,
     kind: 'affiliate-bonus',
     kindLabel: 'REFERRAL BONUS',
     label: `L${level} REFERRAL BONUS`,
@@ -509,7 +511,8 @@ async function _wwxrpItems(address, days) {
     return {
       id: `wwxrp-draw:${address}:${row.day}`,
       dismissScope: address,
-      dismissKey: `wwxrp-draw:${row.day}:${claimable ? 'claim' : 'won'}`,
+      // Preserve one logical identity across unclaimed -> paid indexing.
+      dismissKey: `wwxrp-draw:${row.day}`,
       kind: 'wwxrp-draw',
       kindLabel: `DAY ${row.day}`,
       label: `D${row.day} WWXRP · WON ${amount} FLIP`,

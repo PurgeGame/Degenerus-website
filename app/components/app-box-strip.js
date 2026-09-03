@@ -60,7 +60,7 @@ import {
   LOOTBOX_REVEAL_QUEUED_EVENT,
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   LOOTBOX_REVEAL_ABORT_EVENT,
-} from './reveal-overlay.js';
+} from './reveal-queue.js';
 import { registerComponentPoll } from '../app/component-poll.js';
 import { permissionlessReadProvider, readTransactionReceipt } from '../app/read-provider.js';
 
@@ -339,7 +339,11 @@ function _boxDismissKey(box) {
     box?.transactionHash,
   ].filter(Boolean).map((hash) => String(hash).toLowerCase()))].sort();
   return hashes.length > 0
-    ? `lootbox:${key}:purchases:${hashes.join(',')}`
+    // Keep one purchase identity while it moves from the optimistic
+    // `submitted:<hash>` placeholder to its mined RNG index. Otherwise CLEAR
+    // tombstones the placeholder and confirmation immediately republishes the
+    // exact same purchase under a different key.
+    ? `lootbox:purchases:${hashes.join(',')}`
     : `lootbox:${key}`;
 }
 

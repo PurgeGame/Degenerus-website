@@ -4668,6 +4668,44 @@ describe('reveal-overlay element', () => {
       'a routine publisher refresh cannot bring the cleared reminder back');
   });
 
+  test('fullscreen CLEAR consumes reveals enqueued by cleanup instead of reopening', async () => {
+    let releaseOwner;
+    const ownerGate = new Promise((resolve) => { releaseOwner = resolve; });
+    pendingActionsMod.publishPendingActions('slow-owner', [{
+      id: 'slow:1', kind: 'lootbox', label: 'Old result', state: 'ready',
+      run: async () => {},
+      clearAll: () => ownerGate,
+    }]);
+    const completed = [];
+    const onComplete = (event) => completed.push(event.detail?.key);
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
+    const el = instantiate();
+    queueReveal({ kind: 'pack', count: 1, level: 7, pending: true });
+    await tick();
+
+    el.querySelector('[data-bind="rvl-clear-pending"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    queueReveal({
+      kind: 'lootbox',
+      legs: [{ legType: 'dgnrs', amount: 10n ** 18n }],
+      lootboxRelease: {
+        address: '0x00000000000000000000000000000000000000ab',
+        key: 'tx:late-cleanup-result',
+        lootboxIndex: 91,
+        transactionHash: '0xlatecleanup',
+      },
+    });
+    await tick();
+
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'a cleanup callback cannot reopen the just-cleared overlay');
+    assert.deepEqual(completed, ['tx:late-cleanup-result'],
+      'the late release is acknowledged so its owner cannot republish it');
+    releaseOwner();
+    await tick();
+    document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
+  });
+
   test('primary reveal controls occupy one raised target without an empty socket', () => {
     assert.doesNotMatch(APP_CSS, /\.rvl-stage::after\s*\{/,
       'no pseudo-button remains when there is nothing to click');

@@ -88,184 +88,39 @@ import { celebrateProtocol } from '../protocol-celebration.js';
 import { appendCoinFaces } from '../app/coin-faces.js';
 import { flipPileLevel, flipPileArt, flipPileVariant } from '../app/flip-piles.js';
 import { unpackBoxOrder } from '../app/lootbox.js';
+import { projectDegeneretteEthSplit } from './reveal-projection.js';
+export { projectDegeneretteEthSplit } from './reveal-projection.js';
+import {
+  emitLootboxRevealQueued as _emitLootboxQueued,
+  LOOTBOX_REVEAL_ABORT_EVENT,
+  LOOTBOX_REVEAL_COMPLETE_EVENT,
+  PACK_REVEAL_ABORT_EVENT,
+  PACK_REVEAL_COMPLETE_EVENT,
+  registerRevealOverlay,
+  releaseLootboxRevealPresentations,
+  releaseResultRevealPresentations,
+  RESULT_REVEAL_ABORT_EVENT,
+  REVEAL_OVERLAY_IDLE_EVENT,
+  revealResultPresentation as _resultPresentationOf,
+  unregisterRevealOverlay,
+  withLootboxPresentationId as _withLootboxPresentationId,
+} from './reveal-queue.js';
+export {
+  __resetForTest,
+  __takeQueuedForTest,
+  LOOTBOX_REVEAL_ABORT_EVENT,
+  LOOTBOX_REVEAL_COMPLETE_EVENT,
+  LOOTBOX_REVEAL_QUEUED_EVENT,
+  PACK_REVEAL_ABORT_EVENT,
+  PACK_REVEAL_COMPLETE_EVENT,
+  queueReveal,
+  RESULT_REVEAL_ABORT_EVENT,
+  REVEAL_OVERLAY_IDLE_EVENT,
+} from './reveal-queue.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
 // ---------------------------------------------------------------------------
-
-let _instance = null;
-let _buffer = [];
-let _lootboxPresentationSeq = 0;
-let _queuedLootboxPresentationIds = new Set();
-let _queuedBingoPresentationIds = new Set();
-let _queuedPariPresentationIds = new Set();
-let _queuedReferralBonusPresentationIds = new Set();
-
-/**
- * The abort identity of a single-presentation prize (Bingo, settled side bet,
- * referral bonus), read from either a raw queued sequence or the normalized one
- * the queue holds. Null for every other kind.
- */
-function _resultPresentationOf(seq) {
-  if (seq?.resultPresentation) return seq.resultPresentation;
-  const presentationId = String(seq?.presentationId || '');
-  if (!presentationId || !_tombstoneSet(seq?.kind)) return null;
-  return { kind: seq.kind, presentationId, release: seq?.revealRelease || null };
-}
-
-/** The session tombstone set for a single-presentation prize kind, else null. */
-function _tombstoneSet(kind) {
-  if (kind === 'bingo') return _queuedBingoPresentationIds;
-  if (kind === 'pari') return _queuedPariPresentationIds;
-  if (kind === 'referral-bonus') return _queuedReferralBonusPresentationIds;
-  return null;
-}
-
-// Ticket inventory listens for these lifecycle events so newly indexed cards
-// remain behind their wrapper until the corresponding presentation is actually
-// consumed. Pack-watch owns the durable pending/revealed bookkeeping.
-export const PACK_REVEAL_COMPLETE_EVENT = 'degenerus:pack-reveal-complete';
-export const PACK_REVEAL_ABORT_EVENT = 'degenerus:pack-reveal-abort';
-// Fired only after the complete fullscreen queue has drained and its backdrop
-// is hidden. Consumers that reveal background state (for example seating a
-// foil pack in the Daily Drawing cabinet) must wait for this rather than a
-// per-sequence completion event, because more fullscreen rewards may follow.
-export const REVEAL_OVERLAY_IDLE_EVENT = 'degenerus:reveal-overlay-idle';
-export const LOOTBOX_REVEAL_COMPLETE_EVENT = 'degenerus:lootbox-reveal-complete';
-export const LOOTBOX_REVEAL_ABORT_EVENT = 'degenerus:lootbox-reveal-abort';
-export const LOOTBOX_REVEAL_QUEUED_EVENT = 'degenerus:lootbox-reveal-queued';
-// Bingo / side-bet / referral results are single-presentation prizes whose
-// publishers mark them seen the moment they queue. When the player closes the
-// overlay their sequences are dropped with the rest of the queue, so the abort
-// has to hand the id back — otherwise the prize is marked seen, tombstoned,
-// and can never be presented again. Mirrors LOOTBOX_REVEAL_ABORT_EVENT.
-export const RESULT_REVEAL_ABORT_EVENT = 'degenerus:result-reveal-abort';
-
-function _withLootboxPresentationId(seq) {
-  if (seq?.kind !== 'lootbox') return seq;
-  if (seq.presentationId) return seq;
-  const release = seq?.lootboxRelease;
-  const address = String(release?.address || '').toLowerCase();
-  const key = String(release?.key || '');
-  if (address && key) {
-    return { ...seq, presentationId: `lootbox-reveal:${address}:${key}` };
-  }
-  return { ...seq, presentationId: `lootbox-reveal:${++_lootboxPresentationSeq}` };
-}
-
-function _withBingoPresentationId(seq) {
-  if (seq?.kind !== 'bingo' || seq.presentationId) return seq;
-  const player = String(seq.player || seq.address || '').toLowerCase();
-  const level = Number(seq.level);
-  const symbol = Number(seq.symbol ?? seq.sym);
-  const quadrant = Number.isInteger(Number(seq.quadrant))
-    ? Number(seq.quadrant)
-    : (Number.isInteger(symbol) ? symbol >> 3 : Number.NaN);
-  if (!player || !Number.isInteger(level) || level < 0
-    || !Number.isInteger(quadrant) || quadrant < 0) return seq;
-  // One player can claim a given level/quadrant Bingo only once. Use that
-  // protocol identity rather than a receipt id: the local transaction receipt
-  // and the indexer can discover the same claim through different paths.
-  return { ...seq, presentationId: `bingo-reveal:${player}:${level}:${quadrant}` };
-}
-
-function _withPariPresentationId(seq) {
-  if (seq?.kind !== 'pari' || seq.presentationId) return seq;
-  const market = String(seq.market || '').toLowerCase() === 'volume' ? 'volume' : 'growth';
-  const round = Number(seq.round);
-  if (!Number.isInteger(round) || round < 0) return seq;
-  const player = String(seq.player || seq.address || 'current').toLowerCase();
-  return { ...seq, presentationId: `pari-reveal:${player}:${market}:${round}` };
-}
-
-function _withReferralBonusPresentationId(seq) {
-  if (seq?.kind !== 'referral-bonus' || seq.presentationId) return seq;
-  const player = String(seq.player || seq.address || '').toLowerCase();
-  const level = Number(seq.level);
-  if (!player || !Number.isInteger(level) || level <= 0) return seq;
-  return { ...seq, presentationId: `referral-bonus:${player}:${level}` };
-}
-
-function _emitLootboxQueued(seq) {
-  const id = seq?.kind === 'lootbox' ? String(seq.presentationId || '') : '';
-  if (!id || _queuedLootboxPresentationIds.has(id)) return;
-  _queuedLootboxPresentationIds.add(id);
-  if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
-    || typeof CustomEvent !== 'function') return;
-  const release = seq?.lootboxRelease;
-  try {
-    document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_QUEUED_EVENT, {
-      detail: {
-        presentationId: id,
-        address: release?.address == null ? null : String(release.address).toLowerCase(),
-        key: release?.key == null ? null : String(release.key),
-        lootboxIndex: release?.lootboxIndex == null ? null : Number(release.lootboxIndex),
-        transactionHash: release?.transactionHash == null
-          ? null
-          : String(release.transactionHash).toLowerCase(),
-      },
-    }));
-  } catch (_e) { /* spoiler bookkeeping must never break a reveal */ }
-}
-
-/**
- * Enqueue a reveal sequence. Safe to call before <reveal-overlay> mounts —
- * sequences buffer and play on connect. Returns true if accepted.
- */
-export function queueReveal(seq) {
-  if (!seq || typeof seq !== 'object') return false;
-  const queued = _withReferralBonusPresentationId(
-    _withPariPresentationId(
-      _withBingoPresentationId(_withLootboxPresentationId(seq)),
-    ),
-  );
-  const presentationId = String(queued?.presentationId || '');
-  // Live receipt parsing and the indexed pending tray can discover the same
-  // settled box independently. A stable release-derived id keeps that one
-  // logical box from entering the overlay twice while buffered/active and
-  // remains a session tombstone after completion. Abort explicitly releases
-  // the id so a presentation the player never finished can be retried.
-  if (queued?.kind === 'lootbox'
-    && presentationId && _queuedLootboxPresentationIds.has(presentationId)) return false;
-  if (presentationId && _tombstoneSet(queued?.kind)?.has(presentationId)) return false;
-  // Bingo ids are session tombstones, not merely active-queue locks. A claimed
-  // Bingo is immutable, so COMPLETING its visual must not let a delayed indexer
-  // refresh present the same prize again. An abort is the opposite case: the
-  // player never saw it, so #emitResultAbort hands the id back below.
-  //
-  // A settled side-bet round and a referral payout are immutable for the same
-  // reason — one player, one round/level, one presentation.
-  const tombstones = _tombstoneSet(queued?.kind);
-  if (tombstones && presentationId) tombstones.add(presentationId);
-  _emitLootboxQueued(queued);
-  if (_instance) {
-    _instance.enqueue(queued);
-  } else {
-    _buffer.push(queued);
-  }
-  return true;
-}
-
-/** Test-only — drop the singleton + buffer. */
-export function __resetForTest() {
-  _instance = null;
-  _buffer = [];
-  _lootboxPresentationSeq = 0;
-  _queuedLootboxPresentationIds = new Set();
-  _queuedBingoPresentationIds = new Set();
-  _queuedPariPresentationIds = new Set();
-  _queuedReferralBonusPresentationIds = new Set();
-}
-
-/**
- * Test-only — the sequences queued since the last call, cleared on read.
- * Lets a caller assert WHAT it queued without mounting the element.
- */
-export function __takeQueuedForTest() {
-  const out = _buffer;
-  _buffer = [];
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Normalization — every sequence becomes {kind, title, big, autoStart, cards[]}.
@@ -592,30 +447,6 @@ export function lootboxFlightLandingTranslations(sourceRects, targetRects) {
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
   });
   return translations.every(Boolean) ? translations : [];
-}
-
-/**
- * Project a partial Degenerette ETH total into its two final receipt lanes.
- *
- * `lootboxEth` is emitted only as a final aggregate, so attributing each
- * settled spin with a guessed contract tier makes the two numbers jump when
- * the receipt eventually wins. Keep every animation frame on the final
- * on-chain ratio instead. Integer dust stays in the immediately claimable ETH
- * lane and the final frame is exact.
- */
-export function projectDegeneretteEthSplit({ gross, total, lootboxEth } = {}) {
-  const shown = _safeBigInt(gross);
-  const finalTotal = _safeBigInt(total);
-  const emittedBox = _safeBigInt(lootboxEth);
-  if (shown <= 0n) return { actual: 0n, lootbox: 0n };
-  if (finalTotal <= 0n || emittedBox <= 0n) return { actual: shown, lootbox: 0n };
-
-  const finalBox = emittedBox > finalTotal ? finalTotal : emittedBox;
-  const progress = shown > finalTotal ? finalTotal : shown;
-  const box = progress === finalTotal
-    ? finalBox
-    : (finalBox * progress) / finalTotal;
-  return { actual: shown - box, lootbox: box };
 }
 
 function _packedTraits(traits) {
@@ -2696,23 +2527,19 @@ class RevealOverlay extends HTMLElement {
   #controlsOnly = false;
   #continuationBusy = false;
   #lootboxLanding = null;
+  #clearingPending = false;
 
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
     this.#wire();
-    _instance = this;
-    // Drain anything queued before mount.
-    if (_buffer.length > 0) {
-      const pending = _buffer;
-      _buffer = [];
-      for (const seq of pending) this.enqueue(seq);
-    }
+    registerRevealOverlay(this);
   }
 
   disconnectedCallback() {
-    if (_instance === this) _instance = null;
+    unregisterRevealOverlay(this);
+    this.#clearingPending = false;
     this.#skippedPackBatches.clear();
     this.#clearTimers();
     try { unlockScroll(); } catch (_e) { /* defensive */ }
@@ -3653,6 +3480,14 @@ class RevealOverlay extends HTMLElement {
     // hand a single-presentation prize back to its publisher.
     const resultPresentation = _resultPresentationOf(queued);
     if (resultPresentation) seq.resultPresentation = resultPresentation;
+    // CLEAR stays open while publishers process their completion/cleanup
+    // callbacks. Treat anything they enqueue in that window as part of the
+    // cleared backlog instead of letting it become the next popup.
+    if (this.#clearingPending) {
+      this.#emitPackComplete(seq);
+      this.#emitLootboxComplete(seq);
+      return;
+    }
     this.#queue.push(seq);
     // Same-tick pack releases are ordered before the runner claims the first
     // item. This prevents a foil-only record from becoming the current pack
@@ -3777,17 +3612,14 @@ class RevealOverlay extends HTMLElement {
   }
 
   #clearPendingQueue() {
+    if (this.#clearingPending) return;
+    this.#clearingPending = true;
     // Tombstone the shared manifest before completion events can make a
     // controller refresh. That keeps CLEAR materially different from the X:
     // X merely closes this presentation; CLEAR retires every reminder that is
     // currently in the queue and prevents routine polling from bringing it
     // straight back.
-    const clearing = dismissPendingActionItems(getPendingActions());
     const sequences = [this.#currentSequence, ...this.#queue].filter(Boolean);
-    for (const seq of sequences) {
-      this.#emitPackComplete(seq);
-      this.#emitLootboxComplete(seq);
-    }
     this.#aborted = true;
     this.#queue = [];
     this.#currentSequence = null;
@@ -3801,9 +3633,18 @@ class RevealOverlay extends HTMLElement {
       this.#tapResolve = null;
       resolve();
     }
-    void clearing.catch((error) => {
-      console.warn?.('[reveal-overlay] pending clear failed', error);
-    });
+    const clearing = dismissPendingActionItems(getPendingActions(), { drain: true });
+    for (const seq of sequences) {
+      this.#emitPackComplete(seq);
+      this.#emitLootboxComplete(seq);
+    }
+    void clearing
+      .catch((error) => {
+        console.warn?.('[reveal-overlay] pending clear failed', error);
+      })
+      .finally(() => {
+        this.#clearingPending = false;
+      });
   }
 
   #emitPackComplete(seq) {
@@ -3865,15 +3706,7 @@ class RevealOverlay extends HTMLElement {
   // Without this, closing the overlay burns a Bingo, a settled side bet, or a
   // referral bonus permanently — the row is gone and queueReveal refuses it.
   #emitResultAbort(sequences) {
-    const released = [];
-    for (const seq of Array.isArray(sequences) ? sequences : []) {
-      const identity = _resultPresentationOf(seq);
-      if (!identity) continue;
-      const tombstones = _tombstoneSet(identity.kind);
-      if (!tombstones || !tombstones.has(identity.presentationId)) continue;
-      tombstones.delete(identity.presentationId);
-      released.push({ ...identity });
-    }
+    const released = releaseResultRevealPresentations(sequences);
     if (released.length === 0) return;
     if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
       || typeof CustomEvent !== 'function') return;
@@ -3901,7 +3734,7 @@ class RevealOverlay extends HTMLElement {
         detail: { releases, presentationIds },
       }));
     } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
-    for (const id of presentationIds) _queuedLootboxPresentationIds.delete(id);
+    releaseLootboxRevealPresentations(presentationIds);
   }
 
   #tap(value = 'tap') {

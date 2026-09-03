@@ -17,7 +17,7 @@ import {
   dgnDisplaySymbol,
 } from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
-import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from '../components/reveal-queue.js';
 import { claimBingo } from './bingo.js';
 import {
   currentUnresolvedJackpotContext,
@@ -441,6 +441,7 @@ async function _publish(address, seq = null) {
     return {
       id: `bingo:${receipt.id}`,
       dismissScope: addr,
+      dismissKey: `bingo:${receipt.level}:${receipt.symbol}`,
       kind: 'bingo',
       kindLabel: _tierLabel(receipt.tier),
       label: `Level ${receipt.level} ${symbolName} Bingo`,
@@ -497,6 +498,9 @@ async function _publish(address, seq = null) {
       return {
         id: `bingo-claim:${candidate.level}`,
         dismissScope: addr,
+        // The later claim receipt has an event id, but it is still this exact
+        // level/symbol Bingo. Keep CLEAR stable across that transition.
+        dismissKey: `bingo:${candidate.level}:${candidate.symbol}`,
         kind: 'bingo',
         kindLabel: 'BINGO READY',
         label: `Level ${candidate.level} ${symbolName} Bingo`,

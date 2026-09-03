@@ -19,7 +19,8 @@ import {
   degeneretteRevealSequenceFromFeedItem,
   mergeDegeneretteFeedItems,
 } from './app-degenerette-panel.js';
-import { queueReveal, projectDegeneretteEthSplit } from './reveal-overlay.js';
+import { queueReveal } from './reveal-queue.js';
+import { projectDegeneretteEthSplit } from './reveal-projection.js';
 
 const DEFAULT_LIMIT = 10;
 const LIMITS = new Set([10, 25, 50, 100]);

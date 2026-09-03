@@ -1226,3 +1226,17 @@ test('winner cells wear the linked Discord identity and never lose the address',
   assert.match(componentSource, /`\$\{profile\.name\} · \$\{raw\}` : raw/,
     'the full address always survives in the title');
 });
+
+test('a closed battle awaiting its result refreshes the lobby window on a 5s settle watch', () => {
+  const componentSource = readFileSync(new URL('../app-craps-entry.js', import.meta.url), 'utf8');
+  assert.match(componentSource, /const CRAPS_SETTLE_WATCH_MS = 5_000;/,
+    'the settle watch is a short, explicit cadence');
+  assert.match(componentSource, /if \(battle\.state === 'closed' && !result\) awaitingSettlement = true;/,
+    'SETTLING is derived from a closed battle with no result yet');
+  assert.match(componentSource, /this\.#awaitingSettlement = awaitingSettlement;/,
+    'the render publishes the flag the watcher gates on');
+  assert.match(componentSource, /registerComponentPoll\(\(\) => \{\s*if \(this\.#awaitingSettlement\) void this\.#refreshSchedule\(\);\s*\}, CRAPS_SETTLE_WATCH_MS\)/,
+    'the watch rides the shared component poll so hidden tabs pause it, and only fires while settling');
+  assert.match(componentSource, /if \(typeof this\.#settleWatchTimer === 'function'\)/,
+    'disconnect releases the settle watch');
+});

@@ -1199,6 +1199,71 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('CLEAR retires the full existing Degenerette backlog instead of revealing it one bet at a time', async () => {
+    const amountPerSpin = 250n * 10n ** 18n;
+    const packed = 13n
+      | (5n << 32n)
+      | (1n << 40n)
+      | (amountPerSpin << 42n)
+      | (2n << 218n);
+    let pendingRows = [
+      { betIndex: 7, betId: '42' },
+      { betIndex: 6, betId: '41' },
+    ];
+    const readBetIds = [];
+    let playerFetches = 0;
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      degeneretteBetInfo: async (_player, betId) => {
+        readBetIds.push(betId);
+        return packed;
+      },
+      connect(_signer) { return this; },
+    }));
+    _fetchHandler = async (url) => {
+      const path = String(url);
+      if (path.includes('/tickets/by-trait')) return { cards: [] };
+      if (path.includes('/degenerette/feed')) return { items: [] };
+      if (path.includes(`/player/${CONNECTED.toLowerCase()}`)) {
+        playerFetches += 1;
+        return { degenerette: { pendingBets: pendingRows } };
+      }
+      return {};
+    };
+
+    const el = instantiate();
+    await settle(80);
+    const action = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'degenerette:42');
+    assert.equal(typeof action?.clearAll, 'function');
+    await action.clearAll();
+    await settle();
+
+    const { clearedDegeneretteThroughKey } = await import('../app-degenerette-panel.js');
+    assert.equal(localStorage.getItem(clearedDegeneretteThroughKey(CONNECTED)), '42');
+    assert.ok(playerFetches >= 2, 'CLEAR bypasses the ordinary player-snapshot cache');
+    assert.deepEqual(pendingActionsMod.getPendingActions(), []);
+    el.disconnectedCallback();
+
+    // A later, genuinely new bet remains actionable, but neither older row is
+    // allowed to become the next surprise popup after the remount/poll.
+    pendingRows = [
+      { betIndex: 8, betId: '43' },
+      { betIndex: 7, betId: '42' },
+      { betIndex: 6, betId: '41' },
+    ];
+    const { invalidateJSONCache } = await import('../../app/api.js');
+    invalidateJSONCache();
+    const remounted = instantiate();
+    await settle(80);
+    assert.ok(readBetIds.some((betId) => betId === 43n),
+      'the post-clear recovery still considers a genuinely newer bet');
+    assert.deepEqual(
+      pendingActionsMod.getPendingActions().map((item) => item.id),
+      ['degenerette:43'],
+    );
+    remounted.disconnectedCallback();
+  });
+
   test('old-deployment local and indexed bets cannot reappear as current pending work', async () => {
     const legacyKey = `pending-degenerette:${CHAIN.id}:${CONNECTED.toLowerCase()}`;
     localStorage.setItem(legacyKey, JSON.stringify({

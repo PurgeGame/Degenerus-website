@@ -20,7 +20,7 @@ import {
   dgnDecodePacked,
   mergeDegeneretteFeedItems,
 } from './app-degenerette-panel.js';
-import { queueReveal } from './reveal-overlay.js';
+import { queueReveal } from './reveal-queue.js';
 
 const SOURCE = 'day-history-replays';
 const PAGE_LIMIT = 200;

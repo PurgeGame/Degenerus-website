@@ -41,7 +41,7 @@ import {
   PACK_REVEAL_COMPLETE_EVENT,
   PACK_REVEAL_ABORT_EVENT,
   LOOTBOX_REVEAL_COMPLETE_EVENT,
-} from '../components/reveal-overlay.js';
+} from '../components/reveal-queue.js';
 
 // Local reveal state is contract-deployment state, not merely chain state.
 // Testnet reuses level numbers and player addresses on every run; carrying a

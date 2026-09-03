@@ -178,33 +178,73 @@ export function clearPendingActions(source) {
  * Provider `clearAll` hooks may retire their own durable browser receipts,
  * while the registry tombstones guarantee that a routine republish cannot
  * resurrect a cleared reminder. Related ids cover rows that transition from
- * one aggregate placeholder into one or more ready actions.
+ * one aggregate placeholder into one or more ready actions. Pass
+ * `{ drain: true }` for the user-facing CLEAR operation so rows published by
+ * owner cleanup are included before the operation closes.
  */
-export async function dismissPendingActionItems(items = null) {
-  const rows = Array.isArray(items) ? [...items] : _snapshot();
-  if (rows.length === 0) return 0;
+export async function dismissPendingActionItems(items = null, { drain = false } = {}) {
+  let rows = Array.isArray(items) ? [...items] : _snapshot();
+  const dismissedRows = new Set();
+  const invokedOwners = new Set();
+  const failures = [];
+  let quietPasses = 0;
 
-  for (const item of rows) {
-    const scope = _currentDismissScope(item?.dismissScope);
-    _rememberDismissed(_dismissKey(scope, item?.source, item?.dismissKey ?? item?.id));
-    for (const relatedId of Array.isArray(item?.dismissIds) ? item.dismissIds : []) {
-      _rememberDismissed(_dismissKey(scope, item?.source, relatedId));
+  // CLEAR is a small fixed-point operation. Owner cleanup and reveal-complete
+  // listeners are allowed to publish replacement rows (for example, an
+  // aggregate ticket wait becoming a concrete pack). In drain mode, keep the
+  // clear open across those microtasks and tombstone every row that belongs to
+  // the same already-existing backlog. A later publish after this operation
+  // completes is still treated as genuinely new work.
+  for (let pass = 0; pass < 50; pass += 1) {
+    const owners = new Map();
+    if (rows.length > 0) {
+      for (const item of rows) {
+        const scope = _currentDismissScope(item?.dismissScope);
+        const key = _dismissKey(scope, item?.source, item?.dismissKey ?? item?.id);
+        _rememberDismissed(key);
+        dismissedRows.add(`${scope}:${String(item?.source || '')}:${String(item?.id || key)}`);
+        for (const relatedId of Array.isArray(item?.dismissIds) ? item.dismissIds : []) {
+          const relatedKey = _dismissKey(scope, item?.source, relatedId);
+          _rememberDismissed(relatedKey);
+        }
+        if (typeof item?.clearAll !== 'function') continue;
+        const owner = String(item.source || item.id);
+        if (!invokedOwners.has(owner)) owners.set(owner, item.clearAll);
+      }
+
+      // Persist before any publisher cleanup or refresh can run. If the page
+      // is closed immediately after CLEAR, the exact same rows stay retired.
+      _persistDismissed();
+      // Hide synchronously. Owner cleanup may involve storage or a refresh and
+      // must not leave the cleared queue painted while it completes.
+      _notify();
+    }
+
+    const ownerEntries = [...owners.entries()];
+    for (const [owner] of ownerEntries) invokedOwners.add(owner);
+    const settled = await Promise.allSettled(ownerEntries.map(([, clearAll]) => (
+      Promise.resolve().then(() => clearAll())
+    )));
+    settled.forEach((result) => {
+      if (result.status === 'rejected') failures.push(result.reason);
+    });
+
+    if (!drain) break;
+    // Two empty microtask turns close the synchronous publish gap without
+    // muting an unrelated action created after the user's clear has finished.
+    await Promise.resolve();
+    rows = _snapshot();
+    if (rows.length === 0) {
+      quietPasses += 1;
+      if (quietPasses >= 2) break;
+    } else {
+      quietPasses = 0;
     }
   }
-  // Persist before any publisher cleanup or refresh can run. If the page is
-  // closed immediately after CLEAR, the exact same rows still stay retired.
-  _persistDismissed();
-  // Hide synchronously. The owner cleanup below can involve storage or a
-  // refresh and must not leave the cleared queue painted while it completes.
-  _notify();
 
-  const owners = new Map();
-  for (const item of rows) {
-    if (typeof item?.clearAll !== 'function') continue;
-    owners.set(String(item.source || item.id), item.clearAll);
-  }
-  for (const clearAll of owners.values()) await clearAll();
-  return rows.length;
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Pending cleanup failed');
+  return dismissedRows.size;
 }
 
 /** Current flattened manifest. Returned as a new array. */

@@ -113,6 +113,37 @@ describe('pending-actions registry', () => {
       'cleared rows stay gone while genuinely new ids remain visible');
   });
 
+  test('drain mode clears rows published by owner cleanup before allowing new work', async () => {
+    let firstOwnerClears = 0;
+    let replacementOwnerClears = 0;
+    publishPendingActions('first', [{
+      id: 'first:waiting', label: 'First wait', state: 'waiting',
+      clearAll: async () => {
+        firstOwnerClears += 1;
+        await Promise.resolve();
+        publishPendingActions('replacement', [{
+          id: 'replacement:ready', label: 'Replacement', state: 'ready', run() {},
+          clearAll: () => { replacementOwnerClears += 1; },
+        }]);
+      },
+    }]);
+
+    assert.equal(
+      await dismissPendingActionItems(getPendingActions(), { drain: true }),
+      2,
+    );
+    assert.equal(firstOwnerClears, 1);
+    assert.equal(replacementOwnerClears, 1,
+      'a replacement publisher gets its cleanup hook during the same CLEAR');
+    assert.deepEqual(getPendingActions(), []);
+
+    publishPendingActions('later', [{
+      id: 'later:new', label: 'Actually new', state: 'ready', run() {},
+    }]);
+    assert.deepEqual(getPendingActions().map((item) => item.id), ['later:new'],
+      'the drain fence closes once cleanup is quiet');
+  });
+
   test('CLEAR survives a registry reload and is isolated to the viewed wallet', async () => {
     publishPendingActions('boxes', [{
       id: 'lootbox:77', dismissScope: '0xaaa', label: 'Box', state: 'ready', run() {},

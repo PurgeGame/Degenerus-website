@@ -87,6 +87,7 @@ const CRAPS_MAX_FELT_OPPONENTS = 2;
 // pair (500,000 / 2,250,000) left with the goal draw when the schedule fixed at 5x.
 const CRAPS_PROGRESSIVE_COMMON_BPS = 250_000n;
 const CRAPS_PROGRESSIVE_RARE_BPS = 1_200_000n;
+const CRAPS_PROGRESSIVE_TARGET_VISUAL_BPS = 9_000n;
 const CRAPS_LOCAL_PLAYER_COLOR = '#6ef08c';
 const CRAPS_OPPONENT_MEDAL_COLORS = Object.freeze(['#f4c84f', '#c8d4df', '#c77b45']);
 const CRAPS_BOARD_CHIPS = 10n;
@@ -504,8 +505,10 @@ export function crapsRackPipLayout({
 }
 
 /**
- * The post-goal tray measures the run's high-water score against the progressive's one cutoff
- * pair (audit 0880d134c). Score basis points use 10,000 == 1x starting bankroll.
+ * After the ordinary goal locks, remap the same rack toward the next Run It Up
+ * tier. The active target sits at roughly 90% of the curved rack, leaving the
+ * far edge available for live red chips. Crossing tier one expands the scale
+ * again toward the rare/top tier instead of leaving a permanently full bar.
  */
 export function crapsProgressiveTrayScale({
   startingBankrollFlip = 0,
@@ -527,25 +530,44 @@ export function crapsProgressiveTrayScale({
     : CRAPS_PROGRESSIVE_COMMON_BPS;
   const rareScoreBps = CRAPS_PROGRESSIVE_RARE_BPS;
   const scoreBps = (highPoint * 10_000n) / starting;
-  const clampedScoreBps = scoreBps > rareScoreBps ? rareScoreBps : scoreBps;
   const slots = clampInteger(slotCount, 0, 512, CRAPS_RACK_SLOTS);
-  const percentOf = (value) => Number((value * 10_000n) / rareScoreBps) / 100;
-  const highPointPercent = Math.max(0, Math.min(100, percentOf(clampedScoreBps)));
-  const achievedCount = slots > 0
-    ? Math.max(1, Math.min(slots, Math.round((highPointPercent / 100) * slots)))
-    : 0;
+  const tier = scoreBps >= commonScoreBps ? 'rare' : 'common';
+  const targetScoreBps = tier === 'rare' ? rareScoreBps : commonScoreBps;
+  const targetFlip = (starting * targetScoreBps + 9_999n) / 10_000n;
+  const targetVisualSquared = CRAPS_PROGRESSIVE_TARGET_VISUAL_BPS
+    * CRAPS_PROGRESSIVE_TARGET_VISUAL_BPS;
+  const rackCapacityFlip = (
+    targetFlip * 100_000_000n + targetVisualSquared - 1n
+  ) / targetVisualSquared;
+  const layoutAt = (bankrollFlip) => crapsRackPipLayout({
+    bankrollFlip,
+    capacityFlip: rackCapacityFlip,
+    slotCount: slots,
+  });
+  const commonFlip = (starting * commonScoreBps + 9_999n) / 10_000n;
+  const rareFlip = (starting * rareScoreBps + 9_999n) / 10_000n;
+  const highLayout = layoutAt(highPoint);
+  const targetPointPercent = layoutAt(targetFlip).visualPercentage;
 
   return Object.freeze({
     startingBankrollFlip: starting,
+    goalFlip: goal,
     highPointFlip: highPoint,
     scoreBps,
     commonScoreBps,
     rareScoreBps,
     commonMultiple: Number(commonScoreBps / 10_000n),
     rareMultiple: Number(rareScoreBps / 10_000n),
-    commonPointPercent: Math.max(0, Math.min(100, percentOf(commonScoreBps))),
-    highPointPercent,
-    achievedCount,
+    tier,
+    targetScoreBps,
+    targetMultiple: Number(targetScoreBps / 10_000n),
+    targetFlip,
+    rackCapacityFlip,
+    targetPointPercent,
+    commonPointPercent: layoutAt(commonFlip).visualPercentage,
+    rarePointPercent: layoutAt(rareFlip).visualPercentage,
+    highPointPercent: highLayout.visualPercentage,
+    achievedCount: highLayout.filledCount,
     slotCount: slots,
   });
 }
@@ -917,6 +939,58 @@ export function crapsEscalatedChipPresentation(chipCount = 0, shooterOrdinal = 0
   });
 }
 
+/**
+ * Turn a winner's exact credits into a physical payoff scaled against what
+ * that seat put in. Seven visible chips represent roughly one starting buy-in;
+ * larger multiples naturally graduate from stacks into the shared pile ladder.
+ */
+export function crapsWinnerPayoffPresentation({
+  runPayoutWei = null,
+  battleWonByViewer = false,
+  battlePayoutWei = null,
+  progressiveWonByViewer = false,
+  progressivePayoutWei = null,
+  startingBuyInFlip = 0,
+} = {}) {
+  const positiveWei = (value) => {
+    try {
+      const amount = value == null ? 0n : BigInt(value);
+      return amount > 0n ? amount : 0n;
+    } catch (_error) { return 0n; }
+  };
+  const runWei = positiveWei(runPayoutWei);
+  const bountyWei = battleWonByViewer === true ? positiveWei(battlePayoutWei) : 0n;
+  const progressiveWei = progressiveWonByViewer === true ? positiveWei(progressivePayoutWei) : 0n;
+  const totalWei = runWei + bountyWei + progressiveWei;
+  const startingFlip = wholeFlip(startingBuyInFlip) ?? 0n;
+  const startingWei = startingFlip * CRAPS_FLIP_WEI;
+
+  if (totalWei <= 0n) {
+    return Object.freeze({
+      totalWei: '0',
+      startingBuyInFlip: startingFlip.toString(),
+      multipleBps: null,
+      visualChipCount: '0',
+      kind: 'empty',
+      art: Object.freeze([]),
+    });
+  }
+
+  const multipleBps = startingWei > 0n ? (totalWei * 10_000n) / startingWei : null;
+  const visualChipCount = startingWei > 0n
+    ? (totalWei * BigInt(CRAPS_PICKED_CHIPS) + startingWei - 1n) / startingWei
+    : BigInt(CRAPS_PICKED_CHIPS);
+  const chips = crapsEscalatedChipPresentation(visualChipCount, 0, 'gold');
+  return Object.freeze({
+    totalWei: totalWei.toString(),
+    startingBuyInFlip: startingFlip.toString(),
+    multipleBps: multipleBps?.toString() ?? null,
+    visualChipCount: visualChipCount.toString(),
+    kind: chips.kind,
+    art: chips.art,
+  });
+}
+
 function stackArtFor(amount, variant = '') {
   const value = wholeFlip(amount) ?? 0n;
   const thresholds = [60n, 150n, 300n, 600n, 1_500n, 3_000n, 6_000n, 15_000n];
@@ -975,6 +1049,9 @@ export function aggregateCrapsTableBets(input = []) {
     const flipSurvivedValue = exit.survived ?? exit.flipSurvived ?? entry.survived ?? entry.flipSurvived;
     const flipSurvived = typeof flipSurvivedValue === 'boolean' ? flipSurvivedValue : null;
     const flipPaid = wholeFlip(exit.paidFlip ?? exit.flipPaid ?? entry.paidFlip ?? entry.flipPaid);
+    const runPayoutWei = wholeFlip(
+      exit.runPayoutWei ?? exit.paidWei ?? entry.runPayoutWei ?? entry.paidWei,
+    );
     const rawEnding = wholeFlip(
       exit.rawEndingFlip ?? exit.endingFlip ?? entry.rawEndingFlip ?? entry.endingFlip
         ?? exit.amountFlip ?? exit.amount ?? entry.exitAmountFlip,
@@ -1032,6 +1109,7 @@ export function aggregateCrapsTableBets(input = []) {
       bankrolls,
       flipSurvived,
       flipPaid,
+      runPayoutWei,
       rawEnding,
       highPoint,
       handsPlayed,
@@ -1045,6 +1123,7 @@ export function aggregateCrapsTableBets(input = []) {
     }
     if (player.flipSurvived == null && flipSurvived != null) player.flipSurvived = flipSurvived;
     if (player.flipPaid == null && flipPaid != null) player.flipPaid = flipPaid;
+    if (player.runPayoutWei == null && runPayoutWei != null) player.runPayoutWei = runPayoutWei;
     if (player.shooterBoosts.length === 0 && shooterBoosts.length > 0) player.shooterBoosts = shooterBoosts;
     if (player.survivals.length === 0 && survivals.length > 0) player.survivals = survivals;
     if (player.rollEvents.length === 0 && rollEvents.length > 0) player.rollEvents = rollEvents;
@@ -1088,6 +1167,7 @@ export function aggregateCrapsTableBets(input = []) {
       betIds: Object.freeze([...player.bets]),
       survived: player.flipSurvived,
       paidFlip: player.flipPaid?.toString() ?? null,
+      runPayoutWei: player.runPayoutWei?.toString() ?? null,
       rawEndingFlip: player.rawEnding.toString(),
       highPointFlip: player.highPoint.toString(),
       handsPlayed: player.handsPlayed,
@@ -1320,6 +1400,58 @@ export function formatSignedCrapsFlip(value) {
   return `${amount > 0n ? '+' : '−'}${formatCrapsCompactFlip(amount > 0n ? amount : -amount)}`;
 }
 
+/** Latest personal roll result visible at a shared-table replay position. */
+export function crapsPlayerLastResult({
+  roundNumber = 0,
+  rollEvents = [],
+  bankrollsFlip = [],
+  startingBankrollFlip = 0,
+  exitRoll = 0,
+} = {}) {
+  const resolved = clampInteger(roundNumber, 0, CRAPS_REPLAY_MAX_ROLLS, 0);
+  const present = (delta, rollNumber) => Object.freeze({
+    deltaFlip: delta.toString(),
+    copy: delta === 0n ? 'PUSH' : formatSignedCrapsFlip(delta),
+    state: delta > 0n ? 'win' : delta < 0n ? 'loss' : 'push',
+    rollNumber,
+  });
+  const empty = () => Object.freeze({
+    deltaFlip: null,
+    copy: '—',
+    state: 'empty',
+    rollNumber: null,
+  });
+  if (resolved === 0) return empty();
+
+  const events = Array.isArray(rollEvents) ? rollEvents : [];
+  for (let index = Math.min(resolved, events.length) - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    // Shared frames continue after a perspective has closed. Keep that
+    // player's real terminal result instead of replacing it with fake pushes.
+    if (!event || event.viewerClosed === true) continue;
+    const delta = signedWholeFlip(event.deltaFlip ?? event.delta);
+    if (delta != null) return present(delta, index + 1);
+  }
+
+  // Legacy/demo rows may have exact bankroll checkpoints but no event stream.
+  // Their adjacent snapshots still provide an honest last-result fallback.
+  const snapshots = (Array.isArray(bankrollsFlip) ? bankrollsFlip : [])
+    .map(wholeFlip)
+    .filter((amount) => amount != null);
+  const terminalRound = wholeNumber(exitRoll);
+  const visibleRounds = Math.min(
+    resolved,
+    snapshots.length,
+    terminalRound != null && terminalRound > 0 ? terminalRound : snapshots.length,
+  );
+  if (visibleRounds === 0) return empty();
+  const current = snapshots[visibleRounds - 1];
+  const previous = visibleRounds > 1
+    ? snapshots[visibleRounds - 2]
+    : wholeFlip(startingBankrollFlip) ?? 0n;
+  return present(current - previous, visibleRounds);
+}
+
 const CRAPS_ROLL_HISTORY_SLOT_COUNT = 5;
 
 /** Table-state accent carried by one fixed LAST 5 slot. */
@@ -1328,6 +1460,23 @@ export function crapsRollHistoryEvent(frame = {}) {
   if (frame?.sevenOut === true || /\bseven(?:\s|-)?out\b/i.test(label)) return 'seven-out';
   if (frame?.pointSet === true || /\bpoint\s+(?:4|5|6|8|9|10)\s+set\b/i.test(label)) return 'point-set';
   return '';
+}
+
+/** Dealer-style copy for the transient result centered between the dice. */
+export function crapsDiceCallout(frame = {}, { comeOut = false } = {}) {
+  const numericTotal = Number(frame?.total);
+  const total = Number.isInteger(numericTotal) && numericTotal >= 2 && numericTotal <= 12
+    ? String(numericTotal)
+    : '—';
+  const event = crapsRollHistoryEvent(frame);
+  if (event === 'seven-out') {
+    return Object.freeze({ event, label: '', value: '7 OUT' });
+  }
+  if (event === 'point-set'
+    || (comeOut && CRAPS_POINT_NUMBERS.includes(numericTotal))) {
+    return Object.freeze({ event: 'point-set', label: 'POINT', value: total });
+  }
+  return Object.freeze({ event: '', label: '', value: total });
 }
 
 /**
@@ -2582,10 +2731,23 @@ class AppCrapsTable extends HTMLElement {
                       <span class="craps-dice-bay__dice" aria-hidden="true">
                         <img data-bind="craps-die-one" data-face="2" src="${dgnBadgePath(3, 1, CRAPS_DICE_BADGE_COLORS[0])}" alt="">
                         <output class="craps-dice-bay__lock-readout" data-bind="craps-dice-lock-readout" hidden>
-                          <strong class="craps-dice-bay__lock-number" data-bind="craps-dice-lock-number">—</strong>
+                          <strong class="craps-dice-bay__lock-number">
+                            <small class="craps-dice-bay__lock-label" data-bind="craps-dice-lock-label" hidden></small>
+                            <span data-bind="craps-dice-lock-number">—</span>
+                          </strong>
                         </output>
                         <img data-bind="craps-die-two" data-face="5" src="${dgnBadgePath(3, 4, CRAPS_DICE_BADGE_COLORS[1])}" alt="">
                       </span>
+                      <output class="craps-winner-payoff" data-bind="craps-winner-payoff"
+                              role="status" aria-live="polite" data-kind="empty" hidden>
+                        <span class="craps-winner-payoff__art" data-bind="craps-winner-payoff-art"
+                              aria-hidden="true"></span>
+                        <span class="craps-winner-payoff__copy">
+                          <small>TOTAL WON</small>
+                          <strong><span data-bind="craps-winner-payoff-amount">—</span><em>FLIP</em></strong>
+                          <span class="craps-winner-payoff__multiple" data-bind="craps-winner-payoff-multiple" hidden></span>
+                        </span>
+                      </output>
                       <span class="craps-survival-stage" data-bind="craps-survival-stage" hidden aria-hidden="true">
                         <span class="craps-survival-coin" data-bind="craps-survival-coin"><span class="craps-survival-coin__face"></span></span>
                         <img class="craps-survival-landed" data-bind="craps-survival-landed" src="/shared/coinflip-face-red.svg" alt="" hidden>
@@ -2626,9 +2788,7 @@ class AppCrapsTable extends HTMLElement {
                                 data-bind="craps-jp-rare-point">
                             <small data-bind="craps-jp-rare-label">RARE —</small>
                           </span>
-                          <span class="craps-run-rail__high-point" data-bind="craps-jp-high-point">
-                            <span><small>HIGH</small><strong><output data-bind="craps-jp-high-amount">—</output></strong></span>
-                          </span>
+                          <span class="craps-run-rail__high-point" data-bind="craps-jp-high-point"></span>
                         </span>
                       </div>
                       <div class="craps-run-rail__bounty" data-bind="craps-battle-bounty-receipt"
@@ -3177,12 +3337,20 @@ class AppCrapsTable extends HTMLElement {
       const total = clampInteger(frame?.total, 2, 12, 0) || '—';
       const event = crapsRollHistoryEvent(frame);
       const marker = event === 'point-set' ? 'POINT' : event === 'seven-out' ? '7 OUT' : '';
+      const survivalSettled = typeof frame?.survival?.survived === 'boolean'
+        && this.#settledSurvivalShooters.has(this.#endedShooterAtFrame(frameIndex));
+      const survival = survivalSettled ? (frame.survival.survived ? 'survived' : 'bust') : '';
+      const survivalCopy = survival === 'survived' ? 'SURVIVED' : survival === 'bust' ? 'BUST' : '';
       const net = formatSignedCrapsFlip(delta);
       const netDescription = delta === 0n ? 'No net change' : `${net} FLIP`;
-      return `<li data-slot="${slot + 1}" data-state="${state}" data-roll-event="${event}"
+      return `<li data-slot="${slot + 1}" data-state="${state}" data-roll-event="${event}" data-survival="${survival}"
                   data-roll-marker="${marker}" title="${escapeHtml(outcome)}"
-                  aria-label="Roll ${frameIndex + 1}: ${total}. ${escapeHtml(outcome)}. ${escapeHtml(netDescription)}.">
-        <strong>${total}</strong><span>${escapeHtml(net)}</span>
+                  aria-label="Roll ${frameIndex + 1}: ${total}. ${escapeHtml(outcome)}. ${escapeHtml(netDescription)}.${survivalCopy
+                    ? ` Survival flip ${survival === 'survived' ? 'won' : 'lost'}.`
+                    : ''}">
+        <strong>${total}</strong><span>${escapeHtml(net)}</span>${survivalCopy
+          ? `<small class="craps-roll-history__survival">${survivalCopy}</small>`
+          : ''}
       </li>`;
     });
     host.innerHTML = history.join('');
@@ -3299,9 +3467,17 @@ class AppCrapsTable extends HTMLElement {
     const settled = endedShooter != null && this.#settledSurvivalShooters.has(endedShooter);
     const amount = crapsBoundaryBankroll(snapshot, survival, { settled });
     const survived = typeof survival === 'boolean' ? survival : survival?.survived;
+    const visibleSnapshotCount = Math.min(snapshots.length, Math.max(0, Number(rollNumber) || 0));
+    let highPoint = snapshots.slice(0, visibleSnapshotCount).reduce(
+      (highest, value) => value > highest ? value : highest,
+      starting,
+    );
+    if (amount > highPoint) highPoint = amount;
     return {
       amount,
       capacity: amount > capacity ? amount : capacity,
+      starting,
+      highPoint,
       exact,
       survivalBusted: settled && survived === false,
     };
@@ -3407,6 +3583,13 @@ class AppCrapsTable extends HTMLElement {
     const shooterOpeningFlip = state === 'live'
       ? this.#opponentShooterOpeningFlip(player, roundNumber)
       : null;
+    const lastResult = crapsPlayerLastResult({
+      roundNumber,
+      rollEvents: player.rollEvents,
+      bankrollsFlip: player.bankrollsFlip,
+      startingBankrollFlip: player.startingBankrollFlip,
+      exitRoll: player.exitRoll,
+    });
     return {
       key: player.key ?? `opponent-${opponentIndex}`,
       betId: player.betId ?? null,
@@ -3419,6 +3602,9 @@ class AppCrapsTable extends HTMLElement {
       betIds: Array.isArray(player.betIds) ? player.betIds : [],
       amount,
       capacity: progress.capacity > amount ? progress.capacity : amount || 1n,
+      startingBankroll: progress.starting,
+      highPoint: progress.highPoint,
+      runPayoutWei: wholeFlip(player.runPayoutWei),
       feltStake,
       nextStake: baseBoard,
       goal,
@@ -3428,6 +3614,7 @@ class AppCrapsTable extends HTMLElement {
       reserveState,
       shooterBoost,
       shooterOpeningFlip,
+      lastResult,
       rankStop: player.exitType === 'cashout' ? 'goal' : player.exitType === 'bust' ? 'bust' : null,
       rankHands: player.handsPlayed,
       rankPeak: player.highPointFlip,
@@ -3496,9 +3683,22 @@ class AppCrapsTable extends HTMLElement {
     const capacity = wholeFlip(this.#resolutionRun?.capacityFlip)
       ?? (this.#goal > amount ? this.#goal : amount)
       ?? 1n;
+    let highPoint = frames.slice(0, Math.max(0, Math.min(roundNumber, frames.length))).reduce(
+      (highest, candidate) => {
+        const bankroll = wholeFlip(candidate?.bankrollFlip) ?? 0n;
+        return bankroll > highest ? bankroll : highest;
+      },
+      starting,
+    );
+    if (amount > highPoint) highPoint = amount;
     const shooterOpeningFlip = state === 'live'
       ? this.#localShooterOpeningFlip(roundNumber)
       : null;
+    const lastResult = crapsPlayerLastResult({
+      roundNumber,
+      rollEvents: frames,
+      startingBankrollFlip: starting,
+    });
     return {
       key: 'local',
       betId: this.#viewerBetId,
@@ -3511,6 +3711,9 @@ class AppCrapsTable extends HTMLElement {
       betIds: [...this.#bets.keys()],
       amount,
       capacity: capacity > amount ? capacity : amount || 1n,
+      startingBankroll: starting,
+      highPoint,
+      runPayoutWei: this.#viewerResult?.runPayoutWei ?? null,
       feltStake,
       nextStake: baseBoard,
       goal: this.#goal,
@@ -3520,6 +3723,7 @@ class AppCrapsTable extends HTMLElement {
       reserveState,
       shooterBoost: state === 'live' ? liveFrame?.shooterBoost ?? null : null,
       shooterOpeningFlip,
+      lastResult,
       rankStop: this.#viewerResult?.stop ?? (localTerminal || null),
       rankHands: this.#viewerResult?.handsPlayed
         || ((wholeNumber(frame?.shooter) ?? this.#runShooterIndexAtRound(roundNumber)) + 1),
@@ -3560,7 +3764,6 @@ class AppCrapsTable extends HTMLElement {
           battleAwardWei,
           battleAwardFlip,
           feltStake: 0n,
-          reserveState: 'safe',
           state: 'paid',
           status: 'WINNER',
         }
@@ -3585,7 +3788,7 @@ class AppCrapsTable extends HTMLElement {
         ...entry,
         rank,
         capacity,
-        rackCapacity: entry.battleAwardFlip ?? capacity,
+        rackCapacity: capacity,
         finalized,
       };
     });
@@ -3596,25 +3799,39 @@ class AppCrapsTable extends HTMLElement {
       .filter((entry) => entry.state === 'live' && entry.shooterBoost);
   }
 
+  #progressiveScaleForEntry(entry, slotCount) {
+    if (entry?.reserveState !== 'goal-locked') return null;
+    return crapsProgressiveTrayScale({
+      startingBankrollFlip: entry.startingBankroll,
+      goalFlip: entry.goal,
+      highPointFlip: entry.highPoint ?? entry.amount,
+      thresholdScoreBps: this.#jackpotThresholdScoreBps,
+      slotCount,
+    });
+  }
+
   #battleRackChipLayout(entry, slotCount, amount = entry.amount) {
     const bankroll = wholeFlip(amount) ?? 0n;
     const feltStake = wholeFlip(entry.feltStake) ?? 0n;
     const inPlay = entry.state === 'risk'
       ? bankroll
       : entry.state === 'live' && feltStake > 0n && bankroll >= feltStake ? feltStake : 0n;
-    return crapsRackPipLayout({
+    const progressiveScale = this.#progressiveScaleForEntry(entry, slotCount);
+    const layout = crapsRackPipLayout({
       bankrollFlip: bankroll,
-      capacityFlip: entry.rackCapacity ?? entry.capacity,
+      capacityFlip: progressiveScale?.rackCapacityFlip ?? entry.rackCapacity ?? entry.capacity,
       inPlayFlip: inPlay,
-      shooterOpeningFlip: entry.shooterOpeningFlip,
+      shooterOpeningFlip: progressiveScale ? null : entry.shooterOpeningFlip,
       slotCount,
     });
+    return Object.freeze({ ...layout, progressiveScale });
   }
 
   #paintRackPips(chips, layout, {
     reserveState = 'safe',
     allowPartial = false,
     pulseArrival = false,
+    progressive = false,
   } = {}) {
     const filledCount = layout?.filledCount ?? layout?.chipCount ?? 0;
     const wholeFilledCount = allowPartial
@@ -3639,12 +3856,13 @@ class AppCrapsTable extends HTMLElement {
         && index >= shooterAddedStart
         && index < shooterAddedEnd;
       chip.classList?.remove('is-jp-achieved', 'is-jp-pending', 'is-pip-arrival');
+      chip.classList?.toggle('is-progressive', progressive);
       chip.classList?.toggle('is-filled', filled);
       chip.classList?.toggle('is-banked', bankedChip);
       chip.classList?.toggle('is-in-play', filled && !bankedChip);
       chip.classList?.toggle('is-new-this-shooter', newThisShooter);
       chip.classList?.toggle('is-reserve-risk', bankedChip && reserveRisk);
-      chip.classList?.toggle('is-goal-locked', filled && goalLocked);
+      chip.classList?.toggle('is-goal-locked', bankedChip && goalLocked);
       chip.classList?.toggle('is-partial', partial);
       if (partial) {
         const visibleFill = Math.max(0.08, Math.min(1, partialFill));
@@ -3737,6 +3955,7 @@ class AppCrapsTable extends HTMLElement {
     const previousPositions = new Map(sameOrder
       ? []
       : existingRacks.map((rack) => [rack.dataset.battleKey, rack.getBoundingClientRect?.()]));
+    const rackLayouts = new Map();
     const rowMarkup = visibleStandings.map((entry) => {
       // Keep initials behind the live Discord portrait. If Discord rotates or
       // removes an avatar URL, its load error drops cleanly to this fallback.
@@ -3780,13 +3999,23 @@ class AppCrapsTable extends HTMLElement {
                    title="${onFelt ? 'Hide' : 'Show'} felt chips"></button>`
         : '';
       const rankLabel = entry.displayRank == null ? '—' : String(entry.displayRank);
-      const rackAmount = entry.battleAwardFlip ?? entry.amount;
-      const rackCapacity = entry.rackCapacity ?? entry.capacity;
-      const runAmountCopy = formatCrapsCompactFlip(entry.amount);
+      // The rack always remains the player's run. The exact Battle bounty is
+      // a second number, never a replacement balance or a fake pile of pips.
+      const rackAmount = entry.amount;
+      const rackLayout = this.#battleRackChipLayout(entry, CRAPS_RACK_SLOTS, rackAmount);
+      const progressiveScale = rackLayout.progressiveScale;
+      rackLayouts.set(entry.key, rackLayout);
+      const winnerRunPayoutWei = entry.battleWinner && entry.runPayoutWei != null
+        ? BigInt(entry.runPayoutWei)
+        : null;
+      const compactWei = (value) => value % CRAPS_FLIP_WEI === 0n
+        ? formatCrapsCompactFlip(value / CRAPS_FLIP_WEI)
+        : formatCrapsWei(value);
+      const runAmountCopy = winnerRunPayoutWei == null
+        ? formatCrapsCompactFlip(entry.amount)
+        : compactWei(winnerRunPayoutWei);
       const bountyAmountCopy = entry.battleAwardWei != null
-        ? entry.battleAwardWei % CRAPS_FLIP_WEI === 0n
-          ? formatCrapsCompactFlip(entry.battleAwardWei / CRAPS_FLIP_WEI)
-          : formatCrapsWei(entry.battleAwardWei)
+        ? compactWei(entry.battleAwardWei)
         : null;
       const amountMarkup = bountyAmountCopy == null
         ? `<strong>${runAmountCopy}</strong>`
@@ -3797,19 +4026,39 @@ class AppCrapsTable extends HTMLElement {
              <small>BOUNTY</small><strong>${bountyAmountCopy}</strong>
            </span>`;
       const baseAmountAria = entry.battleAwardWei != null
-        ? `${formatCrapsFlip(entry.amount)} FLIP run winnings, ${formatCrapsWei(entry.battleAwardWei)} FLIP battle bounty`
+        ? `${winnerRunPayoutWei == null
+            ? formatCrapsFlip(entry.amount)
+            : formatCrapsWei(winnerRunPayoutWei)} FLIP run winnings, ${formatCrapsWei(entry.battleAwardWei)} FLIP battle bounty`
         : `${formatCrapsFlip(entry.amount)} FLIP`;
       const shooterAddedFlip = entry.state === 'live'
         && entry.shooterOpeningFlip != null
         && entry.amount > entry.shooterOpeningFlip
         ? entry.amount - entry.shooterOpeningFlip
         : 0n;
-      const amountAria = shooterAddedFlip > 0n
+      const bankrollAria = shooterAddedFlip > 0n
         ? `${baseAmountAria}, ${formatCrapsFlip(shooterAddedFlip)} added this shooter in teal`
         : baseAmountAria;
-      const percentage = rackCapacity > 0n
-        ? Math.max(0, Math.min(100, Number((rackAmount * 10_000n) / rackCapacity) / 100))
-        : 0;
+      const progressiveAria = progressiveScale
+        ? `, Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier ${progressiveScale.targetMultiple} times target at 90 percent, high point ${formatCrapsFlip(progressiveScale.highPointFlip)} FLIP`
+        : '';
+      const amountAria = `${bankrollAria}${progressiveAria}`;
+      const lastResult = entry.lastResult ?? crapsPlayerLastResult();
+      const lastResultAria = lastResult.state === 'empty'
+        ? 'no resolved result yet'
+        : lastResult.state === 'push'
+          ? `last result at roll ${lastResult.rollNumber}, push`
+          : `last result at roll ${lastResult.rollNumber}, ${lastResult.copy} FLIP`;
+      const lastResultTitle = lastResult.state === 'empty'
+        ? 'LAST · WAITING'
+        : `ROLL ${lastResult.rollNumber} · ${lastResult.copy}${lastResult.state === 'push' ? '' : ' FLIP'}`;
+      const percentage = rackLayout.visualPercentage;
+      const progressiveMarkup = progressiveScale
+        ? `<span class="craps-battle-rack__progressive" data-tier="${progressiveScale.tier}"
+                 style="--craps-jp-target-at:${progressiveScale.targetPointPercent.toFixed(3)}%;--craps-jp-high-at:${progressiveScale.highPointPercent.toFixed(3)}%" aria-hidden="true">
+             <i class="craps-battle-rack__progressive-target"><small>${progressiveScale.tier === 'common' ? 'RIU' : 'TOP'}</small></i>
+             <i class="craps-battle-rack__progressive-high"></i>
+           </span>`
+        : '';
       return `<article class="craps-battle-rack${entry.local ? ' is-you' : ''}${entry.displayRank === 1 ? ' is-leader' : ''}${onFelt ? ' is-felt-rival' : ''}"
                        role="listitem"
                        data-battle-key="${escapeHtml(entry.key)}"
@@ -3817,11 +4066,14 @@ class AppCrapsTable extends HTMLElement {
                        data-battle-opponent-index="${entry.opponentIndex}"
                        data-on-felt="${String(onFelt)}"
                        data-state="${escapeHtml(entry.state)}"
+                       data-rack-scale="${progressiveScale ? 'progressive' : 'bankroll'}"
+                       data-progressive-tier="${progressiveScale?.tier ?? ''}"
                        data-reserve-state="${escapeHtml(entry.reserveState)}"
                        data-shooter-added-flip="${shooterAddedFlip}"
                        data-shooter-boost="${entry.shooterBoost ? 'active' : 'off'}"
+                       data-last-result="${lastResult.state}"
                        style="--player-color:${escapeHtml(playerColor)}"
-                       aria-label="Rank ${rankLabel}, ${escapeHtml(entry.label)}, ${escapeHtml(amountAria)}, ${escapeHtml(entry.status.toLowerCase())}">
+                       aria-label="Rank ${rankLabel}, ${escapeHtml(entry.label)}, ${escapeHtml(amountAria)}, ${escapeHtml(lastResultAria)}, ${escapeHtml(entry.status.toLowerCase())}">
         ${feltControl}${watchControl}
         <span class="craps-battle-rack__identity">
           <span class="craps-battle-rack__rank">#${rankLabel}</span>
@@ -3833,9 +4085,13 @@ class AppCrapsTable extends HTMLElement {
         <output class="craps-battle-rack__amount${bountyAmountCopy == null ? '' : ' is-breakdown'}" aria-hidden="true">
           ${amountMarkup}
         </output>
+        <output class="craps-battle-rack__last" data-state="${lastResult.state}"
+                data-roll="${lastResult.rollNumber ?? ''}" title="${escapeHtml(lastResultTitle)}" aria-hidden="true">
+          <small>LAST</small><strong>${escapeHtml(lastResult.copy)}</strong>
+        </output>
         <span class="craps-battle-rack__well" role="progressbar" aria-valuemin="0" aria-valuemax="100"
               aria-valuenow="${Math.round(percentage)}" aria-valuetext="${escapeHtml(amountAria)}">
-          <span class="craps-battle-rack__chips craps-run-rail__rack" aria-hidden="true">${chipMarkup}</span>
+          <span class="craps-battle-rack__chips craps-run-rail__rack" aria-hidden="true">${chipMarkup}</span>${progressiveMarkup}
         </span>${coin}
       </article>`;
     });
@@ -3869,11 +4125,10 @@ class AppCrapsTable extends HTMLElement {
       const rack = rackByKey.get(entry.key);
       if (!rack) return;
       const chips = [...rack.querySelectorAll('.craps-battle-rack__chip')];
-      const layout = this.#battleRackChipLayout(
-        entry,
-        chips.length,
-        entry.battleAwardFlip ?? entry.amount,
+      const layout = rackLayouts.get(entry.key) ?? this.#battleRackChipLayout(
+        entry, chips.length, entry.amount,
       );
+      const progressiveScale = layout.progressiveScale;
       const signature = [
         chips.length,
         layout?.filledCount ?? layout?.chipCount ?? 0,
@@ -3882,10 +4137,13 @@ class AppCrapsTable extends HTMLElement {
         layout?.shooterAddedCount ?? 0,
         layout?.inPlay === 0n ? 1 : 0,
         entry.reserveState ?? 'safe',
+        progressiveScale?.tier ?? 'bankroll',
+        progressiveScale == null ? -1 : Math.round(progressiveScale.highPointPercent * 100),
       ].join('|');
       if (rack.dataset?.pipSignature === signature) return;
       this.#paintRackPips(chips, layout, {
         reserveState: entry.reserveState,
+        progressive: progressiveScale != null,
       });
       if (rack.dataset) rack.dataset.pipSignature = signature;
     });
@@ -4042,6 +4300,7 @@ class AppCrapsTable extends HTMLElement {
     const rollCount = hands.reduce((total, hand) => total + hand.rolls.length, 0);
     const state = this.#tableResolved ? (first ? 'rolled' : 'ready') : 'open';
     bay.dataset.state = state;
+    this.#resetWinnerPayoff();
     this.#paintDiceBadge(dieOne, first?.d1 ?? 2, CRAPS_DICE_BADGE_COLORS[0]);
     this.#paintDiceBadge(dieTwo, first?.d2 ?? 5, CRAPS_DICE_BADGE_COLORS[1]);
     this.#resetSurvivalStage();
@@ -4781,14 +5040,15 @@ class AppCrapsTable extends HTMLElement {
   #paintProgressiveTrayScale(scale) {
     const tray = this.querySelector('[data-bind="craps-resolution-tray"]');
     const overlay = this.querySelector('[data-bind="craps-jp-scale"]');
+    const commonPoint = this.querySelector('[data-bind="craps-jp-common-point"]');
+    const rarePoint = this.querySelector('[data-bind="craps-jp-rare-point"]');
     const commonLabel = this.querySelector('[data-bind="craps-jp-common-label"]');
     const rareLabel = this.querySelector('[data-bind="craps-jp-rare-label"]');
-    const highAmount = this.querySelector('[data-bind="craps-jp-high-amount"]');
     const active = scale != null;
     if (tray) {
-      tray.dataset.scale = 'bankroll';
+      tray.dataset.scale = active ? 'progressive' : 'bankroll';
       tray.setAttribute('aria-label', active
-        ? 'Player bankroll tray with Run It Up high-point markers'
+        ? `Player bankroll tray remapped toward the Run It Up ${scale.tier === 'common' ? 'first' : 'top'} tier`
         : 'Player bankroll tray');
     }
     if (overlay) {
@@ -4796,19 +5056,24 @@ class AppCrapsTable extends HTMLElement {
       if (active) overlay.removeAttribute?.('hidden');
       else overlay.setAttribute?.('hidden', '');
     }
-    if (!active) return false;
+    if (!active) {
+      if (commonPoint) commonPoint.hidden = true;
+      if (rarePoint) rarePoint.hidden = true;
+      return false;
+    }
 
-    overlay?.style?.setProperty?.('--craps-jp-common-at', `${scale.commonPointPercent}%`);
+    overlay?.style?.setProperty?.('--craps-jp-target-at', `${scale.targetPointPercent}%`);
     overlay?.style?.setProperty?.('--craps-jp-high-at', `${scale.highPointPercent}%`);
     if (overlay) {
+      overlay.dataset.tier = scale.tier;
       overlay.dataset.highScoreBps = scale.scoreBps.toString();
       overlay.dataset.commonScoreBps = scale.commonScoreBps.toString();
       overlay.dataset.rareScoreBps = scale.rareScoreBps.toString();
-      overlay.dataset.highSide = scale.highPointPercent > 72 ? 'end' : 'start';
     }
+    if (commonPoint) commonPoint.hidden = scale.tier !== 'common';
+    if (rarePoint) rarePoint.hidden = scale.tier !== 'rare';
     if (commonLabel) commonLabel.textContent = `RUN IT UP ${scale.commonMultiple}×`;
-    if (rareLabel) rareLabel.textContent = `RARE ${scale.rareMultiple}×`;
-    if (highAmount) highAmount.textContent = formatCrapsFlip(scale.highPointFlip);
+    if (rareLabel) rareLabel.textContent = `TOP TIER ${scale.rareMultiple}×`;
     return true;
   }
 
@@ -4869,7 +5134,7 @@ class AppCrapsTable extends HTMLElement {
         ? this.#localShooterOpeningFlip(Math.max(0, this.#resolutionIndex + 1))
         : null
       : wholeFlip(shooterOpeningFlip);
-    const layout = this.#resolutionTrayLayout(amount, {
+    let layout = this.#resolutionTrayLayout(amount, {
       active,
       allInPlay,
       inPlayFlip,
@@ -4878,7 +5143,6 @@ class AppCrapsTable extends HTMLElement {
     });
     const {
       bankroll,
-      capacity,
       inPlay,
       banked,
       shooterOpening,
@@ -4910,7 +5174,7 @@ class AppCrapsTable extends HTMLElement {
     const shooterAddedFlip = shooterOpening != null && bankroll > shooterOpening
       ? bankroll - shooterOpening
       : 0n;
-    const progressiveScale = goalLocked && !goalAward && this.#jackpotThresholdScoreBps != null
+    const progressiveScale = goalLocked && !goalAward
       ? crapsProgressiveTrayScale({
           startingBankrollFlip: this.#resolutionRun?.startingBankrollFlip,
           goalFlip: goal,
@@ -4919,6 +5183,14 @@ class AppCrapsTable extends HTMLElement {
           slotCount: chips.length,
         })
       : null;
+    if (progressiveScale) {
+      layout = crapsRackPipLayout({
+        bankrollFlip: bankroll,
+        capacityFlip: progressiveScale.rackCapacityFlip,
+        inPlayFlip: inPlay,
+        slotCount: chips.length,
+      });
+    }
     const bankedDescription = reserveRisk
       ? `${formatCrapsFlip(guaranteedReserve)} FLIP survives a full-board loss; that loss forces ${reserveState === 'bust-risk' ? 'a bust' : 'the survival flip'}.`
       : shooterAddedFlip > 0n
@@ -4929,7 +5201,7 @@ class AppCrapsTable extends HTMLElement {
       : goalAward
         ? `${formatCrapsFlip(bankroll)} FLIP goal payout paid.`
       : progressiveScale
-      ? `Goal locked after a full-board loss. Bankroll pips remain blue. High point ${formatCrapsFlip(progressiveScale.highPointFlip)} FLIP, ${formatCrapsScoreMultiple(progressiveScale.scoreBps)} starting bankroll. Run It Up jackpot points are ${progressiveScale.commonMultiple} times for the jackpot and ${progressiveScale.rareMultiple} times for the rare jackpot.`
+      ? `Goal locked. The rack is reset toward the Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier at ${progressiveScale.targetMultiple} times starting bankroll. Earned reserve is blue, open rack space is light blue, live chips remain red, and the line marks the ${formatCrapsFlip(progressiveScale.highPointFlip)} FLIP high point.`
       : goalLocked
         ? `${formatCrapsFlip(bankroll)} FLIP blue; ${formatCrapsFlip(guaranteedReserve)} FLIP remains after a full-board loss and guarantees the goal.`
       : `${formatCrapsFlip(inPlay)} FLIP red on the felt. Round bet ${formatCrapsFlip(nextStake)} FLIP. ${bankedDescription}`;
@@ -4937,27 +5209,33 @@ class AppCrapsTable extends HTMLElement {
       amountNode.textContent = formatCrapsFlip(bankroll);
       amountNode.setAttribute(
         'aria-label',
-        goalAward ? 'Goal payout' : battleAward ? 'Battle prize' : 'Current bankroll',
+        goalAward
+          ? 'Goal payout'
+          : battleAward ? 'Battle prize' : progressiveScale ? 'Run It Up progress' : 'Current bankroll',
       );
     }
     if (amountLabelNode) {
       amountLabelNode.textContent = goalAward
         ? 'RUN PAYOUT'
-        : battleAward ? 'BATTLE BOUNTY' : 'YOUR BANKROLL';
+        : battleAward ? 'BATTLE BOUNTY' : progressiveScale ? 'RUN IT UP' : 'YOUR BANKROLL';
     }
     if (roundBetNode) {
       roundBetNode.textContent = formatCrapsCompactFlip(nextStake);
       roundBetNode.setAttribute('aria-label', `${formatCrapsFlip(nextStake)} FLIP current round bet`);
     }
     if (goalNode) {
-      goalNode.textContent = goal > 0n ? formatCrapsCompactFlip(goal) : 'NONE';
+      goalNode.textContent = progressiveScale
+        ? `${progressiveScale.tier === 'common' ? 'RIU' : 'TOP'} ${progressiveScale.targetMultiple}×`
+        : goal > 0n ? formatCrapsCompactFlip(goal) : 'NONE';
       goalNode.setAttribute(
         'aria-label',
-        goal > 0n ? `${formatCrapsFlip(goal)} FLIP bankroll target` : 'No bankroll target',
+        progressiveScale
+          ? `${formatCrapsFlip(progressiveScale.targetFlip)} FLIP Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier target`
+          : goal > 0n ? `${formatCrapsFlip(goal)} FLIP bankroll target` : 'No bankroll target',
       );
     }
     if (meter) {
-      meter.setAttribute('aria-valuemax', capacity.toString());
+      meter.setAttribute('aria-valuemax', layout.capacity.toString());
       meter.setAttribute('aria-valuenow', bankroll.toString());
       meter.setAttribute(
         'aria-valuetext',
@@ -4969,13 +5247,15 @@ class AppCrapsTable extends HTMLElement {
       meter.dataset.roundBetFlip = nextStake.toString();
       meter.dataset.shooterAddedFlip = shooterAddedFlip.toString();
       meter.dataset.reserveState = reserveState;
-      meter.dataset.scale = 'bankroll';
+      meter.dataset.scale = progressiveScale ? 'progressive' : 'bankroll';
       if (progressiveScale) {
         meter.dataset.highPointFlip = progressiveScale.highPointFlip.toString();
         meter.dataset.highScoreBps = progressiveScale.scoreBps.toString();
+        meter.dataset.progressiveTier = progressiveScale.tier;
       } else {
         delete meter.dataset.highPointFlip;
         delete meter.dataset.highScoreBps;
+        delete meter.dataset.progressiveTier;
       }
       meter.classList?.toggle('is-goal-reached', goalLocked);
     }
@@ -4990,12 +5270,95 @@ class AppCrapsTable extends HTMLElement {
       reserveState,
       allowPartial: true,
       pulseArrival,
+      progressive: progressiveScale != null,
     });
   }
 
   #stopBattleBountyTimer() {
     if (this.#battleBountyTimer != null) globalThis.clearTimeout?.(this.#battleBountyTimer);
     this.#battleBountyTimer = null;
+  }
+
+  #winnerPayoffPresentation() {
+    const startingBankroll = wholeFlip(this.#resolutionRun?.startingBankrollFlip) ?? this.#bankroll;
+    // A contested High Roller lane is funded by its extra battle-stake multiple;
+    // the main lane compares its full credits with the same bankroll + battle
+    // stake shown as BUY IN in the lobby.
+    const highLaneStake = this.#battleStake * BigInt(Math.max(1, this.#entryMultiple - 1));
+    const startingBuyInFlip = this.#replayLane === 'high' && highLaneStake > 0n
+      ? highLaneStake
+      : startingBankroll + this.#battleStake;
+    const progressivePayoutWei = this.#replayLane === 'main'
+      && this.#jackpotState === 'won-you'
+      && this.#jackpotAmountFlip != null
+      && this.#jackpotAmountFlip > 0n
+      ? this.#jackpotAmountFlip * CRAPS_FLIP_WEI
+      : null;
+    return crapsWinnerPayoffPresentation({
+      runPayoutWei: this.#viewerResult?.runPayoutWei,
+      battleWonByViewer: this.#battleWonByViewer,
+      battlePayoutWei: this.#battlePayoutWei,
+      progressiveWonByViewer: progressivePayoutWei != null,
+      progressivePayoutWei,
+      startingBuyInFlip,
+    });
+  }
+
+  #resetWinnerPayoff() {
+    const payoff = this.querySelector('[data-bind="craps-winner-payoff"]');
+    const art = this.querySelector('[data-bind="craps-winner-payoff-art"]');
+    const amount = this.querySelector('[data-bind="craps-winner-payoff-amount"]');
+    const multiple = this.querySelector('[data-bind="craps-winner-payoff-multiple"]');
+    if (payoff) {
+      payoff.hidden = true;
+      payoff.setAttribute?.('hidden', '');
+      payoff.dataset.kind = 'empty';
+      delete payoff.dataset.chipCount;
+      payoff.removeAttribute?.('aria-label');
+    }
+    if (art) art.innerHTML = '';
+    if (amount) amount.textContent = '—';
+    if (multiple) {
+      multiple.textContent = '';
+      multiple.hidden = true;
+    }
+  }
+
+  #paintWinnerPayoff(presentation = this.#winnerPayoffPresentation()) {
+    const payoff = this.querySelector('[data-bind="craps-winner-payoff"]');
+    const art = this.querySelector('[data-bind="craps-winner-payoff-art"]');
+    const amount = this.querySelector('[data-bind="craps-winner-payoff-amount"]');
+    const multiple = this.querySelector('[data-bind="craps-winner-payoff-multiple"]');
+    if (!payoff || presentation.kind === 'empty') {
+      this.#resetWinnerPayoff();
+      return false;
+    }
+    const totalWei = BigInt(presentation.totalWei);
+    const amountCopy = totalWei % CRAPS_FLIP_WEI === 0n
+      ? formatCrapsCompactFlip(totalWei / CRAPS_FLIP_WEI)
+      : formatCrapsWei(totalWei);
+    const multipleCopy = presentation.multipleBps == null
+      ? ''
+      : `${formatCrapsScoreMultiple(presentation.multipleBps)} BUY-IN`;
+    if (art) {
+      art.innerHTML = presentation.art.map((src, index) => (
+        `<img data-stack-index="${index}" src="${src}" alt="">`
+      )).join('');
+    }
+    if (amount) amount.textContent = amountCopy;
+    if (multiple) {
+      multiple.textContent = multipleCopy;
+      multiple.hidden = multipleCopy.length === 0;
+    }
+    payoff.dataset.kind = presentation.kind;
+    payoff.dataset.chipCount = presentation.visualChipCount;
+    payoff.setAttribute(
+      'aria-label',
+      `${formatCrapsWei(totalWei)} FLIP total won.${multipleCopy ? ` ${multipleCopy.toLowerCase()}.` : ''}`,
+    );
+    payoff.hidden = false;
+    payoff.removeAttribute?.('hidden');
+    return true;
   }
 
   #resetBattleBountyReceipt() {
@@ -5139,15 +5502,22 @@ class AppCrapsTable extends HTMLElement {
     if (!readout) return;
     readout.classList?.remove('is-popping');
     delete readout.dataset.sevenOutcome;
+    delete readout.dataset.rollEvent;
     readout.hidden = true;
     readout.setAttribute?.('hidden', '');
   }
 
   #popDiceLockReadout(frame, { comeOut = false } = {}) {
     const readout = this.querySelector('[data-bind="craps-dice-lock-readout"]');
+    const label = this.querySelector('[data-bind="craps-dice-lock-label"]');
     const total = this.querySelector('[data-bind="craps-dice-lock-number"]');
-    if (!readout || !total) return;
-    total.textContent = String(frame?.total ?? '—');
+    if (!readout || !label || !total) return;
+    const callout = crapsDiceCallout(frame, { comeOut });
+    label.textContent = callout.label;
+    label.hidden = callout.label.length === 0;
+    total.textContent = callout.value;
+    if (callout.event) readout.dataset.rollEvent = callout.event;
+    else delete readout.dataset.rollEvent;
     const sevenOutcome = crapsSevenRollOutcome(frame, { comeOut });
     if (sevenOutcome) readout.dataset.sevenOutcome = sevenOutcome;
     else delete readout.dataset.sevenOutcome;
@@ -5696,6 +6066,7 @@ class AppCrapsTable extends HTMLElement {
     this.#stopResolutionTimer();
     this.#resetBonusReveal();
     this.#resetBattleBountyReceipt();
+    this.#resetWinnerPayoff();
     this.#viewerBustLocked = false;
     this.#viewerBustRank = null;
     this.#featuredPlayerKeys = [];
@@ -5914,6 +6285,11 @@ class AppCrapsTable extends HTMLElement {
     this.#awaitingRoll = false;
     const lastIndex = this.#resolutionRun.frames.length - 1;
     const last = this.#resolutionRun.frames[lastIndex];
+    if (skipped) {
+      this.#resolutionRun.frames.forEach((frame, frameIndex) => {
+        if (typeof frame?.survival?.survived === 'boolean') this.#markSurvivalBoundarySettled(frameIndex);
+      });
+    }
     if (skipped || this.#resolutionIndex < lastIndex) {
       this.#resolutionIndex = lastIndex;
       this.#paintResolutionFrame(last, lastIndex);
@@ -5959,6 +6335,7 @@ class AppCrapsTable extends HTMLElement {
       if (!survived) {
         this.#viewerBustLocked = true;
       }
+      this.#paintRollHistory(frameIndex);
       this.#paintResolutionTray(postFlipBankroll, { active: false });
       this.#paintOpponentRacks(frameIndex + 1);
       onDone?.(postFlipBankroll);
@@ -6005,6 +6382,7 @@ class AppCrapsTable extends HTMLElement {
       if (survived) sfxCrapsDouble({ at: 0.14 });
       else this.#viewerBustLocked = true;
       this.#markSurvivalBoundarySettled(frameIndex);
+      this.#paintRollHistory(frameIndex);
       this.#landOpponentCoinFlips();
       if (bay) bay.dataset.state = 'coin-landed';
       this.#paintResolutionTray(postFlipBankroll, { active: false });
@@ -6111,22 +6489,14 @@ class AppCrapsTable extends HTMLElement {
     const { bonusFlip, finalTray, last, busted } = this.#resolutionOutcome();
     if (busted) this.#viewerBustLocked = true;
     const battleWon = this.#battleWonByViewer === true;
-    const battleAwardFlip = battleWon && this.#battlePayoutWei != null && this.#battlePayoutWei > 0n
-      ? (this.#battlePayoutWei + CRAPS_FLIP_WEI - 1n) / CRAPS_FLIP_WEI
-      : null;
     const goalPayoutWei = last.terminal === 'goal'
       && this.#viewerResult?.runPayoutWei != null
       && this.#viewerResult.runPayoutWei > 0n
       ? this.#viewerResult.runPayoutWei
       : null;
-    const goalPayoutFlip = goalPayoutWei == null
-      ? null
-      : (goalPayoutWei + CRAPS_FLIP_WEI - 1n) / CRAPS_FLIP_WEI;
-    this.#paintResolutionTray(goalPayoutFlip ?? battleAwardFlip ?? finalTray, {
-      active: false,
-      battleAward: goalPayoutFlip == null && battleAwardFlip != null,
-      goalAward: goalPayoutFlip != null,
-    });
+    // Keep the final rack faithful to the run. Payouts and bounties are exact,
+    // separate credits in the center payoff and the receipt below the rack.
+    this.#paintResolutionTray(finalTray, { active: false });
     this.#paintJackpotTray(this.#resolutionRun.frames.length);
     const screen = this.querySelector('[data-bind="craps-resolution"]');
     const skip = this.querySelector('[data-bind="craps-resolution-skip"]');
@@ -6134,6 +6504,7 @@ class AppCrapsTable extends HTMLElement {
     const done = this.querySelector('[data-bind="craps-resolution-done"]');
     const bonus = this.querySelector('[data-bind="craps-resolution-bonus"]');
     const bay = this.querySelector('[data-bind="craps-dice-bay"]');
+    const winnerPayoff = this.#winnerPayoffPresentation();
     const finalSummary = crapsFinalResolutionSummary({
       terminal: last.terminal,
       finalTray,
@@ -6147,10 +6518,16 @@ class AppCrapsTable extends HTMLElement {
       bonus.textContent = bonusFlip > 0n ? `BONUS FLIP +${formatCrapsCompactFlip(bonusFlip)} FLIP` : '';
     }
     this.#resetSurvivalStage();
+    const showWinnerPayoff = this.#paintWinnerPayoff(winnerPayoff);
     if (bay) {
-      bay.dataset.state = 'rolled';
+      bay.dataset.state = showWinnerPayoff ? 'winner' : 'rolled';
       bay.dataset.result = finalSummary.bayResult;
-      bay.setAttribute('aria-label', finalSummary.ariaLabel);
+      bay.setAttribute(
+        'aria-label',
+        showWinnerPayoff
+          ? `${finalSummary.ariaLabel} ${formatCrapsWei(BigInt(winnerPayoff.totalWei))} FLIP total won.`
+          : finalSummary.ariaLabel,
+      );
     }
     this.#setPoint(null);
     this.#paintOpponentRacks(this.#resolutionRun.frames.length);

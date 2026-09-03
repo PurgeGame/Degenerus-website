@@ -37,16 +37,15 @@
     });
   })();
   </script>
-  <!-- The jackpot hero art is referenced from app.css background rules, so the
-       browser only discovers it after CSS parses AND the custom elements mount
-       — it was the LCP element arriving last. Preload starts both fetches at
-       HTML parse. KEEP THE -vNN SUFFIXES IN SYNC with app.css when art bumps.
-       The golden-ticket frame is the LCP image: fetchpriority="high" lifts it
-       out of Chrome's default low-priority lane for preloaded background
-       images. The backplate deliberately stays at default priority so it does
-       not compete with the frame on the first round trips. -->
-  <link rel="preload" as="image" fetchpriority="high" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
+  <!-- Jackpot hero art is referenced from CSS backgrounds, so the browser only
+       discovers it after CSS parses and the custom elements mount. A 390px
+       cold-load trace identifies the tiny foil-routing layer as the current
+       LCP resource; give that 2.6KB SVG priority instead of making the 172KB
+       headline frame compete with critical CSS. KEEP THE -vNN SUFFIXES IN
+       SYNC with the stylesheets when art bumps. -->
+  <link rel="preload" as="image" href="/app/assets/jackpot/golden-ticket-frame-v1.webp">
   <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v9.webp">
+  <link rel="preload" as="image" fetchpriority="high" href="/app/assets/jackpot/daily-drawing-foil-routing-v5.svg">
   <!-- Inter is self-hosted (shared/nav.css @font-face). Preloading the latin
        file lets it beat first paint on cold loads — without this the swap
        from the fallback font re-wraps the nav and headline (~0.16 CLS). -->
@@ -469,10 +468,6 @@
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
-  <!-- Enter through the import map so the eager tag and every relative
-       importer share one cache-revised RevealOverlay singleton. A direct src
-       here can leave old controls registered while newer CSS paints them. -->
-  <script type="module">import '/app/components/reveal-overlay.js';</script>
   <script type="module">
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
     //
@@ -485,8 +480,8 @@
     //  and dialogs with ZERO static importers (verified 2026-08-13): they
     //  self-initialize from current store state on upgrade, so arriving one
     //  idle slot after paint changes nothing user-visible above the fold.
-    //  reveal-overlay is deliberately NOT here — 11 eager modules import it
-    //  statically, so demoting its tag would save nothing.
+    //  reveal-overlay is loaded by reveal-queue.js only when the first prize is
+    //  actually queued, keeping its large visual engine off normal cold loads.
     //
     // ⚠ These are dynamic imports: the publish runbook's static
     // module-resolution grep does NOT see them. index-structure.test.js
@@ -518,7 +513,8 @@
       '/app/components/app-day-history-replays.js',
       '/app/components/app-jackpot-resolutions.js',
       '/app/components/app-all-in-dialog.js',
-      '/app/components/app-craps-table.js',
+      // app-craps-entry imports the cache-pinned table implementation. Listing
+      // the bare table URL here fetched and parsed a second module identity.
       '/app/components/app-player-funds-dialog.js',
       '/app/components/app-afking-funding-warning.js',
       // Telemetry client (2026-08-15): drains the head hook's queue and

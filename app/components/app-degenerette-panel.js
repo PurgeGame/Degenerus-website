@@ -107,7 +107,7 @@ import {
   clearPendingActions,
   reportPendingActionError,
 } from '../app/pending-actions.js';
-import { queueReveal } from './reveal-overlay.js';
+import { queueReveal } from './reveal-queue.js';
 import {
   candidateClaimsRecord,
   RECORD_KIND_SPIN,
@@ -271,6 +271,39 @@ export function pendingDegeneretteKey(address) {
   return `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${String(address || '').toLowerCase()}`;
 }
 
+export function clearedDegeneretteThroughKey(address) {
+  return `cleared-degenerette-through:${CHAIN.id}:${CHAIN.deployBlock}:${String(address || '').toLowerCase()}`;
+}
+
+function _readClearedDegeneretteThrough(address) {
+  if (!address || typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(clearedDegeneretteThroughKey(address));
+    if (raw == null || raw === '') return null;
+    const value = BigInt(raw);
+    return value >= 0n ? value : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _rememberClearedDegeneretteThrough(address, betId) {
+  if (!address || betId == null || typeof localStorage === 'undefined') return;
+  try {
+    const next = BigInt(betId);
+    const current = _readClearedDegeneretteThrough(address);
+    if (next < 0n || (current != null && current >= next)) return;
+    localStorage.setItem(clearedDegeneretteThroughKey(address), String(next));
+  } catch (_e) { /* best-effort browser receipt */ }
+}
+
+function _isClearedDegeneretteBet(address, betId) {
+  if (betId == null) return false;
+  const cutoff = _readClearedDegeneretteThrough(address);
+  if (cutoff == null) return false;
+  try { return BigInt(betId) <= cutoff; } catch (_e) { return false; }
+}
+
 function _legacyPendingDegeneretteKey(address) {
   return `pending-degenerette:${CHAIN.id}:${String(address || '').toLowerCase()}`;
 }
@@ -285,6 +318,11 @@ function _readPendingBet(address) {
     const raw = localStorage.getItem(pendingDegeneretteKey(address));
     const row = raw ? JSON.parse(raw) : null;
     if (!row || row.betId == null || row.index == null) return null;
+    const betId = BigInt(row.betId);
+    if (_isClearedDegeneretteBet(address, betId)) {
+      localStorage.removeItem(pendingDegeneretteKey(address));
+      return null;
+    }
     let packedData = null;
     let rngWord = 0n;
     try {
@@ -294,7 +332,7 @@ function _readPendingBet(address) {
       if (row.rngWord != null) rngWord = BigInt(row.rngWord);
     } catch (_e) { rngWord = 0n; }
     return {
-      betId: BigInt(row.betId),
+      betId,
       index: BigInt(row.index),
       currency: Number(row.currency ?? 0),
       amountPerSpin: BigInt(row.amountPerSpin ?? 0),
@@ -954,6 +992,10 @@ class AppDegenerettePanel extends HTMLElement {
   #pendingPlacementKey = null;
   #pendingRecoverySeq = 0;
   #pendingRecoveryAddress = null;
+  // CLEAR invalidates in-flight placement/recovery continuations and remains
+  // active until the DB backlog has been folded into the durable cutoff.
+  #pendingClearGeneration = 0;
+  #clearingPendingBets = false;
   // Invalidates asynchronous result replays when a newer placement takes
   // ownership of the panel. Aborting fetch/poll timers is not enough: a replay
   // may already be awaiting chain logs and otherwise enqueue the older reels
@@ -2298,6 +2340,7 @@ class AppDegenerettePanel extends HTMLElement {
     const acting = getActingAddress();
     const address = acting ? String(acting).toLowerCase() : null;
     if (!address
+      || this.#clearingPendingBets
       || this.#currentBetId != null
       || [STATE.PLACING, STATE.RESOLVING, STATE.INDEXING].includes(this.#state)
       || this.#pendingRecoveryAddress === address) {
@@ -2332,6 +2375,7 @@ class AppDegenerettePanel extends HTMLElement {
           }
         })
         .filter(Boolean)
+        .filter((row) => !_isClearedDegeneretteBet(address, row.betId))
         .sort((a, b) => (a.betId === b.betId ? 0 : a.betId > b.betId ? -1 : 1));
       if (pending.length === 0) return false;
 
@@ -2744,6 +2788,8 @@ class AppDegenerettePanel extends HTMLElement {
       // complete result projection. The contract stores bets by betId; the DB
       // keeps older rows recoverable after the newest active card is retired.
       placeBtn.disabled = (
+        this.#clearingPendingBets
+        ||
         this.#state === STATE.PLACING
         || this.#state === STATE.REQUESTING_RNG
         || this.#state === STATE.RESOLVING
@@ -2751,6 +2797,80 @@ class AppDegenerettePanel extends HTMLElement {
       this.#renderPlaceLabel();
     }
     this.#publishPending();
+  }
+
+  async #clearAllPendingDegenerette(fallbackAddress = null, transientSource = null) {
+    if (transientSource) clearPendingActions(transientSource);
+    if (this.#clearingPendingBets) return;
+    this.#clearingPendingBets = true;
+
+    const address = String(
+      this.#pendingAddress || fallbackAddress || getActingAddress() || '',
+    ).toLowerCase();
+    let clearedThrough = null;
+    const includeBetId = (value) => {
+      if (value == null) return;
+      try {
+        const betId = BigInt(value);
+        if (betId >= 0n && (clearedThrough == null || betId > clearedThrough)) {
+          clearedThrough = betId;
+        }
+      } catch (_e) { /* malformed indexer row */ }
+    };
+    includeBetId(this.#currentBetId);
+    if (address && clearedThrough != null) {
+      _rememberClearedDegeneretteThrough(address, clearedThrough);
+      this.#presentedBetKeys.add(`${address}:${String(clearedThrough)}`);
+    }
+
+    // Invalidate every async continuation before changing the visible state.
+    // A resolver or placement receipt already inside an await must not enqueue
+    // its result after CLEAR has retired the backlog.
+    this.#pendingClearGeneration += 1;
+    this.#resolutionGeneration += 1;
+    this.#pendingRecoverySeq += 1;
+    this.#pendingRecoveryAddress = null;
+    this.#cancelRngPoll();
+    this.#pendingPlacementKey = null;
+    this.#currentBetId = null;
+    this.#currentLootboxIndex = null;
+    this.#currentTicket = null;
+    this.#currentPackedData = null;
+    this.#currentRngWord = 0n;
+    this.#rngRequestAvailable = false;
+    this.#rngRequestPending = false;
+    this.#rngRequestStartedAt = 0;
+    this.#rngRequestBlock = 0;
+    this.#rngObservedBlock = 0;
+    if (address) _writePendingBet(address, null);
+    clearPendingActions(PENDING_SOURCE);
+    this.#setState(STATE.IDLE);
+
+    try {
+      // Only one DB row is normally mounted at a time. Fold every other row
+      // already in that player backlog into a deployment-scoped high-water
+      // mark so the next poll cannot reveal them one by one after CLEAR.
+      if (address) {
+        const snapshot = await fetchJSON(`/player/${address}`, {
+          force: true,
+          priority: 'interaction',
+        });
+        for (const row of Array.isArray(snapshot?.degenerette?.pendingBets)
+          ? snapshot.degenerette.pendingBets
+          : []) {
+          includeBetId(row?.betId);
+        }
+      }
+    } catch (_e) {
+      // The active browser receipt was still cleared. A later explicit clear
+      // can extend the cutoff if the indexer was temporarily unavailable.
+    } finally {
+      if (address && clearedThrough != null) {
+        _rememberClearedDegeneretteThrough(address, clearedThrough);
+      }
+      this.#clearingPendingBets = false;
+      this.#renderState();
+    }
   }
 
   #publishPending() {
@@ -2839,6 +2959,7 @@ class AppDegenerettePanel extends HTMLElement {
       rngQueuePendingFlipWhole: String(this.#rngQueuePendingFlipWhole),
       order: 15,
       run: () => this.#onPendingAction(),
+      clearAll: () => this.#clearAllPendingDegenerette(),
     }]);
   }
 
@@ -2876,8 +2997,9 @@ class AppDegenerettePanel extends HTMLElement {
 
   async #onPlaceClick(e, questBet = null) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyPlace) return;
+    if (this.#busyPlace || this.#clearingPendingBets) return;
     this.#busyPlace = true;
+    const pendingClearGeneration = this.#pendingClearGeneration;
     const previousActive = this.#currentBetId != null
       && [STATE.AWAITING_RNG, STATE.READY, STATE.INDEXING].includes(this.#state)
       ? {
@@ -2999,6 +3121,10 @@ class AppDegenerettePanel extends HTMLElement {
             progress: 'indeterminate',
             chronology: Date.now(),
             order: 15,
+            clearAll: () => this.#clearAllPendingDegenerette(
+              submissionAddress,
+              optimisticSource,
+            ),
           }]);
         },
       });
@@ -3007,6 +3133,14 @@ class AppDegenerettePanel extends HTMLElement {
       // tests' log.parsed seam; a parsed-only adapter here made every genuine
       // wallet receipt look empty and stranded otherwise-valid bets.
       const placed = parseBetPlacedFromReceipt(receipt);
+      if (pendingClearGeneration !== this.#pendingClearGeneration) {
+        for (const bet of placed) {
+          _rememberClearedDegeneretteThrough(submissionAddress, bet?.betId);
+        }
+        retireOptimistic();
+        _writePendingBet(submissionAddress, null);
+        return;
+      }
       if (placed.length === 0) {
         // The transaction is confirmed, so never invite a duplicate wager.
         // A provider can occasionally return a receipt without decoded/log
@@ -3077,6 +3211,12 @@ class AppDegenerettePanel extends HTMLElement {
       // 250ms post-confirm refetch (CF-06).
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
+      if (pendingClearGeneration !== this.#pendingClearGeneration) {
+        retireOptimistic();
+        this.#pendingPlacementKey = null;
+        this.#setState(STATE.IDLE);
+        return;
+      }
       const failureMessage = compactUiError(error, 'Bet did not go through. Try again.');
       const wasBroadcast = optimisticSource != null;
       retireOptimistic();

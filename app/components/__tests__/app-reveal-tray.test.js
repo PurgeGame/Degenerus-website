@@ -1468,6 +1468,9 @@ describe('<app-reveal-tray>', () => {
         run: async () => {}, clearAll,
       },
     ]);
+    pending.publishPendingActions('hidden-box', [{
+      id: 'box:hidden', kind: 'lootbox', label: 'Still indexing', state: 'waiting',
+    }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
     const clear = el.querySelector('[data-bind="rrt-clear"]');
@@ -1475,9 +1478,19 @@ describe('<app-reveal-tray>', () => {
     assert.equal(clear.textContent, 'CLEAR');
 
     clear.dispatchEvent({ type: 'click' });
-    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(cleared, 1, 'one publisher callback is not repeated per row');
     assert.equal(pendingSurfaceVisible(el), false);
+    assert.deepEqual(pending.getPendingActions(), [],
+      'CLEAR drains registry rows that were not yet actionable enough to paint');
+
+    pending.publishPendingActions('hidden-box', [{
+      id: 'box:hidden', kind: 'lootbox', label: 'Finished indexing',
+      state: 'ready', run: async () => {},
+    }]);
+    assert.equal(pendingSurfaceVisible(el), false,
+      'a hidden row cannot promote itself into a surprise popup after CLEAR');
 
     pending.publishPendingActions('box', [{
       id: 'box:7', kind: 'lootbox', label: 'Luckbox #7', detail: 'Now ready again',

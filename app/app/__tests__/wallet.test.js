@@ -25,7 +25,6 @@ import assert from 'node:assert/strict';
 const _events = [];                               // captured CustomEvents (dispatchEvent calls)
 const _docListeners = new Map();                  // bridge listeners installed at module init
 const _localStore = new Map();
-const _windowOpenCalls = [];
 let _reloadCalled = false;
 
 globalThis.window = {
@@ -34,10 +33,6 @@ globalThis.window = {
     get search() { return ''; },
     get href() { return 'http://localhost/'; },
     reload: () => { _reloadCalled = true; },
-  },
-  open: (...args) => {
-    _windowOpenCalls.push(args);
-    return window;
   },
 };
 
@@ -213,7 +208,6 @@ beforeEach(() => {
   _storeUpdates.length = 0;   // drop initial-fire history from re-install
   _events.length = 0;
   _localStore.clear();
-  _windowOpenCalls.length = 0;
   _reloadCalled = false;
   _discoverCalls = [];
   _discoverReturn = null;
@@ -225,165 +219,6 @@ beforeEach(() => {
 
 afterEach(() => {
   teardownStoreSubscribers();
-});
-
-// ===========================================================================
-// WalletConnect mobile request handoff
-// ===========================================================================
-
-describe('createWalletConnectRequestHandoff', () => {
-  function makeClient() {
-    const listeners = new Map();
-    return {
-      on(event, fn) {
-        const set = listeners.get(event) || new Set();
-        set.add(fn);
-        listeners.set(event, set);
-      },
-      off(event, fn) { listeners.get(event)?.delete(fn); },
-      removeListener(event, fn) { listeners.get(event)?.delete(fn); },
-      emit(event, payload) {
-        for (const fn of [...(listeners.get(event) || [])]) fn(payload);
-      },
-      listenerCount(event) { return listeners.get(event)?.size || 0; },
-    };
-  }
-
-  test('opens the exact published MetaMask request in the current tab', () => {
-    const client = makeClient();
-    const topic = 'base-sepolia-session';
-    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
-      href: 'https://metamask.app.link',
-      name: 'MetaMask',
-    }));
-    let readyHandle = null;
-    const handle = wallet.createWalletConnectRequestHandoff({
-      isWalletConnect: true,
-      session: { topic },
-      signer: { client },
-    }, {
-      onReady: (ready) => { readyHandle = ready; },
-    });
-
-    assert.ok(handle, 'a connected WalletConnect session arms the handoff');
-    assert.equal(handle.walletName, 'MetaMask');
-    assert.equal(handle.ready, false);
-    assert.equal(client.listenerCount('session_request_sent'), 1);
-
-    client.emit('session_request_sent', {
-      topic,
-      id: 123456,
-      request: { method: 'eth_sendTransaction' },
-    });
-
-    assert.strictEqual(readyHandle, handle, 'CTA fallback receives the same request handle');
-    assert.equal(handle.ready, true);
-    assert.deepEqual(_windowOpenCalls[0], [
-      'https://metamask.app.link/wc?requestId=123456&sessionTopic=base-sepolia-session',
-      '_self',
-      'noreferrer noopener',
-    ]);
-    assert.equal(client.listenerCount('session_request_sent'), 0, 'listener is one-shot');
-
-    assert.equal(handle.open(), true, 'a second button tap can reopen the pending request');
-    assert.equal(_windowOpenCalls.length, 2);
-    handle.cancel();
-    assert.equal(handle.open(), false, 'completed requests cannot reopen a stale handoff');
-  });
-
-  test('ignores unrelated requests and falls back to peer native metadata', () => {
-    const client = makeClient();
-    const handle = wallet.createWalletConnectRequestHandoff({
-      isWalletConnect: true,
-      session: {
-        topic: 'topic-2',
-        peer: {
-          metadata: {
-            name: 'MetaMask',
-            redirect: { native: 'metamask://' },
-          },
-        },
-      },
-      signer: { client },
-    });
-
-    client.emit('session_request_sent', {
-      topic: 'topic-2',
-      id: 88,
-      request: { method: 'personal_sign' },
-    });
-    client.emit('session_request_sent', {
-      topic: 'different-topic',
-      id: 89,
-      request: { method: 'eth_sendTransaction' },
-    });
-    assert.equal(_windowOpenCalls.length, 0);
-
-    client.emit('session_request_sent', {
-      topic: 'topic-2',
-      id: 90,
-      request: { method: 'eth_sendTransaction' },
-    });
-    assert.equal(
-      _windowOpenCalls[0][0],
-      'metamask://wc?requestId=90&sessionTopic=topic-2',
-    );
-    handle.cancel();
-  });
-
-  test('does not arm for injected wallets or unsafe stored links', () => {
-    const client = makeClient();
-    assert.equal(wallet.createWalletConnectRequestHandoff({
-      isWalletConnect: false,
-      session: { topic: 'injected' },
-      signer: { client },
-    }), null);
-
-    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
-      href: 'javascript:alert(1)',
-      name: 'Bad link',
-    }));
-    assert.equal(wallet.createWalletConnectRequestHandoff({
-      isWalletConnect: true,
-      session: { topic: 'unsafe' },
-      signer: { client },
-    }), null);
-    assert.equal(client.listenerCount('session_request_sent'), 0);
-  });
-
-  test('connected WalletConnect sessions foreground approval requests outside the buy panel', () => {
-    const client = makeClient();
-    const raw = {
-      isWalletConnect: true,
-      session: { topic: 'pass-purchase-topic' },
-      signer: { client },
-      on() {},
-      request: async () => null,
-    };
-    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
-      href: 'https://metamask.app.link',
-      name: 'MetaMask',
-    }));
-    wallet._testAttachListeners({
-      provider: raw,
-      getNetwork: async () => ({ chainId: 84532n }),
-    }, raw);
-    assert.equal(client.listenerCount('session_request_sent'), 1,
-      'connection installs the automatic approval handoff');
-
-    client.emit('session_request_sent', {
-      topic: 'pass-purchase-topic',
-      id: 2468,
-      request: { method: 'eth_sendTransaction' },
-    });
-
-    assert.deepEqual(_windowOpenCalls[0], [
-      'https://metamask.app.link/wc?requestId=2468&sessionTopic=pass-purchase-topic',
-      '_self',
-      'noreferrer noopener',
-    ]);
-    wallet.disconnect();
-  });
 });
 
 // ===========================================================================

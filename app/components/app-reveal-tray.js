@@ -1168,7 +1168,7 @@ class AppRevealTray extends HTMLElement {
     this.#items = [];
     this.#render();
     try {
-      await dismissPendingActionItems(visible);
+      await dismissPendingActionItems(visible, { drain: true });
     } catch (error) {
       console.warn?.('[reveal-tray] clear failed', error);
       this.#showError(briefTxError(error, 'Could not clear reminders. Try again.'));

@@ -51,7 +51,7 @@ export { decimatorWindowIsOpen };
 import { degenScoreLootTier } from '../app/activity-score.js';
 import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
-import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from './reveal-overlay.js';
+import { queueReveal, RESULT_REVEAL_ABORT_EVENT } from './reveal-queue.js';
 import { registerComponentPoll } from '../app/component-poll.js';
 import { compactUiError } from '../app/ui-error.js';
 import './boon-product-indicator.js';

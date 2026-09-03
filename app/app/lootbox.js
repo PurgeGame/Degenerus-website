@@ -1570,9 +1570,10 @@ function readSiteRef(chainId, address) {
 // without surfacing Safari's "Open MetaMask?" confirm prompt (Pitfall 12
 // canonical mitigation per Reown Mobile Linking docs + WC #1165).
 //
-// The original consumer was app-packs-panel.js. The mounted Buy In replacement
-// (app-decimator-panel.js) now uses the same cache for tickets, packed boxes,
-// and foil; unrelated write panels retain the normal sendTx path.
+// SCOPE LOCKED to lootbox panel only (CONTEXT D-02). The 10 sibling panels
+// continue using the existing `await sendTx(...)` path — accept the standard
+// "Open MetaMask?" Safari prompt as documented cost-of-business. MM in-dApp
+// browser sidesteps the issue entirely and is the supported mobile path.
 //
 // THIS IS THE ONE PRODUCTION SITE WHERE THE PHASE 58 CLOSURE-FORM `sendTx`
 // CHOKEPOINT IS BYPASSED AT THE CLICK MOMENT. `requireSelf()` is invoked HERE
@@ -1591,9 +1592,7 @@ function readSiteRef(chainId, address) {
  * @param {{ticketQuantity:number, boxOrder?:bigint, boxSelection?:object,
  *          boxCostWei?:bigint, lootboxQuantity?:number,
  *          affiliateCode?:string, lootBoxAmountWei?:bigint,
- *          ticketCostWei?:bigint, foil?:boolean, foilCostWei?:bigint,
- *          preferClaimable?:boolean, useAfking?:boolean,
- *          eip1193Provider?:object}} args
+ *          ticketCostWei?:bigint, preferClaimable?:boolean, useAfking?:boolean}} args
  * @returns {Promise<{buildTx:()=>Promise<import('ethers').TransactionResponse>,
  *                    abort:()=>void, expiresAt:number, payment:object}>}
  */
@@ -1606,7 +1605,6 @@ export async function prewarmLootboxBuy(args) {
   const provider = getProvider();
   if (!provider) throw new Error('Wallet not connected.');
   const signer = await provider.getSigner();
-  const sender = String(await signer.getAddress()).toLowerCase();
   // Account-switcher fix (2026-07-16): buyer must be the ACTING player
   // (getActingAddress() — connected in 'self', the viewed owner in
   // 'operator'), NOT unconditionally the signer's own address. The prior
@@ -1615,7 +1613,7 @@ export async function prewarmLootboxBuy(args) {
   // already guarantees mode is 'self' or 'operator' by this point (both
   // resolve a non-null getActingAddress()); the signer-address fallback is
   // defensive only, mirroring purchaseEth/openLootBox's _readBuyer().
-  const buyer = String(getActingAddress() || sender).toLowerCase();
+  const buyer = (getActingAddress() || (await signer.getAddress())).toLowerCase();
 
   const contract = _buildContract(signer);
   const ticketsScaled = entriesScaledFromTickets(args.ticketQuantity ?? 0);
@@ -1624,35 +1622,23 @@ export async function prewarmLootboxBuy(args) {
   // remain the preferred funding source. Only the uncovered remainder rides
   // as msg.value.
   const boxOrder = _boxOrderFromPurchaseArgs(args);
-  const ticketQuantity = Number(args.ticketQuantity ?? 0);
-  const foil = Boolean(args.foil);
-  const quote = ticketQuantity > 0 || boxOrder > 0n || foil
-    ? await readPurchaseQuote({ fresh: true })
-    : null;
-  const quotedPriceWei = quote?.priceWei ?? 0n;
+  const quote = boxOrder > 0n ? await readPurchaseQuote({ fresh: true }) : null;
   let boxCostWei = 0n;
   if (boxOrder > 0n) {
-    if (quotedPriceWei > 0n) {
-      boxCostWei = boxOrderCostFromPriceWei(quotedPriceWei, boxOrder);
+    if (quote?.priceWei > 0n) {
+      boxCostWei = boxOrderCostFromPriceWei(quote.priceWei, boxOrder);
     } else if (args.boxCostWei != null) {
       boxCostWei = BigInt(args.boxCostWei);
     } else boxCostWei = boxOrderCostFromPriceWei(
-      quotedPriceWei > 0n ? quotedPriceWei : LOOTBOX_MIN_WEI,
+      quote?.priceWei > 0n ? quote.priceWei : LOOTBOX_MIN_WEI,
       boxOrder,
     );
   }
-  const ticketCostWei = quotedPriceWei > 0n && ticketQuantity > 0
-    ? ticketCostFromTickets(quotedPriceWei, ticketQuantity)
-    : BigInt(args.ticketCostWei ?? 0n);
-  const foilCostWei = foil
-    ? quotedPriceWei > 0n
-      ? foilPackCostFromPriceWei(quotedPriceWei)
-      : BigInt(args.foilCostWei ?? 0n)
-    : 0n;
+  const ticketCostWei = args.ticketCostWei ?? 0n;
   const payment = await _purchaseFundingFor(
     contract,
     buyer,
-    boxCostWei + ticketCostWei + foilCostWei,
+    boxCostWei + ticketCostWei,
     {
       useClaimable: args.preferClaimable !== false,
       useAfking: args.useAfking === true,
@@ -1660,12 +1646,12 @@ export async function prewarmLootboxBuy(args) {
   );
   const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
   const unsignedTx = await contract.purchase.populateTransaction(
-    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, foil,
+    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, false,
     { value: payment.msgValueWei }
   );
   const staticCallMethod = 'purchase';
   const staticCallArgs = [
-    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, foil,
+    buyer, ticketsScaled, boxOrder, affiliateCode, payment.payKind, false,
     { value: payment.msgValueWei },
   ];
 
@@ -1684,72 +1670,20 @@ export async function prewarmLootboxBuy(args) {
   const estimatedGas = await signer.estimateGas(unsignedTx).catch(() => null);
   if (estimatedGas) unsignedTx.gasLimit = gasEstimateWithHeadroom(estimatedGas);
 
-  // ethers' JsonRpcSigner.sendTransaction starts with an awaited block-number
-  // read. That is harmless on desktop, but on mobile WalletConnect it lets the
-  // browser's transient tap activation expire before the SDK opens MetaMask.
-  // Pre-format the final EIP-1193 request now, then invoke raw.request directly
-  // inside buildTx() so eth_sendTransaction begins in the click stack itself.
-  const eip1193 = args.eip1193Provider;
-  const directWalletConnect = Boolean(
-    eip1193?.isWalletConnect === true
-    && typeof eip1193.request === 'function'
-    && typeof provider.getRpcTransaction === 'function'
-    && typeof provider.waitForTransaction === 'function'
-  );
-  const rpcTx = directWalletConnect
-    ? provider.getRpcTransaction({ ...unsignedTx, from: sender })
-    : null;
-
   let aborted = false;
   return {
     buildTx: () => {
       if (aborted) throw new Error('Pre-warm stale — recompute.');
-      if (directWalletConnect) {
-        // Calling request() is deliberately the first async-producing action
-        // in this branch. Do not put an await, provider read, or Promise
-        // callback before it: Reown performs the mobile deep-link while this
-        // request is being dispatched.
-        const hashPromise = eip1193.request({
-          method: 'eth_sendTransaction',
-          params: [rpcTx],
-        });
-        return Promise.resolve(hashPromise).then((hashValue) => {
-          const hash = String(hashValue || '');
-          if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) {
-            throw new Error('Wallet returned an invalid transaction hash.');
-          }
-          return {
-            hash,
-            wait: async () => {
-              const receipt = await provider.waitForTransaction(hash);
-              if (!receipt) throw new Error('Transaction receipt was not found.');
-              if (Number(receipt.status) === 0) {
-                const error = new Error(`Reverted: ${hash}`);
-                error.receipt = receipt;
-                throw error;
-              }
-              return receipt;
-            },
-          };
-        });
-      }
-      // Injected/in-wallet fallback. The WalletConnect branch above is the one
-      // that must reach raw.request without an ethers preflight await.
+      // SYNCHRONOUS — no `await` here. signer.sendTransaction internally
+      // populates remaining fields (chainId, nonce, fees) — verified ethers
+      // v6 docs. The Promise<TransactionResponse> is returned immediately;
+      // the click handler chains .then(tx => tx.wait()) without awaiting.
       return signer.sendTransaction(unsignedTx);
     },
     abort: () => { aborted = true; },
     expiresAt: Date.now() + PREWARM_TTL_MS,
     payment,
-    contract,
-    buyer,
-    affiliateCode,
-    purchaseQuote: quote,
-    ticketPriceWei: quotedPriceWei,
-    ticketQuantity,
-    ticketCostWei,
     boxOrder,
     boxCostWei,
-    foil,
-    foilCostWei,
   };
 }

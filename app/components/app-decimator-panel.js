@@ -36,7 +36,6 @@ import {
   subscribeUiPreferences,
 } from '../app/ui-preferences.js';
 import { getProvider } from '../app/contracts.js';
-import { createWalletConnectRequestHandoff, getEip1193 } from '../app/wallet.js';
 import { permissionlessReadProvider, readNativeBalance } from '../app/read-provider.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
@@ -86,7 +85,6 @@ import {
   writePurchaseFundingPriority as _writeFundingPriority,
   readPurchaseUseAfking as _readUseAfking,
   writePurchaseUseAfking as _writeUseAfking,
-  prewarmLootboxBuy,
 } from '../app/lootbox.js';
 import {
   applyLootboxCasePresentation,
@@ -122,7 +120,7 @@ import {
   readCoinflipDisplaySnapshot,
 } from '../app/coinflip.js';
 import { formatFlip } from '../viewer/utils.js';
-import { queueReveal } from './reveal-overlay.js';
+import { queueReveal } from './reveal-queue.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 import { heldBalanceValue } from '../app/balance-hold.js';
 import { degeneretteLimits } from '../app/degenerette.js';
@@ -847,15 +845,6 @@ class AppDecimatorPanel extends HTMLElement {
   #buyInDialogReturnFocus = null;
   #customBoxOpen = false;
   #presaleOptionAvailable = false;
-  // WalletConnect mobile must receive eth_sendTransaction while the Buy tap's
-  // transient activation is still alive. All reads, simulation, and gas work
-  // are cached before the tap; the click consumes this closure synchronously.
-  #purchasePrewarm = null;
-  #purchasePrewarmTimer = null;
-  #purchasePrewarmSeq = 0;
-  #walletConnectHandoff = null;
-  #purchasePrewarmPendingFingerprint = null;
-  #purchasePrewarmError = null;
   // --- Pinned data (server-derived; rendered via textContent) ---
   #gameState = null;   // Phase 64 — /game/state snapshot (level + jackpotPhaseFlag → ticket price)
   #purchaseQuote = null; // Exact purchaseInfo() buy-now route/price.
@@ -956,8 +945,6 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    this.#clearPurchasePrewarm();
-    this.#clearWalletConnectHandoff();
     this.#closeBuyInDialog({ restoreFocus: false });
     this.#closeBuilderPopovers({ restoreFocus: false });
     this.#clearPurchaseTargetPulse(this.querySelector('[data-bind="dec-flip-credit"]'));
@@ -1635,8 +1622,7 @@ class AppDecimatorPanel extends HTMLElement {
           catch (_e) { /* focus is progressive enhancement */ }
           return;
         }
-        if (this.#flipModeEnabled()) void this.#onBuyWithFlipClick(e);
-        else this.#startEthPurchase(e);
+        void (this.#flipModeEnabled() ? this.#onBuyWithFlipClick(e) : this.#onBuyClick(e));
       });
     }
     for (const close of Array.from(
@@ -1845,7 +1831,7 @@ class AppDecimatorPanel extends HTMLElement {
         // order path, so the main CTA being momentarily disabled is not a
         // reason to swallow the click and leave the player with nothing.
         this.#closeCustomBoxPopover({ restoreFocus: false });
-        this.#startEthPurchase(event);
+        void this.#onBuyClick(event);
       },
     );
     // Live total-cost label on the Buy button as quantities change.
@@ -2205,9 +2191,9 @@ class AppDecimatorPanel extends HTMLElement {
 
     this.#closeBuyInDialog({ restoreFocus: false });
     this.#updateTotalLabel();
-    if (this.#flipModeEnabled()) return this.#onBuyWithFlipClick(event);
-    this.#startEthPurchase(event);
-    return true;
+    return this.#flipModeEnabled()
+      ? this.#onBuyWithFlipClick(event)
+      : this.#onBuyClick(event);
   }
 
   #openAfkingPasses() {
@@ -3280,212 +3266,6 @@ class AppDecimatorPanel extends HTMLElement {
     this.#updateTotalLabel();
   }
 
-  #purchasePrewarmDraft() {
-    if (this.#busy || this.#flipModeEnabled() || get('ui.chainOk') !== true) return null;
-    const mode = get('ui.mode');
-    if (mode !== 'self' && mode !== 'operator') return null;
-
-    const eip1193Provider = getEip1193();
-    // Injected MetaMask runs inside the wallet browser and does not need an app
-    // handoff. Limit this extra work to external WalletConnect sessions.
-    if (eip1193Provider?.isWalletConnect !== true
-      || typeof eip1193Provider.request !== 'function') return null;
-
-    const connected = get('connected.address');
-    const buyer = getActingAddress();
-    if (!connected || !buyer) return null;
-
-    const ticketQuantity = this.#ticketsWanted();
-    const boxDraft = this.#boxDraft(this.#ticketPriceWei());
-    const foil = this.#foilWanted();
-    // The combined presale selector has a separate ABI and live-credit gate.
-    // Keep its existing path; normal tickets, boxes, and foil use this cache.
-    if (boxDraft.error || this.#presaleWantedWei() > 0n) return null;
-    if (ticketQuantity <= 0 && boxDraft.order <= 0n && !foil) return null;
-
-    const affiliateCode = readAffiliateCode(CHAIN.id, buyer);
-    const priceWei = this.#ticketPriceWei();
-    const ticketCostWei = priceWei != null && ticketQuantity > 0
-      ? ticketCostFromTickets(priceWei, ticketQuantity)
-      : 0n;
-    const foilCostWei = priceWei != null && foil
-      ? foilPackCostFromPriceWei(priceWei)
-      : 0n;
-    const fingerprint = [
-      CHAIN.id,
-      String(connected).toLowerCase(),
-      String(buyer).toLowerCase(),
-      ticketQuantity,
-      boxDraft.order.toString(),
-      foil ? 1 : 0,
-      affiliateCode,
-      this.#preferClaimable ? 1 : 0,
-      this.#useAfking ? 1 : 0,
-    ].join('|');
-
-    return {
-      fingerprint,
-      args: {
-        ticketQuantity,
-        boxOrder: boxDraft.order,
-        boxCostWei: boxDraft.costWei,
-        affiliateCode,
-        ticketCostWei,
-        foil,
-        foilCostWei,
-        preferClaimable: this.#preferClaimable,
-        useAfking: this.#useAfking,
-        eip1193Provider,
-      },
-    };
-  }
-
-  #clearPurchasePrewarm() {
-    this.#purchasePrewarmSeq += 1;
-    this.#purchasePrewarmPendingFingerprint = null;
-    if (this.#purchasePrewarmTimer != null) {
-      try { clearTimeout(this.#purchasePrewarmTimer); } catch (_e) { /* defensive */ }
-      this.#purchasePrewarmTimer = null;
-    }
-    if (this.#purchasePrewarm) {
-      try { this.#purchasePrewarm.abort(); } catch (_e) { /* defensive */ }
-      this.#purchasePrewarm = null;
-    }
-  }
-
-  async #refreshPurchasePrewarm(seq, draft) {
-    this.#purchasePrewarmPendingFingerprint = draft.fingerprint;
-    try {
-      const prepared = await prewarmLootboxBuy(draft.args);
-      const current = this.#purchasePrewarmDraft();
-      if (seq !== this.#purchasePrewarmSeq
-        || current?.fingerprint !== draft.fingerprint) {
-        try { prepared.abort(); } catch (_e) { /* defensive */ }
-        return;
-      }
-      this.#purchasePrewarm = { ...prepared, fingerprint: draft.fingerprint };
-      this.#purchasePrewarmError = null;
-    } catch (error) {
-      if (seq === this.#purchasePrewarmSeq) {
-        this.#purchasePrewarm = null;
-        this.#purchasePrewarmError = {
-          fingerprint: draft.fingerprint,
-          message: compactUiError(error, 'Cannot prepare this purchase. Try again.'),
-        };
-      }
-    } finally {
-      if (seq === this.#purchasePrewarmSeq) {
-        this.#purchasePrewarmPendingFingerprint = null;
-        // A first tap may have landed while preparation was still running.
-        // Restore the exact amount once the next tap is ready to open MetaMask.
-        this.#updateTotalLabel();
-      }
-    }
-  }
-
-  #schedulePurchasePrewarm(delayMs = 160, retryFailed = false) {
-    const draft = this.#purchasePrewarmDraft();
-    if (!draft) {
-      this.#clearPurchasePrewarm();
-      this.#purchasePrewarmError = null;
-      return;
-    }
-    if (this.#purchasePrewarm?.fingerprint === draft.fingerprint
-      && Date.now() <= this.#purchasePrewarm.expiresAt) return;
-    if (this.#purchasePrewarmPendingFingerprint === draft.fingerprint) return;
-    if (!retryFailed && this.#purchasePrewarmError?.fingerprint === draft.fingerprint) return;
-
-    this.#clearPurchasePrewarm();
-    this.#purchasePrewarmError = null;
-    const seq = this.#purchasePrewarmSeq;
-    this.#purchasePrewarmTimer = setTimeout(() => {
-      this.#purchasePrewarmTimer = null;
-      void this.#refreshPurchasePrewarm(seq, draft);
-    }, Math.max(0, Number(delayMs) || 0));
-    this.#purchasePrewarmTimer?.unref?.();
-  }
-
-  #takePurchasePrewarm(draft) {
-    const cached = this.#purchasePrewarm;
-    if (!cached
-      || cached.fingerprint !== draft?.fingerprint
-      || Date.now() > cached.expiresAt) {
-      if (cached) {
-        try { cached.abort(); } catch (_e) { /* defensive */ }
-        this.#purchasePrewarm = null;
-      }
-      return null;
-    }
-    // Consume without aborting. Bump the generation so an older in-flight
-    // refresh cannot replace the cache while this transaction is pending.
-    this.#purchasePrewarm = null;
-    this.#purchasePrewarmSeq += 1;
-    this.#purchasePrewarmPendingFingerprint = null;
-    if (this.#purchasePrewarmTimer != null) {
-      try { clearTimeout(this.#purchasePrewarmTimer); } catch (_e) { /* defensive */ }
-      this.#purchasePrewarmTimer = null;
-    }
-    return cached;
-  }
-
-  #startEthPurchase(e) {
-    if (this.#busy) {
-      try { e?.preventDefault?.(); } catch (_e) { /* defensive */ }
-      this.#walletConnectHandoff?.open?.();
-      return;
-    }
-    const draft = this.#purchasePrewarmDraft();
-    if (!draft) {
-      void this.#onBuyClick(e);
-      return;
-    }
-    const prepared = this.#takePurchasePrewarm(draft);
-    if (!prepared) {
-      try { e?.preventDefault?.(); } catch (_e) { /* defensive */ }
-      const priorError = this.#purchasePrewarmError?.fingerprint === draft.fingerprint
-        ? this.#purchasePrewarmError.message
-        : null;
-      if (priorError) this.#renderError(priorError);
-      this.#setBuyLabel('Preparing wallet…', 'TAP BUY AGAIN');
-      this.#schedulePurchasePrewarm(0, true);
-      return;
-    }
-
-    let txPromise;
-    let handoff = null;
-    try {
-      handoff = createWalletConnectRequestHandoff(getEip1193(), {
-        onReady: () => {
-          // SignClient emits after its relay publish. Let the handler that
-          // started below establish #busy first, then leave this same CTA live
-          // as a user-gesture fallback if the OS ignores the automatic link.
-          queueMicrotask(() => {
-            if (!this.#busy || this.#walletConnectHandoff !== handoff) return;
-            const btn = this.querySelector('[data-bind="dec-buy-cta"]');
-            if (btn) btn.disabled = false;
-            this.#setBuyLabel('Open', handoff?.walletName || 'Wallet');
-          });
-        },
-      });
-      this.#walletConnectHandoff = handoff;
-      // CRITICAL: buildTx invokes raw WalletConnect eth_sendTransaction right
-      // here, in the event listener's synchronous stack, before any await.
-      txPromise = prepared.buildTx();
-    } catch (error) {
-      try { handoff?.cancel?.(); } catch (_e) { /* defensive */ }
-      if (this.#walletConnectHandoff === handoff) this.#walletConnectHandoff = null;
-      this.#renderError(compactUiError(error, 'Cannot open the wallet request. Try again.'));
-      this.#schedulePurchasePrewarm(0, true);
-      return;
-    }
-    void this.#onBuyClick(e, null, { prepared, txPromise, handoff });
-  }
-
-  #clearWalletConnectHandoff(handoff = this.#walletConnectHandoff) {
-    try { handoff?.cancel?.(); } catch (_e) { /* defensive */ }
-    if (this.#walletConnectHandoff === handoff) this.#walletConnectHandoff = null;
-  }
-
   #setBuyLabel(action, amount = '') {
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     const actionEl = this.querySelector('[data-bind="dec-buy-cta-action"]');
@@ -3524,7 +3304,6 @@ class AppDecimatorPanel extends HTMLElement {
     const boxDraft = this.#boxDraft(priceWei);
     this.#renderBoxDraft(boxDraft);
     if (this.#flipModeEnabled()) {
-      this.#clearPurchasePrewarm();
       // FLIP is tickets-only. Run the presale renderer before this branch's
       // early return so switching payment modes cannot leave the ETH-only row
       // painted from the previous quote.
@@ -3599,7 +3378,6 @@ class AppDecimatorPanel extends HTMLElement {
       centuryUsageKnown: this.#centuryUsageKnown,
     });
     if (this.#buyInDialogOpen) this.#renderBuyInDialog();
-    this.#schedulePurchasePrewarm();
   }
 
   #renderBountyTriggers() {
@@ -4889,19 +4667,12 @@ class AppDecimatorPanel extends HTMLElement {
   // Store subscriptions — Phase 58 namespace. On wallet switch (connected.address)
   // OR view-target switch (viewing.address), fire an immediate cycle restart.
   #wireStoreSubscriptions() {
-    const u1 = subscribe('connected.address', () => {
-      this.#clearPurchasePrewarm();
-      this.#runPollCycle();
-    });
-    const u2 = subscribe('viewing.address', () => {
-      this.#clearPurchasePrewarm();
-      this.#runPollCycle();
-    });
+    const u1 = subscribe('connected.address', () => this.#runPollCycle());
+    const u2 = subscribe('viewing.address', () => this.#runPollCycle());
     // Account-switcher (2026-07-16): mode flip re-renders the combined
     // summary immediately; the merged payload updates live as polling.js's
     // combined-mode cycle refreshes.
     const u3 = subscribe('ui.mode', () => {
-      this.#clearPurchasePrewarm();
       if (get('ui.mode') !== 'self') this.#closeBuyInDialog({ restoreFocus: false });
       else if (this.#buyInDialogOpen) this.#renderBuyInDialog();
       this.#renderCombinedSummary();
@@ -4915,7 +4686,6 @@ class AppDecimatorPanel extends HTMLElement {
     // A newly resolved day closes the spoiler gate immediately and supplies
     // the day-scoped key read by #claimableSpoilerOpen().
     const u5 = subscribe('app.lastDay', () => {
-      this.#clearPurchasePrewarm();
       this.#renderFundsFooter();
       this.#updateTotalLabel();
     });
@@ -4944,11 +4714,7 @@ class AppDecimatorPanel extends HTMLElement {
       if (name === 'allInButton') this.#renderFundsFooter();
     });
     const u13 = subscribe('app.boons', () => this.#updateTotalLabel());
-    const u14 = subscribe('ui.chainOk', () => {
-      this.#clearPurchasePrewarm();
-      this.#updateTotalLabel();
-    });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14);
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13);
   }
 
   // ---------------------------------------------------------------------
@@ -5076,7 +4842,7 @@ class AppDecimatorPanel extends HTMLElement {
   // T-62-01-04: #busy guard makes double-clicks invoke purchaseEth exactly once.
   // ---------------------------------------------------------------------
 
-  async #onBuyClick(e, questPurchase = null, preparedSend = null) {
+  async #onBuyClick(e, questPurchase = null) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
     const allInFlow = questPurchase?.allIn === true;
     if (this.#busy) return false;
@@ -5085,18 +4851,7 @@ class AppDecimatorPanel extends HTMLElement {
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     if (btn) {
       btn.disabled = true;
-      if (!allInFlow) {
-        if (preparedSend?.txPromise) {
-          // Use the CTA's two deliberate text rows instead of squeezing this
-          // status into the narrow one-row prompt width (four lines on mobile).
-          this.#setBuyLabel(
-            'Confirm in',
-            `${preparedSend?.handoff?.walletName || 'MetaMask'}…`,
-          );
-        } else {
-          this.#setBuyLabel('Buying…');
-        }
-      }
+      if (!allInFlow) this.#setBuyLabel('Buying…');
     }
     // Defensive: clear any prior error before a fresh attempt.
     this.#clearError();
@@ -5186,54 +4941,33 @@ class AppDecimatorPanel extends HTMLElement {
       let purchaseQuote = null;
       const hasPresetBoxes = (boxOrder & 0xFFFFFFn) !== 0n;
       if (ticketQuantity > 0 || boxOrder > 0n || foilWanted) {
-        if (preparedSend?.prepared) {
-          // The pre-warm already used one fresh purchaseInfo quote and ran the
-          // exact value-bearing static call. Reuse that snapshot so the UI and
-          // the transaction already waiting in MetaMask stay byte-for-byte aligned.
-          const prepared = preparedSend.prepared;
-          purchaseQuote = prepared.purchaseQuote;
-          if (purchaseQuote) this.#purchaseQuote = purchaseQuote;
-          purchaseTicketPriceWei = BigInt(prepared.ticketPriceWei ?? 0n) > 0n
-            ? BigInt(prepared.ticketPriceWei)
-            : this.#ticketPriceWei();
-          ticketCostWei = BigInt(prepared.ticketCostWei ?? 0n);
-          foilCostWei = BigInt(prepared.foilCostWei ?? 0n);
-          boxCostWei = BigInt(prepared.boxCostWei ?? 0n);
-        } else {
-          // purchaseInfo() is the complete buy-now authority. Never put the DB
-          // in this click's promise graph: an indexed outage must not consume the
-          // wallet gesture or add the API timeout before the wallet prompt.
-          const quote = await readPurchaseQuote({ fresh: true });
-          purchaseQuote = quote;
-          if (quote) this.#purchaseQuote = quote;
-          // Never re-check indexed ownership here. purchaseEth immediately runs
-          // the exact contract static-call with this level/value, which is both
-          // fresher and authoritative.
-          purchaseTicketPriceWei = this.#ticketPriceWei();
-          if (purchaseTicketPriceWei == null && (ticketQuantity > 0 || hasPresetBoxes || foilWanted)) {
-            return rejectPurchase('Ticket price unavailable — try again in a moment.');
-          }
-          // Exactly what the contract charges: priceWei * entryQuantityScaled /
-          // (4 * QTY_SCALE). Quoting priceWei-per-ticket-count overpaid 4x, and
-          // an overpay is credited to afking rather than refunded.
-          if (ticketQuantity > 0) {
-            ticketCostWei = ticketCostFromTickets(purchaseTicketPriceWei, ticketQuantity);
-          }
-          if (foilWanted) {
-            foilCostWei = foilPackCostFromPriceWei(purchaseTicketPriceWei);
-          }
-          if (boxOrder > 0n) {
-            boxCostWei = boxOrderCostFromPriceWei(purchaseTicketPriceWei ?? 0n, boxOrder);
-            if (boxCostWei <= 0n) {
-              return rejectPurchase('Luckbox price unavailable — try again in a moment.');
-            }
-          }
-        }
+        // purchaseInfo() is the complete buy-now authority. Never put the DB
+        // in this click's promise graph: an indexed outage must not consume the
+        // wallet gesture or add the API timeout before the wallet prompt.
+        const quote = await readPurchaseQuote({ fresh: true });
+        purchaseQuote = quote;
+        if (quote) this.#purchaseQuote = quote;
+        // Never re-check indexed ownership here. purchaseEth immediately runs
+        // the exact contract static-call with this level/value, which is both
+        // fresher and authoritative.
+        purchaseTicketPriceWei = this.#ticketPriceWei();
         if (purchaseTicketPriceWei == null && (ticketQuantity > 0 || hasPresetBoxes || foilWanted)) {
           return rejectPurchase('Ticket price unavailable — try again in a moment.');
         }
-        if (boxOrder > 0n && boxCostWei <= 0n) {
-          return rejectPurchase('Luckbox price unavailable — try again in a moment.');
+        // Exactly what the contract charges: priceWei * entryQuantityScaled /
+        // (4 * QTY_SCALE). Quoting priceWei-per-ticket-count overpaid 4x, and
+        // an overpay is credited to afking rather than refunded.
+        if (ticketQuantity > 0) {
+          ticketCostWei = ticketCostFromTickets(purchaseTicketPriceWei, ticketQuantity);
+        }
+        if (foilWanted) {
+          foilCostWei = foilPackCostFromPriceWei(purchaseTicketPriceWei);
+        }
+        if (boxOrder > 0n) {
+          boxCostWei = boxOrderCostFromPriceWei(purchaseTicketPriceWei ?? 0n, boxOrder);
+          if (boxCostWei <= 0n) {
+            return rejectPurchase('Luckbox price unavailable — try again in a moment.');
+          }
         }
       }
 
@@ -5283,33 +5017,22 @@ class AppDecimatorPanel extends HTMLElement {
             } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
           }
         : undefined;
-      let receipt;
-      let contract;
-      if (preparedSend?.txPromise) {
-        const tx = await preparedSend.txPromise;
-        if (typeof onSubmitted === 'function') {
-          try { onSubmitted(tx); } catch (_error) { /* presentation cannot fail a write */ }
-        }
-        receipt = await tx.wait();
-        contract = preparedSend.prepared.contract;
-      } else {
-        ({ receipt, contract } = presaleBoxAmountWei > 0n && !hasMintPurchase
-          ? await purchasePresaleBox({
-              boxAmountWei: presaleBoxAmountWei,
-              player: buyer,
-              preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
-              useAfking: questPurchase?.useAfking ?? this.#useAfking,
-              onSubmitted,
-            })
-          : await purchaseEth({
-              ticketQuantity, boxOrder, boxCostWei, affiliateCode, ticketCostWei,
-              foil: foilWanted, foilCostWei, presaleBoxAmountWei,
-              purchaseQuote,
-              preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
-              useAfking: questPurchase?.useAfking ?? this.#useAfking,
-              onSubmitted,
-            }));
-      }
+      const { receipt, contract } = presaleBoxAmountWei > 0n && !hasMintPurchase
+        ? await purchasePresaleBox({
+            boxAmountWei: presaleBoxAmountWei,
+            player: buyer,
+            preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
+            useAfking: questPurchase?.useAfking ?? this.#useAfking,
+            onSubmitted,
+          })
+        : await purchaseEth({
+            ticketQuantity, boxOrder, boxCostWei, affiliateCode, ticketCostWei,
+            foil: foilWanted, foilCostWei, presaleBoxAmountWei,
+            purchaseQuote,
+            preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
+            useAfking: questPurchase?.useAfking ?? this.#useAfking,
+            onSubmitted,
+          });
 
       if (questPurchase == null) this.#clearCompletedBuyDraft();
 
@@ -5482,7 +5205,6 @@ class AppDecimatorPanel extends HTMLElement {
       }
       if (allInFlow) throw new Error(failureMessage, { cause: error });
     } finally {
-      this.#clearWalletConnectHandoff(preparedSend?.handoff);
       if (btn) btn.disabled = false;
       this.#busy = false;
       // Recompute both button lines after the pending label.

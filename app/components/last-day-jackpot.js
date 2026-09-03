@@ -40,7 +40,7 @@ import {
   PACK_REVEAL_COMPLETE_EVENT,
   REVEAL_OVERLAY_IDLE_EVENT,
   queueReveal,
-} from './reveal-overlay.js';
+} from './reveal-queue.js';
 import {
   claimFoilMatch,
   FOIL_TIER_FACES,
@@ -2205,6 +2205,9 @@ class LastDayJackpot extends HTMLElement {
     publishPendingActions(FOIL_MATCH_ACTION_SOURCE, [{
       id: `foil-match:${best.key}`,
       dismissScope: player,
+      // The cabinet intentionally shows only the highest-ranked match. CLEAR
+      // means the whole already-known stack, not "show me the next ticket".
+      dismissIds: candidates.map((candidate) => `foil-match:${candidate.key}`),
       kind: 'foil-match',
       kindLabel: 'FOIL TICKET MATCH',
       label: `T${best.grade.score} FOIL LUCKBOX MATCH`,

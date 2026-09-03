@@ -14,8 +14,10 @@ import {
 } from './replay-engine.js';
 import { fetchProfiles } from '../app/profiles.js';
 import { CONTRACTS } from '../app/chain-config.js';
+import { crapsBonusMultiplier, readCrapsSettlementWord } from '../app/craps.js';
 
 const TEN = 10n;
+const CRAPS_REPLAY_BONUS_MULTIPLIERS = new Set([0.25, 1, 10, 100]);
 
 /**
  * PROTOCOL SEATS, labelled from the ACTIVE chain profile rather than hardcoded.
@@ -226,6 +228,9 @@ function tablePlayer(trace, clock, manifest, profiles = null) {
       amountFlip: displayFlip(player.ladderWei.at(-1)),
       rawEndingFlip: displayFlip(player.ladderWei.at(-1)),
       highPointFlip: displayFlip(playerHighPointWei(player)),
+      // Keep the run credit available when this seat becomes the final Battle
+      // winner. The leaderboard presents it independently from the bounty.
+      runPayoutWei: player.paidWei,
       handsPlayed: player.handsPlayed,
       standing: player.standing,
       bankrollsFlip: opponentSnapshots(trace, clock),
@@ -515,6 +520,7 @@ export async function openCrapsReplayTable(table, {
   highBankrollRider = null,
   fetchImpl,
   loadProfiles = fetchProfiles,
+  loadSettlementWord = readCrapsSettlementWord,
   ...openOptions
 } = {}) {
   const artifacts = await loadCrapsReplay({
@@ -545,6 +551,23 @@ export async function openCrapsReplayTable(table, {
     battleStakeWei: mainModel.manifest.terms.battleStakeWei,
     entrants: mainModel.manifest.field.entrants,
   });
+  const suppliedBonusMultiplier = Number(
+    openOptions.bonusMultiplier
+      ?? openOptions.battleBonusMultiplier
+      ?? openOptions.boostMultiplier,
+  );
+  let replayBonusMultiplier = CRAPS_REPLAY_BONUS_MULTIPLIERS.has(suppliedBonusMultiplier)
+    ? suppliedBonusMultiplier
+    : null;
+  if (replayBonusMultiplier == null) {
+    try {
+      const word = await loadSettlementWord(mainModel.manifest.settlement.boundIndex);
+      replayBonusMultiplier = crapsBonusMultiplier({
+        battleKey: mainModel.manifest.battleKey,
+        wordValue: word,
+      });
+    } catch (_error) { /* a storage outage must not block an otherwise verified replay */ }
+  }
   const mainWinnerBetId = openOptions.battleWinnerBetId ?? openOptions.winnerBetId ?? null;
   const requestedHighEntrants = Number(highRollerEntrants);
   const exactHighRoster = Number.isInteger(requestedHighEntrants) && requestedHighEntrants >= 2
@@ -643,6 +666,7 @@ export async function openCrapsReplayTable(table, {
       ...nextModel.tableOptions,
       ...lanePrizeAmounts,
       ...battleAward,
+      ...(replayBonusMultiplier == null ? {} : { bonusMultiplier: replayBonusMultiplier }),
       battleWinnerBetId: winnerBetId,
       onPerspectiveSelect,
       onResolutionAcknowledged: highLane ? undefined : openOptions.onResolutionAcknowledged,

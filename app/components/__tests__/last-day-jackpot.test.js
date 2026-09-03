@@ -3267,6 +3267,8 @@ describe('foil match pending action', () => {
       'main and bonus draw claims are graded independently');
     assert.match(src, /publishPendingActions\(FOIL_MATCH_ACTION_SOURCE/);
     assert.match(src, /kind:\s*'foil-match'/);
+    assert.match(src, /dismissIds:\s*candidates\.map/,
+      'CLEAR retires every already-known foil match, not only the top card');
     assert.match(src, /claimFoilMatch\(/);
     assert.match(src, /parseFoilMatchClaimedFromReceipt\(/);
     assert.match(src, /queueReveal\(\{\s*kind:\s*'foil-match'/s);

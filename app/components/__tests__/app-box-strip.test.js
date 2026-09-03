@@ -422,6 +422,27 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('CLEAR during confirmation also retires the mined form of that purchase', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxSubmitted('0xclearwhilemining');
+    const submitted = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:submitted:0xclearwhilemining');
+    assert.ok(submitted);
+
+    await pendingActionsMod.dismissPendingActionItems([submitted]);
+    fireTxConfirmed([{ index: 12, day: 5 }], {
+      player: ADDR,
+      submittedTransactionHash: '0xclearwhilemining',
+    });
+    await tick();
+
+    assert.deepEqual(pendingActionsMod.getPendingActions(), [],
+      'confirmation cannot turn the cleared placeholder into a fresh popup');
+    el.disconnectedCallback();
+  });
+
   test('a packed combo order survives Pending so its reveal can offer combined or individual views', async () => {
     const el = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);

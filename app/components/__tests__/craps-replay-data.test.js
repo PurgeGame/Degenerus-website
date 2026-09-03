@@ -303,6 +303,7 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   ]);
   const opened = [];
   const profileBatchSizes = [];
+  const settlementReads = [];
   const settledMainPotWei = 84_900n * 10n ** 18n;
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
@@ -313,6 +314,10 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
     battlePayoutWei: settledMainPotWei,
     battleWinningStop: 1,
     bonusMultiplier: 10,
+    loadSettlementWord: async (index) => {
+      settlementReads.push(index);
+      return 5n;
+    },
     fetchImpl: async (path) => ({
       ok: bodies.has(path),
       status: bodies.has(path) ? 200 : 404,
@@ -343,6 +348,8 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   assert.equal(options.battleWinningStop, 1);
   assert.equal(options.bonusMultiplier, 10,
     'the authoritative boost rung survives the replay adapter');
+  assert.deepEqual(settlementReads, [],
+    'an explicit valid rung does not add a redundant storage read');
   assert.ok(options.otherPlayers.every((player) => player.label.startsWith('Discord ')));
   assert.ok(options.otherPlayers.every((player) => player.discordPfp?.startsWith('https://')));
 
@@ -372,6 +379,73 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   assert.equal(opened[2].resumeResolutionIndex, 8);
   assert.equal(options.onPerspectiveSelect({ betId: '999999999999999999999' }), false,
     'a click cannot escape the already verified viewport');
+  __resetCrapsReplayLoaderForTest();
+});
+
+test('a Dice Run record replay recovers its sealed bonus rung before opening', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const viewer = SIM_CRAPS_REPLAY_VIEWER;
+  const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const bodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[viewerShard], SIM_CRAPS_REPLAY_SHARDS[viewerShard]],
+  ]);
+  const opened = [];
+  const readIndexes = [];
+
+  await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
+    viewerBetId: viewer.betId,
+    settledMainPotWei: 84_900n * 10n ** 18n,
+    fetchImpl: async (path) => ({
+      ok: bodies.has(path),
+      status: bodies.has(path) ? 200 : 404,
+      json: async () => clone(bodies.get(path)),
+    }),
+    loadProfiles: async () => new Map(),
+    loadSettlementWord: async (index) => {
+      readIndexes.push(String(index));
+      return 5n;
+    },
+  });
+
+  assert.deepEqual(readIndexes, [MANIFEST.settlement.boundIndex],
+    'metadata-poor replay launchers recover the immutable word at the manifest-bound index');
+  assert.equal(opened[0]?.bonusMultiplier, 1,
+    'the shared opener derives the exact contract rung instead of skipping the pre-roll reveal');
+  __resetCrapsReplayLoaderForTest();
+});
+
+test('a settlement-word outage degrades without blocking a verified replay', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const viewer = SIM_CRAPS_REPLAY_VIEWER;
+  const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const bodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[viewerShard], SIM_CRAPS_REPLAY_SHARDS[viewerShard]],
+  ]);
+  const opened = [];
+
+  await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
+    viewerBetId: viewer.betId,
+    settledMainPotWei: 84_900n * 10n ** 18n,
+    fetchImpl: async (path) => ({
+      ok: bodies.has(path),
+      status: bodies.has(path) ? 200 : 404,
+      json: async () => clone(bodies.get(path)),
+    }),
+    loadProfiles: async () => new Map(),
+    loadSettlementWord: async () => { throw new Error('temporary RPC outage'); },
+  });
+
+  assert.equal(opened.length, 1, 'word recovery is presentation-only and cannot block the replay');
+  assert.equal(Object.hasOwn(opened[0], 'bonusMultiplier'), false,
+    'an unavailable word never invents a multiplier');
   __resetCrapsReplayLoaderForTest();
 });
 
@@ -798,6 +872,17 @@ test('a goal-completing perspective carries its exact credited run payout into t
   assert.equal(options.viewerResult.stop, 'goal');
   assert.equal(options.viewerResult.runPayoutWei, goalWinner.paidWei,
     'the sealed CrapsBetSettled credit reaches the final result without being replaced by the bounty');
+
+  const defaultOptions = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS).tableOptions;
+  const paidOpponent = defaultOptions.otherPlayers.find((player) => (
+    player.resolution.type === 'cashout' && BigInt(player.resolution.runPayoutWei ?? 0) > 0n
+  ));
+  assert.ok(paidOpponent, 'the featured viewport includes a paid goal opponent');
+  const sealedOpponent = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => (
+    player.betId === paidOpponent.betId
+  ));
+  assert.equal(paidOpponent.resolution.runPayoutWei, sealedOpponent.paidWei,
+    'a winning Top 10 opponent carries the same exact run credit for its separate RUN number');
 });
 
 test('the table consumer preserves every sealed frame and every authoritative payout list', async () => {
