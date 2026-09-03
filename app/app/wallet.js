@@ -43,6 +43,7 @@ import {
   clearProvider,
   setChainSwitchHandler,
   switchToSepolia,
+  switchToSepoliaResult,
 } from './contracts.js';
 import { abortAllInflight } from './polling.js';
 
@@ -253,8 +254,8 @@ function _walletConnectSessionHasChain(provider, chainId) {
  * and opens a fresh pairing; ordinary injected wallets and WC sessions that
  * already authorize the chain use the normal switch/add flow.
  */
-export async function ensureConfiguredWalletChain() {
-  let raw = getEip1193();
+export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = true } = {}) {
+  const raw = getEip1193();
   if (!raw) return false;
 
   if (
@@ -262,33 +263,27 @@ export async function ensureConfiguredWalletChain() {
     && raw.session
     && !_walletConnectSessionHasChain(raw, CHAIN.id)
   ) {
+    if (!allowWalletConnectRepair) return false;
     try {
       await raw.disconnect();
-    } catch (_e) {
+    } catch (error) {
+      if (_isStaleWalletConnectError(error)) {
+        return _replaceStaleWalletConnectSession(raw);
+      }
       return false;
     }
     // The WC disconnect event normally clears this state first; keep the
     // explicit reset for providers that do not emit it until a later tick.
     disconnect();
     try {
-      // The caller is already the authoritative, awaited switch flow. Suppress
-      // connectWalletConnect's normal fire-and-forget convenience switch so a
-      // replacement session receives exactly one request and cannot report
-      // ready while it is still active on Ethereum mainnet.
+      // This is the authoritative awaited switch flow. Suppress the ordinary
+      // fire-and-forget convenience switch, then verify the replacement once.
       const connected = await connectWalletConnect({ requestConfiguredChain: false });
       if (!connected) return false;
+      return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
     } catch (_e) {
       return false;
     }
-    raw = getEip1193();
-    if (!raw) return false;
-    // A wallet may approve another single-chain namespace. Do not recurse into
-    // an endless disconnect/pair loop; leave the write safely blocked instead.
-    if (
-      raw.isWalletConnect === true
-      && raw.session
-      && !_walletConnectSessionHasChain(raw, CHAIN.id)
-    ) return false;
   }
 
   // The EIP-1193 provider is the live source of truth. ethers' BrowserProvider
@@ -302,8 +297,17 @@ export async function ensureConfiguredWalletChain() {
     return true;
   }
 
-  const switched = await switchToSepolia(raw);
-  if (!switched) return false;
+  const switchResult = await switchToSepoliaResult(raw);
+  if (!switchResult.ok) {
+    if (
+      allowWalletConnectRepair
+      && raw.isWalletConnect === true
+      && _isStaleWalletConnectError(switchResult.error)
+    ) {
+      return _replaceStaleWalletConnectSession(raw);
+    }
+    return false;
+  }
   // Several mobile wallets resolve the approval request before eth_chainId
   // and chainChanged catch up in the returning browser tab.
   const activeChainId = await _waitForConfiguredChain(raw);
@@ -341,6 +345,71 @@ export function hasInstalledWallet() {
 // ---------------------------------------------------------------------------
 
 let _wcProvider = null;
+
+// WalletConnect can leave a locally persisted session after the wallet has
+// already deleted the peer topic. Requests against that zombie session fail
+// forever with "No matching key. session topic doesn't exist"; disconnect()
+// fails for the same reason and therefore never reaches the SDK's cleanup.
+// Keep our sessions in a versioned namespace, and rotate that namespace when
+// this exact condition is observed so the next init cannot restore the corpse.
+const WC_STORAGE_PREFIX_BASE = 'degenerus-wc-20260903';
+const WC_STORAGE_GENERATION_KEY = 'degenerusWalletConnectStorageGeneration';
+let _volatileWcStorageGeneration = 0;
+
+function _wcStorageGeneration() {
+  try {
+    const raw = globalThis.localStorage?.getItem?.(WC_STORAGE_GENERATION_KEY);
+    const parsed = Number.parseInt(String(raw ?? ''), 10);
+    if (Number.isSafeInteger(parsed) && parsed >= 0) return parsed;
+  } catch (_e) { /* private mode: use the page-local generation */ }
+  return _volatileWcStorageGeneration;
+}
+
+function _advanceWcStorageGeneration() {
+  const next = _wcStorageGeneration() + 1;
+  _volatileWcStorageGeneration = next;
+  try { globalThis.localStorage?.setItem?.(WC_STORAGE_GENERATION_KEY, String(next)); } catch (_e) { /* private mode */ }
+  return next;
+}
+
+function _walletErrorText(error) {
+  const text = [];
+  const queue = [error];
+  const seen = new Set();
+  while (queue.length > 0 && seen.size < 16) {
+    const value = queue.shift();
+    if (typeof value === 'string') {
+      text.push(value);
+      continue;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    if (typeof value.message === 'string') text.push(value.message);
+    queue.push(value.data, value.error, value.cause, value.originalError, value.info);
+  }
+  return text.join(' ');
+}
+
+function _isStaleWalletConnectError(error) {
+  return /no matching key[.:\s]+session topic doesn['’]?t exist|session topic doesn['’]?t exist/i
+    .test(_walletErrorText(error));
+}
+
+async function _replaceStaleWalletConnectSession(staleProvider) {
+  if (staleProvider !== _eip1193) return false;
+  _advanceWcStorageGeneration();
+  _wcProvider = null;
+  // Do not call staleProvider.disconnect() again: the missing peer topic makes
+  // that method reject before WalletConnect cleans its own persisted state.
+  disconnect();
+  try {
+    const connected = await connectWalletConnect({ requestConfiguredChain: false });
+    if (!connected) return false;
+    return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
+  } catch (_e) {
+    return false;
+  }
+}
 
 // Test-seam: factory injection for EthereumProvider.init. Production code uses
 // the imported EthereumProvider directly; tests inject a mock factory so they
@@ -499,6 +568,7 @@ function _wcInitOpts() {
   const origin = (win && win.location && win.location.origin) ? win.location.origin : '';
   return {
     projectId: WALLETCONNECT_PROJECT_ID,
+    customStoragePrefix: `${WC_STORAGE_PREFIX_BASE}-${_wcStorageGeneration()}`,
     optionalChains: [CHAIN.id, 1],
     // WalletConnect routes non-wallet JSON-RPC methods (eth_call,
     // eth_estimateGas, block/receipt reads) through its HTTP provider. Pin the

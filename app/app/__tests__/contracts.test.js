@@ -631,6 +631,18 @@ describe('switchToSepolia 4902 fallback', () => {
       'wallet_switchEthereumChain',
     ]);
   });
+
+  test('detailed result preserves a stale WalletConnect topic error for recovery', async () => {
+    const stale = new Error("No matching key. session topic doesn't exist: dead-topic");
+    const eip = { request: async () => { throw stale; } };
+
+    const result = await contractsMod.switchToSepoliaResult(eip);
+
+    assert.equal(result.ok, false);
+    assert.strictEqual(result.error, stale);
+    assert.equal(await contractsMod.switchToSepolia(eip), false,
+      'the existing boolean API remains false for ordinary callers');
+  });
 });
 
 // ===========================================================================

@@ -984,6 +984,8 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(opts.metadata.redirect, 'metadata.redirect present');
     assert.ok(typeof opts.metadata.redirect.universal === 'string', 'redirect.universal is a string');
     assert.ok(opts.metadata.redirect.universal.endsWith('/app/'), 'redirect.universal ends with /app/');
+    assert.match(opts.customStoragePrefix, /^degenerus-wc-/,
+      'WalletConnect storage is app-versioned so legacy dead topics are not restored');
   });
 
   test('autoReconnect WC branch: with persisted session and accounts returns true silently (no wc.connect call)', async () => {
@@ -1148,6 +1150,66 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(result, true, 'fresh WalletConnect pairing succeeds');
     assert.equal(wcInstance._disconnectCalls.length, 1, 'stale session is retired');
     assert.equal(wcInstance._connectCalls.length, 1, 'replacement session is paired');
+    assert.equal(storeMod.get('connected.address'), account.toLowerCase());
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
+
+  test('re-pairs under fresh storage when a locally restored WC topic no longer exists', async () => {
+    const account = '0xBb00000000000000000000000000000000000077';
+    const stale = makeMockWcFactory({
+      session: {
+        topic: 'deleted-wallet-topic',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`],
+            chains: ['eip155:1'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 1,
+      disconnectImpl: async () => {
+        throw new Error("No matching key. session topic doesn't exist: deleted-wallet-topic");
+      },
+    });
+    const fresh = makeMockWcFactory({
+      session: null,
+      accounts: [],
+      chainId: 84532,
+      connectImpl: async () => {
+        fresh.wcInstance._setSession({
+          topic: 'fresh-base-topic',
+          namespaces: {
+            eip155: {
+              accounts: [`eip155:84532:${account}`],
+              chains: ['eip155:84532'],
+            },
+          },
+        });
+        fresh.wcInstance._setAccounts([account]);
+      },
+    });
+    const initOpts = [];
+    let initCount = 0;
+    wallet._testInjectWcFactory({
+      init: async (opts) => {
+        initOpts.push(opts);
+        initCount += 1;
+        return initCount === 1 ? stale.wcInstance : fresh.wcInstance;
+      },
+    });
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    await wallet.autoReconnect();
+
+    const result = await wallet.ensureConfiguredWalletChain();
+
+    assert.equal(result, true, 'a fresh pairing replaces the dead local topic');
+    assert.equal(stale.wcInstance._disconnectCalls.length, 1,
+      'the stale topic is detected on the ordinary disconnect attempt');
+    assert.equal(fresh.wcInstance._connectCalls.length, 1, 'a new pairing is opened');
+    assert.equal(initOpts.length, 2, 'WalletConnect is initialized again');
+    assert.notEqual(initOpts[0].customStoragePrefix, initOpts[1].customStoragePrefix,
+      'the replacement cannot restore the same dead topic from storage');
     assert.equal(storeMod.get('connected.address'), account.toLowerCase());
     assert.equal(storeMod.get('ui.chainOk'), true);
   });

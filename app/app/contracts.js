@@ -444,13 +444,18 @@ function _isUnknownWalletChain(error) {
       .test(_walletRpcErrorText(error));
 }
 
-export async function switchToSepolia(eip1193Provider) {
+/**
+ * Detailed form used by wallet.js when it must distinguish a rejected prompt
+ * from a dead WalletConnect topic. Keep switchToSepolia()'s boolean API for
+ * presentation callers and older consumers.
+ */
+export async function switchToSepoliaResult(eip1193Provider) {
   try {
     await eip1193Provider.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: CHAIN.hexId }],
     });
-    return true;
+    return { ok: true, error: null };
   } catch (err) {
     if (_isUnknownWalletChain(err)) {
       // Chain not added to wallet — add it then retry switch.
@@ -463,14 +468,17 @@ export async function switchToSepolia(eip1193Provider) {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: CHAIN.hexId }],
         });
-        return true;
-      } catch {
-        return false;
+        return { ok: true, error: null };
+      } catch (fallbackError) {
+        return { ok: false, error: fallbackError };
       }
     }
-    if (_walletRpcErrorCode(err) === 4001) return false;   // user rejected — silent
-    return false;
+    return { ok: false, error: err };
   }
+}
+
+export async function switchToSepolia(eip1193Provider) {
+  return (await switchToSepoliaResult(eip1193Provider)).ok;
 }
 
 // Re-export ethers for downstream Phase 60+ convenience (matches /beta/app/contracts.js L1).
