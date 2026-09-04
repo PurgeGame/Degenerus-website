@@ -645,6 +645,8 @@ test('Craps entry failures are visible and duplicate-entry state repairs from ch
   assert.match(componentSource,
     /error\?\.code === 'AlreadyInBonus'[\s\S]*?readCrapsPlayerEntriesOnChain\(state\.day, player\)[\s\S]*?playerEntries: freshPlayerEntries/,
     'an authoritative duplicate-entry rejection replaces a stale indexed projection with wallet-filtered chain state');
+  assert.doesNotMatch(componentSource, /this\.#message = kind === 'future-day'/,
+    'successful entries update the lobby without adding routine confirmation copy');
   assert.equal((componentSource.match(/<button type="button" data-write data-craps-entry=/g) || []).length, 3,
     'all three entry-button templates participate in the shared wallet/write gate');
   assert.match(componentSource, /button\.disabled = Boolean\(domainLocked \|\| !canSign\)/,

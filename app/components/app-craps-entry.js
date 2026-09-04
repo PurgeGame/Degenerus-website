@@ -2945,11 +2945,7 @@ export class AppCrapsEntry extends HTMLElement {
           return { ok: false, error, message };
         }
       }
-      this.#message = kind === 'future-day'
-        ? usePass
-          ? `Day ${selection.entryDay} reserved with one ${this.#highRoller ? 'High Roller' : 'Low Stakes'} Craps comp.`
-          : `Day ${selection.entryDay} purchased with FLIP in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`
-        : `${kind === 'day' ? 'Full slate' : `Battle ${period + 1}`} entered in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane.`;
+      this.#message = '';
       try { await this.#refreshSchedule(true); } catch (_refreshError) { /* the purchase still succeeded */ }
       try {
         this.dispatchEvent(new CustomEvent(CRAPS_ENTRY_CONFIRMED_EVENT, {

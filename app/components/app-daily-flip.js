@@ -5111,7 +5111,12 @@ class AppDailyFlip extends HTMLElement {
             held: tomorrowHeld,
             upcoming: true,
           },
-          { ...resolvedRow, key: 'tomorrow', label: "Yesterday's bet" },
+          {
+            ...resolvedRow,
+            key: 'tomorrow',
+            label: "Yesterday's bet",
+            hideValue: resolvedRow.outcome === 'loss',
+          },
         ]
       : [resolvedRow, liveRow];
     for (const item of rows) {
@@ -5190,28 +5195,30 @@ class AppDailyFlip extends HTMLElement {
         }
         row.appendChild(multi);
       }
-      const result = document.createElement('span');
-      result.className = 'df-position-result';
-      const v = document.createElement('span');
-      v.className = `df-position-value${item.outcome ? ` df-position-value--${item.outcome}` : ''}`;
-      if (item.number != null) {
-        const number = document.createElement('span');
-        number.className = 'df-position-number';
-        number.textContent = item.number;
-        const unit = document.createElement('span');
-        unit.className = 'df-position-unit';
-        unit.textContent = item.unit ? ` ${item.unit}` : '';
-        v.appendChild(number);
-        v.appendChild(unit);
-      } else {
-        v.textContent = item.value;
+      if (!item.hideValue) {
+        const result = document.createElement('span');
+        result.className = 'df-position-result';
+        const v = document.createElement('span');
+        v.className = `df-position-value${item.outcome ? ` df-position-value--${item.outcome}` : ''}`;
+        if (item.number != null) {
+          const number = document.createElement('span');
+          number.className = 'df-position-number';
+          number.textContent = item.number;
+          const unit = document.createElement('span');
+          unit.className = 'df-position-unit';
+          unit.textContent = item.unit ? ` ${item.unit}` : '';
+          v.appendChild(number);
+          v.appendChild(unit);
+        } else {
+          v.textContent = item.value;
+        }
+        result.appendChild(v);
+        if (item.held) {
+          result.setAttribute('title', 'Last settled value; updates after the RNG reveal');
+          result.setAttribute('aria-label', `Last settled ${item.label.toLowerCase()}. Updates after the RNG reveal.`);
+        }
+        row.appendChild(result);
       }
-      result.appendChild(v);
-      if (item.held) {
-        result.setAttribute('title', 'Last settled value; updates after the RNG reveal');
-        result.setAttribute('aria-label', `Last settled ${item.label.toLowerCase()}. Updates after the RNG reveal.`);
-      }
-      row.appendChild(result);
       slot.appendChild(row);
     }
   }

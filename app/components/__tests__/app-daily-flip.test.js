@@ -3149,8 +3149,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
       el.querySelector('[data-bind="df-tomorrow-bet-oval"]').getAttribute('data-yesterday-outcome'),
       'loss',
     );
-    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /LOSS-43,840/,
-      'the resolved amount and result remain in the fixed compact Yesterday fixture');
+    const yesterday = el.querySelector('[data-position="tomorrow"]');
+    assert.equal(yesterday.querySelector('.df-position-outcome').textContent, 'LOSS');
+    assert.equal(yesterday.querySelector('.df-position-result'), null,
+      'the bottom Yesterday oval reduces a loss receipt to the outcome without repeating the stake');
     assert.equal(lowerSurface.getAttribute('aria-label'), "Yesterday's bet lost 43,844 FLIP");
     assert.match(CHIPSET_CSS,
       /\.df-tomorrow-layout\.is-yesterday > \.df-position-slot\s*\{[^}]*width:\s*100%[^}]*grid-area:\s*oval/s,
@@ -3159,8 +3161,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-tomorrow-layout\.is-yesterday \.df-tomorrow-bet-oval \.df-bet-chip-rack\s*\{\s*display:\s*none;/s,
       'Yesterday does not split the oval into a second stake readout and result');
     assert.match(CHIPSET_CSS,
-      /\.df-tomorrow-layout\.is-yesterday \.df-position-multiplier\s*\{[^}]*display:\s*inline-flex/s,
-      'the reused receipt exposes WIN or LOSS beside its signed amount');
+      /\.df-tomorrow-layout\.is-yesterday \.df-position-row--loss\s*\{[^}]*justify-content:\s*center/s,
+      'the bottom oval centers LOSS after suppressing its signed amount');
     assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, true,
       'the rollover activation is visual only and does not also open Add Bet');
 

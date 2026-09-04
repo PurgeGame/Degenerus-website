@@ -148,37 +148,34 @@ class AppWwxrpBurn extends HTMLElement {
   #renderShell() {
     this.hidden = true;
     this.innerHTML = `
-      <section class="pari-wwxrp" data-bind="wwxrp-shell"
+      <section class="pari-wwxrp pari-funding-card pari-funding-card--wwxrp" data-bind="wwxrp-shell"
                aria-label="WWXRP balance and Daily Incinerator entry">
-        <span class="pari-wwxrp__mark" aria-hidden="true">
+        <span class="pari-wwxrp__mark pari-funding-card__mark" aria-hidden="true">
           <img src="/shared/coinflip-face-red.svg" alt="">
         </span>
-        <span class="pari-wwxrp__identity">
+        <span class="pari-wwxrp__identity pari-funding-card__identity">
           <small>DAILY INCINERATOR</small>
           <strong>WWXRP</strong>
+          <span class="pari-wwxrp__balance pari-funding-card__balance" data-bind="wwxrp-balance-wrap">
+            <small>AVAILABLE</small>
+            <strong><span data-bind="wwxrp-balance">—</span></strong>
+          </span>
         </span>
-        <span class="pari-wwxrp__balance" data-bind="wwxrp-balance-wrap">
-          <small>BALANCE</small>
-          <strong>
-            <span data-bind="wwxrp-balance">—</span>
-            <em>WWXRP</em>
-          </strong>
-        </span>
-        <span class="pari-wwxrp__amount">
-          <small>AMOUNT TO BURN</small>
-          <span class="pari-wwxrp__amount-control">
+        <span class="pari-wwxrp__amount pari-funding-card__amount">
+          <small>BURN AMOUNT</small>
+          <span class="pari-wwxrp__amount-control pari-funding-card__amount-control">
             <input type="text" data-bind="wwxrp-amount" inputmode="decimal"
                    autocomplete="off" spellcheck="false" aria-label="WWXRP to burn">
-            <span class="pari-wwxrp__unit">WWXRP</span>
+            <span class="pari-wwxrp__unit pari-funding-card__unit">WWXRP</span>
             <button type="button" data-bind="wwxrp-max">MAX</button>
           </span>
         </span>
-        <button type="button" class="pari-wwxrp__burn" data-write data-write-locked
+        <button type="button" class="pari-wwxrp__burn pari-funding-card__action" data-write data-write-locked
                 data-write-lock-title="WWXRP balance is loading"
                 data-bind="wwxrp-burn">
           <b data-bind="wwxrp-burn-label">BURN</b>
         </button>
-        <p class="pari-wwxrp__feedback" data-bind="wwxrp-feedback"
+        <p class="pari-wwxrp__feedback pari-funding-card__feedback" data-bind="wwxrp-feedback"
            hidden role="status"></p>
       </section>
     `;

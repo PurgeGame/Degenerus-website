@@ -1423,7 +1423,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(won.cards[0], {
       type: 'craps-result',
       rarity: 'rare',
-      icon: null,
+      icon: '/app/assets/craps/craps-autobattle-integrated-swords-v8.webp',
       glyph: null,
       label: 'CRAPS WINNINGS',
       value: '+1,234 FLIP',
@@ -1434,6 +1434,14 @@ describe('normalizeSequence', () => {
       spin: null,
     });
     assert.equal(won.consolationOnly, false);
+    assert.match(REVEAL_SRC,
+      /card\.type === 'craps-result'[\s\S]*?#buildCrapsResultLogo\(card\)/,
+      'the Craps win receipt mounts the Craps Autobattle lockup');
+    assert.match(APP_CSS,
+      /\.rvl-stage--day-summary \.rvl-card-icon--craps-result\s*\{[^}]*width:\s*min\(100%, 244px\)[^}]*aspect-ratio:\s*2025 \/ 466/s,
+      'the wide Autobattle lockup receives a readable receipt-card slot');
+    assert.doesNotMatch(REVEAL_SRC, /buildCrapsResultBadge|rvl-craps-result-badge/,
+      'the old generic dice badge is no longer used for Craps wins');
 
     assert.equal(normalizeSequence({
       kind: 'jackpot', day: 9, prizes: [],

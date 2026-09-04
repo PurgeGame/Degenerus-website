@@ -12,7 +12,7 @@ export const CRAPS_REPLAY_SCHEMA_VERSION = 1;
 // placed-indexed shooter boost, and the single 250,000/1,200,000 progressive cutoff pair.
 // Exact-match checked against `manifest.ruleset.engineVersion`, so bundles from any older
 // materializer fail closed here rather than animating the wrong chips.
-export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-0880d134c-v1';
+export const CRAPS_REPLAY_ENGINE_VERSION = 'craps-solidity-8777c7d99-v1';
 export const CRAPS_REPLAY_CDN_PREFIX = '/craps/replays/v1';
 export const CRAPS_REPLAY_DEFAULT_SHARD_SIZE = 256;
 // Mirrors `Craps._MAX_SLIP_HANDS` and `Craps._SLIP_ROLL_CEILING` (`_SLIP_ROLL_BUDGET - 1 +

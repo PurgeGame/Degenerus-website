@@ -381,7 +381,13 @@ export function replayCrapsSeat(manifestInput, playerInput, decodedTape = null) 
         deltaWei: deltaWei.toString(),
         returnedWei: (raw.returnedWei * multiplier).toString(),
         boostWei: last ? (boostWei * multiplier).toString() : '0',
-        shooterBoost: boost ? Object.freeze({ percent: boost.percent }) : null,
+        // `percent` is the COMBINED uplift (audit 8777c7d99): the schedule's draw plus a flat
+        // +5 on the one hand the field's ROTATING SHOOTER handed this seat. `rotation` names
+        // which of the two is present so the table can label the turn rather than just the
+        // number — the two can also coincide on the same hand.
+        shooterBoost: boost
+          ? Object.freeze({ percent: boost.percent, rotation: boost.rotation === true })
+          : null,
         terminal: last && shooter === player.handsPlayed - 1 ? player.stop : '',
       });
     });

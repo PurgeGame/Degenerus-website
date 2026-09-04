@@ -10,6 +10,13 @@ body.layout-basic app-records-rail {
   margin: 0 0 clamp(1rem, 3vw, 1.5rem);
 }
 
+/* panels.css uses content-visibility:auto for this below-the-fold host. That
+   containment would turn a fixed descendant into a rail-sized, clipped strip.
+   Release it only while the transaction explainer is open. */
+body.layout-basic app-records-rail[data-bounty-dialog-open] {
+  content-visibility: visible;
+}
+
 body.layout-basic app-records-rail[hidden],
 body.layout-basic .records-rail[hidden] {
   display: none !important;

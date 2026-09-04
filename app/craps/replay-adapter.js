@@ -45,6 +45,80 @@ export function protocolSeatLabel(address) {
 const CRAPS_PROFILE_BATCH_SIZE = 8;
 const CRAPS_PROFILE_MAX_ADDRESSES = 160;
 
+/**
+ * Optional per-hand shooter decoration published by newer replay builders.
+ *
+ * Shooter identity is deliberately not part of replay verification: dice,
+ * bankrolls, and winners still come only from the sealed contract artifacts.
+ * Keeping this adapter permissive lets the next indexer payload start driving
+ * NOW SHOOTING without making older immutable bundles unreadable.
+ */
+export function normalizeCrapsReplayShooters(artifacts = {}, profiles = null) {
+  const source = [
+    artifacts?.shooterTimeline,
+    artifacts?.shooters,
+    artifacts?.manifest?.shooterTimeline,
+    artifacts?.manifest?.shooters,
+    artifacts?.manifest?.tape?.shooterTimeline,
+    artifacts?.manifest?.tape?.shooters,
+    artifacts?.featured?.shooterTimeline,
+    artifacts?.featured?.shooters,
+  ].find((candidate) => Array.isArray(candidate)
+    || (candidate && typeof candidate === 'object' && !Array.isArray(candidate)));
+  const rows = Array.isArray(source)
+    ? source
+    : source && typeof source === 'object'
+      ? Object.entries(source).map(([shooter, value]) => (
+          value && typeof value === 'object' ? { shooter, ...value } : { shooter, player: value }
+        ))
+      : [];
+  return Object.freeze(rows.map((raw, fallbackShooter) => {
+    const entry = raw && typeof raw === 'object' ? raw : { player: raw };
+    const identity = entry.identity && typeof entry.identity === 'object' ? entry.identity : {};
+    const shooter = Number(entry.shooter ?? entry.hand ?? entry.handIndex ?? entry.ordinal ?? fallbackShooter);
+    if (!Number.isInteger(shooter) || shooter < 0) return null;
+    const player = String(
+      identity.player ?? identity.address ?? entry.player ?? entry.address ?? '',
+    ).trim() || null;
+    const profile = player == null ? null : profiles?.get?.(player.toLowerCase()) ?? null;
+    const betId = identity.betId ?? identity.seatId ?? entry.betId ?? entry.seatId;
+    const label = protocolSeatLabel(player)
+      || profile?.name
+      || String(identity.name ?? identity.label ?? entry.name ?? entry.label ?? '').trim()
+      || null;
+    const avatar = profile?.avatar
+      || String(
+        identity.discordPfp
+          ?? identity.discordAvatar
+          ?? identity.avatarUrl
+          ?? identity.avatar
+          ?? entry.discordPfp
+          ?? entry.discordAvatar
+          ?? entry.avatarUrl
+          ?? entry.avatar
+          ?? '',
+      ).trim()
+      || null;
+    const boostPercentValue = Number(
+      entry.hotShooterBoostPercent
+        ?? entry.hotShooterPercent
+        ?? entry.boostPercent
+        ?? entry.percent
+        ?? identity.hotShooterBoostPercent,
+    );
+    return Object.freeze({
+      shooter,
+      player,
+      betId: betId == null ? null : String(betId),
+      label,
+      avatar,
+      hotShooterBoostPercent: Number.isFinite(boostPercentValue) && boostPercentValue > 0
+        ? Math.min(255, Math.floor(boostPercentValue))
+        : null,
+    });
+  }).filter(Boolean));
+}
+
 function displayFlip(wei) {
   return (BigInt(wei) / CRAPS_REPLAY_FLIP_WEI).toString();
 }
@@ -338,6 +412,7 @@ export function createCrapsReplayTableModel(artifacts, {
         opponentBetIds: Object.freeze(row.betIds.filter((betId) => betId !== viewer.betId).slice(0, 10)),
       })));
   const resolutionHands = viewerFrames(viewerTrace, clock);
+  const shooterTimeline = normalizeCrapsReplayShooters(artifacts, profiles);
   const requestedHighEntrants = Number(highRollerEntrants);
   const laneEntrants = replayLane === 'high'
     && Number.isInteger(requestedHighEntrants)
@@ -378,6 +453,7 @@ export function createCrapsReplayTableModel(artifacts, {
     goalFlip: displayFlip(viewer.goalWei),
     rolls: rollsHex(viewport.tape),
     resolutionHands,
+    shooterTimeline,
     otherPlayers: Object.freeze(opponents.map((trace) => tablePlayer(trace, clock, manifest, profiles))),
     leaderboardTimeline,
     jackpot: progressiveForViewer(manifest, viewer.betId),
@@ -560,6 +636,7 @@ export async function openCrapsReplayTable(table, {
     const addresses = [
       mainModel.viewer.player,
       ...mainModel.tableOptions.otherPlayers.map((player) => player.player),
+      ...normalizeCrapsReplayShooters(artifacts).map((shooter) => shooter.player),
     ];
     profiles = await loadCrapsReplayProfiles(addresses, loadProfiles);
     if (profiles?.size) mainModel = createCrapsReplayTableModel(artifacts, { profiles });

@@ -13332,83 +13332,91 @@ body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden],
 body.layout-basic .pari-bet-container--link > app-link-donation[hidden] { display: none !important; }
 body.layout-basic .pari-wwxrp {
   position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   display: grid;
   height: 100%;
   min-width: 0;
-  min-height: 4.9rem;
-  grid-template-areas: "mark identity amount burn" "mark balance amount burn";
-  grid-template-columns: 3.8rem minmax(8.5rem, 0.78fr) minmax(9.5rem, 1.22fr) 6.9rem;
-  grid-template-rows: repeat(2, minmax(1.65rem, auto));
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.42rem 0.5rem;
+  min-height: 5.75rem;
+  grid-template-areas: "mark identity amount burn";
+  grid-template-columns: 4rem minmax(10rem, 1fr) minmax(10rem, 11rem) 6rem;
+  grid-template-rows: minmax(4.75rem, 1fr);
+  align-items: stretch;
+  gap: 0.7rem;
+  padding: 0.5rem;
   overflow: hidden;
-  border: 1px solid rgba(199, 91, 107, 0.54);
-  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.58);
+  border-radius: 12px;
   background:
-    linear-gradient(90deg, rgba(154, 26, 42, 0.13), transparent 28%, rgba(111, 12, 27, 0.1)),
-    radial-gradient(circle at 2.15rem 50%, rgba(237, 14, 17, 0.18), transparent 4.5rem),
-    repeating-linear-gradient(115deg, transparent 0 13px, rgba(255, 255, 255, 0.012) 13px 14px),
-    linear-gradient(180deg, #1d1419 0%, #0e0b0e 54%, #140d11 100%);
+    radial-gradient(circle at 2.6rem 50%, rgba(237, 14, 17, 0.26), transparent 5.6rem),
+    linear-gradient(100deg, rgba(127, 29, 29, 0.22), transparent 42%, rgba(69, 10, 10, 0.1)),
+    repeating-linear-gradient(115deg, transparent 0 16px, rgba(255, 255, 255, 0.014) 16px 17px),
+    linear-gradient(180deg, #211419 0%, #100c0f 58%, #180d12 100%);
   box-shadow:
-    inset 0 1px rgba(255, 224, 227, 0.08),
-    inset 0 -1px rgba(52, 18, 26, 0.72),
-    0 8px 22px rgba(0, 0, 0, 0.32),
-    0 0 20px rgba(183, 30, 47, 0.06);
+    inset 0 1px rgba(255, 228, 230, 0.1),
+    inset 0 -1px rgba(76, 5, 25, 0.7),
+    0 8px 22px rgba(0, 0, 0, 0.34),
+    0 0 24px rgba(225, 29, 72, 0.08);
 }
 body.layout-basic .pari-wwxrp__mark {
   display: grid;
-  width: 3.5rem;
-  height: 3.5rem;
+  box-sizing: border-box;
+  width: 3.7rem;
+  height: 3.7rem;
   grid-area: mark;
+  place-self: center;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(255, 122, 124, 0.52);
+  border: 1px solid rgba(251, 113, 133, 0.7);
   border-radius: 50%;
-  background: #18090c;
+  background: radial-gradient(circle, #3f1019, #16090d 72%);
   box-shadow:
-    inset 0 1px rgba(255, 225, 218, 0.1),
-    0 0 12px rgba(237, 14, 17, 0.24),
+    inset 0 1px rgba(255, 228, 230, 0.12),
+    0 0 16px rgba(244, 63, 94, 0.3),
     0 2px 6px rgba(0, 0, 0, 0.55);
 }
-body.layout-basic .pari-wwxrp__mark img { display: block; width: 2.68rem; height: 2.68rem; object-fit: contain; }
+body.layout-basic .pari-wwxrp__mark img { display: block; width: 3.18rem; height: 3.18rem; object-fit: contain; }
 body.layout-basic .pari-wwxrp__identity {
   display: grid;
   min-width: 0;
   grid-area: identity;
+  grid-template-areas: "eyebrow" "title" "balance";
+  grid-template-columns: minmax(0, 1fr);
   align-content: center;
-  gap: 0.16rem;
+  gap: 0.23rem;
 }
-body.layout-basic .pari-wwxrp__identity small {
+body.layout-basic .pari-wwxrp__identity > small {
+  grid-area: eyebrow;
   overflow: hidden;
-  color: rgba(254, 202, 202, 0.62);
-  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.085em;
+  color: #fda4af;
+  font: 900 0.54rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.11em;
   text-overflow: ellipsis;
+  text-shadow: 0 0 8px rgba(244, 63, 94, 0.28);
   white-space: nowrap;
 }
 body.layout-basic .pari-wwxrp__identity > strong {
+  grid-area: title;
   overflow: hidden;
-  color: #fecaca;
-  font: 950 0.82rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.075em;
+  color: #fff1f2;
+  font: 950 0.98rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.09em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 body.layout-basic .pari-wwxrp__balance {
-  display: grid;
+  display: flex;
   min-width: 0;
   grid-area: balance;
-  align-content: center;
-  gap: 0.12rem;
+  align-items: baseline;
+  gap: 0.35rem;
   padding: 0;
 }
 body.layout-basic .pari-wwxrp__balance > small,
 body.layout-basic .pari-wwxrp__amount > small {
-  color: rgba(254, 202, 202, 0.48);
-  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.11em;
+  color: rgba(254, 202, 202, 0.58);
+  font: 900 0.49rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.12em;
   white-space: nowrap;
 }
 body.layout-basic .pari-wwxrp__balance > strong {
@@ -13417,7 +13425,7 @@ body.layout-basic .pari-wwxrp__balance > strong {
   align-items: baseline;
   gap: 0.24rem;
   color: #fda4af;
-  font: 900 0.85rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font: 900 0.9rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 8px rgba(239, 68, 68, 0.48);
   white-space: nowrap;
@@ -13429,19 +13437,19 @@ body.layout-basic .pari-wwxrp__balance > strong > span {
 }
 body.layout-basic .pari-wwxrp__balance em {
   color: rgba(254, 202, 202, 0.5);
-  font: 900 0.38rem/1 "Inter", system-ui, sans-serif;
+  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.06em;
 }
-body.layout-basic .pari-wwxrp__amount { display: grid; width: min(100%, 9.25rem); min-width: 0; grid-area: amount; justify-self: end; gap: 0.18rem; }
+body.layout-basic .pari-wwxrp__amount { display: grid; width: min(100%, 11rem); min-width: 0; grid-area: amount; align-content: center; justify-self: end; gap: 0.32rem; }
 body.layout-basic .pari-wwxrp__amount-control {
   box-sizing: border-box;
   display: grid;
   min-width: 0;
-  height: 1.82rem;
-  grid-template-columns: minmax(1.8rem, 1fr) auto 2.35rem;
+  height: 2.15rem;
+  grid-template-columns: minmax(2.2rem, 1fr) auto 2.65rem;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid rgba(248, 113, 113, 0.42);
+  border: 1px solid rgba(248, 113, 113, 0.48);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(19, 9, 13, 0.94), rgba(7, 5, 7, 0.9));
   box-shadow: inset 0 1px 7px rgba(0, 0, 0, 0.62), 0 1px rgba(255, 255, 255, 0.035);
@@ -13462,7 +13470,7 @@ body.layout-basic .pari-wwxrp__amount input {
   outline: 0;
   background: transparent;
   color: #fff1f2;
-  font: 850 0.62rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font: 850 0.76rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   text-align: right;
   box-shadow: none;
@@ -13473,26 +13481,8 @@ body.layout-basic .pari-wwxrp__amount input {
 body.layout-basic .pari-wwxrp__amount input:focus,
 body.layout-basic .pari-wwxrp__amount input:focus-visible { border: 0; border-radius: 0; box-shadow: none; }
 body.layout-basic .pari-wwxrp__amount input[aria-invalid="true"] { color: #fca5a5; }
-body.layout-basic .pari-wwxrp__unit {
-  display: flex;
-  align-items: center;
-  padding-right: 0.24rem;
-  color: rgba(254, 202, 202, 0.46);
-  font: 900 0.3rem/1 "Inter", system-ui, sans-serif;
-}
-body.layout-basic .pari-wwxrp__amount button {
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  padding: 0 0.18rem;
-  border: 0;
-  border-left: 1px solid rgba(248, 113, 113, 0.28);
-  background: rgba(153, 27, 27, 0.24);
-  color: #fda4af;
-  font: 900 0.36rem/1 "Inter", system-ui, sans-serif;
-  cursor: pointer;
-}
+body.layout-basic .pari-wwxrp__unit { display: flex; align-items: center; padding-right: 0.32rem; color: rgba(254, 202, 202, 0.56); font: 900 0.42rem/1 "Inter", system-ui, sans-serif; }
+body.layout-basic .pari-wwxrp__amount button { box-sizing: border-box; min-width: 0; min-height: 0; height: 100%; padding: 0 0.24rem; border: 0; border-left: 1px solid rgba(248, 113, 113, 0.28); background: rgba(153, 27, 27, 0.24); color: #fda4af; font: 900 0.47rem/1 "Inter", system-ui, sans-serif; cursor: pointer; }
 body.layout-basic .pari-wwxrp__amount button:hover:not(:disabled) {
   background: rgba(220, 38, 38, 0.28); color: #fee2e2;
 }
@@ -13501,9 +13491,10 @@ body.layout-basic .pari-wwxrp__burn[data-write] {
   position: relative;
   box-sizing: border-box;
   display: grid;
-  width: 6.9rem;
-  min-width: 6.9rem;
-  min-height: 3.8rem;
+  width: 6rem;
+  min-width: 6rem;
+  min-height: 4.75rem;
+  height: 100%;
   grid-area: burn;
   place-items: center;
   gap: 0;
@@ -13516,7 +13507,7 @@ body.layout-basic .pari-wwxrp__burn[data-write] {
     radial-gradient(circle at 62% -40%, rgba(255, 180, 142, 0.36), transparent 66%),
     linear-gradient(180deg, #d32c34 0%, #a1121d 48%, #700810 100%);
   color: #fff7ec;
-  font: 950 0.72rem/1 "Inter", system-ui, sans-serif;
+  font: 950 0.78rem/1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.08em;
   text-align: center;
   box-shadow:
@@ -13540,67 +13531,75 @@ body.layout-basic .pari-wwxrp__burn[data-write]:disabled {
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.04), 0 0 0 2px rgba(10, 8, 11, 0.56);
   cursor: not-allowed;
 }
-body.layout-basic .pari-wwxrp__feedback {
-  grid-column: 2 / -1;
-  grid-row: 2;
-  margin: 0;
-  color: #86efac;
-  font: 850 0.48rem/1.25 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.045em;
-  text-align: right;
-}
+body.layout-basic .pari-wwxrp__feedback { position: absolute; right: 6.9rem; bottom: 0.14rem; left: 4.9rem; z-index: 2; margin: 0; overflow: hidden; color: #86efac; font: 850 0.48rem/1.25 "Inter", system-ui, sans-serif; letter-spacing: 0.045em; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 body.layout-basic .pari-wwxrp__feedback[data-state="error"] { color: #fca5a5; }
 body.layout-basic .pari-wwxrp__feedback[hidden] { display: none !important; }
 
 /* The Incinerator compacts against its own card width, not Growth's state. */
 @container (max-width: 38rem) {
   body.layout-basic .pari-wwxrp {
-    min-height: 4.4rem;
-    grid-template-areas: "mark identity amount burn" "mark balance amount burn";
-    grid-template-columns: 2.95rem minmax(5.3rem, 0.78fr) minmax(7rem, 1.22fr) 5.3rem;
-    grid-template-rows: repeat(2, minmax(1.52rem, auto));
-    gap: 0.2rem 0.44rem;
-    padding: 0.3rem 0.36rem;
+    min-height: 5.1rem;
+    grid-template-columns: 3.4rem minmax(7.2rem, 1fr) minmax(8rem, 9.25rem) 5.1rem;
+    grid-template-rows: minmax(4.25rem, 1fr);
+    gap: 0.48rem;
+    padding: 0.4rem;
   }
-  body.layout-basic .pari-wwxrp__mark { width: 2.75rem; height: 2.75rem; }
-  body.layout-basic .pari-wwxrp__mark img { width: 2.12rem; height: 2.12rem; }
-  body.layout-basic .pari-wwxrp__identity { gap: 0.12rem; }
-  body.layout-basic .pari-wwxrp__identity small { font-size: 0.34rem; }
-  body.layout-basic .pari-wwxrp__identity > strong { font-size: 0.68rem; }
-  body.layout-basic .pari-wwxrp__balance { gap: 0.12rem; padding: 0; }
-  body.layout-basic .pari-wwxrp__balance > small { font-size: 0.34rem; }
-  body.layout-basic .pari-wwxrp__balance > strong { font-size: 0.7rem; }
-  body.layout-basic .pari-wwxrp__balance em { font-size: 0.3rem; }
-  body.layout-basic .pari-wwxrp__amount { width: min(100%, 9.25rem); gap: 0.18rem; }
-  body.layout-basic .pari-wwxrp__amount > small { font-size: 0.34rem; }
-  body.layout-basic .pari-wwxrp__amount-control { height: 1.82rem; grid-template-columns: minmax(1.8rem, 1fr) auto 2.35rem; }
-  body.layout-basic .pari-wwxrp__amount input { padding-inline: 0.28rem; font-size: 0.62rem; }
-  body.layout-basic .pari-wwxrp__unit { padding-right: 0.25rem; font-size: 0.3rem; }
-  body.layout-basic .pari-wwxrp__amount button { padding-inline: 0.2rem; font-size: 0.38rem; }
+  body.layout-basic .pari-wwxrp__mark { width: 3.15rem; height: 3.15rem; }
+  body.layout-basic .pari-wwxrp__mark img { width: 2.75rem; height: 2.75rem; }
+  body.layout-basic .pari-wwxrp__identity { gap: 0.18rem; }
+  body.layout-basic .pari-wwxrp__identity > small { font-size: 0.47rem; }
+  body.layout-basic .pari-wwxrp__identity > strong { font-size: 0.82rem; }
+  body.layout-basic .pari-wwxrp__balance { gap: 0.28rem; padding: 0; }
+  body.layout-basic .pari-wwxrp__balance > small { font-size: 0.4rem; }
+  body.layout-basic .pari-wwxrp__balance > strong { font-size: 0.76rem; }
+  body.layout-basic .pari-wwxrp__balance em { font-size: 0.36rem; }
+  body.layout-basic .pari-wwxrp__amount { width: min(100%, 9.25rem); gap: 0.27rem; }
+  body.layout-basic .pari-wwxrp__amount > small { font-size: 0.44rem; }
+  body.layout-basic .pari-wwxrp__amount-control { height: 2rem; grid-template-columns: minmax(2rem, 1fr) auto 2.5rem; }
+  body.layout-basic .pari-wwxrp__amount input { padding-inline: 0.32rem; font-size: 0.7rem; }
+  body.layout-basic .pari-wwxrp__unit { padding-right: 0.28rem; font-size: 0.38rem; }
+  body.layout-basic .pari-wwxrp__amount button { padding-inline: 0.22rem; font-size: 0.44rem; }
   body.layout-basic .pari-wwxrp__burn[data-write] {
-    width: 5.3rem;
-    min-width: 5.3rem;
-    min-height: 3.55rem;
+    width: 5.1rem;
+    min-width: 5.1rem;
+    min-height: 4.25rem;
     gap: 0;
     padding: 0.4rem;
-    font-size: 0.64rem;
+    font-size: 0.72rem;
   }
-  body.layout-basic .pari-wwxrp__feedback { grid-column: 2 / 4; grid-row: 3; }
+  body.layout-basic .pari-wwxrp__feedback { right: 5.9rem; left: 4.25rem; }
 }
 
 @container (max-width: 26rem) {
-  body.layout-basic .pari-wwxrp { grid-template-columns: 2.75rem minmax(5.4rem, 0.82fr) minmax(6.4rem, 1.18fr) 4.9rem; gap-inline: 0.34rem; }
-  body.layout-basic .pari-wwxrp__mark { width: 2.55rem; height: 2.55rem; }
-  body.layout-basic .pari-wwxrp__mark img { width: 1.95rem; height: 1.95rem; }
-  body.layout-basic .pari-wwxrp__burn[data-write] { width: 4.9rem; min-width: 4.9rem; }
-  body.layout-basic .pari-wwxrp__amount > small { display: none; }
-  body.layout-basic .pari-wwxrp__balance em { display: none; }
+  body.layout-basic .pari-wwxrp {
+    min-height: 6.4rem;
+    grid-template-areas: "mark identity burn" "amount amount burn";
+    grid-template-columns: 3rem minmax(0, 1fr) 4.8rem;
+    grid-template-rows: auto auto;
+    gap: 0.36rem 0.5rem;
+    padding: 0.38rem;
+  }
+  body.layout-basic .pari-wwxrp__mark { width: 2.85rem; height: 2.85rem; }
+  body.layout-basic .pari-wwxrp__mark img { width: 2.52rem; height: 2.52rem; }
+  body.layout-basic .pari-wwxrp__identity { gap: 0.14rem; }
+  body.layout-basic .pari-wwxrp__identity > small { font-size: 0.44rem; }
+  body.layout-basic .pari-wwxrp__identity > strong { font-size: 0.8rem; }
+  body.layout-basic .pari-wwxrp__balance > small { font-size: 0.38rem; }
+  body.layout-basic .pari-wwxrp__balance > strong { font-size: 0.72rem; }
+  body.layout-basic .pari-wwxrp__amount { width: 100%; max-width: none; gap: 0.2rem; }
+  body.layout-basic .pari-wwxrp__amount > small { font-size: 0.4rem; }
+  body.layout-basic .pari-wwxrp__burn[data-write] { width: 4.8rem; min-width: 4.8rem; min-height: 0; }
+  body.layout-basic .pari-wwxrp__feedback { right: 5.55rem; left: 0.45rem; }
 }
 
 @container (max-width: 21rem) {
-  body.layout-basic .pari-wwxrp { grid-template-areas: "identity amount burn" "balance amount burn"; grid-template-columns: minmax(5rem, 0.82fr) minmax(6rem, 1.18fr) 4.5rem; }
+  body.layout-basic .pari-wwxrp {
+    grid-template-areas: "identity burn" "amount burn";
+    grid-template-columns: minmax(0, 1fr) 4.5rem;
+  }
   body.layout-basic .pari-wwxrp__mark { display: none; }
   body.layout-basic .pari-wwxrp__burn[data-write] { width: 4.5rem; min-width: 4.5rem; }
+  body.layout-basic .pari-wwxrp__feedback { right: 5.25rem; }
 }
 
 /* A reveal card whose face IS a ticket (deferred ticket reveals — the four
@@ -19857,57 +19856,18 @@ body.layout-basic .deg-currency-option[data-bind="deg-currency-option-0"] img {
 .rvl-card--craps-result .rvl-card-value { color: #86efac !important; }
 .rvl-card--craps-result .rvl-card-label { color: #ffe7a3 !important; }
 .rvl-card--craps-result .rvl-card-sub { color: #a7f3d0; }
-.rvl-card-icon--craps-result { padding: 0.38rem !important; }
-.rvl-craps-result-badge {
-  position: relative;
-  display: grid;
-  box-sizing: border-box;
+.rvl-stage--day-summary .rvl-card-icon--craps-result {
+  width: min(100%, 244px);
+  height: auto;
+  aspect-ratio: 2025 / 466;
+  padding: 0;
+  filter: drop-shadow(0 5px 8px rgba(0,0,0,0.48));
+}
+.rvl-craps-result-logo {
+  display: block;
   width: 100%;
   height: 100%;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid rgba(226, 184, 95, 0.82);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(151, 31, 49, 0.72), rgba(33, 9, 16, 0.96) 70%);
-  box-shadow: inset 0 0 18px rgba(0,0,0,0.5), 0 5px 12px rgba(0,0,0,0.35);
-}
-.rvl-craps-result-badge__dice {
-  position: relative;
-  display: block;
-  width: 72%;
-  height: 58%;
-  transform: translateY(-8%);
-}
-.rvl-craps-result-badge__dice img {
-  position: absolute;
-  top: 0;
-  width: 58%;
-  height: auto;
-  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.56));
-}
-.rvl-craps-result-badge__dice img:first-child {
-  left: 0;
-  z-index: 1;
-  transform: rotate(-8deg);
-}
-.rvl-craps-result-badge__dice img:last-child {
-  right: 0;
-  transform: rotate(8deg);
-}
-.rvl-craps-result-badge__band {
-  position: absolute;
-  right: 13%;
-  bottom: 12%;
-  left: 13%;
-  padding: 0.22em 0.35em;
-  border: 1px solid rgba(255,255,255,0.24);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #f4cb69, #a96912);
-  color: #231400;
-  font: 1000 clamp(0.34rem, 1.1vw, 0.62rem)/1 "Roboto Mono", monospace;
-  letter-spacing: 0.1em;
-  text-align: center;
+  object-fit: contain;
 }
 body.layout-basic .dgn-inline-spin .dgn-rq.dgn-lock-color {
   border-bottom-color: #f5a623;

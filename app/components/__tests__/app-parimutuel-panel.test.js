@@ -467,24 +467,19 @@ describe('app-parimutuel-panel', () => {
     assert.match(APP_CSS,
       /\.pari-bet-container--growth,\s*body\.layout-basic \.side-bets-rail \.pari-bet-container--link\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1/s,
       'Growth and LINK alternate in the second desktop lane');
-    assert.match(APP_CSS,
-      /@container \(max-width: 38rem\)\s*\{[\s\S]*?\.pari-wwxrp\s*\{[^}]*grid-template-areas:[^}]*"mark identity amount burn"[^}]*"mark balance amount burn"/s,
-      'the Incinerator responds to its own lane width');
+    assert.match(WWXRP_SOURCE,
+      /<section class="pari-wwxrp pari-funding-card pari-funding-card--wwxrp"/,
+      'the Incinerator opts into the same compact card geometry as LINK');
+    assert.match(LINK_DONATION_SOURCE, /pari-link pari-funding-card pari-funding-card--link/);
     assert.match(LINK_DONATION_CSS,
-      /\.pari-link\s*\{[^}]*grid-template-areas:[^}]*"mark identity quote donate"[^}]*"mark balance amount donate"/s,
-      'the LINK card gives its reward quote a first-class lane');
+      /\.pari-funding-card\s*\{[^}]*height:\s*100%/s,
+      'the peer funding card stretches to the Incinerator row instead of leaving a short mismatched box');
     assert.match(LINK_DONATION_CSS,
-      /@container \(max-width: 38rem\)[\s\S]*?\.pari-link\s*\{[^}]*min-height:\s*4\.4rem;[^}]*grid-template-columns:\s*2\.95rem minmax\(5\.3rem, 0\.78fr\) minmax\(7rem, 1\.22fr\) 5\.3rem/s,
-      'LINK uses the same compact height and column proportions as WWXRP');
+      /\.pari-funding-card\s*\{[^}]*min-height:\s*3\.8rem;[^}]*grid-template-areas:\s*"mark identity amount action"/s,
+      'both funding cards use the same compact, readable desktop chassis');
     assert.match(LINK_DONATION_CSS,
-      /@container \(max-width: 38rem\)[\s\S]*?\.pari-link__amount > small\s*\{\s*display:\s*none;/s,
-      'the redundant compact donation caption cannot force LINK taller than WWXRP');
-    assert.match(LINK_DONATION_CSS,
-      /\.pari-link__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
-      'the LINK entry control is compact and right-aligned');
-    assert.match(LINK_DONATION_CSS,
-      /\.pari-link__amount input\s*\{[^}]*border-radius:\s*0;[^}]*text-align:\s*right;[^}]*box-shadow:\s*none/s,
-      'LINK has one field frame, not a rounded input nested inside another frame');
+      /@container \(max-width: 26rem\)[\s\S]*?\.pari-funding-card\s*\{[^}]*grid-template-areas:\s*"identity amount action"/s,
+      'narrow cards drop decoration without crushing the identity, amount, and action together');
     assert.match(APP_CSS,
       /\.side-bets-rail \.app-parimutuel\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent/s,
       'the parent is layout-only instead of drawing shared card chrome');
@@ -534,7 +529,7 @@ describe('app-parimutuel-panel', () => {
       /wwxrp-dialog|wwxrp-accept|aria-haspopup="dialog"|#openDialog|#closeDialog/,
       'the amount and write action stay in the rail instead of opening a nested popup');
     assert.match(WWXRP_SOURCE,
-      /class="pari-wwxrp__amount"[\s\S]*data-bind="wwxrp-amount"[\s\S]*data-bind="wwxrp-max"[\s\S]*class="pari-wwxrp__burn"/,
+      /class="pari-wwxrp__amount[^\"]*"[\s\S]*data-bind="wwxrp-amount"[\s\S]*data-bind="wwxrp-max"[\s\S]*class="pari-wwxrp__burn[^\"]*"/,
       'the amount field is immediately before the BURN key');
     assert.equal(input.value, '25');
     assert.equal(burn.disabled, false);
@@ -551,35 +546,22 @@ describe('app-parimutuel-panel', () => {
     assert.equal(burned, 25n * FLIP);
     assert.match(el.querySelector('[data-bind="wwxrp-feedback"]').textContent, /WWXRP INCINERATED/);
     assert.match(WWXRP_SOURCE,
-      /class="pari-wwxrp__balance"[\s\S]*?<small>BALANCE<\/small>[\s\S]*?class="pari-wwxrp__amount"[\s\S]*?<small>AMOUNT TO BURN<\/small>/,
-      'balance and editable amount are labeled as separate pieces of information');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*4\.9rem[^}]*"mark identity amount burn"[^}]*"mark balance amount burn"/s,
-      'the wide Incinerator uses the same two-row card chassis as LINK');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*width:\s*6\.9rem[^}]*min-height:\s*3\.8rem/s,
-      'the action remains a full-height rail key');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__balance\s*\{[^}]*grid-area:\s*balance;[^}]*padding:\s*0;/s,
-      'the wallet balance reads as a labeled metric instead of floating over the input');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__amount\s*\{[^}]*width:\s*min\(100%, 9\.25rem\);[^}]*justify-self:\s*end/s,
-      'the entry field stays compact and aligned against the action key');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__amount-control\s*\{[^}]*height:\s*1\.82rem;[^}]*grid-template-columns:\s*minmax\(1\.8rem, 1fr\) auto 2\.35rem/s,
-      'the value, WWXRP unit, and utility-sized MAX action form one clear control');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__amount input\s*\{[^}]*text-align:\s*right;[^}]*box-shadow:\s*none;[^}]*appearance:\s*textfield/s,
-      'the inner input is flat and right-aligned instead of drawing an oval inside its frame');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__amount button\s*\{[^}]*min-height:\s*0;[^}]*height:\s*100%/s,
-      'mobile touch-target defaults cannot clip the MAX label');
+      /class="pari-wwxrp__balance[^\"]*pari-funding-card__balance[^\"]*"[\s\S]*?<small>AVAILABLE<\/small>[\s\S]*?class="pari-wwxrp__amount[^\"]*pari-funding-card__amount[^\"]*"[\s\S]*?<small>BURN AMOUNT<\/small>/,
+      'available balance and editable amount are separate, plainly labeled fields');
+    assert.doesNotMatch(WWXRP_SOURCE,
+      /data-bind="wwxrp-balance">—<\/span>\s*<em>WWXRP<\/em>/,
+      'the balance does not repeat WWXRP beside an already prominent WWXRP title');
+    assert.match(WWXRP_SOURCE, /src="\/shared\/coinflip-face-red\.svg"/,
+      'the Incinerator uses the same unmistakable WWXRP coin face as the rest of the app');
+    assert.match(LINK_DONATION_CSS,
+      /\.pari-funding-card__identity > strong\s*\{[^}]*font:\s*900 0\.9rem\/1/s,
+      'the primary instrument name uses the shared readable type scale');
     assert.match(WWXRP_SOURCE,
       /data-bind="wwxrp-burn-label">BURN<\/b>/,
       'the WWXRP action keeps its BURN label in a stable child during refreshes');
-    assert.match(APP_CSS,
-      /\.pari-wwxrp__burn\[data-write\]\s*\{[^}]*place-items:\s*center;[^}]*gap:\s*0;[^}]*padding:\s*0\.4rem;/s,
-      'BURN uses the same centered one-piece action treatment as DONATE');
+    assert.match(WWXRP_SOURCE,
+      /class="pari-wwxrp__burn pari-funding-card__action"/,
+      'BURN uses the same clearly separated action key as LINK');
     assert.doesNotMatch(APP_CSS, /\.pari-wwxrp__burn\[data-write\]::before/,
       'the mismatched split flame compartment is removed');
   });
@@ -611,7 +593,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(balance.textContent, '0');
   });
 
-  test('LINK donation widget quotes FLIP from the entered amount and donates inline', async () => {
+  test('LINK funding swap quotes FLIP from the entered amount and funds inline', async () => {
     let donated = null;
     linkDonationWidget.__setLinkDonationWidgetDepsForTest({
       read: async () => ({
@@ -634,19 +616,21 @@ describe('app-parimutuel-panel', () => {
     assert.equal(input.value, '1');
     assert.equal(el.querySelector('[data-bind="link-quote-input"]').textContent, '1 LINK');
     assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '749 FLIP');
-    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '3× REWARD');
+    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '3×');
+    assert.equal(el.querySelector('[data-bind="link-donate-label"]').textContent, 'FUND');
+    assert.match(LINK_DONATION_SOURCE, /<strong>LINK FUNDING SWAP<\/strong>/);
     assert.equal(donate.disabled, false);
 
     input.value = '200';
     input.dispatchEvent({ type: 'input' });
     assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '100K FLIP',
       'the amount-weighted reward updates as the player types');
-    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '2× REWARD');
+    assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '2×');
     donate.click();
     await flush();
 
     assert.equal(donated, 200n * FLIP);
-    assert.match(el.querySelector('[data-bind="link-feedback"]').textContent, /LINK DONATED/);
+    assert.match(el.querySelector('[data-bind="link-feedback"]').textContent, /LINK FUNDED/);
     assert.match(LINK_DONATION_SOURCE, /linkDonationFlipQuote\(\{/,
       'the compact widget consumes the shared authoritative quote helper');
     assert.match(LINK_DONATION_SOURCE,

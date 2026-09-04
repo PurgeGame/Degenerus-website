@@ -138,6 +138,7 @@ const ICONS = Object.freeze({
   dgnrsBadge: '/badges-circular/crypto_06_ethereum_purple.svg',
   wwxrp: '/shared/coinflip-face-red.svg',
   flame: '/specials/special_none.svg',
+  crapsAutobattle: '/app/assets/craps/craps-autobattle-integrated-swords-v8.webp',
 });
 
 /**
@@ -2022,7 +2023,7 @@ export function normalizeSequence(seq) {
     const crapsWinCount = Math.max(0, Math.trunc(Number(activity.crapsWinCount) || 0));
     if (crapsWinnings > 0n && crapsWinCount > 0) {
       cards.push({
-        type: 'craps-result', rarity: 'rare', icon: null, glyph: null,
+        type: 'craps-result', rarity: 'rare', icon: ICONS.crapsAutobattle, glyph: null,
         label: 'CRAPS WINNINGS',
         value: `+${_tokenText(crapsWinnings)} FLIP`,
         sub: `${crapsWinCount} WINNING ${crapsWinCount === 1 ? 'BATTLE' : 'BATTLES'}`,
@@ -6526,24 +6527,13 @@ class RevealOverlay extends HTMLElement {
     return badge;
   }
 
-  #buildCrapsResultBadge() {
-    const badge = document.createElement('div');
-    badge.className = 'rvl-craps-result-badge';
-    const dice = document.createElement('span');
-    dice.className = 'rvl-craps-result-badge__dice';
-    for (const [symbol, color] of [[1, 6], [4, 4]]) {
-      const die = document.createElement('img');
-      die.src = dgnBadgePath(3, symbol, color);
-      die.alt = '';
-      die.decoding = 'async';
-      dice.appendChild(die);
-    }
-    const band = document.createElement('span');
-    band.className = 'rvl-craps-result-badge__band';
-    band.textContent = 'CRAPS';
-    badge.appendChild(dice);
-    badge.appendChild(band);
-    return badge;
+  #buildCrapsResultLogo(card) {
+    const logo = document.createElement('img');
+    logo.className = 'rvl-craps-result-logo';
+    logo.src = card.icon || ICONS.crapsAutobattle;
+    logo.alt = 'Craps Autobattle';
+    logo.decoding = 'async';
+    return logo;
   }
 
   #buildSdgnrsBadge() {
@@ -6772,7 +6762,7 @@ class RevealOverlay extends HTMLElement {
       icon.appendChild(this.#buildCrapsPassBadge(card));
     } else if (card.type === 'craps-result') {
       icon.className = 'rvl-card-icon rvl-card-icon--craps-result';
-      icon.appendChild(this.#buildCrapsResultBadge());
+      icon.appendChild(this.#buildCrapsResultLogo(card));
     } else if (card.icon) {
       // A pile-scale FLIP prize renders as its chip pile: a wide bottom-
       // anchored lane instead of the square logo slot.

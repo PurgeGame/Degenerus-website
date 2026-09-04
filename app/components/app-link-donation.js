@@ -1,4 +1,4 @@
-// Compact LINK donation surface for the Side Bets rail. The reward quote uses
+// Compact LINK funding-swap surface for the Side Bets rail. The reward quote uses
 // the same amount-weighted curve and live on-chain inputs as the full funds
 // dialog; this component only owns presentation and transaction state.
 
@@ -141,43 +141,42 @@ class AppLinkDonation extends HTMLElement {
 
   #renderShell() {
     this.innerHTML = `
-      <section class="pari-link" data-bind="link-shell"
-               aria-label="Donate LINK and receive the quoted FLIP reward">
-        <span class="pari-link__mark" aria-hidden="true">
+      <section class="pari-link pari-funding-card pari-funding-card--link" data-bind="link-shell"
+               aria-label="Fund Chainlink RNG with LINK and receive the quoted FLIP reward">
+        <span class="pari-link__mark pari-funding-card__mark" aria-hidden="true">
           <img src="/symbols/crypto_05_chainlink_blue.svg" alt="">
         </span>
-        <span class="pari-link__identity">
-          <small>FUND CHAINLINK RNG</small>
-          <strong>LINK DONATION</strong>
+        <span class="pari-link__identity pari-funding-card__identity">
+          <small>CHAINLINK RNG</small>
+          <strong>LINK FUNDING SWAP</strong>
+          <span class="pari-link__balance pari-funding-card__balance" data-bind="link-balance-wrap">
+            <small>WALLET</small>
+            <strong><span data-bind="link-balance">—</span><em>LINK</em></strong>
+          </span>
         </span>
-        <span class="pari-link__balance" data-bind="link-balance-wrap">
-          <small>WALLET</small>
-          <strong><span data-bind="link-balance">—</span><em>LINK</em></strong>
-        </span>
-        <span class="pari-link__quote" data-bind="link-quote" data-state="loading"
-              aria-live="polite">
-          <small>EST. RECEIVE</small>
-          <strong>
-            <output data-bind="link-quote-input">1 LINK</output>
-            <i aria-hidden="true">→</i>
-            <output data-bind="link-quote-reward">— FLIP</output>
-          </strong>
-          <em data-bind="link-multiplier">—</em>
-        </span>
-        <span class="pari-link__amount">
-          <small>DONATION</small>
-          <span class="pari-link__amount-control">
+        <span class="pari-link__amount pari-funding-card__amount">
+          <span class="pari-link__quote pari-funding-card__meta" data-bind="link-quote"
+                data-state="loading" aria-live="polite">
+            <small>GET</small>
+            <strong>
+              <output data-bind="link-quote-input">1 LINK</output>
+              <i aria-hidden="true">→</i>
+              <output data-bind="link-quote-reward">— FLIP</output>
+            </strong>
+            <em data-bind="link-multiplier">—</em>
+          </span>
+          <span class="pari-link__amount-control pari-funding-card__amount-control">
             <input type="text" data-bind="link-amount" inputmode="decimal"
-                   autocomplete="off" spellcheck="false" aria-label="LINK amount to donate">
-            <span class="pari-link__unit">LINK</span>
+                   autocomplete="off" spellcheck="false" aria-label="LINK funding amount">
+            <span class="pari-link__unit pari-funding-card__unit">LINK</span>
             <button type="button" data-bind="link-max">MAX</button>
           </span>
         </span>
-        <button type="button" class="pari-link__donate" data-write data-write-locked
+        <button type="button" class="pari-link__donate pari-funding-card__action" data-write data-write-locked
                 data-write-lock-title="LINK balance is loading" data-bind="link-donate">
-          <b data-bind="link-donate-label">DONATE</b>
+          <b data-bind="link-donate-label">FUND</b>
         </button>
-        <p class="pari-link__feedback" data-bind="link-feedback" hidden role="status"></p>
+        <p class="pari-link__feedback pari-funding-card__feedback" data-bind="link-feedback" hidden role="status"></p>
       </section>
     `;
     const input = this.querySelector('[data-bind="link-amount"]');
@@ -314,19 +313,19 @@ class AppLinkDonation extends HTMLElement {
     if (multiplier) {
       multiplier.textContent = quote == null
         ? '—'
-        : `${formatLinkDonationMultiplier(quote.averageMultiplierWei)} REWARD`;
+        : formatLinkDonationMultiplier(quote.averageMultiplierWei);
     }
     if (quoteBox) {
       quoteBox.dataset.state = this.#state == null
         ? 'loading'
         : pricingReady ? 'ready' : 'unavailable';
       quoteBox.setAttribute('aria-label', quote
-        ? `Donating ${inputLabel} is estimated to receive ${rewardLabel} at an average ${formatLinkDonationMultiplier(quote.averageMultiplierWei)} reward multiplier.`
+        ? `Funding with ${inputLabel} is estimated to receive ${rewardLabel} at an average ${formatLinkDonationMultiplier(quote.averageMultiplierWei)} reward multiplier.`
         : pricingReady
-          ? 'Enter a valid LINK amount for a FLIP reward quote.'
+            ? 'Enter a valid LINK funding amount for a FLIP reward quote.'
           : this.#state == null
-            ? 'Loading the current LINK donation reward quote.'
-            : 'The current LINK donation reward quote is unavailable.');
+            ? 'Loading the current LINK funding reward quote.'
+            : 'The current LINK funding reward quote is unavailable.');
     }
 
     const valid = amount != null
@@ -340,7 +339,7 @@ class AppLinkDonation extends HTMLElement {
     }
     const donate = this.querySelector('[data-bind="link-donate"]');
     const donateLabel = this.querySelector('[data-bind="link-donate-label"]');
-    if (donateLabel) donateLabel.textContent = this.#busy ? 'WAIT' : 'DONATE';
+    if (donateLabel) donateLabel.textContent = this.#busy ? 'WAIT' : 'FUND';
     const lockReason = this.#lockReason();
     _setWriteLock(
       donate,
@@ -377,7 +376,7 @@ class AppLinkDonation extends HTMLElement {
       return;
     }
     if (this.#state?.balanceWei == null || amount > this.#state.balanceWei) {
-      this.#setFeedback('Not enough LINK for that donation.', { error: true });
+      this.#setFeedback('Not enough LINK for that funding amount.', { error: true });
       return;
     }
 
@@ -389,12 +388,12 @@ class AppLinkDonation extends HTMLElement {
       await _donate({ amount });
       if (target !== this.#address) return;
       if (this.#state?.balanceWei != null) this.#state.balanceWei -= amount;
-      this.#setFeedback(`${formatLinkDonationAmount(amount)} LINK DONATED · FLIP CREDITED`);
+      this.#setFeedback(`${formatLinkDonationAmount(amount)} LINK FUNDED · FLIP CREDITED`);
       this.#queueRefresh();
     } catch (error) {
       if (target === this.#address) {
         this.#setFeedback(
-          compactUiError(error, 'LINK donation did not go through.'),
+          compactUiError(error, 'LINK funding did not go through.'),
           { error: true },
         );
       }

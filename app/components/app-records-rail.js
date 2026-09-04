@@ -856,6 +856,10 @@ class AppRecordsRail extends HTMLElement {
     const { quote } = result;
     this.#bountyDialogKind = Number(kind);
     this.#bountyDialogQuote = quote;
+    // `content-visibility: auto` normally contains this below-the-fold rail.
+    // Release that containment before revealing the fixed child so its inset
+    // resolves against the viewport instead of clipping to the rail's height.
+    this.setAttribute('data-bounty-dialog-open', '');
     this.#renderBountyDialog();
     const dialog = this.querySelector('[data-bind="records-bounty-dialog"]');
     if (dialog) {
@@ -1071,6 +1075,7 @@ class AppRecordsRail extends HTMLElement {
   #closeBountyDialog({ restoreFocus = true } = {}) {
     this.#bountyDialogSeq += 1;
     const kind = this.#bountyDialogKind;
+    this.removeAttribute('data-bounty-dialog-open');
     const dialog = this.querySelector?.('[data-bind="records-bounty-dialog"]');
     if (dialog) {
       dialog.hidden = true;

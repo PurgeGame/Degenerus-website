@@ -2104,6 +2104,37 @@ app-craps-table {
     drop-shadow(0 0.065rem 0.04rem rgba(0, 0, 0, 0.8));
 }
 
+/*
+ * THE ROTATING SHOOTER (audit 8777c7d99). One hand per seat, passed around the whole field —
+ * so it is rarer and more legible than the schedule's per-shooter draw and reads in a COOLER
+ * accent rather than a hotter gold, otherwise the two are indistinguishable at chip size.
+ * The uplift itself is already folded into the boost percentage; this is purely the label.
+ */
+.craps-bet__seat-chip.is-rotation-turn .craps-bet__seat-art {
+  filter:
+    saturate(1.12)
+    brightness(1.12)
+    drop-shadow(0 0 0.075rem rgba(164, 233, 255, 0.85))
+    drop-shadow(0 0 0.14rem rgba(96, 196, 255, 0.5))
+    drop-shadow(0 0.055rem 0.035rem rgba(0, 0, 0, 0.78));
+}
+.craps-bet__seat-chip.is-local.is-rotation-turn .craps-bet__seat-art {
+  filter:
+    saturate(1.16)
+    brightness(1.14)
+    drop-shadow(0 0 0.095rem rgba(196, 244, 255, 0.92))
+    drop-shadow(0 0 0.18rem rgba(96, 196, 255, 0.58))
+    drop-shadow(0 0.065rem 0.04rem rgba(0, 0, 0, 0.8));
+  animation: craps-rotation-turn 1.6s ease-in-out infinite;
+}
+@keyframes craps-rotation-turn {
+  0%, 100% { transform: translateZ(0) scale(1); }
+  50%      { transform: translateZ(0) scale(1.045); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .craps-bet__seat-chip.is-local.is-rotation-turn .craps-bet__seat-art { animation: none; }
+}
+
 .craps-bet__seat-chip.is-local .craps-bet__seat-art + .craps-bet__seat-art {
   margin-left: 0;
 }
@@ -4746,6 +4777,111 @@ app-craps-table {
 
 .craps-winner-payoff[hidden] { display: none !important; }
 
+.craps-bust-checkpoint[hidden] { display: none !important; }
+
+.craps-bust-checkpoint {
+  position: absolute;
+  z-index: 12;
+  inset: 0.28rem;
+  display: grid;
+  min-width: 0;
+  place-content: center;
+  justify-items: center;
+  gap: 0.24rem;
+  padding: 0.42rem;
+  border: 1px solid rgba(255, 91, 101, 0.68);
+  border-radius: 0.5rem;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(206, 38, 50, 0.24), transparent 65%),
+    rgba(25, 5, 9, 0.9);
+  box-shadow: inset 0 0 1.2rem rgba(183, 24, 37, 0.16), 0 0 0.72rem rgba(215, 45, 57, 0.2);
+  color: #fff1ee;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  text-align: center;
+}
+
+.craps-bust-checkpoint > small {
+  color: #ff9ca3;
+  font-size: clamp(0.42rem, 0.75vw, 0.58rem);
+  font-weight: 1000;
+  letter-spacing: 0.14em;
+}
+
+.craps-bust-checkpoint > strong {
+  color: #fff5f2;
+  font-size: clamp(1.32rem, 3.2vw, 2.25rem);
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  text-shadow: 0 0 0.72rem rgba(255, 65, 78, 0.58);
+}
+
+.craps-bust-checkpoint__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+}
+
+.craps-bust-checkpoint__actions button {
+  min-width: 4.5rem;
+  min-height: 1.72rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(230, 236, 241, 0.32);
+  border-radius: 0.34rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e7edf1;
+  font: 1000 clamp(0.5rem, 0.86vw, 0.64rem)/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.craps-bust-checkpoint__actions button:focus-visible {
+  outline: 2px solid #fff2bc;
+  outline-offset: 2px;
+}
+
+.craps-bust-checkpoint__observe {
+  border-color: rgba(103, 183, 244, 0.72);
+  background: linear-gradient(180deg, #2476b7, #123d66);
+  color: #f2f8ff;
+  box-shadow: 0 0 0.55rem rgba(72, 157, 226, 0.22);
+}
+
+.craps-bust-checkpoint__exit {
+  border-color: rgba(255, 113, 122, 0.5);
+  color: #ffc1c5;
+}
+
+.craps-center-hud .craps-dice-bay[data-state="bust-paused"] {
+  border-style: solid;
+  border-color: rgba(255, 82, 94, 0.88);
+  background: rgba(24, 4, 8, 0.84);
+  box-shadow: inset 0 0 1.4rem rgba(187, 24, 37, 0.18), 0 0 0.65rem rgba(222, 45, 58, 0.16);
+}
+
+.craps-dice-bay[data-state="bust-paused"] > :is(.craps-dice-bay__dice, .craps-survival-stage) {
+  opacity: 0.12;
+  filter: grayscale(0.8);
+}
+
+@media (max-width: 700px) {
+  .craps-bust-checkpoint {
+    inset: 0.12rem;
+    gap: 0.16rem;
+    padding: 0.24rem;
+  }
+  .craps-bust-checkpoint > strong { font-size: clamp(1.02rem, 4.8vw, 1.48rem); }
+  .craps-bust-checkpoint__actions { width: 100%; gap: 0.18rem; }
+  .craps-bust-checkpoint__actions button {
+    min-width: 0;
+    min-height: 1.48rem;
+    flex: 1 1 0;
+    padding-inline: 0.22rem;
+    font-size: clamp(0.42rem, 2vw, 0.54rem);
+  }
+}
+
 .craps-winner-payoff {
   position: absolute;
   z-index: 7;
@@ -5034,30 +5170,6 @@ app-craps-table {
   white-space: nowrap;
 }
 
-.craps-roll-history__survival {
-  max-width: 100%;
-  padding: 0.09rem 0.22rem 0.08rem;
-  overflow: hidden;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: clamp(0.38rem, 0.6vw, 0.46rem);
-  font-weight: 1000;
-  letter-spacing: 0.055em;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-roll-history li[data-survival="survived"] .craps-roll-history__survival {
-  background: rgba(46, 180, 104, 0.18);
-  color: #83f3a7;
-}
-
-.craps-roll-history li[data-survival="bust"] .craps-roll-history__survival {
-  background: rgba(210, 49, 61, 0.2);
-  color: #ff9299;
-}
-
 .craps-roll-history li[data-state="win"] {
   border-color: rgba(79, 220, 130, 0.34);
   background: rgba(17, 70, 45, 0.38);
@@ -5112,6 +5224,10 @@ app-craps-table {
 }
 
 .craps-roll-history li[data-roll-event="seven-out"]::after { color: #ff9299; }
+
+.craps-roll-history li[data-roll-event="survival"]::after { color: currentColor; }
+.craps-roll-history li[data-roll-event="survival"][data-state="win"] { color: #83f3a7; }
+.craps-roll-history li[data-roll-event="survival"][data-state="loss"] { color: #ff9299; }
 
 .craps-roll-history li[data-state="cursor"] {
   opacity: 1;

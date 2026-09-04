@@ -284,12 +284,12 @@ body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row {
   background: none;
   box-shadow: none;
 }
-body.layout-basic .df-tomorrow-layout.is-yesterday :is(
-  .df-position-row--win,
-  .df-position-row--loss
-) {
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row--win {
   justify-content: space-between;
   padding-inline: 0.72rem;
+}
+body.layout-basic .df-tomorrow-layout.is-yesterday .df-position-row--loss {
+  justify-content: center;
 }
 /* Optical centering. Both halves of the receipt are box-centered in the oval
    already, but a line box reserves descender space these glyphs never use, so

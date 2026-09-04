@@ -1252,6 +1252,16 @@ describe('rail wiring', () => {
     assert.ok(CSS.includes('display: none !important'));
   });
 
+  test('the bounty dialog escapes the rail content-visibility containing block', () => {
+    assert.match(COMPONENT, /this\.setAttribute\('data-bounty-dialog-open', ''\)/,
+      'opening the popup marks the custom-element host before revealing its fixed child');
+    assert.match(COMPONENT, /this\.removeAttribute\('data-bounty-dialog-open'\)/,
+      'closing the popup restores normal below-the-fold containment');
+    assert.match(CSS,
+      /app-records-rail\[data-bounty-dialog-open\]\s*\{[^}]*content-visibility:\s*visible/s,
+      'an open popup must use the viewport rather than the contained rail as its fixed-position block');
+  });
+
   test('refreshes the live pool after mined app transactions and on a short poll', () => {
     assert.match(COMPONENT, /POLL_MS = 15_000/);
     assert.match(COMPONENT, /addEventListener\(TX_CONFIRMED_EVENT/);

@@ -234,6 +234,24 @@ test('a local bust locks the rack at zero while the shared table finishes', () =
     'an animated failed survival enters the same persistent zero state only after landing');
   assert.doesNotMatch(COMPONENT_SRC, /#paintViewerBustOutcome|data-bind="craps-roll-result"/,
     'the removed outcome panel has no private painter left behind');
+  assert.match(COMPONENT_SRC,
+    /class="craps-bust-checkpoint"[\s\S]*?BANKROLL BUSTED[\s\S]*?YOU LOSE[\s\S]*?data-bind="craps-bust-observe">OBSERVE[\s\S]*?data-bind="craps-bust-exit">EXIT/s,
+    'a local loss exposes an explicit observe-or-exit checkpoint');
+  assert.match(COMPONENT_SRC,
+    /#pauseForViewerBust\(continueResolution\)[\s\S]*?#winnerPayoffPresentation\(\)\.totalWei[\s\S]*?this\.#viewerBustLocked[\s\S]*?!viewingOriginalPlayer \|\| viewerWon[\s\S]*?dataset\.phase = 'bust-paused'[\s\S]*?dataset\.state = 'bust-paused'[\s\S]*?craps-bust-observe[\s\S]*?focus/s,
+    'a true losing viewer pauses playback and moves focus to OBSERVE without mislabeling a bounty winner');
+  assert.match(COMPONENT_SRC,
+    /#queueNextResolutionRoll\(delay = 0\)[\s\S]*?#pauseForViewerBust\(\(\) => this\.#queueNextResolutionRoll\(delay\)\)[\s\S]*?#finishResolution\(skipped = false\)[\s\S]*?!skipped && this\.#pauseForViewerBust\(\(\) => this\.#finishResolution\(false\)\)/s,
+    'both a mid-run bust and a final-roll bust stop before automatic continuation');
+  assert.match(COMPONENT_SRC,
+    /#observeAfterViewerBust\(\)[\s\S]*?viewerBustCheckpointPassed = true[\s\S]*?continueResolution\?\.\(\)[\s\S]*?#exitAfterViewerBust\(\)[\s\S]*?this\.#close\(\)/s,
+    'OBSERVE resumes the saved boundary while EXIT uses the normal close path');
+  assert.match(COMPONENT_SRC,
+    /#close\(\)[\s\S]*?viewerBustCheckpointActive && !this\.#resolutionCompleted[\s\S]*?#finishResolution\(true\)[\s\S]*?#acknowledgeResolution\(\)/s,
+    'exiting at the checkpoint settles and acknowledges the already-resolved replay');
+  assert.match(CSS_SRC,
+    /\.craps-bust-checkpoint\s*\{[\s\S]*?\.craps-bust-checkpoint > strong[\s\S]*?\.craps-bust-checkpoint__observe[\s\S]*?\.craps-bust-checkpoint__exit[\s\S]*?data-state="bust-paused"/s,
+    'the loss checkpoint is a prominent, responsive center-bay decision instead of toolbar microcopy');
 });
 
 test('leaderboard players are complete, roll-aligned replay perspectives', () => {
@@ -1135,7 +1153,7 @@ test('the transient seven distinguishes a come-out win from seven-out', async ()
 });
 
 test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-event markers', async () => {
-  const { crapsRollHistoryEvent, crapsRollHistorySlots } = await import(moduleUrl);
+  const { crapsRollHistoryEvent, crapsRollHistorySlots, crapsRollHistoryTimeline } = await import(moduleUrl);
   const frames = [
     { label: 'POINT 6 SET' },
     { label: '5 ROLLED' },
@@ -1180,15 +1198,37 @@ test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-e
     [[5, false], [6, false], [2, false], [3, false], [4, false]],
     'the final result fills its slot without leaving a fake next-roll cursor',
   );
+
+  const survivalFrames = [
+    { label: 'POINT 6 SET' },
+    { label: 'SEVEN OUT', survival: { survived: true } },
+    { label: 'POINT 8 SET' },
+  ];
+  const pendingSurvival = crapsRollHistoryTimeline(survivalFrames, 1);
+  assert.equal(pendingSurvival.resolvedIndex, 1,
+    'an airborne survival coin owns the next cursor slot without revealing its result');
+  const settledSurvival = crapsRollHistoryTimeline(survivalFrames, 1, new Set([1]));
+  assert.deepEqual(settledSurvival.events.map(({ kind, frameIndex }) => [kind, frameIndex]), [
+    ['roll', 0], ['roll', 1], ['survival', 1], ['roll', 2],
+  ], 'the survival flip is a chronological history event immediately after its triggering roll');
+  assert.equal(settledSurvival.resolvedIndex, 2);
+  assert.deepEqual(
+    crapsRollHistorySlots(settledSurvival.events, settledSurvival.resolvedIndex)
+      .map(({ frame, cursor }) => frame?.kind ?? (cursor ? 'cursor' : null)),
+    ['roll', 'roll', 'survival', 'cursor', null],
+    'a settled survival flip consumes one of the same five slots and advances the same cursor');
   assert.match(COMPONENT_SRC,
-    /const survivalSettled = typeof frame\?\.survival\?\.survived === 'boolean'[\s\S]*?this\.#settledSurvivalShooters\.has[\s\S]*?craps-roll-history__survival[\s\S]*?SURVIVED[\s\S]*?BUST/s,
-    'a landed survival result is preserved in its LAST 5 slot without spoiling the coin in flight');
+    /crapsRollHistoryTimeline\([\s\S]*?crapsRollHistorySlots\(historyTimeline, historyResolvedIndex\)[\s\S]*?historyEvent\.kind === 'survival'[\s\S]*?data-slot="\$\{slot \+ 1\}"[\s\S]*?data-roll-event="survival"[\s\S]*?<strong>\$\{survived \? '2×' : '0×'\}<\/strong><span>\$\{resultCopy\}<\/span>/s,
+    'a landed survival flip renders through the same five-slot roll history');
+  assert.doesNotMatch(COMPONENT_SRC,
+    /craps-roll-history-survival|craps-roll-history__survival-slots/,
+    'survival does not get a separate sixth panel outside LAST 5');
   assert.match(COMPONENT_SRC,
     /this\.#markSurvivalBoundarySettled\(frameIndex\);[\s\S]*?this\.#paintRollHistory\(frameIndex\);[\s\S]*?this\.#landOpponentCoinFlips\(\)/s,
     'the animated survival landing immediately repaints LAST 5 with its verdict');
   assert.match(CSS_SRC,
-    /\.craps-roll-history__survival\s*\{[\s\S]*?data-survival="survived"[\s\S]*?#83f3a7[\s\S]*?data-survival="bust"[\s\S]*?#ff9299/s,
-    'survived and bust badges are visibly distinct');
+    /\.craps-roll-history li\s*\{[\s\S]*?data-roll-event="survival"\]\[data-state="win"\][\s\S]*?#83f3a7[\s\S]*?data-roll-event="survival"\]\[data-state="loss"\][\s\S]*?#ff9299/s,
+    'survival uses the shared roll tile with distinct win and bust colors');
 });
 
 test('every Top 10 rack keeps that player’s latest personal result visible', async () => {
@@ -1421,6 +1461,26 @@ test('resolution run pairs exact bankroll snapshots with each shared shooter', a
   assert.deepEqual(normalizeCrapsShooterBoost(true, 25), { percent: 25 });
   assert.deepEqual(normalizeCrapsShooterBoost({ active: true, profitPercent: 300 }), { percent: 255 });
   assert.equal(normalizeCrapsShooterBoost({ active: false, percent: 20 }), null);
+  // THE ROTATING SHOOTER (audit 8777c7d99). The flag rides through the normalizer so the table
+  // can NAME the one hand the field's rotation handed this seat; `percent` already carries the
+  // +5 folded in, so this must never become a second multiplier.
+  assert.deepEqual(
+    normalizeCrapsShooterBoost({ active: true, percent: 37, rotation: true }),
+    { percent: 37, rotation: true },
+    'a rotation turn is preserved alongside the combined percentage',
+  );
+  // ADDITIVE: an ordinary schedule hit — and every pre-8777c7d99 tape — keeps the old shape,
+  // which is what lets a stale tape through the same normalizer unchanged.
+  assert.deepEqual(
+    normalizeCrapsShooterBoost({ active: true, percent: 29, rotation: false }),
+    { percent: 29 },
+    'a non-rotation boost carries no rotation key at all',
+  );
+  assert.deepEqual(
+    normalizeCrapsShooterBoost({ active: true, percent: 29 }),
+    { percent: 29 },
+    'a tape with no rotation field normalizes exactly as it did before the re-vendor',
+  );
   const boostRun = createCrapsResolutionRun({
     startingBankrollFlip: 300,
     hands: [
@@ -1756,8 +1816,8 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the redundant outcome, net, point, and persistent roll board is absent');
   assert.match(COMPONENT_SRC, /<strong>LAST 5<\/strong><small>ROLL · NET<\/small>/,
     'the history rail names its two large values with one compact legend');
-  assert.match(COMPONENT_SRC, /#paintRollHistory\(resolvedIndex[\s\S]*?crapsRollHistorySlots\(frames, end\)[\s\S]*?data-state="cursor"[\s\S]*?aria-current="step"[\s\S]*?data-roll-event="\$\{event\}"[\s\S]*?<strong>\$\{total\}<\/strong><span>\$\{escapeHtml\(net\)\}<\/span>[\s\S]*?#paintResolutionResult[\s\S]*?this\.#paintRollHistory\(index\)/s,
-    'the HUD keeps five physical slots, a blank next-roll cursor, and accessible roll/net results');
+  assert.match(COMPONENT_SRC, /#paintRollHistory\(resolvedIndex[\s\S]*?crapsRollHistoryTimeline\([\s\S]*?crapsRollHistorySlots\(historyTimeline, historyResolvedIndex\)[\s\S]*?data-state="cursor"[\s\S]*?aria-current="step"[\s\S]*?data-roll-event="\$\{event\}"[\s\S]*?<strong>\$\{total\}<\/strong><span>\$\{escapeHtml\(net\)\}<\/span>[\s\S]*?#paintResolutionResult[\s\S]*?this\.#paintRollHistory\(index\)/s,
+    'the HUD keeps five physical slots and advances one cursor through roll and survival results');
   assert.doesNotMatch(COMPONENT_SRC, /frames\.slice\(Math\.max\(0, end - 4\), end \+ 1\)/,
     'history does not slide every number left on each result');
   assert.doesNotMatch(COMPONENT_SRC, /<strong>\$\{total\}<\/strong><span>\$\{escapeHtml\(formatSignedCrapsFlip\(delta\)\)\}<\/span><small>/,
@@ -2025,6 +2085,12 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'the opponent glow reinforces the gold face instead of washing it back to silver');
   assert.match(CSS_SRC, /\.craps-bet__seat-chip\.is-local\.is-shooter-boosted \.craps-bet__seat-art/,
     'the local boosted stack receives a stronger warm-gold glow');
+  assert.match(CSS_SRC, /\.craps-bet__seat-chip\.is-rotation-turn \.craps-bet__seat-art/,
+    'the rotating shooter turn is distinguishable from an ordinary schedule boost');
+  assert.match(CSS_SRC, /\.craps-bet__seat-chip\.is-rotation-turn \.craps-bet__seat-art\s*\{[\s\S]*?rgba\(164, 233, 255, 0\.85\)/s,
+    'the rotation turn reads in a cooler accent so it never reads as the gold schedule boost');
+  assert.match(CSS_SRC, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?is-rotation-turn[\s\S]*?animation: none/s,
+    'the rotation pulse is dropped for reduced-motion viewers');
   assert.match(CSS_SRC, /@keyframes craps-payout-chip-flight/);
   assert.match(CSS_SRC, /@keyframes craps-seven-out-stack-clear/);
   assert.match(CSS_SRC, /\.craps-table-rail\[data-board="clearing"\][\s\S]*?\.craps-bet\.is-seven-clearing \.craps-bet__corner-grid\s*\{[\s\S]*?craps-seven-out-dust-field var\(--craps-speed-240, 240ms\)/s,
