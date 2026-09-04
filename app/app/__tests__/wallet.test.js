@@ -885,9 +885,9 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       set accounts(v) { accounts = v; },
       chainId,
       // Always count via connectCalls; user impl runs after the counter bump.
-      connect: async () => {
-        connectCalls.push(Date.now());
-        if (typeof connectImpl === 'function') await connectImpl();
+      connect: async (opts) => {
+        connectCalls.push(opts);
+        if (typeof connectImpl === 'function') await connectImpl(opts);
       },
       disconnect: async () => {
         disconnectCalls.push(Date.now());
@@ -1170,7 +1170,11 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       },
       accounts: [account],
       chainId: 1,
-      connectImpl: async () => {
+      connectImpl: async (opts) => {
+        assert.deepEqual(opts, {
+          optionalChains: [CHAIN.id],
+          rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
+        }, 'repair pairing advertises only Base Sepolia, not mainnet again');
         wcInstance.chainId = 84532;
         wcInstance._setSession({
           topic: 'fresh-base-session',
@@ -1250,6 +1254,10 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(stale.wcInstance._disconnectCalls.length, 1,
       'the stale topic is detected on the ordinary disconnect attempt');
     assert.equal(fresh.wcInstance._connectCalls.length, 1, 'a new pairing is opened');
+    assert.deepEqual(fresh.wcInstance._connectCalls[0], {
+      optionalChains: [CHAIN.id],
+      rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
+    }, 'dead-topic recovery also excludes mainnet from the replacement proposal');
     assert.equal(initOpts.length, 2, 'WalletConnect is initialized again');
     assert.notEqual(initOpts[0].customStoragePrefix, initOpts[1].customStoragePrefix,
       'the replacement cannot restore the same dead topic from storage');
@@ -1301,6 +1309,10 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(result, true);
     assert.equal(wcInstance._disconnectCalls.length, 1);
     assert.equal(wcInstance._connectCalls.length, 1);
+    assert.deepEqual(wcInstance._connectCalls[0], {
+      optionalChains: [CHAIN.id],
+      rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
+    });
     assert.equal(
       wcInstance._requestCalls.filter(({ method }) => method === 'wallet_switchEthereumChain').length,
       1,

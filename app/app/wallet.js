@@ -257,6 +257,60 @@ function _walletConnectSessionHasMethod(provider, method) {
   });
 }
 
+function _walletChainFailureReason(error) {
+  if (!error) return 'none';
+  if (_isStaleWalletConnectError(error)) return 'stale-topic';
+  const queue = [error];
+  const seen = new Set();
+  while (queue.length > 0 && seen.size < 12) {
+    const value = queue.shift();
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    const code = value.code;
+    if ((typeof code === 'number' && Number.isFinite(code))
+      || (typeof code === 'string' && /^-?\d+$/.test(code.trim()))) {
+      return `code:${String(code).trim()}`;
+    }
+    queue.push(value.data, value.error, value.cause, value.originalError, value.info);
+  }
+  const message = _walletErrorText(error);
+  if (/not approved|does not support|unsupported/i.test(message)) return 'unsupported';
+  if (/reject|denied|declined/i.test(message)) return 'rejected';
+  if (/expir|timed? out/i.test(message)) return 'expired';
+  if (/offline|network|relay|socket|connect/i.test(message)) return 'transport';
+  return 'unknown';
+}
+
+// Caught wallet errors normally never reach window.onerror. Emit only a small,
+// address-free capability snapshot when chain recovery fails so a real-phone
+// retry can identify the exact WalletConnect branch without exposing account
+// or session identifiers.
+function _reportWalletChainFailure(stage, raw, error = null) {
+  try {
+    const queue = globalThis.__telemetryQ;
+    if (!queue || typeof queue.push !== 'function') return;
+    const namespaces = raw?.session?.namespaces;
+    const namespaceCount = namespaces && typeof namespaces === 'object'
+      ? Object.keys(namespaces).length
+      : 0;
+    queue.push({
+      kind: 'error',
+      t: Date.now(),
+      data: {
+        m: `wallet-chain:${stage}`,
+        wc: raw?.isWalletConnect === true,
+        active: _normalizeChainId(raw?.chainId),
+        namespaces: namespaceCount,
+        target: _walletConnectSessionHasChain(raw, CHAIN.id),
+        switch: _walletConnectSessionHasMethod(raw, 'wallet_switchEthereumChain'),
+        add: _walletConnectSessionHasMethod(raw, 'wallet_addEthereumChain'),
+        send: _walletConnectSessionHasMethod(raw, 'eth_sendTransaction'),
+        reason: _walletChainFailureReason(error),
+      },
+    });
+  } catch (_e) { /* diagnostics must never affect wallet recovery */ }
+}
+
 async function _repairWalletConnectNamespace(raw) {
   try {
     await raw.disconnect();
@@ -264,6 +318,7 @@ async function _repairWalletConnectNamespace(raw) {
     if (_isStaleWalletConnectError(error)) {
       return _replaceStaleWalletConnectSession(raw);
     }
+    _reportWalletChainFailure('repair-disconnect-failed', raw, error);
     return false;
   }
   // The WC disconnect event normally clears this state first; keep the
@@ -273,10 +328,17 @@ async function _repairWalletConnectNamespace(raw) {
     // The caller is already the authoritative, awaited switch flow. Suppress
     // connectWalletConnect's normal fire-and-forget convenience switch so a
     // replacement session receives exactly one awaited request below.
-    const connected = await connectWalletConnect({ requestConfiguredChain: false });
-    if (!connected) return false;
+    const connected = await connectWalletConnect({
+      requestConfiguredChain: false,
+      connectOptions: _walletConnectRepairOptions(),
+    });
+    if (!connected) {
+      _reportWalletChainFailure('repair-empty-session', getEip1193() || raw);
+      return false;
+    }
     return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
-  } catch (_e) {
+  } catch (error) {
+    _reportWalletChainFailure('repair-connect-failed', getEip1193() || raw, error);
     return false;
   }
 }
@@ -306,7 +368,10 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
   // after the wallet accepts it. Destroying such a session before the request
   // is why mobile writes repeatedly fell through to "Wrong network".
   if (walletConnectMissingChain && !walletConnectCanSwitch) {
-    if (!allowWalletConnectRepair) return false;
+    if (!allowWalletConnectRepair) {
+      _reportWalletChainFailure('replacement-missing-capability', raw);
+      return false;
+    }
     return _repairWalletConnectNamespace(raw);
   }
 
@@ -333,6 +398,7 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
     if (allowWalletConnectRepair && walletConnectMissingChain) {
       return _repairWalletConnectNamespace(raw);
     }
+    _reportWalletChainFailure('switch-failed', raw, switchResult.error);
     return false;
   }
   // Several mobile wallets resolve the approval request before eth_chainId
@@ -343,6 +409,7 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
   if (!chainOk && allowWalletConnectRepair && walletConnectMissingChain) {
     return _repairWalletConnectNamespace(raw);
   }
+  if (!chainOk) _reportWalletChainFailure('switch-not-observed', raw);
   return chainOk;
 }
 
@@ -433,10 +500,17 @@ async function _replaceStaleWalletConnectSession(staleProvider) {
   // that method reject before WalletConnect cleans its own persisted state.
   disconnect();
   try {
-    const connected = await connectWalletConnect({ requestConfiguredChain: false });
-    if (!connected) return false;
+    const connected = await connectWalletConnect({
+      requestConfiguredChain: false,
+      connectOptions: _walletConnectRepairOptions(),
+    });
+    if (!connected) {
+      _reportWalletChainFailure('stale-repair-empty-session', getEip1193() || staleProvider);
+      return false;
+    }
     return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
-  } catch (_e) {
+  } catch (error) {
+    _reportWalletChainFailure('stale-repair-connect-failed', getEip1193() || staleProvider, error);
     return false;
   }
 }
@@ -629,6 +703,19 @@ function _wcInitOpts() {
   };
 }
 
+// The first pairing stays permissive because MetaMask Mobile rejects an
+// unknown custom chain when it is required. Recovery must not repeat the same
+// `[Base Sepolia, Ethereum]` optional proposal, though: a wallet that selected
+// only Ethereum would simply give us the same unusable namespace again. A
+// fresh, Base-only optional proposal preserves MetaMask compatibility while
+// removing mainnet as the fallback it can approve instead.
+function _walletConnectRepairOptions() {
+  return {
+    optionalChains: [CHAIN.id],
+    rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
+  };
+}
+
 // The WalletConnect SDK is the single heaviest dependency graph on the page
 // (hundreds of esm.sh module requests via its transitive imports), and only
 // two paths ever need it: an explicit WalletConnect connect click, and a
@@ -666,13 +753,16 @@ async function _ensureWcProvider() {
 // chokepoint (Phase 58) is reused verbatim (CF-04, no new chokepoint).
 // ---------------------------------------------------------------------------
 
-export async function connectWalletConnect({ requestConfiguredChain = true } = {}) {
+export async function connectWalletConnect({
+  requestConfiguredChain = true,
+  connectOptions = null,
+} = {}) {
   const wc = await _ensureWcProvider();
   if (!wc.session || !wc.accounts || wc.accounts.length === 0) {
     // No persisted session — open the QR modal / deep-link to mobile wallet.
     // wc.connect() is the popup-equivalent and is intentionally invoked here
     // (NEVER from autoReconnect — that path is silent).
-    await wc.connect();
+    await wc.connect(connectOptions || undefined);
   }
   if (!wc.accounts || wc.accounts.length === 0) return null;
 

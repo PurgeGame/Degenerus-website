@@ -267,7 +267,18 @@ export async function ensureWriteChain() {
       throw new Error('Account changed mid-flow — please retry.');
     }
     if (!_provider) throw new Error('Wallet not connected');
-    if (await _liveProviderChainId(_provider) === CHAIN.id) return true;
+    const repairedChainId = await _liveProviderChainId(_provider);
+    if (repairedChainId === CHAIN.id) return true;
+    try {
+      globalThis.__telemetryQ?.push?.({
+        kind: 'error',
+        t: Date.now(),
+        data: {
+          m: 'wallet-chain:write-gate-mismatch',
+          active: repairedChainId,
+        },
+      });
+    } catch (_e) { /* diagnostics must never affect a transaction */ }
   }
 
   throw new Error(`Wrong network — switch to ${CHAIN.name}.`);
