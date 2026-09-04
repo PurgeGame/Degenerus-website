@@ -49,6 +49,7 @@ import {
   crapsReplayBattleAward,
   crapsReplayPrizeAmounts,
   loadCrapsReplayProfiles,
+  normalizeCrapsReplayShooters,
   openCrapsReplayTable,
   protocolSeatLabel,
 } from '../../craps/replay-adapter.js';
@@ -66,9 +67,14 @@ import { CRAPS_REPLAY_ESCALATOR_SHOOTERS } from '../../craps/replay-engine.js';
 
 const clone = (value) => structuredClone(value);
 const MANIFEST = validateCrapsReplayManifest(SIM_CRAPS_REPLAY_MANIFEST);
+const REPLAY_DEPLOYMENT = Object.freeze({
+  chainId: MANIFEST.ruleset.chainId,
+  contract: MANIFEST.ruleset.contract,
+});
 const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x4daa99994b751204ddd189f133e57e4586b2a8d91047a788031f247e37065a57';
 
 function contestedHighRollerFixture() {
   const existing = clone(ALL_PLAYERS.find((player) => player.entryMultiple > 1));
@@ -103,6 +109,16 @@ test('the differentially verified run-47 Craps runtime is explicitly replayable'
   assert.equal(
     assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
     RUN_47_CRAPS_RUNTIME_HASH,
+  );
+});
+
+test('the differentially verified current Craps runtime is explicitly replayable', () => {
+  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  manifest.ruleset.contract = CONTRACTS.CRAPS;
+  manifest.ruleset.runtimeCodeHash = CURRENT_CRAPS_RUNTIME_HASH;
+  assert.equal(
+    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
+    CURRENT_CRAPS_RUNTIME_HASH,
   );
 });
 
@@ -154,6 +170,138 @@ test('ready pointer is tiny, complete, and bound to its immutable digest path', 
   const parsedFailure = validateCrapsReplayPointer(failed);
   assert.equal(parsedFailure.error, 'replay-mismatch');
   assert.equal(parsedFailure.digest, null);
+});
+
+test('replay paths namespace a reused battle key by chain and Craps deployment', () => {
+  const deployment = MANIFEST.ruleset;
+  const nextContract = `0x${'ef'.repeat(20)}`;
+  const scopedPointer = crapsReplayPointerPath(MANIFEST.battleKey, deployment);
+  const nextPointer = crapsReplayPointerPath(MANIFEST.battleKey, {
+    chainId: deployment.chainId,
+    contract: nextContract,
+  });
+  const scopedArtifacts = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest, deployment);
+
+  assert.equal(
+    scopedPointer,
+    `/craps/replays/v1/chains/${deployment.chainId}/contracts/${deployment.contract}`
+      + `/battles/${MANIFEST.battleKey}/latest.json`,
+  );
+  assert.notEqual(scopedPointer, crapsReplayPointerPath(MANIFEST.battleKey),
+    'the rollout-only legacy pointer is not the canonical deployment namespace');
+  assert.notEqual(scopedPointer, nextPointer,
+    'the same scheduled battle key cannot collide across Craps contracts');
+  assert.equal(scopedArtifacts.manifest,
+    scopedPointer.replace('/latest.json', `/results/${MANIFEST.digest}/manifest.json`));
+  assert.throws(
+    () => crapsReplayPointerPath(MANIFEST.battleKey, { chainId: 0, contract: deployment.contract }),
+    /chainId/,
+  );
+  assert.throws(
+    () => crapsReplayPointerPath(MANIFEST.battleKey, { chainId: deployment.chainId, contract: 'bad' }),
+    /contract/,
+  );
+});
+
+test('loader selects the requested deployment when two contracts reuse a battle key', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const viewer = SIM_CRAPS_REPLAY_VIEWER;
+  const deployment = MANIFEST.ruleset;
+  const legacyContract = `0x${'ef'.repeat(20)}`;
+  const shardIndex = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const scoped = `/craps/replays/v1/chains/${deployment.chainId}/contracts/${deployment.contract}`
+    + `/battles/${MANIFEST.battleKey}`;
+  const scopedBase = `${scoped}/results/${MANIFEST.digest}`;
+  const currentManifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  currentManifest.field.featuredPath = `${scopedBase}/featured.json`;
+  currentManifest.field.shardPathTemplate = `${scopedBase}/seats/{shard}.json`;
+  const currentPointer = {
+    ...clone(SIM_CRAPS_REPLAY_POINTER),
+    manifestPath: `${scopedBase}/manifest.json`,
+  };
+  const legacyManifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  legacyManifest.ruleset.contract = legacyContract;
+  const bodies = new Map([
+    [`${scoped}/latest.json`, currentPointer],
+    [`${scopedBase}/manifest.json`, currentManifest],
+    [`${scopedBase}/featured.json`, SIM_CRAPS_REPLAY_FEATURED],
+    [`${scopedBase}/seats/${String(shardIndex).padStart(4, '0')}.json`, SIM_CRAPS_REPLAY_SHARDS[shardIndex]],
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, legacyManifest],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[shardIndex], SIM_CRAPS_REPLAY_SHARDS[shardIndex]],
+  ]);
+  const calls = [];
+
+  const loaded = await loadCrapsReplay({
+    battleKey: MANIFEST.battleKey,
+    viewerBetId: viewer.betId,
+    chainId: deployment.chainId,
+    contract: deployment.contract,
+    fetchImpl: async (path) => {
+      calls.push(path);
+      const body = bodies.get(path);
+      return { ok: body != null, status: body == null ? 404 : 200, json: async () => clone(body) };
+    },
+  });
+
+  assert.equal(loaded.manifest.ruleset.contract, deployment.contract);
+  assert.equal(calls[0], `${scoped}/latest.json`);
+  assert.equal(calls.includes(SIM_CRAPS_REPLAY_PATHS.pointer), false,
+    'a present scoped pointer never consults a colliding legacy pointer');
+  __resetCrapsReplayLoaderForTest();
+});
+
+test('rollout fallback accepts only a legacy manifest for the requested deployment', async () => {
+  const viewer = SIM_CRAPS_REPLAY_VIEWER;
+  const deployment = MANIFEST.ruleset;
+  const shardIndex = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  const scopedPointer = crapsReplayPointerPath(MANIFEST.battleKey, deployment);
+  const matchingBodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    [SIM_CRAPS_REPLAY_PATHS.shards[shardIndex], SIM_CRAPS_REPLAY_SHARDS[shardIndex]],
+  ]);
+  const matchingCalls = [];
+  const request = {
+    battleKey: MANIFEST.battleKey,
+    viewerBetId: viewer.betId,
+    chainId: deployment.chainId,
+    contract: deployment.contract,
+  };
+
+  __resetCrapsReplayLoaderForTest();
+  const loaded = await loadCrapsReplay({
+    ...request,
+    fetchImpl: async (path) => {
+      matchingCalls.push(path);
+      const body = matchingBodies.get(path);
+      return { ok: body != null, status: body == null ? 404 : 200, json: async () => clone(body) };
+    },
+  });
+  assert.equal(loaded.ready, true);
+  assert.deepEqual(matchingCalls.slice(0, 2), [scopedPointer, SIM_CRAPS_REPLAY_PATHS.pointer]);
+
+  __resetCrapsReplayLoaderForTest();
+  const collidingManifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  collidingManifest.ruleset.contract = `0x${'ef'.repeat(20)}`;
+  const collidingBodies = new Map([
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, collidingManifest],
+  ]);
+  await assert.rejects(
+    loadCrapsReplay({
+      ...request,
+      fetchImpl: async (path) => {
+        const body = collidingBodies.get(path);
+        return { ok: body != null, status: body == null ? 404 : 200, json: async () => clone(body) };
+      },
+    }),
+    (error) => error?.name === 'CrapsReplayLegacyDeploymentMismatchError',
+    'another deployment\'s legacy pointer remains retryable while scoped producer objects arrive',
+  );
+  __resetCrapsReplayLoaderForTest();
 });
 
 test('manifest, featured union, and every seat shard form a closed verified artifact set', () => {
@@ -317,6 +465,7 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   const settlementReads = [];
   const settledMainPotWei = 84_900n * 10n ** 18n;
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    ...REPLAY_DEPLOYMENT,
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
     viewerBetId: viewer.betId,
     settledMainPotWei,
@@ -407,6 +556,7 @@ test('a Dice Run record replay recovers its sealed bonus rung before opening', a
   const readIndexes = [];
 
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    ...REPLAY_DEPLOYMENT,
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
     viewerBetId: viewer.betId,
     settledMainPotWei: 84_900n * 10n ** 18n,
@@ -442,6 +592,7 @@ test('a settlement-word outage degrades without blocking a verified replay', asy
   const opened = [];
 
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    ...REPLAY_DEPLOYMENT,
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
     viewerBetId: viewer.betId,
     settledMainPotWei: 84_900n * 10n ** 18n,
@@ -481,6 +632,7 @@ test('a contested High Roller replay runs its exact side field before the main b
   const highPayoutWei = (8_000n * 10n ** 18n).toString();
 
   const loaded = await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    ...REPLAY_DEPLOYMENT,
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
     viewerBetId: viewer.betId,
     highRollerBetIds: [viewer.betId, rival.betId],
@@ -547,6 +699,7 @@ test('a missing optional High Roller shard falls back to the complete main repla
   const degraded = [];
 
   const loaded = await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
+    ...REPLAY_DEPLOYMENT,
     battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey,
     viewerBetId: viewer.betId,
     highRollerBetIds: [viewer.betId, rival.betId],
@@ -557,7 +710,9 @@ test('a missing optional High Roller shard falls back to the complete main repla
     highBankrollRider: false,
     fetchImpl: async (path) => ({
       ok: bodies.has(path),
-      status: bodies.has(path) ? 200 : 503,
+      status: bodies.has(path)
+        ? 200
+        : path === crapsReplayPointerPath(MANIFEST.battleKey, REPLAY_DEPLOYMENT) ? 404 : 503,
       json: async () => clone(bodies.get(path)),
     }),
     loadProfiles: async () => new Map(),
@@ -1088,6 +1243,39 @@ test('live Discord identity overlays the sealed seat labels, and an outage keeps
   );
   assert.equal(bare.viewerLabel, base.viewerLabel);
   assert.equal(bare.viewerDiscordPfp, base.viewerDiscordPfp);
+});
+
+test('next-run shooter sidecars preserve hand order, identity, and the actual hot proc', () => {
+  const player = SIM_CRAPS_REPLAY_ARTIFACTS.viewer.player;
+  const profiles = new Map([[player.toLowerCase(), {
+    name: 'Shooter Sam',
+    avatar: 'https://cdn.discordapp.com/avatars/3/c.png',
+  }]]);
+  const shooters = normalizeCrapsReplayShooters({
+    shooters: {
+      0: { player, betId: '41' },
+      1: { player, betId: '41', hotShooterBoostPercent: 5 },
+    },
+  }, profiles);
+
+  assert.deepEqual(shooters, [
+    {
+      shooter: 0,
+      player,
+      betId: '41',
+      label: 'Shooter Sam',
+      avatar: 'https://cdn.discordapp.com/avatars/3/c.png',
+      hotShooterBoostPercent: null,
+    },
+    {
+      shooter: 1,
+      player,
+      betId: '41',
+      label: 'Shooter Sam',
+      avatar: 'https://cdn.discordapp.com/avatars/3/c.png',
+      hotShooterBoostPercent: 5,
+    },
+  ]);
 });
 
 test('protocol seats are named from the active chain profile, not hardcoded', () => {

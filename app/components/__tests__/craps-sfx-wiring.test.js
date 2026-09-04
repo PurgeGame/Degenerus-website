@@ -34,6 +34,6 @@ test('craps resolution wires one restrained cue to each visible gameplay beat', 
     'the local bonus-shooter reveal owns a distinct cue');
   assert.match(source, /#startSurvivalFlip[\s\S]*?sfxCoinflipStart\(\);[\s\S]*?#showSurvivalLanding\(survived\);\s*sfxCoinflipLand\(survived\);/s,
     'survival reuses the established coin launch and landing language');
-  assert.match(source, /if \(battleWon\) sfxFanfare\(true\);\s*else if \(last\.terminal === 'goal'\) sfxFanfare\(false\);\s*else if \(last\.terminal === 'bust'\) sfxNoWin\(\);/s,
-    'completion reserves the large fanfare for an actual battle bounty');
+  assert.match(source, /if \(battleWon\) sfxFanfare\(true\);\s*else if \(last\.terminal === 'goal'\) sfxFanfare\(false\);\s*else if \(last\.terminal === 'bust' && !this\.#viewerBustCheckpointPassed\) sfxNoWin\(\);/s,
+    'completion reserves the large fanfare for an actual battle bounty and never repeats the bust cue');
 });

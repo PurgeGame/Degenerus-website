@@ -3435,6 +3435,7 @@ class RevealOverlay extends HTMLElement {
     } finally {
       this.#controlsOnly = false;
       actions?.classList?.remove('is-loading');
+      for (const button of actions?.querySelectorAll?.('button') || []) button.disabled = false;
       if (close) close.disabled = false;
     }
     if (this.#aborted) return false;

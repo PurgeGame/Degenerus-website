@@ -3,7 +3,7 @@
 
 import { deriveCanSign, get, subscribe } from '../app/store.js';
 import { gameDay } from '../app/game-state.js';
-import { CHAIN, CRAPS_SCHEDULE } from '../app/chain-config.js';
+import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../app/chain-config.js';
 import { loadCrapsReplay } from '../craps/replay-contract.js';
 import { crapsReplayFetch } from '../craps/replay-fetch.js';
 import { openCrapsReplayTable } from '../craps/replay-adapter.js';
@@ -26,10 +26,18 @@ import {
 } from '../app/craps.js';
 import { readCrapsWinnerTotals } from '../app/craps-results.js';
 import {
+  RECORD_KIND_DICE_RUN,
+  accruedPayoutWei,
+  accruedShareBps,
+  fetchRecords,
+  readPreviousDiceRunRecord,
+  recordClaimTargetForMark,
+} from '../app/records.js';
+import {
   CRAPS_TABLE_OPEN_EVENT,
   formatCrapsCompactFlip,
   unpackCrapsContractChips,
-} from './app-craps-table.js?rev=bonus-reveal-v1';
+} from './app-craps-table.js?rev=resolution-race-v2';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
 export const CRAPS_BATTLES_PER_DAY = 7;
@@ -261,11 +269,17 @@ export function crapsReplayStatusCopy(loader = {}) {
   return 'Checking sealed replay status.';
 }
 
-export function crapsResolutionSeenKey(address, battleKey, viewerBetId) {
+export function crapsResolutionSeenKey(
+  address,
+  battleKey,
+  viewerBetId,
+  chainId = CHAIN.id,
+  contract = CONTRACTS.CRAPS,
+) {
   return [
-    'craps-resolution-seen',
-    CHAIN.id,
-    Number(CHAIN.deployBlock || 0),
+    'craps-resolution-seen:v2',
+    String(chainId ?? ''),
+    String(contract ?? '').toLowerCase(),
     String(address || '').toLowerCase(),
     String(battleKey || '').toLowerCase(),
     String(viewerBetId || ''),
@@ -278,6 +292,8 @@ function resolutionWasSeen(address, replay) {
       address,
       replay?.battleKey,
       replay?.viewerBetId,
+      replay?.chainId ?? CHAIN.id,
+      replay?.contract ?? CONTRACTS.CRAPS,
     )) === '1';
   } catch (_error) {
     return false;
@@ -290,12 +306,19 @@ function markResolutionSeen(address, replay) {
       address,
       replay?.battleKey,
       replay?.viewerBetId,
+      replay?.chainId ?? CHAIN.id,
+      replay?.contract ?? CONTRACTS.CRAPS,
     ), '1');
   } catch (_error) { /* private browsing: the result remains available next load */ }
 }
 
 function resolutionIdentity(replay) {
-  return `${String(replay?.battleKey || '').toLowerCase()}:${String(replay?.viewerBetId || '')}`;
+  return [
+    String(replay?.chainId ?? CHAIN.id),
+    String(replay?.contract ?? CONTRACTS.CRAPS).toLowerCase(),
+    String(replay?.battleKey || '').toLowerCase(),
+    String(replay?.viewerBetId || ''),
+  ].join(':');
 }
 
 function unseenResultReplays(result, {
@@ -823,7 +846,7 @@ export function crapsResolutionPendingActions({
       ? crapsReplayStatusCopy(loader)
       : 'Battle settled. Open the replay to reveal your result and final rewards.';
     const shortLabel = ready
-      ? 'View result'
+      ? 'Craps battle'
       : ['failed', 'build-unavailable'].includes(loaderStatus)
         ? 'Replay unavailable'
         : loaderStatus === 'pending'
@@ -942,6 +965,19 @@ export function crapsWinnerReplayRequest(result) {
   const winningStop = result?.winningStop == null ? null : Number(result.winningStop);
   const bonusMultiplier = Number(result?.bonusMultiplier);
   const hasBonusMultiplier = [0.25, 1, 10, 100].includes(bonusMultiplier);
+  const shooterTimeline = result?.shooterTimeline ?? result?.shooters ?? null;
+  const riuBattleAddedWei = optionalUint(
+    result?.riuBattleAddedWei ?? result?.riuBattleTransferWei ?? result?.riuTransferWei,
+  );
+  const winningScoreBps = optionalUint(result?.winningScoreBps);
+  const biggestDiceRunHit = typeof result?.biggestDiceRunHit === 'boolean'
+    ? result.biggestDiceRunHit
+    : null;
+  const biggestDiceRunBefore = biggestDiceRunHit === true
+    && result?.biggestDiceRunBefore
+    && typeof result.biggestDiceRunBefore === 'object'
+    ? result.biggestDiceRunBefore
+    : null;
   return Object.freeze({
     battleKey,
     viewerBetId,
@@ -950,6 +986,15 @@ export function crapsWinnerReplayRequest(result) {
     battleWinnerBetId: viewerBetId,
     battlePayoutWei: optionalUint(result?.amountWei),
     battleWinningStop: winningStop === 0 || winningStop === 1 ? winningStop : null,
+    ...(winningScoreBps == null ? {} : { winningScoreBps }),
+    ...(biggestDiceRunHit == null || (biggestDiceRunHit && !biggestDiceRunBefore) ? {} : {
+      biggestDiceRunHit,
+      biggestDiceRunBefore,
+    }),
+    ...(shooterTimeline && typeof shooterTimeline === 'object'
+      ? { shooterTimeline }
+      : {}),
+    ...(riuBattleAddedWei == null ? {} : { riuBattleAddedWei }),
     ...(hasBonusMultiplier ? { bonusMultiplier } : {}),
   });
 }
@@ -1012,6 +1057,7 @@ export class AppCrapsEntry extends HTMLElement {
   #scheduleSeq = 0;
   #passCredits = null;
   #replayStates = new Map();
+  #openedReplayIdentities = new Set();
   #replaySeq = 0;
   #replayPollTimer = null;
   #replayLoadPending = false;
@@ -1183,6 +1229,7 @@ export class AppCrapsEntry extends HTMLElement {
       this.#unsubs.push(
         subscribe('app.gameState', this.#storeListener),
         subscribe('app.daySync', this.#storeListener),
+        subscribe('app.records', this.#storeListener),
         subscribe('connected.address', this.#storeListener),
       );
     }
@@ -1255,6 +1302,7 @@ export class AppCrapsEntry extends HTMLElement {
     this.#replaySeq += 1;
     this.#replayLoadPending = false;
     this.#replayStates.clear();
+    this.#openedReplayIdentities.clear();
     clearPendingActions(PENDING_SOURCE);
   }
 
@@ -2144,7 +2192,7 @@ export class AppCrapsEntry extends HTMLElement {
       address: this.#schedulePlayer,
       replays: this.#resolvedReplays,
       states: this.#replayStates,
-      wasSeen: resolutionWasSeen,
+      wasSeen: (address, replay) => this.#resolutionReplayWasSeen(address, replay),
     });
   }
 
@@ -2168,7 +2216,129 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#resultNeedsReveal(previous)) return [...out].sort();
     remember(previous?.winner);
     remember(previous?.highResult?.winner);
+    const diceRun = get('app.records')?.records?.find?.(
+      (record) => Number(record?.kind) === RECORD_KIND_DICE_RUN,
+    );
+    remember(diceRun?.player);
     return [...out].sort();
+  }
+
+  #biggestDiceRunOption(state = get('app.records'), {
+    record: suppliedRecord = null,
+    bountyWei: suppliedBountyWei = null,
+  } = {}) {
+    const record = suppliedRecord ?? state?.records?.find?.(
+      (entry) => Number(entry?.kind) === RECORD_KIND_DICE_RUN,
+    );
+    let scoreBps;
+    try { scoreBps = BigInt(record?.value ?? 0); } catch (_error) { return null; }
+    const held = Boolean(record?.held) && scoreBps > 0n;
+    if (scoreBps <= 0n) {
+      scoreBps = recordClaimTargetForMark(RECORD_KIND_DICE_RUN, 0n);
+    }
+    if (scoreBps == null || scoreBps <= 0n) return null;
+    const player = held ? String(record?.player ?? '').toLowerCase() || null : null;
+    const profile = player == null ? null : this.#profiles.get(player) ?? null;
+    const shareBps = accruedShareBps({
+      held,
+      clockDay: record?.clockDay,
+      today: Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null,
+    });
+    const bountyWei = suppliedBountyWei == null
+      ? accruedPayoutWei(state?.recordPoolWei, shareBps)
+      : BigInt(suppliedBountyWei);
+    return Object.freeze({
+      scoreBps: scoreBps.toString(),
+      player,
+      label: player == null
+        ? held ? 'HOLDER PENDING' : 'UNCLAIMED'
+        : profile?.name || compactWinner(player),
+      avatar: profile?.avatar || null,
+      bountyWei: bountyWei?.toString?.() ?? null,
+    });
+  }
+
+  async #biggestDiceRunForReplay(replay = {}) {
+    let state = get('app.records');
+    if (replay?.biggestDiceRunHit === true && replay?.biggestDiceRunBefore) {
+      const before = replay.biggestDiceRunBefore;
+      let scoreBps = 0n;
+      let bountyWei = null;
+      try {
+        scoreBps = BigInt(before.scoreBps ?? 0);
+        bountyWei = BigInt(before.bountyWei ?? 0);
+      } catch (_error) { /* malformed optional indexer data falls through */ }
+      if (scoreBps > 0n && bountyWei != null && bountyWei >= 0n) {
+        const previousPlayer = String(before.player ?? '').toLowerCase();
+        if (previousPlayer && !this.#profiles.has(previousPlayer)) {
+          try {
+            const profiles = await _fetchProfiles([previousPlayer]);
+            this.#profiles = new Map([...this.#profiles, ...(profiles ?? [])]);
+          } catch (_error) { /* address fallback remains accurate */ }
+        }
+        return this.#biggestDiceRunOption(state, {
+          record: {
+            value: scoreBps,
+            held: Boolean(previousPlayer),
+            player: previousPlayer || null,
+          },
+          bountyWei,
+        });
+      }
+    }
+    // The records rail is below the fold and may not have hydrated when a
+    // Pending replay opens. Read records directly here as replay data, rather
+    // than depending on whether that unrelated component happened to render.
+    try { state = await fetchRecords(); } catch (_error) { /* retain store snapshot */ }
+    const option = this.#biggestDiceRunOption(state);
+    if (!option) return null;
+
+    const record = state?.records?.find?.(
+      (entry) => Number(entry?.kind) === RECORD_KIND_DICE_RUN,
+    );
+    const replayKey = String(replay?.battleKey ?? '').toLowerCase();
+    const recordReplayKey = String(record?.replay?.battleKey ?? '').toLowerCase();
+    let winningScoreBps = 0n;
+    try { winningScoreBps = BigInt(replay?.winningScoreBps ?? 0); } catch (_error) { /* unknown */ }
+    if (!replayKey) return option;
+
+    // The live records rail has already advanced by the time a sealed replay
+    // opens. If this battle set the mark, reconstruct the exact displaced mark
+    // and use BigRecordUpdated.paid as its pre-run bounty. Showing the live
+    // replacement here would reveal the winner before the replay reaches it.
+    const candidate = replay?.biggestDiceRunHit === false
+      ? null
+      : recordReplayKey === replayKey
+      ? { ...record, battleKey: replayKey }
+      : winningScoreBps > 0n
+        ? {
+            value: winningScoreBps,
+            battleKey: replayKey,
+          }
+        : null;
+    if (!candidate) return option;
+    const previous = await readPreviousDiceRunRecord(candidate);
+    if (!previous) {
+      // If live state already bears this result's score, returning it would be
+      // a direct record spoiler. Omit the card on an RPC/provenance failure.
+      let liveValue = 0n;
+      try { liveValue = BigInt(record?.value ?? 0); } catch (_error) { /* unknown */ }
+      return recordReplayKey === replayKey
+        || (winningScoreBps > 0n && liveValue === winningScoreBps)
+        ? null
+        : option;
+    }
+    const previousPlayer = String(previous.player ?? '').toLowerCase();
+    if (previousPlayer && !this.#profiles.has(previousPlayer)) {
+      try {
+        const profiles = await _fetchProfiles([previousPlayer]);
+        this.#profiles = new Map([...this.#profiles, ...(profiles ?? [])]);
+      } catch (_error) { /* address fallback remains accurate */ }
+    }
+    return this.#biggestDiceRunOption(state, {
+      record: previous,
+      bountyWei: previous.bountyWei,
+    });
   }
 
   async #refreshWinnerProfiles() {
@@ -2267,7 +2437,10 @@ export class AppCrapsEntry extends HTMLElement {
       this.#replayLoadPending = false;
       this.#stopReplayPoll();
       this.#replayStates.clear();
-      if (playerChanged) this.#resolvedReplays = [];
+      if (playerChanged) {
+        this.#resolvedReplays = [];
+        this.#openedReplayIdentities.clear();
+      }
       clearPendingActions(PENDING_SOURCE);
     }
     this.#scheduleDay = day;
@@ -2318,9 +2491,13 @@ export class AppCrapsEntry extends HTMLElement {
           ) return;
           this.#winnerTotals = read.totals;
           this.#snapshot = crapsLobbySnapshotWithWinnerTotals(this.#snapshot, read.totals);
+          this.#resolvedReplays = Array.isArray(this.#snapshot.resolvedReplays)
+            ? this.#snapshot.resolvedReplays
+            : this.#resolvedReplays;
           this.#previousEventResult = this.#snapshot.yesterdayEventResult
             ?? this.#previousEventResult;
           this.#render();
+          this.#publishResolvedReplays();
         });
       }
     } catch (_error) {
@@ -2334,6 +2511,11 @@ export class AppCrapsEntry extends HTMLElement {
     }
   }
 
+  #resolutionReplayWasSeen(address, replay) {
+    return this.#openedReplayIdentities.has(resolutionIdentity(replay))
+      || resolutionWasSeen(address, replay);
+  }
+
   #publishResolvedReplays() {
     const address = String(this.#schedulePlayer ?? '').toLowerCase();
     const replays = this.#resolvedReplays;
@@ -2341,7 +2523,7 @@ export class AppCrapsEntry extends HTMLElement {
       address,
       replays,
       states: this.#replayStates,
-      wasSeen: resolutionWasSeen,
+      wasSeen: (scope, replay) => this.#resolutionReplayWasSeen(scope, replay),
       run: (replay, scope) => this.#openResolvedReplay(replay, scope),
       clearAll: () => this.#dismissAllResolvedReplays(),
     });
@@ -2360,7 +2542,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (!address) return false;
     const replays = this.#resolvedReplays;
     return replays.some((replay) => {
-      if (resolutionWasSeen(address, replay)) return false;
+      if (this.#resolutionReplayWasSeen(address, replay)) return false;
       const state = this.#replayStates.get(resolutionIdentity(replay));
       return !state || !CRAPS_REPLAY_TERMINAL_STATES.has(state.status);
     });
@@ -2380,7 +2562,7 @@ export class AppCrapsEntry extends HTMLElement {
     const address = String(this.#schedulePlayer ?? '').toLowerCase();
     let lowest = null;
     for (const replay of this.#resolvedReplays) {
-      if (resolutionWasSeen(address, replay)) continue;
+      if (this.#resolutionReplayWasSeen(address, replay)) continue;
       const state = this.#replayStates.get(resolutionIdentity(replay));
       if (state && CRAPS_REPLAY_TERMINAL_STATES.has(state.status)) continue;
       const attempts = Math.max(0, Math.trunc(Number(state?.attempts) || 0));
@@ -2405,7 +2587,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#replayLoadPending) return;
     this.#stopReplayPoll();
     const replays = (Array.isArray(input) ? input : [])
-      .filter((replay) => !resolutionWasSeen(address, replay));
+      .filter((replay) => !this.#resolutionReplayWasSeen(address, replay));
     const relevant = new Set(replays.map(resolutionIdentity));
     for (const identity of this.#replayStates.keys()) {
       if (!relevant.has(identity)) this.#replayStates.delete(identity);
@@ -2438,6 +2620,8 @@ export class AppCrapsEntry extends HTMLElement {
           const artifacts = await loadCrapsReplay({
             battleKey: replay.battleKey,
             viewerBetId: replay.viewerBetId,
+            chainId: replay.chainId ?? CHAIN.id,
+            contract: replay.contract ?? CONTRACTS.CRAPS,
             fetchImpl: crapsReplayFetch,
           });
           return { identity, state: { ...crapsReplayLoaderState(artifacts), attempts } };
@@ -2486,8 +2670,10 @@ export class AppCrapsEntry extends HTMLElement {
     this.#message = 'Loading the winner\'s replay…';
     this.#render();
     try {
+      const biggestDiceRun = await this.#biggestDiceRunForReplay(replay);
       const result = await openCrapsReplayTable(table, {
         ...replay,
+        biggestDiceRun,
         fetchImpl: crapsReplayFetch,
         onReplayDegraded: (error) => reportCrapsReplayFailure(error, 'side-lane'),
       });
@@ -2514,6 +2700,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (!table?.open) throw new Error('The Craps replay table is unavailable.');
     let result;
     try {
+      const biggestDiceRun = await this.#biggestDiceRunForReplay(replay);
       result = await openCrapsReplayTable(table, {
         battleKey: replay.battleKey,
         viewerBetId: replay.viewerBetId,
@@ -2534,9 +2721,15 @@ export class AppCrapsEntry extends HTMLElement {
         highPayoutWei: replay.highPayoutWei,
         highWinningStop: replay.highWinningStop,
         highBankrollRider: replay.highBankrollRider,
+        shooterTimeline: replay.shooterTimeline ?? replay.shooters,
+        riuBattleAddedWei: replay.riuBattleAddedWei
+          ?? replay.riuBattleTransferWei
+          ?? replay.riuTransferWei,
+        biggestDiceRun,
         onReplayDegraded: (error) => reportCrapsReplayFailure(error, 'side-lane'),
         onResolutionAcknowledged: () => {
-          if (resolutionWasSeen(address, replay)) return;
+          if (this.#resolutionReplayWasSeen(address, replay)) return;
+          this.#openedReplayIdentities.add(resolutionIdentity(replay));
           markResolutionSeen(address, replay);
           this.#replayStates.delete(resolutionIdentity(replay));
           this.#render();
@@ -2563,13 +2756,28 @@ export class AppCrapsEntry extends HTMLElement {
       this.#scheduleReplayPoll();
       return false;
     }
+    // Opening is the reveal boundary. Retire this Pending action now, before
+    // the reveal overlay refreshes its continuation button; waiting until the
+    // table's EXIT acknowledgement left that stale button pointing at the same
+    // battle and made one result appear to play twice.
+    if (!this.#resolutionReplayWasSeen(address, replay)) {
+      this.#openedReplayIdentities.add(resolutionIdentity(replay));
+      markResolutionSeen(address, replay);
+      this.#replayStates.delete(resolutionIdentity(replay));
+      this.#render();
+      this.#publishResolvedReplays();
+      this.#scheduleReplayPoll();
+    }
     return true;
   }
 
   #dismissAllResolvedReplays() {
     const address = String(this.#schedulePlayer ?? '').toLowerCase();
     if (!address) return;
-    for (const replay of this.#resolvedReplays) markResolutionSeen(address, replay);
+    for (const replay of this.#resolvedReplays) {
+      this.#openedReplayIdentities.add(resolutionIdentity(replay));
+      markResolutionSeen(address, replay);
+    }
     this.#replayStates.clear();
     this.#stopReplayPoll();
     this.#render();

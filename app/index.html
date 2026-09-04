@@ -84,7 +84,7 @@
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
   <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" data-href="/app/styles/craps-table.css">
+  <link rel="stylesheet" data-href="/app/styles/craps-table.css" data-rev="resolution-race-v2">
   <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
   <link rel="stylesheet" data-href="/app/styles/records-rail.css">
   <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
@@ -116,9 +116,9 @@
       "gsap/Flip": "/app/vendor/gsap-flip.mjs",
       "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
       "lean-qr": "/app/vendor/lean-qr.mjs",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-0880d134c-45c30da1",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-0880d134c-45c30da1",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-0880d134c-45c30da1",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-8777c7d99-4daa9999-scoped-v1",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-8777c7d99-4daa9999-scoped-v1",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-8777c7d99-4daa9999-scoped-v1",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-20260829",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
@@ -609,7 +609,8 @@
       const loaded = new Promise((resolve) => {
         link.addEventListener('load', resolve, { once: true });
         link.addEventListener('error', resolve, { once: true });
-        link.setAttribute('href', href);
+        const revision = String(link.dataset.rev || '').trim();
+        link.setAttribute('href', revision ? `${href}?v=${encodeURIComponent(revision)}` : href);
       });
       styleLoads.set(href, loaded);
       return loaded;

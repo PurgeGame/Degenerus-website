@@ -21,6 +21,7 @@ const {
   fetchRecords,
   formatRecordValue,
   normalizeRecords,
+  previousDiceRunRecordSnapshot,
   readLiveDiceRunRecord,
   recordClaimTarget,
   recordClaimTargetForMark,
@@ -589,6 +590,92 @@ describe('Dice Run record provenance', () => {
     }, null);
     assert.equal(record.player, PLAYER);
     assert.equal(record.replay, null);
+  });
+
+  test('replays against the displaced record and its exact paid bounty', () => {
+    const previousPlayer = '0x1234567890123456789012345678901234567890';
+    const previousHash = `0x${'12'.repeat(32)}`;
+    const logs = [
+      {
+        blockNumber: 100,
+        index: 3,
+        transactionHash: previousHash,
+        parsed: {
+          name: 'BigRecordUpdated',
+          args: { kind: RECORD_KIND_DICE_RUN, player: previousPlayer, value: 5_030_000n, paid: 8_000n },
+        },
+      },
+      {
+        blockNumber: 120,
+        index: 7,
+        transactionHash: TX_HASH,
+        parsed: {
+          name: 'BigRecordUpdated',
+          args: { kind: RECORD_KIND_DICE_RUN, player: PLAYER, value: SCORE_BPS, paid: 66_000n },
+        },
+      },
+    ];
+    assert.deepEqual(previousDiceRunRecordSnapshot(logs, {
+      transactionHash: TX_HASH,
+      value: SCORE_BPS,
+      logIndex: 7,
+    }), {
+      player: previousPlayer,
+      value: 5_030_000n,
+      held: true,
+      blockNumber: 100,
+      transactionHash: previousHash,
+      logIndex: 3,
+      bountyWei: '66000',
+    });
+  });
+
+  test('the first Dice Run replays against the unclaimed 100x floor', () => {
+    const snapshot = previousDiceRunRecordSnapshot([{
+      blockNumber: 120,
+      index: 7,
+      transactionHash: TX_HASH,
+      parsed: {
+        name: 'BigRecordUpdated',
+        args: { kind: RECORD_KIND_DICE_RUN, player: PLAYER, value: SCORE_BPS, paid: 66_000n },
+      },
+    }], {
+      transactionHash: TX_HASH,
+      value: SCORE_BPS,
+      logIndex: 7,
+    });
+    assert.equal(snapshot.player, null);
+    assert.equal(snapshot.value, 1_000_000n);
+    assert.equal(snapshot.held, false);
+    assert.equal(snapshot.bountyWei, '66000');
+  });
+
+  test('a just-settled winning score can identify its unique record event before indexing catches up', () => {
+    const previousPlayer = '0x1234567890123456789012345678901234567890';
+    const logs = [
+      {
+        blockNumber: 100,
+        index: 3,
+        transactionHash: `0x${'12'.repeat(32)}`,
+        parsed: {
+          name: 'BigRecordUpdated',
+          args: { kind: RECORD_KIND_DICE_RUN, player: previousPlayer, value: 5_030_000n, paid: 8_000n },
+        },
+      },
+      {
+        blockNumber: 120,
+        index: 7,
+        transactionHash: TX_HASH,
+        parsed: {
+          name: 'BigRecordUpdated',
+          args: { kind: RECORD_KIND_DICE_RUN, player: PLAYER, value: SCORE_BPS, paid: 66_000n },
+        },
+      },
+    ];
+    assert.equal(
+      previousDiceRunRecordSnapshot(logs, { value: SCORE_BPS })?.value,
+      5_030_000n,
+    );
   });
 });
 

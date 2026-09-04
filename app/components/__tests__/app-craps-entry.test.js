@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+import { CHAIN, CONTRACTS } from '../../app/chain-config.js';
+
 globalThis.HTMLElement ??= class HTMLElement {};
 globalThis.customElements ??= {
   registry: new Map(),
@@ -17,6 +19,11 @@ const indexSource = readFileSync(indexUrl, 'utf8');
 const cssSource = readFileSync(cssUrl, 'utf8');
 
 const crapsEntry = await import(moduleUrl);
+
+const replayIdentity = (battleKey, viewerBetId, {
+  chainId = CHAIN.id,
+  contract = CONTRACTS.CRAPS,
+} = {}) => [chainId, contract.toLowerCase(), battleKey.toLowerCase(), viewerBetId].join(':');
 
 test('the browser clock mirrors all seven contract battle boundaries', () => {
   const period = (iso) => crapsEntry.crapsPeriodAt(Date.parse(iso));
@@ -144,7 +151,7 @@ test('a lobby result stays sealed and only claims readiness once its replay can 
   const battleKey = `0x${'ab'.repeat(32)}`;
   const result = { battleKey, winner: address.toLowerCase() };
   const replays = [{ battleKey, viewerBetId: '17' }];
-  const identity = `${battleKey.toLowerCase()}:17`;
+  const identity = replayIdentity(battleKey, '17');
 
   assert.equal(crapsEntry.crapsResultNeedsReveal(result, {
     address,
@@ -305,6 +312,13 @@ test('result-bar replays open with the winning seat as the viewer', () => {
     potWei: '12000000000000000000000',
     amountWei: 9_000n * 10n ** 18n,
     winningStop: 1,
+    winningScoreBps: 5_030_000,
+    biggestDiceRunHit: true,
+    biggestDiceRunBefore: {
+      player: '0x0000000000000000000000000000000000000099',
+      scoreBps: 4_200_000n,
+      bountyWei: 66_000n,
+    },
     bonusMultiplier: 100,
   }), {
     battleKey,
@@ -314,6 +328,13 @@ test('result-bar replays open with the winning seat as the viewer', () => {
     battleWinnerBetId: '6234999496913828446217',
     battlePayoutWei: '9000000000000000000000',
     battleWinningStop: 1,
+    winningScoreBps: '5030000',
+    biggestDiceRunHit: true,
+    biggestDiceRunBefore: {
+      player: '0x0000000000000000000000000000000000000099',
+      scoreBps: 4_200_000n,
+      bountyWei: 66_000n,
+    },
     bonusMultiplier: 100,
   }, 'the replay loader receives the winner bet id as its initial perspective');
   const highWinner = '0xCD34000000000000000000000000000000000000';
@@ -353,6 +374,9 @@ test('result-bar replays open with the winning seat as the viewer', () => {
   assert.match(componentSource,
     /#openWinnerReplay\(button\)[\s\S]*?openCrapsReplayTable\(table, \{[\s\S]*?\.\.\.replay,[\s\S]*?fetchImpl: crapsReplayFetch/s,
     'the winner-scoped request reuses the verified replay table adapter');
+  assert.match(componentSource,
+    /#biggestDiceRunForReplay\(replay[\s\S]*?biggestDiceRunHit === true[\s\S]*?biggestDiceRunBefore[\s\S]*?bountyWei[\s\S]*?readPreviousDiceRunRecord\(candidate\)/s,
+    'the replay header prefers the result\'s explicit pre-run Biggest card and retains a compatibility fallback');
   assert.match(componentSource,
     /#bindWinnerReplay\([\s\S]*?concealed \? null : laneResult/s,
     'an unseen owned result cannot leak through the public replay button');
@@ -1180,7 +1204,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
     winner: address.toLowerCase(),
     amountWei: (12_300n * 10n ** 18n).toString(),
   };
-  const identity = `${battleKey}:${viewerBetId}`;
+  const identity = replayIdentity(battleKey, viewerBetId);
   const runs = [];
   let clears = 0;
 
@@ -1227,7 +1251,7 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
     clearAll: () => { clears += 1; },
   });
   assert.equal(ready[0].state, 'ready');
-  assert.equal(ready[0].shortLabel, 'View result');
+  assert.equal(ready[0].shortLabel, 'Craps battle');
   assert.equal(ready[0].detail,
     'Battle settled. Open the replay to reveal your result and final rewards.');
   assert.doesNotMatch(ready[0].detail, /won|12\.3K|0xab12/i,
@@ -1245,7 +1269,18 @@ test('Pending replay rows stay waiting until sealed data is ready and exclude se
   });
   assert.deepEqual(seen, []);
   assert.match(crapsEntry.crapsResolutionSeenKey(address, battleKey, viewerBetId),
-    new RegExp(`${address.toLowerCase()}:${battleKey}:${viewerBetId}$`));
+    new RegExp(`${CHAIN.id}:${CONTRACTS.CRAPS.toLowerCase()}:${address.toLowerCase()}:${battleKey}:${viewerBetId}$`));
+  assert.notEqual(
+    crapsEntry.crapsResolutionSeenKey(address, battleKey, viewerBetId),
+    crapsEntry.crapsResolutionSeenKey(
+      address,
+      battleKey,
+      viewerBetId,
+      CHAIN.id,
+      `0x${'ef'.repeat(20)}`,
+    ),
+    'a repeated battle and seat identity cannot inherit another deployment\'s acknowledgement',
+  );
 });
 
 test('replay publication copy covers every pointer state without leaking failure codes', () => {
@@ -1272,7 +1307,7 @@ test('replay publication copy covers every pointer state without leaking failure
   const failedRow = crapsEntry.crapsResolutionPendingActions({
     address: '0xab12000000000000000000000000000000000000',
     replays: [{ day: 42, period: 0, slot: '337', battleKey: 'battle', viewerBetId: '1' }],
-    states: new Map([['battle:1', { ready: false, status: 'failed', pointer }]]),
+    states: new Map([[replayIdentity('battle', '1'), { ready: false, status: 'failed', pointer }]]),
   })[0];
   assert.equal(failedRow.passive, true, 'terminal failures are plain status, not a WAITING action');
   assert.equal(failedRow.run, null);
@@ -1296,6 +1331,9 @@ test('replay polling is one-second jittered, visibility-aware, and stops on term
     name: 'CrapsReplayValidationError', path: 'manifest.ruleset.engineVersion',
   }), 'build-unavailable');
   assert.equal(crapsEntry.crapsReplayFailureStatus(new Error('HTTP 503')), 'retrying');
+  assert.equal(crapsEntry.crapsReplayFailureStatus({
+    name: 'CrapsReplayLegacyDeploymentMismatchError',
+  }), 'retrying', 'a rollout-era legacy pointer collision keeps polling for its scoped replacement');
 
   assert.match(componentSource, /document\?\.addEventListener\?\.\('visibilitychange'/);
   assert.match(componentSource, /document\?\.hidden === true/);
@@ -1338,6 +1376,9 @@ test('caught replay failures emit privacy-safe diagnostics from every open path'
   assert.match(componentSource, /reportCrapsReplayFailure\(error, 'winner-open'\)/);
   assert.match(componentSource, /reportCrapsReplayFailure\(error, 'pending-open'\)/);
   assert.match(componentSource, /onReplayDegraded: \(error\) => reportCrapsReplayFailure\(error, 'side-lane'\)/);
+  assert.match(componentSource,
+    /if \(!result\.ready\)[\s\S]*?return false;[\s\S]*?markResolutionSeen\(address, replay\);[\s\S]*?this\.#publishResolvedReplays\(\);[\s\S]*?return true;/s,
+    'a successfully opened battle retires before Pending can offer the same replay again');
 });
 
 test('winner cells wear the linked Discord identity and never lose the address', () => {

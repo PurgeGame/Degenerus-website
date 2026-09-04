@@ -3496,6 +3496,75 @@ describe('reveal-overlay element', () => {
       'the overlay closes after the one combined case instead of opening a queued tail');
   });
 
+  test('ticket-pack batch controls re-enable after a Luckbox OPEN ALL handoff', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    const source = 'open-all-before-ticket-packs';
+    t.after(() => pendingActionsMod.clearPendingActions(source));
+    pendingActionsMod.publishPendingActions(source, [{
+      id: 'lootbox:2', kind: 'lootbox', label: 'Luckbox #2',
+      state: 'ready', order: 2,
+      run: async () => {
+        pendingActionsMod.clearPendingActions(source);
+        queueReveal({
+          kind: 'lootbox', lootboxIndex: 2,
+          legs: [{ legType: 'dgnrs', amount: 2n * 10n ** 18n }],
+        });
+      },
+    }]);
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+      queueReveal({
+        kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 2,
+        batchId: 'packs-after-lootbox-open-all', packIndex, packCount: 2,
+        tickets: [ticket(packIndex * 2 - 1), ticket(packIndex * 2)],
+      });
+    }
+
+    const el = instantiate();
+    await tick();
+    // The suite's tiny innerHTML parser keeps shell nodes flat. Recreate the
+    // production containment this regression exercises: OPEN ALL disables the
+    // three buttons found beneath the shared action container.
+    const shellActions = el.querySelector('[data-bind="rvl-pack-actions"]');
+    shellActions.appendChild(el.querySelector('[data-bind="rvl-open-pack"]'));
+    shellActions.appendChild(el.querySelector('[data-bind="rvl-open-all"]'));
+    shellActions.appendChild(el.querySelector('[data-bind="rvl-skip-pack"]'));
+    const shellOpenAll = el.querySelector('[data-bind="rvl-open-all"]');
+    shellOpenAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(shellOpenAll.disabled, true,
+      'the async Luckbox handoff temporarily locks the action it owns');
+
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    for (let i = 0; i < 20 && summary.hidden; i += 1) {
+      await tick();
+      if (summary.hidden) backdrop.dispatchEvent({ type: 'click' });
+    }
+    const terminal = summary.querySelector('.rvl-collect-cta');
+    assert.ok(terminal, 'the combined Luckbox receipt reaches its terminal action');
+    terminal.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    const skipAll = el.querySelector('[data-bind="rvl-skip-pack"]');
+    assert.equal(shellOpenAll.hidden, false, 'the following pack offers OPEN ALL');
+    assert.equal(skipAll.textContent, 'SKIP ALL', 'the following pack offers SKIP ALL');
+    assert.equal(shellOpenAll.disabled, false,
+      'OPEN ALL is a native-clickable button after the prior async handoff');
+    assert.equal(skipAll.disabled, false,
+      'SKIP ALL is a native-clickable button after the prior async handoff');
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
   test('OPEN ALL cannot be preempted by tapping the case while sibling results load', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });

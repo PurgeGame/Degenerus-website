@@ -39,6 +39,8 @@ const POINTER_EDGE_TTL_SECONDS = 86_400;
 const ORIGIN_TIMEOUT_MS = 3_000;
 
 const BATTLE_KEY = /^[A-Za-z0-9_.:-]{1,160}$/;
+const CHAIN_ID = /^[1-9][0-9]{0,15}$/;
+const CONTRACT = /^0x[0-9a-f]{40}$/;
 const DIGEST = /^[0-9a-f]{16,64}$/;
 const SHARD = /^\d{4}\.json$/;
 
@@ -53,17 +55,30 @@ export function routeKind(pathname) {
   const rest = pathname.slice('/craps/replays/v1/'.length);
   if (rest.includes('..') || rest.includes('//')) return null;
   const parts = rest.split('/');
-  if (parts[0] !== 'battles') return null;
+  let battleOffset = 0;
+  if (parts[0] === 'chains') {
+    if (!CHAIN_ID.test(parts[1] ?? '')
+      || parts[2] !== 'contracts'
+      || !CONTRACT.test(parts[3] ?? '')
+      || parts[4] !== 'battles') return null;
+    battleOffset = 4;
+  } else if (parts[0] !== 'battles') {
+    return null;
+  }
+  const battleParts = parts.slice(battleOffset);
   let battleKey;
-  try { battleKey = decodeURIComponent(parts[1] ?? ''); } catch { return null; }
+  try { battleKey = decodeURIComponent(battleParts[1] ?? ''); } catch { return null; }
   if (!BATTLE_KEY.test(battleKey)) return null;
 
-  if (parts.length === 3 && parts[2] === 'latest.json') return 'pointer';
-  if (parts[2] !== 'results' || !DIGEST.test(parts[3] ?? '')) return null;
-  if (parts.length === 5 && (parts[4] === 'manifest.json' || parts[4] === 'featured.json')) {
+  if (battleParts.length === 3 && battleParts[2] === 'latest.json') return 'pointer';
+  if (battleParts[2] !== 'results' || !DIGEST.test(battleParts[3] ?? '')) return null;
+  if (battleParts.length === 5
+    && (battleParts[4] === 'manifest.json' || battleParts[4] === 'featured.json')) {
     return 'immutable';
   }
-  if (parts.length === 6 && parts[4] === 'seats' && SHARD.test(parts[5])) return 'immutable';
+  if (battleParts.length === 6
+    && battleParts[4] === 'seats'
+    && SHARD.test(battleParts[5])) return 'immutable';
   return null;
 }
 

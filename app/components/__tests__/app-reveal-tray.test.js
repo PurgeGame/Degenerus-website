@@ -463,10 +463,10 @@ describe('<app-reveal-tray>', () => {
     action = el.querySelector('.rrt-action--craps');
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-craps-summary__amount').textContent, '200 FLIP');
-    assert.equal(action.querySelector('.rrt-craps-summary__status').textContent, 'VIEW RESULT');
+    assert.equal(action.querySelector('.rrt-craps-summary__status').textContent, 'CRAPS BATTLE');
     assert.equal(action.querySelector('.rrt-craps-summary__status').getAttribute('data-state'),
       'ready');
-    assert.equal(action.getAttribute('aria-label'), '200 FLIP · VIEW RESULT');
+    assert.equal(action.getAttribute('aria-label'), '200 FLIP · CRAPS BATTLE');
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1, 'the ready receipt opens the owned replay result');

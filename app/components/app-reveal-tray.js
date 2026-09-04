@@ -423,7 +423,7 @@ export function crapsPendingSummary(item) {
   const amount = abbreviatePendingTokenAmounts(label || 'CRAPS').toUpperCase();
   const phase = String(item?.phase || '');
   const status = item?.state === 'ready'
-    ? 'VIEW RESULT'
+    ? 'CRAPS BATTLE'
     : phase === 'pending'
       ? 'WAITING TO SETTLE'
       : phase === 'settling'

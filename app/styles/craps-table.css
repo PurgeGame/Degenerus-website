@@ -1604,7 +1604,7 @@ app-craps-table {
 
 .craps-bet__hardway-legend {
   position: absolute;
-  z-index: 11;
+  z-index: 2;
   bottom: 0.3rem;
   left: 0.36rem;
   display: grid;
@@ -1952,7 +1952,7 @@ app-craps-table {
 
 .craps-bet__corner-grid {
   position: absolute;
-  z-index: 10;
+  z-index: 20;
   inset: 0.24rem;
   display: block;
   overflow: hidden;
@@ -2069,14 +2069,6 @@ app-craps-table {
     drop-shadow(0 0.055rem 0.035rem rgba(0, 0, 0, 0.76));
 }
 
-.craps-bet__seat-chip.is-shooter-boosted:not(.is-local) .craps-bet__seat-art {
-  filter:
-    saturate(1.08)
-    brightness(1.08)
-    drop-shadow(0 0 0.055rem rgba(255, 221, 126, 0.72))
-    drop-shadow(0 0.055rem 0.035rem rgba(0, 0, 0, 0.78));
-}
-
 .craps-bet__seat-chip.is-local {
   top: auto;
   right: 0;
@@ -2094,45 +2086,6 @@ app-craps-table {
     brightness(1.04)
     drop-shadow(0 0 0.075rem color-mix(in srgb, var(--player-color) 72%, transparent))
     drop-shadow(0 0.065rem 0.04rem rgba(0, 0, 0, 0.78));
-}
-
-.craps-bet__seat-chip.is-local.is-shooter-boosted .craps-bet__seat-art {
-  filter:
-    saturate(1.08)
-    brightness(1.09)
-    drop-shadow(0 0 0.085rem rgba(255, 235, 154, 0.8))
-    drop-shadow(0 0.065rem 0.04rem rgba(0, 0, 0, 0.8));
-}
-
-/*
- * THE ROTATING SHOOTER (audit 8777c7d99). One hand per seat, passed around the whole field —
- * so it is rarer and more legible than the schedule's per-shooter draw and reads in a COOLER
- * accent rather than a hotter gold, otherwise the two are indistinguishable at chip size.
- * The uplift itself is already folded into the boost percentage; this is purely the label.
- */
-.craps-bet__seat-chip.is-rotation-turn .craps-bet__seat-art {
-  filter:
-    saturate(1.12)
-    brightness(1.12)
-    drop-shadow(0 0 0.075rem rgba(164, 233, 255, 0.85))
-    drop-shadow(0 0 0.14rem rgba(96, 196, 255, 0.5))
-    drop-shadow(0 0.055rem 0.035rem rgba(0, 0, 0, 0.78));
-}
-.craps-bet__seat-chip.is-local.is-rotation-turn .craps-bet__seat-art {
-  filter:
-    saturate(1.16)
-    brightness(1.14)
-    drop-shadow(0 0 0.095rem rgba(196, 244, 255, 0.92))
-    drop-shadow(0 0 0.18rem rgba(96, 196, 255, 0.58))
-    drop-shadow(0 0.065rem 0.04rem rgba(0, 0, 0, 0.8));
-  animation: craps-rotation-turn 1.6s ease-in-out infinite;
-}
-@keyframes craps-rotation-turn {
-  0%, 100% { transform: translateZ(0) scale(1); }
-  50%      { transform: translateZ(0) scale(1.045); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .craps-bet__seat-chip.is-local.is-rotation-turn .craps-bet__seat-art { animation: none; }
 }
 
 .craps-bet__seat-chip.is-local .craps-bet__seat-art + .craps-bet__seat-art {
@@ -5681,6 +5634,1567 @@ app-craps-table {
   }
 }
 
+/* -------------------------------------------------------------------------
+   Craps resolution race
+
+   The old rack and Top 10 remain in the DOM as compatibility/accessibility
+   fallbacks. During replay this full-width instrument is the visible source
+   of bankroll, rank and history truth. */
+
+.craps-dialog__brand-logo,
+.craps-dialog__riu-logo,
+.craps-bet__hardway-dice {
+  display: none;
+}
+
+.craps-dialog__flip-mark {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.craps-dialog__prize--biggest[hidden],
+.craps-race[hidden],
+.craps-race-cover[hidden],
+.craps-race-result[hidden] {
+  display: none !important;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] {
+  width: min(99vw, 94rem);
+  grid-template-rows: 4.55rem minmax(0, 1fr) auto;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+  min-height: 0;
+  grid-template-columns: clamp(10.5rem, 18vw, 14.5rem) minmax(0, 1fr) 2rem;
+  gap: clamp(0.35rem, 0.8vw, 0.7rem);
+  padding: 0.25rem 0.55rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo {
+  display: block;
+  width: 100%;
+  max-height: 3.65rem;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0.18rem 0.22rem rgba(0, 0, 0, 0.72));
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-dialog__dice,
+  .craps-dialog__heading,
+  .craps-dialog__prize--goal
+) {
+  display: none !important;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+  position: static;
+  display: grid;
+  width: 100%;
+  max-width: none;
+  height: 3.65rem;
+  grid-template-columns: minmax(15rem, 1.15fr) minmax(14rem, 1fr) minmax(15rem, 1fr);
+  gap: 0.3rem;
+  transform: none;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="2"] {
+  grid-template-columns: minmax(15rem, 1.08fr) minmax(15rem, 1fr);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__close {
+  grid-column: 3;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize {
+  min-height: 0;
+  height: 3.65rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 0.28rem;
+  box-shadow: inset 0.14rem 0 var(--prize-accent), inset 0 0 0.8rem rgba(0, 0, 0, 0.45);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot {
+  grid-template-columns: minmax(6.5rem, 0.9fr) minmax(6.8rem, 1fr);
+  gap: 0.4rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__riu-logo {
+  display: block;
+  width: 100%;
+  max-height: 2.75rem;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0.12rem 0.25rem rgba(0, 0, 0, 0.7));
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__jackpot-label {
+  display: none;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot > strong {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-dialog__prize--jackpot,
+  .craps-dialog__prize--bounty
+) > strong output {
+  overflow: hidden;
+  color: #fff0b2;
+  font-size: clamp(1.1rem, 1.75vw, 1.48rem);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot > strong output {
+  color: #e4a1ff;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.55rem;
+  row-gap: 0.05rem;
+  background:
+    radial-gradient(circle at 50% 120%, rgba(238, 184, 66, 0.18), transparent 58%),
+    linear-gradient(105deg, rgba(229, 168, 56, 0.13), transparent 58%),
+    rgba(14, 10, 4, 0.9);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > small {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  color: #f7e7b4;
+  font-size: 0.66rem;
+  letter-spacing: 0.11em;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+  grid-column: 1;
+  grid-row: 2;
+  justify-content: flex-start;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-content: center;
+  align-self: stretch;
+  min-width: 4.7rem;
+  padding-left: 0.45rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added small {
+  font-size: 0.5rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added output {
+  max-width: 6.5ch;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added .craps-dialog__flip-mark {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize em {
+  display: none;
+}
+
+.craps-dialog__prize--jackpot.is-paying {
+  animation: craps-race-header-pay 0.9s ease both;
+}
+
+.craps-dialog__prize--bounty.is-receiving {
+  animation: craps-race-header-receive 0.9s ease both;
+}
+
+@keyframes craps-race-header-pay {
+  0%, 100% { filter: none; }
+  45% { filter: brightness(1.5) drop-shadow(0 0 0.65rem rgba(216, 131, 255, 0.65)); }
+}
+
+@keyframes craps-race-header-receive {
+  0%, 100% { filter: none; }
+  55% { filter: brightness(1.55) drop-shadow(0 0 0.72rem rgba(245, 202, 98, 0.72)); }
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest {
+  --prize-accent: #d0a84d;
+  --prize-border: rgba(208, 168, 77, 0.55);
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.35rem minmax(0, 1fr) 3.8rem;
+  grid-template-rows: 1fr 1fr;
+  gap: 0 0.35rem;
+  padding: 0.22rem 0.55rem 0.2rem 0.34rem;
+  isolation: isolate;
+}
+
+.craps-biggest__art {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.47;
+  object-fit: cover;
+  object-position: center;
+}
+
+.craps-biggest__avatar {
+  position: relative;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid #b68f37;
+  border-radius: 50%;
+  background: #07334a;
+  color: #e8f8ff;
+  font: 1000 0.66rem/1 "Roboto Mono", monospace;
+  box-shadow: 0 0 0 2px #17212b, 0 0 0.6rem rgba(63, 201, 236, 0.38);
+}
+
+.craps-biggest__avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.craps-biggest__holder {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: center;
+  overflow: hidden;
+  color: #f5e7c0;
+  font: 900 0.72rem/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.craps-biggest__multiple {
+  display: grid !important;
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: stretch;
+  place-items: center;
+  padding-left: 0.35rem;
+  border-left: 1px solid rgba(224, 186, 99, 0.42);
+  color: #fff0b2 !important;
+  font: 1000 1.15rem/1 "Roboto Mono", monospace;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest::before {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  color: #ffe4a0;
+  font: 1000 0.62rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.05em;
+  content: "THE BIGGEST DICE RUN";
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: clamp(12.2rem, 28dvh, 14.5rem) minmax(17rem, 1fr);
+  grid-template-areas: "felt" "race";
+  gap: 0.42rem;
+  padding: 0.45rem 0.55rem;
+  overflow-y: auto;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board {
+  display: none !important;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
+  min-height: 0;
+  height: 100%;
+  padding: 0.42rem 0.55rem;
+  overflow: visible;
+  border-width: 2px;
+  border-radius: 0.8rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-groups {
+  height: 100%;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  grid-template-rows: 4.15rem minmax(0, 1fr);
+  grid-template-areas:
+    "place place place place place place place place place place place place place place place place"
+    "hard4 hard4 hard8 hard8 hud hud hud hud hud hud hud hud line line dont dont";
+  gap: 0.2rem 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets {
+  gap: 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet {
+  min-height: 0;
+  border-radius: 0;
+  border-width: 1px;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet:first-child {
+  border-radius: 0.48rem 0 0 0.18rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet:last-child {
+  border-radius: 0 0.48rem 0.18rem 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__name {
+  top: 0.28rem;
+  font-size: clamp(1.25rem, 2vw, 1.85rem);
+  text-shadow: 0 0.12rem 0.25rem rgba(0, 20, 13, 0.9);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-group--hard-4,
+  .craps-group--hard-8,
+  .craps-group--line,
+  .craps-group--dont-line
+) {
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-group--hard-4,
+  .craps-group--hard-8,
+  .craps-group--line,
+  .craps-group--dont-line
+) .craps-bet {
+  min-height: 0;
+  height: 100%;
+  padding: 0.2rem;
+  border-radius: 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--hard-4 .craps-bet {
+  border-radius: 0.18rem 0 0 0.48rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet {
+  border: 2px solid rgba(237, 14, 17, 0.92);
+  border-radius: 0 0.18rem 0.48rem 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend {
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  place-items: center;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend > :is(small, strong) {
+  display: none;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend em {
+  position: absolute;
+  bottom: 0.35rem;
+  left: 0.45rem;
+  display: block;
+  margin: 0;
+  font-size: clamp(0.72rem, 1vw, 0.92rem);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice {
+  position: absolute;
+  top: 0.3rem;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.12rem;
+  transform: translateX(-50%);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice img {
+  display: block;
+  width: clamp(2.15rem, 3.25vw, 2.8rem);
+  height: clamp(2.15rem, 3.25vw, 2.8rem);
+  object-fit: contain;
+  filter: none;
+  transform: none;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-group--line,
+  .craps-group--dont-line
+) .craps-bet__name {
+  align-self: start;
+  justify-content: center;
+  margin-top: 0.6rem;
+  font-size: clamp(0.85rem, 1.15vw, 1.1rem);
+  line-height: 1;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__name {
+  gap: 0.25rem;
+  color: #ffc4c6;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__wwxrp-mark {
+  width: 1.4rem;
+  height: 1.4rem;
+  flex: 0 0 1.4rem;
+  object-fit: contain;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-group--line,
+  .craps-group--dont-line
+) .craps-bet__odds {
+  bottom: 0.42rem;
+  left: 0.45rem;
+  display: block;
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-group--line,
+  .craps-group--dont-line
+) .craps-bet__odds small {
+  display: none;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__corner-grid {
+  inset: 0.16rem;
+  overflow: visible;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-chip.is-local {
+  right: 0.18rem;
+  bottom: 0.18rem;
+  width: 62%;
+  height: 72%;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"] {
+  display: grid;
+  width: min(100%, 8.2rem);
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  justify-items: center;
+  gap: 0.16rem;
+  padding-inline: 0;
+  overflow: visible;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"][data-columns="2"] {
+  width: min(112%, 9.2rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"][data-columns="3"] {
+  width: min(126%, 10.5rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"] .craps-bet__seat-art {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+/* Pile count is the wager language: one/two/three separate silhouettes retain
+   the original chip count while each silhouette's size carries escalation. */
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"][data-base-chip-count="2"] .craps-bet__seat-art,
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__seat-art-set[data-kind="pile"][data-base-chip-count="3"] .craps-bet__seat-art {
+  justify-self: stretch;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+  display: grid;
+  height: 100%;
+  grid-template-columns: minmax(11.5rem, 1.05fr) minmax(15rem, 1.35fr) minmax(10.5rem, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "race-player roll race-l10";
+  gap: 0.22rem;
+  padding: 0.22rem;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-area: race-player;
+  grid-template-rows: 2.5rem minmax(0, 1fr);
+  gap: 0.2rem;
+}
+
+.craps-race-shooter {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.42rem 0.12rem 0.12rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--shooter-color, #9aa4ff) 66%, #6470b9);
+  border-radius: 999px 0.28rem 0.28rem 999px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--shooter-color, #5865f2) 34%, transparent), rgba(5, 19, 28, 0.96) 62%);
+}
+
+.craps-race-shooter.is-hot {
+  border-color: #ffd360;
+  background: linear-gradient(105deg, rgba(255, 205, 67, 0.48), rgba(64, 40, 4, 0.97) 64%);
+  box-shadow: 0 0 0.7rem rgba(255, 191, 31, 0.27);
+}
+
+.craps-race-shooter__avatar {
+  position: relative;
+  display: grid;
+  width: 2.15rem;
+  height: 2.15rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1.5px solid var(--shooter-color, #9aa4ff);
+  border-radius: 50%;
+  background: #111827;
+  color: white;
+  font: 1000 0.58rem/1 "Roboto Mono", monospace;
+}
+
+.craps-race-shooter.is-hot .craps-race-shooter__avatar {
+  border-color: #ffe08a;
+}
+
+.craps-race-shooter__avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.craps-race-shooter__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.craps-race-shooter__copy small {
+  color: #aeb6ff;
+  font: 900 0.48rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.05em;
+}
+
+.craps-race-shooter__copy strong {
+  overflow: hidden;
+  color: #f1f3ff;
+  font: 1000 clamp(0.7rem, 1vw, 0.86rem)/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.craps-race-shooter > em {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  color: #ffd45f;
+  font: 1000 0.62rem/1 "Roboto Mono", monospace;
+  font-style: normal;
+}
+
+.craps-race-shooter > em b {
+  color: #fff4bb;
+  font-size: 1rem;
+}
+
+.craps-race-you-stats {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: 0.78fr 1fr 0.78fr 1.45fr;
+  border: 1px solid rgba(110, 240, 140, 0.38);
+  border-radius: 0;
+  background: radial-gradient(circle at 50% 20%, rgba(87, 230, 125, 0.13), transparent 65%), rgba(4, 29, 19, 0.76);
+}
+
+.craps-race-you-stats > span {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  place-items: center;
+  gap: 0.12rem;
+  padding: 0.25rem 0.12rem 0.18rem;
+  border-left: 1px solid rgba(110, 240, 140, 0.16);
+}
+
+.craps-race-you-stats > span:first-child {
+  border-left: 0;
+}
+
+.craps-race-you-stats small {
+  color: #82c993;
+  font: 950 0.48rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.025em;
+}
+
+.craps-race-you-stats strong {
+  display: flex;
+  min-width: 3ch;
+  align-items: center;
+  justify-content: center;
+  color: #eaffef;
+  font: 1000 clamp(0.82rem, 1.2vw, 1.05rem)/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.craps-race-you-stack strong {
+  gap: 0.2rem;
+  font-size: clamp(0.8rem, 1.1vw, 1rem);
+}
+
+.craps-race-you-stack img {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 1.05rem;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud__core {
+  grid-area: roll;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-dice-bay {
+  height: 100%;
+  overflow: hidden;
+  border: 1px dashed rgba(242, 224, 179, 0.54);
+  border-radius: 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice {
+  width: 100%;
+  height: 100%;
+  gap: 0;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
+  width: clamp(7.8rem, 11.2vw, 10.75rem);
+  height: clamp(7.8rem, 11.2vw, 10.75rem);
+  max-width: 56%;
+  object-fit: contain;
+  filter: drop-shadow(0 0.35rem 0.35rem rgba(0, 0, 0, 0.72));
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:first-child {
+  z-index: 1;
+  transform: translateX(-0.65rem);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:last-child {
+  transform: translateX(0.65rem);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-readout {
+  top: 79%;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-number {
+  top: 0;
+  left: 50%;
+  min-width: 2ch;
+  font-size: clamp(1.35rem, 2.15vw, 1.8rem);
+  transform: translate(-50%, -50%);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-label {
+  top: calc(100% + 0.22rem);
+  left: 50%;
+  width: max-content;
+  font-size: 0.66rem;
+  transform: translateX(-50%);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay[data-race-tone="big"] .craps-dice-bay__lock-number {
+  color: #83d9ff;
+  text-shadow: 0 0 0.65rem rgba(97, 197, 255, 0.58);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay[data-race-tone="good"] .craps-dice-bay__lock-number {
+  color: #a8ffbc;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay[data-race-tone="bad"] .craps-dice-bay__lock-number,
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-readout[data-seven-outcome="crap-out"] .craps-dice-bay__lock-number {
+  color: #ff8b92;
+  text-shadow: 0 0 0.65rem rgba(255, 83, 91, 0.58);
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-area: race-l10;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.28rem;
+  border: 1px solid rgba(198, 218, 207, 0.2);
+  border-radius: 0 0.38rem 0.38rem 0;
+  background: rgba(4, 20, 15, 0.78);
+}
+
+.craps-race-l10 > strong {
+  color: #d7c17d;
+  font: 1000 0.82rem/1 "Roboto Mono", monospace;
+  text-align: center;
+}
+
+.craps-race-l10 > span {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(5, minmax(1.3rem, 1fr));
+  grid-template-rows: repeat(2, minmax(1.8rem, 1fr));
+  gap: 0.18rem;
+}
+
+.craps-race-l10 i {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  border: 1px solid rgba(184, 211, 197, 0.17);
+  border-radius: 0.2rem;
+  background: #071910;
+  color: #9bb2a6;
+  font: 1000 clamp(0.72rem, 1.05vw, 0.92rem)/1 "Roboto Mono", monospace;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.craps-race-l10 i[data-state="good"] {
+  border-color: rgba(91, 235, 128, 0.5);
+  background: rgba(18, 83, 43, 0.58);
+  color: #a8ffbc;
+}
+
+.craps-race-l10 i[data-state="big"] {
+  border-color: rgba(97, 197, 255, 0.68);
+  background: linear-gradient(180deg, rgba(28, 101, 145, 0.72), rgba(12, 54, 84, 0.76));
+  color: #d3f2ff;
+  box-shadow: inset 0 -2px rgba(97, 197, 255, 0.7), 0 0 0.35rem rgba(97, 197, 255, 0.16);
+}
+
+.craps-race-l10 i[data-state="neutral"] {
+  background: rgba(20, 39, 30, 0.74);
+  color: #b8c9c0;
+}
+
+.craps-race-l10 i[data-state="bad"] {
+  border-color: rgba(255, 91, 101, 0.52);
+  background: rgba(91, 18, 27, 0.62);
+  color: #ffb1b6;
+  box-shadow: inset 0 -2px rgba(255, 83, 91, 0.48);
+}
+
+.craps-race-l10 i[data-state="empty"] {
+  color: #52685d;
+}
+
+.craps-race-l10 i[data-point="true"]::before {
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 0.25rem rgba(255, 255, 255, 0.85);
+  content: "";
+}
+
+.craps-race-l10 i[data-state="cursor"] {
+  border-color: #f5ca62;
+  box-shadow: inset 0 0 0.5rem rgba(245, 202, 98, 0.2), 0 0 0.35rem rgba(245, 202, 98, 0.24);
+}
+
+.craps-race-l10 i[data-state="cursor"]::after {
+  position: absolute;
+  top: -0.35rem;
+  left: 50%;
+  border-right: 0.28rem solid transparent;
+  border-top: 0.28rem solid #f5ca62;
+  border-left: 0.28rem solid transparent;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.craps-race-l10 i:nth-child(n + 6)[data-state="cursor"]::after {
+  top: auto;
+  bottom: -0.35rem;
+  border-top: 0;
+  border-bottom: 0.28rem solid #f5ca62;
+}
+
+.craps-dialog__card.is-resolving[data-screen="battle"] :is(
+  .craps-center-hud .craps-run-rail,
+  .craps-center-hud .craps-roll-history
+) {
+  display: none !important;
+}
+
+.craps-race {
+  --race-you: #6ef08c;
+  --race-gold: #f5ca62;
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 17rem;
+  grid-area: race;
+  overflow: hidden;
+  border: 1px solid rgba(180, 214, 196, 0.2);
+  border-radius: 0.55rem;
+  background:
+    radial-gradient(circle at 58% 28%, rgba(38, 130, 90, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(6, 30, 22, 0.96), rgba(3, 16, 11, 0.98));
+  box-shadow: inset 0 1.1rem 2rem rgba(0, 0, 0, 0.16), inset 0 -1.4rem 2.4rem rgba(0, 0, 0, 0.25);
+}
+
+.craps-race__chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 17rem;
+  overflow: hidden;
+}
+
+.craps-race-grid-line {
+  stroke: rgba(185, 222, 201, 0.115);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.craps-race-shooter-line {
+  stroke: rgba(164, 208, 186, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 3 6;
+}
+
+.craps-race-axis {
+  fill: #78998a;
+  stroke: rgba(3, 18, 12, 0.92);
+  stroke-width: 3px;
+  paint-order: stroke;
+  font: 850 11px/1 "Roboto Mono", monospace;
+}
+
+.craps-race-axis-title {
+  fill: #86a999;
+  font: 900 11px/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.craps-race-border {
+  fill: none;
+  stroke: rgba(174, 211, 192, 0.14);
+}
+
+.craps-race-threshold,
+.craps-race-danger {
+  stroke-width: 2.25;
+  stroke-dasharray: 8 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.craps-race-threshold.is-goal {
+  stroke: rgba(245, 202, 98, 0.92);
+}
+
+.craps-race-threshold.is-riu {
+  stroke: rgba(216, 131, 255, 0.96);
+  filter: drop-shadow(0 0 0.35rem rgba(205, 98, 255, 0.42));
+}
+
+.craps-race-threshold.is-biggest {
+  stroke: #f5ca62;
+  filter: drop-shadow(0 0 0.4rem rgba(245, 202, 98, 0.42));
+}
+
+.craps-race-danger {
+  stroke: #ff535b;
+  stroke-width: 3;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 0.3rem rgba(255, 83, 91, 0.36));
+}
+
+.craps-race-threshold-label rect,
+.craps-race-danger-label rect {
+  rx: 4;
+  stroke-width: 1;
+}
+
+.craps-race-threshold-label text,
+.craps-race-danger-label text {
+  font: 1000 13px/1 "Roboto Mono", monospace;
+  letter-spacing: 0.035em;
+}
+
+.craps-race-threshold-label.is-goal rect,
+.craps-race-threshold-label.is-biggest rect {
+  fill: #352b0c;
+  stroke: #caa445;
+}
+
+.craps-race-threshold-label.is-goal text,
+.craps-race-threshold-label.is-biggest text {
+  fill: #ffe6a2;
+}
+
+.craps-race-threshold-label.is-riu rect {
+  fill: #291032;
+  stroke: #a75ccb;
+}
+
+.craps-race-threshold-label.is-riu text {
+  fill: #edbdff;
+}
+
+.craps-race-danger-label rect {
+  fill: #361015;
+  stroke: #c44850;
+}
+
+.craps-race-danger-label text {
+  fill: #ff969b;
+}
+
+.craps-race-path {
+  fill: none;
+  stroke: var(--race-player, #9bb3a7);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.16;
+  vector-effect: non-scaling-stroke;
+}
+
+.craps-race-path.is-leader {
+  stroke-width: 2.4;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 0.2rem rgba(245, 202, 98, 0.42));
+}
+
+.craps-race-path.is-you {
+  stroke-width: 4;
+  opacity: 1;
+  filter: drop-shadow(0 0 0.42rem rgba(110, 240, 140, 0.62));
+}
+
+.craps-race-path.is-you.is-leader {
+  filter: drop-shadow(0 0 0.16rem rgba(245, 202, 98, 0.95)) drop-shadow(0 0 0.46rem rgba(110, 240, 140, 0.68));
+}
+
+.craps-race-path.is-busted {
+  opacity: 0.1;
+}
+
+.craps-race-path.is-pulsing.is-blue {
+  stroke: #61c5ff;
+  animation: craps-race-blue-pulse var(--craps-speed-720, 720ms) ease-out both;
+}
+
+.craps-race-path.is-pulsing.is-red {
+  stroke: #ff4652;
+  animation: craps-race-red-pulse var(--craps-speed-720, 720ms) ease-out both;
+}
+
+@keyframes craps-race-blue-pulse {
+  0%, 100% { opacity: 1; stroke-width: 3.5; }
+  35% { opacity: 1; stroke-width: 8; filter: drop-shadow(0 0 0.8rem #61c5ff); }
+}
+
+@keyframes craps-race-red-pulse {
+  0% { opacity: 1; stroke-width: 8; filter: drop-shadow(0 0 0.85rem #ff4652); }
+  100% { opacity: 0.42; stroke-width: 2.5; filter: drop-shadow(0 0 0.25rem #ff4652); }
+}
+
+.craps-race-dot {
+  fill: var(--race-player, #9bb3a7);
+  stroke: #06100c;
+  stroke-width: 2;
+}
+
+.craps-race-dot.is-you {
+  filter: drop-shadow(0 0 0.35rem rgba(110, 240, 140, 0.85));
+}
+
+.craps-race-pulse {
+  fill: none;
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: craps-race-ring var(--craps-speed-720, 720ms) ease-out both;
+}
+
+.craps-race-pulse.is-blue { stroke: #61c5ff; }
+.craps-race-pulse.is-red { stroke: #ff4652; }
+
+@keyframes craps-race-ring {
+  from { opacity: 1; transform: scale(0.4); }
+  to { opacity: 0; transform: scale(3.6); }
+}
+
+.craps-race-playhead {
+  stroke: rgba(231, 246, 238, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.craps-race-wager-art {
+  filter: drop-shadow(0 0.12rem 0.1rem rgba(0, 0, 0, 0.76))
+    drop-shadow(0 0 0.24rem rgba(237, 14, 17, 0.18));
+}
+
+.craps-race-wager-label {
+  fill: #b9cfc2;
+  font: 950 9px/1 "Roboto Mono", monospace;
+  letter-spacing: 0.07em;
+}
+
+.craps-race-wager-value {
+  fill: #fff0b2;
+  font: 1000 13px/1 "Roboto Mono", monospace;
+}
+
+.craps-race-endpoint > line {
+  stroke: #6ef08c;
+  stroke-width: 1.35;
+}
+
+.craps-race-endpoint > rect {
+  fill: #0b4328;
+  stroke: #6ef08c;
+  stroke-width: 1.5;
+  rx: 5;
+  filter: drop-shadow(0 0 0.4rem rgba(110, 240, 140, 0.28));
+}
+
+.craps-race-endpoint.is-leader > line {
+  stroke: #f5ca62;
+}
+
+.craps-race-endpoint.is-leader > rect {
+  fill: #624908;
+  stroke: #f5ca62;
+  filter: drop-shadow(0 0 0.45rem rgba(245, 202, 98, 0.34));
+}
+
+.craps-race-endpoint.is-you.is-leader > rect {
+  stroke: #6ef08c;
+  stroke-width: 2;
+}
+
+.craps-race-endpoint-avatar {
+  fill: #0a1b12;
+  stroke: #ffe08a;
+  stroke-width: 1.5;
+}
+
+.craps-race-endpoint.is-you .craps-race-endpoint-avatar {
+  stroke: #6ef08c;
+}
+
+.craps-race-endpoint-initials {
+  fill: white;
+  font: 1000 9px/1 "Roboto Mono", monospace;
+}
+
+.craps-race-endpoint-rank {
+  fill: #baffca;
+  font: 1000 11px/1 "Roboto Mono", monospace;
+}
+
+.craps-race-endpoint.is-leader .craps-race-endpoint-rank {
+  fill: #fff0a9;
+}
+
+.craps-race-endpoint-value {
+  fill: white;
+  font: 1000 14px/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.craps-race-cover {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(218, 131, 255, 0.2), transparent 42%),
+    rgba(2, 13, 9, 0.97);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.craps-race-cover.is-visible {
+  opacity: 1;
+}
+
+.craps-race-cover > span {
+  display: grid;
+  max-width: 90%;
+  justify-items: center;
+  gap: 0.55rem;
+  text-align: center;
+  transform: scale(0.72);
+}
+
+.craps-race-cover.is-visible > span {
+  animation: craps-race-cover-in var(--craps-speed-720, 720ms) cubic-bezier(0.18, 1.3, 0.36, 1) both;
+}
+
+.craps-race-cover img {
+  display: block;
+  width: min(21rem, 58vw);
+  max-height: 5.2rem;
+  object-fit: contain;
+}
+
+.craps-race-cover strong {
+  color: #ffe79e;
+  font: 1000 clamp(1.8rem, 4vw, 3.5rem)/0.95 "Roboto Mono", monospace;
+  letter-spacing: 0.025em;
+  text-shadow: 0 0 1.2rem rgba(255, 213, 99, 0.42);
+}
+
+.craps-race-cover em {
+  color: #edf7f1;
+  font: 1000 clamp(0.92rem, 1.8vw, 1.4rem)/1 "Roboto Mono", monospace;
+  font-style: normal;
+}
+
+@keyframes craps-race-cover-in {
+  from { opacity: 0; transform: scale(0.72); }
+  58% { opacity: 1; transform: scale(1.05); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.craps-race-transfer-layer {
+  position: fixed;
+  z-index: 12090;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.craps-race-transfer {
+  position: absolute;
+  display: grid;
+  min-width: 5.4rem;
+  place-items: center;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid rgba(134, 255, 173, 0.82);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(28, 111, 65, 0.98), rgba(7, 49, 29, 0.99));
+  box-shadow: 0 0 1rem rgba(101, 255, 141, 0.42);
+  color: #b8ffca;
+  font: 1000 clamp(1rem, 1.8vw, 1.35rem)/1 "Roboto Mono", monospace;
+  animation: craps-race-transfer var(--craps-speed-720, 720ms) cubic-bezier(0.22, 0.76, 0.3, 1) both;
+  transform: translate(-50%, -50%);
+}
+
+.craps-race-transfer.is-loss {
+  border-color: rgba(255, 118, 128, 0.85);
+  background: linear-gradient(180deg, rgba(126, 27, 37, 0.98), rgba(59, 7, 14, 0.99));
+  box-shadow: 0 0 1rem rgba(255, 70, 82, 0.42);
+  color: #ffc1c6;
+}
+
+.craps-race-transfer--pool {
+  border-color: rgba(232, 177, 255, 0.88);
+  background: linear-gradient(180deg, rgba(111, 47, 143, 0.98), rgba(45, 12, 61, 0.99));
+  color: #f0c7ff;
+}
+
+@keyframes craps-race-transfer {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.72); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  100% { opacity: 0.2; transform: translate(calc(-50% + var(--race-transfer-x)), calc(-50% + var(--race-transfer-y))) scale(0.82); }
+}
+
+.craps-race-result {
+  position: fixed;
+  z-index: 12110;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(245, 202, 98, 0.2), transparent 38%),
+    rgba(2, 8, 6, 0.93);
+  opacity: 0;
+  visibility: hidden;
+}
+
+.craps-race-result.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.craps-race-result.is-loss {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 70, 82, 0.18), transparent 38%),
+    rgba(12, 3, 5, 0.95);
+}
+
+.craps-race-result__card {
+  position: relative;
+  display: grid;
+  width: min(94vw, 39rem);
+  justify-items: center;
+  gap: 0.75rem;
+  padding: clamp(1rem, 3vw, 1.7rem);
+  overflow: hidden;
+  border: 1px solid rgba(245, 202, 98, 0.58);
+  border-radius: 0.8rem;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 202, 98, 0.13), transparent 43%),
+    linear-gradient(180deg, #0d251a, #06110c);
+  box-shadow: inset 0 0 2rem rgba(0, 0, 0, 0.45), 0 1.4rem 5rem rgba(0, 0, 0, 0.72);
+}
+
+.craps-race-result.is-loss .craps-race-result__card {
+  border-color: rgba(255, 83, 91, 0.62);
+  background: radial-gradient(circle at 50% 0%, rgba(255, 70, 82, 0.13), transparent 43%), #17070a;
+}
+
+.craps-race-result.is-visible .craps-race-result__card {
+  animation: craps-race-result-in 0.62s 0.05s cubic-bezier(0.2, 1.05, 0.3, 1) both;
+}
+
+@keyframes craps-race-result-in {
+  from { opacity: 0; transform: translateY(1.1rem) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+.craps-race-result__logo {
+  display: block;
+  width: min(21rem, 72vw);
+  max-height: 4.8rem;
+  object-fit: contain;
+}
+
+.craps-race-result__awards {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.38rem;
+}
+
+.craps-race-result__award {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(245, 202, 98, 0.52);
+  border-radius: 999px;
+  background: rgba(64, 45, 9, 0.68);
+  color: #ffe699;
+  font: 1000 0.72rem/1 "Roboto Mono", monospace;
+}
+
+.craps-race-result__award.is-riu {
+  border-color: rgba(216, 131, 255, 0.62);
+  background: rgba(53, 17, 69, 0.76);
+  color: #efc0ff;
+}
+
+.craps-race-result__award img {
+  display: block;
+  width: 5.8rem;
+  max-height: 1.5rem;
+  object-fit: contain;
+}
+
+.craps-race-result__card h2 {
+  margin: 0;
+  color: #ffe08a;
+  font: 1000 clamp(2rem, 6vw, 3.8rem)/0.92 "Roboto Mono", monospace;
+  letter-spacing: 0.035em;
+  text-shadow: 0 0 1rem rgba(245, 202, 98, 0.35);
+}
+
+.craps-race-result.is-loss .craps-race-result__card h2 {
+  color: #ff858d;
+  text-shadow: 0 0 1rem rgba(255, 70, 82, 0.38);
+}
+
+.craps-race-result__performance {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-block: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.craps-race-result__performance > span {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 0.28rem;
+  padding: 0.65rem;
+}
+
+.craps-race-result__performance > span + span {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.craps-race-result__performance strong,
+.craps-race-result__winner-peak strong,
+.craps-race-result__money strong {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  color: #fff0b2;
+  font: 1000 clamp(1.15rem, 2.7vw, 1.65rem)/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.craps-race-result__performance strong em {
+  color: #9aac9f;
+  font-size: 0.65em;
+  font-style: normal;
+}
+
+.craps-race-result__performance img,
+.craps-race-result__winner-peak img,
+.craps-race-result__money img {
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 1.5rem;
+}
+
+.craps-race-result__performance small,
+.craps-race-result__winner small,
+.craps-race-result__money small {
+  color: #8ca598;
+  font: 900 0.58rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.craps-race-result.is-loss .craps-race-result__performance strong {
+  color: #ff9f98;
+}
+
+.craps-race-result__winner {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 3.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(245, 202, 98, 0.28);
+  border-radius: 0.45rem;
+  background: rgba(24, 18, 5, 0.5);
+}
+
+.craps-race-result__winner-avatar {
+  position: relative;
+  display: grid;
+  width: 3.1rem;
+  height: 3.1rem;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid #f5ca62;
+  border-radius: 50%;
+  background: #10231a;
+  color: white;
+  font: 1000 0.8rem/1 "Roboto Mono", monospace;
+}
+
+.craps-race-result__winner-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.craps-race-result__winner > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+.craps-race-result__winner > span:nth-child(2) > strong {
+  overflow: hidden;
+  color: #f4ead0;
+  font: 1000 1rem/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.craps-race-result__winner-peak {
+  display: grid;
+  justify-items: end;
+  gap: 0.28rem;
+}
+
+.craps-race-result__winner-peak strong {
+  font-size: 1rem;
+}
+
+.craps-race-result__money {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.35rem;
+}
+
+.craps-race-result__money > span {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(110, 240, 140, 0.28);
+  border-radius: 0.4rem;
+  background: rgba(9, 54, 30, 0.48);
+}
+
+.craps-race-result__money > span.is-prize {
+  border-color: rgba(255, 213, 91, 0.45);
+  background: rgba(58, 39, 8, 0.48);
+}
+
+.craps-race-result__money > span.is-riu {
+  border-color: rgba(216, 131, 255, 0.5);
+  background: rgba(48, 16, 61, 0.55);
+}
+
+.craps-race-result__card > button {
+  min-width: 9rem;
+  min-height: 2.55rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid #d0a84d;
+  border-radius: 0.4rem;
+  background: linear-gradient(180deg, #66501c, #30240d);
+  color: #ffe69d;
+  font: 1000 0.85rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+@media (max-width: 1120px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+    grid-template-columns: minmax(10rem, 1fr) minmax(13rem, 1.25fr) minmax(9.5rem, 0.95fr);
+  }
+}
+
+@media (max-width: 959px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+    grid-template-columns: minmax(13rem, 1.1fr) minmax(13rem, 1fr);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest {
+    display: none !important;
+  }
+
+}
+
+@media (max-width: 850px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] {
+    grid-template-rows: 4.2rem minmax(0, 1fr) auto;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+    grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr) 2rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+    height: 3.3rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize {
+    height: 3.3rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-groups {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "place place place place place place place place place place place place"
+      "hard4 hard8 hud hud hud hud hud hud hud hud line dont";
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+    grid-template-columns: minmax(8.5rem, 1fr) minmax(11rem, 1.2fr);
+    grid-template-areas: "race-player roll";
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot {
+    display: none !important;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
+    grid-template-rows: 13rem minmax(17rem, 1fr);
+    min-width: 41rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .craps-race-path,
+  .craps-race-pulse,
+  .craps-race-cover > span,
+  .craps-race-result__card,
+  .craps-race-transfer,
+  .craps-dialog__prize--jackpot,
+  .craps-dialog__prize--bounty {
+    animation: none !important;
+  }
+}
+
 /* A phone held sideways has width for a real table composition but almost no
    spare height. Put Top 10 beside the felt, flatten the numbers to one row,
    and arrange the center HUD in two columns. */
@@ -6111,5 +7625,689 @@ app-craps-table {
   .craps-table-rail:has(.craps-run-rail[data-phase="complete"])
     .craps-battle-rack:not([data-battle-winner="true"]) {
     --craps-finished-last-indent: 1.56rem;
+  }
+}
+
+/* Sketch 013 / Variant D is the desktop resolver contract. The production
+   component keeps the sealed replay machinery, but its visible chassis must
+   retain the sketch's 6-column felt, 244px table and 400px full-width race. */
+@media (min-width: 960px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] {
+    width: min(99vw, 82.5rem);
+    grid-template-rows: 5.4rem minmax(0, 1fr) auto;
+    border-radius: 0.7rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+    height: 5.4rem;
+    box-sizing: border-box;
+    grid-template-columns: clamp(12.5rem, 21vw, 18rem) minmax(0, 1fr) 2rem;
+    gap: 0.42rem;
+    padding: 0.45rem 0.58rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo {
+    width: 100%;
+    max-height: 4.25rem;
+    justify-self: stretch;
+    object-position: left center;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+    height: 4.25rem;
+    grid-template-columns: minmax(13.25rem, 1.32fr) minmax(12.25rem, 1.12fr) minmax(10.5rem, 0.9fr);
+    gap: 0.38rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="2"] {
+    grid-template-columns: minmax(16rem, 20rem) minmax(15rem, 18rem);
+    justify-content: end;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="1"] {
+    grid-template-columns: minmax(16rem, 20rem);
+    justify-content: end;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize {
+    height: 4.25rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot {
+    position: relative;
+    display: block;
+    padding-inline: 0.48rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot > strong,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    position: absolute;
+    bottom: 0.52rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--jackpot > strong {
+    right: 0.55rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.2rem;
+    padding: 0.44rem 0.8rem 0.5rem;
+    background: radial-gradient(circle at 50% 145%, rgba(245, 202, 98, 0.22), transparent 54%), linear-gradient(135deg, transparent 0 45%, rgba(255, 229, 148, 0.055) 46% 54%, transparent 55%), linear-gradient(180deg, #211b09, #120f06);
+    box-shadow: inset 0 0 0 1px rgba(255, 237, 175, 0.06), inset 0 0 1.5rem rgba(245, 179, 48, 0.08), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.28);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > small {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    font-size: 0.68rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added {
+    position: absolute;
+    top: 0.42rem;
+    right: 0.62rem;
+    display: flex;
+    width: auto;
+    min-width: 0;
+    height: auto;
+    align-items: center;
+    align-self: auto;
+    gap: 0.2rem;
+    padding: 0.15rem 0.34rem;
+    border: 1px solid rgba(97, 197, 255, 0.3);
+    border-radius: 999px;
+    background: rgba(15, 63, 83, 0.55);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added > small {
+    order: 2;
+    color: #83d9ff;
+    font-size: 0.55rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added > strong {
+    display: flex;
+    order: 1;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added .craps-dialog__flip-mark,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added em {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added output {
+    max-width: 6ch;
+    color: #83d9ff;
+    font-size: 0.62rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__riu-logo {
+    position: absolute;
+    top: 50%;
+    left: 0.48rem;
+    width: clamp(6.5rem, 42%, 10.5rem);
+    max-height: 3.25rem;
+    transform: translateY(-50%);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-dialog__prize--jackpot,
+    .craps-dialog__prize--bounty
+  ) > strong output {
+    font-size: clamp(1.25rem, 1.8vw, 1.55rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest {
+    grid-template-columns: 3rem minmax(0, 1fr) 3.35rem;
+    padding-inline: 0.3rem 0.42rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__avatar {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__multiple {
+    font-size: 1.05rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
+    grid-template-rows: 15.25rem 25rem;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
+    height: 15.25rem;
+    padding: 0.44rem 0.56rem;
+    border-width: 3px;
+    border-radius: 1rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-groups {
+    display: grid;
+    height: 100%;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: 4.5rem 3.875rem minmax(0, 1fr);
+    grid-template-areas: none;
+    gap: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place {
+    grid-column: 1 / 7;
+    grid-row: 1;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--hard-4 {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--hard-8 {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--line {
+    grid-column: 5;
+    grid-row: 2;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line {
+    grid-column: 6;
+    grid-row: 2;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--hard-4,
+    .craps-group--hard-8,
+    .craps-group--line,
+    .craps-group--dont-line
+  ) {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--hard-4 .craps-bet {
+    border-radius: 0.2rem 0 0 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--hard-8 .craps-bet,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--line .craps-bet {
+    border-radius: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet {
+    border-radius: 0 0.2rem 0 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__name {
+    top: 0.42rem;
+    font-size: 2rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__odds {
+    bottom: 0.48rem;
+    left: 0.62rem;
+    font-size: 0.94rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__odds small {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend em {
+    bottom: 0.48rem;
+    left: 0.62rem;
+    font-size: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend em::after {
+    color: inherit;
+    font: 1000 0.94rem/1 "Roboto Mono", monospace;
+    content: attr(data-pays);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice {
+    top: 0.22rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice img {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--line,
+    .craps-group--dont-line
+  ) .craps-bet__name {
+    margin-top: 0.92rem;
+    font-size: 1.45rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__name {
+    margin-top: 0.72rem;
+    font-size: 1.05rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__wwxrp-mark {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-basis: 1.75rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--line,
+    .craps-group--dont-line
+  ) .craps-bet__odds {
+    bottom: 0.46rem;
+    left: 0.62rem;
+    font-size: 0.94rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+    display: contents;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel {
+    display: grid;
+    grid-column: 1 / 3;
+    grid-row: 3;
+    grid-template-rows: 2.2rem minmax(0, 1fr);
+    gap: 0.18rem;
+    padding: 0.24rem 0.38rem;
+    overflow: hidden;
+    border: 1px solid rgba(218, 235, 225, 0.14);
+    border-radius: 0 0 0 0.62rem;
+    background: linear-gradient(180deg, rgba(2, 31, 23, 0.88), rgba(2, 21, 16, 0.94));
+    box-shadow: inset 0 0 1.35rem rgba(0, 0, 0, 0.28);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter {
+    grid-template-columns: 1.85rem minmax(0, 1fr) auto;
+    gap: 0.32rem;
+    padding: 0.08rem 0.38rem 0.08rem 0.08rem;
+    border-radius: 0.22rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__avatar {
+    width: 1.78rem;
+    height: 1.78rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy {
+    gap: 0.1rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy small {
+    font-size: 0.44rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy strong {
+    font-size: 0.72rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em {
+    font-size: 0.62rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em b {
+    font-size: 0.98rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats {
+    grid-template-columns: 0.78fr 1.06fr 0.78fr 1.38fr;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span {
+    gap: 0.12rem;
+    padding: 0.2rem 0.12rem 0.12rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats small {
+    font-size: 0.46rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats strong {
+    font-size: 0.98rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud__core {
+    position: relative;
+    z-index: 4;
+    display: grid;
+    grid-column: 3 / 5;
+    grid-row: 2 / 4;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-dice-bay {
+    width: 100%;
+    height: 100%;
+    border: 1px dashed rgba(242, 224, 179, 0.54);
+    border-radius: 0;
+    background: radial-gradient(circle at 50% 48%, rgba(78, 143, 255, 0.16), transparent 56%), rgba(2, 24, 18, 0.88);
+    box-shadow: inset 0 0 1.65rem rgba(0, 0, 0, 0.3);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail[data-shooter-boost="active"] .craps-dice-bay {
+    background: radial-gradient(circle at 50% 48%, rgba(245, 202, 98, 0.19), transparent 58%), rgba(2, 24, 18, 0.88);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
+    width: 10.75rem;
+    height: 10.75rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-readout.is-popping .craps-dice-bay__lock-number {
+    animation: craps-resolution-dice-number-settle var(--craps-roll-readout-ms, 900ms) cubic-bezier(0.2, 0.78, 0.24, 1) both;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 {
+    display: grid;
+    grid-column: 5 / 7;
+    grid-row: 3;
+    grid-template-columns: 2.38rem minmax(0, 1fr);
+    gap: 0.38rem;
+    padding: 0.38rem 0.5rem;
+    border-radius: 0 0 0.62rem 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 > strong {
+    font-size: 0.94rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 > span {
+    grid-template-columns: repeat(5, minmax(1.55rem, 1fr));
+    grid-template-rows: repeat(2, minmax(1.7rem, 1fr));
+    gap: 0.24rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 i {
+    font-size: 0.92rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race {
+    min-height: 25rem;
+    height: 25rem;
+    border-radius: 0.55rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race__chart {
+    min-height: 25rem;
+    height: 25rem;
+  }
+}
+
+@media (min-width: 960px) and (max-width: 1120px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+    grid-template-columns: clamp(12rem, 21vw, 13.5rem) minmax(0, 1fr) 2rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo {
+    width: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes {
+    grid-template-columns: minmax(11.5rem, 1.15fr) minmax(10.75rem, 1fr) minmax(9rem, 0.88fr);
+    gap: 0.24rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="2"] {
+    grid-template-columns: minmax(11.5rem, 1.15fr) minmax(9rem, 0.88fr);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="1"] {
+    grid-template-columns: minmax(11.5rem, 1fr);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"]
+    .craps-group--dont-line [data-bet="dont-pass"] .craps-bet__name {
+    right: 0.38rem;
+    left: auto;
+    gap: 0.2rem;
+    padding-inline: 0;
+    font-size: 0.94rem;
+    transform: translateY(-50%);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"]
+    .craps-group--dont-line .craps-bet__wwxrp-mark {
+    width: 1.45rem;
+    height: 1.45rem;
+    flex-basis: 1.45rem;
+  }
+}
+
+@keyframes craps-resolution-dice-number-settle {
+  0% { opacity: 0; transform: translate(-50%, -44%) scale(0.78); }
+  20% { opacity: 1; transform: translate(-50%, -58%) scale(1.06); }
+  34%, 78% { opacity: 1; transform: translate(-50%, -58%) scale(1); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (min-width: 960px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest {
+    isolation: isolate;
+    container-type: inline-size;
+    display: block;
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: 3 / 1;
+    justify-self: end;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest::before {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__art {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 0.18rem 0.18rem rgba(0, 0, 0, 0.76)) drop-shadow(0 0 0.25rem rgba(245, 166, 35, 0.12));
+  }
+
+  .craps-biggest__portrait {
+    position: absolute;
+    z-index: 1;
+    top: 7%;
+    right: 73.2%;
+    bottom: 7%;
+    left: 2.5%;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__avatar {
+    position: absolute;
+    top: 2%;
+    left: 50%;
+    display: grid;
+    width: 17.333cqi;
+    height: auto;
+    aspect-ratio: 1;
+    place-items: center;
+    border: 2px solid #12bfc7;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, #153c61 0 27%, transparent 28%), conic-gradient(from -18deg, #06d5d5, #007a99 27%, #e5342f 28% 31%, #063e65 32% 72%, #f1aa27 73% 76%, #08b8bc 77%);
+    box-shadow: inset 0 0 0 4px #0b2638, inset 0 0 0 6px rgba(35, 231, 230, 0.55), 0 0 0.62rem rgba(0, 202, 207, 0.32), 0 0.12rem 0.25rem rgba(0, 0, 0, 0.7);
+    color: #c5ffff;
+    font: 1000 4cqi/1 "Roboto Mono", monospace;
+    text-shadow: 0 1px 2px #001118, 0 0 4px #00e8e9;
+    transform: translateX(-50%);
+  }
+
+  .craps-biggest__avatar::before {
+    position: absolute;
+    inset: 4cqi;
+    border: 1px solid rgba(101, 255, 250, 0.65);
+    border-radius: 50%;
+    content: "";
+  }
+
+  .craps-biggest__avatar::after {
+    position: absolute;
+    right: -1px;
+    bottom: 3px;
+    width: 2cqi;
+    aspect-ratio: 1;
+    border: 1px solid #151209;
+    border-radius: 50%;
+    background: #f3b435;
+    box-shadow: 0 0 4px rgba(243, 180, 53, 0.7);
+    content: "";
+  }
+
+  .craps-biggest__bounty {
+    position: absolute;
+    right: 7%;
+    bottom: 0;
+    left: 7%;
+    display: flex;
+    height: 20%;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 1cqi;
+    color: #fff0b8;
+    white-space: nowrap;
+  }
+
+  .craps-biggest__bounty svg {
+    width: 4cqi;
+    height: 4cqi;
+    overflow: visible;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.8;
+  }
+
+  .craps-biggest__bounty strong {
+    color: #fff0b8;
+    font: 1000 4cqi/1 "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.035em;
+  }
+
+  .craps-biggest__title {
+    position: absolute;
+    z-index: 1;
+    top: 8%;
+    right: 4.2%;
+    bottom: 44%;
+    left: 29%;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.333cqi;
+    padding: 0 2%;
+    overflow: hidden;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .craps-biggest__title span {
+    color: #fff2cc;
+    font: 1000 6.333cqi/0.92 "Arial Black", "Noto Sans", sans-serif;
+    letter-spacing: 0.018em;
+    text-shadow: 0 1px 0 rgba(92, 27, 20, 0.92), 0 2px 2px rgba(0, 0, 0, 0.72);
+  }
+
+  .craps-biggest__title strong {
+    color: #f4d58b;
+    font: 950 5.333cqi/1 Georgia, "Roboto Slab", serif;
+    letter-spacing: 0.075em;
+    text-shadow: 0 1px 0 rgba(91, 25, 18, 0.9), 0 1px 2px rgba(0, 0, 0, 0.76);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__holder {
+    position: absolute;
+    z-index: 1;
+    top: 58%;
+    right: 26.5%;
+    bottom: 7%;
+    left: 29%;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 0 2%;
+    overflow: hidden;
+    color: #fff5df;
+    font: 900 4.667cqi/1.05 "Inter", system-ui, sans-serif;
+    text-align: center;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
+    white-space: nowrap;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__multiple {
+    position: absolute;
+    z-index: 1;
+    top: 58%;
+    right: 2.2%;
+    bottom: 5.5%;
+    left: 73.5%;
+    display: flex !important;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    padding: 1% 9% 1% 3%;
+    overflow: hidden;
+    border-left: 1px solid rgba(245, 202, 98, 0.34);
+    background: linear-gradient(180deg, rgba(24, 25, 26, 0.97), rgba(15, 16, 17, 0.99));
+    box-shadow: inset 1px 0 rgba(204, 59, 51, 0.12);
+    clip-path: polygon(0 0, 100% 0, 100% 68%, 87% 100%, 0 100%);
+    color: #fff0c7 !important;
+    font: 1000 6.667cqi/1 "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.055em;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.78), 0 0 7px rgba(245, 166, 35, 0.12);
+    white-space: nowrap;
   }
 }

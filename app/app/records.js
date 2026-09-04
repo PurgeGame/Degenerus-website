@@ -345,20 +345,31 @@ export function diceRunRecordFromReceipt(candidate, receipt) {
 
   const blockNumber = Number(candidate?.blockNumber);
   const transactionHash = String(candidate?.transactionHash ?? '').toLowerCase() || null;
-  const base = {
-    player,
-    value,
-    blockNumber: Number.isSafeInteger(blockNumber) && blockNumber >= 0 ? blockNumber : null,
-    transactionHash,
-    replay: null,
-  };
   const iface = crapsRecordReplayInterface();
+  const recordIface = bigRecordEventInterface();
   const crapsAddress = normalizedRecordAddress(CONTRACTS.CRAPS);
+  const coinflipAddress = normalizedRecordAddress(CONTRACTS.COINFLIP);
   const finalized = [];
   const paid = [];
+  let recordLogIndex = Number(candidate?.logIndex);
+  if (!Number.isSafeInteger(recordLogIndex)) recordLogIndex = -1;
+  let recordPaidWei = candidate?.paidWei == null && candidate?.paid == null
+    ? null
+    : toBigInt(candidate?.paidWei ?? candidate?.paid);
 
   for (const log of receipt?.logs ?? []) {
     const logAddress = normalizedRecordAddress(log?.address);
+    if (!coinflipAddress || logAddress === coinflipAddress) {
+      const recordParsed = parsedRecordLog(recordIface, log);
+      const recordArgs = recordParsed?.args ?? {};
+      if (recordParsed?.name === 'BigRecordUpdated'
+          && Number(recordArgs.kind ?? recordArgs[0]) === RECORD_KIND_DICE_RUN
+          && normalizedRecordAddress(recordArgs.player ?? recordArgs[1]) === player
+          && toBigInt(recordArgs.value ?? recordArgs[2]) === value) {
+        recordLogIndex = diceRunLogIndex(log);
+        recordPaidWei = toBigInt(recordArgs.paid ?? recordArgs[3]);
+      }
+    }
     if (crapsAddress && logAddress !== crapsAddress) continue;
     const parsed = parsedRecordLog(iface, log);
     if (!parsed) continue;
@@ -383,6 +394,16 @@ export function diceRunRecordFromReceipt(candidate, receipt) {
       }
     } catch (_e) { /* ignore one malformed log without losing holder identity */ }
   }
+
+  const base = {
+    player,
+    value,
+    blockNumber: Number.isSafeInteger(blockNumber) && blockNumber >= 0 ? blockNumber : null,
+    transactionHash,
+    logIndex: recordLogIndex,
+    paidWei: recordPaidWei?.toString?.() ?? null,
+    replay: null,
+  };
 
   for (const final of finalized) {
     if (!/^0x[0-9a-f]{64}$/.test(final.battleKey)) continue;
@@ -427,6 +448,7 @@ function diceRunCandidateFromLog(log) {
   return {
     player,
     value,
+    paidWei: toBigInt(args.paid ?? args[3]),
     transactionHash,
     blockNumber,
     logIndex: diceRunLogIndex(log),
@@ -541,6 +563,100 @@ async function readDiceRunRecordLogs(provider, latestBlock) {
 }
 
 /**
+ * Reconstruct the Dice Run target and bounty that existed immediately before
+ * a particular record-setting transaction. `BigRecordUpdated.paid` is the
+ * exact accrued bounty paid for the displaced record, so using it avoids both
+ * a post-run pool estimate and the spoiler of showing the new mark while its
+ * replay is still unfolding.
+ */
+export function previousDiceRunRecordSnapshot(logs, currentRecord) {
+  const currentHash = String(currentRecord?.transactionHash ?? '').toLowerCase();
+  const currentValue = toBigInt(currentRecord?.value);
+  const hasCurrentHash = /^0x[0-9a-f]{64}$/.test(currentHash);
+  if (currentValue <= 0n) return null;
+
+  const candidates = (Array.isArray(logs) ? logs : [])
+    .map(diceRunCandidateFromLog)
+    .filter(Boolean)
+    .sort((left, right) => (
+      left.blockNumber - right.blockNumber || left.logIndex - right.logIndex
+    ));
+  const requestedLogIndex = Number(currentRecord?.logIndex);
+  const currentIndex = candidates.findIndex((candidate) => (
+    candidate.value === currentValue
+    && (!hasCurrentHash || candidate.transactionHash === currentHash)
+    && (!Number.isSafeInteger(requestedLogIndex) || requestedLogIndex < 0
+      || candidate.logIndex === requestedLogIndex)
+  ));
+  if (currentIndex < 0) return null;
+
+  const current = candidates[currentIndex];
+  const previous = currentIndex > 0 ? candidates[currentIndex - 1] : null;
+  return Object.freeze({
+    player: previous?.player ?? null,
+    value: previous?.value ?? toBigInt(recordKindMeta(RECORD_KIND_DICE_RUN)?.floorValue),
+    held: Boolean(previous),
+    blockNumber: previous?.blockNumber ?? null,
+    transactionHash: previous?.transactionHash ?? null,
+    logIndex: previous?.logIndex ?? -1,
+    bountyWei: current.paidWei?.toString?.() ?? '0',
+  });
+}
+
+/** Read the pre-run Dice Run snapshot only when a replay displaced the live mark. */
+export async function readPreviousDiceRunRecord(currentRecord) {
+  try {
+    const provider = recordPoolProvider();
+    if (!provider?.getLogs || !CONTRACTS.COINFLIP) return null;
+    const latestBlock = Number(await readProviderBlockNumber(provider));
+    if (!Number.isSafeInteger(latestBlock) || latestBlock < 0) return null;
+    const logs = await readDiceRunRecordLogs(provider, latestBlock);
+    let resolvedRecord = currentRecord;
+    const currentHash = String(currentRecord?.transactionHash ?? '').toLowerCase();
+    const expectedBattleKey = String(
+      currentRecord?.battleKey ?? currentRecord?.replay?.battleKey ?? '',
+    ).toLowerCase();
+
+    // A just-settled lobby result already knows its winning score and battle
+    // key, while the records API may still be one block behind. Dice Run marks
+    // are strictly increasing, so the score identifies at most one record
+    // event. Join that event to its receipt before rewinding, ensuring a later
+    // replay that merely ties the same score can never borrow another run's
+    // pre-record snapshot.
+    if (!/^0x[0-9a-f]{64}$/.test(currentHash)) {
+      const requestedValue = toBigInt(currentRecord?.value);
+      const requestedPlayer = normalizedRecordAddress(currentRecord?.player);
+      const candidate = logs
+        .map(diceRunCandidateFromLog)
+        .find((entry) => entry
+          && entry.value === requestedValue
+          && (!requestedPlayer || entry.player === requestedPlayer));
+      if (!candidate) return null;
+      const receipt = await readTransactionReceipt(candidate.transactionHash, { provider });
+      const joined = diceRunRecordFromReceipt(candidate, receipt);
+      if (!joined) return null;
+      if (expectedBattleKey && String(joined.replay?.battleKey ?? '').toLowerCase() !== expectedBattleKey) {
+        return null;
+      }
+      resolvedRecord = joined;
+    } else if (expectedBattleKey) {
+      const candidate = logs
+        .map(diceRunCandidateFromLog)
+        .find((entry) => entry?.transactionHash === currentHash
+          && entry.value === toBigInt(currentRecord?.value));
+      if (!candidate) return null;
+      const receipt = await readTransactionReceipt(candidate.transactionHash, { provider });
+      const joined = diceRunRecordFromReceipt(candidate, receipt);
+      if (String(joined?.replay?.battleKey ?? '').toLowerCase() !== expectedBattleKey) return null;
+      resolvedRecord = joined;
+    }
+    return previousDiceRunRecordSnapshot(logs, resolvedRecord);
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
  * Normalize the `/records` payload's `diceRun` fragment into the candidate
  * shape `diceRunRecordFromReceipt` expects.
  *
@@ -560,9 +676,11 @@ export function diceRunCandidateFromApiPayload(diceRun) {
   if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
     || !Number.isSafeInteger(blockNumber) || blockNumber < 0) return undefined;
   const rawLogIndex = Number(diceRun.logIndex);
+  const paidWei = diceRun.paidWei ?? diceRun.paid;
   return {
     player,
     value,
+    ...(paidWei == null ? {} : { paidWei: toBigInt(paidWei) }),
     transactionHash,
     blockNumber,
     logIndex: Number.isSafeInteger(rawLogIndex) ? rawLogIndex : -1,
@@ -952,6 +1070,19 @@ export function normalizeRecords(
         clockDay: liveClock ?? indexedClock,
         held: value > 0n,
         replay: provenanceMatches ? diceRunProvenance?.replay ?? null : null,
+        transactionHash: provenanceMatches
+          ? String(diceRunProvenance?.transactionHash ?? '').toLowerCase() || null
+          : null,
+        blockNumber: provenanceMatches && diceRunProvenance?.blockNumber != null
+          && Number.isSafeInteger(Number(diceRunProvenance.blockNumber))
+          ? Number(diceRunProvenance.blockNumber)
+          : null,
+        logIndex: provenanceMatches && Number.isSafeInteger(Number(diceRunProvenance?.logIndex))
+          ? Number(diceRunProvenance.logIndex)
+          : -1,
+        paidWei: provenanceMatches && diceRunProvenance?.paidWei != null
+          ? toBigInt(diceRunProvenance.paidWei)
+          : null,
       };
     }),
   };

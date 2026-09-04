@@ -70,6 +70,9 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 // 0x45c30da1… — run #47 at CrapsBattle 0x5e237980…. The live Base Sepolia bytecode
 //   hashes to the manifest value, the 0880d134c differential suite passes 7/7,
 //   and 21 consecutive published fields report every entrant replayed successfully.
+// 0x4daa9999… — current Base Sepolia deployment at CrapsBattle 0xc75f47d0…. The live
+//   manifest carries this exact runtime hash, the 8777c7d99 differential suite passes 7/7,
+//   and its published bundle reports every entrant replayed successfully.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
@@ -77,6 +80,7 @@ export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796',
   '0x022f73dbdd170c87a2074ace604fdadfaaf06f1b18f01faf785b77709d862639',
   '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42',
+  '0x4daa99994b751204ddd189f133e57e4586b2a8d91047a788031f247e37065a57',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -92,6 +96,22 @@ export class CrapsReplayValidationError extends Error {
     super(`${path}: ${message}`);
     this.name = 'CrapsReplayValidationError';
     this.path = path;
+  }
+}
+
+export class CrapsReplayHttpError extends Error {
+  constructor(path, status) {
+    super(`Craps replay ${path} returned HTTP ${status ?? 'unknown'}`);
+    this.name = 'CrapsReplayHttpError';
+    this.path = path;
+    this.status = status ?? null;
+  }
+}
+
+export class CrapsReplayLegacyDeploymentMismatchError extends Error {
+  constructor() {
+    super('Legacy Craps replay pointer belongs to another deployment');
+    this.name = 'CrapsReplayLegacyDeploymentMismatchError';
   }
 }
 
@@ -270,13 +290,30 @@ function battleSegment(battleKey) {
   return encodeURIComponent(stringAt(String(battleKey ?? ''), 'battleKey', { max: 160 }));
 }
 
-export function crapsReplayPointerPath(battleKey) {
-  return `${CRAPS_REPLAY_CDN_PREFIX}/battles/${battleSegment(battleKey)}/latest.json`;
+function replayDeploymentAt(value) {
+  if (value == null) return null;
+  const deployment = objectAt(value, 'deployment');
+  return Object.freeze({
+    chainId: integerAt(Number(deployment.chainId), 'deployment.chainId', { min: 1 }),
+    contract: addressAt(deployment.contract, 'deployment.contract'),
+  });
 }
 
-export function crapsReplayArtifactPaths(battleKey, digest) {
+function replayBattleBase(battleKey, deploymentInput = null) {
+  const deployment = replayDeploymentAt(deploymentInput);
+  const deploymentPrefix = deployment == null
+    ? ''
+    : `/chains/${deployment.chainId}/contracts/${deployment.contract}`;
+  return `${CRAPS_REPLAY_CDN_PREFIX}${deploymentPrefix}/battles/${battleSegment(battleKey)}`;
+}
+
+export function crapsReplayPointerPath(battleKey, deployment = null) {
+  return `${replayBattleBase(battleKey, deployment)}/latest.json`;
+}
+
+export function crapsReplayArtifactPaths(battleKey, digest, deployment = null) {
   const safeDigest = digestAt(digest, 'digest');
-  const base = `${CRAPS_REPLAY_CDN_PREFIX}/battles/${battleSegment(battleKey)}/results/${safeDigest}`;
+  const base = `${replayBattleBase(battleKey, deployment)}/results/${safeDigest}`;
   return Object.freeze({
     base,
     manifest: `${base}/manifest.json`,
@@ -305,7 +342,7 @@ export function crapsReplayShardPath(manifest, shardIndex) {
   return normalized.field.shardPathTemplate.replace('{shard}', String(index).padStart(4, '0'));
 }
 
-export function validateCrapsReplayPointer(input) {
+export function validateCrapsReplayPointer(input, deployment = null) {
   const value = objectAt(input, 'pointer');
   if (value.schemaVersion !== CRAPS_REPLAY_SCHEMA_VERSION) fail('pointer.schemaVersion', 'unsupported schema');
   if (value.kind !== 'craps-replay-pointer') fail('pointer.kind', 'expected craps-replay-pointer');
@@ -333,7 +370,7 @@ export function validateCrapsReplayPointer(input) {
   }
   if (resolved !== entrants) fail('pointer.resolved', 'a ready pointer must have resolved every entrant');
   const digest = digestAt(value.digest, 'pointer.digest');
-  const expected = crapsReplayArtifactPaths(battleKey, digest).manifest;
+  const expected = crapsReplayArtifactPaths(battleKey, digest, deployment).manifest;
   const manifestPath = replayPathAt(value.manifestPath, 'pointer.manifestPath');
   if (manifestPath !== expected) fail('pointer.manifestPath', `expected ${expected}`);
   return frozen({ ...base, digest, manifestPath });
@@ -394,7 +431,9 @@ export function validateCrapsReplayManifest(input) {
   if (value.kind !== 'craps-replay-manifest') fail('manifest.kind', 'expected craps-replay-manifest');
   const battleKey = stringAt(value.battleKey, 'manifest.battleKey', { max: 160 });
   const digest = digestAt(value.digest, 'manifest.digest');
-  const paths = crapsReplayArtifactPaths(battleKey, digest);
+  const ruleset = validateRuleset(value.ruleset);
+  const legacyPaths = crapsReplayArtifactPaths(battleKey, digest);
+  const scopedPaths = crapsReplayArtifactPaths(battleKey, digest, ruleset);
   const field = objectAt(value.field, 'manifest.field');
   const entrants = integerAt(field.entrants, 'manifest.field.entrants', { min: 1, max: 0xffffffff });
   const shardSize = integerAt(field.shardSize, 'manifest.field.shardSize', { min: 1, max: 4_096 });
@@ -403,7 +442,10 @@ export function validateCrapsReplayManifest(input) {
   if (shardCount !== expectedShardCount) fail('manifest.field.shardCount', `expected ${expectedShardCount}`);
   const featuredPath = replayPathAt(field.featuredPath, 'manifest.field.featuredPath');
   const shardPathTemplate = replayPathAt(field.shardPathTemplate, 'manifest.field.shardPathTemplate');
-  if (featuredPath !== paths.featured) fail('manifest.field.featuredPath', `expected ${paths.featured}`);
+  const paths = featuredPath === scopedPaths.featured ? scopedPaths : legacyPaths;
+  if (featuredPath !== paths.featured) {
+    fail('manifest.field.featuredPath', `expected ${scopedPaths.featured} or rollout legacy ${legacyPaths.featured}`);
+  }
   if (shardPathTemplate !== paths.shardTemplate) fail('manifest.field.shardPathTemplate', `expected ${paths.shardTemplate}`);
   const terms = objectAt(value.terms, 'manifest.terms');
   const verification = objectAt(value.verification, 'manifest.verification');
@@ -415,7 +457,7 @@ export function validateCrapsReplayManifest(input) {
     kind: 'craps-replay-manifest',
     battleKey,
     digest,
-    ruleset: validateRuleset(value.ruleset),
+    ruleset,
     settlement: Object.freeze({
       boundSlot: decimalAt(value.settlement?.boundSlot, 'manifest.settlement.boundSlot'),
       boundIndex: decimalAt(value.settlement?.boundIndex, 'manifest.settlement.boundIndex'),
@@ -605,7 +647,7 @@ async function fetchJson(path, fetchImpl, { immutable = false } = {}) {
   if (immutable && immutableFlights.has(path)) return immutableFlights.get(path);
   const flight = (async () => {
     const response = await fetchImpl(path, { headers: { accept: 'application/json' } });
-    if (!response?.ok) throw new Error(`Craps replay ${path} returned HTTP ${response?.status ?? 'unknown'}`);
+    if (!response?.ok) throw new CrapsReplayHttpError(path, response?.status);
     const payload = await response.json();
     if (immutable) {
       immutableCache.set(path, payload);
@@ -626,15 +668,44 @@ export async function loadCrapsReplay({
   battleKey,
   viewerBetId,
   highRollerBetIds = [],
+  chainId = null,
+  contract = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('loadCrapsReplay requires fetch');
   const requestedBattleKey = stringAt(String(battleKey ?? ''), 'battleKey', { max: 160 });
-  const pointer = validateCrapsReplayPointer(await fetchJson(crapsReplayPointerPath(battleKey), fetchImpl));
+  const hasDeployment = chainId != null || contract != null;
+  const deployment = hasDeployment ? replayDeploymentAt({ chainId, contract }) : null;
+  let legacyPointer = deployment == null;
+  let pointerRaw;
+  if (deployment == null) {
+    pointerRaw = await fetchJson(crapsReplayPointerPath(battleKey), fetchImpl);
+  } else {
+    try {
+      pointerRaw = await fetchJson(crapsReplayPointerPath(battleKey, deployment), fetchImpl);
+    } catch (error) {
+      if (!(error instanceof CrapsReplayHttpError) || error.status !== 404) throw error;
+      legacyPointer = true;
+      pointerRaw = await fetchJson(crapsReplayPointerPath(battleKey), fetchImpl);
+    }
+  }
+  const pointer = validateCrapsReplayPointer(pointerRaw, legacyPointer ? null : deployment);
   if (pointer.battleKey !== requestedBattleKey) fail('pointer.battleKey', `expected ${requestedBattleKey}`);
   if (pointer.status !== 'ready') return frozen({ ready: false, pointer });
 
-  const manifest = assertSupportedCrapsReplayRuleset(await fetchJson(pointer.manifestPath, fetchImpl, { immutable: true }));
+  const manifestRaw = await fetchJson(pointer.manifestPath, fetchImpl, { immutable: true });
+  const parsedManifest = validateCrapsReplayManifest(manifestRaw);
+  if (deployment != null && (
+    parsedManifest.ruleset.chainId !== deployment.chainId
+    || parsedManifest.ruleset.contract !== deployment.contract
+  )) {
+    if (legacyPointer) throw new CrapsReplayLegacyDeploymentMismatchError();
+    if (parsedManifest.ruleset.chainId !== deployment.chainId) {
+      fail('manifest.ruleset.chainId', `expected ${deployment.chainId}`);
+    }
+    fail('manifest.ruleset.contract', `expected ${deployment.contract}`);
+  }
+  const manifest = assertSupportedCrapsReplayRuleset(parsedManifest);
   if (manifest.battleKey !== pointer.battleKey || manifest.digest !== pointer.digest) {
     fail('manifest', 'does not match the ready pointer');
   }

@@ -13,7 +13,7 @@ import {
   replayCrapsViewport,
 } from './replay-engine.js';
 import { fetchProfiles } from '../app/profiles.js';
-import { CONTRACTS } from '../app/chain-config.js';
+import { CHAIN, CONTRACTS } from '../app/chain-config.js';
 import { crapsBonusMultiplier, readCrapsSettlementWord } from '../app/craps.js';
 
 const TEN = 10n;
@@ -189,6 +189,8 @@ function viewerFrames(trace, clock) {
       return Object.freeze({
         bankrollFlip: displayFlip(finalBankroll),
         deltaFlip: '0',
+        returnedFlip: '0',
+        boostFlip: '0',
         label: `${battleFinished ? 'BATTLE COMPLETE' : 'BATTLE CONTINUES'} · ${sharedEvent.label}`,
         dice: Object.freeze([sharedEvent.d1, sharedEvent.d2]),
         point: sharedEvent.pointAfter || null,
@@ -213,8 +215,14 @@ function viewerFrames(trace, clock) {
         ? survival?.survived === false ? ' · SURVIVAL LOST' : ' · RUN ENDED'
         : '';
     return Object.freeze({
+      // The first roll of each shooter carries the exact bankroll dealt into
+      // that board. The race uses it to apply survival doubling before taking
+      // the newly-posted felt stake out of the off-table stack.
+      startingBankrollFlip: displayFlip(event.bankrollBeforeWei),
       bankrollFlip: displayFlip(event.bankrollAfterWei),
       deltaFlip: displayFlip(event.deltaWei),
+      returnedFlip: displayFlip(event.returnedWei),
+      boostFlip: displayFlip(event.boostWei),
       label: `${event.label}${suffix}`,
       dice: Object.freeze([event.d1, event.d2]),
       point: event.pointAfter || null,
@@ -260,6 +268,8 @@ function alignedOpponentEvents(trace, clock) {
       retiredBets: event.retiredBets,
       deltaFlip: displayFlip(event.deltaWei),
       bankrollFlip: displayFlip(event.bankrollAfterWei),
+      returnedFlip: displayFlip(event.returnedWei),
+      boostFlip: displayFlip(event.boostWei),
       shooter: event.shooter,
     });
   }));
@@ -428,6 +438,7 @@ export function createCrapsReplayTableModel(artifacts, {
     replayLane,
     entryLabel: replayLane === 'high' ? 'HIGH ROLLER BATTLE' : 'MAIN BATTLE',
     viewerBetId: viewer.betId,
+    viewerPlayer: viewer.player,
     originalViewerBetId: originalViewer.betId,
     viewerLabel: protocolSeatLabel(viewer.player) || viewerIdentity?.name || viewer.name,
     viewerDiscordPfp: viewerIdentity?.avatar || viewer.avatarUrl,
@@ -587,6 +598,8 @@ export function crapsReplayPrizeAmounts({
 export async function openCrapsReplayTable(table, {
   battleKey,
   viewerBetId,
+  chainId = CHAIN.id,
+  contract = CONTRACTS.CRAPS,
   highRollerBetIds = [],
   highRollerEntrants = null,
   highWinnerBetId = null,
@@ -606,6 +619,8 @@ export async function openCrapsReplayTable(table, {
     artifacts = await loadCrapsReplay({
       battleKey,
       viewerBetId,
+      chainId,
+      contract,
       highRollerBetIds,
       fetchImpl,
     });
@@ -619,6 +634,8 @@ export async function openCrapsReplayTable(table, {
     artifacts = await loadCrapsReplay({
       battleKey,
       viewerBetId,
+      chainId,
+      contract,
       highRollerBetIds: [],
       fetchImpl,
     });
@@ -629,6 +646,9 @@ export async function openCrapsReplayTable(table, {
   }
   if (!artifacts.ready) return artifacts;
   let mainModel = createCrapsReplayTableModel(artifacts);
+  let suppliedShooterTimeline = normalizeCrapsReplayShooters({
+    shooterTimeline: openOptions.shooterTimeline ?? openOptions.shooters ?? [],
+  });
   let profiles = null;
   // Overlay live Discord identity on the sealed seats. Decoration only: any
   // failure keeps the deterministic model exactly as the bundle shipped it.
@@ -637,9 +657,15 @@ export async function openCrapsReplayTable(table, {
       mainModel.viewer.player,
       ...mainModel.tableOptions.otherPlayers.map((player) => player.player),
       ...normalizeCrapsReplayShooters(artifacts).map((shooter) => shooter.player),
+      ...suppliedShooterTimeline.map((shooter) => shooter.player),
     ];
     profiles = await loadCrapsReplayProfiles(addresses, loadProfiles);
-    if (profiles?.size) mainModel = createCrapsReplayTableModel(artifacts, { profiles });
+    if (profiles?.size) {
+      mainModel = createCrapsReplayTableModel(artifacts, { profiles });
+      suppliedShooterTimeline = normalizeCrapsReplayShooters({
+        shooterTimeline: openOptions.shooterTimeline ?? openOptions.shooters ?? [],
+      }, profiles);
+    }
   } catch (_error) { /* identity outage must never block the replay */ }
   const mainPrizeAmounts = crapsReplayPrizeAmounts({
     bountyPoolWei: mainModel.tableOptions.bountyPoolWei,
@@ -765,6 +791,12 @@ export async function openCrapsReplayTable(table, {
       ...nextModel.tableOptions,
       ...lanePrizeAmounts,
       ...battleAward,
+      // New indexer responses can carry the actual shooter rotation before it
+      // is promoted into the immutable replay schema. Prefer sealed metadata
+      // when present, otherwise preserve that live optional sidecar.
+      shooterTimeline: nextModel.tableOptions.shooterTimeline.length > 0
+        ? nextModel.tableOptions.shooterTimeline
+        : suppliedShooterTimeline,
       ...(replayBonusMultiplier == null ? {} : { bonusMultiplier: replayBonusMultiplier }),
       battleWinnerBetId: winnerBetId,
       onPerspectiveSelect,

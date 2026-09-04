@@ -370,7 +370,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-0880d134c-45c30da1';
+    const revision = '?v=craps-8777c7d99-4daa9999-scoped-v1';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -430,12 +430,16 @@ describe('index.html basic-mode skeleton', () => {
       '/app/styles/baf-eve.css',
       '/app/styles/link-donation.css',
     ]) {
-      assert.match(html, new RegExp(`<link rel="stylesheet" data-href="${href.replaceAll('.', '\\.')}">`));
+      assert.match(html, new RegExp(`<link rel="stylesheet" data-href="${href.replaceAll('.', '\\.')}"[^>]*>`));
       assert.doesNotMatch(html, new RegExp(`<link rel="stylesheet" href="${href.replaceAll('.', '\\.')}"`));
       assert.ok(html.includes(`'${href}'`), `deferred stylesheet is owned by a module: ${href}`);
     }
     assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
       'component upgrade waits for its scoped stylesheet');
+    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v2"/,
+      'the resolver redesign has its own deferred-style cache identity');
+    assert.match(html, /link\.dataset\.rev[\s\S]*?encodeURIComponent\(revision\)/,
+      'the deferred-style loader applies an explicitly declared cache identity');
   });
 
   // Import-map targets are BARE specifiers at the call site (`from 'ethers'`),

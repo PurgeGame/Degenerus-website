@@ -740,6 +740,12 @@ test('indexer winner totals add the exact run settlement without double-counting
         highPaidWei: '0',
         progressivePaidWei: '2000',
         totalWonWei: '25000',
+        biggestDiceRunHit: true,
+        biggestDiceRunBefore: {
+          player: '0x0000000000000000000000000000000000000099',
+          scoreBps: '5030000',
+          bountyWei: '66000',
+        },
       },
       {
         day: 42,
@@ -791,6 +797,12 @@ test('indexer winner totals add the exact run settlement without double-counting
   assert.equal(totals.length, 3);
   assert.equal(totals[0].runPaidWei, 18_000n);
   assert.equal(totals[0].totalWonWei, 25_000n);
+  assert.equal(totals[0].biggestDiceRunHit, true);
+  assert.deepEqual(totals[0].biggestDiceRunBefore, {
+    player: '0x0000000000000000000000000000000000000099',
+    scoreBps: 5_030_000n,
+    bountyWei: 66_000n,
+  });
   assert.equal(totals[1].totalWonWei, 12_000n,
     'the sole rider lives inside the run settlement and is counted once');
   assert.equal(totals[2].totalWonWei, null,
@@ -810,6 +822,7 @@ test('indexer winner totals add the exact run settlement without double-counting
         bankrollRider: true,
       },
     }],
+    resolvedReplays: [{ battleKey, viewerBetId: '808' }],
     yesterdayEventResult: {
       day: 41,
       period: 6,
@@ -822,7 +835,13 @@ test('indexer winner totals add the exact run settlement without double-counting
   const enriched = craps.crapsLobbySnapshotWithWinnerTotals(snapshot, totals);
   assert.equal(enriched.results[0].amountWei, 5_000n, 'the lane prize remains available separately');
   assert.equal(enriched.results[0].totalWonWei, 25_000n);
+  assert.equal(enriched.results[0].biggestDiceRunHit, true);
+  assert.equal(enriched.results[0].biggestDiceRunBefore.scoreBps, 5_030_000n);
   assert.equal(enriched.results[0].highResult.totalWonWei, 12_000n);
+  assert.equal(enriched.results[0].highResult.biggestDiceRunHit, true,
+    'the side-lane replay uses the same pre-battle record card as the main field');
+  assert.equal(enriched.resolvedReplays[0].biggestDiceRunBefore.bountyWei, 66_000n,
+    'the owned Pending replay receives the sealed pre-run card too');
   assert.equal(enriched.yesterdayEventResult.totalWonWei, null);
 
   let requested = null;

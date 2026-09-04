@@ -1940,6 +1940,26 @@ export function crapsWinnerTotalsFromPayload(dayValue, payload) {
       // A sole rider's return is already part of CrapsBetSettled.paid. A non-zero separate
       // high payout here would be the exact double-count this endpoint exists to prevent.
       if (bankrollRider === true && highPaidWei !== 0n) continue;
+      let biggestDiceRunHit = null;
+      let biggestDiceRunBefore = null;
+      if (value?.biggestDiceRunHit != null) {
+        if (typeof value.biggestDiceRunHit !== 'boolean') continue;
+        biggestDiceRunHit = value.biggestDiceRunHit;
+        if (biggestDiceRunHit) {
+          const before = value?.biggestDiceRunBefore;
+          if (!before || typeof before !== 'object') continue;
+          const scoreBps = asUint(before.scoreBps, 'Craps pre-run Dice Run score');
+          const bountyWei = asUint(before.bountyWei, 'Craps pre-run Dice Run bounty');
+          if (scoreBps === 0n) continue;
+          const rawPlayer = before.player == null ? null : String(before.player).toLowerCase();
+          if (rawPlayer != null && !/^0x[0-9a-f]{40}$/.test(rawPlayer)) continue;
+          biggestDiceRunBefore = Object.freeze({
+            player: rawPlayer,
+            scoreBps,
+            bountyWei,
+          });
+        }
+      }
       totals.push(Object.freeze({
         day: resultDay,
         period,
@@ -1953,6 +1973,8 @@ export function crapsWinnerTotalsFromPayload(dayValue, payload) {
         highPaidWei,
         progressivePaidWei,
         totalWonWei,
+        biggestDiceRunHit,
+        biggestDiceRunBefore,
       }));
     } catch (_error) {
       // One malformed row cannot blank the other completed battles.
@@ -1979,9 +2001,17 @@ export function crapsLobbySnapshotWithWinnerTotals(snapshot, totals = []) {
     winnerKey(entry),
     entry,
   ]));
+  const biggestByBattle = new Map();
+  for (const entry of Array.isArray(totals) ? totals : []) {
+    if (typeof entry?.biggestDiceRunHit !== 'boolean') continue;
+    const key = String(entry?.battleKey ?? '').toLowerCase();
+    if (!key || (biggestByBattle.has(key) && entry?.lane !== 'main')) continue;
+    biggestByBattle.set(key, entry);
+  }
   const enrichLane = (result, lane) => {
     if (!result || typeof result !== 'object') return result ?? null;
     const match = byWinner.get(winnerKey(result, lane));
+    const battleBiggest = biggestByBattle.get(String(result?.battleKey ?? '').toLowerCase());
     const chainProgressive = typeof result.progressivePaidWei === 'bigint'
       ? result.progressivePaidWei
       : null;
@@ -2004,6 +2034,14 @@ export function crapsLobbySnapshotWithWinnerTotals(snapshot, totals = []) {
       highPaidWei: match?.highPaidWei ?? null,
       progressivePaidWei,
       totalWonWei,
+      biggestDiceRunHit: match?.biggestDiceRunHit
+        ?? battleBiggest?.biggestDiceRunHit
+        ?? result?.biggestDiceRunHit
+        ?? null,
+      biggestDiceRunBefore: match?.biggestDiceRunBefore
+        ?? battleBiggest?.biggestDiceRunBefore
+        ?? result?.biggestDiceRunBefore
+        ?? null,
     });
   };
   const enrichResult = (result) => {
@@ -2020,6 +2058,18 @@ export function crapsLobbySnapshotWithWinnerTotals(snapshot, totals = []) {
   return Object.freeze({
     ...snapshot,
     results: Object.freeze((Array.isArray(snapshot.results) ? snapshot.results : []).map(enrichResult)),
+    resolvedReplays: Object.freeze((Array.isArray(snapshot.resolvedReplays)
+      ? snapshot.resolvedReplays
+      : []).map((replay) => {
+      const biggest = biggestByBattle.get(String(replay?.battleKey ?? '').toLowerCase());
+      return biggest
+        ? Object.freeze({
+            ...replay,
+            biggestDiceRunHit: biggest.biggestDiceRunHit,
+            biggestDiceRunBefore: biggest.biggestDiceRunBefore,
+          })
+        : replay;
+    })),
     yesterdayEventResult: enrichResult(snapshot.yesterdayEventResult),
   });
 }

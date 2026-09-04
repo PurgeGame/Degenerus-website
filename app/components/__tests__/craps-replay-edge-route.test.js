@@ -21,6 +21,11 @@ import { SIM_CRAPS_REPLAY_PATHS } from '../../craps/fixtures/sim-battle-v1.js';
 const BATTLE = `0x${'ab'.repeat(32)}`;
 const DIGEST = 'a'.repeat(64);
 const PATHS = crapsReplayArtifactPaths(BATTLE, DIGEST);
+const DEPLOYMENT = Object.freeze({
+  chainId: 84532,
+  contract: `0x${'cd'.repeat(20)}`,
+});
+const SCOPED_PATHS = crapsReplayArtifactPaths(BATTLE, DIGEST, DEPLOYMENT);
 
 test('routes exactly the four objects one viewer needs', () => {
   assert.equal(routeKind(crapsReplayPointerPath(BATTLE)), 'pointer');
@@ -28,6 +33,10 @@ test('routes exactly the four objects one viewer needs', () => {
   assert.equal(routeKind(PATHS.featured), 'immutable');
   assert.equal(routeKind(`${PATHS.base}/seats/0000.json`), 'immutable');
   assert.equal(routeKind(`${PATHS.base}/seats/0157.json`), 'immutable');
+  assert.equal(routeKind(crapsReplayPointerPath(BATTLE, DEPLOYMENT)), 'pointer');
+  assert.equal(routeKind(SCOPED_PATHS.manifest), 'immutable');
+  assert.equal(routeKind(SCOPED_PATHS.featured), 'immutable');
+  assert.equal(routeKind(`${SCOPED_PATHS.base}/seats/0157.json`), 'immutable');
 
   // The paths the contract module and the generated fixture actually produce must route.
   assert.equal(routeKind(SIM_CRAPS_REPLAY_PATHS.pointer), 'pointer');
@@ -64,6 +73,13 @@ test('refuses everything outside the grammar', () => {
     '/craps/replays/v1/battles/%FF%FE/latest.json',
     `/craps/replays/v1/battles/${'k'.repeat(161)}/latest.json`,
     '/craps/replays/v1/battles//latest.json',
+    // Deployment namespace components are canonical decimal chain ids and lowercase addresses.
+    `/craps/replays/v1/chains/0/contracts/${DEPLOYMENT.contract}/battles/${BATTLE}/latest.json`,
+    `/craps/replays/v1/chains/084532/contracts/${DEPLOYMENT.contract}/battles/${BATTLE}/latest.json`,
+    `/craps/replays/v1/chains/${DEPLOYMENT.chainId}/contracts/${DEPLOYMENT.contract.toUpperCase()}/battles/${BATTLE}/latest.json`,
+    `/craps/replays/v1/chains/${DEPLOYMENT.chainId}/contracts/0x1234/battles/${BATTLE}/latest.json`,
+    `/craps/replays/v1/chains/${DEPLOYMENT.chainId}/${DEPLOYMENT.contract}/battles/${BATTLE}/latest.json`,
+    `/craps/replays/v1/chains/${DEPLOYMENT.chainId}/contracts/${DEPLOYMENT.contract}/battles/${BATTLE}/latest.json/extra`,
   ];
   for (const path of refused) {
     assert.equal(routeKind(path), null, `expected ${path} to be refused`);

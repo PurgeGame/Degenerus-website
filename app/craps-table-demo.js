@@ -1,7 +1,7 @@
 import {
   CRAPS_TABLE_REPLAY_EVENT,
   formatCrapsWei,
-} from '/app/components/app-craps-table.js?v=bonus-impact-v23';
+} from '/app/components/app-craps-table.js?v=resolution-race-v2';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
   SIM_CRAPS_REPLAY_FEATURED,
@@ -59,6 +59,14 @@ function openTable() {
       bountyPoolFlip: params.get('bountyPool') || 84_900,
       addedFlip: params.get('added') || 75_000,
       bonusMultiplier: params.get('bonusMultiplier') || 10,
+      riuBattleAddedFlip: params.get('riuTransfer') || 370_930,
+      biggestDiceRun: {
+        scoreBps: params.get('biggestScoreBps') || 5_035_000,
+        player: '0x71d40000000000000000000000000000000009a3',
+        label: 'Velvet Kraken',
+        discordPfp: demoDiscordPfp('VK', '#0d9488'),
+        bountyWei: (66_000n * 10n ** 18n).toString(),
+      },
       autoRoll: params.get('manual') !== 'true',
     });
     receipt.textContent = `SIM BUNDLE · ${viewer.name} · ${viewer.handsPlayed} shooters · ${viewer.totalRolls} rolls`;
@@ -162,6 +170,14 @@ function openTable() {
       amountFlip: params.get('jackpotAmount') || 1_250_000,
       status: jackpotWinner === 'other' ? 'won-other' : jackpotWinner === 'you' ? 'won-you' : 'live',
       wonAtScoreBps: params.get('jackpotWinnerScoreBps'),
+      battleAddedFlip: params.get('riuTransfer') || 370_930,
+    },
+    biggestDiceRun: {
+      scoreBps: params.get('biggestScoreBps') || 5_035_000,
+      player: '0x71d40000000000000000000000000000000009a3',
+      label: 'Velvet Kraken',
+      discordPfp: demoDiscordPfp('VK', '#0d9488'),
+      bountyWei: (66_000n * 10n ** 18n).toString(),
     },
     autoRoll: params.get('manual') !== 'true',
     rakeBps: params.get('rakeBps') || 5000,
@@ -202,7 +218,9 @@ function openTable() {
           // RH's bust is a lost survival coin at the first boundary, flipping
           // beside the portrait while the viewer's own coin lands a win.
           ...(survivalRun ? { survivals: [{ survived: false }] } : {}),
-          bankrollsFlip: [540, 0],
+          // The roll snapshot is the pre-coin low. The resolver owns the later
+          // vertical move to zero so even this fixture cannot spoil the flip.
+          bankrollsFlip: survivalRun ? [540, 360] : [540, 0],
         },
         chips: { dontPassLine: 2, place4: 1, place5: 1, place6: 1, place8: 1, hard4: 1 },
       },
@@ -228,8 +246,8 @@ function openTable() {
     ],
     initialBets: filled
       ? dontPassDemo
-        ? { 'dont-pass': 2, 'place-6': 2, 'place-8': 2, 'hard-8': 1 }
-        : { pass: 2, 'place-6': 2, 'place-8': 2, 'hard-8': 1 }
+        ? { 'dont-pass': 1, 'place-6': 2, 'place-8': 3, 'hard-8': 1 }
+        : { pass: 1, 'place-6': 2, 'place-8': 3, 'hard-8': 1 }
       : {},
     confirm: async (wager) => {
       receipt.textContent = [

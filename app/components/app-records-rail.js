@@ -16,6 +16,7 @@ import {
   fetchProfiles,
   formatRecordValue,
   readLiveRecordMark,
+  readPreviousDiceRunRecord,
   recordClaimTarget,
   recordClaimTargetForMark,
   RECORD_KIND_BUY,
@@ -676,8 +677,24 @@ class AppRecordsRail extends HTMLElement {
     this.#diceRunReplayOpening = true;
     this.#showNotice('LOADING BIGGEST DICE RUN REPLAY…', { persist: true });
     try {
+      const previous = await readPreviousDiceRunRecord(record);
+      let profile = previous?.player ? this.#profiles.get(previous.player) ?? null : null;
+      if (previous?.player && !profile) {
+        try {
+          const profiles = await _fetchProfiles([previous.player]);
+          profile = profiles?.get?.(previous.player) ?? null;
+          this.#profiles = new Map([...this.#profiles, ...(profiles ?? [])]);
+        } catch (_error) { /* the address remains an honest holder label */ }
+      }
       const result = await openCrapsReplayTable(table, {
         ...replay,
+        biggestDiceRun: previous ? {
+          scoreBps: previous.value?.toString?.() ?? String(previous.value ?? 0),
+          player: previous.player,
+          label: previous.player == null ? 'UNCLAIMED' : profile?.name ?? shortAddress(previous.player),
+          avatar: profile?.avatar,
+          bountyWei: previous.bountyWei?.toString?.() ?? null,
+        } : null,
         fetchImpl: crapsReplayFetch,
       });
       if (!result?.ready) {

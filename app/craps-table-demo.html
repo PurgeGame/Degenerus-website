@@ -6,7 +6,14 @@
   <title>FLIP Craps Table Demo</title>
   <link rel="stylesheet" href="/shared/nav.css">
   <link rel="stylesheet" href="/app/styles/base.css">
-  <link rel="stylesheet" href="/app/styles/craps-table.css?v=bonus-impact-v23">
+  <link rel="stylesheet" href="/app/styles/craps-table.css?v=resolution-race-v2">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903"
+    }
+  }
+  </script>
   <style>
     body.craps-demo-page { min-height: 100vh; margin: 0; background: #080b10; color: #f5ecd8; }
     .craps-demo { display: grid; min-height: 100vh; box-sizing: border-box; place-items: center; padding: 2rem; text-align: center; }
@@ -29,6 +36,6 @@
     </section>
   </main>
   <app-craps-table></app-craps-table>
-  <script type="module" src="/app/craps-table-demo.js?v=bonus-impact-v23"></script>
+  <script type="module" src="/app/craps-table-demo.js?v=resolution-race-v2"></script>
 </body>
 </html>
