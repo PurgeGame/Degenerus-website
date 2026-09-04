@@ -48,7 +48,7 @@ import * as contractsMod from '../contracts.js';
 
 const {
   setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
-  ensureWriteChain, setChainSwitchHandler,
+  ensureWriteChain, setChainSwitchHandler, setWalletSessionRecoveryHandler,
   gasEstimateWithHeadroom, TX_CONFIRMED_EVENT,
 } = contractsMod;
 
@@ -93,6 +93,7 @@ beforeEach(() => {
   resetStore();
   clearProvider();
   setChainSwitchHandler(null);
+  setWalletSessionRecoveryHandler(null);
 });
 
 // ===========================================================================
@@ -410,6 +411,87 @@ describe('sendTx player-facing error boundary', () => {
         return true;
       },
     );
+  });
+
+  test('retries a pre-broadcast write after the wallet session recovers', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const recoveryCalls = [];
+    let buildCalls = 0;
+    setWalletSessionRecoveryHandler(async (error, context) => {
+      recoveryCalls.push({ error, context });
+      return true;
+    });
+
+    const receipt = await sendTx(async () => {
+      buildCalls += 1;
+      if (buildCalls === 1) {
+        const error = new Error('Invalid Id');
+        error.code = 1;
+        throw error;
+      }
+      return { hash: '0xrecovered', wait: async () => ({ status: 1, hash: '0xrecovered' }) };
+    }, 'Enter Craps battle');
+
+    assert.equal(receipt.status, 1);
+    assert.equal(buildCalls, 2, 'the rejected request is rebuilt with the fresh provider');
+    assert.equal(provider.getSignerCallCount(), 2, 'the retry derives a fresh signer');
+    assert.equal(recoveryCalls.length, 1);
+    assert.equal(recoveryCalls[0].error.message, 'Invalid Id');
+    assert.equal(recoveryCalls[0].context.attempt, 0);
+  });
+
+  test('bounds wallet-session recovery to two attempts', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const recoveryAttempts = [];
+    let buildCalls = 0;
+    setWalletSessionRecoveryHandler(async (_error, { attempt }) => {
+      recoveryAttempts.push(attempt);
+      return true;
+    });
+
+    await assert.rejects(
+      sendTx(async () => {
+        buildCalls += 1;
+        throw Object.assign(new Error('Invalid Id'), { code: 1 });
+      }, 'Enter Craps battle'),
+      /Invalid Id/,
+    );
+
+    assert.equal(buildCalls, 3, 'the original request plus two bounded retries run');
+    assert.deepEqual(recoveryAttempts, [0, 1]);
+  });
+
+  test('never retries an error after the wallet has returned a transaction response', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    let buildCalls = 0;
+    let recoveryCalls = 0;
+    setWalletSessionRecoveryHandler(async () => {
+      recoveryCalls += 1;
+      return true;
+    });
+
+    await assert.rejects(
+      sendTx(async () => {
+        buildCalls += 1;
+        return {
+          hash: '0xalready-broadcast',
+          wait: async () => { throw Object.assign(new Error('Invalid Id'), { code: 1 }); },
+        };
+      }, 'Enter Craps battle'),
+      /Invalid Id/,
+    );
+
+    assert.equal(buildCalls, 1, 'an already-broadcast transaction is never rebuilt');
+    assert.equal(recoveryCalls, 0, 'session recovery is restricted to the pre-broadcast phase');
   });
 });
 

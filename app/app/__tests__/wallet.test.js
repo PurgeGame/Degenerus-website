@@ -1022,6 +1022,68 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     }
   });
 
+  test('recognizes MetaMask peer Invalid Id without matching an unrelated chain-id error', () => {
+    assert.equal(
+      wallet._testIsStaleWalletConnectError(Object.assign(new Error('Invalid Id'), { code: 1 })),
+      true,
+    );
+    assert.equal(
+      wallet._testIsStaleWalletConnectError(Object.assign(new Error('could not coalesce error'), {
+        code: 'UNKNOWN_ERROR',
+        info: { error: { code: 1, message: 'Invalid Id' } },
+      })),
+      true,
+      'the classifier reaches MetaMask\'s response through the ethers wrapper',
+    );
+    assert.equal(
+      wallet._testIsStaleWalletConnectError(Object.assign(new Error('Invalid chain id'), { code: 1 })),
+      false,
+    );
+    assert.equal(
+      wallet._testIsStaleWalletConnectError(Object.assign(new Error('Invalid Id'), { code: 'CALL_EXCEPTION' })),
+      false,
+      'an on-chain revert with similar prose must never trigger a transaction retry',
+    );
+  });
+
+  test('the shared transaction gate retries after MetaMask finishes restoring the same session', async () => {
+    const account = '0xBb00000000000000000000000000000000000075';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'restoring-peer-topic',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:84532:${account}`],
+            chains: ['eip155:84532'],
+            methods: ['eth_sendTransaction'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 84532,
+    });
+    wallet._testInjectWcFactory(factory);
+    wallet._testSetWcInvalidIdRetryDelay(0);
+    await wallet.connectWalletConnect();
+    let buildCalls = 0;
+
+    const receipt = await contractsMod.sendTx(async () => {
+      buildCalls += 1;
+      if (buildCalls === 1) {
+        throw Object.assign(new Error('could not coalesce error'), {
+          code: 'UNKNOWN_ERROR',
+          info: { error: { code: 1, message: 'Invalid Id' } },
+        });
+      }
+      return { hash: '0xrestored', wait: async () => ({ status: 1, hash: '0xrestored' }) };
+    }, 'Enter Craps battle');
+
+    assert.equal(receipt.status, 1);
+    assert.equal(buildCalls, 2, 'the original Craps request is rebuilt once');
+    assert.equal(wcInstance._connectCalls.length, 0,
+      'a cold-start race keeps the existing session instead of forcing a re-pair');
+  });
+
   test('singleton: two _ensureWcProvider calls invoke init exactly once and return same instance', async () => {
     const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: [] });
     wallet._testInjectWcFactory(factory);
@@ -1400,6 +1462,68 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(initOpts.length, 2, 'WalletConnect is initialized again');
     assert.notEqual(initOpts[0].customStoragePrefix, initOpts[1].customStoragePrefix,
       'the replacement cannot restore the same dead topic from storage');
+    assert.equal(storeMod.get('connected.address'), account.toLowerCase());
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
+
+  test('re-pairs a peer session when MetaMask still returns Invalid Id after the restore retry', async () => {
+    const account = '0xBb00000000000000000000000000000000000076';
+    const stale = makeMockWcFactory({
+      session: {
+        topic: 'peer-missing-topic',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:84532:${account}`],
+            chains: ['eip155:84532'],
+            methods: ['eth_sendTransaction'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 84532,
+    });
+    const fresh = makeMockWcFactory({
+      session: null,
+      accounts: [],
+      chainId: 84532,
+      connectImpl: async () => {
+        fresh.wcInstance._setSession({
+          topic: 'repaired-peer-topic',
+          namespaces: {
+            eip155: {
+              accounts: [`eip155:84532:${account}`],
+              chains: ['eip155:84532'],
+              methods: ['eth_sendTransaction'],
+            },
+          },
+        });
+        fresh.wcInstance._setAccounts([account]);
+      },
+    });
+    const initOpts = [];
+    let initCount = 0;
+    wallet._testInjectWcFactory({
+      init: async (opts) => {
+        initOpts.push(opts);
+        initCount += 1;
+        return initCount === 1 ? stale.wcInstance : fresh.wcInstance;
+      },
+    });
+    await wallet.connectWalletConnect();
+
+    const recovered = await wallet._testRecoverWalletConnectWrite(
+      Object.assign(new Error('Invalid Id'), { code: 1 }),
+      { attempt: 1 },
+    );
+
+    assert.equal(recovered, true);
+    assert.equal(fresh.wcInstance._connectCalls.length, 1, 'a replacement pairing is opened once');
+    assert.deepEqual(fresh.wcInstance._connectCalls[0], {
+      optionalChains: [CHAIN.id],
+      rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
+    });
+    assert.equal(initOpts.length, 2, 'WalletConnect is initialized under fresh storage');
+    assert.notEqual(initOpts[0].customStoragePrefix, initOpts[1].customStoragePrefix);
     assert.equal(storeMod.get('connected.address'), account.toLowerCase());
     assert.equal(storeMod.get('ui.chainOk'), true);
   });

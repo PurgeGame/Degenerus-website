@@ -32,6 +32,13 @@ let _provider = null;
 // module dependency while guaranteeing every sendTx consumer gets the fix.
 let _chainSwitchHandler = null;
 let _chainSwitchFlight = null;
+// WalletConnect can reject an otherwise valid request before broadcast while
+// the mobile wallet is still restoring (or has forgotten) the session topic.
+// wallet.js owns that session lifecycle; this write chokepoint owns the bounded
+// retry so every contract surface gets identical recovery behavior.
+let _walletSessionRecoveryHandler = null;
+let _walletSessionRecoveryFlight = null;
+const WALLET_SESSION_RECOVERY_ATTEMPTS = 2;
 
 // eth_estimateGas is a snapshot. A purchase or resolver can cross a storage
 // boundary between simulation and mining (for example, another player moves a
@@ -132,6 +139,33 @@ export function clearProvider() { _provider = null; }
 export function setChainSwitchHandler(handler) {
   _chainSwitchHandler = typeof handler === 'function' ? handler : null;
   if (!_chainSwitchHandler) _chainSwitchFlight = null;
+}
+
+/** Register wallet.js's WalletConnect pre-broadcast session recovery. */
+export function setWalletSessionRecoveryHandler(handler) {
+  _walletSessionRecoveryHandler = typeof handler === 'function' ? handler : null;
+  if (!_walletSessionRecoveryHandler) _walletSessionRecoveryFlight = null;
+}
+
+async function _recoverWalletSession(error, attempt) {
+  if (!_walletSessionRecoveryHandler) return false;
+  if (!_walletSessionRecoveryFlight) {
+    const handler = _walletSessionRecoveryHandler;
+    _walletSessionRecoveryFlight = Promise.resolve()
+      .then(() => handler(error, { attempt }))
+      .then(Boolean)
+      .catch(() => false)
+      .finally(() => { _walletSessionRecoveryFlight = null; });
+  }
+  return _walletSessionRecoveryFlight;
+}
+
+class _PreBroadcastTransactionError extends Error {
+  constructor(cause) {
+    super('Wallet request failed before broadcast.');
+    this.name = 'PreBroadcastTransactionError';
+    this.cause = cause;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,29 +338,40 @@ export async function ensureWriteChain() {
 // ---------------------------------------------------------------------------
 
 export async function sendTx(buildTx, action, options = {}) {
-  try {
-    return await _sendTxRaw(buildTx, action, options);
-  } catch (error) {
-    // Keep the provider's full object under `cause` for diagnostics while the
-    // public Error surface is always short and safe. Existing UI consumers
-    // prefer userMessage; even older consumers that read only `.message` now
-    // receive the same sanitized copy instead of RPC JSON/calldata.
-    const fallback = `${String(action || 'Transaction')} did not go through. Try again.`;
-    const userMessage = compactUiError(error, fallback);
-    const wrapped = new Error(userMessage);
-    wrapped.name = 'TransactionError';
-    wrapped.userMessage = userMessage;
-    wrapped.cause = error;
-    // Preserve fields used by control flow/decoders, but keep raw prose such
-    // as `reason` and `shortMessage` exclusively under `cause`. Some legacy
-    // views prefer those fields over `.message`, so copying them would reopen
-    // the provider-blob leak this boundary is meant to close.
-    for (const key of ['code', 'revert', 'data', 'receipt', 'replacement', 'cancelled']) {
-      try {
-        if (error?.[key] !== undefined) wrapped[key] = error[key];
-      } catch (_e) { /* hostile wallet error object */ }
+  let recoveryAttempt = 0;
+  while (true) {
+    try {
+      return await _sendTxRaw(buildTx, action, options);
+    } catch (caught) {
+      const preBroadcast = caught instanceof _PreBroadcastTransactionError;
+      const error = preBroadcast ? caught.cause : caught;
+      if (preBroadcast && recoveryAttempt < WALLET_SESSION_RECOVERY_ATTEMPTS) {
+        const recovered = await _recoverWalletSession(error, recoveryAttempt);
+        recoveryAttempt += 1;
+        if (recovered) continue;
+      }
+
+      // Keep the provider's full object under `cause` for diagnostics while
+      // the public Error surface is always short and safe. Existing UI
+      // consumers prefer userMessage; even older consumers that read only
+      // `.message` now receive the same sanitized copy instead of RPC JSON.
+      const fallback = `${String(action || 'Transaction')} did not go through. Try again.`;
+      const userMessage = compactUiError(error, fallback);
+      const wrapped = new Error(userMessage);
+      wrapped.name = 'TransactionError';
+      wrapped.userMessage = userMessage;
+      wrapped.cause = error;
+      // Preserve fields used by control flow/decoders, but keep raw prose such
+      // as `reason` and `shortMessage` exclusively under `cause`. Some legacy
+      // views prefer those fields over `.message`, so copying them would reopen
+      // the provider-blob leak this boundary is meant to close.
+      for (const key of ['code', 'revert', 'data', 'receipt', 'replacement', 'cancelled']) {
+        try {
+          if (error?.[key] !== undefined) wrapped[key] = error[key];
+        } catch (_e) { /* hostile wallet error object */ }
+      }
+      throw wrapped;
     }
-    throw wrapped;
   }
 }
 
@@ -345,7 +390,15 @@ async function _sendTxRaw(buildTx, action, { onSubmitted } = {}) {
     throw new Error('Account changed mid-flow — please retry.');
   }
   // 4. Compose tx with fresh signer (caller passes builder, NOT pre-resolved promise).
-  const tx = await buildTx(_signerWithGasHeadroom(signer));
+  let tx;
+  try {
+    tx = await buildTx(_signerWithGasHeadroom(signer));
+  } catch (error) {
+    // A retry is safe only before the wallet returns a transaction response.
+    // Once `tx` exists, all errors stay on the receipt/replacement path below
+    // and can never cause a duplicate broadcast.
+    throw new _PreBroadcastTransactionError(error);
+  }
   if (typeof onSubmitted === 'function') {
     try { onSubmitted(tx); } catch (_error) { /* presentation cannot fail a write */ }
   }

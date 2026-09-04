@@ -42,6 +42,7 @@ import {
   getProvider,
   clearProvider,
   setChainSwitchHandler,
+  setWalletSessionRecoveryHandler,
   switchToSepolia,
   switchToSepoliaResult,
 } from './contracts.js';
@@ -505,6 +506,7 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
 // action. That preserves silent reconnect while making the same tap request
 // Base Sepolia, wait for mobile propagation, and continue the original write.
 setChainSwitchHandler(ensureConfiguredWalletChain);
+setWalletSessionRecoveryHandler(_recoverWalletConnectWrite);
 
 /**
  * Whether this browser currently exposes an installed EIP-1193/EIP-6963
@@ -539,6 +541,12 @@ let _wcProvider = null;
 // this exact condition is observed so the next init cannot restore the corpse.
 const WC_STORAGE_PREFIX_BASE = 'degenerus-wc-20260903';
 const WC_STORAGE_GENERATION_KEY = 'degenerusWalletConnectStorageGeneration';
+// MetaMask Mobile installs its WalletConnect request listener before restoring
+// persisted sessions. Its restore loop can take about four seconds at the
+// supported session limit, so one delayed retry lets that cold-start race
+// settle before replacing a session that may still be perfectly valid.
+const WC_INVALID_ID_RETRY_DELAY_MS = 5_000;
+let _wcInvalidIdRetryDelayMs = WC_INVALID_ID_RETRY_DELAY_MS;
 let _volatileWcStorageGeneration = 0;
 
 function _wcStorageGeneration() {
@@ -575,9 +583,51 @@ function _walletErrorText(error) {
   return text.join(' ');
 }
 
+function _walletErrorHasCode(error, expected) {
+  const queue = [error];
+  const seen = new Set();
+  while (queue.length > 0 && seen.size < 16) {
+    const value = queue.shift();
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    const code = value.code;
+    if ((typeof code === 'number' && Number.isFinite(code) && code === expected)
+      || (typeof code === 'string'
+        && /^-?\d+$/.test(code.trim())
+        && Number(code.trim()) === expected)) return true;
+    queue.push(value.data, value.error, value.cause, value.originalError, value.info);
+  }
+  return false;
+}
+
+function _isWalletPeerInvalidIdError(error) {
+  // MetaMask Mobile responds with JSON-RPC code 1 / "Invalid Id" when a
+  // request arrives before its session topic has been restored. Requiring both
+  // fields avoids mistaking an on-chain "invalid id" revert for this peer error.
+  return _walletErrorHasCode(error, 1) && /\binvalid id\b/i.test(_walletErrorText(error));
+}
+
 function _isStaleWalletConnectError(error) {
-  return /no matching key[.:\s]+session topic doesn['’]?t exist|session topic doesn['’]?t exist/i
-    .test(_walletErrorText(error));
+  return _isWalletPeerInvalidIdError(error)
+    || /no matching key[.:\s]+session topic doesn['’]?t exist|session topic doesn['’]?t exist/i
+      .test(_walletErrorText(error));
+}
+
+async function _recoverWalletConnectWrite(error, { attempt = 0 } = {}) {
+  const staleProvider = _eip1193;
+  if (staleProvider?.isWalletConnect !== true || !_isStaleWalletConnectError(error)) return false;
+
+  if (_isWalletPeerInvalidIdError(error) && attempt === 0) {
+    const topic = String(staleProvider.session?.topic || '');
+    if (!topic) return false;
+    _reportWalletChainFailure('peer-session-restoring', staleProvider, error);
+    await new Promise((resolve) => setTimeout(resolve, _wcInvalidIdRetryDelayMs));
+    return staleProvider === _eip1193
+      && topic === String(_eip1193?.session?.topic || '');
+  }
+
+  _reportWalletChainFailure('peer-session-repair', staleProvider, error);
+  return _replaceStaleWalletConnectSession(staleProvider);
 }
 
 async function _replaceStaleWalletConnectSession(staleProvider) {
@@ -1294,5 +1344,15 @@ export const _testEnsureWcProvider = _ensureWcProvider;
 export const _testWcInitOpts = _wcInitOpts;
 export function _testInjectWcFactory(fn) { _wcEthereumProviderFactory = fn; }
 export function _testInjectWcBrowserProviderCtor(ctor) { _wcBrowserProviderCtor = ctor; }
-export function _testResetWcSingleton() { _wcProvider = null; _wcEthereumProviderFactory = null; _wcBrowserProviderCtor = null; }
+export function _testResetWcSingleton() {
+  _wcProvider = null;
+  _wcEthereumProviderFactory = null;
+  _wcBrowserProviderCtor = null;
+  _wcInvalidIdRetryDelayMs = WC_INVALID_ID_RETRY_DELAY_MS;
+}
 export function _testGetWcSingleton() { return _wcProvider; }
+export const _testIsStaleWalletConnectError = _isStaleWalletConnectError;
+export const _testRecoverWalletConnectWrite = _recoverWalletConnectWrite;
+export function _testSetWcInvalidIdRetryDelay(ms) {
+  _wcInvalidIdRetryDelayMs = Math.max(0, Number(ms) || 0);
+}
