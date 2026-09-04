@@ -379,10 +379,10 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
   // can retain the network it first detected, so a wallet that already switched
   // successfully must be allowed to repair that stale wrapper without showing
   // another switch prompt.
-  const currentChainId = await _readEip1193ChainId(raw);
+  const currentChainId = await _readEip1193ChainId(raw, { authoritative: true });
   if (currentChainId === CHAIN.id) {
     _refreshConnectedBrowserProvider(raw);
-    await _syncConnectedChain(raw);
+    await _syncConnectedChain(raw, null, { authoritative: true });
     return true;
   }
 
@@ -568,11 +568,12 @@ function _isConfiguredChainId(value) {
   return _normalizeChainId(value) === CHAIN.id;
 }
 
-async function _readEip1193ChainId(raw) {
-  // WalletConnect exposes its active CAIP/EVM chain directly. Reading that
-  // property avoids turning a silent reconnect into an RPC request while still
-  // normalizing restored hex/CAIP forms.
-  if (raw?.isWalletConnect === true) {
+async function _readEip1193ChainId(raw, { authoritative = false } = {}) {
+  // WalletConnect exposes a cheap public chain hint, which is useful during a
+  // silent reconnect. Its EthereumProvider chainId can diverge from the
+  // UniversalProvider's active chain after restoring a multi-chain session,
+  // though. User-initiated writes therefore request eth_chainId first.
+  if (!authoritative && raw?.isWalletConnect === true) {
     const walletConnectChainId = _normalizeChainId(raw.chainId);
     if (walletConnectChainId != null) return walletConnectChainId;
   }
@@ -584,8 +585,8 @@ async function _readEip1193ChainId(raw) {
   return _normalizeChainId(raw?.chainId);
 }
 
-async function _syncConnectedChain(raw, browserProvider = null) {
-  let chainId = await _readEip1193ChainId(raw);
+async function _syncConnectedChain(raw, browserProvider = null, { authoritative = false } = {}) {
+  let chainId = await _readEip1193ChainId(raw, { authoritative });
   if (chainId == null && browserProvider) {
     const network = await browserProvider.getNetwork().catch(() => null);
     chainId = _normalizeChainId(network?.chainId);
@@ -610,7 +611,7 @@ async function _waitForConfiguredChain(raw, browserProvider = null) {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    chainId = await _syncConnectedChain(raw, browserProvider);
+    chainId = await _syncConnectedChain(raw, browserProvider, { authoritative: true });
     if (chainId === CHAIN.id) return chainId;
   }
   return chainId;

@@ -861,6 +861,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       StubBrowserProvider.instances.push(this);
     }
     async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
+    async send(method, params = []) { return this._wc.request({ method, params }); }
     async getSigner() { return { getAddress: async () => this._wc.accounts?.[0] || null }; }
   }
 
@@ -1140,7 +1141,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     _localStore.set('lastWalletRdns', 'walletconnect:v2');
     await wallet.autoReconnect();
 
-    const result = await wallet.ensureConfiguredWalletChain();
+    const result = await contractsMod.ensureWriteChain();
 
     assert.equal(result, true,
       'the SDK-supported cross-chain request repairs the original session');
@@ -1153,6 +1154,54 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       'a switch-capable live session is not destroyed before trying the switch');
     assert.equal(wcInstance._connectCalls.length, 0,
       'the player is not forced through a second pairing for a recoverable chain mismatch');
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
+
+  test('write repair trusts eth_chainId when WC public chainId is optimistically stale', async () => {
+    const account = '0xBb00000000000000000000000000000000000080';
+    let authoritativeChainId = 1;
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'optimistic-public-chain',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
+            chains: ['eip155:1', 'eip155:84532'],
+            methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+          },
+        },
+      },
+      accounts: [account],
+      // This is the exact disagreement observed in production: the SDK's
+      // public hint says Base while an actual RPC request still reports mainnet.
+      chainId: 84532,
+      requestImpl: async (payload) => {
+        if (payload.method === 'eth_chainId') {
+          return `0x${authoritativeChainId.toString(16)}`;
+        }
+        if (payload.method === 'wallet_switchEthereumChain') {
+          authoritativeChainId = CHAIN.id;
+          return null;
+        }
+        return null;
+      },
+    });
+    wallet._testInjectWcFactory(factory);
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    await wallet.autoReconnect();
+
+    const result = await contractsMod.ensureWriteChain();
+
+    assert.equal(result, true);
+    assert.equal(
+      wcInstance._requestCalls.filter(({ method }) => method === 'wallet_switchEthereumChain').length,
+      1,
+      'the authoritative mainnet response must trigger a switch despite WC.chainId',
+    );
+    assert.ok(
+      wcInstance._requestCalls.filter(({ method }) => method === 'eth_chainId').length >= 2,
+      'write repair verifies the wallet chain before and after the switch',
+    );
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
