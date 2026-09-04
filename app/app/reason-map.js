@@ -16,6 +16,8 @@
 // Downstream phases (60+) extend the registry via register() per write surface.
 // Source: docs.ethers.org/v6/api/utils/errors — CallExceptionError + ErrorDescription.
 
+import { CHAIN } from './chain-config.js';
+
 const ERROR_REGISTRY = new Map([
   ['NotTimeYet', {
     code: 'NotTimeYet',
@@ -58,6 +60,28 @@ const UNKNOWN = {
   userMessage: 'Unexpected error — please try again.',
   recoveryAction: 'Refresh the page if this persists.',
 };
+
+// requireStaticCall captures the shared write-chain guard along with genuine
+// Solidity reverts. Preserve this one app-authored message before the generic
+// contract fallback so a declined/failed mobile switch remains actionable.
+const WRONG_NETWORK_MESSAGE = `Wrong network — switch to ${CHAIN.name}.`;
+const WRONG_NETWORK = {
+  code: 'WrongNetwork',
+  userMessage: WRONG_NETWORK_MESSAGE,
+  recoveryAction: `Approve the switch to ${CHAIN.name} in your wallet, then retry.`,
+};
+
+function _writeGuardMapping(error) {
+  const candidates = [
+    error?.userMessage,
+    error?.message,
+    error?.cause?.userMessage,
+    error?.cause?.message,
+  ];
+  return candidates.some((value) => value === WRONG_NETWORK_MESSAGE)
+    ? WRONG_NETWORK
+    : null;
+}
 
 // Native-currency failures happen outside Solidity, so they do not carry a
 // contract custom-error selector. BrowserProvider also nests the useful RPC
@@ -189,6 +213,9 @@ export function decodeRevertReason(error) {
   // bounded nested error chain before falling through to the generic copy.
   const walletFunds = _walletFundsMapping(error);
   if (walletFunds) return walletFunds;
+  // App-level chain guards are not contract reverts and have no selector.
+  const writeGuard = _writeGuardMapping(error);
+  if (writeGuard) return writeGuard;
   // Fallback: require-string match (legacy contract reverts).
   // WR-02: the catch-all 'E' is a single-character key — substring-matching it
   // produces false positives on any reason that happens to contain capital 'E'

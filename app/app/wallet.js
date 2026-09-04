@@ -245,6 +245,42 @@ function _walletConnectSessionHasChain(provider, chainId) {
   });
 }
 
+function _walletConnectSessionHasMethod(provider, method) {
+  const namespaces = provider?.session?.namespaces;
+  if (!namespaces || typeof namespaces !== 'object') return false;
+  return Object.entries(namespaces).some(([key, namespace]) => {
+    const eip155 = key === 'eip155'
+      || key.startsWith('eip155:')
+      || namespace?.chains?.some?.((chain) => String(chain).startsWith('eip155:'))
+      || namespace?.accounts?.some?.((account) => String(account).startsWith('eip155:'));
+    return eip155 && Array.isArray(namespace?.methods) && namespace.methods.includes(method);
+  });
+}
+
+async function _repairWalletConnectNamespace(raw) {
+  try {
+    await raw.disconnect();
+  } catch (error) {
+    if (_isStaleWalletConnectError(error)) {
+      return _replaceStaleWalletConnectSession(raw);
+    }
+    return false;
+  }
+  // The WC disconnect event normally clears this state first; keep the
+  // explicit reset for providers that do not emit it until a later tick.
+  disconnect();
+  try {
+    // The caller is already the authoritative, awaited switch flow. Suppress
+    // connectWalletConnect's normal fire-and-forget convenience switch so a
+    // replacement session receives exactly one awaited request below.
+    const connected = await connectWalletConnect({ requestConfiguredChain: false });
+    if (!connected) return false;
+    return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
+  } catch (_e) {
+    return false;
+  }
+}
+
 /**
  * Switch the connected wallet to this deployment's chain.
  *
@@ -258,32 +294,20 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
   const raw = getEip1193();
   if (!raw) return false;
 
-  if (
-    raw.isWalletConnect === true
+  const walletConnectMissingChain = raw.isWalletConnect === true
     && raw.session
-    && !_walletConnectSessionHasChain(raw, CHAIN.id)
-  ) {
+    && !_walletConnectSessionHasChain(raw, CHAIN.id);
+  const walletConnectCanSwitch = walletConnectMissingChain
+    && _walletConnectSessionHasMethod(raw, 'wallet_switchEthereumChain');
+
+  // A WalletConnect session may omit the target from its fixed namespace but
+  // still explicitly authorize wallet_switchEthereumChain. The SDK forwards
+  // that request through the current approved chain and selects the target
+  // after the wallet accepts it. Destroying such a session before the request
+  // is why mobile writes repeatedly fell through to "Wrong network".
+  if (walletConnectMissingChain && !walletConnectCanSwitch) {
     if (!allowWalletConnectRepair) return false;
-    try {
-      await raw.disconnect();
-    } catch (error) {
-      if (_isStaleWalletConnectError(error)) {
-        return _replaceStaleWalletConnectSession(raw);
-      }
-      return false;
-    }
-    // The WC disconnect event normally clears this state first; keep the
-    // explicit reset for providers that do not emit it until a later tick.
-    disconnect();
-    try {
-      // This is the authoritative awaited switch flow. Suppress the ordinary
-      // fire-and-forget convenience switch, then verify the replacement once.
-      const connected = await connectWalletConnect({ requestConfiguredChain: false });
-      if (!connected) return false;
-      return ensureConfiguredWalletChain({ allowWalletConnectRepair: false });
-    } catch (_e) {
-      return false;
-    }
+    return _repairWalletConnectNamespace(raw);
   }
 
   // The EIP-1193 provider is the live source of truth. ethers' BrowserProvider
@@ -306,6 +330,9 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
     ) {
       return _replaceStaleWalletConnectSession(raw);
     }
+    if (allowWalletConnectRepair && walletConnectMissingChain) {
+      return _repairWalletConnectNamespace(raw);
+    }
     return false;
   }
   // Several mobile wallets resolve the approval request before eth_chainId
@@ -313,6 +340,9 @@ export async function ensureConfiguredWalletChain({ allowWalletConnectRepair = t
   const activeChainId = await _waitForConfiguredChain(raw);
   const chainOk = activeChainId === CHAIN.id;
   if (chainOk) _refreshConnectedBrowserProvider(raw);
+  if (!chainOk && allowWalletConnectRepair && walletConnectMissingChain) {
+    return _repairWalletConnectNamespace(raw);
+  }
   return chainOk;
 }
 

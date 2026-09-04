@@ -142,9 +142,9 @@ function makeFakeReverseFlipContract(opts = {}) {
   };
 }
 
-function makeFakeProvider(connectedAddr) {
+function makeFakeProvider(connectedAddr, chainId = 84532n) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -1010,6 +1010,25 @@ describe('Plan 62-03: depositCoinflip', () => {
       coinflipMod.depositCoinflip({ amount: '200000000000000000000' }),
       /Wallet not connected/i,
     );
+  });
+
+  test('preserves the actionable Base Sepolia error when chain repair cannot complete', async () => {
+    contractsMod.setChainSwitchHandler(null);
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, 1n));
+
+    await assert.rejects(
+      coinflipMod.depositCoinflip({
+        amount: '200000000000000000000',
+        useCarry: false,
+      }),
+      (error) => {
+        assert.match(error.message, /Wrong network.*Base Sepolia/i);
+        assert.doesNotMatch(error.message, /Unexpected error/i);
+        return true;
+      },
+    );
+    assert.deepEqual(lastFakeContract._order, [],
+      'the contract simulation and transaction stay blocked on the wrong chain');
   });
 
   test('accepts amount as string and converts to BigInt', async () => {

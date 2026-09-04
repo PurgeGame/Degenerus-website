@@ -1113,6 +1113,49 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
+  test('a mainnet-only WC namespace gets one live switch attempt before destructive re-pair', async () => {
+    const account = '0xBb00000000000000000000000000000000000079';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'mainnet-only-but-switch-capable',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`],
+            chains: ['eip155:1'],
+            methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: 1,
+      requestImpl: async (payload, wc) => {
+        if (payload.method === 'wallet_switchEthereumChain') {
+          wc.chainId = 84532;
+          return null;
+        }
+        return null;
+      },
+    });
+    wallet._testInjectWcFactory(factory);
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    await wallet.autoReconnect();
+
+    const result = await wallet.ensureConfiguredWalletChain();
+
+    assert.equal(result, true,
+      'the SDK-supported cross-chain request repairs the original session');
+    assert.equal(
+      wcInstance._requestCalls.filter(({ method }) => method === 'wallet_switchEthereumChain').length,
+      1,
+      'the initiating tap sends one switch request to the wallet',
+    );
+    assert.equal(wcInstance._disconnectCalls.length, 0,
+      'a switch-capable live session is not destroyed before trying the switch');
+    assert.equal(wcInstance._connectCalls.length, 0,
+      'the player is not forced through a second pairing for a recoverable chain mismatch');
+    assert.equal(storeMod.get('ui.chainOk'), true);
+  });
+
   test('ensureConfiguredWalletChain re-pairs a WC session that does not authorize Base Sepolia', async () => {
     const account = '0xBb00000000000000000000000000000000000077';
     const { factory, wcInstance } = makeMockWcFactory({

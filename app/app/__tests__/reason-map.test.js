@@ -63,6 +63,17 @@ describe('UNKNOWN catch-all', () => {
   });
 });
 
+describe('application write guards', () => {
+  test('preserves the configured-chain instruction instead of returning UNKNOWN', () => {
+    const decoded = decodeRevertReason(
+      new Error('Wrong network — switch to Base Sepolia.'),
+    );
+    assert.equal(decoded.code, 'WrongNetwork');
+    assert.equal(decoded.userMessage, 'Wrong network — switch to Base Sepolia.');
+    assert.match(decoded.recoveryAction, /approve.*Base Sepolia/i);
+  });
+});
+
 describe('native wallet balance failures', () => {
   test('decodes the ethers INSUFFICIENT_FUNDS code', () => {
     const decoded = decodeRevertReason({
