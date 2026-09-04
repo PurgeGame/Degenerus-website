@@ -6749,6 +6749,24 @@ app-craps-table {
   font-variant-numeric: tabular-nums;
 }
 
+.craps-race-inline-endpoint {
+  fill: #baffca;
+  stroke: rgba(2, 18, 11, 0.96);
+  stroke-width: 3px;
+  paint-order: stroke;
+  font: 1000 10px/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.craps-race-endpoint.is-leader .craps-race-inline-endpoint {
+  fill: #fff0a9;
+}
+
+.craps-race-endpoint.is-you.is-leader .craps-race-inline-endpoint {
+  stroke: #0b512c;
+}
+
 .craps-race-cover {
   position: absolute;
   z-index: 20;
@@ -7179,7 +7197,7 @@ app-craps-table {
 
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
     grid-template-rows: 13rem minmax(17rem, 1fr);
-    min-width: 41rem;
+    min-width: 0;
   }
 }
 
@@ -8066,6 +8084,731 @@ app-craps-table {
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race__chart {
     min-height: 25rem;
     height: 25rem;
+  }
+}
+
+/* Mobile resolution is its own fitted instrument. Never preserve the desktop
+   felt by making the rail wider than the viewport: that crops the dice and
+   turns half the betting surface into unreachable overflow. Keep the compact
+   felt and dice first, then give every remaining pixel to the race graph. */
+@media (max-width: 680px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] {
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    grid-template-rows: 3.15rem minmax(0, 1fr) auto;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+    width: 100%;
+    height: 3.15rem;
+    box-sizing: border-box;
+    grid-template-columns: minmax(7.4rem, 8.8rem) minmax(0, 1fr) 1.75rem;
+    gap: 0.24rem;
+    padding: 0.22rem 0.34rem;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo {
+    width: 100%;
+    max-height: 2.55rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__close {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="1"],
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="2"] {
+    width: 100%;
+    height: 2.55rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-dialog__prize--jackpot,
+    .craps-dialog__prize--biggest
+  ) {
+    display: none !important;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty {
+    display: grid;
+    height: 2.55rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0.25rem;
+    padding: 0.18rem 0.42rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > small {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-dialog__prize--bounty > strong,
+    .craps-dialog__prize--bounty > strong output
+  ) {
+    font-size: clamp(0.88rem, 4.4vw, 1.08rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong .craps-dialog__flip-mark {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    width: auto;
+    min-width: 0;
+    align-items: center;
+    align-self: center;
+    gap: 0.12rem;
+    padding: 0.12rem 0.2rem;
+    border-top: 0;
+    border-left: 1px solid rgba(97, 197, 255, 0.25);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added small {
+    font-size: 0.42rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added output {
+    max-width: 5.5ch;
+    font-size: 0.58rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added :is(
+    .craps-dialog__flip-mark,
+    em
+  ) {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: clamp(15.6rem, 34dvh, 18rem) minmax(19rem, 1fr);
+    gap: 0.34rem;
+    padding: 0.34rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.28rem;
+    overflow: hidden;
+    border-width: 2px;
+    border-radius: 0.65rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-groups {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: 5.25rem 3.25rem minmax(6.8rem, 1fr);
+    grid-template-areas:
+      "place place place place"
+      "hard4 hard8 line dont"
+      "hud hud hud hud";
+    gap: 0.2rem 0.16rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__name {
+    top: 0.18rem;
+    font-size: clamp(1.05rem, 5vw, 1.3rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__odds {
+    bottom: 0.14rem;
+    left: 0.22rem;
+    font-size: clamp(0.5rem, 2.3vw, 0.62rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--hard-4,
+    .craps-group--hard-8,
+    .craps-group--line,
+    .craps-group--dont-line
+  ) {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--hard-4,
+    .craps-group--hard-8,
+    .craps-group--line,
+    .craps-group--dont-line
+  ) :is(.craps-group__bets, .craps-bet) {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice {
+    top: 0.18rem;
+    gap: 0.05rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice img {
+    width: clamp(1.45rem, 6.5vw, 1.7rem);
+    height: clamp(1.45rem, 6.5vw, 1.7rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend em,
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--line,
+    .craps-group--dont-line
+  ) .craps-bet__odds {
+    bottom: 0.2rem;
+    left: 0.22rem;
+    font-size: clamp(0.5rem, 2.2vw, 0.6rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--line .craps-bet__name {
+    margin-top: 0.68rem;
+    font-size: clamp(0.9rem, 4vw, 1.05rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__name {
+    gap: 0.08rem;
+    margin-top: 0.58rem;
+    font-size: clamp(0.56rem, 2.55vw, 0.68rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__wwxrp-mark {
+    width: 0.9rem;
+    height: 0.9rem;
+    flex-basis: 0.9rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    grid-template-columns: minmax(7.4rem, 0.82fr) minmax(0, 1.35fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "race-player roll";
+    gap: 0.18rem;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel {
+    grid-template-rows: minmax(2.7rem, auto) minmax(0, 1fr);
+    gap: 0.12rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter {
+    grid-template-columns: 1.65rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.04rem 0.22rem;
+    padding: 0.12rem 0.2rem 0.12rem 0.12rem;
+    border-radius: 0.24rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__avatar {
+    width: 1.62rem;
+    height: 1.62rem;
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 0.08rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy small {
+    font-size: 0.38rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy strong {
+    font-size: clamp(0.58rem, 2.6vw, 0.7rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 0.44rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em b {
+    font-size: 0.68rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span {
+    gap: 0.06rem;
+    padding: 0.18rem 0.04rem 0.12rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span:nth-child(3) {
+    border-left: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span:nth-child(n + 3) {
+    border-top: 1px solid rgba(110, 240, 140, 0.16);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats small {
+    font-size: clamp(0.3rem, 1.45vw, 0.36rem);
+    letter-spacing: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats strong,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stack strong {
+    min-width: 0;
+    font-size: clamp(0.66rem, 3.2vw, 0.78rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stack strong {
+    gap: 0.08rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stack img {
+    width: 0.66rem;
+    height: 0.66rem;
+    flex-basis: 0.66rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud__core {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-dice-bay {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
+    width: clamp(5.25rem, 26vw, 6.35rem);
+    height: clamp(5.25rem, 26vw, 6.35rem);
+    max-width: 48%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:first-child {
+    transform: translateX(-0.22rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:last-child {
+    transform: translateX(0.22rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-number {
+    font-size: clamp(1.2rem, 5.8vw, 1.55rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-label {
+    font-size: clamp(0.48rem, 2.2vw, 0.6rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race__chart {
+    width: 100%;
+    min-width: 0;
+    min-height: 19rem;
+    height: 100%;
+  }
+}
+
+/* A phone in landscape has enough horizontal room to keep the felt and graph
+   visible together. The legacy leaderboard column is gone; bets stay above
+   the dice on the left and the race owns the rest of the viewport. */
+@media (orientation: landscape) and (max-height: 600px) and (min-width: 521px) and (max-width: 959px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] {
+    width: calc(100vw - 0.36rem);
+    height: calc(100dvh - 0.36rem);
+    max-height: none;
+    grid-template-rows: 3.05rem minmax(0, 1fr) auto;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head {
+    width: 100%;
+    height: 3.05rem;
+    box-sizing: border-box;
+    grid-template-columns: clamp(8rem, 22vw, 11.5rem) minmax(0, 1fr) 1.7rem;
+    gap: 0.28rem;
+    padding: 0.18rem 0.38rem;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo {
+    display: block;
+    width: 100%;
+    max-height: 2.5rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="1"],
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="2"] {
+    width: 100%;
+    height: 2.45rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-dialog__prize--jackpot,
+    .craps-dialog__prize--biggest
+  ) {
+    display: none !important;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty {
+    display: grid;
+    height: 2.45rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0.3rem;
+    padding: 0.14rem 0.48rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > small {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: flex-start;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong output {
+    font-size: clamp(0.94rem, 2.8vw, 1.2rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    width: auto;
+    min-width: 0;
+    align-items: center;
+    align-self: center;
+    gap: 0.14rem;
+    padding: 0.1rem 0.24rem;
+    border-top: 0;
+    border-left: 1px solid rgba(97, 197, 255, 0.25);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize-added :is(
+    .craps-dialog__flip-mark,
+    em
+  ) {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__close {
+    width: 1.7rem;
+    height: 1.7rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    grid-template-columns: minmax(17rem, 0.92fr) minmax(0, 1.2fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "felt race";
+    gap: 0.34rem;
+    padding: 0.3rem;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem;
+    overflow: hidden;
+    border-width: 2px;
+    border-radius: 0.62rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-groups {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: 3.35rem 3rem minmax(0, 1fr);
+    grid-template-areas:
+      "place place place place"
+      "hard4 hard8 line dont"
+      "hud hud hud hud";
+    gap: 0.16rem 0.12rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-group__bets {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-4"] { grid-column: 1; grid-row: 1; }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-5"] { grid-column: 2; grid-row: 1; }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-6"] { grid-column: 3; grid-row: 1; }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-8"] { grid-column: 4; grid-row: 1; }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-9"] { grid-column: 5; grid-row: 1; }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place [data-bet="place-10"] { grid-column: 6; grid-row: 1; }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__name {
+    top: 0.18rem;
+    font-size: clamp(0.9rem, 4.4dvh, 1.15rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--place .craps-bet__odds {
+    bottom: 0.13rem;
+    left: 0.16rem;
+    font-size: clamp(0.42rem, 1.8dvh, 0.54rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--hard-4,
+    .craps-group--hard-8,
+    .craps-group--line,
+    .craps-group--dont-line
+  ),
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--hard-4,
+    .craps-group--hard-8,
+    .craps-group--line,
+    .craps-group--dont-line
+  ) :is(.craps-group__bets, .craps-bet) {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-dice img {
+    width: clamp(1.25rem, 6dvh, 1.5rem);
+    height: clamp(1.25rem, 6dvh, 1.5rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-bet__hardway-legend em,
+  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
+    .craps-group--line,
+    .craps-group--dont-line
+  ) .craps-bet__odds {
+    bottom: 0.18rem;
+    left: 0.18rem;
+    font-size: clamp(0.42rem, 1.8dvh, 0.52rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--line .craps-bet__name {
+    margin-top: 0.62rem;
+    font-size: clamp(0.82rem, 4dvh, 1rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__name {
+    gap: 0.06rem;
+    margin-top: 0.54rem;
+    font-size: clamp(0.5rem, 2.25dvh, 0.64rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-group--dont-line .craps-bet__wwxrp-mark {
+    width: 0.82rem;
+    height: 0.82rem;
+    flex-basis: 0.82rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    grid-template-columns: minmax(8rem, 0.9fr) minmax(0, 1.25fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "race-player roll";
+    gap: 0.15rem;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel {
+    grid-template-rows: minmax(2.55rem, auto) minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter {
+    grid-template-columns: 1.55rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.03rem 0.18rem;
+    padding: 0.08rem 0.18rem 0.08rem 0.08rem;
+    border-radius: 0.22rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__avatar {
+    width: 1.5rem;
+    height: 1.5rem;
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 0.06rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy small {
+    font-size: 0.34rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter__copy strong {
+    font-size: clamp(0.52rem, 2.5dvh, 0.66rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 0.4rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter > em b {
+    font-size: 0.62rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span {
+    gap: 0.04rem;
+    padding: 0.12rem 0.03rem 0.08rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span:nth-child(3) {
+    border-left: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats > span:nth-child(n + 3) {
+    border-top: 1px solid rgba(110, 240, 140, 0.16);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats small {
+    font-size: clamp(0.28rem, 1.4dvh, 0.34rem);
+    letter-spacing: 0;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stats strong,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stack strong {
+    min-width: 0;
+    font-size: clamp(0.62rem, 2.8dvh, 0.74rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-you-stack img {
+    width: 0.62rem;
+    height: 0.62rem;
+    flex-basis: 0.62rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud__core,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-dice-bay {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud__core {
+    grid-area: roll;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
+    width: clamp(4.3rem, 10.5vw, 5.5rem);
+    height: clamp(4.3rem, 10.5vw, 5.5rem);
+    max-width: 48%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:first-child {
+    transform: translateX(-0.18rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:last-child {
+    transform: translateX(0.18rem);
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-l10 {
+    display: none;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race,
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race__chart {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
   }
 }
 

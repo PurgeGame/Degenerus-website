@@ -1214,6 +1214,41 @@ test('the desktop resolution chassis protects dice copy and keeps its full prize
     'graph rescaling never stretches the wager stack art');
 });
 
+test('mobile resolution fits bets, dice, and graph without a desktop-width crop', () => {
+  const mobileRaceCss = CSS_SRC.slice(
+    CSS_SRC.indexOf('/* Mobile resolution is its own fitted instrument'),
+    CSS_SRC.indexOf('/* A phone in landscape has enough horizontal room'),
+  );
+  assert.doesNotMatch(CSS_SRC, /min-width:\s*41rem/,
+    'no phone path preserves the desktop felt by pushing it outside the viewport');
+  assert.match(mobileRaceCss,
+    /\.craps-table-rail\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?overflow-x:\s*hidden;/s,
+    'the portrait rail is explicitly bounded to the phone viewport');
+  assert.match(mobileRaceCss,
+    /grid-template-rows:\s*5\.25rem 3\.25rem minmax\(6\.8rem, 1fr\);[\s\S]*?"place place place place"\s*"hard4 hard8 line dont"\s*"hud hud hud hud"/s,
+    'all betting lanes sit above the shooter and dice instead of hanging beneath them');
+  assert.match(mobileRaceCss,
+    /\.craps-center-hud\s*\{[\s\S]*?grid-template-areas:\s*"race-player roll"/s,
+    'the player panel and large dice share the primary mobile action row');
+  assert.match(COMPONENT_SRC,
+    /const compactRace = Boolean[\s\S]*?raceBounds\.height \/ raceBounds\.width[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
+    'the graph adopts the rendered mobile panel aspect ratio instead of letterboxing a desktop plot');
+  assert.match(COMPONENT_SRC,
+    /\? \{ left: 48, right: 12, top: 20, bottom: 44 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
+    'compact graphs keep rank and amount inside the plot without a right-side card gutter');
+
+  const landscapeRaceCss = CSS_SRC.slice(
+    CSS_SRC.indexOf('/* A phone in landscape has enough horizontal room'),
+    CSS_SRC.indexOf('@media (min-width: 960px) and (max-width: 1120px)'),
+  );
+  assert.match(landscapeRaceCss,
+    /grid-template-areas:\s*"felt race"/s,
+    'landscape phones give the available width directly to the felt and graph');
+  assert.match(landscapeRaceCss,
+    /grid-template-areas:\s*"place place place place"\s*"hard4 hard8 line dont"\s*"hud hud hud hud"/s,
+    'landscape keeps every wager above the dice as well');
+});
+
 test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-event markers', async () => {
   const { crapsRollHistoryEvent, crapsRollHistorySlots, crapsRollHistoryTimeline } = await import(moduleUrl);
   const frames = [

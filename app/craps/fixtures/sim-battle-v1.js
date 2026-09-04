@@ -22,7 +22,6 @@
 
 const BATTLE_KEY = "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71";
 const DIGEST = "48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6";
-const BASE = `/craps/replays/v1/battles/${encodeURIComponent(BATTLE_KEY)}/results/${DIGEST}`;
 
 export const SIM_CRAPS_REPLAY_POINTER = Object.freeze({
   "schemaVersion": 1,
@@ -35,7 +34,7 @@ export const SIM_CRAPS_REPLAY_POINTER = Object.freeze({
   "publishedAt": "2026-08-28T18:00:00.000Z",
   "error": null,
   "digest": "48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6",
-  "manifestPath": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/manifest.json"
+  "manifestPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/manifest.json"
 });
 
 export const SIM_CRAPS_REPLAY_MANIFEST = Object.freeze({
@@ -80,8 +79,8 @@ export const SIM_CRAPS_REPLAY_MANIFEST = Object.freeze({
     "entrants": 24,
     "shardSize": 8,
     "shardCount": 3,
-    "featuredPath": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/featured.json",
-    "shardPathTemplate": "/craps/replays/v1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/{shard}.json"
+    "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/featured.json",
+    "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/{shard}.json"
   },
   "verification": {
     "allSeatsReplayOk": true,
@@ -115,11 +114,9 @@ export const SIM_CRAPS_REPLAY_ARTIFACTS = Object.freeze({
 });
 
 export const SIM_CRAPS_REPLAY_PATHS = Object.freeze({
-  pointer: `/craps/replays/v1/battles/${encodeURIComponent(BATTLE_KEY)}/latest.json`,
-  manifest: `${BASE}/manifest.json`,
-  featured: `${BASE}/featured.json`,
-  shard: `${BASE}/seats/0000.json`,
-  shards: Object.freeze(SIM_CRAPS_REPLAY_SHARDS.map(
-    (_, index) => `${BASE}/seats/${String(index).padStart(4, '0')}.json`,
-  )),
+  pointer: "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/latest.json",
+  manifest: "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/manifest.json",
+  featured: "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/featured.json",
+  shard: "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/0000.json",
+  shards: Object.freeze(["/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/0000.json","/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/0001.json","/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6/seats/0002.json"]),
 });

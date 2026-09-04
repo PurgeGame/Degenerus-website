@@ -436,7 +436,7 @@ describe('index.html basic-mode skeleton', () => {
     }
     assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
       'component upgrade waits for its scoped stylesheet');
-    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v2"/,
+    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v3"/,
       'the resolver redesign has its own deferred-style cache identity');
     assert.match(html, /link\.dataset\.rev[\s\S]*?encodeURIComponent\(revision\)/,
       'the deferred-style loader applies an explicitly declared cache identity');

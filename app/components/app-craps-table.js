@@ -4215,8 +4215,32 @@ class AppCrapsTable extends HTMLElement {
     const leader = this.#racePlayers.find((player) => player.key === leaderStanding?.key) ?? null;
     const local = this.#racePlayers.find((player) => player.local);
     const scale = this.#raceScale(resolved);
-    const { width, height } = CRAPS_RACE_VIEWBOX;
-    const geometry = { left: 58, right: 132, top: 24, bottom: 48 };
+    // The desktop plot is intentionally panoramic, but reusing that 10:3
+    // coordinate system on a portrait phone letterboxes the chart into a thin
+    // strip. Give mobile a viewBox with the rendered panel's own aspect ratio
+    // so graph lines, labels, and endpoints occupy the full available area.
+    const portraitRace = Boolean(globalThis.matchMedia?.(
+      '(orientation: portrait) and (max-width: 959px)',
+    )?.matches);
+    const compactRace = Boolean(globalThis.matchMedia?.(
+      '(orientation: portrait) and (max-width: 959px), (orientation: landscape) and (max-height: 600px) and (max-width: 959px)',
+    )?.matches);
+    const raceBounds = compactRace && typeof svg.getBoundingClientRect === 'function'
+      ? svg.getBoundingClientRect()
+      : null;
+    const width = compactRace ? 430 : CRAPS_RACE_VIEWBOX.width;
+    const height = compactRace
+      ? Math.max(portraitRace ? 320 : 210, Math.round(width * (
+          raceBounds?.width > 0 && raceBounds?.height > 0
+            ? raceBounds.height / raceBounds.width
+            : 1.12
+        )))
+      : CRAPS_RACE_VIEWBOX.height;
+    svg.setAttribute?.('viewBox', `0 0 ${width} ${height}`);
+    svg.dataset.compact = compactRace ? 'true' : 'false';
+    const geometry = compactRace
+      ? { left: 48, right: 12, top: 20, bottom: 44 }
+      : { left: 58, right: 132, top: 24, bottom: 48 };
     const plotWidth = width - geometry.left - geometry.right;
     const plotHeight = height - geometry.top - geometry.bottom;
     const plotRight = geometry.left + plotWidth;
@@ -4324,10 +4348,11 @@ class AppCrapsTable extends HTMLElement {
     const wagerMinimumHeight = 18 + (wagerChipCount - 1) * 3;
     const wagerVisualHeight = Math.min(46, Math.max(wagerMinimumHeight, wagerHeight));
     const wagerWidth = (wagerVisualHeight * 120) / wagerSourceHeight;
+    const wagerX = compactRace ? 23 : 28;
     parts.push('<g class="craps-race-wager-stack">');
-    parts.push(`<image class="craps-race-wager-art" x="${28 - wagerWidth / 2}" y="${plotBottom - wagerVisualHeight}" width="${wagerWidth}" height="${wagerVisualHeight}" href="${wagerArt}" preserveAspectRatio="xMidYMax meet"></image>`);
-    parts.push(`<text class="craps-race-wager-label" x="28" y="${plotBottom + 17}" text-anchor="middle">WAGER</text>`);
-    parts.push(`<text class="craps-race-wager-value" x="28" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(wager))}</text></g>`);
+    parts.push(`<image class="craps-race-wager-art" x="${wagerX - wagerWidth / 2}" y="${plotBottom - wagerVisualHeight}" width="${wagerWidth}" height="${wagerVisualHeight}" href="${wagerArt}" preserveAspectRatio="xMidYMax meet"></image>`);
+    parts.push(`<text class="craps-race-wager-label" x="${wagerX}" y="${plotBottom + 17}" text-anchor="middle">WAGER</text>`);
+    parts.push(`<text class="craps-race-wager-value" x="${wagerX}" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(wager))}</text></g>`);
 
     const endpointPlayers = [...new Map([leader, local].filter(Boolean).map((player) => [player.key, player])).values()];
     const endpoints = endpointPlayers.map((player) => ({
@@ -4335,10 +4360,12 @@ class AppCrapsTable extends HTMLElement {
       pointY: yAt(this.#raceValueAt(player, resolved)),
       labelY: yAt(this.#raceValueAt(player, resolved)),
     })).sort((left, right) => left.labelY - right.labelY);
+    const endpointGap = compactRace ? 22 : 50;
     endpoints.forEach((endpoint, index) => {
-      if (index > 0) endpoint.labelY = Math.max(endpoint.labelY, endpoints[index - 1].labelY + 50);
+      if (index > 0) endpoint.labelY = Math.max(endpoint.labelY, endpoints[index - 1].labelY + endpointGap);
     });
-    const overflow = (endpoints.at(-1)?.labelY ?? plotBottom) - (plotBottom - 24);
+    const endpointHalfHeight = compactRace ? 7 : 21;
+    const overflow = (endpoints.at(-1)?.labelY ?? plotBottom) - (plotBottom - endpointHalfHeight - 3);
     if (overflow > 0) endpoints.forEach((endpoint) => { endpoint.labelY -= overflow; });
     for (const endpoint of endpoints) {
       const { player, pointY, labelY } = endpoint;
@@ -4347,16 +4374,31 @@ class AppCrapsTable extends HTMLElement {
         ? this.#localRankAtRound(resolved, standing?.rank, visibleStandings)
         : standing?.rank;
       const isLeader = player.key === leader?.key;
-      const boxX = plotRight + 9;
-      const boxY = labelY - 21;
-      const showAvatar = isLeader;
-      const textX = boxX + (showAvatar ? 42 : 9);
       const classes = `craps-race-endpoint${player.local ? ' is-you' : ''}${isLeader ? ' is-leader' : ''}`;
-      parts.push(`<g class="${classes}"><line x1="${plotRight}" x2="${boxX}" y1="${pointY}" y2="${labelY}"></line><rect x="${boxX}" y="${boxY}" width="116" height="42"></rect>`);
+      if (compactRace) {
+        const endpointValue = formatCrapsCompactFlip(this.#raceValueAt(player, resolved));
+        const endpointLabel = player.local
+          ? `YOU #${rank ?? '—'} · ${endpointValue}`
+          : `#1 · ${endpointValue}`;
+        parts.push(`<g class="${classes}"><line x1="${plotRight}" x2="${plotRight - 5}" y1="${pointY}" y2="${labelY}"></line><text class="craps-race-inline-endpoint" x="${plotRight - 8}" y="${labelY + 4}" text-anchor="end">${esc(endpointLabel)}</text></g>`);
+        continue;
+      }
+      const boxX = plotRight + 9;
+      const boxWidth = 116;
+      const boxHeight = 42;
+      const boxY = labelY - boxHeight / 2;
+      const showAvatar = isLeader;
+      const avatarX = boxX + 20;
+      const avatarRadius = 14;
+      const textX = boxX + (showAvatar ? 42 : 9);
+      parts.push(`<g class="${classes}"><line x1="${plotRight}" x2="${boxX}" y1="${pointY}" y2="${labelY}"></line><rect x="${boxX}" y="${boxY}" width="${boxWidth}" height="${boxHeight}"></rect>`);
       if (showAvatar) {
-        parts.push(`<circle class="craps-race-endpoint-avatar" cx="${boxX + 20}" cy="${labelY}" r="14"></circle>`);
-        if (player.avatar) parts.push(`<image href="${esc(player.avatar)}" x="${boxX + 7}" y="${labelY - 13}" width="26" height="26" clip-path="circle(13px at 13px 13px)" preserveAspectRatio="xMidYMid slice"></image>`);
-        else parts.push(`<text class="craps-race-endpoint-initials" x="${boxX + 20}" y="${labelY + 4}" text-anchor="middle">${esc(player.initials)}</text>`);
+        parts.push(`<circle class="craps-race-endpoint-avatar" cx="${avatarX}" cy="${labelY}" r="${avatarRadius}"></circle>`);
+        if (player.avatar) {
+          const avatarSize = 26;
+          const avatarInset = avatarSize / 2;
+          parts.push(`<image href="${esc(player.avatar)}" x="${avatarX - avatarInset}" y="${labelY - avatarInset}" width="${avatarSize}" height="${avatarSize}" clip-path="circle(${avatarInset}px at ${avatarInset}px ${avatarInset}px)" preserveAspectRatio="xMidYMid slice"></image>`);
+        } else parts.push(`<text class="craps-race-endpoint-initials" x="${avatarX}" y="${labelY + 4}" text-anchor="middle">${esc(player.initials)}</text>`);
       }
       parts.push(`<text class="craps-race-endpoint-rank" x="${textX}" y="${boxY + 16}">${player.local ? `YOU · #${rank ?? '—'}` : '#1'}</text>`);
       parts.push(`<text class="craps-race-endpoint-value" x="${textX}" y="${boxY + 34}">${esc(formatCrapsCompactFlip(this.#raceValueAt(player, resolved)))}</text></g>`);

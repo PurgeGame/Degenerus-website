@@ -37,7 +37,7 @@ import {
   CRAPS_TABLE_OPEN_EVENT,
   formatCrapsCompactFlip,
   unpackCrapsContractChips,
-} from './app-craps-table.js?rev=resolution-race-v2';
+} from './app-craps-table.js?rev=resolution-race-v3';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
 export const CRAPS_BATTLES_PER_DAY = 7;
