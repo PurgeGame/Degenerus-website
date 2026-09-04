@@ -131,6 +131,7 @@ export function getEip1193() {
 // the relay, navigate this tab to the wallet's exact request deep link instead.
 const WC_DEEPLINK_CHOICE_KEY = 'WALLETCONNECT_DEEPLINK_CHOICE';
 const WC_REQUEST_SENT_EVENT = 'session_request_sent';
+const WC_HANDOFF_FALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
 const WC_APPROVAL_METHODS = new Set([
   'eth_sendTransaction',
   'eth_sign',
@@ -145,6 +146,9 @@ const WC_APPROVAL_METHODS = new Set([
   'wallet_watchAsset',
 ]);
 const _wcAutomaticHandoffClients = new WeakSet();
+let _wcPendingApprovalHandoff = null;
+let _wcApprovalHandoffTimer = null;
+let _wcApprovalPageWasHidden = false;
 
 function _isMobileWalletHandoffContext() {
   const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
@@ -174,10 +178,16 @@ function _walletConnectDeepLinkChoice(provider) {
     stored = raw ? JSON.parse(raw) : null;
   } catch (_e) { /* use the connected wallet's session metadata below */ }
 
-  const redirect = provider?.session?.peer?.metadata?.redirect;
-  return _safeWalletDeepLink(stored?.href)
+  const peerMetadata = provider?.session?.peer?.metadata;
+  const redirect = peerMetadata?.redirect;
+  const href = _safeWalletDeepLink(stored?.href)
     || _safeWalletDeepLink(redirect?.native)
     || _safeWalletDeepLink(redirect?.universal);
+  if (!href) return null;
+
+  const rawName = String(stored?.name || peerMetadata?.name || 'Wallet').trim();
+  const walletName = rawName && rawName.length <= 24 ? rawName : 'Wallet';
+  return { href, walletName };
 }
 
 function _formatWalletConnectRequestDeepLink(baseHref, requestId, sessionTopic) {
@@ -209,6 +219,80 @@ function _openWalletDeepLinkInPlace(href) {
   return false;
 }
 
+function _walletApprovalHandoffHost() {
+  const doc = (typeof globalThis !== 'undefined') ? globalThis.document : null;
+  try { return doc?.getElementById?.('wallet-approval-handoff') || null; }
+  catch (_e) { return null; }
+}
+
+function _clearWalletApprovalHandoff(requestKey = null) {
+  if (requestKey && _wcPendingApprovalHandoff?.requestKey !== requestKey) return;
+  _wcPendingApprovalHandoff = null;
+  _wcApprovalPageWasHidden = false;
+  if (_wcApprovalHandoffTimer != null) {
+    try { clearTimeout(_wcApprovalHandoffTimer); } catch (_e) { /* headless */ }
+    _wcApprovalHandoffTimer = null;
+  }
+  const host = _walletApprovalHandoffHost();
+  if (host) host.hidden = true;
+}
+
+// External-app navigation is ultimately controlled by the phone OS. Keep the
+// exact already-published request behind a real button so a fresh user gesture
+// can recover when an automatic universal-link handoff is ignored.
+function _showWalletApprovalHandoff({ href, walletName, requestKey }) {
+  const host = _walletApprovalHandoffHost();
+  const label = host?.querySelector?.('[data-bind="wallet-approval-label"]');
+  const action = host?.querySelector?.('[data-bind="wallet-approval-open"]');
+  const dismiss = host?.querySelector?.('[data-bind="wallet-approval-dismiss"]');
+  if (!host || !label || !action || !dismiss || !_safeWalletDeepLink(href)) return false;
+
+  _clearWalletApprovalHandoff();
+  _wcPendingApprovalHandoff = { href, requestKey };
+  label.textContent = `Approval waiting in ${walletName}`;
+  action.textContent = `OPEN ${String(walletName).toUpperCase()}`;
+  action.setAttribute?.('aria-label', `Open ${walletName} to review the pending approval`);
+  action.onclick = (event) => {
+    try { event?.preventDefault?.(); } catch (_e) { /* defensive */ }
+    if (_wcPendingApprovalHandoff?.requestKey !== requestKey) return;
+    _openWalletDeepLinkInPlace(href);
+  };
+  dismiss.onclick = (event) => {
+    try { event?.preventDefault?.(); } catch (_e) { /* defensive */ }
+    _clearWalletApprovalHandoff(requestKey);
+  };
+  host.hidden = false;
+
+  _wcApprovalHandoffTimer = setTimeout(
+    () => _clearWalletApprovalHandoff(requestKey),
+    WC_HANDOFF_FALLBACK_TIMEOUT_MS,
+  );
+  _wcApprovalHandoffTimer?.unref?.();
+  return true;
+}
+
+function _installWalletApprovalHandoffLifecycle() {
+  const doc = (typeof globalThis !== 'undefined') ? globalThis.document : null;
+  if (!doc || typeof doc.addEventListener !== 'function') return;
+  try {
+    doc.addEventListener('visibilitychange', () => {
+      if (!_wcPendingApprovalHandoff) {
+        _wcApprovalPageWasHidden = false;
+        return;
+      }
+      if (doc.visibilityState === 'hidden') {
+        _wcApprovalPageWasHidden = true;
+        return;
+      }
+      if (doc.visibilityState === 'visible' && _wcApprovalPageWasHidden) {
+        _clearWalletApprovalHandoff();
+      }
+    });
+  } catch (_e) { /* headless */ }
+}
+
+_installWalletApprovalHandoffLifecycle();
+
 function _installWalletConnectAutomaticHandoff(provider) {
   if (provider?.isWalletConnect !== true) return;
   const client = provider?.signer?.client;
@@ -220,11 +304,15 @@ function _installWalletConnectAutomaticHandoff(provider) {
     const currentTopic = String(provider?.session?.topic || '');
     const method = String(event?.request?.method || '');
     if (!topic || topic !== currentTopic || event?.id == null || !WC_APPROVAL_METHODS.has(method)) return;
-    const baseHref = _walletConnectDeepLinkChoice(provider);
-    if (!baseHref) return;
-    _openWalletDeepLinkInPlace(
-      _formatWalletConnectRequestDeepLink(baseHref, event.id, topic),
-    );
+    const choice = _walletConnectDeepLinkChoice(provider);
+    if (!choice) return;
+    const href = _formatWalletConnectRequestDeepLink(choice.href, event.id, topic);
+    _showWalletApprovalHandoff({
+      href,
+      walletName: choice.walletName,
+      requestKey: `${topic}:${String(event.id)}`,
+    });
+    _openWalletDeepLinkInPlace(href);
   };
 
   try {
@@ -1115,6 +1203,7 @@ export function disconnect() {
   localStorage.removeItem('lastWalletRdns');
   clearProvider();
   _eip1193 = null;
+  _clearWalletApprovalHandoff();
   document.dispatchEvent(new CustomEvent('wallet-disconnected'));
 }
 

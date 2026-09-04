@@ -422,6 +422,22 @@
     <!-- Wallet picker modal (Phase 58 — hidden by default; show() unhides) -->
     <wallet-picker></wallet-picker>
 
+    <!-- WalletConnect can deliver an approval after the browser's original
+         tap permission has expired. wallet.js attempts the app handoff, then
+         leaves this exact-request retry visible if the phone ignores it. -->
+    <aside id="wallet-approval-handoff" class="wallet-approval-handoff"
+           role="status" aria-live="polite" hidden>
+      <span class="wallet-approval-handoff__mark" aria-hidden="true">↗</span>
+      <span class="wallet-approval-handoff__copy">
+        <strong data-bind="wallet-approval-label">Approval waiting in wallet</strong>
+        <small>If your wallet did not open, tap the button.</small>
+      </span>
+      <button type="button" class="wallet-approval-handoff__open"
+              data-bind="wallet-approval-open">OPEN WALLET</button>
+      <button type="button" class="wallet-approval-handoff__dismiss"
+              data-bind="wallet-approval-dismiss" aria-label="Dismiss wallet approval reminder">×</button>
+    </aside>
+
     <!-- One-time first-visit choice: connect a wallet or view the read-only app. -->
     <app-onboarding></app-onboarding>
 

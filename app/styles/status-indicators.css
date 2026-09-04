@@ -73,6 +73,119 @@
 
 html[data-degenerus-tutorial] .testnet-beta-banner { display: none !important; }
 
+/* Mobile WalletConnect recovery. The automatic app link remains the primary
+   path; this compact fixed notice is the fresh-tap fallback when Android or
+   iOS leaves the browser foregrounded with an approval already in the wallet. */
+.wallet-approval-handoff {
+  position: fixed;
+  z-index: 3200;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  display: grid;
+  box-sizing: border-box;
+  width: min(calc(100vw - 1.5rem), 27rem);
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.62rem;
+  border: 1px solid rgba(167, 139, 250, 0.72);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(124, 58, 237, 0.3), transparent 34%),
+    linear-gradient(145deg, rgba(22, 18, 45, 0.98), rgba(8, 10, 20, 0.99));
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.58), inset 0 0 18px rgba(139, 92, 246, 0.1);
+  color: #f5f3ff;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.wallet-approval-handoff[hidden] { display: none !important; }
+
+.wallet-approval-handoff__mark {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgba(196, 181, 253, 0.55);
+  border-radius: 50%;
+  background: rgba(91, 33, 182, 0.42);
+  color: #ddd6fe;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.wallet-approval-handoff__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.wallet-approval-handoff__copy strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.76rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-approval-handoff__copy small {
+  color: #c4b5fd;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.wallet-approval-handoff__open,
+.wallet-approval-handoff__dismiss {
+  min-height: 2.5rem;
+  border-radius: 8px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.wallet-approval-handoff__open {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #c4b5fd;
+  background: linear-gradient(145deg, #8b5cf6, #6d28d9);
+  color: #fff;
+  font-size: 0.64rem;
+  letter-spacing: 0.055em;
+  white-space: nowrap;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.28);
+}
+
+.wallet-approval-handoff__dismiss {
+  width: 2.5rem;
+  padding: 0;
+  border: 1px solid rgba(196, 181, 253, 0.25);
+  background: rgba(15, 12, 31, 0.72);
+  color: #c4b5fd;
+  font-size: 1.05rem;
+}
+
+.wallet-approval-handoff :is(button:hover, button:focus-visible) {
+  border-color: #ede9fe;
+  filter: brightness(1.12);
+}
+
+.wallet-approval-handoff button:focus-visible {
+  outline: 2px solid #f5f3ff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .wallet-approval-handoff {
+    right: max(0.5rem, env(safe-area-inset-right));
+    left: max(0.5rem, env(safe-area-inset-left));
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    width: auto;
+    gap: 0.48rem;
+  }
+
+  .wallet-approval-handoff__copy small { display: none; }
+}
+
 /* The quest action sheet is also a real purchase surface. Keep the boon's
    exact incremental value visible when that shortcut submits the buy. */
 body.layout-basic .qst-action-boon {

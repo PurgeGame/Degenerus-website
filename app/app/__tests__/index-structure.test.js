@@ -26,11 +26,24 @@ const htmlPath = resolvePath(__dirname, '../../index.html');
 const html = readFileSync(htmlPath, 'utf8');
 const onboarding = readFileSync(resolvePath(__dirname, '../../components/app-onboarding.js'), 'utf8');
 const appCss = readFileSync(resolvePath(__dirname, '../../styles/app.css'), 'utf8');
+const statusCss = readFileSync(resolvePath(__dirname, '../../styles/status-indicators.css'), 'utf8');
 const revealQueue = readFileSync(resolvePath(__dirname, '../../components/reveal-queue.js'), 'utf8');
 
 describe('index.html basic-mode skeleton', () => {
   test('body carries the layout-basic class', () => {
     assert.match(html, /<body class="layout-basic">/);
+  });
+
+  test('mobile wallet approvals have a fixed exact-request recovery surface', () => {
+    assert.match(html,
+      /<aside id="wallet-approval-handoff"[\s\S]*?data-bind="wallet-approval-open"[\s\S]*?data-bind="wallet-approval-dismiss"/,
+      'the wallet module has a static host available before any transaction starts');
+    assert.match(statusCss,
+      /\.wallet-approval-handoff\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*3200/s,
+      'the recovery action stays reachable above ordinary panels on a phone');
+    assert.match(statusCss,
+      /\.wallet-approval-handoff\[hidden\]\s*\{\s*display:\s*none\s*!important;/,
+      'the recovery surface has no footprint until an approval is published');
   });
 
   test('top-to-bottom element order', () => {

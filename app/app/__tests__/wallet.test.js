@@ -30,6 +30,34 @@ const _locationAssignCalls = [];
 const _windowOpenCalls = [];
 let _reloadCalled = false;
 
+function makeHandoffControl() {
+  const attributes = new Map();
+  return {
+    hidden: false,
+    textContent: '',
+    onclick: null,
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    removeAttribute(name) { attributes.delete(name); },
+    getAttribute(name) { return attributes.has(name) ? attributes.get(name) : null; },
+    click() {
+      this.onclick?.({ preventDefault() {} });
+    },
+  };
+}
+
+const _handoffLabel = makeHandoffControl();
+const _handoffAction = makeHandoffControl();
+const _handoffDismiss = makeHandoffControl();
+const _handoffHost = {
+  hidden: true,
+  querySelector(selector) {
+    if (selector === '[data-bind="wallet-approval-label"]') return _handoffLabel;
+    if (selector === '[data-bind="wallet-approval-open"]') return _handoffAction;
+    if (selector === '[data-bind="wallet-approval-dismiss"]') return _handoffDismiss;
+    return null;
+  },
+};
+
 globalThis.window = {
   addEventListener: (type, fn) => {
     if (!_windowListeners.has(type)) _windowListeners.set(type, []);
@@ -61,6 +89,7 @@ globalThis.document = {
   },
   removeEventListener: () => {},
   dispatchEvent: (ev) => { _events.push(ev); return true; },
+  getElementById: (id) => id === 'wallet-approval-handoff' ? _handoffHost : null,
   querySelector: (sel) => {
     if (sel === 'wallet-picker') return _pickerEl;
     return null;
@@ -228,6 +257,13 @@ beforeEach(() => {
   _localStore.clear();
   _locationAssignCalls.length = 0;
   _windowOpenCalls.length = 0;
+  document.visibilityState = 'visible';
+  _handoffHost.hidden = true;
+  _handoffLabel.textContent = '';
+  _handoffAction.textContent = '';
+  _handoffAction.onclick = null;
+  _handoffAction.removeAttribute('aria-label');
+  _handoffDismiss.onclick = null;
   window.matchMedia = (query) => ({
     matches: false,
     media: query,
@@ -312,6 +348,60 @@ describe('WalletConnect mobile approval handoff', () => {
     ]]);
     assert.equal(_windowOpenCalls.length, 0,
       'same-tab navigation does not depend on a popup being allowed');
+  });
+
+  test('keeps the exact pending request available behind a fresh Open MetaMask tap', () => {
+    const client = makeClient();
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'https://metamask.app.link',
+      name: 'MetaMask',
+    }));
+    attachWalletConnect(client, { topic: 'slow-quest-request' });
+
+    client.emit('session_request_sent', {
+      topic: 'slow-quest-request',
+      id: 97531,
+      request: { method: 'eth_sendTransaction' },
+    });
+
+    assert.equal(_handoffHost.hidden, false,
+      'the recovery surface is visible even if the OS ignores automatic navigation');
+    assert.equal(_handoffLabel.textContent, 'Approval waiting in MetaMask');
+    assert.equal(_handoffAction.textContent, 'OPEN METAMASK');
+    assert.equal(_locationAssignCalls.length, 1, 'automatic handoff still runs first');
+
+    _handoffAction.click();
+    assert.deepEqual(_locationAssignCalls.at(-1), [
+      'https://metamask.app.link/wc?requestId=97531&sessionTopic=slow-quest-request',
+    ], 'the explicit tap retries the exact request that is already in MetaMask');
+    assert.equal(_locationAssignCalls.length, 2);
+
+    _handoffDismiss.click();
+    assert.equal(_handoffHost.hidden, true, 'the player can dismiss the fallback');
+  });
+
+  test('clears the recovery surface after the player returns from the wallet', () => {
+    const client = makeClient();
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'https://metamask.app.link',
+      name: 'MetaMask',
+    }));
+    attachWalletConnect(client, { topic: 'return-cleanup' });
+    client.emit('session_request_sent', {
+      topic: 'return-cleanup',
+      id: 88,
+      request: { method: 'eth_sendTransaction' },
+    });
+    assert.equal(_handoffHost.hidden, false);
+
+    document.visibilityState = 'hidden';
+    for (const fn of _docListeners.get('visibilitychange') || []) fn();
+    assert.equal(_handoffHost.hidden, false, 'leaving for the wallet preserves the retry state');
+
+    document.visibilityState = 'visible';
+    for (const fn of _docListeners.get('visibilitychange') || []) fn();
+    assert.equal(_handoffHost.hidden, true,
+      'returning from the wallet clears the now-stale approval reminder');
   });
 
   test('uses session metadata, ignores unrelated requests, and installs only once', () => {
