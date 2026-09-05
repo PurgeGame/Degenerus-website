@@ -7099,8 +7099,21 @@ app-craps-table {
   padding: 0.65rem;
 }
 
-.craps-race-result__performance > span + span {
+.craps-race-result__performance > span:nth-child(even) {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.craps-race-result__performance > span:nth-child(n + 3) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 959px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.is-hot > em {
+    font-size: 0.65rem;
+  }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.is-hot > em b {
+    font-size: 1rem;
+  }
 }
 
 .craps-race-result__performance strong,

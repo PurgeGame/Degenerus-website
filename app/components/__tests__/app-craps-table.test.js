@@ -216,7 +216,7 @@ test('winner payoff size follows exact total won versus the starting buy-in', as
     'the center supports stacks and piles and clears the dice beneath them');
 });
 
-test('battle rank uses goal high points then bust rolls, with shared places', async () => {
+test('battle rank follows visible peaks while live and final goal peaks/bust rolls, with the winner first', async () => {
   const { rankCrapsBattleEntries, crapsLeaderboardRows } = await import(moduleUrl);
   const entries = [
     { key: 'early', rankStop: 'bust', rankRoll: 20, rankPeak: 9999n },
@@ -228,18 +228,30 @@ test('battle rank uses goal high points then bust rolls, with shared places', as
   ];
   const ranks = rankCrapsBattleEntries(entries, true);
   assert.deepEqual(ranks.map(({ key, rank }) => [key, rank]), [
-    ['peak', 1], ['equal', 1], ['goal', 3], ['late', 4], ['tie', 4], ['early', 6],
+    ['equal', 1], ['peak', 2], ['goal', 3], ['late', 4], ['tie', 4], ['early', 6],
   ]);
-  assert.deepEqual(crapsLeaderboardRows(ranks).map(({ rank }) => rank), [1, 1, 3, 4, 4, 6]);
+  assert.deepEqual(crapsLeaderboardRows(ranks).map(({ rank }) => rank), [1, 2, 3, 4, 4, 6]);
   const live = rankCrapsBattleEntries([
     { key: 'future', rankStop: 'goal', rankPeak: 900n, highPoint: 200n, goal: 500n, rankRoll: 12 },
     { key: 'locked', highPoint: 600n, goal: 500n, rankRoll: 10 },
     { key: 'active', highPoint: 300n, goal: 500n, rankRoll: 12 },
-    { key: 'bust', highPoint: 400n, goal: 500n, rankRoll: 9 },
+    { key: 'bust', state: 'bust', highPoint: 400n, goal: 500n, rankRoll: 9 },
   ]);
   assert.deepEqual(live.map(({ key, rank }) => [key, rank]), [
-    ['locked', 1], ['future', 2], ['active', 2], ['bust', 4],
+    ['locked', 1], ['active', 2], ['future', 3], ['bust', 4],
   ], 'live ranks use observed high points and survival time, not future outcomes');
+});
+
+test('bonus display uses ordinary schedule procs, and receipts never invent first place', () => {
+  assert.match(COMPONENT_SRC, /const hotPercent = viewerBoost\?\.percent \?\? selectedBoost\?\.percent/);
+  assert.match(COMPONENT_SRC, /#announceShooterBoost\(roundNumber, onDone\) \{\s*this\.#paintRaceShooter\(roundNumber \+ 1\)/);
+  assert.match(COMPONENT_SRC, /shooter\.hot \? 7 : CRAPS_DICE_BADGE_COLORS/);
+  assert.match(COMPONENT_SRC, /const finalRank = battleWon \? 1 : this\.#localRankAtRound\(resultRound, local\?\.rank, standings\);/);
+  assert.match(COMPONENT_SRC, /finalRank == null \? '—'/);
+  assert.match(COMPONENT_SRC, /<small>ROLLS<\/small>/);
+  assert.match(COMPONENT_SRC, /<small>SHOOTERS<\/small>/);
+  assert.match(COMPONENT_SRC, /if \(resultWei > 0n\)/);
+  assert.match(COMPONENT_SRC, /reachedGoal \? '#6eff99' : '#ff626b'/);
 });
 
 test('a local bust locks the rack at zero while the shared table finishes', () => {
@@ -1257,7 +1269,7 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
     /const compactRace = Boolean[\s\S]*?raceBounds\.height \/ raceBounds\.width[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
     'the graph adopts the rendered mobile panel aspect ratio instead of letterboxing a desktop plot');
   assert.match(COMPONENT_SRC,
-    /\? \{ left: 48, right: 12, top: 20, bottom: 80 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
+    /\? \{ left: 48, right: 12, top: 20, bottom: 56 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
     'compact graphs keep rank and amount inside the plot without a right-side card gutter');
 
   const landscapeRaceCss = CSS_SRC.slice(

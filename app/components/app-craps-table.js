@@ -1469,7 +1469,24 @@ export function rankCrapsBattleEntries(entries = [], finalized = false) {
     rankStop: entry.goal > 0n && entry.highPoint >= entry.goal ? 'goal' : null,
     rankPeak: entry.highPoint,
   };
-  const compare = (a, b) => compareFinalCrapsBattleEntries(visible(a), visible(b));
+  const compare = (a, b) => {
+    if (finalized && Boolean(a.battleWinner) !== Boolean(b.battleWinner)) return a.battleWinner ? -1 : 1;
+    const left = visible(a);
+    const right = visible(b);
+    if (!finalized && left.rankStop !== 'goal' && right.rankStop !== 'goal') {
+      const aBusted = a.state === 'bust';
+      const bBusted = b.state === 'bust';
+      if (aBusted !== bBusted) return aBusted ? 1 : -1;
+      if (!aBusted) {
+        const ap = wholeFlip(a.highPoint) ?? 0n;
+        const bp = wholeFlip(b.highPoint) ?? 0n;
+        if (ap !== bp) return ap > bp ? -1 : 1;
+      }
+    }
+    const score = compareFinalCrapsBattleEntries(left, right);
+    if (score !== 0) return score;
+    return (wholeNumber(b.rankStanding) ?? 0) - (wholeNumber(a.rankStanding) ?? 0);
+  };
   const sorted = [...entries].sort(compare);
   let rank = 1;
   return sorted.map((entry, index) => {
@@ -3926,15 +3943,18 @@ class AppCrapsTable extends HTMLElement {
         color: '#9aa4ff',
       };
     }
-    let rotationBoost = false;
+    let selectedBoost = null;
     if (selected.local) {
-      rotationBoost = frames.find((frame) => (wholeNumber(frame?.shooter) ?? -1) === shooter)
-        ?.shooterBoost?.rotation === true;
+      selectedBoost = frames[frameIndex]?.viewerClosed !== true ? frames[frameIndex]?.shooterBoost : null;
     } else {
       const source = this.#tablePlayers.find((player) => player.key === selected.key);
-      rotationBoost = source?.shooterBoosts?.[shooter]?.rotation === true;
+      selectedBoost = source?.shooterBoosts?.[shooter] ?? null;
     }
-    const hotPercent = indexed?.hotShooterBoostPercent ?? (rotationBoost ? 5 : null);
+    // Schedule procs belong to the viewer even when somebody else is rolling.
+    // The rotation flag identifies a shooter; it is not bonus eligibility.
+    const viewerBoost = frames[frameIndex]?.viewerClosed !== true ? frames[frameIndex]?.shooterBoost : null;
+    const hotPercent = viewerBoost?.percent ?? selectedBoost?.percent
+      ?? indexed?.hotShooterBoostPercent ?? (selectedBoost?.rotation ? 5 : null);
     return Object.freeze({ ...selected, shooter, hotPercent, hot: hotPercent != null && hotPercent > 0 });
   }
 
@@ -3974,6 +3994,11 @@ class AppCrapsTable extends HTMLElement {
     }
     const table = this.querySelector('[data-bind="craps-table-rail"]');
     if (table) table.dataset.shooterBoost = shooter.hot ? 'active' : 'off';
+    for (const bind of ['craps-die-one', 'craps-die-two']) {
+      const die = this.querySelector(`[data-bind="${bind}"]`);
+      this.#paintDiceBadge(die, Number(die?.dataset?.face) || 1,
+        shooter.hot ? 7 : CRAPS_DICE_BADGE_COLORS[bind === 'craps-die-one' ? 0 : 1]);
+    }
     return shooter;
   }
 
@@ -4252,8 +4277,8 @@ class AppCrapsTable extends HTMLElement {
     const scaledRace = this.#racePlayers.some((player) => player.entryMultiple > 1);
     svg.dataset.compact = compactRace ? 'true' : 'false';
     const geometry = compactRace
-      ? { left: 48, right: 12, top: 20, bottom: 80 }
-      : { left: 58, right: 132, top: 24, bottom: 80 };
+      ? { left: 48, right: 12, top: 20, bottom: 56 }
+      : { left: 58, right: 132, top: 24, bottom: 56 };
     const plotWidth = width - geometry.left - geometry.right;
     const plotHeight = height - geometry.top - geometry.bottom;
     const plotRight = geometry.left + plotWidth;
@@ -4348,7 +4373,8 @@ class AppCrapsTable extends HTMLElement {
     const bustGroups = new Map();
     for (const player of this.#racePlayers) {
       if (player.endStep <= 0 || player.endStep > resolved
-        || this.#raceValueAt(player, resolved) !== 0n) continue;
+        || (this.#raceValueAt(player, resolved) !== 0n
+          && !['goal', 'cashout'].includes(player.stop))) continue;
       const pendingCoin = player.survivalBoundaries?.some((boundary) => (
         boundary.step === player.endStep && !this.#settledSurvivalShooters.has(boundary.shooter)
       ));
@@ -4359,11 +4385,13 @@ class AppCrapsTable extends HTMLElement {
     }
     for (const [step, players] of bustGroups) {
       const cx = xAt(step);
-      const cy = plotBottom + 43;
-      parts.push(`<g class="craps-race-bust-portraits"><title>${esc(players.map((player) => player.label).join(', '))} · busted on roll ${step}</title>`);
+      const cy = plotBottom + 14;
+      parts.push(`<g class="craps-race-bust-portraits"><title>${esc(players.map((player) => player.label).join(', '))} · finished on roll ${step}</title>`);
       players.slice(0, 3).forEach((player, index) => {
         const px = Math.max(geometry.left + 11, Math.min(plotRight - 11, cx)) - index * 7;
-        parts.push(`<circle cx="${px}" cy="${cy}" r="11" fill="#281016" stroke="#ff626b" stroke-width="1.5"></circle>`);
+        const reachedGoal = ['goal', 'cashout'].includes(player.stop)
+          || (player.goal > 0n && this.#raceHighAt(player, step) >= player.goal);
+        parts.push(`<circle cx="${px}" cy="${cy}" r="11" fill="${reachedGoal ? '#09291a' : '#281016'}" stroke="${reachedGoal ? '#6eff99' : '#ff626b'}" stroke-width="1.5"></circle>`);
         if (player.avatar) parts.push(`<image href="${esc(player.avatar)}" x="${px - 9}" y="${cy - 9}" width="18" height="18" clip-path="circle(9px at 9px 9px)" preserveAspectRatio="xMidYMid slice"></image>`);
         else parts.push(`<text class="craps-race-endpoint-initials" x="${px}" y="${cy + 3}" text-anchor="middle">${esc(player.initials)}</text>`);
       });
@@ -4608,8 +4636,9 @@ class AppCrapsTable extends HTMLElement {
   }
 
   #announceShooterBoost(roundNumber, onDone) {
-    // Opponent eligibility is communicated only by their metallic felt chips.
-    // This brief Degenerette-style text hit belongs exclusively to the viewer.
+    this.#paintRaceShooter(roundNumber + 1);
+    // The announcement belongs to the viewer; persistent bonus styling lives
+    // on the dice and shooter panel, never on the felt chips.
     const local = this.#activeShooterBoostEntries(roundNumber).find((entry) => entry.local);
     if (!local) {
       this.#resetShooterBoostAnnouncement();
@@ -5084,6 +5113,8 @@ class AppCrapsTable extends HTMLElement {
     // Older published timelines sort bankroll and freeze at bust. Recalculate
     // from the full loaded field so the HUD and leaderboard share one rule.
     return crapsStandingAtRound({
+      rankTimeline: roundNumber < (this.#resolutionRun?.frames.length ?? 0)
+        && (standings?.length ?? 0) < (this.#fieldEntrants ?? 0) ? this.#rankTimeline : [],
       roundNumber,
       fallbackRank,
       fieldEntrants: this.#fieldEntrants,
@@ -7898,12 +7929,15 @@ class AppCrapsTable extends HTMLElement {
     const standings = this.#battleStandings(resultRound);
     const local = standings.find((entry) => entry.local);
     const winner = standings.find((entry) => entry.battleWinner) ?? standings[0] ?? local;
-    const finalRank = this.#localRankAtRound(resultRound, local?.rank, standings) ?? local?.rank ?? 1;
+    const finalRank = battleWon ? 1 : this.#localRankAtRound(resultRound, local?.rank, standings);
     const totalEntrants = this.#fieldEntrants ?? standings.length;
     const cashedOut = !battleWon && (local?.rankStop === 'goal' || last?.terminal === 'goal');
     const lost = !battleWon && !cashedOut;
     const title = battleWon ? 'BATTLE WON' : cashedOut ? 'CASHED OUT' : 'LOST';
     const localPeak = wholeFlip(local?.rankPeak ?? local?.highPoint) ?? 0n;
+    const playedRolls = Math.min(resultRound, this.#viewerResult?.exitRoll || resultRound);
+    const playedShooters = this.#viewerResult?.handsPlayed || new Set(frames.slice(0, playedRolls)
+      .map((frame, index) => frame.shooter ?? this.#runShooterIndexAtRound(index))).size;
     const winnerPeak = wholeFlip(winner?.rankPeak ?? winner?.highPoint) ?? 0n;
     const winnerLabel = winner?.local ? this.#viewerLabel : winner?.label ?? 'WINNER';
     const winnerAvatar = winner?.local ? this.#viewerAvatar : winner?.avatar ?? '';
@@ -7937,6 +7971,12 @@ class AppCrapsTable extends HTMLElement {
       ? `<img src="${escapeHtml(winnerAvatar)}" alt="" decoding="async" referrerpolicy="no-referrer">`
       : ''}</span>`;
     const money = [];
+    const resultWei = ongoing
+      ? (wholeFlip(goalPayoutWei) ?? 0n)
+      : BigInt(this.#winnerPayoffPresentation().totalWei);
+    if (resultWei > 0n) {
+      money.push(`<span><small>RESULT</small><strong>${flipAmount(formatCrapsWei(resultWei))}</strong></span>`);
+    }
     if (cashedOut) {
       const paidWei = goalPayoutWei ?? crapsPlayerMoney(finalTray, this.#entryMultiple) * CRAPS_FLIP_WEI;
       money.push(`<span><small>CASHED OUT</small><strong>${flipAmount(formatCrapsWei(paidWei))}</strong></span>`);
@@ -7956,8 +7996,10 @@ class AppCrapsTable extends HTMLElement {
       ${awards ? `<div class="craps-race-result__awards">${awards}</div>` : ''}
       <h2>${title}</h2>
       <div class="craps-race-result__performance">
-        <span><strong>#${finalRank}<em>/${totalEntrants}</em></strong><small>${ongoing ? 'RANK' : 'FINAL RANK'}</small></span>
+        <span><strong>${finalRank == null ? '—' : `#${finalRank}`}<em>/${totalEntrants}</em></strong><small>${ongoing ? 'RANK' : 'FINAL RANK'}</small></span>
         <span><strong>${flipAmount(formatCrapsFlip(crapsPlayerMoney(localPeak, this.#entryMultiple)))}</strong><small>PEAK</small></span>
+        <span><strong>${playedRolls}</strong><small>ROLLS</small></span>
+        <span><strong>${playedShooters}</strong><small>SHOOTERS</small></span>
       </div>
       ${ongoing ? '' : `<div class="craps-race-result__winner">
         ${winnerAvatarMarkup}
