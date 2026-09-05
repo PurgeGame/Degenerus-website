@@ -25381,6 +25381,28 @@ body.layout-basic .craps-entry__random-slot {
   background: rgba(0, 49, 43, 0.42) !important;
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.62);
 }
+body.layout-basic .craps-entry__line-row .craps-entry__random-slot .craps-entry__bet-label {
+  top: 0.16rem;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.06rem 0;
+  color: #f0fcff;
+  background: rgba(0, 25, 29, 0.9);
+  font-size: 0.68rem;
+  font-weight: 1000;
+  letter-spacing: 0;
+  text-align: center;
+  line-height: 1.1;
+}
+body.layout-basic .craps-entry__random-stack {
+  top: auto;
+  bottom: 0.1rem;
+  right: 10%;
+  width: min(80%, 2.6rem);
+  height: 54%;
+  transform: none;
+}
 
 @media (max-width: 768px) {
   body.layout-basic .craps-entry__action > button,
