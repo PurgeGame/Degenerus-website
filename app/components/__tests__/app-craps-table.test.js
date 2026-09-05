@@ -46,7 +46,7 @@ test('balance transfers fly chips, reveal the amount on arrival, then credit and
   assert.match(transfer, /raceBalanceFadeTimer[\s\S]*token\.remove[\s\S]*transferDuration/);
   assert.doesNotMatch(transfer, /this\.#raceTransferTimer =/);
   assert.match(COMPONENT_SRC, /if \(this\.#racePendingBalance == null\) \{\s*write\('craps-race-stack'/);
-  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#clearRaceBalanceTransfer\(false\)/);
+  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#clearRaceBalanceTransfer\(false\)/);
   assert.match(CSS_SRC, /56%, 78% \{ opacity: 1/);
   assert.match(CSS_SRC, /@keyframes craps-race-balance-chips[\s\S]*?56%, 100% \{ opacity: 0/);
   assert.match(CSS_SRC, /@keyframes craps-race-balance-amount[\s\S]*?0% \{ opacity: 0; \}[\s\S]*?56%, 100% \{ opacity: 1/);
@@ -252,6 +252,14 @@ test('bonus display uses ordinary schedule procs, and receipts never invent firs
   assert.match(COMPONENT_SRC, /<small>SHOOTERS<\/small>/);
   assert.match(COMPONENT_SRC, /if \(resultWei > 0n\)/);
   assert.match(COMPONENT_SRC, /reachedGoal \? '#6eff99' : '#ff626b'/);
+});
+
+test('exit portraits wait for completed settlement without shifting their roll coordinate', () => {
+  assert.match(COMPONENT_SRC, /player\.endStep > Math\.min\(resolved, this\.#raceSettledRollCount\)/);
+  assert.match(COMPONENT_SRC, /const continueRun = \(\) => \{[\s\S]*?this\.#raceSettledRollCount = nextIndex \+ 1;\s*this\.#paintRaceChart\(nextIndex \+ 1\)/);
+  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0/);
+  assert.match(COMPONENT_SRC, /this\.#clearRaceBalanceTransfer\(false\);\s*this\.#raceSettledRollCount = index \+ 1/);
+  assert.match(COMPONENT_SRC, /for \(const \[step, players\] of bustGroups\) \{\s*const cx = xAt\(step\)/);
 });
 
 test('a local bust locks the rack at zero while the shared table finishes', () => {

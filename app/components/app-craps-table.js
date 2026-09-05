@@ -2282,6 +2282,7 @@ class AppCrapsTable extends HTMLElement {
   #raceBalanceLandTimer = null;
   #raceBalanceFadeTimer = null;
   #racePendingBalance = null;
+  #raceSettledRollCount = 0;
   #racePoolLandTimer = null;
   #onResolutionAcknowledged = null;
   #onResolutionPhaseComplete = null;
@@ -4371,7 +4372,7 @@ class AppCrapsTable extends HTMLElement {
     // has visibly settled. Share one small cluster for simultaneous busts.
     const bustGroups = new Map();
     for (const player of this.#racePlayers) {
-      if (player.endStep <= 0 || player.endStep > resolved
+      if (player.endStep <= 0 || player.endStep > Math.min(resolved, this.#raceSettledRollCount)
         || (this.#raceValueAt(player, resolved) !== 0n
           && !['goal', 'cashout'].includes(player.stop))) continue;
       const pendingCoin = player.survivalBoundaries?.some((boundary) => (
@@ -5836,6 +5837,7 @@ class AppCrapsTable extends HTMLElement {
   }
 
   #stopRaceTimers() {
+    this.#raceSettledRollCount = 0;
     this.#clearRaceBalanceTransfer(false);
     for (const timer of [
       this.#racePulseTimer,
@@ -7432,7 +7434,10 @@ class AppCrapsTable extends HTMLElement {
       inPlayFlip: rackActive ? this.#boardInPlayFlip() : null,
     });
     if (animateRace) this.#animateRaceDelta(frame, index);
-    else this.#clearRaceBalanceTransfer(false);
+    else {
+      this.#clearRaceBalanceTransfer(false);
+      this.#raceSettledRollCount = index + 1;
+    }
     this.#paintRaceDashboard(index + 1, { animate: animateRace, frame });
   }
 
@@ -7624,6 +7629,10 @@ class AppCrapsTable extends HTMLElement {
           comeOut,
         });
         const continueRun = () => {
+          // An exit portrait is a settled outcome, not a preview from the
+          // graph update. This runs after board clearing and survival coins.
+          this.#raceSettledRollCount = nextIndex + 1;
+          this.#paintRaceChart(nextIndex + 1);
           if (last) {
             this.#resolutionTimer = globalThis.setTimeout?.(() => {
               this.#resolutionTimer = null;

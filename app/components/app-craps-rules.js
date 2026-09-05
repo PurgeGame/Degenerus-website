@@ -328,7 +328,7 @@ export class AppCrapsRules extends HTMLElement {
             </section>
             <section>
               <strong>WIN THE BATTLE.</strong>
-              <p>There are two ways to win a Craps Autobattle. If the goal is met by any player, then whoever achieves the highest peak among those players wins the prize. If no player reaches the goal, then the one who lasts the longest is declared the winner.</p>
+              <p>There are two ways to win a Craps Autobattle. If the goal is met by any player, then whoever achieves the highest peak wins the prize. If no player reaches the goal, then the one who lasts the longest is declared the winner.</p>
             </section>
             <section aria-labelledby="craps-rules-riu-title">
               <strong id="craps-rules-riu-title">RUN IT UP.</strong>
