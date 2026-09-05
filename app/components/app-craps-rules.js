@@ -106,8 +106,8 @@ export class AppCrapsRules extends HTMLElement {
           position: fixed;
           inset: 0;
           box-sizing: border-box;
-          width: min(36rem, calc(100vw - 2rem));
-          max-height: min(47rem, calc(100dvh - 2rem));
+          width: min(52rem, calc(100vw - 2rem));
+          max-height: calc(100dvh - 2rem);
           margin: auto;
           padding: 0;
           overflow: hidden;
@@ -135,7 +135,7 @@ export class AppCrapsRules extends HTMLElement {
           grid-template-columns: minmax(0, 1fr) auto;
           gap: 1rem;
           align-items: start;
-          padding: 1.25rem 1.25rem 1rem;
+          padding: 1rem 1.25rem 0.75rem;
           background:
             radial-gradient(circle at 8% 0%, rgba(218, 224, 235, 0.13), transparent 44%),
             linear-gradient(145deg, #151b24, #0c1016 72%);
@@ -159,7 +159,7 @@ export class AppCrapsRules extends HTMLElement {
         #craps-rules-summary {
           margin: 0.5rem 0 0;
           color: #b9c0ca;
-          font: 500 0.88rem/1.45 system-ui, sans-serif;
+          font: 500 0.84rem/1.4 system-ui, sans-serif;
         }
 
         .craps-rules__close {
@@ -193,99 +193,47 @@ export class AppCrapsRules extends HTMLElement {
 
         .craps-rules__steps {
           display: grid;
-          gap: 0.85rem;
+          gap: 0.65rem;
           margin: 0;
           padding: 0;
           list-style: none;
-          counter-reset: rules-step;
         }
 
-        .craps-rules__steps li {
+        .craps-rules__steps section {
           position: relative;
           min-height: 2.05rem;
-          padding-left: 2.65rem;
           color: #c4cad3;
           font-size: 0.84rem;
-          line-height: 1.45;
-          counter-increment: rules-step;
+          line-height: 1.4;
         }
 
-        .craps-rules__steps li > strong {
+        .craps-rules__steps section > strong {
           display: block;
           margin-bottom: 0.08rem;
         }
 
-        .craps-rules__steps li::before {
-          content: counter(rules-step);
-          position: absolute;
-          left: 0;
-          top: 0;
-          display: grid;
-          place-items: center;
-          width: 1.9rem;
-          height: 1.9rem;
-          color: #0a0d12;
-          background: #d9dee6;
-          border-radius: 50%;
-          font-size: 0.74rem;
-          font-weight: 800;
+        .craps-rules__steps p {
+          margin: 0.35rem 0 0;
+        }
+
+        .craps-rules__steps p + p {
+          margin-top: 0.5rem;
+        }
+
+        .craps-rules__hot-shooter {
+          color: #f5ca62;
         }
 
         strong {
           color: #f5f6f8;
         }
 
-        .craps-rules__riu {
-          margin: 1rem 0;
-          padding: 0.85rem 0.9rem;
-          color: #cbd1da;
-          background:
-            radial-gradient(circle at 100% 0%, rgba(108, 92, 231, 0.18), transparent 45%),
-            #131923;
-          border: 1px solid #465164;
-          border-radius: 9px;
-          font-size: 0.8rem;
-          line-height: 1.45;
-        }
-
-        .craps-rules__riu h3 {
-          margin: 0 0 0.45rem;
-          color: #fff;
-          font-size: 0.72rem;
-          letter-spacing: 0.13em;
-        }
-
-        .craps-rules__riu p {
-          margin: 0;
-        }
-
-        .craps-rules__riu p + p {
-          margin-top: 0.55rem;
-        }
-
-        .craps-rules__settlement {
-          margin: 0;
-          padding: 0.75rem 0.8rem;
-          color: #c5cbd3;
-          background: rgba(219, 225, 234, 0.06);
-          border-left: 3px solid #cdd3dc;
-          font-size: 0.79rem;
-          line-height: 1.45;
-        }
-
         .craps-rules__actions {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-end;
           gap: 1rem;
-          margin-top: 1rem;
-        }
-
-        .craps-rules__risk {
-          margin: 0;
-          color: #89929e;
-          font-size: 0.68rem;
-          line-height: 1.35;
+          margin-top: 0.65rem;
         }
 
         .craps-rules__learn {
@@ -293,7 +241,7 @@ export class AppCrapsRules extends HTMLElement {
           color: #090c10;
           background: #e1e5eb;
           border-radius: 7px;
-          padding: 0.62rem 0.85rem;
+          padding: 0.4rem 0.75rem;
           font-size: 0.76rem;
           font-weight: 800;
           text-decoration: none;
@@ -321,19 +269,29 @@ export class AppCrapsRules extends HTMLElement {
 
           .craps-rules__head,
           .craps-rules__body {
-            padding-left: 1rem;
-            padding-right: 1rem;
+            padding: 0.65rem 0.85rem;
           }
 
-          .craps-rules__actions {
-            align-items: stretch;
-            flex-direction: column;
+          .craps-rules__head { gap: 0.2rem 0.4rem; }
+          .craps-rules__head > div { display: contents; }
+          .craps-rules__eyebrow, h2 { grid-column: 1; }
+          .craps-rules__close { grid-column: 2; grid-row: 1 / 3; }
+          #craps-rules-summary { grid-column: 1 / -1; }
+          .craps-rules__eyebrow { font-size: 0.6rem; }
+          h2 { font-size: 1.2rem; }
+          #craps-rules-summary,
+          .craps-rules__steps section {
+            font-size: clamp(0.7rem, 1.42dvh, 0.78rem);
+            line-height: 1.32;
           }
-
-          .craps-rules__learn {
-            text-align: center;
-          }
+          #craps-rules-summary { margin-top: 0.35rem; }
+          .craps-rules__steps { gap: 0.5rem; }
+          .craps-rules__steps p { margin-top: 0.2rem; }
+          .craps-rules__steps p + p { margin-top: 0.35rem; }
+          .craps-rules__actions { margin-top: 0.5rem; }
+          .craps-rules__learn { font-size: 0.7rem; padding: 0.3rem 0.6rem; }
         }
+
 
         @media (prefers-reduced-motion: reduce) {
           dialog[open] {
@@ -352,28 +310,33 @@ export class AppCrapsRules extends HTMLElement {
           <div>
             <p class="craps-rules__eyebrow">HOW IT WORKS</p>
             <h2 id="craps-rules-title">CRAPS AUTOBATTLE</h2>
-            <p id="craps-rules-summary">Build once. Every entry plays the same dice. Best run wins.</p>
+            <p id="craps-rules-summary">Place your bets and buy into a tournament. Every player is seated at the same table, with the same dice and different strategies. One winner captures the whole Battle Pool, but anyone who runs their stack up to 5× before busting will win at least that much.</p>
           </div>
           <button class="craps-rules__close" type="button" aria-label="Close Craps rules">&times;</button>
         </header>
 
         <div class="craps-rules__body">
-          <ol class="craps-rules__steps">
-            <li><strong>Build a 10-chip board.</strong> Choose zero through seven chips, with no more than three per spot. Random chips fill the rest.</li>
-            <li><strong>The bet doubles every three shooters.</strong> Everyone gets the same dice, and your board repeats. Your bankroll starts at 5× the initial board bet. If you cannot cover the next bet but have at least half, you get a survival flip; below half is a Bust.</li>
-            <li><strong>Reach Goal, then climb.</strong> Reaching 5× your starting bankroll locks Goal; the run continues to set a high point. Goals beat Busts. Highest Goal wins; if all Bust, the longest run wins.</li>
-          </ol>
-
-          <section class="craps-rules__riu" aria-labelledby="craps-rules-riu-title">
-            <h3 id="craps-rules-riu-title">HOW TO WIN RUN IT UP</h3>
-            <p>Win a scheduled battle&rsquo;s main field with a Goal whose high point reaches <strong>25× starting bankroll</strong>. A <strong>120× rare tier</strong> pays a larger share. It is automatic&mdash;there is no second draw.</p>
-            <p>The seventh battle is the daily Event and pays a larger share. If the Event winner also has an earlier Goal win that day, the Event share doubles.</p>
-          </section>
-
-          <p class="craps-rules__settlement"><strong>Settlement:</strong> Goal returns and prizes become Coinflip credit; a Bust run returns zero. Activity standing can reduce Run It Up and other protocol-funded awards.</p>
+          <div class="craps-rules__steps">
+            <section>
+              <strong>PLACE YOUR BETS.</strong>
+              <p>Place between 0 and 7 chips on the simplified craps table, with 3 max per spot. Your final board will include your selections, plus enough random bets for a total of 10 chips bet. Allowing more of your bets to be assigned randomly increases your chances of receiving a <strong class="craps-rules__hot-shooter">Hot Shooter</strong> bonus.</p>
+            </section>
+            <section>
+              <strong>REACH THE GOAL.</strong>
+              <p>Your bets will be played automatically until your run is over. The goal is to run your stack up to 5× your starting bankroll. Every 3 shooters, all bets are doubled. After a 7-out, if you cannot cover the next betting round, you are at risk. If you have less than half a bet, you bust; if you have at least half a bet, you receive a double-or-nothing survival flip that will allow you to continue half the time.</p>
+              <p>After reaching the goal, that amount is locked in. You keep playing with the winnings above it until they can no longer cover the next bet, then you keep your remaining stack, including the protected goal amount.</p>
+            </section>
+            <section>
+              <strong>WIN THE BATTLE.</strong>
+              <p>There are two ways to win a Craps Autobattle. If the goal is met by any player, then whoever achieves the highest peak among those players wins the prize. If no player reaches the goal, then the one who lasts the longest is declared the winner.</p>
+            </section>
+            <section aria-labelledby="craps-rules-riu-title">
+              <strong id="craps-rules-riu-title">RUN IT UP.</strong>
+              <p>Win the main Battle and reach a peak of at least <strong>25× your starting bankroll</strong> to claim a share of the Run It Up progressive jackpot. Reach <strong>120×</strong> for a bigger payout, with the biggest shares awarded in the daily Event.</p>
+            </section>
+          </div>
 
           <div class="craps-rules__actions">
-            <p class="craps-rules__risk">Entry burns FLIP and can be lost in full.</p>
             <a class="craps-rules__learn" href="/learn/craps/">Full rules</a>
           </div>
         </div>

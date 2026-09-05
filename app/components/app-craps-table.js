@@ -4297,7 +4297,6 @@ class AppCrapsTable extends HTMLElement {
     const esc = escapeHtml;
     const parts = [`<defs><clipPath id="craps-race-plot-clip"><rect x="${geometry.left}" y="${geometry.top}" width="${plotWidth}" height="${plotHeight}"></rect></clipPath><clipPath id="craps-race-avatar-clip"><circle cx="0" cy="0" r="13"></circle></clipPath></defs>`];
     const frames = this.#resolutionRun?.frames ?? [];
-    if (scaledRace) parts.push(`<text class="craps-race-axis" x="${geometry.left}" y="12">GRAPH: BASE BUY-IN · LABELS: ACTUAL FLIP</text>`);
     let priorShooter = null;
     for (let frameIndex = 0; frameIndex < resolved; frameIndex += 1) {
       const shooter = wholeNumber(frames[frameIndex]?.shooter) ?? this.#runShooterIndexAtRound(frameIndex);

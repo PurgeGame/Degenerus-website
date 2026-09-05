@@ -58,22 +58,17 @@ test('the rules popup uses native dialog behavior with a safe fallback', () => {
 test('the popup leads with the run loop and states the Run It Up qualification', () => {
   assert.doesNotMatch(componentSource, /Pass · 1:1|Place · 7:6|Hard 4 \/ 8|Don&apos;t Pass · 3:4/,
     'bet payout odds belong on the full learn page, not in the quick popup');
-  assert.match(componentSource, /bet doubles every three shooters/i,
+  assert.match(componentSource, /Every 3 shooters, all bets are doubled/i,
     'the mandatory wager escalation stays in the quick explanation');
-  assert.match(componentSource, /bankroll starts at 5× the initial board bet/i,
-    'the opening bankroll is stated in the same units as the escalating wager');
-  assert.match(componentSource, /HOW TO WIN RUN IT UP/);
-  assert.match(componentSource, /scheduled battle[^<]*main field[^<]*Goal/i,
-    'only the scheduled main-field Goal winner can qualify');
-  assert.match(componentSource, /25×[^<]*starting bankroll/i,
-    'the common high-point cutoff is explicit');
-  assert.match(componentSource, /120×[^<]*rare/i,
-    'the rare high-point cutoff is explicit');
-  assert.match(componentSource, /no second draw/i,
-    'qualification comes from the completed run rather than another random draw');
-  assert.match(componentSource, /seventh battle[^<]*daily Event[^<]*larger share/i);
-  assert.match(componentSource, /Event winner[^<]*earlier[^<]*Goal win[^<]*share doubles/i,
-    'the same-day repeat-winner Event boost is explained');
+  assert.match(componentSource, /run your stack up to 5× your starting bankroll/i,
+    'the goal is stated relative to the starting bankroll');
+  assert.match(componentSource, /RUN IT UP\.<\/strong>/);
+  assert.match(componentSource, /Win the main Battle/);
+  assert.match(componentSource, /25× your starting bankroll/);
+  assert.match(componentSource, /120×/);
+  assert.match(componentSource, /biggest shares awarded in the daily Event/);
+  assert.doesNotMatch(componentSource, /class="craps-rules__riu"/,
+    'Run It Up shares the plain section layout');
 });
 
 test('the full Craps primer is indexed and covers the current run rules', () => {
