@@ -25388,7 +25388,8 @@ body.layout-basic .craps-entry__line-row .craps-entry__random-slot .craps-entry_
   box-sizing: border-box;
   padding: 0.06rem 0;
   color: #f0fcff;
-  background: rgba(0, 25, 29, 0.9);
+  background: none;
+  border-radius: 0;
   font-size: 0.68rem;
   font-weight: 1000;
   letter-spacing: 0;
