@@ -25341,7 +25341,7 @@ body.layout-basic .craps-entry__line-row .craps-entry__bet-label {
 }
 body.layout-basic .craps-entry__line-row [data-craps-bet="pass"] .craps-entry__bet-label { font-size: 0.78rem; }
 body.layout-basic .craps-entry__bet-spot--hard .craps-entry__bet-label {
-  top: 58%;
+  top: calc(58% + 0.12rem);
   font-size: 0.48rem;
   line-height: 0.82;
 }
