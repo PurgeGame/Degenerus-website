@@ -21,6 +21,7 @@ import {
 } from './polling.js';
 import { startDayRollover } from './day-rollover.js';
 import { warmBadgeStore } from './badge-sprite.js';
+import { mountAmbientMotion } from './ambient-motion.js';
 import { initRouter, getViewedAddress } from './router.js';
 import { autoReconnect } from './wallet.js';
 import { subscribe, get, getActingAddress, update } from './store.js';
@@ -369,6 +370,7 @@ async function boot() {
   //    re-pin path instead of adding a second source of truth.
   mountDaySelector();
   mountJackpotCountdown();
+  mountAmbientMotion();
   console.log('[app] ready');
 
   // Badge art: one bundled fetch on idle, AFTER the critical UI is up — every

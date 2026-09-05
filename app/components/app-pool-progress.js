@@ -760,7 +760,7 @@ class AppPoolProgress extends HTMLElement {
 
   #set(name, value) {
     const element = this.querySelector(`[data-el="${name}"]`);
-    if (element) element.textContent = String(value);
+    if (element && element.textContent !== String(value)) element.textContent = String(value);
     return element;
   }
 

@@ -1402,11 +1402,7 @@ export function crapsLeaderboardRows(standings = [], {
   const opponents = entries
     .filter((entry) => !entry?.local)
     .slice(0, Math.min(CRAPS_LEADERBOARD_OPPONENTS, Math.max(0, limit - 1)));
-  let opponentRank = 1;
-  const rows = opponents.map((entry) => {
-    if (exactLocalRank <= limit && opponentRank === exactLocalRank) opponentRank += 1;
-    return { ...entry, rank: opponentRank++ };
-  });
+  const rows = opponents.map((entry) => ({ ...entry }));
   rows.push({ ...local, rank: exactLocalRank });
   rows.sort((left, right) => {
     if (left.rank !== right.rank) return left.rank - right.rank;
@@ -1450,46 +1446,36 @@ export function crapsRemainingEntrantsAtRound({
   return standings.filter((entry) => ['live', 'risk'].includes(String(entry?.state))).length;
 }
 
-/**
- * Contract-order two finalized battle entries. The visible bankroll is zero for
- * a bust, but the battle comparator still ranks that run by shooters completed,
- * then by its raw ending remainder and entry-time standing.
- */
-export function compareFinalCrapsBattleEntries(left = {}, right = {}, winnerBetId = null) {
-  const winner = winnerBetId == null ? null : String(winnerBetId);
-  const leftWinner = left.battleWinner === true
-    || (winner != null && String(left.betId ?? '') === winner);
-  const rightWinner = right.battleWinner === true
-    || (winner != null && String(right.betId ?? '') === winner);
-  if (leftWinner !== rightWinner) return leftWinner ? -1 : 1;
-
-  const isGoal = (entry) => entry.rankStop === 'goal' || entry.state === 'cashout';
+/** Goal finishers lead by high point; other runs rank by latest bust roll. */
+export function compareFinalCrapsBattleEntries(left = {}, right = {}) {
+  const isGoal = (entry) => entry.rankStop === 'goal'
+    || entry.state === 'cashout'
+    || (entry.goal > 0n && (wholeFlip(entry.rankPeak) ?? 0n) >= entry.goal);
   const leftGoal = isGoal(left);
   const rightGoal = isGoal(right);
   if (leftGoal !== rightGoal) return leftGoal ? -1 : 1;
-
-  const primary = (entry, goal) => goal
+  const score = (entry, goal) => goal
     ? (wholeFlip(entry.rankPeak) ?? 0n)
-    : BigInt(wholeNumber(entry.rankHands) ?? 0);
-  const leftPrimary = primary(left, leftGoal);
-  const rightPrimary = primary(right, rightGoal);
-  if (leftPrimary !== rightPrimary) return leftPrimary > rightPrimary ? -1 : 1;
+    : BigInt(wholeNumber(entry.rankRoll) ?? wholeNumber(entry.rankHands) ?? 0);
+  const a = score(left, leftGoal);
+  const b = score(right, rightGoal);
+  return a === b ? 0 : a > b ? -1 : 1;
+}
 
-  const leftEnd = wholeFlip(left.rankEnd) ?? 0n;
-  const rightEnd = wholeFlip(right.rankEnd) ?? 0n;
-  if (leftEnd !== rightEnd) return leftEnd > rightEnd ? -1 : 1;
-
-  const leftStanding = wholeNumber(left.rankStanding) ?? 0;
-  const rightStanding = wholeNumber(right.rankStanding) ?? 0;
-  if (leftStanding !== rightStanding) return rightStanding - leftStanding;
-
-  try {
-    const leftId = BigInt(left.betId ?? 0);
-    const rightId = BigInt(right.betId ?? 0);
-    if (leftId !== rightId) return leftId < rightId ? -1 : 1;
-  } catch (_error) { /* stable presentation fallback below */ }
-  if (left.local !== right.local) return left.local ? -1 : 1;
-  return (wholeNumber(left.opponentIndex) ?? 0) - (wholeNumber(right.opponentIndex) ?? 0);
+/** Rank only what has happened so far, without revealing future goal finishers. */
+export function rankCrapsBattleEntries(entries = [], finalized = false) {
+  const visible = (entry) => finalized ? entry : {
+    ...entry,
+    rankStop: entry.goal > 0n && entry.highPoint >= entry.goal ? 'goal' : null,
+    rankPeak: entry.highPoint,
+  };
+  const compare = (a, b) => compareFinalCrapsBattleEntries(visible(a), visible(b));
+  const sorted = [...entries].sort(compare);
+  let rank = 1;
+  return sorted.map((entry, index) => {
+    if (index > 0 && compare(sorted[index - 1], entry) !== 0) rank = index + 1;
+    return { ...entry, rank };
+  });
 }
 
 export function formatSignedCrapsFlip(value) {
@@ -2199,7 +2185,6 @@ class AppCrapsTable extends HTMLElement {
   #viewerLabel = 'YOU';
   #viewerAvatar = '';
   #viewerResult = null;
-  #viewerBustRank = null;
   #leaderboardTimeline = [];
   #rankTimeline = [];
   #remainingEntrantsTimeline = [];
@@ -2583,7 +2568,6 @@ class AppCrapsTable extends HTMLElement {
     this.#leaderboardRowMarkup = new Map();
     this.#leaderboardRanksByKey = new Map();
     this.#leaderboardViewerRank = null;
-    this.#viewerBustRank = null;
     this.#viewerBetId = detail.viewerBetId == null ? null : String(detail.viewerBetId);
     this.#viewerPlayer = detail.viewerPlayer == null
       ? null
@@ -2608,6 +2592,7 @@ class AppCrapsTable extends HTMLElement {
     const viewerStop = String(viewerResult.stop ?? '').trim().toLowerCase();
     this.#viewerResult = Object.freeze({
       stop: viewerStop === 'goal' || viewerStop === 'bust' ? viewerStop : null,
+      exitRoll: wholeNumber(viewerResult.exitRoll),
       handsPlayed: clampInteger(viewerResult.handsPlayed, 0, CRAPS_MAX_SLIP_HANDS, 0),
       rawEndingFlip: wholeFlip(viewerResult.rawEndingFlip ?? viewerResult.endingFlip),
       highPointFlip: wholeFlip(viewerResult.highPointFlip ?? viewerResult.peakFlip),
@@ -4832,6 +4817,7 @@ class AppCrapsTable extends HTMLElement {
       shooterOpeningFlip,
       lastResult,
       rankStop: player.exitType === 'cashout' ? 'goal' : player.exitType === 'bust' ? 'bust' : null,
+      rankRoll: Math.min(roundNumber, player.exitRoll || roundNumber),
       rankHands: player.handsPlayed,
       rankPeak: player.highPointFlip,
       rankEnd: player.rawEndingFlip,
@@ -4946,6 +4932,7 @@ class AppCrapsTable extends HTMLElement {
       shooterOpeningFlip,
       lastResult,
       rankStop: this.#viewerResult?.stop ?? (localTerminal || null),
+      rankRoll: Math.min(roundNumber, this.#viewerResult?.exitRoll || roundNumber),
       rankHands: this.#viewerResult?.handsPlayed
         || ((wholeNumber(frame?.shooter) ?? this.#runShooterIndexAtRound(roundNumber)) + 1),
       rankPeak: this.#viewerResult?.highPointFlip
@@ -4994,25 +4981,12 @@ class AppCrapsTable extends HTMLElement {
       const candidate = entry.capacity > entry.amount ? entry.capacity : entry.amount;
       return candidate > highest ? candidate : highest;
     }, 1n);
-    entries.sort((a, b) => {
-      if (finalized) return compareFinalCrapsBattleEntries(a, b, this.#battleWinnerBetId);
-      if (a.amount !== b.amount) return a.amount > b.amount ? -1 : 1;
-      if (a.local !== b.local) return a.local ? -1 : 1;
-      return a.opponentIndex - b.opponentIndex;
-    });
-    let rank = 0;
-    let previousAmount = null;
-    return entries.map((entry, index) => {
-      if (finalized || previousAmount == null || entry.amount !== previousAmount) rank = index + 1;
-      previousAmount = entry.amount;
-      return {
-        ...entry,
-        rank,
-        capacity,
-        rackCapacity: capacity,
-        finalized,
-      };
-    });
+    return rankCrapsBattleEntries(entries, finalized).map((entry) => ({
+      ...entry,
+      capacity,
+      rackCapacity: capacity,
+      finalized,
+    }));
   }
 
   #activeShooterBoostEntries(roundNumber = 0) {
@@ -5107,22 +5081,14 @@ class AppCrapsTable extends HTMLElement {
   }
 
   #localRankAtRound(roundNumber, fallbackRank, standings) {
-    if (this.#viewerBustRank != null) return this.#viewerBustRank;
-    const local = Array.isArray(standings) ? standings.find((entry) => entry.local) : null;
-    const knownWinnerRank = local?.finalized
-      && this.#battleWinnerBetId != null
-      && String(local.betId ?? '') === this.#battleWinnerBetId
-      ? 1
-      : null;
-    const rank = knownWinnerRank ?? crapsStandingAtRound({
-      rankTimeline: this.#rankTimeline,
+    // Older published timelines sort bankroll and freeze at bust. Recalculate
+    // from the full loaded field so the HUD and leaderboard share one rule.
+    return crapsStandingAtRound({
       roundNumber,
       fallbackRank,
       fieldEntrants: this.#fieldEntrants,
       loadedEntrants: Array.isArray(standings) ? standings.length : 0,
     });
-    if (local?.state === 'bust' && rank != null) this.#viewerBustRank = rank;
-    return rank;
   }
 
   #paintBattleLeaderboard(roundNumber = 0, localBankroll = null, roundResult = null, atRoundFlip = false, reorder = false) {
@@ -7489,7 +7455,6 @@ class AppCrapsTable extends HTMLElement {
     this.#resetBattleBountyReceipt();
     this.#resetWinnerPayoff();
     this.#viewerBustLocked = false;
-    this.#viewerBustRank = null;
     this.#featuredPlayerKeys = [];
     this.#feltOpponentKeys = [];
     this.#leaderboardPlayerKeys = [];

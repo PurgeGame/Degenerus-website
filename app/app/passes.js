@@ -691,6 +691,7 @@ export async function updateAfkingSubscription({
   useTickets = true,
   drainGameCreditFirst = true,
   msgValueWei = 0n,
+  onSubmitted,
 } = {}) {
   const player = getActingAddress();
   if (!player) throw new Error('Wallet not connected.');
@@ -714,6 +715,7 @@ export async function updateAfkingSubscription({
   const receipt = await sendTx(
     (s) => _buildContract(s).subscribe(...args),
     qty === 0 ? 'Cancel AFKing subscription' : 'Save AFKing subscription',
+    { onSubmitted },
   );
   return { receipt };
 }
@@ -750,7 +752,7 @@ export async function fundAfkingSubscription({ msgValueWei } = {}) {
  * mistake. The balance is re-read at click time because an active subscription
  * may consume funding between poll cycles.
  */
-export async function withdrawAfkingSubscriptionFunding() {
+export async function withdrawAfkingSubscriptionFunding({ onSubmitted } = {}) {
   const connected = _normalizedHexAddress(get('connected.address'));
   const acting = _normalizedHexAddress(getActingAddress());
   if (!connected) throw new Error('Wallet not connected.');
@@ -774,6 +776,7 @@ export async function withdrawAfkingSubscriptionFunding() {
     receipt = await sendTx(
       (s) => _buildContract(s).withdrawAfkingFunding(...args),
       'Withdraw AFKing funding',
+      { onSubmitted },
     );
   } catch (error) {
     // Keep wallet/provider errors intact, but preserve friendly contract copy

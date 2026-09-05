@@ -297,7 +297,33 @@ _installWalletApprovalHandoffLifecycle();
 function _installWalletConnectAutomaticHandoff(provider) {
   if (provider?.isWalletConnect !== true) return;
   const client = provider?.signer?.client;
-  if (!client || typeof client.on !== 'function' || _wcAutomaticHandoffClients.has(client)) return;
+  if (!client || typeof client.on !== 'function') return;
+
+  const suppressEarlyRedirect = () => {
+    // SignClient.request runs its default deep link IN PARALLEL with relay
+    // publication. On a phone, opening the wallet can suspend this tab before
+    // the request reaches the relay. Let our request-sent listener own the
+    // redirect instead. Update the current session on every attachment, since
+    // reconnecting can reuse the client with a new session topic.
+    if (_isMobileWalletHandoffContext() && _walletConnectDeepLinkChoice(provider)) {
+      try {
+        const topic = provider.session?.topic;
+        const session = topic && client.session?.get?.(topic);
+        if (session && session.sessionConfig?.disableDeepLink !== true) {
+          const update = client.session.update(topic, {
+            sessionConfig: { ...session.sessionConfig, disableDeepLink: true },
+          });
+          // Store.update replaces its in-memory record synchronously, before
+          // persisting. A storage failure must not break the wallet connection.
+          Promise.resolve(update).catch(() => {});
+        }
+      } catch (_e) { /* nonstandard clients retain the SDK fallback */ }
+    }
+  };
+  if (_wcAutomaticHandoffClients.has(client)) {
+    suppressEarlyRedirect();
+    return;
+  }
 
   const onRequestSent = (event) => {
     if (!_isMobileWalletHandoffContext()) return;
@@ -319,6 +345,7 @@ function _installWalletConnectAutomaticHandoff(provider) {
   try {
     client.on(WC_REQUEST_SENT_EVENT, onRequestSent);
     _wcAutomaticHandoffClients.add(client);
+    suppressEarlyRedirect();
   } catch (_e) { /* older/nonstandard providers keep their existing behavior */ }
 }
 

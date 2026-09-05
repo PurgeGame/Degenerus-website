@@ -327,6 +327,52 @@ describe('WalletConnect mobile approval handoff', () => {
     return raw;
   }
 
+  test('mobile navigation waits for relay publication instead of racing it', async () => {
+    const client = makeClient();
+    const sessions = new Map([['mobile-session', {
+      topic: 'mobile-session', sessionConfig: { retained: true },
+    }]]);
+    client.session = {
+      get: (topic) => sessions.get(topic),
+      update: async (topic, patch) => sessions.set(topic, { ...sessions.get(topic), ...patch }),
+    };
+    _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({
+      href: 'https://metamask.app.link', name: 'MetaMask',
+    }));
+    const raw = attachWalletConnect(client);
+    assert.deepEqual(sessions.get('mobile-session').sessionConfig, {
+      retained: true, disableDeepLink: true,
+    });
+    let publish;
+    const publication = new Promise((resolve) => { publish = resolve; });
+    // Model the installed SignClient's two parallel branches: its default
+    // redirect and relay publication followed by session_request_sent.
+    const pending = Promise.all([
+      publication.then(() => client.emit('session_request_sent', {
+        topic: raw.session.topic, id: 991, request: { method: 'eth_sendTransaction' },
+      })),
+      Promise.resolve().then(() => {
+        if (!sessions.get(raw.session.topic).sessionConfig.disableDeepLink) {
+          window.location.assign('https://metamask.app.link/too-early');
+        }
+      }),
+    ]);
+    await Promise.resolve();
+    assert.equal(_locationAssignCalls.length, 0, 'no wallet launch while publication is pending');
+    publish();
+    await pending;
+    assert.deepEqual(_locationAssignCalls, [[
+      'https://metamask.app.link/wc?requestId=991&sessionTopic=mobile-session',
+    ]], 'only the published request opens the wallet');
+
+    sessions.set('reconnected-session', { topic: 'reconnected-session' });
+    raw.session = sessions.get('reconnected-session');
+    wallet._testAttachListeners({ provider: raw }, raw);
+    assert.equal(sessions.get('reconnected-session').sessionConfig.disableDeepLink, true,
+      'a replacement session also suppresses the early SDK redirect');
+    assert.equal(client.listenerCount('session_request_sent'), 1);
+  });
+
   test('foregrounds MetaMask in the same tab when a transaction request is published', () => {
     const client = makeClient();
     _localStore.set('WALLETCONNECT_DEEPLINK_CHOICE', JSON.stringify({

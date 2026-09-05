@@ -900,9 +900,14 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /class="craps-entry__entered"/);
   assert.doesNotMatch(componentSource, /✓ ENTERED|✓ ENTERED ROWS/,
     'owned seats use plain status text rather than disabled button copy');
-  assert.match(componentSource,
-    /button\.dataset\.state === 'entered'[\s\S]*?this\.#openBoard\(button,[\s\S]*?button\.dataset\.state === 'amend'[\s\S]*?this\.#amend\(button\)/s,
-    'ENTERED reopens that slip board while CHANGE BET submits its changed layout');
+  assert.doesNotMatch(componentSource, /#openBoard|screen: 'placement'|CRAPS_TABLE_OPEN_EVENT/,
+    'the lobby uses its inline board without opening the placement popup');
+  assert.match(componentSource, /button\.dataset\.state === 'amend'[\s\S]*?this\.#amend\(button\)/s,
+    'CHANGE BET submits the inline board');
+  assert.match(componentSource, /dayButton\.hidden = plainDayEntered && !dayNeedsAmend/);
+  assert.match(componentSource, /tomorrowTicket && !tomorrowNeedsAmend/);
+  assert.match(componentSource, /entry && !canUpgrade && !entryNeedsAmend/,
+    'unchanged owned entries display status text, not clickable buttons');
   assert.match(componentSource, /\? entryNeedsAmend \? 'CHANGE BET' : crapsEnteredLabel\(entry\)/,
     'a changed board promotes the individual battle action from ENTERED to CHANGE BET');
   assert.doesNotMatch(componentSource, /AMEND ENTRY|AMENDING…/,

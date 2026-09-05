@@ -342,7 +342,7 @@ function makeFakePassContract(opts = {}) {
     subscribe: Object.assign(
       async (...args) => {
         calls.subscribe.push(args);
-        return makeFakeTx(makeFakeReceipt());
+        return opts.subscribeTx ?? makeFakeTx(makeFakeReceipt());
       },
       { staticCall: stk('subscribe') }
     ),
@@ -1239,6 +1239,51 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     el.disconnectedCallback();
   });
+
+  for (const dismissBeforeSubmit of [false, true]) {
+    test(`AFKing editor remains dismissible through mobile wallet return (${dismissBeforeSubmit ? 'Back' : 'automatic'})`, async () => {
+      let submitted;
+      let confirmed;
+      const transaction = new Promise((resolve) => { submitted = resolve; });
+      const receipt = new Promise((resolve) => { confirmed = resolve; });
+      const contract = makeFakePassContract({ subscribeTx: transaction });
+      passesMod.__setContractFactoryForTest(() => contract);
+      passesMod.__setAfkingReadContractFactoryForTest(() => ({
+        token: { balanceOf: async () => 1n },
+        game: {
+          subInfo: async () => [true, 2n, 8n, 12n],
+          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
+        },
+        lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
+      }));
+      const el = instantiate();
+      await settle(60);
+      el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+      el.querySelector('[name="pass-afking-qty"]').value = '3';
+      const save = el.querySelector('[data-bind="pass-afking-save"]');
+      const dialog = el.querySelector('[data-bind="pass-afking-dialog"]');
+      save.dispatchEvent({ type: 'click' });
+      await settle(60);
+      assert.equal(contract._calls.subscribe.length, 1);
+      assert.equal(dialog.hidden, false);
+      if (dismissBeforeSubmit) {
+        el.querySelector('[data-bind="pass-afking-dialog-close"]').dispatchEvent({ type: 'click' });
+        assert.equal(dialog.hidden, true, 'Back works even before MetaMask answers');
+      }
+      submitted({ hash: '0xsubmitted', wait: () => receipt });
+      await settle(60);
+      assert.equal(dialog.hidden, true, 'wallet submission closes the editor without waiting for a receipt');
+      assert.equal(save.disabled, true, 'closing does not permit duplicate subscription writes');
+      assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / DAY',
+        'submission alone does not claim the new settings are confirmed');
+      confirmed(makeFakeReceipt());
+      await settle(60);
+      assert.equal(dialog.hidden, true);
+      assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '3 LUCKBOX / DAY');
+      assert.equal(save.disabled, false);
+      el.disconnectedCallback();
+    });
+  }
 
   test('an existing AFKING holder shows its real state, edits in the popup, and tops up inline', async () => {
     const passContract = makeFakePassContract();

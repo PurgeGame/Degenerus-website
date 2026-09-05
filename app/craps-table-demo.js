@@ -1,7 +1,7 @@
 import {
   CRAPS_TABLE_REPLAY_EVENT,
   formatCrapsWei,
-} from '/app/components/app-craps-table.js?v=resolution-race-v3';
+} from '/app/components/app-craps-table.js?v=goal-bust-ranks-v4';
 import {
   SIM_CRAPS_REPLAY_ARTIFACTS,
   SIM_CRAPS_REPLAY_FEATURED,

@@ -838,7 +838,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /if \(percent\) percent\.hidden = model\.levelReady/,
       'the percentage disappears once the thermometer has switched to its post-guarantee state');
     assert.match(css, /\.pool-progress__percent\[hidden\]\s*\{[^}]*display:\s*none !important/s);
-    assert.match(css, /app-pool-progress \+ \.jackpot-hero\s*\{[^}]*margin-top:\s*0\.3rem/s);
+    assert.match(css, /body\.layout-basic main > \.jackpot-hero\s*\{[^}]*margin-top:\s*3px/s);
   });
 
   test('purchase mode keeps one compact prize-pool thermometer', () => {

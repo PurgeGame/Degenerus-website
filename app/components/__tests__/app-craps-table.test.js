@@ -216,35 +216,30 @@ test('winner payoff size follows exact total won versus the starting buy-in', as
     'the center supports stacks and piles and clears the dice beneath them');
 });
 
-test('final battle ordering keeps the contract comparator after every visible rack busts', async () => {
-  const { compareFinalCrapsBattleEntries } = await import(moduleUrl);
+test('battle rank uses goal high points then bust rolls, with shared places', async () => {
+  const { rankCrapsBattleEntries, crapsLeaderboardRows } = await import(moduleUrl);
   const entries = [
-    { betId: '1', rankStop: 'bust', rankHands: 8, rankEnd: 900, rankStanding: 500 },
-    { betId: '2', rankStop: 'bust', rankHands: 10, rankEnd: 20, rankStanding: 10 },
-    { betId: '3', rankStop: 'bust', rankHands: 10, rankEnd: 40, rankStanding: 5 },
+    { key: 'early', rankStop: 'bust', rankRoll: 20, rankPeak: 9999n },
+    { key: 'late', rankStop: 'bust', rankRoll: 25, rankEnd: 20n },
+    { key: 'tie', rankStop: 'bust', rankRoll: 25, rankEnd: 40n, local: true },
+    { key: 'goal', rankStop: 'goal', rankPeak: 500n },
+    { key: 'peak', rankStop: 'goal', rankPeak: 800n },
+    { key: 'equal', rankStop: 'goal', rankPeak: 800n, battleWinner: true },
   ];
-  assert.deepEqual(
-    entries.toSorted((left, right) => compareFinalCrapsBattleEntries(left, right)).map((entry) => entry.betId),
-    ['3', '2', '1'],
-    'busts rank on shooters completed and raw remainder, not their displayed zero',
-  );
-  assert.equal(compareFinalCrapsBattleEntries(
-    { betId: '4', rankStop: 'bust', rankHands: 20, rankEnd: 500 },
-    { betId: '5', rankStop: 'goal', rankPeak: 1, rankEnd: 1 },
-  ), 1, 'every goal outranks every bust');
-  assert.equal(compareFinalCrapsBattleEntries(
-    { betId: '6', rankStop: 'bust', rankHands: 10, rankEnd: 40, rankStanding: 5 },
-    { betId: '7', rankStop: 'bust', rankHands: 10, rankEnd: 40, rankStanding: 5 },
-    '7',
-  ), 1, 'the finalized chain winner resolves an otherwise exact tie');
-  assert.equal(compareFinalCrapsBattleEntries(
-    { betId: null, battleWinner: true, rankStop: 'bust', rankHands: 1 },
-    { betId: '8', rankStop: 'goal', rankPeak: 999 },
-  ), -1, 'the verified local-winner fallback stays first even without a bet id');
-
-  assert.match(COMPONENT_SRC,
-    /const finalized = frames\.length > 0 && roundNumber >= frames\.length[\s\S]*?compareFinalCrapsBattleEntries\(a, b, this\.#battleWinnerBetId\)/s,
-    'the leaderboard switches from live chip order to the final contract order');
+  const ranks = rankCrapsBattleEntries(entries, true);
+  assert.deepEqual(ranks.map(({ key, rank }) => [key, rank]), [
+    ['peak', 1], ['equal', 1], ['goal', 3], ['late', 4], ['tie', 4], ['early', 6],
+  ]);
+  assert.deepEqual(crapsLeaderboardRows(ranks).map(({ rank }) => rank), [1, 1, 3, 4, 4, 6]);
+  const live = rankCrapsBattleEntries([
+    { key: 'future', rankStop: 'goal', rankPeak: 900n, highPoint: 200n, goal: 500n, rankRoll: 12 },
+    { key: 'locked', highPoint: 600n, goal: 500n, rankRoll: 10 },
+    { key: 'active', highPoint: 300n, goal: 500n, rankRoll: 12 },
+    { key: 'bust', highPoint: 400n, goal: 500n, rankRoll: 9 },
+  ]);
+  assert.deepEqual(live.map(({ key, rank }) => [key, rank]), [
+    ['locked', 1], ['future', 2], ['active', 2], ['bust', 4],
+  ], 'live ranks use observed high points and survival time, not future outcomes');
 });
 
 test('a local bust locks the rack at zero while the shared table finishes', () => {
@@ -1035,7 +1030,7 @@ test('the ten-row leaderboard includes YOU and only reorders at table checkpoint
   ], { localRank: 3 });
   assert.equal(topThreeViewer.length, 10);
   assert.equal(topThreeViewer.filter((entry) => entry.local).length, 1);
-  assert.deepEqual(topThreeViewer.map((entry) => entry.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(topThreeViewer.map((entry) => entry.rank), [1, 2, 3, 3, 4, 5, 6, 7, 8, 9]);
 
   const pinnedViewer = crapsLeaderboardRows([...opponents, local], { localRank: 37 });
   assert.equal(pinnedViewer.length, 10);
@@ -2020,8 +2015,8 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the separate leaderboard renders YOU plus nine opponents in its checkpointed order');
   assert.match(COMPONENT_SRC, /#paintResolutionFrame\(frame, index[\s\S]*?const standingsCheckpoint = crapsLeaderboardCheckpoint\(frame\)[\s\S]*?this\.#paintBattleLeaderboard\(index \+ 1\);[\s\S]*?standingsCheckpoint \|\| nextShooter/s,
     'rolls repaint chip amounts while made points and completed shooters advance the row order');
-  assert.match(COMPONENT_SRC, /if \(this\.#viewerBustRank != null\) return this\.#viewerBustRank;[\s\S]*?local\?\.state === 'bust'[\s\S]*?this\.#viewerBustRank = rank/s,
-    'YOU freezes at the exact checkpoint rank captured on bust');
+  assert.doesNotMatch(COMPONENT_SRC, /if \(this\.#viewerBustRank != null\) return this\.#viewerBustRank/,
+    'a bust does not freeze the viewer rank while other runs continue');
   assert.match(COMPONENT_SRC, /displayRank: entry\.local \? this\.#leaderboardViewerRank : rank[\s\S]*?const rankLabel = entry\.displayRank == null \? '—' : String\(entry\.displayRank\)/s,
     'a partial bundle shows an unknown viewer rank honestly until the indexer supplies it');
   assert.match(COMPONENT_SRC, /const playerColor = local[\s\S]*?CRAPS_OPPONENT_MEDAL_COLORS\[Math\.max\(0, entry\.rank - 1\)\][\s\S]*?style="--player-color:\$\{escapeHtml\(playerColor\)\}"/s,

@@ -35,10 +35,8 @@ import {
   recordClaimTargetForMark,
 } from '../app/records.js';
 import {
-  CRAPS_TABLE_OPEN_EVENT,
   formatCrapsCompactFlip,
-  unpackCrapsContractChips,
-} from './app-craps-table.js?rev=resolution-race-v3';
+} from './app-craps-table.js?rev=goal-bust-ranks-v4';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
 export const CRAPS_BATTLES_PER_DAY = 7;
@@ -1208,13 +1206,7 @@ export class AppCrapsEntry extends HTMLElement {
     }
     const button = event?.target?.closest?.('[data-craps-entry]');
     if (!button || button.disabled) return;
-    if (button.dataset.state === 'entered') {
-      this.#openBoard(button, {
-        betId: button.dataset.crapsBetId,
-        chips: Number(button.dataset.crapsEntryChips ?? 0),
-      });
-      return;
-    }
+    if (button.hidden || button.dataset.state === 'entered') return;
     if (button.dataset.state === 'amend') {
       void this.#amend(button);
       return;
@@ -1672,10 +1664,10 @@ export class AppCrapsEntry extends HTMLElement {
       dayButton.removeAttribute('data-craps-upgrade');
       if (dayCanUpgrade) dayButton.dataset.crapsUpgrade = String(dayUpgradeMask);
       bindEntryTarget(dayButton, dayTicket);
-      dayButton.hidden = plainDayEntered && !dayAmendable;
+      dayButton.hidden = plainDayEntered && !dayNeedsAmend;
       const dayDomainLocked = this.#busyKey != null
         || dayUpgradeWhenOpen
-        || (dayEntered ? !dayCanUpgrade && !dayAmendable : !dayReady);
+        || (dayEntered ? !dayCanUpgrade && !dayNeedsAmend : !dayReady);
       bindWriteAvailability(dayButton, dayDomainLocked,
         dayUpgradeWhenOpen ? 'This Craps upgrade is not open yet.' : 'This Craps entry is not currently available.');
       dayButton.dataset.terms = dayReady ? 'ready' : 'loading';
@@ -1718,7 +1710,7 @@ export class AppCrapsEntry extends HTMLElement {
     }
     if (dayEnteredStatus) {
       dayEnteredStatus.textContent = crapsEnteredLabel(dayTicket);
-      dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
+      dayEnteredStatus.hidden = !plainDayEntered || dayNeedsAmend;
     }
 
     // Before Battle 1, today's live all-seven entry stays at the top while a
@@ -1765,7 +1757,7 @@ export class AppCrapsEntry extends HTMLElement {
     }
     if (tomorrowButton) {
       bindEntryTarget(tomorrowButton, tomorrowTicket);
-      tomorrowButton.hidden = !showTomorrow || Boolean(tomorrowTicket && !tomorrowAmendable);
+      tomorrowButton.hidden = !showTomorrow || Boolean(tomorrowTicket && !tomorrowNeedsAmend && !tomorrowUpgradeWhenOpen);
       const tomorrowDomainLocked = !showTomorrow
         || this.#busyKey != null
         || tomorrowUpgradeWhenOpen
@@ -1809,7 +1801,7 @@ export class AppCrapsEntry extends HTMLElement {
       tomorrowEnteredStatus.textContent = crapsEnteredLabel(tomorrowTicket);
       tomorrowEnteredStatus.hidden = !showTomorrow
         || !tomorrowTicket
-        || tomorrowAmendable
+        || tomorrowNeedsAmend
         || tomorrowUpgradeWhenOpen;
     }
 
@@ -1870,6 +1862,9 @@ export class AppCrapsEntry extends HTMLElement {
       const entryNeedsAmend = amendable && needsAmend(entry);
       row.dataset.state = result ? 'completed' : battle.state;
       row.dataset.resultVisibility = concealed ? 'concealed' : result ? 'revealed' : 'pending';
+      row.dataset.winnerGoal = crapsWinnerGoalResult(concealed ? null : laneResult);
+      row.title = row.dataset.winnerGoal === 'met' ? 'Winner met the goal'
+        : row.dataset.winnerGoal === 'missed' ? 'Winner did not meet the goal' : '';
       row.dataset.entry = entry ? entry.high ? 'high' : 'normal' : 'none';
       row.dataset.terms = ready ? 'ready' : this.#schedulePending ? 'loading' : 'unavailable';
       const close = row.querySelector('[data-bind="craps-battle-countdown"]');
@@ -1980,10 +1975,10 @@ export class AppCrapsEntry extends HTMLElement {
         button.removeAttribute('data-craps-upgrade');
         if (canUpgrade) button.dataset.crapsUpgrade = String(upgradeMask);
         bindEntryTarget(button, entry);
-        button.hidden = Boolean(result) || Boolean(entry && !canUpgrade && !amendable);
+        button.hidden = Boolean(result) || Boolean(entry && !canUpgrade && !entryNeedsAmend);
         const windowDomainLocked = this.#busyKey != null
           || (entry
-            ? !canUpgrade && !amendable
+            ? !canUpgrade && !entryNeedsAmend
             : !battle.joinable || !ready);
         bindWriteAvailability(button, windowDomainLocked,
           battle.joinable ? 'This Craps entry is not currently available.' : 'This Craps battle is closed.');
@@ -2022,7 +2017,7 @@ export class AppCrapsEntry extends HTMLElement {
       }
       if (enteredStatus) {
         enteredStatus.textContent = crapsEnteredLabel(entry);
-        enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || amendable;
+        enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || entryNeedsAmend;
       }
     });
     this.#awaitingSettlement = awaitingSettlement;
@@ -2049,6 +2044,9 @@ export class AppCrapsEntry extends HTMLElement {
     const previousEventReplay = this.querySelector('.craps-entry__previous-event [data-craps-winner-replay]');
     if (previousEventRow) {
       previousEventRow.hidden = !previousEvent;
+      previousEventRow.dataset.winnerGoal = crapsWinnerGoalResult(previousEventConcealed ? null : previousEventLaneResult);
+      previousEventRow.title = previousEventRow.dataset.winnerGoal === 'met' ? 'Winner met the goal'
+        : previousEventRow.dataset.winnerGoal === 'missed' ? 'Winner did not meet the goal' : '';
       previousEventRow.dataset.day = previousEvent ? String(previousEvent.day) : '';
       previousEventRow.dataset.resultVisibility = previousEventConcealed
         ? 'concealed'
@@ -2931,41 +2929,6 @@ export class AppCrapsEntry extends HTMLElement {
     ], { duration: 160, easing: 'ease-out' });
   }
 
-  #openBoard(opener, entry = null) {
-    const state = crapsEntryState({ day: currentDayFromStore() });
-    const terms = this.#termsFor(state);
-    const reference = terms?.windows?.find(Boolean) ?? null;
-    const editingEntry = entry?.betId != null;
-    const entryChips = Number(entry?.chips ?? 0) >>> 0;
-    const confirm = async (wager) => {
-      this.#boardBets = { ...wager.chips };
-      this.#boardHistory = entryBoardHistory(wager.chips);
-      this.#contractChips = wager.contractChips;
-      this.#boardSet = true;
-      this.#message = editingEntry
-        ? wager.contractChips === entryChips
-          ? 'Entry board unchanged.'
-          : 'Chip placement changed. Select CHANGE BET to update it.'
-        : 'Your board is set for the Buy In buttons.';
-      this.#render();
-      return true;
-    };
-    globalThis.document?.dispatchEvent?.(new CustomEvent(CRAPS_TABLE_OPEN_EVENT, {
-      detail: {
-        opener,
-        screen: 'placement',
-        entryKind: 'board',
-        entryLabel: editingEntry ? 'EDIT ENTRY BOARD' : this.#boardSet ? 'EDIT YOUR BOARD' : 'SET YOUR BOARD',
-        bets: editingEntry ? unpackCrapsContractChips(entryChips) : this.#boardBets,
-        bankrollFlip: 0n,
-        battleStakeFlip: 0n,
-        goalFlip: 0n,
-        playedFlip: reference?.playedFlip ?? 10n,
-        confirm,
-      },
-    }));
-  }
-
   #applyAmendedBoard(betId, chips) {
     const playerEntries = this.#snapshot?.playerEntries;
     if (!playerEntries) return;
@@ -2989,10 +2952,7 @@ export class AppCrapsEntry extends HTMLElement {
     if (this.#busyKey != null || !this.#boardSet) return;
     const betId = String(button?.dataset?.crapsBetId ?? '');
     const enteredChips = Number(button?.dataset?.crapsEntryChips ?? 0) >>> 0;
-    if (!/^\d+$/.test(betId) || this.#contractChips === enteredChips) {
-      this.#openBoard(button, { betId, chips: enteredChips });
-      return;
-    }
+    if (!/^\d+$/.test(betId) || this.#contractChips === enteredChips) return;
     const busyKey = `amend-${betId}`;
     this.#busyKey = busyKey;
     this.#message = '';

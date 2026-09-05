@@ -315,6 +315,7 @@ class AppPassSection extends HTMLElement {
   #pollHandle = null;
   #pollController = null;
   #afkingLockPollHandle = null;
+  #postConfirmRefetchHandle = null;
   #lastPollAt = 0;
   #visibilityListener = null;
   // --- Pinned data from /player/:address (server-derived; rendered via textContent) ---
@@ -358,6 +359,8 @@ class AppPassSection extends HTMLElement {
   }
 
   disconnectedCallback() {
+    clearTimeout(this.#postConfirmRefetchHandle);
+    this.#postConfirmRefetchHandle = null;
     if (typeof this.#pollHandle === 'function') {
       try { this.#pollHandle(); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
@@ -865,6 +868,14 @@ class AppPassSection extends HTMLElement {
   #startPolling() {
     if (typeof this.#pollHandle === 'function') this.#pollHandle();
     this.#pollHandle = registerComponentPoll(() => this.#runPollCycle(), POLL_INTERVAL_MS);
+  }
+
+  #schedulePostConfirmRefetch() {
+    clearTimeout(this.#postConfirmRefetchHandle);
+    this.#postConfirmRefetchHandle = setTimeout(() => {
+      this.#postConfirmRefetchHandle = null;
+      void this.#runPollCycle();
+    }, POST_CONFIRM_REFETCH_MS);
   }
 
   async #runPollCycle() {
@@ -1678,7 +1689,8 @@ class AppPassSection extends HTMLElement {
 
   #closeAfkingDialog(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || this.#busyAfkingWithdrawal) return;
+    // Dismissing the editor does not cancel or resubmit the wallet request.
+    // Mobile wallets can leave receipt waiting suspended after returning.
     this.#afkingDialogOpen = false;
     this.#clearAfkingError();
     this.#renderAfking();
@@ -1946,7 +1958,7 @@ class AppPassSection extends HTMLElement {
         }));
       } catch (_e) { /* defensive */ }
       this.#clearAllErrorStates();
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       const msg = compactUiError(error, 'Lazy pass purchase did not go through.');
       this.#renderLazyError(msg);
@@ -2033,7 +2045,7 @@ class AppPassSection extends HTMLElement {
       // Clear all error states across the panel on next-success-anywhere.
       this.#clearAllErrorStates();
       // 250ms post-confirm refetch (CF-06).
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       const msg = compactUiError(error, 'Whale pass purchase did not go through.');
       this.#renderWhaleError(msg);
@@ -2122,7 +2134,7 @@ class AppPassSection extends HTMLElement {
 
       this.#clearAllErrorStates();
       this.#closeDeityDialog();
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       // CONTEXT D-05 LOCKED override path. Use error.code if pre-decoded
       // (passes.js wraps revert errors via _structuredRevertError); otherwise
@@ -2185,7 +2197,7 @@ class AppPassSection extends HTMLElement {
         }));
       } catch (_error) { /* defensive */ }
       this.#afkingDialogOpen = false;
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       this.#renderAfkingError(compactUiError(error, 'Funding did not go through.'));
     } finally {
@@ -2209,7 +2221,9 @@ class AppPassSection extends HTMLElement {
     this.#clearAfkingError();
     this.#renderAfking();
     try {
-      const { amountWei } = await withdrawAfkingSubscriptionFunding();
+      const { amountWei } = await withdrawAfkingSubscriptionFunding({
+        onSubmitted: () => this.#closeAfkingDialog(),
+      });
       this.#clearAllErrorStates();
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
@@ -2219,7 +2233,7 @@ class AppPassSection extends HTMLElement {
       } catch (_error) { /* defensive */ }
       this.#afkingState = { ...this.#afkingState, fundingWei: 0n };
       this.#afkingDialogOpen = false;
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       this.#renderAfkingError(compactUiError(error, 'Withdrawal did not go through.'));
     } finally {
@@ -2257,7 +2271,7 @@ class AppPassSection extends HTMLElement {
           bubbles: true,
         }));
       } catch (_error) { /* defensive */ }
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       this.#renderAfkingError(compactUiError(error, 'Bonus FLIP claim did not go through.'));
     } finally {
@@ -2309,6 +2323,7 @@ class AppPassSection extends HTMLElement {
         useTickets,
         drainGameCreditFirst,
         msgValueWei,
+        onSubmitted: () => this.#closeAfkingDialog(),
       });
       this.#afkingState = {
         ...this.#afkingState,
@@ -2327,7 +2342,7 @@ class AppPassSection extends HTMLElement {
           bubbles: true,
         }));
       } catch (_error) { /* defensive */ }
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       this.#renderAfkingError(compactUiError(error, 'Subscription update did not go through.'));
     } finally {
@@ -2356,7 +2371,11 @@ class AppPassSection extends HTMLElement {
     this.#clearAfkingError();
     this.#renderAfking();
     try {
-      await updateAfkingSubscription({ dailyQuantity: 0, msgValueWei: 0n });
+      await updateAfkingSubscription({
+        dailyQuantity: 0,
+        msgValueWei: 0n,
+        onSubmitted: () => this.#closeAfkingDialog(),
+      });
       this.#afkingState = { ...this.#afkingState, active: false, dailyQuantity: 0 };
       this.#afkingDialogOpen = false;
       this.#clearAllErrorStates();
@@ -2366,7 +2385,7 @@ class AppPassSection extends HTMLElement {
           bubbles: true,
         }));
       } catch (_error) { /* defensive */ }
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      this.#schedulePostConfirmRefetch();
     } catch (error) {
       this.#renderAfkingError(compactUiError(error, 'Cancellation did not go through.'));
     } finally {

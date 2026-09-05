@@ -370,7 +370,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-a8d068839-457e12fa-scoped-v2';
+    const revision = '?v=craps-a8d068839-457e12fa-ranks-v3';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',

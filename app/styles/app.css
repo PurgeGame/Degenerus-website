@@ -25392,3 +25392,16 @@ body.layout-basic .craps-entry__random-slot {
     line-height: 1;
   }
 }
+
+/* The result's left strip reports the selected lane winner's goal outcome. */
+body.layout-basic :is(.craps-entry__battle, .craps-entry__previous-event)[data-winner-goal="met"] {
+  box-shadow: inset .16rem 0 #4ade80;
+}
+body.layout-basic :is(.craps-entry__battle, .craps-entry__previous-event)[data-winner-goal="missed"] {
+  box-shadow: inset .16rem 0 #8b949e;
+}
+
+/* Owned entries show plain status until the inline board has a pending change. */
+body.layout-basic .craps-entry__action > button[hidden] {
+  display: none !important;
+}

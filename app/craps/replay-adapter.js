@@ -325,9 +325,9 @@ function tablePlayer(trace, clock, manifest, profiles = null) {
   });
 }
 
-function uniqueReplayPlayers(featuredPlayers, highRollers) {
+function uniqueReplayPlayers(...groups) {
   const byBetId = new Map();
-  for (const raw of [...featuredPlayers, ...(Array.isArray(highRollers) ? highRollers : [])]) {
+  for (const raw of groups.filter(Array.isArray).flat()) {
     const player = validateCrapsReplayPlayer(raw);
     byBetId.set(player.betId, player);
   }
@@ -399,7 +399,8 @@ export function createCrapsReplayTableModel(artifacts, {
   // spectator switches to a featured seat, the original player must move into
   // the opponent list instead of disappearing from the table.
   const replayLane = lane === 'high' ? 'high' : 'main';
-  const replayPlayers = uniqueReplayPlayers(featured.players, artifacts?.highRollers);
+  const replayPlayers = uniqueReplayPlayers(featured.players, artifacts?.highRollers,
+    ...(artifacts?.shards ?? []).map((shard) => shard.players));
   const fullViewport = replayCrapsViewport(manifest, replayPlayers, originalViewer);
   const viewport = replayLaneViewport(fullViewport, replayLane);
   const selectedBetId = perspectiveBetId == null
@@ -445,6 +446,7 @@ export function createCrapsReplayTableModel(artifacts, {
     viewerResult: Object.freeze({
       stop: viewer.stop,
       handsPlayed: viewer.handsPlayed,
+      exitRoll: exitRoll(viewerTrace),
       rawEndingFlip: displayFlip(viewer.ladderWei.at(-1)),
       highPointFlip: displayFlip(playerHighPointWei(viewer)),
       standing: viewer.standing,
@@ -623,6 +625,7 @@ export async function openCrapsReplayTable(table, {
       chainId,
       contract,
       highRollerBetIds,
+      fullField: true,
       fetchImpl,
     });
   } catch (error) {

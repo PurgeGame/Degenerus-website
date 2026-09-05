@@ -410,6 +410,15 @@ body.layout-basic quest-objective-indicator {
   scale: 1.1;
 }
 
+/* Only ambient-motion.js's explicit decorative targets receive this marker.
+   Pause the referral coin's faces together, and include button sheen pseudos. */
+[data-ambient-paused],
+[data-ambient-paused]::before,
+[data-ambient-paused]::after,
+[data-ambient-paused] * {
+  animation-play-state: paused !important;
+}
+
 @keyframes quest-objective-pulse {
   from { filter: brightness(0.96); transform: translateY(0); }
   to { filter: brightness(1.13); transform: translateY(-1px); }

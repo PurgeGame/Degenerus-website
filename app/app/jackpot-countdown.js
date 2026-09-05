@@ -47,9 +47,12 @@ export function mountJackpotCountdown({
   const value = host?.querySelector?.('[data-bind="nav-jackpot-countdown-value"]');
   if (!host || !value) return () => {};
 
+  let lastText = null;
   const paint = () => {
     const remaining = secondsUntilDayCrossover(now(), clock);
     const text = formatJackpotCountdown(remaining);
+    if (text === lastText) return;
+    lastText = text;
     value.textContent = text;
     host.setAttribute?.('aria-label', `Next jackpot in ${text}`);
     host.title = `Next jackpot in ${text}`;

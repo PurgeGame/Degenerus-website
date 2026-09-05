@@ -471,6 +471,7 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   const viewer = SIM_CRAPS_REPLAY_VIEWER;
   const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
   const bodies = new Map([
+    ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
     [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
@@ -510,6 +511,8 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
 
   assert.equal(opened.length, 1);
   const options = opened[0];
+  assert.equal(options.otherPlayers.length + 1, MANIFEST.field.entrants,
+    'opening loads every seat so battle ranks include the full field');
   const expectedAddedWei = settledMainPotWei
     - BigInt(MANIFEST.terms.battleStakeWei) * BigInt(MANIFEST.field.entrants);
   assert.ok(profileBatchSizes.length >= 1, 'the replay opener requests the featured identity union');
@@ -563,6 +566,7 @@ test('a Dice Run record replay recovers its sealed bonus rung before opening', a
   const viewer = SIM_CRAPS_REPLAY_VIEWER;
   const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
   const bodies = new Map([
+    ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
     [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
@@ -600,6 +604,7 @@ test('a settlement-word outage degrades without blocking a verified replay', asy
   const viewer = SIM_CRAPS_REPLAY_VIEWER;
   const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
   const bodies = new Map([
+    ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
     [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
@@ -636,6 +641,7 @@ test('a contested High Roller replay runs its exact side field before the main b
   const rivalIndex = rivalShard.players.findIndex((player) => player.betId === rival.betId);
   rivalShard.players[rivalIndex] = rival;
   const bodies = new Map([
+    ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
     [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
@@ -996,6 +1002,7 @@ test('adapter seats the viewer, excludes them from the opponent rack, and aligns
   assert.deepEqual(options.viewerResult, {
     stop: viewer.stop,
     handsPlayed: viewer.handsPlayed,
+    exitRoll: replayCrapsSeat(MANIFEST, viewer).events.at(-1).globalRoll + 1,
     rawEndingFlip: (BigInt(viewer.ladderWei.at(-1)) / (10n ** 18n)).toString(),
     highPointFlip: (viewer.ladderWei.reduce((highest, amount) => (
       BigInt(amount) > highest ? BigInt(amount) : highest

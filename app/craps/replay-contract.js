@@ -672,6 +672,7 @@ export async function loadCrapsReplay({
   battleKey,
   viewerBetId,
   highRollerBetIds = [],
+  fullField = false,
   chainId = null,
   contract = null,
   fetchImpl = globalThis.fetch,
@@ -724,6 +725,7 @@ export async function loadCrapsReplay({
   const requestedHighBetIds = Object.freeze([...new Set(parsedHighBetIds)]);
   const requestedShardIndexes = [...new Set([
     shardIndex,
+    ...(fullField ? Array.from({ length: manifest.field.shardCount }, (_, index) => index) : []),
     ...requestedHighBetIds.map((requestedBetId, index) => {
       const requestedSeat = crapsReplaySeatFromBetId(requestedBetId);
       const requestedShard = crapsReplayShardIndex(requestedSeat, manifest.field.shardSize);

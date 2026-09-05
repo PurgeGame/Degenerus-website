@@ -27,6 +27,7 @@ test('mounted topbar clock paints immediately, ticks, and cleans up', () => {
   let tick = null;
   let delay = null;
   let cleared = null;
+  let writes = 0;
   const value = { textContent: '' };
   const host = {
     title: '',
@@ -34,7 +35,7 @@ test('mounted topbar clock paints immediately, ticks, and cleans up', () => {
     querySelector(selector) {
       return selector === '[data-bind="nav-jackpot-countdown-value"]' ? value : null;
     },
-    setAttribute(name, val) { this.attrs[name] = val; },
+    setAttribute(name, val) { writes++; this.attrs[name] = val; },
   };
   const root = {
     querySelector(selector) {
@@ -54,6 +55,9 @@ test('mounted topbar clock paints immediately, ticks, and cleans up', () => {
   assert.equal(host.attrs['aria-label'], 'Next jackpot in 07:55');
   assert.equal(host.title, 'Next jackpot in 07:55');
   assert.equal(delay, 250);
+  tick();
+  tick();
+  assert.equal(writes, 1, 'subsecond ticks do not rewrite unchanged countdowns');
   current += 1_000;
   tick();
   assert.equal(value.textContent, '07:54');
