@@ -43,7 +43,7 @@ export const SIM_CRAPS_REPLAY_MANIFEST = Object.freeze({
   "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
   "digest": "48ec43b10073ce45452685870f6d30f52305caf76c6f86d28aa34e2813b113a6",
   "ruleset": {
-    "engineVersion": "craps-solidity-8777c7d99-v1",
+    "engineVersion": "craps-solidity-a8d068839-v1",
     "chainId": 31337,
     "contract": "0xd02c36ab81619cd5d7f7d235c68e734124cd3df1",
     "runtimeCodeHash": "0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a"
