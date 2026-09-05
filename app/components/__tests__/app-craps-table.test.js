@@ -24,9 +24,12 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
-test('balance transfers fly chips, hold before crediting, and fade independently of pool transfers', () => {
+test('balance transfers fly chips, reveal the amount on arrival, then credit and fade', () => {
   const transfer = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #animateRaceDelta(frame, index)'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
   assert.match(transfer, /stack-3-high-red\.svg/);
+  assert.match(transfer, /craps-race-transfer__amount/);
+  assert.match(transfer, /escapeHtml\(amount\)/);
+  assert.match(transfer, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
   assert.doesNotMatch(transfer, /token\.textContent/);
   assert.match(transfer, /to\.width \/ 2 \+ 20/);
   assert.match(transfer, /racePendingBalance = formatCrapsCompactFlip/);
@@ -36,6 +39,8 @@ test('balance transfers fly chips, hold before crediting, and fade independently
   assert.match(COMPONENT_SRC, /if \(this\.#racePendingBalance == null\) \{\s*write\('craps-race-stack'/);
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#clearRaceBalanceTransfer\(false\)/);
   assert.match(CSS_SRC, /56%, 78% \{ opacity: 1/);
+  assert.match(CSS_SRC, /@keyframes craps-race-balance-chips[\s\S]*?56%, 100% \{ opacity: 0/);
+  assert.match(CSS_SRC, /@keyframes craps-race-balance-amount[\s\S]*?0% \{ opacity: 0; \}[\s\S]*?56%, 100% \{ opacity: 1/);
 });
 
 test('resolution acknowledgment is gated on painted completion and exact-once state', async () => {

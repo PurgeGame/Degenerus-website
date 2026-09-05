@@ -6893,6 +6893,7 @@ app-craps-table {
 
 .craps-race-transfer--balance {
   animation-name: craps-race-balance-transfer;
+  grid-template-columns: minmax(0, 1fr);
   width: 3.4rem;
   min-width: 0;
   padding: 0;
@@ -6913,6 +6914,29 @@ app-craps-table {
   display: block;
   width: 100%;
   height: auto;
+  grid-area: 1 / 1;
+  animation: craps-race-balance-chips steps(1, end) both;
+  animation-duration: inherit;
+}
+
+.craps-race-transfer--balance .craps-race-transfer__amount {
+  grid-area: 1 / 1;
+  justify-self: center;
+  white-space: nowrap;
+  font-size: clamp(1.25rem, 2vw, 1.6rem);
+  text-shadow: 0 2px 4px #06150d;
+  animation: craps-race-balance-amount steps(1, end) both;
+  animation-duration: inherit;
+}
+
+@keyframes craps-race-balance-chips {
+  0% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+
+@keyframes craps-race-balance-amount {
+  0% { opacity: 0; }
+  56%, 100% { opacity: 1; }
 }
 
 @keyframes craps-race-balance-transfer {

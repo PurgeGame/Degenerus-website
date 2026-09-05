@@ -4499,7 +4499,10 @@ class AppCrapsTable extends HTMLElement {
     const token = globalThis.document?.createElement?.('output');
     if (!token) return;
     token.className = `craps-race-transfer craps-race-transfer--balance${delta < 0n ? ' is-loss' : ''}`;
-    token.innerHTML = '<img src="/shared/flip-chips/stack-3-high-red.svg" alt="">';
+    const amount = `${delta > 0n ? '+' : '−'}${formatCrapsCompactFlip(crapsPlayerMoney(
+      delta < 0n ? -delta : delta, this.#entryMultiple,
+    ))}`;
+    token.innerHTML = `<img src="/shared/flip-chips/stack-3-high-red.svg" alt=""><span class="craps-race-transfer__amount">${escapeHtml(amount)}</span>`;
     token.style.left = `${from.left + from.width / 2 - layerRect.left}px`;
     token.style.top = `${from.top + from.height / 2 - layerRect.top}px`;
     token.style.setProperty('--race-transfer-x', `${to.left + to.width / 2 + 20 - from.left - from.width / 2}px`);
