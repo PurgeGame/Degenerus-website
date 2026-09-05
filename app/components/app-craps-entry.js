@@ -1020,6 +1020,10 @@ export function crapsWinnerTotalLabel(result) {
   return knownPayment === '—' ? '—' : `≥${knownPayment}`;
 }
 
+export function crapsEnteredLabel(entry) {
+  return entry?.comped === true ? 'COMPED' : 'ENTERED';
+}
+
 /** A Normal whole-day reservation still needs promotion for the selected High Roller lane. */
 export function crapsDayTicketNeedsHighUpgrade(ticket, highRoller = false) {
   if (!ticket || highRoller !== true) return false;
@@ -1690,9 +1694,9 @@ export class AppCrapsEntry extends HTMLElement {
           : dayUpgradeWhenOpen
             ? 'UPGRADE WHEN OPEN'
           : dayAmendable
-            ? dayNeedsAmend ? 'CHANGE BET' : 'ENTERED'
+            ? dayNeedsAmend ? 'CHANGE BET' : crapsEnteredLabel(dayTicket)
             : dayEntered
-              ? 'ENTERED'
+              ? crapsEnteredLabel(dayTicket)
             : usePass
               ? 'FREE COMP'
               : `${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)} FLIP`;
@@ -1712,7 +1716,10 @@ export class AppCrapsEntry extends HTMLElement {
               : `Buy all seven Craps battles in the ${this.#highRoller ? 'High Roller' : 'Low Stakes'} lane for ${dayPrice} FLIP. ${this.#boardSet ? 'Your board is set.' : 'The contract will draw a random ten-chip board.'}`
             : 'Full-day Craps terms are loading');
     }
-    if (dayEnteredStatus) dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
+    if (dayEnteredStatus) {
+      dayEnteredStatus.textContent = crapsEnteredLabel(dayTicket);
+      dayEnteredStatus.hidden = !plainDayEntered || dayAmendable;
+    }
 
     // Before Battle 1, today's live all-seven entry stays at the top while a
     // second, blind reservation for tomorrow remains available at the bottom.
@@ -1778,9 +1785,9 @@ export class AppCrapsEntry extends HTMLElement {
         : tomorrowUpgradeWhenOpen
           ? 'UPGRADE WHEN OPEN'
         : tomorrowAmendable
-          ? tomorrowNeedsAmend ? 'CHANGE BET' : 'ENTERED'
+          ? tomorrowNeedsAmend ? 'CHANGE BET' : crapsEnteredLabel(tomorrowTicket)
           : tomorrowTicket
-            ? 'ENTERED'
+            ? crapsEnteredLabel(tomorrowTicket)
           : tomorrowUsePass
             ? 'FREE COMP'
             : `${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
@@ -1799,6 +1806,7 @@ export class AppCrapsEntry extends HTMLElement {
           : 'Tomorrow\'s Craps comp balance is loading.');
     }
     if (tomorrowEnteredStatus) {
+      tomorrowEnteredStatus.textContent = crapsEnteredLabel(tomorrowTicket);
       tomorrowEnteredStatus.hidden = !showTomorrow
         || !tomorrowTicket
         || tomorrowAmendable
@@ -1837,6 +1845,7 @@ export class AppCrapsEntry extends HTMLElement {
       const directEntry = playerEntries?.windows?.[index] ?? null;
       const dayEntry = currentDayTicket ? Object.freeze({
         source: 'day',
+        comped: currentDayTicket.comped,
         high: Boolean((currentDayTicket.highMask ?? 0) & (1 << index)),
         betId: currentDayTicket.betId,
         chips: currentDayTicket.chips,
@@ -1991,9 +2000,9 @@ export class AppCrapsEntry extends HTMLElement {
           : canUpgrade
             ? `UPGRADE ${formatCrapsCompactFlip(upgradePrice)}`
             : amendable
-              ? entryNeedsAmend ? 'CHANGE BET' : 'ENTERED'
+              ? entryNeedsAmend ? 'CHANGE BET' : crapsEnteredLabel(entry)
               : entry
-                ? 'ENTERED'
+                ? crapsEnteredLabel(entry)
               : battle.state === 'closed'
                 ? 'SETTLING'
                 : `${price == null ? '—' : formatCrapsCompactFlip(price)} FLIP`;
@@ -2011,7 +2020,10 @@ export class AppCrapsEntry extends HTMLElement {
                 ? `Enter Battle ${battle.number} for ${price} FLIP: ${entryPrice} FLIP wager plus ${battlePrice} FLIP to the battle pool.`
                 : `Battle ${battle.number}, terms loading`);
       }
-      if (enteredStatus) enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || amendable;
+      if (enteredStatus) {
+        enteredStatus.textContent = crapsEnteredLabel(entry);
+        enteredStatus.hidden = Boolean(result) || !entry || canUpgrade || amendable;
+      }
     });
     this.#awaitingSettlement = awaitingSettlement;
 

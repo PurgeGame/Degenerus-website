@@ -929,6 +929,8 @@ test('lobby entry history scopes a direct High Roller seat to the connected wall
     day,
     period,
     source: 'window',
+    transactionHash: null,
+    entryLogIndex: 0,
     multiple: 10,
     high: true,
     betId: betId.toString(),
@@ -1801,4 +1803,46 @@ test('historical craps boon reads the owned entry mask, including consumed tiers
   assert.equal(requestedKey, ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
     ['uint256', 'uint256'], [123n, 0n],
   )));
+});
+
+
+test('comped entries use receipt funding and pass redemption, excluding later upgrades', async () => {
+  const iface = new ethers.Interface([
+    'event CrapsCompSpent(address indexed player,uint256 amount)',
+    'event Transfer(address indexed from,address indexed to,uint256 value)',
+  ]);
+  const event = (name, args, index, address = CONTRACTS.COIN) => ({
+    ...iface.encodeEventLog(iface.getEvent(name), args), index, address,
+  });
+  const entry = { transactionHash: '0xcomp', entryLogIndex: 5 };
+  const spent = event('CrapsCompSpent', [PLAYER, 25000n], 3);
+  const paid = event('Transfer', [PLAYER, ethers.ZeroAddress, 25000n], 4);
+  const receipt = { logs: [spent] };
+  assert.equal(craps.crapsEntryWasComped(entry, PLAYER, {}, receipt), true);
+  assert.equal(craps.crapsEntryWasComped(entry, PLAYER, {}, { logs: [spent, paid] }), false);
+  assert.equal(craps.crapsEntryWasComped(entry, PLAYER, {}, { logs: [{ ...spent, index: 6 }] }), false);
+  assert.equal(craps.crapsEntryWasComped(entry, PLAYER, {}, { logs: [{ ...spent, address: CONTRACTS.GAME }] }), false);
+  const transaction = {
+    to: CONTRACTS.CRAPS, from: PLAYER,
+    data: ethers.id('applyCrapsPasses(uint24,uint8,bool,uint32)').slice(0, 10),
+  };
+  assert.equal(craps.crapsEntryWasComped(entry, PLAYER, transaction, { logs: [] }), true);
+  const reads = [];
+  const provider = {
+    getTransaction: async (hash) => { reads.push(hash); return {}; },
+    getTransactionReceipt: async () => receipt,
+  };
+  const entries = { player: PLAYER, days: { 42: entry }, windows: [entry, null] };
+  const result = await craps.decorateCrapsCompEntries(entries, provider);
+  assert.equal(result.days[42].comped, true);
+  assert.equal(result.windows[0].comped, true);
+  assert.equal(result.windows[1], null);
+  await craps.decorateCrapsCompEntries(entries, provider);
+  assert.equal(reads.length, 1, 'shared transaction reads are cached across rows and polls');
+  assert.equal(entry.comped, undefined, 'the source entry is not mutated');
+  const unavailable = await craps.decorateCrapsCompEntries(entries, {
+    getTransaction: async () => { throw new Error('offline'); },
+    getTransactionReceipt: async () => null,
+  });
+  assert.equal(unavailable.days[42].comped, undefined);
 });

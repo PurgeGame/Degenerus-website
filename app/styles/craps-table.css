@@ -8312,7 +8312,7 @@ app-craps-table {
     min-height: 0;
     box-sizing: border-box;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: clamp(16.8rem, 34dvh, 18rem) minmax(19rem, 1fr);
+    grid-template-rows: clamp(18.8rem, 37dvh, 20rem) minmax(19rem, 1fr);
     gap: 0.34rem;
     padding: 0.34rem;
     overflow-x: hidden;
@@ -8336,7 +8336,7 @@ app-craps-table {
     min-width: 0;
     height: 100%;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: 5.25rem 3.25rem minmax(6.8rem, 1fr);
+    grid-template-rows: 5.25rem 3.25rem minmax(8.8rem, 1fr);
     grid-template-areas:
       "place place place place"
       "hard4 hard8 line dont"
@@ -8436,7 +8436,7 @@ app-craps-table {
     width: 100%;
     min-width: 0;
     height: 100%;
-    grid-template-columns: minmax(7.4rem, 0.82fr) minmax(0, 1.35fr);
+    grid-template-columns: minmax(7.4rem, 0.72fr) minmax(0, 1.45fr);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "race-player roll";
     gap: 0.18rem;
@@ -8540,9 +8540,9 @@ app-craps-table {
   }
 
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
-    width: clamp(5.25rem, 26vw, 6.35rem);
-    height: clamp(5.25rem, 26vw, 6.35rem);
-    max-width: 48%;
+    width: clamp(5.6rem, 29vw, 7.5rem);
+    height: clamp(5.6rem, 29vw, 7.5rem);
+    max-width: 50%;
   }
 
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img:first-child {

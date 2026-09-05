@@ -4496,7 +4496,13 @@ class AppCrapsTable extends HTMLElement {
     const layer = this.querySelector('[data-bind="craps-race-transfer-layer"]');
     if (!target || !layer || (delta > 0n && sources.length === 0)) return;
     const to = target.getBoundingClientRect();
-    const landing = { x: to.right - 48, y: to.top + 20 };
+    const mobile = Boolean(globalThis.matchMedia?.('(max-width: 959px)')?.matches);
+    const stackBounds = mobile
+      ? this.querySelector('[data-bind="craps-race-stack-target"]')?.getBoundingClientRect?.()
+      : null;
+    const landing = stackBounds
+      ? { x: stackBounds.right + 32, y: stackBounds.bottom - 18 }
+      : { x: to.right - 48, y: to.top + 20 };
     const origins = delta > 0n ? sources : [{
       left: landing.x, top: landing.y, width: 1, height: 1,
     }];

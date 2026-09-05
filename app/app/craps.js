@@ -1257,7 +1257,7 @@ export function crapsLobbySnapshotFromLogs(
     });
   };
 
-  const rememberDayTicket = (entryDay, highMask = 0, { betId = null, chips = null } = {}) => {
+  const rememberDayTicket = (entryDay, highMask = 0, { betId = null, chips = null, transactionHash = null, entryLogIndex = null } = {}) => {
     if (entryDay !== day && entryDay !== day + 1) return;
     const prior = dayTickets.get(entryDay);
     dayTickets.set(entryDay, {
@@ -1266,6 +1266,8 @@ export function crapsLobbySnapshotFromLogs(
       highMask: (prior?.highMask ?? 0) | (Number(highMask) & CRAPS_ALL_WINDOWS_MASK),
       betId: betId ?? prior?.betId ?? null,
       chips: chips ?? prior?.chips ?? 0,
+      transactionHash: transactionHash ?? prior?.transactionHash ?? null,
+      entryLogIndex: entryLogIndex ?? prior?.entryLogIndex ?? null,
     });
   };
 
@@ -1329,12 +1331,16 @@ export function crapsLobbySnapshotFromLogs(
           rememberDayTicket(entryDay, multiple > 1 ? CRAPS_ALL_WINDOWS_MASK : 0, {
             betId: betKey,
             chips,
+            transactionHash: log.transactionHash ?? null,
+            entryLogIndex: Number(log.index ?? log.logIndex ?? 0),
           });
         } else if (entryDay === day && remainder <= CRAPS_BONUS_WINDOWS) {
           playerWindows[remainder - 1] = {
             day: entryDay,
             period: remainder - 1,
             source: 'window',
+            transactionHash: log.transactionHash ?? null,
+            entryLogIndex: Number(log.index ?? log.logIndex ?? 0),
             multiple,
             high: multiple > 1,
             betId: betKey,
@@ -2120,6 +2126,56 @@ export async function readCrapsSettlementWord(index, providerOverride = null, bl
   return word === 0n ? null : word;
 }
 
+const compReceiptParser = new ethers.Interface([
+  'event CrapsCompSpent(address indexed player,uint256 amount)',
+  'event Transfer(address indexed from,address indexed to,uint256 value)',
+]);
+const compTransactionReads = new WeakMap();
+
+/** Identify the funding immediately preceding this slip, not a later upgrade. */
+export function crapsEntryWasComped(entry, player, transaction, receipt) {
+  const owner = String(player).toLowerCase();
+  if (String(transaction?.to).toLowerCase() === String(CONTRACTS.CRAPS).toLowerCase()
+    && String(transaction?.from).toLowerCase() === owner
+    && String(transaction?.data ?? '').startsWith(ethers.id('applyCrapsPasses(uint24,uint8,bool,uint32)').slice(0, 10))) return true;
+  let comped = false;
+  const events = [...(receipt?.logs ?? [])].sort((a, b) => Number(a.index ?? a.logIndex) - Number(b.index ?? b.logIndex));
+  for (const log of events) {
+    if (Number(log.index ?? log.logIndex) >= entry.entryLogIndex) break;
+    if (String(log.address).toLowerCase() !== String(CONTRACTS.COIN).toLowerCase()) continue;
+    let event;
+    try { event = compReceiptParser.parseLog(log); } catch (_error) { continue; }
+    if (event?.name === 'CrapsCompSpent' && String(event.args.player).toLowerCase() === owner) comped = true;
+    if (event?.name === 'Transfer' && String(event.args.from).toLowerCase() === owner
+      && event.args.to === ethers.ZeroAddress) comped = false;
+  }
+  return comped;
+}
+
+export async function decorateCrapsCompEntries(entries, provider) {
+  if (!entries || !provider?.getTransaction || !provider?.getTransactionReceipt) return entries;
+  let cache = compTransactionReads.get(provider);
+  if (!cache) { cache = new Map(); compTransactionReads.set(provider, cache); }
+  const decorate = async (entry) => {
+    if (!entry?.transactionHash || entry.entryLogIndex == null) return entry;
+    const hash = entry.transactionHash;
+    try {
+      if (!cache.has(hash)) {
+        if (cache.size >= 128) cache.delete(cache.keys().next().value);
+        cache.set(hash, Promise.all([provider.getTransaction(hash), provider.getTransactionReceipt(hash)]));
+      }
+      const [transaction, receipt] = await cache.get(hash);
+      if (!transaction || !receipt) { cache.delete(hash); return entry; }
+      return Object.freeze({ ...entry, comped: crapsEntryWasComped(entry, entries.player, transaction, receipt) });
+    } catch (_error) { cache.delete(hash); return entry; }
+  };
+  const [days, windows] = await Promise.all([
+    Promise.all(Object.entries(entries.days ?? {}).map(async ([day, entry]) => [day, await decorate(entry)])),
+    Promise.all((entries.windows ?? []).map(decorate)),
+  ]);
+  return Object.freeze({ ...entries, days: Object.freeze(Object.fromEntries(days)), windows: Object.freeze(windows) });
+}
+
 /** One window read powers schedule terms, completed rows, and the prior-day boost. */
 export async function readCrapsLobbySnapshot(dayValue, player = null) {
   if (!isCrapsAvailable()) return null;
@@ -2141,7 +2197,8 @@ export async function readCrapsLobbySnapshot(dayValue, player = null) {
     try { return [String(index), await readCrapsSettlementWord(index, provider, blockTag)]; }
     catch (_error) { return [String(index), null]; }
   })));
-  return crapsLobbySnapshotFromLogs(day, logs, { parser, wordsByIndex: words, player });
+  const snapshot = crapsLobbySnapshotFromLogs(day, logs, { parser, wordsByIndex: words, player });
+  return Object.freeze({ ...snapshot, playerEntries: await decorateCrapsCompEntries(snapshot.playerEntries, provider) });
 }
 
 /**
@@ -2172,10 +2229,11 @@ export async function readCrapsPlayerEntriesOnChain(dayValue, player) {
       ethers.zeroPadValue(normalizedPlayer, 32),
     ],
   });
-  return crapsLobbySnapshotFromLogs(day, logs, {
+  const entries = crapsLobbySnapshotFromLogs(day, logs, {
     parser: crapsLobbyReceiptParser(),
     player: normalizedPlayer,
   })?.playerEntries ?? null;
+  return decorateCrapsCompEntries(entries, provider);
 }
 
 function structuredRevert(error, fallback) {

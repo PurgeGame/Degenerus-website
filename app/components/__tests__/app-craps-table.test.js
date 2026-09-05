@@ -37,6 +37,7 @@ test('balance transfers fly chips, reveal the amount on arrival, then credit and
   assert.doesNotMatch(transfer, /token\.textContent/);
   assert.match(transfer, /data-bind="craps-race-player-panel"/);
   assert.match(transfer, /x: to\.right - 48, y: to\.top \+ 20/);
+  assert.match(transfer, /x: stackBounds\.right \+ 32, y: stackBounds\.bottom - 18/);
   assert.match(transfer, /if \(delta < 0n\) creditBalance\(\)/);
   assert.match(CSS_SRC, /@keyframes craps-race-balance-loss/);
   assert.match(CSS_SRC, /\.craps-race-transfer--balance\.is-loss img \{\s*visibility: hidden/);
@@ -1252,7 +1253,7 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
     /\.craps-table-rail\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?overflow-x:\s*hidden;/s,
     'the portrait rail is explicitly bounded to the phone viewport');
   assert.match(mobileRaceCss,
-    /grid-template-rows:\s*5\.25rem 3\.25rem minmax\(6\.8rem, 1fr\);[\s\S]*?"place place place place"\s*"hard4 hard8 line dont"\s*"hud hud hud hud"/s,
+    /grid-template-rows:\s*5\.25rem 3\.25rem minmax\(8\.8rem, 1fr\);[\s\S]*?"place place place place"\s*"hard4 hard8 line dont"\s*"hud hud hud hud"/s,
     'all betting lanes sit above the shooter and dice instead of hanging beneath them');
   assert.match(mobileRaceCss,
     /\.craps-center-hud\s*\{[\s\S]*?grid-template-areas:\s*"race-player roll"/s,

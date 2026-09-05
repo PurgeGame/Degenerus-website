@@ -903,7 +903,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource,
     /button\.dataset\.state === 'entered'[\s\S]*?this\.#openBoard\(button,[\s\S]*?button\.dataset\.state === 'amend'[\s\S]*?this\.#amend\(button\)/s,
     'ENTERED reopens that slip board while CHANGE BET submits its changed layout');
-  assert.match(componentSource, /\? entryNeedsAmend \? 'CHANGE BET' : 'ENTERED'/,
+  assert.match(componentSource, /\? entryNeedsAmend \? 'CHANGE BET' : crapsEnteredLabel\(entry\)/,
     'a changed board promotes the individual battle action from ENTERED to CHANGE BET');
   assert.doesNotMatch(componentSource, /AMEND ENTRY|AMENDING…/,
     'internal amendment terminology is not exposed in the player-facing action');
@@ -1414,4 +1414,12 @@ test('a closed battle awaiting its result refreshes the lobby window on a 5s set
     'the watch rides the shared component poll so hidden tabs pause it, and only fires while settling');
   assert.match(componentSource, /if \(typeof this\.#settleWatchTimer === 'function'\)/,
     'disconnect releases the settle watch');
+});
+
+
+test('confirmed comps read COMPED while paid and unknown entries stay ENTERED', () => {
+  assert.equal(crapsEntry.crapsEnteredLabel({ comped: true }), 'COMPED');
+  assert.equal(crapsEntry.crapsEnteredLabel({ comped: false }), 'ENTERED');
+  assert.equal(crapsEntry.crapsEnteredLabel({}), 'ENTERED');
+  assert.equal(crapsEntry.crapsEnteredLabel(null), 'ENTERED');
 });
