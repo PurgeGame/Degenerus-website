@@ -24,6 +24,20 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
+test('balance transfers fly chips, hold before crediting, and fade independently of pool transfers', () => {
+  const transfer = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #animateRaceDelta(frame, index)'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
+  assert.match(transfer, /stack-3-high-red\.svg/);
+  assert.doesNotMatch(transfer, /token\.textContent/);
+  assert.match(transfer, /to\.width \/ 2 \+ 20/);
+  assert.match(transfer, /racePendingBalance = formatCrapsCompactFlip/);
+  assert.match(transfer, /balance\.textContent = this\.#racePendingBalance[\s\S]*resolutionDelay\(840\)/);
+  assert.match(transfer, /raceBalanceFadeTimer[\s\S]*token\.remove[\s\S]*resolutionDelay\(1080\)/);
+  assert.doesNotMatch(transfer, /this\.#raceTransferTimer =/);
+  assert.match(COMPONENT_SRC, /if \(this\.#racePendingBalance == null\) \{\s*write\('craps-race-stack'/);
+  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#clearRaceBalanceTransfer\(false\)/);
+  assert.match(CSS_SRC, /56%, 78% \{ opacity: 1/);
+});
+
 test('resolution acknowledgment is gated on painted completion and exact-once state', async () => {
   const { canAcknowledgeCrapsResolution } = await import(moduleUrl);
   const callback = () => {};
@@ -1856,11 +1870,11 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'an authoritative empty payout list cannot be replaced by inferred come-out winners');
   assert.match(COMPONENT_SRC, /class="craps-center-hud"[\s\S]*?class="craps-dice-bay"[\s\S]*?class="craps-run-rail"[\s\S]*?class="craps-run-rail__bankroll"[\s\S]*?YOUR BANKROLL[\s\S]*?data-bind="craps-resolution-bankroll"[\s\S]*?<span>BET<\/span>[\s\S]*?data-bind="craps-round-bet"[\s\S]*?<span>TARGET<\/span>[\s\S]*?data-bind="craps-resolution-goal"[\s\S]*?class="craps-run-rail__well"[\s\S]*?class="craps-run-rail__rack"[\s\S]*?class="craps-roll-history"/,
     'dice, bankroll, current bet, target, rack, and roll trail share one central HUD');
-  assert.match(COMPONENT_SRC, /if \(amountNode\) \{[\s\S]*?amountNode\.textContent = formatCrapsFlip\(bankroll\);[\s\S]*?goalAward[\s\S]*?'Goal payout'[\s\S]*?battleAward \? 'Battle prize' : progressiveScale \? 'Run It Up progress' : 'Current bankroll'/s,
+  assert.match(COMPONENT_SRC, /if \(amountNode\) \{[\s\S]*?amountNode\.textContent = formatCrapsFlip\(money\(bankroll\)\);[\s\S]*?goalAward[\s\S]*?'Goal payout'[\s\S]*?battleAward \? 'Battle prize' : progressiveScale \? 'Run It Up progress' : 'Current bankroll'/s,
     'the tray renders exact whole-FLIP and names ordinary, paid, and Run It Up states accessibly');
-  assert.match(COMPONENT_SRC, /if \(roundBetNode\) \{[\s\S]*?formatCrapsCompactFlip\(nextStake\)[\s\S]*?formatCrapsFlip\(nextStake\)[\s\S]*?current round bet/s,
+  assert.match(COMPONENT_SRC, /if \(roundBetNode\) \{[\s\S]*?formatCrapsCompactFlip\(money\(nextStake\)\)[\s\S]*?formatCrapsFlip\(money\(nextStake\)\)[\s\S]*?current round bet/s,
     'the escalated wager for the current shooter remains visible beside the bankroll');
-  assert.match(COMPONENT_SRC, /if \(goalNode\) \{[\s\S]*?formatCrapsCompactFlip\(goal\)[\s\S]*?bankroll target/s,
+  assert.match(COMPONENT_SRC, /if \(goalNode\) \{[\s\S]*?formatCrapsCompactFlip\(money\(goal\)\)[\s\S]*?bankroll target/s,
     'the same HUD paints the exact active target beside the current wager');
   assert.doesNotMatch(COMPONENT_SRC, /craps-resolution-standing|craps-battle-remaining|craps-battle-entrants|#paintLocalStanding/,
     'standings, field size, and remaining entrants stay in the leaderboard instead of crowding the central HUD');
@@ -2276,7 +2290,7 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'the component no longer tracks a second latest-roll color state');
   assert.match(COMPONENT_SRC, /boardState === 'come-out'[\s\S]*?this\.#bets\.get\('pass'\)[\s\S]*?this\.#bets\.get\('dont-pass'\)[\s\S]*?this\.#playedFlip \/ CRAPS_BOARD_CHIPS/s,
     'the come-out rack converts both line chip counts to the battle slot’s chip value');
-  assert.match(COMPONENT_SRC, /const bankedDescription = reserveRisk[\s\S]*?survives a full-board loss[\s\S]*?reserve chips are green[\s\S]*?const rackDescription = battleAward[\s\S]*?FLIP Battle prize paid[\s\S]*?: progressiveScale[\s\S]*?Earned reserve is blue, open rack space is light blue, live chips remain red[\s\S]*?line marks the[\s\S]*?high point[\s\S]*?: goalLocked[\s\S]*?remains after a full-board loss and guarantees the goal[\s\S]*?Round bet \$\{formatCrapsFlip\(nextStake\)\}/s,
+  assert.match(COMPONENT_SRC, /const bankedDescription = reserveRisk[\s\S]*?survives a full-board loss[\s\S]*?reserve chips are green[\s\S]*?const rackDescription = battleAward[\s\S]*?FLIP Battle prize paid[\s\S]*?: progressiveScale[\s\S]*?Earned reserve is blue, open rack space is light blue, live chips remain red[\s\S]*?line marks the[\s\S]*?high point[\s\S]*?: goalLocked[\s\S]*?remains after a full-board loss and guarantees the goal[\s\S]*?Round bet \$\{formatCrapsFlip\(money\(nextStake\)\)\}/s,
     'rack accessibility distinguishes paid, progressive blue/light-blue/red, grey-risk, and ordinary states');
   assert.match(CSS_SRC, /\.craps-battle-rack \.craps-battle-rack__chip\.is-in-play\s*\{[\s\S]*?#ed0e11/s,
     'battle players use the same red in-play tray chips');
@@ -2475,4 +2489,25 @@ test('result boon badge requires a paid goal and the boon stored on that entry',
   }
   assert.equal(crapsResultBoonPercent({ stop: 'goal', runPayoutWei: 100n }), 0);
   assert.equal(crapsResultBoonPercent({ stop: 'goal', runPayoutWei: 100n, boonPercent: 7 }), 0);
+});
+
+
+test('high roller money scales without changing base run comparisons or exact credits', async () => {
+  const { crapsPlayerMoney, aggregateCrapsTableBets, crapsPlayerLastResult } = await import(moduleUrl);
+  assert.equal(crapsPlayerMoney(3000n, 100), 300000n);
+  assert.equal(crapsPlayerMoney(3000n, 1), 3000n);
+  assert.equal(crapsPlayerMoney(-600n, 10), -6000n);
+  assert.equal(crapsPlayerMoney(1234567890123456789n, 100), 123456789012345678900n);
+  const base = { roundNumber: 1, rollEvents: [{ deltaFlip: '600' }] };
+  const low = crapsPlayerLastResult(base);
+  const high = crapsPlayerLastResult({ ...base, entryMultiple: 100 });
+  assert.equal(high.deltaFlip, low.deltaFlip);
+  assert.equal(high.copy, '+60K');
+  const players = aggregateCrapsTableBets([
+    { player: 'low', entryMultiple: 1, chips: { passLine: 1 }, resolution: { startingBankrollFlip: 3000 } },
+    { player: 'high', entryMultiple: 100, chips: { passLine: 1 }, resolution: { startingBankrollFlip: 3000, runPayoutWei: '600000000000000000000000' } },
+  ]);
+  assert.deepEqual(players.players.map((player) => player.entryMultiple), [1, 100]);
+  assert.deepEqual(players.players.map((player) => player.startingBankrollFlip), ['3000', '3000']);
+  assert.equal(players.players[1].runPayoutWei, '600000000000000000000000');
 });

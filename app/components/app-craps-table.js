@@ -29,6 +29,13 @@ import {
 } from '../craps/replay-adapter.js';
 import { CRAPS_REPLAY_MAX_ROLLS } from '../craps/replay-contract.js';
 
+// Replay ladders and rankings use one copy of a run. Scale only money copy;
+// exact run/bounty/boon credits already include their contract multiples.
+export function crapsPlayerMoney(value, entryMultiple = 1) {
+  const base = signedWholeFlip(value) ?? 0n;
+  return base * BigInt(clampInteger(entryMultiple, 1, 256, 1));
+}
+
 export function crapsResultBoonPercent(result = {}) {
   return result.stop === 'goal' && wholeFlip(result.runPayoutWei) > 0n
     && [5, 10, 15].includes(result.boonPercent) ? result.boonPercent : 0;
@@ -1190,6 +1197,7 @@ export function aggregateCrapsTableBets(input = []) {
       passLineChips: 0n,
       lineChips: 0n,
       bets: new Set(),
+      entryMultiple: clampInteger(entry.entryMultiple ?? entry.multiple, 1, 256, 1),
       exitType,
       exitRoll,
       exitAmount: wholeFlip(exit.amountFlip ?? exit.amount ?? entry.exitAmountFlip) ?? 0n,
@@ -1244,6 +1252,7 @@ export function aggregateCrapsTableBets(input = []) {
       passLineChips: player.passLineChips.toString(),
       lineChips: player.lineChips.toString(),
       betCount: player.bets.size,
+      entryMultiple: player.entryMultiple,
       exitType: player.exitType,
       exitRoll: player.exitRoll,
       exitAmountFlip: player.exitAmount.toString(),
@@ -1496,11 +1505,12 @@ export function crapsPlayerLastResult({
   bankrollsFlip = [],
   startingBankrollFlip = 0,
   exitRoll = 0,
+  entryMultiple = 1,
 } = {}) {
   const resolved = clampInteger(roundNumber, 0, CRAPS_REPLAY_MAX_ROLLS, 0);
   const present = (delta, rollNumber) => Object.freeze({
     deltaFlip: delta.toString(),
-    copy: delta === 0n ? 'PUSH' : formatSignedCrapsFlip(delta),
+    copy: delta === 0n ? 'PUSH' : formatSignedCrapsFlip(crapsPlayerMoney(delta, entryMultiple)),
     state: delta > 0n ? 'win' : delta < 0n ? 'loss' : 'push',
     rollNumber,
   });
@@ -2267,6 +2277,9 @@ class AppCrapsTable extends HTMLElement {
   #racePulseTimer = null;
   #raceCoverTimer = null;
   #raceTransferTimer = null;
+  #raceBalanceLandTimer = null;
+  #raceBalanceFadeTimer = null;
+  #racePendingBalance = null;
   #racePoolLandTimer = null;
   #onResolutionAcknowledged = null;
   #onResolutionPhaseComplete = null;
@@ -3645,7 +3658,7 @@ class AppCrapsTable extends HTMLElement {
       const total = clampInteger(frame?.total, 2, 12, 0) || '—';
       const event = crapsRollHistoryEvent(frame);
       const marker = event === 'point-set' ? 'POINT' : event === 'point-hit' ? 'POINT HIT' : event === 'seven-out' ? '7 OUT' : '';
-      const net = formatSignedCrapsFlip(delta);
+      const net = formatSignedCrapsFlip(crapsPlayerMoney(delta, this.#entryMultiple));
       const netDescription = delta === 0n ? 'No net change' : `${net} FLIP`;
       return `<li data-slot="${slot + 1}" data-state="${state}" data-roll-event="${event}"
                   data-roll-marker="${marker}" title="${escapeHtml(outcome)}"
@@ -3736,6 +3749,7 @@ class AppCrapsTable extends HTMLElement {
       betId: this.#viewerBetId,
       player: null,
       local: true,
+      entryMultiple: this.#entryMultiple,
       label: this.#viewerLabel,
       initials: playerInitials(this.#viewerLabel),
       avatar: this.#viewerAvatar,
@@ -3810,6 +3824,7 @@ class AppCrapsTable extends HTMLElement {
         betId: player.betId,
         player: player.player,
         local: false,
+        entryMultiple: player.entryMultiple,
         label: player.label,
         initials: player.initials,
         avatar: player.avatar,
@@ -3998,7 +4013,9 @@ class AppCrapsTable extends HTMLElement {
     write('craps-race-rank', rank == null ? '—' : `#${rank}`);
     write('craps-race-left', left == null ? '—' : String(left));
     write('craps-race-total', total == null ? '—' : String(total));
-    write('craps-race-stack', formatCrapsCompactFlip(stack));
+    if (this.#racePendingBalance == null) {
+      write('craps-race-stack', formatCrapsCompactFlip(crapsPlayerMoney(stack, this.#entryMultiple)));
+    }
   }
 
   #paintRaceL10(resolvedIndex = this.#resolutionIndex) {
@@ -4130,10 +4147,10 @@ class AppCrapsTable extends HTMLElement {
       title.textContent = '120× GOAL ACHIEVED';
       detail.textContent = this.#jackpotAmountFlip != null && this.#jackpotAmountFlip > 0n
         ? `${formatCrapsFlip(this.#jackpotAmountFlip)} RIU JACKPOT`
-        : `${formatCrapsFlip(stack)} FLIP`;
+        : `${formatCrapsFlip(crapsPlayerMoney(stack, this.#entryMultiple))} FLIP`;
     } else {
       title.textContent = 'BIGGEST DICE RUN';
-      detail.textContent = `${formatCrapsFlip(stack)} FLIP`;
+      detail.textContent = `${formatCrapsFlip(crapsPlayerMoney(stack, this.#entryMultiple))} FLIP`;
     }
     cover.hidden = false;
     cover.removeAttribute?.('hidden');
@@ -4247,6 +4264,7 @@ class AppCrapsTable extends HTMLElement {
         )))
       : CRAPS_RACE_VIEWBOX.height;
     svg.setAttribute?.('viewBox', `0 0 ${width} ${height}`);
+    const scaledRace = this.#racePlayers.some((player) => player.entryMultiple > 1);
     svg.dataset.compact = compactRace ? 'true' : 'false';
     const geometry = compactRace
       ? { left: 48, right: 12, top: 20, bottom: 80 }
@@ -4269,6 +4287,7 @@ class AppCrapsTable extends HTMLElement {
     const esc = escapeHtml;
     const parts = [`<defs><clipPath id="craps-race-plot-clip"><rect x="${geometry.left}" y="${geometry.top}" width="${plotWidth}" height="${plotHeight}"></rect></clipPath><clipPath id="craps-race-avatar-clip"><circle cx="0" cy="0" r="13"></circle></clipPath></defs>`];
     const frames = this.#resolutionRun?.frames ?? [];
+    if (scaledRace) parts.push(`<text class="craps-race-axis" x="${geometry.left}" y="12">GRAPH: BASE BUY-IN · LABELS: ACTUAL FLIP</text>`);
     let priorShooter = null;
     for (let frameIndex = 0; frameIndex < resolved; frameIndex += 1) {
       const shooter = wholeNumber(frames[frameIndex]?.shooter) ?? this.#runShooterIndexAtRound(frameIndex);
@@ -4324,7 +4343,7 @@ class AppCrapsTable extends HTMLElement {
       if (pulsing) classes.push('is-pulsing', `is-${pulseKind}`);
       const pathPoints = pathPointsFor(player);
       const endpoint = pathPoints.at(-1) ?? { step: 0, value: 0n };
-      parts.push(`<path class="${classes.join(' ')}" style="--race-player:${esc(color)}" clip-path="url(#craps-race-plot-clip)" d="${pathFor(pathPoints)}"><title>${esc(player.label)} · ${esc(formatCrapsFlip(this.#raceValueAt(player, resolved)))}</title></path>`);
+      parts.push(`<path class="${classes.join(' ')}" style="--race-player:${esc(color)}" clip-path="url(#craps-race-plot-clip)" d="${pathFor(pathPoints)}"><title>${esc(player.label)} · ${esc(formatCrapsFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple)))}</title></path>`);
       const cx = xAt(endpoint.step);
       const cy = yAt(endpoint.value);
       if (pulsing) parts.push(`<circle class="craps-race-pulse is-${pulseKind}" cx="${cx}" cy="${cy}" r="8"></circle>`);
@@ -4392,7 +4411,7 @@ class AppCrapsTable extends HTMLElement {
     parts.push('<g class="craps-race-wager-stack">');
     parts.push(`<image class="craps-race-wager-art" x="${wagerX - wagerWidth / 2}" y="${plotBottom - wagerVisualHeight}" width="${wagerWidth}" height="${wagerVisualHeight}" href="${wagerArt}" preserveAspectRatio="xMidYMax meet"></image>`);
     parts.push(`<text class="craps-race-wager-label" x="${wagerX}" y="${plotBottom + 17}" text-anchor="middle">WAGER</text>`);
-    parts.push(`<text class="craps-race-wager-value" x="${wagerX}" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(wager))}</text></g>`);
+    parts.push(`<text class="craps-race-wager-value" x="${wagerX}" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(crapsPlayerMoney(wager, this.#entryMultiple)))}</text></g>`);
 
     const endpointPlayers = [...new Map([leader, local].filter(Boolean).map((player) => [player.key, player])).values()];
     const endpoints = endpointPlayers.map((player) => ({
@@ -4416,7 +4435,7 @@ class AppCrapsTable extends HTMLElement {
       const isLeader = player.key === leader?.key;
       const classes = `craps-race-endpoint${player.local ? ' is-you' : ''}${isLeader ? ' is-leader' : ''}`;
       if (compactRace) {
-        const endpointValue = formatCrapsCompactFlip(this.#raceValueAt(player, resolved));
+        const endpointValue = formatCrapsCompactFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple));
         const endpointLabel = player.local
           ? `YOU #${rank ?? '—'} · ${endpointValue}`
           : `#1 · ${endpointValue}`;
@@ -4441,13 +4460,28 @@ class AppCrapsTable extends HTMLElement {
         } else parts.push(`<text class="craps-race-endpoint-initials" x="${avatarX}" y="${labelY + 4}" text-anchor="middle">${esc(player.initials)}</text>`);
       }
       parts.push(`<text class="craps-race-endpoint-rank" x="${textX}" y="${boxY + 16}">${player.local ? `YOU · #${rank ?? '—'}` : '#1'}</text>`);
-      parts.push(`<text class="craps-race-endpoint-value" x="${textX}" y="${boxY + 34}">${esc(formatCrapsCompactFlip(this.#raceValueAt(player, resolved)))}</text></g>`);
+      parts.push(`<text class="craps-race-endpoint-value" x="${textX}" y="${boxY + 34}">${esc(formatCrapsCompactFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple)))}</text></g>`);
     }
     svg.innerHTML = parts.join('');
-    svg.setAttribute?.('aria-label', `Craps battle bankroll race through roll ${resolved}.`);
+    svg.setAttribute?.('aria-label', `Craps battle bankroll race through roll ${resolved}.${scaledRace ? ' Graph scaled to one base buy-in; player labels show actual FLIP.' : ''}`);
   }
 
-  #animateRaceDelta(frame) {
+  #clearRaceBalanceTransfer(commit = true) {
+    for (const timer of [this.#raceBalanceLandTimer, this.#raceBalanceFadeTimer]) {
+      if (timer != null) globalThis.clearTimeout?.(timer);
+    }
+    if (commit && this.#racePendingBalance != null) {
+      const balance = this.querySelector('[data-bind="craps-race-stack"]');
+      if (balance) balance.textContent = this.#racePendingBalance;
+    }
+    this.#racePendingBalance = null;
+    this.#raceBalanceLandTimer = null;
+    this.#raceBalanceFadeTimer = null;
+    for (const token of this.querySelectorAll('.craps-race-transfer--balance')) token.remove?.();
+  }
+
+  #animateRaceDelta(frame, index) {
+    this.#clearRaceBalanceTransfer();
     const delta = signedWholeFlip(frame?.deltaFlip) ?? 0n;
     if (delta === 0n || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
     const ids = delta > 0n
@@ -4464,17 +4498,28 @@ class AppCrapsTable extends HTMLElement {
     if (from.width <= 0 || to.width <= 0) return;
     const token = globalThis.document?.createElement?.('output');
     if (!token) return;
-    token.className = `craps-race-transfer${delta < 0n ? ' is-loss' : ''}`;
-    token.textContent = `${delta > 0n ? '+' : '−'}${formatCrapsCompactFlip(delta < 0n ? -delta : delta)}`;
+    token.className = `craps-race-transfer craps-race-transfer--balance${delta < 0n ? ' is-loss' : ''}`;
+    token.innerHTML = '<img src="/shared/flip-chips/stack-3-high-red.svg" alt="">';
     token.style.left = `${from.left + from.width / 2 - layerRect.left}px`;
     token.style.top = `${from.top + from.height / 2 - layerRect.top}px`;
-    token.style.setProperty('--race-transfer-x', `${to.left + to.width / 2 - from.left - from.width / 2}px`);
+    token.style.setProperty('--race-transfer-x', `${to.left + to.width / 2 + 20 - from.left - from.width / 2}px`);
     token.style.setProperty('--race-transfer-y', `${to.top + to.height / 2 - from.top - from.height / 2}px`);
+    token.style.animationDuration = `${this.#resolutionDelay(1080)}ms`;
+    const player = this.#racePlayers.find((entry) => entry.local);
+    this.#racePendingBalance = formatCrapsCompactFlip(crapsPlayerMoney(
+      this.#raceValueAt(player, index + 1), this.#entryMultiple,
+    ));
     layer.append?.(token);
-    this.#raceTransferTimer = globalThis.setTimeout?.(() => {
+    this.#raceBalanceLandTimer = globalThis.setTimeout?.(() => {
+      const balance = this.querySelector('[data-bind="craps-race-stack"]');
+      if (balance) balance.textContent = this.#racePendingBalance;
+      this.#racePendingBalance = null;
+      this.#raceBalanceLandTimer = null;
+    }, this.#resolutionDelay(840)) ?? null;
+    this.#raceBalanceFadeTimer = globalThis.setTimeout?.(() => {
       token.remove?.();
-      this.#raceTransferTimer = null;
-    }, this.#resolutionDelay(720)) ?? null;
+      this.#raceBalanceFadeTimer = null;
+    }, this.#resolutionDelay(1080)) ?? null;
   }
 
   #paintRaceDashboard(roundNumber = 0, { animate = true, frame = null } = {}) {
@@ -4735,12 +4780,14 @@ class AppCrapsTable extends HTMLElement {
       bankrollsFlip: player.bankrollsFlip,
       startingBankrollFlip: player.startingBankrollFlip,
       exitRoll: player.exitRoll,
+      entryMultiple: player.entryMultiple,
     });
     return {
       key: player.key ?? `opponent-${opponentIndex}`,
       betId: player.betId ?? null,
       opponentIndex,
       local: false,
+      entryMultiple: player.entryMultiple,
       label: player.label,
       initials: player.initials,
       avatar: player.avatar,
@@ -4847,12 +4894,14 @@ class AppCrapsTable extends HTMLElement {
       roundNumber,
       rollEvents: frames,
       startingBankrollFlip: starting,
+      entryMultiple: this.#entryMultiple,
     });
     return {
       key: 'local',
       betId: this.#viewerBetId,
       opponentIndex: -1,
       local: true,
+      entryMultiple: this.#entryMultiple,
       label: this.#viewerLabel,
       initials: playerInitials(this.#viewerLabel),
       avatar: this.#viewerAvatar,
@@ -5161,7 +5210,7 @@ class AppCrapsTable extends HTMLElement {
         ? formatCrapsCompactFlip(value / CRAPS_FLIP_WEI)
         : formatCrapsWei(value);
       const runAmountCopy = winnerRunPayoutWei == null
-        ? formatCrapsCompactFlip(entry.amount)
+        ? formatCrapsCompactFlip(crapsPlayerMoney(entry.amount, entry.entryMultiple))
         : compactWei(winnerRunPayoutWei);
       const bountyAmountCopy = entry.battleAwardWei != null
         ? compactWei(entry.battleAwardWei)
@@ -5176,19 +5225,19 @@ class AppCrapsTable extends HTMLElement {
            </span>`;
       const baseAmountAria = entry.battleAwardWei != null
         ? `${winnerRunPayoutWei == null
-            ? formatCrapsFlip(entry.amount)
+            ? formatCrapsFlip(crapsPlayerMoney(entry.amount, entry.entryMultiple))
             : formatCrapsWei(winnerRunPayoutWei)} FLIP run winnings, ${formatCrapsWei(entry.battleAwardWei)} FLIP battle bounty`
-        : `${formatCrapsFlip(entry.amount)} FLIP`;
+        : `${formatCrapsFlip(crapsPlayerMoney(entry.amount, entry.entryMultiple))} FLIP`;
       const shooterAddedFlip = entry.state === 'live'
         && entry.shooterOpeningFlip != null
         && entry.amount > entry.shooterOpeningFlip
         ? entry.amount - entry.shooterOpeningFlip
         : 0n;
       const bankrollAria = shooterAddedFlip > 0n
-        ? `${baseAmountAria}, ${formatCrapsFlip(shooterAddedFlip)} added this shooter in teal`
+        ? `${baseAmountAria}, ${formatCrapsFlip(crapsPlayerMoney(shooterAddedFlip, entry.entryMultiple))} added this shooter in teal`
         : baseAmountAria;
       const progressiveAria = progressiveScale
-        ? `, Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier ${progressiveScale.targetMultiple} times target at 90 percent, high point ${formatCrapsFlip(progressiveScale.highPointFlip)} FLIP`
+        ? `, Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier ${progressiveScale.targetMultiple} times target at 90 percent, high point ${formatCrapsFlip(crapsPlayerMoney(progressiveScale.highPointFlip, entry.entryMultiple))} FLIP`
         : '';
       const amountAria = `${bankrollAria}${progressiveAria}`;
       const lastResult = entry.lastResult ?? crapsPlayerLastResult();
@@ -5768,6 +5817,7 @@ class AppCrapsTable extends HTMLElement {
   }
 
   #stopRaceTimers() {
+    this.#clearRaceBalanceTransfer(false);
     for (const timer of [
       this.#racePulseTimer,
       this.#raceCoverTimer,
@@ -6249,12 +6299,9 @@ class AppCrapsTable extends HTMLElement {
     const bountyPoolWei = this.#bountyPoolWei == null
       ? null
       : this.#bountyPoolWei + transferWei;
-    const bountyPoolWholeFlip = bountyPoolWei == null ? null : bountyPoolWei / CRAPS_FLIP_WEI;
     const bountyAmountCopy = bountyPoolWei == null
       ? '—'
-      : bountyPoolWholeFlip >= 1_000n
-        ? formatCrapsCompactFlip(bountyPoolWholeFlip)
-        : formatCrapsWei(bountyPoolWei);
+      : formatCrapsWei(bountyPoolWei);
     const addedFlipWei = this.#addedFlipWei == null
       ? (transferWei > 0n ? transferWei : null)
       : this.#addedFlipWei + transferWei;
@@ -6463,6 +6510,7 @@ class AppCrapsTable extends HTMLElement {
     goalAward = false,
     shooterOpeningFlip = undefined,
   } = {}) {
+    const money = (value) => crapsPlayerMoney(value, battleAward || goalAward ? 1 : this.#entryMultiple);
     const chips = this.querySelectorAll('[data-bind="craps-resolution-chips"] .craps-run-chip');
     const activeShooterOpening = shooterOpeningFlip === undefined
       ? this.#resolutionActive
@@ -6527,21 +6575,21 @@ class AppCrapsTable extends HTMLElement {
       });
     }
     const bankedDescription = reserveRisk
-      ? `${formatCrapsFlip(guaranteedReserve)} FLIP survives a full-board loss; that loss forces ${reserveState === 'bust-risk' ? 'a bust' : 'the survival flip'}.`
+      ? `${formatCrapsFlip(money(guaranteedReserve))} FLIP survives a full-board loss; that loss forces ${reserveState === 'bust-risk' ? 'a bust' : 'the survival flip'}.`
       : shooterAddedFlip > 0n
-        ? `${formatCrapsFlip(banked)} FLIP is currently off the felt; ${formatCrapsFlip(shooterAddedFlip)} FLIP added this shooter is teal and the opening reserve is green.`
-        : `${formatCrapsFlip(banked)} FLIP is currently off the felt; reserve chips are green.`;
+        ? `${formatCrapsFlip(money(banked))} FLIP is currently off the felt; ${formatCrapsFlip(money(shooterAddedFlip))} FLIP added this shooter is teal and the opening reserve is green.`
+        : `${formatCrapsFlip(money(banked))} FLIP is currently off the felt; reserve chips are green.`;
     const rackDescription = battleAward
-      ? `${formatCrapsFlip(bankroll)} FLIP Battle prize paid.`
+      ? `${formatCrapsFlip(money(bankroll))} FLIP Battle prize paid.`
       : goalAward
-        ? `${formatCrapsFlip(bankroll)} FLIP goal payout paid.`
+        ? `${formatCrapsFlip(money(bankroll))} FLIP goal payout paid.`
       : progressiveScale
-      ? `Goal locked. The rack is reset toward the Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier at ${progressiveScale.targetMultiple} times starting bankroll. Earned reserve is blue, open rack space is light blue, live chips remain red, and the line marks the ${formatCrapsFlip(progressiveScale.highPointFlip)} FLIP high point.`
+      ? `Goal locked. The rack is reset toward the Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier at ${progressiveScale.targetMultiple} times starting bankroll. Earned reserve is blue, open rack space is light blue, live chips remain red, and the line marks the ${formatCrapsFlip(money(progressiveScale.highPointFlip))} FLIP high point.`
       : goalLocked
-        ? `${formatCrapsFlip(bankroll)} FLIP blue; ${formatCrapsFlip(guaranteedReserve)} FLIP remains after a full-board loss and guarantees the goal.`
-      : `${formatCrapsFlip(inPlay)} FLIP red on the felt. Round bet ${formatCrapsFlip(nextStake)} FLIP. ${bankedDescription}`;
+        ? `${formatCrapsFlip(money(bankroll))} FLIP blue; ${formatCrapsFlip(money(guaranteedReserve))} FLIP remains after a full-board loss and guarantees the goal.`
+      : `${formatCrapsFlip(money(inPlay))} FLIP red on the felt. Round bet ${formatCrapsFlip(money(nextStake))} FLIP. ${bankedDescription}`;
     if (amountNode) {
-      amountNode.textContent = formatCrapsFlip(bankroll);
+      amountNode.textContent = formatCrapsFlip(money(bankroll));
       amountNode.setAttribute(
         'aria-label',
         goalAward
@@ -6555,18 +6603,18 @@ class AppCrapsTable extends HTMLElement {
         : battleAward ? 'BATTLE BOUNTY' : progressiveScale ? 'RUN IT UP' : 'YOUR BANKROLL';
     }
     if (roundBetNode) {
-      roundBetNode.textContent = formatCrapsCompactFlip(nextStake);
-      roundBetNode.setAttribute('aria-label', `${formatCrapsFlip(nextStake)} FLIP current round bet`);
+      roundBetNode.textContent = formatCrapsCompactFlip(money(nextStake));
+      roundBetNode.setAttribute('aria-label', `${formatCrapsFlip(money(nextStake))} FLIP current round bet`);
     }
     if (goalNode) {
       goalNode.textContent = progressiveScale
         ? `${progressiveScale.tier === 'common' ? 'RIU' : 'TOP'} ${progressiveScale.targetMultiple}×`
-        : goal > 0n ? formatCrapsCompactFlip(goal) : 'NONE';
+        : goal > 0n ? formatCrapsCompactFlip(money(goal)) : 'NONE';
       goalNode.setAttribute(
         'aria-label',
         progressiveScale
-          ? `${formatCrapsFlip(progressiveScale.targetFlip)} FLIP Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier target`
-          : goal > 0n ? `${formatCrapsFlip(goal)} FLIP bankroll target` : 'No bankroll target',
+          ? `${formatCrapsFlip(money(progressiveScale.targetFlip))} FLIP Run It Up ${progressiveScale.tier === 'common' ? 'first' : 'top'} tier target`
+          : goal > 0n ? `${formatCrapsFlip(money(goal))} FLIP bankroll target` : 'No bankroll target',
       );
     }
     if (meter) {
@@ -6622,7 +6670,7 @@ class AppCrapsTable extends HTMLElement {
     const highLaneStake = this.#battleStake * BigInt(Math.max(1, this.#entryMultiple - 1));
     const startingBuyInFlip = this.#replayLane === 'high' && highLaneStake > 0n
       ? highLaneStake
-      : startingBankroll + this.#battleStake;
+      : (startingBankroll + this.#battleStake) * BigInt(this.#entryMultiple);
     const progressivePayoutWei = this.#replayLane === 'main'
       && this.#jackpotState === 'won-you'
       && this.#jackpotAmountFlip != null
@@ -7364,8 +7412,9 @@ class AppCrapsTable extends HTMLElement {
       active: rackActive,
       inPlayFlip: rackActive ? this.#boardInPlayFlip() : null,
     });
+    if (animateRace) this.#animateRaceDelta(frame, index);
+    else this.#clearRaceBalanceTransfer(false);
     this.#paintRaceDashboard(index + 1, { animate: animateRace, frame });
-    if (animateRace) this.#animateRaceDelta(frame);
   }
 
   #restoreResolutionPerspective(resumeResolutionIndex) {
@@ -7901,7 +7950,7 @@ class AppCrapsTable extends HTMLElement {
       : ''}</span>`;
     const money = [];
     if (cashedOut) {
-      const paidWei = goalPayoutWei ?? (wholeFlip(finalTray) ?? 0n) * CRAPS_FLIP_WEI;
+      const paidWei = goalPayoutWei ?? crapsPlayerMoney(finalTray, this.#entryMultiple) * CRAPS_FLIP_WEI;
       money.push(`<span><small>CASHED OUT</small><strong>${flipAmount(formatCrapsWei(paidWei))}</strong></span>`);
     }
     if (battleWon && this.#battlePayoutWei != null && this.#battlePayoutWei > 0n) {
@@ -7920,12 +7969,12 @@ class AppCrapsTable extends HTMLElement {
       <h2>${title}</h2>
       <div class="craps-race-result__performance">
         <span><strong>#${finalRank}<em>/${totalEntrants}</em></strong><small>${ongoing ? 'RANK' : 'FINAL RANK'}</small></span>
-        <span><strong>${flipAmount(formatCrapsFlip(localPeak))}</strong><small>PEAK</small></span>
+        <span><strong>${flipAmount(formatCrapsFlip(crapsPlayerMoney(localPeak, this.#entryMultiple)))}</strong><small>PEAK</small></span>
       </div>
       ${ongoing ? '' : `<div class="craps-race-result__winner">
         ${winnerAvatarMarkup}
         <span><small>WINNER</small><strong>${escapeHtml(winnerLabel)}</strong></span>
-        <span class="craps-race-result__winner-peak"><strong>${flipAmount(formatCrapsFlip(winnerPeak))}</strong><small>WINNER PEAK</small></span>
+        <span class="craps-race-result__winner-peak"><strong>${flipAmount(formatCrapsFlip(crapsPlayerMoney(winnerPeak, winner?.entryMultiple)))}</strong><small>WINNER PEAK</small></span>
       </div>`}
       ${money.length > 0 ? `<div class="craps-race-result__money">${money.join('')}</div>` : ''}
       <button type="button" data-bind="craps-race-exit">EXIT</button>

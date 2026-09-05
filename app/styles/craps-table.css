@@ -6891,6 +6891,37 @@ app-craps-table {
   color: #ffc1c6;
 }
 
+.craps-race-transfer--balance {
+  animation-name: craps-race-balance-transfer;
+  width: 3.4rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 0 0.45rem rgba(101, 255, 141, 0.65));
+}
+
+.craps-race-transfer--balance.is-loss {
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 0 0.45rem rgba(255, 70, 82, 0.65));
+}
+
+.craps-race-transfer--balance img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@keyframes craps-race-balance-transfer {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.72); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  56%, 78% { opacity: 1; transform: translate(calc(-50% + var(--race-transfer-x)), calc(-50% + var(--race-transfer-y))) scale(0.9); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--race-transfer-x)), calc(-50% + var(--race-transfer-y))) scale(0.9); }
+}
+
 .craps-race-transfer--pool {
   border-color: rgba(232, 177, 255, 0.88);
   background: linear-gradient(180deg, rgba(111, 47, 143, 0.98), rgba(45, 12, 61, 0.99));
@@ -8902,9 +8933,11 @@ app-craps-table {
     isolation: isolate;
     container-type: inline-size;
     display: block;
-    width: 100%;
+    width: min(100%, 12.75rem);
+    height: auto;
     min-height: 0;
     aspect-ratio: 3 / 1;
+    align-self: center;
     justify-self: end;
     padding: 0;
     overflow: visible;
@@ -9070,22 +9103,22 @@ app-craps-table {
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-biggest__multiple {
     position: absolute;
     z-index: 1;
-    top: 58%;
-    right: 2.2%;
-    bottom: 5.5%;
-    left: 73.5%;
+    top: 76%;
+    right: 5%;
+    bottom: 7%;
+    left: 78%;
     display: flex !important;
     box-sizing: border-box;
     align-items: center;
     justify-content: center;
-    padding: 1% 9% 1% 3%;
+    padding: 0;
     overflow: hidden;
-    border-left: 1px solid rgba(245, 202, 98, 0.34);
-    background: linear-gradient(180deg, rgba(24, 25, 26, 0.97), rgba(15, 16, 17, 0.99));
-    box-shadow: inset 1px 0 rgba(204, 59, 51, 0.12);
-    clip-path: polygon(0 0, 100% 0, 100% 68%, 87% 100%, 0 100%);
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
     color: #fff0c7 !important;
-    font: 1000 6.667cqi/1 "Roboto Mono", monospace;
+    font: 1000 5cqi/1 "Roboto Mono", monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.055em;
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.78), 0 0 7px rgba(245, 166, 35, 0.12);
@@ -9100,4 +9133,20 @@ app-craps-table {
   flex: none;
   fill: currentColor;
   filter: drop-shadow(0 0 3px rgba(147, 197, 253, .6));
+}
+
+@media (min-width: 960px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong {
+    left: .65rem;
+    right: .65rem;
+    min-width: 0;
+    justify-content: center;
+    transform: none;
+  }
+}
+
+@media (min-width: 960px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes[data-count="3"] {
+    grid-template-columns: minmax(0, 1.32fr) minmax(0, 1.12fr) minmax(0, 12.75rem);
+  }
 }
