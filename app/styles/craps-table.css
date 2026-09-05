@@ -6333,11 +6333,12 @@ app-craps-table {
 }
 
 .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-label {
-  top: calc(100% + 0.22rem);
-  left: 50%;
+  position: static;
   width: max-content;
+  justify-self: center;
+  color: var(--craps-dice-lock-color);
   font-size: 0.66rem;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay[data-race-tone="big"] .craps-dice-bay__lock-number {
@@ -6747,6 +6748,41 @@ app-craps-table {
   fill: white;
   font: 1000 14px/1 "Roboto Mono", monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Reserve a separate result band beneath phone dice, including while the
+   number animates. The label is centered by its grid, never translated. */
+@media (max-width: 959px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice {
+    box-sizing: border-box;
+    padding-bottom: 2.4rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__dice img {
+    max-height: 100%;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-readout {
+    inset: auto 0 0;
+    height: 2.4rem;
+    display: grid;
+    place-items: center;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-number {
+    position: static;
+    transform: none;
+    gap: 0.15rem;
+  }
+
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dice-bay__lock-readout.is-popping .craps-dice-bay__lock-number {
+    animation: craps-mobile-readout-in var(--craps-roll-readout-ms, 900ms) ease-out both !important;
+  }
+}
+
+@keyframes craps-mobile-readout-in {
+  from { opacity: 0; }
+  15%, to { opacity: 1; }
 }
 
 .craps-race-inline-endpoint {
@@ -8204,7 +8240,7 @@ app-craps-table {
     min-height: 0;
     box-sizing: border-box;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: clamp(15.6rem, 34dvh, 18rem) minmax(19rem, 1fr);
+    grid-template-rows: clamp(16.8rem, 34dvh, 18rem) minmax(19rem, 1fr);
     gap: 0.34rem;
     padding: 0.34rem;
     overflow-x: hidden;
