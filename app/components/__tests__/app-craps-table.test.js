@@ -31,10 +31,14 @@ test('balance transfers fly chips, reveal the amount on arrival, then credit and
   assert.match(transfer, /escapeHtml\(amount\)/);
   assert.match(transfer, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
   assert.doesNotMatch(transfer, /token\.textContent/);
-  assert.match(transfer, /to\.width \/ 2 \+ 20/);
+  assert.match(transfer, /data-bind="craps-race-player-panel"/);
+  assert.match(transfer, /x: to\.right - 48, y: to\.top \+ 20/);
+  assert.match(transfer, /if \(delta < 0n\) creditBalance\(\)/);
+  assert.match(CSS_SRC, /@keyframes craps-race-balance-loss/);
+  assert.match(CSS_SRC, /\.craps-race-transfer--balance\.is-loss img \{\s*visibility: hidden/);
   assert.match(transfer, /racePendingBalance = formatCrapsCompactFlip/);
-  assert.match(transfer, /balance\.textContent = this\.#racePendingBalance[\s\S]*resolutionDelay\(840\)/);
-  assert.match(transfer, /raceBalanceFadeTimer[\s\S]*token\.remove[\s\S]*resolutionDelay\(1080\)/);
+  assert.match(transfer, /balance\.textContent = this\.#racePendingBalance[\s\S]*transferDuration \* 0\.56/);
+  assert.match(transfer, /raceBalanceFadeTimer[\s\S]*token\.remove[\s\S]*transferDuration/);
   assert.doesNotMatch(transfer, /this\.#raceTransferTimer =/);
   assert.match(COMPONENT_SRC, /if \(this\.#racePendingBalance == null\) \{\s*write\('craps-race-stack'/);
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#clearRaceBalanceTransfer\(false\)/);

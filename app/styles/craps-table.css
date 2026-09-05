@@ -6905,6 +6905,7 @@ app-craps-table {
 }
 
 .craps-race-transfer--balance.is-loss {
+  animation-name: craps-race-balance-loss;
   background: none;
   box-shadow: none;
   filter: drop-shadow(0 0 0.45rem rgba(255, 70, 82, 0.65));
@@ -6927,6 +6928,20 @@ app-craps-table {
   text-shadow: 0 2px 4px #06150d;
   animation: craps-race-balance-amount steps(1, end) both;
   animation-duration: inherit;
+}
+
+.craps-race-transfer--balance.is-loss img {
+  visibility: hidden;
+}
+
+.craps-race-transfer--balance.is-loss .craps-race-transfer__amount {
+  animation: none;
+  opacity: 1;
+}
+
+@keyframes craps-race-balance-loss {
+  0%, 50% { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, -50%); }
 }
 
 @keyframes craps-race-balance-chips {

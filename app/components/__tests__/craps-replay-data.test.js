@@ -74,7 +74,7 @@ const REPLAY_DEPLOYMENT = Object.freeze({
 const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x4daa99994b751204ddd189f133e57e4586b2a8d91047a788031f247e37065a57';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);

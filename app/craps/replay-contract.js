@@ -73,6 +73,9 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 // 0x4daa9999… — current Base Sepolia deployment at CrapsBattle 0xc75f47d0…. The live
 //   manifest carries this exact runtime hash, the 8777c7d99 differential suite passes 7/7,
 //   and its published bundle reports every entrant replayed successfully.
+// 0x457e12fa… — current a8d068839 deployment at CrapsBattle 0xf864dc42….
+//   Verified against live Base Sepolia code; differential suite passes 7/7 and
+//   the slot-30 bundle verifies all 27 entrants against their chain settlements.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
@@ -81,6 +84,7 @@ export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x022f73dbdd170c87a2074ace604fdadfaaf06f1b18f01faf785b77709d862639',
   '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42',
   '0x4daa99994b751204ddd189f133e57e4586b2a8d91047a788031f247e37065a57',
+  '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
