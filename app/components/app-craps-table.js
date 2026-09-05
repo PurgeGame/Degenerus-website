@@ -4487,36 +4487,44 @@ class AppCrapsTable extends HTMLElement {
     const ids = delta > 0n
       ? normalizedPayoutBetIds(frame?.payoutBets)
       : normalizedPayoutBetIds(frame?.lostBets);
-    const spot = ids.map((id) => this.querySelector(`[data-bet="${id}"]`)).find(Boolean);
-    const source = spot?.querySelector?.('.craps-bet__seat-chip.is-local .craps-bet__seat-art-set') ?? spot;
+    const sources = [...new Set(ids)].map((id) => this.querySelector(
+      `[data-bet="${id}"] .craps-bet__seat-chip.is-local .craps-bet__seat-art-set`,
+    )).filter((source) => typeof source?.getBoundingClientRect === 'function')
+      .map((source) => source.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
     const target = this.querySelector('[data-bind="craps-race-player-panel"]');
     const layer = this.querySelector('[data-bind="craps-race-transfer-layer"]');
-    if (!target || !layer || (delta > 0n && typeof source?.getBoundingClientRect !== 'function')) return;
+    if (!target || !layer || (delta > 0n && sources.length === 0)) return;
     const to = target.getBoundingClientRect();
     const landing = { x: to.right - 48, y: to.top + 20 };
-    const from = delta > 0n ? source.getBoundingClientRect() : {
+    const origins = delta > 0n ? sources : [{
       left: landing.x, top: landing.y, width: 1, height: 1,
-    };
+    }];
     const layerRect = layer.getBoundingClientRect?.() ?? { left: 0, top: 0 };
-    if (from.width <= 0 || to.width <= 0) return;
-    const token = globalThis.document?.createElement?.('output');
-    if (!token) return;
-    token.className = `craps-race-transfer craps-race-transfer--balance${delta < 0n ? ' is-loss' : ''}`;
-    const amount = `${delta > 0n ? '+' : '−'}${formatCrapsCompactFlip(crapsPlayerMoney(
-      delta < 0n ? -delta : delta, this.#entryMultiple,
-    ))}`;
-    token.innerHTML = `<img src="/shared/flip-chips/stack-3-high-red.svg" alt=""><span class="craps-race-transfer__amount">${escapeHtml(amount)}</span>`;
-    token.style.left = `${from.left + from.width / 2 - layerRect.left}px`;
-    token.style.top = `${from.top + from.height / 2 - layerRect.top}px`;
-    token.style.setProperty('--race-transfer-x', `${landing.x - from.left - from.width / 2}px`);
-    token.style.setProperty('--race-transfer-y', `${landing.y - from.top - from.height / 2}px`);
+    if (to.width <= 0) return;
     const transferDuration = this.#resolutionDelay(delta < 0n ? 480 : 1080);
-    token.style.animationDuration = `${transferDuration}ms`;
+    const tokens = [];
+    origins.forEach((from, sourceIndex) => {
+      const token = globalThis.document?.createElement?.('output');
+      if (!token) return;
+      token.className = `craps-race-transfer craps-race-transfer--balance${delta < 0n ? ' is-loss' : ''}`;
+      const amount = `${delta > 0n ? '+' : '−'}${formatCrapsCompactFlip(crapsPlayerMoney(
+        delta < 0n ? -delta : delta, this.#entryMultiple,
+      ))}`;
+      token.innerHTML = `<img src="/shared/flip-chips/stack-3-high-red.svg" alt="">${sourceIndex === 0 ? `<span class="craps-race-transfer__amount">${escapeHtml(amount)}</span>` : ''}`;
+      token.style.left = `${from.left + from.width / 2 - layerRect.left}px`;
+      token.style.top = `${from.top + from.height / 2 - layerRect.top}px`;
+      token.style.setProperty('--race-transfer-x', `${landing.x - from.left - from.width / 2}px`);
+      token.style.setProperty('--race-transfer-y', `${landing.y - from.top - from.height / 2}px`);
+      token.style.animationDuration = `${transferDuration}ms`;
+      layer.append?.(token);
+      tokens.push(token);
+    });
+    if (tokens.length === 0) return;
     const player = this.#racePlayers.find((entry) => entry.local);
     this.#racePendingBalance = formatCrapsCompactFlip(crapsPlayerMoney(
       this.#raceValueAt(player, index + 1), this.#entryMultiple,
     ));
-    layer.append?.(token);
     const creditBalance = () => {
       const balance = this.querySelector('[data-bind="craps-race-stack"]');
       if (balance) balance.textContent = this.#racePendingBalance;
@@ -4526,7 +4534,7 @@ class AppCrapsTable extends HTMLElement {
     if (delta < 0n) creditBalance();
     else this.#raceBalanceLandTimer = globalThis.setTimeout?.(creditBalance, transferDuration * 0.56) ?? null;
     this.#raceBalanceFadeTimer = globalThis.setTimeout?.(() => {
-      token.remove?.();
+      for (const token of tokens) token.remove?.();
       this.#raceBalanceFadeTimer = null;
     }, transferDuration) ?? null;
   }

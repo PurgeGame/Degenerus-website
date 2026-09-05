@@ -920,7 +920,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     /dayUpgradeWhenOpen[\s\S]*?tomorrowUpgradeWhenOpen[\s\S]*?'UPGRADE WHEN OPEN'/,
     'Normal future reservations show the High Roller upgrade state instead of ENTERED');
   assert.match(componentSource, /`\$\{price == null \? '—' : formatCrapsCompactFlip\(price\)\} FLIP`/);
-  assert.doesNotMatch(componentSource, /ENTER: (?:—|1 COMP|\$\{)/,
+  assert.doesNotMatch(componentSource, /ENTER: (?:—|FREE COMP|\$\{)/,
     'compact buy-in controls show only their price or comp payment');
   assert.match(componentSource,
     /class="craps-entry__lobby"[\s\S]*?<section class="craps-entry__betting"[\s\S]*?class="craps-entry__surface-strip"[\s\S]*?class="craps-entry__mini-felt"/s,
@@ -1064,7 +1064,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource,
     /document\?\.hidden !== true[\s\S]*?#refreshSchedule\(true\)/,
     'foregrounding the lobby forces a fresh result snapshot after timer throttling');
-  assert.match(componentSource, /\? '1 COMP'/);
+  assert.match(componentSource, /\? 'FREE COMP'/);
   assert.match(componentSource, /Craps comp/);
   assert.doesNotMatch(componentSource, /DAY PASS|1 PASS|Craps passes|Craps pass balance|pass will reserve/,
     'free Craps days are consistently presented as comps');

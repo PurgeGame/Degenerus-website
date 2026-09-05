@@ -1694,7 +1694,7 @@ export class AppCrapsEntry extends HTMLElement {
             : dayEntered
               ? 'ENTERED'
             : usePass
-              ? '1 COMP'
+              ? 'FREE COMP'
               : `${dayPrice == null ? '—' : formatCrapsCompactFlip(dayPrice)} FLIP`;
       dayButton.setAttribute('aria-label', dayCanUpgrade
         ? `Upgrade the remaining open battles on your day ticket for ${dayUpgradePrice} FLIP.`
@@ -1782,7 +1782,7 @@ export class AppCrapsEntry extends HTMLElement {
           : tomorrowTicket
             ? 'ENTERED'
           : tomorrowUsePass
-            ? '1 COMP'
+            ? 'FREE COMP'
             : `${formatCrapsCompactFlip(tomorrowPrice)} FLIP`;
       tomorrowButton.setAttribute('aria-label', tomorrowAmendable
         ? tomorrowNeedsAmend

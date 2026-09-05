@@ -27,6 +27,10 @@ const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 test('balance transfers fly chips, reveal the amount on arrival, then credit and fade', () => {
   const transfer = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #animateRaceDelta(frame, index)'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
   assert.match(transfer, /stack-3-high-red\.svg/);
+  assert.match(transfer, /\[\.\.\.new Set\(ids\)\]/);
+  assert.match(transfer, /\.craps-bet__seat-chip\.is-local \.craps-bet__seat-art-set/);
+  assert.match(transfer, /origins\.forEach\(\(from, sourceIndex\)/);
+  assert.match(transfer, /sourceIndex === 0 \?/);
   assert.match(transfer, /craps-race-transfer__amount/);
   assert.match(transfer, /escapeHtml\(amount\)/);
   assert.match(transfer, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
