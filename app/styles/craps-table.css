@@ -6932,10 +6932,12 @@ app-craps-table {
   position: relative;
   display: grid;
   width: min(94vw, 39rem);
+  max-height: calc(100dvh - 2rem);
+  box-sizing: border-box;
   justify-items: center;
   gap: 0.75rem;
   padding: clamp(1rem, 3vw, 1.7rem);
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid rgba(245, 202, 98, 0.58);
   border-radius: 0.8rem;
   background:
@@ -9089,4 +9091,13 @@ app-craps-table {
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.78), 0 0 7px rgba(245, 166, 35, 0.12);
     white-space: nowrap;
   }
+}
+
+.craps-race-result__award.is-boon { color: #93c5fd; }
+.craps-race-result__award.is-boon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  fill: currentColor;
+  filter: drop-shadow(0 0 3px rgba(147, 197, 253, .6));
 }

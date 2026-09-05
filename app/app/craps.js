@@ -305,6 +305,25 @@ export function crapsPassCreditsStorageKey(player) {
   ));
 }
 
+/** Historical entry boon: `_bets` is mapping slot 0; bits 206..208 are one-hot.
+ * Like the comp storage reader, this layout is coupled to CONTRACTS.CRAPS.
+ */
+export function decodeCrapsEntryBoonPercent(header, player) {
+  const packed = asUint(header, 'Craps entry header');
+  if (!ethers.isAddress(String(player ?? ''))
+    || (packed & ((1n << 160n) - 1n)) !== BigInt(player)) return 0;
+  return ({ 1: 5, 2: 10, 4: 15 })[Number((packed >> 206n) & 7n)] ?? 0;
+}
+
+export async function readCrapsEntryBoonPercent(betId, player) {
+  requireCraps();
+  const key = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256', 'uint256'], [asUint(betId, 'Craps bet id'), 0n],
+  ));
+  const header = await readContractStorage(contractAddress(), key, { provider: readerProvider() });
+  return decodeCrapsEntryBoonPercent(header, player);
+}
+
 /** Read the two uncommitted Craps comp lanes from the deployed packed mapping. */
 export async function readCrapsPassCredits(player) {
   requireCraps();

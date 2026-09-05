@@ -3,6 +3,7 @@
 
 import { deriveCanSign, get, subscribe } from '../app/store.js';
 import { gameDay } from '../app/game-state.js';
+import './boon-product-indicator.js';
 import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../app/chain-config.js';
 import { loadCrapsReplay } from '../craps/replay-contract.js';
 import { crapsReplayFetch } from '../craps/replay-fetch.js';
@@ -1344,7 +1345,7 @@ export class AppCrapsEntry extends HTMLElement {
         <div class="craps-entry__lobby">
           <table class="craps-entry__listing" aria-label="Craps battle buy-ins">
             <colgroup><col class="craps-entry__col-close"><col class="craps-entry__col-wager"><col class="craps-entry__col-operator"><col class="craps-entry__col-battle"><col class="craps-entry__col-action"><col class="craps-entry__col-entrants"></colgroup>
-            <thead><tr><th>CLOSES IN</th><th class="craps-entry__wager">WAGER</th><th class="craps-entry__operator">+</th><th class="craps-entry__battle-key">BATTLE</th><th>BUY IN</th><th>ENTRANTS</th></tr></thead>
+            <thead><tr><th>CLOSES IN</th><th class="craps-entry__wager">WAGER</th><th class="craps-entry__operator">+</th><th class="craps-entry__battle-key">BATTLE</th><th><span class="craps-entry__buy-in-heading">BUY IN<boon-product-indicator product="craps" hidden></boon-product-indicator></span></th><th>ENTRANTS</th></tr></thead>
             <tbody>
               <tr class="craps-entry__day-buy" data-bind="craps-day-row" data-state="open">
                 <th scope="row" data-bind="craps-day-head"><small data-bind="craps-day-kicker">FULL DAY</small><time data-bind="craps-day-countdown">—</time></th>

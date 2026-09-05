@@ -28,7 +28,7 @@ const css = readFileSync(cssPath, 'utf8');
 globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
 
 const { _testing } = await import('../gold-rush-headline.js');
-const { groupEth, fmtEth, easeOutCubic, headlineAmountFit } = _testing;
+const { groupEth, fmtEth, fmtHeadline, easeOutCubic, headlineAmountFit } = _testing;
 
 // polling.js registers a visibilitychange listener behind a typeof guard, so it is
 // import-safe here; its _testing surface exposes the adaptive-cadence internals.
@@ -81,6 +81,12 @@ describe('fmtEth (display scale)', () => {
 });
 
 describe('narrow headline fitting', () => {
+  test('drops headline decimals at a million display ETH without changing delta precision', () => {
+    assert.equal(fmtHeadline(999999123000000000n), '999,999.123');
+    assert.equal(fmtHeadline(1000000123000000000n), '1,000,000');
+    assert.equal(fmtHeadline(2344077077000000000n), '2,344,077');
+    assert.equal(fmtEth(2344077077000000000n, 4), '2,344,077.077');
+  });
   test('accounts for punctuation as the jackpot grows through width buckets', () => {
     assert.equal(headlineAmountFit('8,689.892'), 'normal');
     assert.equal(headlineAmountFit('12,345.678'), 'medium');
@@ -168,65 +174,29 @@ describe('gold-rush-headline.js source discipline', () => {
     assert.doesNotMatch(css, /\.gr__ticket/);
   });
 
-  test('adds a compact Degenerus Protocol lockup without demoting the jackpot number', () => {
-    assert.match(
-      src,
-      /class="gr__brand"[\s\S]{0,320}\/whitepaper\/flame-logo\.svg[\s\S]{0,320}<strong>DEGENERUS<\/strong>[\s\S]{0,120}<small>PROTOCOL<\/small>/,
-      'the banner carries the protocol flame and full brand name',
-    );
-    assert.ok(
-      src.indexOf('class="gr__brand"') < src.indexOf('class="gr__amount"'),
-      'the restrained brand lockup precedes the headline figure',
-    );
-    assert.match(
-      css,
-      /\.gr__amount\s*\{[\s\S]{0,760}font-size:\s*clamp\(3\.55rem,\s*8\.4vw,\s*6\.8rem\)/,
-      'the jackpot amount retains its oversized headline scale',
-    );
-    assert.match(
-      src,
-      /class="gr__unit-code"[^>]*aria-label="Ethereum"[^>]*>ETH</,
-      'the amount uses an explicit, readable Ethereum currency code',
-    );
-    assert.doesNotMatch(src, /gr__unit-(?:mark|logo)|crypto_06_ethereum_silver\.svg/,
-      'the old circled Ethereum icon is not rendered beside the amount');
-    assert.match(
-      css,
-      /\.gr__unit-code\s*\{[^}]*font-size:\s*clamp\(0\.72rem,\s*1\.5vw,\s*0\.92rem\)/s,
-      'the plain ETH code is larger now that it carries the denomination alone',
-    );
-    assert.match(
-      css,
-      /\.gr__brand-logo\s*\{[\s\S]{0,180}width:\s*clamp\(1\.45rem,\s*3\.2vw,\s*1\.9rem\)/,
-      'the protocol mark stays subordinate to the number',
-    );
-    assert.match(
-      css,
-      /\.gr__brand-copy strong\s*\{[^}]*font-size:\s*clamp\(0\.58rem,\s*1\.5vw,\s*0\.72rem\)/s,
-      'the DEGENERUS line is readable without competing with the amount',
-    );
-    assert.match(
-      css,
-      /\.gr__brand-copy small\s*\{[^}]*font-size:\s*clamp\(0\.4rem,\s*1\.05vw,\s*0\.5rem\)/s,
-      'the PROTOCOL line receives the same modest size increase',
-    );
-    assert.doesNotMatch(src, /gr__bounty-pool|BOUNTY POOL|bounty-pool-amount/,
-      'the protocol-logo lockup stays free of the unrelated bounty pool');
-    assert.match(
-      css,
-      /\.gr__label-text\s*\{[^}]*font-size:\s*clamp\(0\.72rem,\s*1\.75vw,\s*1\.02rem\)/s,
-      'Golden Ticket Jackpot is slightly larger across the responsive range',
-    );
-    assert.match(
-      css,
-      /\.gr\s*\{[\s\S]{0,520}golden-ticket-frame-v1\.webp/,
-      'the dedicated art pass is integrated as a decorative frame behind live HTML',
-    );
-    assert.match(
-      css,
-      /@media \(max-width: 640px\)[\s\S]*?\.gr__amount\[data-fit="medium"\]\s*\{[^}]*font-size:[^}]*\}[\s\S]*?\.gr__amount\[data-fit="long"\]\s*\{[^}]*font-size:/,
-      'narrow screens shrink longer live totals before the ETH lockup can clip',
-    );
+  test('uses selected chip hallway art behind responsive live text', () => {
+    assert.match(src, /<strong>DEGENERUS<\/strong>/);
+    assert.match(src, /<small>PROTOCOL<\/small>/);
+    assert.match(src, /class="gr__unit-code"[^>]*aria-label="Ethereum"[^>]*>ETH</);
+    assert.match(css, /chip-hallway-desktop-v1\.svg/);
+    assert.match(css, /chip-hallway-mobile-v1\.svg/);
+    assert.match(css, /container-type: inline-size/);
+    assert.match(css, /var\(--gr-chars, 9\)/);
+    assert.match(css, /color: #f4cf61/);
+    assert.doesNotMatch(css, /golden-ticket-frame-v1\.webp/);
+    const art = readFileSync(resolvePath(__dirname, '../../assets/jackpot/chip-hallway-desktop-v1.svg'), 'utf8');
+    const mobile = readFileSync(resolvePath(__dirname, '../../assets/jackpot/chip-hallway-mobile-v1.svg'), 'utf8');
+    assert.equal((art.match(/class="chip"/g) || []).length, 120);
+    assert.doesNotMatch(mobile, /class="chip"/);
+    assert.doesNotMatch(art + mobile, /<text[ >]|\.art-attic|\.planning/);
+    assert.doesNotMatch(art + mobile, /href="(?!#)/, 'art is self-contained');
+  });
+
+  test('addition floats outside the amount row without shifting its centering', () => {
+    assert.match(css, /\.gr__float\s*\{[^}]*position: absolute;[^}]*left: calc\(100% \+ \.5cqw\)/s);
+    const animation = css.slice(css.indexOf('@keyframes gr-float'), css.indexOf('@media (max-width: 768px)', css.indexOf('@keyframes gr-float')));
+    assert.match(animation, /translateY/);
+    assert.doesNotMatch(animation, /translate\(-50%/);
   });
 });
 

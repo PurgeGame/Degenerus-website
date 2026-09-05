@@ -83,6 +83,13 @@ function fmtEth(rawWei, digits = HEADLINE_DIGITS) {
   return groupEth(displayEthCompact(rawWei, digits));
 }
 
+// Compact only the headline at a million display ETH; delta precision stays intact.
+function fmtHeadline(rawWei) {
+  const formatted = fmtEth(rawWei);
+  const integer = formatted.split('.')[0];
+  return integer.replace(/[^0-9]/g, '').length >= 7 ? integer : formatted;
+}
+
 /** Width bucket used by the narrow-screen CSS; punctuation consumes room too. */
 function headlineAmountFit(formatted) {
   const length = String(formatted ?? '').length;
@@ -93,9 +100,10 @@ function headlineAmountFit(formatted) {
 
 function paintHeadlineAmount(amount, rawWei) {
   if (!amount) return;
-  const formatted = fmtEth(rawWei);
+  const formatted = fmtHeadline(rawWei);
   amount.textContent = formatted;
   amount.setAttribute('data-fit', headlineAmountFit(formatted));
+  amount.style.setProperty('--gr-chars', String(formatted.length));
 }
 
 function prefersReducedMotion() {
@@ -306,6 +314,6 @@ if (typeof customElements !== 'undefined' && !customElements.get('gold-rush-head
 // Test surface — the pure formatting helpers, exercised by
 // __tests__/gold-rush-headline.test.js without a DOM.
 export const _testing = {
-  groupEth, fmtEth, easeOutCubic, headlineAmountFit,
+  groupEth, fmtEth, fmtHeadline, easeOutCubic, headlineAmountFit,
 };
 export default GoldRushHeadline;

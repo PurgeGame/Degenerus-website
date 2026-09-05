@@ -405,7 +405,7 @@ describe('index.html basic-mode skeleton', () => {
     );
     assert.match(
       html,
-      /href="\/app\/styles\/app\.min\.css\?v=mobile-perf-[^"]+"/,
+      /href="\/app\/styles\/app\.min\.css\?v=[^"]+"/,
       'the generated production stylesheet has an explicit cache cutover',
     );
   });

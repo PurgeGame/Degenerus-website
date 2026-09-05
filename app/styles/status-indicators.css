@@ -1307,3 +1307,19 @@ body.layout-basic .more-ways__quickbuy small {
   }
   body.layout-basic .more-ways__quickbuy > i { display: none; }
 }
+
+/* Reserve a compact boon slot beside BUY IN without shifting the column. */
+body.layout-basic .craps-entry__buy-in-heading {
+  position: relative;
+  display: inline-block;
+  padding-inline: 1rem;
+  line-height: 1.1rem;
+}
+
+body.layout-basic .craps-entry__buy-in-heading boon-product-indicator {
+  top: 50%;
+  right: 0;
+  width: .9rem;
+  height: .9rem;
+  translate: 0 -50%;
+}

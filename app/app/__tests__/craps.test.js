@@ -1780,3 +1780,25 @@ test('the Added rail folds the shared craps window instead of opening its own qu
   assert.equal(Number(provider.calls[1].fromBlock), WINDOW_HEAD - WINDOW_TAIL + 1);
   assert.deepEqual(provider.calls[1].topics.length, 1, 'and it reuses the window filter');
 });
+
+
+test('historical craps boon reads the owned entry mask, including consumed tiers', async () => {
+  const player = '0x1111111111111111111111111111111111111111';
+  for (const [mask, percent] of [[0, 0], [1, 5], [2, 10], [4, 15], [3, 0], [7, 0]]) {
+    const header = BigInt(player) | (BigInt(mask) << 206n);
+    assert.equal(craps.decodeCrapsEntryBoonPercent(header, player), percent);
+    assert.equal(craps.decodeCrapsEntryBoonPercent(header, '0x2222222222222222222222222222222222222222'), 0);
+  }
+  let requestedKey;
+  contracts.setProvider({
+    ...fakeProvider(),
+    getStorage: async (_address, key) => {
+      requestedKey = key;
+      return ethers.toBeHex(BigInt(player) | (2n << 206n), 32);
+    },
+  });
+  assert.equal(await craps.readCrapsEntryBoonPercent(123n, player), 10);
+  assert.equal(requestedKey, ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256', 'uint256'], [123n, 0n],
+  )));
+});

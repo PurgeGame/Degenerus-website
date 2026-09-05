@@ -238,8 +238,8 @@ test('a local bust locks the rack at zero while the shared table finishes', () =
     /class="craps-bust-checkpoint"[\s\S]*?BANKROLL BUSTED[\s\S]*?YOU LOSE[\s\S]*?data-bind="craps-bust-observe">OBSERVE[\s\S]*?data-bind="craps-bust-exit">EXIT/s,
     'a local loss exposes an explicit observe-or-exit checkpoint');
   assert.match(COMPONENT_SRC,
-    /#pauseForViewerBust\(continueResolution\)[\s\S]*?#winnerPayoffPresentation\(\)\.totalWei[\s\S]*?this\.#viewerBustLocked[\s\S]*?!viewingOriginalPlayer \|\| viewerWon[\s\S]*?dataset\.phase = 'bust-paused'[\s\S]*?dataset\.state = 'bust-paused'[\s\S]*?craps-bust-observe[\s\S]*?focus/s,
-    'a true losing viewer pauses playback and moves focus to OBSERVE without mislabeling a bounty winner');
+    /#pauseForViewerBust\(continueResolution\)[\s\S]*?viewerTerminal === 'goal'[\s\S]*?this\.#viewerBustLocked[\s\S]*?this\.#paintRaceResult\([\s\S]*?ongoing: true[\s\S]*?craps-race-observe[\s\S]*?focus/s,
+    'a resolved personal run pauses with a result popup and Observe without revealing the future winner');
   assert.match(COMPONENT_SRC,
     /#queueNextResolutionRoll\(delay = 0\)[\s\S]*?#pauseForViewerBust\(\(\) => this\.#queueNextResolutionRoll\(delay\)\)[\s\S]*?#finishResolution\(skipped = false\)[\s\S]*?!skipped && this\.#pauseForViewerBust\(\(\) => this\.#finishResolution\(false\)\)/s,
     'both a mid-run bust and a final-roll bust stop before automatic continuation');
@@ -1234,7 +1234,7 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
     /const compactRace = Boolean[\s\S]*?raceBounds\.height \/ raceBounds\.width[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
     'the graph adopts the rendered mobile panel aspect ratio instead of letterboxing a desktop plot');
   assert.match(COMPONENT_SRC,
-    /\? \{ left: 48, right: 12, top: 20, bottom: 44 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
+    /\? \{ left: 48, right: 12, top: 20, bottom: 80 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
     'compact graphs keep rank and amount inside the plot without a right-side card gutter');
 
   const landscapeRaceCss = CSS_SRC.slice(
@@ -2461,4 +2461,18 @@ test('standalone demo and main app both mount the same component', () => {
     /^\s*'\/app\/components\/app-craps-table\.js',\s*$/m,
     'the table loads once through app-craps-entry instead of a second bare module identity',
   );
+});
+
+
+test('result boon badge requires a paid goal and the boon stored on that entry', async () => {
+  const { crapsResultBoonPercent } = await import(moduleUrl);
+  for (const boonPercent of [5, 10, 15]) {
+    const result = { stop: 'goal', runPayoutWei: 100n, boonPercent };
+    assert.equal(crapsResultBoonPercent(result), boonPercent);
+    assert.equal(crapsResultBoonPercent({ ...result, stop: 'bust' }), 0);
+    assert.equal(crapsResultBoonPercent({ ...result, runPayoutWei: 0n }), 0);
+    assert.equal(crapsResultBoonPercent({ ...result, runPayoutWei: null }), 0);
+  }
+  assert.equal(crapsResultBoonPercent({ stop: 'goal', runPayoutWei: 100n }), 0);
+  assert.equal(crapsResultBoonPercent({ stop: 'goal', runPayoutWei: 100n, boonPercent: 7 }), 0);
 });

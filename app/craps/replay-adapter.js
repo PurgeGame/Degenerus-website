@@ -14,7 +14,7 @@ import {
 } from './replay-engine.js';
 import { fetchProfiles } from '../app/profiles.js';
 import { CHAIN, CONTRACTS } from '../app/chain-config.js';
-import { crapsBonusMultiplier, readCrapsSettlementWord } from '../app/craps.js';
+import { crapsBonusMultiplier, readCrapsSettlementWord, readCrapsEntryBoonPercent } from '../app/craps.js';
 
 const TEN = 10n;
 const CRAPS_REPLAY_BONUS_MULTIPLIERS = new Set([0.25, 1, 10, 100]);
@@ -610,6 +610,7 @@ export async function openCrapsReplayTable(table, {
   fetchImpl,
   loadProfiles = fetchProfiles,
   loadSettlementWord = readCrapsSettlementWord,
+  loadEntryBoonPercent = readCrapsEntryBoonPercent,
   onReplayDegraded = null,
   ...openOptions
 } = {}) {
@@ -711,6 +712,20 @@ export async function openCrapsReplayTable(table, {
       })
     : null;
 
+  // Entry flags survive consumption of the live wallet boon. Read only paid
+  // goal seats, and never apply today's deployment layout to another contract.
+  const entryBoons = new Map();
+  if (String(contract).toLowerCase() === String(CONTRACTS.CRAPS).toLowerCase()
+    && Number(chainId) === Number(CHAIN.id)) {
+    await Promise.all(mainModel.viewport.seats.map(async ({ player }) => {
+      if (player.stop !== 'goal' || BigInt(player.paidWei) <= 0n) return;
+      try {
+        const percent = await loadEntryBoonPercent(player.betId, player.player);
+        if ([5, 10, 15].includes(percent)) entryBoons.set(player.betId, percent);
+      } catch (_error) { /* optional decoration must not block a verified replay */ }
+    }));
+  }
+
   const modelFor = (lane, perspectiveBetId = null) => createCrapsReplayTableModel(artifacts, {
     profiles,
     perspectiveBetId,
@@ -791,6 +806,10 @@ export async function openCrapsReplayTable(table, {
       ...nextModel.tableOptions,
       ...lanePrizeAmounts,
       ...battleAward,
+      viewerResult: {
+        ...nextModel.tableOptions.viewerResult,
+        boonPercent: highLane ? 0 : entryBoons.get(nextModel.viewer.betId) ?? 0,
+      },
       // New indexer responses can carry the actual shooter rotation before it
       // is promoted into the immutable replay schema. Prefer sealed metadata
       // when present, otherwise preserve that live optional sidecar.

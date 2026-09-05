@@ -788,7 +788,7 @@ test('the unified signboard presents Craps Autobattle and the Run It Up jackpot'
 
 test('a poker-lobby listing separates battle stakes from settled added FLIP', () => {
   assert.match(componentSource, /<table class="craps-entry__listing"/);
-  assert.match(componentSource, /CLOSES IN<\/th><th class="craps-entry__wager">WAGER<\/th><th class="craps-entry__operator">\+<\/th><th class="craps-entry__battle-key">BATTLE<\/th><th>BUY IN<\/th><th>ENTRANTS/,
+  assert.match(componentSource, /CLOSES IN<\/th><th class="craps-entry__wager">WAGER<\/th><th class="craps-entry__operator">\+<\/th><th class="craps-entry__battle-key">BATTLE<\/th><th><span class="craps-entry__buy-in-heading">BUY IN<boon-product-indicator product="craps" hidden><\/boon-product-indicator><\/span><\/th><th>ENTRANTS/,
     'open entries label the at-risk battle-pool contribution instead of calling it Added');
   assert.match(componentSource, /Wager \$\{dayEntry[^`]+FLIP plus \$\{dayBattle[^`]+FLIP to the battle pool\./s);
   assert.match(componentSource, /FLIP wager plus \$\{battlePrice\} FLIP to the battle pool\./,
