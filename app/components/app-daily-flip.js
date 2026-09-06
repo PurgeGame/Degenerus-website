@@ -1110,6 +1110,8 @@ class AppDailyFlip extends HTMLElement {
   #dashboard = null;
   #dashboardAddress = null;
   #coinflipStats = null;
+  #coinflipStatsPaintHost = null;
+  #coinflipStatsPaintKey = null;
   #liveBalances = null;
   #liveBalancesAddress = null;
   #bafScore = null;        // indexed score for the active x10 BAF bracket
@@ -3288,6 +3290,16 @@ class AppDailyFlip extends HTMLElement {
     const opener = this.#addBetOpener();
     const todayOpener = this.querySelector('[data-bind="df-today-bet-cta"]');
     const tomorrowOpener = this.querySelector('[data-bind="df-flip-cta"]');
+    if (!dialog) return;
+    for (const button of [todayOpener, tomorrowOpener]) {
+      const expanded = String(button === opener && !dialog.hidden);
+      if (button && button.getAttribute('aria-expanded') !== expanded) {
+        button.setAttribute('aria-expanded', expanded);
+      }
+    }
+    // Opening paints synchronously from current balances, quests and records.
+    // Background refreshes need only keep the external openers in sync.
+    if (dialog.hidden) return;
     const title = this.querySelector('[data-bind="df-add-bet-title"]');
     const chipPile = this.querySelector('[data-bind="df-add-bet-chip-pile"]');
     const slider = this.querySelector('[data-bind="df-add-bet-slider"]');
@@ -3460,8 +3472,6 @@ class AppDailyFlip extends HTMLElement {
               : 'At least 100 FLIP is required',
       );
     }
-    todayOpener?.setAttribute('aria-expanded', String(opener === todayOpener && !dialog.hidden));
-    tomorrowOpener?.setAttribute('aria-expanded', String(opener === tomorrowOpener && !dialog.hidden));
     if (status) {
       status.textContent = this.#addBetError;
       status.hidden = !this.#addBetError;
@@ -3533,6 +3543,13 @@ class AppDailyFlip extends HTMLElement {
       && typeof this.#coinflipScoreTickWin === 'boolean';
     const winsTicked = scoreTickActive && this.#coinflipScoreTickWin === true;
     const lossesTicked = scoreTickActive && this.#coinflipScoreTickWin === false;
+    // Polls often return the same history. Preserve the existing marker nodes
+    // (and their animation clocks) until a displayed result or reveal gate changes.
+    const paintKey = JSON.stringify([
+      nextWins, nextLosses, winsTicked, lossesTicked, Number(this.#day),
+      (stats?.recent || []).map((row) => [row.day, Boolean(row.win), String(row.rewardPercent)]),
+    ]);
+    if (this.#coinflipStatsPaintHost === recentHost && this.#coinflipStatsPaintKey === paintKey) return;
     wins.classList?.toggle('is-ticking', winsTicked);
     losses.classList?.toggle('is-ticking', lossesTicked);
     scoreGroup.classList?.toggle('is-resolving', scoreTickActive);
@@ -3585,6 +3602,8 @@ class AppDailyFlip extends HTMLElement {
     host.title = `All-time coinflip record: ${recordCopy}. Last 25: ${recentCopy}.`;
     host.setAttribute('aria-label', host.title);
     recentHost.setAttribute('aria-label', `Last twenty-five coinflip results: ${recentCopy}`);
+    this.#coinflipStatsPaintHost = recentHost;
+    this.#coinflipStatsPaintKey = paintKey;
   }
 
   #renderAutoRebuy({ syncDraft = false } = {}) {

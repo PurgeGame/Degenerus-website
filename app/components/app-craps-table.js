@@ -2151,10 +2151,10 @@ function betMarkup(bet) {
     : '';
   const feltLegend = hardwayNumber
     ? `<span class="craps-bet__hardway-legend" aria-hidden="true"><small>HARD</small><strong>${hardwayNumber}</strong><em data-pays="${escapeHtml(bet.pays)}">PAYS ${escapeHtml(bet.pays)}</em><span class="craps-bet__hardway-dice"><img src="/symbols/dice_${hardwayNumber === '4' ? '01_2' : '03_4'}_silver.svg" alt=""><img src="/symbols/dice_${hardwayNumber === '4' ? '01_2' : '03_4'}_blue.svg" alt=""></span></span>`
-    : `<span class="craps-bet__name">${pointPuck}${bet.id === 'dont-pass'
+    : `<span class="craps-bet__name">${pointPuck}${escapeHtml(bet.shortLabel)}</span>
+      <span class="craps-bet__odds">${bet.id === 'dont-pass'
         ? '<img class="craps-bet__wwxrp-mark" src="/shared/coinflip-face-red.svg" alt="" aria-hidden="true">'
-        : ''}${escapeHtml(bet.shortLabel)}</span>
-      <span class="craps-bet__odds"><small>PAYS</small>${escapeHtml(bet.pays)}</span>`;
+        : ''}<small>PAYS</small>${escapeHtml(bet.pays)}</span>`;
   return `
     <button type="button" class="craps-bet${numberClass}" data-bet="${escapeHtml(bet.id)}"
             data-stake-bet data-active="false" title="${escapeHtml(betRules(bet))}">

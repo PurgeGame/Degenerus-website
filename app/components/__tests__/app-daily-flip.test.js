@@ -2297,6 +2297,42 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('unchanged refreshes preserve recent-result nodes and leave the closed bet dialog alone', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false },
+      coinflipStats: { wins: 2, losses: 1, recent: [{ day: 66, win: true, rewardPercent: 96 }] },
+    };
+    const el = mount();
+    await flushMicrotasks();
+    const recent = el.querySelector('[data-bind="df-coinflip-recent"]');
+    const markers = [...recent.children];
+    assert.equal(markers.length, 25);
+    const number = el.querySelector('[data-bind="df-add-bet-number"]');
+    let writes = 0;
+    const originalSet = number.setAttribute;
+    number.setAttribute = function (...args) { writes++; originalSet.apply(this, args); };
+    storeMod.update('app.records', {});
+    document.dispatchEvent({ type: 'visibilitychange' });
+    await flushMicrotasks();
+    assert.equal(writes, 0, 'closed dialog receives no background attribute writes');
+    assert.ok(markers.every((marker, i) => marker === recent.children[i]),
+      'the same history keeps the same 25 nodes');
+
+    invalidateJSONCache();
+    _fetchResponses.coinflipStats = {
+      wins: 2, losses: 2, recent: [{ day: 66, win: false, rewardPercent: 96 }],
+    };
+    document.dispatchEvent({ type: 'visibilitychange' });
+    await flushMicrotasks();
+    assert.notEqual(recent.children[0], markers[0], 'changed history repaints');
+    assert.match(recent.children[0].className, /is-loss/);
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, false);
+    assert.ok(writes > 0, 'opening hydrates the dialog synchronously');
+    el.disconnectedCallback();
+  });
+
   test('the modifier rail waits until a real win is final, then settles vertically', async () => {
     _currentStakeWei = '12000000000000000000000';
     seedFlipAvailableHold('4526397000000000000000000');

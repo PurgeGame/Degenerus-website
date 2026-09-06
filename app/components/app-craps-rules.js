@@ -132,9 +132,9 @@ export class AppCrapsRules extends HTMLElement {
 
         .craps-rules__head {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
           gap: 1rem;
-          align-items: start;
+          align-items: center;
           padding: 1rem 1.25rem 0.75rem;
           background:
             radial-gradient(circle at 8% 0%, rgba(218, 224, 235, 0.13), transparent 44%),
@@ -142,27 +142,52 @@ export class AppCrapsRules extends HTMLElement {
           border-bottom: 1px solid #29313d;
         }
 
-        .craps-rules__eyebrow {
-          margin: 0 0 0.25rem;
-          color: #aeb6c2;
-          font: 700 0.67rem/1.2 system-ui, sans-serif;
-          letter-spacing: 0.18em;
-        }
-
         h2 {
+          display: contents;
           margin: 0;
           color: #fff;
-          font: 800 clamp(1.25rem, 5vw, 1.65rem)/1.08 system-ui, sans-serif;
-          letter-spacing: 0.02em;
+          font: 800 clamp(0.8rem, 2.8vw, 1rem)/1.1 system-ui, sans-serif;
+          white-space: nowrap;
+        }
+
+        .craps-rules__logo {
+          grid-column: 2;
+          justify-self: center;
+          width: 100%;
+          max-width: 18rem;
+          height: auto;
         }
 
         #craps-rules-summary {
-          margin: 0.5rem 0 0;
-          color: #b9c0ca;
-          font: 500 0.84rem/1.4 system-ui, sans-serif;
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: 1.1fr 1.4fr 0.55fr;
+          gap: 0.75rem;
+          margin: 0.25rem 0 0;
+          padding: 0.65rem 0.75rem;
+          border: 1px solid rgba(245, 202, 98, 0.24);
+          border-radius: 8px;
+          background:
+            radial-gradient(ellipse at 50% 0%, rgba(245, 202, 98, 0.11), transparent 75%),
+            linear-gradient(135deg, #1b2028, #10141b);
+          box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+          list-style: none;
+          font: 800 0.85rem/1.3 system-ui, sans-serif;
+        }
+
+        #craps-rules-summary li { min-width: 0; text-align: center; }
+        .craps-rules__first-step { display: inline-block; }
+        #craps-rules-summary small {
+          display: block;
+          margin-top: 0.2rem;
+          color: #aeb6c2;
+          font-size: 0.8em;
+          font-weight: 500;
         }
 
         .craps-rules__close {
+          grid-column: 3;
+          justify-self: end;
           display: grid;
           place-items: center;
           width: 2rem;
@@ -272,19 +297,19 @@ export class AppCrapsRules extends HTMLElement {
             padding: 0.65rem 0.85rem;
           }
 
-          .craps-rules__head { gap: 0.2rem 0.4rem; }
-          .craps-rules__head > div { display: contents; }
-          .craps-rules__eyebrow, h2 { grid-column: 1; }
-          .craps-rules__close { grid-column: 2; grid-row: 1 / 3; }
-          #craps-rules-summary { grid-column: 1 / -1; }
-          .craps-rules__eyebrow { font-size: 0.6rem; }
-          h2 { font-size: 1.2rem; }
-          #craps-rules-summary,
+          .craps-rules__head { gap: 0.65rem 0.4rem; }
+          h2 { font-size: 0.72rem; }
+          .craps-rules__close { grid-column: 3; grid-row: 1; }
+          #craps-rules-summary {
+            gap: 0.4rem;
+            margin-top: 0;
+            padding: 0.55rem 0.4rem;
+            font-size: 0.62rem;
+          }
           .craps-rules__steps section {
             font-size: clamp(0.7rem, 1.42dvh, 0.78rem);
             line-height: 1.32;
           }
-          #craps-rules-summary { margin-top: 0.35rem; }
           .craps-rules__steps { gap: 0.5rem; }
           .craps-rules__steps p { margin-top: 0.2rem; }
           .craps-rules__steps p + p { margin-top: 0.35rem; }
@@ -307,12 +332,15 @@ export class AppCrapsRules extends HTMLElement {
         aria-describedby="craps-rules-summary"
       >
         <header class="craps-rules__head">
-          <div>
-            <p class="craps-rules__eyebrow">HOW IT WORKS</p>
-            <h2 id="craps-rules-title">CRAPS AUTOBATTLE</h2>
-            <p id="craps-rules-summary">Place your bets and buy into a tournament. Every player is seated at the same table, with the same dice and different strategies. One winner captures the whole Battle Pool, but anyone who runs their stack up to 5× before busting will win at least that much.</p>
-          </div>
+          <h2 id="craps-rules-title"><span>HOW TO PLAY</span>
+            <img class="craps-rules__logo" src="/app/assets/craps/craps-autobattle-integrated-swords-v8.webp" width="2025" height="466" alt="Craps Autobattle">
+          </h2>
           <button class="craps-rules__close" type="button" aria-label="Close Craps rules">&times;</button>
+          <ol id="craps-rules-summary">
+            <li><span class="craps-rules__first-step">1. PLACE YOUR BETS<small>or play random</small></span></li>
+            <li>2. BUY INTO A TOURNAMENT</li>
+            <li>3. WIN?</li>
+          </ol>
         </header>
 
         <div class="craps-rules__body">
