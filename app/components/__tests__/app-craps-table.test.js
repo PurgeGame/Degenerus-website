@@ -250,7 +250,7 @@ test('bonus display uses ordinary schedule procs, and receipts never invent firs
   assert.match(COMPONENT_SRC, /finalRank == null \? '—'/);
   assert.match(COMPONENT_SRC, /<small>ROLLS<\/small>/);
   assert.match(COMPONENT_SRC, /<small>SHOOTERS<\/small>/);
-  assert.match(COMPONENT_SRC, /if \(resultWei > 0n\)/);
+  assert.match(COMPONENT_SRC, /if \(resultWei > 0n \|\| dualResults\)/);
   assert.match(COMPONENT_SRC, /reachedGoal \? '#6eff99' : '#ff626b'/);
 });
 
@@ -2539,4 +2539,52 @@ test('high roller money scales without changing base run comparisons or exact cr
   assert.deepEqual(players.players.map((player) => player.entryMultiple), [1, 100]);
   assert.deepEqual(players.players.map((player) => player.startingBankrollFlip), ['3000', '3000']);
   assert.equal(players.players[1].runPayoutWei, '600000000000000000000000');
+});
+
+
+test('shooter identity cannot change with viewer-relative roster order', async () => {
+  const { crapsShooterIdentity } = await import(moduleUrl);
+  const main = { betId: '1', player: '0xaaa', label: 'MAIN' };
+  const alt = { betId: '2', player: '0xbbb', label: 'ALT' };
+  for (const candidates of [[main, alt], [alt, main], [alt]]) {
+    const unknown = crapsShooterIdentity({ shooter: 3, candidates });
+    assert.equal(unknown.label, 'SHOOTER 4');
+    assert.equal(unknown.player, null);
+    assert.equal(unknown.local, false);
+    const known = crapsShooterIdentity({ shooter: 3, indexed: { ...main }, candidates });
+    assert.equal(known.player, main.player);
+    assert.equal(known.label, 'MAIN');
+  }
+  const otherSeat = { ...main, betId: '9' };
+  assert.equal(crapsShooterIdentity({ indexed: otherSeat, candidates: [main], viewerBetId: '1', viewerPlayer: main.player }).local, false);
+  assert.equal(crapsShooterIdentity({ indexed: { player: main.player }, candidates: [{ ...main, local: true }] }).local, true);
+  assert.equal(crapsShooterIdentity({ rotationPlayer: alt, candidates: [main, alt] }).label, 'ALT');
+});
+
+
+test('the final payout retains a High Roller prize after a main-field loss', async () => {
+  const { crapsWinnerPayoffPresentation } = await import(moduleUrl);
+  const payout = crapsWinnerPayoffPresentation({
+    battleWonByViewer: false, battlePayoutWei: '999999', runPayoutWei: '0',
+    highRollerPayoutWei: '8000000000000000000000', startingBuyInFlip: 3000,
+  });
+  assert.equal(payout.totalWei, '8000000000000000000000');
+  assert.match(COMPONENT_SRC, /if \(typeof advancePhase !== 'function'\) presentResult\(\)/,
+    'the terminal result popup waits until phase handoff is finished');
+  assert.match(COMPONENT_SRC, /if \(!advanced && this\.#isOpen\) \{\s*presentResult\(\)/,
+    'a failed handoff restores the completed result');
+});
+
+
+test('High Roller panel distinguishes wins, losses, sole riders and missing results', async () => {
+  const { crapsHighRollerPanel } = await import(moduleUrl);
+  const award = { contested: true, battleWinner: '0xwinner', winnerLabel: 'Winner', battleWonByViewer: true, battlePayoutWei: '8000' };
+  assert.equal(crapsHighRollerPanel(award).status, 'WON');
+  assert.equal(crapsHighRollerPanel(award).prizeWei, 8000n);
+  assert.equal(crapsHighRollerPanel({ ...award, battleWonByViewer: false }).status, 'LOST');
+  assert.equal(crapsHighRollerPanel({ ...award, battleWonByViewer: false }).prizeWei, 0n);
+  assert.equal(crapsHighRollerPanel({ ...award, contested: false }).status, 'SOLE RIDER');
+  assert.equal(crapsHighRollerPanel({ ...award, contested: false }).prizeWei, null);
+  assert.equal(crapsHighRollerPanel(null).status, 'UNAVAILABLE');
+  assert.equal(crapsHighRollerPanel({ ...award, battleWinner: null }).status, 'UNAVAILABLE');
 });

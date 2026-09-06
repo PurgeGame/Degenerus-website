@@ -31,6 +31,44 @@ import { CRAPS_REPLAY_MAX_ROLLS } from '../craps/replay-contract.js';
 
 // Replay ladders and rankings use one copy of a run. Scale only money copy;
 // exact run/bounty/boon credits already include their contract multiples.
+export function crapsShooterIdentity({ shooter = 0, indexed = null, candidates = [], rotationPlayer = null, viewerBetId = null, viewerPlayer = null } = {}) {
+  // A published bet id names a specific seat, even if its owner has others.
+  const selected = indexed == null ? null : candidates.find((candidate) => (
+    indexed.betId != null
+      ? candidate.betId != null && String(candidate.betId) === String(indexed.betId)
+      : indexed.player && candidate.player
+        && String(candidate.player).toLowerCase() === String(indexed.player).toLowerCase()
+  ));
+  if (selected) return selected;
+  if (!indexed && rotationPlayer) return rotationPlayer;
+  const label = indexed?.label ?? `SHOOTER ${shooter + 1}`;
+  return {
+    key: `indexed-shooter-${shooter}`,
+    betId: indexed?.betId ?? null,
+    player: indexed?.player ?? null,
+    local: indexed?.betId != null
+      ? String(indexed.betId) === String(viewerBetId)
+      : Boolean(indexed?.player && viewerPlayer
+        && String(indexed.player).toLowerCase() === String(viewerPlayer).toLowerCase()),
+    label,
+    initials: indexed ? playerInitials(label) : '—',
+    avatar: playerAvatar(indexed?.avatar),
+    color: '#9aa4ff',
+  };
+}
+
+export function crapsHighRollerPanel(award = null) {
+  if (award?.contested === false) return { status: 'SOLE RIDER', tone: 'neutral', winner: 'No competing High Roller', prizeWei: null, note: 'Rider return is included in your bankroll payout.' };
+  if (!award || award.contested !== true || !award.battleWinner) return { status: 'UNAVAILABLE', tone: 'neutral', winner: 'Result unavailable', prizeWei: null, note: '' };
+  const won = award.battleWonByViewer === true;
+  return {
+    status: won ? 'WON' : 'LOST', tone: won ? 'win' : 'loss',
+    winner: award.winnerLabel || award.battleWinner,
+    prizeWei: won ? wholeFlip(award.battlePayoutWei) : 0n,
+    note: '',
+  };
+}
+
 export function crapsPlayerMoney(value, entryMultiple = 1) {
   const base = signedWholeFlip(value) ?? 0n;
   return base * BigInt(clampInteger(entryMultiple, 1, 256, 1));
@@ -1044,6 +1082,7 @@ export function crapsWinnerPayoffPresentation({
   battlePayoutWei = null,
   progressiveWonByViewer = false,
   progressivePayoutWei = null,
+  highRollerPayoutWei = null,
   startingBuyInFlip = 0,
 } = {}) {
   const positiveWei = (value) => {
@@ -1055,7 +1094,7 @@ export function crapsWinnerPayoffPresentation({
   const runWei = positiveWei(runPayoutWei);
   const bountyWei = battleWonByViewer === true ? positiveWei(battlePayoutWei) : 0n;
   const progressiveWei = progressiveWonByViewer === true ? positiveWei(progressivePayoutWei) : 0n;
-  const totalWei = runWei + bountyWei + progressiveWei;
+  const totalWei = runWei + bountyWei + progressiveWei + positiveWei(highRollerPayoutWei);
   const startingFlip = wholeFlip(startingBuyInFlip) ?? 0n;
   const startingWei = startingFlip * CRAPS_FLIP_WEI;
 
@@ -2217,6 +2256,9 @@ class AppCrapsTable extends HTMLElement {
   #bonusRevealActive = false;
   #bonusRevealContinue = null;
   #battleWonByViewer = false;
+  #highRollerAward = null;
+  #highRollerWonByViewer = false;
+  #highRollerPayoutWei = null;
   #battlePayoutWei = null;
   #battleBoostWei = null;
   #battleWinningStop = null;
@@ -2664,6 +2706,12 @@ class AppCrapsTable extends HTMLElement {
       detail.bonusMultiplier ?? detail.battleBonusMultiplier ?? detail.boostMultiplier,
     );
     this.#battleWonByViewer = detail.battleWonByViewer === true;
+    this.#highRollerAward = detail.highRollerAward && typeof detail.highRollerAward === 'object'
+      ? { ...detail.highRollerAward } : null;
+    this.#highRollerWonByViewer = this.#highRollerAward?.contested !== false
+      && this.#highRollerAward?.battleWonByViewer === true;
+    this.#highRollerPayoutWei = this.#highRollerWonByViewer
+      ? wholeFlip(detail.highRollerAward?.battlePayoutWei) : null;
     this.#battlePayoutWei = wholeFlip(detail.battlePayoutWei ?? detail.battleAwardWei);
     this.#battleBoostWei = wholeFlip(detail.battleBoostWei ?? detail.battleBoostPaidWei);
     const battleWinningStop = wholeNumber(detail.battleWinningStop ?? detail.winningStop);
@@ -3750,7 +3798,7 @@ class AppCrapsTable extends HTMLElement {
     const local = Object.freeze({
       key: 'local',
       betId: this.#viewerBetId,
-      player: null,
+      player: this.#viewerPlayer,
       local: true,
       entryMultiple: this.#entryMultiple,
       label: this.#viewerLabel,
@@ -3901,11 +3949,6 @@ class AppCrapsTable extends HTMLElement {
       : wholeNumber(frames[frameIndex]?.shooter) ?? this.#runShooterIndexAtRound(frameIndex);
     const indexed = this.#shooterTimeline.find((entry) => entry.shooter === shooter) ?? null;
     const candidates = this.#racePlayers.length > 0 ? this.#racePlayers : this.#buildRacePlayers();
-    const matching = (entry) => candidates.find((candidate) => (
-      (entry?.betId != null && candidate.betId != null && String(candidate.betId) === String(entry.betId))
-      || (entry?.player && candidate.player
-        && String(candidate.player).toLowerCase() === String(entry.player).toLowerCase())
-    ));
     const rotationPlayer = candidates.find((candidate) => {
       if (candidate.local) {
         return frames.find((frame) => (wholeNumber(frame?.shooter) ?? -1) === shooter)
@@ -3914,36 +3957,10 @@ class AppCrapsTable extends HTMLElement {
       const source = this.#tablePlayers.find((player) => player.key === candidate.key);
       return source?.shooterBoosts?.[shooter]?.rotation === true;
     }) ?? null;
-    let selected = matching(indexed);
-    if (!selected && !indexed && rotationPlayer) selected = rotationPlayer;
-    if (!selected && indexed) {
-      const indexedPlayer = indexed.player?.toLowerCase?.() ?? null;
-      selected = {
-        key: `indexed-shooter-${shooter}`,
-        betId: indexed.betId,
-        player: indexed.player,
-        local: (indexed.betId != null && String(indexed.betId) === String(this.#viewerBetId))
-          || (indexedPlayer != null && indexedPlayer === this.#viewerPlayer),
-        label: indexed.label ?? `SHOOTER ${shooter + 1}`,
-        initials: playerInitials(indexed.label ?? `S${shooter + 1}`),
-        avatar: playerAvatar(indexed.avatar),
-        color: '#9aa4ff',
-      };
-    }
-    if (!selected) {
-      let seed = 2166136261;
-      const source = `${this.#replayDigest || this.#tableIndex || 'craps'}:${shooter}`;
-      for (let index = 0; index < source.length; index += 1) {
-        seed = Math.imul(seed ^ source.charCodeAt(index), 16777619) >>> 0;
-      }
-      selected = candidates[seed % Math.max(1, candidates.length)] ?? {
-        key: `fallback-shooter-${shooter}`,
-        label: `SHOOTER ${shooter + 1}`,
-        initials: 'DG',
-        avatar: '',
-        color: '#9aa4ff',
-      };
-    }
+    const selected = crapsShooterIdentity({
+      shooter, indexed, candidates, rotationPlayer,
+      viewerBetId: this.#viewerBetId, viewerPlayer: this.#viewerPlayer,
+    });
     let selectedBoost = null;
     if (selected.local) {
       selectedBoost = frames[frameIndex]?.viewerClosed !== true ? frames[frameIndex]?.shooterBoost : null;
@@ -4297,6 +4314,9 @@ class AppCrapsTable extends HTMLElement {
     };
     const esc = escapeHtml;
     const parts = [`<defs><clipPath id="craps-race-plot-clip"><rect x="${geometry.left}" y="${geometry.top}" width="${plotWidth}" height="${plotHeight}"></rect></clipPath><clipPath id="craps-race-avatar-clip"><circle cx="0" cy="0" r="13"></circle></clipPath></defs>`];
+    if (scaledRace) {
+      parts.push(`<text class="craps-race-axis" x="${plotRight}" y="${geometry.top - 8}" text-anchor="end">BASE FLIP · 1× ENTRY</text>`);
+    }
     const frames = this.#resolutionRun?.frames ?? [];
     let priorShooter = null;
     for (let frameIndex = 0; frameIndex < resolved; frameIndex += 1) {
@@ -4353,7 +4373,7 @@ class AppCrapsTable extends HTMLElement {
       if (pulsing) classes.push('is-pulsing', `is-${pulseKind}`);
       const pathPoints = pathPointsFor(player);
       const endpoint = pathPoints.at(-1) ?? { step: 0, value: 0n };
-      parts.push(`<path class="${classes.join(' ')}" style="--race-player:${esc(color)}" clip-path="url(#craps-race-plot-clip)" d="${pathFor(pathPoints)}"><title>${esc(player.label)} · ${esc(formatCrapsFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple)))}</title></path>`);
+      parts.push(`<path class="${classes.join(' ')}" style="--race-player:${esc(color)}" clip-path="url(#craps-race-plot-clip)" d="${pathFor(pathPoints)}"><title>${esc(player.label)} · ${esc(formatCrapsFlip(this.#raceValueAt(player, resolved)))}</title></path>`);
       const cx = xAt(endpoint.step);
       const cy = yAt(endpoint.value);
       if (pulsing) parts.push(`<circle class="craps-race-pulse is-${pulseKind}" cx="${cx}" cy="${cy}" r="8"></circle>`);
@@ -4424,7 +4444,7 @@ class AppCrapsTable extends HTMLElement {
     parts.push('<g class="craps-race-wager-stack">');
     parts.push(`<image class="craps-race-wager-art" x="${wagerX - wagerWidth / 2}" y="${plotBottom - wagerVisualHeight}" width="${wagerWidth}" height="${wagerVisualHeight}" href="${wagerArt}" preserveAspectRatio="xMidYMax meet"></image>`);
     parts.push(`<text class="craps-race-wager-label" x="${wagerX}" y="${plotBottom + 17}" text-anchor="middle">WAGER</text>`);
-    parts.push(`<text class="craps-race-wager-value" x="${wagerX}" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(crapsPlayerMoney(wager, this.#entryMultiple)))}</text></g>`);
+    parts.push(`<text class="craps-race-wager-value" x="${wagerX}" y="${plotBottom + 34}" text-anchor="middle">${esc(formatCrapsCompactFlip(wager))}</text></g>`);
 
     const endpointPlayers = [...new Map([leader, local].filter(Boolean).map((player) => [player.key, player])).values()];
     const endpoints = endpointPlayers.map((player) => ({
@@ -4448,7 +4468,7 @@ class AppCrapsTable extends HTMLElement {
       const isLeader = player.key === leader?.key;
       const classes = `craps-race-endpoint${player.local ? ' is-you' : ''}${isLeader ? ' is-leader' : ''}`;
       if (compactRace) {
-        const endpointValue = formatCrapsCompactFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple));
+        const endpointValue = formatCrapsCompactFlip(this.#raceValueAt(player, resolved));
         const endpointLabel = player.local
           ? `YOU #${rank ?? '—'} · ${endpointValue}`
           : `#1 · ${endpointValue}`;
@@ -4473,10 +4493,10 @@ class AppCrapsTable extends HTMLElement {
         } else parts.push(`<text class="craps-race-endpoint-initials" x="${avatarX}" y="${labelY + 4}" text-anchor="middle">${esc(player.initials)}</text>`);
       }
       parts.push(`<text class="craps-race-endpoint-rank" x="${textX}" y="${boxY + 16}">${player.local ? `YOU · #${rank ?? '—'}` : '#1'}</text>`);
-      parts.push(`<text class="craps-race-endpoint-value" x="${textX}" y="${boxY + 34}">${esc(formatCrapsCompactFlip(crapsPlayerMoney(this.#raceValueAt(player, resolved), player.entryMultiple)))}</text></g>`);
+      parts.push(`<text class="craps-race-endpoint-value" x="${textX}" y="${boxY + 34}">${esc(formatCrapsCompactFlip(this.#raceValueAt(player, resolved)))}</text></g>`);
     }
     svg.innerHTML = parts.join('');
-    svg.setAttribute?.('aria-label', `Craps battle bankroll race through roll ${resolved}.${scaledRace ? ' Graph scaled to one base buy-in; player labels show actual FLIP.' : ''}`);
+    svg.setAttribute?.('aria-label', `Craps battle bankroll race through roll ${resolved}.${scaledRace ? ' Graph scaled to one base buy-in; heights and labels both show base FLIP.' : ''}`);
   }
 
   #clearRaceBalanceTransfer(commit = true) {
@@ -5493,7 +5513,7 @@ class AppCrapsTable extends HTMLElement {
     const cashedOut = frame?.viewerTerminal === 'goal'
       || (frame?.viewerClosed === true && this.#viewerResult?.stop === 'goal');
     if (!this.#resolutionActive || (!this.#viewerBustLocked && !cashedOut)
-      || this.#viewerBustCheckpointPassed || !viewingOriginalPlayer
+      || this.#viewerBustCheckpointPassed || this.#highRollerWonByViewer || !viewingOriginalPlayer
       || this.#resolutionIndex >= frames.length - 1) return false;
     this.#stopResolutionTimer();
     this.#awaitingRoll = false;
@@ -6702,6 +6722,7 @@ class AppCrapsTable extends HTMLElement {
       runPayoutWei: this.#viewerResult?.runPayoutWei,
       battleWonByViewer: this.#battleWonByViewer,
       battlePayoutWei: this.#battlePayoutWei,
+      highRollerPayoutWei: this.#highRollerPayoutWei,
       progressiveWonByViewer: progressivePayoutWei != null,
       progressivePayoutWei,
       startingBuyInFlip,
@@ -7940,8 +7961,10 @@ class AppCrapsTable extends HTMLElement {
     const finalRank = battleWon ? 1 : this.#localRankAtRound(resultRound, local?.rank, standings);
     const totalEntrants = this.#fieldEntrants ?? standings.length;
     const cashedOut = !battleWon && (local?.rankStop === 'goal' || last?.terminal === 'goal');
-    const lost = !battleWon && !cashedOut;
-    const title = battleWon ? 'BATTLE WON' : cashedOut ? 'CASHED OUT' : 'LOST';
+    const highWon = !ongoing && this.#highRollerWonByViewer;
+    const lost = !battleWon && !highWon && !cashedOut;
+    const dualResults = !ongoing && this.#replayLane === 'main' && this.#entryMultiple > 1;
+    const title = dualResults ? 'HIGH ROLLER RESULTS' : battleWon ? 'BATTLE WON' : highWon ? 'HIGH ROLLER WON' : cashedOut ? 'CASHED OUT' : 'LOST';
     const localPeak = wholeFlip(local?.rankPeak ?? local?.highPoint) ?? 0n;
     const playedRolls = Math.min(resultRound, this.#viewerResult?.exitRoll || resultRound);
     const playedShooters = this.#viewerResult?.handsPlayed || new Set(frames.slice(0, playedRolls)
@@ -7978,18 +8001,30 @@ class AppCrapsTable extends HTMLElement {
     const winnerAvatarMarkup = `<span class="craps-race-result__winner-avatar"><b>${escapeHtml(winnerInitials)}</b>${winnerAvatar
       ? `<img src="${escapeHtml(winnerAvatar)}" alt="" decoding="async" referrerpolicy="no-referrer">`
       : ''}</span>`;
+    const highPanel = crapsHighRollerPanel(this.#highRollerAward);
+    const lanePanel = (label, { status, tone, winner: name, prizeWei, note = '' }) => `
+      <section class="craps-race-result__lane" data-tone="${tone}" aria-label="${label}: ${status}">
+        <h3>${label}</h3><strong class="craps-race-result__lane-status">${status}</strong>
+        <span class="craps-race-result__lane-winner"><small>WINNER</small><b>${escapeHtml(name)}</b></span>
+        <span class="craps-race-result__lane-prize"><small>YOUR PRIZE</small><strong>${prizeWei == null ? '—' : flipAmount(formatCrapsWei(prizeWei))}</strong></span>
+        ${note ? `<p>${escapeHtml(note)}</p>` : ''}
+      </section>`;
+    const panels = dualResults ? `<div class="craps-race-result__lanes">
+      ${lanePanel('MAIN BATTLE', { status: battleWon ? 'WON' : 'LOST', tone: battleWon ? 'win' : 'loss', winner: winnerLabel, prizeWei: battleWon ? this.#battlePayoutWei : 0n })}
+      ${lanePanel('HIGH ROLLER', highPanel)}
+    </div>` : '';
     const money = [];
     const resultWei = ongoing
       ? (wholeFlip(goalPayoutWei) ?? 0n)
       : BigInt(this.#winnerPayoffPresentation().totalWei);
-    if (resultWei > 0n) {
-      money.push(`<span><small>RESULT</small><strong>${flipAmount(formatCrapsWei(resultWei))}</strong></span>`);
+    if (resultWei > 0n || dualResults) {
+      money.push(`<span><small>${dualResults ? 'TOTAL WON' : 'RESULT'}</small><strong>${flipAmount(formatCrapsWei(resultWei))}</strong></span>`);
     }
-    if (cashedOut) {
+    if (cashedOut || (dualResults && this.#viewerResult?.runPayoutWei > 0n)) {
       const paidWei = goalPayoutWei ?? crapsPlayerMoney(finalTray, this.#entryMultiple) * CRAPS_FLIP_WEI;
-      money.push(`<span><small>CASHED OUT</small><strong>${flipAmount(formatCrapsWei(paidWei))}</strong></span>`);
+      money.push(`<span><small>${dualResults ? 'BANKROLL RETURN' : 'CASHED OUT'}</small><strong>${flipAmount(formatCrapsWei(paidWei))}</strong></span>`);
     }
-    if (battleWon && this.#battlePayoutWei != null && this.#battlePayoutWei > 0n) {
+    if (!dualResults && battleWon && this.#battlePayoutWei != null && this.#battlePayoutWei > 0n) {
       money.push(`<span class="is-prize"><small>BATTLE PRIZE</small><strong>${flipAmount(formatCrapsWei(this.#battlePayoutWei))}</strong></span>`);
     }
     if (riuWon && this.#jackpotAmountFlip != null && this.#jackpotAmountFlip > 0n) {
@@ -7999,25 +8034,27 @@ class AppCrapsTable extends HTMLElement {
       && this.#biggestDiceRun.bountyWei > 0n) {
       money.push(`<span class="is-prize"><small>BIGGEST BOUNTY</small><strong>${flipAmount(formatCrapsWei(this.#biggestDiceRun.bountyWei))}</strong></span>`);
     }
+    card.classList.toggle('is-high-roller', dualResults);
     card.innerHTML = `
       <img class="craps-race-result__logo" src="/app/assets/craps/craps-autobattle-integrated-swords-v8.webp" alt="Craps Autobattle">
       ${awards ? `<div class="craps-race-result__awards">${awards}</div>` : ''}
       <h2>${title}</h2>
+      ${panels}
       <div class="craps-race-result__performance">
-        <span><strong>${finalRank == null ? '—' : `#${finalRank}`}<em>/${totalEntrants}</em></strong><small>${ongoing ? 'RANK' : 'FINAL RANK'}</small></span>
+        <span><strong>${finalRank == null ? '—' : `#${finalRank}`}<em>/${totalEntrants}</em></strong><small>${ongoing ? 'RANK' : dualResults ? 'MAIN RANK' : 'FINAL RANK'}</small></span>
         <span><strong>${flipAmount(formatCrapsFlip(crapsPlayerMoney(localPeak, this.#entryMultiple)))}</strong><small>PEAK</small></span>
         <span><strong>${playedRolls}</strong><small>ROLLS</small></span>
         <span><strong>${playedShooters}</strong><small>SHOOTERS</small></span>
       </div>
-      ${ongoing ? '' : `<div class="craps-race-result__winner">
+      ${ongoing || dualResults ? '' : `<div class="craps-race-result__winner">
         ${winnerAvatarMarkup}
-        <span><small>WINNER</small><strong>${escapeHtml(winnerLabel)}</strong></span>
+        <span><small>${highWon ? 'MAIN WINNER' : 'WINNER'}</small><strong>${escapeHtml(winnerLabel)}</strong></span>
         <span class="craps-race-result__winner-peak"><strong>${flipAmount(formatCrapsFlip(crapsPlayerMoney(winnerPeak, winner?.entryMultiple)))}</strong><small>WINNER PEAK</small></span>
       </div>`}
       ${money.length > 0 ? `<div class="craps-race-result__money">${money.join('')}</div>` : ''}
       <button type="button" data-bind="craps-race-exit">EXIT</button>
       ${ongoing ? '<button type="button" data-bind="craps-race-observe">OBSERVE</button>' : ''}`;
-    splash.classList?.toggle('is-loss', lost);
+    splash.classList?.toggle('is-loss', lost && !dualResults);
     splash.hidden = false;
     splash.removeAttribute?.('hidden');
     splash.classList?.remove('is-visible');
@@ -8084,14 +8121,17 @@ class AppCrapsTable extends HTMLElement {
     if (done) done.hidden = false;
     this.#resolutionCompleted = true;
     this.#resolutionActive = false;
-    this.#paintRaceResult({ last, finalTray, battleWon, goalPayoutWei });
-    if (battleWon) sfxFanfare(true);
-    else if (last.terminal === 'goal') sfxFanfare(false);
-    else if (last.terminal === 'bust' && !this.#viewerBustCheckpointPassed) sfxNoWin();
+    const advancePhase = this.#onResolutionPhaseComplete;
+    const presentResult = () => {
+      this.#paintRaceResult({ last, finalTray, battleWon, goalPayoutWei });
+      if (battleWon || this.#highRollerWonByViewer) sfxFanfare(true);
+      else if (last.terminal === 'goal') sfxFanfare(false);
+      else if (last.terminal === 'bust' && !this.#viewerBustCheckpointPassed) sfxNoWin();
+    };
+    if (typeof advancePhase !== 'function') presentResult();
     this.#animateBattleBountyReceipt();
     this.#syncRollControls();
     this.querySelector('.craps-table-felt')?.setAttribute?.('aria-busy', 'false');
-    const advancePhase = this.#onResolutionPhaseComplete;
     if (typeof advancePhase === 'function') {
       if (screen) screen.dataset.phase = 'transition';
       if (replay) replay.hidden = true;
@@ -8110,6 +8150,7 @@ class AppCrapsTable extends HTMLElement {
           }) === true;
         } catch (_error) { /* a failed phase handoff leaves the completed result usable */ }
         if (!advanced && this.#isOpen) {
+          presentResult();
           if (screen) screen.dataset.phase = 'complete';
           if (replay) replay.hidden = false;
           if (done) done.hidden = false;

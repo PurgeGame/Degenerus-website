@@ -703,6 +703,15 @@ test('a contested High Roller replay runs its exact side field before the main b
   assert.equal(main.onResolutionAcknowledged, acknowledged,
     'only the completed main battle may retire the Pending receipt');
   assert.equal(main.autoRoll, false);
+  assert.equal(main.highRollerAward.battleWonByViewer, false);
+  assert.equal(main.onPerspectiveSelect({ betId: rival.betId }), true);
+  const rivalMain = opened.at(-1);
+  assert.equal(rivalMain.replayLane, 'main');
+  assert.equal(rivalMain.highRollerAward.battleWonByViewer, true);
+  assert.equal(rivalMain.highRollerAward.battlePayoutWei, highPayoutWei);
+  assert.equal(rivalMain.onPerspectiveSelect({ betId: viewer.betId }), true);
+  assert.equal(opened.at(-1).highRollerAward.battleWonByViewer, false,
+    'switching away cannot inherit the previous perspective high win');
   __resetCrapsReplayLoaderForTest();
 });
 

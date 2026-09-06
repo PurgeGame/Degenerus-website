@@ -809,6 +809,23 @@ export async function openCrapsReplayTable(table, {
       ...nextModel.tableOptions,
       ...lanePrizeAmounts,
       ...battleAward,
+      // The final main-field receipt must retain a contested High Roller win
+      // for this exact perspective, without counting a sole rider twice.
+      highRollerAward: !highLane && nextModel.viewer.entryMultiple > 1
+        ? {
+            ...crapsReplayBattleAward({
+              viewer: nextModel.viewer.player, viewerBetId: nextModel.viewer.betId,
+              winner: highWinner, winnerBetId: highWinnerSeat,
+              payoutWei: highBankrollRider === true ? null : highPayoutWei,
+            }),
+            contested: highBankrollRider === true || requestedHighEntrants === 1
+              ? false : requestedHighEntrants >= 2 ? true : null,
+            winnerLabel: protocolSeatLabel(highWinner)
+              || profiles?.get?.(String(highWinner).toLowerCase())?.name
+              || artifacts.highRollers?.find((player) => player.betId === highWinnerSeat)?.name
+              || null,
+          }
+        : null,
       viewerResult: {
         ...nextModel.tableOptions.viewerResult,
         boonPercent: highLane ? 0 : entryBoons.get(nextModel.viewer.betId) ?? 0,

@@ -36,7 +36,7 @@ import {
 } from '../app/records.js';
 import {
   formatCrapsCompactFlip,
-} from './app-craps-table.js?rev=goal-bust-ranks-v4';
+} from './app-craps-table.js?rev=base-flip-graph-v5';
 
 export const CRAPS_ENTRY_CONFIRMED_EVENT = 'degenerus:craps:entered';
 export const CRAPS_BATTLES_PER_DAY = 7;
