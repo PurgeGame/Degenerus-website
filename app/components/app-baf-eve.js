@@ -3,6 +3,7 @@
 // surfaces are changing state.
 
 import { fetchJSON } from '../app/api.js';
+import { eligibleBafLeaders } from '../app/baf-leaderboard.js';
 import { fetchProfiles } from '../app/profiles.js';
 import { gameDay, readGameState } from '../app/game-state.js';
 import { readBafFinalPurchaseDay } from '../app/coinflip.js';
@@ -84,26 +85,12 @@ export function bafPrizePoolWei(futurePoolWei, targetLevel) {
 
 /** Defensive normalization keeps stale/mixed-level API rows out of the rail. */
 export function normalizeBafLeaders(payload, targetLevel, count = LEADER_COUNT) {
-  const level = Number(targetLevel);
-  const rows = Array.isArray(payload) ? payload : payload?.entries;
-  if (!Array.isArray(rows)) return [];
-  const seen = new Set();
-  return rows
-    .filter((row) => Number(row?.level) === level)
-    .map((row) => ({
-      level,
-      player: String(row?.player || ''),
-      score: _bigint(row?.score),
-      rank: Number(row?.rank),
-    }))
-    .filter((row) => row.player && Number.isInteger(row.rank) && row.rank > 0 && row.rank <= count)
-    .sort((a, b) => a.rank - b.rank)
-    .filter((row) => {
-      if (seen.has(row.rank)) return false;
-      seen.add(row.rank);
-      return true;
-    })
-    .slice(0, count);
+  return eligibleBafLeaders(payload, targetLevel, count).map((row) => ({
+    level: Number(targetLevel),
+    player: String(row.player),
+    score: _bigint(row.score),
+    rank: row.rank,
+  }));
 }
 
 /** Coinflip deposits made now settle on the next numbered daily flip. */

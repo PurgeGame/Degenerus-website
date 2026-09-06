@@ -8,6 +8,7 @@ const {
   bafGateWon,
   buildBafResolutionSnapshot,
   normalizeBafPrizeHits,
+  normalizeBafTopFour,
   loadBafResolutionSnapshot,
   __setBafResolutionFetcherForTest,
   __resetBafResolutionFetcherForTest,
@@ -65,6 +66,29 @@ describe('BAF resolution model', () => {
     assert.equal(bafGateWon(2), false);
     assert.equal(bafCutSurvivorRank(1), 4);
     assert.equal(bafCutSurvivorRank(5), 3);
+  });
+
+  test('the vault cannot occupy a ranked prize in the resolution', async () => {
+    const { CONTRACTS } = await import('../chain-config.js');
+    const entries = [
+      { level: 40, player: CONTRACTS.VAULT.toUpperCase(), rank: 1, score: '999999' },
+      ...LEADERS.entries.map((row) => ({ ...row, rank: row.rank + 1 })),
+    ];
+    assert.deepEqual(normalizeBafTopFour({ entries }, 40), LEADERS.entries.map(({ rank, player, score }) => ({ rank, player, score })));
+    const snapshot = buildBafResolutionSnapshot({
+      level: 40, player: CONTRACTS.VAULT,
+      metadata: { status: 'closed', rngWord: '1' },
+      leaderboard: { entries }, playerOutcome: { rank: 1, score: '999999' },
+    });
+    assert.equal(snapshot.player.rank, null);
+    assert.equal(snapshot.player.leaderSlicePct, 0);
+    const eligibleWinner = buildBafResolutionSnapshot({
+      level: 40, player: PLAYER_1,
+      metadata: { status: 'closed', rngWord: '1' },
+      leaderboard: { entries }, playerOutcome: { rank: 2, score: '400' },
+    });
+    assert.equal(eligibleWinner.player.rank, 1);
+    assert.equal(eligibleWinner.player.leaderSlicePct, 10);
   });
 
   test('maps every contract prize lane and keeps the shares at 100%', () => {

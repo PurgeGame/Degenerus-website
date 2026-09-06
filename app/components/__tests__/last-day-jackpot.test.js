@@ -1549,6 +1549,12 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const { replayAttractShouldRun, replayHoldingsLevel } = await import('../replay-panel.js');
     assert.equal(replayAttractShouldRun({ revealCleared: null }), true,
       'cold startup spins while persisted reveal state is still unknown');
+    assert.equal(replayAttractShouldRun({ revealCleared: null, inViewport: false }), false,
+      'an offscreen ticket does not keep swapping badges');
+    assert.equal(replayAttractShouldRun({ revealCleared: false, tabVisible: false }), false,
+      'a hidden tab cannot keep the idle timer alive');
+    assert.equal(replayAttractShouldRun({ revealCleared: false, inViewport: true, tabVisible: true }), true,
+      'an uncleared ticket resumes when visible again');
     assert.equal(replayAttractShouldRun({ revealCleared: true, dayLoading: true }), true,
       'an already-cleared prior day still spins while replacement data loads');
     assert.equal(replayAttractShouldRun({ revealCleared: true, dayWarming: true }), true,

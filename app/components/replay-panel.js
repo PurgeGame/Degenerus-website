@@ -88,8 +88,10 @@ export function replayAttractShouldRun({
   dayWarming = false,
   spinning = false,
   interactiveReveal = false,
+  inViewport = true,
+  tabVisible = true,
 } = {}) {
-  return !spinning && !interactiveReveal && (
+  return inViewport && tabVisible && !spinning && !interactiveReveal && (
     revealCleared !== true
     || Boolean(dayLoading)
     || Boolean(dayWarming)
@@ -632,6 +634,8 @@ class ReplayPanel extends HTMLElement {
   // logged two warnings per attempt and buried every other console message.
   #rollsMissingWarnedDay = null;
   #idleSpinTimer = null;
+  #idleInViewport = true;
+  #idleVisibilityCleanup = null;
   // Once the player starts this selection's reveal, polling may update the
   // persisted flags but must not rebuild/cancel the live main or bonus board.
   #interactiveRevealKey = null;
@@ -836,6 +840,7 @@ class ReplayPanel extends HTMLElement {
     // Paint the first attract frame synchronously. The replay/day and persisted
     // reveal reads arrive independently, so waiting for either one used to
     // expose the neutral grey reset board during a cold load.
+    this.#watchIdleVisibility();
     this.#startIdleSpin();
     this.refreshDays();
     this.#badgeWarmPromise = this.#preloadBadges();
@@ -851,6 +856,8 @@ class ReplayPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.#idleVisibilityCleanup?.();
+    this.#idleVisibilityCleanup = null;
     this.#animId++;  // cancel any running spin
     this.#dayLoadSeq++;
     this.#dayLoadInFlight = null;
@@ -1841,6 +1848,35 @@ class ReplayPanel extends HTMLElement {
     this.#syncSpinControlState();
   }
 
+  #watchIdleVisibility() {
+    this.#idleVisibilityCleanup?.();
+    this.#idleInViewport = true;
+    let active = true;
+    const refresh = () => {
+      if (!active) return;
+      if (this.#idleSpinWanted()) this.#startIdleSpin();
+      else this.#stopIdleSpin();
+    };
+    // Observe the stable ticket, not an image that changes size as badges swap.
+    const ticket = this.querySelector('[data-bind="card-grid"]');
+    const observer = ticket && typeof IntersectionObserver === 'function'
+      ? new IntersectionObserver((records) => {
+          if (!active) return;
+          for (const record of records) {
+            if (record.target === ticket) this.#idleInViewport = record.isIntersecting;
+          }
+          refresh();
+        }, { rootMargin: '50px' })
+      : null;
+    observer?.observe(ticket);
+    document.addEventListener('visibilitychange', refresh);
+    this.#idleVisibilityCleanup = () => {
+      active = false;
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }
+
   #idleSpinWanted() {
     return replayAttractShouldRun({
       revealCleared: this.#hostRevealCleared,
@@ -1848,6 +1884,8 @@ class ReplayPanel extends HTMLElement {
       dayWarming: this.hasAttribute('data-day-warming'),
       spinning: this.#spinning,
       interactiveReveal: this.#interactiveSelectionActive(),
+      inViewport: this.#idleInViewport,
+      tabVisible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
     });
   }
 

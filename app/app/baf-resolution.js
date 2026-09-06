@@ -7,6 +7,7 @@
 import { fetchJSON } from './api.js';
 import { ethers } from './contracts.js';
 import { normalizeBafDraw } from './baf-draw.js';
+import { eligibleBafLeaders, isBafRankEligible } from './baf-leaderboard.js';
 
 const FLIP = 10n ** 18n;
 const ENTRIES_PER_TICKET = 4n;
@@ -45,19 +46,11 @@ export function bafCutSurvivorRank(rngWord) {
 }
 
 export function normalizeBafTopFour(payload, level) {
-  const target = Number(level);
-  const rows = Array.isArray(payload) ? payload : payload?.entries;
-  if (!Array.isArray(rows)) return [];
-  const byRank = new Map();
-  for (const row of rows) {
-    const rank = Number(row?.rank);
-    if (Number(row?.level) !== target || !Number.isInteger(rank) || rank < 1 || rank > 4) continue;
-    if (byRank.has(rank)) continue;
-    const player = _address(row?.player);
-    if (!player) continue;
-    byRank.set(rank, { rank, player, score: _big(row?.score).toString() });
-  }
-  return [...byRank.values()].sort((a, b) => a.rank - b.rank);
+  return eligibleBafLeaders(payload, level).map((row) => ({
+    rank: row.rank,
+    player: _address(row.player),
+    score: _big(row.score).toString(),
+  }));
 }
 
 function _rowCount(row) {
@@ -162,7 +155,9 @@ export function buildBafResolutionSnapshot({
   }, { eth: 0n, tickets: 0n, whalePassHalves: 0n });
   const finalDayDraw = normalizeBafDraw(draw, metadata?.day, viewed);
   const rank = Number(playerOutcome?.rank);
-  const playerRank = Number.isInteger(rank) && rank > 0 ? rank : null;
+  const playerRank = !isBafRankEligible(viewed) ? null
+    : topFour.find((entry) => entry.player === viewed)?.rank
+      ?? (Number.isInteger(rank) && rank > 0 ? rank : null);
   const leaderSlicePct = gateWon && playerRank === 1
     ? 10
     : (gateWon && playerRank === survivorRank ? 5 : 0);

@@ -32,6 +32,7 @@ const COMPONENT = readFileSync(new URL('../app-baf-eve.js', import.meta.url), 'u
 const DEMO_HTML = readFileSync(new URL('../../event-rails-demo.html', import.meta.url), 'utf8');
 const DEMO_JS = readFileSync(new URL('../../event-rails-demo.js', import.meta.url), 'utf8');
 const FLIP = 10n ** 18n;
+const { CONTRACTS } = await import('../../app/chain-config.js');
 
 describe('<app-baf-eve>', () => {
   test('appears for the whole x9 level, including RNG and jackpot phases', () => {
@@ -70,6 +71,20 @@ describe('<app-baf-eve>', () => {
     ]);
     assert.equal(formatBafScoreCompact(79_595_332n * FLIP), '79.5M');
     assert.equal(formatBafScoreCompact(999n * FLIP), '999');
+  });
+
+  test('excludes the vault and promotes the next eligible score into the top four', () => {
+    for (const vaultRank of [1, 3, 5]) {
+      const entries = Array.from({ length: 5 }, (_, index) => ({
+        level: 40, rank: index + 1, score: String(500 - index * 100),
+        player: index + 1 === vaultRank ? CONTRACTS.VAULT.toUpperCase() : `player-${index + 1}`,
+      }));
+      const leaders = normalizeBafLeaders({ entries: entries.toReversed() }, 40);
+      assert.equal(leaders.length, 4);
+      assert.deepEqual(leaders.map((row) => row.rank), [1, 2, 3, 4]);
+      assert.deepEqual(leaders.map((row) => row.player),
+        entries.filter((row) => row.rank !== vaultRank).map((row) => row.player));
+    }
   });
 
   test('surfaces the decisive daily flip leader only for the exact target day', () => {
