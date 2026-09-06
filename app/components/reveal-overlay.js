@@ -3233,6 +3233,10 @@ class RevealOverlay extends HTMLElement {
   #nextReadyPendingAction(excludeSequence = null) {
     return getPendingActions().find((item) => (
       item?.state === 'ready' && typeof item.run === 'function'
+      // A refresh can leave the current reward's Pending row visible until
+      // after its summary renders. Never offer to reopen that same receipt.
+      && (!excludeSequence?.presentationId
+        || String(item.id) !== String(excludeSequence.presentationId))
       // Mine FLIP is permissionless maintenance, not part of a player's
       // reward-opening flow. Keep it in Pending for an explicit click, but do
       // not let a reveal popup chain into it automatically.

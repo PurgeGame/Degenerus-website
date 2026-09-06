@@ -1705,7 +1705,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /data-bind="craps-dice-lock-label"[\s\S]*?data-bind="craps-dice-lock-number"/,
     'the transient result supports a dealer label above the number between the dice');
   assert.match(COMPONENT_SRC, /data-point-puck="\$\{escapeHtml\(bet\.number\)\}"/);
-  assert.match(COMPONENT_SRC, /class="craps-bet__odds"><small>PAYS<\/small>\$\{escapeHtml\(bet\.pays\)\}<\/span>/,
+  assert.match(COMPONENT_SRC, /class="craps-bet__odds">\$\{bet\.id === 'dont-pass'[\s\S]*?: ''\}<small>PAYS<\/small>\$\{escapeHtml\(bet\.pays\)\}<\/span>/,
     'standard live betting spots print their repo-defined payout odds directly on the felt');
   assert.match(COMPONENT_SRC, /class="craps-bet__hardway-legend"[\s\S]*?<small>HARD<\/small><strong>\$\{hardwayNumber\}<\/strong><em data-pays="\$\{escapeHtml\(bet\.pays\)\}">PAYS \$\{escapeHtml\(bet\.pays\)\}<\/em>/s,
     'hardways retain accessible names while resolution mode can reduce the felt copy to the payout');
@@ -2124,7 +2124,7 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     /\.craps-group--place \.craps-group__bets\s*\{[\s\S]*?grid-template-columns:\s*repeat\(6,[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\)/s,
     'landscape flattens all six place numbers into one bounded row');
   assert.match(CSS_SRC, /\.craps-group--place \.craps-group__bets\s*\{\s*grid-template-columns:\s*repeat\(6,/s);
-  assert.match(COMPONENT_SRC, /class="craps-bet__name">\$\{pointPuck\}\$\{bet\.id === 'dont-pass'[\s\S]*?: ''\}\$\{escapeHtml\(bet\.shortLabel\)\}<\/span>/,
+  assert.match(COMPONENT_SRC, /class="craps-bet__name">\$\{pointPuck\}\$\{escapeHtml\(bet\.shortLabel\)\}<\/span>/,
     'the point puck is inside the number label immediately before the numeral');
   assert.match(CSS_SRC, /\.craps-bet--number \.craps-bet__name\s*\{[\s\S]*?display:\s*inline-flex;[\s\S]*?align-items:\s*center;[\s\S]*?gap:/s,
     'the point puck and number share one vertically centered inline row');

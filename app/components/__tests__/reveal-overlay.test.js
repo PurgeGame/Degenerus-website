@@ -3001,6 +3001,28 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  test('a referral receipt finishes instead of offering its own stale Pending action', async () => {
+    const id = 'referral-bonus:0x1234000000000000000000000000000000000000:90';
+    let repeated = 0;
+    pendingActionsMod.publishPendingActions('referral-summary-regression', [{
+      id, kind: 'affiliate-bonus', shortLabel: 'View Referral Bonus',
+      state: 'ready', run: async () => { repeated += 1; },
+    }]);
+    queueReveal({
+      kind: 'referral-bonus', presentationId: id, level: 90,
+      amountWei: 100n * 10n ** 18n,
+    });
+    const el = instantiate();
+    await tick();
+    const finish = el.querySelector('.rvl-collect-cta');
+    assert.ok(finish, 'the referral receipt reaches its summary');
+    assert.equal(finish.textContent, 'TAKE THE WIN');
+    assert.equal(finish.dataset.mode, 'continue');
+    finish.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(repeated, 0, 'finishing never re-runs the bonus already on screen');
+  });
+
   test('the first referral-bonus card fits a 100M DGNRS total before count-up', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });

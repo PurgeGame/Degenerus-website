@@ -5095,8 +5095,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       ['static', TEST_ADDR, target],
       ['send', TEST_ADDR, target],
     ]);
-    assert.equal(normalAmount.value, '1,375',
-      'the one-off quest stake does not replace Tomorrow\'s Bet draft');
+    assert.equal(normalAmount.value, '1375',
+      'the one-off quest stake leaves the closed Tomorrow\'s Bet draft untouched');
     el.disconnectedCallback();
   });
 
