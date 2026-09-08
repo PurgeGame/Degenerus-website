@@ -1191,7 +1191,11 @@ class AppBoxStrip extends HTMLElement {
           ...(Array.isArray(box?.transactionHashes) ? box.transactionHashes : []),
           box?.transactionHash,
         ].filter(Boolean);
-        if (purchaseHashes.length > 0) {
+        // A swept, DB-only candidate is discarded below. Recovering its old
+        // purchase kind cannot change that decision and can hit multiple RPCs
+        // when an endpoint no longer has the receipt. Keep recovery for local
+        // receipt-backed purchases: they still wait for their result legs.
+        if (purchaseHashes.length > 0 && (completion !== true || box.fromReceipt)) {
           const purchase = await this.#readPurchaseKinds(box, owner);
           if (purchase) {
             hasLootboxLeg ||= purchase.hasLootboxLeg;

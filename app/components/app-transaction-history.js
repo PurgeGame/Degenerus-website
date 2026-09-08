@@ -18,7 +18,7 @@ import {
   degeneretteReplaySequences,
   degeneretteRevealSequenceFromFeedItem,
   mergeDegeneretteFeedItems,
-} from './app-degenerette-panel.js';
+} from '../app/degenerette-replay.js';
 import { queueReveal } from './reveal-queue.js';
 import { projectDegeneretteEthSplit } from './reveal-projection.js';
 

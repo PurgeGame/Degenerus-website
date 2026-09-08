@@ -1815,13 +1815,6 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece {
   transform: none;
 }
 
-/* The header already carries the purchase-bonus readout. Do not paint its
-   duplicate arrow over the rightmost ticket tile (Foil when it is present). */
-body.layout-basic .app-decimator-panel .dec-input-group--tickets
-  > .dec-input-accessories > boon-product-indicator {
-  display: none !important;
-}
-
 body.layout-basic .app-decimator-panel .dec-ticket-piece__copy {
   position: absolute;
   z-index: 12;
@@ -2407,6 +2400,13 @@ body.layout-basic .app-decimator-panel .dec-input-group--lootbox
   left: auto;
   width: 1.42rem;
   height: 1.42rem;
+}
+
+/* The bonus readout already explains ticket boons. Keep the duplicate arrow
+   from covering the fourth (Foil Pack) item in the compact ticket shelf. */
+body.layout-basic .app-decimator-panel .dec-input-group--tickets
+  > .dec-input-accessories > boon-product-indicator {
+  display: none !important;
 }
 
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle {

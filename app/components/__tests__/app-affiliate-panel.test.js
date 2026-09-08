@@ -16,6 +16,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { __resetSimRosterForTest } from '../../app/profiles.js';
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port from app-quest-panel.test.js).
@@ -427,6 +428,7 @@ function makeRefereesPayload(overrides = {}) {
 
 describe('<app-affiliate-panel> — referral network', () => {
   beforeEach(async () => {
+    __resetSimRosterForTest();
     storeMod.__resetForTest();
     resetDom();
     storeMod.update('connected.address', CONNECTED);

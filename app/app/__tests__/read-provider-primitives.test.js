@@ -1,6 +1,7 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ethers } from '../contracts.js';
+import { CONTRACTS } from '../chain-config.js';
 import * as reads from '../read-provider.js';
 
 afterEach(() => {
@@ -115,4 +116,71 @@ test('receipt reads retain mined results but only briefly retain pending nulls',
   reads.invalidateReadCache();
   await reads.readTransactionReceipt(hash, { provider });
   assert.equal(calls, 3, 'receipt invalidation permits reorg reconciliation');
+});
+
+test('GAME storage slots share one same-block Multicall and retain exact 256-bit values', async () => {
+  const abi = new ethers.Interface([
+    'function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)',
+    'function extsload(bytes32 slot) view returns (bytes32)',
+  ]);
+  const calls = [];
+  let rawReads = 0;
+  const word = (slot) => ethers.toBeHex((1n << 240n) + BigInt(slot), 32);
+  const provider = reads.attachMulticall({
+    getCode: async () => '0x01',
+    getStorage: async () => { rawReads++; throw new Error('unexpected raw read'); },
+    call: async (tx) => {
+      calls.push(tx);
+      assert.equal(tx.blockTag, 12345);
+      const [batch] = abi.decodeFunctionData('aggregate3', tx.data);
+      assert.equal(batch.length, 14);
+      const results = batch.map((row) => {
+        assert.equal(row.target.toLowerCase(), CONTRACTS.GAME.toLowerCase());
+        const [slot] = abi.decodeFunctionData('extsload', row.callData);
+        return { success: true, returnData: word(slot) };
+      });
+      return abi.encodeFunctionResult('aggregate3', [results]);
+    },
+  });
+  const slots = Array.from({ length: 14 }, (_, i) => BigInt(i + 10));
+  const result = await Promise.all(slots.map((slot) => reads.readContractStorage(CONTRACTS.GAME, slot, {
+    provider, blockTag: 12345,
+  })));
+  assert.deepEqual(result, slots.map(word));
+  assert.equal(calls.length, 1);
+  assert.equal(rawReads, 0);
+  await reads.readContractStorage(CONTRACTS.GAME, slots[0], { provider, blockTag: 12345 });
+  assert.equal(calls.length, 1, 'pinned storage cache survives the transport change');
+});
+
+test('GAME storage falls back on a reverted or malformed getter and other contracts stay direct', async () => {
+  const calls = [];
+  const raw = [];
+  let malformed = false;
+  const provider = reads.attachMulticall({
+    getCode: async () => '0x',
+    call: async (tx) => { calls.push(tx); if (malformed) return '0x'; throw new Error('missing selector'); },
+    getStorage: async (...args) => { raw.push(args); return ethers.toBeHex(33, 32); },
+  });
+  assert.equal(await reads.readContractStorage(CONTRACTS.GAME, 1, { provider, blockTag: 123 }), ethers.toBeHex(33, 32));
+  malformed = true;
+  assert.equal(await reads.readContractStorage(CONTRACTS.GAME, 2, { provider, blockTag: 124 }), ethers.toBeHex(33, 32));
+  const other = `0x${'1'.repeat(40)}`;
+  await reads.readContractStorage(other, 3, { provider, blockTag: 125 });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(raw, [[CONTRACTS.GAME, '0x1', 123], [CONTRACTS.GAME, '0x2', 124], [other, '0x3', 125]]);
+});
+
+test('explicit fresh storage reads bypass the completed call cache', async () => {
+  let rawReads = 0;
+  let calls = 0;
+  const provider = reads.attachReadCache(reads.attachMulticall({
+    getCode: async () => '0x',
+    call: async () => { calls++; return ethers.toBeHex(1, 32); },
+    getStorage: async () => { rawReads++; return ethers.toBeHex(2, 32); },
+  }));
+  assert.equal(await reads.readContractStorage(CONTRACTS.GAME, 1, { provider }), ethers.toBeHex(1, 32));
+  assert.equal(await reads.readContractStorage(CONTRACTS.GAME, 1, { provider, fresh: true }), ethers.toBeHex(2, 32));
+  assert.equal(calls, 1);
+  assert.equal(rawReads, 1);
 });

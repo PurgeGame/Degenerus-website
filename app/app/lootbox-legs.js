@@ -811,7 +811,11 @@ export async function enrichHumanBoxSpinLegs(legs, {
       return leg;
     }
     changed = true;
-    return { ...leg, preSurvivalPayout };
+    return {
+      ...leg,
+      preSurvivalPayout,
+      survivalWinPayout: boxSpinFlipSurvivalPayout(preSurvivalPayout, derived.spinSeed),
+    };
   });
   return changed ? enriched : rows;
 }

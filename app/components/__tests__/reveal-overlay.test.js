@@ -1629,6 +1629,56 @@ describe('normalizeSequence', () => {
 });
 
 describe('buildBoxSpinBoard', () => {
+  test('a fallback loss has the same pending amounts as a possible survivor', () => {
+    const oneFlip = 10n ** 18n;
+    const source = {
+      spinType: 'flip',
+      estimateBoxAmountWei: 1_000_000_000_000n,
+      estimateTicketPriceWei: 10_000_000_000n,
+      reels: [
+        { spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 1, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
+      ],
+    };
+    const prizes = new Set();
+    for (let betId = 1n; betId <= 40n; betId += 1n) {
+      const lost = buildBoxSpinBoard({ ...source, betId, payout: 0n, survived: false });
+      const won = buildBoxSpinBoard({
+        ...source, betId, payout: lost.survivalWinPayout, survived: true,
+      });
+      assert.ok(lost.survivalWinPayout > 0n);
+      const granule = lost.survivalWinPayout > 1_000n * oneFlip ? 100n * oneFlip : oneFlip;
+      assert.equal(lost.survivalWinPayout % granule, 0n,
+        'the possible prize has the same rounding as an emitted survivor');
+      assert.equal(lost.payoutAtRisk, won.payoutAtRisk);
+      assert.deepEqual(lost.rows.map((row) => row.previewPayout),
+        won.rows.map((row) => row.previewPayout));
+      assert.equal(lost.rows.reduce((sum, row) => sum + row.previewPayout, 0n),
+        lost.payoutAtRisk);
+      assert.equal(buildBoxSpinBoard({ ...source, betId }).payoutAtRisk, lost.payoutAtRisk,
+        'replay and an omitted survival bit cannot change the fallback');
+      prizes.add(String(lost.survivalWinPayout));
+    }
+    assert.ok(prizes.size > 5, 'losses use varied possible rolls, not one recognizable average');
+
+    const legacy = buildBoxSpinBoard({ spinType: 'flip', reels: source.reels, payout: 0n });
+    assert.ok(legacy.payoutAtRisk > 0n && legacy.survivalWinPayout > 0n,
+      'missing box metadata still produces a plausible number for paying reels');
+  });
+
+  test('a known potential win supplies the pending stake on a loss', () => {
+    const oneFlip = 10n ** 18n;
+    const board = buildBoxSpinBoard({
+      spinType: 'flip', survived: false, payout: 0n,
+      survivalWinPayout: 4_200n * oneFlip,
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+    });
+    assert.equal(board.payoutAtRisk, 2_100n * oneFlip);
+    assert.equal(board.payoutAtRiskApproximate, false);
+    assert.equal(board.rows[0].previewPayout, 2_100n * oneFlip);
+  });
+
   // The reported defect: every amount on a busted box spin came from the
   // settled payout, which the contract zeroes on a bust, so the panel could
   // only count reels. The stake now arrives independently of the coin.
@@ -1743,7 +1793,7 @@ describe('buildBoxSpinBoard', () => {
       board.payoutAtRisk,
     );
     assert.equal(board.rows[0].previewApproximate, true,
-      'the estimate qualifier follows the amount onto the paying reel');
+      'estimated provenance is retained internally for the paying reel');
   });
 
   test('preserves every verified reel and keeps a three-spin FLIP payout group-level', () => {
@@ -1949,12 +1999,14 @@ describe('buildBoxSpinBoard', () => {
       'the parent bounty stake reconstructs what its paying reels lost on the final flip');
     assert.equal(board.payoutAtRiskApproximate, false,
       'the emitted score identifies one hero interpretation for this reel');
-    assert.equal(board.survivalWinPayout, board.payoutAtRisk * 2n);
+    assert.ok(board.survivalWinPayout > 0n);
+    assert.equal(board.survivalWinPayout % oneFlip, 0n,
+      'the potential win follows the contract rounding instead of exposing fractional mint amounts');
 
     const neutralActivityEstimate = buildBoxSpinBoard({ ...spin, activityScore: null });
     assert.ok(neutralActivityEstimate.payoutAtRisk > 0n);
     assert.equal(neutralActivityEstimate.payoutAtRiskApproximate, true,
-      'a legacy bounty with its stake but no activity snapshot remains visibly approximate');
+      'a legacy bounty retains approximate provenance internally');
 
     const sequence = normalizeSequence({ kind: 'record-bounty', spin });
     assert.equal(sequence.kind, 'record-bounty');
@@ -5643,7 +5695,64 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('a BoxSpin survival bust shows a result-independent reel-payout estimate', async () => {
+  test('pending payout text is identical for a fallback loss and a possible win', async (t) => {
+    const source = {
+      legType: 'spin', spinType: 'flip', betId: 91n,
+      estimateBoxAmountWei: 1_000_000_000_000n,
+      estimateTicketPriceWei: 10_000_000_000n,
+      reels: [
+        { spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 1, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
+      ],
+    };
+    const potentialWin = buildBoxSpinBoard(source).survivalWinPayout;
+    const snapshots = [];
+    let overlay;
+    const createElement = document.createElement;
+    t.mock.method(document, 'createElement', (tag) => {
+      const element = createElement(tag);
+      const descriptor = Object.getOwnPropertyDescriptor(element, 'textContent');
+      Object.defineProperty(element, 'textContent', {
+        ...descriptor,
+        set(value) {
+          descriptor.set.call(this, value);
+          if (this.className === 'rvl-survival-detail' && String(value).includes(' · WIN ')) {
+            snapshots.push({
+              detail: value,
+              meter: overlay.querySelector('.rvl-box-payout-meter').textContent,
+              reels: overlay.querySelectorAll('.rvl-dgn-history-chip').map((chip) => chip.textContent),
+            });
+          }
+        },
+      });
+      return element;
+    });
+    overlay = instantiate();
+    t.after(() => overlay.disconnectedCallback());
+    for (const survived of [false, true]) {
+      queueReveal({
+        kind: 'lootbox',
+        legs: [{ ...source, survived, payout: survived ? potentialWin : 0n }],
+      });
+      await tick();
+      overlay.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')
+        .dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+      assert.match(overlay.querySelector('.rvl-survival').textContent,
+        survived ? /SURVIVED/ : /BUSTED/,
+        'the terminal result still reports the actual settlement');
+      overlay.querySelector('.rvl-dgn-spin-cta')
+        .dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+    }
+    assert.equal(snapshots.length, 2, 'both pre-landing survival displays were captured');
+    assert.deepEqual(snapshots[0], snapshots[1],
+      'reel chips, the running payout, and the survival amount cannot identify the loss');
+    assert.doesNotMatch(JSON.stringify(snapshots), /[≈~]|PAYING REELS/);
+  });
+
+  test('a BoxSpin survival bust shows a plausible reel payout without a loss marker', async () => {
     queueReveal({
       kind: 'lootbox',
       lootboxIndex: 9,
@@ -5689,12 +5798,14 @@ describe('reveal-overlay element', () => {
     const survival = zone.querySelector('.rvl-survival');
     assert.match(
       payoutMeter.textContent,
-      /REEL PAYOUT≈[\d,.KM]+ FLIPDOUBLE OR NOTHING · WIN ≈[\d,.KM]+ FLIP/,
+      /REEL PAYOUT[\d,.KM]+ FLIPDOUBLE OR NOTHING · WIN [\d,.KM]+ FLIP/,
     );
     assert.match(
       survival.textContent,
-      /BUSTED1 PAYING REEL · ≈[\d,.KM]+ FLIP LOST/,
+      /BUSTED1 PAYING REEL · [\d,.KM]+ FLIP LOST/,
     );
+    assert.doesNotMatch(zone.textContent, /[≈~]/,
+      'an approximation marker must never give away the survival loss');
     assert.doesNotMatch(
       zone.textContent,
       /PAYOUT AT RISK|WIN LOCKED|REEL PAYOUT AT RISK|FINAL PAYOUT LOST/,

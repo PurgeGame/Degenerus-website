@@ -1382,6 +1382,7 @@ describe('app-box-strip', () => {
   });
 
   test('an unresolved legacy DB row cannot create a notification for an empty chain slot', async () => {
+    let receiptReads = 0;
     const fake = {
       boxIndexComplete: async () => true,
       lootboxRngWordByIndex: async () => 1n,
@@ -1389,6 +1390,7 @@ describe('app-box-strip', () => {
     contractsMod.setProvider({
       getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
       getSigner: async () => ({ getAddress: async () => ADDR }),
+      getTransactionReceipt: async () => { receiptReads += 1; return null; },
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
     globalThis.fetch = async (url) => ({
@@ -1396,13 +1398,14 @@ describe('app-box-strip', () => {
       status: 200,
       json: async () => String(url).includes('/lootbox/feed')
         ? {
-            items: [{
+            items: Array.from({ length: 15 }, (_, index) => ({
               player: ADDR_LC,
-              resolvedIndex: 88,
+              resolvedIndex: 88 + index,
+              transactionHash: `0x${String(index + 1).padStart(64, '0')}`,
               opened: false,
               rngReady: true,
               results: [],
-            }],
+            })),
           }
         : { items: [] },
     });
@@ -1417,7 +1420,67 @@ describe('app-box-strip', () => {
       'the bottom tray is not spammed by the stale row');
     assert.equal(globalThis.localStorage.getItem(KEY), null,
       'an unverified database candidate is not persisted as a receipt purchase');
+    assert.equal(receiptReads, 0,
+      'completed DB-only indexes are discarded without looking up old purchase receipts');
     el.disconnectedCallback();
+  });
+
+  test('a completed receipt-backed purchase still recovers its receipt and waits for results', async () => {
+    let receiptReads = 0;
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 8, resultKey: '8', transactionHash: '0xcompletedlocalpurchase',
+      amountWei: '10000000000', fromReceipt: true, ready: false, resolved: false,
+    }]));
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getTransactionReceipt: async () => {
+        receiptReads += 1;
+        return { logs: [{ parsed: {
+          name: 'PresaleBoxBuy', args: { buyer: ADDR, index: 8n, amount: 10_000_000_000n },
+        } }] };
+      },
+    });
+    lootboxMod.__setContractFactoryForTest(() => ({
+      interface: { parseLog: log => log.parsed },
+      boxIndexComplete: async () => true,
+    }));
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    assert.equal(receiptReads, 1, 'a durable local purchase retains receipt recovery');
+    const [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending?.resolved, true);
+    assert.equal(pending?.write, false);
+    assert.equal(pending?.shortLabel, 'Syncing result');
+    assert.equal(JSON.parse(globalThis.localStorage.getItem(KEY))[0].fromReceipt, true);
+  });
+
+  test('an unavailable completion read does not suppress purchase receipt recovery', async () => {
+    let receiptReads = 0;
+    contractsMod.setProvider({
+      getTransactionReceipt: async () => {
+        receiptReads += 1;
+        return { logs: [] };
+      },
+    });
+    lootboxMod.__setContractFactoryForTest(() => ({
+      interface: { parseLog: log => log.parsed },
+      boxIndexComplete: async () => { throw Error('temporary RPC failure'); },
+      openBox: { staticCall: async () => undefined },
+    }));
+    globalThis.fetch = async url => ({
+      ok: true, status: 200,
+      json: async () => ({ items: String(url).includes('/lootbox/feed') ? [{
+        player: ADDR_LC, resolvedIndex: 9, transactionHash: '0xunknowncompletion',
+        costRawWei: '10000000000', opened: false, results: [],
+      }] : [] }),
+    });
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    assert.equal(receiptReads, 1, 'unknown completion is not proof that the box was swept');
+    assert.equal(JSON.parse(globalThis.localStorage.getItem(KEY))?.[0]?.ready, true,
+      'a successful exact-player simulation still discovers the actionable box');
   });
 
   test('a receipt-confirmed presale-only box survives an incomplete shared index', async () => {

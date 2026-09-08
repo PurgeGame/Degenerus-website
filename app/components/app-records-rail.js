@@ -1156,7 +1156,7 @@ class AppRecordsRail extends HTMLElement {
     if (!Array.isArray(records)) return null;
     const seq = this.#seq;
     const holders = records.map((record) => record.player).filter(Boolean);
-    const profiles = await _fetchProfiles(holders);
+    const profiles = await _fetchProfiles(holders, { fresh: true });
     if (seq !== this.#seq) return null;
     this.#profiles = profiles;
     this.#render();

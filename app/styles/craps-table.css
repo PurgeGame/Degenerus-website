@@ -1237,6 +1237,69 @@ app-craps-table {
 
 .craps-dice-bay__lock-readout[hidden] { display: none !important; }
 
+/* Last score change: a bare glowing number in the dice bay's bottom-left
+   corner, right beside the STACK score. The dice are round, so that corner
+   stays clear on every layout. */
+.craps-score-delta {
+  --craps-score-delta-color: #f2e0b3;
+  --craps-score-delta-glow: rgba(242, 224, 179, 0.5);
+  position: absolute;
+  z-index: 5;
+  bottom: 0.3rem;
+  left: 0.45rem;
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: var(--craps-score-delta-color);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.craps-score-delta[hidden] { display: none !important; }
+
+.craps-score-delta[data-tone="win"] {
+  --craps-score-delta-color: #7dff9c;
+  --craps-score-delta-glow: rgba(60, 255, 122, 0.85);
+}
+
+.craps-score-delta[data-tone="loss"] {
+  --craps-score-delta-color: #ff7b84;
+  --craps-score-delta-glow: rgba(255, 60, 70, 0.85);
+}
+
+.craps-score-delta strong {
+  display: block;
+  opacity: 0;
+  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  font-weight: 1000;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-text-stroke: 0.05em rgba(24, 15, 3, 0.92);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 2px rgba(15, 9, 2, 0.92), 0 0 0.65rem var(--craps-score-delta-glow);
+  transform-origin: 0 100%;
+}
+
+.craps-score-delta.is-popping strong {
+  animation: craps-score-delta-pop var(--craps-speed-900, 900ms) ease-out both;
+}
+
+/* The final TOTAL WON card owns the bay; the per-roll number yields to it. */
+.craps-dice-bay:has(.craps-winner-payoff:not([hidden])) .craps-score-delta { display: none; }
+
+@keyframes craps-score-delta-pop {
+  0% { opacity: 0; transform: translateY(0.35rem) scale(0.55); }
+  14% { opacity: 1; transform: translateY(0) scale(1.18); }
+  26% { transform: scale(1); }
+  62% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-0.6rem); }
+}
+
+}
+}
+
 .craps-dice-bay__lock-readout[data-seven-outcome="win"] {
   --craps-dice-lock-color: #6ef08c;
   --craps-dice-lock-glow: rgba(60, 255, 122, 0.92);
@@ -4297,11 +4360,6 @@ app-craps-table {
     cubic-bezier(0.25, 0.7, 0.24, 1) var(--flight-delay, 0ms) both;
 }
 
-.craps-payout-flight img.is-featured-payout {
-  width: clamp(1.02rem, 1.55vw, 1.35rem);
-  filter: saturate(1.15) brightness(1.08) drop-shadow(0 0 5px rgba(255, 216, 120, 0.72)) drop-shadow(0 7px 5px rgba(0, 0, 0, 0.58));
-}
-
 .craps-payout-flight img.is-bounty-award {
   width: clamp(1.3rem, 2vw, 1.75rem);
   filter: saturate(1.2) brightness(1.16)
@@ -4348,12 +4406,51 @@ app-craps-table {
   }
 }
 
-.craps-bet.is-paying .craps-bet__seat-chip.is-local {
-  animation: craps-paying-stack var(--craps-speed-600, 600ms) ease-out both;
+/* A winning section lights up where it sits, and so does every chip on it.
+   The class holds for the whole settlement beat, so the flash settles into a
+   steady lit state instead of fading before the rack repaints. */
+.craps-bet.is-winning {
+  z-index: 2;
+  border-color: #fff1b3;
+  animation: craps-bet-win-flash var(--craps-speed-600, 600ms) ease-out both;
 }
 
-.craps-bet__seat-chip.is-paying-featured {
-  animation: craps-paying-other-stack var(--craps-speed-600, 600ms) ease-out both;
+.craps-bet.is-winning .craps-bet__seat-chip.is-winning {
+  z-index: 3;
+  animation: craps-chip-win-pulse var(--craps-speed-600, 600ms) ease-out both;
+}
+
+@keyframes craps-bet-win-flash {
+  0% {
+    background-color: rgba(255, 226, 132, 0);
+    box-shadow: inset 0 0 0 0 rgba(255, 222, 120, 0);
+  }
+  24% {
+    background-color: rgba(255, 226, 132, 0.42);
+    box-shadow:
+      inset 0 0 0 3px #ffe58a,
+      inset 0 0 1.8rem rgba(255, 214, 90, 0.82),
+      0 0 1.2rem rgba(255, 214, 90, 0.78);
+  }
+  100% {
+    background-color: rgba(255, 226, 132, 0.17);
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 229, 138, 0.92),
+      inset 0 0 1rem rgba(255, 214, 90, 0.46),
+      0 0 0.55rem rgba(255, 214, 90, 0.42);
+  }
+}
+
+@keyframes craps-chip-win-pulse {
+  0% { filter: none; transform: none; }
+  30% {
+    filter: brightness(1.7) drop-shadow(0 0 0.55rem rgba(255, 228, 120, 1));
+    transform: scale(1.16);
+  }
+  100% {
+    filter: brightness(1.25) drop-shadow(0 0 0.35rem rgba(255, 228, 120, 0.9));
+    transform: scale(1.05);
+  }
 }
 
 .craps-bet.is-seven-clearing .craps-bet__corner-grid {
@@ -4532,16 +4629,6 @@ app-craps-table {
   100% { opacity: 1; transform: none; filter: none; }
 }
 
-@keyframes craps-paying-stack {
-  0%, 100% { filter: none; }
-  28% { filter: brightness(1.65) drop-shadow(0 0 8px rgba(91, 255, 160, 0.95)); }
-}
-
-@keyframes craps-paying-other-stack {
-  0%, 100% { filter: none; }
-  28% { filter: brightness(1.65) drop-shadow(0 0 8px rgba(255, 98, 110, 0.95)); }
-}
-
 @keyframes craps-rack-pip-arrival {
   0% { filter: brightness(1.9) drop-shadow(0 0 0.32rem rgba(141, 255, 200, 0.92)); }
   55% { filter: brightness(1.28) drop-shadow(0 0 0.18rem rgba(91, 225, 161, 0.62)); }
@@ -4629,6 +4716,16 @@ app-craps-table {
   .craps-run-chip.is-pip-arrival,
   .craps-run-rail__bounty { animation: none !important; }
   .craps-payout-flight { display: none; }
+  .craps-bet.is-winning {
+    animation: none !important;
+    background-color: rgba(255, 226, 132, 0.17);
+    box-shadow: inset 0 0 0 2px rgba(255, 229, 138, 0.92);
+  }
+  .craps-bet.is-winning .craps-bet__seat-chip.is-winning {
+    animation: none !important;
+    filter: brightness(1.25) drop-shadow(0 0 0.35rem rgba(255, 228, 120, 0.9));
+  }
+  .craps-score-delta.is-popping strong { animation: none !important; opacity: 1; }
   .craps-table-rail[data-board="clearing"]
     .craps-bet.is-seven-clearing .craps-bet__corner-grid,
   .craps-table-rail[data-board="clearing"]
@@ -6287,6 +6384,8 @@ app-craps-table {
   font-size: clamp(0.8rem, 1.1vw, 1rem);
 }
 
+}
+
 .craps-race-you-stack img {
   display: block;
   width: 1.05rem;
@@ -6892,81 +6991,6 @@ app-craps-table {
   transform: translate(-50%, -50%);
 }
 
-.craps-race-transfer.is-loss {
-  border-color: rgba(255, 118, 128, 0.85);
-  background: linear-gradient(180deg, rgba(126, 27, 37, 0.98), rgba(59, 7, 14, 0.99));
-  box-shadow: 0 0 1rem rgba(255, 70, 82, 0.42);
-  color: #ffc1c6;
-}
-
-.craps-race-transfer--balance {
-  animation-name: craps-race-balance-transfer;
-  grid-template-columns: minmax(0, 1fr);
-  width: 3.4rem;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  filter: drop-shadow(0 0 0.45rem rgba(101, 255, 141, 0.65));
-}
-
-.craps-race-transfer--balance.is-loss {
-  animation-name: craps-race-balance-loss;
-  background: none;
-  box-shadow: none;
-  filter: drop-shadow(0 0 0.45rem rgba(255, 70, 82, 0.65));
-}
-
-.craps-race-transfer--balance img {
-  display: block;
-  width: 100%;
-  height: auto;
-  grid-area: 1 / 1;
-  animation: craps-race-balance-chips steps(1, end) both;
-  animation-duration: inherit;
-}
-
-.craps-race-transfer--balance .craps-race-transfer__amount {
-  grid-area: 1 / 1;
-  justify-self: center;
-  white-space: nowrap;
-  font-size: clamp(1.25rem, 2vw, 1.6rem);
-  text-shadow: 0 2px 4px #06150d;
-  animation: craps-race-balance-amount steps(1, end) both;
-  animation-duration: inherit;
-}
-
-.craps-race-transfer--balance.is-loss img {
-  visibility: hidden;
-}
-
-.craps-race-transfer--balance.is-loss .craps-race-transfer__amount {
-  animation: none;
-  opacity: 1;
-}
-
-@keyframes craps-race-balance-loss {
-  0%, 50% { opacity: 1; transform: translate(-50%, -50%); }
-  100% { opacity: 0; transform: translate(-50%, -50%); }
-}
-
-@keyframes craps-race-balance-chips {
-  0% { opacity: 1; }
-  56%, 100% { opacity: 0; }
-}
-
-@keyframes craps-race-balance-amount {
-  0% { opacity: 0; }
-  56%, 100% { opacity: 1; }
-}
-
-@keyframes craps-race-balance-transfer {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.72); }
-  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  56%, 78% { opacity: 1; transform: translate(calc(-50% + var(--race-transfer-x)), calc(-50% + var(--race-transfer-y))) scale(0.9); }
-  100% { opacity: 0; transform: translate(calc(-50% + var(--race-transfer-x)), calc(-50% + var(--race-transfer-y))) scale(0.9); }
 }
 
 .craps-race-transfer--pool {

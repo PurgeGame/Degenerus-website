@@ -569,6 +569,9 @@ describe('human BoxSpin payout enrichment', () => {
       'the losing branch names it too, from identical inputs');
     assert.equal(enrichedWon.preSurvivalPayout, enrichedBusted.preSurvivalPayout,
       'the stake is a property of the reels and the box, never of the coin');
+    assert.equal(enrichedWon.survivalWinPayout, 552n * oneFlip);
+    assert.equal(enrichedBusted.survivalWinPayout, enrichedWon.survivalWinPayout,
+      'the lost branch retains the exact rounded potential win as well as the reel stake');
     assert.equal(
       boxSpinFlipSurvivalPayout(enrichedWon.preSurvivalPayout, 123n),
       _feedPayout(enrichedWon.payout),

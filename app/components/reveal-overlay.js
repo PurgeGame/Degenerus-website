@@ -68,6 +68,7 @@ import {
   getPendingActions,
 } from '../app/pending-actions.js';
 import {
+  boxSpinFlipSurvivalPayout,
   boxSpinHeroQuadrant,
   lootboxRewardPresentation,
   lootboxRewardVisual,
@@ -232,7 +233,6 @@ const TOKEN_WEI = 10n ** 18n;
 // FLIP lane. The final BoxSpin payout is zero when survival loses, but this
 // fixed source stake still lets the reveal name an honest reel-payout estimate.
 const FOIL_FLIP_STAKE_PER_FACE = 1_000n * TOKEN_WEI;
-const BOX_ESTIMATE_VARIANCE_BPS = 12_448n;
 const BOX_ESTIMATE_MAIN_BPS = 9_000n;
 const BOX_ESTIMATE_STAKE_BPS = 7_060n;
 const BOX_ESTIMATE_SPLIT_THRESHOLD = (TOKEN_WEI / 2n) / BigInt(ETH_DIVISOR);
@@ -512,12 +512,25 @@ function _boxSpinHeroForRow(reel, row) {
 // The BoxSpin event publishes the final group payout rather than three row
 // payouts. FLIP rows all share one stake and one ROI, so their relative payout
 // weights are still recoverable exactly from the emitted ticket + score table.
-// When the packed score leaves more than one possible hero, average only if the
-// candidate table weights differ and mark the eventual amount as approximate.
+// When multiple heroes fit, choose a stable, possible table value. Averaging
+// candidates can produce a payout that no real reel could have earned.
+function _boxSpinPreviewSeed(spin, rows, purpose) {
+  // Presentation entropy deliberately excludes both the survival bit and the
+  // settled payout. Replays retain the same fallback without exposing either.
+  const key = `${purpose}:${spin?.betId ?? ''}:${rows.map((row) =>
+    `${row.spinIndex}:${row.playerTraits}:${row.houseTraits}:${row.score}`).join('|')}`;
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = Math.imul(hash ^ key.charCodeAt(i), 16777619);
+  }
+  return BigInt(hash >>> 0);
+}
+
 function _boxSpinFlipWeight(row) {
   if (!boxSpinScorePays(row?.score)) return { weight: 0n, ambiguous: false };
   const candidates = [];
   for (let hero = 0; hero < 4; hero += 1) {
+    if (row.heroIdx != null && hero !== row.heroIdx) continue;
     if (_boxSpinScoreForHero(row, hero) !== Number(row.score)) continue;
     try {
       const table = degenerettePayoutTable({
@@ -534,7 +547,7 @@ function _boxSpinFlipWeight(row) {
   const unique = new Set(positive.map(String));
   if (unique.size === 1) return { weight: positive[0], ambiguous: false };
   return {
-    weight: positive.reduce((sum, weight) => sum + weight, 0n) / BigInt(positive.length),
+    weight: positive[Number(_boxSpinPreviewSeed(null, [row], 'hero') % BigInt(positive.length))],
     ambiguous: true,
   };
 }
@@ -574,7 +587,7 @@ function _allocateBoxSpinPreview(rows, amount, approximate = false) {
 // event alone cannot say how much its three reels produced first. Record
 // bounties and foil rewards both retain a fixed source stake; combine it with
 // the frozen activity score (or its marked estimate) and the emitted reel
-// scores. Differing hero candidates are averaged rather than hiding the stake.
+// scores. If the hero is unknown, choose one of its possible payouts.
 function _fixedStakeSpinPayoutAtRisk(spin, rows) {
   const recordStake = _safeBigInt(spin?.recordStake);
   const totalStake = recordStake > 0n
@@ -598,6 +611,7 @@ function _fixedStakeSpinPayoutAtRisk(spin, rows) {
     if (!boxSpinScorePays(row?.score)) continue;
     const candidates = [];
     for (let hero = 0; hero < 4; hero += 1) {
+      if (row.heroIdx != null && hero !== row.heroIdx) continue;
       if (_boxSpinScoreForHero(row, hero) !== Number(row.score)) continue;
       try {
         const payout = degenerettePayoutTable({
@@ -616,7 +630,7 @@ function _fixedStakeSpinPayoutAtRisk(spin, rows) {
     if (unique.length === 1) {
       amount += unique[0];
     } else {
-      amount += unique.reduce((sum, value) => sum + value, 0n) / BigInt(unique.length);
+      amount += candidates[Number(_boxSpinPreviewSeed(null, [row], 'hero') % BigInt(candidates.length))];
       approximate = true;
     }
   }
@@ -626,8 +640,8 @@ function _fixedStakeSpinPayoutAtRisk(spin, rows) {
 // FoilPackBought publishes the deterministic ActivityCurveLib boost rather
 // than the raw frozen score. Invert the same three segments so a claim receipt
 // can use a close activity estimate without another network read. The final
-// near-flat segment maps several scores to one bps value, so those results keep
-// the approximation marker.
+// near-flat segment maps several scores to one bps value, so those results
+// retain their approximate provenance internally.
 function _foilActivityScoreFromBoost(multBps) {
   const boost = Number(multBps);
   if (!Number.isInteger(boost) || boost < 20_000 || boost > 60_000) return null;
@@ -659,17 +673,23 @@ function _foilActivityScoreFromBoost(multBps) {
 /**
  * Result-independent fallback for a human Luckbox whose historical storage
  * context is unavailable. The opened box value and level price still support
- * a neutral-EV estimate: average the contract's twenty FLIP-size rolls, then
+ * a plausible roll: select from the contract's twenty FLIP-size rolls, then
  * apply the real 70.6% three-reel stake and the visible score-table weights.
  * This deliberately cannot announce whether the later survival coin won.
  */
 function _humanBoxSpinPayoutEstimate(spin, rows) {
-  const amountWei = _safeBigInt(spin?.estimateBoxAmountWei);
-  const ticketPriceWei = _safeBigInt(spin?.estimateTicketPriceWei);
-  if (amountWei <= 0n || ticketPriceWei <= 0n) return null;
+  const ticketPriceWei = _safeBigInt(spin?.estimateTicketPriceWei)
+    || lootboxTicketPriceForLevel(0);
+  // Legacy receipts can omit both prices. Use a modest one-ticket box so a
+  // paying loss never advertises missing context with a bare reel count.
+  const amountWei = _safeBigInt(spin?.estimateBoxAmountWei) || ticketPriceWei;
+  const roll = _boxSpinPreviewSeed(spin, rows, 'size') % 20n;
+  const varianceBps = roll < 16n
+    ? 4_388n + roll * 360n
+    : 23_199n + (roll - 16n) * 7_125n;
   let rollAmount = (amountWei * BOX_ESTIMATE_MAIN_BPS) / 10_000n;
   if (rollAmount > BOX_ESTIMATE_SPLIT_THRESHOLD) rollAmount /= 2n;
-  const largeFlip = ((rollAmount * BOX_ESTIMATE_VARIANCE_BPS) / 10_000n)
+  const largeFlip = ((rollAmount * varianceBps) / 10_000n)
     * (1_000n * TOKEN_WEI) / ticketPriceWei;
   const perSpin = ((largeFlip * BOX_ESTIMATE_STAKE_BPS) / 10_000n) / 3n;
   if (perSpin <= 0n) return null;
@@ -724,6 +744,7 @@ export function buildBoxSpinBoard(spin) {
   const explicitAtRisk = _safeBigInt(
     spin?.preSurvivalPayout ?? spin?.survivalPayout ?? spin?.payoutAtRisk,
   );
+  const suppliedSurvivalWinPayout = _safeBigInt(spin?.survivalWinPayout);
   const reconstructedAtRisk = spinType === 'record' || _safeBigInt(spin?.fixedStake) > 0n
     ? _fixedStakeSpinPayoutAtRisk(spin, rows)
     : null;
@@ -734,11 +755,11 @@ export function buildBoxSpinBoard(spin) {
   // is unavailable. Use its known half for the reel pot immediately; only a
   // busted branch needs the physical-box estimate. This also makes a lone
   // paying reel exact instead of showing an unrelated average-roll amount.
-  const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
+  const inferredAtRisk = survivalStake ? (total || suppliedSurvivalWinPayout) / 2n : 0n;
   const exactReconstructedAtRisk = reconstructedAtRisk?.approximate === false
     ? reconstructedAtRisk.amount
     : 0n;
-  const payoutAtRisk = explicitAtRisk > 0n
+  const rawAtRisk = explicitAtRisk > 0n
     ? explicitAtRisk
     : exactReconstructedAtRisk > 0n
       ? exactReconstructedAtRisk
@@ -752,28 +773,23 @@ export function buildBoxSpinBoard(spin) {
     : reconstructedAtRisk != null
       ? reconstructedAtRisk.approximate
       : estimatedAtRisk != null;
-  const settledPayoutAtRisk = explicitAtRisk > 0n
-    ? explicitAtRisk
-    : exactReconstructedAtRisk > 0n
-      ? exactReconstructedAtRisk
-      : inferredAtRisk > 0n
-        ? inferredAtRisk
-        : (reconstructedAtRisk?.amount ?? estimatedAtRisk?.amount ?? 0n);
-  const settledPayoutAtRiskApproximate = explicitAtRisk > 0n
-    || exactReconstructedAtRisk > 0n
-    ? false
-    : inferredAtRisk > 0n
-      ? false
-      : reconstructedAtRisk != null
-        ? reconstructedAtRisk.approximate
-        : estimatedAtRisk != null;
-  const suppliedSurvivalWinPayout = _safeBigInt(spin?.survivalWinPayout);
-  const survivalWinPayout = suppliedSurvivalWinPayout
-    || (survivalStake && total > 0n ? total : 0n)
-    || (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n);
-  const settledSurvivalWinPayout = suppliedSurvivalWinPayout
-    || (survivalStake && total > 0n ? total : 0n)
-    || (settledPayoutAtRisk > 0n ? settledPayoutAtRisk * 2n : 0n);
+  const previewWin = rawAtRisk > 0n
+    ? boxSpinFlipSurvivalPayout(rawAtRisk, _boxSpinPreviewSeed(spin, rows, 'round'))
+    : 0n;
+  // Unknown losses must look like a possible surviving settlement, including
+  // whole-FLIP / hundred-FLIP rounding. Otherwise their decimals give them away
+  // even without an approximation symbol. Exact reel amounts remain intact.
+  const payoutAtRisk = payoutAtRiskApproximate && previewWin > 0n
+    ? previewWin / 2n
+    : rawAtRisk;
+  const settledPayoutAtRisk = payoutAtRisk;
+  const settledPayoutAtRiskApproximate = payoutAtRiskApproximate;
+  const survivalWinPayout = (survivalStake && total > 0n ? total : 0n)
+    || suppliedSurvivalWinPayout
+    || previewWin;
+  const settledSurvivalWinPayout = (survivalStake && total > 0n ? total : 0n)
+    || suppliedSurvivalWinPayout
+    || previewWin;
   if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk, payoutAtRiskApproximate);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
@@ -1319,7 +1335,7 @@ export function normalizeSequence(seq) {
       group.cards.forEach((card) => groupAmountByCard.set(card, group.amountWei));
     });
     // Exact event-block enrichment remains authoritative. When it is absent,
-    // give FLIP boards their physical box value for a clearly marked estimate.
+    // give FLIP boards their physical box value for a plausible pending amount.
     // A counted combo's aggregate purchase value belongs to the outer receipt,
     // never to each Small / Medium / Large spin inside it.
     const mappedCards = cards.map((card) => card?.spin?.spinType === 'flip'
@@ -4982,9 +4998,11 @@ class RevealOverlay extends HTMLElement {
     return board.currency === 0 ? _ethText(amount) : _tokenText(amount);
   }
 
-  #boxSpinAmountText(board, amount, approximate = false) {
+  #boxSpinAmountText(board, amount) {
     const value = this.#formatDgnAmount(board, amount);
-    return `${approximate ? '≈' : ''}${value} ${board.unit}`;
+    // Approximation is internal provenance: displaying it here reveals a loss
+    // whenever the surviving branch could infer its amount from settlement.
+    return `${value} ${board.unit}`;
   }
 
   #boxSpinRowPresentation(row, board, currencyRevealed) {
@@ -5023,7 +5041,7 @@ class RevealOverlay extends HTMLElement {
     }
     const preview = _safeBigInt(row?.previewPayout);
     const amount = preview > 0n
-      ? this.#boxSpinAmountText(board, preview, row?.previewApproximate === true)
+      ? this.#boxSpinAmountText(board, preview)
       : '';
     return {
       won: true,
@@ -5072,13 +5090,7 @@ class RevealOverlay extends HTMLElement {
     const payoutKnown = built > 0n;
     rendered.boxPayoutLabel.textContent = payoutKnown ? 'REEL PAYOUT' : 'PAYING REELS';
     rendered.boxPayoutValue.textContent = payoutKnown
-      ? this.#boxSpinAmountText(
-          board,
-          built,
-          board.payoutAtRiskApproximate === true
-            || (remaining > 0
-              && winningRows.some((row) => row.previewApproximate === true)),
-        )
+      ? this.#boxSpinAmountText(board, built)
       : (remaining > 0
           ? `${winningRows.length} SO FAR`
           : `${winningRows.length} OF ${board.rows.length}`);
@@ -5088,7 +5100,6 @@ class RevealOverlay extends HTMLElement {
       rendered.boxPayoutDetail.textContent = `DOUBLE OR NOTHING · WIN ${this.#boxSpinAmountText(
         board,
         board.survivalWinPayout,
-        board.survivalWinPayoutApproximate === true,
       )}`;
     } else if (board.survivalStage) {
       rendered.boxPayoutDetail.textContent = 'DOUBLE OR NOTHING';
@@ -5762,13 +5773,13 @@ class RevealOverlay extends HTMLElement {
     const payingReelsText = `${payingReels} PAYING REEL${payingReels === 1 ? '' : 'S'}`;
     const reelResultText = board.boxSpin
       ? (atRisk > 0n
-          ? `${board.payoutAtRiskApproximate ? '≈' : ''}${_tokenText(atRisk)} FLIP FROM REELS`
+          ? `${_tokenText(atRisk)} FLIP FROM REELS`
           : payingReelsText)
       : `${_tokenText(atRisk)} FLIP AT RISK`;
     const survivalWin = board.boxSpin ? _safeBigInt(board.survivalWinPayout) : atRisk * 2n;
     detail.textContent = survivalWin > 0n
       ? `${reelResultText} · WIN ${board.boxSpin
-          ? this.#boxSpinAmountText(board, survivalWin, board.survivalWinPayoutApproximate === true)
+          ? this.#boxSpinAmountText(board, survivalWin)
           : `${_tokenText(survivalWin)} FLIP`}`
       : `${reelResultText} · DOUBLE OR NOTHING`;
 
@@ -5831,7 +5842,6 @@ class RevealOverlay extends HTMLElement {
             ? `${payingReelsText} · ${this.#boxSpinAmountText(
               board,
               settledAtRisk,
-              board.payoutAtRiskApproximate === true,
             )} LOST`
             : `${payingReelsText} · LOST ON SURVIVAL FLIP`)
       : board.survived

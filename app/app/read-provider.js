@@ -60,7 +60,9 @@
 // never leave a rewritten block cached.
 
 import { ethers } from 'ethers';
-import { CHAIN } from './chain-config.js';
+import { CHAIN, CONTRACTS } from './chain-config.js';
+
+const GAME_EXTSLOAD_SELECTOR = ethers.id('extsload(bytes32)').slice(0, 10);
 
 // Mirrors api.js RECENT_JSON_TTL_MS — one freshness rule across both transports.
 const RECENT_CALL_TTL_MS = 1_000;
@@ -308,7 +310,7 @@ export async function readContractStorage(address, slot, {
     ? slot
     : `0x${BigInt(slot).toString(16)}`;
   const block = normalizeBlockTag(blockTag);
-  const read = () => {
+  const readDirect = () => {
     if (typeof reader.getStorage === 'function') {
       return reader.getStorage(address, position, blockTag);
     }
@@ -321,6 +323,22 @@ export async function readContractStorage(address, slot, {
       return reader.send('eth_getStorageAt', [address, position, rpcBlock]);
     }
     throw new Error('Provider cannot read contract storage.');
+  };
+  const read = async () => {
+    // GAME.extsload is exactly sload(slot), with no sender-dependent logic.
+    // Route its slots through the shared Multicall queue: the Craps lobby
+    // reads many words at one pinned block and otherwise spends one separate
+    // eth_getStorageAt method per word on every refresh. Other contracts and
+    // providers retain the direct storage path.
+    if (!fresh && block !== null && contract === String(CONTRACTS.GAME || '').toLowerCase()
+      && reader._multicallAttached && typeof reader.call === 'function') {
+      try {
+        const data = GAME_EXTSLOAD_SELECTOR + ethers.toBeHex(BigInt(position), 32).slice(2);
+        const value = await reader.call({ to: address, data, blockTag });
+        if (typeof value === 'string' && /^0x[0-9a-f]{64}$/i.test(value)) return value;
+      } catch (_e) { /* older deployments / unavailable getter use raw storage */ }
+    }
+    return readDirect();
   };
   if (block === null) return read();
   const pinned = block.startsWith('#');

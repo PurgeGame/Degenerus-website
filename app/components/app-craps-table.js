@@ -2321,9 +2321,7 @@ class AppCrapsTable extends HTMLElement {
   #racePulseTimer = null;
   #raceCoverTimer = null;
   #raceTransferTimer = null;
-  #raceBalanceLandTimer = null;
-  #raceBalanceFadeTimer = null;
-  #racePendingBalance = null;
+  #settlementImpactTimer = null;
   #raceSettledRollCount = 0;
   #racePoolLandTimer = null;
   #onResolutionAcknowledged = null;
@@ -3046,6 +3044,10 @@ class AppCrapsTable extends HTMLElement {
                         </output>
                         <img data-bind="craps-die-two" data-face="5" src="${dgnBadgePath(3, 4, CRAPS_DICE_BADGE_COLORS[1])}" alt="">
                       </span>
+                      <output class="craps-score-delta" data-bind="craps-score-delta" data-tone="push"
+                              role="status" aria-live="polite" aria-label="Last score change" hidden>
+                        <strong data-bind="craps-score-delta-amount">—</strong>
+                      </output>
                       <output class="craps-winner-payoff" data-bind="craps-winner-payoff"
                               role="status" aria-live="polite" data-kind="empty" hidden>
                         <span class="craps-winner-payoff__art" data-bind="craps-winner-payoff-art"
@@ -4041,9 +4043,7 @@ class AppCrapsTable extends HTMLElement {
     write('craps-race-rank', rank == null ? '—' : `#${rank}`);
     write('craps-race-left', left == null ? '—' : String(left));
     write('craps-race-total', total == null ? '—' : String(total));
-    if (this.#racePendingBalance == null) {
-      write('craps-race-stack', formatCrapsCompactFlip(crapsPlayerMoney(stack, this.#entryMultiple)));
-    }
+    write('craps-race-stack', formatCrapsCompactFlip(crapsPlayerMoney(stack, this.#entryMultiple)));
   }
 
   #paintRaceL10(resolvedIndex = this.#resolutionIndex) {
@@ -4499,83 +4499,41 @@ class AppCrapsTable extends HTMLElement {
     svg.setAttribute?.('aria-label', `Craps battle bankroll race through roll ${resolved}.${scaledRace ? ' Graph scaled to one base buy-in; heights and labels both show base FLIP.' : ''}`);
   }
 
-  #clearRaceBalanceTransfer(commit = true) {
-    for (const timer of [this.#raceBalanceLandTimer, this.#raceBalanceFadeTimer]) {
-      if (timer != null) globalThis.clearTimeout?.(timer);
-    }
-    if (commit && this.#racePendingBalance != null) {
-      const balance = this.querySelector('[data-bind="craps-race-stack"]');
-      if (balance) balance.textContent = this.#racePendingBalance;
-    }
-    this.#racePendingBalance = null;
-    this.#raceBalanceLandTimer = null;
-    this.#raceBalanceFadeTimer = null;
-    for (const token of this.querySelectorAll('.craps-race-transfer--balance')) token.remove?.();
+  #hideScoreDelta() {
+    const badge = this.querySelector('[data-bind="craps-score-delta"]');
+    if (!badge) return;
+    badge.hidden = true;
+    badge.setAttribute?.('hidden', '');
+    badge.classList?.remove('is-popping');
   }
 
-  #animateRaceDelta(frame, index) {
-    this.#clearRaceBalanceTransfer();
+  /**
+   * The last score change: a bare number that pops out of the dice bay's
+   * corner beside the STACK score and fades. Pushes show nothing, and a restored perspective shows
+   * nothing either, because the number is a moment, not a readout.
+   */
+  #popScoreDelta(frame, { animate = true } = {}) {
+    const badge = this.querySelector('[data-bind="craps-score-delta"]');
+    const amount = this.querySelector('[data-bind="craps-score-delta-amount"]');
     const delta = signedWholeFlip(frame?.deltaFlip) ?? 0n;
-    if (delta === 0n || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
-    const ids = delta > 0n
-      ? normalizedPayoutBetIds(frame?.payoutBets)
-      : normalizedPayoutBetIds(frame?.lostBets);
-    const sources = [...new Set(ids)].map((id) => this.querySelector(
-      `[data-bet="${id}"] .craps-bet__seat-chip.is-local .craps-bet__seat-art-set`,
-    )).filter((source) => typeof source?.getBoundingClientRect === 'function')
-      .map((source) => source.getBoundingClientRect())
-      .filter((rect) => rect.width > 0 && rect.height > 0);
-    const target = this.querySelector('[data-bind="craps-race-player-panel"]');
-    const layer = this.querySelector('[data-bind="craps-race-transfer-layer"]');
-    if (!target || !layer || (delta > 0n && sources.length === 0)) return;
-    const to = target.getBoundingClientRect();
-    const mobile = Boolean(globalThis.matchMedia?.('(max-width: 959px)')?.matches);
-    const stackBounds = mobile
-      ? this.querySelector('[data-bind="craps-race-stack-target"]')?.getBoundingClientRect?.()
-      : null;
-    const landing = stackBounds
-      ? { x: stackBounds.right + 32, y: stackBounds.bottom - 18 }
-      : { x: to.right - 48, y: to.top + 20 };
-    const origins = delta > 0n ? sources : [{
-      left: landing.x, top: landing.y, width: 1, height: 1,
-    }];
-    const layerRect = layer.getBoundingClientRect?.() ?? { left: 0, top: 0 };
-    if (to.width <= 0) return;
-    const transferDuration = this.#resolutionDelay(delta < 0n ? 480 : 1080);
-    const tokens = [];
-    origins.forEach((from, sourceIndex) => {
-      const token = globalThis.document?.createElement?.('output');
-      if (!token) return;
-      token.className = `craps-race-transfer craps-race-transfer--balance${delta < 0n ? ' is-loss' : ''}`;
-      const amount = `${delta > 0n ? '+' : '−'}${formatCrapsCompactFlip(crapsPlayerMoney(
-        delta < 0n ? -delta : delta, this.#entryMultiple,
-      ))}`;
-      token.innerHTML = `<img src="/shared/flip-chips/stack-3-high-red.svg" alt="">${sourceIndex === 0 ? `<span class="craps-race-transfer__amount">${escapeHtml(amount)}</span>` : ''}`;
-      token.style.left = `${from.left + from.width / 2 - layerRect.left}px`;
-      token.style.top = `${from.top + from.height / 2 - layerRect.top}px`;
-      token.style.setProperty('--race-transfer-x', `${landing.x - from.left - from.width / 2}px`);
-      token.style.setProperty('--race-transfer-y', `${landing.y - from.top - from.height / 2}px`);
-      token.style.animationDuration = `${transferDuration}ms`;
-      layer.append?.(token);
-      tokens.push(token);
-    });
-    if (tokens.length === 0) return;
-    const player = this.#racePlayers.find((entry) => entry.local);
-    this.#racePendingBalance = formatCrapsCompactFlip(crapsPlayerMoney(
-      this.#raceValueAt(player, index + 1), this.#entryMultiple,
+    if (!badge || !amount) return;
+    if (delta === 0n || !animate) {
+      this.#hideScoreDelta();
+      return;
+    }
+    const magnitude = formatCrapsCompactFlip(crapsPlayerMoney(
+      delta < 0n ? -delta : delta, this.#entryMultiple,
     ));
-    const creditBalance = () => {
-      const balance = this.querySelector('[data-bind="craps-race-stack"]');
-      if (balance) balance.textContent = this.#racePendingBalance;
-      this.#racePendingBalance = null;
-      this.#raceBalanceLandTimer = null;
-    };
-    if (delta < 0n) creditBalance();
-    else this.#raceBalanceLandTimer = globalThis.setTimeout?.(creditBalance, transferDuration * 0.56) ?? null;
-    this.#raceBalanceFadeTimer = globalThis.setTimeout?.(() => {
-      for (const token of tokens) token.remove?.();
-      this.#raceBalanceFadeTimer = null;
-    }, transferDuration) ?? null;
+    amount.textContent = `${delta > 0n ? '+' : '−'}${magnitude}`;
+    badge.dataset.tone = delta > 0n ? 'win' : 'loss';
+    badge.hidden = false;
+    badge.removeAttribute?.('hidden');
+    badge.classList?.remove('is-popping');
+    void badge.offsetWidth;
+    badge.classList?.add('is-popping');
+    amount.addEventListener?.('animationend', () => {
+      if (badge.classList?.contains('is-popping')) this.#hideScoreDelta();
+    }, { once: true });
   }
 
   #paintRaceDashboard(roundNumber = 0, { animate = true, frame = null } = {}) {
@@ -5858,7 +5816,7 @@ class AppCrapsTable extends HTMLElement {
 
   #stopRaceTimers() {
     this.#raceSettledRollCount = 0;
-    this.#clearRaceBalanceTransfer(false);
+    this.#hideScoreDelta();
     for (const timer of [
       this.#racePulseTimer,
       this.#raceCoverTimer,
@@ -5891,9 +5849,12 @@ class AppCrapsTable extends HTMLElement {
       delete host.dataset.active;
       delete host.dataset.flow;
     }
-    this.querySelectorAll('.craps-bet.is-paying').forEach((spot) => spot.classList?.remove('is-paying'));
-    this.querySelectorAll('.craps-bet.is-paying-others').forEach((spot) => spot.classList?.remove('is-paying-others'));
-    this.querySelectorAll('.craps-bet__seat-chip.is-paying-featured').forEach((seat) => seat.classList?.remove('is-paying-featured'));
+    if (this.#settlementImpactTimer != null) {
+      globalThis.clearTimeout?.(this.#settlementImpactTimer);
+      this.#settlementImpactTimer = null;
+    }
+    this.querySelectorAll('.craps-bet.is-winning').forEach((spot) => spot.classList?.remove('is-winning'));
+    this.querySelectorAll('.craps-bet__seat-chip.is-winning').forEach((seat) => seat.classList?.remove('is-winning'));
     this.querySelectorAll('.craps-battle-rack.is-collecting').forEach((rack) => rack.classList?.remove('is-collecting'));
   }
 
@@ -6992,86 +6953,38 @@ class AppCrapsTable extends HTMLElement {
     return frame?.payoutBetsExact ? requested : requested.slice(0, 2);
   }
 
+  /** Every board spot the roll pays, whether or not anyone has a chip on it. */
+  #winningSpotIds(frame, { comeOut = false } = {}) {
+    return [...new Set(this.#framePayoutBetIds(frame, { comeOut })
+      .map((id) => id === 'pass-odds' ? 'pass' : id))]
+      .filter((id) => this.querySelector(`[data-bet="${id}"]`));
+  }
+
+  /**
+   * Winning sections light up where they sit, and so does every visible chip
+   * on them. Nothing travels: the racks repaint on the shared impact beat.
+   */
+  #lightWinningSpots(frame, { comeOut = false } = {}) {
+    let lit = 0;
+    for (const id of this.#winningSpotIds(frame, { comeOut })) {
+      const spot = this.querySelector(`[data-bet="${id}"]`);
+      if (!spot) continue;
+      spot.classList?.add('is-winning');
+      lit += 1;
+      for (const seat of spot.querySelectorAll?.('.craps-bet__seat-chip') ?? []) {
+        if (seat.hidden) continue;
+        seat.classList?.add('is-winning');
+      }
+    }
+    return lit > 0 ? this.#resolutionDelay(570) : 0;
+  }
+
   #animatePayout(frame, frameIndex, { visualOnly = false, comeOut = false } = {}) {
     const delta = BigInt(frame?.deltaFlip ?? 0);
     if (delta <= 0n && !visualOnly) return 0;
-    const host = this.querySelector('[data-bind="craps-payout-flight"]');
-    const card = this.querySelector('[data-bind="craps-card"]');
-    const rack = this.querySelector('[data-bind="craps-resolution-chips"]');
-    const target = rack ?? this.querySelector('[data-bind="craps-resolution-meter"]');
     const betIds = this.#payoutBetIds(frame, frameIndex, { comeOut });
-    if (!host || !card || !target || betIds.length === 0
-      || typeof card.getBoundingClientRect !== 'function'
-      || typeof target.getBoundingClientRect !== 'function') {
-      return 0;
-    }
-    const cardRect = card.getBoundingClientRect();
-    const fallbackTargetRect = target.getBoundingClientRect();
-    const rackChips = rack ? [...rack.querySelectorAll('.craps-run-chip')] : [];
-    if (!cardRect.width || !fallbackTargetRect.width) return 0;
-    host.dataset.active = 'true';
-    host.dataset.flow = 'all';
-    const sources = betIds.map((id, sourceIndex) => {
-      const spot = this.querySelector(`[data-bet="${id}"]`);
-      if (!spot || typeof spot.getBoundingClientRect !== 'function') return null;
-      const playerStack = [...spot.querySelectorAll?.('.craps-bet__seat-chip') ?? []]
-        .find((candidate) => candidate.dataset.playerKey === 'local');
-      const source = playerStack && !playerStack.hidden ? playerStack : spot;
-      const sourceRect = source.getBoundingClientRect();
-      if (!sourceRect.width) return null;
-      spot.classList?.add('is-paying');
-      return { sourceIndex, source, sourceRect };
-    }).filter(Boolean);
-    const coinsForSpot = betIds.length > 1 ? 3 : 4;
-    const flightCount = sources.length * coinsForSpot;
-    if (flightCount === 0) return 0;
-
-    const endingBankroll = BigInt(frame.bankrollFlip);
-    const startingBankroll = visualOnly ? endingBankroll : endingBankroll - delta;
-    const boundaryAt = (bankroll) => {
-      const layout = this.#resolutionTrayLayout(bankroll, {
-        active: true,
-        slotCount: rackChips.length,
-      });
-      const dividerIndex = Math.max(0, Math.min(rackChips.length, layout.bankedCount));
-      const leftRect = rackChips[dividerIndex - 1]?.getBoundingClientRect?.();
-      const rightRect = rackChips[dividerIndex]?.getBoundingClientRect?.();
-      const referenceRect = rightRect?.width ? rightRect : leftRect?.width ? leftRect : fallbackTargetRect;
-      const x = leftRect?.width && rightRect?.width
-        ? (leftRect.right + rightRect.left) / 2
-        : rightRect?.width ? rightRect.left : leftRect?.width ? leftRect.right : fallbackTargetRect.left + fallbackTargetRect.width / 2;
-      return { x, y: referenceRect.top + referenceRect.height / 2 };
-    };
-
-    let flightIndex = 0;
-    sources.forEach(({ sourceIndex, source, sourceRect }) => {
-      for (let chipIndex = 0; chipIndex < coinsForSpot; chipIndex += 1) {
-        const chip = globalThis.document?.createElement?.('img');
-        if (!chip) continue;
-        const impactBankroll = visualOnly
-          ? endingBankroll
-          : startingBankroll + ((delta * BigInt(flightIndex + 1)) / BigInt(flightCount));
-        const impactTarget = boundaryAt(impactBankroll);
-        const startX = sourceRect.left + sourceRect.width / 2 - cardRect.left + (chipIndex - 1.5) * 3;
-        const startY = sourceRect.top + sourceRect.height / 2 - cardRect.top - chipIndex * 2;
-        const endX = impactTarget.x - cardRect.left;
-        const endY = impactTarget.y - cardRect.top;
-        const dx = endX - startX;
-        const dy = endY - startY;
-        chip.src = CRAPS_CHIP_ART[source?.dataset?.face] ?? CRAPS_CHIP_ART.red;
-        chip.alt = '';
-        chip.draggable = false;
-        chip.style.left = `${startX - 17}px`;
-        chip.style.top = `${startY - 17}px`;
-        chip.style.setProperty('--flight-mid-x', `${dx * 0.5 + (sourceIndex ? 14 : -14)}px`);
-        chip.style.setProperty('--flight-mid-y', `${dy * 0.43 - 38 - chipIndex * 6}px`);
-        chip.style.setProperty('--flight-end-x', `${dx}px`);
-        chip.style.setProperty('--flight-end-y', `${dy}px`);
-        chip.style.setProperty('--flight-delay', '0ms');
-        host.appendChild(chip);
-        flightIndex += 1;
-      }
-    });
+    const lit = betIds.filter((id) => this.querySelector(`[data-bet="${id}"]`)?.classList?.contains('is-winning'));
+    if (lit.length === 0) return 0;
     return this.#resolutionDelay(570);
   }
 
@@ -7093,76 +7006,21 @@ class AppCrapsTable extends HTMLElement {
     const roundNumber = frameIndex + 1;
     const localBankroll = wholeFlip(frame?.bankrollFlip) ?? 0n;
     const standings = this.#battleStandings(roundNumber, localBankroll);
-    const host = this.querySelector('[data-bind="craps-payout-flight"]');
-    const card = this.querySelector('[data-bind="craps-card"]');
-    if (!host || !card || typeof card.getBoundingClientRect !== 'function') {
-      return 0;
-    }
-    const cardRect = card.getBoundingClientRect();
-    if (!cardRect.width) return 0;
-
     const byKey = new Map(standings.map((entry) => [entry.key, entry]));
-    const payouts = this.#featuredPlayerKeys.flatMap((key) => {
+    const racks = this.#featuredPlayerKeys.flatMap((key) => {
       const entry = byKey.get(key);
       if (!entry || entry.local) return [];
       const player = this.#tablePlayers[entry.opponentIndex];
       if (!player) return [];
       const targetRack = [...this.querySelectorAll('[data-battle-key]')]
         .find((candidate) => candidate.dataset.battleKey === entry.key);
-      const targetWell = targetRack?.querySelector?.('.craps-battle-rack__well');
       const betIds = this.#featuredPayoutBetIds(player, frame, frameIndex, { comeOut });
-      if (!targetRack || !targetWell || betIds.length === 0) return [];
-      const targetChips = [...targetRack.querySelectorAll('.craps-battle-rack__chip')];
-      const boundaryChip = targetChips.find((chip) => !chip.classList?.contains('is-filled')) ?? targetChips.at(-1);
-      const targetRect = boundaryChip?.getBoundingClientRect?.() ?? targetWell.getBoundingClientRect();
-      if (!targetRect?.width) return [];
-      const sources = betIds.flatMap((id) => {
-        const spot = this.querySelector(`[data-bet="${id}"]`);
-        const source = [...spot?.querySelectorAll?.('.craps-bet__seat-chip') ?? []]
-          .find((candidate) => candidate.dataset.playerKey === entry.key);
-        if (!spot || !source || typeof source.getBoundingClientRect !== 'function') return [];
-        const sourceRect = source.getBoundingClientRect();
-        if (!sourceRect.width) return [];
-        return [{ source, sourceRect }];
-      });
-      return sources.length > 0 ? [{ entry, targetRack, targetRect, sources }] : [];
+      if (!targetRack || betIds.length === 0) return [];
+      const lit = betIds.some((id) => this.querySelector(`[data-bet="${id}"]`)?.classList?.contains('is-winning'));
+      return lit ? [targetRack] : [];
     });
-    if (payouts.length === 0) return 0;
-
-    host.dataset.active = 'true';
-    host.dataset.flow = 'all';
-    let flightIndex = 0;
-    payouts.forEach(({ targetRack, targetRect, sources }, playerIndex) => {
-      targetRack.classList?.add('is-collecting');
-      sources.forEach(({ source, sourceRect }, sourceIndex) => {
-        source.classList?.add('is-paying-featured');
-        const coinsForSource = sources.length === 1 ? 2 : 1;
-        for (let chipIndex = 0; chipIndex < coinsForSource; chipIndex += 1) {
-          const chip = globalThis.document?.createElement?.('img');
-          if (!chip) continue;
-          const startX = sourceRect.left + sourceRect.width / 2 - cardRect.left + (chipIndex - 0.5) * 3;
-          const startY = sourceRect.top + sourceRect.height / 2 - cardRect.top - chipIndex * 2;
-          const endX = targetRect.left + targetRect.width / 2 - cardRect.left;
-          const endY = targetRect.top + targetRect.height / 2 - cardRect.top;
-          const dx = endX - startX;
-          const dy = endY - startY;
-          chip.className = 'is-featured-payout';
-          chip.src = CRAPS_CHIP_ART[source?.dataset?.face] ?? CRAPS_CHIP_ART.red;
-          chip.alt = '';
-          chip.draggable = false;
-          chip.style.left = `${startX - 11}px`;
-          chip.style.top = `${startY - 11}px`;
-          chip.style.setProperty('--flight-mid-x', `${dx * 0.5 + (sourceIndex ? 9 : -9)}px`);
-          chip.style.setProperty('--flight-mid-y', `${dy * 0.42 - 22 - chipIndex * 4 - playerIndex * 3}px`);
-          chip.style.setProperty('--flight-end-x', `${dx}px`);
-          chip.style.setProperty('--flight-end-y', `${dy}px`);
-          chip.style.setProperty('--flight-delay', '0ms');
-          host.appendChild(chip);
-          flightIndex += 1;
-        }
-      });
-    });
-    if (flightIndex === 0) return 0;
+    if (racks.length === 0) return 0;
+    racks.forEach((rack) => rack.classList?.add('is-collecting'));
     return this.#resolutionDelay(570);
   }
 
@@ -7266,10 +7124,11 @@ class AppCrapsTable extends HTMLElement {
     const lostBetDuration = clearBoard
       ? 0
       : this.#animateLostBetCollection(frame, frameIndex, () => this.#holdLostBetCollection(frame));
+    const highlightDuration = this.#lightWinningSpots(frame, { comeOut });
     const payoutDuration = localHasPayout
       ? this.#animatePayout(frame, frameIndex, { visualOnly: delta <= 0n, comeOut })
       : 0;
-    const localDuration = Math.max(lossDuration, lostBetDuration, payoutDuration);
+    const localDuration = Math.max(lossDuration, lostBetDuration, highlightDuration, payoutDuration);
     const featuredDuration = this.#animateFeaturedPayouts(frame, frameIndex, { comeOut });
     const duration = Math.max(
       this.#resolutionDelay(760),
@@ -7306,13 +7165,16 @@ class AppCrapsTable extends HTMLElement {
       opponentClackPlayed = true;
       sfxCrapsSettlement('opponent', this.#featuredPayoutSoundChipCount(frameIndex));
     };
-    const payoutHost = this.querySelector('[data-bind="craps-payout-flight"]');
-    const firstLocalPayoutChip = payoutHost?.querySelector?.('img:not(.is-board-deal):not(.is-featured-payout)');
-    const firstOpponentPayoutChip = payoutHost?.querySelector?.('img.is-featured-payout');
-    const firstPayoutChip = payoutHost?.querySelector?.('img:not(.is-board-deal)');
-    firstLocalPayoutChip?.addEventListener?.('animationend', playLocalClack, { once: true });
-    firstOpponentPayoutChip?.addEventListener?.('animationend', playOpponentClack, { once: true });
-    firstPayoutChip?.addEventListener?.('animationend', paintImpact, { once: true });
+    // The racks repaint on one shared impact beat, roughly where the old chip
+    // flights used to land, so the lit sections read first and the rack follows.
+    if (payoutDuration > 0 || featuredDuration > 0) {
+      this.#settlementImpactTimer = globalThis.setTimeout?.(() => {
+        this.#settlementImpactTimer = null;
+        paintImpact();
+        playLocalClack();
+        playOpponentClack();
+      }, Math.min(duration, this.#resolutionDelay(360))) ?? null;
+    }
     const finish = () => {
       if (payoutDuration > 0 || featuredDuration > 0) paintImpact();
       playLocalClack();
@@ -7454,11 +7316,8 @@ class AppCrapsTable extends HTMLElement {
       active: rackActive,
       inPlayFlip: rackActive ? this.#boardInPlayFlip() : null,
     });
-    if (animateRace) this.#animateRaceDelta(frame, index);
-    else {
-      this.#clearRaceBalanceTransfer(false);
-      this.#raceSettledRollCount = index + 1;
-    }
+    this.#popScoreDelta(frame, { animate: animateRace });
+    if (!animateRace) this.#raceSettledRollCount = index + 1;
     this.#paintRaceDashboard(index + 1, { animate: animateRace, frame });
   }
 

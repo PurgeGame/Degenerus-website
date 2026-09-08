@@ -1022,15 +1022,17 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-bonu
   }
 }
 
-/* The glint rests off the right edge of the face (background-position 130%
-   with an oversized tile), so reduced motion or a hover simply parks it
-   invisible instead of freezing a stripe across the word. */
+/* Move a painted glint layer instead of repainting its background each frame.
+   The layer is 2.6 times the face width: -80% and 18.461538% put it at the
+   same offsets as the old 130% and -30% background positions. Its resting
+   position stays off the face for reduced motion and hover. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
   > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning)::after,
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 260%;
   border-radius: 1px;
   background:
     linear-gradient(112deg,
@@ -1040,14 +1042,15 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-re
       rgba(255, 255, 255, 0.22) 51%,
       rgba(var(--jp-led-c), 0.18) 56%,
       transparent 64% 100%)
-    130% 0 / 260% 100% no-repeat;
+    0 0 / 100% 100% no-repeat;
+  transform: translateX(-80%);
   animation: jackpot-key-sheen 2.8s ease-in-out infinite;
   pointer-events: none;
 }
 
 @keyframes jackpot-key-sheen {
-  0%, 18% { background-position: 130% 0; }
-  62%, 100% { background-position: -30% 0; }
+  0%, 18% { transform: translateX(-80%); }
+  62%, 100% { transform: translateX(18.461538%); }
 }
 
 /* Under the pointer the key answers steadily: the attract loop yields to the
@@ -1060,7 +1063,9 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:hover:n
 body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:focus-visible::after,
 body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:hover::after,
 body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:focus-visible::after {
-  animation: none;
+  /* The armed rule includes three :not() states, giving it more specificity
+     than hover/focus. These interaction states must still stop the loop. */
+  animation: none !important;
 }
 
 /* While the key is naming the crank, its indicator is a pickaxe.

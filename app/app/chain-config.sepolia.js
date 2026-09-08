@@ -27,7 +27,7 @@ export const CHAIN = {
   // Keeping this separate from rpcUrl prevents a future private provider key
   // from silently turning browser ticker traffic into our infrastructure bill.
   goldRushPublicRpcUrl: 'https://base-sepolia-rpc.publicnode.com',
-  deployBlock: 46_433_058,
+  deployBlock: 46_570_486,
   // One canonical hosted indexer/API for both degener.us and localhost.
   indexerBase: 'https://degenerus-db.fly.dev',
   etherscanBase: 'https://sepolia.basescan.org',
@@ -46,40 +46,40 @@ export const CHAIN = {
 // the player-facing ERC-677 donation rail sends LINK directly to ADMIN's
 // onTokenTransfer callback.
 export const CONTRACTS = {
-  ICONS_32:                '0x1332e34cf570c8d3a8b71cfb2c8fcadc3179e832',
-  GAME_MINT_MODULE:        '0x2ee86f44ba5cfb9fcbb40739a4ac45f5cbb5b03b',
-  GAME_ADVANCE_MODULE:     '0x70d253f67489473efeafff980ba3ac53e009d51c',
-  GAME_WHALE_MODULE:       '0x7391d7e5d540990dd425ae914b71a82d36fae70c',
-  GAME_JACKPOT_MODULE:     '0xdc395392208901248c6ddb4f4ad86dbf6f51481f',
-  GAME_DECIMATOR_MODULE:   '0xfd3900010a3cb4ea6acbd463c5d69e628e86cbc4',
-  GAME_GAMEOVER_MODULE:    '0x9c1367aa8956356936d0dcecf258c16844635b41',
-  GAME_LOOTBOX_MODULE:     '0x5e46cce02bcd104483d9c1d65ca064e265d07f4c',
-  GAME_BOON_MODULE:        '0x98c91600f1dcc55e6b4d86f752eb244cfd3ab591',
-  GAME_DEGENERETTE_MODULE: '0x98295c9da4189768f0967a07cb086208fe9bc50c',
-  GAME_BINGO_MODULE:       '0xc8872fd04a2b0f20cebc22ac39b8f9213ab78e8e',
-  GAME_AFKING_MODULE:      '0x5df3163654690b3f77d5277c301824fb4f40e228',
-  GAME_FOILPACK_MODULE:    '0xa4668ebb2a46d4f4ffb75a8c45d265f02374db86',
-  AFKING_SUB_TOKEN:        '0x4d9c6ebc881647b349fb3496b6da79f694b60398',
-  COIN:                    '0xfebebd125308be4b4472db76d71106e86ae5c3f5',
-  COINFLIP:                '0x476b492e78410d69496c0327b2c8870c7784e6d9',
+  ICONS_32:                '0x6873e6f37e69c43d2accebbccea4e23964436aec',
+  GAME_MINT_MODULE:        '0x5b45f5f48939c30af17428a7d93efb3ee03e8c7b',
+  GAME_ADVANCE_MODULE:     '0x1bd2112915ddf6d8134500ac8e1ff2d1c78bd578',
+  GAME_WHALE_MODULE:       '0x4a45bf26c873c71b061b9450c19237a11b14a39d',
+  GAME_JACKPOT_MODULE:     '0xf5495bd3e5b52ea9da98790e6402632e535da9f4',
+  GAME_DECIMATOR_MODULE:   '0x1d7106fb4b5805f49a653209c7e9eac53b476a3e',
+  GAME_GAMEOVER_MODULE:    '0x7710171167a3f382cb10ca076dabc850451222b5',
+  GAME_LOOTBOX_MODULE:     '0xa0ae3c536f4f2a6b836fc59bd028bc6c99d4ae34',
+  GAME_BOON_MODULE:        '0x5392c9b3e4b260c6ca51fe833efec1896bb8690d',
+  GAME_DEGENERETTE_MODULE: '0x96be29f58aa4ed82d989375fb41ba1dc7d479dba',
+  GAME_BINGO_MODULE:       '0xd27e431ce2fd605f91d98ff981739be2e179ec6b',
+  GAME_AFKING_MODULE:      '0x2da261b4ccca1c67bde172b356f7b8c4a855a2a9',
+  GAME_FOILPACK_MODULE:    '0xb798fdfdd8da0de78afd745f774203fff4aec00a',
+  AFKING_SUB_TOKEN:        '0x070ea5445163f14c4245f0b42f32fad52f83053d',
+  COIN:                    '0x1d37205ffe124549e111634bdb7594676af3700e',
+  COINFLIP:                '0x7459f9eb78427ec09def3f95114f215e560d26d5',
   // CrapsBattle — run #43, verified at deploy block 46,133,086. The address is
   // stable across runs; the block is not, so re-copy it with the rest.
-  CRAPS:                   '0xf864dc42f0806ed9247acaff98545bde7f1b241a',
-  GAME:                    '0xda9cbbb99500d4c32d15484928748707543dc188',
+  CRAPS:                   '0x4c85cd904508b9cc06e88cad99306714c32d790c',
+  GAME:                    '0xb6da648a25283ba40dbae10b1dc912740ff91e4b',
   // Read-only periphery (DegenerusGameLens). Redeployed every run — it bakes
   // QUESTS and DEPLOY_DAY_BOUNDARY as compile-time constants.
-  GAME_LENS:               '0x71a63eee2c8077875e6d69a60e8e930b581f5559',
-  WWXRP:                   '0x3e5e33b47514ef56f70b6dc5d8a40e34afb036c1',
-  AFFILIATE:               '0x69a1c8d723937dbdabaf0f1eb76fc5735b7b1b43',
-  JACKPOTS:                '0x841390175cb09b05ef595f1d0a824995eda6f395',
-  QUESTS:                  '0x3a34fd7b04a653275e4e1035145f4d594d8ea235',
-  PARIMUTUEL:              '0x0ea19c248b64370ddb94bdc8153d29ab61617c66',
-  DEITY_PASS:              '0xe738585c5463ad0df57f2257d816ace10d79fd0c',
-  VAULT:                   '0xcaa57582f2f4360accf5269a394b543690ede3ac',
-  SDGNRS:                  '0x26f2653eb3ec1d548f02a8148478289c42a7e05b',
-  DGNRS:                   '0x6712236d25fe9a7ef113246ae1e7bbb38c35a0ec',
-  GNRUS:                   '0x2340b321d36857ecc2bc142efb777a81f2a5f323',
-  ADMIN:                   '0x7d959c6ecae9031cf8b51480e7a30f992a0e2c98',
+  GAME_LENS:               '0x72cac25255deea51c8d095cffefe60f7b0174f94',
+  WWXRP:                   '0xd1070a8065783dbca1e3261528aae7730761ec0a',
+  AFFILIATE:               '0x6bdecf582aa65dfc84b313c99b84b49c03e3299b',
+  JACKPOTS:                '0x65b9dbc69b989ee923f291a3c9a4d3027261bfaa',
+  QUESTS:                  '0xacec42b9f81ed0c04f96ae1d96c9e36de6034e39',
+  PARIMUTUEL:              '0x5b0c57dad76f57689822f096cc3b79939d353312',
+  DEITY_PASS:              '0x728eea235b15265ea9cd86dad488cc56e1b18c1b',
+  VAULT:                   '0x4de0b4f28dde4ab53c3d0d0c61f67e1a8e4bbe97',
+  SDGNRS:                  '0x61b48d0b82167d934bb14504816b2fc6ec80ba75',
+  DGNRS:                   '0x1738a7157ff540cf2169504c00152acdf4677ffa',
+  GNRUS:                   '0x45eb9ab561bab046d8370dc30633b6754d273161',
+  ADMIN:                   '0x796be5ae32a61403d317686fb0a8868eb94d26df',
   // Exact LINK constant compiled into this deployment's verified ADMIN.
   LINK_TOKEN:              '0xe4ab69c077896252fafbd49efd26b5d171a32410',
 };
@@ -104,7 +104,7 @@ export const VOLUME_WINDOW = {
   // epoch-scale. REDEPLOY-SENSITIVE: this moves with every deploy; it is
   // `deployDayBoundary` in the sim's sepolia-manifest.json and must be
   // re-copied alongside the addresses above.
-  deployDayBoundary: 1_490_459, // 0xda9cbbb9… @ 46433058
+  deployDayBoundary: 1_490_688, // 0xb6da648a… @ 46570486
 };
 
 // contracts-testnet/CrapsBattle.sol compresses the production daily schedule

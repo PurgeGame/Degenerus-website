@@ -326,6 +326,7 @@ const PANEL_SRC = readFileSync(
   new URL('../app-degenerette-panel.js', import.meta.url),
   'utf8',
 );
+const REPLAY_SRC = readFileSync(new URL('../../app/degenerette-replay.js', import.meta.url), 'utf8');
 
 test('private RNG monitors yield to major draw animation work', () => {
   const rngPoll = PANEL_SRC.slice(
@@ -1863,7 +1864,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(PANEL_SRC,
       /import\s*\{[^}]*dgnRecordBountyHeroQuadrants[^}]*\}\s*from '\.\.\/app\/dgn-reels\.js'/s,
       'a cached pre-helper dependency cannot prevent the whole custom element from registering');
-    assert.match(PANEL_SRC,
+    assert.match(REPLAY_SRC,
       /typeof dgnReels\.dgnRecordBountyHeroQuadrants === 'function'[\s\S]*?\? dgnReels\.dgnRecordBountyHeroQuadrants\(/,
       'only the new bounty decoration is skipped until the cached dependency catches up');
   });

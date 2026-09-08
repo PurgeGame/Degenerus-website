@@ -24,32 +24,38 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
-test('balance transfers fly chips, reveal the amount on arrival, then credit and fade', () => {
-  const transfer = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #animateRaceDelta(frame, index)'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
-  assert.match(transfer, /stack-3-high-red\.svg/);
-  assert.match(transfer, /\[\.\.\.new Set\(ids\)\]/);
-  assert.match(transfer, /\.craps-bet__seat-chip\.is-local \.craps-bet__seat-art-set/);
-  assert.match(transfer, /origins\.forEach\(\(from, sourceIndex\)/);
-  assert.match(transfer, /sourceIndex === 0 \?/);
-  assert.match(transfer, /craps-race-transfer__amount/);
-  assert.match(transfer, /escapeHtml\(amount\)/);
-  assert.match(transfer, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
-  assert.doesNotMatch(transfer, /token\.textContent/);
-  assert.match(transfer, /data-bind="craps-race-player-panel"/);
-  assert.match(transfer, /x: to\.right - 48, y: to\.top \+ 20/);
-  assert.match(transfer, /x: stackBounds\.right \+ 32, y: stackBounds\.bottom - 18/);
-  assert.match(transfer, /if \(delta < 0n\) creditBalance\(\)/);
-  assert.match(CSS_SRC, /@keyframes craps-race-balance-loss/);
-  assert.match(CSS_SRC, /\.craps-race-transfer--balance\.is-loss img \{\s*visibility: hidden/);
-  assert.match(transfer, /racePendingBalance = formatCrapsCompactFlip/);
-  assert.match(transfer, /balance\.textContent = this\.#racePendingBalance[\s\S]*transferDuration \* 0\.56/);
-  assert.match(transfer, /raceBalanceFadeTimer[\s\S]*token\.remove[\s\S]*transferDuration/);
-  assert.doesNotMatch(transfer, /this\.#raceTransferTimer =/);
-  assert.match(COMPONENT_SRC, /if \(this\.#racePendingBalance == null\) \{\s*write\('craps-race-stack'/);
-  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#clearRaceBalanceTransfer\(false\)/);
-  assert.match(CSS_SRC, /56%, 78% \{ opacity: 1/);
-  assert.match(CSS_SRC, /@keyframes craps-race-balance-chips[\s\S]*?56%, 100% \{ opacity: 0/);
-  assert.match(CSS_SRC, /@keyframes craps-race-balance-amount[\s\S]*?0% \{ opacity: 0; \}[\s\S]*?56%, 100% \{ opacity: 1/);
+test('the last score change is a pinned dice-bay badge, not a flying balance token', () => {
+  const pop = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #popScoreDelta(frame, { animate = true } = {})'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
+  assert.match(COMPONENT_SRC, /<output class="craps-score-delta" data-bind="craps-score-delta" data-tone="push"[\s\S]*?<strong data-bind="craps-score-delta-amount">—<\/strong>/s,
+    'the number lives in the dice bay as a bare amount, no label or bubble');
+  assert.match(COMPONENT_SRC, /data-bind="craps-die-two"[\s\S]*?<\/span>\s*<output class="craps-score-delta"/s,
+    'the number is a child of the dice bay, beside the STACK score');
+  assert.doesNotMatch(COMPONENT_SRC, /<small>LAST ROLL<\/small>/);
+  assert.match(pop, /if \(delta === 0n \|\| !animate\) \{\s*this\.#hideScoreDelta\(\);\s*return;/,
+    'a push or a restored perspective shows no number at all');
+  assert.match(pop, /amount\.addEventListener\?\.\('animationend'[\s\S]*?this\.#hideScoreDelta\(\)/s,
+    'the number hides itself once the pop-and-fade ends');
+  assert.match(CSS_SRC, /@keyframes craps-score-delta-pop \{[\s\S]*?100% \{ opacity: 0;/s,
+    'the pop ends faded out');
+  assert.match(pop, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
+  assert.match(pop, /amount\.textContent = `\$\{delta > 0n \? '\+' : '−'\}\$\{magnitude\}`/);
+  assert.match(pop, /badge\.dataset\.tone = delta > 0n \? 'win' : 'loss'/);
+  assert.match(pop, /void badge\.offsetWidth;\s*badge\.classList\?\.add\('is-popping'\)/,
+    'every non-zero change restarts the pop');
+  assert.match(COMPONENT_SRC, /this\.#popScoreDelta\(frame, \{ animate: animateRace \}\)/,
+    'a restored perspective shows the frame’s change without animating it');
+  assert.match(COMPONENT_SRC, /write\('craps-race-stack', formatCrapsCompactFlip\(crapsPlayerMoney\(stack, this\.#entryMultiple\)\)\)/);
+  assert.doesNotMatch(COMPONENT_SRC, /racePendingBalance|raceBalanceLandTimer|craps-race-transfer--balance|#animateRaceDelta/,
+    'no balance token flies to the stack any more');
+  assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#hideScoreDelta\(\)/);
+  assert.match(CSS_SRC, /\.craps-score-delta \{[\s\S]*?position: absolute;[\s\S]*?bottom: 0\.3rem;\s*left: 0\.45rem;[\s\S]*?padding: 0;/s,
+    'the number is pinned to the dice bay corner beside the STACK score on every layout, with no bubble');
+  assert.match(CSS_SRC, /\.craps-dice-bay:has\(\.craps-winner-payoff:not\(\[hidden\]\)\) \.craps-score-delta \{ display: none; \}/,
+    'the final TOTAL WON card is never covered by the per-roll number');
+  assert.match(CSS_SRC, /\.craps-score-delta\[hidden\] \{ display: none !important; \}/);
+  assert.match(CSS_SRC, /\.craps-score-delta\[data-tone="win"\][\s\S]*?\.craps-score-delta\[data-tone="loss"\]/s);
+  assert.match(CSS_SRC, /@keyframes craps-score-delta-pop/);
+  assert.doesNotMatch(CSS_SRC, /craps-race-balance|craps-race-transfer--balance/);
 });
 
 test('resolution acknowledgment is gated on painted completion and exact-once state', async () => {
@@ -258,7 +264,7 @@ test('exit portraits wait for completed settlement without shifting their roll c
   assert.match(COMPONENT_SRC, /player\.endStep > Math\.min\(resolved, this\.#raceSettledRollCount\)/);
   assert.match(COMPONENT_SRC, /const continueRun = \(\) => \{[\s\S]*?this\.#raceSettledRollCount = nextIndex \+ 1;\s*this\.#paintRaceChart\(nextIndex \+ 1\)/);
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0/);
-  assert.match(COMPONENT_SRC, /this\.#clearRaceBalanceTransfer\(false\);\s*this\.#raceSettledRollCount = index \+ 1/);
+  assert.match(COMPONENT_SRC, /if \(!animateRace\) this\.#raceSettledRollCount = index \+ 1/);
   assert.match(COMPONENT_SRC, /for \(const \[step, players\] of bustGroups\) \{\s*const cx = xAt\(step\)/);
 });
 
@@ -1818,16 +1824,24 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
   assert.match(COMPONENT_SRC, /#animateFeaturedPayouts\(frame, frameIndex, \{ comeOut = false \} = \{\}\)/);
   assert.doesNotMatch(COMPONENT_SRC, /if \(after <= before\) return \[\]/,
     'a gross winning bet still collects when other losses make the player net-negative');
-  assert.match(COMPONENT_SRC, /targetRack\?\.querySelector\?\.\('\.craps-battle-rack__well'\)[\s\S]*?candidate\.dataset\.playerKey === entry\.key/s,
-    'featured payout flights connect that player’s actual corner chip to that player’s rack');
-  assert.match(COMPONENT_SRC, /#animateSettlementsTogether\(frame, frameIndex, onDone, \{ comeOut = false \} = \{\}\)[\s\S]*?const lossDuration =[\s\S]*?const lostBetDuration =[\s\S]*?const payoutDuration =[\s\S]*?this\.#animatePayout\(frame, frameIndex, \{ visualOnly: delta <= 0n, comeOut \}\)[\s\S]*?const localDuration = Math\.max\(lossDuration, lostBetDuration, payoutDuration\);[\s\S]*?const featuredDuration = this\.#animateFeaturedPayouts\(frame, frameIndex, \{ comeOut \}\);[\s\S]*?Math\.max\(\s*this\.#resolutionDelay\(760\),\s*localDuration,\s*featuredDuration,?\s*\)/s,
-    'local and featured-opponent settlements launch in one beat and share the longest duration');
+  assert.match(COMPONENT_SRC, /#animateFeaturedPayouts\([\s\S]*?const betIds = this\.#featuredPayoutBetIds\(player, frame, frameIndex, \{ comeOut \}\);[\s\S]*?classList\?\.contains\('is-winning'\)[\s\S]*?rack\.classList\?\.add\('is-collecting'\)/s,
+    'a featured opponent’s rack collects only when one of that player’s own spots lit up');
+  assert.match(COMPONENT_SRC, /#animateSettlementsTogether\(frame, frameIndex, onDone, \{ comeOut = false \} = \{\}\)[\s\S]*?const lossDuration =[\s\S]*?const lostBetDuration =[\s\S]*?const highlightDuration = this\.#lightWinningSpots\(frame, \{ comeOut \}\);[\s\S]*?const payoutDuration =[\s\S]*?this\.#animatePayout\(frame, frameIndex, \{ visualOnly: delta <= 0n, comeOut \}\)[\s\S]*?const localDuration = Math\.max\(lossDuration, lostBetDuration, highlightDuration, payoutDuration\);[\s\S]*?const featuredDuration = this\.#animateFeaturedPayouts\(frame, frameIndex, \{ comeOut \}\);[\s\S]*?Math\.max\(\s*this\.#resolutionDelay\(760\),\s*localDuration,\s*featuredDuration,?\s*\)/s,
+    'winning sections light before local and featured settlements, all in one beat sharing the longest duration');
+  assert.match(COMPONENT_SRC, /#lightWinningSpots\(frame, \{ comeOut = false \} = \{\}\)[\s\S]*?this\.#winningSpotIds\(frame, \{ comeOut \}\)[\s\S]*?spot\.classList\?\.add\('is-winning'\)[\s\S]*?querySelectorAll\?\.\('\.craps-bet__seat-chip'\)[\s\S]*?seat\.classList\?\.add\('is-winning'\)/s,
+    'every paying section lights up along with every visible chip sitting on it, whoever owns the chip');
+  assert.match(COMPONENT_SRC, /#winningSpotIds\(frame, \{ comeOut = false \} = \{\}\)[\s\S]*?this\.#framePayoutBetIds\(frame, \{ comeOut \}\)[\s\S]*?id === 'pass-odds' \? 'pass' : id/s,
+    'sections light from the roll’s paying spots, not from the viewer’s own bets');
+  assert.match(COMPONENT_SRC, /this\.querySelectorAll\('\.craps-bet\.is-winning'\)\.forEach[\s\S]*?this\.querySelectorAll\('\.craps-bet__seat-chip\.is-winning'\)\.forEach/s,
+    'the settlement clear releases both the section and chip highlights');
+  assert.match(COMPONENT_SRC, /this\.#settlementImpactTimer = globalThis\.setTimeout\?\.\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);\s*\}, Math\.min\(duration, this\.#resolutionDelay\(360\)\)\)/s,
+    'racks repaint and clacks play on one timed impact beat rather than a chip flight’s animationend');
+  assert.doesNotMatch(COMPONENT_SRC, /is-featured-payout|is-paying-featured|craps-bet\.is-paying/,
+    'no payout chip flies from the felt to a rack any more');
   assert.doesNotMatch(COMPONENT_SRC, /const animateFeatured =|this\.#animatePayout\(frame, nextIndex, animateFeatured\)/,
     'opponent collections no longer wait for the local payout to finish');
-  assert.match(COMPONENT_SRC, /#animatePayout\(frame, frameIndex, \{ visualOnly = false, comeOut = false \} = \{\}\)[\s\S]*?chip\.style\.setProperty\('--flight-delay', '0ms'\);[\s\S]*?return this\.#resolutionDelay\(570\);/s,
-    'every local payout chip starts without an internal stagger');
-  assert.match(COMPONENT_SRC, /#animateFeaturedPayouts\(frame, frameIndex, \{ comeOut = false \} = \{\}\)[\s\S]*?chip\.style\.setProperty\('--flight-delay', '0ms'\);[\s\S]*?return this\.#resolutionDelay\(570\);/s,
-    'every featured-opponent payout chip starts on that exact same frame');
+  assert.match(COMPONENT_SRC, /#animatePayout\(frame, frameIndex, \{ visualOnly = false, comeOut = false \} = \{\}\)[\s\S]*?classList\?\.contains\('is-winning'\)[\s\S]*?return this\.#resolutionDelay\(570\);/s,
+    'the local settlement beat runs only when one of the viewer’s spots lit up');
   assert.doesNotMatch(COMPONENT_SRC, /--flight-delay', `\$\{(?:flightIndex|playerFlightIndex) \*/,
     'no player or chip-order payout delay remains');
   assert.match(COMPONENT_SRC, /#animateBankrollLoss\(frame, \{ clearBoard = false \} = \{\}\)/);
@@ -2012,8 +2026,6 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'wager growth follows completed seven-outs rather than individual dice rolls');
   assert.match(COMPONENT_SRC, /#paintOpponentRacks\(roundNumber[\s\S]*?#syncWagerMultiplier\(roundNumber\)[\s\S]*?#paintRemainingOtherWagers\(roundNumber\)/s,
     'felt stacks adopt the new multiple as the next shooter is dealt');
-  assert.match(COMPONENT_SRC, /chip\.className = 'is-featured-payout';\s*chip\.src = CRAPS_CHIP_ART\[source\?\.dataset\?\.face\] \?\? CRAPS_CHIP_ART\.red;/,
-    'featured payout flights retain the source player’s normal or metallic boost face');
   assert.doesNotMatch(COMPONENT_SRC, /const label = `#\$\{entry\.rank\} \$\{entry\.initials\}`|<small>\$\{escapeHtml\(label\)\}<\/small>/,
     'felt stacks use no redundant player labels');
   assert.match(COMPONENT_SRC, /function playerChipArt[\s\S]*?stack-\$\{level\}-high-\$\{face\}\.svg/s,
@@ -2244,8 +2256,13 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'the crumbling chip itself stays anchored to its betting spot');
   assert.match(CSS_SRC, /@keyframes craps-board-chip-deal/);
   assert.match(CSS_SRC, /@keyframes craps-board-stack-restore/);
-  assert.match(CSS_SRC, /animation:\s*craps-payout-chip-flight var\(--craps-speed-520, 520ms\)/,
-    'concurrent payout flights remain visible while fitting the two-second roll cadence');
+  assert.match(CSS_SRC, /\.craps-bet\.is-winning \{[\s\S]*?animation: craps-bet-win-flash var\(--craps-speed-600, 600ms\) ease-out both;/s,
+    'a winning section flashes in place and holds lit for the settlement beat');
+  assert.match(CSS_SRC, /\.craps-bet\.is-winning \.craps-bet__seat-chip\.is-winning \{[\s\S]*?animation: craps-chip-win-pulse var\(--craps-speed-600, 600ms\) ease-out both;/s,
+    'chips on a winning section pulse where they sit');
+  assert.match(CSS_SRC, /@keyframes craps-bet-win-flash[\s\S]*?@keyframes craps-chip-win-pulse/s);
+  assert.match(CSS_SRC, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.craps-bet\.is-winning \{\s*animation: none !important;\s*background-color/s,
+    'reduced motion still shows the lit section, just without the flash');
   assert.match(CSS_SRC, /@keyframes craps-bankroll-chip-loss/);
   assert.match(CSS_SRC, /\.craps-run-rail__well\.is-seven-out \.craps-run-chip\.is-lost\s*\{[\s\S]*?craps-bankroll-chip-dust var\(--craps-speed-240, 240ms\)/s,
     'red in-play rack cells crumble quickly on a seven-out while ordinary losses keep their own cue');
@@ -2297,12 +2314,8 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
   assert.match(COMPONENT_SRC, /allGreenChips\.filter\(\(chip\) => bankedBefore\.has\(chip\)\)/);
   assert.match(COMPONENT_SRC, /const startX = local[\s\S]*?dealRect\.left \+ dealRect\.width/s,
     'chips dealt back to the felt launch from the red cells that just turned green');
-  assert.match(COMPONENT_SRC, /const boundaryAt = \(bankroll\) => \{[\s\S]*?layout\.bankedCount[\s\S]*?leftRect\.right \+ rightRect\.left/s,
-    'every payout chip targets the moving seam between red bankroll and green action');
-  assert.match(COMPONENT_SRC, /const impactBankroll = visualOnly[\s\S]*?startingBankroll \+ \(\(delta \* BigInt\(flightIndex \+ 1\)\) \/ BigInt\(flightCount\)\)/s,
-    'each incoming chip carries its proportional part of the verified payout');
-  assert.match(COMPONENT_SRC, /const firstPayoutChip =[\s\S]*?firstPayoutChip\?\.addEventListener\?\.\('animationend', paintImpact, \{ once: true \}\)/s,
-    'one common impact callback lands local and opponent rack changes together');
+  assert.doesNotMatch(COMPONENT_SRC, /const boundaryAt = \(bankroll\)|firstPayoutChip\?\.addEventListener/,
+    'no payout geometry or flight-end hook survives');
   assert.match(COMPONENT_SRC, /const paintImpact = \(\) => \{[\s\S]*?this\.#paintResolutionTray\(endingBankroll,[\s\S]*?this\.#paintBattleLeaderboard\(frameIndex \+ 1, endingBankroll\)/s,
     'the player rack and featured opponent racks update in the same impact callback');
   assert.match(COMPONENT_SRC, /#activeShooterStartRound\(roundNumber[\s\S]*?#opponentShooterOpeningFlip\(player, roundNumber[\s\S]*?shooterOpeningFlip,/s,
@@ -2434,8 +2447,6 @@ test('layout rings one central HUD with betting spots and adapts on narrow scree
     'local hardway stacks are reduced to fit their narrow outside bays');
   assert.doesNotMatch(CSS_SRC, /craps-bet__field-total|craps-bet__crowd-stack/,
     'the removed anonymous aggregate has no leftover layout layer');
-  assert.match(CSS_SRC, /\.craps-payout-flight img\.is-featured-payout\s*\{[\s\S]*?width:\s*clamp\(1\.02rem, 1\.55vw, 1\.35rem\)/s,
-    'featured-player payouts stay visible but smaller than the local payout');
   assert.match(CSS_SRC, /\.craps-player-strip\s*\{/);
   assert.match(CSS_SRC, /\.craps-dialog__card\[data-screen="placement"\] :is\([\s\S]*?\.craps-battle-board,[\s\S]*?\.craps-dice-bay,[\s\S]*?\.craps-bet__seat-chip:not\(\.is-local\)[\s\S]*?display:\s*none !important/s,
     'placement is an isolated board without battle standings, dice, or opponent chips');

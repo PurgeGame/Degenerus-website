@@ -19,7 +19,7 @@ import {
   degeneretteRevealSequenceFromFeedItem,
   dgnDecodePacked,
   mergeDegeneretteFeedItems,
-} from './app-degenerette-panel.js';
+} from '../app/degenerette-replay.js';
 import { queueReveal } from './reveal-queue.js';
 
 const SOURCE = 'day-history-replays';
