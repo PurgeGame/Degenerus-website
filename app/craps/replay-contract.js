@@ -76,6 +76,13 @@ export const CRAPS_REPLAY_LEG_ORDER = Object.freeze([
 // 0x457e12fa… — current a8d068839 deployment at CrapsBattle 0xf864dc42….
 //   Verified against live Base Sepolia code; differential suite passes 7/7 and
 //   the slot-30 bundle verifies all 27 entrants against their chain settlements.
+// 0xd6c49f2e… — run #50 at CrapsBattle 0x4c85cd90…, the SAME audit freeze (cb0c866ef, craps
+//   sources byte-identical to a8d068839) re-deployed 2026-09-08 for a testnet-overlay quest fix.
+//   Read back off live Base Sepolia (`cast codehash`); the a8d068839 differential suite passes
+//   7/7 unchanged; the hosted replay jobs publish `ready` under this exact hash. It moved only
+//   because ContractAddresses moved — see the run #45 note above.
+//   ⛔ go-run50 step 6c stamped the import-map suffix but NOT this list, so every run-#50 replay
+//   failed CLOSED in the browser ("Replay unavailable") while the server side was green.
 export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x7fa2e3de9a9102cc1832fc8f1eb240040d641e5c173d9dc61bb38a2c125e8471',
   '0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a',
@@ -85,6 +92,7 @@ export const CRAPS_REPLAY_SUPPORTED_RUNTIME_HASHES = Object.freeze([
   '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42',
   '0x4daa99994b751204ddd189f133e57e4586b2a8d91047a788031f247e37065a57',
   '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c',
+  '0xd6c49f2e5a2ff50634a57eaa1a1ade2898f4489df9acfb4161c9ef85f0791f8e',
 ]);
 
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
