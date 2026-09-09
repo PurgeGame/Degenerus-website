@@ -1,0 +1,10 @@
+# Public app entry. Assets keep their stable /app/... URLs.
+# No query or fragment on the destination: referral/view links retain both.
+/app /beta/ 301
+/app/ /beta/ 301
+/app/index.html /beta/ 301
+/beta /beta/ 301
+/beta/index.html /beta/ 301
+
+# Serve the authored app document at the public beta URL.
+/beta/ /app/index.html 200

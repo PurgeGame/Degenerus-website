@@ -863,7 +863,7 @@ function _wcInitOpts() {
       icons: [`${origin}/badges-circular/flame_red.svg`],
       redirect: {
         native: 'degenerus://',
-        universal: `${origin}/app/`,
+        universal: `${origin}/beta/`,
       },
     },
   };

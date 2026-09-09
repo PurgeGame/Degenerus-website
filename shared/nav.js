@@ -270,7 +270,7 @@
   function copyAffLink() {
     var code = player && player.referral_code;
     if (!code) return;
-    var link = window.location.origin + '/app/?ref=' + code;
+    var link = window.location.origin + '/beta/?ref=' + code;
     var btn = $('unav-aff-copy');
     navigator.clipboard.writeText(link).then(function () {
       if (btn) {
@@ -354,7 +354,7 @@
     nav.className = 'unified-nav';
 
     var pages = config.pages || [
-      { key: 'app', label: 'Play', href: '/app/' },
+      { key: 'app', label: 'Play', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
       { key: 'theory', label: 'Game Theory', href: '/theory/' },

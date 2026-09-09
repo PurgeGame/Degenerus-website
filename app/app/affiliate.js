@@ -326,7 +326,7 @@ export function buildAffiliateUrl(addr, registeredCode = null) {
   const code = typeof registeredCode === 'string' && /^0x[0-9a-fA-F]{64}$/.test(registeredCode)
     ? registeredCode.toLowerCase()
     : address;
-  return `https://degener.us/app/?ref=${code}`;
+  return `https://degener.us/beta/?ref=${code}`;
 }
 
 // ---------------------------------------------------------------------------

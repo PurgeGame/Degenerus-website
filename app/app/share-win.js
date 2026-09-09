@@ -8,7 +8,7 @@
 //
 // Affiliate link: a registered vanity code when the player has one (bytes32
 // ?ref= form — it can carry a kickback %, strictly better for the referred
-// player), else the bare-address ?ref= form (`https://degener.us/app/?ref=0x…`)
+// player), else the bare-address ?ref= form (`https://degener.us/beta/?ref=0x…`)
 // that /js/ref.js captures site-wide and DegenerusAffiliate resolves as an
 // address-derived default code — commissions flow with zero registration.
 // No connected wallet → plain degener.us link (still a share, just no ref).
@@ -26,7 +26,7 @@ import { displayEth, displayToken } from './scaling.js';
 import { ethers } from './contracts.js';
 import { resolveRegisteredCode } from './affiliate.js';
 
-const APP_ORIGIN = 'https://degener.us/app/';
+const APP_ORIGIN = 'https://degener.us/beta/';
 const MAX_UINT160 = (1n << 160n) - 1n;
 
 // ---------------------------------------------------------------------------
