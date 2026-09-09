@@ -6,5 +6,4 @@
 /beta /beta/ 301
 /beta/index.html /beta/ 301
 
-# Serve the authored app document at the public beta URL.
-/beta/ /app/index.html 200
+# beta/index.html is generated from app/index.html when publishing.

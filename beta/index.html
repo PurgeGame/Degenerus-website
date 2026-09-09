@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus App</title>
+  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
+  <!-- First-paint signal for skeleton.css: no persisted wallet session means
+       the disconnected protocol-wallet banner WILL appear, so its footprint
+       can be reserved before it mounts (wallet.js sets/clears lastWalletRdns
+       on every connect/disconnect path). Must run before the stylesheets. -->
+  <script>try{if(!localStorage.getItem('lastWalletRdns'))document.documentElement.classList.add('no-wallet-session');}catch(e){}</script>
+  <!-- Telemetry capture hook: queue errors, unhandled rejections, dead
+       resource loads (this no-404 site serves HTML for missing modules — the
+       browser then fires exactly this error event), and CSP violations from
+       the very first parse. app/telemetry.js (IDLE_MODULES) drains the queue
+       and beacons it to the database API. Capture-phase listener is required
+       for resource errors; the queue caps itself so a storm cannot grow it. -->
+  <script>
+  (function () {
+    var q = window.__telemetryQ = [];
+    function push(kind, data) { if (q.length < 100) q.push({ kind: kind, t: Date.now(), data: data }); }
+    addEventListener('error', function (e) {
+      var t = e && e.target;
+      if (t && t !== window && (t.src || t.href)) {
+        push('resource', { u: String(t.src || t.href).slice(0, 200), tag: t.tagName });
+      } else if (e && e.message !== undefined) {
+        push('error', { m: String(e.message || '').slice(0, 300), src: String(e.filename || '').slice(0, 200), l: e.lineno || 0 });
+      }
+    }, true);
+    addEventListener('unhandledrejection', function (e) {
+      var r = e && e.reason;
+      push('rejection', { m: String((r && r.message) || r || '').slice(0, 300) });
+    });
+    document.addEventListener('securitypolicyviolation', function (e) {
+      push('csp', { d: e.effectiveDirective, b: String(e.blockedURI || '').slice(0, 200) });
+    });
+  })();
+  </script>
+  <!-- Jackpot hero art is referenced from CSS backgrounds, so the browser only
+       discovers it after CSS parses and the custom elements mount. A 390px
+       cold-load trace identifies the tiny foil-routing layer as the current
+       LCP resource; give that 2.6KB SVG priority instead of making the 172KB
+       headline frame compete with critical CSS. KEEP THE -vNN SUFFIXES IN
+       SYNC with the stylesheets when art bumps. -->
+  <link rel="preload" as="image" href="/app/assets/jackpot/daily-drawing-backplate-v9.webp">
+  <link rel="preload" as="image" fetchpriority="high" href="/app/assets/jackpot/daily-drawing-foil-routing-v5.svg">
+  <!-- Inter is self-hosted (shared/nav.css @font-face). Preloading the latin
+       file lets it beat first paint on cold loads — without this the swap
+       from the fallback font re-wraps the nav and headline (~0.16 CLS). -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/shared/fonts/inter-var-latin-v20.woff2">
+  <!-- Stylesheet tiers (2026-08-15 LCP round). BLOCKING sheets style what is
+       visible at first paint: the shell/nav/skeleton, the testnet banner
+       (status-indicators.css), the static gold-rush hero (app.min.css), the
+       drawing-machine chrome (jackpot/daily-drawing), nav chrome
+       (settings-menu) and the top-of-page wallet banner slot.
+       DEFERRED sheets use media="print" + onload when they are lightweight
+       and broadly shared. Large component-owned sheets keep their href in
+       data-href and are requested with their module, so they do not compete
+       with the phone's first screen. Both forms retain the original <link>
+       position, so cascade order ("loaded after app.css" comments in the
+       sheets) is unchanged.
+       ⚠ Keep any sheet that styles STATIC index.html markup in the blocking
+       tier — a deferred sheet here means a flash of unstyled content. -->
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/status-bar.css">
+  <link rel="stylesheet" href="/app/styles/skeleton.css">
+  <link rel="stylesheet" href="/app/styles/forms.css">
+  <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/jackpot.css">
+  <link rel="stylesheet" href="/app/styles/viewer.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/app.min.css?v=chip-hallway-20260904-addition">
+  <link rel="stylesheet" data-href="/app/styles/link-donation.css">
+  <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
+  <link rel="stylesheet" href="/app/styles/daily-drawing.css">
+  <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css">
+  <link rel="stylesheet" href="/app/styles/settings-menu.css">
+  <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
+  <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
+  <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" data-href="/app/styles/craps-table.css" data-rev="resolution-race-v3">
+  <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
+  <link rel="stylesheet" data-href="/app/styles/records-rail.css">
+  <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
+  <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/status-indicators.css">
+  <!-- BUY IN is part of the static three-column hero, so its final visual
+       layer stays render-blocking and loads after the shared status badges. -->
+  <link rel="stylesheet" href="/app/styles/purchase-desk.css">
+  <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
+       They used to load from esm.sh, a free public CDN, which put a third party
+       on the critical path of every page load and cost 46 requests for ethers'
+       dependency graph alone. GSAP and lean-qr are self-contained esm.sh
+       `?bundle` builds tracked by app/vendor/MANIFEST.txt. Ethers is built
+       locally from the exact same pinned version with only the APIs this app
+       uses; `npm run check:vendor` prevents a stale generated module.
+       @walletconnect stays on esm.sh: its bundle still fans out into @msgpack
+       sub-modules, and it is lazy-loaded (connect click only), so it is off the
+       cold-load path. Revisit when a real WalletConnect project id lands. -->
+  <!-- Keep the three replay modules on one URL generation. A bare local
+       static server can otherwise cache replay-contract.js after the lazy
+       launcher itself has refreshed, producing a false "unsupported ruleset"
+       for a hash already shipped by the current app. Bump the shared suffix
+       whenever the verified replay engine/runtime generation changes. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
+      "gsap": "/app/vendor/gsap.mjs",
+      "gsap/Flip": "/app/vendor/gsap-flip.mjs",
+      "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
+      "lean-qr": "/app/vendor/lean-qr.mjs",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-referral-20260905",
+      "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
+    }
+  }
+  </script>
+  <!-- Capture ?ref before shared/nav.js removes it from the visible URL. -->
+  <script src="/js/ref.js"></script>
+  <!-- Tutorial frames paint the production UI once, then freeze its pollers so
+       scripted training values do not visibly fight live background refreshes. -->
+  <script src="/app/app/tutorial-frame-freeze.js"></script>
+</head>
+<body class="layout-basic">
+  <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
+       push the whole page down 43px after first paint (0.18 of mobile CLS).
+       testnet-beta-banner.js still hides it when the configured chain is not
+       Base Sepolia. MAINNET CUTOVER (WR-06): re-add the `hidden` attribute
+       here so mainnet visitors never see a testnet flash. -->
+  <div
+    id="testnet-beta-banner"
+    class="testnet-beta-banner"
+    role="status"
+    aria-label="Testnet beta warning"
+  >
+    <span class="testnet-beta-banner__dot" aria-hidden="true"></span>
+    <strong>TESTNET BETA · NOT REAL MONEY</strong>
+    <a
+      class="testnet-beta-banner__faucet"
+      href="https://www.alchemy.com/faucets/base-sepolia"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Get free play money from the Base Sepolia Alchemy faucet"
+    >GET FREE PLAY MONEY</a>
+  </div>
+  <h1 style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">Degenerus App</h1>
+  <div class="container">
+    <!-- Nav injected by shared/nav.js. #nav-slot reserves the nav's footprint
+         (height in skeleton.css) so the late insertion causes no layout shift;
+         nav.js swaps the real nav into the slot when it finds one. -->
+    <div id="nav-slot" aria-hidden="true"></div>
+
+    <!-- Chrome strip (user call): no page header — the nav bar carries the
+         Degenerus logo + Discord + wallet Connect (its links/extra buttons
+         are hidden in basic mode via app.css); content starts at the
+         balances strip + jackpot hero. -->
+
+    <!-- Account switcher (2026-07-16): "Acting as" select — self / per-approver
+         operator / combined. account-switcher.js keeps it hidden until the
+         connected wallet has 1+ operator approvals (subscribe-driven; the
+         `hidden` attribute here is just the pre-JS default). -->
+    <account-switcher hidden></account-switcher>
+
+    <!-- View-mode banner REMOVED (user call: "we don't need the read only
+         thing"). view-mode-banner.js stays loaded — its #view-mode-banner
+         lookup is null-guarded and it still owns the [data-write] disable
+         manager for view mode (now also operator/combined variants). -->
+
+    <!-- Network chip row (placeholder label; wallet-picker.js re-labels from CHAIN.name) -->
+    <div class="chain-chip-row" aria-label="Network status">
+      <span id="chain-chip" class="chain-chip chain-chip--neutral">
+        <span class="chain-chip__dot"></span>
+        <span class="chain-chip__label">Base Sepolia testnet</span>
+      </span>
+    </div>
+
+    <main>
+      <!-- Headline jackpot number: the grand gold rush's payout size (current +
+           next + future prize pools + yield accumulator, per _payGoldRush's grand
+           branch). Sampled per block by the indexer, so it ticks up whenever new
+           money enters the pools. First thing on the page by design — it is the
+           draw, and it is the only number that moves on its own.
+           STATIC SHELL (LCP): this markup is a byte-for-byte copy of the
+           template in gold-rush-headline.js #renderShell, shipped in the HTML
+           so the hero (the page's LCP element) paints as soon as CSS is ready
+           instead of waiting for the module graph to execute. The component
+           ADOPTS these nodes via the data-el hooks — keep both copies in sync
+           (index-structure.test.js asserts the hooks are present here). -->
+      <gold-rush-headline class="gr">
+        <div class="gr__inner">
+          <div class="gr__masthead">
+            <span class="gr__brand">
+              <img class="gr__brand-logo" src="/whitepaper/flame-logo.svg" alt="">
+              <span class="gr__brand-copy">
+                <strong>DEGENERUS</strong>
+                <small>PROTOCOL</small>
+              </span>
+            </span>
+            <span class="gr__masthead-divider" aria-hidden="true"></span>
+            <div class="gr__label">
+              <span class="gr__label-text">Golden Ticket Jackpot</span>
+              <span class="gr__chip" data-el="chip" hidden></span>
+            </div>
+          </div>
+          <div class="gr__amount-row">
+            <span class="gr__amount" data-el="amount">—</span>
+            <span class="gr__unit-code" title="Ethereum" aria-label="Ethereum">ETH</span>
+            <span class="gr__float" data-el="float" hidden></span>
+          </div>
+        </div>
+      </gold-rush-headline>
+
+      <!-- The level-wide objective: live nextPrizePool against both the
+           progression threshold and the growth-market O/U line. -->
+      <app-pool-progress></app-pool-progress>
+
+      <!-- Disconnected sessions deliberately inspect the live sDGNRS protocol
+           account. Keep that context between the prize-pool instrument and the
+           player-centric daily jackpot, with a direct path into wallet connect. -->
+      <app-protocol-wallet-banner hidden></app-protocol-wallet-banner>
+
+      <!-- Connected wallets that are genuinely low on native ETH get one
+           funding assist in this same wallet-context slot. Testnet offers only
+           its free faucet; production opens the external fiat on-ramp. -->
+      <app-eth-onramp hidden></app-eth-onramp>
+
+      <!-- Mine FLIP has no top-bar control. app-mine-flip.js is a headless
+           probe that publishes ready crank work into the fixed pending-actions
+           tray at the bottom of the screen. -->
+
+      <!-- Phase 64 basic-mode: daily drawing front and center.
+           One bordered hero instrument (user call: coinflip lives INSIDE the
+           jackpot widget). Left column: last-day-jackpot is the player-centric
+           shell (day pin, spoiler gate); replay-panel is the
+           GT-paper spin + scratch reveal (beta component, driven by the
+           shell's bridge — its own selects are hidden via app.css). The other
+           columns are the purchase widget and app-daily-flip, the day's
+           coinflip reveal (two-faced coin + Reveal Flip button) + flip
+           stake/redeem actions. On narrow screens the draw and flip stay
+           first, with purchase immediately below them.
+           The old foreground foil strip and the day-results list were removed
+           from the shell on 2026-07-29 (user call: "the ugly foil tickets and
+           the big list of what everyone else won"). Four subdued foil sockets
+           now live in the drawing cabinet itself; only a revealed match lights.
+           The DAY SUMMARY button is still owned by last-day-jackpot (it carries
+           the gates) and replaces SPIN JACKPOT in that button's existing action
+           row once BOTH the board and the flip have played out. -->
+      <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
+        <div class="jackpot-hero__draw">
+          <!-- Keep the illustrated drawing instrument independent from the
+               expandable day-history / summary region below it. The hero row
+               can grow when another column opens a disclosure without
+               stretching this backplate or moving its four foil modules. -->
+          <div class="jackpot-hero__machine">
+            <!-- Live current for the four real button-to-board traces. This is
+                 inline so the page can start it only while the resolved random
+                 word is driving the reels, and can stop its travelling packets
+                 for reduced-motion users. Every path is copied verbatim from
+                 daily-drawing-board-routing-v9.svg; the overlay cannot invent
+                 circuitry that is absent from the copper layer. -->
+            <svg class="jackpot-board-current" viewBox="0 0 1280 1280"
+                 preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="jackpotBoardCurrentUp" gradientUnits="userSpaceOnUse"
+                                x1="640" y1="1098" x2="640" y2="915">
+                  <stop stop-color="#a5cbff"/>
+                  <stop offset="0.42" stop-color="#6799ff"/>
+                  <stop offset="1" stop-color="#73e8b0"/>
+                </linearGradient>
+                <path id="jackpotBoardRoute1" d="M456 1098V1018L438 1000H432L414 982V915"/>
+                <path id="jackpotBoardRoute2" d="M548 1098V1038L530 1020H524L506 1002V915"/>
+                <path id="jackpotBoardRoute3" d="M732 1098V1038L750 1020H756L774 1002V915"/>
+                <path id="jackpotBoardRoute4" d="M824 1098V1018L842 1000H848L866 982V915"/>
+              </defs>
+              <g class="jackpot-board-current__rail" stroke="url(#jackpotBoardCurrentUp)">
+                <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+                <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+              </g>
+              <g class="jackpot-board-current__packet" stroke="url(#jackpotBoardCurrentUp)">
+                <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+                <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+              </g>
+            </svg>
+            <!-- This mount never disappears. Low-score players see its pale
+                 capped socket; earned eligibility swaps the same footprint to
+                 the red ALL IN control without moving the cabinet layout. -->
+            <app-all-in-machine-control></app-all-in-machine-control>
+            <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
+              <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/flame-center-silver.svg"
+                   width="38" height="54" alt="" aria-hidden="true">
+              <strong>DEGENERUS DAILY DRAWING</strong>
+            </h2>
+            <last-day-jackpot></last-day-jackpot>
+            <replay-panel single-button></replay-panel>
+          </div>
+          <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
+               aria-label="Jackpot day history">
+            <button type="button" data-bind="jackpot-day-prev"
+                    aria-label="View previous jackpot day">‹</button>
+            <span data-bind="jackpot-day-history-label">DAY —</span>
+            <button type="button" data-bind="jackpot-day-next"
+                    aria-label="View next jackpot day">›</button>
+          </nav>
+          <div class="jackpot-hero__summary-slot" data-bind="day-summary-slot" hidden></div>
+        </div>
+        <app-decimator-panel></app-decimator-panel>
+        <app-daily-flip></app-daily-flip>
+      </section>
+
+      <!-- Headless level-transition watcher. A final Decimator temporarily
+           owns the main jackpot action; BAF remains in the compact Pending
+           tray. Neither needs a permanent dashboard card. -->
+      <app-jackpot-resolutions hidden aria-hidden="true"></app-jackpot-resolutions>
+
+      <!-- The level before each x10 BAF gets a full-width event preview with
+           the live pool, this player's position, and the five-player race. -->
+      <app-baf-eve></app-baf-eve>
+
+      <!-- Open only during the live Decimator burn window. This full-width
+           event rail replaces the small duplicate entry card in Side Bets. -->
+      <app-decimator-burn></app-decimator-burn>
+
+      <!-- Claims banner and aggregate winnings strip are intentionally
+           unmounted. Gameplay-specific resolution stays with its owning
+           surface; app-claims-panel.js and app-balances-strip.js remain on
+           disk for THE PIT. -->
+
+      <!-- Second three-column instrument, aligned to the jackpot hero:
+           quests left, Degenerette center, and scheduled Craps entries right.
+           Side Bets keeps its own full-width rail below AFKING Passes.
+           Degenerette owns fresh and historical resolved spins in-panel. -->
+      <section class="play-grid" aria-label="Quests, Degenerette, and Craps">
+        <app-quest-panel></app-quest-panel>
+        <app-degenerette-panel></app-degenerette-panel>
+        <app-craps-entry></app-craps-entry>
+        <app-craps-rules hidden></app-craps-rules>
+      </section>
+
+      <!-- The only permanent scoreboard in the game: five all-time marks.
+           Their payouts still quote the shared FLIP pool without spending a
+           separate display slot on it. -->
+      <app-records-rail></app-records-rail>
+
+      <!-- Deity holders act from a compact daily-power desk outside the
+           pass shop, immediately above the inventory those boons can affect. -->
+      <app-deity-desk></app-deity-desk>
+
+      <!-- Task #12: ticket inventory — deduped ticket cards + the wide
+           all-symbols × per-level chart (app-tickets-inventory.js) -->
+      <app-tickets-inventory></app-tickets-inventory>
+
+      <!-- Collapsed passes: subscription coverage plus three purchase
+           shortcuts. Owned passes deliberately live on their own surfaces
+           (for example, Deity ownership belongs to app-deity-desk above). -->
+      <details class="more-ways section-disclosure" id="afking-passes">
+        <summary class="more-ways__summary section-disclosure__bar">
+          <span class="section-disclosure__title">AFKING PASSES</span>
+          <span class="more-ways__summary-closed" data-bind="pass-summary-closed">
+            <span class="more-ways__sub-state" data-bind="pass-summary-state" hidden>
+              <b data-bind="pass-summary-subscription"></b>
+              <b data-bind="pass-summary-funding" hidden></b>
+            </span>
+            <span class="more-ways__quickbuys" aria-label="Quick buy passes">
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--lazy"
+                      data-write data-pass-quickbuy="lazy" aria-label="Quick buy Lazy pass">
+                <i aria-hidden="true">10</i>
+                <span><b data-bind="pass-summary-buy-lazy-name">BUY LAZY</b><small data-bind="pass-summary-buy-lazy-price">CHECKING…</small></span>
+              </button>
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--whale"
+                      data-write data-pass-quickbuy="whale" aria-label="Quick buy Whale pass">
+                <i aria-hidden="true">100</i>
+                <span><b data-bind="pass-summary-buy-whale-name">BUY WHALE</b><small data-bind="pass-summary-buy-whale-price">CHECKING…</small></span>
+              </button>
+              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--deity"
+                      data-write data-pass-quickbuy="deity" aria-label="Choose a Deity pass symbol">
+                <i aria-hidden="true">✦</i>
+                <span><b data-bind="pass-summary-buy-deity-name">BUY DEITY</b><small data-bind="pass-summary-buy-deity-price">CHECKING…</small></span>
+              </button>
+            </span>
+          </span>
+          <span class="section-disclosure__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="more-ways__content">
+          <app-pass-section></app-pass-section>
+        </div>
+      </details>
+
+      <!-- Side wagers stay available without occupying the future Craps
+           column. Full-width placement lets active books flow horizontally,
+           keeping this rail short even when more than one market is open. -->
+      <section class="side-bets-rail" aria-label="Side bets">
+        <app-parimutuel-panel></app-parimutuel-panel>
+      </section>
+
+      <!-- Compact equity utility: both token balances, their combined backing
+           preview, and entry points into the existing burn and charity dialogs. -->
+      <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
+
+      <!-- Full activity history stays collapsed and does not touch the indexer
+           until this dropdown opens. -->
+      <app-transaction-history></app-transaction-history>
+
+      <!-- Account-scoped referral network: who referred this wallet, the
+           wallet's direct referrals, and its share link. User-requested final
+           panel, directly below Transaction History. -->
+      <app-affiliate-panel></app-affiliate-panel>
+    </main>
+
+    <footer>
+      <p>Degenerus Protocol — Base Sepolia testnet</p>
+    </footer>
+
+    <!-- Wallet picker modal (Phase 58 — hidden by default; show() unhides) -->
+    <wallet-picker></wallet-picker>
+
+    <!-- WalletConnect can deliver an approval after the browser's original
+         tap permission has expired. wallet.js attempts the app handoff, then
+         leaves this exact-request retry visible if the phone ignores it. -->
+    <aside id="wallet-approval-handoff" class="wallet-approval-handoff"
+           role="status" aria-live="polite" hidden>
+      <span class="wallet-approval-handoff__mark" aria-hidden="true">↗</span>
+      <span class="wallet-approval-handoff__copy">
+        <strong data-bind="wallet-approval-label">Approval waiting in wallet</strong>
+        <small>If your wallet did not open, tap the button.</small>
+      </span>
+      <button type="button" class="wallet-approval-handoff__open"
+              data-bind="wallet-approval-open">OPEN WALLET</button>
+      <button type="button" class="wallet-approval-handoff__dismiss"
+              data-bind="wallet-approval-dismiss" aria-label="Dismiss wallet approval reminder">×</button>
+    </aside>
+
+    <!-- One-time first-visit choice: connect a wallet or view the read-only app. -->
+    <app-onboarding></app-onboarding>
+
+    <!-- Standalone currency/format chooser for the purchase widget's ALL IN
+         action. It quotes and submits without rewriting any ordinary form. -->
+    <app-all-in-dialog></app-all-in-dialog>
+
+    <!-- Event-driven pre-roll craps builder. The opener supplies the FLIP
+         balance and submit callback; this host only builds the repeated slip. -->
+    <app-craps-table></app-craps-table>
+
+    <!-- Account-scoped runway warning for an active AFKing subscription. The
+         pass desk publishes its exact prepaid-day coverage; this popup never
+         performs a duplicate contract read. -->
+    <app-afking-funding-warning hidden></app-afking-funding-warning>
+
+    <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
+         through the same fixed bottom tray used by ticket packs. -->
+    <app-box-strip tray-only></app-box-strip>
+    <app-day-history-replays></app-day-history-replays>
+    <!-- A live sDGNRS burn settles one day later. Keep its claim/open step in
+         the same durable reveal tray, including across page refreshes. -->
+    <app-sdgnrs-redemptions></app-sdgnrs-redemptions>
+
+    <!-- Full-screen prize reveal engine (reveal-overlay.js) — lootbox opens,
+         ticket-pack creation, jackpot winnings. Hidden until a sequence is
+         queued via queueReveal(). -->
+    <app-player-funds-dialog></app-player-funds-dialog>
+    <app-reveal-tray></app-reveal-tray>
+    <reveal-overlay></reveal-overlay>
+  </div>
+
+  <script src="/shared/nav.js"></script>
+  <script>initNav({ currentPage: 'app', sessionChecks: false });</script>
+  <script type="module" src="/app/components/testnet-beta-banner.js"></script>
+  <script type="module" src="/app/app/main.js"></script>
+  <script type="module" src="/app/components/app-referral-input.js"></script>
+  <script type="module" src="/app/components/app-sound-toggle.js"></script>
+  <script type="module" src="/app/components/app-feedback-button.js"></script>
+  <script type="module" src="/app/components/app-settings-menu.js"></script>
+  <script type="module" src="/app/components/app-eth-onramp.js"></script>
+  <script type="module" src="/app/components/wallet-picker.js"></script>
+  <script type="module" src="/app/components/app-onboarding.js"></script>
+  <script type="module" src="/app/components/app-protocol-wallet-banner.js"></script>
+  <script type="module" src="/app/components/account-switcher.js"></script>
+  <script type="module" src="/app/components/view-mode-banner.js"></script>
+  <script type="module" src="/app/components/gold-rush-headline.js"></script>
+  <script type="module" src="/app/components/app-pool-progress.js"></script>
+  <script type="module" src="/app/components/replay-panel.js"></script>
+  <script type="module" src="/app/components/last-day-jackpot.js"></script>
+  <script type="module" src="/app/components/app-mine-flip.js"></script>
+  <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
+       eager; the two large outer hero columns are scheduled below. -->
+  <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
+  <script type="module">
+    // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
+    //
+    //  LAZY_PANELS — custom elements inside a CLOSED <details>: nothing
+    //  renders until opened, so first open (or the idle slot, whichever
+    //  first) imports the module. The toggle listener covers a user faster
+    //  than idle.
+    //
+    //  IDLE_MODULES — below-the-fold self-disclosing panels, hidden banners
+    //  and dialogs with ZERO static importers (verified 2026-08-13): they
+    //  self-initialize from current store state on upgrade, so arriving one
+    //  idle slot after paint changes nothing user-visible above the fold.
+    //  reveal-overlay is loaded by reveal-queue.js only when the first prize is
+    //  actually queued, keeping its large visual engine off normal cold loads.
+    //
+    // ⚠ These are dynamic imports: the publish runbook's static
+    // module-resolution grep does NOT see them. index-structure.test.js
+    // asserts every path below exists — keep both lists in sync with it.
+    const LAZY_PANELS = [
+      ['afking-passes', '/app/components/app-pass-section.js'],
+    ];
+    // These are visible hero columns, but on a phone they sit below the Daily
+    // Drawing. skeleton.css reserves their measured heights. The viewport
+    // scheduler fetches each shortly before it scrolls into view; wide layouts
+    // start both immediately because all three columns are visible.
+    const POST_HERO_MODULES = [
+      '/app/components/app-decimator-panel.js',
+      '/app/components/app-daily-flip.js',
+    ];
+    // These scoped sheets belong exclusively to late modules. A print-media
+    // link still downloads during HTML parsing, so it was costing narrow cold
+    // loads hundreds of kilobytes before any corresponding panel existed.
+    // Leaving the href absent preserves cascade position without requesting it;
+    // the module loader attaches it and waits, preventing a flash on upgrade.
+    const MODULE_STYLES = new Map([
+      ['/app/components/app-pass-section.js', ['/app/styles/deity-pass-purchase.css']],
+      ['/app/components/app-craps-entry.js', ['/app/styles/craps-table.css']],
+      ['/app/components/app-baf-eve.js', ['/app/styles/baf-eve.css']],
+      ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
+      ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css']],
+      ['/app/components/app-parimutuel-panel.js', ['/app/styles/link-donation.css']],
+      ['/app/components/app-sdgnrs-burn-rail.js', ['/app/styles/sdgnrs-burn-rail.css']],
+      ['/app/components/app-jackpot-resolutions.js', ['/app/styles/baf-resolution.css']],
+      ['/app/components/app-afking-funding-warning.js', ['/app/styles/afking-funding-warning.css']],
+    ]);
+    const IDLE_MODULES = [
+      // Second lazy-tier pass (C16, 2026-08-14): below-the-fold main-column
+      // panels and event-driven chrome/dialogs, each verified ZERO static
+      // importers (the reveal-overlay lesson) — they self-initialize from
+      // store state on upgrade one idle slot after paint.
+      '/app/components/app-quest-panel.js',
+      '/app/components/app-degenerette-panel.js',
+      '/app/components/app-craps-entry.js',
+      '/app/components/app-craps-rules.js',
+      '/app/components/app-parimutuel-panel.js',
+      '/app/components/app-records-rail.js',
+      '/app/components/app-deity-desk.js',
+      '/app/components/app-decimator-burn.js',
+      '/app/components/app-baf-eve.js',
+      '/app/components/app-tickets-inventory.js',
+      '/app/components/app-sdgnrs-burn-rail.js',
+      '/app/components/app-reveal-tray.js',
+      '/app/components/app-box-strip.js',
+      '/app/components/app-transaction-history.js',
+      '/app/components/app-affiliate-panel.js',
+      '/app/components/app-sdgnrs-redemptions.js',
+      '/app/components/app-day-history-replays.js',
+      '/app/components/app-jackpot-resolutions.js',
+      '/app/components/app-all-in-dialog.js',
+      // app-craps-entry imports the cache-pinned table implementation. Listing
+      // the bare table URL here fetched and parsed a second module identity.
+      '/app/components/app-player-funds-dialog.js',
+      '/app/components/app-afking-funding-warning.js',
+      // Telemetry client (2026-08-15): drains the head hook's queue and
+      // beacons errors + Web Vitals to the database API. Deliberately idle —
+      // it must never compete with the panels it measures.
+      '/app/app/telemetry.js',
+    ];
+    // Empty custom-element hosts collapse before upgrade, so observe stable
+    // section boundaries where several panels share a row. A 200px lookahead
+    // is enough to hide module latency during an ordinary scroll without
+    // letting multi-megabyte below-fold graphs compete with mobile LCP.
+    const VIEWPORT_MODULES = [
+      ['app-decimator-panel', '/app/components/app-decimator-panel.js'],
+      ['app-daily-flip', '/app/components/app-daily-flip.js'],
+      ['app-baf-eve', '/app/components/app-baf-eve.js'],
+      ['app-decimator-burn', '/app/components/app-decimator-burn.js'],
+      ['.play-grid', '/app/components/app-quest-panel.js'],
+      ['.play-grid', '/app/components/app-degenerette-panel.js'],
+      ['.play-grid', '/app/components/app-craps-entry.js'],
+      ['.play-grid', '/app/components/app-craps-rules.js'],
+      ['app-records-rail', '/app/components/app-records-rail.js'],
+      ['app-deity-desk', '/app/components/app-deity-desk.js'],
+      ['app-tickets-inventory', '/app/components/app-tickets-inventory.js'],
+      ['app-parimutuel-panel', '/app/components/app-parimutuel-panel.js'],
+      ['app-sdgnrs-burn-rail', '/app/components/app-sdgnrs-burn-rail.js'],
+      ['app-transaction-history', '/app/components/app-transaction-history.js'],
+      ['app-affiliate-panel', '/app/components/app-affiliate-panel.js'],
+    ];
+    // A hard reload only applies its cache bypass to navigation-time fetches.
+    // These modules arrive later from an idle callback, so reused Firefox and
+    // Chromium profiles can otherwise keep different pre-edit generations of
+    // the same local panel. Give every lazy import in one localhost navigation
+    // a shared fresh URL; production retains its deliberate 60-second cache.
+    const DEV_MODULE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+    const moduleRevision = DEV_MODULE_HOSTS.has(window.location.hostname)
+      ? `?dev=${Date.now().toString(36)}`
+      : '';
+    const styleLoads = new Map();
+    const moduleLoads = new Map();
+    const loadStyle = (href) => {
+      if (styleLoads.has(href)) return styleLoads.get(href);
+      const link = document.querySelector(`link[data-href="${href}"]`);
+      if (!link || link.hasAttribute('href')) return Promise.resolve();
+      const loaded = new Promise((resolve) => {
+        link.addEventListener('load', resolve, { once: true });
+        link.addEventListener('error', resolve, { once: true });
+        const revision = String(link.dataset.rev || '').trim();
+        link.setAttribute('href', revision ? `${href}?v=${encodeURIComponent(revision)}` : href);
+      });
+      styleLoads.set(href, loaded);
+      return loaded;
+    };
+    const importModule = (src) => {
+      if (moduleLoads.has(src)) return moduleLoads.get(src);
+      const loaded = (async () => {
+        await Promise.all((MODULE_STYLES.get(src) || []).map(loadStyle));
+        return import(`${src}${moduleRevision}`);
+      })();
+      moduleLoads.set(src, loaded);
+      loaded.catch(() => { if (moduleLoads.get(src) === loaded) moduleLoads.delete(src); });
+      return loaded;
+    };
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
+    const requestModule = (src) => {
+      void importModule(src).catch((error) => console.error(`Unable to load ${src}`, error));
+    };
+    const afterWindowLoad = (fn) => {
+      const schedule = () => idle(fn);
+      if (document.readyState === 'complete') schedule();
+      else window.addEventListener('load', schedule, { once: true });
+    };
+    const loadInBatches = (sources) => {
+      const pending = [...new Set(sources)];
+      const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
+      const next = () => {
+        if (pending.length === 0) return;
+        const batch = pending.splice(0, batchSize);
+        void Promise.allSettled(batch.map(importModule))
+          .then(() => setTimeout(() => idle(next), 250));
+      };
+      next();
+    };
+
+    // Desktop exposes every hero column at once. Phones request each large
+    // neighbor only as it approaches the viewport.
+    if (window.matchMedia('(min-width: 1100px)').matches) {
+      for (const src of POST_HERO_MODULES) requestModule(src);
+    }
+
+    if ('IntersectionObserver' in window) {
+      const modulesByHost = new Map();
+      for (const [selector, src] of VIEWPORT_MODULES) {
+        const host = document.querySelector(selector);
+        if (!host) continue;
+        const sources = modulesByHost.get(host) || [];
+        sources.push(src);
+        modulesByHost.set(host, sources);
+      }
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer.unobserve(entry.target);
+          for (const src of modulesByHost.get(entry.target) || []) requestModule(src);
+        }
+      }, { rootMargin: '200px 0px' });
+      for (const host of modulesByHost.keys()) observer.observe(host);
+    }
+
+    for (const [detailsId, src] of LAZY_PANELS) {
+      const host = document.getElementById(detailsId);
+      if (!host) { afterWindowLoad(() => requestModule(src)); continue; }
+      let requested = false;
+      const load = () => { if (!requested) { requested = true; requestModule(src); } };
+      host.addEventListener('toggle', load, { once: true });
+      // The closed AFKING bar contains real purchase shortcuts. Warm its lazy
+      // module on intent, then hand the click to the upgraded component while
+      // preventing the surrounding <summary> from opening accidentally.
+      const warmQuickBuy = (event) => {
+        if (event.target?.closest?.('[data-pass-quickbuy]')) load();
+      };
+      host.addEventListener('pointerdown', warmQuickBuy, { passive: true });
+      host.addEventListener('focusin', warmQuickBuy);
+      host.addEventListener('click', async (event) => {
+        const quickBuy = event.target?.closest?.('[data-pass-quickbuy]');
+        if (!quickBuy || !host.contains(quickBuy)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (quickBuy.disabled) return;
+        try {
+          await importModule(src);
+          const passSection = host.querySelector('app-pass-section');
+          await passSection?.quickBuyPass?.(quickBuy.dataset.passQuickbuy);
+        } catch (error) {
+          console.error(`Unable to start ${quickBuy.dataset.passQuickbuy} pass purchase`, error);
+          host.open = true;
+        }
+      });
+      if (host.open) load();
+    }
+    // Window load is the LCP-safe backstop: every panel still initializes in a
+    // tab that never scrolls, but root imports are capped at two at a time so
+    // network, parsing and the API do not receive one synchronized burst.
+    afterWindowLoad(() => loadInBatches([
+      ...POST_HERO_MODULES,
+      ...IDLE_MODULES,
+      ...LAZY_PANELS.map(([, src]) => src),
+    ]));
+  </script>
+</body>
+</html>
