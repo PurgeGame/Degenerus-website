@@ -1,19 +1,4 @@
-// components/boons-panel.js -- Active Boons panel for the player-facing /beta/ page.
-// Phase 44 BOON-03: subscribes to player.boons (populated by main.js on day-change
-// via GET /player/:address/boons/:day); renders BN-{NAME} badges per D-06.
-// Empty-state: conditional render (hidden root) per D-07.
-
-import { subscribe } from '../app/reactive-store.js';
-import { BOON_TYPE_NAMES, BOON_FULL_NAMES, BOON_BOOST_PCT } from '../app/boon-types.js';
-import { boonTypePresentation } from '../app/boons.js';
-
-class BoonsPanel extends HTMLElement {
-  #unsubs = [];
-  #currentDay = null;
-  #currentBoons = null;
-
-  connectedCallback() {
-    this.innerHTML = `
+var m=Object.defineProperty;var l=(i,n)=>m(i,"name",{value:n,configurable:!0});import{subscribe as d}from"../app/reactive-store.js";import{BOON_TYPE_NAMES as $,BOON_FULL_NAMES as T,BOON_BOOST_PCT as f}from"../app/boon-types.js";import{boonTypePresentation as g}from"../app/boons.js";class _ extends HTMLElement{static{l(this,"BoonsPanel")}#s=[];#n=null;#o=null;connectedCallback(){this.innerHTML=`
       <div class="boons-panel" data-bind="content" hidden>
         <div class="boons-panel-header">
           <span class="boons-panel-label">Active Boons</span>
@@ -21,77 +6,5 @@ class BoonsPanel extends HTMLElement {
         </div>
         <ul class="boons-panel-list" data-bind="list"></ul>
       </div>
-    `;
-    this.#unsubs.push(
-      subscribe('player.boons', (boons) => {
-        this.#currentBoons = boons;
-        this.#render(boons);
-      }),
-      subscribe('replay.day', (day) => {
-        this.#currentDay = day;
-        this.#renderDay();
-        // Re-render badge list so tooltips pick up the new day value.
-        if (this.#currentBoons && this.#currentBoons.length > 0) {
-          this.#render(this.#currentBoons);
-        }
-      }),
-    );
-  }
-
-  disconnectedCallback() {
-    this.#unsubs.forEach((fn) => fn());
-    this.#unsubs = [];
-  }
-
-  #renderDay() {
-    const el = this.querySelector('[data-bind="day"]');
-    if (el) el.textContent = this.#currentDay != null ? `Day ${this.#currentDay}` : 'Day --';
-  }
-
-  #render(boons) {
-    const root = this.querySelector('[data-bind="content"]');
-    const list = this.querySelector('[data-bind="list"]');
-    if (!root || !list) return;
-
-    // D-07 empty-state: hidden (zero-height), not "No boons" text.
-    if (!boons || boons.length === 0) {
-      root.hidden = true;
-      list.innerHTML = '';
-      return;
-    }
-    root.hidden = false;
-
-    // D-06 tooltip derivation (CD-02 decision):
-    //   consumed && consumedBoostBps != null -> pct = consumedBoostBps / 100 (authoritative)
-    //   else                                 -> pct = BOON_BOOST_PCT[boonType] (parsed from type-name suffix)
-    //   pct null (only WHPASS) -> omit the boost fragment entirely; render only the
-    //   full name + day-rollover clause. The placeholder fallback the planner
-    //   forbade is NEVER emitted — every tooltip has a concrete phrase.
-    list.innerHTML = boons.map((b) => {
-      const name = BOON_TYPE_NAMES[b.boonType] ?? `T${b.boonType}`;
-      const full = BOON_FULL_NAMES[b.boonType] ?? `Type ${b.boonType}`;
-      const pct = (b.consumed && b.consumedBoostBps != null)
-        ? (b.consumedBoostBps / 100)
-        : BOON_BOOST_PCT[b.boonType];
-      const boostFragment = pct != null ? ` · +${pct}% boost` : '';
-      const suffix = b.consumed ? ' used' : '';
-      const variant = b.consumed ? 'boon-badge--used' : 'boon-badge--active';
-      const day = this.#currentDay != null ? this.#currentDay : '?';
-      const visual = boonTypePresentation(b.boonType);
-      const amount = visual.effect || (pct != null ? `+${pct}%` : 'ACTIVE');
-      return `<li class="boon-badge ${variant}" tabindex="0"`
-        + ` data-boon-product="${visual.product}" data-boon-strength="${visual.strength}"`
-        + ` data-boon-tier="${visual.tier}" data-boon-pips="${visual.pips}"`
-        + ` data-boon-direction="${visual.direction}">`
-        + `<span class="boon-badge__mark" aria-hidden="true">`
-        + (visual.icon ? `<img class="boon-badge__icon" src="${visual.icon}" alt="">` : '')
-        + `</span>`
-        + `<span class="boon-badge__copy"><span class="boon-badge__name">${visual.name || `BN-${name}`}${suffix}</span>`
-        + `<strong class="boon-badge__amount">${b.consumed ? 'USED' : amount}</strong></span>`
-        + `<span class="boon-tooltip">${full}${boostFragment} · Active until end of Day ${day}</span>`
-        + `</li>`;
-    }).join('');
-  }
-}
-
-customElements.define('boons-panel', BoonsPanel);
+    `,this.#s.push(d("player.boons",n=>{this.#o=n,this.#t(n)}),d("replay.day",n=>{this.#n=n,this.#e(),this.#o&&this.#o.length>0&&this.#t(this.#o)}))}disconnectedCallback(){this.#s.forEach(n=>n()),this.#s=[]}#e(){const n=this.querySelector('[data-bind="day"]');n&&(n.textContent=this.#n!=null?`Day ${this.#n}`:"Day --")}#t(n){const e=this.querySelector('[data-bind="content"]'),a=this.querySelector('[data-bind="list"]');if(!(!e||!a)){if(!n||n.length===0){e.hidden=!0,a.innerHTML="";return}e.hidden=!1,a.innerHTML=n.map(o=>{const c=$[o.boonType]??`T${o.boonType}`,r=T[o.boonType]??`Type ${o.boonType}`,t=o.consumed&&o.consumedBoostBps!=null?o.consumedBoostBps/100:f[o.boonType],p=t!=null?` · +${t}% boost`:"",u=o.consumed?" used":"",b=o.consumed?"boon-badge--used":"boon-badge--active",h=this.#n!=null?this.#n:"?",s=g(o.boonType),y=s.effect||(t!=null?`+${t}%`:"ACTIVE");return`<li class="boon-badge ${b}" tabindex="0" data-boon-product="${s.product}" data-boon-strength="${s.strength}" data-boon-tier="${s.tier}" data-boon-pips="${s.pips}" data-boon-direction="${s.direction}"><span class="boon-badge__mark" aria-hidden="true">`+(s.icon?`<img class="boon-badge__icon" src="${s.icon}" alt="">`:"")+`</span><span class="boon-badge__copy"><span class="boon-badge__name">${s.name||`BN-${c}`}${u}</span><strong class="boon-badge__amount">${o.consumed?"USED":y}</strong></span><span class="boon-tooltip">${r}${p} · Active until end of Day ${h}</span></li>`}).join("")}}}customElements.define("boons-panel",_);
+//# sourceMappingURL=boons-panel.js.map

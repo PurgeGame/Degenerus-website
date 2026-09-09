@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["player-funds.js"],
+  "sourcesContent": ["export const PLAYER_FUNDS_OPEN_EVENT = 'degenerus:player-funds:open';\n\nexport function normalizePlayerFundsMode(mode) {\n  return mode === 'eth' || mode === 'flip' || mode === 'link' || mode === 'cashout'\n    ? mode\n    : 'flip';\n}\n\n/** Open a focused action, or the combined ETH + FLIP cash-out surface. */\nexport function openPlayerFundsDialog(mode = 'flip') {\n  if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return false;\n  try {\n    document.dispatchEvent(new CustomEvent(PLAYER_FUNDS_OPEN_EVENT, {\n      detail: { mode: normalizePlayerFundsMode(mode) },\n    }));\n    return true;\n  } catch (_e) {\n    return false;\n  }\n}\n"],
+  "mappings": "+EAAO,aAAM,wBAA0B,8BAEhC,gBAAS,yBAAyBA,EAAM,CAC7C,OAAOA,IAAS,OAASA,IAAS,QAAUA,IAAS,QAAUA,IAAS,UACpEA,EACA,MACN,CAJgBC,EAAA,qDAOT,gBAAS,sBAAsBD,EAAO,OAAQ,CACnD,GAAI,OAAO,SAAa,KAAe,OAAO,SAAS,eAAkB,WAAY,MAAO,GAC5F,GAAI,CACF,gBAAS,cAAc,IAAI,YAAY,wBAAyB,CAC9D,OAAQ,CAAE,KAAM,yBAAyBA,CAAI,CAAE,CACjD,CAAC,CAAC,EACK,EACT,MAAa,CACX,MAAO,EACT,CACF,CAVgBC,EAAA",
+  "names": ["mode", "__name"]
+}

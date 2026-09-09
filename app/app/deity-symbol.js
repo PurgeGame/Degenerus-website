@@ -1,18 +1,2 @@
-import { BADGE_ITEMS, BADGE_QUADRANTS, badgeCircularPath } from './constants.js';
-
-export function deitySymbolPresentation(symbolId) {
-  const id = Number(symbolId);
-  if (!Number.isInteger(id) || id < 0 || id > 31) return null;
-  const quadrant = (id >> 3) & 3;
-  const symbol = id & 7;
-  const category = BADGE_QUADRANTS[quadrant];
-  const slug = BADGE_ITEMS[category]?.[symbol];
-  if (!category || !slug) return null;
-  const displayName = slug === 'xrp' ? 'WWXRP' : slug.charAt(0).toUpperCase() + slug.slice(1);
-  return {
-    id,
-    name: displayName,
-    title: `God of ${displayName}`,
-    path: badgeCircularPath(category, symbol, 'gold'),
-  };
-}
+var l=Object.defineProperty;var s=(e,t)=>l(e,"name",{value:t,configurable:!0});import{BADGE_ITEMS as c,BADGE_QUADRANTS as u,badgeCircularPath as m}from"./constants.js";export function deitySymbolPresentation(e){const t=Number(e);if(!Number.isInteger(t)||t<0||t>31)return null;const i=t>>3&3,o=t&7,n=u[i],r=c[n]?.[o];if(!n||!r)return null;const a=r==="xrp"?"WWXRP":r.charAt(0).toUpperCase()+r.slice(1);return{id:t,name:a,title:`God of ${a}`,path:m(n,o,"gold")}}s(deitySymbolPresentation,"deitySymbolPresentation");
+//# sourceMappingURL=deity-symbol.js.map

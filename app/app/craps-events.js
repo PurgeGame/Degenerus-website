@@ -1,22 +1,2 @@
-// /app/app/craps-events.js — the ONE call site for GET /game/craps/events.
-//
-// craps.js is a mission-critical money-in writer and
-// app/__tests__/money-in-db-independence.test.js asserts its whole source
-// stays free of any indexer/API dependency, so a dead indexer never blocks a
-// wallet gesture. The lobby WINDOW read is API-first, so that one fetch lives
-// here; craps.js imports only the wrapper below, never `fetchJSON`/`./api.js`.
-// Same pattern as coinflip-day-status.js and parimutuel-winners.js.
-
-import { fetchJSON } from './api.js';
-
-let _fetch = fetchJSON;
-
-/** The one call site for GET /game/craps/events[?since=]. */
-export function fetchCrapsEventsJSON(path) {
-  return _fetch(path);
-}
-
-/** Test-only: replace the underlying fetch. */
-export function __setCrapsEventsTransportForTest(fetcher) {
-  _fetch = typeof fetcher === 'function' ? fetcher : fetchJSON;
-}
+var f=Object.defineProperty;var e=(t,r)=>f(t,"name",{value:r,configurable:!0});import{fetchJSON as n}from"./api.js";let o=n;export function fetchCrapsEventsJSON(t){return o(t)}e(fetchCrapsEventsJSON,"fetchCrapsEventsJSON");export function __setCrapsEventsTransportForTest(t){o=typeof t=="function"?t:n}e(__setCrapsEventsTransportForTest,"__setCrapsEventsTransportForTest");
+//# sourceMappingURL=craps-events.js.map

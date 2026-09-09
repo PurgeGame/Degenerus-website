@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["api.js"],
+  "sourcesContent": ["// Viewer reads share the same abort-aware broker, short render-wave cache,\n// personalized queue, and load-shed cooldown as the main dashboard.\nexport { fetchJSON } from '../app/api.js';\nexport { API_BASE } from '../app/constants.js';\n"],
+  "mappings": "AAEA,OAAS,cAAiB,gBAC1B,OAAS,aAAgB",
+  "names": []
+}

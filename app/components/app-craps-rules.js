@@ -1,93 +1,4 @@
-// A compact, dependency-free rules overlay for the Craps launcher. Keeping it
-// separate from app-craps-entry means opening help cannot disturb live board or
-// entry state.
-
-export class AppCrapsRules extends HTMLElement {
-  #dialog = null;
-  #listeners = null;
-  #returnFocus = null;
-
-  connectedCallback() {
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: 'open' });
-      this.shadowRoot.innerHTML = this.#template();
-    }
-
-    this.#dialog = this.shadowRoot.querySelector('#craps-rules-dialog');
-    this.#wireEvents();
-    this.removeAttribute('hidden');
-  }
-
-  disconnectedCallback() {
-    this.#listeners?.abort();
-    this.#listeners = null;
-  }
-
-  open(trigger = null) {
-    const dialog = this.#dialog;
-    if (!dialog || dialog.hasAttribute('open')) return;
-    this.#returnFocus = trigger ?? this.ownerDocument?.activeElement ?? null;
-    this.shadowRoot.querySelector('.craps-rules__body').scrollTop = 0;
-
-    if (typeof dialog.showModal === 'function') {
-      dialog.showModal();
-    } else {
-      dialog.setAttribute('open', '');
-    }
-
-    this.shadowRoot.querySelector('.craps-rules__close')?.focus();
-  }
-
-  close() {
-    const dialog = this.#dialog;
-    if (!dialog) return;
-
-    if (typeof dialog.close === 'function' && dialog.hasAttribute('open')) {
-      dialog.close();
-    } else {
-      dialog.removeAttribute('open');
-    }
-    this.#returnFocus?.focus?.();
-  }
-
-  #wireEvents() {
-    this.#listeners?.abort();
-    this.#listeners = new AbortController();
-    const { signal } = this.#listeners;
-
-    this.ownerDocument?.addEventListener('craps-rules:open', (event) => {
-      this.open(event?.detail?.trigger);
-    }, { signal });
-    this.shadowRoot.querySelector('.craps-rules__close')
-      ?.addEventListener('click', () => this.close(), { signal });
-
-    this.#dialog?.addEventListener('click', (event) => {
-      if (event.target !== this.#dialog) return;
-      const rect = this.#dialog.getBoundingClientRect();
-      const outside = event.clientX < rect.left || event.clientX > rect.right
-        || event.clientY < rect.top || event.clientY > rect.bottom;
-      if (outside) this.close();
-    }, { signal });
-
-    this.#dialog?.addEventListener('cancel', (event) => {
-      event.preventDefault();
-      this.close();
-    }, { signal });
-
-    this.#dialog?.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        this.close();
-      }
-    }, { signal });
-
-    this.#dialog?.addEventListener('close', () => {
-      this.#returnFocus?.focus?.();
-    }, { signal });
-  }
-
-  #template() {
-    return `
+var o=Object.defineProperty;var a=(t,r)=>o(t,"name",{value:r,configurable:!0});export class AppCrapsRules extends HTMLElement{static{a(this,"AppCrapsRules")}#e=null;#r=null;#s=null;connectedCallback(){this.shadowRoot||(this.attachShadow({mode:"open"}),this.shadowRoot.innerHTML=this.#a()),this.#e=this.shadowRoot.querySelector("#craps-rules-dialog"),this.#t(),this.removeAttribute("hidden")}disconnectedCallback(){this.#r?.abort(),this.#r=null}open(r=null){const e=this.#e;!e||e.hasAttribute("open")||(this.#s=r??this.ownerDocument?.activeElement??null,this.shadowRoot.querySelector(".craps-rules__body").scrollTop=0,typeof e.showModal=="function"?e.showModal():e.setAttribute("open",""),this.shadowRoot.querySelector(".craps-rules__close")?.focus())}close(){const r=this.#e;r&&(typeof r.close=="function"&&r.hasAttribute("open")?r.close():r.removeAttribute("open"),this.#s?.focus?.())}#t(){this.#r?.abort(),this.#r=new AbortController;const{signal:r}=this.#r;this.ownerDocument?.addEventListener("craps-rules:open",e=>{this.open(e?.detail?.trigger)},{signal:r}),this.shadowRoot.querySelector(".craps-rules__close")?.addEventListener("click",()=>this.close(),{signal:r}),this.#e?.addEventListener("click",e=>{if(e.target!==this.#e)return;const s=this.#e.getBoundingClientRect();(e.clientX<s.left||e.clientX>s.right||e.clientY<s.top||e.clientY>s.bottom)&&this.close()},{signal:r}),this.#e?.addEventListener("cancel",e=>{e.preventDefault(),this.close()},{signal:r}),this.#e?.addEventListener("keydown",e=>{e.key==="Escape"&&(e.preventDefault(),this.close())},{signal:r}),this.#e?.addEventListener("close",()=>{this.#s?.focus?.()},{signal:r})}#a(){return`
       <style>
         :host {
           grid-area: craps;
@@ -369,10 +280,5 @@ export class AppCrapsRules extends HTMLElement {
           </div>
         </div>
       </dialog>
-    `;
-  }
-}
-
-if (!customElements.get('app-craps-rules')) {
-  customElements.define('app-craps-rules', AppCrapsRules);
-}
+    `}}customElements.get("app-craps-rules")||customElements.define("app-craps-rules",AppCrapsRules);
+//# sourceMappingURL=app-craps-rules.js.map

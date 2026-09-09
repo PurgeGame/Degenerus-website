@@ -1,25 +1,2 @@
-// Pure reveal receipt projections shared by the history UI and visual engine.
-// Kept separate so a collapsed history panel does not import the 300KB engine.
-
-function _safeBigInt(value) {
-  try { return BigInt(value ?? 0); } catch (_error) { return 0n; }
-}
-
-/**
- * Project a partial Degenerette ETH total into its two final receipt lanes.
- * Integer dust stays in immediately claimable ETH and the final frame is exact.
- */
-export function projectDegeneretteEthSplit({ gross, total, lootboxEth } = {}) {
-  const shown = _safeBigInt(gross);
-  const finalTotal = _safeBigInt(total);
-  const emittedBox = _safeBigInt(lootboxEth);
-  if (shown <= 0n) return { actual: 0n, lootbox: 0n };
-  if (finalTotal <= 0n || emittedBox <= 0n) return { actual: shown, lootbox: 0n };
-
-  const finalBox = emittedBox > finalTotal ? finalTotal : emittedBox;
-  const progress = shown > finalTotal ? finalTotal : shown;
-  const box = progress === finalTotal
-    ? finalBox
-    : (finalBox * progress) / finalTotal;
-  return { actual: shown - box, lootbox: box };
-}
+var f=Object.defineProperty;var c=(n,r)=>f(n,"name",{value:r,configurable:!0});function a(n){try{return BigInt(n??0)}catch{return 0n}}c(a,"_safeBigInt");export function projectDegeneretteEthSplit({gross:n,total:r,lootboxEth:u}={}){const o=a(n),t=a(r),e=a(u);if(o<=0n)return{actual:0n,lootbox:0n};if(t<=0n||e<=0n)return{actual:o,lootbox:0n};const i=e>t?t:e,l=o>t?t:o,s=l===t?i:i*l/t;return{actual:o-s,lootbox:s}}c(projectDegeneretteEthSplit,"projectDegeneretteEthSplit");
+//# sourceMappingURL=reveal-projection.js.map

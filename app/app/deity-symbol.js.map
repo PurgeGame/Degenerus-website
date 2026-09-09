@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["deity-symbol.js"],
+  "sourcesContent": ["import { BADGE_ITEMS, BADGE_QUADRANTS, badgeCircularPath } from './constants.js';\n\nexport function deitySymbolPresentation(symbolId) {\n  const id = Number(symbolId);\n  if (!Number.isInteger(id) || id < 0 || id > 31) return null;\n  const quadrant = (id >> 3) & 3;\n  const symbol = id & 7;\n  const category = BADGE_QUADRANTS[quadrant];\n  const slug = BADGE_ITEMS[category]?.[symbol];\n  if (!category || !slug) return null;\n  const displayName = slug === 'xrp' ? 'WWXRP' : slug.charAt(0).toUpperCase() + slug.slice(1);\n  return {\n    id,\n    name: displayName,\n    title: `God of ${displayName}`,\n    path: badgeCircularPath(category, symbol, 'gold'),\n  };\n}\n"],
+  "mappings": "+EAAA,OAAS,eAAAA,EAAa,mBAAAC,EAAiB,qBAAAC,MAAyB,iBAEzD,gBAAS,wBAAwBC,EAAU,CAChD,MAAMC,EAAK,OAAOD,CAAQ,EAC1B,GAAI,CAAC,OAAO,UAAUC,CAAE,GAAKA,EAAK,GAAKA,EAAK,GAAI,OAAO,KACvD,MAAMC,EAAYD,GAAM,EAAK,EACvBE,EAASF,EAAK,EACdG,EAAWN,EAAgBI,CAAQ,EACnCG,EAAOR,EAAYO,CAAQ,IAAID,CAAM,EAC3C,GAAI,CAACC,GAAY,CAACC,EAAM,OAAO,KAC/B,MAAMC,EAAcD,IAAS,MAAQ,QAAUA,EAAK,OAAO,CAAC,EAAE,YAAY,EAAIA,EAAK,MAAM,CAAC,EAC1F,MAAO,CACL,GAAAJ,EACA,KAAMK,EACN,MAAO,UAAUA,CAAW,GAC5B,KAAMP,EAAkBK,EAAUD,EAAQ,MAAM,CAClD,CACF,CAfgBI,EAAA",
+  "names": ["BADGE_ITEMS", "BADGE_QUADRANTS", "badgeCircularPath", "symbolId", "id", "quadrant", "symbol", "category", "slug", "displayName", "__name"]
+}

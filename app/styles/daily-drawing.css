@@ -1244,11 +1244,10 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-lane path {
      seated card or in from the frame. */
   stroke-dasharray: 9 21;
   animation: ldj-foil-lane-flow 1.05s linear infinite;
-  /* An unlit lane (parent opacity 0) would otherwise still tick this
-     non-compositable animation every frame — style work and an invisible
-     repaint, times eight paths, forever. The same :has() gates that light a
-     lane below also set it running; a lane resuming from offset 0 is
-     indistinguishable from one that never stopped. */
+  /* Occupied sockets retain their lanes between drawings, when the entire
+     current sheet has opacity 0. Pause unless BOTH the socket is occupied and
+     the drawing is running; invisible stroke animation still costs main-thread
+     style work every frame. ambient-motion.js also parks an offscreen sheet. */
   animation-play-state: paused;
 }
 
@@ -1267,13 +1266,13 @@ body.layout-basic .jackpot-hero__machine
   opacity: 1;
 }
 
-body.layout-basic .jackpot-hero__machine
+body.layout-basic .jackpot-hero__machine:has(replay-panel .replay-reveal-btn.is-spinning)
   .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(1).is-loaded) .ldj-foil-lane--1 path,
-body.layout-basic .jackpot-hero__machine
+body.layout-basic .jackpot-hero__machine:has(replay-panel .replay-reveal-btn.is-spinning)
   .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(2).is-loaded) .ldj-foil-lane--2 path,
-body.layout-basic .jackpot-hero__machine
+body.layout-basic .jackpot-hero__machine:has(replay-panel .replay-reveal-btn.is-spinning)
   .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(3).is-loaded) .ldj-foil-lane--3 path,
-body.layout-basic .jackpot-hero__machine
+body.layout-basic .jackpot-hero__machine:has(replay-panel .replay-reveal-btn.is-spinning)
   .ldj-foil-machine-bank:has(.ldj-foil-machine-slot:nth-child(4).is-loaded) .ldj-foil-lane--4 path {
   animation-play-state: running;
 }

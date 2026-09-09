@@ -1,38 +1,4 @@
-// Explicit context for the useful disconnected fallback account. The app polls
-// the live sDGNRS protocol wallet until a player connects; this banner makes it
-// impossible to mistake those balances/results for their own.
-
-import { CONTRACTS } from '../app/chain-config.js';
-import { connectWithPicker } from '../app/wallet.js';
-import { get, subscribe } from '../app/store.js';
-
-const PROTOCOL_ADDRESS = CONTRACTS.SDGNRS
-  ? String(CONTRACTS.SDGNRS).toLowerCase()
-  : null;
-
-export function isDisconnectedProtocolWalletView({ connected, viewing } = {}) {
-  return Boolean(
-    PROTOCOL_ADDRESS
-    && !connected
-    && viewing
-    && String(viewing).toLowerCase() === PROTOCOL_ADDRESS
-  );
-}
-
-function _shortAddress(address) {
-  const value = String(address || '');
-  return value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
-}
-
-export class AppProtocolWalletBanner extends HTMLElement {
-  #initialized = false;
-  #busy = false;
-  #unsubs = [];
-
-  connectedCallback() {
-    if (this.#initialized) return;
-    this.#initialized = true;
-    this.innerHTML = `
+var c=Object.defineProperty;var o=(e,t)=>c(e,"name",{value:t,configurable:!0});import{CONTRACTS as i}from"../app/chain-config.js";import{connectWithPicker as a}from"../app/wallet.js";import{get as s,subscribe as l}from"../app/store.js";const r=i.SDGNRS?String(i.SDGNRS).toLowerCase():null;export function isDisconnectedProtocolWalletView({connected:e,viewing:t}={}){return!!(r&&!e&&t&&String(t).toLowerCase()===r)}o(isDisconnectedProtocolWalletView,"isDisconnectedProtocolWalletView");function d(e){const t=String(e||"");return t.length>12?`${t.slice(0,6)}…${t.slice(-4)}`:t}o(d,"_shortAddress");export class AppProtocolWalletBanner extends HTMLElement{static{o(this,"AppProtocolWalletBanner")}#n=!1;#t=!1;#o=[];connectedCallback(){this.#n||(this.#n=!0,this.innerHTML=`
       <div class="protocol-wallet-banner__mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round">
@@ -42,53 +8,8 @@ export class AppProtocolWalletBanner extends HTMLElement {
       </div>
       <span class="protocol-wallet-banner__copy">
         <strong>VIEWING THE sDGNRS PROTOCOL WALLET</strong>
-        <small>Live read-only protocol activity · ${_shortAddress(PROTOCOL_ADDRESS)}</small>
+        <small>Live read-only protocol activity · ${d(r)}</small>
       </span>
       <button type="button" class="protocol-wallet-banner__connect"
-              data-bind="protocol-wallet-connect">CONNECT YOUR WALLET</button>`;
-    this.querySelector('[data-bind="protocol-wallet-connect"]')
-      ?.addEventListener('click', () => void this.#connect());
-    this.#unsubs = [
-      subscribe('connected.address', () => this.#render()),
-      subscribe('viewing.address', () => this.#render()),
-    ];
-    this.#render();
-  }
-
-  disconnectedCallback() {
-    for (const unsubscribe of this.#unsubs.splice(0)) {
-      try { unsubscribe?.(); } catch (_error) { /* defensive */ }
-    }
-    this.#initialized = false;
-    this.#busy = false;
-  }
-
-  #render() {
-    const visible = isDisconnectedProtocolWalletView({
-      connected: get('connected.address'),
-      viewing: get('viewing.address'),
-    });
-    this.hidden = !visible;
-    const button = this.querySelector('[data-bind="protocol-wallet-connect"]');
-    if (button) {
-      button.disabled = this.#busy;
-      button.textContent = this.#busy ? 'CONNECTING…' : 'CONNECT YOUR WALLET';
-    }
-  }
-
-  async #connect() {
-    if (this.#busy || get('connected.address')) return;
-    this.#busy = true;
-    this.#render();
-    try { await connectWithPicker(); }
-    catch (_error) { /* the wallet/picker owns rejection details */ }
-    finally {
-      this.#busy = false;
-      this.#render();
-    }
-  }
-}
-
-if (typeof customElements !== 'undefined' && !customElements.get('app-protocol-wallet-banner')) {
-  customElements.define('app-protocol-wallet-banner', AppProtocolWalletBanner);
-}
+              data-bind="protocol-wallet-connect">CONNECT YOUR WALLET</button>`,this.querySelector('[data-bind="protocol-wallet-connect"]')?.addEventListener("click",()=>{this.#s()}),this.#o=[l("connected.address",()=>this.#e()),l("viewing.address",()=>this.#e())],this.#e())}disconnectedCallback(){for(const t of this.#o.splice(0))try{t?.()}catch{}this.#n=!1,this.#t=!1}#e(){const t=isDisconnectedProtocolWalletView({connected:s("connected.address"),viewing:s("viewing.address")});this.hidden=!t;const n=this.querySelector('[data-bind="protocol-wallet-connect"]');n&&(n.disabled=this.#t,n.textContent=this.#t?"CONNECTING…":"CONNECT YOUR WALLET")}async#s(){if(!(this.#t||s("connected.address"))){this.#t=!0,this.#e();try{await a()}catch{}finally{this.#t=!1,this.#e()}}}}typeof customElements<"u"&&!customElements.get("app-protocol-wallet-banner")&&customElements.define("app-protocol-wallet-banner",AppProtocolWalletBanner);
+//# sourceMappingURL=app-protocol-wallet-banner.js.map

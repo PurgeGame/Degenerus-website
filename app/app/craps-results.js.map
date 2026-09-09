@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["craps-results.js"],
+  "sourcesContent": ["// Optional indexed presentation data for the Craps lobby.\n//\n// Keep this transport outside craps.js: that module owns money-in contract\n// writes and must remain wallet/RPC -> contract even when the API or DB is down.\n\nimport { fetchJSON } from './api.js';\nimport { crapsWinnerTotalsFromPayload } from './craps.js';\n\n/** One optional indexer read supplies exact totals for all visible winner rows. */\nexport async function readCrapsWinnerTotals(dayValue, fetcher = fetchJSON) {\n  const day = Number(dayValue);\n  if (!Number.isInteger(day) || day <= 0 || typeof fetcher !== 'function') return Object.freeze([]);\n  return crapsWinnerTotalsFromPayload(\n    day,\n    await fetcher('/game/craps/lobby/' + day + '/results'),\n  );\n}\n"],
+  "mappings": "+EAKA,OAAS,aAAAA,MAAiB,WAC1B,OAAS,gCAAAC,MAAoC,aAG7C,sBAAsB,sBAAsBC,EAAUC,EAAUH,EAAW,CACzE,MAAMI,EAAM,OAAOF,CAAQ,EAC3B,MAAI,CAAC,OAAO,UAAUE,CAAG,GAAKA,GAAO,GAAK,OAAOD,GAAY,WAAmB,OAAO,OAAO,CAAC,CAAC,EACzFF,EACLG,EACA,MAAMD,EAAQ,qBAAuBC,EAAM,UAAU,CACvD,CACF,CAPsBC,EAAA",
+  "names": ["fetchJSON", "crapsWinnerTotalsFromPayload", "dayValue", "fetcher", "day", "__name"]
+}

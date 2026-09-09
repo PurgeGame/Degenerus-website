@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["disclosure-shell.js"],
+  "sourcesContent": ["// Adopt a static disclosure without replacing its focused summary or changing\n// its current open state. The markup argument must be a static component shell.\nexport function renderDisclosureShell(host, binding, markup) {\n  const details = host.querySelector(`[data-bind=\"${binding}\"]`);\n  if (!details?.hasAttribute('data-lazy-disclosure')) {\n    host.innerHTML = markup;\n    return;\n  }\n  const template = document.createElement('template');\n  template.innerHTML = markup;\n  const rendered = template.content.querySelector(`[data-bind=\"${binding}\"]`);\n  const summary = details.querySelector('summary');\n  for (const child of [...details.children]) {\n    if (child !== summary) child.remove();\n  }\n  for (const child of [...rendered.children]) {\n    if (child.tagName !== 'SUMMARY') details.appendChild(child);\n  }\n  details.removeAttribute('data-lazy-disclosure');\n}\n"],
+  "mappings": "+EAEO,gBAAS,sBAAsBA,EAAMC,EAASC,EAAQ,CAC3D,MAAMC,EAAUH,EAAK,cAAc,eAAeC,CAAO,IAAI,EAC7D,GAAI,CAACE,GAAS,aAAa,sBAAsB,EAAG,CAClDH,EAAK,UAAYE,EACjB,MACF,CACA,MAAME,EAAW,SAAS,cAAc,UAAU,EAClDA,EAAS,UAAYF,EACrB,MAAMG,EAAWD,EAAS,QAAQ,cAAc,eAAeH,CAAO,IAAI,EACpEK,EAAUH,EAAQ,cAAc,SAAS,EAC/C,UAAWI,IAAS,CAAC,GAAGJ,EAAQ,QAAQ,EAClCI,IAAUD,GAASC,EAAM,OAAO,EAEtC,UAAWA,IAAS,CAAC,GAAGF,EAAS,QAAQ,EACnCE,EAAM,UAAY,WAAWJ,EAAQ,YAAYI,CAAK,EAE5DJ,EAAQ,gBAAgB,sBAAsB,CAChD,CAjBgBK,EAAA",
+  "names": ["host", "binding", "markup", "details", "template", "rendered", "summary", "child", "__name"]
+}

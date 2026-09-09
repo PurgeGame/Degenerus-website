@@ -407,12 +407,28 @@
 
       <!-- Full activity history stays collapsed and does not touch the indexer
            until this dropdown opens. -->
-      <app-transaction-history></app-transaction-history>
+      <app-transaction-history>
+        <details class="txh section-disclosure" id="transaction-history" data-bind="txh-details" data-lazy-disclosure>
+          <summary class="txh__summary section-disclosure__bar">
+            <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
+            <span class="section-disclosure__chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="txh__content" data-lazy-status role="status">Loading history…</div>
+        </details>
+      </app-transaction-history>
 
       <!-- Account-scoped referral network: who referred this wallet, the
            wallet's direct referrals, and its share link. User-requested final
            panel, directly below Transaction History. -->
-      <app-affiliate-panel></app-affiliate-panel>
+      <app-affiliate-panel>
+        <details class="app-affiliate-panel aff-disclosure section-disclosure" id="referrals" data-bind="aff-details" data-lazy-disclosure>
+          <summary class="aff-summary section-disclosure__bar">
+            <strong class="section-disclosure__title">REFERRALS</strong>
+            <span class="section-disclosure__chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="aff-content" data-lazy-status role="status">Loading referrals…</div>
+        </details>
+      </app-affiliate-panel>
     </main>
 
     <footer>
@@ -507,11 +523,17 @@
     //  reveal-overlay is loaded by reveal-queue.js only when the first prize is
     //  actually queued, keeping its large visual engine off normal cold loads.
     //
-    // ⚠ These are dynamic imports: the publish runbook's static
-    // module-resolution grep does NOT see them. index-structure.test.js
-    // asserts every path below exists — keep both lists in sync with it.
+    // The publish module scanner and index-structure.test.js validate these
+    // registered paths, including the modules that load only on first open.
     const LAZY_PANELS = [
       ['afking-passes', '/app/components/app-pass-section.js'],
+    ];
+    // These read-only panels have no closed-state data or global side effects.
+    // Their static summary bars work with pointer and keyboard before upgrade.
+    // Keep them out of viewport/idle loading: only opening needs their code.
+    const DISCLOSURE_MODULES = [
+      ['transaction-history', '/app/components/app-transaction-history.js'],
+      ['referrals', '/app/components/app-affiliate-panel.js'],
     ];
     // These are visible hero columns, but on a phone they sit below the Daily
     // Drawing. skeleton.css reserves their measured heights. The viewport
@@ -555,8 +577,6 @@
       '/app/components/app-sdgnrs-burn-rail.js',
       '/app/components/app-reveal-tray.js',
       '/app/components/app-box-strip.js',
-      '/app/components/app-transaction-history.js',
-      '/app/components/app-affiliate-panel.js',
       '/app/components/app-sdgnrs-redemptions.js',
       '/app/components/app-day-history-replays.js',
       '/app/components/app-jackpot-resolutions.js',
@@ -588,8 +608,6 @@
       ['app-tickets-inventory', '/app/components/app-tickets-inventory.js'],
       ['app-parimutuel-panel', '/app/components/app-parimutuel-panel.js'],
       ['app-sdgnrs-burn-rail', '/app/components/app-sdgnrs-burn-rail.js'],
-      ['app-transaction-history', '/app/components/app-transaction-history.js'],
-      ['app-affiliate-panel', '/app/components/app-affiliate-panel.js'],
     ];
     // A hard reload only applies its cache bypass to navigation-time fetches.
     // These modules arrive later from an idle callback, so reused Firefox and
@@ -671,6 +689,29 @@
       for (const host of modulesByHost.keys()) observer.observe(host);
     }
 
+    for (const [detailsId, src] of DISCLOSURE_MODULES) {
+      const host = document.getElementById(detailsId);
+      if (!host) { afterWindowLoad(() => requestModule(src)); continue; }
+      const status = host.querySelector('[data-lazy-status]');
+      const loadingText = status?.textContent;
+      let pending = false;
+      const load = async () => {
+        if (!host.open || pending) return;
+        pending = true;
+        if (status) status.textContent = loadingText;
+        try {
+          await importModule(src);
+          host.removeEventListener('toggle', load);
+        } catch (error) {
+          pending = false;
+          if (status) status.textContent = 'Unable to load. Reload the page to retry.';
+          console.error(`Unable to load ${src}`, error);
+        }
+      };
+      host.addEventListener('toggle', load);
+      if (host.open) void load();
+    }
+
     for (const [detailsId, src] of LAZY_PANELS) {
       const host = document.getElementById(detailsId);
       if (!host) { afterWindowLoad(() => requestModule(src)); continue; }
@@ -702,8 +743,9 @@
       });
       if (host.open) load();
     }
-    // Window load is the LCP-safe backstop: every panel still initializes in a
-    // tab that never scrolls, but root imports are capped at two at a time so
+    // Window load is the backstop for stateful panels and event listeners;
+    // the two static disclosures above wait for opening. Root imports are
+    // capped at two at a time so
     // network, parsing and the API do not receive one synchronized burst.
     afterWindowLoad(() => loadInBatches([
       ...POST_HERO_MODULES,
