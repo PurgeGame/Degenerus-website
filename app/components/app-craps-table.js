@@ -23,7 +23,7 @@ var ve=Object.defineProperty;var k=(o,t)=>ve(o,"name",{value:t,configurable:!0})
         <section class="craps-dialog__card" data-bind="craps-card" tabindex="-1">
           <header class="craps-dialog__head">
             <img class="craps-dialog__brand-logo"
-                 src="/app/assets/craps/craps-autobattle-integrated-swords-v8.webp"
+                 src="/app/assets/craps/craps-autobattle-integrated-swords-v9.webp"
                  alt="Craps Autobattle">
             <span class="craps-dialog__dice" aria-hidden="true"><i data-face="2"></i><i data-face="5"></i></span>
             <span class="craps-dialog__heading">
@@ -412,7 +412,7 @@ var ve=Object.defineProperty;var k=(o,t)=>ve(o,"name",{value:t,configurable:!0})
       ${Z("MAIN BATTLE",{status:s?"WON":"LOST",tone:s?"win":"loss",winner:L,prizeWei:s?this.#F:0n})}
       ${Z("HIGH ROLLER",D)}
     </div>`:"",G=[],H=a?v(i)??0n:BigInt(this.#Ue().totalWei);if((H>0n||$)&&G.push(`<span><small>${$?"TOTAL WON":"RESULT"}</small><strong>${T(formatCrapsWei(H))}</strong></span>`),g||$&&this.#l?.runPayoutWei>0n){const j=i??crapsPlayerMoney(e,this.#u)*CRAPS_FLIP_WEI;G.push(`<span><small>${$?"BANKROLL RETURN":"CASHED OUT"}</small><strong>${T(formatCrapsWei(j))}</strong></span>`)}!$&&s&&this.#F!=null&&this.#F>0n&&G.push(`<span class="is-prize"><small>BATTLE PRIZE</small><strong>${T(formatCrapsWei(this.#F))}</strong></span>`),E&&this.#$!=null&&this.#$>0n&&G.push(`<span class="is-riu"><small>RIU JACKPOT</small><strong>${T(formatCrapsFlip(this.#$))}</strong></span>`),s&&C&&this.#g?.bountyWei!=null&&this.#g.bountyWei>0n&&G.push(`<span class="is-prize"><small>BIGGEST BOUNTY</small><strong>${T(formatCrapsWei(this.#g.bountyWei))}</strong></span>`),n.classList.toggle("is-high-roller",$),n.innerHTML=`
-      <img class="craps-race-result__logo" src="/app/assets/craps/craps-autobattle-integrated-swords-v8.webp" alt="Craps Autobattle">
+      <img class="craps-race-result__logo" src="/app/assets/craps/craps-autobattle-integrated-swords-v9.webp" alt="Craps Autobattle">
       ${F?`<div class="craps-race-result__awards">${F}</div>`:""}
       <h2>${A}</h2>
       ${K}

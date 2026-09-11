@@ -654,12 +654,28 @@
     };
     const loadInBatches = (sources) => {
       const pending = [...new Set(sources)];
+      const retried = new Set();
       const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
       const next = () => {
         if (pending.length === 0) return;
         const batch = pending.splice(0, batchSize);
         void Promise.allSettled(batch.map(importModule))
-          .then(() => setTimeout(() => idle(next), 250));
+          .then((results) => {
+            // A failed import used to vanish here: no log, no second attempt,
+            // and the panel stayed blank for the session. importModule already
+            // dropped the failed flight from its cache, so one retry at the end
+            // of the queue is a real second request.
+            results.forEach((result, index) => {
+              if (result.status !== 'rejected') return;
+              const src = batch[index];
+              console.error(`Unable to load ${src}`, result.reason);
+              if (!retried.has(src)) {
+                retried.add(src);
+                pending.push(src);
+              }
+            });
+            setTimeout(() => idle(next), 250);
+          });
       };
       next();
     };

@@ -14,7 +14,7 @@
 //   - assertChainOrBlank returns true when _provider is null
 //   - assertChain throws when _provider chainId !== CHAIN.id
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ---------------------------------------------------------------------------
@@ -50,6 +50,7 @@ const {
   setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
   ensureWriteChain, setChainSwitchHandler, setWalletSessionRecoveryHandler,
   gasEstimateWithHeadroom, TX_CONFIRMED_EVENT,
+  settleSubmittedTransaction, WALLET_RESPONSE_TIMEOUT_MS,
 } = contractsMod;
 
 function resetStore() {
@@ -525,7 +526,9 @@ describe('sendTx receipt handling', () => {
       'broadcast hook',
       { onSubmitted: (submitted) => order.push(`submitted:${submitted.hash}`) },
     );
-    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    // The chain check, signer and address reads each carry a wallet deadline
+    // now (one extra hop apiece), so the pre-broadcast path is a few ticks longer.
+    for (let i = 0; i < 16; i += 1) await Promise.resolve();
     assert.deepEqual(order, ['broadcast', 'submitted:0xbroadcast', 'wait-started']);
     release();
     await pending;
@@ -573,6 +576,63 @@ describe('sendTx receipt handling', () => {
       transactionHash: '0xprotocol-spend',
       blockNumber: 123,
     });
+  });
+
+  test('a wallet that never answers its chain read fails the write with a human message', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    provider.getNetwork = () => new Promise(() => {});   // frozen extension / dead relay
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      let settled = null;
+      const pending = sendTx(() => Promise.resolve({ hash: '0xnever', wait: async () => ({ status: 1 }) }), 'frozen wallet')
+        .then(() => { settled = 'resolved'; }, (error) => { settled = error; });
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+      assert.equal(settled, null, 'still waiting inside the deadline');
+      mock.timers.tick(WALLET_RESPONSE_TIMEOUT_MS + 1);
+      await pending;
+      assert.ok(settled instanceof Error, 'the write settles instead of hanging forever');
+      assert.match(settled.message, /^Wallet is not responding/);
+      assert.equal(settled.code, 'WALLET_UNRESPONSIVE');
+      assert.equal(provider.getSignerCallCount(), 0, 'no signer is derived from a wallet that never answered');
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('settleSubmittedTransaction gives a direct wallet send the chokepoint tail: receipt + confirmed event', async () => {
+    const events = [];
+    const priorDocument = globalThis.document;
+    const priorCustomEvent = globalThis.CustomEvent;
+    globalThis.document = { dispatchEvent: (event) => { events.push(event); return true; } };
+    globalThis.CustomEvent = class {
+      constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+    };
+    try {
+      const tx = {
+        hash: '0xfast-buy',
+        wait: async () => ({ status: 1, hash: '0xfast-buy', blockNumber: 77 }),
+      };
+      const receipt = await settleSubmittedTransaction(tx, 'Lootbox purchase');
+      assert.equal(receipt.blockNumber, 77);
+      assert.equal(events.length, 1);
+      assert.equal(events[0].type, TX_CONFIRMED_EVENT);
+      assert.deepEqual(events[0].detail, {
+        action: 'Lootbox purchase',
+        transactionHash: '0xfast-buy',
+        blockNumber: 77,
+      });
+      const reverted = { hash: '0xreverted', wait: async () => ({ status: 0, hash: '0xreverted' }) };
+      await assert.rejects(settleSubmittedTransaction(reverted, 'Lootbox purchase'), /Reverted: 0xreverted/);
+      assert.equal(events.length, 1, 'a revert publishes nothing');
+    } finally {
+      if (priorDocument === undefined) delete globalThis.document;
+      else globalThis.document = priorDocument;
+      if (priorCustomEvent === undefined) delete globalThis.CustomEvent;
+      else globalThis.CustomEvent = priorCustomEvent;
+    }
   });
 
   test('throws "Reverted: <hash>" when receipt.status === 0', async () => {

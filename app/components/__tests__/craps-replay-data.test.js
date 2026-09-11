@@ -1342,3 +1342,37 @@ test('protocol seats are named from the active chain profile, not hardcoded', ()
   assert.match(src, /CONTRACTS\?\.VAULT/, 'vault label must read the active chain profile');
   assert.match(src, /CONTRACTS\?\.SDGNRS/, 'sDGNRS label must read the active chain profile');
 });
+
+test('rotation survives validation and both viewer and opponent table projection', () => {
+  const artifacts = clone(SIM_CRAPS_REPLAY_ARTIFACTS);
+  const markRotation = (player) => {
+    if (player.boosts.length) player.boosts[0].rotation = true;
+  };
+  markRotation(artifacts.viewer);
+  artifacts.featured.players.forEach(markRotation);
+  artifacts.shards?.forEach((shard) => shard.players.forEach(markRotation));
+  const raw = artifacts.featured.players.find((player) => player.boosts.length);
+  assert.ok(raw);
+  assert.equal(validateCrapsReplayPlayer(raw).boosts[0].rotation, true);
+  const invalid = clone(raw);
+  invalid.boosts[0].rotation = 'true';
+  assert.throws(() => validateCrapsReplayPlayer(invalid), /rotation.*boolean/);
+  const model = createCrapsReplayTableModel(artifacts);
+  const opponent = model.tableOptions.otherPlayers.find((player) => player.resolution.shooterBoosts.some((boost) => boost?.rotation));
+  assert.ok(opponent, 'opponent rotation must reach the table');
+  const trace = replayCrapsSeat(MANIFEST, raw, decodeCrapsReplayTape(MANIFEST));
+  assert.ok(trace.events.some((frame) => frame.shooterBoost?.rotation), 'viewer frames preserve rotation');
+});
+
+test('a shooter outside the featured players retains identity through collection validation', () => {
+  const artifacts = clone(SIM_CRAPS_REPLAY_ARTIFACTS);
+  const player = '0x1234567890123456789012345678901234567890';
+  artifacts.featured.shooterTimeline = [{ shooter: 0, betId: '123', player, name: 'Seat 123' }];
+  artifacts.featured = validateCrapsReplayCollection(artifacts.featured, MANIFEST);
+  const model = createCrapsReplayTableModel(artifacts, {
+    profiles: new Map([[player, { name: 'Outside Shooter', avatar: null }]]),
+  });
+  assert.equal(model.tableOptions.shooterTimeline[0].label, 'Outside Shooter');
+  assert.equal(model.tableOptions.shooterTimeline[0].betId, '123');
+  assert.equal(model.tableOptions.otherPlayers.some((seat) => seat.player === player), false);
+});

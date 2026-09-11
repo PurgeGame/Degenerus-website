@@ -24,9 +24,9 @@ const GOOD = '0x7fC3290000000000000000000000000000000E7a';
 
 // The share link points at the APP, not the marketing root: share-win.js's
 // APP_ORIGIN and affiliate.js's shareUrl builder independently agree on
-// https://degener.us/app/, so a shared ref lands the referee straight in the app
+// https://degener.us/beta/, so a shared ref lands the referee straight in the app
 // instead of one navigation short of it. These expectations predate that move.
-const APP_ORIGIN = 'https://degener.us/app/';
+const APP_ORIGIN = 'https://degener.us/beta/';
 
 describe('buildShareRefUrl', () => {
   test('valid address → lowercased bare-address ref URL', () => {

@@ -681,7 +681,7 @@ test('Craps entry failures are visible and duplicate-entry state repairs from ch
 
 test('the unified signboard presents Craps Autobattle and the Run It Up jackpot', () => {
   assert.match(componentSource, /craps-entry__identity craps-entry__identity--craps/);
-  assert.match(componentSource, /craps-autobattle-integrated-swords-v8\.webp/,
+  assert.match(componentSource, /craps-autobattle-integrated-swords-v9\.webp/,
     'the approved lockup is one transparent asset, so its swords cannot clip either word');
   assert.doesNotMatch(componentSource, /craps-entry__craps-(?:logo-base|logo-finish|swords)/,
     'the live header does not reconstruct the lockup from overlapping image layers');
@@ -1415,12 +1415,27 @@ test('a closed battle awaiting its result refreshes the lobby window on a 5s set
     'SETTLING is derived from a closed battle with no result yet');
   assert.match(componentSource, /this\.#awaitingSettlement = awaitingSettlement;/,
     'the render publishes the flag the watcher gates on');
-  assert.match(componentSource, /registerComponentPoll\(\(\) => \{\s*if \(this\.#awaitingSettlement\) void this\.#refreshSchedule\(\);\s*\}, CRAPS_SETTLE_WATCH_MS\)/,
+  assert.match(componentSource, /registerComponentPoll\(\(\) => \{\s*if \(!this\.#awaitingSettlement\) return;\s*this\.#settleWatchTick \+= 1;\s*if \(!crapsSettleWatchDue\(Date\.now\(\) - this\.#settlingSince, this\.#settleWatchTick\)\) return;\s*void this\.#refreshSchedule\(\);\s*\}, CRAPS_SETTLE_WATCH_MS\)/,
     'the watch rides the shared component poll so hidden tabs pause it, and only fires while settling');
+  assert.match(componentSource, /else if \(this\.#settlingBattle !== awaitingBattle\) \{\s*this\.#settlingBattle = awaitingBattle;\s*this\.#settlingSince = Date\.now\(\);/,
+    'a different battle closing restarts the settle clock');
   assert.match(componentSource, /if \(typeof this\.#settleWatchTimer === 'function'\)/,
     'disconnect releases the settle watch');
 });
 
+
+test('the settle watch stretches from 5s to 15s after three minutes and 30s after ten', async () => {
+  const { crapsSettleWatchDue } = await import('../app-craps-entry.js');
+  for (let tick = 1; tick <= 6; tick += 1) {
+    assert.equal(crapsSettleWatchDue(0, tick), true, `fresh settle refreshes every tick (${tick})`);
+    assert.equal(crapsSettleWatchDue(179_000, tick), true, 'still every tick just under three minutes');
+  }
+  const stretched = [1, 2, 3, 4, 5, 6].map((tick) => crapsSettleWatchDue(4 * 60_000, tick));
+  assert.deepEqual(stretched, [false, false, true, false, false, true], 'every third tick after three minutes');
+  const stalled = [1, 2, 3, 4, 5, 6, 12].map((tick) => crapsSettleWatchDue(11 * 60_000, tick));
+  assert.deepEqual(stalled, [false, false, false, false, false, true, true], 'every sixth tick after ten minutes');
+  assert.equal(crapsSettleWatchDue(NaN, 1), true, 'an unknown elapsed time keeps the fast cadence');
+});
 
 test('confirmed comps read COMPED while paid and unknown entries stay ENTERED', () => {
   assert.equal(crapsEntry.crapsEnteredLabel({ comped: true }), 'COMPED');

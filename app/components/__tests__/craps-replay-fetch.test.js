@@ -24,3 +24,25 @@ test('a local static server routes through the hosted game API', () => {
   assert.equal(crapsReplayFetchBase('127.0.0.1'), base);
   assert.match(base, /^https:\/\//);
 });
+
+test('every replay fetch carries a deadline so a hung pointer cannot park the loader', async () => {
+  const { crapsReplayFetch, CRAPS_REPLAY_FETCH_TIMEOUT_MS } = await import('../../craps/replay-fetch.js');
+  const priorFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => { seen.push({ url, init }); return { ok: true }; };
+  try {
+    await crapsReplayFetch('/craps/replays/v1/battles/b1/latest.json', { headers: { accept: 'application/json' } });
+    assert.equal(seen.length, 1);
+    assert.ok(seen[0].init.signal instanceof AbortSignal, 'a timeout signal is attached');
+    assert.equal(seen[0].init.signal.aborted, false);
+    assert.equal(seen[0].init.headers.accept, 'application/json', 'the caller init survives');
+    assert.equal(CRAPS_REPLAY_FETCH_TIMEOUT_MS, 20_000);
+
+    const own = new AbortController();
+    await crapsReplayFetch('/x', { signal: own.signal });
+    assert.equal(seen[1].init.signal, own.signal, 'a caller-supplied signal is kept');
+  } finally {
+    if (priorFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = priorFetch;
+  }
+});

@@ -963,6 +963,28 @@ describe('connectWithPicker', () => {
     assert.equal(_pickerShownWith.length, 2);
   });
 
+  test('closing the picker resolves null without falling through to the legacy eth_requestAccounts popup', async () => {
+    const wallets = [
+      { rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' },
+      { rdns: 'io.rabby', name: 'Rabby', icon: 'data:', uuid: 'u2' },
+    ];
+    _discoverFilterResult = wallets;
+    _discoverReturn = null;
+    _pickerShowReturn = Promise.resolve(null);   // Escape / backdrop / Cancel
+    const legacyCalls = [];
+    const prior = window.ethereum;
+    window.ethereum = { request: async ({ method }) => { legacyCalls.push(method); return ['0xabc0000000000000000000000000000000000001']; } };
+    try {
+      const result = await wallet.connectWithPicker();
+      assert.equal(result, null, 'a cancelled picker is a null connect');
+      assert.ok(_pickerShownWith, 'the picker was shown');
+      assert.ok(!legacyCalls.includes('eth_requestAccounts'), 'cancelling one prompt must not open the window.ethereum prompt');
+    } finally {
+      if (prior === undefined) delete window.ethereum;
+      else window.ethereum = prior;
+    }
+  });
+
   test('On successful connectWithPicker, localStorage.setItem(lastWalletRdns, info.rdns) — NEVER lastWalletAddress / lastWalletUuid', async () => {
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'unique-uuid' }];
     _discoverReturn = makeMockBrowserProvider({
@@ -1182,7 +1204,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(opts.metadata, 'metadata present');
     assert.ok(opts.metadata.redirect, 'metadata.redirect present');
     assert.ok(typeof opts.metadata.redirect.universal === 'string', 'redirect.universal is a string');
-    assert.ok(opts.metadata.redirect.universal.endsWith('/app/'), 'redirect.universal ends with /app/');
+    assert.ok(opts.metadata.redirect.universal.endsWith('/beta/'), 'redirect.universal ends with /beta/');
     assert.match(opts.customStoragePrefix, /^degenerus-wc-/,
       'WalletConnect storage is app-versioned so legacy dead topics are not restored');
   });

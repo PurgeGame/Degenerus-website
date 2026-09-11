@@ -334,7 +334,7 @@ test('Craps resolution speed inherits the main reveal pace and scales the full r
   assert.equal(normalizeCrapsResolutionSpeed(99), 3);
   assert.equal(normalizeCrapsResolutionSpeed('junk'), 1);
   assert.equal(crapsResolutionDelay(520, 2), 260);
-  assert.equal(crapsResolutionDelay(520, 0.5), 1040);
+  assert.equal(crapsResolutionDelay(520, 0.5), 520);
   assert.deepEqual(
     crapsRollImpactCadence(3),
     {
@@ -362,7 +362,7 @@ test('Craps resolution speed inherits the main reveal pace and scales the full r
   assert.match(
     COMPONENT_SRC,
     /class="craps-run-speed"[\s\S]*?type="range" min="0\.5" max="3" step="0\.5"[\s\S]*?data-bind="craps-resolution-speed"[\s\S]*?data-bind="craps-resolution-speed-value"/s,
-    'the live resolution rail carries a compact 0.5x–3x speed slider',
+    'the live resolution rail carries a compact manual–3x speed slider',
   );
   assert.match(
     COMPONENT_SRC,
@@ -2598,4 +2598,62 @@ test('High Roller panel distinguishes wins, losses, sole riders and missing resu
   assert.equal(crapsHighRollerPanel({ ...award, contested: false }).prizeWei, null);
   assert.equal(crapsHighRollerPanel(null).status, 'UNAVAILABLE');
   assert.equal(crapsHighRollerPanel({ ...award, battleWinner: null }).status, 'UNAVAILABLE');
+});
+
+test('lowest speed waits for one click per roll and higher speeds resume autoplay', async () => {
+  const { normalizeCrapsResolutionSpeed, crapsResolutionDelay, crapsRollImpactCadence } = await import(moduleUrl);
+  const methods = ['setResolutionSpeed', 'syncRollControls', 'rollNextResolution', 'queueNextResolutionRoll'].map((name) => {
+    const start = COMPONENT_SRC.indexOf(`  #${name}(`);
+    const end = COMPONENT_SRC.indexOf('\n  #', start + 1);
+    return COMPONENT_SRC.slice(start, end).replaceAll('#', '_');
+  }).join('\n');
+  let pending = null;
+  const clock = { setTimeout(callback) { pending = callback; return 1; } };
+  const Harness = new Function('normalizeCrapsResolutionSpeed', 'crapsResolutionDelay', 'crapsRollImpactCadence',
+    'writeDegeneretteSpeed', 'CRAPS_RESOLUTION_CSS_DURATIONS', 'globalThis', `return class { ${methods} }`)(
+    normalizeCrapsResolutionSpeed, crapsResolutionDelay, crapsRollImpactCadence, () => {}, [], clock);
+  const nodes = new Map();
+  const table = new Harness();
+  table.querySelector = (selector) => {
+    if (!nodes.has(selector)) nodes.set(selector, {
+      dataset: {}, setAttribute() {}, removeAttribute() {},
+    });
+    return nodes.get(selector);
+  };
+  let rolls = 0;
+  let stops = 0;
+  Object.assign(table, {
+    _resolutionSpeed: 1, _resolutionActive: true, _awaitingRoll: true, _autoRoll: true,
+    _pauseForViewerBust: () => false,
+    _stopResolutionTimer: () => { pending = null; stops++; },
+    _resolutionDelay: (duration) => duration,
+    _advanceResolution: () => { rolls++; },
+  });
+  table._queueNextResolutionRoll(80);
+  assert.equal(typeof pending, 'function');
+  table._setResolutionSpeed(0.5);
+  assert.equal(pending, null, 'entering manual cancels the queued automatic roll');
+  assert.equal(table.querySelector('[data-bind="craps-resolution-speed-value"]').textContent, 'MANUAL');
+  assert.equal(table.querySelector('[data-bind="craps-resolution-auto"]').hidden, true);
+  assert.equal(table.querySelector('[data-bind="craps-resolution-roll"]').hidden, false);
+  table._rollNextResolution();
+  table._rollNextResolution();
+  assert.equal(rolls, 1, 'double clicks cannot advance during a roll');
+  const before = stops;
+  table._setResolutionSpeed(0.5);
+  assert.equal(stops, before, 'changing pace during settlement does not cancel its timer');
+  table._queueNextResolutionRoll(80);
+  assert.equal(pending, null, 'finishing a manual roll waits again');
+  table._rollNextResolution();
+  assert.equal(rolls, 2);
+  table._queueNextResolutionRoll(80);
+  table._setResolutionSpeed(1);
+  assert.equal(typeof pending, 'function', 'leaving manual resumes automatically');
+  pending();
+  assert.equal(rolls, 3);
+  table._resolutionActive = false;
+  table._awaitingRoll = false;
+  table._setResolutionSpeed(0.5);
+  table._rollNextResolution();
+  assert.equal(rolls, 3, 'closed or completed replays cannot be advanced');
 });

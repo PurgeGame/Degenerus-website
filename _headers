@@ -1,9 +1,9 @@
 # Site-wide security baseline (2026-08-14 launch-readiness round). Additive
 # header names only — these never collide with the Cache-Control rules below.
-# HSTS starts conservative: 30 days, no includeSubDomains (api.degener.us is a
-# separate host), no preload. Lengthen after it has soaked.
+# HSTS: 180 days after a 30-day soak (2026-08-14 -> 2026-09-10). No
+# includeSubDomains (api.degener.us is a separate host), no preload.
 /*
-  Strict-Transport-Security: max-age=2592000
+  Strict-Transport-Security: max-age=15552000
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()

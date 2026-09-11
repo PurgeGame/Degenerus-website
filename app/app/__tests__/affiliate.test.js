@@ -211,14 +211,14 @@ describe('Plan 62-06: buildAffiliateUrl', () => {
   test('uses default code when no registeredCode', () => {
     const addr = '0x' + 'a'.repeat(40);
     const url = affiliateMod.buildAffiliateUrl(addr);
-    assert.equal(url, `https://degener.us/app/?ref=${addr}`);
+    assert.equal(url, `https://degener.us/beta/?ref=${addr}`);
   });
 
   test('uses registeredCode when provided', () => {
     const addr = '0x' + 'a'.repeat(40);
     const vanity = '0x' + '4445474500000000000000000000000000000000000000000000000000000000';
     const url = affiliateMod.buildAffiliateUrl(addr, vanity);
-    assert.equal(url, `https://degener.us/app/?ref=${vanity}`);
+    assert.equal(url, `https://degener.us/beta/?ref=${vanity}`);
   });
 });
 

@@ -218,7 +218,7 @@ describe('index.html basic-mode skeleton', () => {
     assert.ok(referrals < mainClose, 'Referrals remains inside main');
     assert.match(
       html.slice(history, mainClose),
-      /<app-transaction-history><\/app-transaction-history>[\s\S]*?<app-affiliate-panel><\/app-affiliate-panel>/,
+      /<app-transaction-history>[\s\S]*?<\/app-transaction-history>\s*<!--[\s\S]*?-->\s*<app-affiliate-panel>[\s\S]*?<\/app-affiliate-panel>/,
       'no other panel is inserted between Transaction History and Referrals',
     );
   });
@@ -305,7 +305,7 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(html, /new IntersectionObserver\([\s\S]*?rootMargin: '200px 0px'/,
       'narrow layouts fetch large panels shortly before they enter the viewport');
     assert.match(html, /afterWindowLoad\(\(\) => loadInBatches\(\[[\s\S]*?\.\.\.POST_HERO_MODULES,[\s\S]*?\.\.\.IDLE_MODULES,[\s\S]*?\.\.\.LAZY_PANELS\.map/,
-      'window load is the non-scrolling backstop for every deferred panel');
+      'window load remains the backstop for stateful panels and listeners');
     assert.match(html, /const batchSize = window\.matchMedia\('\(max-width: 1099px\)'\)\.matches \? 1 : 2/,
       'phones admit only one deferred root module at a time');
     assert.match(html, /pending\.splice\(0, batchSize\)[\s\S]*?setTimeout\(\(\) => idle\(next\), 250\)/,
@@ -313,10 +313,8 @@ describe('index.html basic-mode skeleton', () => {
     // Cold-load module diet (2026-08-13; second tier 2026-08-14): these load
     // through the inline LAZY_PANELS / IDLE_MODULES registrations instead of
     // eager script tags.
-    // The path string must still appear — dynamic imports are invisible to
-    // the publish runbook's static module-resolution grep, so THESE asserts
-    // are what keep a renamed/deleted module from silently resolving to the
-    // no-404 HTML fallback. Disk existence is asserted too.
+    // Keep registered paths and disk existence covered alongside the publish
+    // module scanner, including the two panels that load only on first open.
     const lazyModules = [
       '/app/components/app-pass-section.js',
       '/app/components/app-transaction-history.js',

@@ -2228,7 +2228,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       button.dispatchEvent({ type: 'click', preventDefault() {} });
       await settle(80);
       assert.equal(copied.length, 3);
-      assert.match(copied.at(-1), /^https:\/\/degener\.us\/app\/\?ref=0x[0-9a-f]{40}$/);
+      assert.match(copied.at(-1), /^https:\/\/degener\.us\/beta\/\?ref=0x[0-9a-f]{40}$/);
       assert.match(copied.at(-1), new RegExp(`${CONNECTED.slice(2).toLowerCase()}$`),
         'the default address-derived code belongs to the connected player');
       assert.equal(button.textContent, 'CODE COPIED');
@@ -2289,11 +2289,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       await settle(20);
       assert.equal(pendingLookups.length >= 1, true, 'affiliate lookup is still unresolved');
       assert.deepEqual(clipboardAttempts, [
-        `https://degener.us/app/?ref=${CONNECTED.toLowerCase()}`,
+        `https://degener.us/beta/?ref=${CONNECTED.toLowerCase()}`,
       ], 'clipboard is attempted immediately with the always-valid address link');
       assert.deepEqual(fallbackCopies, [{
         command: 'copy',
-        value: `https://degener.us/app/?ref=${CONNECTED.toLowerCase()}`,
+        value: `https://degener.us/beta/?ref=${CONNECTED.toLowerCase()}`,
       }], 'a temporary mounted field backs up denied Clipboard API access');
       assert.equal(document.querySelector('textarea'), null, 'temporary copy field is removed');
       assert.equal(button.textContent, 'CODE COPIED');

@@ -316,3 +316,14 @@ test('stable settled Decimator/BAF rounds are latched and not refetched', () => 
   assert.match(src, /if \(nextAddress !== this\.#address\) this\.#settled =/,
     'switching accounts invalidates the latch');
 });
+
+test('a failed consolation read reads as pending, never as "no consolation"', () => {
+  const skipped = { roundStatus: 'skipped', score: '1000' };
+  const unknown = bafResolutionView({ outcome: skipped, consolation: null, consolationUnknown: true, level: 7, currentLevel: 9 });
+  assert.equal(unknown.status, 'CONSOLATION PENDING');
+  assert.equal(unknown.actionable, false);
+  const none = bafResolutionView({ outcome: skipped, consolation: 0n, level: 7, currentLevel: 9 });
+  assert.match(none.status, /^LOSS/);
+  const ready = bafResolutionView({ outcome: skipped, consolation: 5n * 10n ** 18n, consolationUnknown: false, level: 7, currentLevel: 9 });
+  assert.equal(ready.status, 'CONSOLATION READY');
+});

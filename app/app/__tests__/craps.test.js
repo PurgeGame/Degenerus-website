@@ -907,6 +907,42 @@ test('settlement words are read out of GAME storage, which is where they live', 
   assert.equal(await craps.readCrapsSettlementWord(901n, provider), null);
 });
 
+test('a drawn settlement word is remembered across heads; an undrawn one keeps polling', async () => {
+  // GAME writes lootboxRngWordByIndex[index] once (rawFulfillRandomWords drops
+  // stale request ids; finalize and gap-backfill refuse a non-zero slot), so
+  // re-reading a drawn word at every new pinned head was pure RPC waste.
+  craps.__resetCrapsSettlementWordsForTest();
+  const drawn = 910n;
+  const undrawn = 911n;
+  const drawnKey = craps.crapsSettlementWordStorageKey(drawn);
+  const reads = [];
+  const provider = {
+    getStorage: async (address, slot) => {
+      reads.push(slot);
+      return slot === drawnKey
+        ? `0x${(777n).toString(16).padStart(64, '0')}`
+        : `0x${''.padStart(64, '0')}`;
+    },
+  };
+  assert.equal(craps.knownCrapsSettlementWord(drawn), null, 'nothing is known before the first read');
+  assert.equal(await craps.readCrapsSettlementWord(drawn, provider, 100), 777n);
+  assert.equal(await craps.readCrapsSettlementWord(undrawn, provider, 100), null);
+  assert.equal(reads.length, 2);
+
+  assert.equal(await craps.readCrapsSettlementWord(drawn, provider, 101), 777n, 'a later head is served from memory');
+  assert.equal(await craps.readCrapsSettlementWord(drawn, provider, 'latest'), 777n);
+  assert.equal(craps.knownCrapsSettlementWord(drawn, 250), 777n);
+  assert.equal(reads.length, 2, 'the drawn word cost no further storage reads');
+
+  assert.equal(await craps.readCrapsSettlementWord(undrawn, provider, 101), null);
+  assert.equal(reads.length, 3, 'an undrawn word is read again at the next head');
+
+  assert.equal(craps.knownCrapsSettlementWord(drawn, 99), null, 'a head before the word was learned is never served from memory');
+  assert.equal(await craps.readCrapsSettlementWord(drawn, provider, 99), 777n);
+  assert.equal(reads.length, 4);
+  craps.__resetCrapsSettlementWordsForTest();
+});
+
 test('lobby entry history scopes a direct High Roller seat to the connected wallet', () => {
   const day = 42;
   const period = 5;

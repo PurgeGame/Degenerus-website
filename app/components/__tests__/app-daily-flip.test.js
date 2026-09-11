@@ -286,7 +286,9 @@ function resetDom() {
 }
 
 async function flushPromises() {
-  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+  // contracts.js bounds its chain, signer and address reads with a wallet
+  // deadline (one microtask hop apiece), so the pre-broadcast path is longer.
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
 async function flushMicrotasks() {

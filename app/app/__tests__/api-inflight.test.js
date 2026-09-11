@@ -251,6 +251,48 @@ test('failed requests leave the in-flight cache and retry immediately', async ()
   assert.equal(calls, 2, 'a later call gets a fresh network attempt');
 });
 
+test('a hung read arms the shared cooldown; a fast failure or a consumer abort does not', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new TypeError('Failed to fetch'); };
+  await assert.rejects(api.fetchJSON('/game/state'), TypeError);
+  await assert.rejects(api.fetchJSON('/game/state'), TypeError);
+  assert.equal(calls, 2, 'a refused connection fails in milliseconds and keeps its immediate retry');
+  assert.equal(cooldown.cooldownUntil(), 0, 'a fast transport failure leaves the gate open');
+
+  // A consumer that walks away is not an API failure.
+  globalThis.fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const controller = new AbortController();
+  const walkedAway = api.fetchJSON('/game/state', { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(walkedAway);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(cooldown.cooldownUntil(), 0, 'a consumer abort leaves the gate open');
+
+  // A read that never answers is the expensive failure: the 20s deadline
+  // arms the gate like a 503, so the next read stays off the wire.
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    calls = 0;
+    globalThis.fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+      calls += 1;
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    const hung = api.fetchJSON('/game/state');
+    mock.timers.tick(20_001);
+    await assert.rejects(hung, (error) => error.name === 'TimeoutError');
+    assert.ok(cooldown.cooldownUntil() > Date.now(), 'a hung read arms the gate when its deadline fires');
+    await assert.rejects(api.fetchJSON('/game/state'), /API cooling down/);
+    assert.equal(calls, 1, 'the gate keeps the follow-up read off the wire');
+  } finally {
+    mock.timers.reset();
+    cooldown.clearApiCooldown();
+  }
+});
+
 test('successful reads collapse for one second, then expire', async () => {
   const realNow = Date.now;
   let now = 10_000;
@@ -271,6 +313,112 @@ test('successful reads collapse for one second, then expire', async () => {
   } finally {
     Date.now = realNow;
   }
+});
+
+const absentPlayer = `/player/0x${'a'.repeat(40)}`;
+
+test('an absent dashboard shares one 404 across a render wave, then expires', async () => {
+  const realNow = Date.now;
+  let now = 10_000;
+  let calls = 0;
+  let cancellations = 0;
+  Date.now = () => now;
+  const response = { ok: false, status: 404, body: { cancel: async () => { cancellations += 1; } } };
+  globalThis.fetch = async () => { calls += 1; return response; };
+  try {
+    const errors = [];
+    for (let i = 0; i < 16; i += 1) {
+      await assert.rejects(api.fetchJSON(absentPlayer), (error) => {
+        assert.ok(error instanceof api.ApiRequestError);
+        assert.equal(error.status, 404);
+        assert.equal(error.response, response);
+        errors.push(error);
+        return true;
+      });
+    }
+    assert.equal(calls, 1);
+    assert.equal(cancellations, 1, 'the original error body is released once');
+    assert.equal(new Set(errors).size, 16, 'cached consumers get independent errors');
+    now += 1_000;
+    await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+    assert.equal(calls, 2, 'absence expires at the same boundary as a successful read');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('forced reads and transaction confirmation immediately bypass dashboard absence', async () => {
+  let calls = 0;
+  const options = [];
+  globalThis.fetch = async (_url, opts) => {
+    calls += 1;
+    options.push(opts);
+    return calls % 2 === 1
+      ? { ok: false, status: 404 }
+      : { ok: true, status: 200, json: async () => ({ indexed: true }) };
+  };
+  await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+  assert.deepEqual(await api.fetchJSON(absentPlayer, { force: true }), { indexed: true });
+  assert.equal(options[1].cache, 'no-store');
+  assert.deepEqual(await api.fetchJSON(absentPlayer), { indexed: true });
+  api.invalidateJSONCache();
+  await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+  api.invalidateJSONCache();
+  assert.deepEqual(await api.fetchJSON(absentPlayer), { indexed: true });
+  assert.equal(calls, 4);
+});
+
+test('late pre-transaction 404s cannot repopulate the dashboard cache', async () => {
+  let finish;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) return new Promise((resolve) => { finish = resolve; });
+    return { ok: true, status: 200, json: async () => ({ indexed: true }) };
+  };
+  const stale = api.fetchJSON(absentPlayer);
+  api.invalidateJSONCache();
+  finish({ ok: false, status: 404 }); // Deliberately ignore abort like a late transport callback.
+  await assert.rejects(stale, { status: 404 });
+  assert.deepEqual(await api.fetchJSON(absentPlayer), { indexed: true });
+  assert.equal(calls, 2);
+});
+
+test('a pre-aborted consumer cannot receive a cached dashboard 404', async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return { ok: false, status: 404 }; };
+  await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(api.fetchJSON(absentPlayer, { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('dashboard absence uses the bounded completed-response budget', async () => {
+  const realNow = Date.now;
+  Date.now = () => 10_000;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return { ok: false, status: 404 }; };
+  try {
+    await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+    for (let i = 0; i < 256; i += 1) {
+      await assert.rejects(api.fetchJSON(`/player/0x${i.toString(16).padStart(40, '0')}`), { status: 404 });
+    }
+    await assert.rejects(api.fetchJSON(absentPlayer), { status: 404 });
+    assert.equal(calls, 258, 'the oldest response was evicted even inside the TTL');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('missing results and dashboard server errors still retry immediately', async () => {
+  let calls = 0;
+  for (const [path, status] of [[`${absentPlayer}/results`, 404], ['/coinflip/day/6', 404], [absentPlayer, 500]]) {
+    globalThis.fetch = async () => { calls += 1; return { ok: false, status }; };
+    await assert.rejects(api.fetchJSON(path), { status });
+    await assert.rejects(api.fetchJSON(path), { status });
+  }
+  assert.equal(calls, 6);
 });
 
 test('polling.js and panel reads share the same in-flight request', async () => {

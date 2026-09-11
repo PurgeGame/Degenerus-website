@@ -1423,7 +1423,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(won.cards[0], {
       type: 'craps-result',
       rarity: 'rare',
-      icon: '/app/assets/craps/craps-autobattle-integrated-swords-v8.webp',
+      icon: '/app/assets/craps/craps-autobattle-integrated-swords-v9.webp',
       glyph: null,
       label: 'CRAPS WINNINGS',
       value: '+1,234 FLIP',
