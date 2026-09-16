@@ -566,6 +566,11 @@ body.layout-basic .df-payout-chip-stack {
     var(--df-payout-delay, 0s) backwards;
 }
 
+/* coin.svg is 120 units wide; the stack assets add 8 units of padding. */
+body.layout-basic .df-payout-chip-stack[data-chip-count="1"] {
+  width: calc(var(--df-payout-stack-width) * 120 / 128);
+}
+
 @keyframes df-payout-stack-arrive {
   0% {
     opacity: 0;
@@ -655,6 +660,11 @@ body.layout-basic .df-bet-chip-rack {
    mirrors vary how much red/green edge is exposed without inventing chip
    denominations. Buried coins hide their faces behind the coin above (the
    asset's wall band is >=28% of its height; rise never exceeds 26%). */
+body.layout-basic .df-bet-chip-stack {
+  /* Shade the complete silhouette so buried chips do not cast bulging rims. */
+  filter: drop-shadow(0 0.05rem 0.05rem rgba(0, 0, 0, 0.45));
+}
+
 body.layout-basic .df-bet-chip {
   --df-chip-mirror: 1;
   box-sizing: border-box;
@@ -664,7 +674,7 @@ body.layout-basic .df-bet-chip {
   border-radius: 0;
   background: url('/shared/flip-chips/coin.svg') center / 100% 100% no-repeat;
   box-shadow: none;
-  filter: drop-shadow(0 0.05rem 0.05rem rgba(0, 0, 0, 0.45));
+  filter: none;
 }
 
 body.layout-basic .df-bet-chip[data-chip-turn="1"],

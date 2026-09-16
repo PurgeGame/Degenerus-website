@@ -1176,6 +1176,18 @@
   line-height: 1;
 }
 
+.replay-bucket-craps {
+  gap: 0.2em;
+  color: #62400f;
+}
+
+.replay-bucket-craps__unit {
+  max-width: 4em;
+  font-size: 0.85em;
+  line-height: 1.05;
+  white-space: normal;
+}
+
 .replay-bucket-row-count {
   flex: 0 0 auto;
   margin-left: 0.08em;
