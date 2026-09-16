@@ -284,6 +284,7 @@ describe('index.html basic-mode skeleton', () => {
   });
 
   test('all shipped panel script tags present', () => {
+    const importMap = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]);
     for (const src of [
       '/app/app/main.js',
       '/app/components/wallet-picker.js',
@@ -293,7 +294,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/replay-panel.js',
       '/app/components/app-all-in-machine-control.js',
     ]) {
-      assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
+      assert.ok(html.includes(`src="${importMap.imports[src] || src}"`), `script tag: ${src}`);
     }
     for (const src of [
       '/app/components/app-decimator-panel.js',

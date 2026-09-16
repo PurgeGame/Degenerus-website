@@ -1112,6 +1112,17 @@ describe('normalizeSequence', () => {
     assert.match(seq.title, /PACK 2\/3/);
   });
 
+  test('jackpot: bonus day passes use the normal craps comp card', () => {
+    const sequence = normalizeSequence({ kind: 'jackpot', day: 446,
+      prizes: [{ type: 'craps-pass', amount: 2n, winningTraitIds: [18] }],
+    });
+    assert.equal(sequence.cards.length, 1);
+    assert.equal(sequence.cards[0].type, 'craps-pass');
+    assert.equal(sequence.cards[0].passTier, 'normal');
+    assert.equal(sequence.cards[0].value, '2');
+    assert.deepEqual(sequence.cards[0].winningTraitIds, [18]);
+  });
+
   test('jackpot: eth + flip + tickets prizes; autoStart + big; zero amounts dropped', () => {
     const seq = normalizeSequence({
       kind: 'jackpot',

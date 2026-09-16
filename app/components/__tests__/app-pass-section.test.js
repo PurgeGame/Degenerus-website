@@ -318,6 +318,7 @@ function makeFakePassContract(opts = {}) {
     }
   };
   return {
+    claimableWinningsOf: async () => 0n,
     purchaseWhalePass: Object.assign(
       async (...args) => {
         calls.purchaseWhalePass.push(args);
@@ -846,6 +847,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     // Replace at module level using the contract factory seam — capture args
     // via a stub that mirrors purchaseWhaleBundle's signature.
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async (...args) => {
           recordedArgs = args;
@@ -929,6 +931,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       return error;
     };
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async () => { throw outOfFunds(); },
         { staticCall: async () => undefined },
@@ -1005,6 +1008,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('Deity dialog symbol selection invokes purchaseDeityPass with symbolId', async () => {
     let recordedArgs = null;
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
@@ -1552,6 +1556,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test("Deity 'E' revert renders 'That symbol's taken — try another.' (CONTEXT D-05 LOCKED)", async () => {
     // Stub purchaseDeityPass to throw a structured 'E' error
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
@@ -1591,6 +1596,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
   test("Deity 'NotApproved' revert surfaces standard reason-map text (NOT the override)", async () => {
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
@@ -1636,6 +1642,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('Deity click handler debounced — double-click invokes purchaseDeityPass exactly once', async () => {
     let callCount = 0;
     passesMod.__setContractFactoryForTest(() => ({
+      claimableWinningsOf: async () => 0n,
       purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },

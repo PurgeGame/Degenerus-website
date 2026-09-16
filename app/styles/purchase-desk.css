@@ -89,6 +89,7 @@ body.layout-basic .app-decimator-panel .panel-header::after {
 
 body.layout-basic .app-decimator-panel .dec-header-title {
   position: relative;
+  box-sizing: border-box;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -1490,7 +1491,8 @@ body.layout-basic .app-decimator-panel .dec-header-title::before {
 }
 
 body.layout-basic .app-decimator-panel .dec-header-title::after {
-  margin-right: 0;
+  /* Equal side clearance keeps BUY IN centered independently of the help link. */
+  margin-right: 1.55rem;
 }
 
 body.layout-basic .app-decimator-panel .dec-purchase-heading {
@@ -1504,8 +1506,8 @@ body.layout-basic .app-decimator-panel .dec-purchase-heading::before {
 }
 
 body.layout-basic .app-decimator-panel .dec-purchase-help {
-  right: auto;
-  left: 0.08rem;
+  right: 0.08rem;
+  left: auto;
   width: 1.18rem;
   height: 1.18rem;
 }
@@ -3536,8 +3538,8 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-purchase-help {
-    right: auto;
-    left: 0;
+    right: 0;
+    left: auto;
     width: 1rem;
     height: 1rem;
   }

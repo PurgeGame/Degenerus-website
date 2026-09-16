@@ -497,7 +497,7 @@ describe('day-wide reveal planning', () => {
         'every chip selects one of the four physically drawn turns');
       assert.ok(stack.count === 1 || new Set(stack.turns).size > 1,
         'a multi-chip stack always shows more than one rotational orientation');
-      const riseStep = Math.min(0.25, 1.15 / Math.max(1, stack.count - 1));
+      const riseStep = 0.25;
       stack.chips.forEach((chip, index) => {
         assert.deepEqual(Object.keys(chip).sort(), ['rise', 'turn'],
           'rotation and uniform rise are the only per-chip variations');

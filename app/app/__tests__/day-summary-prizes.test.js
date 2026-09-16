@@ -50,3 +50,10 @@ describe('Day Summary level-transition prizes', () => {
     assert.deepEqual(prizes, [{ type: 'baf-tickets', amount: 50n, level: 64 }]);
   });
 });
+
+test('includes grouped bonus craps passes in Day Summary without adding FLIP', () => {
+  assert.deepEqual(buildDaySummaryPrizes({ coinTotal: '0', breakdown: [
+    { awardType: 'craps_pass', amount: '1', count: 2, traitId: 18 },
+    { awardType: 'craps_pass', amount: '2', count: 1, traitId: 18 },
+  ] }), [{ type: 'craps-pass', amount: 4n, winningTraitIds: [18] }]);
+});

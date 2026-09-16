@@ -26,7 +26,7 @@ if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 }
 
-const { _makeFailoverSend } = await import('../read-provider.js');
+const { _makeFailoverSend, RpcUnavailableError } = await import('../read-provider.js');
 
 const A = 'https://primary.invalid';
 const B = 'https://fallback.invalid';
@@ -103,4 +103,82 @@ test('a hung endpoint is aborted with a concrete signal before failover', async 
   assert.equal(primarySignal instanceof AbortSignal, true);
   assert.equal(primarySignal.aborted, true);
   assert.deepEqual(hits, [A, B]);
+});
+
+test('a fully dead chain arms a breaker: later reads fail fast, the next probe walk waits for the ladder', async () => {
+  const realNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+  try {
+    let hits = 0;
+    let alive = false;
+    const send = _makeFailoverSend([A, B], async () => {
+      hits += 1;
+      if (alive) return ok({ id: 1, result: '0x1' });
+      throw new Error('all down');
+    });
+    await assert.rejects(send(PAYLOAD), /all down/);
+    assert.equal(hits, 2, 'the first dead walk contacted every endpoint');
+    const firstGate = send._state.outageUntil;
+    assert.ok(firstGate > now && firstGate - now <= 2_400, 'the first ladder step is ~2s');
+
+    await assert.rejects(send(PAYLOAD), (error) => error instanceof RpcUnavailableError && error.code === 'RPC_UNAVAILABLE');
+    assert.equal(hits, 2, 'inside the gate nothing touches the network');
+
+    now = firstGate + 1;
+    await assert.rejects(send(PAYLOAD), /all down/);
+    assert.equal(hits, 4, 'past the gate one full walk goes out again');
+    assert.ok(send._state.outageUntil - now > firstGate - 1_000_000, 'a second dead walk doubles the ladder');
+    assert.equal(send._state.consecutiveOutages, 2);
+
+    alive = true;
+    now = send._state.outageUntil + 1;
+    assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
+    assert.equal(send._state.outageUntil, 0, 'a successful walk clears the gate');
+    assert.equal(send._state.consecutiveOutages, 0);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('a demoted primary is re-probed from the side and restored when it answers', async () => {
+  const realNow = Date.now;
+  let now = 5_000_000;
+  Date.now = () => now;
+  try {
+    const hits = [];
+    let primaryAlive = false;
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      const method = JSON.parse(init.body).method;
+      hits.push(`${url === A ? 'A' : 'B'}:${method}`);
+      if (url === B) return ok({ id: 1, result: '0x2' });
+      if (!primaryAlive) throw new Error('primary down');
+      return ok({ id: method === 'eth_blockNumber' ? 0 : 1, result: '0x1' });
+    });
+    for (let i = 0; i < 3; i += 1) await send(PAYLOAD);
+    assert.equal(send._state.preferred, 1, 'three primary failures promote the fallback');
+    hits.length = 0;
+
+    await send(PAYLOAD);
+    assert.deepEqual(hits, ['B:eth_call'], 'inside the probe interval the fallback serves alone');
+    hits.length = 0;
+
+    now += 60_000;
+    await send(PAYLOAD);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(hits, ['A:eth_blockNumber', 'B:eth_call'], 'the probe rides beside the live read, which the fallback still serves');
+    assert.equal(send._state.preferred, 1, 'a probe that fails leaves the fallback preferred');
+    hits.length = 0;
+
+    primaryAlive = true;
+    now += 60_000;
+    await send(PAYLOAD);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(send._state.preferred, 0, 'a probe that answers restores the primary');
+    hits.length = 0;
+    await send(PAYLOAD);
+    assert.deepEqual(hits, ['A:eth_call'], 'live traffic is back on the primary');
+  } finally {
+    Date.now = realNow;
+  }
 });

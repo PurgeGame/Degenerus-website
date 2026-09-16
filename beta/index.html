@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script>document.addEventListener('load',function(e){var t=e.target;if(t&&t.tagName==='LINK'&&t.hasAttribute('data-deferred-css')&&t.media==='print')t.media='all';},true);</script>
-
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus App</title>
@@ -12,6 +10,11 @@
        can be reserved before it mounts (wallet.js sets/clears lastWalletRdns
        on every connect/disconnect path). Must run before the stylesheets. -->
   <script>try{if(!localStorage.getItem('lastWalletRdns'))document.documentElement.classList.add('no-wallet-session');}catch(e){}</script>
+  <!-- Deferred stylesheets (media="print" + data-deferred-css below) switch to
+       media="all" once they arrive. One capture listener replaces the per-link
+       onload= attributes: the published script-src admits inline scripts by
+       hash (db/csp-inline-hashes.mjs), and an event handler attribute has none. -->
+  <script>document.addEventListener('load',function(e){var t=e.target;if(t&&t.tagName==='LINK'&&t.hasAttribute('data-deferred-css')&&t.media==='print')t.media='all';},true);</script>
   <!-- Telemetry capture hook: queue errors, unhandled rejections, dead
        resource loads (this no-404 site serves HTML for missing modules — the
        browser then fires exactly this error event), and CSP violations from
@@ -35,7 +38,9 @@
       push('rejection', { m: String((r && r.message) || r || '').slice(0, 300) });
     });
     document.addEventListener('securitypolicyviolation', function (e) {
-      push('csp', { d: e.effectiveDirective, b: String(e.blockedURI || '').slice(0, 200) });
+      // 'report-sample' in the policy exposes the first 40 characters of a
+      // refused inline script, so a blocked injection is identifiable.
+      push('csp', { d: e.effectiveDirective, b: String(e.blockedURI || '').slice(0, 200), s: String(e.sample || '').slice(0, 40) });
     });
   })();
   </script>
@@ -56,7 +61,7 @@
        (status-indicators.css), the static gold-rush hero (app.min.css), the
        drawing-machine chrome (jackpot/daily-drawing), nav chrome
        (settings-menu) and the top-of-page wallet banner slot.
-       DEFERRED sheets use media="print" + onload when they are lightweight
+       DEFERRED sheets use media="print" + data-deferred-css when they are lightweight
        and broadly shared. Large component-owned sheets keep their href in
        data-href and are requested with their module, so they do not compete
        with the phone's first screen. Both forms retain the original <link>
@@ -118,10 +123,17 @@
       "gsap/Flip": "/app/vendor/gsap-flip.mjs",
       "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
       "lean-qr": "/app/vendor/lean-qr.mjs",
+      "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
+      "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=tutorial-fixtures-13",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=tutorial-fixtures-13",
+      "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
+      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=tutorial-fixtures-13",
+      "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
       "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
       "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
       "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
-      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-referral-20260905",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-tutorial-native-tickets-20260914",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-22",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
   }
@@ -502,9 +514,9 @@
   <script type="module" src="/app/components/app-protocol-wallet-banner.js"></script>
   <script type="module" src="/app/components/account-switcher.js"></script>
   <script type="module" src="/app/components/view-mode-banner.js"></script>
-  <script type="module" src="/app/components/gold-rush-headline.js"></script>
-  <script type="module" src="/app/components/app-pool-progress.js"></script>
-  <script type="module" src="/app/components/replay-panel.js"></script>
+  <script type="module" src="/app/components/gold-rush-headline.js?v=tutorial-fixtures-13"></script>
+  <script type="module" src="/app/components/app-pool-progress.js?v=tutorial-fixtures-13"></script>
+  <script type="module" src="/app/components/replay-panel.js?v=tutorial-navigation-22"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it

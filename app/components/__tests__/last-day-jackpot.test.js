@@ -1767,6 +1767,18 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
   });
 
+  test('bonus craps badge rewards show whole day passes for raw and composed wins', async () => {
+    const { winningBadgeRewardLines } = await import('../replay-panel.js');
+    for (const win of [
+      { awardType: 'craps_pass', amount: '2' },
+      { awardType: 'aggregated', crapsPassTotal: '2', flipTotal: '0' },
+    ]) {
+      assert.deepEqual(winningBadgeRewardLines(win), [{
+        kind: 'craps-pass', amount: '2 PASSES', aria: '2 normal craps day passes',
+      }]);
+    }
+  });
+
   test('fresh winning badges pop their exact icon-and-amount reward once on hover', async () => {
     const { winningBadgeRewardLines } = await import('../replay-panel.js');
     const rows = winningBadgeRewardLines({
@@ -6585,4 +6597,18 @@ describe('the LCD key names the contract-authoritative Mine FLIP action', () => 
       `${CRANK_LABEL} (${CRANK_LABEL.length}) must not exceed the widest existing key label`);
     assert.match(REPLAY_PANEL_SRC, /const MINE_FLIP_CRANK_LABEL = 'MINE FLIP · PROCESSING'/);
   });
+});
+
+test('a reveal, bonus spin, or draw toggle that throws is reported and paints a retry label', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
+  assert.match(src, /\} catch \(error\) \{\s*console\.warn\('\[replay-panel\] reveal failed', error\);\s*if \(!instant\) this\.#paintSpinFailure\(\);\s*return false;/,
+    'the main reveal reports and paints');
+  assert.match(src, /\} catch \(error\) \{\s*console\.warn\('\[replay-panel\] bonus spin failed', error\);\s*this\.#paintSpinFailure\(\);\s*return false;/,
+    'the bonus spin reports and paints');
+  assert.match(src, /console\.warn\('\[replay-panel\] draw view switch failed', error\);/,
+    'the draw toggle no longer leaves an unhandled rejection');
+  assert.match(src, /const SPIN_FAILED_LABEL = 'SPIN FAILED · TRY AGAIN';/);
+  assert.match(src, /#paintSpinFailure\(\) \{\s*globalThis\.setTimeout\?\.\(\(\) => \{/,
+    'the failure paints one macrotask after the finally repaint');
 });

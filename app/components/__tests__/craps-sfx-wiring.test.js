@@ -16,7 +16,7 @@ test('craps resolution wires one restrained cue to each visible gameplay beat', 
     'the authoritative faces appear in one impact with a roll-number tone and a wager-relative result tone');
   assert.match(source, /#animateBankrollLoss[\s\S]*?sfxCrapsSettlement\('sweep'\)/s,
     'a whole felt loss gets one sweep');
-  assert.match(source, /this\.#settlementImpactTimer = globalThis\.setTimeout\?\.\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);/s,
+  assert.match(source, /this\.#settlementImpactTimer = this\.#guardedTimeout\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);/s,
     'local and opponent settlements get separate impact cues on the shared timed impact beat');
   assert.match(source, /#localPayoutSoundChipCount[\s\S]*?crapsPayoutChipCount\(frame\?\.deltaFlip, this\.#playedFlip\)[\s\S]*?placedWinners \* multiplier/s,
     'the local impact converts the multiplied payout back into physical base-chip weight');

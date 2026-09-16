@@ -18,6 +18,7 @@ import * as passesMod from '../passes.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
+import { writePurchaseFundingPriority } from '../lootbox.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of claims.test.js shape.
@@ -33,6 +34,8 @@ function makeFakeTx(receipt) {
 
 function makeFakeContract(opts = {}) {
   const calls = {
+    claimableWinningsOf: [],
+    staticCalls: [],
     purchaseWhalePass: [],
     purchaseDeityPass: [],
     issueDeityBoon: [],
@@ -44,6 +47,7 @@ function makeFakeContract(opts = {}) {
     claimAfkingFlip: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
+    calls.staticCalls.push({ methodName, args: _args });
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = {
@@ -63,6 +67,11 @@ function makeFakeContract(opts = {}) {
   };
 
   const c = {
+    claimableWinningsOf: async (buyer) => {
+      calls.claimableWinningsOf.push(buyer);
+      if (opts.claimableError) throw opts.claimableError;
+      return opts.claimableWei ?? 0n;
+    },
     purchaseWhalePass: Object.assign(
       async (...args) => {
         calls.purchaseWhalePass.push(args);
@@ -677,6 +686,7 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
   let lastFakeContract;
 
   beforeEach(() => {
+    writePurchaseFundingPriority('claimable');
     storeMod.__resetForTest();
     storeMod.update('connected.address', CONNECTED);
     storeMod.update('viewing.address', null);
@@ -687,6 +697,7 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
   });
 
   afterEach(() => {
+    writePurchaseFundingPriority('claimable');
     passesMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });
@@ -705,6 +716,39 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
     // 4th arg = overrides object containing value
     assert.ok(args[3] && typeof args[3] === 'object', 'overrides object passed');
     assert.equal(args[3].value, value, 'msg.value matches msgValueWei');
+  });
+
+  for (const [label, balance, expected] of [
+    ['fully funded', 1001n, 0n],
+    ['partially funded', 401n, 600n],
+    ['sentinel only', 1n, 1000n],
+    ['empty balance', 0n, 1000n],
+  ]) {
+    test(`claimable-first whale buy: ${label}`, async () => {
+      lastFakeContract = makeFakeContract({ claimableWei: balance });
+      await passesMod.purchaseWhaleBundle({ quantity: 1, msgValueWei: 1000n });
+      assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, [CONNECTED]);
+      assert.equal(lastFakeContract._calls.purchaseWhalePass[0][3].value, expected);
+      assert.equal(lastFakeContract._calls.staticCalls[0].args[3].value, expected);
+    });
+  }
+
+  test('wallet-first whale buy sends full price without reading claimable', async () => {
+    writePurchaseFundingPriority('wallet');
+    lastFakeContract = makeFakeContract({ claimableWei: 1001n });
+    await passesMod.purchaseWhaleBundle({ quantity: 1, msgValueWei: 1000n });
+    assert.equal(lastFakeContract._calls.purchaseWhalePass[0][3].value, 1000n);
+    assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, []);
+  });
+
+  test('claimable read failure stops whale buy before simulation or send', async () => {
+    lastFakeContract = makeFakeContract({ claimableError: new Error('RPC unavailable') });
+    await assert.rejects(
+      passesMod.purchaseWhaleBundle({ quantity: 1, msgValueWei: 1000n }),
+      /RPC unavailable/,
+    );
+    assert.deepEqual(lastFakeContract._calls.staticCalls, []);
+    assert.deepEqual(lastFakeContract._calls.purchaseWhalePass, []);
   });
 
   test('rejects quantity < 1', async () => {

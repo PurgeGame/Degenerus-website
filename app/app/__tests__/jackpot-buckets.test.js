@@ -124,3 +124,21 @@ describe('public jackpot bucket summaries', () => {
       'future-trait and center awards stay on the opening bonus draw');
   });
 });
+
+test('bonus craps comps retain whole pass counts and per-entry ranges without becoming FLIP', () => {
+  const summaries = buildRoll2BucketSummaries([
+    { awardType: 'craps_pass', traitId: 18, winner: PLAYER, amount: '1' },
+    { awardType: 'craps_pass', traitId: 18, winner: PLAYER, amount: '2' },
+    { awardType: 'craps_pass', traitId: 18, winner: PLAYER, amount: '0' },
+    { awardType: 'craps_pass', traitId: null, winner: PLAYER, amount: '99' },
+    { awardType: 'flip', traitId: 121, winner: PLAYER, amount: PER_WIN },
+    { awardType: 'tickets', traitId: 18, winner: PLAYER, amount: '8' },
+  ], [18, 121, 180, 253]);
+  assert.deepEqual(summaries[0].crapsPasses, { winnerCount: 2, total: 3n, min: 1n, max: 2n });
+  assert.equal(summaries[0].perWinWei, 0n);
+  assert.equal(summaries[0].winnerCount, 0);
+  assert.equal(summaries[0].ticketEntriesTotal, 8n);
+  assert.equal(summaries[1].perWinWei, PER_WIN);
+  assert.equal(summaries[1].crapsPasses, undefined);
+  assert.equal(summaries[2].crapsPasses, undefined);
+});

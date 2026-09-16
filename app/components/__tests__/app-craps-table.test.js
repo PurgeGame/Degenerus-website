@@ -1811,7 +1811,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the transient lock hit promotes point and seven-out copy from the sealed roll event');
   assert.match(COMPONENT_SRC, /dice\.forEach\(\(die, dieIndex\) => this\.#paintDiceBadge\(die, targets\[dieIndex\], colors\[dieIndex\]\)\)[\s\S]*?this\.#impactDicePair\(dicePair\)/,
     'both verified faces appear together on one shared pair-impact beat');
-  assert.match(COMPONENT_SRC, /this\.#impactDicePair\(dicePair\);\s*this\.#popDiceLockReadout\(frame, \{ comeOut \}\);\s*sfxCrapsDiceLand\(\{ total: frame\.total, netResultBps \}\);[\s\S]*?setTimeout/s,
+  assert.match(COMPONENT_SRC, /this\.#impactDicePair\(dicePair\);\s*this\.#popDiceLockReadout\(frame, \{ comeOut \}\);\s*sfxCrapsDiceLand\(\{ total: frame\.total, netResultBps \}\);[\s\S]*?(?:setTimeout|#guardedTimeout)/s,
     'the total and result tones follow the shared visual impact before settlement resumes');
   assert.match(COMPONENT_SRC, /dicePair\?\.classList\?\.remove\('is-impacting'\);\s*this\.#resetDiceLockReadout\(\);/,
     'each result clears the previous impact before replacing the badge faces');
@@ -1834,7 +1834,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'sections light from the roll’s paying spots, not from the viewer’s own bets');
   assert.match(COMPONENT_SRC, /this\.querySelectorAll\('\.craps-bet\.is-winning'\)\.forEach[\s\S]*?this\.querySelectorAll\('\.craps-bet__seat-chip\.is-winning'\)\.forEach/s,
     'the settlement clear releases both the section and chip highlights');
-  assert.match(COMPONENT_SRC, /this\.#settlementImpactTimer = globalThis\.setTimeout\?\.\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);\s*\}, Math\.min\(duration, this\.#resolutionDelay\(360\)\)\)/s,
+  assert.match(COMPONENT_SRC, /this\.#settlementImpactTimer = this\.#guardedTimeout\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);\s*\}, Math\.min\(duration, this\.#resolutionDelay\(360\)\)\)/s,
     'racks repaint and clacks play on one timed impact beat rather than a chip flight’s animationend');
   assert.doesNotMatch(COMPONENT_SRC, /is-featured-payout|is-paying-featured|craps-bet\.is-paying/,
     'no payout chip flies from the felt to a rack any more');
@@ -2602,7 +2602,7 @@ test('High Roller panel distinguishes wins, losses, sole riders and missing resu
 
 test('lowest speed waits for one click per roll and higher speeds resume autoplay', async () => {
   const { normalizeCrapsResolutionSpeed, crapsResolutionDelay, crapsRollImpactCadence } = await import(moduleUrl);
-  const methods = ['setResolutionSpeed', 'syncRollControls', 'rollNextResolution', 'queueNextResolutionRoll'].map((name) => {
+  const methods = ['setResolutionSpeed', 'syncRollControls', 'rollNextResolution', 'queueNextResolutionRoll', 'guardedTimeout'].map((name) => {
     const start = COMPONENT_SRC.indexOf(`  #${name}(`);
     const end = COMPONENT_SRC.indexOf('\n  #', start + 1);
     return COMPONENT_SRC.slice(start, end).replaceAll('#', '_');

@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { moduleSpecifiers, localImportUrl } from '../../../db/module-imports.mjs';
 import { checkAppModules } from '../../../db/check-app-modules.mjs';
 import { minifyPublishApp } from '../../../db/minify-publish-app.mjs';
+import { scriptHash } from '../../../db/csp-inline-hashes.mjs';
 
 test('publication parsing handles compact imports, re-exports, multiline and escaped paths', () => {
   const source = String.raw`
@@ -97,7 +98,12 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
   const digest = '0123456789abcdef';
   const resultPath = `/jackpots/results/7-${digest}.json`;
   let missing = false;
+  let unsafeInline = false;
   const requested = new Set();
+  // The served entry carries one inline script (its import map); a real publish
+  // admits it by hash, so the fixture policy does too.
+  const importMap = '{"imports":{"ethers":"/app/vendor.js"}}';
+  const policy = () => `default-src 'self'; script-src 'self' ${unsafeInline ? "'unsafe-inline'" : scriptHash(importMap)}`;
   const server = createServer((req, res) => {
     const path = req.url;
     requested.add(path);
@@ -108,7 +114,7 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
       return;
     }
     const routes = {
-      '/beta/': ['text/html', '<script type="importmap">{"imports":{"ethers":"/app/vendor.js"}}</script><script type="module" src="/app/app/main.js"></script>'],
+      '/beta/': ['text/html', `<script type="importmap">${importMap}</script><script type="module" src="/app/app/main.js"></script>`],
       '/app/app/main.js': ['text/javascript', 'import"../main.js";'],
       '/app/app/chain-config.js': ['text/javascript', 'export*from"./chain-config.sepolia.js";'],
       '/app/app/chain-config.sepolia.js': ['text/javascript', `export const GAME="${deployment.contracts.GAME}";`],
@@ -125,7 +131,7 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
       [resultPath]: ['application/json', '{}'],
     };
     const [type, body] = routes[path] || ['text/html', '<html>Fallback</html>'];
-    res.writeHead(200, { 'content-type': type, 'content-security-policy': "default-src 'self'", 'x-jackpot-edge': 'HIT' });
+    res.writeHead(200, { 'content-type': type, 'content-security-policy': policy(), 'x-jackpot-edge': 'HIT' });
     res.end(body);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -133,6 +139,7 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
   try {
     const result = await promisify(execFile)(process.execPath, args, { timeout: 10_000 });
     assert.match(result.stdout, /ALL OK/);
+    assert.match(result.stdout, /script-src admits 1 served inline scripts by hash, no 'unsafe-inline'/);
     for (const path of ['/app/dep.js?rev=1', '/app/star.js', '/app/vendor.js', '/app/lazy.js']) {
       assert.ok(requested.has(path), `the gate must actually fetch ${path}`);
     }
@@ -140,6 +147,14 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
     await assert.rejects(promisify(execFile)(process.execPath, args, { timeout: 10_000 }), (error) => {
       assert.equal(error.code, 1);
       assert.match(error.stderr, /\/app\/lazy\.js.*SPA fallback/);
+      return true;
+    });
+    missing = false;
+    unsafeInline = true;
+    await assert.rejects(promisify(execFile)(process.execPath, args, { timeout: 10_000 }), (error) => {
+      assert.equal(error.code, 1);
+      assert.match(error.stderr, /script-src still carries 'unsafe-inline'/);
+      assert.match(error.stderr, /inline script #1 \(line 1\) is not admitted by script-src/);
       return true;
     });
   } finally {
