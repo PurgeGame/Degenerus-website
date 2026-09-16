@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>document.addEventListener('load',function(e){var t=e.target;if(t&&t.tagName==='LINK'&&t.hasAttribute('data-deferred-css')&&t.media==='print')t.media='all';},true);</script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus App</title>
@@ -69,11 +71,11 @@
   <link rel="stylesheet" href="/app/styles/status-bar.css">
   <link rel="stylesheet" href="/app/styles/skeleton.css">
   <link rel="stylesheet" href="/app/styles/forms.css">
-  <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/jackpot.css">
-  <link rel="stylesheet" href="/app/styles/viewer.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/replay.css" media="print" onload="this.media='all';this.onload=null">
-  <link rel="stylesheet" href="/app/styles/boons.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/viewer.css" media="print" data-deferred-css>
+  <link rel="stylesheet" href="/app/styles/replay.css" media="print" data-deferred-css>
+  <link rel="stylesheet" href="/app/styles/boons.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/app.min.css?v=chip-hallway-20260904-addition">
   <link rel="stylesheet" data-href="/app/styles/link-donation.css">
   <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css">
@@ -83,12 +85,12 @@
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
-  <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" data-deferred-css>
   <link rel="stylesheet" data-href="/app/styles/craps-table.css" data-rev="resolution-race-v3">
   <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
   <link rel="stylesheet" data-href="/app/styles/records-rail.css">
   <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
-  <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" onload="this.media='all';this.onload=null">
+  <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
   <!-- BUY IN is part of the static three-column hero, so its final visual
        layer stays render-blocking and loads after the shared status badges. -->
