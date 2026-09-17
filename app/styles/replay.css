@@ -411,6 +411,12 @@
   box-shadow: none;
 }
 
+/* Comps use teal once revealed; the covered surface keeps its eligibility color. */
+.replay-tq.q-craps-comp-win.q-has-tickets:not(.q-scratch-underlay):not(.q-result-pending) {
+  background: rgba(8, 145, 178, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(103, 232, 249, 0.65);
+}
+
 /* --- Scratch canvas --- */
 
 .replay-scratch-canvas {
@@ -476,6 +482,18 @@
   text-align: center;
   transform: translateY(0) scale(1);
   transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.78, 0.24, 1);
+}
+
+.replay-win-description--craps-comp {
+  border-color: rgba(103, 232, 249, 0.72);
+  background: linear-gradient(135deg, rgba(8, 51, 68, 0.97), rgba(14, 86, 101, 0.96));
+  box-shadow: 0 3px 14px rgba(8, 51, 68, 0.42), inset 0 1px 0 rgba(207, 250, 254, 0.16);
+  color: #ecfeff;
+}
+
+.replay-win-description--craps-comp .replay-win-description__title,
+.replay-win-description__line--craps-comp {
+  color: #a5f3fc;
 }
 
 .replay-win-description.is-waiting-for-reward-popups {
@@ -704,6 +722,8 @@
 .replay-badge-reward-pop__row--flip { color: #ffcf64; }
 .replay-badge-reward-pop__row--eth { color: #dcfce7; }
 .replay-badge-reward-pop__row--tickets { color: #dbeafe; }
+.replay-badge-reward-pop__row--craps-pass,
+.tip-row--craps-comp { color: #67e8f9; }
 
 .replay-badge-reward-pop__icon,
 .replay-badge-reward-pop__ticket {
@@ -1178,7 +1198,11 @@
 
 .replay-bucket-craps {
   gap: 0.2em;
-  color: #62400f;
+  padding: 0.18em 0.35em;
+  border: 1px solid rgba(14, 116, 144, 0.38);
+  border-radius: 5px;
+  background: rgba(207, 250, 254, 0.8);
+  color: #155e75;
 }
 
 .replay-bucket-craps__unit {

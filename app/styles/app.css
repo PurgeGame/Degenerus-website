@@ -25055,7 +25055,7 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
    dice badge used by the battle table is mounted into a clipped pass face;
    normal and 19x high-roller denominations keep unmistakably different felt. */
 .rvl-card--craps-pass {
-  --craps-pass-rgb: 52, 211, 153;
+  --craps-pass-rgb: 34, 211, 238;
   --craps-pass-ink: #a7f3d0;
   color: rgb(var(--craps-pass-rgb));
   border-color: rgba(var(--craps-pass-rgb), 0.8) !important;
