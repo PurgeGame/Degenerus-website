@@ -25433,6 +25433,6 @@ body.layout-basic .craps-entry__action > button[hidden] {
 @media (any-hover: hover) and (any-pointer: fine) {
   body.layout-basic .craps-entry__bet-spot[data-craps-bet]:not(:disabled),
   .craps-bet[data-stake-bet]:not(:disabled) {
-    cursor: url('/app/assets/flip-chip-cursor.svg') 16 12, pointer;
+    cursor: url('/app/assets/flip-chip-cursor.svg?v=1') 16 12, pointer;
   }
 }
