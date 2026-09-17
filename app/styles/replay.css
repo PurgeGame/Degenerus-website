@@ -723,7 +723,7 @@
 .replay-badge-reward-pop__row--eth { color: #dcfce7; }
 .replay-badge-reward-pop__row--tickets { color: #dbeafe; }
 .replay-badge-reward-pop__row--craps-pass,
-.tip-row--craps-comp { color: #67e8f9; }
+.tip-row.tip-row--craps-comp { color: #67e8f9; }
 
 .replay-badge-reward-pop__icon,
 .replay-badge-reward-pop__ticket {
