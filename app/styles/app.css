@@ -7213,6 +7213,13 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   padding: 1rem 0.5rem;
 }
 
+.rvl-action-error {
+  color: #fca5a5;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .rvl-title {
   font-size: clamp(1rem, 4vw, 1.5rem);
   font-weight: 900;
