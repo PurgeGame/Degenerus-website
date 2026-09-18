@@ -1297,9 +1297,6 @@ app-craps-table {
   100% { opacity: 0; transform: translateY(-0.6rem); }
 }
 
-}
-}
-
 .craps-dice-bay__lock-readout[data-seven-outcome="win"] {
   --craps-dice-lock-color: #6ef08c;
   --craps-dice-lock-glow: rgba(60, 255, 122, 0.92);
@@ -6384,8 +6381,6 @@ app-craps-table {
   font-size: clamp(0.8rem, 1.1vw, 1rem);
 }
 
-}
-
 .craps-race-you-stack img {
   display: block;
   width: 1.05rem;
@@ -6989,8 +6984,6 @@ app-craps-table {
   font: 1000 clamp(1rem, 1.8vw, 1.35rem)/1 "Roboto Mono", monospace;
   animation: craps-race-transfer var(--craps-speed-720, 720ms) cubic-bezier(0.22, 0.76, 0.3, 1) both;
   transform: translate(-50%, -50%);
-}
-
 }
 
 .craps-race-transfer--pool {
