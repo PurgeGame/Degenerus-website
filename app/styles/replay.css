@@ -1198,18 +1198,12 @@
 
 .replay-bucket-craps {
   gap: 0.2em;
-  padding: 0.18em 0.35em;
-  border: 1px solid rgba(14, 116, 144, 0.38);
-  border-radius: 5px;
-  background: rgba(207, 250, 254, 0.8);
   color: #155e75;
 }
 
 .replay-bucket-craps__unit {
-  max-width: 4em;
   font-size: 0.85em;
   line-height: 1.05;
-  white-space: normal;
 }
 
 .replay-bucket-row-count {
