@@ -1,0 +1,121 @@
+/* Mirrored deity controls flank one shared amount; no expanded detail view. */
+app-sacrifice-panel { display: block; min-width: 0; margin-bottom: 0.85rem; container: sacrifice / inline-size; }
+.sacrifice { display: grid; grid-template-columns: minmax(0, 1fr) 5.8rem minmax(0, 1fr); gap: 0.4rem; align-items: center; font: 400 0.75rem/1.3 Inter, sans-serif; }
+.sacrifice *, .sacrifice *::before, .sacrifice *::after { box-sizing: border-box; }
+.sacrifice [hidden] { display: none !important; }
+.sacrifice__side {
+  --sac-rgb: 248, 91, 95;
+  --sac-ink: #ffd2d3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem;
+  align-items: stretch;
+  gap: 0.3rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.15rem 0.25rem;
+  border: 1px solid rgba(var(--sac-rgb), 0.4);
+  border-radius: 8px;
+  background: linear-gradient(110deg, rgba(var(--sac-rgb), 0.12), transparent 66%), #140e12;
+  box-shadow: inset 0 1px rgba(var(--sac-rgb), 0.08);
+  color: var(--sac-ink);
+}
+.sacrifice__side[data-deity="sdgnrs"] { --sac-rgb: 66, 208, 126; --sac-ink: #c5f6d8; background-color: #0b1511; grid-template-columns: 9rem minmax(0, 1fr); }
+.sacrifice__deity { display: grid; min-width: 0; }
+.sacrifice__side[data-deity="sdgnrs"] .sacrifice__deity { grid-column: 2; grid-row: 1; }
+.sacrifice__side[data-deity="sdgnrs"] .sacrifice__submit { grid-column: 1; grid-row: 1; }
+.sacrifice__boons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.1rem; align-items: stretch; min-width: 0; }
+.sacrifice__boon { --boon-amount: #93c5fd; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); grid-template-rows: auto auto; gap: 0.15rem 0.12rem; align-content: center; min-height: 3.25rem; padding: 0.1rem 0.15rem; min-width: 0; border: 0; border-radius: 3px; background: #07080935; text-align: left; }
+.sacrifice__boon small { grid-column: 2; color: #d3c9b8; font-size: 0.57rem; font-weight: 650; line-height: 1.1; overflow-wrap: anywhere; }
+.sacrifice__boon strong { grid-column: 2; color: var(--boon-amount); font: 850 0.74rem/1.05 ui-monospace, monospace; text-wrap: balance; }
+/* The deity desk's arrow silhouette and native badges fill the rail height.
+   Boon tier colors remain independent of deity color. */
+.sacrifice__boon-mark { position: relative; grid-column: 1; grid-row: 1 / 3; align-self: center; display: grid; width: 2.75rem; height: 2.75rem; place-items: center; }
+.sacrifice__boon-mark::before { position: absolute; inset: 1.24% 7.85% 1.65%; display: block; background: linear-gradient(145deg, #f8fff9 0 8%, var(--boon-amount) 34% 100%); clip-path: polygon(50% 0, 94% 39%, 69% 39%, 69% 100%, 31% 100%, 31% 39%, 6% 39%); content: ""; filter: drop-shadow(0 0 2px color-mix(in srgb, var(--boon-amount) 88%, transparent)) drop-shadow(0 0 6px color-mix(in srgb, var(--boon-amount) 34%, transparent)) drop-shadow(0 1px 1px #000e); transform-origin: 50% 50%; }
+.sacrifice__boon[data-boon-direction="down"] .sacrifice__boon-mark::before { transform: rotate(180deg); }
+.sacrifice__boon[data-boon-product="quests"] .sacrifice__boon-mark::before { display: none; }
+.sacrifice__boon-icon { position: absolute; z-index: 1; bottom: 3.3%; left: 50%; display: block; width: 45.45%; height: 45.45%; border: 0; background: transparent; object-fit: contain; filter: drop-shadow(0 1px 1px #000e); translate: -50% 0; }
+.sacrifice__boon[data-boon-direction="down"] .sacrifice__boon-icon { top: 3.3%; bottom: auto; }
+.sacrifice__boon[data-boon-product="quests"] .sacrifice__boon-icon { inset: 0; width: 100%; height: 100%; translate: none; }
+.sacrifice__amount { display: flex; align-items: center; gap: 0.2rem; min-width: 0; height: 2.15rem; padding: 0.35rem 0.4rem; border: 1px solid #aa8e5b; border-radius: 4px; background: #06080a; }
+.sacrifice__amount input { width: 100%; min-width: 0; padding: 0; border: 0; border-radius: 0; outline: none; background: transparent; color: #fff5ed; font: 750 0.76rem/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.sacrifice__amount span { color: #e8cc96; font: 800 0.47rem/1 Inter, sans-serif; }
+.sacrifice__amount:focus-within { outline: 2px solid #e8cc96; outline-offset: 2px; }
+/* Compact altar plates: a lit metal rim, engraved copy, and a recessed deity seal. */
+.sacrifice__submit {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.125rem;
+  align-content: center;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem 0.08rem;
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid rgba(var(--sac-rgb), 0.72);
+  border-radius: 3px;
+  color: var(--sac-ink);
+  background:
+    radial-gradient(ellipse at 83% 35%, rgba(var(--sac-rgb), 0.24), transparent 63%),
+    linear-gradient(168deg, rgba(var(--sac-rgb), 0.17), transparent 42%),
+    linear-gradient(180deg, #201d1c, #100e10 84%);
+  box-shadow: inset 0 1px #fff3, inset 0 -2px #0009, 0 1px 3px #0008;
+  font: 900 0.75rem/1 Inter, sans-serif;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 2px #000;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+.sacrifice__submit::before { position: absolute; z-index: -1; inset: 3px; border: 1px solid rgba(var(--sac-rgb), 0.18); border-radius: 1px; pointer-events: none; content: ""; }
+.sacrifice__submit::after { position: absolute; inset: -1px auto auto 10%; width: 37%; height: 1px; background: linear-gradient(90deg, transparent, var(--sac-ink), transparent); pointer-events: none; content: ""; }
+.sacrifice__submit-copy { display: grid; gap: 0.19rem; min-width: 0; text-align: center; }
+.sacrifice__submit-copy b { font: inherit; color: #fff3e1; white-space: nowrap; }
+.sacrifice__submit-copy small { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.065em; white-space: nowrap; }
+.sacrifice__submit-seal { position: relative; display: grid; width: 3.125rem; height: 3.125rem; place-items: center; }
+.sacrifice__submit-seal::before { position: absolute; width: 76%; aspect-ratio: 1; border: 1px solid rgba(var(--sac-rgb), 0.38); border-radius: 50%; background: #06080ae6; box-shadow: inset 0 2px 4px #000c, 0 1px #fff2, 0 0 9px rgba(var(--sac-rgb), 0.18); content: ""; }
+.sacrifice__submit-badge { position: absolute; display: block; width: 3.375rem; height: 3.375rem; max-width: none; object-fit: contain; filter: drop-shadow(0 0 3px rgba(var(--sac-rgb), 0.3)); }
+.sacrifice__submit:hover:not(:disabled) { border-color: var(--sac-ink); box-shadow: inset 0 1px #fff5, inset 0 -2px #0009, 0 0 12px rgba(var(--sac-rgb), 0.2); filter: brightness(1.12); }
+.sacrifice__submit:active:not(:disabled) { box-shadow: inset 0 2px 5px #000b, inset 0 0 0 1px rgba(var(--sac-rgb), 0.28); filter: brightness(0.95); }
+.sacrifice__submit:focus-visible { outline: 2px solid var(--sac-ink); outline-offset: 3px; }
+.sacrifice__submit:disabled { opacity: 0.55; cursor: default; }
+.sacrifice__odds { grid-column: 1 / -1; margin: 0; padding-top: 0.2rem; font-size: 0.62rem; line-height: 1.35; color: #b8b0b6; font-variant-numeric: tabular-nums; }
+.sacrifice__feedback { grid-column: 1 / -1; margin: 0; padding-top: 0.2rem; font-size: 0.65rem; color: var(--sac-ink); }
+.sacrifice__feedback--error { color: #ffc0b4; }
+/* Past blessings sit under BOTH altars: the awards are one wallet's, not one god's. */
+.sacrifice__history { grid-column: 1 / -1; margin-top: 0.5rem; padding-top: 0.45rem; border-top: 1px solid #ffffff14; }
+.sacrifice__history-title { margin: 0 0 0.25rem; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8d858c; }
+.sacrifice__history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.12rem; }
+.sacrifice__history-item { font-size: 0.62rem; color: #cfc6cd; font-variant-numeric: tabular-nums; }
+@container sacrifice (max-width: 900px) {
+  .sacrifice { grid-template-columns: minmax(0, 1fr) 6rem minmax(0, 1fr); }
+  .sacrifice__side { display: contents; }
+  .sacrifice__deity { padding: 0.15rem 0.25rem; border: 1px solid rgba(var(--sac-rgb), 0.4); border-radius: 6px; background: linear-gradient(110deg, rgba(var(--sac-rgb), 0.12), #0d0e12 85%); }
+  .sacrifice__side[data-deity="vault"] .sacrifice__deity { grid-column: 1 / -1; grid-row: 1; }
+  .sacrifice__side[data-deity="sdgnrs"] .sacrifice__deity { grid-column: 1 / -1; grid-row: 3; }
+  .sacrifice__side[data-deity="vault"] .sacrifice__submit { grid-column: 1; grid-row: 2; }
+  .sacrifice__amount { grid-column: 2; grid-row: 2; }
+  .sacrifice__side[data-deity="sdgnrs"] .sacrifice__submit { grid-column: 3; grid-row: 2; }
+}
+@container sacrifice (max-width: 400px) {
+  .sacrifice__submit { grid-template-columns: minmax(0, 1fr) 2.6rem; padding-inline: 0.2rem; font-size: 0.66rem; letter-spacing: 0.01em; }
+  .sacrifice__submit-copy small { font-size: 0.54rem; letter-spacing: 0.04em; }
+  .sacrifice__submit-seal { width: 2.6rem; height: 2.6rem; }
+  .sacrifice__submit-badge { width: 2.9rem; height: 2.9rem; }
+}
+@container sacrifice (max-width: 340px) {
+  .sacrifice { grid-template-columns: minmax(0, 1fr) 5rem minmax(0, 1fr); }
+  .sacrifice__submit { grid-template-columns: minmax(0, 1fr) 1.9rem; font-size: 0.54rem; padding-inline: 0.1rem; letter-spacing: 0; }
+  .sacrifice__submit-copy small { font-size: 0.46rem; letter-spacing: 0; }
+  .sacrifice__submit-seal { width: 1.9rem; height: 1.9rem; }
+  .sacrifice__submit-badge { width: 2.2rem; height: 2.2rem; }
+  .sacrifice__boon { grid-template-columns: 2.4rem minmax(0, 1fr); }
+  .sacrifice__boon-mark { width: 2.4rem; height: 2.4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .sacrifice__submit { transition: none; } }
+
+/* Review fixture only. */
+.sacrifice-demo { max-width: 1160px; margin: 3rem auto; padding: 0 1rem; }
+.sacrifice-demo__header { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; font-size: 0.75rem; color: #c0bac1; }
+.sacrifice-demo__header a { color: #dfcba4; margin-right: auto; }
+.sacrifice-demo__header select { border: 1px solid #5b4b50; border-radius: 4px; background: #1a131a; color: #f4eddf; padding: 0.5rem; }

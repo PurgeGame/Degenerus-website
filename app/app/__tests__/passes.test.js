@@ -266,6 +266,9 @@ describe('deity daily boons', () => {
     );
   });
 
+  // ARCHIVED FIXTURES. Both walks below were captured from deployments that PREDATE
+  // the Craps boon band, so they exercise the 2,518-wide gift walk on purpose. The
+  // live menu is 2,766 wide — see `readDeityBoonSlots`, which passes includeCraps.
   test('includes the deployed Degenerette bands in the static gift-slot walk', () => {
     const slots = passesMod.deriveDeityBoonSlots({
       dailySeed: 11621158837047785902248431115065076657481296476413078720687728983663490809916n,
@@ -277,7 +280,7 @@ describe('deity daily boons', () => {
     assert.deepEqual(slots, [38, 7, 36]);
   });
 
-  test('matches both day-94 boon types emitted by the current deployment', () => {
+  test('matches both day-94 boon types emitted by the pre-Craps-band deployment', () => {
     const dailySeed = 88904332696311948919678638685246784339464390906126343802395035075230538782229n;
 
     const firstDeity = passesMod.deriveDeityBoonSlots({
@@ -305,7 +308,15 @@ describe('deity daily boons', () => {
     assert.equal(state.day, 7);
     assert.equal(state.usedMask, 0b101);
     assert.equal(state.ready, true);
-    assert.deepEqual(state.slots, [35, 35, 40]);
+    // The LIVE walk is 2,766 wide (the Craps band is in the deployed weight tree),
+    // so the same seed and day give [7, 5, 1] and NOT the archived pre-Craps
+    // [35, 35, 40] that `deriveDeityBoonSlots`'s bare default still reproduces.
+    assert.deepEqual(state.slots, [7, 5, 1]);
+    assert.notDeepEqual(
+      state.slots,
+      passesMod.deriveDeityBoonSlots({ dailySeed: 123456789n, deity: CONNECTED, day: 7 }),
+      'the desk must not fall back to the pre-Craps menu',
+    );
   });
 
   test('issues a slot for the acting deity only after a static call', async () => {

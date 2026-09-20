@@ -445,7 +445,6 @@ describe('app-balances-strip — combined mode (account-switcher)', () => {
       dgnrsBalance: '24000000000000000000',        // 2× 12 DGNRS
       coinflip: { depositedAmount: '0', claimablePreview: '0' },
       decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
-      terminal: null,
       tickets: [
         { level: 2, entryCount: 16, owner: TEST_ADDR },
         { level: 3, entryCount: 8, owner: TEST_ADDR },
@@ -476,7 +475,7 @@ describe('app-balances-strip — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [TEST_ADDR], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
-      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null, tickets: [],
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, tickets: [],
     });
 
     const el = mountStrip();

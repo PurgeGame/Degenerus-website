@@ -39,10 +39,13 @@ describe('Decimator final payout breakdown', () => {
     assert.equal(split.recirculatedDustWei, 5n * DECIMATOR_ETH_WEI / 1_000n);
   });
 
-  test('terminal mode remains all claimable ETH', () => {
+  test('the removed terminal mode cannot be re-entered by passing the old option', () => {
+    // Audit 635b010a deleted the terminal decimator, so its all-ETH split went with it.
+    // A caller that still passes `{ terminal: true }` must get the ORDINARY split, not a
+    // silent branch back into a payout shape the contract can no longer produce.
     const split = decimatorPayoutBreakdown(7n * DECIMATOR_ETH_WEI, { terminal: true });
-    assert.equal(split.claimableEthWei, 7n * DECIMATOR_ETH_WEI);
-    assert.equal(split.rewardWei, 0n);
-    assert.equal(split.rewardKind, 'eth');
+    assert.equal(split.claimableEthWei, 35n * DECIMATOR_ETH_WEI / 10n);
+    assert.equal(split.rewardWei, 35n * DECIMATOR_ETH_WEI / 10n);
+    assert.notEqual(split.rewardKind, 'eth');
   });
 });

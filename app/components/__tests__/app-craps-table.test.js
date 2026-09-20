@@ -11,6 +11,12 @@ globalThis.customElements ??= {
 
 const moduleUrl = new URL('../app-craps-table.js', import.meta.url);
 const cssUrl = new URL('../../styles/craps-table.css', import.meta.url);
+
+test('craps styles parse without dropping rules during CSS error recovery', async () => {
+  const { transform } = await import('lightningcss');
+  const result = transform({ filename: 'craps-table.css', code: readFileSync(cssUrl) });
+  assert.deepEqual(result.warnings, []);
+});
 const demoUrl = new URL('../../craps-table-demo.html', import.meta.url);
 const demoScriptUrl = new URL('../../craps-table-demo.js', import.meta.url);
 const indexUrl = new URL('../../index.html', import.meta.url);

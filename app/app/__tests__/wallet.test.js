@@ -1209,6 +1209,34 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       'WalletConnect storage is app-versioned so legacy dead topics are not restored');
   });
 
+  test('overlapping silent restore and connect share WalletConnect initialization', async () => {
+    let release;
+    let calls = 0;
+    const instance = {};
+    wallet._testInjectWcFactory({ init: () => {
+      calls += 1;
+      return new Promise((resolve) => { release = resolve; });
+    } });
+    const first = wallet._testEnsureWcProvider();
+    const second = wallet._testEnsureWcProvider();
+    assert.equal(calls, 1);
+    release(instance);
+    assert.equal(await first, instance);
+    assert.equal(await second, instance);
+  });
+
+  test('WalletConnect initialization can retry after a failed load', async () => {
+    let calls = 0;
+    const instance = {};
+    wallet._testInjectWcFactory({ init: async () => {
+      if (++calls === 1) throw new Error('Relay unavailable');
+      return instance;
+    } });
+    await assert.rejects(wallet._testEnsureWcProvider(), /Relay unavailable/);
+    assert.equal(await wallet._testEnsureWcProvider(), instance);
+    assert.equal(calls, 2);
+  });
+
   test('autoReconnect WC branch: with persisted session and accounts returns true silently (no wc.connect call)', async () => {
     _localStore.set('lastWalletRdns', 'walletconnect:v2');
     const { factory, wcInstance } = makeMockWcFactory({

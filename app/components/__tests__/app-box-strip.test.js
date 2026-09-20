@@ -744,6 +744,73 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('CLEAR retires an opening box and ignores its late result', async () => {
+    localStorage.setItem(KEY, JSON.stringify([{
+      index: 8, ready: true, resolved: true, fromReceipt: true,
+    }]));
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    el.__setReadyForTest(8);
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let reads = 0;
+    globalThis.fetch = async () => {
+      reads += 1;
+      await gate;
+      return { ok: true, status: 200, json: async () => ({ items: [{
+        uid: 'late-cleared-spin', player: ADDR_LC, legType: 'spin',
+        lootboxIndex: 8, transactionHash: '0xlatecleared', ord: 106,
+        spin: { spinType: 'wwxrp', spinCount: 1, payout: '0', ethShare: '0',
+          reels: [{ spinIndex: 0, score: 0, playerTraits: [], resultTraits: [] }] },
+      }] }) };
+    };
+    const action = pendingActionsMod.getPendingActions()[0];
+    const opening = action.run();
+    await tick();
+    assert.ok(reads > 0, 'the result read is in flight');
+    assert.equal(pendingActionsMod.getPendingActions()[0].state, 'busy');
+    await pendingActionsMod.dismissPendingActionItems(null, { drain: true });
+    assert.equal(localStorage.getItem(KEY), null, 'owner clears even while opening');
+    release();
+    await opening;
+    assert.deepEqual(revealMod.__takeQueuedForTest(), [], 'late result cannot reopen the overlay');
+    assert.deepEqual(pendingActionsMod.getPendingActions(), []);
+    assert.equal(localStorage.getItem(KEY), null);
+    fireTxConfirmed([{ index: 9, day: 4 }]);
+    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'lootbox:9'),
+      'new purchases remain visible after Clear');
+  });
+
+  test('CLEAR invalidates a discovery request even with an empty manifest', async () => {
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let reads = 0;
+    globalThis.fetch = async (url) => {
+      reads += 1;
+      await gate;
+      return { ok: true, status: 200, json: async () => ({ items:
+        String(url).includes('/lootbox/legs') ? [{
+          uid: 'late-discovered-spin', player: ADDR_LC, legType: 'spin',
+          lootboxIndex: 0, transactionHash: '0xlatediscovered', ord: 106,
+          spin: { spinType: 'wwxrp', spinCount: 1, payout: '0', ethShare: '0',
+            reels: [{ spinIndex: 0, score: 0, playerTraits: [], resultTraits: [] }] },
+        }] : [],
+      }) };
+    };
+    const polling = el.__pollForTest();
+    await tick();
+    assert.ok(reads > 0);
+    await pendingActionsMod.dismissPendingActionItems(null, { drain: true });
+    release();
+    await polling;
+    assert.deepEqual(pendingActionsMod.getPendingActions(), []);
+    assert.equal(localStorage.getItem(KEY), null);
+  });
+
   test('a later purchase sharing a cleared RNG index reappears in Pending', async () => {
     const el = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);

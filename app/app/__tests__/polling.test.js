@@ -1410,7 +1410,6 @@ describe('combined mode player cycle → app.playerCombined', () => {
       dgnrsBalance: '0',
       coinflip: null,
       decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
-      terminal: null,
       tickets: [],
     };
   }

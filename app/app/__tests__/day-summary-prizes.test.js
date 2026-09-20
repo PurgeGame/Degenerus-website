@@ -16,7 +16,6 @@ describe('Day Summary level-transition prizes', () => {
       decimatorPrize: {
         regularEth: '1537350828834',
         lootboxEth: '1537350828835',
-        terminalEth: '0',
       },
       breakdown: [
         { awardType: 'eth', amount: '1', count: 2, traitId: 33, level: 200 },
@@ -31,7 +30,6 @@ describe('Day Summary level-transition prizes', () => {
         type: 'decimator',
         amount: 1537350828834n,
         lootboxAmount: 1537350828835n,
-        terminalAmount: 0n,
       },
     ]);
   });
@@ -56,4 +54,16 @@ test('includes grouped bonus craps passes in Day Summary without adding FLIP', (
     { awardType: 'craps_pass', amount: '1', count: 2, traitId: 18 },
     { awardType: 'craps_pass', amount: '2', count: 1, traitId: 18 },
   ] }), [{ type: 'craps-pass', amount: 4n, winningTraitIds: [18] }]);
+});
+
+test('AFKing seat draw has a distinct receipt and is removed from the generic FLIP total', () => {
+  const unit = 10n ** 18n;
+  const breakdown = [{ awardType: 'afking_seat_flip', amount: String(4000n * unit), count: 1, traitId: null }];
+  assert.deepEqual(buildDaySummaryPrizes({ coinTotal: String(4010n * unit), breakdown }), [
+    { type: 'afking-seat', amount: 4000n * unit },
+    { type: 'flip', amount: 10n * unit, winningTraitIds: [] },
+  ]);
+  assert.deepEqual(buildDaySummaryPrizes({ coinTotal: String(4000n * unit), breakdown }), [
+    { type: 'afking-seat', amount: 4000n * unit },
+  ]);
 });

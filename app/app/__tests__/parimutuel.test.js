@@ -565,3 +565,27 @@ describe('growthBps', () => {
     assert.equal(pari.growthBps(null, undefined), null);
   });
 });
+
+test('pool benchmarks read phase, target and ratchets at one block during a level transition', async () => {
+  const calls = [];
+  const blockTag = 47018167;
+  const pinned = (name, out) => async (...args) => {
+    calls.push([name, args]);
+    assert.equal(args.at(-1)?.blockTag, blockTag, `${name} must not read a different latest state`);
+    return out;
+  };
+  pari.__setGameFactoryForTest(() => ({
+    purchaseInfo: pinned('phase', [413, false, true, true, 0n]),
+    jackpotCompressionTier: pinned('compression', 2),
+    growthState: pinned('ratchets', [29992980031120142n, 0n, 0n, 413, false, 0]),
+    prizePoolTargetView: pinned('target', 50000000000000n),
+  }));
+  try {
+    const snapshot = await pari.readPoolBenchmarkSnapshot({ blockTag });
+    assert.equal(snapshot.level, 413);
+    assert.equal(snapshot.ratchets.prev, 29992980031120142n);
+    assert.equal(snapshot.phaseContext.lastPurchaseDay, true);
+    assert.equal(calls.find(([name]) => name === 'ratchets')[1][0], 413);
+    assert.equal(calls.length, 4);
+  } finally { pari.__resetGameFactoryForTest(); }
+});

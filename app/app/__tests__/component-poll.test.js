@@ -5,7 +5,7 @@
 // What must hold:
 //   - a registered poll ticks on its interval and stops on unregister
 //   - unregister is idempotent
-//   - hidden tab disarms every poll; visible re-fires each immediately and re-arms
+//   - hidden tab disarms every poll; visible batches catch-up and re-arms
 //   - registering while hidden stays disarmed until visible
 
 import { test, afterEach } from 'node:test';
@@ -47,7 +47,8 @@ test('ticks on its interval; unregister stops it and is idempotent', async () =>
   assert.deepEqual(cp._componentPollStatsForTests(), { registered: 0, armed: 0 });
 });
 
-test('hidden disarms; visible re-fires immediately and re-arms', async () => {
+test('hidden disarms; visible yields before catching up and re-arming', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
   let ticks = 0;
   cp.registerComponentPoll(() => { ticks++; }, 5_000);
   assert.equal(ticks, 0, 'registration does not fire the callback');
@@ -58,19 +59,69 @@ test('hidden disarms; visible re-fires immediately and re-arms', async () => {
 
   hidden = false;
   cp._onVisibilityChangeForTests();
+  assert.equal(ticks, 0, 'return-from-hidden leaves the first paint and primary refresh free');
+  t.mock.timers.tick(250);
   assert.equal(ticks, 1, 'return-from-hidden fires the coherent catch-up');
   assert.equal(cp._componentPollStatsForTests().armed, 1, 're-armed');
 });
 
-test('registering while hidden stays disarmed until visible', () => {
+test('registering while hidden stays disarmed until visible', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
   hidden = true;
   let ticks = 0;
   cp.registerComponentPoll(() => { ticks++; }, 1_000);
   assert.equal(cp._componentPollStatsForTests().armed, 0);
   hidden = false;
   cp._onVisibilityChangeForTests();
+  t.mock.timers.tick(250);
   assert.equal(ticks, 1);
   assert.equal(cp._componentPollStatsForTests().armed, 1);
+});
+
+test('tab resume spreads panels over batches and ignores duplicate visible events', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  hidden = true;
+  const calls = [];
+  for (let i = 0; i < 12; i += 1) cp.registerComponentPoll(() => calls.push(i), 30_000);
+  hidden = false;
+  cp._onVisibilityChangeForTests();
+  cp._onVisibilityChangeForTests();
+  assert.equal(calls.length, 0);
+  t.mock.timers.tick(250);
+  assert.deepEqual(calls, [0, 1, 2, 3]);
+  cp._onVisibilityChangeForTests();
+  t.mock.timers.tick(125);
+  assert.equal(calls.length, 8);
+  t.mock.timers.tick(125);
+  assert.deepEqual(calls, Array.from({ length: 12 }, (_, i) => i));
+  cp._onVisibilityChangeForTests();
+  t.mock.timers.tick(250);
+  assert.equal(calls.length, 12, 'finished catch-up is not repeated by another visible event');
+  assert.equal(cp._componentPollStatsForTests().armed, 12);
+});
+
+test('hiding or starting a draw cancels pending resume batches; unregistered panels stay stopped', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  hidden = true;
+  const calls = [];
+  const removers = Array.from({ length: 8 }, (_, i) => cp.registerComponentPoll(() => calls.push(i), 30_000));
+  hidden = false;
+  cp._onVisibilityChangeForTests();
+  hidden = true;
+  cp._onVisibilityChangeForTests();
+  t.mock.timers.tick(1_000);
+  assert.equal(calls.length, 0);
+  hidden = false;
+  cp._onVisibilityChangeForTests();
+  removers[0]();
+  t.mock.timers.tick(250);
+  assert.deepEqual(calls, [1, 2, 3]);
+  drawGate.setMajorDrawActivity('jackpot-replay', true);
+  t.mock.timers.tick(1_000);
+  assert.deepEqual(calls, [1, 2, 3]);
+  assert.equal(cp._componentPollStatsForTests().armed, 0);
+  drawGate.setMajorDrawActivity('jackpot-replay', false);
+  assert.equal(cp._componentPollStatsForTests().armed, 7);
 });
 
 test('major draw activity excludes component poll work from the reel task lane', async () => {

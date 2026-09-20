@@ -84,6 +84,7 @@
   <link rel="stylesheet" href="/app/styles/app.min.css?v=chip-hallway-20260904-addition">
   <link rel="stylesheet" data-href="/app/styles/link-donation.css">
   <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css">
+  <link rel="stylesheet" data-href="/app/styles/sacrifices.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css">
   <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css">
@@ -107,9 +108,8 @@
        `?bundle` builds tracked by app/vendor/MANIFEST.txt. Ethers is built
        locally from the exact same pinned version with only the APIs this app
        uses; `npm run check:vendor` prevents a stale generated module.
-       @walletconnect stays on esm.sh: its bundle still fans out into @msgpack
-       sub-modules, and it is lazy-loaded (connect click only), so it is off the
-       cold-load path. Revisit when a real WalletConnect project id lands. -->
+       WalletConnect is also self-hosted as one lazy module, loaded only for a
+       connect click or persisted session restoration. -->
   <!-- Keep the three replay modules on one URL generation. A bare local
        static server can otherwise cache replay-contract.js after the lazy
        launcher itself has refreshed, producing a false "unsupported ruleset"
@@ -129,9 +129,9 @@
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=tutorial-fixtures-13",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-a8d068839-d6c49f2e-ranks-v3",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-635b010a-585a2ad0-scoped-v1",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-635b010a-585a2ad0-scoped-v1",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-635b010a-585a2ad0-scoped-v1",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-tutorial-native-tickets-20260914",
       "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-22",
       "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
@@ -364,6 +364,8 @@
            separate display slot on it. -->
       <app-records-rail></app-records-rail>
 
+      <app-sacrifice-panel></app-sacrifice-panel>
+
       <!-- Deity holders act from a compact daily-power desk outside the
            pass shop, immediately above the inventory those boons can affect. -->
       <app-deity-desk></app-deity-desk>
@@ -568,6 +570,7 @@
       ['/app/components/app-baf-eve.js', ['/app/styles/baf-eve.css']],
       ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
       ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css']],
+      ['/app/components/app-sacrifice-panel.js', ['/app/styles/sacrifices.css']],
       ['/app/components/app-parimutuel-panel.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-sdgnrs-burn-rail.js', ['/app/styles/sdgnrs-burn-rail.css']],
       ['/app/components/app-jackpot-resolutions.js', ['/app/styles/baf-resolution.css']],
@@ -585,6 +588,7 @@
       '/app/components/app-parimutuel-panel.js',
       '/app/components/app-records-rail.js',
       '/app/components/app-deity-desk.js',
+      '/app/components/app-sacrifice-panel.js',
       '/app/components/app-decimator-burn.js',
       '/app/components/app-baf-eve.js',
       '/app/components/app-tickets-inventory.js',
@@ -619,6 +623,7 @@
       ['.play-grid', '/app/components/app-craps-rules.js'],
       ['app-records-rail', '/app/components/app-records-rail.js'],
       ['app-deity-desk', '/app/components/app-deity-desk.js'],
+      ['app-sacrifice-panel', '/app/components/app-sacrifice-panel.js'],
       ['app-tickets-inventory', '/app/components/app-tickets-inventory.js'],
       ['app-parimutuel-panel', '/app/components/app-parimutuel-panel.js'],
       ['app-sdgnrs-burn-rail', '/app/components/app-sdgnrs-burn-rail.js'],

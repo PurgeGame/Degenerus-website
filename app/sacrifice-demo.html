@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sacrifice to the Gods · UI review</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/sacrifices.css">
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs?v=mobile-perf-20260903"}}</script>
+</head>
+<body>
+  <main class="sacrifice-demo">
+    <header class="sacrifice-demo__header">
+      <a href="/beta/">← Player app</a>
+      <span>UI PREVIEW · SAMPLE BOONS · NO TRANSACTIONS</span>
+      <label>State <select id="sacrifice-demo-state">
+        <option value="ready">Ready to sacrifice</option>
+        <option value="empty">First offering</option>
+        <option value="waiting">Awaiting boons</option>
+        <option value="offline">Unavailable</option>
+        <option value="disconnected">No wallet</option>
+        <option value="poor">Low FLIP balance</option>
+        <option value="ended">Game ended</option>
+      </select></label>
+    </header>
+    <div id="sacrifice-demo-host"></div>
+  </main>
+  <script type="module" src="/app/sacrifice-demo.js"></script>
+</body>
+</html>

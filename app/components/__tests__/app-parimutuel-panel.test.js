@@ -638,6 +638,32 @@ describe('app-parimutuel-panel', () => {
       'the visible FLIP figure is derived from all live reward inputs');
   });
 
+  test('refreshes benchmarks immediately on a same-level phase reset, once per phase', async () => {
+    installContract({ growth: {}, ratchets: { prev: 100n, current: 0n }, poolTarget: 50n });
+    let closing = true;
+    let targetReads = 0;
+    pari.__setGameFactoryForTest(() => ({
+      purchaseInfo: async () => [LEVEL, false, closing, closing, 1n],
+      jackpotCompressionTier: async () => 2,
+      growthState: async () => [100n, closing ? 0n : 110n, 0n, LEVEL, false, 0],
+      prizePoolTargetView: async () => { targetReads++; return closing ? 50n : 110n; },
+    }));
+    const el = await mount();
+    try {
+      assert.equal(storeMod.get('app.poolBenchmarks').targetWei, '50');
+      closing = false;
+      const phaseClock = { level: LEVEL, jackpot: false, lastPurchaseDay: false, rngLocked: false };
+      storeMod.update('app.goldRush', { phaseClock });
+      await flush();
+      assert.equal(storeMod.get('app.poolBenchmarks').targetWei, '110');
+      assert.equal(storeMod.get('app.poolBenchmarks').ratchets.current, '110');
+      const readsAfterReset = targetReads;
+      storeMod.update('app.goldRush', { phaseClock: { ...phaseClock }, components: { nextWei: '70' } });
+      await flush();
+      assert.equal(targetReads, readsAfterReset, 'ordinary pool ticks do not add benchmark RPC reads');
+    } finally { el.disconnectedCallback(); }
+  });
+
   test('uses the chain level when the indexed game snapshot disagrees', async () => {
     installContract({
       growth: { [LEVEL]: { openRound: 0 } },

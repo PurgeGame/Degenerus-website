@@ -384,6 +384,37 @@ body.layout-basic .pass-deity-symbol--taken {
   cursor: not-allowed;
 }
 
+/* The two GENESIS symbols (0 = VAULT, 6 = sDGNRS) are held by the protocol and are
+   never for sale. They read as taken but stay legible, because they name a holder
+   the player can recognise rather than an anonymous sold-out slot. */
+body.layout-basic .pass-deity-symbol--genesis {
+  opacity: 0.5;
+  filter: grayscale(0.35);
+  border-color: rgba(147, 197, 253, 0.32);
+}
+
+body.layout-basic .pass-deity-dialog__note {
+  display: block;
+  max-width: 46ch;
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  line-height: 1.45;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: #a79c78;
+}
+
+body.layout-basic .pass-deity-symbol--genesis::after {
+  content: attr(data-genesis-holder);
+  position: absolute;
+  inset: auto 0 0.1rem 0;
+  font-size: 0.42rem;
+  letter-spacing: 0.06em;
+  color: #93c5fd;
+  text-align: center;
+  pointer-events: none;
+}
+
 body.layout-basic .pass-deity-buy {
   width: 100%;
   min-height: 3.2rem;

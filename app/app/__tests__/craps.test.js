@@ -77,16 +77,21 @@ function fakeContract() {
     'static:applyCrapsPasses': [],
     upgradeDayWindows: [],
     'static:upgradeDayWindows': [],
+    upgradeReservedDay: [],
+    'static:upgradeReservedDay': [],
+    convertNormalToHigh: [],
+    'static:convertNormalToHigh': [],
   };
   const contract = {
     progressivePool: async () => 1_250_000n * 10n ** 18n,
-    previewSettlement: async () => ({ won: 381n, paid: 762n }),
     amendSlip: callable('amendSlip', calls),
     enterBonusBattle: callable('enterBonusBattle', calls),
     enterBonusDay: callable('enterBonusDay', calls),
     buyFutureCrapsDays: callable('buyFutureCrapsDays', calls),
     applyCrapsPasses: callable('applyCrapsPasses', calls),
     upgradeDayWindows: callable('upgradeDayWindows', calls, 4_500n),
+    upgradeReservedDay: callable('upgradeReservedDay', calls),
+    convertNormalToHigh: callable('convertNormalToHigh', calls),
     connect() { return this; },
     _calls: calls,
   };
@@ -126,12 +131,14 @@ test('the craps ABI names only functions the deployed contract actually has', ()
   // deployed contract byte for byte. These are the doors the app uses.
   for (const method of [
     'amendSlip', 'enterBonusBattle', 'enterBonusDay', 'applyCrapsPasses', 'buyFutureCrapsDays',
-    'upgradeDayWindows', 'progressivePool', 'previewSettlement',
+    'upgradeDayWindows', 'upgradeReservedDay', 'convertNormalToHigh', 'progressivePool',
   ]) assert.ok(iface.getFunction(method), method);
-  assert.deepEqual(
-    iface.getFunction('previewSettlement').outputs.map((o) => o.name),
-    ['won', 'paid'],
-    'previewSettlement returns two values, not the old (won, survived, paid)',
+  // 635b010a cut `previewSettlement` to make room under EIP-170. A stale entry here
+  // would show up as a panel that renders a dash forever, not as an error.
+  assert.equal(
+    iface.getFunction('previewSettlement'),
+    null,
+    'previewSettlement is GONE from the deployed surface and must not be re-listed',
   );
   for (const event of [
     'CrapsSlipPlaced', 'CrapsSlipAmended', 'CrapsBetSettled', 'CrapsBonusOpened', 'CrapsBonusDonated',
@@ -1391,6 +1398,25 @@ test('scheduled entries, amendments, future days, and upgrades use their distinc
   await craps.upgradeCrapsDayWindows({ day: 42, periodMask: 0b0010101 });
   assert.deepEqual(contract._calls['static:upgradeDayWindows'], [[42, 0b0010101, { from: PLAYER }]]);
   assert.deepEqual(contract._calls.upgradeDayWindows, [[42, 0b0010101]]);
+
+  // A BLIND future reservation has no landed word to price windows off, so it takes a
+  // different door: one banked HIGH comp for the whole day, nothing burned.
+  const reserved = await craps.upgradeCrapsReservedDay({ day: 44 });
+  assert.deepEqual(contract._calls['static:upgradeReservedDay'], [[44, { from: PLAYER }]]);
+  assert.deepEqual(contract._calls.upgradeReservedDay, [[44]]);
+  assert.equal(reserved.periodMask, 0x7F, 'the reserved-day door upgrades all seven windows');
+
+  const converted = await craps.convertCrapsNormalPassesToHigh({ highCount: 2 });
+  assert.deepEqual(contract._calls['static:convertNormalToHigh'], [[2, { from: PLAYER }]]);
+  assert.deepEqual(contract._calls.convertNormalToHigh, [[2]]);
+  assert.equal(converted.normalsSpent, 38, '19 normal comps per High Roller comp');
+});
+
+test('the reserved-day upgrade refuses a day it could never name on-chain', async () => {
+  await assert.rejects(() => craps.upgradeCrapsReservedDay({ day: 0 }), /valid future Craps day/);
+  await assert.rejects(() => craps.upgradeCrapsReservedDay({ day: 0x1000000 }), /valid future Craps day/);
+  await assert.rejects(() => craps.convertCrapsNormalPassesToHigh({ highCount: 0 }), /High Roller comps/);
+  assert.equal(craps.CRAPS_NORMAL_PASSES_PER_HIGH, 19, 'mirrors CrapsBattle._PASSES_PER_HIGH');
 });
 
 test('scheduled Craps preflight stays on the public reader before a browser-wallet send', async () => {
@@ -1435,8 +1461,9 @@ test('scheduled Craps preflight stays on the public reader before a browser-wall
 });
 
 test('receipt parsing decodes the packed slip echo the contract really emits', () => {
-  // CrapsSlipPlaced carries ONE word: chips, then the bet id at bit 32 and the
-  // entry multiple at bit 160. There is no per-field event any more.
+  // CrapsSlipPlaced carries ONE word: chips, then the bet id at bit 32, the entry
+  // multiple at bit 160, the standing at 190, the entry boon at 206 and the seat's
+  // high-roller bits at 217. There is no per-field event any more.
   const betId = (337n << 64n) | 4n;
   const packed = 0x1241111n | (betId << 32n) | (9n << 160n);
   const parsed = craps.parseCrapsReceipt({ logs: [
@@ -1447,7 +1474,13 @@ test('receipt parsing decodes the packed slip echo the contract really emits', (
     { parsed: { name: 'CrapsBetSettled', args: { betId, player: PLAYER, won: 381n, paid: 762n } } },
   ] });
   assert.deepEqual(parsed.placed[0], {
-    player: PLAYER, betId: betId.toString(), slot: '337', multiple: 10,
+    player: PLAYER,
+    betId: betId.toString(),
+    slot: '337',
+    multiple: 10,
+    chips: 0x1241111,
+    highMask: 0,
+    high: false,
   });
   assert.deepEqual(parsed.reserved[0], { player: PLAYER, day: 43, highRoller: true });
   assert.deepEqual(parsed.upgraded[0], {
@@ -1457,6 +1490,32 @@ test('receipt parsing decodes the packed slip echo the contract really emits', (
   assert.deepEqual(parsed.settled[0], {
     betId: betId.toString(), player: PLAYER, wonWei: '381', paidWei: '762',
   });
+});
+
+test('the slip echo carries the seat high bits at the shift the bet word stores them', () => {
+  // 635b010a: `_writeSlip` ORs `highBits` into the event word unchanged, so bit 217
+  // alone is a window seat and 217..223 is a day ticket's per-period mask. Before
+  // this, a COMPED high day seat (evMult 0 → multiple 1) was invisible in the logs.
+  const windowBetId = (338n << 64n) | 7n;   // slot % 8 === 2 → window-local slip
+  const dayBetId = (336n << 64n) | 9n;      // slot % 8 === 0 → whole-day ticket
+  const HIGH_BIT = 1n << 217n;
+  const DAY_HIGH = 0x7Fn << 217n;
+
+  assert.deepEqual(craps.decodeCrapsSlipHighBits(HIGH_BIT, false), { highMask: 0x7F, high: true });
+  assert.deepEqual(craps.decodeCrapsSlipHighBits(0n, false), { highMask: 0, high: false });
+  assert.deepEqual(craps.decodeCrapsSlipHighBits(DAY_HIGH, true), { highMask: 0x7F, high: true });
+  assert.deepEqual(craps.decodeCrapsSlipHighBits(0x05n << 217n, true), { highMask: 0x05, high: true });
+
+  const comped = craps.parseCrapsReceipt({ logs: [
+    // evMult stays ZERO on a banked HIGH pass, so `multiple` decodes to 1x.
+    { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: (dayBetId << 32n) | DAY_HIGH } } },
+    { parsed: { name: 'CrapsSlipPlaced', args: { player: PLAYER, bet: (windowBetId << 32n) | HIGH_BIT } } },
+  ] });
+  assert.equal(comped.placed[0].multiple, 1, 'a comped high seat still echoes 1x');
+  assert.equal(comped.placed[0].high, true, 'but its high bits say otherwise');
+  assert.equal(comped.placed[0].highMask, 0x7F);
+  assert.equal(comped.placed[1].high, true, 'a window-local high seat sets bit 217 alone');
+  assert.equal(comped.placed[1].highMask, 0x7F);
 });
 
 test('contract errors map to actionable craps copy', () => {

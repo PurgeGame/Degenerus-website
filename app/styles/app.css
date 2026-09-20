@@ -996,6 +996,17 @@ account-switcher[hidden] {
   transition: border-color 0.2s, background 0.2s, opacity 0.2s;
 }
 
+/* GAME OVER only: names the 2% terminal affiliate share already inside the ETH
+   row above. Deliberately typed as a note, not a row — it is not a second claim. */
+.clm-terminal-affiliate {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--warning, #eab308);
+  color: var(--text-secondary, #aaa);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .clm-row__label {
   flex: 0 0 auto;
   font-weight: 500;
@@ -25441,5 +25452,22 @@ body.layout-basic .craps-entry__action > button[hidden] {
   body.layout-basic .craps-entry__bet-spot[data-craps-bet]:not(:disabled),
   .craps-bet[data-stake-bet]:not(:disabled) {
     cursor: url('/app/assets/flip-chip-cursor.svg?v=1') 16 12, pointer;
+  }
+}
+
+/* Keep the full-day Craps range legible in the existing narrow mobile cell. */
+@media (max-width: 600px) {
+  body.layout-basic .craps-entry__tomorrow-range .craps-entry__tomorrow-layout {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: .08rem;
+    padding-inline: .08rem;
+  }
+  body.layout-basic .craps-entry__tomorrow-range strong {
+    overflow: visible;
+    text-overflow: clip;
+    letter-spacing: 0;
+  }
+  body.layout-basic .craps-entry__tomorrow-range small {
+    min-width: 0;
   }
 }

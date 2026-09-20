@@ -17,16 +17,16 @@ describe('disconnected protocol-wallet view', () => {
     assert.match(html, /href="\/app\/styles\/protocol-wallet-banner\.css"/);
   });
 
-  test('every disconnected session gets the protocol account after silent reconnect', () => {
-    const reconnectAt = main.indexOf('await autoReconnect()');
+  test('disconnected preview stays transient while silent reconnect runs', () => {
+    const reconnectAt = main.indexOf('void autoReconnect()');
     const seedAt = main.indexOf('seedDisconnectedProtocolWalletIfNeeded();', reconnectAt);
     assert.ok(reconnectAt >= 0 && seedAt > reconnectAt,
-      'silent wallet reconnect gets first chance before the fallback view');
+      'wallet restoration starts without blocking the fallback view');
     assert.match(main,
-      /function seedDisconnectedProtocolWalletIfNeeded\(\)\s*\{\s*if \(!DEFAULT_PLAYER \|\| get\('viewing\.address'\) \|\| get\('connected\.address'\)\) return false;/s);
+      /function seedDisconnectedProtocolWalletIfNeeded\(\)\s*\{\s*return seedDefaultViewedAddress\(DEFAULT_PLAYER\);/s);
     assert.doesNotMatch(main, /hasInstalledWallet/,
       'an installed-but-disconnected wallet no longer suppresses the useful fallback');
-    assert.match(main, /update\('viewing\.address', DEFAULT_PLAYER\)/);
+    assert.match(main, /if \(addr && clearDefaultViewedAddress\(\)\)/);
   });
 
   test('the banner is explicit, live, and connects through the real wallet flow', () => {

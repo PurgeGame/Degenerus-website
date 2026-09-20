@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { CHAIN, CONTRACTS } from '../../app/chain-config.js';
+import { crapsLobbySnapshotFromLogs } from '../../app/craps.js';
 
 globalThis.HTMLElement ??= class HTMLElement {};
 globalThis.customElements ??= {
@@ -217,6 +218,48 @@ test('winner-list goal colors and actual winner buy-ins come from sealed result 
   'a High Roller who wins the shared main field still shows the 100x price they paid');
 });
 
+test('settled High Roller seats show their full buy-in in either view, including yesterday’s Event', () => {
+  const day = 604;
+  const wei = 10n ** 18n;
+  const player = '0x0000000000000000000000000000000000000011';
+  const event = (name, args) => ({ parsed: { name, args } });
+  for (const previous of [false, true]) {
+    for (const sameSeat of [false, true]) {
+      const entryDay = previous ? day - 1 : day;
+      const period = previous ? 6 : 3;
+      const daySlot = BigInt(entryDay * 8);
+      const betId = (daySlot << 64n) | 1n;
+      const highBetId = sameSeat ? betId : betId + 1n;
+      const battleKey = `0x${'ab'.repeat(32)}`;
+      const snapshot = crapsLobbySnapshotFromLogs(day, [
+        event('CrapsHighRollerDayOpened', {
+          day: BigInt(entryDay), multiplier: 100n, mainBoostBudget: 0n, highRollerBoostBudget: 0n,
+        }),
+        event('CrapsBonusOpened', {
+          battleKey, slot: daySlot + BigInt(period + 1), seed: 0n,
+          bankroll: 1200n * wei, battleStake: 300n * wei,
+          goal: 6000n * wei, boardStake: 120n * wei,
+        }),
+        // A reserved day ticket echoes 1x; its reservation marker may be outside the lookback.
+        event('CrapsSlipPlaced', { player, bet: betId << 32n }),
+        event('CrapsSlipPlaced', { player, bet: highBetId << 32n }),
+        event('CrapsBattlePaid', { betId, battleKey, player, amount: 5000n }),
+        event('CrapsHighRollerPaid', {
+          betId: highBetId, battleKey, player, amount: 9000n, bankrollRider: false,
+        }),
+      ]);
+      const result = previous ? snapshot.yesterdayEventResult : snapshot.results[period];
+      assert.equal(crapsEntry.crapsWinnerListBuyInWei(
+        crapsEntry.crapsWinnerResultForLane(result, false), false,
+      ), ((sameSeat ? 150000n : 1500n) * wei).toString(),
+      'the normal view uses the winning seat, not just the winning wallet');
+      assert.equal(crapsEntry.crapsWinnerListBuyInWei(
+        crapsEntry.crapsWinnerResultForLane(result, true), true,
+      ), (150000n * wei).toString(), 'the High Roller view overrides an incomplete 1x reservation echo');
+    }
+  }
+});
+
 test('result Added amount and color include an actual progressive payout', () => {
   assert.equal(crapsEntry.crapsAddedResultWei('800', null), 800n);
   assert.equal(crapsEntry.crapsAddedResultWei('800', '2000'), 2800n,
@@ -392,6 +435,62 @@ test('a Normal future reservation remains visibly upgradeable when High Roller i
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0x7F }, true), false);
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0 }, false), false);
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade(null, true), false);
+});
+
+test('a banked High Roller comp turns a blind reservation into a live one-comp upgrade', () => {
+  const normal = { highMask: 0, day: 44 };
+  const base = { ticket: normal, ticketDay: 44, currentDay: 43, highRoller: true };
+
+  // CrapsBattle.upgradeReservedDay debits the HIGH credit before it banks the normal
+  // one back, so a wallet with none fails on the debit. Gate on the balance instead.
+  assert.deepEqual(
+    crapsEntry.crapsReservedDayUpgradeState({ ...base, highPasses: 1 }),
+    { eligible: true, ready: true, day: 44, reason: null },
+  );
+  assert.deepEqual(
+    crapsEntry.crapsReservedDayUpgradeState({ ...base, highPasses: 0 }),
+    { eligible: true, ready: false, day: 44, reason: 'no-comp' },
+  );
+  assert.deepEqual(
+    crapsEntry.crapsReservedDayUpgradeState({ ...base, highPasses: 3, passInventoryReady: false }),
+    { eligible: true, ready: false, day: 44, reason: 'loading' },
+  );
+
+  // Today and the past belong to upgradeDayWindows, which prices each window off the
+  // landed word; this door reverts DayNotReservable on them.
+  assert.equal(crapsEntry.crapsReservedDayUpgradeState({
+    ...base, ticketDay: 43, highPasses: 5,
+  }).ready, false);
+  assert.equal(crapsEntry.crapsReservedDayUpgradeState({
+    ...base, ticketDay: 42, highPasses: 5,
+  }).reason, 'open');
+
+  // Already high, or the Low Stakes lane selected: nothing to upgrade.
+  assert.equal(crapsEntry.crapsReservedDayUpgradeState({
+    ...base, ticket: { highMask: 0x7F, day: 44 }, highPasses: 5,
+  }).eligible, false);
+  assert.equal(crapsEntry.crapsReservedDayUpgradeState({
+    ...base, highRoller: false, highPasses: 5,
+  }).eligible, false);
+  assert.equal(crapsEntry.crapsReservedDayUpgradeState({ highPasses: 5 }).eligible, false);
+});
+
+test('the reserved-day upgrade is wired to its own contract door and click target', () => {
+  assert.match(componentSource, /upgradeCrapsReservedDay,/,
+    'the component imports the reserved-day adapter, not just the window-mask one');
+  assert.match(componentSource, /data-craps-upgrade-reserved/,
+    'the reserved-day action carries its own click target');
+  assert.match(
+    componentSource,
+    /\[data-craps-upgrade-reserved\][\s\S]{0,400}?\[data-craps-upgrade\]/,
+    'the reserved-day branch is matched BEFORE the window-mask branch, which would otherwise swallow it',
+  );
+  assert.match(componentSource, /upgradeCrapsReservedDay\(\{ day \}\)/,
+    'the handler calls the adapter with the day alone — nothing is priced');
+  assert.match(componentSource, /UPGRADE · 1 COMP/,
+    'the live action names its one-comp cost');
+  assert.match(componentSource, /UPGRADE WHEN OPEN/,
+    'a wallet without a High Roller comp still gets the honest wait state');
 });
 
 test('winner totals retain a visible, honest chain lower bound while the indexer is unavailable', () => {

@@ -17,6 +17,7 @@ const {
   poolProgressModel,
   sampledPoolHistory,
   prizePoolThermometerContext,
+  poolBenchmarksMatchPhase,
   jackpotPoolModel,
   jackpotCadenceModel,
   jackpotCompressionTier,
@@ -715,7 +716,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     const meter = html.indexOf('<app-pool-progress>');
     const hero = html.indexOf('<section class="jackpot-hero"');
     assert.ok(headline >= 0 && headline < meter && meter < hero);
-    assert.match(html, /src="\/app\/components\/app-pool-progress\.js"/);
+    assert.match(html, /src="\/app\/components\/app-pool-progress\.js(?:\?[^" ]*)?"/);
   });
 
   test('center draw has the requested Degenerus Daily Drawing machine marquee', () => {
@@ -739,7 +740,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
   });
 
   test('existing side-bet refresh publishes contract-exact shared benchmarks', () => {
-    assert.match(pari, /readPrizePoolTarget/);
+    assert.match(pari, /readPoolBenchmarkSnapshot/);
     assert.match(pari, /readGrowthRatchetHistory/);
     assert.match(pari, /update\('app\.poolBenchmarks'/);
     assert.match(pari, /lastPurchaseDay:\s*phaseContext\.lastPurchaseDay === true/,
@@ -890,4 +891,28 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.pool-progress__jackpot\s*\{[^}]*grid-template-areas:\s*"pool pool"\s*"context tail"/s,
       'narrow jackpot context has a centered pool row and a details row');
   });
+});
+
+test('a same-level pool reset rejects the closing 50 ETH benchmark and its history', () => {
+  const pending = { level: 413, jackpot: false, lastPurchaseDay: true, rngLocked: true };
+  const reset = { ...pending, lastPurchaseDay: false, rngLocked: false };
+  const benchmarks = { level: 413, targetWei: 50000000000000n,
+    ratchets: { prev: 29992980031120142n, current: 0n, next: 0n }, contractPhase: pending };
+  assert.equal(poolBenchmarksMatchPhase(benchmarks, pending), true);
+  assert.equal(poolBenchmarksMatchPhase(benchmarks, reset), false,
+    'the level number is unchanged, but nextPrizePool now belongs to level 414');
+  const closing = prizePoolThermometerContext({ phaseLevel: 414, benchmarkLevel: 413,
+    targetWei: benchmarks.targetWei, ratchets: benchmarks.ratchets, contractPhase: pending });
+  assert.equal(closing.targetWei, 29992980031120142n);
+  const loading = poolProgressModel({ currentLevel: 414, nextWei: 18193794536352353n,
+    targetWei: poolBenchmarksMatchPhase(benchmarks, reset) ? benchmarks.targetWei : null,
+    history: [{ level: 412, poolWei: 29992980031120142n }] });
+  assert.equal(loading.levelReady, false);
+  assert.deepEqual(loading.historyMarkers, []);
+  const settled = { ...benchmarks, targetWei: 30271038848977129n, contractPhase: reset };
+  assert.equal(poolBenchmarksMatchPhase(settled, reset), true);
+  const fresh = poolProgressModel({ currentLevel: 414, nextWei: 18193794536352353n,
+    targetWei: settled.targetWei });
+  assert.equal(fresh.levelReady, false);
+  assert.equal(fresh.referenceWei, 30271038848977129n);
 });

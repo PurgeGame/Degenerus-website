@@ -1767,14 +1767,14 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
   });
 
-  test('bonus craps badge rewards show whole day passes for raw and composed wins', async () => {
+  test('bonus craps badge rewards show Craps comps for raw and composed wins', async () => {
     const { winningBadgeRewardLines } = await import('../replay-panel.js');
     for (const win of [
       { awardType: 'craps_pass', amount: '2' },
       { awardType: 'aggregated', crapsPassTotal: '2', flipTotal: '0' },
     ]) {
       assert.deepEqual(winningBadgeRewardLines(win), [{
-        kind: 'craps-pass', amount: '2 PASSES', aria: '2 normal craps day passes',
+        kind: 'craps-pass', amount: '2 CRAPS COMPS', aria: '2 Craps comps',
       }]);
     }
   });
@@ -1941,12 +1941,12 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
   test('the far-future center reveal is a focused FLIP bonus prize', () => {
     assert.match(
       REPLAY_PANEL_SRC,
-      /class="ff-logo" src="\/whitepaper\/flame-logo-split\.svg"[\s\S]*?class="ff-amount"[\s\S]*?class="ff-label">BONUS/,
+      /class="ff-logo" src="\/whitepaper\/flame-logo-split\.svg"[\s\S]*?class="ff-amount"[\s\S]*?class="ff-label">\$\{label\}/,
       'the center contains only the FLIP mark, amount, and bonus label',
     );
     assert.doesNotMatch(REPLAY_PANEL_SRC, /ff-label">Far Future/,
       'the internal distribution name is not repeated in the prize art');
-    assert.match(REPLAY_PANEL_SRC, /setAttribute\('aria-label', `\$\{amountStr\} FLIP bonus`\)/,
+    assert.match(REPLAY_PANEL_SRC, /setAttribute\('aria-label', description\)/,
       'the logo-only currency treatment keeps its full accessible meaning');
     assert.match(
       REPLAY_PANEL_SRC,
@@ -2173,7 +2173,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
       ticketCount: 100,
       coinTotal: '0',
       bafPrize: { eth: '0', tickets: 0 },
-      decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+      decimatorPrize: { regularEth: '0', lootboxEth: '0' },
     };
     storeMod.update('app.lastDay', {
       day: 7, level: 2, summary: null, winners: [winner],
@@ -2299,7 +2299,7 @@ const RESOLVED_PAYLOAD_DAY5 = {
     address: '0xab12000000000000000000000000000000000000',
     totalEth: '1000000000000000000', ticketCount: 100, coinTotal: '0',
     bafPrize: { eth: '0', tickets: 0 },
-    decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+    decimatorPrize: { regularEth: '0', lootboxEth: '0' },
   }],
   roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
   roll2: { day: 5, level: 2, purchaseLevel: null, wins: [], bonusTraitsPacked: null },
@@ -3489,7 +3489,7 @@ describe('foil match pending action', () => {
     }
   });
 
-  test('a foil pack indexed after the first cabinet read seats on the shared poll catch-up', async () => {
+  test('a foil pack indexed after the first cabinet read seats on the shared poll catch-up', async (t) => {
     const player = '0xab12000000000000000000000000000000000000';
     const lines = [
       [1, 70, 130, 200],
@@ -3540,7 +3540,12 @@ describe('foil match pending action', () => {
         'the first pre-index response correctly leaves the sockets empty');
 
       indexed = true;
+      t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+      document.visibilityState = 'hidden';
       componentPollMod._onVisibilityChangeForTests();
+      document.visibilityState = 'visible';
+      componentPollMod._onVisibilityChangeForTests();
+      t.mock.timers.tick(250);
       await flushMicrotasks();
 
       assert.ok(foilReads >= 2, 'the cabinet rechecks the same player and level');
@@ -3837,7 +3842,7 @@ describe('foil match pending action', () => {
     );
   });
 
-  test('the final jackpot keeps its eligible pack through presentation and an outstanding payout', async () => {
+  test('the final jackpot keeps its eligible pack through presentation and an outstanding payout', async (t) => {
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
     const nextTraits = [7, 79, 143, 207];
@@ -3942,7 +3947,12 @@ describe('foil match pending action', () => {
       assert.equal(slot.classList.contains('is-claimable'), true);
 
       claims = [{ day: 190, ticketIndex: 0, drawKind: 0 }];
+      t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+      document.visibilityState = 'hidden';
       componentPollMod._onVisibilityChangeForTests();
+      document.visibilityState = 'visible';
+      componentPollMod._onVisibilityChangeForTests();
+      t.mock.timers.tick(250);
       for (let i = 0; i < 12; i += 1) await flushMicrotasks();
 
       assert.deepEqual([...new Set(requestedLevels)], [38, 39],
@@ -5552,7 +5562,6 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           decimatorPrize: {
             regularEth: '2000000000000',
             lootboxEth: '500000000000',
-            terminalEth: '1000000000000',
           },
         }],
       });
@@ -5566,9 +5575,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       const [queued] = revealMod.__takeQueuedForTest();
       assert.deepEqual(queued.prizes, [{
         type: 'decimator',
-        amount: 3_000_000_000_000n,
+        amount: 2_000_000_000_000n,
         lootboxAmount: 500_000_000_000n,
-        terminalAmount: 1_000_000_000_000n,
       }]);
       assert.equal(requested.some((path) => /\/decimator(?:\?|\/)/.test(path)), false,
         'the composed last-day winner row is reused instead of adding a DB request');
@@ -5606,7 +5614,6 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
               decimatorPrize: {
                 regularEth: '2000',
                 lootboxEth: '500',
-                terminalEth: '1000',
               },
               breakdown: [{
                 awardType: 'eth_baf',
@@ -5652,7 +5659,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ...RESOLVED_PAYLOAD_DAY5.winners[0],
           totalEth: '0', ticketCount: 0, coinTotal: '0', breakdown: [],
           bafPrize: { eth: '0', tickets: 0 },
-          decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+          decimatorPrize: { regularEth: '0', lootboxEth: '0' },
         }],
       });
       await flushMicrotasks();
@@ -5667,9 +5674,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         { type: 'baf', amount: 12_000n, level: 200 },
         {
           type: 'decimator',
-          amount: 3_000n,
+          amount: 2_000n,
           lootboxAmount: 500n,
-          terminalAmount: 1_000n,
         },
       ]);
       assert.ok(requested.some((path) => path.includes('/game/jackpot/day/5/winners')),

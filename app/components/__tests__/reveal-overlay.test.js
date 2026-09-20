@@ -1219,7 +1219,6 @@ describe('normalizeSequence', () => {
         type: 'decimator',
         amount: 2_000_000_000_000n,
         lootboxAmount: 500_000_000_000n,
-        terminalAmount: 0n,
       }],
     });
     assert.equal(seq.cards.length, 1);
@@ -4596,6 +4595,55 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  for (const surface of ['pack', 'summary']) {
+    test(`${surface} Bingo continuation explains claim failures and opens its confirmed receipt on retry`, async () => {
+      let claims = 0;
+      let reveals = 0;
+      const identity = { kind: 'bingo', dismissScope: 'player-a', dismissKey: 'bingo:8:0' };
+      pendingActionsMod.publishPendingActions('bingo-continuation', [{
+        ...identity, id: 'bingo-claim:8', state: 'ready', write: true,
+        run: async () => {
+          claims += 1;
+          if (claims === 1) throw Object.assign(new Error('User rejected request'), { code: 4001 });
+          pendingActionsMod.publishPendingActions('bingo-continuation', [{
+            ...identity, id: 'bingo:receipt-8', state: 'ready', write: false,
+            run: async () => {
+              reveals += 1;
+              pendingActionsMod.clearPendingActions('bingo-continuation');
+              queueReveal({ kind: 'bingo', level: 8, symbol: 0,
+                presentationId: `bingo:claim-then-reveal-${surface}` });
+            },
+          }]);
+        },
+      }]);
+      queueReveal(surface === 'pack'
+        ? { kind: 'pack', level: 8, count: 1, tickets: [{ traitIds: [1, 65, 129, 193] }] }
+        : { kind: 'referral-bonus', level: 7, amount: '1000000000000000000' });
+      const el = instantiate();
+      await tick();
+      let button = el.querySelector('.rvl-collect-cta');
+      assert.equal(button.textContent, 'CLAIM BINGO', 'a wallet transaction is identified as a claim');
+      button.dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+      const notice = el.querySelector('[data-bind="rvl-action-error"]');
+      assert.equal(notice.hidden, false);
+      assert.equal(notice.textContent, 'Transaction cancelled.');
+      assert.equal(el.querySelector('[data-bind="rvl-close"]').disabled, false);
+      button = el.querySelector('.rvl-collect-cta');
+      assert.equal(button.disabled, false);
+      assert.equal(button.textContent, 'CLAIM BINGO');
+      button.dispatchEvent({ type: 'click', stopPropagation() {} });
+      for (let i = 0; i < 4; i += 1) await tick();
+      assert.equal(claims, 2);
+      assert.equal(reveals, 1, 'a confirmed claim advances directly into its matching receipt');
+      assert.ok(el.querySelector('.rvl-bingo-chart'));
+      assert.equal(notice.hidden, true, 'retry clears the old error');
+      el.querySelector('[data-bind="rvl-close"]')
+        .dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+    });
+  }
+
   test('OPEN ALL remaining is one confirmation for sealed-card pack batches', async (t) => {
     const previousMatchMedia = window.matchMedia;
     t.after(() => { window.matchMedia = previousMatchMedia; });
@@ -6304,4 +6352,15 @@ describe('reveal-overlay element', () => {
     const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
     assert.equal(backdrop.hidden, true);
   });
+});
+
+test('AFKing seat draw summary identifies the automatically credited FLIP reward', () => {
+  const seq = normalizeSequence({ kind: 'jackpot', day: 446, prizes: [
+    { type: 'afking-seat', amount: 4000n * 10n ** 18n },
+  ] });
+  assert.equal(seq.cards.length, 1);
+  assert.equal(seq.cards[0].label, 'AFKING SEAT DRAW');
+  assert.match(seq.cards[0].value, /4,?000 FLIP/);
+  assert.equal(seq.cards[0].sub, 'Credited to your coinflip stake');
+  assert.equal(seq.cards[0].summaryDetail, true);
 });

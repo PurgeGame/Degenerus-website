@@ -1340,7 +1340,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
       addresses: [TEST_ADDR, OTHER_ADDR],
       perAddress: {},
       claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
-      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null,
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
       tickets: [
         { level: 17, entryCount: 16, owner: TEST_ADDR },   // 4 tickets
         { level: 18, entryCount: 8, owner: OTHER_ADDR },   // 2 tickets
@@ -1383,7 +1383,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [TEST_ADDR, OTHER_ADDR], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
-      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null,
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
       tickets: [
         { level: 17, entryCount: 13, owner: TEST_ADDR },
         { level: 18, entryCount: 1, owner: OTHER_ADDR },
@@ -1406,7 +1406,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [TEST_ADDR], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
-      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null, tickets: [],
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, tickets: [],
     });
 
     const el = mount();
@@ -1427,7 +1427,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [TEST_ADDR], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
-      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null,
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
       tickets: [{ level: 17, entryCount: 4, owner: TEST_ADDR }],
     });
     const el = mount();

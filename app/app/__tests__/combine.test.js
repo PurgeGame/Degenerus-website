@@ -4,7 +4,7 @@
 //
 // Covers mergePlayerPayloads:
 //   - SUM wei-denominated strings with BigInt (no float precision loss)
-//   - CONCAT tickets[] + terminal.burns[] with owner tags
+//   - CONCAT tickets[] with owner tags
 //   - IDENTITY fields (quests/questStreak/scoreBreakdown/affiliate/degenerette) omitted
 //   - decimator.claimablePerLevel per-level sum; futurePoolTotal GLOBAL (first, not summed)
 //   - addresses[] + perAddress{} round-trip; null/failed payloads ignored
@@ -37,7 +37,6 @@ function payload(addr, over = {}) {
     degenerette: { betNonce: 2 }, // identity
     coinflip: null,
     decimator: { windowOpen: false, activityScore: 0, claimablePerLevel: [], futurePoolTotal: '800' },
-    terminal: null,
     tickets: [],
     ...over,
   };
@@ -154,16 +153,15 @@ describe('mergePlayerPayloads — CONCAT with owner tags', () => {
     assert.equal(merged.tickets[0].entryCount, 4);
   });
 
-  test('terminal.burns concatenated + owner-tagged; null when none', () => {
-    const withBurns = mergePlayerPayloads([
+  test('the removed terminal decimator leaves NO `terminal` key on the merged root', () => {
+    // Audit 635b010a deleted the death bet end to end, so /player/:address stopped
+    // carrying `terminal`. A stale merge would resurrect the key as `null` and invite a
+    // panel to branch on a feature that no longer exists.
+    const merged = mergePlayerPayloads([
       payload(A, { terminal: { burns: [{ level: 5, effectiveAmount: '10' }] } }),
       payload(B),
     ]);
-    assert.equal(withBurns.terminal.burns.length, 1);
-    assert.equal(withBurns.terminal.burns[0].owner, A);
-
-    const noBurns = mergePlayerPayloads([payload(A), payload(B)]);
-    assert.equal(noBurns.terminal, null);
+    assert.equal('terminal' in merged, false);
   });
 });
 
@@ -195,7 +193,7 @@ describe('mergePlayerPayloads — identity omission + addresses/perAddress', () 
     assert.deepEqual(merged.addresses, []);
     assert.equal(merged.claimableEth, '0');
     assert.equal(merged.coinflip, null);
-    assert.equal(merged.terminal, null);
+    assert.equal('terminal' in merged, false);
     assert.deepEqual(merged.tickets, []);
     assert.deepEqual(merged.decimator.claimablePerLevel, []);
   });

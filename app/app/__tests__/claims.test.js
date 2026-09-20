@@ -28,6 +28,7 @@ import * as claimsMod from '../claims.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
+import { CONTRACTS } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of lootbox.test.js
@@ -702,5 +703,80 @@ describe('Plan 62-06: claims.js source-level invariants (AFF-03 extension)', () 
     // extension (3 from Phase 61 + 1 NEW for claimAffiliateDgnrs).
     const matches = SRC.match(/sendTx\(\s*\(s\)\s*=>/g) || [];
     assert.ok(matches.length >= 4, `expected >= 4 closure-form sendTx after Plan 62-06; got ${matches.length}`);
+  });
+});
+
+
+// ===========================================================================
+// GAME OVER — the terminal affiliate 2% (audit 635b010a).
+// ===========================================================================
+
+describe('terminal affiliate payout', () => {
+  const claims = claimsMod;
+  const contracts = contractsMod;
+  const { ethers } = contractsMod;
+  const AFFILIATE = ethers.getAddress('0xab12000000000000000000000000000000000000');
+  const OTHER = ethers.getAddress('0xcd34000000000000000000000000000000000000');
+  const iface = new ethers.Interface([
+    'event TerminalAffiliatePaid(address indexed affiliate, uint24 indexed level, uint256 amount)',
+  ]);
+  const encode = (affiliate, level, amount) => {
+    const log = iface.encodeEventLog(
+      iface.getEvent('TerminalAffiliatePaid'), [affiliate, level, amount],
+    );
+    return { address: CONTRACTS.GAME, topics: log.topics, data: log.data };
+  };
+
+  test('decodes the event the game-over drain emits', () => {
+    const row = claims.decodeTerminalAffiliatePaid(encode(AFFILIATE, 412, 7_500_000n));
+    assert.deepEqual(row, {
+      affiliate: AFFILIATE.toLowerCase(),
+      level: 412,
+      amountWei: '7500000',
+    });
+    assert.equal(claims.decodeTerminalAffiliatePaid(null), null);
+    assert.equal(claims.decodeTerminalAffiliatePaid({ topics: [], data: '0x' }), null);
+    // A pre-parsed log from a receipt is taken as-is, with no second decode.
+    assert.equal(claims.decodeTerminalAffiliatePaid({
+      parsed: { name: 'SomethingElse', args: {} },
+    }), null);
+  });
+
+  test('the payout read is scoped to the wallet and never throws on a dead RPC', async () => {
+    const queries = [];
+    const provider = {
+      getLogs: async (filter) => {
+        queries.push(filter);
+        return [encode(AFFILIATE, 412, 7_500_000n)];
+      },
+    };
+    contracts.setProvider(provider);
+    try {
+      const row = await claims.readTerminalAffiliatePayout(AFFILIATE, { fromBlock: 46_570_486 });
+      assert.equal(row?.amountWei, '7500000');
+      assert.equal(row?.level, 412);
+      assert.equal(queries[0].address, CONTRACTS.GAME);
+      assert.equal(queries[0].fromBlock, 46_570_486);
+      assert.equal(
+        queries[0].topics[1],
+        ethers.zeroPadValue(ethers.getAddress(AFFILIATE), 32),
+        'the wallet is an INDEXED topic, so the node filters instead of the browser',
+      );
+
+      // Another wallet's payout is not this wallet's, even if a node ignores the topic.
+      assert.equal(await claims.readTerminalAffiliatePayout(OTHER), null);
+    } finally {
+      contracts.clearProvider();
+    }
+
+    // The note is decoration: a restricted or rate-limited eth_getLogs must degrade
+    // to "no note", never take down the panel that renders the claim buttons.
+    contracts.setProvider({ getLogs: async () => { throw new Error('rate limited'); } });
+    try {
+      assert.equal(await claims.readTerminalAffiliatePayout(AFFILIATE), null);
+    } finally {
+      contracts.clearProvider();
+    }
+    assert.equal(await claims.readTerminalAffiliatePayout('not-an-address'), null);
   });
 });

@@ -498,9 +498,22 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const descriptions = [
       'One ticket every level for the next 10 levels.',
       'One ticket every other level for the next 100 levels.',
-      '15 entries every level and three boons per day forever.',
+      // 635b010a gives every deity — genesis or paid — one whole ticket per level,
+      // extended at every level transition (DeityPerpetualQueued). Before it, a deity
+      // purchase queued NO tickets at all, so the old "15 entries" copy was already
+      // describing something the contract did not do.
+      'One whole ticket every level, renewed at every level transition, and three boons per day forever.',
     ];
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
+    assert.match(el.innerHTML, /1 TICKET \/ LEVEL · PERPETUAL/,
+      'the perpetual ticket is a visible deity perk, not only body copy');
+    assert.match(el.innerHTML, /genesis passes, held by the VAULT and sDGNRS/,
+      'the picker states why two of the 32 symbols can never be bought');
+    assert.match(el.innerHTML, /30 of the 32 symbols are for sale/);
+    assert.match(el.innerHTML, /24&nbsp;ETH rising to 300&nbsp;ETH on the 24th, then doubling to 19,200&nbsp;ETH/,
+      'the rebased ladder is stated where the symbol is chosen');
+    assert.doesNotMatch(el.innerHTML, /15 entries every level/,
+      'the pre-635b010a deity entry claim is gone');
     assert.match(el.innerHTML, /AFKING SUBSCRIPTION/);
     assert.match(el.innerHTML, /NO AUTOMATIC ORDER/,
       'the compact AFKING identity prioritizes current state over explanatory copy');
@@ -1052,10 +1065,16 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Deity dialog keeps taken symbols aligned and prices from the minted count', async () => {
+  test('Deity dialog keeps taken symbols aligned and prices off PAID sales, not minted passes', async () => {
+    const vault = '0x3333000000000000000000000000000000000000';
+    const sdgnrs = '0x4444000000000000000000000000000000000000';
     const otherA = '0x1111000000000000000000000000000000000000';
     const otherB = '0x2222000000000000000000000000000000000000';
+    // Symbols 0 and 6 are the GENESIS passes (VAULT, sDGNRS). They are minted, so
+    // they are in the catalog, but `deityPassSales` never counted them.
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
+      [0, vault],
+      [6, sdgnrs],
       [2, otherA],
       [7, otherB],
     ])));
@@ -1065,9 +1084,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const select = el.querySelector('[data-bind="pass-deity-select"]');
     const ids = select.children.map((option) => option.value);
-    assert.equal(ids.length, 30, 'only the 30 available symbols are offered');
-    assert.equal(ids.includes('2'), false, 'first minted symbol omitted');
-    assert.equal(ids.includes('7'), false, 'second minted symbol omitted');
+    assert.equal(ids.length, 28, 'the 32 symbols less 2 genesis and 2 sold');
+    assert.equal(ids.includes('2'), false, 'first paid symbol omitted');
+    assert.equal(ids.includes('7'), false, 'second paid symbol omitted');
+    assert.equal(ids.includes('0'), false, 'the VAULT genesis symbol is never for sale');
+    assert.equal(ids.includes('6'), false, 'the sDGNRS genesis symbol is never for sale');
     assert.equal(ids.includes('8'), true, 'unminted symbol remains available');
     assert.equal(select.disabled, false, 'an available canonical selection remains usable');
     assert.equal(el.querySelectorAll('.pass-deity-symbol').length, 32,
@@ -1076,15 +1097,48 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'a taken symbol remains visible but cannot be selected');
     assert.equal(el.querySelector('[data-symbol-id="8"]').disabled, false,
       'an available symbol tile can be selected');
+    const genesisTile = el.querySelector('[data-symbol-id="0"]');
+    assert.equal(genesisTile.disabled, true, 'a genesis symbol can never be picked');
+    assert.equal(genesisTile.getAttribute('data-genesis-holder'), 'VAULT');
+    assert.match(genesisTile.title, /genesis pass held by the VAULT/);
+    assert.equal(el.querySelector('[data-symbol-id="6"]').getAttribute('data-genesis-holder'), 'sDGNRS');
     assert.equal(el.querySelector('[data-bind="pass-deity-buy"]').disabled, false,
       'buy action remains usable');
     assert.equal(
       el.querySelector('[data-bind="pass-deity-open"]').textContent,
       'BUY DEITY PASS\n27 ETH',
-      'two issued passes produce the 24 + triangular(2) = 27 ETH quote',
+      'TWO PAID sales price the next pass at 24 + triangular(2) = 27 ETH — the two '
+      + 'genesis mints must not push it to 24 + triangular(4) = 34 ETH',
     );
 
     el.disconnectedCallback();
+  });
+
+  test('the rebased deity ladder is triangular to 300 ETH, then doubles to 19,200', async () => {
+    const {
+      computeDeityNextPriceWei, deityPaidSalesFromCatalog,
+      DEITY_DOUBLING_ANCHOR_SOLD, DEITY_PAID_PASS_MAX, GENESIS_DEITY_SYMBOLS,
+      DEITY_PERPETUAL_ENTRIES_PER_LEVEL,
+    } = await import('../app-pass-section.js');
+    const ETH = 10n ** 18n;
+    // chainId 1 keeps the raw mainnet scale; the testnet profile divides by 1e6.
+    const at = (sold) => computeDeityNextPriceWei(sold, 1) / ETH;
+    assert.equal(DEITY_DOUBLING_ANCHOR_SOLD, 23);
+    assert.equal(DEITY_PAID_PASS_MAX, 30);
+    assert.equal(at(0), 24n, 'the first paid pass is the 24 ETH base');
+    assert.equal(at(1), 25n);
+    assert.equal(at(22), 277n, 'the last triangular step before the anchor');
+    assert.equal(at(23), 300n, 'the 24th paid pass IS the anchor');
+    assert.equal(at(24), 600n, 'and every pass after it doubles');
+    assert.equal(at(29), 19_200n, 'the 30th and final paid pass');
+
+    // Paid sales EXCLUDE the two genesis mints — the whole reason the ladder cannot
+    // be driven off the catalog size.
+    assert.deepEqual(GENESIS_DEITY_SYMBOLS, { 0: 'VAULT', 6: 'sDGNRS' });
+    assert.equal(deityPaidSalesFromCatalog({ takenSymbols: new Set([0, 6]) }), 0);
+    assert.equal(deityPaidSalesFromCatalog({ takenSymbols: new Set([0, 6, 2, 7]) }), 2);
+    assert.equal(deityPaidSalesFromCatalog({ takenSymbols: null }), null);
+    assert.equal(DEITY_PERPETUAL_ENTRIES_PER_LEVEL, 4, '4 entries = one whole ticket per level');
   });
 
   test('Deity pass presents the legacy XRP badge as WWXRP', async () => {
@@ -1092,8 +1146,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(60);
 
     const select = el.querySelector('[data-bind="pass-deity-select"]');
-    const wwxrp = select.children.find((option) => option.value === '0');
-    assert.equal(wwxrp?.textContent, 'Crypto · WWXRP');
+    // Symbol 0 is the VAULT's genesis pass, so the WWXRP name now rides on its
+    // grid tile rather than on a purchasable option.
+    const wwxrp = el.querySelector('[data-symbol-id="0"]');
+    assert.match(wwxrp.getAttribute('aria-label'), /^WWXRP deity symbol, held by the VAULT$/);
+    assert.equal(select.children.some((option) => option.value === '0'), false);
 
     el.disconnectedCallback();
   });

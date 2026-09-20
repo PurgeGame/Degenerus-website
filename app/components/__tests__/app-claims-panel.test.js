@@ -1939,7 +1939,6 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
       dgnrsBalance: '0',
       coinflip: { depositedAmount: '0', claimablePreview: '0' },
       decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
-      terminal: null,
       tickets: [],
       ...overrides,
     };

@@ -4479,7 +4479,7 @@ describe('app-decimator-panel — combined mode (account-switcher)', () => {
         ],
         futurePoolTotal: '0',
       },
-      terminal: null, tickets: [],
+      tickets: [],
     });
 
     const el = instantiate();
@@ -4498,7 +4498,7 @@ describe('app-decimator-panel — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [CONNECTED], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0', coinflip: null,
-      decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null, tickets: [],
+      decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, tickets: [],
     });
 
     const el = instantiate();
@@ -4515,7 +4515,7 @@ describe('app-decimator-panel — combined mode (account-switcher)', () => {
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
       addresses: [CONNECTED], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0', coinflip: null,
-      decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null, tickets: [],
+      decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, tickets: [],
     });
     const el = instantiate();
     await settle(30);

@@ -180,6 +180,50 @@ describe('bingo event watcher', () => {
     }
   });
 
+  for (const chartState of ['stalled', 'failed', 'wallet-changed']) {
+    test(`a ${chartState} ticket chart cannot strand or lose a Bingo reveal`, async (t) => {
+      let address = PLAYER;
+      let signal;
+      bingo.__setBingoReadersForTest({
+        index: async () => ({ claimed: [{
+          id: '0xbeef:5', transactionHash: '0xbeef', logIndex: 5,
+          blockNumber: TEST_BLOCK, player: PLAYER, level: 31, symbol: 0,
+          tier: 'first-symbol', flipReward: '2000', dgnrsPaid: '77',
+        }] }),
+        tickets: async (args) => {
+          signal = args.signal;
+          if (chartState === 'failed') throw new Error('API unavailable');
+          return new Promise(() => {});
+        },
+      });
+      bingo.startBingoWatch({ getAddress: () => address });
+      await bingo.refreshBingoWatch();
+      const row = pending.getPendingActions().find((item) => item.kind === 'bingo');
+      assert.ok(row);
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      const running = row.run();
+      if (chartState === 'wallet-changed') address = null;
+      t.mock.timers.tick(750);
+      const result = await running;
+      const queued = reveal.__takeQueuedForTest();
+      if (chartState === 'wallet-changed') {
+        assert.equal(result, false);
+        assert.equal(queued.length, 0);
+        address = PLAYER;
+        await bingo.refreshBingoWatch();
+        assert.ok(pending.getPendingActions().find((item) => item.id === row.id));
+      } else {
+        assert.equal(queued.length, 1);
+        assert.equal(queued[0].kind, 'bingo');
+        assert.equal(queued[0].level, 31);
+        assert.equal(queued[0].flipReward, '2000');
+        assert.deepEqual(queued[0].counts, Array(64).fill(0));
+        assert.equal(pending.getPendingActions().some((item) => item.id === row.id), false);
+      }
+      if (chartState !== 'failed') assert.equal(signal.aborted, true);
+    });
+  }
+
   test('publishes one durable reveal, then a repeat API read cannot reopen it', async () => {
     // The indexed `claimed` row is the same receipt the chain used to supply,
     // and the API keeps returning it forever — so the consumed set, not a scan

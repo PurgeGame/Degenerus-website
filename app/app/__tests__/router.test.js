@@ -89,6 +89,80 @@ beforeEach(() => {
 // Cold-load ?as= handling
 // ===========================================================================
 
+describe('automatic disconnected account preview', () => {
+  const protocol = '0xaaaa000000000000000000000000000000000001';
+  const wallet = '0xbbbb000000000000000000000000000000000002';
+
+  test('preview never writes an account override into the URL', () => {
+    setLocation('?theme=dark');
+    initRouter();
+    assert.equal(routerMod.seedDefaultViewedAddress(protocol), true);
+    assert.equal(getViewedAddress(), protocol);
+    assert.equal(window.location.search, '?theme=dark');
+    assert.equal(_replaceCalls.length, 0);
+  });
+
+  test('connecting replaces the automatic preview with the connected account', async () => {
+    initRouter();
+    routerMod.seedDefaultViewedAddress(protocol);
+    storeMod.update('connected.address', wallet);
+    assert.equal(routerMod.clearDefaultViewedAddress(), true);
+    await flushMicrotasks();
+    assert.equal(getViewedAddress(), wallet);
+    assert.equal(storeMod.get('ui.mode'), 'self');
+    assert.equal(window.location.search, '');
+  });
+
+  test('refreshing an automatic preview does not create a deliberate account link', () => {
+    initRouter();
+    routerMod.seedDefaultViewedAddress(protocol);
+    const search = window.location.search;
+    __resetRouter();
+    storeMod.__resetForTest();
+    setLocation(search);
+    initRouter();
+    storeMod.update('connected.address', wallet);
+    assert.equal(routerMod.seedDefaultViewedAddress(protocol), false);
+    assert.equal(getViewedAddress(), wallet);
+  });
+
+  test('an explicit protocol URL survives wallet connection', () => {
+    setLocation(`?as=${protocol}`);
+    initRouter();
+    assert.equal(routerMod.seedDefaultViewedAddress(protocol), false);
+    storeMod.update('connected.address', wallet);
+    assert.equal(routerMod.clearDefaultViewedAddress(), false);
+    assert.equal(getViewedAddress(), protocol);
+    assert.equal(window.location.search, `?as=${protocol}`);
+  });
+
+  test('explicit navigation to the currently previewed account preserves it', () => {
+    initRouter();
+    routerMod.seedDefaultViewedAddress(protocol);
+    setLocation(`?as=${protocol}`);
+    _winListeners.get('popstate')[0]({ type: 'popstate' });
+    storeMod.update('connected.address', wallet);
+    assert.equal(routerMod.clearDefaultViewedAddress(), false);
+    assert.equal(getViewedAddress(), protocol);
+  });
+
+  test('selecting another account ends the automatic preview', () => {
+    initRouter();
+    routerMod.seedDefaultViewedAddress(protocol);
+    storeMod.update('viewing.address', wallet);
+    assert.equal(routerMod.clearDefaultViewedAddress(), false);
+    assert.equal(getViewedAddress(), wallet);
+    assert.equal(window.location.search, `?as=${wallet}`);
+  });
+
+  test('combined view is not replaced by an automatic preview', () => {
+    initRouter();
+    storeMod.update('viewing.combined', true);
+    assert.equal(routerMod.seedDefaultViewedAddress(protocol), false);
+    assert.equal(storeMod.get('viewing.address'), null);
+  });
+});
+
 describe('initRouter cold-load ?as=', () => {
   test("with no ?as= param does NOT update viewing.address", () => {
     setLocation('');
