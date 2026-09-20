@@ -168,18 +168,19 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
   });
 
-  test('Side Bets is a full-width rail between AFKING PASSES and the compact DGNRS rail', () => {
+  test('Sacrifice follows AFKING PASSES, then Side Bets and the compact DGNRS rail', () => {
     const passesEnd = html.indexOf('</details>', html.indexOf('id="afking-passes"'));
+    const sacrifice = html.indexOf('<app-sacrifice-panel>');
     const sideBets = html.indexOf('<section class="side-bets-rail"', passesEnd);
     const pari = html.indexOf('<app-parimutuel-panel>', sideBets);
     const sideBetsEnd = html.indexOf('</section>', pari);
     const rail = html.indexOf('<app-sdgnrs-burn-rail>', sideBetsEnd);
     const history = html.indexOf('<app-transaction-history>', rail);
-    assert.ok(passesEnd >= 0 && sideBets > passesEnd && pari > sideBets
+    assert.ok(passesEnd >= 0 && sacrifice > passesEnd && sideBets > sacrifice && pari > sideBets
       && sideBetsEnd > pari && rail > sideBetsEnd && history > rail,
-      'Side Bets leaves the play grid and sits immediately after the pass drawer');
-    assert.doesNotMatch(html.slice(passesEnd, sideBets), /<app-[a-z-]+>/,
-      'no component is inserted before the Side Bets rail');
+      'the sacrifice widget sits below the pass drawer, followed by Side Bets');
+    assert.deepEqual(html.slice(passesEnd, sideBets).match(/<app-[a-z-]+>/g), ['<app-sacrifice-panel>'],
+      'only the sacrifice widget is inserted before the Side Bets rail');
     assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
       'the DGNRS rail immediately follows Side Bets');
     assert.match(appCss,

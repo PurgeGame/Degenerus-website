@@ -388,6 +388,8 @@ body.layout-basic .pass-deity-symbol--taken {
    never for sale. They read as taken but stay legible, because they name a holder
    the player can recognise rather than an anonymous sold-out slot. */
 body.layout-basic .pass-deity-symbol--genesis {
+  /* The extra holder row must fit even when a narrow slot cannot stay square. */
+  aspect-ratio: auto;
   opacity: 0.5;
   filter: grayscale(0.35);
   border-color: rgba(147, 197, 253, 0.32);
@@ -406,9 +408,9 @@ body.layout-basic .pass-deity-dialog__note {
 
 body.layout-basic .pass-deity-symbol--genesis::after {
   content: attr(data-genesis-holder);
-  position: absolute;
-  inset: auto 0 0.1rem 0;
+  /* A separate grid row keeps the holder below the symbol name at every size. */
   font-size: 0.42rem;
+  line-height: 1;
   letter-spacing: 0.06em;
   color: #93c5fd;
   text-align: center;
