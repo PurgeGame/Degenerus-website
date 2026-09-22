@@ -154,10 +154,12 @@ describe('Discord lazy session discovery', () => {
     button.click();
     await settle();
     assert.deepEqual(requests, [
-      'https://api.degener.us/auth/discord/me',
-      'https://api.degener.us/api/player',
+      '/session/auth/discord/me',
+      '/session/api/player',
     ], 'the first trusted click still performs session discovery');
-    assert.match(opened[0] || '', /https:\/\/api\.degener\.us\/auth\/discord/,
+    // Same-origin now: the OAuth start resolves against the document origin instead of the
+    // retired api.degener.us host, which is what keeps the popup in the app's cookie jar.
+    assert.match(opened[0] || '', /^https?:\/\/[^/]+\/session\/auth\/discord/,
       'an anonymous explicit click still starts Discord OAuth');
   });
 });

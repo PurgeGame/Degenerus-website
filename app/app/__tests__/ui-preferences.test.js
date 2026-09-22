@@ -2,6 +2,8 @@ import { beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  LIGHTWEIGHT_MODE_STORAGE_KEY,
+  readLightweightModePreference, writeLightweightModePreference, syncLightweightMode,
   AFKING_LOW_FUND_WARNING_STORAGE_KEY,
   ALL_IN_BUTTON_STORAGE_KEY,
   BIGGEST_BOUNTIES_MODE_STORAGE_KEY,
@@ -78,4 +80,26 @@ describe('shared UI preferences', () => {
     assert.equal(readBiggestBountiesModePreference(), 'on');
     unsubscribe();
   });
+});
+
+test('Lightweight mode persists, notifies mounted consumers and works without storage', (t) => {
+  const seen = [];
+  const unsubscribe = subscribeUiPreferences(detail => seen.push(detail));
+  t.after(unsubscribe);
+  assert.equal(readLightweightModePreference(), false);
+  writeLightweightModePreference(true);
+  assert.equal(localStorage.getItem(LIGHTWEIGHT_MODE_STORAGE_KEY), '1');
+  assert.equal(readLightweightModePreference(), true);
+  assert.deepEqual(seen.at(-1), { name: 'lightweightMode', value: true });
+  let applied;
+  syncLightweightMode({ documentElement: { classList: { toggle: (name, value) => { applied = [name, value]; } } } });
+  assert.deepEqual(applied, ['lightweight-mode', true]);
+  const saved = globalThis.localStorage;
+  globalThis.localStorage = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+  try {
+    writeLightweightModePreference(true);
+    assert.equal(readLightweightModePreference(), true);
+    writeLightweightModePreference(false);
+    assert.equal(readLightweightModePreference(), false);
+  } finally { globalThis.localStorage = saved; writeLightweightModePreference(false); }
 });

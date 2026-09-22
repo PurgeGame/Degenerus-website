@@ -1442,7 +1442,7 @@ test('replay polling is one-second jittered, visibility-aware, and stops on term
   assert.match(componentSource, /document\?\.addEventListener\?\.\('visibilitychange'/);
   assert.match(componentSource, /document\?\.hidden === true/);
   assert.match(componentSource, /navigator\?\.onLine === false/);
-  assert.match(componentSource, /CRAPS_REPLAY_TERMINAL_STATES = new Set\(\['ready', 'failed', 'build-unavailable'\]\)/);
+  assert.match(componentSource, /CRAPS_REPLAY_TERMINAL_STATES = new Set\(\['ready', 'on-demand', 'failed', 'build-unavailable'\]\)/);
   assert.match(componentSource,
     /#scheduleReplayPoll\(\)[\s\S]*?crapsReplayPollDelay\(Math\.random\(\), this\.#replayPollAttempts\(\)\)/s);
   assert.match(componentSource, /#replayPollAttempts\(\)[\s\S]*?attempts < lowest/s,
@@ -1541,4 +1541,15 @@ test('confirmed comps read COMPED while paid and unknown entries stay ENTERED', 
   assert.equal(crapsEntry.crapsEnteredLabel({ comped: false }), 'ENTERED');
   assert.equal(crapsEntry.crapsEnteredLabel({}), 'ENTERED');
   assert.equal(crapsEntry.crapsEnteredLabel(null), 'ENTERED');
+});
+
+test('a settled chain replay can be opened on demand without preloaded artifacts',()=>{
+  const address='0x1111111111111111111111111111111111111111';
+  const replay={battleKey:'0x'+'12'.repeat(32),viewerBetId:'1',slot:340,finalized:true,buyInWei:'1000000000000000000'};
+  const states=new Map();
+  // Match the public action identity without assuming a replay was built.
+  const pending=crapsEntry.crapsResolutionPendingActions({address,replays:[replay]})[0];
+  states.set(pending.dismissKey,{status:'on-demand',ready:false});let opened=0;
+  const rows=crapsEntry.crapsResolutionPendingActions({address,replays:[replay],states,run:()=>{opened++;}});
+  assert.equal(rows[0].state,'ready');assert.equal(typeof rows[0].run,'function');rows[0].run();assert.equal(opened,1);
 });

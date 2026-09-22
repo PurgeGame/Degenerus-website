@@ -570,7 +570,7 @@ describe('<app-affiliate-panel> — referral network', () => {
     _fetchHandler = async (url) => {
       if (String(url).includes('/api/profiles?')) {
         profileCalls.push(String(url));
-        const requested = new URL(String(url)).searchParams.get('addresses')?.split(',') || [];
+        const requested = new URL(String(url), 'https://degener.us').searchParams.get('addresses')?.split(',') || [];
         return {
           profiles: requested.includes(linked)
             ? [{ address: linked, discord_name: 'Ninth Degen', discord_avatar: null }]
@@ -588,7 +588,7 @@ describe('<app-affiliate-panel> — referral network', () => {
     await settle(80);
     assert.equal(profileCalls.length, 2, 'nine wallets are resolved in two profile calls');
     for (const url of profileCalls) {
-      const addresses = new URL(url).searchParams.get('addresses')?.split(',') || [];
+      const addresses = new URL(url, 'https://degener.us').searchParams.get('addresses')?.split(',') || [];
       assert.ok(addresses.length <= 8, `profile batch stays at or below eight; got ${addresses.length}`);
     }
     assert.match(el.querySelector('[data-bind="aff-referees"]').textContent, /Ninth Degen/,

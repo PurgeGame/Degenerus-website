@@ -8,11 +8,17 @@
 // reason-map registrations.
 //
 // RESEARCH R5 confirmed: BUY-05 is a TWO-tx flow.
-//   tx 1: placeDegeneretteBet(player, currency, amountPerTicket, ticketCount,
-//                             customTicket, heroQuadrant) payable
+//   tx 1: placeDegeneretteBet(player, currency, amountPerSpin, spinCount,
+//                             symbol) payable
 //                             → emits BetPlaced(player, index, betId, packed)
 //   tx 2 (after RNG ready):  resolveDegeneretteBets(player, betIds[])
 //                             → emits DegeneretteResolved + DegeneretteResult per spin
+//
+// AUDIT a5d4d2cd (vendored into degenerus-sim) replaced the old
+// `uint32 customTraits, uint8 heroQuadrant` pair with a single `uint8 symbol`
+// (0..31: quadrant = symbol >> 3, icon = symbol & 7). The player's ticket is
+// generated fresh from the RNG seed every spin — colors are never chosen.
+// See DegenerusGameDegeneretteModule.sol.
 //
 // Sources:
 //  - DegenerusGame.sol:714 — placeDegeneretteBet (delegate-called via GAME).
@@ -181,7 +187,7 @@ describe('Plan 62-03: placeBet', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes placeDegeneretteBet(player, currency, amount, count, customTicket, heroQuadrant) with closure-form sendTx + msg.value', async () => {
+  test('invokes placeDegeneretteBet(player, currency, amount, count, symbol) with closure-form sendTx + msg.value', async () => {
     const amountPerTicket = 10n ** 16n;  // 0.01 ETH
     const ticketCount = 3;
     const msgValueWei = amountPerTicket * BigInt(ticketCount);
@@ -189,8 +195,7 @@ describe('Plan 62-03: placeBet', () => {
       currency: 0,
       amountPerTicketWei: amountPerTicket,
       ticketCount,
-      customTicket: 0,
-      heroQuadrant: 0,
+      symbol: 21, // quadrant 2 (21 >> 3), icon 5 (21 & 7)
       msgValueWei,
     });
     assert.equal(lastFakeContract._calls.placeDegeneretteBet.length, 1);
@@ -199,11 +204,10 @@ describe('Plan 62-03: placeBet', () => {
     assert.equal(args[1], 0, 'currency = ETH (0)');
     assert.equal(args[2], amountPerTicket, 'amountPerTicket bigint');
     assert.equal(args[3], 3, 'ticketCount = 3');
-    assert.equal(args[4], 0, 'customTicket = 0');
-    assert.equal(args[5], 0, 'heroQuadrant = 0 (quadrant A; v48 requires a valid 0-3)');
-    // 7th arg = overrides object containing value
-    assert.ok(args[6] && typeof args[6] === 'object', 'overrides object passed');
-    assert.equal(args[6].value, msgValueWei, 'msg.value matches msgValueWei');
+    assert.equal(args[4], 21, 'symbol = 21 (quadrant << 3 | icon)');
+    // 6th arg = overrides object containing value
+    assert.ok(args[5] && typeof args[5] === 'object', 'overrides object passed');
+    assert.equal(args[5].value, msgValueWei, 'msg.value matches msgValueWei');
   });
 
   test('claimable-first ETH wager preserves the sentinel and sends only the wallet shortfall', async () => {
@@ -219,15 +223,14 @@ describe('Plan 62-03: placeBet', () => {
       currency: 0,
       amountPerTicketWei: amountPerTicket,
       ticketCount,
-      customTicket: 0,
-      heroQuadrant: 0,
+      symbol: 0,
       preferClaimable: true,
     });
 
     assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, [[CONNECTED]],
       'the click-time split reads the acting player from chain');
     const [args] = lastFakeContract._calls.placeDegeneretteBet;
-    assert.equal(args[6].value, amountPerTicket,
+    assert.equal(args[5].value, amountPerTicket,
       'two spins come from claimable and the final spin comes from wallet ETH');
     assert.equal(payment.claimableUsedWei, amountPerTicket * 2n);
     assert.equal(payment.msgValueWei, amountPerTicket);
@@ -243,14 +246,13 @@ describe('Plan 62-03: placeBet', () => {
       currency: 0,
       amountPerTicketWei: amountPerTicket,
       ticketCount: 2,
-      customTicket: 0,
-      heroQuadrant: 0,
+      symbol: 0,
       preferClaimable: false,
     });
 
     assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, []);
     const [args] = lastFakeContract._calls.placeDegeneretteBet;
-    assert.equal(args[6].value, amountPerTicket * 2n);
+    assert.equal(args[5].value, amountPerTicket * 2n);
     assert.equal(payment.claimableUsedWei, 0n);
   });
 
@@ -263,13 +265,12 @@ describe('Plan 62-03: placeBet', () => {
       currency: 0,
       amountPerTicketWei: amountPerTicket,
       ticketCount: 2,
-      customTicket: 0,
-      heroQuadrant: 0,
+      symbol: 0,
       preferClaimable: true,
     });
 
     const [args] = lastFakeContract._calls.placeDegeneretteBet;
-    assert.equal(args[6].value, amountPerTicket * 2n);
+    assert.equal(args[5].value, amountPerTicket * 2n);
   });
 
   test('rejects spinCount < 1', async () => {
@@ -278,8 +279,7 @@ describe('Plan 62-03: placeBet', () => {
         currency: 0,
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 0,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: 0n,
       }),
       /Spins must be 1-25 for ETH/i,
@@ -300,8 +300,7 @@ describe('Plan 62-03: placeBet', () => {
         currency,
         amountPerTicketWei: amount,
         ticketCount: cap,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: currency === 0 ? amount * BigInt(cap) : 0n,
       });
       await assert.rejects(
@@ -309,8 +308,7 @@ describe('Plan 62-03: placeBet', () => {
           currency,
           amountPerTicketWei: amount,
           ticketCount: cap + 1,
-          customTicket: 0,
-          heroQuadrant: 0,
+          symbol: 0,
           msgValueWei: 0n,
         }),
         new RegExp(`Spins must be 1-${cap} for ${unit}`, 'i'),
@@ -331,30 +329,30 @@ describe('Plan 62-03: placeBet', () => {
     const ethMinChainWei = (5n * 10n ** 15n) / BigInt(ETH_DIVISOR);
     await assert.rejects(
       degeneretteMod.placeBet({
-        currency: 0, amountPerTicketWei: ethMinChainWei - 1n, ticketCount: 1, heroQuadrant: 0,
+        currency: 0, amountPerTicketWei: ethMinChainWei - 1n, ticketCount: 1, symbol: 0,
       }),
       /Minimum bet is 0.005 ETH per spin/i,
     );
     // …and exactly at the ETH minimum goes through.
     await degeneretteMod.placeBet({
-      currency: 0, amountPerTicketWei: ethMinChainWei, ticketCount: 1, heroQuadrant: 0,
+      currency: 0, amountPerTicketWei: ethMinChainWei, ticketCount: 1, symbol: 0,
       msgValueWei: ethMinChainWei,
     });
     await assert.rejects(
       degeneretteMod.placeBet({
-        currency: 1, amountPerTicketWei: 99n * 10n ** 18n, ticketCount: 1, heroQuadrant: 0,
+        currency: 1, amountPerTicketWei: 99n * 10n ** 18n, ticketCount: 1, symbol: 0,
       }),
       /Minimum bet is 100 FLIP per spin/i,
     );
     await assert.rejects(
       degeneretteMod.placeBet({
-        currency: 3, amountPerTicketWei: 10n ** 17n, ticketCount: 1, heroQuadrant: 0,
+        currency: 3, amountPerTicketWei: 10n ** 17n, ticketCount: 1, symbol: 0,
       }),
       /Minimum bet is 1 WWXRP per spin/i,
     );
     // Exactly at the minimum is a valid bet.
     await degeneretteMod.placeBet({
-      currency: 1, amountPerTicketWei: 100n * 10n ** 18n, ticketCount: 1, heroQuadrant: 0,
+      currency: 1, amountPerTicketWei: 100n * 10n ** 18n, ticketCount: 1, symbol: 0,
     });
   });
 
@@ -364,8 +362,7 @@ describe('Plan 62-03: placeBet', () => {
         currency: 2,
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: 0n,
       }),
       /Unsupported currency|UnsupportedCurrency|not supported/i,
@@ -378,8 +375,7 @@ describe('Plan 62-03: placeBet', () => {
         currency: 0,
         amountPerTicketWei: 0n,
         ticketCount: 1,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: 0n,
       }),
       /Amount.*greater than 0|Amount must|InvalidBet/i,
@@ -394,8 +390,7 @@ describe('Plan 62-03: placeBet', () => {
         currency: 0,
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: 10n ** 16n,
       }),
       /Wallet not connected/i,
@@ -413,8 +408,7 @@ describe('Plan 62-03: placeBet', () => {
         currency: 0,
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
-        customTicket: 0,
-        heroQuadrant: 0,
+        symbol: 0,
         msgValueWei: 10n ** 16n,
       }),
     );
@@ -799,7 +793,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
 
   test('canonical ABI: placeDegeneretteBet signature', () => {
     assert.ok(
-      SRC.includes('function placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) external payable'),
+      SRC.includes('function placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) external payable'),
       'canonical placeDegeneretteBet ABI fragment present',
     );
   });
@@ -807,7 +801,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   test('payable preflight carries the same ETH value as the wallet send', () => {
     assert.match(
       SRC,
-      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amount, tc, ct, hq, \{ value \}\]/,
+      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amount, tc, sym, \{ value \}\]/,
       'ETH bets must not be simulated with msg.value=0',
     );
   });

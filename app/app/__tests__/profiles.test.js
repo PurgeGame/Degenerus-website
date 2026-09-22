@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
+import { CHAIN } from '../chain-config.js';
 import { __resetSimRosterForTest, fetchProfiles } from '../profiles.js';
 
 const LINKED = `0x${'1'.repeat(40)}`;
@@ -97,7 +98,7 @@ test('overlapping panels share per-wallet lookups and respect eight-address batc
   const batches = [];
   globalThis.fetch = async (url) => {
     if (!String(url).includes('/api/profiles?')) return response({ players: [] });
-    const addresses = new URL(url).searchParams.get('addresses').split(',');
+    const addresses = new URL(url, 'https://degener.us').searchParams.get('addresses').split(',');
     batches.push(addresses);
     return response({ profiles: addresses.map((address) => ({ address, discord_name: address })) });
   };
@@ -188,7 +189,7 @@ test('cached identities stay bounded and cannot be changed by a consumer', async
   globalThis.fetch = async (url) => {
     if (!String(url).includes('/api/profiles?')) return response({ players: [] });
     requests++;
-    return response({ profiles: new URL(url).searchParams.get('addresses').split(',')
+    return response({ profiles: new URL(url, 'https://degener.us').searchParams.get('addresses').split(',')
       .map((address) => ({ address, discord_name: 'Original' })) });
   };
   const initial = await fetchProfiles(wallets);
@@ -226,4 +227,157 @@ test('a fresh profile lookup cannot be overwritten by a pre-link in-flight respo
   assert.equal((await fresh).get(LINKED)?.name, 'Just linked');
   assert.equal((await fetchProfiles([LINKED])).get(LINKED)?.name, 'Just linked');
   assert.equal(requests, 2);
+});
+
+// --- chain mode: the published roster file replaces the session service ---
+
+async function inChainMode(run) {
+  const previous = CHAIN.readMode;
+  CHAIN.readMode = 'chain';
+  try { return await run(); } finally { CHAIN.readMode = previous; __resetSimRosterForTest(); }
+}
+
+// A roster as the builder writes it: stamped with the chain it was built for,
+// which is what lets the simulated lane be trusted.
+function roster(profiles) {
+  return response({
+    version: 2,
+    generatedAt: '2026-09-22T00:00:00.000Z',
+    chainId: CHAIN.id,
+    count: Object.keys(profiles).length,
+    profiles,
+  });
+}
+
+test('chain mode resolves identities from one published roster request', async () => {
+  await inChainMode(async () => {
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      return roster({
+        [LINKED]: { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/11/a.png' },
+        [SIMULATED]: { name: 'Moon Goblin', avatar: null },
+      });
+    };
+
+    const profiles = await fetchProfiles([LINKED.toUpperCase().replace('0X', '0x'), SIMULATED]);
+
+    assert.deepEqual(profiles.get(LINKED), { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/11/a.png' });
+    assert.deepEqual(profiles.get(SIMULATED), { name: 'Moon Goblin', avatar: null });
+    assert.throws(() => { profiles.get(LINKED).name = 'Changed'; }, TypeError);
+    assert.deepEqual(calls, ['/app/assets/discord-roster.json'],
+      'no session-service or sim-roster request is made in chain mode');
+
+    // Every later panel mount shares the one fetch.
+    await fetchProfiles([SIMULATED]);
+    assert.equal(calls.length, 1);
+  });
+});
+
+test('chain mode omits unlisted wallets and refuses an off-CDN avatar', async () => {
+  await inChainMode(async () => {
+    globalThis.fetch = async () => roster({
+      [LINKED]: { name: 'WAR', avatar: 'https://evil.example.com/x.png' },
+      [`0x${'9'.repeat(40)}`]: { name: '   ', avatar: null },
+    });
+
+    const profiles = await fetchProfiles([LINKED, SIMULATED, `0x${'9'.repeat(40)}`]);
+
+    assert.deepEqual(profiles.get(LINKED), { name: 'WAR', avatar: null });
+    assert.equal(profiles.has(SIMULATED), false, 'an unlinked wallet keeps its shortened-address fallback');
+    assert.equal(profiles.has(`0x${'9'.repeat(40)}`), false, 'a blank name is not an identity');
+  });
+});
+
+test('a missing roster file degrades to addresses and is not re-requested per mount', async () => {
+  await inChainMode(async () => {
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; return response(null, false); };
+
+    assert.equal((await fetchProfiles([LINKED])).size, 0);
+    assert.equal((await fetchProfiles([SIMULATED])).size, 0);
+    assert.equal((await fetchProfiles([LINKED])).size, 0);
+    assert.equal(requests, 1, 'the retry window absorbs the mount wave');
+
+    // A publish that lands the file is picked up by an explicit refresh.
+    globalThis.fetch = async () => roster({ [LINKED]: { name: 'Just linked', avatar: null } });
+    assert.equal((await fetchProfiles([LINKED], { fresh: true })).get(LINKED)?.name, 'Just linked');
+  });
+});
+
+test('a real Discord link outranks a simulated identity for the same wallet', async () => {
+  await inChainMode(async () => {
+    globalThis.fetch = async () => roster({
+      [LINKED]: { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/496/abc.png' },
+      [SIMULATED]: {
+        name: 'Ritual Bot',
+        avatar: null,
+        sim: { type: 'afkQuestFlip', seed: '12b56589792754c4dd201306502a838448971f4c', colors: ['#17321d', '#9cff57', '#ffd23f'] },
+      },
+    });
+
+    const profiles = await fetchProfiles([LINKED, SIMULATED]);
+
+    assert.deepEqual(profiles.get(LINKED), { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/496/abc.png' });
+    assert.equal(profiles.get(SIMULATED).name, 'Ritual Bot');
+    assert.match(profiles.get(SIMULATED).avatar, /^data:image\/svg\+xml;charset=utf-8,/,
+      'a bot face is drawn locally, with no API to ask');
+  });
+});
+
+test('a simulated face is drawn only for the wallets a panel actually asked about', async () => {
+  await inChainMode(async () => {
+    const sim = { type: 'degen', seed: '12b56589792754c4dd201306502a838448971f4c', colors: ['#17321d', '#9cff57', '#ffd23f'] };
+    globalThis.fetch = async () => roster({
+      [LINKED]: { name: 'Bot One', avatar: null, sim },
+      [SIMULATED]: { name: 'Bot Two', avatar: null, sim },
+    });
+
+    const first = await fetchProfiles([LINKED]);
+    assert.ok(first.get(LINKED).avatar.startsWith('data:image/svg+xml'));
+    assert.equal(first.has(SIMULATED), false);
+
+    // The second wallet materializes on its own request, and the first is
+    // handed back as the same frozen object rather than redrawn.
+    const second = await fetchProfiles([LINKED, SIMULATED]);
+    assert.equal(second.get(LINKED), first.get(LINKED));
+    assert.ok(second.get(SIMULATED).avatar.startsWith('data:image/svg+xml'));
+  });
+});
+
+test('a roster built for another chain contributes its links but never its bots', async () => {
+  await inChainMode(async () => {
+    const sim = { type: 'degen', seed: '12b56589792754c4dd201306502a838448971f4c', colors: ['#17321d', '#9cff57', '#ffd23f'] };
+    globalThis.fetch = async () => response({
+      version: 2,
+      chainId: CHAIN.id + 1, // a roster exported against a different deployment
+      profiles: {
+        [LINKED]: { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/496/abc.png' },
+        [SIMULATED]: { name: 'Ritual Bot', avatar: null, sim },
+      },
+    });
+
+    const profiles = await fetchProfiles([LINKED, SIMULATED]);
+
+    assert.deepEqual(profiles.get(LINKED), { name: 'WAR', avatar: 'https://cdn.discordapp.com/avatars/496/abc.png' },
+      'a wallet’s Discord account is the same account on any chain');
+    assert.deepEqual(profiles.get(SIMULATED), { name: 'Ritual Bot', avatar: null },
+      'the invented face is dropped; only the bare name survives');
+  });
+});
+
+test('a roster with no chain stamp is treated as foreign for the simulated lane', async () => {
+  await inChainMode(async () => {
+    globalThis.fetch = async () => response({
+      version: 1,
+      profiles: {
+        [SIMULATED]: {
+          name: 'Ritual Bot',
+          avatar: null,
+          sim: { type: 'degen', seed: '12b56589792754c4dd201306502a838448971f4c', colors: ['#17321d', '#9cff57', '#ffd23f'] },
+        },
+      },
+    });
+    assert.equal((await fetchProfiles([SIMULATED])).get(SIMULATED).avatar, null);
+  });
 });

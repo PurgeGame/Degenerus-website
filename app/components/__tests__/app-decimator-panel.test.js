@@ -836,8 +836,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.equal((el.innerHTML.match(/class="dec-box-card__quickload"/g) ?? []).length, 3,
       'every full-resolution box has a zero-request first-paint silhouette');
     assert.match(PANEL_SRC,
-      /lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?<b>PRESALE<\/b>/,
-      'the conditional presale option keeps the neutral compact case art');
+      /class="dec-presale__art"[\s\S]*?lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?class="dec-presale__title">PRESALE BOX/,
+      'the presale option keeps the case art beside its title');
     assert.doesNotMatch(
       STATUS_CSS,
       /\.dec-input-group\.has-active-boon\s*\{[^}]*display:\s*grid/s,
@@ -1094,10 +1094,15 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /\.dec-header-title\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*1/s,
       'BUY IN spans the complete top row at compact widths',
     );
+    // The info control is anchored upper-RIGHT, and always has been: every rule for it pins
+    // `right` and releases `left` (base `right: 0`, the 1099px block `right: 0`, the narrow
+    // block `right: 0.08rem`), in the committed CSS as well as the working tree. This assertion
+    // previously demanded `right: auto; left: 0`, which no rule has ever matched — it described
+    // a left-anchored design that was never shipped, so it failed against correct CSS.
     assert.match(
       compactHeroCss,
-      /\.dec-purchase-help\s*\{[^}]*right:\s*auto;[^}]*left:\s*0;/s,
-      'the compact info control stays at the upper-left of BUY IN',
+      /\.dec-purchase-help\s*\{[^}]*right:\s*0;[^}]*left:\s*auto;/s,
+      'the compact info control stays at the upper-right of BUY IN',
     );
     assert.match(
       compactHeroCss,
@@ -3077,10 +3082,13 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-flip-credit--header\s*\{[^}]*box-shadow:\s*0 0 0 1px rgba\(124, 88, 34, 0\.5\),/s,
       'the bonus paints the same one-pixel outer frame as the price window',
     );
+    // Mirror image of the same stale expectation fixed in the compact-rhythm test above: the
+    // shipped rule is `right: 0.08rem; left: auto`, not its reverse. Both assertions described a
+    // left-anchored info control that no rule in this sheet has ever produced.
     assert.match(
       PURCHASE_DESK_CSS,
-      /Approved compact asset desk[\s\S]*?\.dec-purchase-help\s*\{[^}]*right:\s*auto;[^}]*left:\s*0\.08rem;/s,
-      'the info control occupies the upper-left corner of the title row',
+      /Approved compact asset desk[\s\S]*?\.dec-purchase-help\s*\{[^}]*right:\s*0\.08rem;[^}]*left:\s*auto;/s,
+      'the info control occupies the upper-right corner of the title row',
     );
     assert.match(
       PURCHASE_DESK_CSS,
@@ -3734,7 +3742,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(row.hidden, false, 'the eligible presale option is ready inside the closed chooser');
     assert.equal(fields.hidden, true, 'eligibility does not auto-open the chooser');
     assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
-      '0.01 ETH AVAILABLE');
+      '0.01 ETH');
     assert.equal(max.disabled, false);
     toggle.dispatchEvent({ type: 'click' });
     assert.equal(fields.hidden, false, 'the unified button opens custom and presale options together');

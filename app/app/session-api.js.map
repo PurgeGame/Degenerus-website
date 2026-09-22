@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["session-api.js"],
+  "sourcesContent": ["// app/app/session-api.js — the ONE definition of where the Discord/wallet session service lives.\n//\n// This used to be the string 'https://api.degener.us', repeated in four modules (discord-link,\n// profiles, records, player-target). That host was a separate Fly app; it was destroyed with the\n// rest of the hosted infrastructure, and the service now runs as a Cloudflare Pages Function on\n// THIS origin (website/functions/session/[[path]].js) over D1.\n//\n// ⭐ Same origin is not just tidier, it removes a class of bug the old code had to work around.\n// Cross-site cookies from api.degener.us needed SameSite=None, so the OAuth popup's top-level\n// cookie and the app's fetch cookies could land in different jars — Safari/ITP especially. That\n// is why discord-link.js carries a one-use `discordLinkToken` ticket and a comment explaining\n// that /auth/discord/me may disagree with /api/player. On one origin the cookie is SameSite=Lax\n// and both see the same session; the ticket is kept as belt-and-braces through the redirect.\n//\n// A relative base also means localhost talks to a local `wrangler pages dev`, and the deployed\n// site talks to itself, with no per-environment switch.\nexport const SESSION_API = '/session';\n"],
+  "mappings": "AAgBO,aAAM,YAAc",
+  "names": []
+}

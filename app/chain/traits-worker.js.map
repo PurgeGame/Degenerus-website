@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["traits-worker.js"],
+  "sourcesContent": ["import { deriveTraits } from './traits.js';\nself.onmessage = ({ data }) => {\n  try {\n    const traits = deriveTraits(BigInt(data.baseKey), data.startIndex, data.count, BigInt(data.entropy));\n    self.postMessage({ traits }, [traits.buffer]);\n  } catch (error) { self.postMessage({ error: error.message }); }\n};\n"],
+  "mappings": "AAAA,OAAS,gBAAAA,MAAoB,cAC7B,KAAK,UAAY,CAAC,CAAE,KAAAC,CAAK,IAAM,CAC7B,GAAI,CACF,MAAMC,EAASF,EAAa,OAAOC,EAAK,OAAO,EAAGA,EAAK,WAAYA,EAAK,MAAO,OAAOA,EAAK,OAAO,CAAC,EACnG,KAAK,YAAY,CAAE,OAAAC,CAAO,EAAG,CAACA,EAAO,MAAM,CAAC,CAC9C,OAASC,EAAO,CAAE,KAAK,YAAY,CAAE,MAAOA,EAAM,OAAQ,CAAC,CAAG,CAChE",
+  "names": ["deriveTraits", "data", "traits", "error"]
+}

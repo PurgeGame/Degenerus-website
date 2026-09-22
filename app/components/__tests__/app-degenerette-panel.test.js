@@ -310,8 +310,12 @@ function installDeityOwners(owners = new Map()) {
   }));
 }
 import {
-  DGN_COLOR_HEX, DGN_TICKET_COPY_EVENT,
+  DGN_COLOR_HEX, DGN_TICKET_COPY_EVENT, dgnSymbolPath,
 } from '../../app/dgn-traits.js';
+// Audit a5d4d2cd: the picker never picks a color — every rendered badge uses
+// this fixed neutral swatch (mirrors app-degenerette-panel.js's own
+// DGN_NEUTRAL_COLOR; duplicated here since the panel does not export it).
+const DGN_NEUTRAL_COLOR = 6; // 'silver'
 import { dgnHouseTraits, dgnScore } from '../../app/dgn-reels.js';
 
 // reveal-overlay.js subclasses HTMLElement at module scope, so it can only be
@@ -604,11 +608,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(el.innerHTML, /data-bind="deg-actions"/);
   });
 
-  test('ticket builder comes first and the readable wager uses logo currency choices', () => {
-    const ticketAt = PANEL_SRC.indexOf('deg-block deg-block--ticket');
+  test('symbol picker comes first and the readable wager uses logo currency choices', () => {
+    const ticketAt = PANEL_SRC.indexOf('deg-block deg-block--symbol');
     const wagerAt = PANEL_SRC.indexOf('deg-block deg-block--wager');
     assert.ok(ticketAt >= 0 && wagerAt > ticketAt,
-      'ticket builder precedes wager in visual and keyboard order');
+      'symbol picker precedes wager in visual and keyboard order');
     assert.doesNotMatch(PANEL_SRC, /deg-block__step/, 'numbered setup labels are removed');
     assert.match(PANEL_SRC, /aria-label="Wager currency"/);
     assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
@@ -713,8 +717,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       PANEL_SRC,
-      /img\.src\s*=\s*dgnSymbolPath\(q, s, t\.c\)/,
-      'symbol choices use the standalone trait marks instead of circular ticket badges',
+      /img\.src\s*=\s*dgnSymbolPath\(q, s, DGN_NEUTRAL_COLOR\)/,
+      'symbol choices use the standalone trait marks on the fixed neutral swatch — '
+        + 'audit a5d4d2cd removed the per-quadrant picked color (t.c) entirely',
     );
     assert.match(
       APP_CSS,
@@ -740,33 +745,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.deg-block \.dgn-ticket-wrap\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*1/s,
-      'opening the trait panel cannot flex-shrink the ticket',
-    );
-    assert.match(
-      APP_CSS,
-      /@media \(min-width:\s*1100px\)[\s\S]*?\.deg-block \.dgn-ticket-wrap\s*\{[^}]*width:\s*min\(232px, 100%\)/s,
-      'the wide picker spends recovered padding on a larger ticket',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-colors\s*\{[^}]*grid-template-columns:\s*repeat\(8, 1\.05rem\) 1\.3rem/s,
-      'the Hero star shares the compact color row instead of consuming its own line',
-    );
-    assert.doesNotMatch(PANEL_SRC, /dgn-editor-head/,
-      'the standalone labeled Hero row is removed');
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-color-btn\s*\{[^}]*width:\s*1\.05rem[^}]*height:\s*1\.05rem/s,
-      'color dots stay compact',
-    );
-    assert.match(
-      APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.deg-block \.dgn-colors\s*\{[^}]*grid-template-columns:\s*repeat\(8, 1\.25rem\) 1\.3rem[^}]*gap:\s*0\.12rem[^}]*\}[\s\S]*?\.deg-block \.dgn-color-btn\s*\{[^}]*width:\s*1\.25rem[^}]*height:\s*1\.25rem[^}]*min-width:\s*0[^}]*min-height:\s*0[^}]*padding:\s*0\.265rem[^}]*background-clip:\s*content-box !important/s,
-      'phones render small color dots without shrinking the surrounding choice buttons to the same size',
-    );
-    assert.match(
-      APP_CSS,
       /\.deg-block--wager \.deg-place-cta\s*\{[^}]*font-size:\s*0\.74rem/s,
       'the amount-bearing Place Bet label stays comfortably readable',
     );
@@ -786,23 +764,23 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
   });
 
-  test('clicking an inventory ticket copies all four traits and makes its first gold trait Hero', () => {
+  test('clicking an inventory ticket carries only its gold quadrant\'s icon into the picker', () => {
+    // Audit a5d4d2cd: a copied inventory ticket still has 4 real quadrants +
+    // colors (it's a settled/owned ticket), but only ONE symbol survives into
+    // the picker — the gold quadrant's icon, same "make gold Hero" preference
+    // as before. The color itself is never carried over (see #copyInventoryTicket).
     const el = instantiate();
     document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
       detail: { traitIds: [56, 65, 130, 195], level: 17 },
     }));
 
-    assert.equal(el.querySelector('[data-bind="dgn-img-0"]').src,
-      '/badges-circular/crypto_00_xrp_gold.svg');
-    assert.equal(el.querySelector('[data-bind="dgn-img-1"]').src,
-      '/badges-circular/zodiac_01_taurus_pink.svg');
-    const hero = el.querySelector('[data-bind="dgn-cell-0"]');
-    assert.ok(hero.classList.contains('q-hero'));
-    assert.equal(hero.getAttribute('data-trait-color'), 'gold');
-    assert.equal(hero.style['--dgn-trait-color'], '#ab8d3f',
-      'Hero spikes inherit the exact color of their badge');
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
-      'copying an inventory ticket keeps the manual trait picker closed');
+    assert.equal(el.getTicketDraft().symbol, 0);
+    assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
+      dgnSymbolPath(0, 0, DGN_NEUTRAL_COLOR),
+      'the copied icon uses standalone neutral art, without its old color');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'WWXRP');
+    assert.equal(el.querySelector('[data-bind="dgn-category-0"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-0"]').getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
       'copying a ticket does not recreate the removed header status pill');
     el.disconnectedCallback();
@@ -1030,8 +1008,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         target: String(2_000n * 10n ** 18n),
         amountPerSpin: String(400n * 10n ** 18n),
         spinCount: 5,
-        traitIds: [56, 65, 130, 195],
-        heroQuadrant: 2,
+        symbol: 18,
         variant: 'secondary',
         submit: true,
       },
@@ -1043,13 +1020,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(fake._calls.placeDegeneretteBet[0][2], 400n * 10n ** 18n,
       'five spins divide the exact 2,000 FLIP minimum evenly');
     assert.equal(fake._calls.placeDegeneretteBet[0][3], 5, 'the preset retains five spins');
+    // The submitted symbol stays pinned to the quest snapshot.
     assert.equal(
       Number(fake._calls.placeDegeneretteBet[0][4]),
-      56 | (1 << 8) | (2 << 16) | (3 << 24),
-      'the popup ticket is the ticket submitted to the contract',
+      18,
+      'symbol matches the quest snapshot',
     );
-    assert.equal(fake._calls.placeDegeneretteBet[0][5], 2,
-      'the popup Hero quadrant is preserved through submission');
+    assert.equal(fake._calls.placeDegeneretteBet[0].length, 6,
+      'placeDegeneretteBet(player, currency, amount, spinCount, symbol) + one payable overrides object');
     assert.deepEqual({
       currency: el.querySelector('[name="deg-currency"]').value,
       spins: el.querySelector('[name="deg-ticket-count"]').value,
@@ -1111,7 +1089,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(60);
 
     assert.ok(recordedArgs, 'placeDegeneretteBet invoked');
-    assert.equal(recordedArgs[6].value, fullWagerWei - spendableClaimableWei,
+    // Audit a5d4d2cd: placeDegeneretteBet(player, currency, amount, spinCount,
+    // symbol) has 5 positional args now (was 6 with customTicket+heroQuadrant),
+    // so the payable overrides object shifts from args[6] to args[5].
+    assert.equal(recordedArgs[5].value, fullWagerWei - spendableClaimableWei,
       'the default checked preference spends claimable first and sends only the wallet remainder');
     // State transitions to awaitingRng, but the bottom tray is its only visible surface.
     assert.equal(el.querySelector('.deg-state'), null,
@@ -1130,11 +1111,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
   test('reload recovers a DB-pending bet stranded by an older receipt parser', async () => {
     const amountPerSpin = 250n * 10n ** 18n;
-    const packed = 13n
+    // Audit a5d4d2cd: the packed word's low bits are one symbol (0..31), not a
+    // full uint32 ticket + separate 2-bit heroQuadrant field. quadrant 2, icon
+    // 5 → symbol 21; heroQuadrant derives back out as symbol >> 3.
+    const symbol = (2 << 3) | 5; // 21
+    const packed = BigInt(symbol)
       | (5n << 32n)
       | (1n << 40n)
-      | (amountPerSpin << 42n)
-      | (2n << 218n);
+      | (amountPerSpin << 42n);
     const reads = [];
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async (...args) => {
@@ -1177,8 +1161,13 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.id, 'degenerette:42');
     assert.equal(pending.label, '5 spins');
-    assert.equal(pending.ticketPacked, '13', 'the exact submitted ticket feeds the pending-card art');
-    assert.equal(pending.heroQuadrant, 2);
+    // Audit a5d4d2cd: there is no full ticket to report pre-resolution any
+    // more — app-reveal-tray.js's pending-card art is gated on `!= null` and
+    // skips cleanly. Only the chosen symbol (and its derived heroQuadrant) survive.
+    assert.equal(pending.ticketPacked, null,
+      'no full ticket exists pre-resolution — only the chosen symbol is known');
+    assert.equal(pending.symbol, symbol, 'the exact submitted symbol feeds the pending-card context');
+    assert.equal(pending.heroQuadrant, 2, 'heroQuadrant derives from the chosen symbol (symbol >> 3)');
     assert.equal(pending.state, 'waiting');
     assert.equal(el.querySelector('.deg-state'), null,
       'the bottom pending row is the sole RNG-wait surface');
@@ -1191,8 +1180,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       currency: 1,
       amountPerSpin: String(amountPerSpin),
       spinCount: 5,
-      hero: 2,
-      ticket: '13',
+      symbol,
       packedData: String(packed),
     }, 'the recovered bet is durable across another refresh');
     assert.doesNotMatch(PANEL_SRC, /manual resolve required/i);
@@ -1653,7 +1641,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       placeDegeneretteBet: Object.assign(
         async (...args) => {
           placeCalls += 1;
-          recordedValue = args[6]?.value;
+          // Audit a5d4d2cd: symbol replaces customTicket+heroQuadrant, so the
+          // payable overrides object is now args[5], not args[6].
+          recordedValue = args[5]?.value;
           return makeFakeTx(makeFakeReceipt([
             { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
           ]));
@@ -2308,7 +2298,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     }
   });
 
-  test('Degenerette basics quotes the selected board at the player Degen Score and explains ETH Hero influence', async () => {
+  test('Degenerette basics quotes the guaranteed floor at the player Degen Score and explains ETH Hero influence', async () => {
     decimatorMod.__setDecimatorContextReaderForTest(async () => ({ activityScore: 305 }));
     _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
       ? { cards: [] }
@@ -2317,8 +2307,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     try {
       await settle();
       assert.match(el.innerHTML, /data-bind="deg-basics-info"[^>]*aria-label="How Degenerette works"/);
-      assert.match(el.innerHTML, /Pick a symbol and color for each quadrant/);
-      assert.match(el.innerHTML, /Matching symbols score/);
+      // Audit a5d4d2cd: the player picks one Hero symbol (quadrant + icon);
+      // every other quadrant and every color (Hero included) is house-rolled.
+      assert.match(el.innerHTML, /Pick one Hero symbol/);
+      assert.match(el.innerHTML, /rolled icon that matches your Hero scores 2/);
       assert.match(el.innerHTML,
         /When you bet ETH,[\s\S]*?selected Hero symbol[\s\S]*?main jackpot drawing[\s\S]*?color is still random/,
         'the info sheet explains the selected Hero symbol\'s ETH-only main-jackpot influence');
@@ -2326,46 +2318,60 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
       assert.match(el.innerHTML, /Selected board · ETH \/ FLIP payouts/);
 
-      document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
-        detail: { traitIds: [56, 121, 130, 203] },
-      }));
+      // Audit a5d4d2cd: payout no longer depends on the picked symbol at all —
+      // there is one shared table for every quadrant/icon choice, scaled only
+      // by currency and Degen Score. The preview quotes the guaranteed floor
+      // (goldMatches=0) since matched-gold is unknowable pre-spin.
+      const expectedEth = degeneretteMod.degenerettePayoutTable({ currency: 0, activityScore: 305 }).rows;
+      const expectedFlip = degeneretteMod.degenerettePayoutTable({ currency: 1, activityScore: 305 }).rows;
+      const centix = (hundredths) => {
+        const n = BigInt(hundredths);
+        const whole = (n / 100n).toString();
+        const frac = (n % 100n).toString().padStart(2, '0').replace(/0$/, '');
+        return frac ? `${whole}.${frac}` : whole;
+      };
+
       let payoutTables = el.querySelectorAll('.deg-payout-table');
-      assert.equal(payoutTables.length, 1, 'the selected board has one payout table');
+      assert.equal(payoutTables.length, 1, 'one guaranteed-floor payout table');
       let payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
       assert.equal(payoutRows.length, 9, 'the universal zero scores share one 0–1 row');
       assert.ok(payoutRows.every((row) => row.children.length === 3),
-        'each row contains score plus ETH and FLIP for only the selected board');
-      let payoutHeadings = payoutTables[0].querySelectorAll('th')
+        'each row contains score plus ETH and FLIP');
+      const payoutHeadings = payoutTables[0].querySelectorAll('th')
         .map((heading) => heading.textContent).join(' ');
-      assert.match(payoutHeadings, /2 GOLD · HERO GOLD/);
+      assert.match(payoutHeadings, /GUARANTEED FLOOR/);
       assert.match(payoutHeadings, /ETH/);
       assert.match(payoutHeadings, /FLIP/);
       assert.match(payoutHeadings, /DEGEN SCORE 305/,
         'the visible quote prefers the live GAME score over a stale indexed score');
-      assert.doesNotMatch(payoutHeadings, /0 GOLD|1 GOLD|3 GOLD|4 GOLD|OTHER HERO/);
-      assert.equal(payoutRows[1].children[1].textContent, '2.38',
-        'score 2 ETH uses the selected board adjusted by Degen Score 305');
-      assert.equal(payoutRows[1].children[2].textContent, '2.38',
-        'score 2 FLIP uses the selected board adjusted by Degen Score 305');
-      assert.equal(payoutRows[5].children[1].textContent, '269.68',
+      assert.doesNotMatch(payoutHeadings, /GOLD|HERO/,
+        'the table no longer varies by a picked gold-quadrant count — there is nothing to pick');
+      assert.equal(payoutRows[1].children[1].textContent, centix(expectedEth[2].multiplierHundredths),
+        'score 2 ETH matches degenerettePayoutTable\'s real guaranteed-floor output at Degen Score 305');
+      assert.equal(payoutRows[1].children[2].textContent, centix(expectedFlip[2].multiplierHundredths),
+        'score 2 FLIP matches degenerettePayoutTable\'s real guaranteed-floor output at Degen Score 305');
+      assert.equal(payoutRows[5].children[1].textContent, centix(expectedEth[6].multiplierHundredths),
         'score 6 includes the ETH-only high-score bonus');
-      assert.equal(payoutRows[5].children[2].textContent, '244.52',
+      assert.equal(payoutRows[5].children[2].textContent, centix(expectedFlip[6].multiplierHundredths),
         'score 6 keeps the distinct FLIP schedule');
       assert.match(el.querySelector('[data-bind="deg-payout-context"]')?.textContent || '',
         /Degen Score 305/,
         'the explanatory copy says the player score is applied');
+      assert.match(el.querySelector('[data-bind="deg-payout-context"]')?.textContent || '',
+        /gold.*matches more than this floor|matches.*gold.*pays more/i,
+        'the copy explains a matched-gold spin can beat the quoted floor');
 
-      el.querySelector('[data-bind="dgn-cell-2"]')
-        .dispatchEvent({ type: 'contextmenu', preventDefault() {} });
+      // Picking a different quadrant/icon does not change the table at all —
+      // this is the core semantic change from the old per-picked-gold tables.
+      document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
+        detail: { traitIds: [56, 121, 130, 203] },
+      }));
+      el.querySelector('[data-bind="dgn-category-2"]').dispatchEvent({ type: 'click' });
+      el.querySelector('[data-bind="dgn-symbol-choice-0"]').dispatchEvent({ type: 'click' });
       payoutTables = el.querySelectorAll('.deg-payout-table');
       payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
-      payoutHeadings = payoutTables[0].querySelectorAll('th')
-        .map((heading) => heading.textContent).join(' ');
-      assert.match(payoutHeadings, /2 GOLD · OTHER HERO/,
-        'moving Hero to a non-gold quadrant refreshes the visible schedule');
-      assert.doesNotMatch(payoutHeadings, /HERO GOLD(?:\s|$)/);
-      assert.equal(payoutRows[1].children[1].textContent, '2.31',
-        'the score-adjusted multiplier changes with the selected board Hero position');
+      assert.equal(payoutRows[1].children[1].textContent, centix(expectedEth[2].multiplierHundredths),
+        'the guaranteed-floor table is identical regardless of the chosen quadrant/icon');
       assert.doesNotMatch(payoutHeadings, /WWXRP/);
       assert.equal(dialog.hidden, true);
       info.dispatchEvent({ type: 'click', preventDefault() {} });
@@ -2414,75 +2420,49 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     reveal.__takeQueuedForTest();
   });
 
-  test('picker renders 4 quadrant badges + exactly one hero, no raw uint32 input', () => {
+  test('picker shows one symbol and can select all 32 contract symbols', () => {
     const el = instantiate();
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
-      'the trait selector is closed by default');
-    const editHint = el.querySelector('[data-bind="dgn-ticket-hint"]');
-    assert.match(el.innerHTML, /data-bind="dgn-ticket-hint">CLICK TO EDIT<\/p>/,
-      'the ticket template includes the visible edit affordance copy');
-    assert.equal(editHint.hidden, false,
-      'the idle ticket carries a visible edit affordance below it');
-    for (let q = 0; q < 4; q += 1) {
-      const img = el.querySelector(`[data-bind="dgn-img-${q}"]`);
-      assert.ok(img, `quadrant ${q} badge img`);
-      assert.match(String(img.src), /^\/badges-circular\//, 'badge path scheme');
+    assert.equal(el.querySelector('[data-bind="dgn-ticket"]'), null);
+    assert.equal(el.querySelector('[name="deg-custom-ticket"]'), null);
+    assert.equal(el.querySelector('[name="deg-quadrant"]'), null);
+    const choices = el.querySelector('[data-bind="dgn-symbol-choices"]');
+    assert.equal(choices.querySelectorAll('button').length, 8);
+    for (let q = 0; q < 4; q++) {
+      el.querySelector(`[data-bind="dgn-category-${q}"]`).dispatchEvent({ type: 'click' });
+      for (let icon = 0; icon < 8; icon++) {
+        const button = choices.querySelector(`[data-bind="dgn-symbol-choice-${icon}"]`);
+        button.dispatchEvent({ type: 'click' });
+        assert.equal(el.getTicketDraft().symbol, (q << 3) | icon);
+        assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
+          dgnSymbolPath(q, icon, DGN_NEUTRAL_COLOR));
+        assert.equal(button.getAttribute('aria-pressed'), 'true');
+        assert.equal(choices.querySelectorAll('button')
+          .filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
+        assert.equal(choices.querySelector(`[data-bind="dgn-symbol-choice-${icon}"]`), button,
+          'selection preserves the focused DOM button');
+      }
     }
-    const heroes = [0, 1, 2, 3].filter((q) =>
-      el.querySelector(`[data-bind="dgn-cell-${q}"]`).classList.contains('q-hero'));
-    assert.equal(heroes.length, 1, 'exactly one hero quadrant');
-    assert.equal(el.querySelector('[name="deg-custom-ticket"]'), null, 'raw uint32 input removed');
-    assert.equal(el.querySelector('[name="deg-quadrant"]'), null, 'raw quadrant select removed');
-    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, false,
-      'clicking a quadrant opens its selector');
-    assert.equal(editHint.hidden, true,
-      'the editor replaces the idle hint instead of duplicating it');
-    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true);
-    assert.equal(editHint.hidden, false, 'closing the editor restores the hint');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 8');
     el.disconnectedCallback();
   });
 
-  test('pink and green use dark contrast tiles except for crypto symbols', () => {
+  test('browsing a category leaves the chosen symbol unchanged until an icon is picked', () => {
     const el = instantiate();
-    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
-    let editor = el.querySelector('[data-bind="dgn-editor"]');
-    editor.querySelectorAll('.dgn-color-btn')[0].dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
-      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
-    'pink crypto symbols keep the neutral tile');
-
-    editor.querySelectorAll('.dgn-color-btn')[2].dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
-      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
-    'green crypto symbols keep the neutral tile');
-
-    el.querySelector('[data-bind="dgn-cell-1"]').dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    editor.querySelectorAll('.dgn-color-btn')[0].dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
-      .every((button) => button.classList.contains('dgn-symbol-btn--dark-trait')),
-    'pink non-crypto symbols retain the dark contrast tile');
-
-    editor.querySelectorAll('.dgn-color-btn')[2].dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
-      .every((button) => button.classList.contains('dgn-symbol-btn--dark-trait')),
-    'green non-crypto symbols retain the dark contrast tile');
-
-    editor.querySelectorAll('.dgn-color-btn')[1].dispatchEvent({ type: 'click' });
-    editor = el.querySelector('[data-bind="dgn-editor"]');
-    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
-      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
-    'other colors keep the neutral tile');
+    const original = el.getTicketDraft();
+    const other = (original.heroQuadrant + 1) % 4;
+    el.querySelector(`[data-bind="dgn-category-${other}"]`).dispatchEvent({ type: 'click' });
+    assert.deepEqual(el.getTicketDraft(), original, 'browsing does not change the bet');
+    assert.equal(el.querySelector(`[data-bind="dgn-category-${other}"]`)
+      .getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelectorAll('.dgn-symbol-btn')
+      .some(b => b.getAttribute('aria-pressed') === 'true'), false,
+      'another category does not imply a selected icon');
+    el.querySelector('[data-bind="dgn-symbol-choice-5"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.getTicketDraft().symbol, (other << 3) | 5);
     el.disconnectedCallback();
   });
 
-  test('picker defaults to the first upcoming ticket with gold and makes gold Hero', async () => {
+  test('picker defaults to the first upcoming ticket with gold, carrying only that quadrant\'s icon', async () => {
     const seen = [];
     storeMod.update('app.lastDay', {
       day: 130,
@@ -2517,27 +2497,16 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       seen.some((url) => url.includes(`/player/${CONNECTED}/tickets/by-trait?level=25`)),
       'upcoming drawing inventory is read from the DB API',
     );
-    assert.match(
-      el.querySelector('[data-bind="dgn-img-2"]').src,
-      /_gold\.svg$/,
-      'gold ticket wins default selection',
-    );
-    assert.ok(
-      el.querySelector('[data-bind="dgn-cell-2"]').classList.contains('q-hero'),
-      'the gold quadrant is Hero',
-    );
-    assert.doesNotMatch(
-      el.querySelector('[data-bind="dgn-img-0"]').src,
-      /xrp_pink/,
-      'the earlier non-gold ticket was not selected',
-    );
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
-      'loading the gold-trait default does not pop the selector open');
+    assert.equal(el.getTicketDraft().symbol, 19, 'the gold quadrant supplies its icon only');
+    assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
+      dgnSymbolPath(2, 3, DGN_NEUTRAL_COLOR));
+    assert.equal(el.querySelector('[data-bind="dgn-category-2"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-3"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });
 
   test('a deity holder defaults the Hero quadrant to their owned deity symbol', async () => {
-    installDeityOwners(new Map([[22, CONNECTED]])); // cards quadrant · king
+    installDeityOwners(new Map([[22, CONNECTED]])); // symbol 22 = quadrant 2 (cards), icon 6
     storeMod.update('app.lastDay', {
       day: 131,
       roll1: { purchaseLevel: 26 },
@@ -2558,46 +2527,28 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const el = instantiate();
     await settle(60);
 
-    assert.equal(
-      el.querySelector('[data-bind="dgn-img-2"]').src,
-      '/badges-circular/cards_01_king_pink.svg',
-      'the deity symbol replaces only the symbol in its natural quadrant',
-    );
-    assert.ok(el.querySelector('[data-bind="dgn-cell-2"]').classList.contains('q-hero'),
-      'the deity symbol quadrant is Hero by default');
-    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true);
+    assert.equal(el.getTicketDraft().symbol, 22, 'the deity symbol overrides the inventory default');
+    assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
+      dgnSymbolPath(2, 6, DGN_NEUTRAL_COLOR));
+    assert.equal(el.querySelector('[data-bind="dgn-category-2"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-6"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });
 
-  test('editor drives the packed customTicket + heroQuadrant passed to placeDegeneretteBet', async () => {
+  test('picker drives the single symbol (quadrant<<3|icon) passed to placeDegeneretteBet', async () => {
+    // Audit a5d4d2cd: the OLD picker built a full uint32 customTicket across
+    // all 4 quadrants (each [QQ][CCC][SSS]) plus a separate heroQuadrant arg.
+    // The new picker has exactly one chosen quadrant + icon = symbol (0..31),
+    // sent as placeDegeneretteBet's 5th positional arg — there is no longer a
+    // 6th "heroQuadrant" arg; the 6th slot is the payable value override.
     const fake = makeFakeDegContract();
     degeneretteMod.__setContractFactoryForTest(() => fake);
     const el = instantiate();
     await settle(40);
 
-    // Set (color, symbol) per quadrant via editor buttons: c=[1,2,3,4], s=[5,6,7,0].
-    // Hero is the ninth compact control in the color row.
-    const colors = [1, 2, 3, 4];
-    const symbols = [5, 6, 7, 0];
-    const initialHero = [0, 1, 2, 3]
-      .find((q) => el.querySelector(`[data-bind="dgn-cell-${q}"]`).classList.contains('q-hero'));
-    const chosenHero = ((initialHero ?? 0) + 1) % 4;
-    for (let q = 0; q < 4; q += 1) {
-      el.querySelector(`[data-bind="dgn-cell-${q}"]`).dispatchEvent({ type: 'click' });
-      // Editor rebuilds after every click — re-query buttons each time.
-      el.querySelector('[data-bind="dgn-editor"]')
-        .querySelectorAll('.dgn-color-btn')[colors[q]].dispatchEvent({ type: 'click' });
-      el.querySelector('[data-bind="dgn-editor"]')
-        .querySelectorAll('.dgn-symbol-btn')[symbols[q]].dispatchEvent({ type: 'click' });
-      if (q === chosenHero) {
-        const colorRow = el.querySelector('[data-bind="dgn-editor"]').querySelector('.dgn-colors');
-        const hero = colorRow.querySelector('.dgn-hero-toggle');
-        assert.equal(colorRow.children.length, 9, 'eight colors and Hero share one row');
-        assert.equal(colorRow.children[8], hero, 'Hero is the compact trailing control');
-        assert.equal(hero.textContent, '☆');
-        hero.dispatchEvent({ type: 'click' });
-      }
-    }
+    el.querySelector('[data-bind="dgn-category-3"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dgn-symbol-choice-5"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 6');
 
     const amountInput = el.querySelector('[name="deg-amount"]');
     if (amountInput) amountInput.value = '0.01';
@@ -2606,10 +2557,13 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     assert.equal(fake._calls.placeDegeneretteBet.length, 1, 'placeDegeneretteBet invoked once');
     const args = fake._calls.placeDegeneretteBet[0];
-    // byte q = ((c&7)<<3)|(s&7): [13, 22, 31, 32] → LSB-first uint32.
-    const expected = (13 | (22 << 8) | (31 << 16) | (32 << 24)) >>> 0;
-    assert.equal(Number(args[4]), expected, 'customTicket packs [QQ][CCC][SSS] per byte, QQ=0');
-    assert.equal(Number(args[5]), chosenHero, 'heroQuadrant comes from the integrated star control');
+    const expectedSymbol = (3 << 3) | 5; // quadrant 3, icon 5 → 29
+    assert.equal(Number(args[4]), expectedSymbol,
+      'symbol packs quadrant<<3|icon — the sole ticket input now');
+    assert.equal(args.length, 6,
+      'placeDegeneretteBet(player, currency, amount, spinCount, symbol) + one payable overrides object');
+    assert.ok(args[5] && typeof args[5].value !== 'undefined',
+      'the 6th positional slot is the payable value override, not a second ticket field');
     el.disconnectedCallback();
   });
 
@@ -2695,7 +2649,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     const el = instantiate();
     await settle(40);
-    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'contextmenu' });
+    el.querySelector('[data-bind="dgn-category-0"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dgn-symbol-choice-0"]').dispatchEvent({ type: 'click' });
     el.querySelector('[name="deg-amount"]').value = '0.01';
     el.querySelector('[name="deg-ticket-count"]').value = '2';
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });

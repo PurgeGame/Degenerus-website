@@ -1,0 +1,255 @@
+{
+  "provenance": "degenerus-sim/scripts/craps-replay-fixture.ts --word 5 --verify; native TypeScript producer, rotating-shooter rules; buildCrapsReplayBundle includes production tape.seed for shooterTimeline",
+  "manifest": {
+    "schemaVersion": 1,
+    "kind": "craps-replay-manifest",
+    "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
+    "digest": "1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1",
+    "ruleset": {
+      "engineVersion": "craps-solidity-ed035463-v1",
+      "chainId": 31337,
+      "contract": "0xd02c36ab81619cd5d7f7d235c68e734124cd3df1",
+      "runtimeCodeHash": "0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a"
+    },
+    "settlement": {
+      "boundSlot": "340",
+      "boundIndex": "512",
+      "finalizedBlock": "22001400",
+      "finalizedBlockHash": "0x3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "terms": {
+      "bankrollWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "boardStakeWei": "600000000000000000000",
+      "battleStakeWei": "300000000000000000000"
+    },
+    "tape": {
+      "encoding": "packed-nibbles+uint32be/base64",
+      "maxHands": 12,
+      "totalRolls": 119,
+      "rolls": "QxFUMjUxFWYTRVQxIxQxUyNEFCMkYjYWYzNWIhRiETJmJiFFZRMVVFNURkUlZlQUZVUhMSVhQVYxMlFFFTERQ0JCNBYURBJlVWIWJlY1EmYzJTJDUkMkEiRTViVRVVJmIUZlISI0FDJVZUQRIlJDVDRUNhJhNTQ=",
+      "handOffsets": "AAAAAAAAAC0AAAA1AAAAQAAAAEsAAABSAAAAVAAAAFwAAABfAAAAZgAAAG4AAABx"
+    },
+    "progressive": {
+      "scoreBpsBefore": "59080",
+      "thresholdScoreBps": "250000",
+      "amountWei": "1250000000000000000000000",
+      "winnerBetId": "6198106008766409342979",
+      "wonAtScoreBps": 59080,
+      "status": "won"
+    },
+    "field": {
+      "entrants": 24,
+      "shardSize": 8,
+      "shardCount": 3,
+      "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1/featured.json",
+      "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1/seats/{shard}.json"
+    },
+    "verification": {
+      "allSeatsReplayOk": true,
+      "settledEntrants": 24,
+      "replayedWonDigest": "0x80fd98e68d4fe23b9a7d68eac41186e77378d5ffb8c1d1a4a4487e661798f30e"
+    },
+    "publishedAt": "2026-08-28T18:00:00.000Z"
+  },
+  "players": [
+    {
+      "betId": "6198106008766409342977",
+      "player": "0x0000000000000000000000000000000000000002",
+      "standing": 899,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549441",
+      "player": "0x0000000000000000000000000000000000000002",
+      "standing": 999,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6198106008766409342978",
+      "player": "0x0000000000000000000000000000000000000003",
+      "standing": 898,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549442",
+      "player": "0x0000000000000000000000000000000000000003",
+      "standing": 998,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6198106008766409342979",
+      "player": "0x0000000000000000000000000000000000000004",
+      "standing": 897,
+      "entryMultiple": 1,
+      "wonWei": "17724000000000000000000",
+      "paidWei": "17724000000000000000000"
+    },
+    {
+      "betId": "6271892985061247549443",
+      "player": "0x0000000000000000000000000000000000000004",
+      "standing": 997,
+      "entryMultiple": 1,
+      "wonWei": "1369600000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549444",
+      "player": "0x0000000000000000000000000000000000000005",
+      "standing": 996,
+      "entryMultiple": 1,
+      "wonWei": "1983000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549445",
+      "player": "0x0000000000000000000000000000000000000006",
+      "standing": 995,
+      "entryMultiple": 10,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549446",
+      "player": "0x0000000000000000000000000000000000000007",
+      "standing": 994,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549447",
+      "player": "0x0000000000000000000000000000000000000008",
+      "standing": 993,
+      "entryMultiple": 1,
+      "wonWei": "3236000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549448",
+      "player": "0x0000000000000000000000000000000000000009",
+      "standing": 992,
+      "entryMultiple": 1,
+      "wonWei": "1494000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549449",
+      "player": "0x0000000000000000000000000000000000000001",
+      "standing": 991,
+      "entryMultiple": 1,
+      "wonWei": "455000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549450",
+      "player": "0x0000000000000000000000000000000000000002",
+      "standing": 990,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549451",
+      "player": "0x0000000000000000000000000000000000000003",
+      "standing": 989,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549452",
+      "player": "0x0000000000000000000000000000000000000004",
+      "standing": 988,
+      "entryMultiple": 1,
+      "wonWei": "1590000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549453",
+      "player": "0x0000000000000000000000000000000000000005",
+      "standing": 987,
+      "entryMultiple": 1,
+      "wonWei": "18720000000000000000000",
+      "paidWei": "18720000000000000000000"
+    },
+    {
+      "betId": "6271892985061247549454",
+      "player": "0x0000000000000000000000000000000000000006",
+      "standing": 986,
+      "entryMultiple": 1,
+      "wonWei": "2152200000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549455",
+      "player": "0x0000000000000000000000000000000000000007",
+      "standing": 985,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549456",
+      "player": "0x0000000000000000000000000000000000000008",
+      "standing": 984,
+      "entryMultiple": 1,
+      "wonWei": "940000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549457",
+      "player": "0x0000000000000000000000000000000000000009",
+      "standing": 983,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549458",
+      "player": "0x0000000000000000000000000000000000000001",
+      "standing": 982,
+      "entryMultiple": 1,
+      "wonWei": "1110000000000000000000",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549459",
+      "player": "0x0000000000000000000000000000000000000002",
+      "standing": 981,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549460",
+      "player": "0x0000000000000000000000000000000000000003",
+      "standing": 980,
+      "entryMultiple": 1,
+      "wonWei": "0",
+      "paidWei": "0"
+    },
+    {
+      "betId": "6271892985061247549461",
+      "player": "0x0000000000000000000000000000000000000004",
+      "standing": 979,
+      "entryMultiple": 1,
+      "wonWei": "740000000000000000000",
+      "paidWei": "0"
+    }
+  ],
+  "hashes": {
+    "seats/0000": "4a49898bb5e127ee6c05721a271727ead1c4f2c7bb1aca5b3ae100bba12bc23f",
+    "seats/0001": "3257370fe0278076dd61624b40092458f9578b9bfd7e124202fc1e52ae143f00",
+    "seats/0002": "c6a6ab9cf20e110324fc331a6c8060879f6239b8e33489b89f2480ef3a62cfb2",
+    "featured": "48f030d2cae34e8550ee0ee4416cdc05c3cf4896db5f2000e07ac62eabd07f77"
+  }
+}

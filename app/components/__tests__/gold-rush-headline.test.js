@@ -214,7 +214,10 @@ describe('gold-rush headline wiring', () => {
     // The tag ships the static LCP shell (class="gr" + adopted children) —
     // index-structure.test.js asserts the shell's contents in depth.
     assert.match(html, /<gold-rush-headline class="gr">/);
-    assert.match(html, /src="\/app\/components\/gold-rush-headline\.js"/);
+    // The module ships with a cache-bust query (`?v=…`) and is also pinned in the import map.
+    // The bare-URL assertion this replaces matched neither spelling, so it failed on a module
+    // that loads correctly — it was asserting the spelling of a cache key, not the wiring.
+    assert.match(html, /<script type="module" src="\/app\/components\/gold-rush-headline\.js(?:\?[^"]*)?"/);
   });
 
   test('mounted above the main jackpot hero (it is the headline)', () => {

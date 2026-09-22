@@ -1656,8 +1656,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       totalParticipants: 20,
       roundStatus: 'open',
     });
-    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #7',
-      'the corner BAF instrument immediately adopts the shared live rank');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, '');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').hidden, true,
+      'leaving the top four removes the rank label');
     assert.equal(_fetchCounts.get(bafUrl), 1,
       'sharing the live BAF row does not add another API request');
 
@@ -1668,7 +1669,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('a transient BAF rank API miss retries instead of caching a dash forever', async () => {
+  test('a transient BAF rank API miss retries without showing a placeholder rank', async () => {
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 0 },
@@ -1681,12 +1682,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const bafUrl = [..._fetchCounts.keys()].find((url) => /\/baf\?level=10$/.test(url));
     assert.ok(bafUrl);
     assert.equal(_fetchCounts.get(bafUrl), 1);
-    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK —');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, '');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').hidden, true);
 
     _fetchResponses.baf = {
       level: 10,
       score: String(1_000n * 10n ** 18n),
-      rank: 7,
+      rank: 4,
       totalParticipants: 20,
       roundStatus: 'open',
     };
@@ -1694,7 +1696,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.equal(_fetchCounts.get(bafUrl), 2);
-    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #7');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #4');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').hidden, false);
     el.disconnectedCallback();
   });
 
@@ -3811,7 +3814,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /@keyframes df-baf-transfer-flight\s*\{[\s\S]*var\(--df-baf-flight-x\)[\s\S]*var\(--df-baf-flight-y\)/,
       'the receipt travels to the measured BAF value rather than a hard-coded screen point');
     assert.match(el.innerHTML,
-      /df-baf-score__title[^>]*href="\/learn\/baf\/"[\s\S]*?df-baf-score__unit">BAF<[\s\S]*?df-baf-score__rank[^>]*>RANK —</,
+      /df-baf-score__title[^>]*href="\/learn\/baf\/"[\s\S]*?df-baf-score__unit">BAF<[\s\S]*?df-baf-score__rank[^>]*hidden></,
       'the compact BAF + live-rank header remains the learn-more link');
     assert.match(APP_CSS,
       /\.df-baf-score\s*\{[^}]*position:\s*absolute;[^}]*top:\s*var\(--df-score-cap-top\);[^}]*left:\s*0\.18rem;[^}]*width:\s*5\.1rem;[^}]*height:\s*1\.62rem;[^}]*grid-template-rows:\s*0\.42rem minmax\(0, 1fr\)/s,

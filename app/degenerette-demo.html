@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Degenerette · Pop reveal preview</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/app.min.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
+  <link rel="stylesheet" href="/app/styles/settings-menu.css">
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs"}}</script>
+</head>
+<body class="layout-basic">
+  <main style="max-width:800px;margin:3rem auto;padding:1rem">
+    <h1>Degenerette</h1>
+    <p>Pop a quadrant. Tap the flame to reveal the board.</p>
+    <p>Preview with sample results. No wallet transactions.</p>
+    <label>Preview
+      <select id="pop-demo-kind">
+        <option value="1">One board</option>
+        <option value="4">Four boards</option>
+        <option value="9">Nine boards</option>
+        <option value="25">25 boards</option>
+        <option value="box">Luckbox · mystery currency</option>
+        <option value="record">Record bonus · survival</option>
+      </select>
+    </label>
+    <button type="button" id="pop-demo-open">OPEN PREVIEW</button>
+    <label><input type="checkbox" id="pop-demo-lightweight"> Lightweight mode</label>
+    <label><input type="checkbox" id="pop-demo-mute"> Mute</label>
+  </main>
+  <reveal-overlay></reveal-overlay>
+  <script type="module" src="/app/degenerette-demo.js"></script>
+</body>
+</html>

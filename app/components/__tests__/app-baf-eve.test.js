@@ -156,16 +156,20 @@ describe('<app-baf-eve>', () => {
     const locked = bafGateModel({ score: 0n, rank: null, total: 247 });
     assert.equal(locked.armed, false);
     assert.equal(locked.score, '0');
-    assert.equal(locked.rank, '—');
+    assert.equal(locked.rank, '');
     assert.equal(locked.context, 'LOCKED OUT OF 80%');
     assert.equal(locked.note, 'CLAIM A WON FLIP TO SCORE');
 
     const armed = bafGateModel({ score: 12n * FLIP, rank: 12, total: 247 });
     assert.equal(armed.armed, true);
-    assert.equal(armed.rank, '#12');
-    assert.equal(armed.context, 'OF 247');
+    assert.equal(armed.rank, '');
+    assert.equal(armed.context, '');
+    const leader = bafGateModel({ score: 12n * FLIP, rank: 4, total: 247 });
+    assert.equal(leader.rank, '#4');
+    assert.equal(leader.context, 'OF 247');
     // Ranked and unranked both score: the scatter never reads the board.
-    assert.equal(bafGateModel({ score: 12n * FLIP, rank: null }).context, 'UNRANKED');
+    assert.equal(bafGateModel({ score: 12n * FLIP, rank: null }).context, '');
+    assert.equal(bafGateModel({ score: 12n * FLIP, rank: 1 }).context, '');
 
     assert.doesNotMatch(COMPONENT, /'ARMED'|'LOCKED'/, 'no big state word in the rail');
     assert.match(COMPONENT, /classList\?\.toggle\('is-armed', gate\.armed\)/);

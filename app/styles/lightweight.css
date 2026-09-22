@@ -1,0 +1,10 @@
+/* Only ornamental loops. Actual reveals, score feedback and controls keep working. */
+.lightweight-mode :is(.replay-flame, .deg-referral-card__coin, .ldj-foil-machine-current,
+  .rvl-pack-shine, .rvl-chest-aura, .rvl-lootbox-fx, .rvl-lootbox-beam,
+  .rvl-lootbox-rays, .rvl-lootbox-spark, .replay-controls > .replay-reveal-btn,
+  .replay-controls > .ldj-results-cta) { animation: none !important; }
+.lightweight-mode :is(.rvl-pack-shine, .rvl-chest-aura, .rvl-lootbox-fx) { display: none !important; }
+.lightweight-mode :is(.ticket-card--foil, .trait-quadrant--gold, .ldj-foil-machine-ticket)::before,
+.lightweight-mode :is(.ticket-card--foil, .trait-quadrant--gold, .ldj-foil-machine-ticket)::after { animation: none !important; }
+.lightweight-mode .replay-tq.q-decorative { background: #c8d5cd; box-shadow: none; }
+.lightweight-mode .dgn-pop__cell.is-gold { box-shadow: inset 0 0 0 3px #f2cb62; }

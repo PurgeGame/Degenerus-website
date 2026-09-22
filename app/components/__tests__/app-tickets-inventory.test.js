@@ -13,6 +13,9 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { writeLightweightModePreference } from '../../app/ui-preferences.js';
+import { CHAIN } from '../../app/chain-config.js';
+CHAIN.readMode = 'indexer';
 import * as storeMod from '../../app/store.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as passesMod from '../../app/passes.js';
@@ -223,6 +226,7 @@ const _fetchLog = [];
 globalThis.fetch = async (url) => {
   const u = String(url);
   _fetchLog.push(u);
+  if (u.endsWith('/holdings')) return { ok: true, status: 200, json: async () => ({ tickets: _dashboardTickets }) };
   if (u.endsWith('/game/state')) {
     return { ok: true, status: 200, json: async () => _gameState };
   }
@@ -332,6 +336,32 @@ describe('app-tickets-inventory — cards + chart', () => {
     inventoryMod = await import('../app-tickets-inventory.js');
     inventoryMod.__resetDeityEntryContractFactoryForTest();
     packWatchMod = await import('../../app/pack-watch.js');
+  });
+
+  test('Lightweight mode requests details only for an explicitly opened level', async (t) => {
+    writeLightweightModePreference(true);
+    _dashboardTickets = [{ level: 17, entryCount: 8 }, { level: 18, entryCount: 4 }];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
+    const el = mount({ expanded: false });
+    t.after(() => { el.disconnectedCallback(); writeLightweightModePreference(false); });
+    await flushMicrotasks();
+    const details = () => _fetchLog.filter(url => /tickets\/by-trait|\/foil\?|\/viewer\//.test(url));
+    assert.deepEqual(details(), [], 'no unopened level detail reads');
+    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '2');
+    const levels = el.querySelectorAll('[data-bind="inv-level-tab"]');
+    levels[1].dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.ok(details().some(url => url.includes('tickets/by-trait?level=18')));
+    assert.equal(details().some(url => url.includes('tickets/by-trait?level=17')), false);
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false);
+    levels[1].dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    const before = details().length;
+    storeMod.update('connected.address', '0xbb12000000000000000000000000000000000000');
+    await flushMicrotasks();
+    assert.equal(details().length, before, 'a changed wallet starts with no selected detail level');
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
   });
 
   test('YOUR TICKETS stays on one line in the phone header', () => {

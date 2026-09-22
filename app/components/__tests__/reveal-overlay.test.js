@@ -72,7 +72,7 @@ function makeFakeElement(tag = 'div') {
     },
     set textContent(v) { this._textContent = String(v); this.children = []; },
     appendChild(child) { child.parentElement = this; this.children.push(child); return child; },
-    remove() { /* noop */ },
+    remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); this.parentElement = null; },
     querySelector(sel) {
       const stack = [...this.children];
       while (stack.length) {
@@ -216,6 +216,17 @@ test('ticket packs keep their own reveal art without protocol flame overlays', (
 });
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
+const clickPop = node => node.dispatchEvent({ type: 'click', stopPropagation() {} });
+async function revealPops(el) {
+  for (let i = 0; i < 4; i++) {
+    const all = el.querySelector('.dgn-pop__all');
+    if (!all) return;
+    clickPop(all);
+    await tick();
+    if (!el.querySelector('.rvl-dgn-spin-cta')?.hidden) return;
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // normalizeSequence (pure)
@@ -2033,7 +2044,7 @@ describe('buildBoxSpinBoard', () => {
   test('mystery box currency flips after reel one while a known-FLIP record bounty does not', () => {
     assert.match(
       REVEAL_SRC,
-      /completed = i \+ 1;[\s\S]*?if \(board\.boxSpin && i === 0 && !currencyRevealed\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: true/,
+      /if \(!currencyRevealed && progress\.masks\[0\] === 15\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: true/,
       'only a still-hidden denomination gets the reveal beat after reel one',
     );
     assert.match(REVEAL_SRC, /currencyKnown:\s*spinType === 'record'/,
@@ -2043,7 +2054,7 @@ describe('buildBoxSpinBoard', () => {
       /if \(board\.boxSpin && i === 0 && board\.total > 0n\)/,
       'a miss cannot suppress the currency flip',
     );
-    assert.match(REVEAL_SRC, /const countIsRevealed = !board\.boxSpin \|\| currencyRevealed \|\| i > 0/,
+    assert.match(REVEAL_SRC, /availableCount: currencyRevealed \? board\.rows\.length : 1/,
       'only mystery BoxSpins hide their reel count before reel one');
     assert.match(
       REVEAL_SRC,
@@ -2121,8 +2132,8 @@ describe('buildBoxSpinBoard', () => {
       'the old short single-image survival motion is gone');
     assert.match(
       REVEAL_SRC,
-      /#renderFullSpinStage\(board,\s*\{[\s\S]*?speedEnabled:\s*!board\.boxSpin,[\s\S]*?launchFromLootbox:\s*Boolean\(options\.launchFromLootbox\)/,
-      'a bonus BoxSpin inherits reveal speed and can enter through the one-time box-launch transition',
+      /#renderFullSpinStage\(board,\s*\{[\s\S]*?launchFromLootbox:\s*Boolean\(options\.launchFromLootbox\)/,
+      'a bonus board can enter through the one-time box-launch transition',
     );
   });
 });
@@ -2179,7 +2190,7 @@ describe('buildDegeneretteSpinFrames', () => {
       'seeded plans allow either color or symbol to be first in a quadrant');
     assert.match(
       REVEAL_SRC,
-      /sfxMatchLock\(lockMatch, matchingSoundCount\)/,
+      /mountPopBoards\(rendered\.compare, board\.rows/,
       'the reveal sends its color, symbol, or both classification to audio',
     );
   });
@@ -2207,7 +2218,7 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.equal(shouldBobDegeneretteLock('symbol', 2), false);
     assert.equal(shouldBobDegeneretteLock('symbol', 3), true);
     assert.equal(shouldBobDegeneretteLock('both', 3), true);
-    assert.match(REVEAL_SRC, /shouldBobDegeneretteLock\(lockMatch, matchingLocks\)/,
+    assert.match(REVEAL_SRC, /onChange: \(\) => this\.#tap\('pop'\)/,
       'the motion path uses the scoring-aware bob rule');
   });
 });
@@ -2976,7 +2987,7 @@ describe('reveal-overlay element', () => {
       /const boxSpinCards = seq\.cards\.filter[\s\S]*?#playLootboxSpinGrant\(seq, boxSpinCards,\s*\{[\s\S]*?directFromLootbox:\s*seq\.kind === 'lootbox'/,
       'a live Luckbox spin moves straight from the opened case into its full reel board');
     assert.match(REVEAL_SRC,
-      /let action = options\.autoStartFirst && i === 0 \? 'spin' : null/,
+      /pop = mountPopBoards\(rendered\.compare, board\.rows/,
       'opening the box starts reel one without a redundant PLAY SPIN gate');
     assert.match(APP_CSS, /@keyframes rvl-lootbox-spin-board-launch/,
       'the real reel board launches from the open case position');
@@ -3395,14 +3406,16 @@ describe('reveal-overlay element', () => {
 
     assert.equal(spinZone.hidden, false,
       'the one PLAY SPINS confirmation enters the first selected spin');
+    await revealPops(el);
     assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /WWXRP BOX SPIN/);
-    assert.equal(spinZone.querySelectorAll('.rvl-dgn-history-chip').length, 1);
+    assert.equal(spinZone.querySelectorAll('.dgn-pop__ticket').length, 1);
     spinZone.querySelector('.rvl-dgn-spin-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
+    await revealPops(el);
     assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /FLIP BOX SPIN/);
-    assert.equal(spinZone.querySelectorAll('.rvl-dgn-history-chip').length, 3,
+    assert.equal(spinZone.querySelectorAll('.dgn-pop__ticket').length, 3,
       'the second selected box retains all three verified reels');
     spinZone.querySelector('.rvl-dgn-spin-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -5119,121 +5132,52 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('reduced motion keeps the full-size settled result (content, not choreography)', async () => {
-    assert.equal(queueReveal({
-      kind: 'degenerette',
-      currency: 0,
-      heroIdx: 1,
-      amountPerSpin: 10n ** 16n,
-      totalWager: 2n * 10n ** 16n,
-      totalPayout: 2n * 10n ** 16n,
-      lootboxEth: 5n * 10n ** 15n,
-      spins: [
-        { spinIndex: 0, playerTraits: 13, houseTraits: 0x01020304, score: 4, payout: 2n * 10n ** 16n },
-        { spinIndex: 1, playerTraits: 13, houseTraits: 0xA1B2C3D4, score: 0, payout: 0n },
-      ],
-    }), true);
-    const el = instantiate();
-    await tick();
-    const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
-    assert.equal(zone.hidden, false, 'board visible on the reduced-motion path');
-    assert.equal(zone.querySelectorAll('.rvl-gamepiece').length, 2,
-      'the large player/house presentation is retained');
-    const hero = zone.querySelectorAll('.rvl-gamepiece')[0].querySelector('.rvl-rq--hero');
-    assert.equal(hero.getAttribute('data-trait-color'), 'pink');
-    assert.equal(hero.style['--dgn-trait-color'], '#f409cd',
-      'the reveal Hero burst uses its own badge color');
-    assert.equal(zone.querySelectorAll('.rvl-ticket--rolling-full').length, 0,
-      'no rolling shimmer is left running');
-    const history = zone.querySelectorAll('.rvl-dgn-history-chip');
-    assert.equal(history.length, 2, 'the compact result trail keeps one chip per spin');
-    assert.match(history[0].textContent, /S 4/);
-    assert.match(history[0].textContent, /\+/, 'the paid chip keeps its payout');
-    assert.match(history[1].textContent, /MISS/, 'the unpaid chip remains explicit');
-    assert.ok(history[1].classList.contains('is-selected'),
-      'the final reel starts selected after the settled board opens');
-    const lastHouseImages = zone.querySelectorAll('.rvl-gamepiece')[1]
-      .querySelectorAll('img').map((img) => img.src);
-    history[0].dispatchEvent({ type: 'click', stopPropagation() {} });
-    const firstHouseImages = zone.querySelectorAll('.rvl-gamepiece')[1]
-      .querySelectorAll('img').map((img) => img.src);
-    assert.ok(history[0].classList.contains('is-selected'),
-      'clicking a result chip selects that reel');
-    assert.equal(history[1].classList.contains('is-selected'), false);
-    assert.notDeepEqual(firstHouseImages, lastHouseImages,
-      'the large ticket graphics switch to the clicked result');
-    // Nothing to count up on this path, so the tracker shows the settled total.
-    const running = zone.querySelector('.is-running');
-    assert.ok(running, 'winnings tracker is present in the top facts');
-    assert.doesNotMatch(running.textContent, /ACTUAL ETH|LUCKBOX ETH/,
-      'the split does not add a second tier of miniature labels');
-    assert.match(running.textContent, /ETH.*ETH LUCKBOX/,
-      'the two regular value lines state cash first and lootbox ETH second');
-    const ethValues = running.querySelectorAll('.rvl-dgn-eth-split__value');
-    assert.equal(ethValues.length, 2, 'gross ETH is presented as two explicit destinations');
-    assert.match(ethValues[0].textContent, /^15,?000 ETH$/,
-      'Base Sepolia presentation scaling is applied to the actual-ETH share');
-    assert.match(ethValues[1].textContent, /^5,?000 ETH LUCKBOX$/,
-      'Base Sepolia presentation scaling is applied to the lootbox-ETH share');
-    assert.ok(ethValues[0].classList.contains('is-win'), 'claimable ETH lights independently');
-    assert.ok(ethValues[1].classList.contains('is-win'), 'lootbox ETH lights independently');
-    const finalTotal = zone.querySelector('.rvl-spin-total');
-    assert.ok(finalTotal.classList.contains('rvl-spin-total--eth-split'),
-      'the bottom receipt does not recombine the two ETH destinations');
-    assert.match(finalTotal.querySelector('.rvl-spin-total__cash').textContent,
-      /^15,?000 ETH WON$/);
-    assert.match(finalTotal.querySelector('.rvl-spin-total__lootbox').textContent,
-      /^5,?000 ETH LUCKBOX$/);
-    assert.doesNotMatch(finalTotal.textContent, /20,?000 ETH WON/,
-      'gross ETH is never mislabeled as immediately won ETH');
-    const betFacts = zone.querySelector('.rvl-dgn-facts--bet').textContent;
-    assert.match(betFacts, /BET \/ SPIN/);
-    assert.match(betFacts, /WINNINGS/);
-    assert.doesNotMatch(betFacts, /CUM\./);
-    assert.doesNotMatch(betFacts, /HERO/,
-      'Hero is marked on the submitted ticket instead of consuming a top fact');
-    assert.equal(zone.querySelector('.rvl-dgn-result-details'), null,
-      'nothing repeats the settled result below the terminal action');
-    const cta = zone.querySelector('.rvl-dgn-spin-cta');
-    assert.equal(cta.textContent, 'TAKE THE WIN');
-    const back = zone.querySelector('.rvl-dgn-skip-cta');
-    assert.equal(back.hidden, true,
-      'the obsolete skip shortcut does not become a second terminal action');
-    assert.ok(zone.querySelector('.rvl-dgn-actions')
-      .classList.contains('rvl-dgn-actions--result-ready'),
-    'the final primary action owns a centered one-button rail');
-    assert.deepEqual(
-      zone.querySelector('.rvl-dgn-actions').children
-        .filter((button) => !button.hidden)
-        .map((button) => button.textContent),
-      ['TAKE THE WIN'],
-      'only one terminal button remains visible after a natural finish',
-    );
-    cta.dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
+  test('reduced motion keeps manual popping and one tally across every board', async () => {
+    queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0,
+      totalPayout: 0n, spins: [0, 1].map(spinIndex => ({
+        spinIndex, playerTraits: 0xC0804000, houseTraits: 0xC0804000, score: 9, payout: 0n,
+      })),
+    });
+    const el = instantiate(); await tick();
+    assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 2);
+    assert.equal(el.querySelectorAll('.dgn-pop__score').length, 1);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '0');
+    assert.equal(el.querySelector('.rvl-spin-total'), null);
+    const cells = el.querySelectorAll('.dgn-pop__cell');
+    clickPop(cells[0]);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    clickPop(cells[0]);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    clickPop(el.querySelector('.dgn-pop__flame'));
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '9');
+    await revealPops(el);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '18');
+    assert.equal(el.querySelectorAll('.dgn-pop__player').length, 8);
+    assert.equal(el.querySelector('.rvl-dgn-auto-cta'), null);
+    assert.equal(el.querySelector('.rvl-dgn-skip-cta'), null);
+    assert.equal(el.querySelector('.rvl-dgn-speed'), null);
+    assert.equal(el.querySelector('.rvl-dgn-spin-cta').textContent, 'UNLUCKY');
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
-  test('zero lootbox ETH does not create a second winnings line', async () => {
-    queueReveal({
-      kind: 'degenerette', currency: 0, heroIdx: 1,
-      amountPerSpin: 10n ** 16n, totalWager: 10n ** 16n,
-      totalPayout: 2n * 10n ** 16n, lootboxEth: 0n,
-      spins: [{
-        spinIndex: 0, playerTraits: 13, houseTraits: 0x01020304,
-        score: 4, payout: 2n * 10n ** 16n,
-      }],
-    });
-    const el = instantiate();
-    await tick();
-
-    const running = el.querySelector('[data-bind="rvl-spin-zone"]').querySelector('.is-running');
-    const values = running.querySelectorAll('.rvl-dgn-eth-split__value');
-    assert.equal(values.length, 1, 'the lootbox destination is absent until it is positive');
-    assert.doesNotMatch(running.textContent, /ETH LUCKBOX/);
-    const finalTotal = el.querySelector('.rvl-spin-total');
-    assert.equal(finalTotal.classList.contains('rvl-spin-total--eth-split'), false,
-      'ordinary ETH-only results keep the compact single total');
-    assert.match(finalTotal.textContent, /^20,?000 ETH WON$/);
+  test('only the completed payout summary splits real ETH from awarded Luckboxes', async () => {
+    for (const lootboxEth of [0n, 5n * 10n ** 15n]) {
+      queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0,
+        totalPayout: 2n * 10n ** 16n, lootboxEth,
+        spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: 0xC0804000,
+          score: 9, payout: 2n * 10n ** 16n }],
+      });
+      const el = instantiate(); await tick();
+      assert.equal(el.querySelector('.rvl-spin-total'), null);
+      assert.equal(el.querySelector('.is-running'), null);
+      await revealPops(el);
+      const total = el.querySelector('.rvl-spin-total');
+      assert.equal(total.classList.contains('rvl-spin-total--eth-split'), lootboxEth > 0n);
+      assert.equal(/ETH LUCKBOX/.test(total.textContent), lootboxEth > 0n);
+      clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
+      el.disconnectedCallback();
+    }
   });
 
   test('a Degenerette box win is named on the result and opens directly from its final button', async () => {
@@ -5267,6 +5211,7 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.equal(zone.querySelector('.rvl-dgn-result-details'), null,
       'the won Luckbox is not repeated in a second stats section');
@@ -5309,6 +5254,7 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const cta = el.querySelector('.rvl-dgn-spin-cta');
     assert.equal(cta.textContent, 'UNLUCKY');
     assert.ok(cta.classList.contains('rvl-collect-cta--unlucky'),
@@ -5319,7 +5265,7 @@ describe('reveal-overlay element', () => {
       ['UNLUCKY'],
       'the ETH loss cannot retain a second Back to Game exit',
     );
-    assert.equal(el.querySelector('.rvl-dgn-skip-cta').hidden, true);
+    assert.equal(el.querySelector('.rvl-dgn-skip-cta'), null);
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -5337,6 +5283,7 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const total = el.querySelector('.rvl-spin-total');
     assert.match(total.textContent, /WWXRP/);
     const cta = el.querySelector('.rvl-dgn-spin-cta');
@@ -5344,7 +5291,7 @@ describe('reveal-overlay element', () => {
     assert.equal(cta.classList.contains('rvl-collect-cta--unlucky'), false,
       'a positive WWXRP result uses a neutral exit action');
     const extraExit = el.querySelector('.rvl-dgn-skip-cta');
-    assert.equal(extraExit.hidden, true,
+    assert.equal(extraExit, null,
       'a WWXRP result never renders two Back to Game buttons');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -5367,13 +5314,14 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const actions = el.querySelector('.rvl-dgn-actions');
     assert.deepEqual(
       actions.children.filter((button) => !button.hidden).map((button) => button.textContent),
       ['GOOD LUCK'],
       'the continuation occupies the single terminal action slot',
     );
-    assert.equal(el.querySelector('.rvl-dgn-skip-cta').hidden, true);
+    assert.equal(el.querySelector('.rvl-dgn-skip-cta'), null);
 
     el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -5407,6 +5355,7 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     const spinZone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.equal(summary.hidden, true,
@@ -5431,127 +5380,42 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('reduced-motion BoxSpin settles the full reel without retaining a duplicate currency card', async () => {
-    queueReveal({
-      kind: 'lootbox',
-      lootboxIndex: 7,
-      legs: [{
-        legType: 'spin',
-        spinType: 'eth',
-        payout: 100n,
-        ethShare: 40n,
-        reels: [{
-          spinIndex: 0,
-          playerTicket: 0xC3824100n,
-          resultTicket: 0xC7864504n,
-          score: 4,
-        }],
-      }],
-    });
-    const el = instantiate();
+  test('Luckbox currency stays sealed until the first board is popped, including misses', async () => {
+    queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'wwxrp', payout: 0n,
+      reels: [{ spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC9894909n, score: 0 }],
+    }] });
+    const el = instantiate(); await tick();
+    clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta'));
     await tick();
-
-    const rootStage = el.querySelector('[data-bind="rvl-stage"]');
-    const grant = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(grant.hidden, false, 'the parent lootbox contents land first');
-    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'BOX SPIN');
-    assert.equal(grant.querySelector('.rvl-card-value').textContent, '?');
-    assert.doesNotMatch(grant.textContent, /ETH BOX SPIN|ETH SPIN|won .* ETH/i,
-      'the granted spin cannot disclose its currency before it is played');
-    const play = grant.querySelector('.rvl-collect-cta');
-    assert.equal(play.textContent, 'PLAY SPIN');
-    play.dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
-
-    const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
-    assert.equal(zone.hidden, false);
-    assert.ok(rootStage.classList.contains('rvl-stage--degenerette'),
-      'BoxSpin uses the full-size Degenerette surface');
-    assert.equal(zone.querySelectorAll('.rvl-gamepiece').length, 2,
-      'the complete player and house gamepieces remain visible');
-    assert.equal(zone.querySelectorAll('.rvl-rq').length, 8,
-      'both gamepieces retain all four quadrants');
-    assert.match(zone.querySelector('.rvl-spin-head').textContent, /ETH BOX SPIN/);
-
-    const currency = zone.querySelector('.rvl-box-currency-reveal');
-    assert.ok(currency, 'the denomination still passes through its dedicated reveal beat');
-    assert.ok(currency.classList.contains('is-revealed'));
-    assert.ok(currency.classList.contains('is-leaving'));
-    assert.equal(currency.hidden, true,
-      'the completed currency beat collapses after updating the permanent board facts');
-    assert.equal(currency.getAttribute('data-currency'), 'ETH');
-    assert.equal(
-      currency.querySelector('.rvl-box-currency-landed')?.src,
-      '/shared/coinflip-face-eth.svg',
-    );
-    assert.match(currency.textContent, /CURRENCY FLIPETHCURRENCY REVEALED/);
-    assert.match(zone.querySelector('.rvl-spin-head').textContent, /ETH BOX SPIN/,
-      'the denomination remains in the compact heading after the large card leaves');
-    assert.equal(zone.querySelector('.rvl-dgn-auto-cta'), null,
-      'a mystery-currency spin never mounts AUTOSPIN');
-    assert.equal(zone.querySelector('.rvl-dgn-skip-cta'), null,
-      'a mystery-currency spin never mounts SKIP TO RESULTS');
-    assert.deepEqual(
-      zone.querySelector('.rvl-dgn-actions').children.map((node) => node.className),
-      ['rvl-collect-cta rvl-dgn-spin-cta'],
-      'the BoxSpin action rail contains only its required manual action',
-    );
-    assert.equal(zone.querySelector('.rvl-dgn-spin-cta').textContent, 'TAKE THE WIN');
-
-    zone.querySelector('.rvl-dgn-spin-cta')
-      .dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
-    const summary = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(summary.hidden, true,
-      'the resolved spin does not return to a duplicate compact receipt');
-    assert.equal(rootStage.classList.contains('rvl-stage--degenerette'), false,
-      'the full spin releases its temporary large-stage layout');
-    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+    assert.doesNotMatch(el.querySelector('.rvl-spin-head').textContent, /WWXRP/);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '0');
+    assert.equal(el.querySelector('.rvl-spin-total'), null);
+    await revealPops(el);
+    assert.match(el.querySelector('.rvl-spin-head').textContent, /WWXRP/);
+    assert.equal(el.querySelector('.rvl-box-currency-reveal'), null);
+    assert.equal(el.querySelector('.rvl-dgn-spin-cta').textContent, 'UNLUCKY');
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
-  test('the live FLIP BoxSpin marks each selected reel with its own Hero', async () => {
-    const oneFlip = 10n ** 18n;
-    queueReveal({
-      kind: 'lootbox',
-      lootboxIndex: 32_404,
-      legs: [{
-        legType: 'spin',
-        betId: 11_026_022_280_916_248_713n,
-        spinType: 'flip',
-        survived: true,
-        payout: 170_100n * oneFlip,
-        reels: [
-          { spinIndex: 0, playerTicket: 4_203_172_354n, resultTicket: 4_136_200_202n, score: 2 },
-          { spinIndex: 1, playerTicket: 3_835_317_537n, resultTicket: 3_380_768_558n, score: 2 },
-          { spinIndex: 2, playerTicket: 3_968_814_117n, resultTicket: 3_937_362_177n, score: 2 },
-        ],
-      }],
+  test('record boards preserve individual Hero quadrants in the shared spread', async () => {
+    queueReveal({ kind: 'record-bounty', spin: { legType: 'spin', spinType: 'record',
+      payout: 0n, survived: false, preSurvivalPayout: 500n * 10n ** 18n,
+      reels: [0, 2, 3].map((heroQuadrant, spinIndex) => ({
+        spinIndex, heroQuadrant, playerTicket: 0xC0804000n, resultTicket: 0xC0804000n, score: 9,
+      })),
+    }});
+    const el = instantiate(); await tick();
+    const cards = el.querySelectorAll('.dgn-pop__card');
+    assert.equal(cards.length, 3);
+    cards.forEach((card, i) => {
+      const q = [0, 2, 3][i];
+      assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.dgn-pop__hero'));
     });
-    const el = instantiate();
-    await tick();
-
-    el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')
-      .dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
-
-    const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
-    const history = zone.querySelectorAll('.rvl-dgn-history-chip');
-    const visibleHero = () => zone.querySelectorAll('.rvl-gamepiece')[0]
-      .querySelectorAll('.rvl-rq')
-      .findIndex((cell) => cell.classList.contains('rvl-rq--hero'));
-    const visibleHeroes = [];
-    for (const chip of history) {
-      chip.dispatchEvent({ type: 'click', stopPropagation() {} });
-      visibleHeroes.push(visibleHero());
-    }
-    assert.deepEqual(visibleHeroes, [0, 2, 2],
-      'selecting each reel renders the contract-consistent per-reel Hero marker');
-    assert.match(zone.querySelector('.rvl-spin-total').textContent, /170,100 FLIP/,
-      'the verified group payout remains attached to the same three-reel board');
-
-    zone.querySelector('.rvl-dgn-spin-cta')
-      .dispatchEvent({ type: 'click', stopPropagation() {} });
-    await tick();
+    await revealPops(el);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
+    assert.match(el.querySelector('.rvl-survival').textContent, /BUSTED/);
+    assert.equal(el.querySelector('.rvl-box-currency-reveal'), null);
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
   test('motion DAY SUMMARY omits a completed zero BoxSpin without replaying it', async () => {
@@ -5639,6 +5503,7 @@ describe('reveal-overlay element', () => {
     grant.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+    await revealPops(el);
 
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-win'));
@@ -5647,9 +5512,7 @@ describe('reveal-overlay element', () => {
       '/shared/coinflip-face-eth.svg',
     );
     const animatedCoin = survival.querySelector('.rvl-survival-coin');
-    assert.equal(animatedCoin?.hidden, true);
-    assert.equal(animatedCoin?.style?.display, 'none',
-      'the transformed red rotor is compositor-hidden before the static face appears');
+    assert.equal(animatedCoin, null, 'the stale animated coin is detached before the static face appears');
     assert.match(REVEAL_SRC, /coin\.remove\?\.\(\);/,
       'a real browser also detaches the stale rotor from the settled result');
     assert.match(
@@ -5658,11 +5521,8 @@ describe('reveal-overlay element', () => {
       'the hidden fallback also beats the rotor display rule',
     );
     assert.match(survival.textContent, /SURVIVED/);
-    const history = el.querySelectorAll('.rvl-dgn-history-chip');
-    assert.ok(history[0].classList.contains('is-win'));
-    assert.match(history[0].textContent, /#1 · WIN · 450 FLIP/);
-    assert.ok(history[1].classList.contains('is-miss'), 'S1 is visibly a miss, not a win');
-    assert.match(history[1].textContent, /#2 · MISS · S 1/);
+    assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 3);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '4');
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
     assert.equal(payoutMeter.hidden, false);
     assert.match(payoutMeter.textContent, /REEL PAYOUT450 FLIPDOUBLE OR NOTHING · WIN 900 FLIP/);
@@ -5700,6 +5560,7 @@ describe('reveal-overlay element', () => {
     await tick();
 
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
+    await revealPops(el);
     assert.match(
       payoutMeter.textContent,
       /REEL PAYOUT8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
@@ -5738,9 +5599,10 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.match(zone.querySelector('.rvl-spin-head__title').textContent,
-      /BIGGEST SPIN BOUNTY · 3 FLIP REELS/);
+      /BIGGEST SPIN BOUNTY/);
     assert.equal(zone.querySelector('.rvl-box-currency-reveal'), null,
       'the fixed-FLIP bounty never mounts a currency-flip interstitial');
     assert.match(zone.querySelector('.rvl-box-payout-meter').textContent,
@@ -5798,6 +5660,7 @@ describe('reveal-overlay element', () => {
       overlay.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')
         .dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
+      await revealPops(overlay);
       assert.match(overlay.querySelector('.rvl-survival').textContent,
         survived ? /SURVIVED/ : /BUSTED/,
         'the terminal result still reports the actual settlement');
@@ -5852,6 +5715,7 @@ describe('reveal-overlay element', () => {
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
+    await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     const payoutMeter = zone.querySelector('.rvl-box-payout-meter');
     const survival = zone.querySelector('.rvl-survival');
@@ -5918,6 +5782,7 @@ describe('reveal-overlay element', () => {
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
+    await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.match(
       zone.querySelector('.rvl-box-payout-meter').textContent,
@@ -5958,6 +5823,7 @@ describe('reveal-overlay element', () => {
     grant.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+    await revealPops(el);
 
     assert.equal(el.querySelector('.rvl-survival'), null,
       'nothing about survival is rendered when no preliminary payout exists');
@@ -5980,15 +5846,10 @@ describe('reveal-overlay element', () => {
     });
     const el = instantiate();
     await tick();
-    const running = el.querySelector('.is-running')?.querySelector('.rvl-dgn-fact-value');
-    assert.match(running.textContent, /^0(\.0+)? FLIP$/);
-    assert.equal(running.classList.contains('is-win'), false);
-    assert.match(el.querySelector('.rvl-dgn-facts--bet').textContent, /50,000 FLIP/,
-      'legacy packed float dust renders as the amount the player entered');
-    const rows = el.querySelectorAll('.rvl-dgn-history-chip');
-    assert.equal(rows.length, 4, 'all four spins remain in the final result');
-    assert.ok(rows.some((row) => /(?:^|\s)is-win(?:\s|$)/.test(row.className)),
-      'the preliminary winning spin remains visible after the survival loss');
+    await revealPops(el);
+    assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 4);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    assert.match(el.querySelector('.rvl-spin-total').textContent, /SURVIVAL FLIP BUSTED/);
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-bust'));
     assert.match(survival.textContent, /BUSTED/);
@@ -6073,275 +5934,57 @@ describe('reveal-overlay element', () => {
       'both winnings lines inherit the same value font as the other fact boxes');
   });
 
-  test('motion path offers the full token spin and keeps its complete result until acknowledged', async () => {
-    const previousMatchMedia = window.matchMedia;
-    const previousRaf = globalThis.requestAnimationFrame;
+  test('motion mode uses the same pop controls and preserves gold independently of points', async (t) => {
+    const previous = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
-    globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
-    try {
-      localStorage.setItem(DEGENERETTE_PREFERENCES_KEY, JSON.stringify({
-        version: 1,
-        speed: 2.5,
-        bets: { 0: '0.025', 1: '500', 3: '2' },
-      }));
-      const el = instantiate();
-      queueReveal({
-        kind: 'degenerette',
-        currency: 0,
-        heroIdx: 2,
-        amountPerSpin: 10n ** 16n,
-        totalWager: 2n * 10n ** 16n,
-        totalPayout: 2n * 10n ** 16n,
-        spins: [
-          { spinIndex: 0, playerTraits: 13, houseTraits: 13, score: 4, payout: 2n * 10n ** 16n },
-          { spinIndex: 1, playerTraits: 13, houseTraits: 77, score: 0, payout: 0n },
-        ],
-      });
-      await tick();
-      const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
-      backdrop.dispatchEvent({ type: 'click' }); // dismiss neutral title beat
-      await tick();
-
-      const stage = el.querySelector('.rvl-dgn-stage');
-      assert.ok(stage, 'standalone-style stage rendered');
-      const speed = el.querySelector('.rvl-dgn-speed');
-      const speedRange = speed?.querySelector('input');
-      assert.ok(speedRange, 'an inconspicuous resolver speed bar is available');
-      assert.equal(speedRange.min, '0.5');
-      assert.equal(speedRange.max, '3');
-      assert.equal(speedRange.value, '2.5', 'the browser-local speed is restored');
-      assert.equal(speed.querySelector('output').textContent, '2.5×');
-      speedRange.value = '3';
-      speedRange.dispatchEvent({ type: 'input', stopPropagation() {} });
-      assert.equal(speed.querySelector('output').textContent, '3×');
-      speedRange.dispatchEvent({ type: 'change', stopPropagation() {} });
-      assert.equal(JSON.parse(localStorage.getItem(DEGENERETTE_PREFERENCES_KEY)).speed, 3,
-        'changing the speed persists it without disturbing the wager preferences');
-      assert.equal(stage.querySelectorAll('.rvl-gamepiece').length, 2,
-        'player and house are full gamepieces');
-      const cta = stage.querySelector('.rvl-dgn-spin-cta');
-      const auto = stage.querySelector('.rvl-dgn-auto-cta');
-      const skip = stage.querySelector('.rvl-dgn-skip-cta');
-      assert.equal(stage.querySelector('.rvl-dgn-progress'), null);
-      assert.equal(stage.querySelector('.rvl-dgn-status'), null);
-      assert.equal(stage.querySelector('.rvl-dgn-hint'), null,
-        'reel graphics and sound replace the play-by-play narration rows');
-      assert.equal(cta.textContent, 'SPIN 1 OF 2');
-      assert.equal(auto.textContent, 'AUTOSPIN');
-      assert.equal(skip.textContent, 'SKIP TO RESULTS');
-      assert.deepEqual(
-        stage.querySelector('.rvl-dgn-actions').children.map((node) => node.className),
-        ['rvl-dgn-auto-cta', 'rvl-collect-cta rvl-dgn-spin-cta', 'rvl-dgn-skip-cta'],
-        'Autospin, Spin Next, and Skip occupy the left, middle, and right tracks',
-      );
-      assert.match(
-        APP_CSS,
-        /\.rvl-dgn-actions\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
-      );
-
-      backdrop.dispatchEvent({ type: 'click' });
-      await tick();
-      assert.equal(cta.textContent, 'SPIN 1 OF 2',
-        'background taps cannot consume the explicit per-spin gate');
-
-      cta.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-      assert.equal(cta.hidden, true, 'the spin control gets out of the way while its reel runs');
-      assert.equal(cta.disabled, true);
-      assert.equal(skip.hidden, false, 'skip remains a separate control while spinning');
-      skip.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-
-      assert.equal(cta.hidden, true,
-        'skip does not jump the pointer to a replacement terminal control');
-      assert.equal(skip.hidden, false);
-      assert.equal(skip.textContent, 'BACK TO GAME',
-        'the shortcut becomes an honest exit once the verified result is up');
-      assert.equal(skip.dataset.mode, 'exit');
-      assert.ok(stage.querySelector('.rvl-dgn-actions')
-        .classList.contains('rvl-dgn-actions--result-exit'));
-      assert.equal(stage.querySelectorAll('.rvl-dgn-history-chip').length, 2,
-        'skip keeps every spin in the result trail');
-      assert.equal(stage.querySelectorAll('.rvl-rq').length, 8,
-        'both displayed tickets retain all four quadrants');
-      assert.doesNotMatch(
-        el.querySelector('.is-running').querySelector('.rvl-dgn-fact-value').textContent,
-        /Infinity|NaN/,
-        'zero-duration skip total is assigned directly, never divided by zero',
-      );
-      assert.equal(stage.querySelector('.rvl-dgn-result-details'), null,
-        'the result stops at BACK TO GAME without a duplicate section below it');
-      assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true,
-        'the large result never collapses into the old mini summary');
-
-      skip.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-      assert.equal(backdrop.hidden, true,
-        'BACK TO GAME closes the persistent fullscreen result');
-    } finally {
-      window.matchMedia = previousMatchMedia;
-      if (previousRaf === undefined) delete globalThis.requestAnimationFrame;
-      else globalThis.requestAnimationFrame = previousRaf;
-    }
+    t.after(() => { window.matchMedia = previous; });
+    queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
+      spins: [{ spinIndex: 0, playerTraits: 0xC0804038, houseTraits: 0xC9894939, score: 1, payout: 0n }],
+    });
+    const el = instantiate(); await tick();
+    const cell = el.querySelector('.dgn-pop__cell');
+    assert.equal(cell.querySelector('.dgn-pop__gold'), null, 'covered gold does not announce a match');
+    clickPop(cell);
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '1');
+    assert.equal(cell.dataset.points, '1');
+    assert.ok(cell.querySelector('.dgn-pop__gold'));
+    assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD ×1.25');
+    await revealPops(el);
+    assert.equal(el.querySelector('.rvl-dgn-spin-cta').hidden, false);
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, false);
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
-  test('Degenerette hides SKIP TO RESULTS while AUTOSPIN is running', async () => {
-    const previousMatchMedia = window.matchMedia;
-    const previousRaf = globalThis.requestAnimationFrame;
-    window.matchMedia = () => ({ matches: false });
-    globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
-    try {
-      const el = instantiate();
-      queueReveal({
-        kind: 'degenerette',
-        currency: 1,
-        amountPerSpin: 50_000n * 10n ** 18n,
-        totalWager: 100_000n * 10n ** 18n,
-        totalPayout: 0n,
-        spins: [
-          { spinIndex: 0, playerTraits: 13, houseTraits: 77, score: 0, payout: 0n },
-          { spinIndex: 1, playerTraits: 13, houseTraits: 77, score: 0, payout: 0n },
-        ],
-      });
-      await tick();
-
-      const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
-      backdrop.dispatchEvent({ type: 'click' });
-      await tick();
-
-      const stage = el.querySelector('.rvl-dgn-stage');
-      const auto = stage.querySelector('.rvl-dgn-auto-cta');
-      const skip = stage.querySelector('.rvl-dgn-skip-cta');
-      assert.equal(skip.hidden, false, 'manual resolution still offers the shortcut');
-
-      auto.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-      assert.equal(auto.textContent, 'STOP AUTO');
-      assert.equal(skip.hidden, true, 'autospin owns the run without a redundant skip control');
-
-      el.querySelector('[data-bind="rvl-close"]').dispatchEvent({
-        type: 'click', stopPropagation() {},
-      });
-      await tick();
-    } finally {
-      window.matchMedia = previousMatchMedia;
-      if (previousRaf === undefined) delete globalThis.requestAnimationFrame;
-      else globalThis.requestAnimationFrame = previousRaf;
-    }
+  test('closing a partial reveal aborts without completing or accepting later pops', async () => {
+    queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
+      spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: 0xC0804000, score: 9, payout: 0n }],
+    });
+    const el = instantiate(); await tick();
+    const cell = el.querySelector('.dgn-pop__cell');
+    clickPop(cell);
+    const score = el.querySelector('.dgn-pop__score');
+    assert.equal(score.textContent, '3');
+    clickPop(el.querySelector('[data-bind="rvl-close"]')); await tick();
+    clickPop(el.querySelectorAll('.dgn-pop__cell')[1]);
+    assert.equal(score.textContent, '3');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
-  test('motion BoxSpin keeps currency sealed until its first verified reel lands', async () => {
-    const previousMatchMedia = window.matchMedia;
-    const previousRaf = globalThis.requestAnimationFrame;
-    window.matchMedia = () => ({ matches: false });
-    globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
-    try {
-      localStorage.setItem(DEGENERETTE_PREFERENCES_KEY, JSON.stringify({ speed: 3 }));
-      const el = instantiate();
-      queueReveal({
-        kind: 'lootbox',
-        lootboxIndex: 22,
-        legs: [{
-          legType: 'spin',
-          spinType: 'wwxrp',
-          payout: 2n * 10n ** 18n,
-          reels: [{
-            spinIndex: 0,
-            playerTicket: 0xC3824100n,
-            resultTicket: 0xC7864504n,
-            score: 4,
-          }],
-        }],
-      });
-      await tick();
-
-      const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
-      let stage = el.querySelector('.rvl-dgn-stage');
-      for (let i = 0; i < 20 && !stage; i++) {
-        backdrop.dispatchEvent({ type: 'click' });
-        await tick();
-        stage = el.querySelector('.rvl-dgn-stage');
-      }
-      assert.ok(stage, 'the opened case hands directly to the full BoxSpin reel stage');
-      const summary = el.querySelector('[data-bind="rvl-summary"]');
-      assert.equal(summary.hidden, true, 'there is no intermediate BOX SPIN receipt');
-      assert.doesNotMatch(summary.textContent, /PLAY SPIN/);
-      const spinZone = el.querySelector('[data-bind="rvl-spin-zone"]');
-      assert.ok(spinZone.classList.contains('rvl-spin-zone--lootbox-launch'),
-        'the populated reel board flies out from the case opening');
-      assert.equal(stage.querySelectorAll('.rvl-gamepiece').length, 2);
-      assert.equal(stage.querySelectorAll('.rvl-rq').length, 8);
-      assert.equal(stage.querySelector('.rvl-box-currency-reveal'), null,
-        'currency has not appeared before the verified reel runs');
-      assert.equal(stage.querySelector('.rvl-box-payout-meter')?.hidden, true,
-        'no denominated payout leaks before the currency coin lands');
-      const head = el.querySelector('.rvl-spin-head');
-      assert.equal(head.textContent, 'LUCKBOX SPIN');
-      assert.doesNotMatch(head.textContent, /ETH|FLIP|WWXRP/);
-
-      const cta = stage.querySelector('.rvl-dgn-spin-cta');
-      assert.equal(stage.querySelector('.rvl-dgn-auto-cta'), null,
-        'BoxSpin does not expose AUTOSPIN');
-      assert.equal(stage.querySelector('.rvl-dgn-skip-cta'), null,
-        'BoxSpin does not expose SKIP TO RESULTS');
-      assert.match(
-        APP_CSS,
-        /\.rvl-dgn-actions--box\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
-        'the remaining manual control owns a centered one-column action rail',
-      );
-      assert.equal(cta.hidden, true,
-        'opening the case has already started reel one without another click');
-
-      let sealed = stage.querySelector('.rvl-box-currency-reveal');
-      for (let i = 0; i < 100 && !sealed; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        sealed = stage.querySelector('.rvl-box-currency-reveal');
-      }
-      assert.ok(sealed, 'the reveal beat begins only after the result has landed');
-      assert.equal(sealed.classList.contains('is-revealed'), false,
-        'the currency badge starts face-down');
-      assert.equal(sealed.classList.contains('is-flipping'), true,
-        'a real currency coin flip bridges reel one and the result');
-      const currencyCoin = sealed.querySelector('.rvl-box-currency-coin');
-      assert.equal(currencyCoin.style['--df-track-duration'], '550ms');
-      assert.equal(currencyCoin.style['--df-ending-duration'], '117ms');
-      await new Promise((resolve) => setTimeout(resolve, 1_300));
-
-      const currency = stage.querySelector('.rvl-box-currency-reveal');
-      assert.ok(currency.classList.contains('is-revealed'));
-      assert.ok(currency.classList.contains('is-leaving'));
-      assert.equal(currency.hidden, true,
-        'the completed denomination card leaves once its facts are on the reel UI');
-      assert.equal(currency.getAttribute('data-currency'), 'WWXRP');
-      assert.match(currency.textContent, /WWXRP/);
-      assert.match(head.textContent, /WWXRP BOX SPIN · 1 REEL/);
-      const history = stage.querySelector('.rvl-dgn-history-chip');
-      assert.ok(history.classList.contains('is-win'));
-      assert.match(history.textContent, /#1 · WIN · 2 WWXRP/,
-        'the first reel becomes an explicit denominated win only after currency reveal');
-      const liveResult = stage.querySelector('.rvl-dgn-roll-pop');
-      assert.match(liveResult.textContent, /WIN · 2 WWXRP/,
-        'the live result bubble refreshes to the amount at the same reveal boundary');
-      const payoutMeter = stage.querySelector('.rvl-box-payout-meter');
-      assert.equal(payoutMeter.hidden, false);
-      assert.match(payoutMeter.textContent, /PAYOUT2 WWXRPFINAL PAYOUT/);
-      assert.match(stage.querySelector('.rvl-spin-total').textContent, /2 WWXRP · UNLUCKY/);
-      assert.equal(cta.textContent, 'UNLUCKY',
-        'WWXRP with no other Luckbox prize never becomes TAKE THE WIN');
-
-      cta.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
-      assert.equal(summary.hidden, true,
-        'the acknowledged full result is not redrawn as the same compact spin');
-      assert.equal(backdrop.hidden, true);
-      // The final payout count-up runs independently of the acknowledgement.
-      // Let its RAF chain drain before restoring the test's global shim.
-      await new Promise((resolve) => setTimeout(resolve, 650));
-    } finally {
-      window.matchMedia = previousMatchMedia;
-      if (previousRaf === undefined) delete globalThis.requestAnimationFrame;
-      else globalThis.requestAnimationFrame = previousRaf;
-    }
+  test('Reveal all crosses a mystery-currency gate and completes every board once', async () => {
+    queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'flip', payout: 1000n * 10n ** 18n,
+      survived: true, preSurvivalPayout: 500n * 10n ** 18n,
+      reels: [0, 1, 2].map(spinIndex => ({ spinIndex, heroQuadrant: 0,
+        playerTicket: 0xC0804000n, resultTicket: 0xC0804000n, score: 9 })),
+    }] });
+    const el = instantiate(); await tick();
+    clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')); await tick();
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__card').map(card => card.hidden), [false, true, true]);
+    clickPop(el.querySelector('.dgn-pop__all')); await tick(); await tick();
+    assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__card').map(card => card.hidden), [false, false, false]);
+    assert.match(el.querySelector('.rvl-survival').textContent, /SURVIVED/);
+    assert.match(el.querySelector('.rvl-spin-total').textContent, /1,?000 FLIP/);
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
   test('junk sequences are ignored without opening the overlay', async () => {

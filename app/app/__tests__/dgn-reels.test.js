@@ -3,16 +3,22 @@
 //
 // dgn-reels.js re-derives the house reel of every spin after the first, because
 // the chain only publishes spin 0's. If this port ever drifts from the contract
-// the UI starts drawing reels that never rolled, so the vectors below are REAL
-// EVM output, not expectations written by hand.
+// the UI starts drawing reels that never rolled, so the seed/traits/rigged
+// columns below are REAL EVM output, not expectations written by hand.
 //
 // Provenance: a forge harness compiled from
 //   degenerus-audit/contracts/DegenerusTraitUtils.sol (packedTraitsDegenerette)
 //   degenerus-audit/contracts/modules/DegenerusGameDegeneretteModule.sol
-//     (per-spin resultSeed assembly, _rigWwxrpResult, _score)
+//     (per-spin resultSeed assembly, _rigWwxrpResult) — pre-a5d4d2cd.
 // emitted 576 (rngWord × index × spinIdx × pick × hero) rows plus a 4000-case
 // pseudo-random sweep. Six deterministic rows are pinned here, followed by a
 // current-deployment regression for the lower edge of the rigging band.
+//
+// The `score` column was recomputed by hand against the current contract's
+// independent-color _score formula (audit a5d4d2cd — see dgn-reels.js
+// dgnScore): seed/traits/rigged are untouched by that audit and stay real EVM
+// output, but a symbol-miss/color-hit quadrant now scores +1 where the old
+// dependent formula scored 0 (row index 4 below changes 0 → 1).
 //
 // CSV columns: rngWord, index, spinIdx, playerPick, hero, seed, traits,
 // riggedWwxrpTraits, score.
@@ -44,7 +50,7 @@ const VECTORS = [
   // max index (uint32) — the 4 index bytes land at 0x20..0x23.
   ['115792089237316195423570985008687907853269984665640564039457584007913129639935', 4294967295, 2, 118957879, 3,
     '41620300697377120835912208807644665055056100693075817333013691223595885505481',
-    3651815474, 3651815474, 0],
+    3651815474, 3651815474, 1],
   ['74158540597562961298676378875079351819634584590352076869952930171588285113734', 4294967295, 3, 118957879, 3,
     '115436490784823612758593072696709701608786935507293936845360631204579206647804',
     3498470432, 3498470432, 0],

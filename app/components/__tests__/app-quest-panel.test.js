@@ -1320,14 +1320,13 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('a Degenerette quest popup shows the selected ticket and submits its exact five-spin wager', async () => {
+  test('a Degenerette quest popup shows the selected symbol and submits its exact five-spin wager', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);
     document.addEventListener('quest:activate', listener);
     const ticketDraft = makeFakeElement('app-degenerette-panel');
     ticketDraft.getTicketDraft = () => ({
-      traitIds: [56, 65, 130, 195],
-      heroQuadrant: 2,
+      symbol: 18,
     });
     _docBody.appendChild(ticketDraft);
     _fetchHandler = async (url) => {
@@ -1365,14 +1364,9 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('[data-bind="qst-action-dgn-unit"]').textContent, 'ETH');
     assert.equal(el.querySelector('[data-bind="qst-action-dgn-bet-limit"]').textContent, 'MIN 0.005');
     assert.equal(el.querySelector('[data-bind="qst-action-dgn-spins-limit"]').textContent, 'MAX 25');
-    assert.equal(
-      el.querySelector('[data-bind="qst-action-dgn-img-0"]').src,
-      '/badges-circular/crypto_00_xrp_gold.svg',
-    );
-    assert.equal(
-      el.querySelector('[data-bind="qst-action-dgn-cell-2"]').classList.contains('q-hero'),
-      true,
-    );
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn-symbol"]').src,
+      '/symbols/cards_05_heart_silver.svg');
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn-symbol-name"]').textContent, 'Heart');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
       'DEGENERETTE · 5 SPINS · 0.08 ETH',
@@ -1397,8 +1391,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       submit: true,
       amountPerSpin: '16000000000',
       spinCount: 5,
-      traitIds: [56, 65, 130, 195],
-      heroQuadrant: 2,
+      symbol: 18,
     }]);
 
     document.removeEventListener('quest:activate', listener);
