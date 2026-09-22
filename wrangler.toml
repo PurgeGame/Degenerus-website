@@ -1,0 +1,36 @@
+# Cloudflare Pages configuration for degener.us.
+#
+# This exists for the /session/* Pages Function (Discord + wallet login) that replaced the
+# destroyed api.degener.us Fly app. The rest of the site is static files and needs nothing here.
+#
+# ⛔ CONFIGURATION IS EITHER HERE OR IN THE DASHBOARD, NEVER BOTH. Once a wrangler.toml is present
+# in a Pages deployment, Cloudflare uses it and IGNORES the dashboard's Functions bindings. So a
+# binding added in the dashboard while this file exists will look configured and do nothing.
+# Bindings belong in this file; SECRETS never do — they are set with `wrangler pages secret put`
+# (see db/SESSION-D1-RUNBOOK.md) so they are not committed to a public repository.
+
+name = "degenerus-website"
+compatibility_date = "2026-09-22"
+pages_build_output_dir = "."
+
+# The session/Discord database. `database_id` is filled in by whoever creates it:
+#   npx wrangler d1 create degenerus-sessions
+# It is an identifier, not a credential — safe to commit, useless without account access.
+[[d1_databases]]
+binding = "SESSIONS_DB"
+database_name = "degenerus-sessions"
+database_id = "04360b23-a740-420a-b184-a589ce8ea943"
+
+[vars]
+# Where /auth/discord/callback returns the player. Same origin as the app.
+FRONTEND_REDIRECT = "https://degener.us"
+# Public OAuth callback URL — an identifier Discord echoes back, not a credential, so it is
+# config rather than a secret. It MUST match a Redirect entry on the Discord application exactly.
+DISCORD_REDIRECT_URI = "https://degener.us/session/auth/discord/callback"
+
+# Secrets consumed by functions/session/[[path]].js, set via `wrangler pages secret put`:
+#   SESSION_SECRET         HMAC key for the signed session cookie (openssl rand -base64 32)
+#   DISCORD_CLIENT_ID      Discord application client id
+#   DISCORD_CLIENT_SECRET  Discord application client secret
+#   DISCORD_GUILD_ID       optional — enables auto guild-join on login
+#   DISCORD_BOT_TOKEN      optional — required with DISCORD_GUILD_ID

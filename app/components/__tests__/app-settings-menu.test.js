@@ -12,6 +12,7 @@ describe('top-bar player settings', () => {
     for (const marker of [
       'id = BUTTON_ID',
       'data-bind="settings-actions"',
+      'data-bind="settings-lightweight"',
       'data-bind="settings-auto-reveals"',
       'data-bind="settings-bounties-description"',
       'data-bind="settings-reveal-speed"',

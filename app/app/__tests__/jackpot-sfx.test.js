@@ -22,6 +22,7 @@ import {
   toggleMuted,
   warmup,
   preloadCrapsChipSamples,
+  sfxDgnPop, stopDgnPops,
   sfxSpinStart,
   sfxTick,
   sfxMatchLock,
@@ -565,4 +566,49 @@ describe('cues with a stubbed AudioContext', () => {
       sfxGoldTicket();
     });
   });
+});
+
+class FakePopAudioContext extends FakeNoiseAudioContext {
+  track(source) {
+    source.stops = 0;
+    source.disconnect = () => {};
+    source.stop = () => { source.stops++; };
+    return source;
+  }
+  createBufferSource() {
+    const source = this.track(super.createBufferSource());
+    source.playbackRate = { value: 1 };
+    return source;
+  }
+  createOscillator() { return this.track(super.createOscillator()); }
+  createGain() { return { ...super.createGain(), disconnect() {} }; }
+}
+
+test('pop scores have distinct cues, gold adds a shimmer, and batch volume is bounded', () => {
+  __resetForTest();
+  globalThis.AudioContext = FakePopAudioContext;
+  setMuted(false);
+  const cues = [];
+  for (let points = 0; points <= 3; points++) {
+    stopDgnPops();
+    sfxDgnPop({ points });
+    const ctx = FakeAudioContext.last;
+    const count = points + 1;
+    cues.push(ctx.oscillators.slice(-count).map(node => node.frequency.value ?? node.frequency.values[0].value));
+  }
+  assert.equal(new Set(cues.map(JSON.stringify)).size, 4);
+  const ctx = FakeAudioContext.last;
+  const start = ctx.oscillators.length;
+  sfxDgnPop({ points: 3, gold: true, count: 100 });
+  assert.equal(ctx.oscillators.length - start, 6, '100 quadrants produce one cue, not 100 chords');
+  assert.deepEqual(ctx.oscillators.slice(-2).map(node => node.frequency.value), [1760, 2349.32]);
+  const voices = [...ctx.oscillators.slice(-6), ctx.bufferSources.at(-1)];
+  setMuted(true);
+  assert.ok(voices.every(node => node.stops >= 2), 'muting stops scheduled and playing pop voices');
+  const mutedCount = ctx.oscillators.length;
+  sfxDgnPop({ points: 3, gold: true });
+  assert.equal(ctx.oscillators.length, mutedCount);
+  __resetForTest();
+  delete globalThis.AudioContext;
+  setMuted(false);
 });

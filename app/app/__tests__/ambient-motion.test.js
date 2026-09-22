@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeLightweightModePreference } from '../ui-preferences.js';
 import { mountAmbientMotion } from '../ambient-motion.js';
 
 test('decorations pause outside the viewport and hidden tabs, including late mounts', (t) => {
@@ -64,6 +65,11 @@ test('decorations pause outside the viewport and hidden tabs, including late mou
   assert.equal(late.paused, false);
   intersect([{ target: late, isIntersecting: false }]);
   assert.equal(late.paused, false, 'ignore queued records for retired nodes');
+  intersect([{ target: first, isIntersecting: true }]);
+  writeLightweightModePreference(true);
+  assert.equal(first.paused, true, 'Lightweight mode stops visible decorations immediately');
+  writeLightweightModePreference(false);
+  assert.equal(first.paused, false);
   cleanup();
   assert.equal(first.paused, false);
   assert.equal(observed.size, 0);

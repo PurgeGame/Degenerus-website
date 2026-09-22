@@ -1363,7 +1363,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const start = REPLAY_PANEL_SRC.indexOf('async #triggerReveal(');
     const end = REPLAY_PANEL_SRC.indexOf('\n  #buildBreakdownLookup(', start);
     const flow = REPLAY_PANEL_SRC.slice(start, end);
-    const mainReadAt = flow.indexOf('const playerTraitsPromise = this.#loadPlayerTraits()');
+    const mainReadAt = flow.indexOf('const playerTraitsPromise = this.#loadPlayerTraits({ required: true })');
     const warmAt = flow.indexOf('void this.#loadFutureTraits()');
     const mainAwaitAt = flow.indexOf('await playerTraitsPromise');
     const spinAt = flow.indexOf('await this.#runSpin(');
@@ -1434,7 +1434,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
   });
 
   test('JP interaction reads bypass background traffic and the click has one network gate', () => {
-    const traitsStart = REPLAY_PANEL_SRC.indexOf('async #loadPlayerTraits()');
+    const traitsStart = REPLAY_PANEL_SRC.indexOf('async #loadPlayerTraits(');
     const traitsEnd = REPLAY_PANEL_SRC.indexOf('\n  // --- Event Handlers ---', traitsStart);
     const traitsFlow = REPLAY_PANEL_SRC.slice(traitsStart, traitsEnd);
     assert.match(

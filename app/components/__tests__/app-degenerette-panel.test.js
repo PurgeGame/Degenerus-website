@@ -9,6 +9,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeLightweightModePreference } from '../../app/ui-preferences.js';
 import { readFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
@@ -616,8 +617,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(PANEL_SRC, /deg-block__step/, 'numbered setup labels are removed');
     assert.match(PANEL_SRC, /aria-label="Wager currency"/);
     assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
-    assert.match(PANEL_SRC, /aria-label="Bet per spin"/);
-    assert.match(PANEL_SRC, /aria-label="Number of spins"/);
+    assert.match(PANEL_SRC, /aria-label="Bet per board"/);
+    assert.match(PANEL_SRC, /aria-label="Number of boards"/);
     assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_green\.svg/,
       'ETH uses the green circular Degenerus trait badge');
     assert.doesNotMatch(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
@@ -648,12 +649,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
     assert.ok(placeAt > wagerAt && placeAt < wagerEnd,
       'Place bet is owned by and sits below the wager controls');
-    assert.match(PANEL_SRC, /deg-wager-field__label">Bet per spin/);
-    assert.match(PANEL_SRC, /deg-wager-field__label">Spins/);
+    assert.match(PANEL_SRC, /deg-wager-field__label">Bet per board/);
+    assert.match(PANEL_SRC, /deg-wager-field__label">Boards/);
     assert.match(
       APP_CSS,
       /\.deg-wager-field__label\s*\{[^}]*text-align:\s*center/s,
-      'Currency, Bet per spin, and Spins share centered label typography',
+      'Currency, Bet per board, and Boards share centered label typography',
     );
     assert.match(
       APP_CSS,
@@ -2460,6 +2461,20 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.querySelector('[data-bind="dgn-symbol-choice-5"]').dispatchEvent({ type: 'click' });
     assert.equal(el.getTicketDraft().symbol, (other << 3) | 5);
     el.disconnectedCallback();
+  });
+
+  test('Lightweight mode keeps the editable Hero without scanning inventory for a default', async () => {
+    writeLightweightModePreference(true);
+    const seen = [];
+    storeMod.update('app.lastDay', { day: 130, roll1: { purchaseLevel: 25 } });
+    _fetchHandler = async url => { seen.push(String(url)); return { player: null, pending: {} }; };
+    const el = instantiate();
+    try {
+      await settle(50);
+      assert.equal(seen.some(url => url.includes('/tickets/by-trait')), false);
+      assert.ok(Number.isInteger(el.getTicketDraft().symbol));
+      assert.ok(seen.some(url => url.includes('/player/')), 'pending/result recovery remains active');
+    } finally { el.disconnectedCallback(); writeLightweightModePreference(false); }
   });
 
   test('picker defaults to the first upcoming ticket with gold, carrying only that quadrant\'s icon', async () => {
