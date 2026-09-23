@@ -4533,10 +4533,12 @@ body.layout-basic .df-coin3d__inner {
   display: block;
   width: 100%;
   height: 100%;
-  /* One viewer-facing plane is intentional. Two compositor-owned 3D planes
-     can sporadically expose the front plane's reverse as an upside-down,
-     second WWXRP face in Chromium. */
-  transform-style: flat;
+  /* Two culled faces in one 3D context (app/app/coin-faces.js). NOTHING on
+     this rotor, the surface or a face may flatten it: filter, opacity < 1,
+     isolation, contain: paint, overflow, clip-path, mask or a blend mode each
+     stop culling, and the red face's reverse (the upside-down WWXRP) shows on
+     every back-facing half-turn. Put glow and shadow on the .df-coin button. */
+  transform-style: preserve-3d;
   animation: df-spin-idle 1.1s linear infinite;
   will-change: transform;
 }
@@ -4573,16 +4575,12 @@ body.layout-basic .df-coin3d__face {
   display: block;
 }
 body.layout-basic .df-coin3d__surface {
-  isolation: isolate;
-  contain: paint;
-  transform-style: flat;
-  backface-visibility: visible;
-  -webkit-backface-visibility: visible;
+  transform-style: preserve-3d;
 }
 body.layout-basic .df-coin3d__face {
   transform-origin: 50% 50%;
-  backface-visibility: visible;
-  -webkit-backface-visibility: visible;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 body.layout-basic .df-coin3d__face img {
   display: block;
@@ -4590,11 +4588,10 @@ body.layout-basic .df-coin3d__face img {
   height: 100%;
   pointer-events: none;
 }
-body.layout-basic .df-coin3d__face[hidden] { display: none !important; }
-body.layout-basic .df-coin3d__face--red { transform: none; }
-/* The parent plane's back projection inverts Y. Pre-inverting only the loaded
-   ETH artwork makes the visible reverse upright without creating a back plane. */
-body.layout-basic .df-coin3d__face--eth { transform: scaleY(-1); }
+/* A pixel of thickness: the faces never share a plane. The ETH face is turned
+   half a revolution, so its art is upright when the coin shows its back. */
+body.layout-basic .df-coin3d__face--red { transform: translateZ(1px); }
+body.layout-basic .df-coin3d__face--eth { transform: rotateX(180deg) translateZ(1px); }
 
 body.layout-basic .df-coin3d__inner.df-reveal-active {
   --df-track-duration: 3300ms;
@@ -15861,13 +15858,17 @@ body.layout-basic .rvl-ticket-batch-status { margin-top: 0.8rem; color: var(--te
   place-items: center;
   perspective: 800px;
 }
+/* The shadow sits on the icon while it holds the coin: a filter on the rotor
+   would flatten its 3D context (see .df-coin3d__inner). */
+.rvl-box-currency-icon:has(> .rvl-box-currency-coin) {
+  filter: drop-shadow(0 9px 13px rgba(0, 0, 0, 0.48));
+}
 .rvl-box-currency-coin {
   position: relative;
   display: block;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 9px 13px rgba(0, 0, 0, 0.48));
-  transform-style: flat;
+  transform-style: preserve-3d;
   will-change: transform;
 }
 body.layout-basic .rvl-box-currency-coin:not(.df-reveal-active) {
@@ -17973,6 +17974,7 @@ body.layout-basic .dgn-symbol-preview__label {
   text-transform: uppercase;
 }
 body.layout-basic .dgn-symbol-preview__art {
+  position: relative;
   display: grid;
   width: 9rem;
   height: 9rem;
@@ -18587,6 +18589,7 @@ body.layout-basic .deg-block .dgn-symbols {
   margin: 0;
 }
 body.layout-basic .deg-block .dgn-symbol-btn {
+  position: relative;
   display: grid;
   place-items: center;
   box-sizing: border-box;
@@ -18601,6 +18604,16 @@ body.layout-basic .deg-block .dgn-symbol-btn {
   border-radius: 7px;
   background: linear-gradient(145deg, #f8f8f5, #deded9);
 }
+body.layout-basic .dgn-symbol-preview__art::before,
+body.layout-basic .deg-block .dgn-symbol-btn::before {
+  content: '';
+  position: absolute;
+  inset: 6%;
+  border: 3px solid #000;
+  border-radius: 50%;
+  pointer-events: none;
+}
+body.layout-basic .dgn-symbol-preview__art::before { border-width: 4px; }
 /* Neutral standalone marks do not imply a chosen ticket color. */
 body.layout-basic .deg-block .dgn-symbol-btn img {
   width: 82%;
@@ -19935,9 +19948,14 @@ body.layout-basic .app-daily-flip--baf-eve .df-coin-stage::before {
   content: "";
   pointer-events: none;
 }
+/* On the button, never the rotor: a filter inside the coin's 3D context
+   flattens it (see .df-coin3d__inner). Hover keeps its own glow on top. */
 body.layout-basic .app-daily-flip--baf-eve .df-coin > img,
-body.layout-basic .app-daily-flip--baf-eve .df-coin3d__inner {
+body.layout-basic .app-daily-flip--baf-eve .df-coin--spinning {
   filter: drop-shadow(0 0 11px rgba(59, 130, 246, 0.38)) drop-shadow(0 0 6px rgba(250, 204, 21, 0.2));
+}
+body.layout-basic .app-daily-flip--baf-eve .df-coin--spinning:not(.df-coin--syncing):hover {
+  filter: drop-shadow(0 0 11px rgba(59, 130, 246, 0.38)) drop-shadow(0 0 14px rgba(245, 166, 35, 0.65));
 }
 body.layout-basic .app-daily-flip--baf-eve .df-tomorrow-bet-oval {
   border-color: rgba(96, 165, 250, 0.66);

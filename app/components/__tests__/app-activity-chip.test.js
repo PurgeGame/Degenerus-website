@@ -14,6 +14,7 @@
 //     decision lives once in app-quest-panel #publishPrimaryStatus
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -21,6 +21,7 @@
 //   - Mock globalThis.fetch + globalThis.AbortController
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 // ---------------------------------------------------------------------------

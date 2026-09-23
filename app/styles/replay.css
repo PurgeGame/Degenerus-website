@@ -244,6 +244,139 @@
   box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.3), 0 0 18px rgba(245, 166, 35, 0.58);
 }
 
+/* Purchase-day fill-draw craps battle (audit 5790a946). Only for a viewed wallet that was drawn
+   into the day's battle: the diamond takes the craps felt and a pair of dice, and opens the
+   battle on that wallet's run. The draw toggle's amber ring wins if both ever apply. */
+.replay-ticket-center.replay-ticket-center--craps:not(.replay-ticket-center--draw-toggle)::before {
+  border-color: #34d399;
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.22), 0 0 16px rgba(16, 185, 129, 0.55);
+  animation: replay-craps-glow 2.4s ease-in-out infinite;
+}
+.replay-ticket-center.replay-ticket-center--craps:not(.replay-ticket-center--draw-toggle):not(.revealed)::before {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(52, 211, 153, 0.3), transparent 62%),
+    linear-gradient(145deg, #0b3b2c 0%, #0a5039 55%, #083326 100%);
+}
+.replay-ticket-center.replay-ticket-center--craps:hover::before,
+.replay-ticket-center.replay-ticket-center--craps:focus-visible::before {
+  filter: brightness(1.14);
+}
+.replay-ticket-center.replay-ticket-center--craps:focus-visible { outline: none; }
+
+.replay-center-dice {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  z-index: 4;
+  width: 34%;
+  height: 20%;
+  transform: translateX(-50%);
+  display: none;
+  pointer-events: none;
+}
+.replay-ticket-center--craps .replay-center-dice { display: block; }
+.replay-center-dice i,
+.replay-craps-battle__dice i {
+  position: absolute;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 22%;
+  background: linear-gradient(145deg, #fffdf2, #d8c8a4);
+  box-shadow: inset -1px -2px 3px rgba(55, 33, 12, 0.24), 0 2px 4px rgba(0, 0, 0, 0.42);
+}
+.replay-center-dice i { width: 46%; }
+.replay-center-dice i:first-child,
+.replay-craps-battle__dice i:first-child { top: 0; left: 0; transform: rotate(-9deg); }
+.replay-center-dice i:last-child,
+.replay-craps-battle__dice i:last-child { right: 0; bottom: 0; transform: rotate(8deg); }
+.replay-center-dice i[data-face="2"],
+.replay-craps-battle__dice i[data-face="2"] {
+  background:
+    radial-gradient(circle at 30% 30%, #751e25 0 9%, transparent 10%),
+    radial-gradient(circle at 70% 70%, #751e25 0 9%, transparent 10%),
+    linear-gradient(145deg, #fffdf2, #d8c8a4);
+}
+.replay-center-dice i[data-face="5"],
+.replay-craps-battle__dice i[data-face="5"] {
+  background:
+    radial-gradient(circle at 28% 28%, #0a5039 0 8%, transparent 9%),
+    radial-gradient(circle at 72% 28%, #0a5039 0 8%, transparent 9%),
+    radial-gradient(circle at 50% 50%, #0a5039 0 8%, transparent 9%),
+    radial-gradient(circle at 28% 72%, #0a5039 0 8%, transparent 9%),
+    radial-gradient(circle at 72% 72%, #0a5039 0 8%, transparent 9%),
+    linear-gradient(145deg, #fffdf2, #d8c8a4);
+}
+/* The prize owns the middle of a revealed diamond; the dice step up out of its way. */
+.replay-ticket-center--craps.revealed .replay-center-dice { top: 9%; height: 15%; }
+
+@keyframes replay-craps-glow {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.22), 0 0 12px rgba(16, 185, 129, 0.42); }
+  50% { box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.34), 0 0 22px rgba(16, 185, 129, 0.72); }
+}
+
+/* The caption under the ticket: what the battle was and what the diamond opens. */
+.replay-craps-battle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(100%, 22rem);
+  margin: 0.55rem auto 0;
+  padding: 0.38rem 0.75rem 0.38rem 0.5rem;
+  border: 1px solid rgba(52, 211, 153, 0.62);
+  border-radius: 999px;
+  background: linear-gradient(145deg, #0b3b2c, #062a1f);
+  color: #fde68a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.28);
+}
+.replay-craps-battle[hidden] { display: none; }
+.replay-craps-battle:hover,
+.replay-craps-battle:focus-visible {
+  border-color: #6ee7b7;
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.3), 0 0 16px rgba(16, 185, 129, 0.5);
+  outline: none;
+}
+.replay-craps-battle.is-working { cursor: progress; }
+.replay-craps-battle__dice {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.25rem;
+}
+.replay-craps-battle__dice i { width: 1.02rem; }
+.replay-craps-battle__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+.replay-craps-battle__caption {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #a7f3d0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.replay-craps-battle__action {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fde68a;
+}
+.replay-craps-battle[data-status="error"] .replay-craps-battle__action {
+  color: #fca5a5;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replay-ticket-center.replay-ticket-center--craps::before { animation: none; }
+}
+
 .replay-flame {
   position: relative;
   width: 66%;

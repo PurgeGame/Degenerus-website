@@ -8,7 +8,8 @@
 //   - a network error, a non-2xx status, and an unparseable body each fail
 //     over to the next endpoint FOR THAT REQUEST
 //   - a JSON-RPC error object inside a 200 (a revert) is returned unchanged
-//     and never triggers failover
+//     and never triggers failover, EXCEPT a per-item rate limit (-32016),
+//     which is the endpoint refusing the request and fails over like a 429
 //   - after 3 consecutive primary failures the fallback becomes preferred,
 //     and a recovered response resets the failure count
 //   - every endpoint dead → the last transport error surfaces
@@ -65,6 +66,21 @@ test('a revert (JSON-RPC error in a 200) passes through and never fails over', a
   assert.deepEqual(await send(PAYLOAD), [revert]);
   assert.deepEqual(hits, [A], 'the contract-level error must reach ethers untouched');
   assert.equal(send._state.consecutiveFailures, 0, 'a revert is a transport SUCCESS');
+});
+
+test('a rate limit inside a 200 fails over; a range refusal does not', async () => {
+  const hits = [];
+  const send = _makeFailoverSend([A, B], async (url) => {
+    hits.push(url);
+    return url === A ? ok([{ id: 1, result: '0x1' }, { id: 2, error: { code: -32016, message: 'over rate limit' } }]) : ok([{ id: 1, result: '0x1' }, { id: 2, result: '0x2' }]);
+  });
+  assert.deepEqual(await send([PAYLOAD, { ...PAYLOAD, id: 2 }]), [{ id: 1, result: '0x1' }, { id: 2, result: '0x2' }]);
+  assert.deepEqual(hits, [A, B]);
+  const refused = { id: 1, error: { code: -32005, message: 'query returned more than 10000 results' } };
+  const once = [];
+  const sendRange = _makeFailoverSend([A, B], async (url) => { once.push(url); return ok(refused); });
+  assert.deepEqual(await sendRange(PAYLOAD), [refused]);
+  assert.deepEqual(once, [A]);
 });
 
 test('three consecutive primary failures promote the fallback', async () => {

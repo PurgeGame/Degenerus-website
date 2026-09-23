@@ -3,7 +3,7 @@
 import { Interface, toBeHex } from '../../../vendor/ethers-app.mjs';
 import { ChainClient, contractInterface, wordHex } from '../../../chain/client.js';
 import { SCHEMA_HASH } from '../../../chain/generated/index.js';
-const names = ['GAME','GAME_LENS','COIN','COINFLIP','CRAPS','QUESTS','AFFILIATE','JACKPOTS','PARIMUTUEL','DEITY_PASS','WWXRP','SDGNRS','DGNRS','GNRUS','VAULT','ADMIN','AFKING_SUB_TOKEN'];
+const names = ['GAME','GAME_LENS','COIN','COINFLIP','CRAPS','QUESTS','AFFILIATE','JACKPOTS','PARIMUTUEL','DEITY_PASS','WWXRP','SDGNRS','DGNRS','GNRUS','VAULT','ADMIN','AFKING_SUB_TOKEN','COIN_DRAW_BATTLE'];
 const multi = new Interface(['function blockAndAggregate((address target,bytes callData)[] calls) payable returns (uint256 blockNumber,bytes32 blockHash,(bool success,bytes returnData)[] returnData)', 'function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
 export const PLAYER = '0x1234567890123456789012345678901234567890';
 export const OTHER_PLAYER = '0x2234567890123456789012345678901234567890';

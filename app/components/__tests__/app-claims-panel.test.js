@@ -13,6 +13,7 @@
 // Plan 61-03 will extend with polling lifecycle + visibility + cross-tab spun_day refresh.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 // store module is safe to static-import (no HTMLElement use). Tests use it

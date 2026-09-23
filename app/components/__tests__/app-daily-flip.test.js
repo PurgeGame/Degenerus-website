@@ -10,6 +10,8 @@
 //   - action errors render via textContent
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
+import { API_BASE } from '../../app/constants.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -993,7 +995,7 @@ describe('day-wide reveal planning', () => {
         rngLocked_: false,
         ...(overrides.purchaseInfo || {}),
       },
-      compressionTier: overrides.compressionTier ?? 0,
+      jackpotFlags: overrides.jackpotFlags ?? 0,
       growthState: { currentLevel: 31, phaseDay: overrides.phaseDay ?? 1 },
     });
     assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads()), {
@@ -1004,9 +1006,21 @@ describe('day-wide reveal planning', () => {
     })), { level: 40, points: 6, kind: 'x0', reason: 'jackpot' });
     assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads({
       purchaseInfo: { lvl: 40, inJackpotPhase: false, lastPurchaseDay_: false },
-      compressionTier: 2,
+      jackpotFlags: 2, // TURBO_BONUS_PENDING alone: the latch after a turbo level
       phaseDay: 0,
     })), { level: 40, points: 6, kind: 'x0', reason: 'post-turbo' });
+    // A chained turbo (JACKPOT_TURBO | TURBO_BONUS_PENDING) still owes its predecessor's bonus.
+    assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads({
+      purchaseInfo: { lvl: 40, inJackpotPhase: false, lastPurchaseDay_: true },
+      jackpotFlags: 3,
+      phaseDay: 0,
+    })), { level: 40, points: 6, kind: 'x0', reason: 'post-turbo' });
+    // A freshly armed turbo alone (bit 0) is not a bonus day.
+    assert.equal(coinflipMod.upcomingFlipBonusFromGameReads(reads({
+      purchaseInfo: { lvl: 41, inJackpotPhase: false, lastPurchaseDay_: true },
+      jackpotFlags: 1,
+      phaseDay: 0,
+    })), null);
     assert.equal(coinflipMod.upcomingFlipBonusFromGameReads(reads({ phaseDay: 2 })), null);
     assert.equal(coinflipMod.upcomingFlipBonusFromGameReads(reads({
       purchaseInfo: { rngLocked_: true },
@@ -1352,27 +1366,24 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(coin, 'spinning coin rendered');
     assert.equal(coin.tagName, 'BUTTON', 'coin is clickable too');
     assert.ok(coin.querySelector('.df-coin3d__inner'), 'rotor present (idle spin loop)');
-    assert.ok(coin.querySelector('.df-coin3d__surface'),
-      'one physical surface owns both preloaded artworks');
+    assert.ok(coin.querySelector('.df-coin3d__surface'), 'one surface holds both faces');
     const faces = coin.querySelectorAll('.df-coin3d__face');
-    assert.equal(faces.length, 2, 'two artworks are preloaded');
-    assert.equal(faces.filter((face) => !face.hidden).length, 1,
-      'only one artwork can be composited at a time');
+    assert.equal(faces.length, 2, 'two artworks are mounted');
+    assert.equal(faces.filter((face) => face.hidden).length, 0,
+      'both faces stay mounted: the compositor culls the one turned away');
     const srcs = coin.querySelectorAll('img').map((i) => i.src);
     assert.ok(srcs.includes('/shared/coinflip-face-red.svg'), 'red WWXRP face');
     assert.ok(srcs.includes('/shared/coinflip-face-eth.svg'), 'green ETH face');
     const rotorRule = APP_CSS.match(/\.df-coin3d__inner\s*\{[^}]*\}/s)?.[0] || '';
-    assert.match(rotorRule, /transform-style:\s*flat/);
-    assert.match(APP_CSS,
-      /\.df-coin3d__surface\s*\{[^}]*contain:\s*paint[^}]*transform-style:\s*flat/s,
-      'the artwork is isolated on one flat compositor surface');
-    assert.match(APP_CSS, /\.df-coin3d__face\[hidden\]\s*\{[^}]*display:\s*none !important/s,
-      'the opposite artwork is removed from compositing rather than backface-culled');
-    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*scaleY\(-1\)/s,
-      'the one plane pre-inverts ETH so its projected reverse remains upright');
-    assert.doesNotMatch(APP_CSS,
-      /\.df-coin3d__face--(?:red|eth)\s*\{[^}]*(?:rotateX|translateZ)/s,
-      'no second 3D plane can expose an upside-down WWXRP reverse');
+    assert.match(rotorRule, /transform-style:\s*preserve-3d/, 'the rotor is the 3D context both faces live in');
+    assert.match(APP_CSS, /\.df-coin3d__surface\s*\{[^}]*transform-style:\s*preserve-3d/s);
+    assert.match(APP_CSS, /\.df-coin3d__face\s*\{[^}]*backface-visibility:\s*hidden/s,
+      'the face turned away is culled from the same transform the compositor draws');
+    assert.match(APP_CSS, /\.df-coin3d__face--red\s*\{[^}]*translateZ\(1px\)/s);
+    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(1px\)/s,
+      'ETH is its own plane, turned half a revolution so it reads upright from behind');
+    assert.doesNotMatch(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*scaleY\(-1\)/s,
+      'no pre-inverted art: that belonged to the single-plane design');
     const revealHint = el.querySelector('[data-bind="df-reveal-hint"]');
     assert.equal(revealHint.hidden, false, 'small instruction graphic is visible while unrevealed');
     assert.equal(revealHint.tagName, 'BUTTON', 'the instruction graphic is itself a reveal control');
@@ -1428,7 +1439,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
   test('an exact upcoming bonus day puts plain green bonus copy left of Tomorrow', async () => {
     coinflipMod.__setUpcomingFlipBonusReaderForTest(async () => ({
       purchaseInfo: { lvl: 31, inJackpotPhase: true, lastPurchaseDay_: false, rngLocked_: false },
-      compressionTier: 0,
+      jackpotFlags: 0,
       growthState: { currentLevel: 31, phaseDay: 1 },
     }));
     _fetchResponses = {
@@ -1600,12 +1611,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.equal(
-      _fetchCounts.get('https://degenerus-db.fly.dev/player/0xab12000000000000000000000000000000000000'),
+      _fetchCounts.get(`${API_BASE}/player/0xab12000000000000000000000000000000000000`),
       1,
       'immediate-fire store subscriptions share one dashboard request',
     );
     assert.equal(
-      _fetchCounts.get('https://degenerus-db.fly.dev/game/coinflip/day/67'),
+      _fetchCounts.get(`${API_BASE}/game/coinflip/day/67`),
       1,
       'daily result is requested once at mount',
     );

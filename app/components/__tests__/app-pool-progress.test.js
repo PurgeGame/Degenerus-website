@@ -20,8 +20,9 @@ const {
   poolBenchmarksMatchPhase,
   jackpotPoolModel,
   jackpotCadenceModel,
-  jackpotCompressionTier,
-  isTurboTier,
+  jackpotDurationDays,
+  jackpotDaysFromFlags,
+  isTurboJackpot,
   jackpotDrawCounter,
   jackpotPrizePoolWei,
   phaseStripModel,
@@ -278,20 +279,20 @@ describe('next-pool progression model', () => {
 describe('jackpot depletion model', () => {
   test('uses the live contract counter when the indexed counter is stale', () => {
     assert.equal(jackpotDrawCounter({
-      contractPhase: { jackpot: true, day: 4 },
+      contractPhase: { jackpot: true, day: 2 },
       gameState: { jackpotCounter: 0 },
       goldRush: { phaseDay: 0 },
-    }), 4);
+    }), 2);
   });
 
   test('quotes the contract maximum solo share for ordinary and final draws', () => {
-    const ordinary = jackpotPoolModel({ currentWei: 100_000n, baselineWei: 125_000n, counter: 2 });
-    assert.equal(ordinary.maxWinWei, 4_480n,
+    const first = jackpotPoolModel({ currentWei: 100_000n, baselineWei: 125_000n, counter: 0 });
+    assert.equal(first.maxWinWei, 4_480n,
       '14% max draw × 80% ETH leg × 40% solo bucket');
-    assert.equal(ordinary.remainingPercent, 80);
-    assert.equal(ordinary.drawStart, 3);
+    assert.equal(first.remainingPercent, 80);
+    assert.equal(first.drawStart, 1);
 
-    const final = jackpotPoolModel({ currentWei: 100_000n, baselineWei: 125_000n, counter: 4 });
+    const final = jackpotPoolModel({ currentWei: 100_000n, baselineWei: 125_000n, counter: 2 });
     assert.equal(final.finalDraw, true);
     assert.equal(final.maxWinWei, 48_000n,
       'final draw × 80% ETH leg × 60% solo bucket');
@@ -308,89 +309,69 @@ describe('jackpot depletion model', () => {
     }), 95n, 'growthState ratchetRound is the deployed fallback');
   });
 
-  test('a compressed middle draw combines two logical-day maximums', () => {
-    const compressed = jackpotPoolModel({
-      currentWei: 100_000n, baselineWei: 100_000n, counter: 1, compressedFlag: 1,
+  // JackpotModule (audit c5eaf15a): `if (counter != 0) dailyBps *= 2` on a non-final day —
+  // the three-day schedule's middle draw pays twice the rolled 6-14% slice.
+  test('the middle draw of the three-day schedule pays a doubled slice', () => {
+    const middle = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 1, jackpotDays: 3,
     });
-    assert.equal(compressed.step, 2);
-    assert.equal(compressed.drawStart, 2);
-    assert.equal(compressed.drawEnd, 3);
-    assert.equal(compressed.maxWinWei, 8_960n);
-    assert.equal(compressed.physicalDraw, 2);
-    assert.equal(compressed.physicalDrawCount, 3);
+    assert.equal(middle.step, 1, 'the counter always steps by one');
+    assert.equal(middle.drawStart, 2);
+    assert.equal(middle.drawEnd, 2);
+    assert.equal(middle.maxWinWei, 8_960n);
+    assert.equal(middle.finalDraw, false);
+    assert.equal(middle.physicalDraw, 2);
+    assert.equal(middle.physicalDrawCount, 3);
   });
 
-  test('physical cadence names 5-day, 3-day, and 1-day jackpots honestly', () => {
+  test('physical cadence names 3-day and 1-day jackpots honestly', () => {
     assert.deepEqual(
-      [0, 1, 2, 3, 4].map((counter) => jackpotCadenceModel({ counter }).drawNumber),
-      [1, 2, 3, 4, 5],
-    );
-    assert.deepEqual(
-      [0, 1, 3].map((counter) => jackpotCadenceModel({ counter, compressedFlag: 1 }).drawNumber),
+      [0, 1, 2].map((counter) => jackpotCadenceModel({ counter }).drawNumber),
       [1, 2, 3],
     );
-    assert.deepEqual(jackpotCadenceModel({ counter: 3, compressedFlag: 1 }), {
+    assert.deepEqual(jackpotCadenceModel({ counter: 2, jackpotDays: 3 }), {
       drawNumber: 3,
       drawCount: 3,
-      logicalStart: 4,
-      logicalEnd: 5,
-      step: 2,
+      logicalStart: 3,
+      logicalEnd: 3,
+      step: 1,
+      bpsMultiplier: 1,
+      finalDraw: true,
     });
-    assert.deepEqual(jackpotCadenceModel({ counter: 0, compressedFlag: 2 }), {
+    assert.deepEqual(jackpotCadenceModel({ counter: 0, jackpotDays: 1 }), {
       drawNumber: 1,
       drawCount: 1,
       logicalStart: 1,
-      logicalEnd: 5,
-      step: 5,
+      logicalEnd: 1,
+      step: 1,
+      bpsMultiplier: 1,
+      finalDraw: true,
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Compression tier 3 — the chained turbo.
-  //
-  // storage/DegenerusGameStorage.sol:65 declares FOUR tiers:
-  //   0=norm 1=comp 2=turbo 3=turbo+owed
-  // Tier 3 is written by AdvanceModule.sol:329 when a turbo is armed while the
-  // previous turbo's coinflip bonus latch is still owed (two back-to-back
-  // levels that each met target inside one purchase day). It is a turbo: the
-  // contract's own cadence predicate is `>= 2` (AdvanceModule.sol:2360,
-  // JackpotModule.sol:2404, DegenerusGame.sol:2602/:2563).
-  //
-  // The client tested `=== 2`, so tier 3 fell through to the normal branch and
-  // a one-physical-day jackpot was presented as a five-day phase.
-  // ---------------------------------------------------------------------
-  test('tier 3 is a turbo, not a normal five-day phase', () => {
-    assert.equal(isTurboTier(3), true, 'chained arm is a turbo');
-    assert.equal(isTurboTier(2), true);
-    assert.equal(isTurboTier(1), false, 'compressed keeps three physical days');
-    assert.equal(isTurboTier(0), false);
-
-    assert.deepEqual(
-      jackpotCadenceModel({ counter: 0, compressedFlag: 3 }),
-      jackpotCadenceModel({ counter: 0, compressedFlag: 2 }),
-      'a chained turbo renders exactly like a plain turbo',
-    );
-    assert.equal(jackpotCadenceModel({ counter: 0, compressedFlag: 3 }).drawCount, 1);
+  // jackpotFlags: bit 0 JACKPOT_TURBO selects the one-day phase; bit 1 TURBO_BONUS_PENDING is
+  // only the post-turbo coinflip latch. A chained turbo (3) is a turbo; the latch alone (2) is not.
+  test('the schedule follows the turbo bit only', () => {
+    assert.equal(jackpotDaysFromFlags(0), 3);
+    assert.equal(jackpotDaysFromFlags(1), 1);
+    assert.equal(jackpotDaysFromFlags(2), 3, 'a pending bonus alone does not select turbo');
+    assert.equal(jackpotDaysFromFlags(3), 1, 'a chained turbo is still a turbo');
+    assert.equal(jackpotDaysFromFlags(null), null);
+    assert.equal(isTurboJackpot(1), true);
+    assert.equal(isTurboJackpot(3), false);
   });
 
-  test('a chained turbo takes the whole pool on its single draw', () => {
-    const chained = jackpotPoolModel({
-      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 3,
+  test('a turbo takes the whole pool on its single draw', () => {
+    const turbo = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, jackpotDays: 1,
     });
-    const plain = jackpotPoolModel({
-      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 2,
+    assert.equal(turbo.finalDraw, true, 'the only draw is the final draw');
+    assert.equal(turbo.physicalDraw, 1);
+    assert.equal(turbo.physicalDrawCount, 1);
+    const ordinary = jackpotPoolModel({
+      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, jackpotDays: 3,
     });
-    assert.equal(chained.step, 5, 'all five logical days collapse into one');
-    assert.equal(chained.finalDraw, true, 'so the only draw is the final draw');
-    assert.equal(chained.physicalDraw, 1);
-    assert.equal(chained.physicalDrawCount, 1);
-    assert.equal(chained.maxWinWei, plain.maxWinWei);
-    // Under the old `=== 2` test this was step 1 / finalDraw false, which
-    // quoted 14% of the pool at the 40% solo share instead of the grand prize.
-    const understated = jackpotPoolModel({
-      currentWei: 100_000n, baselineWei: 100_000n, counter: 0, compressedFlag: 0,
-    });
-    assert.ok(chained.maxWinWei > understated.maxWinWei * 5n,
+    assert.ok(turbo.maxWinWei > ordinary.maxWinWei * 5n,
       'the grand prize is not the ordinary daily slice');
   });
 
@@ -398,7 +379,7 @@ describe('jackpot depletion model', () => {
     assert.equal(
       phaseStripModel({
         gameState: { level: 41, phase: 'JACKPOT', jackpotPhaseFlag: true },
-        contractPhase: { jackpot: true, jackpotCounter: 0, compressedFlag: 3 },
+        contractPhase: { jackpot: true, jackpotCounter: 0, jackpotFlags: 3, jackpotDays: 1 },
       }).dayLabel,
       'JACKPOT DRAW 1 OF 1',
     );
@@ -406,86 +387,74 @@ describe('jackpot depletion model', () => {
 });
 
 describe('jackpot cadence source resolution', () => {
-  // The gold-rush slot0 decode (polling.js:333) names the counter
-  // `jackpotCounter`; the parimutuel benchmark names the same contract field
-  // `day`. Reading only `day` dropped the live chain counter on every render
-  // driven by the chain ticker.
+  // The gold-rush slot0 decode (polling.js) names the counter `jackpotCounter`; the
+  // parimutuel benchmark names the same contract field `day`.
   test('the chain decode counter is honoured under its own field name', () => {
     assert.equal(
-      jackpotDrawCounter({ contractPhase: { jackpot: true, jackpotCounter: 3 } }),
-      3,
+      jackpotDrawCounter({ contractPhase: { jackpot: true, jackpotCounter: 2 } }),
+      2,
     );
     assert.equal(
-      jackpotDrawCounter({ contractPhase: { jackpot: true, day: 2 } }),
-      2,
+      jackpotDrawCounter({ contractPhase: { jackpot: true, day: 1 } }),
+      1,
       'the benchmark spelling still wins when present',
     );
   });
 
   test('a live chain counter outranks the lagging indexed snapshot', () => {
-    // /game/state briefly retains the pre-advance counter. The chain value is
-    // the authority; the old order let the stale one win.
     assert.equal(
       jackpotDrawCounter({
-        contractPhase: { jackpot: true, jackpotCounter: 4 },
+        contractPhase: { jackpot: true, jackpotCounter: 2 },
         gameState: { jackpotCounter: 0 },
-        goldRush: { phaseDay: 4 },
+        goldRush: { phaseDay: 2 },
       }),
-      4,
+      2,
     );
     assert.equal(
-      jackpotDrawCounter({ gameState: { jackpotCounter: 0 }, goldRush: { phaseDay: 3 } }),
-      3,
+      jackpotDrawCounter({ gameState: { jackpotCounter: 0 }, goldRush: { phaseDay: 1 } }),
+      1,
       'without a contract phase the chain-fed goldRush day still outranks the index',
     );
   });
 
   test('cold load with no source at all reads as draw zero, not NaN', () => {
     assert.equal(jackpotDrawCounter({}), 0);
-    assert.equal(jackpotCompressionTier({}), 0);
-    assert.equal(jackpotCadenceModel({}).drawCount, 5);
+    assert.equal(jackpotDurationDays({}), 3);
+    assert.equal(jackpotCadenceModel({}).drawCount, 3);
   });
 
-  test('an unknown tier falls through to the next source instead of forging "normal"', () => {
-    // readJackpotPhaseContext() returns null when jackpotCompressionTier()
-    // fails. Under the old `?? 0` coercion that null became a hard 0, and `??`
-    // never falls through a 0 — so one bad RPC read masked a live turbo.
+  test('an unknown schedule falls through to the next source instead of forging "normal"', () => {
+    // readJackpotPhaseContext() returns null when jackpotDuration() fails; one bad RPC read
+    // must not mask a live turbo.
     assert.equal(
-      jackpotCompressionTier({
-        contractPhase: { compressedFlag: null },
-        goldRush: { phaseClock: { compressedFlag: 2 } },
-      }),
-      2,
-      'the slot0 decode answers when the direct tier read failed',
-    );
-    assert.equal(
-      jackpotCompressionTier({
-        contractPhase: { compressedFlag: null },
-        gameState: { compressedJackpotFlag: 1 },
+      jackpotDurationDays({
+        contractPhase: { jackpotDays: null },
+        goldRush: { phaseClock: { jackpotDays: 1 } },
       }),
       1,
+      'the slot0 decode answers when the direct read failed',
     );
     assert.equal(
-      jackpotCompressionTier({
-        contractPhase: { compressedFlag: 0 },
-        goldRush: { phaseClock: { compressedFlag: 2 } },
+      jackpotDurationDays({
+        contractPhase: { jackpotDays: null },
+        gameState: { jackpotFlags: 1 },
       }),
-      0,
-      'a real 0 is an answer, not a miss — it must not be overridden',
+      1,
+      'the chain game state carries the raw flags',
     );
     assert.equal(
-      jackpotCompressionTier({ contractPhase: { compressedFlag: null } }),
-      0,
+      jackpotDurationDays({
+        contractPhase: { jackpotDays: 3 },
+        goldRush: { phaseClock: { jackpotDays: 1 } },
+      }),
+      3,
+      'a real normal schedule is an answer, not a miss — it must not be overridden',
+    );
+    assert.equal(
+      jackpotDurationDays({ contractPhase: { jackpotDays: null } }),
+      3,
       'no source anywhere fails closed to the ordinary cadence',
     );
-  });
-
-  test('a masked tier no longer downgrades a chained turbo to five days', () => {
-    const resolved = jackpotCompressionTier({
-      contractPhase: { compressedFlag: null },
-      goldRush: { phaseClock: { compressedFlag: 3 } },
-    });
-    assert.equal(jackpotCadenceModel({ counter: 0, compressedFlag: resolved }).drawCount, 1);
   });
 });
 
@@ -518,50 +487,50 @@ describe('phase strip copy', () => {
 
   test('jackpot mode names the next unresolved draw day', () => {
     assert.deepEqual(phaseStripModel({
-      gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 3 },
+      gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 1 },
     }), {
       jackpot: true,
       level: 37,
-      day: 4,
-      dayCap: 5,
-      logicalStart: 4,
-      logicalEnd: 4,
-      dayLabel: 'JACKPOT DRAW 4 OF 5',
+      day: 2,
+      dayCap: 3,
+      logicalStart: 2,
+      logicalEnd: 2,
+      dayLabel: 'JACKPOT DRAW 2 OF 3',
     });
   });
 
-  test('a compressed final draw is labelled physical draw 3 of 3', () => {
+  test('the final draw is labelled physical draw 3 of 3', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 38, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 0 },
-      contractPhase: { jackpot: true, day: 3, compressedFlag: 1 },
+      contractPhase: { jackpot: true, day: 2, jackpotDays: 3 },
     }), {
       jackpot: true,
       level: 38,
       day: 3,
       dayCap: 3,
-      logicalStart: 4,
-      logicalEnd: 5,
+      logicalStart: 3,
+      logicalEnd: 3,
       dayLabel: 'JACKPOT DRAW 3 OF 3',
     });
     assert.equal(jackpotPoolModel({
       currentWei: 100_000n,
       baselineWei: 125_000n,
-      counter: 3,
-      compressedFlag: 1,
+      counter: 2,
+      jackpotDays: 3,
     }).finalDraw, true);
   });
 
-  test('a turbo jackpot is one physical draw covering all five logical days', () => {
+  test('a turbo jackpot is one physical draw', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 39, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 0 },
-      contractPhase: { jackpot: true, day: 0, compressedFlag: 2 },
+      contractPhase: { jackpot: true, day: 0, jackpotDays: 1 },
     }), {
       jackpot: true,
       level: 39,
       day: 1,
       dayCap: 1,
       logicalStart: 1,
-      logicalEnd: 5,
+      logicalEnd: 1,
       dayLabel: 'JACKPOT DRAW 1 OF 1',
     });
   });
@@ -574,13 +543,13 @@ describe('phase strip copy', () => {
       jackpot: true,
       level: 37,
       day: 3,
-      dayCap: 5,
+      dayCap: 3,
       logicalStart: 3,
       logicalEnd: 3,
-      dayLabel: 'JACKPOT DRAW 3 OF 5',
+      dayLabel: 'JACKPOT DRAW 3 OF 3',
     });
     assert.deepEqual(phaseStripModel({
-      gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 4 },
+      gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 2 },
       contractPhase: { jackpot: false, day: 0 },
     }), {
       jackpot: false, level: 38, day: null, dayLabel: 'PURCHASE DAY —',

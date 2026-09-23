@@ -7,6 +7,7 @@
  * the hosted data plane exactly on a local host, and nowhere else.
  */
 import assert from 'node:assert/strict';
+import '../../app/__tests__/helpers/http-transport.js';
 import test from 'node:test';
 
 import { crapsReplayFetchBase } from '../../craps/replay-fetch.js';
@@ -22,7 +23,8 @@ test('a local static server routes through the hosted game API', () => {
   const base = `${API_BASE}/game`;
   assert.equal(crapsReplayFetchBase('localhost'), base);
   assert.equal(crapsReplayFetchBase('127.0.0.1'), base);
-  assert.match(base, /^https:\/\//);
+  // Only a profile that still names a hosted API has an absolute origin to route to.
+  if (API_BASE) assert.match(base, /^https:\/\//);
 });
 
 test('every replay fetch carries a deadline so a hung pointer cannot park the loader', async () => {

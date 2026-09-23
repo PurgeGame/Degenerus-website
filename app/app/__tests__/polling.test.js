@@ -15,6 +15,8 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as storeMod from '../store.js';
 import { CHAIN } from '../chain-config.js';
+import './helpers/http-transport.js';
+import { API_BASE } from '../constants.js';
 import * as drawGate from '../major-draw-activity.js';
 
 // ---------------------------------------------------------------------------
@@ -421,9 +423,18 @@ describe('gold-rush direct chain reader', () => {
       rngLocked: true,
       transition: false,
       gameOver: false,
-      compressedFlag: 1,
+      // Byte 23 is jackpotFlags: bit 0 JACKPOT_TURBO → a one-day schedule.
+      jackpotFlags: 1,
+      jackpotDays: 1,
       phase: 'JACKPOT',
     });
+    // TURBO_BONUS_PENDING alone (bit 1) is only the coinflip latch: the schedule stays 3 days.
+    const latched = _testing.buildGoldRushChainPayload(
+      { ...SNAPSHOT, phaseSlot0: (jackpotSlot & ~(0xffn << 184n)) | (2n << 184n), currentDay: 168n },
+      null,
+    );
+    assert.equal(latched.phaseClock.jackpotFlags, 2);
+    assert.equal(latched.phaseClock.jackpotDays, 3);
   });
 });
 
@@ -535,7 +546,7 @@ describe('fetchJSONWithSignal (Pitfall 5)', () => {
     };
     const ctrl = new AbortController();
     const request = _testing.fetchJSONWithSignal('/foo', { signal: ctrl.signal });
-    assert.equal(captured.url, 'https://degenerus-db.fly.dev/foo', 'API_BASE prepended');
+    assert.equal(captured.url, API_BASE + '/foo', 'API_BASE prepended');
     ctrl.abort();
     await assert.rejects(request, { name: 'AbortError' });
     assert.equal(captured.opts.signal.aborted, true, 'last consumer abort cancels network work');
@@ -556,7 +567,7 @@ describe('fetchJSONWithSignal (Pitfall 5)', () => {
       return { ok: true, status: 200, json: async () => ({}) };
     };
     await _testing.fetchJSONWithSignal('/baz');
-    assert.equal(captured.url, 'https://degenerus-db.fly.dev/baz');
+    assert.equal(captured.url, API_BASE + '/baz');
     assert.equal(captured.opts.signal instanceof AbortSignal, true);
     assert.equal(captured.opts.signal.aborted, false);
   });

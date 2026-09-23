@@ -108,3 +108,90 @@ test('a saturated single-block log response refuses to invent a complete invento
   const read=client(async()=>Array.from({length:1000},()=>({})));
   await assert.rejects(read.logs({address:GAME},{fromBlock:1,toBlock:1}),{code:'LOG_LIMIT'});
 });
+
+// A fixed 2s chain: block n is stamped 2n and its hash encodes n, so parent links are checkable.
+function fixedChain(head, { onHeader, onReceipt, receiptBlock } = {}) {
+  const hashOf = n => '0x' + n.toString(16).padStart(64, '0');
+  const block = n => ({ number: '0x' + n.toString(16), timestamp: '0x' + (2 * n).toString(16), hash: hashOf(n), parentHash: hashOf(n - 1) });
+  const read = client(async (method, args) => {
+    if (method === 'eth_chainId') return '0x1';
+    if (method === 'eth_getBlockByNumber') { const n = args[0] === 'latest' ? head.number : Number(args[0]); onHeader?.(args[0]); return block(n); }
+    if (method === 'eth_getTransactionReceipt') { onReceipt?.(args[0]); return { transactionHash: args[0], blockNumber: '0x' + receiptBlock().toString(16), blockHash: hashOf(receiptBlock()), logs: [] }; }
+    throw new Error('unexpected ' + method);
+  }, { chain: { id: 1, deployBlock: 1, blockSeconds: 2 } });
+  return { read, hashOf };
+}
+
+test('a settled day boundary is searched once per page, and in two probes on a fixed-interval chain', async () => {
+  const head = { number: 10_000 }; const probes = [];
+  const { read } = fixedChain(head, { onHeader: tag => { if (tag !== 'latest') probes.push(Number(tag)); } });
+  const s = await read.snapshot();
+  assert.equal(await read.blockAtTime(5_001, s.block), 2_501);
+  assert.equal(probes.length, 2);
+  head.number = 10_050; read.head = null;
+  const later = await read.snapshot();
+  assert.equal(await read.blockAtTime(5_001, later.block), 2_501);
+  assert.equal(probes.length, 2, 'a settled boundary is not searched again from a newer head');
+  // Inside the finality window the answer is recomputed on every call.
+  const near = 2 * later.block.number - 20;
+  await read.blockAtTime(near, later.block); const first = probes.length;
+  await read.blockAtTime(near, later.block);
+  assert.ok(probes.length > first, 'a boundary near the head is never remembered');
+});
+
+test('checkpoint ancestry is proven from parent hashes already seen, and refuted on a fork', async () => {
+  const head = { number: 200 };
+  const { read, hashOf } = fixedChain(head);
+  await read.header(199); const upper = await read.header(200);
+  assert.equal(read.linksTo(upper, 199, hashOf(199)), true);
+  assert.equal(read.linksTo(upper, 198, hashOf(198)), true, 'the parent of a known header is proven by its hash');
+  assert.equal(read.linksTo(upper, 199, OTHER), false);
+  assert.equal(read.linksTo(upper, 150, hashOf(150)), null, 'a missing link must fall back to the RPC');
+});
+
+test('receipts are kept once settled, shared briefly when recent, and fetched once when concurrent', async () => {
+  const head = { number: 1_000 }; let at = 900; const fetched = [];
+  const { read } = fixedChain(head, { onReceipt: hash => fetched.push(hash), receiptBlock: () => at });
+  await read.snapshot();
+  await read.receipt('0xaa'); await read.receipt('0xaa');
+  assert.equal(fetched.length, 1);
+  at = 990;
+  await Promise.all([read.receipt('0xbb'), read.receipt('0xbb')]);
+  assert.equal(fetched.length, 2, 'concurrent readers of one transaction share a request');
+  await read.receipt('0xbb');
+  assert.equal(fetched.length, 2, 'a recent receipt is shared within one block interval');
+  read.receipts.get('0xbb').at -= 2 * read.headTtlMs;
+  await read.receipt('0xbb');
+  assert.equal(fetched.length, 3, 'past one block interval a receipt near the head is re-read in case its block is replaced');
+  read.receipts.get('0xbb').at -= 2 * read.headTtlMs;
+  const { blockHash } = await read.receipt('0xbb'); const before = fetched.length;
+  read.receipts.get('0xbb').at -= 2 * read.headTtlMs;
+  await read.receipt('0xbb', undefined, blockHash);
+  assert.equal(fetched.length, before, 'a caller holding the canonical log row reuses a recent receipt from that block');
+  read.receipts.get('0xbb').at -= 2 * read.headTtlMs;
+  await read.receipt('0xbb', undefined, OTHER);
+  assert.equal(fetched.length, before + 1, 'a different block hash means the transaction moved: re-read');
+});
+
+test('one snapshot fetches a header by number once for all its readers', async () => {
+  const probes = [];
+  const { read } = fixedChain({ number: 500 }, { onHeader: tag => { if (tag !== 'latest') probes.push(tag); } });
+  const s = await read.snapshot();
+  const [a, b] = await Promise.all([s.header(490), s.header(490)]);
+  assert.equal(a.hash, b.hash); assert.equal(probes.length, 1);
+});
+
+test('a settled receipt is kept in the browser cache for the next page, holding only deployment logs', async () => {
+  const fetched = [];
+  const make = () => {
+    const { read } = fixedChain({ number: 1_000 }, { onReceipt: hash => fetched.push(hash), receiptBlock: () => 900 });
+    read.persistReceipts = true; return read;
+  };
+  const first = make(); await first.snapshot();
+  await first.receipt('0xcc');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const next = make(); await next.snapshot();
+  const again = await next.receipt('0xcc');
+  assert.equal(fetched.length, 1, 'the second page reuses the stored receipt');
+  assert.equal(again.blockNumber, 900);
+});

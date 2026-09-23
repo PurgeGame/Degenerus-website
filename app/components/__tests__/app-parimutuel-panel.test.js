@@ -13,6 +13,7 @@
 // app-balances-strip.test.js.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -232,7 +233,7 @@ function installContract({
   chainLevel = LEVEL,
   poolTarget = null,
   jackpotPhase = false,
-  compressedFlag = 0,
+  jackpotDays = 3,
 } = {}) {
   const rows = growth;
   const rejectedGrowthRounds = new Set(growthReadErrors.map(Number));
@@ -285,7 +286,7 @@ function installContract({
       },
       purchaseInfo: async () => [chainLevel, jackpotPhase, false, false, 1n],
       jackpotPhase: async () => jackpotPhase,
-      jackpotCompressionTier: async () => compressedFlag,
+      jackpotDuration: async () => jackpotDays,
     }));
   } else {
     pari.__setGameFactoryForTest(() => ({
@@ -296,7 +297,7 @@ function installContract({
       },
       purchaseInfo: async () => [chainLevel, jackpotPhase, false, false, 1n],
       jackpotPhase: async () => jackpotPhase,
-      jackpotCompressionTier: async () => compressedFlag,
+      jackpotDuration: async () => jackpotDays,
     }));
   }
   return fake;
@@ -644,7 +645,7 @@ describe('app-parimutuel-panel', () => {
     let targetReads = 0;
     pari.__setGameFactoryForTest(() => ({
       purchaseInfo: async () => [LEVEL, false, closing, closing, 1n],
-      jackpotCompressionTier: async () => 2,
+      jackpotDuration: async () => 1,
       growthState: async () => [100n, closing ? 0n : 110n, 0n, LEVEL, false, 0],
       prizePoolTargetView: async () => { targetReads++; return closing ? 50n : 110n; },
     }));

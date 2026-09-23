@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import {
   activeTicketLevel,
   foilPackDisplayLevel,
-  JACKPOT_LEVEL_CAP,
+  JACKPOT_DAYS,
 } from '../active-level.js';
 
 const state = (over = {}) => ({
@@ -52,53 +52,56 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
   });
 
   test('rngLocked on the final jackpot day → level + 1', () => {
-    const cnt = JACKPOT_LEVEL_CAP - 1;   // step 1 → cnt + 1 >= CAP
+    assert.equal(JACKPOT_DAYS, 3);
+    const cnt = JACKPOT_DAYS - 1;   // _isFinalJackpotDay: counter >= JACKPOT_DAYS - 1
     assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: cnt })), 26);
   });
 
   test('rngLocked but NOT the final day → still the current level', () => {
     assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 1 })), 25);
+    assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 0 })), 25);
   });
 
-  test('compressed=2 → step is the full cap, so any rngLocked day seals', () => {
+  test('turbo (jackpotFlags bit 0) → any rngLocked day seals', () => {
+    for (const jackpotFlags of [1, 3]) {
+      assert.equal(
+        activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 0, jackpotFlags })),
+        26,
+      );
+    }
     assert.equal(
-      activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 0, compressedJackpotFlag: 2 })),
+      activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 0, jackpotDays: 1 })),
       26,
     );
   });
 
-  test('compressed=1 mid-phase → step 2', () => {
-    const cnt = JACKPOT_LEVEL_CAP - 2;   // step 2 → cnt + 2 >= CAP
+  test('the bonus latch alone (jackpotFlags 2) does not select turbo', () => {
     assert.equal(
-      activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: cnt, compressedJackpotFlag: 1 })),
-      26,
-    );
-    assert.equal(
-      activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 1, compressedJackpotFlag: 1 })),
+      activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 0, jackpotFlags: 2 })),
       25,
     );
   });
 
-  test('absent compressedJackpotFlag behaves as uncompressed (step 1)', () => {
+  test('absent schedule behaves as the normal three-day phase', () => {
     // Conservative default: under-fires rather than advancing the level early.
-    assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 2 })), 25);
+    assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 1 })), 25);
   });
 
-  test('direct compressed cadence fixes a stale /game/state final lock', () => {
+  test('direct cadence fixes a stale /game/state final lock', () => {
     const stale = state({ rngLockedFlag: false, jackpotCounter: 0 });
     assert.equal(activeTicketLevel(stale, {
       level: 25,
       jackpot: true,
       rngLocked: true,
-      day: 3,
-      compressedFlag: 1,
+      day: 2,
+      jackpotDays: 3,
     }), 26);
     assert.equal(activeTicketLevel(stale, {
       level: 25,
       jackpot: true,
       rngLocked: false,
-      day: 3,
-      compressedFlag: 1,
+      day: 2,
+      jackpotDays: 3,
     }), 25);
   });
 
@@ -113,31 +116,31 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
       level: 25,
       jackpot: true,
       rngLocked: true,
-      jackpotCounter: 4,
-      compressedFlag: 0,
+      jackpotCounter: 2,
+      jackpotDays: 3,
     }), 26, 'the final normal day seals and routes buys forward');
     assert.equal(activeTicketLevel(stale, {
       level: 25,
       jackpot: true,
       rngLocked: true,
-      jackpotCounter: 3,
-      compressedFlag: 0,
-    }), 25, 'day four of five is not yet sealed');
+      jackpotCounter: 1,
+      jackpotDays: 3,
+    }), 25, 'day two of three is not yet sealed');
   });
 
-  test('an unknown direct tier falls back to /game/state rather than to normal', () => {
-    // readJackpotPhaseContext() now reports null when jackpotCompressionTier()
-    // fails; the port must not read that as a real tier 0.
+  test('an unknown direct schedule falls back to /game/state rather than to normal', () => {
+    // readJackpotPhaseContext() reports null when jackpotDuration() fails; the port must
+    // not read that as the normal schedule.
     assert.equal(activeTicketLevel(
-      state({ rngLockedFlag: true, jackpotCounter: 0, compressedJackpotFlag: 2 }),
-      { level: 25, jackpot: true, rngLocked: true, day: 0, compressedFlag: null },
+      state({ rngLockedFlag: true, jackpotCounter: 0, jackpotFlags: 1 }),
+      { level: 25, jackpot: true, rngLocked: true, day: 0, jackpotDays: null },
     ), 26, 'the turbo known to /game/state still seals the level');
   });
 
   test('a stale direct snapshot from another level is ignored', () => {
     assert.equal(activeTicketLevel(
       state({ rngLockedFlag: false, jackpotCounter: 1 }),
-      { level: 24, jackpot: false, rngLocked: true, day: 4, compressedFlag: 0 },
+      { level: 24, jackpot: false, rngLocked: true, day: 2, jackpotDays: 3 },
     ), 25);
   });
 
@@ -145,7 +148,7 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
     const seen = [
       activeTicketLevel({ level: 24, jackpotPhaseFlag: false }),                 // L24 purchase
       activeTicketLevel({ level: 25, jackpotPhaseFlag: true, jackpotCounter: 0 }), // L25 jackpot
-      activeTicketLevel({ level: 25, jackpotPhaseFlag: true, rngLockedFlag: true, jackpotCounter: 4 }),
+      activeTicketLevel({ level: 25, jackpotPhaseFlag: true, rngLockedFlag: true, jackpotCounter: 2 }),
       activeTicketLevel({ level: 25, jackpotPhaseFlag: false }),                 // L25 purchase
       activeTicketLevel({ level: 26, jackpotPhaseFlag: true, jackpotCounter: 0 }), // L26 jackpot
     ];
@@ -158,7 +161,7 @@ describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
     assert.equal(foilPackDisplayLevel(state({
       level: 45,
       rngLockedFlag: true,
-      jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+      jackpotCounter: JACKPOT_DAYS - 1,
     })), 45);
   });
 
@@ -166,7 +169,7 @@ describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
     assert.equal(foilPackDisplayLevel(state({
       level: 45,
       rngLockedFlag: true,
-      jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+      jackpotCounter: JACKPOT_DAYS - 1,
       phaseTransitionActive: true,
     })), 46);
   });
@@ -193,13 +196,13 @@ describe('foilPackDisplayLevel — Daily Drawing presentation cadence', () => {
       foilPackDisplayLevel(state({
         level: 45,
         rngLockedFlag: true,
-        jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+        jackpotCounter: JACKPOT_DAYS - 1,
         phaseTransitionActive: false,
       })),
       foilPackDisplayLevel(state({
         level: 45,
         rngLockedFlag: true,
-        jackpotCounter: JACKPOT_LEVEL_CAP - 1,
+        jackpotCounter: JACKPOT_DAYS - 1,
         phaseTransitionActive: true,
       })),
       foilPackDisplayLevel({

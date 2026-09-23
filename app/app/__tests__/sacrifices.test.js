@@ -1,18 +1,21 @@
 import { test, afterEach } from 'node:test';
+import './helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { ethers } from 'ethers';
-import { CONTRACTS, CHAIN } from '../chain-config.js';
+import { CONTRACTS, ETH_DIVISOR } from '../chain-config.js';
 import { update } from '../store.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { deriveDeityBoonSlots } from '../passes.js';
 import {
-  FLIP_UNIT as UNIT, MIN_SACRIFICE, MAX_SACRIFICE, parseSacrificeAmount,
-  sacrificeQuote, readSacrifices, sacrificeFlip, __setSacrificeContractFactoryForTest,
+  SACRIFICE_DEITIES, BOON_WAGER_UNIT_WEI, MIN_BOON_QUOTE_WEI, parseBoonWager,
+  sacrificeQuote, readSacrifices, __setSacrificeContractFactoryForTest,
   readSacrificeHistory, sacrificeStanding, sacrificeAnySlotChance, SACRIFICE_SLOTS_PER_POOL,
 } from '../sacrifices.js';
+import * as sacrifices from '../sacrifices.js';
 import { invalidateJSONCache } from '../api.js';
 
 const DONOR = '0x1111111111111111111111111111111111111111';
+const DIV = BigInt(ETH_DIVISOR);
 afterEach(() => {
   __setSacrificeContractFactoryForTest(null);
   clearProvider();
@@ -20,21 +23,34 @@ afterEach(() => {
   invalidateJSONCache();
 });
 
-test('FLIP parsing preserves wei and rejects exponent, negative and excessive precision inputs', () => {
-  assert.equal(parseSacrificeAmount(' 100.000000000000000001 '), MIN_SACRIFICE + 1n);
-  for (const value of ['', '-100', '1e3', '1,000', '0x100', '100.0000000000000000001']) assert.equal(parseSacrificeAmount(value), null);
+test('the FLIP sacrifice write is gone: entries come only from ETH Degenerette hero bets', () => {
+  // Audit c5eaf15a removed Vault/sDGNRS.donateFlipForBoons and GAME.enterProtocolBoonDraw.
+  assert.equal(sacrifices.sacrificeFlip, undefined);
+  assert.deepEqual(SACRIFICE_DEITIES.map((d) => [d.key, d.address, d.heroSymbol]), [
+    ['vault', CONTRACTS.VAULT, 0],
+    ['sdgnrs', CONTRACTS.SDGNRS, 6],
+  ]);
 });
 
-test('weight floors only whole 100-FLIP units and chance includes the proposed entry', () => {
-  const quote = sacrificeQuote(199n * UNIT, 1600, 4800n);
-  assert.equal(quote.units, 1);
-  assert.equal(quote.weight, 1600n);
-  assert.equal(quote.remainderWei, 99n * UNIT);
+test('ETH wager parsing maps a display amount to raw chain wei and rejects malformed input', () => {
+  assert.equal(parseBoonWager(' 1 '), 10n ** 18n / DIV);
+  assert.equal(parseBoonWager('0.005'), MIN_BOON_QUOTE_WEI);
+  for (const value of ['', '-1', '1e3', '1,000', '0x100', '1.0000000000000000001']) assert.equal(parseBoonWager(value), null);
+});
+
+test('weight floors whole 0.0001-ETH wager units times the multiplier, like the contract', () => {
+  // Mainnet literals, rescaled by the display divisor exactly as the overlay rescales them.
+  assert.equal(BOON_WAGER_UNIT_WEI, 10n ** 14n / DIV);
+  assert.equal(MIN_BOON_QUOTE_WEI, 5n * 10n ** 15n / DIV);
+  const stake = MIN_BOON_QUOTE_WEI + BOON_WAGER_UNIT_WEI - 1n; // 50 units + dust
+  const quote = sacrificeQuote(stake, 1600, 240_000n);
+  assert.equal(quote.units, 50n);
+  assert.equal(quote.weight, 80_000n);
+  assert.equal(quote.multiplier, 2);
   assert.equal(quote.chance, 0.25);
-  assert.equal(sacrificeQuote(MAX_SACRIFICE, 2400, 0n).weight, 600_000n);
-  assert.equal(sacrificeQuote(MIN_SACRIFICE, 800, 0n).chance, 1);
-  for (const amount of [0n, MIN_SACRIFICE - 1n, MAX_SACRIFICE + 1n]) assert.equal(sacrificeQuote(amount, 800, 0n), null);
-  assert.equal(sacrificeQuote(MIN_SACRIFICE, null, 0n), null);
+  assert.equal(sacrificeQuote(MIN_BOON_QUOTE_WEI, 800, 0n).chance, 1);
+  for (const amount of [0n, MIN_BOON_QUOTE_WEI - 1n, null]) assert.equal(sacrificeQuote(amount, 800, 0n), null);
+  assert.equal(sacrificeQuote(MIN_BOON_QUOTE_WEI, null, 0n), null);
 });
 
 test('latest menu matches Solidity 0.8.34 viewer fixtures, including all three Craps tiers', () => {
@@ -58,10 +74,9 @@ test('tomorrow uses today’s finalized word, with all reads pinned to one block
       livenessTriggered: capture('liveness', false), rngWordForDay: capture('seed', 123456n),
     };
     if (address === CONTRACTS.GAME_LENS) return {
-      protocolBoonPool: capture('pool', [123n * UNIT, 800n, 1n, 0n]),
-      protocolBoonQuote: capture('quote', [1n, 400n, 1600n, 1600n]),
+      protocolBoonPool: capture('pool', [12n * 10n ** 16n / DIV, 800n, 1n, 0n]),
+      protocolBoonQuote: capture('quote', [50n, 400n, 1600n, 80_000n]),
     };
-    if (address === CONTRACTS.COIN) return { balanceOf: capture('balance', 500n * UNIT) };
     throw Error('Unexpected contract');
   });
   const state = await readSacrifices({ player: DONOR });
@@ -69,77 +84,38 @@ test('tomorrow uses today’s finalized word, with all reads pinned to one block
   assert.equal(state.awardDay, 43);
   assert.equal(state.menuReady, true);
   assert.equal(state.multiplierUnits, 1600);
-  assert.equal(state.balanceWei, 500n * UNIT);
+  assert.equal(state.score, 400);
+  assert.equal(state.pools[0].totalWageredWei, 12n * 10n ** 16n / DIV);
   for (const [, args] of reads) assert.deepEqual(args.at(-1), { blockTag: 999 });
   assert.equal(reads.find(([name]) => name === 'seed')[1][0], 42);
+  // The quote asks for the smallest stake the lens accepts; any other size scales linearly.
+  assert.deepEqual(reads.find(([name]) => name === 'quote')[1].slice(0, 3), [CONTRACTS.GAME, DONOR, MIN_BOON_QUOTE_WEI]);
   assert.deepEqual(state.pools[0].slots, deriveDeityBoonSlots({ dailySeed: 123456n, deity: CONTRACTS.VAULT, day: 43, includeCraps: true }));
   assert.deepEqual(state.pools[1].slots, deriveDeityBoonSlots({ dailySeed: 123456n, deity: CONTRACTS.SDGNRS, day: 43, includeCraps: true }));
 });
 
-function setupWrite({ day = 42, duringSim = () => {}, failSim = false, minedDay = 42 } = {}) {
-  const calls = [];
-  update('connected.address', DONOR);
-  update('viewing.address', null);
-  update('ui.chainOk', true);
-  update('ui.mode', 'self');
-  const signer = { getAddress: async () => DONOR };
-  setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }), getSigner: async () => signer });
+test('a failed quote leaves the multiplier unknown instead of failing the whole read', async () => {
+  setProvider({ getBlockNumber: async () => 7 });
   __setSacrificeContractFactoryForTest((address) => {
-    if (address === CONTRACTS.GAME) return { currentDayView: async () => typeof day === 'function' ? day() : day };
-    assert.ok([CONTRACTS.VAULT, CONTRACTS.SDGNRS].includes(address));
-    const donate = async (...args) => {
-      calls.push({ address, args });
-      const iface = new ethers.Interface(['event ProtocolBoonDrawEntered(address indexed issuer,address indexed donor,uint24 indexed day,uint256 amount,uint8 amountUnits,uint16 scoreSnapshot,uint64 weight,uint32 entryIndex)']);
-      const event = iface.encodeEventLog(iface.getEvent('ProtocolBoonDrawEntered'), [address, DONOR, minedDay, args[0], 1, 400, 1600, 0]);
-      return { hash: '0x123', wait: async () => ({ status: 1, logs: [{ address: CONTRACTS.GAME, ...event }] }) };
+    if (address === CONTRACTS.GAME) return {
+      currentDayView: async () => 5, gameOverTimestamp: async () => 0n,
+      livenessTriggered: async () => false, rngWordForDay: async () => 0n,
     };
-    donate.staticCall = async () => { duringSim(); if (failSim) throw Error('Simulation rejected'); };
-    const sink = { donateFlipForBoons: donate, connect: () => sink };
-    return sink;
+    return {
+      protocolBoonPool: async () => [0n, 0n, 0n, 0n],
+      protocolBoonQuote: async () => { throw Error('E()'); },
+    };
   });
-  return calls;
-}
-
-test('both gods receive FLIP via their own wrapper, with no native ETH value or approval', async () => {
-  const calls = setupWrite({ minedDay: 43 });
-  const first = await sacrificeFlip({ deityKey: 'vault', amount: 199n * UNIT, expectedDay: 42 });
-  await sacrificeFlip({ deityKey: 'sdgnrs', amount: MIN_SACRIFICE, expectedDay: 42 });
-  assert.deepEqual(calls, [
-    { address: CONTRACTS.VAULT, args: [199n * UNIT] },
-    { address: CONTRACTS.SDGNRS, args: [MIN_SACRIFICE] },
-  ]);
-  assert.equal(first.awardDay, 44, 'confirmation follows the actual event when mining crosses reset');
-});
-
-test('operator and view modes cannot spend the connected donor’s FLIP', async () => {
-  const calls = setupWrite();
-  for (const mode of ['operator', 'view', 'combined']) {
-    update('ui.mode', mode);
-    await assert.rejects(sacrificeFlip({ deityKey: 'vault', amount: MIN_SACRIFICE, expectedDay: 42 }), /own connected wallet/);
-  }
-  assert.equal(calls.length, 0);
-});
-
-test('changed day, failed simulation and a wallet change during simulation never broadcast', async () => {
-  for (const options of [
-    { day: 43 }, { failSim: true },
-    { duringSim: () => update('connected.address', '0x2222222222222222222222222222222222222222') },
-  ]) {
-    const calls = setupWrite(options);
-    await assert.rejects(sacrificeFlip({ deityKey: 'vault', amount: MIN_SACRIFICE, expectedDay: 42 }));
-    assert.equal(calls.length, 0);
-  }
-  let day = 42;
-  const calls = setupWrite({ day: () => day, duringSim: () => { day = 43; } });
-  await assert.rejects(sacrificeFlip({ deityKey: 'vault', amount: MIN_SACRIFICE, expectedDay: 42 }), /game day changed/);
-  assert.equal(calls.length, 0);
+  const state = await readSacrifices({ player: DONOR });
+  assert.equal(state.multiplierUnits, null);
+  assert.equal(state.menuReady, false);
 });
 
 
 test('a missing history route degrades to UNAVAILABLE, never to an empty history', async () => {
   // The indexer publishes /api/game/protocol-boon-draws independently of this build,
   // so a 404 means the surface is not up yet. Reporting that as "no entries" would
-  // tell a donor who just sacrificed that nothing happened.
+  // tell a player who just made a hero bet that nothing happened.
   const priorFetch = globalThis.fetch;
   const requested = [];
   try {
@@ -171,7 +147,7 @@ test('a missing history route degrades to UNAVAILABLE, never to an empty history
       headers: { get: () => 'application/json' },
       json: async () => ({
         entries: [
-          { issuer: CONTRACTS.VAULT, player: DONOR, day: 44, amount: '100', units: 1, amountUnits: 1, weight: '800', entryIndex: 0 },
+          { issuer: CONTRACTS.VAULT, player: DONOR, day: 44, amount: '100', weight: '800', entryIndex: 0 },
           null,
           7,
         ],
@@ -189,19 +165,15 @@ test('a missing history route degrades to UNAVAILABLE, never to an empty history
   }
 });
 
-test('a donor standing sums their own frozen entries and the three slots draw with replacement', () => {
+test('a player standing sums their own frozen entries and the three slots draw with replacement', () => {
   const entries = [
-    { issuer: CONTRACTS.VAULT, day: 44, amount: '100', units: 1, weight: '800' },
-    { issuer: CONTRACTS.VAULT, day: 44, amount: '900', units: 9, weight: '21600' },
-    { issuer: CONTRACTS.VAULT, day: 43, amount: '500', units: 5, weight: '4000' },  // another day
-    { issuer: CONTRACTS.SDGNRS, day: 44, amount: '300', units: 3, weight: '2400' }, // the other god
+    { issuer: CONTRACTS.VAULT, day: 44, amount: '100', weight: '800' },
+    { issuer: CONTRACTS.VAULT, day: 44, amount: '900', weight: '21600' },
+    { issuer: CONTRACTS.VAULT, day: 43, amount: '500', weight: '4000' },  // another day
+    { issuer: CONTRACTS.SDGNRS, day: 44, amount: '300', weight: '2400' }, // the other god
   ];
   const standing = sacrificeStanding(entries, { issuer: CONTRACTS.VAULT, day: 44 });
-  assert.deepEqual(standing, { count: 2, units: 10, weight: 22_400n, amountWei: 1_000n });
-
-  // Each entry keeps the score it was made at, so the position is a SUM of weights —
-  // 22,400 here, which a re-quote of 10 units at one multiplier could never produce.
-  assert.notEqual(standing.weight, 10n * 800n);
+  assert.deepEqual(standing, { count: 2, weight: 22_400n, amountWei: 1_000n });
 
   assert.equal(sacrificeStanding(null, {}).count, 0);
 

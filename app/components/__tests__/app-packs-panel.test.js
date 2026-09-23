@@ -7,6 +7,7 @@
 // Plan 60-04 will extend with localStorage idempotency + boot CTA tests.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 // ---------------------------------------------------------------------------

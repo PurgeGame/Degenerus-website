@@ -94,7 +94,8 @@ describe('BAF resolution model', () => {
   test('maps every contract prize lane and keeps the shares at 100%', () => {
     assert.equal(BAF_PRIZE_LANES.reduce((sum, lane) => sum + lane.share, 0), 100);
     assert.deepEqual(BAF_PRIZE_LANES.map((lane) => lane.label), [
-      'TOP SCORE', 'FINAL-DAY DRAW', 'CUT SURVIVOR', 'FUTURE DRAWS', 'SCATTER',
+      // Audit 26ad5863 removed the two far-future draws; the scatter took their 10%.
+      'TOP SCORE', 'FINAL-DAY DRAW', 'CUT SURVIVOR', 'SCATTER',
     ]);
   });
 

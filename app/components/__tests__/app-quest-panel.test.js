@@ -14,6 +14,7 @@
 // fakeDOM scaffold inherited verbatim from Phase 60/61/62-01 panel tests.
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 

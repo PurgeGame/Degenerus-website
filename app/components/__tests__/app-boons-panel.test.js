@@ -36,6 +36,7 @@
 // fakeDOM scaffold inherited verbatim from app-quest-panel.test.js.
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 

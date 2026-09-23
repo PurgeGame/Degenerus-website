@@ -9,6 +9,7 @@
 // the most coverage here.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import './helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { CHAIN } from '../chain-config.js';
 

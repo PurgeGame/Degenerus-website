@@ -228,7 +228,7 @@ describe('gold-rush headline wiring', () => {
   });
 
   test('polling.js owns the goldRush cycle and writes app.goldRush', () => {
-    assert.match(polling, /goldRush: 5_000/);
+    assert.match(polling, /goldRush: 15_000/);
     assert.match(polling, /blockAndAggregate\.staticCall\(calls\)/);
     assert.match(polling, /CHAIN\.goldRushPublicRpcUrl/,
       'disconnected fallback is explicitly keyless, never the generic app RPC');
@@ -274,8 +274,8 @@ describe('gold-rush adaptive cadence', () => {
     goldRushNextDelay(at(100));
     const seen = [];
     for (let i = 0; i < 20; i += 1) seen.push(goldRushNextDelay(at(100)));
-    // 5s → 10s → 20s → 40s → 60s (capped), two polls per step.
-    assert.deepEqual(seen.slice(0, 8), [5000, 10000, 10000, 20000, 20000, 40000, 40000, 60000]);
+    // 15s → 30s → 60s (capped), two polls per step.
+    assert.deepEqual(seen.slice(0, 6), [15000, 30000, 30000, 60000, 60000, 60000]);
     assert.equal(seen[seen.length - 1], GOLD_RUSH_CADENCE.max, 'settles at the cap');
     for (const d of seen) assert.ok(d <= GOLD_RUSH_CADENCE.max, `never exceeds max: ${d}`);
   });
@@ -303,10 +303,10 @@ describe('gold-rush adaptive cadence', () => {
     assert.ok(p.goldRushDelay > GOLD_RUSH_CADENCE.active, 'cold start counts as quiet');
   });
 
-  // Delays used while quiet: 5,5,10,10,20,20,40,40,60,60,60… → 11 polls to cover
-  // 300s, against 60 at a fixed 5s interval. That is the whole point of the backoff;
+  // Delays used while quiet: 15,15,30,30,60,60,60,60 → 8 polls to cover 300s, against
+  // 20 at a fixed 15s interval. That is the whole point of the backoff;
   // pin it so a cadence tweak has to own its effect on the idle request budget.
-  test('idle cost: a 5-minute silence is 11 requests, not 60', () => {
+  test('idle cost: a 5-minute silence is 8 requests, not 20', () => {
     resetGoldRushCadence();
     goldRushNextDelay(at(100));
     let elapsed = 0;
@@ -316,6 +316,6 @@ describe('gold-rush adaptive cadence', () => {
       requests += 1;
       goldRushNextDelay(at(100));
     }
-    assert.equal(requests, 11, `5-minute idle request count (fixed 5s would be 60)`);
+    assert.equal(requests, 8, `5-minute idle request count (fixed 15s would be 20)`);
   });
 });

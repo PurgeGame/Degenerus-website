@@ -1,6 +1,7 @@
 // /app/app/__tests__/discord-link-focus.test.js — passive focus must stay lazy.
 
 import { after, afterEach, beforeEach, describe, test } from 'node:test';
+import './helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 import * as store from '../store.js';

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import './helpers/http-transport.js';
+import { API_BASE } from '../constants.js';
 import { afterEach, test } from 'node:test';
 
 import { CHAIN } from '../chain-config.js';
@@ -61,7 +63,7 @@ test('linked Discord profiles override the testnet simulation roster', async () 
   });
   assert.deepEqual(profiles.get(SIMULATED), {
     name: 'Moon Goblin',
-    avatar: `https://degenerus-db.fly.dev/players/${SIMULATED}/avatar.svg`,
+    avatar: `${API_BASE}/players/${SIMULATED}/avatar.svg`,
   });
   assert.equal(calls.filter((url) => url.endsWith('/players/sim')).length, 1);
 });

@@ -10,6 +10,7 @@
 // Mirrors app-decimator-panel.test.js fakeDOM scaffold (verbatim port).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 

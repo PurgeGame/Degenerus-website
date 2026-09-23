@@ -8,6 +8,7 @@
 // after the widget-owned one-click-per-spin reveal (no toast/audio).
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { writeLightweightModePreference } from '../../app/ui-preferences.js';
 import { readFileSync } from 'node:fs';

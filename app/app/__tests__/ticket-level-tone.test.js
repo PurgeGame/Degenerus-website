@@ -39,7 +39,7 @@ describe('ticket level RPG tones', () => {
     assert.equal(currentPurchaseTicketLevel(), 40);
   });
 
-  test('a direct compressed final lock advances past the resolved-day fallback', () => {
+  test('a direct final-draw lock advances past the resolved-day fallback', () => {
     update('app.gameState', {
       level: 25,
       jackpotPhaseFlag: true,
@@ -51,8 +51,8 @@ describe('ticket level RPG tones', () => {
       level: 25,
       jackpot: true,
       rngLocked: true,
-      day: 3,
-      compressedFlag: 1,
+      day: 2,
+      jackpotDays: 3,
     } });
     assert.equal(currentPurchaseTicketLevel(), 26);
   });

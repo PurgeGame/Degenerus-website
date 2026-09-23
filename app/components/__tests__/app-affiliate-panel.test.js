@@ -14,6 +14,7 @@
 // fakeDOM scaffold inherited verbatim from app-quest-panel.test.js (Plan 62-04).
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { __resetSimRosterForTest } from '../../app/profiles.js';

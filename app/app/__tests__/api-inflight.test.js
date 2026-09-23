@@ -15,6 +15,18 @@ globalThis.document = {
   addEventListener() {},
 };
 
+// ⛔ THIS FILE TESTS THE HTTP TRANSPORT, so it must pin the transport it tests.
+// api.js short-circuits to readChainRoute() when the ACTIVE profile is readMode 'chain'. Once
+// run #53 activated the database-free profile, every test here silently stopped exercising
+// fetch() and started driving the chain readers instead — failing with aborted async activity
+// rather than an assertion, which reads like flakiness. The launcher's step-0 website gate runs
+// a focused list that does not include this file, so nothing caught it before publish.
+// Forcing the profile keeps these tests about the lane/in-flight/cooldown behaviour they are
+// named for, independent of which profile happens to be active.
+const { CHAIN } = await import('../chain-config.js');
+const priorReadMode = CHAIN.readMode;
+CHAIN.readMode = 'api';
+
 const api = await import('../api.js');
 
 afterEach(() => {
@@ -22,6 +34,7 @@ afterEach(() => {
 });
 
 after(() => {
+  CHAIN.readMode = priorReadMode;
   if (priorDocument === undefined) delete globalThis.document;
   else globalThis.document = priorDocument;
   if (priorFetch === undefined) delete globalThis.fetch;

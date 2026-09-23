@@ -6,6 +6,7 @@
 // Plan 59-03 extends with localStorage idempotency + banner + highlight tests.
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -3397,7 +3398,7 @@ describe('foil match pending action', () => {
       assert.deepEqual(action.matchFaces, [2, 2, 2, 2]);
       assert.equal(action.drawKind, 0);
       assert.equal(action.score, 8);
-      assert.equal(action.rewardFaces, 10_000,
+      assert.equal(action.rewardFaces, 40_000,
         'Pending can name the deterministic bonus before the claim is sent');
       assert.equal(action.autoOpen, true,
         'AUTO may settle the permissionless claim for its fixed player');
@@ -4089,7 +4090,7 @@ describe('foil match pending action', () => {
         jackpotPhaseFlag: true,
         rngLockedFlag: true,
         jackpotCounter: 0,
-        compressedJackpotFlag: 2,
+        jackpotFlags: 1, // JACKPOT_TURBO: a one-day phase
         phaseTransitionActive: false,
       });
       storeMod.update('app.lastDay', {
@@ -4116,7 +4117,7 @@ describe('foil match pending action', () => {
         detail: { address: player, level: 39, foilPack: true },
       });
 
-      // A compressed jackpot can finish its only physical draw while more
+      // A turbo jackpot can finish its only physical draw while more
       // fullscreen rewards are still queued. Both live phase and last-day
       // polling then advance before reveal-overlay emits its final idle event.
       storeMod.update('app.gameState', {
@@ -4125,7 +4126,7 @@ describe('foil match pending action', () => {
         jackpotPhaseFlag: false,
         rngLockedFlag: false,
         jackpotCounter: 0,
-        compressedJackpotFlag: 2,
+        jackpotFlags: 2, // TURBO_BONUS_PENDING: the post-turbo latch in purchase phase
         phaseTransitionActive: false,
       });
       storeMod.update('app.lastDay', {

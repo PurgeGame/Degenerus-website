@@ -130,16 +130,16 @@ describe('<app-baf-eve>', () => {
   });
 
   test('sizes every lane by what the contract actually pays it', () => {
-    // DegenerusJackpots.runBafJackpot: 10% top BAF + 5% pick (rank), 5% weighted
-    // final-day draw, 10% far-future, 45%+25% scatter.
+    // DegenerusJackpots.runBafJackpot (audit 26ad5863): 10% top BAF + 5% pick (rank),
+    // 5% weighted final-day draw, 50%+30% scatter. The far-future slices are gone.
     assert.equal(BAF_SLICES.reduce((total, slice) => total + slice.percent, 0), 100);
     assert.deepEqual(
       BAF_SLICES.map(({ key, percent }) => [key, percent]),
-      [['scatter', 70], ['far', 10], ['rank', 15], ['raffle', 5]],
+      [['scatter', 80], ['rank', 15], ['raffle', 5]],
     );
-    // Far-future and scatter skip zero-score candidates and refund the share.
+    // The scatter skips zero-score candidates and refunds the share.
     assert.equal(BAF_GATED_PERCENT, 80);
-    assert.equal(BAF_SLICES.filter((slice) => slice.gated).map((slice) => slice.key).join(), 'scatter,far');
+    assert.equal(BAF_SLICES.filter((slice) => slice.gated).map((slice) => slice.key).join(), 'scatter');
 
     // The pool column outweighs the ranked board, which pays only 15%.
     assert.match(CSS, /grid-template-columns:\s*\n?\s*minmax\(10\.8rem, 0\.82fr\) minmax\(16rem, 1\.66fr\)\s*\n?\s*minmax\(8\.6rem, 0\.82fr\) minmax\(15rem, 1\.3fr\)/,
@@ -189,10 +189,10 @@ describe('<app-baf-eve>', () => {
 
   test('draws the scatter rule instead of decorating around it', () => {
     const field = bafScatterFieldMarkup();
-    assert.equal((field.match(/<use /g) || []).length, 50, 'one cell per scatter round');
+    assert.equal((field.match(/<use /g) || []).length, 48, 'one cell per scatter round (BAF_SCATTER_ROUNDS)');
     assert.equal((field.match(/class="baf-eve__ticket is-paid"/g) || []).length, 2);
     assert.equal((field.match(/class="baf-eve__ticket"/g) || []).length, 2);
-    assert.match(field, /50 ROUNDS · 4 TICKETS EACH · TOP 2 BY SCORE/,
+    assert.match(field, /48 ROUNDS · 4 TICKETS EACH · TOP 2 BY SCORE/,
       'the field is labelled, so it reads as a diagram and not as texture');
     // User call: nothing on this rail moves, so there is no motion to reduce.
     assert.doesNotMatch(CSS, /@keyframes|animation:|transition:/);

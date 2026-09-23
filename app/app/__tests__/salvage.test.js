@@ -1,4 +1,5 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import './helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 import * as salvageMod from '../salvage.js';

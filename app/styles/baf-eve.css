@@ -1,6 +1,6 @@
 /* Big Ass Flip eve — full-width x9 event rail.
  *
- * 80% of the BAF pool (70% scatter + 10% far-future,
+ * 80% of the BAF pool (the scatter: 50% first + 30% second place,
  * DegenerusJackpots.runBafJackpot) skips any wallet whose BAF score is zero, so
  * the rail leads with the numbers that decide that: the pool, its split, and
  * the player's own score. Ranking decides 15% and is sized like it.

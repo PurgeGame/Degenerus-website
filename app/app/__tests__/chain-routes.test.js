@@ -8,6 +8,9 @@ test('contract ABI integration: current state and balances use RPC without any H
   await f.field('GAME','level',6);
   f.answer('GAME','mintPrice',[120n]);f.answer('COIN','balanceOf',[987654321n]);f.answer('GAME','claimableWinningsOf',[123456789n]);
   const state=await readChainRoute('/game/state',{client:f.client});assert.equal(state.level,6);assert.equal(state.price,'120');
+  // jackpotFlags bit 0 (JACKPOT_TURBO) is the one-day schedule; normal is three days.
+  assert.equal(state.jackpotDays,3);await f.field('GAME','jackpotFlags',3);
+  const turbo=await readChainRoute('/game/state',{client:f.client});assert.equal(turbo.jackpotFlags,3);assert.equal(turbo.jackpotDays,1);
   const p=await readChainRoute(`/player/${PLAYER}`,{client:f.client});assert.equal(p.claimableEth,'123456789');assert.equal(p.flipBalance,'987654321');
   assert.equal(p.tickets,null);assert.equal(f.requests.filter(r=>r.method==='eth_getLogs').length,0,'money HUD must not scan history');
 });
@@ -55,6 +58,35 @@ test('contract ABI integration: all late settlements in a transaction stay under
   const gap=await readChainRoute('/game/jackpot/day/119/winners',{client:f.client});assert.equal(gap.winners.length,0);
   const daily=await readChainRoute('/game/jackpot/day/120/winners',{client:f.client});assert.equal(daily.winners[0].totalEth,'44');
   const replay=await readChainRoute('/replay/day/120',{client:f.client});assert.equal(replay.rng.finalWord,'333');assert.equal(replay.distributions.length,1);
+});
+
+test('contract ABI integration: coin-draw craps winners and the fill-draw battle map onto jackpot awards',async()=>{
+  // Audit 5790a946: a coin draw's craps half logs CoinDrawCrapsWin (no trait, no amount), and the
+  // purchase-day fill draw is played by COIN_DRAW_BATTLE, which logs its own run/pot events.
+  const f=await rpcFixture();const block=9999;const OTHER='0x'+'22'.repeat(20);const THIRD='0x'+'33'.repeat(20);
+  await f.event('GAME','DailyRngApplied',{day:120,finalWord:333},{block,index:0});
+  await f.event('GAME','DailyWinningTraits',{day:120,mainTraitsPacked:123,bonusTraitsPacked:456},{block,index:1});
+  await f.event('GAME','CoinDrawCrapsWin',{winner:PLAYER,winnerLevel:7,fullDay:true,refused:false},{block,index:2});
+  await f.event('GAME','CoinDrawCrapsWin',{winner:OTHER,winnerLevel:7,fullDay:false,refused:true},{block,index:3});
+  await f.event('COIN_DRAW_BATTLE','CoinDrawBattleRun',{level:6,player:THIRD,units:1,bankrollOut:0,rolls:40,paid:0},{block,index:4});
+  await f.event('COIN_DRAW_BATTLE','CoinDrawBattleRun',{level:6,player:PLAYER,units:2,bankrollOut:250,rolls:200,paid:500},{block,index:5});
+  await f.event('COIN_DRAW_BATTLE','CoinDrawBattlePot',{level:6,winner:PLAYER,pot:1000},{block,index:6});
+  await f.event('GAME','PrizePoolDailySnapshot',{day:120},{block,index:7});
+  const daily=await readChainRoute('/game/jackpot/day/120/winners',{client:f.client});
+  const summary=await readChainRoute('/game/jackpot/day/120/summary',{client:f.client});
+  const mine=daily.winners.find(w=>w.address===PLAYER.toLowerCase());
+  assert.deepEqual(mine.breakdown.map(r=>[r.awardType,r.amount,r.crapsAward]).sort(),
+    [['craps_pass','1','day'],['farFutureCoin','1000',null],['farFutureCoin','500',null]]);
+  assert.equal(String(mine.coinTotal),'1500','the battle run and the pot are both FLIP');
+  // A refused opener seat was paid its 2,400 FLIP value instead.
+  const other=daily.winners.find(w=>w.address===OTHER);
+  assert.deepEqual(other.breakdown.map(r=>[r.awardType,r.amount,r.crapsAward]),[['flip',String(2400n*10n**18n),'opener']]);
+  // A busted run is an entrant, not a winner.
+  assert.equal(daily.winners.some(w=>w.address===THIRD),false);
+  assert.equal(summary.rollTwo.farFuture.winnerCount,2);
+  assert.equal(summary.rollTwo.farFuture.totalCoin,'1500');
+  const history=await readChainRoute(`/player/${PLAYER}/jackpot-history`,{client:f.client});
+  assert.deepEqual(history.wins.map(r=>r.name).sort(),['CoinDrawBattlePot','CoinDrawBattleRun','CoinDrawCrapsWin']);
 });
 
 test('contract ABI integration: remaining history and replay paths are implemented',async t=>{

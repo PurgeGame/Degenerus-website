@@ -9,6 +9,7 @@
 // Pattern 1 (Custom Element shell). Mirrors app-packs-panel.test.js fakeDOM scaffold.
 
 import { test, describe, beforeEach } from 'node:test';
+import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -4146,8 +4147,8 @@ describe('Foil pack buy leg', () => {
           jackpotPhaseFlag: true,
           rngLockedFlag: true,
           jackpotCounter: 2,
-          // Deliberately omit compressedJackpotFlag: this was the stale API
-          // shape that under-routed the old JS-only quote to Level 29.
+          // Deliberately omit jackpotFlags/jackpotDays: the counter alone (2 = the final
+          // draw of the three-day schedule) must route the quote past Level 29.
         };
       }
       return { player: null, pending: {} };

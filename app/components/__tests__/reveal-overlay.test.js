@@ -917,7 +917,7 @@ describe('normalizeSequence', () => {
   test('foil match explains each scored quadrant before its reward spin', () => {
     const seq = normalizeSequence({
       kind: 'foil-match', day: 44, level: 12, ticketIndex: 2, drawKind: 0,
-      score: 5, rewardFaces: 6,
+      score: 5, rewardFaces: 24,
       lineTraits: [1, 70, 130, 200],
       winningTraits: [1, 78, 131, 200],
       matchFaces: [2, 1, 0, 2],
@@ -932,7 +932,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.type), ['foil-match', 'spins']);
     assert.match(seq.cards[0].sub, /MAIN JACKPOT · 2 exact \(\+2\) · 1 symbol \(\+1\)/);
     assert.deepEqual(seq.cards[0].foilMatch.matchFaces, [2, 1, 0, 2]);
-    assert.equal(seq.cards[0].foilMatch.rewardFaces, 6);
+    assert.equal(seq.cards[0].foilMatch.rewardFaces, 24);
   });
 
   test('a foil FLIP survival loss estimates its reel payout from the face stake', () => {

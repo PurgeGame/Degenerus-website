@@ -256,38 +256,34 @@ describe('view decoding', () => {
   test('phase context reads the exact last-purchase-day latch', async () => {
     pari.__setGameFactoryForTest(() => ({
       purchaseInfo: async () => [38, false, true, false, 0n],
-      jackpotCompressionTier: async () => 1,
+      jackpotDuration: async () => 3,
     }));
     assert.deepEqual(await pari.readJackpotPhaseContext(), {
       level: 38,
       jackpot: false,
       lastPurchaseDay: true,
       rngLocked: false,
-      compressedFlag: 1,
+      jackpotDays: 3,
     });
   });
 
-  test('a chained-turbo tier 3 survives the read verbatim', async () => {
-    // storage/DegenerusGameStorage.sol:65 — 3 = turbo armed while the previous
-    // turbo's bonus is still owed. It must reach the cadence model intact.
+  test('a turbo schedule (jackpotDuration() = 1) survives the read verbatim', async () => {
     pari.__setGameFactoryForTest(() => ({
       purchaseInfo: async () => [38, true, false, true, 0n],
-      jackpotCompressionTier: async () => 3,
+      jackpotDuration: async () => 1,
     }));
-    assert.equal((await pari.readJackpotPhaseContext()).compressedFlag, 3);
+    assert.equal((await pari.readJackpotPhaseContext()).jackpotDays, 1);
   });
 
-  test('a failed compression-tier read reports null, never a forged tier 0', async () => {
-    // 0 is a REAL tier ("normal five-day phase"). Returning it for a failed
-    // read made a transient RPC error indistinguishable from a genuine normal
-    // cadence, and the consumers use `??`, which will not fall through a 0 —
-    // so a single bad read masked a live turbo behind a five-day label.
+  test('a failed jackpotDuration() read reports null, never a forged normal schedule', async () => {
+    // Returning 3 for a failed read would make a transient RPC error indistinguishable from
+    // a genuine normal cadence and mask a live turbo behind a three-day label.
     pari.__setGameFactoryForTest(() => ({
       purchaseInfo: async () => [38, true, false, true, 0n],
-      jackpotCompressionTier: async () => { throw new Error('rpc hiccup'); },
+      jackpotDuration: async () => { throw new Error('rpc hiccup'); },
     }));
     const context = await pari.readJackpotPhaseContext();
-    assert.equal(context.compressedFlag, null);
+    assert.equal(context.jackpotDays, null);
     assert.equal(context.level, 38, 'the rest of the snapshot is still usable');
     assert.equal(context.jackpot, true);
   });
@@ -576,7 +572,7 @@ test('pool benchmarks read phase, target and ratchets at one block during a leve
   };
   pari.__setGameFactoryForTest(() => ({
     purchaseInfo: pinned('phase', [413, false, true, true, 0n]),
-    jackpotCompressionTier: pinned('compression', 2),
+    jackpotDuration: pinned('duration', 1),
     growthState: pinned('ratchets', [29992980031120142n, 0n, 0n, 413, false, 0]),
     prizePoolTargetView: pinned('target', 50000000000000n),
   }));

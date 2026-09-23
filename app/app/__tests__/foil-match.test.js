@@ -17,6 +17,7 @@ import {
   gradeLine,
   bestGrade,
   claimableDrawGrades,
+  hasBonusSet,
 } from '../foil-match.js';
 
 // Helper: build a trait byte from (quadrant, color, symbol).
@@ -157,5 +158,15 @@ describe('claimableDrawGrades (contract tuple parity)', () => {
     const line = [36, 65, 172, 201];
     const miss = pack(0xff, 0xfe, 0xfd, 0xfc);
     assert.deepEqual(claimableDrawGrades(line, miss, null), []);
+  });
+
+  test('a zero bonus set is no bonus draw (purchase day, audit 2c2e2d95)', () => {
+    // A line of all-zero traits would otherwise grade T8 against the stored zero.
+    const line = [0, 64, 128, 192];
+    const main = pack(0xff, 0xfe, 0xfd, 0xfc);
+    assert.deepEqual(claimableDrawGrades(line, main, 0), []);
+    assert.equal(bestGrade(line, main, 0).drawKind, 0);
+    assert.equal(hasBonusSet(0), false);
+    assert.equal(hasBonusSet(pack(36, 65, 172, 201)), true);
   });
 });

@@ -267,21 +267,33 @@ body.layout-basic.baf-resolution-pending [data-bind="df-reveal-hint"] { visibili
   filter: blur(8px);
   transform: scaleX(0.68);
 }
+.baf-res__coin-body {
+  /* Carries the shadow OUTSIDE the coin's 3D context: a filter on the rotor
+     flattens it and shows the red face's reverse (app/app/coin-faces.js).
+     Perspective only reaches direct children, so it is repeated here. */
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  perspective: 1100px;
+  filter: drop-shadow(0 0 24px rgba(96, 165, 250, 0.28)) drop-shadow(0 18px 22px rgba(0, 0, 0, 0.4));
+}
 .baf-res__coin-rotor {
   position: relative;
   display: block;
   width: 88%;
   height: 88%;
   transform-style: preserve-3d;
-  filter: drop-shadow(0 0 24px rgba(96, 165, 250, 0.28)) drop-shadow(0 18px 22px rgba(0, 0, 0, 0.4));
   will-change: transform;
 }
 .baf-res__coin-rotor .df-coin3d__surface,
 .baf-res__coin-rotor .df-coin3d__face { position: absolute; inset: 0; display: block; border-radius: 50%; }
 .baf-res__coin-rotor .df-coin3d__surface { transform-style: preserve-3d; }
+.baf-res__coin-rotor .df-coin3d__face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .baf-res__coin-rotor .df-coin3d__face img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.baf-res__coin-rotor .df-coin3d__face[hidden] { display: none !important; }
-.baf-res__coin-rotor .df-coin3d__face--eth { transform: scaleY(-1); }
+.baf-res__coin-rotor .df-coin3d__face--red { transform: translateZ(1px); }
+.baf-res__coin-rotor .df-coin3d__face--eth { transform: rotateX(180deg) translateZ(1px); }
 .baf-res__coin-rotor.is-flipping.is-win { animation: baf-res-flip-win 3.25s cubic-bezier(0.12, 0.68, 0.18, 1) forwards; }
 .baf-res__coin-rotor.is-flipping.is-loss { animation: baf-res-flip-loss 3.25s cubic-bezier(0.12, 0.68, 0.18, 1) forwards; }
 .baf-res__shell[data-stage="coin-flip"] .baf-res__coin-shadow { animation: baf-res-shadow 3.25s ease-in-out forwards; }
