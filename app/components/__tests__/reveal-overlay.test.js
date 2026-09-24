@@ -29,7 +29,9 @@ function makeFakeElement(tag = 'div') {
     disabled: false,
     className: '',
     dataset: {},
-    style: {},
+    clientWidth: 160, clientHeight: 160,
+    getBoundingClientRect() { return { left: 0, top: 0, width: 160, height: 160 }; },
+    style: { setProperty(key, value) { this[key] = value; }, removeProperty(key) { delete this[key]; } },
     classList: {
       _set: new Set(),
       add(...cs) { for (const c of cs) this._set.add(c); },
@@ -71,7 +73,7 @@ function makeFakeElement(tag = 'div') {
       return acc;
     },
     set textContent(v) { this._textContent = String(v); this.children = []; },
-    appendChild(child) { child.parentElement = this; this.children.push(child); return child; },
+    appendChild(child) { child.remove(); child.parentElement = this; this.children.push(child); return child; },
     remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); this.parentElement = null; },
     querySelector(sel) {
       const stack = [...this.children];
@@ -140,6 +142,7 @@ const _docBody = makeFakeElement('body');
 const _docListeners = new Map();
 globalThis.document = {
   createElement: (tag) => makeFakeElement(tag),
+  createElementNS: (_ns, tag) => makeFakeElement(tag),
   body: _docBody,
   addEventListener(type, fn) {
     if (!_docListeners.has(type)) _docListeners.set(type, []);
@@ -2218,7 +2221,7 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.equal(shouldBobDegeneretteLock('symbol', 2), false);
     assert.equal(shouldBobDegeneretteLock('symbol', 3), true);
     assert.equal(shouldBobDegeneretteLock('both', 3), true);
-    assert.match(REVEAL_SRC, /onChange: \(\) => this\.#tap\('pop'\)/,
+    assert.match(REVEAL_SRC, /onChange: progress => \{[\s\S]*this\.#syncPopWinnings[\s\S]*this\.#tap\('pop'\)/,
       'the motion path uses the scoring-aware bob rule');
   });
 });
@@ -3407,14 +3410,15 @@ describe('reveal-overlay element', () => {
     assert.equal(spinZone.hidden, false,
       'the one REVEAL BOARDS confirmation enters the first selected spin');
     await revealPops(el);
-    assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /WWXRP DEGENERETTE BOARD/);
+    assert.equal(spinZone.querySelector('.rvl-spin-head').textContent, 'WWXRP DEGENERETTE',
+      'the compact currency heading does not shift the reserved winnings area');
     assert.equal(spinZone.querySelectorAll('.dgn-pop__ticket').length, 1);
     spinZone.querySelector('.rvl-dgn-spin-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
     await revealPops(el);
-    assert.match(spinZone.querySelector('.rvl-spin-head').textContent, /FLIP DEGENERETTE BOARD/);
+    assert.equal(spinZone.querySelector('.rvl-spin-head').textContent, 'FLIP DEGENERETTE');
     assert.equal(spinZone.querySelectorAll('.dgn-pop__ticket').length, 3,
       'the second selected box retains all three verified reels');
     spinZone.querySelector('.rvl-dgn-spin-cta')
@@ -5409,7 +5413,7 @@ describe('reveal-overlay element', () => {
     assert.equal(cards.length, 3);
     cards.forEach((card, i) => {
       const q = [0, 2, 3][i];
-      assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.dgn-pop__hero'));
+      assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.bubble-reveal__hero'));
     });
     await revealPops(el);
     assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
@@ -5524,7 +5528,8 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 3);
     assert.equal(el.querySelector('.dgn-pop__score').textContent, '4');
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
-    assert.equal(payoutMeter.hidden, false);
+    assert.equal(payoutMeter.hidden, true, 'the reserved winnings area replaces the duplicate payout card');
+    assert.ok(el.querySelector('.dgn-winnings'));
     assert.match(payoutMeter.textContent, /BOARD PAYOUT450 FLIPDOUBLE OR NOTHING · WIN 900 FLIP/);
 
     const collect = el.querySelector('.rvl-dgn-spin-cta');
@@ -5642,6 +5647,7 @@ describe('reveal-overlay element', () => {
             snapshots.push({
               detail: value,
               meter: overlay.querySelector('.rvl-box-payout-meter').textContent,
+              winnings: overlay.querySelector('.dgn-winnings__value').textContent,
               reels: overlay.querySelectorAll('.rvl-dgn-history-chip').map((chip) => chip.textContent),
             });
           }
@@ -5950,6 +5956,7 @@ describe('reveal-overlay element', () => {
     assert.ok(cell.querySelector('.dgn-pop__gold'));
     assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD ×1.25');
     await revealPops(el);
+    for (let i = 0; i < 120 && el.querySelector('.rvl-dgn-spin-cta').hidden; i++) await tick();
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').hidden, false);
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, false);
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();

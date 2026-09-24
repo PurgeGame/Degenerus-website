@@ -1,3 +1,4 @@
+@import url("./bubble-reveal.css");
 /* styles/replay.css -- Jackpot Replay Viewer */
 
 .replay-panel {
@@ -1402,3 +1403,47 @@
   height: 42%;
   object-fit: contain;
 }
+
+/* Shared air-pocket reveal; legacy canvas nodes remain inert for saved tutorial state. */
+.replay-scratch-canvas, .replay-center-canvas { display: none !important; pointer-events: none !important; }
+.replay-tq { isolation: isolate; }
+.replay-bubble-trigger {
+  position: absolute; inset: 0; z-index: 100; display: block; width: 100%; height: 100%;
+  padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.replay-bubble-trigger:disabled { opacity: 1; cursor: default; }
+.replay-bubble-trigger:focus-visible { outline: 3px solid #fff1a5; outline-offset: -5px; }
+.replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; }
+.replay-bubble-trigger--center .bubble-reveal { border-radius: 0; }
+.replay-tq.q-result-revealed.q-no-tickets {
+  background: repeating-linear-gradient(135deg,#69141f0b 0 1px,transparent 1px 8px),#dfaeae;
+}
+.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"] { cursor: pointer; }
+.replay-win-flight {
+  position: absolute; z-index: 99; display: grid; gap: 2px; box-sizing: border-box;
+  pointer-events: none; white-space: nowrap; padding: 4px 6px;
+  border: 1px solid #f2d797a3; border-radius: 6px; background: #192c25f0;
+  box-shadow: 0 3px 7px #0004; color: #fff1c9;
+  font: 780 clamp(9px,1.6vw,11px)/1.1 system-ui; opacity: 0;
+}
+.replay-win-flight .replay-badge-reward-pop__row { font-size: inherit; }
+.replay-win-flight.is-flying { animation: replay-prize-flight 1250ms var(--flight-delay) both; }
+.replay-win-flight-source .replay-scattered-badge { animation: replay-prize-kick 280ms var(--flight-delay) ease-out both; }
+@keyframes replay-prize-flight {
+  0% { opacity: 0; transform: translate(var(--flight-x),var(--flight-y)) scale(.3); }
+  12% { opacity: 1; }
+  28%,76% { opacity: 1; transform: translate(0,0) scale(1); }
+  100% { opacity: 0; transform: translate(0,0) scale(.96); }
+}
+@keyframes replay-prize-kick { 0%,100% { scale: 1; } 40% { scale: 1.13; } }
+@media (max-width: 650px) { .replay-win-flight { padding: 3px 4px; } }
+@media (prefers-reduced-motion: reduce) {
+  .replay-win-flight { display: none; }
+  .replay-win-flight-source .replay-scattered-badge { animation: none; }
+}
+
+.replay-badge-reward-pop { box-sizing: border-box; }
+/* These packed badge targets use the layout's explicit size; shell button padding
+   must not enlarge them into adjacent badges or clip the right edge on phones. */
+.replay-badge-wrap[role="button"] { box-sizing: border-box; min-width: 0; min-height: 0; padding: 0; }

@@ -589,14 +589,19 @@ test('pop scores have distinct cues, gold adds a shimmer, and batch volume is bo
   globalThis.AudioContext = FakePopAudioContext;
   setMuted(false);
   const cues = [];
+  const ruptureProfiles = [];
   for (let points = 0; points <= 3; points++) {
     stopDgnPops();
+    const before = FakeAudioContext.last?.bufferSources?.length || 0;
     sfxDgnPop({ points });
     const ctx = FakeAudioContext.last;
+    ruptureProfiles.push({ snaps: ctx.bufferSources.length - before, body: ctx.oscillators.at(-(points + 1)).frequency.values });
     const count = points + 1;
     cues.push(ctx.oscillators.slice(-count).map(node => node.frequency.value ?? node.frequency.values[0].value));
   }
   assert.equal(new Set(cues.map(JSON.stringify)).size, 4);
+  assert.deepEqual(ruptureProfiles.map(cue => cue.snaps), [1, 1, 2, 3]);
+  assert.equal(new Set(ruptureProfiles.map(cue => JSON.stringify(cue.body))).size, 4, 'the pop body changes with points, independently of the reward notes');
   const ctx = FakeAudioContext.last;
   const start = ctx.oscillators.length;
   sfxDgnPop({ points: 3, gold: true, count: 100 });

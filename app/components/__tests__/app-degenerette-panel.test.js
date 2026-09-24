@@ -30,6 +30,10 @@ function makeFakeElement(tag = 'div') {
     _title: '',
     hidden: false,
     disabled: false,
+    open: false,
+    showModal() { this.open = true; },
+    close() { this.open = false; this.dispatchEvent({ type: 'close' }); },
+    focus() { document.activeElement = this; },
     tabIndex: 0,
     className: '',
     dataset: {},
@@ -699,13 +703,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'color and symbol captions are removed from the compact picker');
     assert.match(
       APP_CSS,
-      /\.deg-block \.dgn-symbols\s*\{[^}]*grid-template-columns:\s*repeat\(4,/s,
-      'eight symbol choices render as two rows of four',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn\s*\{[^}]*aspect-ratio:\s*1/s,
-      'symbol buttons grow to fill their grid cells',
+      /\.dgn-symbol-dialog \.dgn-symbols\s*\{[^}]*grid-template-columns:\s*repeat\(8,/s,
+      'the popup shows all eight symbols per category on desktop',
     );
     assert.match(
       APP_CSS,
@@ -722,28 +721,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       /img\.src\s*=\s*dgnSymbolPath\(q, s, DGN_NEUTRAL_COLOR\)/,
       'symbol choices use the standalone trait marks on the fixed neutral swatch — '
         + 'audit a5d4d2cd removed the per-quadrant picked color (t.c) entirely',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn\s*\{[^}]*border-radius:\s*7px[^}]*background:\s*linear-gradient/s,
-      'symbol choices share one softly squared neutral tile',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn img\s*\{[^}]*width:\s*82%[^}]*height:\s*82%/s,
-      'standalone marks fill their cells without the old circular-badge crop',
-    );
-    assert.match(PANEL_SRC, /q === 0 && \(s === 3 \|\| s === 7\)/,
-      'Monero and Bitcoin receive the round-art sizing treatment');
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn--round img\s*\{[^}]*width:\s*92%[^}]*height:\s*92%/s,
-      'round crypto discs remain large after exposing their complete SVG viewBox',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn\.is-selected\s*\{[^}]*outline:\s*2px solid #facc15[^}]*background:\s*linear-gradient[^}]*box-shadow:/s,
-      'the selected symbol has an unmistakable gold outline, fill, and glow',
     );
     assert.match(
       APP_CSS,
@@ -781,7 +758,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       dgnSymbolPath(0, 0, DGN_NEUTRAL_COLOR),
       'the copied icon uses standalone neutral art, without its old color');
     assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'WWXRP');
-    assert.equal(el.querySelector('[data-bind="dgn-category-0"]').getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-0"]').getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
       'copying a ticket does not recreate the removed header status pill');
@@ -2368,8 +2344,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
         detail: { traitIds: [56, 121, 130, 203] },
       }));
-      el.querySelector('[data-bind="dgn-category-2"]').dispatchEvent({ type: 'click' });
-      el.querySelector('[data-bind="dgn-symbol-choice-0"]').dispatchEvent({ type: 'click' });
+      el.querySelector('[data-bind="dgn-symbol-choice-16"]').dispatchEvent({ type: 'click' });
       payoutTables = el.querySelectorAll('.deg-payout-table');
       payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
       assert.equal(payoutRows[1].children[1].textContent, centix(expectedEth[2].multiplierHundredths),
@@ -2428,11 +2403,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(el.querySelector('[name="deg-custom-ticket"]'), null);
     assert.equal(el.querySelector('[name="deg-quadrant"]'), null);
     const choices = el.querySelector('[data-bind="dgn-symbol-choices"]');
-    assert.equal(choices.querySelectorAll('button').length, 8);
+    assert.equal(choices.querySelectorAll('button').length, 32);
     for (let q = 0; q < 4; q++) {
-      el.querySelector(`[data-bind="dgn-category-${q}"]`).dispatchEvent({ type: 'click' });
       for (let icon = 0; icon < 8; icon++) {
-        const button = choices.querySelector(`[data-bind="dgn-symbol-choice-${icon}"]`);
+        el.querySelector('[data-bind="dgn-symbol-open"]').dispatchEvent({ type: 'click' });
+        assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, true);
+        const button = choices.querySelector(`[data-bind="dgn-symbol-choice-${(q << 3) | icon}"]`);
         button.dispatchEvent({ type: 'click' });
         assert.equal(el.getTicketDraft().symbol, (q << 3) | icon);
         assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
@@ -2440,28 +2416,38 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         assert.equal(button.getAttribute('aria-pressed'), 'true');
         assert.equal(choices.querySelectorAll('button')
           .filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
-        assert.equal(choices.querySelector(`[data-bind="dgn-symbol-choice-${icon}"]`), button,
-          'selection preserves the focused DOM button');
+        assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, false,
+          'selection closes the popup');
+        assert.equal(document.activeElement, el.querySelector('[data-bind="dgn-symbol-open"]'),
+          'selection returns focus to the badge');
       }
     }
     assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 8');
     el.disconnectedCallback();
   });
 
-  test('browsing a category leaves the chosen symbol unchanged until an icon is picked', () => {
+  test('dismissing the symbol popup preserves the draft and releases scroll lock', () => {
     const el = instantiate();
     const original = el.getTicketDraft();
-    const other = (original.heroQuadrant + 1) % 4;
-    el.querySelector(`[data-bind="dgn-category-${other}"]`).dispatchEvent({ type: 'click' });
-    assert.deepEqual(el.getTicketDraft(), original, 'browsing does not change the bet');
-    assert.equal(el.querySelector(`[data-bind="dgn-category-${other}"]`)
-      .getAttribute('aria-pressed'), 'true');
-    assert.equal(el.querySelectorAll('.dgn-symbol-btn')
-      .some(b => b.getAttribute('aria-pressed') === 'true'), false,
-      'another category does not imply a selected icon');
-    el.querySelector('[data-bind="dgn-symbol-choice-5"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.getTicketDraft().symbol, (other << 3) | 5);
+    const trigger = el.querySelector('[data-bind="dgn-symbol-open"]');
+    const dialog = el.querySelector('[data-bind="dgn-symbol-dialog"]');
+    assert.equal(dialog.open, false);
+    trigger.dispatchEvent({ type: 'click' });
+    assert.equal(dialog.open, true);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+    assert.equal(document.body.style.overflow, 'hidden');
+    assert.equal(document.activeElement,
+      el.querySelector(`[data-bind="dgn-symbol-choice-${original.symbol}"]`));
+    el.querySelector('[data-bind="dgn-symbol-close"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(el.getTicketDraft(), original);
+    assert.equal(dialog.open, false);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(document.activeElement, trigger);
+    assert.notEqual(document.body.style.overflow, 'hidden');
+    trigger.dispatchEvent({ type: 'click' });
     el.disconnectedCallback();
+    assert.equal(dialog.open, false);
+    assert.notEqual(document.body.style.overflow, 'hidden');
   });
 
   test('Lightweight mode keeps the editable Hero without scanning inventory for a default', async () => {
@@ -2516,8 +2502,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(el.getTicketDraft().symbol, 19, 'the gold quadrant supplies its icon only');
     assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
       dgnSymbolPath(2, 3, DGN_NEUTRAL_COLOR));
-    assert.equal(el.querySelector('[data-bind="dgn-category-2"]').getAttribute('aria-pressed'), 'true');
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-3"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-19"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });
 
@@ -2546,8 +2531,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(el.getTicketDraft().symbol, 22, 'the deity symbol overrides the inventory default');
     assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
       dgnSymbolPath(2, 6, DGN_NEUTRAL_COLOR));
-    assert.equal(el.querySelector('[data-bind="dgn-category-2"]').getAttribute('aria-pressed'), 'true');
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-6"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });
 
@@ -2562,8 +2546,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const el = instantiate();
     await settle(40);
 
-    el.querySelector('[data-bind="dgn-category-3"]').dispatchEvent({ type: 'click' });
-    el.querySelector('[data-bind="dgn-symbol-choice-5"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dgn-symbol-choice-29"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 6');
 
     const amountInput = el.querySelector('[name="deg-amount"]');
@@ -2665,7 +2648,6 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     const el = instantiate();
     await settle(40);
-    el.querySelector('[data-bind="dgn-category-0"]').dispatchEvent({ type: 'click' });
     el.querySelector('[data-bind="dgn-symbol-choice-0"]').dispatchEvent({ type: 'click' });
     el.querySelector('[name="deg-amount"]').value = '0.01';
     el.querySelector('[name="deg-ticket-count"]').value = '2';

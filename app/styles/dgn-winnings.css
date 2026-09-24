@@ -1,0 +1,54 @@
+/* The score, payout counter, and coin always occupy this same reserved area. */
+.dgn-winnings {
+  box-sizing: border-box; position: sticky; top: 0; z-index: 30;
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) 48px;
+  grid-template-rows: 22px 40px 22px 24px;
+  grid-template-areas: 'coin label score' 'coin amount amount' 'coin amount amount' 'status status status';
+  align-items: center; gap: 4px 12px; width: 100%; max-width: 620px; height: 148px;
+  margin: 0 auto 10px; padding: 12px 14px; border: 1px solid #738a8180; border-radius: 14px;
+  background: linear-gradient(145deg, #1a2b25, #0b1412); color: #f5f1dc;
+  box-shadow: 0 7px 18px #0006, inset 0 1px #ffffff18; text-align: left;
+}
+.dgn-winnings__coin {
+  grid-area: coin; position: relative; display: grid; place-items: center;
+  width: 88px; height: 88px; border-radius: 50%;
+  background: radial-gradient(circle, #102019 45%, #728d7920 68%, #07100c 70%);
+  box-shadow: inset 0 0 0 1px #9baa8d40, inset 0 4px 14px #0006;
+}
+.dgn-winnings__placeholder { width: 40%; height: 48%; object-fit: contain; opacity: .22; filter: invert(1); }
+.dgn-winnings__label { grid-area: label; color: #c7d5bb; font: 850 .62rem/1.2 system-ui; letter-spacing: .13em; }
+.dgn-winnings__amount { grid-area: amount; min-width: 0; align-self: start; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+.dgn-winnings__value { color: #ffe7a5; font: 900 clamp(1.35rem, 5vw, 2rem)/1.1 system-ui; overflow-wrap: anywhere; }
+.dgn-winnings__secondary { min-height: 1.2em; color: #e9ca87; font: 750 .68rem/1.2 system-ui; }
+.dgn-winnings__score { grid-area: score; align-self: start; }
+.dgn-winnings .dgn-pop__tally { position: static; padding: 0; background: none; border-radius: 0; }
+.dgn-winnings .dgn-pop__score-label { font-size: .48rem; letter-spacing: .1em; }
+.dgn-winnings .dgn-pop__score { font-size: 1.55rem; line-height: 1.05; }
+.dgn-winnings__status { grid-area: status; color: #a9bcb2; font: 800 .59rem/1.2 system-ui; letter-spacing: .075em; text-align: center; }
+.dgn-winnings__announcement,
+.dgn-winnings :is(.rvl-survival-eyebrow, .rvl-survival-label, .rvl-survival-detail, .rvl-box-currency-eyebrow, .rvl-box-currency-name, .rvl-box-currency-sub) {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.dgn-winnings :is(.rvl-survival, .rvl-box-currency-reveal) {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  width: 100%; height: 100%; max-width: none; margin: 0; padding: 0;
+  border: 0; background: none; box-shadow: none; border-radius: inherit; overflow: visible;
+  grid-template-areas: none; grid-template-columns: 1fr; gap: 0;
+}
+.dgn-winnings :is(.rvl-survival, .rvl-box-currency-reveal)::before { display: none; }
+.dgn-winnings :is(.rvl-survival-arena, .rvl-box-currency-icon) { grid-area: auto; position: absolute; inset: 0; width: 100%; height: 100%; }
+.dgn-winnings .rvl-survival-coin-shell { width: 76px; height: 76px; }
+.dgn-winnings .rvl-box-currency-coin { width: 76px; height: 76px; }
+.dgn-winnings .rvl-box-currency-landed { width: 76px; height: 76px; object-fit: contain; }
+.dgn-winnings .rvl-survival-result-mark { width: 20px; height: 20px; font-size: 14px; right: 0; bottom: 0; }
+.dgn-winnings .rvl-spin-total { font: 900 clamp(1.02rem, 3.6vw, 1.5rem)/1.15 system-ui; letter-spacing: 0; animation: none; }
+.dgn-winnings .rvl-spin-total--eth-split { display: grid; justify-content: start; text-align: left; gap: 4px; }
+.dgn-winnings .rvl-spin-total__separator { display: none; }
+.dgn-winnings .rvl-spin-total__lootbox { font-size: .68rem; }
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop { height: calc(100dvh - 1rem); justify-content: flex-start; }
+.rvl-stage--pop .rvl-dgn-actions--fixed { min-height: 44px; }
+@media (max-width: 380px) {
+  .dgn-winnings { grid-template-columns: 76px minmax(0, 1fr) 40px; gap: 4px 8px; padding-inline: 10px; }
+  .dgn-winnings__coin { width: 76px; height: 76px; }
+  .dgn-winnings .rvl-survival-coin-shell, .dgn-winnings .rvl-box-currency-coin, .dgn-winnings .rvl-box-currency-landed { width: 68px; height: 68px; }
+}

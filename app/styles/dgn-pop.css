@@ -1,3 +1,5 @@
+@import url("./bubble-reveal.css");
+@import url("./dgn-winnings.css");
 /* Shared Degenerette surface: a covered ticket becomes the result in place. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 860px); max-width: 860px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }
 .rvl-stage.rvl-stage--pop > * { flex-shrink: 0; }
@@ -18,29 +20,53 @@
 .dgn-pop__grid[data-size="1"] { grid-template-columns: minmax(0, 1fr); max-width: min(360px, 72vw); }
 .dgn-pop__grid[data-size="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
 .dgn-pop__card { min-width: 0; }
-.dgn-pop__ticket { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); aspect-ratio: 1; gap: 2px; padding: 2px; overflow: hidden; border: 1px solid #a5b4ad; border-radius: 18px; background: var(--pop-line); box-shadow: 0 8px 18px #0005; }
-.dgn-pop__cell { position: relative; display: grid; place-items: center; min-width: 0; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: radial-gradient(ellipse at 40% 28%, #f3f2e9, #d2d9cf 75%); box-shadow: inset 0 2px 3px #fff9, inset 0 -4px 7px #1b2c3544; cursor: pointer; touch-action: manipulation; transition: background-color .15s, box-shadow .15s; }
+.dgn-pop__ticket { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); aspect-ratio: 1; gap: 2px; padding: 2px; overflow: hidden; border: 1px solid #a5b4ad; border-radius: 18px; background: var(--pop-line); box-shadow: 0 8px 18px #0005; }
+.dgn-pop__cell { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: radial-gradient(ellipse at 40% 28%, #f3f2e9, #d2d9cf 75%); box-shadow: inset 0 2px 3px #fff9, inset 0 -4px 7px #1b2c3544; cursor: pointer; touch-action: manipulation; transition: background-color .15s, box-shadow .15s; }
 .dgn-pop__cell:not(.is-open):hover { filter: brightness(1.05); }
 .dgn-pop__cell:not(.is-open):active { box-shadow: inset 0 3px 12px #243a4270; }
 .dgn-pop__cell:focus-visible, .dgn-pop__flame:focus-visible { outline: 3px solid #fff4aa; outline-offset: -4px; z-index: 12; }
 .dgn-pop__badge { display: block; width: 78%; height: 78%; object-fit: contain; pointer-events: none; border-radius: 50%; }
 .dgn-pop__cell.is-open { background: #34423f; box-shadow: inset 0 2px 9px #0006; cursor: default; }
-.dgn-pop__cell.is-open .dgn-pop__badge { width: 69%; height: 69%; background: #e8e8df; animation: dgn-pop-open .19s ease-out both; }
+.dgn-pop__cell.is-open .dgn-pop__badge { width: 69%; height: 69%; background: none; }
 .dgn-pop__cell[data-points="1"] { background: #205794; }
 .dgn-pop__cell[data-points="2"] { background: #08756a; }
 .dgn-pop__cell[data-points="3"] { background: #7946b5; }
-.dgn-pop__player { position: absolute; width: 27%; height: 27%; right: 5%; bottom: 5%; background: #e5e8e2; border: 2px solid #fff; border-radius: 50%; pointer-events: none; box-shadow: 0 2px 4px #0008; }
+.dgn-pop__player { position: absolute; width: 27%; height: 27%; right: 5%; bottom: 5%; background: none; border: 0; pointer-events: none; filter: drop-shadow(0 1px 2px #0005); }
 .dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q2 .dgn-pop__player { left: 5%; right: auto; }
 .dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 5%; bottom: auto; }
-.dgn-pop__hero { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); padding: 2px 5px; border-radius: 4px; font: 900 clamp(.44rem, 1.3vw, .6rem)/1 system-ui; letter-spacing: .06em; color: #f8edca; background: #1d292b; pointer-events: none; }
-.dgn-pop__flame { position: absolute; z-index: 15; top: 50%; left: 50%; width: 23%; min-width: 44px; aspect-ratio: 1; transform: translate(-50%, -50%) rotate(45deg); display: grid; place-items: center; padding: 0; border: 2px solid #afbbb0; border-radius: 7px; background: #fff6d9; box-shadow: 0 3px 10px #0006; cursor: pointer; touch-action: manipulation; }
-.dgn-pop__flame img { width: 85%; height: 85%; transform: rotate(-45deg); pointer-events: none; }
-.dgn-pop__flame:disabled { cursor: default; background: #c3cec5; }
-.dgn-pop__flame:not(:disabled):active { background: #f0ce7c; }
-.dgn-pop__increment { position: absolute; inset: 30% 0 auto; color: white; font: 900 clamp(1.25rem, 4vw, 2rem)/1 system-ui; text-shadow: 0 2px 5px #000; pointer-events: none; animation: dgn-pop-point .55s ease-out both; }
+.dgn-pop__hero { position: absolute; z-index: 2; width: 20%; height: 16%; top: 4%; left: 50%; pointer-events: none; filter: drop-shadow(0 1px 2px #0008); }
+/* Match the jackpot's white seal: a fixed, unrotated hit area with its
+   diamond drawn inside, so the flame stays upright at the four-way seam. */
+.dgn-pop__flame { position: absolute; z-index: 15; top: 50%; left: 50%; width: 28%; height: 28%; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; }
+.dgn-pop__flame::before { content: ''; position: absolute; top: 50%; left: 50%; width: 70.71%; height: 70.71%; box-sizing: border-box; transform: translate(-50%, -50%) rotate(45deg); border: 2px solid #8a8d8f; background: #fff; box-shadow: 0 2px 4px #0002; }
+.dgn-pop__flame { color: #111; container-type: inline-size; transition: color 140ms ease-out; }
+.dgn-pop__flame-mark { position: relative; z-index: 1; display: block; width: 67%; height: 67%; background: currentColor; mask: url('/whitepaper/flame-center.svg') center / contain no-repeat; pointer-events: none; }
+.dgn-pop__flame:disabled { cursor: default; }
+.dgn-pop__flame:disabled::before { background: #e5ece8; }
+.dgn-pop__flame:not(:disabled):active::before { background: #e2e9eb; }
+
+/* The center follows revealed points, keeping the flame until completion.
+   The flame/number and diamond share contrasting shades of the same hue. */
+.dgn-pop__flame[data-points] { --score-ink: #c3cdc9; --score-paper: #26332f; color: var(--score-ink); opacity: 1; }
+.dgn-pop__flame[data-points="1"] { --score-ink: #adc6ee; --score-paper: #213b61; }
+.dgn-pop__flame[data-points="2"] { --score-ink: #84caff; --score-paper: #123f69; }
+.dgn-pop__flame[data-points="3"] { --score-ink: #82e1f4; --score-paper: #164955; }
+.dgn-pop__flame[data-points="4"] { --score-ink: #70e0cc; --score-paper: #134d43; }
+.dgn-pop__flame[data-points="5"] { --score-ink: #b0ec9a; --score-paper: #2d4c25; }
+.dgn-pop__flame[data-points="6"] { --score-ink: #d2b2ff; --score-paper: #48306d; }
+.dgn-pop__flame[data-points="7"] { --score-ink: #f4b0df; --score-paper: #662d56; }
+.dgn-pop__flame[data-points="8"] { --score-ink: #ffc386; --score-paper: #6d3816; }
+.dgn-pop__flame[data-points="9"] { --score-ink: #ffe18a; --score-paper: #684c10; }
+.dgn-pop__flame[data-points]::before { background: var(--score-paper); border-color: var(--score-ink); transition: background-color 140ms ease-out, border-color 140ms ease-out; }
+.dgn-pop__ticket-score { position: relative; z-index: 1; font: 950 clamp(20px, 60cqi, 46px)/1 system-ui; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #0006; pointer-events: none; animation: dgn-pop-score 180ms ease-out both; }
+@keyframes dgn-pop-score { from { opacity: 0; scale: .8; } to { opacity: 1; scale: 1; } }
+
+.dgn-pop__increment { position: absolute; inset: 30% 0 auto; color: white; font: 900 clamp(1.25rem, 4vw, 2rem)/1 system-ui; text-shadow: 0 2px 5px #000; pointer-events: none; opacity: 0; }
 .dgn-pop__cell.is-gold { box-shadow: inset 0 0 0 3px #f2cb62, inset 0 0 14px #e1a02f80; }
 .dgn-pop__gold { position: absolute; bottom: 4%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 90%; padding: 2px 4px; border-radius: 3px; color: #ffe8a1; background: #322608e8; font: 900 clamp(.4rem, 1.1vw, .56rem)/1.1 system-ui; pointer-events: none; }
-.dgn-pop__gold-total { display: block; color: #f4d07c; font: 800 .64rem/1.3 system-ui; }
+.dgn-pop__gold-total { min-height: 1.3em; display: block; color: #f4d07c; font: 800 .64rem/1.3 system-ui; }
+/* Reserve the bonus caption so a gold match does not recenter the ticket. */
+.dgn-pop .dgn-pop__gold-total[hidden] { display: block !important; visibility: hidden; }
 .dgn-pop__number { display: block; padding: .4rem 0 .15rem; color: #b6c3bc; font: 800 .58rem/1.4 system-ui; letter-spacing: .13em; }
 .dgn-pop__all { position: sticky; bottom: 8px; z-index: 25; min-height: 44px; margin: 1rem auto 0; padding: .65rem 1.7rem; color: #202319; background: #eacc81; border: 1px solid #ffedaf; border-radius: 9px; font: 900 .8rem/1.3 system-ui; letter-spacing: .07em; box-shadow: 0 4px 14px #0006; cursor: pointer; }
 .dgn-pop__all:disabled { opacity: .5; cursor: default; }
@@ -49,3 +75,18 @@
 @media (max-width: 620px) { .dgn-pop__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; } .dgn-pop__ticket { border-radius: 12px; } }
 @media (max-width: 350px) { .dgn-pop__grid, .dgn-pop__grid[data-size="4"] { grid-template-columns: minmax(0, 1fr); max-width: 240px; } }
 @media (prefers-reduced-motion: reduce) { .dgn-pop__cell.is-open .dgn-pop__badge { animation: none; } .dgn-pop__increment { display: none; } .dgn-pop__cell { transition: none; } }
+
+/* One smooth air pocket per quadrant. Only the ticket's outside corners round. */
+.dgn-pop__cell--q0 { border-top-left-radius: 14px; }
+.dgn-pop__cell--q1 { border-top-right-radius: 14px; }
+.dgn-pop__cell--q2 { border-bottom-left-radius: 14px; }
+.dgn-pop__cell--q3 { border-bottom-right-radius: 14px; }
+.dgn-pop__cell.is-match .dgn-pop__badge,
+.dgn-pop__cell.is-match .dgn-pop__player { animation: dgn-pop-match 420ms ease-out both; }
+.dgn-pop__cell.is-match .dgn-pop__increment { animation: dgn-pop-point 650ms ease-out both; }
+@keyframes dgn-pop-match { 0%,100% { scale: 1; } 35% { scale: 1.12; filter: drop-shadow(0 0 5px #fff5b9); } }
+@media (prefers-reduced-motion: reduce) {
+  .dgn-pop__cell.is-match .dgn-pop__badge, .dgn-pop__cell.is-match .dgn-pop__player { animation: none; }
+  .dgn-pop__ticket-score { animation: none; }
+  .dgn-pop__flame, .dgn-pop__flame[data-points]::before { transition: none; }
+}

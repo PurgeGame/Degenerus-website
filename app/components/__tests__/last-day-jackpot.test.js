@@ -738,7 +738,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       REPLAY_PANEL_SRC,
       /' possible-win panel'|' panels remaining'|' panel' \+ \(remaining !== 1/,
       'scratch progress is not printed as floating text over the jackpot controls');
-    assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LOCKED_LABEL = 'SCRATCH TO UNLOCK BONUS'/,
+    assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LOCKED_LABEL = 'POP TO UNLOCK BONUS'/,
       'the actionable scratch requirement lives on the shared jackpot control');
     assert.match(
       DRAWING_CSS,
@@ -1780,7 +1780,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     }
   });
 
-  test('fresh winning badges pop their exact icon-and-amount reward once on hover', async () => {
+  test('winning badges retain their exact icon-and-amount rewards for repeated inspection', async () => {
     const { winningBadgeRewardLines } = await import('../replay-panel.js');
     const rows = winningBadgeRewardLines({
       awardType: 'aggregated',
@@ -1797,8 +1797,8 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'ticket wins reuse the recognizable four-trait ticket icon');
     assert.match(REPLAY_PANEL_SRC, /\/whitepaper\/flame-logo-split\.svg[\s\S]*\/symbols\/crypto_06_ethereum_silver\.svg/,
       'currency wins use their real FLIP and ETH marks');
-    assert.match(REPLAY_PANEL_SRC, /addEventListener\('mouseenter', showReward, \{ once: true \}\)/,
-      'each fresh badge performs its pop only on the first mouse entry');
+    assert.match(REPLAY_PANEL_SRC, /addEventListener\('mouseenter', showReward\)/,
+      'badge rewards remain inspectable after the automatic reveal');
     assert.doesNotMatch(
       REPLAY_PANEL_SRC,
       /for \(const active of this\.querySelectorAll\('\.replay-badge-wrap\.is-reward-pop'\)\)/,
@@ -1848,7 +1848,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'new win badges begin inert beneath the scratch cover');
     assert.match(
       REPLAY_PANEL_SRC,
-      /#revealQuadrant[\s\S]*const badges = quad\.querySelectorAll\('\.replay-badge-wrap'\);\s*for \(const badge of badges\) badge\.tabIndex = 0/,
+      /#revealQuadrant[\s\S]*const badges = quad\.querySelectorAll\('\.replay-badge-wrap'\);\s*for \(const badge of badges\) \{ badge\.tabIndex = 0/,
       'badge reward hover arms only when the whole quadrant reaches its reveal threshold',
     );
     assert.match(
@@ -1863,8 +1863,8 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /#activateBadgeReward\(wrap\)[\s\S]*wrap\.dataset\.rewardShown === 'true'[\s\S]*\.replay-badge-reward-pop/,
-      'bulk activation preserves the once-only guard and skips badges without a reward popup',
+      /#activateBadgeReward\(wrap\)[\s\S]*dataset.flying === 'true'[\s\S]*\.replay-badge-reward-pop/,
+      'automatic flights suppress duplicate hover popups and badges without rewards stay quiet',
     );
     assert.match(
       REPLAY_CSS,
@@ -1916,7 +1916,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
   });
 
-  test('YOU WON waits until every active badge reward popup has cleared', () => {
+  test('the total remains visible while individual badge rewards animate', () => {
     assert.match(
       REPLAY_PANEL_SRC,
       /receipt\.className = 'replay-win-description is-waiting-for-reward-popups'[\s\S]*receipt\.dataset\.rewardPopGate = 'pending'/,
@@ -1924,8 +1924,8 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /const rewardPopActive = Boolean\([\s\S]*this\.querySelector\('\.replay-badge-wrap\.is-reward-pop'\)[\s\S]*openingGateActive \|\| rewardPopActive/,
-      'the gate considers every concurrently active reward popup in the widget',
+      /const openingGateActive = receipt.dataset.rewardPopGate === 'pending';[\s\S]*openingGateActive,/,
+      'only the opening gate can hide the receipt; individual prizes never replace the total',
     );
     assert.match(
       REPLAY_PANEL_SRC,

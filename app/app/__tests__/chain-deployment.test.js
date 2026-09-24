@@ -12,7 +12,7 @@ import {SCHEMA_HASH} from '../../chain/generated/index.js';
 const exec=promisify(execFile),root=new URL('../../../',import.meta.url);
 
 test('next-deployment preparation verifies both RPCs and never activates an incomplete manifest',async()=>{
-  const f=await rpcFixture();await f.field('GAME','ticketGenerationStartBlock',1,0);f.answer('GAME','currentDayView',[121]);
+  const f=await rpcFixture();await f.field('GAME','ticketGenerationStartBlock',1,1);f.answer('GAME','currentDayView',[121]);
   const server=createServer(async(req,res)=>{
     let body='';for await(const part of req)body+=part;const job=JSON.parse(body);
     try{const result=req.url==='/wrong'&&job.method==='eth_chainId'?'0x2':await f.client.provider.send(job.method,job.params);res.setHeader('content-type','application/json');res.end(JSON.stringify({jsonrpc:'2.0',id:job.id,result}));}
