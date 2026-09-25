@@ -79,3 +79,20 @@ describe('last-day composition consistency', () => {
     assert.equal(lastDayPayloadNeedsRecheck(payload), true);
   });
 });
+
+test('replay reuses only complete sealed results for the exact selected day', async () => {
+  const { reusableJackpotPayload } = await import('../last-day-state.js');
+  const payload = {
+    day: 42, status: 'resolved',
+    summary: { blockRange: { start: '100', end: '110' } },
+    winners: [{ address: '0xabc', breakdown: [] }],
+    roll1: { day: 42, wins: [] }, roll2: { day: 42, wins: [] },
+  };
+  assert.equal(reusableJackpotPayload(payload, 42), payload);
+  assert.equal(reusableJackpotPayload(payload, 43), null);
+  assert.equal(reusableJackpotPayload({ ...payload, status: 'processing' }, 42), null);
+  assert.equal(reusableJackpotPayload({ ...payload, summary: { blockRange: { start: '100' } } }, 42), null);
+  assert.equal(reusableJackpotPayload({ ...payload, roll2: null }, 42), null);
+  assert.equal(reusableJackpotPayload({ ...payload, roll2: { day: 41, wins: [] } }, 42), null);
+  assert.equal(reusableJackpotPayload({ ...payload, winners: [], roll1: { day: 42, wins: [{ amount: '1' }] } }, 42), null);
+});

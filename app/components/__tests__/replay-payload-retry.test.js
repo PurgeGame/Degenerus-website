@@ -79,6 +79,7 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
   const render = runInNewContext(`new (class {
     #quadWinArrays = []; #centerWins = []; #centerScratched = false; #dayBonusTraitDraw = true;
     #sfxScratchStop() {} #sfxGreenReveal() {} #checkAllScratched() {}
+    #popBubble(_target, _event, _instant, done) { done(); }
     prize = { style: {}, classList: { remove() {}, add() {} }, setAttribute(k,v) { this[k] = v; } };
     querySelector(s) { return s.includes('center-prize') ? this.prize : null; }
     ${source.slice(start, end)}
@@ -94,4 +95,32 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
   assert.match(combined.innerHTML, /BONUS \+ AFKING/);
   assert.match(combined.title, /10 FLIP far-future bonus/);
   assert.match(combined.title, /4000 FLIP AFKing Seat Draw/);
+});
+
+test('an open cabinet reuses the host result without roll or distribution requests', async () => {
+  const { reusableJackpotPayload } = await import('../../app/last-day-state.js');
+  const start = source.indexOf('  setResolvedDayPayload(payload)');
+  const end = source.indexOf('  #isOpeningFlipDraw(', start);
+  let requests = 0;
+  const panel = runInNewContext(`new (class {
+    #resolvedDayPayload = null; #rollsMissingWarnedDay = null;
+    #recordJackpotRead() {}
+    ${source.slice(start, end)}
+    rolls(day) { return this.#loadDayRolls(day); }
+    detail(day) { return this.#loadDayDetail(day); }
+  })()`, {
+    reusableJackpotPayload, console,
+    fetchJSON: async () => { requests++; return {}; },
+    replayFetch: async () => { requests++; return {}; },
+    noteReplayApiResponse() {}, jackpotReadIsUnavailable() { return false; },
+  });
+  const win = { winner: '0xabc', amount: '1', awardType: 'eth' };
+  const payload = { day: 42, status: 'resolved', summary: { blockRange: { end: '110' } },
+    winners: [{ breakdown: [win] }], roll1: { day: 42, wins: [win] }, roll2: { day: 42, wins: [] } };
+  panel.setResolvedDayPayload(payload);
+  assert.equal((await panel.rolls(42)).roll1, payload.roll1);
+  assert.equal((await panel.detail(42)).distributions[0], win);
+  assert.equal(requests, 0);
+  await panel.rolls(43);
+  assert.equal(requests, 2, 'another day still fetches both authoritative rolls');
 });
