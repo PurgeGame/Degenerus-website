@@ -19054,14 +19054,8 @@ body.layout-basic .referral-strip .deg-referral-card::after {
 body.layout-basic .referral-strip .deg-referral-card__logo {
   position: static;
   flex: 0 0 auto;
-  width: 2.15rem;
-  height: 2.15rem;
-  padding: 0.28rem;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 192, 77, 0.55);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(237, 14, 17, 0.35), rgba(15, 10, 30, 0.85) 70%);
-  box-shadow: 0 0 14px rgba(237, 14, 17, 0.45);
+  width: 2rem;
+  height: 2rem;
 }
 body.layout-basic .referral-strip .deg-referral-card__copy { flex: 1 1 auto; }
 body.layout-basic .referral-strip .deg-referral-card__copy > strong {

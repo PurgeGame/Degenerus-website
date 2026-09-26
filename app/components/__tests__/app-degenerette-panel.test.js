@@ -2479,6 +2479,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(copied.at(-1), new RegExp(`${CONNECTED.slice(2).toLowerCase()}$`),
         'the default address-derived code belongs to the connected player');
       assert.equal(button.textContent, 'CODE COPIED');
+      assert.equal(el.querySelector('[data-bind="deg-referral-feedback"]').hidden, true,
+        'the card does not repeat CODE COPIED under the key that already says it');
 
       const info = el.querySelector('[data-bind="deg-referral-info"]');
       info.dispatchEvent({ type: 'click', preventDefault() {} });

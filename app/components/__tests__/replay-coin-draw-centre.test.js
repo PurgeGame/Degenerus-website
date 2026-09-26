@@ -38,6 +38,11 @@ function element() {
   };
 }
 
+const storage = (() => {
+  const map = new Map();
+  return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), clear: () => map.clear(), keys: () => [...map.keys()] };
+})();
+
 function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinComplete = true, bonusTraitDraw = false, toggleReady = false } = {}) {
   const dom = { center: element() };
   const klass = `new (class {
@@ -53,6 +58,12 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
       return null;
     }
     #mainReadyForBonus() { return this.toggleReady; }
+    spinsComplete = true; attrs = new Map(); events = [];
+    #jackpotSpinsComplete() { return this.spinsComplete; }
+    hasAttribute(name) { return this.attrs.has(name); }
+    setAttribute(name, value) { this.attrs.set(name, String(value)); }
+    removeAttribute(name) { this.attrs.delete(name); }
+    dispatchEvent(event) { this.events.push(event.type); return true; }
     #openCoinDrawBattle(opener) { this.opened.push(opener); return Promise.resolve(true); }
     #toggleRevealedDraw() { this.toggled++; return Promise.resolve(); }
     ${between('  #drawToggleReady() {', '  #setCoinDrawStatus(')}
@@ -70,10 +81,15 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     distribute() { this.#distributePrizesFromRoll1(); return this.#centerWins; }
     sync() { return this.#syncCoinDrawCentre(); }
     markSeen(key) { this.#coinDrawSeen.add(key); }
+    stepDue() { return this.#coinDrawStepDue(); }
+    publishDue() { this.#publishCoinDrawDue(); }
+    open(model) { this.#markCoinDrawSeen(model); }
+    forget() { this.#coinDrawSeen.clear(); }
     fail(message) { this.#coinDrawStatus = { message, error: true }; }
   })()`;
   const instance = runInNewContext(klass, {
     dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'RESOLVE CRAPS BATTLE',
+    CHAIN: { id: 84532 }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
   });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });
   return { instance, dom };
@@ -166,14 +182,14 @@ test('purchase day has no Bonus Spin; a drawn wallet\'s battle FLIP is paid at t
 
 test('the bottom key resolves the battle after the main spin, before the coinflip', () => {
   const body = between('    btn.classList?.remove(\'is-craps\');', '    if (this.#coinflipHandoffReady()) {');
-  assert.match(body, /const crapsBattle = this\.#jackpotSpinsComplete\(\) \? this\.#coinDrawCentre\(\) : null;/,
-    'a level-0 purchase day plays its Bonus Spin first');
-  assert.match(body, /!this\.#coinDrawSeen\.has\(/, 'only until the viewer has opened it');
+  assert.match(body, /const crapsBattle = this\.#coinDrawStepDue\(\);/);
+  assert.match(source, /#coinDrawStepDue\(\) \{\s*const model = this\.#jackpotSpinsComplete\(\) \? this\.#coinDrawCentre\(\) : null;\s*return model && !this\.#coinDrawWasSeen\(model\) \? model : null;/,
+    'a level-0 purchase day plays its Bonus Spin first, and the key asks only until the battle is opened');
   assert.match(body, /dataset\.replayAction = 'craps-battle'/);
   assert.match(body, /CRAPS_BATTLE_LABEL/);
   assert.match(source, /replayAction === 'craps-battle'\) \{\s*void this\.#openCoinDrawBattle\(revealBtn\);/,
     'the key opens the same battle the centre does');
-  assert.match(source, /if \(result\?\.ok\) this\.#coinDrawSeen\.add\(/, 'a successful open retires the key step');
+  assert.match(source, /if \(result\?\.ok\) this\.#markCoinDrawSeen\(model\);/, 'a successful open retires the key step');
 });
 
 test('the centre face is the two dice badges and nothing else', () => {
@@ -192,4 +208,56 @@ test('the centre face is the two dice badges and nothing else', () => {
   assert.match(css, /\.replay-ticket-center--craps:not\(\.replay-ticket-center--draw-toggle\) \.replay-flame \{ opacity: 0; \}/);
   assert.equal(css.match(/@keyframes replay-craps-glow/g)?.length, 1, 'one glow, not an older copy overriding it');
   assert.doesNotMatch(css, /replay-center-battle/, 'no styles left for the removed button face');
+});
+
+test('an opened battle stays opened across a reload, and the key asks until then', () => {
+  storage.clear();
+  const { instance } = panel();
+  const model = instance.sync();
+  assert.equal(instance.stepDue()?.key, model.key, 'due after every spin');
+  instance.spinsComplete = false;
+  assert.equal(instance.stepDue(), null, 'never before the spins are done');
+  instance.spinsComplete = true;
+  instance.open(model);
+  assert.equal(instance.stepDue(), null);
+  assert.deepEqual(storage.keys(), [`craps-battle-seen:84532:${VIEWER}:42`], 'scoped by chain, wallet and day');
+  instance.forget();
+  assert.equal(instance.stepDue(), null, 'a fresh mount reads the stored mark');
+  const other = panel({ player: OTHER }).instance;
+  other.setup({ coinDrawBattle: { ...battle }, player: OTHER, day: 42, mainSpinComplete: true, bonusTraitDraw: false });
+  assert.ok(other.stepDue(), 'another wallet in the same battle is still asked');
+  const deploymentPrefixes = readFileSync(new URL('../../app/deployment-presentation-state.js', import.meta.url), 'utf8');
+  assert.match(deploymentPrefixes, /`craps-battle-seen:\$\{CHAIN\.id\}:`,/, 'a redeploy sweeps the marks, since day numbers restart');
+});
+
+test('a due battle outranks DAY SUMMARY on the shared key', () => {
+  storage.clear();
+  const { instance } = panel();
+  instance.sync();
+  instance.publishDue();
+  assert.equal(instance.hasAttribute('data-craps-battle-due'), true, 'the host is told a battle is due');
+  assert.deepEqual([...instance.events], ['replay:craps-battle-due']);
+  instance.publishDue();
+  assert.equal(instance.events.length, 1, 'announced on change only');
+  instance.open(instance.stepDue());
+  instance.publishDue();
+  assert.equal(instance.hasAttribute('data-craps-battle-due'), false);
+  assert.deepEqual([...instance.events], ['replay:craps-battle-due', 'replay:craps-battle-due']);
+  assert.match(source, /if \(resultsCta && resultsCta\.hidden === false && !this\.#coinDrawStepDue\(\)\) \{/,
+    'the visible summary no longer hides a due battle key');
+  const host = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
+  assert.match(host, /&& !this\.#hasOpenedSummary\(\)\s*&& !this\.#crapsBattleDue\(\)/, 'the host holds DAY SUMMARY back');
+  assert.match(host, /document\.addEventListener\('replay:craps-battle-due', this\.#crapsBattleDueListener\)/,
+    'and re-checks as soon as the battle is opened');
+});
+
+test('opening a battle always ends: a deadline, a worker timeout, and a table it loads itself', () => {
+  assert.match(source, /const result = await Promise\.race\(\[\s*openCoinDrawRun\(\{ day: model\.day, player: model\.player, opener, signal: controller\?\.signal \?\? null \}\),\s*timedOut,\s*\]\);/);
+  const viewer = readFileSync(new URL('../../craps/coin-draw-viewer.js', import.meta.url), 'utf8');
+  const entry = readFileSync(new URL('../app-craps-entry.js', import.meta.url), 'utf8');
+  const pinned = entry.match(/from '\.\/app-craps-table\.js(\?rev=[^']+)'/)[1];
+  assert.ok(viewer.includes(`'../components/app-craps-table.js${pinned}'`), 'the table loads under the Craps panel\'s own pinned URL');
+  assert.match(viewer, /if \(signal\?\.aborted\) return \{ ok: false,[^}]*\};\s*table\.open\(/, 'an abandoned open never pops the table later');
+  const chain = readFileSync(new URL('../../chain/coin-draw.js', import.meta.url), 'utf8');
+  assert.match(chain, /setTimeout\(\(\) => \{\s*worker\.terminate\(\);\s*reject\(new ChainDataError\([^)]*'REPLAY_TIMEOUT'\)\);\s*\}, REPLAY_WORKER_TIMEOUT_MS\);/);
 });

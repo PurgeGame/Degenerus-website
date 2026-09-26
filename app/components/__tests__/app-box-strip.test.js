@@ -13,6 +13,9 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const COMPONENT_SRC = readFileSync(new URL('../app-box-strip.js', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (trimmed decimator-panel port) — BEFORE component import.
@@ -743,6 +746,44 @@ describe('app-box-strip', () => {
     assert.equal(el.querySelectorAll('.bxs-chip').length, 0);
     assert.equal(el.querySelector('[data-bind="bxs-strip"]').hidden, true);
     el.disconnectedCallback();
+  });
+
+  test('a pending box the chain already opened is prefetched, so OPEN reveals without another read', async () => {
+    localStorage.setItem(KEY, JSON.stringify([{
+      index: 8, ready: true, resolved: true, fromReceipt: true,
+    }]));
+    let reads = 0;
+    globalThis.fetch = async (url) => {
+      reads += 1;
+      return { ok: true, status: 200, json: async () => ({ items: String(url).includes('/lootbox/legs') ? [{
+        uid: 'prefetched-spin', player: ADDR_LC, legType: 'spin',
+        lootboxIndex: 8, transactionHash: '0xprefetched', ord: 106,
+        spin: { spinType: 'wwxrp', spinCount: 1, payout: '0', ethShare: '0',
+          reels: [{ spinIndex: 0, score: 0, playerTraits: [], resultTraits: [] }] },
+      }] : [] }) };
+    };
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    const afterPoll = reads;
+    const action = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
+    assert.ok(action, 'the opened box waits in Pending');
+    await action.run();
+    assert.equal(reads, afterPoll, 'OPEN used the result assembled while the box was pending');
+    assert.equal(revealMod.__takeQueuedForTest().length, 1, 'and revealed it');
+  });
+
+  test('chain mode probes before any leg lookup, and builds opened results from the poll page', () => {
+    const click = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  async #onOpenClick(box) {'), COMPONENT_SRC.indexOf('  #clearResultReads() {'));
+    assert.ok(click.length > 0, 'the open handler precedes the result readers');
+    assert.match(click, /if \(CHAIN\.readMode !== 'chain'\) \{\s*const indexedReplay = await this\.#replayResolvedBox\(box, \{ silentIfMissing: true \}\);/,
+      'the leg feed is the probe\'s own RPC in chain mode, so it never delays an open');
+    assert.match(click, /if \(settled && CHAIN\.readMode === 'chain'\) \{[\s\S]*?this\.#replayResolvedBox\(box, \{ silentIfMissing: true \}\)/,
+      'a box opened since the last poll still replays on the same click');
+    assert.match(COMPONENT_SRC, /if \(CHAIN\.readMode === 'chain' && recent\.owner === this\.#addr && recent\.items\.length > 0\) \{\s*legs = openLegsFromFeed\(recent\.items, legOptions\);/,
+      'an opened box is assembled from the page the poll already read');
+    assert.match(COMPONENT_SRC, /#readResolvedBoxResult\(box\) \{[\s\S]*?const inFlight = key \? this\.#resolvedLegReads\.get\(key\) : null;\s*if \(inFlight\) return inFlight;/,
+      'a click during a prefetch shares its read');
   });
 
   test('CLEAR retires an opening box and ignores its late result', async () => {
