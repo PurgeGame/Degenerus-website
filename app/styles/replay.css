@@ -1414,6 +1414,12 @@
 }
 .replay-bubble-trigger:disabled { opacity: 1; cursor: default; }
 .replay-bubble-trigger:focus-visible { outline: 3px solid #fff1a5; outline-offset: -5px; }
+.replay-tq .replay-bubble-trigger .bubble-reveal__badge {
+  /* The cover's resting 1.025 scale brings this to the spinning badge's 122%. */
+  flex-shrink: 0;
+  width: 119%;
+  height: 119%;
+}
 .replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; }
 .replay-bubble-trigger--center .bubble-reveal { border-radius: 0; }
 .replay-tq.q-result-revealed.q-no-tickets {

@@ -1641,7 +1641,7 @@ class DecimatorDrawReplay {
     if (!settlement) return null;
     settlement.hidden = value == null;
     if (value == null) return null;
-    const formatted = formatDecimatorSettlement(value, this.ethDisplayScale);
+    const formatted = formatDecimatorSettlement(value, this.ethDisplayScale, { cashOnly: this.player?.cashOnly === true });
     this.bind('player-payout-eth').textContent = formatted.claimableLabel;
     this.bind('player-payout-reward').textContent = formatted.rewardLabel;
     this.bind('player-payout-rule').textContent = formatted.ruleLabel;
@@ -1684,7 +1684,7 @@ class DecimatorDrawReplay {
     }
     const payoutKind = playerFrame ? 'current' : 'projected';
     const finalSettlement = this.completed.length === this.frames.length && result?.won
-      ? formatDecimatorSettlement(value, this.ethDisplayScale)
+      ? formatDecimatorSettlement(value, this.ethDisplayScale, { cashOnly: this.player?.cashOnly === true })
       : null;
     output.setAttribute(
       'aria-label',

@@ -17969,7 +17969,7 @@ body.layout-basic .dgn-symbol-preview {
   display: grid;
   width: 100%;
   justify-items: center;
-  gap: 0.45rem;
+  gap: 0.25rem;
 }
 body.layout-basic button.dgn-symbol-preview {
   padding: 0.4rem 0;
@@ -18018,6 +18018,10 @@ body.layout-basic .dgn-symbol-preview__art img {
   max-width: none;
   object-fit: contain;
 }
+body.layout-basic .dgn-symbol-badge[data-full-disc="true"] img {
+  width: 81%;
+  height: 81%;
+}
 body.layout-basic .dgn-symbol-preview__art {
   width: min(9rem, 100%);
   margin: 0.2rem 0;
@@ -18028,6 +18032,14 @@ body.layout-basic .dgn-symbol-preview__name {
   line-height: 1.4;
 }
 body.layout-basic .dgn-symbol-preview__change {
+  position: absolute;
+  right: -0.3rem;
+  bottom: 0.1rem;
+  z-index: 1;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #ffffff30;
+  border-radius: 999px;
+  background: #171723;
   color: #c7cbd4;
   font-size: 0.65rem;
   font-weight: 700;

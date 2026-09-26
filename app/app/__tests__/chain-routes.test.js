@@ -25,13 +25,54 @@ test('contract ABI integration: supported empty-wallet projections do not crash 
 });
 
 test('contract ABI integration: pending wager recovery includes old placements and excludes resolved records',async()=>{
+  // Audit 224de529: a bet is (index, betId) — betIds restart in every RNG index — and
+  // degeneretteBetInfo(index, betId) is its queued word, zero once settled.
   const f=await rpcFixture();
   await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:7,betId:1,packed:123},{block:2});
   await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:8,betId:2,packed:456},{block:3});
-  await f.event('GAME','DegeneretteResolved',{player:PLAYER,betId:2},{block:4});
-  await f.field('GAME','degeneretteBets',123,PLAYER,1);
+  await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:9,betId:2,packed:789},{block:4});
+  await f.event('GAME','DegeneretteResolved',{player:PLAYER,index:8,betId:2,totalPayout:0,resultTraits:0,spins:'0x0000000000'},{block:5});
+  const words=new Map([['7:1',123n],['8:2',0n],['9:2',789n]]);
+  f.answer('GAME','degeneretteBetInfo',([index,betId])=>[words.get(`${index}:${betId}`)??0n]);
   const data=await readChainRoute(`/player/${PLAYER}?pending=1`,{client:f.client});
-  assert.deepEqual(data.degenerette.pendingBets,[{betId:'1',betIndex:7,packedData:'123'}]);
+  assert.deepEqual(data.degenerette.pendingBets,[
+    {betId:'1',betIndex:7,packedData:'123'},
+    {betId:'2',betIndex:9,packedData:'789'},
+  ],'bet 2 at index 8 settled; bet 2 at index 9 is a different, still-queued bet');
+});
+
+test('contract ABI integration: a keeper-swept bet feeds its own spins, Luckbox and record chain only',async()=>{
+  // Audit 224de529: mineFlip() settles every bet at an index in ONE transaction, after that
+  // index's human boxes. The feed must price each spin from the bet word (no per-spin event)
+  // and attribute only the bet's own log window to it.
+  const {OTHER_PLAYER}=await import('./helpers/chain-rpc.js');
+  const {ETH_DIVISOR}=await import('../chain-config.js');
+  const f=await rpcFixture();
+  const unit=(10n**9n)/BigInt(ETH_DIVISOR); const stake=(10n**16n)/BigInt(ETH_DIVISOR);
+  const packed=BigInt(PLAYER)|(1n<<165n)|(1n<<171n)|((stake/unit)<<188n); // 1 ETH spin, record armed
+  const placeTx='0x'+'aa'.repeat(32), sweepTx='0x'+'bb'.repeat(32);
+  await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:7,betId:1,packed},{block:9990,index:0,tx:placeTx});
+  await f.event('COINFLIP','BigRecordUpdated',{kind:1,player:PLAYER,value:10n**18n,paid:900n*10n**18n+5n,sdgnrsPaid:0},{block:9990,index:1,tx:placeTx});
+  await f.field('GAME','lootboxRngWordByIndex',0xabcd,7);
+  const spins='0x'+(1234).toString(16).padStart(8,'0')+'04'; // one spin: S4, no gold
+  const record=(1n<<63n)|(3n<<60n)|5n;
+  await f.event('GAME','LootBoxOpened',{player:PLAYER,lootboxIndex:7,amount:1,futureLevel:1,futureTickets:4},{block:9995,index:10,tx:sweepTx}); // human box
+  await f.event('GAME','LootBoxOpened',{player:PLAYER,lootboxIndex:0,amount:2,futureLevel:1,futureTickets:4},{block:9995,index:11,tx:sweepTx}); // our direct box
+  await f.event('GAME','DegeneretteResolved',{player:PLAYER,index:7,betId:1,totalPayout:9n*stake,resultTraits:13,spins},{block:9995,index:12,tx:sweepTx});
+  await f.event('GAME','BoxSpin',{player:PLAYER,betId:record,packedSpins:0,payout:0,ethShare:0},{block:9995,index:13,tx:sweepTx}); // our record chain
+  await f.event('GAME','DegeneretteResolved',{player:OTHER_PLAYER,index:7,betId:2,totalPayout:0,resultTraits:13,spins},{block:9995,index:14,tx:sweepTx});
+  const feed=await readChainRoute(`/degenerette/feed?player=${PLAYER}`,{client:f.client});
+  assert.equal(feed.items.length,1);
+  const [item]=feed.items;
+  assert.equal(item.betIndex,7);assert.equal(item.betId,'1');assert.equal(item.rngReady,true);
+  assert.equal(item.recordStake,String(900n*10n**18n),'the whole-FLIP record claim comes from the placement receipt');
+  const resolved=item.results.find(r=>r.resultType==='resolved');
+  assert.equal(resolved.resultData.spinCount,1);assert.equal(resolved.resultData.spins,spins);
+  const [spin]=item.results.filter(r=>r.resultType==='result');
+  assert.equal(spin.resultData.matches,'4');assert.equal(spin.resultData.playerTraits,'1234');
+  assert.equal(spin.payout,String(9n*stake),'S4 at activity 0 is 10x base at 90% — the module payout math');
+  assert.deepEqual(item.lootboxPayouts.map(p=>[p.rewardType,Number(p.logIndex)]),[['opened',11],['BoxSpin',13]],
+    'the sweep\'s human box and the other bettor\'s settlement are not this bet\'s rewards');
 });
 
 test('contract ABI integration: new pending tickets are counted in entries, not packed bits',async()=>{

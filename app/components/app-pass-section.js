@@ -80,13 +80,14 @@ var ht=Object.defineProperty;var b=(d,e)=>ht(d,"name",{value:e,configurable:!0})
                          width="1400" height="320" alt="Deity Pass">
                   </span>
                 </span>
-                <span class="pass-product-description">One whole ticket every level, renewed at every level transition, and three boons per day forever.</span>
+                <span class="pass-product-description">Perpetual drawing entries for your symbol in every color, plus one whole ticket every level and three boons per day forever.</span>
               </span>
             </span>
             <span class="pass-product-perks pass-product-perks--deity" aria-label="Deity pass benefits">
               <span class="pass-lootbox-perk pass-deity-lootbox-perk"
                     data-bind="pass-deity-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
               <span data-bind="pass-deity-score">+155% DEGEN RATING</span>
+              <span data-bind="pass-deity-symbol-entries">PERPETUAL SYMBOL ENTRIES · ALL COLORS</span>
               <span data-bind="pass-deity-perpetual">1 TICKET / LEVEL · PERPETUAL</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
@@ -112,6 +113,7 @@ var ht=Object.defineProperty;var b=(d,e)=>ht(d,"name",{value:e,configurable:!0})
                          width="1400" height="320" alt="">
                   </span>
                   <strong id="pass-deity-dialog-title">CHOOSE YOUR DEITY</strong>
+                  <small class="pass-deity-dialog__note">Your symbol gets perpetual drawing entries in every color, in addition to your ticket every level.</small>
                   <small class="pass-deity-dialog__note" data-bind="pass-deity-genesis-note">WWXRP and ETHEREUM are the genesis passes, held by the VAULT and sDGNRS. 30 of the 32 symbols are for sale: 24&nbsp;ETH rising to 300&nbsp;ETH on the 24th, then doubling to 19,200&nbsp;ETH on the last.</small>
                 </span>
                 <button type="button" class="pass-deity-dialog__close"

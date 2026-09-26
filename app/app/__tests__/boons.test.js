@@ -84,7 +84,8 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'lazy').label, 'BOON −50%');
     assert.equal(boonIndicatorModel(payload, 'degenerette-eth').label, '12% BONUS ETH BET');
     assert.equal(boonIndicatorModel(payload, 'degenerette-flip').label, '12% BONUS FLIP BET');
-    assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, '12% BONUS WWXRP BET');
+    // WWXRP boons boost a Daily Incinerator burn, not a bet (audit 224de529).
+    assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, '12% BONUS WWXRP BURN');
     assert.equal(boonIndicatorModel(payload, 'craps').label, 'BOON +15%');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
   });
@@ -107,13 +108,15 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(4).effect, '1 MISSED DAY SHIELDED');
     assert.equal(boonTypePresentation(32).effect, '4% BONUS ETH BET');
     assert.equal(boonTypePresentation(36).effect, '8% BONUS FLIP BET');
-    assert.equal(boonTypePresentation(40).effect, '12% BONUS WWXRP BET');
+    assert.equal(boonTypePresentation(40).effect, '12% BONUS WWXRP BURN');
+    assert.equal(boonTypePresentation(40).name, 'Incinerator');
     assert.equal(boonTypePresentation(41).effect, '5% MORE CRAPS BANKROLL RETURN');
     assert.equal(boonTypePresentation(42).effect, '10% MORE CRAPS BANKROLL RETURN');
     assert.equal(boonTypePresentation(43).effect, '15% MORE CRAPS BANKROLL RETURN');
     assert.equal(boonTypePresentation(32).name, 'Degenerette');
     assert.equal(boonTypePresentation(36).name, 'Degenerette');
-    assert.equal(boonTypePresentation(40).name, 'Degenerette');
+    assert.equal(boonTypePresentation(40).name, 'Incinerator',
+      'WWXRP boons are spent by the incinerator burn (WWXRP.enter), not a bet');
     assert.equal(boonTypePresentation(42).name, 'Craps');
   });
 
@@ -158,7 +161,8 @@ describe('active boon product mapping', () => {
   test('names Degenerette boons in the active-boon history instead of generic type IDs', () => {
     assert.equal(BOON_TYPE_NAMES[32], 'DGN_ETH_4');
     assert.equal(BOON_TYPE_NAMES[36], 'DGN_FLIP_8');
-    assert.equal(BOON_TYPE_NAMES[40], 'DGN_WWXRP_12');
+    assert.equal(BOON_TYPE_NAMES[40], 'WWXRP_12', 'audit 224de529 renamed DEGEN_WWXRP_* to WWXRP_*');
+    assert.equal(BOON_FULL_NAMES[40], '12% BONUS WWXRP BURN');
     assert.equal(BOON_FULL_NAMES[36], '8% BONUS FLIP BET');
     assert.equal(BOON_BOOST_PCT[40], 12);
     assert.equal(BOON_TYPE_NAMES[42], 'CRAPS_10');

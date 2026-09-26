@@ -15,7 +15,7 @@ test('there is no sacrifice write: the panel explains the hero-bet entry instead
   const [vault, sdgnrs] = SACRIFICE_DEITIES;
   assert.match(sacrificeHowTo(vault), /Bet ETH on Degenerette with the XRP hero symbol/);
   assert.match(sacrificeHowTo(sdgnrs), /ETH hero symbol to enter the God of ETH/);
-  assert.match(sacrificeHowTo(vault), /FLIP, WWXRP and gifted bets do not count/);
+  assert.match(sacrificeHowTo(vault), /FLIP and gifted bets do not count/);
 });
 
 test('draw status only closes for a missing read, an ended game or a drawn pool', () => {
@@ -30,7 +30,7 @@ test('draw status only closes for a missing read, an ended game or a drawn pool'
 test('compact boons preserve effective discounts, currency and non-percentage rewards', () => {
   assert.deepEqual(compactSacrificeBoon(3), { name: 'Coinflip', effect: '+25%' });
   assert.deepEqual(compactSacrificeBoon(24), { name: 'Whale', effect: '−35%' });
-  assert.deepEqual(compactSacrificeBoon(40), { name: 'Degenerette', effect: '+12% WWXRP' });
+  assert.deepEqual(compactSacrificeBoon(40), { name: 'Incinerator', effect: '+12% WWXRP' });
   assert.deepEqual(compactSacrificeBoon(18), { name: 'Degen rating', effect: '+12.5' });
   assert.deepEqual(compactSacrificeBoon(4), { name: 'Quest', effect: 'Shield' });
   assert.deepEqual(compactSacrificeBoon(28), { name: 'Whale', effect: 'Pass' });

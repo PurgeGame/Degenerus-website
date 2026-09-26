@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { writeLightweightModePreference } from '../ui-preferences.js';
 import { mountAmbientMotion } from '../ambient-motion.js';
 
-test('decorations pause outside the viewport and hidden tabs, including late mounts', (t) => {
-  let intersect, mutate, visibility;
+test('decorations pause offscreen, in hidden tabs, and when the window loses focus', (t) => {
+  let intersect, mutate, visibility, focused = true;
+  const windowListeners = new Map();
   const observed = new Set();
   const makeElement = () => ({
     nodeType: 1, isConnected: true, paused: false,
@@ -17,6 +18,11 @@ test('decorations pause outside the viewport and hidden tabs, including late mou
   const root = {
     body: { nodeType: 1, matches: () => false, querySelectorAll: () => [first] },
     visibilityState: 'visible',
+    hasFocus: () => focused,
+    defaultView: {
+      addEventListener(name, fn) { windowListeners.set(name, fn); },
+      removeEventListener(name) { windowListeners.delete(name); },
+    },
     addEventListener(name, fn) { visibility = fn; },
     removeEventListener() { visibility = null; },
   };
@@ -42,6 +48,12 @@ test('decorations pause outside the viewport and hidden tabs, including late mou
   const cleanup = mountAmbientMotion(root);
   assert.equal(first.paused, true);
   intersect([{ target: first, isIntersecting: true }]);
+  assert.equal(first.paused, false);
+  focused = false;
+  windowListeners.get('blur')();
+  assert.equal(first.paused, true);
+  focused = true;
+  windowListeners.get('focus')();
   assert.equal(first.paused, false);
   root.visibilityState = 'hidden';
   visibility();
@@ -74,4 +86,5 @@ test('decorations pause outside the viewport and hidden tabs, including late mou
   assert.equal(first.paused, false);
   assert.equal(observed.size, 0);
   assert.equal(visibility, null);
+  assert.equal(windowListeners.size, 0);
 });

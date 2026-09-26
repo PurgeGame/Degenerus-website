@@ -16,7 +16,7 @@
 .dgn-pop__score-label { color: #aebfb7; font: 800 .65rem/1.2 system-ui; letter-spacing: .22em; }
 .dgn-pop__score { display: block; font: 900 clamp(2.8rem, 9vw, 4.2rem)/1 system-ui; font-variant-numeric: tabular-nums; color: #fff4ce; }
 .dgn-pop__hint { margin: .6rem 0 1rem; color: #b6c3bc; font: 500 .75rem/1.4 system-ui; }
-.dgn-pop__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; width: 100%; margin: auto; }
+.dgn-pop__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; width: 100%; margin: auto; }
 .dgn-pop__grid[data-size="1"] { grid-template-columns: minmax(0, 1fr); max-width: min(360px, 72vw); }
 .dgn-pop__grid[data-size="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
 .dgn-pop__card { min-width: 0; }
@@ -73,7 +73,7 @@
 @keyframes dgn-pop-open { from { transform: scale(.86); opacity: .3; } to { transform: scale(1); opacity: 1; } }
 @keyframes dgn-pop-point { 0% { transform: translateY(5px) scale(.8); opacity: 1; } 50% { opacity: 1; } 100% { transform: translateY(-35px) scale(1.1); opacity: 0; } }
 @media (max-width: 620px) { .dgn-pop__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; } .dgn-pop__ticket { border-radius: 12px; } }
-@media (max-width: 350px) { .dgn-pop__grid, .dgn-pop__grid[data-size="4"] { grid-template-columns: minmax(0, 1fr); max-width: 240px; } }
+
 @media (prefers-reduced-motion: reduce) { .dgn-pop__cell.is-open .dgn-pop__badge { animation: none; } .dgn-pop__increment { display: none; } .dgn-pop__cell { transition: none; } }
 
 /* One smooth air pocket per quadrant. Only the ticket's outside corners round. */
@@ -89,4 +89,62 @@
   .dgn-pop__cell.is-match .dgn-pop__badge, .dgn-pop__cell.is-match .dgn-pop__player { animation: none; }
   .dgn-pop__ticket-score { animation: none; }
   .dgn-pop__flame, .dgn-pop__flame[data-points]::before { transition: none; }
+}
+
+/* Keep four cards in view; only the ticket region scrolls. The controls stay
+   outside it, so Reveal all never covers a ticket or scrolls out of reach. */
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
+  padding-bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+  min-height: 28px; padding: .25rem .75rem; font-size: .65rem; white-space: nowrap;
+  gap: .5rem;
+}
+.rvl-stage.rvl-stage--pop .rvl-spin-zone,
+.rvl-stage.rvl-stage--pop .rvl-dgn-stage,
+.rvl-stage--pop .dgn-pop-mount,
+.rvl-stage--pop .dgn-pop {
+  display: flex; flex-direction: column; flex: 1 1 0; min-height: 0;
+}
+.rvl-stage--pop .dgn-pop-mount > .dgn-winnings { flex-shrink: 0; }
+.dgn-pop__viewport { width: 100%; }
+.rvl-stage--pop .dgn-pop__viewport {
+  flex: 1 1 0; min-height: 0; width: 100%;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges; container-type: size;
+}
+.dgn-pop__viewport:focus-visible { outline: 2px solid #eacc81; outline-offset: 2px; }
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid {
+  box-sizing: border-box; gap: .75rem;
+  width: min(100%, 580px, max(220px, calc(100cqh - 5rem)));
+  padding: .2rem;
+}
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="1"] {
+  width: min(100%, 340px, max(100px, calc(100cqh - 2.5rem)));
+}
+.rvl-stage--pop .dgn-pop__all,
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed {
+  position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%); margin: 0;
+  width: max-content; max-width: calc(100% - 1rem);
+}
+.rvl-stage--pop .dgn-pop__all { z-index: 35; }
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop:has(.rvl-dgn-actions:not([hidden])) {
+  padding-bottom: max(6rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+}
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop .rvl-dgn-stage {
+  position: static; width: 100%; max-width: 100%;
+}
+.rvl-stage.rvl-stage--pop .rvl-share-cta {
+  position: absolute; bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+  min-height: 28px; padding: .25rem .75rem; font-size: .65rem; white-space: nowrap;
+  left: 50%; transform: translateX(-50%); margin: 0;
+}
+@media (max-height: 700px) {
+  .rvl-stage--pop .dgn-winnings {
+    height: 108px; grid-template-columns: 64px minmax(0, 1fr) 40px;
+    grid-template-rows: 18px 28px 18px 16px; gap: 2px 8px; padding: 8px 10px;
+  }
+  .rvl-stage--pop .dgn-winnings__coin { width: 64px; height: 64px; }
+  .rvl-stage--pop .dgn-winnings :is(.rvl-survival-coin-shell, .rvl-box-currency-coin, .rvl-box-currency-landed) {
+    width: 58px; height: 58px;
+  }
 }

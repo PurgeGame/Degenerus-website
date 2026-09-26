@@ -368,8 +368,10 @@ const FLIP_LOGO_SRC = readFileSync(
 function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: logs || [] }; }
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
-// Default fake contract: place returns BetPlaced(index=7, betId=42); resolve
-// returns DegeneretteResolved(totalPayout=5e16) + DegeneretteResult.
+// Default fake contract: place returns DegeneretteBetPlaced(index=7, betId=42)
+// carrying the real queued bet word for its arguments; the optional settle
+// resolveDegeneretteBets(index, ids) returns one DegeneretteResolved whose
+// `spins` hold every spin (audit 224de529 — no per-spin event any more).
 function makeFakeDegContract(opts = {}) {
   const calls = { placeDegeneretteBet: [], resolveDegeneretteBets: [] };
   const stk = (name) => async () => {
@@ -387,7 +389,7 @@ function makeFakeDegContract(opts = {}) {
           {
             parsed: {
               name: 'DegeneretteBetPlaced',
-              args: { player: args[0], index: 7n, betId: 42n, packed: 0n },
+              args: { player: args[0], index: 7n, betId: 42n, packed: placedWord(args) },
             },
           },
         ]));
@@ -402,24 +404,12 @@ function makeFakeDegContract(opts = {}) {
             parsed: {
               name: 'DegeneretteResolved',
               args: {
-                player: args[0],
-                betId: 42n,
-                spinCount: 1,
+                player: CONNECTED,
+                index: BigInt(args[0]),
+                betId: BigInt(args[1][0]),
                 totalPayout: 5n * 10n ** 16n,
                 resultTraits: 1234n,
-              },
-            },
-          },
-          {
-            parsed: {
-              name: 'DegeneretteResult',
-              args: {
-                player: args[0],
-                betId: 42n,
-                spinIndex: 0,
-                playerTraits: 1234n,
-                matches: 4,
-                payout: 5n * 10n ** 16n,
+                spins: spinsHex([{ traits: 1234, score: 4 }]),
               },
             },
           },
@@ -446,11 +436,42 @@ function makeFakeProvider(addr) {
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
+// Audit 224de529 queued bet word, LSB→MSB: owner | symbol << 160 |
+// spinCount << 165 | currency << 170 | record flag << 171 | activity << 172 |
+// stake-per-spin in units << 188 (ETH unit = 1 gwei / ETH_DIVISOR, FLIP = 1 FLIP).
+function betWord({
+  owner = CONNECTED, symbol = 0, spinCount = 1, currency = 0, record = false, activity = 0,
+  amountPerSpin = (10n ** 16n) / BigInt(ETH_DIVISOR),
+} = {}) {
+  const unit = Number(currency) === 0 ? (10n ** 9n) / BigInt(ETH_DIVISOR) : 10n ** 18n;
+  return BigInt(owner)
+    | (BigInt(symbol) << 160n)
+    | (BigInt(spinCount) << 165n)
+    | (BigInt(currency) << 170n)
+    | ((record ? 1n : 0n) << 171n)
+    | (BigInt(activity) << 172n)
+    | ((BigInt(amountPerSpin) / unit) << 188n);
+}
+
+/** The bet word placeDegeneretteBet(player, currency, amountPerSpin, spinCount, symbol) queues. */
+function placedWord(args) {
+  return betWord({
+    owner: args[0], currency: Number(args[1]), amountPerSpin: BigInt(args[2]),
+    spinCount: Number(args[3]), symbol: Number(args[4]),
+  });
+}
+
+/** DegeneretteResolved.spins: 5 bytes per spin — big-endian traits, then score | gold << 4. */
+function spinsHex(rows) {
+  return '0x' + rows.map(({ traits, score, gold = 0 }) => (
+    (Number(traits) >>> 0).toString(16).padStart(8, '0')
+      + ((score & 15) | (gold << 4)).toString(16).padStart(2, '0')
+  )).join('');
+}
+
 function readyFeedItem(overrides = {}) {
   const spinCount = Number(overrides.spinCount ?? 1);
-  const packed = 13n
-    | (BigInt(spinCount) << 32n)
-    | ((10n ** 10n) << 42n);
+  const packed = betWord({ symbol: 13, spinCount, amountPerSpin: 10n ** 10n });
   return {
     player: CONNECTED.toLowerCase(),
     betIndex: 7,
@@ -622,8 +643,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(PANEL_SRC, /deg-block__step/, 'numbered setup labels are removed');
     assert.match(PANEL_SRC, /aria-label="Wager currency"/);
     assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
-    assert.match(PANEL_SRC, /aria-label="Bet per board"/);
-    assert.match(PANEL_SRC, /aria-label="Number of boards"/);
+    assert.match(PANEL_SRC, /aria-label="Bet per card"/);
+    assert.match(PANEL_SRC, /aria-label="Number of cards"/);
     assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_green\.svg/,
       'ETH uses the green circular Degenerus trait badge');
     assert.doesNotMatch(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
@@ -654,12 +675,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
     assert.ok(placeAt > wagerAt && placeAt < wagerEnd,
       'Place bet is owned by and sits below the wager controls');
-    assert.match(PANEL_SRC, /deg-wager-field__label">Bet per board/);
-    assert.match(PANEL_SRC, /deg-wager-field__label">Boards/);
+    assert.match(PANEL_SRC, /deg-wager-field__label">Bet per card/);
+    assert.match(PANEL_SRC, /deg-wager-field__label">Cards/);
     assert.match(
       APP_CSS,
       /\.deg-wager-field__label\s*\{[^}]*text-align:\s*center/s,
-      'Currency, Bet per board, and Boards share centered label typography',
+      'Currency, Bet per card, and Boards share centered label typography',
     );
     assert.match(
       APP_CSS,
@@ -840,21 +861,18 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(place.getAttribute('data-boon-effect'), '+12000 FLIP BOON',
       'only the first 100,000 FLIP receives the 12% boost');
 
-    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
-    amount.value = '30000';
-    amount.dispatchEvent({ type: 'input' });
-    spins.value = '5';
-    spins.dispatchEvent({ type: 'change' });
-    assert.equal(place.textContent, 'Place Bet · 150,000 WWXRP');
-    assert.equal(place.getAttribute('data-boon-effect'), '+18000 WWXRP BOON',
-      'WWXRP keeps the uncapped 12% boost');
+    // Audit 224de529: WWXRP is no longer a bet currency, so its boon (38-40)
+    // boosts a Daily Incinerator burn instead of a Degenerette stake.
+    assert.equal(el.querySelector('[data-bind="deg-currency-option-3"]'), null);
 
     const { boonIndicatorModel } = await import('../../app/boons.js');
     assert.match(boonIndicatorModel(payload, 'degenerette-eth').title,
       /up to 10 ETH.*bet, split across its spins/i);
     assert.match(boonIndicatorModel(payload, 'degenerette-flip').title,
       /up to 100,000 FLIP.*bet, split across its spins/i);
-    assert.match(boonIndicatorModel(payload, 'degenerette-wwxrp').title, /uncapped/i);
+    assert.match(boonIndicatorModel(payload, 'degenerette-wwxrp').title,
+      /draw weight of your next Daily Incinerator WWXRP burn/i);
+    assert.doesNotMatch(boonIndicatorModel(payload, 'degenerette-wwxrp').title, /Degenerette|bet/i);
     el.disconnectedCallback();
   });
 
@@ -869,25 +887,21 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     amount.value = '625';
     amount.dispatchEvent({ type: 'input' });
 
-    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
-    amount.value = '3';
-    amount.dispatchEvent({ type: 'input' });
-
     el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '0.025', 'ETH restores its own previous bet size');
     el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '625', 'FLIP restores its own previous bet size');
 
     const saved = JSON.parse(localStorage.getItem(DEGENERETTE_PREFERENCES_KEY));
-    assert.deepEqual(saved.bets, { 0: '0.025', 1: '625', 3: '3' });
+    assert.deepEqual(saved.bets, { 0: '0.025', 1: '625' });
     el.disconnectedCallback();
 
     el = instantiate();
     assert.equal(el.querySelector('[name="deg-amount"]').value, '0.025',
       'the ETH preference survives a fresh widget mount');
-    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[name="deg-amount"]').value, '3',
-      'the WWXRP preference survives a fresh widget mount');
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="deg-amount"]').value, '625',
+      'the FLIP preference survives a fresh widget mount');
     el.disconnectedCallback();
   });
 
@@ -1076,7 +1090,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('.deg-state'), null,
       'main card has no duplicate RNG lifecycle surface');
     const [pending] = pendingActionsMod.getPendingActions();
-    assert.equal(pending.id, 'degenerette:42');
+    assert.equal(pending.id, 'degenerette:7:42', 'a bet is (index, betId): ids restart per index');
     assert.equal(pending.state, 'waiting');
     assert.equal(pending.run, null, 'an RNG wait cannot resolve early');
     assert.equal(placeBtn.disabled, false,
@@ -1089,14 +1103,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
   test('reload recovers a DB-pending bet stranded by an older receipt parser', async () => {
     const amountPerSpin = 250n * 10n ** 18n;
-    // Audit a5d4d2cd: the packed word's low bits are one symbol (0..31), not a
-    // full uint32 ticket + separate 2-bit heroQuadrant field. quadrant 2, icon
-    // 5 → symbol 21; heroQuadrant derives back out as symbol >> 3.
+    // One chosen symbol (0..31): quadrant 2, icon 5 → symbol 21; heroQuadrant
+    // derives back out as symbol >> 3.
     const symbol = (2 << 3) | 5; // 21
-    const packed = BigInt(symbol)
-      | (5n << 32n)
-      | (1n << 40n)
-      | (amountPerSpin << 42n);
+    const packed = betWord({ symbol, spinCount: 5, currency: 1, amountPerSpin });
     const reads = [];
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async (...args) => {
@@ -1133,12 +1143,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(80);
 
     assert.ok(reads.length >= 1, 'the DB identifier is verified against the pending on-chain slot');
-    assert.ok(reads.every(([owner, betId]) => (
-      owner === CONNECTED.toLowerCase() && betId === 42n
-    )), 'every recovery poll verifies the same player and bet identifier');
+    assert.ok(reads.every(([index, betId]) => (
+      index === 7n && betId === 42n
+    )), 'every recovery poll verifies the same (index, betId) queue slot');
     const [pending] = pendingActionsMod.getPendingActions();
-    assert.equal(pending.id, 'degenerette:42');
-    assert.equal(pending.label, '5 spins');
+    assert.equal(pending.id, 'degenerette:7:42');
+    assert.equal(pending.label, '5 cards');
     // Audit a5d4d2cd: there is no full ticket to report pre-resolution any
     // more — app-reveal-tray.js's pending-card art is gated on `!= null` and
     // skips cleanly. Only the chosen symbol (and its derived heroQuadrant) survive.
@@ -1168,11 +1178,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
   test('CLEAR retires the full existing Degenerette backlog instead of revealing it one bet at a time', async () => {
     const amountPerSpin = 250n * 10n ** 18n;
-    const packed = 13n
-      | (5n << 32n)
-      | (1n << 40n)
-      | (amountPerSpin << 42n)
-      | (2n << 218n);
+    const packed = betWord({ symbol: 13, spinCount: 5, currency: 1, amountPerSpin });
     let pendingRows = [
       { betIndex: 7, betId: '42' },
       { betIndex: 6, betId: '41' },
@@ -1180,7 +1186,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const readBetIds = [];
     let playerFetches = 0;
     degeneretteMod.__setContractFactoryForTest(() => ({
-      degeneretteBetInfo: async (_player, betId) => {
+      degeneretteBetInfo: async (_index, betId) => {
         readBetIds.push(betId);
         return packed;
       },
@@ -1200,13 +1206,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const el = instantiate();
     await settle(80);
     const action = pendingActionsMod.getPendingActions()
-      .find((item) => item.id === 'degenerette:42');
+      .find((item) => item.id === 'degenerette:7:42');
     assert.equal(typeof action?.clearAll, 'function');
     await action.clearAll();
     await settle();
 
     const { clearedDegeneretteThroughKey } = await import('../app-degenerette-panel.js');
-    assert.equal(localStorage.getItem(clearedDegeneretteThroughKey(CONNECTED)), '42');
+    assert.equal(localStorage.getItem(clearedDegeneretteThroughKey(CONNECTED)), String((7n << 64n) | 42n),
+      'the cutoff is the placement-ordered (index << 64) | betId key');
     assert.ok(playerFetches >= 2, 'CLEAR bypasses the ordinary player-snapshot cache');
     assert.deepEqual(pendingActionsMod.getPendingActions(), []);
     el.disconnectedCallback();
@@ -1226,7 +1233,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'the post-clear recovery still considers a genuinely newer bet');
     assert.deepEqual(
       pendingActionsMod.getPendingActions().map((item) => item.id),
-      ['degenerette:43'],
+      ['degenerette:8:43'],
     );
     remounted.disconnectedCallback();
   });
@@ -1335,7 +1342,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending?.phase, 'awaitingRng');
     assert.equal(pending?.pinned, true,
       'the bottom panel cannot drop a bet while its RNG state catches up');
-    assert.equal(pending?.shortLabel, 'Degenerette spin');
+    assert.equal(pending?.shortLabel, 'Degenerette card');
     assert.equal(pending?.detail, 'Waiting for Chainlink RNG');
     assert.equal(el.querySelector('.deg-state'), null,
       'the main widget does not duplicate the pinned RNG wait');
@@ -1448,13 +1455,13 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('shared pending action invokes resolveBets with the parsed betId', async () => {
+  test('the READY card is an optional early settle: resolveDegeneretteBets(index, [betId])', async () => {
     useDegeneretteFeed(readyFeedItem());
     let resolveArgs = null;
     degeneretteMod.__setContractFactoryForTest(() => ({
       placeDegeneretteBet: Object.assign(
         async (...args) => makeFakeTx(makeFakeReceipt([
-          { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
+          { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: placedWord(args) } } },
         ])),
         { staticCall: async () => undefined },
       ),
@@ -1465,15 +1472,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
             {
               parsed: {
                 name: 'DegeneretteResolved',
-                args: { player: args[0], betId: 42n, spinCount: 1, totalPayout: 5n * 10n ** 16n, resultTraits: 1234n },
-              },
-            },
-            {
-              parsed: {
-                name: 'DegeneretteResult',
                 args: {
-                  player: args[0], betId: 42n, spinIndex: 0,
-                  playerTraits: 1234n, matches: 4n, payout: 5n * 10n ** 16n,
+                  player: CONNECTED, index: 7n, betId: 42n, totalPayout: 5n * 10n ** 16n,
+                  resultTraits: 1234n, spins: spinsHex([{ traits: 1234, score: 4 }]),
                 },
               },
             },
@@ -1496,19 +1497,100 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     placeBtn.dispatchEvent({ type: 'click' });
     await settle(80);
 
+    const ready = pendingActionsMod.getPendingActions().find((item) => item.kind === 'degenerette');
+    assert.equal(ready?.phase, 'result-ready');
+    assert.match(ready?.detail || '', /settles on the next crank, or tap to settle now/,
+      'the card says the keeper sweep settles it; the tap is optional');
+
     await runPendingDegeneretteAction();
     await settle(80);
 
     assert.ok(resolveArgs, 'resolveDegeneretteBets invoked');
-    assert.equal(resolveArgs[0], CONNECTED, 'player = connected.address');
+    assert.equal(resolveArgs[0], 7n, 'the RNG index names the queue');
     assert.deepEqual(resolveArgs[1], [42n], 'betIds = [parsed BetPlaced.betId]');
+    assert.equal(resolveArgs.length, 2, 'no player argument: credits go to the bet owner');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the resolved action leaves the tray once the full reveal is queued');
     const [sequence] = (await loadReveal()).__takeQueuedForTest();
     assert.equal(sequence?.kind, 'degenerette');
     assert.equal(sequence?.currency, 0);
     assert.equal(sequence?.spins?.length, 1);
+    // The spin's payout is priced from the queued word: 0.01 ETH × S4 (10×) ×
+    // 90% at activity 0 — exactly what the retired DegeneretteResult carried.
+    assert.equal(sequence?.spins?.[0]?.payout, 9n * ((10n ** 16n) / BigInt(ETH_DIVISOR)));
+    assert.equal(sequence?.headline, 'BET #7-42');
 
+    el.disconnectedCallback();
+  });
+
+  test('a READY bet the keeper sweep settles opens its reveal with no wallet transaction', async (t) => {
+    const originalMatchMedia = globalThis.window.matchMedia;
+    t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
+    globalThis.window.matchMedia = () => ({ matches: true });
+    revealMod.__takeQueuedForTest();
+    const packed = betWord({ symbol: 13, amountPerSpin: 10n ** 10n });
+    let settled = false;
+    let settleWrites = 0;
+    const logQueries = [];
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 5000,
+      getTransactionReceipt: async () => makeFakeReceipt([]),
+    });
+    useDegeneretteFeed(readyFeedItem({ packedData: String(packed) }));
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async (...args) => makeFakeTx(makeFakeReceipt([{
+          parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed } },
+        }])),
+        { staticCall: async () => undefined },
+      ),
+      // The queued word stays put until someone's mineFlip() sweep reaches it.
+      degeneretteBetInfo: async () => (settled ? 0n : packed),
+      resolveDegeneretteBets: Object.assign(
+        async () => { settleWrites += 1; return makeFakeTx(makeFakeReceipt()); },
+        { staticCall: async () => undefined },
+      ),
+      filters: {
+        DegeneretteResolved: (player, index, betId) => ({ event: 'resolved', player, index, betId }),
+        DegeneretteBetPlaced: (player, index, betId) => ({ event: 'placed', player, index, betId }),
+      },
+      queryFilter: async (filter) => {
+        logQueries.push(filter);
+        if (filter.event !== 'resolved') return [];
+        return [{
+          transactionHash: '0xkeeper-sweep',
+          args: {
+            player: CONNECTED, index: 7n, betId: 42n, totalPayout: 0n, resultTraits: 13n,
+            spins: spinsHex([{ traits: 13, score: 0 }]),
+          },
+        }];
+      },
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect() { return this; },
+    }));
+
+    const el = instantiate();
+    await settle(30);
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(pendingActionsMod.getPendingActions()[0]?.phase, 'result-ready');
+    assert.deepEqual(revealMod.__takeQueuedForTest(), []);
+
+    settled = true; // a keeper cranks mineFlip(); the sweep zeroes the slot
+    await new Promise((resolve) => setTimeout(resolve, 12_100));
+    await settle(80);
+
+    assert.equal(settleWrites, 0, 'auto-settlement needs no player transaction');
+    assert.ok(logQueries.every((filter) => filter.index === 7n && filter.betId === 42n),
+      'the settlement is read by its exact (player, index, betId) topics');
+    const [sequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence?.kind, 'degenerette');
+    assert.equal(sequence?.betId, '42');
+    assert.equal(sequence?.spins?.length, 1);
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the settled bet retires from the tray once its reveal is queued');
     el.disconnectedCallback();
   });
 
@@ -1567,14 +1649,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(spins.value, '15', '22 clamps down to the FLIP cap');
     assert.equal(amount.getAttribute('min'), '100', 'FLIP minimum per spin');
     assert.equal(amount.value, '250', 'currency switch uses the FLIP default');
-
-    currency.value = '3';
-    currency.dispatchEvent({ type: 'change' });
-    await settle(10);
-    assert.equal(spins.children.length, 5, 'WWXRP caps at 5');
-    assert.equal(spins.value, '5');
-    assert.equal(amount.getAttribute('min'), '1', 'WWXRP minimum per spin');
-    assert.equal(amount.value, '1', 'currency switch uses the WWXRP default');
     el.disconnectedCallback();
   });
 
@@ -1589,10 +1663,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     currency.dispatchEvent({ type: 'change' });
     assert.equal(amount.value, '250');
 
-    currency.value = '3';
-    currency.dispatchEvent({ type: 'change' });
-    assert.equal(amount.value, '1');
-
     currency.value = '0';
     currency.dispatchEvent({ type: 'change' });
     assert.equal(amount.value, '0.02',
@@ -1600,15 +1670,126 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Currency picker shows ETH + FLIP + WWXRP — currency 2 stays out (user ask supersedes Q7 deferral)', () => {
-    instantiate();
+  test('a bet displaced by a newer placement still reveals after the sweep settles both', async (t) => {
+    const originalMatchMedia = globalThis.window.matchMedia;
+    t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
+    globalThis.window.matchMedia = () => ({ matches: true });
+    revealMod.__takeQueuedForTest();
+    const words = new Map();
+    const settled = new Set();
+    let nextBetId = 41n;
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 5000,
+      getTransactionReceipt: async () => makeFakeReceipt([]),
+    });
+    _fetchHandler = async (url) => {
+      const path = String(url);
+      if (path.includes('/degenerette/feed')) return { items: [] };
+      if (path.includes(`/player/${CONNECTED.toLowerCase()}`)) {
+        // A settled bet is no longer in the chain's pending set.
+        return { degenerette: { pendingBets: [...words.keys()]
+          .filter((id) => !settled.has(id)).map((id) => ({ betIndex: 7, betId: String(id) })) } };
+      }
+      return {};
+    };
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(async (...args) => {
+        const betId = nextBetId;
+        nextBetId += 1n;
+        words.set(betId, placedWord(args));
+        return makeFakeTx(makeFakeReceipt([{
+          parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId, packed: words.get(betId) } },
+        }]));
+      }, { staticCall: async () => undefined }),
+      degeneretteBetInfo: async (_index, betId) => (settled.has(BigInt(betId)) ? 0n : words.get(BigInt(betId)) ?? 0n),
+      resolveDegeneretteBets: Object.assign(async () => makeFakeTx(makeFakeReceipt()),
+        { staticCall: async () => { throw new Error('RNG not ready'); } }),
+      filters: {
+        DegeneretteResolved: (player, index, betId) => ({ event: 'resolved', player, index, betId }),
+        DegeneretteBetPlaced: (player, index, betId) => ({ event: 'placed', player, index, betId }),
+      },
+      queryFilter: async (filter) => (filter.event === 'resolved' && settled.has(BigInt(filter.betId)) ? [{
+        transactionHash: '0xkeeper-sweep',
+        args: {
+          player: CONNECTED, index: 7n, betId: BigInt(filter.betId), totalPayout: 0n, resultTraits: 13n,
+          spins: spinsHex([{ traits: 13, score: 0 }]),
+        },
+      }] : []),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect() { return this; },
+    }));
+
+    const el = instantiate();
+    await settle(30);
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('[name="deg-ticket-count"]').value = '1';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(60);
+    await new Promise((resolve) => setTimeout(resolve, 520)); // place-click debounce
+    // One keeper sweep settles both bets at index 7.
+    settled.add(41n);
+    settled.add(42n);
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(150);
+
+    const { unrevealedDegeneretteKey } = await import('../app-degenerette-panel.js');
+    const queued = revealMod.__takeQueuedForTest().filter((row) => row.kind === 'degenerette');
+    assert.deepEqual(queued.map((row) => row.betId), ['42', '41'],
+      'the newest bet reveals first, then the displaced one the sweep also settled');
+    assert.equal(localStorage.getItem(unrevealedDegeneretteKey(CONNECTED)), null,
+      'a presented bet leaves the displaced-bet backlog');
+    assert.equal(pendingActionsMod.getPendingActions().length, 0);
+    el.disconnectedCallback();
+  });
+
+  test('Currency picker shows ETH + FLIP only — audit 224de529 removed WWXRP bets', () => {
+    const el = instantiate();
     const currencyBlockMatch = PANEL_SRC.match(/<select[^>]*name="deg-currency"[\s\S]*?<\/select>/);
     assert.ok(currencyBlockMatch, 'deg-currency select block found in panel source');
     const currencyBlock = currencyBlockMatch[0];
-    assert.match(currencyBlock, /value="3"/, 'WWXRP option (currency 3) exposed');
-    assert.match(currencyBlock, /WWXRP/, 'WWXRP label present');
+    assert.match(currencyBlock, /value="0"/);
+    assert.match(currencyBlock, /value="1"/);
+    assert.doesNotMatch(currencyBlock, /value="3"|WWXRP/,
+      'WWXRP (currency 3) reverts UnsupportedCurrency and is never offered');
     assert.doesNotMatch(currencyBlock, /value="2"/,
       'currency 2 never exposed (UnsupportedCurrency on-chain)');
+    assert.equal(el.querySelector('[data-bind="deg-currency-option-3"]'), null);
+    el.disconnectedCallback();
+  });
+
+  test('the bet amount snaps to a whole stake unit so a placement never reverts on granularity', async () => {
+    let recorded = null;
+    degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract());
+    const base = makeFakeDegContract();
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      ...base,
+      placeDegeneretteBet: Object.assign(async (...args) => {
+        recorded = args;
+        return base.placeDegeneretteBet(...args);
+      }, { staticCall: async () => undefined }),
+    }));
+    const el = instantiate();
+    await settle(10);
+    const amount = el.querySelector('[name="deg-amount"]');
+    const place = el.querySelector('[data-bind="deg-place-cta"]');
+    // Twelve decimals: finer than the 1 gwei-equivalent ETH stake unit.
+    amount.value = '0.012345678912';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(place.textContent, 'Place Bet · 0.061728 ETH',
+      'the label already prices the floored per-card wager');
+    amount.dispatchEvent({ type: 'change' });
+    assert.equal(amount.value, '0.012345678', 'commit shows exactly what will be sent');
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    amount.value = '150.75';
+    amount.dispatchEvent({ type: 'input' });
+    amount.dispatchEvent({ type: 'change' });
+    assert.equal(amount.value, '150', 'FLIP bets are whole FLIP');
+    el.querySelector('[name="deg-ticket-count"]').value = '1';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(recorded?.[2], 150n * 10n ** 18n);
+    el.disconnectedCallback();
   });
 
   test('Place click debounced — double-click invokes placeBet exactly once', async () => {
@@ -1785,7 +1966,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       partitionDegeneretteRewardLegs,
       withDegeneretteRecordContext,
     } = await import('../app-degenerette-panel.js');
-    const recordBoxBetId = 12_829_128_780_424_407_998n;
+    const recordBoxBetId = 12_824_114_803_960_323_210n;
     const legs = [
       { legType: 'spin', spinType: 'wwxrp' },
       { legType: 'spin', spinType: 'flip' },
@@ -1803,12 +1984,17 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.deepEqual(split.lootboxLegs.map((leg) => leg.spinType), ['wwxrp', 'flip', 'eth']);
     assert.deepEqual(split.recordBountySpins.map((leg) => leg.spinType), ['record', 'unknown_3']);
 
-    const packed = (305n << 202n) | (900n << 220n);
-    assert.equal(dgnDecodePacked(packed).recordBountyStake, 900n * 10n ** 18n);
+    // Audit 224de529: the word only flags an armed record; the whole-FLIP
+    // claim is recovered from the placement receipt and passed alongside.
+    const packed = betWord({ symbol: 0, activity: 305, record: true });
+    assert.equal(dgnDecodePacked(packed).recordArmed, true);
+    assert.equal(dgnDecodePacked(packed).activityScore, 305);
     assert.deepEqual(
       withDegeneretteRecordContext(split.recordBountySpins, packed, {
-        rngWord: 123_456_789n,
-        parentBetId: 42n,
+        rngWord: 33392564275355006143725611925975806392536093100879558358273823546359205207253n,
+        parentBetId: 1n,
+        player: "0xfe5b92e655d8b1732e47cb0a2f00ec6a50ea4200",
+        recordStake: 900n * 10n ** 18n,
       }).map((spin) => ({
         type: spin.spinType,
         stake: spin.recordStake,
@@ -1821,10 +2007,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'indexed replay preserves the parent inputs needed to explain a survival bust',
     );
     const [record] = withDegeneretteRecordContext(split.recordBountySpins, packed, {
-      rngWord: 123_456_789n,
-      parentBetId: 42n,
+      rngWord: 33392564275355006143725611925975806392536093100879558358273823546359205207253n,
+      parentBetId: 1n,
+      player: "0xfe5b92e655d8b1732e47cb0a2f00ec6a50ea4200",
     });
-    assert.deepEqual(record.reels.map((reel) => reel.heroQuadrant), [1, 2, 1],
+    assert.deepEqual(record.reels.map((reel) => reel.heroQuadrant), [0, 0, 0],
       'the replay carries the contract-derived Hero for each individual bounty reel');
     assert.match(PANEL_SRC,
       /import \* as dgnReels from '\.\.\/app\/dgn-reels\.js'/,
@@ -1908,7 +2095,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     assert.deepEqual(revealMod.__takeQueuedForTest(), [],
       'neither stale reels nor their stale luckbox enter the queue');
-    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:42'),
+    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:7:42'),
       'the real live bet remains pending');
     el.disconnectedCallback();
   });
@@ -1917,7 +2104,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const storageKey = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
     const oldBetId = 41n;
     const newBetId = 42n;
-    const packed = 13n | (1n << 32n) | ((10n ** 10n) << 42n);
+    const packed = betWord({ symbol: 13, amountPerSpin: 10n ** 10n });
     localStorage.setItem(storageKey, JSON.stringify({
       betId: String(oldBetId),
       index: '7',
@@ -1951,7 +2138,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       claimableWinningsOf: async () => 1n,
-      degeneretteBetInfo: async (_player, betId) => (
+      degeneretteBetInfo: async (_index, betId) => (
         BigInt(betId) === oldBetId ? 0n : packed
       ),
       resolveDegeneretteBets: Object.assign(
@@ -1959,8 +2146,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       filters: {
-        DegeneretteResolved: (_player, betId) => ({ event: 'resolved', betId }),
-        DegeneretteResult: (_player, betId) => ({ event: 'result', betId }),
+        DegeneretteResolved: (_player, index, betId) => ({ event: 'resolved', index, betId }),
+        DegeneretteBetPlaced: (_player, index, betId) => ({ event: 'placed', index, betId }),
       },
       queryFilter: async (filter) => {
         replayReads += 1;
@@ -1969,24 +2156,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
           return [{
             args: {
               player: CONNECTED,
+              index: 7n,
               betId: oldBetId,
-              spinCount: 1n,
               totalPayout: 5n * 10n ** 16n,
               resultTraits: 13n,
+              spins: spinsHex([{ traits: 13, score: 4 }]),
             },
             transactionHash: '0xold-result',
           }];
         }
-        return [{
-          args: {
-            player: CONNECTED,
-            betId: oldBetId,
-            spinIndex: 0n,
-            playerTraits: 13n,
-            matches: 4n,
-            payout: 5n * 10n ** 16n,
-          },
-        }];
+        return [{ args: { player: CONNECTED, index: 7n, betId: oldBetId, packed } }];
       },
       interface: { parseLog: (log) => log.parsed ?? null },
       connect() { return this; },
@@ -2022,7 +2201,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(100);
     assert.deepEqual(revealMod.__takeQueuedForTest(), [],
       'the late older result cannot enqueue reels or an extra box');
-    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:42'),
+    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:8:42'),
       'the bounty spin remains the active pending bet');
     el.disconnectedCallback();
   });
@@ -2032,6 +2211,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(
       degeneretteLootboxPresentationId(CONNECTED, 42n),
       `degenerette-lootbox:${CONNECTED.toLowerCase()}:42`,
+    );
+    assert.equal(
+      degeneretteLootboxPresentationId(CONNECTED, 42n, 7n),
+      `degenerette-lootbox:${CONNECTED.toLowerCase()}:7:42`,
+      'betIds restart per RNG index, so the index is part of the identity',
     );
     assert.equal(degeneretteLootboxPresentationId('', 42n), null);
   });
@@ -2294,7 +2478,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         'the info sheet explains the selected Hero symbol\'s ETH-only main-jackpot influence');
       const info = el.querySelector('[data-bind="deg-basics-info"]');
       const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
-      assert.match(el.innerHTML, /Selected board · ETH \/ FLIP payouts/);
+      assert.match(el.innerHTML, /Selected card · ETH \/ FLIP payouts/);
 
       // Audit a5d4d2cd: payout no longer depends on the picked symbol at all —
       // there is one shared table for every quadrant/icon choice, scaled only
@@ -2506,6 +2690,35 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
+  test('without gold or a deity, an ordinary ticket keeps the ETH/WWXRP champion', async () => {
+    storeMod.update('app.lastDay', { day: 130, roll1: { purchaseLevel: 25 } });
+    _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
+      ? { cards: [{ entries: [3, 64, 128, 192].map(traitId => ({ traitId })) }] }
+      : { player: null, pending: {} };
+    const el = instantiate();
+    const initial = el.getTicketDraft().symbol;
+    assert.ok([0, 6].includes(initial));
+    await settle(50);
+    assert.equal(el.getTicketDraft().symbol, initial, 'polling preserves the random choice');
+    const boons = el.querySelector('[data-bind="dgn-champion-boons"]');
+    assert.equal(boons.hidden, false);
+    assert.equal(boons.getAttribute('champion'), initial === 6 ? 'sdgnrs' : 'vault');
+    el.querySelector('[data-bind="dgn-symbol-choice-7"]').dispatchEvent({ type: 'click' });
+    assert.equal(boons.hidden, true, 'other champions do not show protocol boon draws');
+    el.disconnectedCallback();
+  });
+
+  test('a partial ticket with gold takes priority over the random champion', async () => {
+    storeMod.update('app.lastDay', { day: 130, roll1: { purchaseLevel: 25 } });
+    _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
+      ? { cards: [{ entries: [{ traitId: 187 }] }] }
+      : { player: null, pending: {} };
+    const el = instantiate();
+    await settle(50);
+    assert.equal(el.getTicketDraft().symbol, 19);
+    el.disconnectedCallback();
+  });
+
   test('a deity holder defaults the Hero quadrant to their owned deity symbol', async () => {
     installDeityOwners(new Map([[22, CONNECTED]])); // symbol 22 = quadrant 2 (cards), icon 6
     storeMod.update('app.lastDay', {
@@ -2609,37 +2822,16 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
           parsed: {
             name: 'DegeneretteResolved',
             args: {
-              player: args[0],
+              player: CONNECTED,
+              index: BigInt(args[0]),
               betId: 42n,
-              spinCount: 2,
               totalPayout: 5n * 10n ** 16n,
               resultTraits: BigInt(houses[0]),
-            },
-          },
-        },
-        {
-          parsed: {
-            name: 'DegeneretteResult',
-            args: {
-              player: args[0],
-              betId: 42n,
-              spinIndex: 0,
-              playerTraits: BigInt(playerTraits),
-              matches: dgnScore(playerTraits, houses[0], 0),
-              payout: 5n * 10n ** 16n,
-            },
-          },
-        },
-        {
-          parsed: {
-            name: 'DegeneretteResult',
-            args: {
-              player: args[0],
-              betId: 42n,
-              spinIndex: 1,
-              playerTraits: BigInt(playerTraits),
-              matches: dgnScore(playerTraits, houses[1], 0),
-              payout: 0n,
+              // One event carries both spins (audit 224de529).
+              spins: spinsHex([
+                { traits: playerTraits, score: dgnScore(playerTraits, houses[0], 0) },
+                { traits: playerTraits, score: dgnScore(playerTraits, houses[1], 0) },
+              ]),
             },
           },
         },
@@ -2673,7 +2865,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
     globalThis.window.matchMedia = () => ({ matches: true });
     revealMod.__takeQueuedForTest();
-    const packed = 13n | (1n << 32n) | ((10n ** 10n) << 42n);
+    const packed = betWord({ symbol: 13, amountPerSpin: 10n ** 10n });
     const calls = { info: [], resolve: 0, logs: [] };
     contractsMod.setProvider({
       ...makeFakeProvider(CONNECTED),
@@ -2702,16 +2894,9 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         },
         { staticCall: async () => undefined },
       ),
-      degeneretteResolve: Object.assign(
-        async () => {
-          calls.resolve += 1;
-          return makeFakeTx(makeFakeReceipt());
-        },
-        { staticCall: async () => undefined },
-      ),
       filters: {
-        DegeneretteResolved: (player, betId) => ({ event: 'resolved', player, betId }),
-        DegeneretteResult: (player, betId) => ({ event: 'result', player, betId }),
+        DegeneretteResolved: (player, index, betId) => ({ event: 'resolved', player, index, betId }),
+        DegeneretteBetPlaced: (player, index, betId) => ({ event: 'placed', player, index, betId }),
       },
       queryFilter: async (filter, from, to) => {
         calls.logs.push({ filter, from, to });
@@ -2719,23 +2904,15 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
           return [{
             args: {
               player: CONNECTED,
+              index: 7n,
               betId: 42n,
-              spinCount: 1,
               totalPayout: 5n * 10n ** 16n,
               resultTraits: 13n,
+              spins: spinsHex([{ traits: 13, score: 4 }]),
             },
           }];
         }
-        return [{
-          args: {
-            player: CONNECTED,
-            betId: 42n,
-            spinIndex: 0,
-            playerTraits: 13n,
-            matches: 4,
-            payout: 5n * 10n ** 16n,
-          },
-        }];
+        return [];
       },
       interface: { parseLog: (log) => log.parsed ?? null },
       connect() { return this; },
@@ -2758,9 +2935,14 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
     await settle(80);
 
-    assert.deepEqual(calls.info, [[CONNECTED, 42n]]);
+    assert.deepEqual(calls.info, [[7n, 42n]], 'the exact (index, betId) queue slot is read');
     assert.equal(calls.resolve, 0, 'the cleared bet slot never reaches a wallet write');
-    assert.equal(calls.logs.length, 2, 'resolved summary and per-spin logs are queried');
+    assert.equal(calls.logs.length, 1,
+      'one DegeneretteResolved carries every spin; the placement word is already known');
+    assert.deepEqual(
+      [calls.logs[0].filter.player, calls.logs[0].filter.index, calls.logs[0].filter.betId],
+      [CONNECTED, 7n, 42n],
+    );
     const [sequence] = revealMod.__takeQueuedForTest();
     assert.equal(sequence.kind, 'degenerette',
       'the recovered chain result launches through the same overlay path');
@@ -2779,9 +2961,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     revealMod.__takeQueuedForTest();
 
     const ready = readyFeedItem();
-    const packed = BigInt(ready.packedData)
-      | (305n << 202n)
-      | (900n << 220n);
+    const packed = betWord({ symbol: 13, amountPerSpin: 10n ** 10n, activity: 305, record: true });
     ready.packedData = String(packed);
     const payout = 5n * 10n ** 16n;
     let feedCalls = 0;
@@ -2792,6 +2972,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       return {
         items: [readyFeedItem({
           packedData: String(packed),
+          // The whole-FLIP record claim, recovered from the placement receipt.
+          recordStake: String(900n * 10n ** 18n),
           results: [
             {
               resultType: 'resolved',
@@ -2871,13 +3053,6 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         },
         { staticCall: async () => undefined },
       ),
-      degeneretteResolve: Object.assign(
-        async () => {
-          resolveWrites += 1;
-          return makeFakeTx(makeFakeReceipt());
-        },
-        { staticCall: async () => undefined },
-      ),
       interface: { parseLog: (log) => log.parsed ?? null },
       connect() { return this; },
     }));
@@ -2907,7 +3082,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(recordSequence?.spin?.payout, 0n,
       'a zero final payout cannot suppress the authored record-bounty reels');
     assert.equal(recordSequence?.spin?.recordStake, 900n * 10n ** 18n,
-      'the parent packed bet carries the bounty stake into its losing reel reveal');
+      'the recovered record claim carries the bounty stake into its losing reel reveal');
     assert.equal(recordSequence?.spin?.activityScore, 305);
     const normalizedRecord = revealMod.normalizeSequence(recordSequence);
     assert.equal(normalizedRecord?.noVessel, true,
@@ -2930,17 +3105,48 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     }, 'the direct box and pending tray share one settlement identity');
     assert.deepEqual(lootboxSequence?.ticketPackRelease, {
       address: CONNECTED.toLowerCase(),
-      sourceKey: 'degenerette:42',
+      sourceKey: 'degenerette:7:42',
       settledExpected: true,
       packs: [{ level: 8, count: 2 }],
     }, 'settled ticket awards wait on the direct parent Luckbox completion');
     assert.deepEqual(lootboxSequence?.legs?.map((leg) => leg.legType), ['opened'],
       'types 0-2 and real opened rewards remain in the genuine Luckbox sequence');
     assert.equal(el.querySelector('.deg-error').hidden, true,
-      'indexing lag is not presented as a failed resolve');
+      'indexing lag is not presented as a failed settle');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the automatically displayed result retires the stale action');
     el.disconnectedCallback();
+  });
+
+  test('Pending opens the reported five-card receipt through the panel', async () => {
+    revealMod.__takeQueuedForTest();
+    const bet = JSON.parse(readFileSync(new URL('../../app/__tests__/fixtures/degenerette-run55-bet1.json', import.meta.url)));
+    bet.player = CONNECTED.toLowerCase();
+    const key = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
+    localStorage.setItem(key, JSON.stringify({ betId: '1', index: '538', currency: 0,
+      amountPerSpin: '1000000000000', spinCount: 5, hero: 0, ticket: '0' }));
+    let complete = false;
+    useDegeneretteFeed(() => ({ ...bet, results: complete ? bet.results
+      : bet.results.filter(r => r.resultType === 'resolved') }));
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      degeneretteBetInfo: async () => 0n, connect() { return this; },
+    }));
+    const el = instantiate();
+    try {
+      await settle(80);
+      const action = pendingActionsMod.getPendingActions().find(row => row.kind === 'degenerette');
+      assert.equal(action?.shortLabel, 'Open cards');
+      await assert.rejects(action.run(), /could not be loaded/,
+        'incomplete results must report a visible error to the Pending tray');
+      await new Promise(resolve => setTimeout(resolve, 550));
+      complete = true;
+      await action.run();
+      await settle(80);
+      const [sequence] = revealMod.__takeQueuedForTest();
+      assert.equal(sequence?.spins?.length, 5);
+      assert.equal(sequence?.betId, '1');
+      assert.equal(localStorage.getItem(key), null);
+    } finally { el.disconnectedCallback(); }
   });
 
   test('an indexing Degenerette result stays clickable and opens once verified spins arrive', async () => {
@@ -2992,7 +3198,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       .find((row) => row.kind === 'degenerette');
     assert.equal(action?.phase, 'indexing');
     assert.equal(action?.state, 'ready');
-    assert.equal(action?.shortLabel, 'Open spins');
+    assert.equal(action?.shortLabel, 'Open cards');
     assert.equal(typeof action?.run, 'function',
       'an on-chain-resolved result never becomes a dead grey card');
 
@@ -3127,35 +3333,29 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.match(urls[1], /before=100/);
   });
 
-  // Account-switcher (2026-07-16) — WWXRP operator-mode gate.
-  test('operator mode disables the WWXRP option + shows the note; reselecting self clears it', async () => {
+  // Account-switcher (2026-07-16). The operator gate existed only for WWXRP
+  // bets, which audit 224de529 removed: both remaining currencies are open to
+  // an approved operator.
+  test('operator mode keeps both bet currencies; no WWXRP gate or note remains', async () => {
     const OWNER = '0xcccc000000000000000000000000000000000003';
     const el = instantiate();
     await settle(10);
-
-    const sel = el.querySelector('[name="deg-currency"]');
-    const note = el.querySelector('[data-bind="deg-wwxrp-note"]');
-    const wwxrpOpt = el.querySelector('[data-bind="deg-currency-wwxrp"]');
-    assert.equal(wwxrpOpt.disabled, false, 'WWXRP enabled in self mode');
-    assert.equal(note.hidden, true, 'note hidden in self mode');
+    assert.equal(el.querySelector('[data-bind="deg-wwxrp-note"]'), null);
+    assert.equal(el.querySelector('[data-bind="deg-currency-wwxrp"]'), null);
 
     storeMod.update('approvals.list', [OWNER]);
     storeMod.update('viewing.address', OWNER);
     storeMod.update('ui.mode', 'operator');
     await settle(10);
-
-    assert.equal(wwxrpOpt.disabled, true, 'WWXRP disabled in operator mode');
-    assert.equal(note.hidden, false, 'note visible in operator mode');
-
-    // A pre-selected WWXRP choice reverts to ETH so an in-flight draft
-    // doesn't stay pinned on an unplaceable currency.
+    for (const value of [0, 1]) {
+      assert.equal(el.querySelector(`[data-bind="deg-currency-option-${value}"]`).disabled, false,
+        `currency ${value} stays available in operator mode`);
+    }
+    const sel = el.querySelector('[name="deg-currency"]');
     sel.value = '3';
     storeMod.update('ui.mode', 'self');
     await settle(10);
-    storeMod.update('ui.mode', 'operator');
-    await settle(10);
-    assert.equal(sel.value, '0', 'WWXRP selection auto-reverted to ETH on operator-mode gate');
-
+    assert.equal(sel.value, '0', 'an unsupported currency never survives a mode switch');
     el.disconnectedCallback();
   });
 

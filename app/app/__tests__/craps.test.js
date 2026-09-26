@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import { ethers } from '../contracts.js';
 import * as contracts from '../contracts.js';
-import { CHAIN, CONTRACTS } from '../chain-config.js';
+import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../chain-config.js';
 import * as craps from '../craps.js';
 import * as crapsResults from '../craps-results.js';
 import * as readProvider from '../read-provider.js';
@@ -1191,6 +1191,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: true,
+      settlementState: 'complete',
       winningStop: 1,
       winnerId: '2',
       winningPeakWei: '4000',
@@ -1211,6 +1212,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: true,
+      settlementState: 'complete',
       winningStop: 0,
       winnerId: '9',
       winningPeakWei: '9000',
@@ -1231,6 +1233,7 @@ test('armed and finalized owned seats retain viewer ids across the Pending lifec
       buyInWei: (500n * wei).toString(),
       battleStakeWei: (200n * wei).toString(),
       finalized: false,
+      settlementState: 'awaiting-rng',
       winningStop: null,
       winnerId: null,
       winningPeakWei: null,
@@ -1547,7 +1550,16 @@ test('contract errors map to actionable craps copy', () => {
 // Deriving the head keeps the margin true for every future run; +100k is ~2 days of Base
 // blocks, comfortably clear of WINDOW_LOOKBACK.
 const WINDOW_HEAD = (Number(CHAIN.deployBlock) || 0) + 100_000;
-const WINDOW_LOOKBACK = 2_400;
+// ⛔ Same trap as WINDOW_HEAD: the lookback is DERIVED from the active profile's day length
+// (app/app/craps.js crapsLogLookbackBlocks — four days of blocks, floored at 1,800, capped at
+// 45,000). A literal 2_400 held only for 1,200 s days; run #55's step 7 activated a 600 s-day
+// profile and the run #56 step-0 gate failed on it, the code being right and the test stale.
+const WINDOW_LOOKBACK = (() => {
+  const daySeconds = Number(CRAPS_SCHEDULE?.daySeconds);
+  const blockSeconds = Number(CRAPS_SCHEDULE?.blockSeconds);
+  if (!(daySeconds > 0) || !(blockSeconds > 0)) return 45_000;
+  return Math.min(45_000, Math.max(1_800, Math.ceil((4 * daySeconds) / blockSeconds)));
+})();
 const WINDOW_TAIL = 12;
 const WINDOW_DAY = 42;
 // Digits only. An address with letters comes back checksummed from an ethers
@@ -1780,8 +1792,8 @@ test('the craps window refresh asks for the reorg tail and replaces the rows ins
   assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
   assert.equal(await craps.readCrapsAddedPerDay(WINDOW_DAY), 5_000n * WINDOW_WEI);
   assert.deepEqual(paths, [
-    '/game/craps/events?lookback=2400',
-    `/game/craps/events?lookback=2400&since=${WINDOW_HEAD - WINDOW_TAIL}`,
+    `/game/craps/events?lookback=${WINDOW_LOOKBACK}`,
+    `/game/craps/events?lookback=${WINDOW_LOOKBACK}&since=${WINDOW_HEAD - WINDOW_TAIL}`,
   ]);
   assert.equal(provider.calls.length, 0);
 });
@@ -1813,7 +1825,7 @@ test('the craps window mirrors its cursor to localStorage so a reload pays only 
   });
   try {
     assert.equal(await reloaded.readCrapsAddedPerDay(WINDOW_DAY), 2_000n * WINDOW_WEI);
-    assert.deepEqual(paths, [`/game/craps/events?lookback=2400&since=${WINDOW_HEAD - WINDOW_TAIL}`]);
+    assert.deepEqual(paths, [`/game/craps/events?lookback=${WINDOW_LOOKBACK}&since=${WINDOW_HEAD - WINDOW_TAIL}`]);
     assert.equal(provider.calls.length, 0, 'a revived window never rescans the chain');
   } finally {
     reloaded.__resetCrapsContractFactoryForTest();
@@ -1940,4 +1952,19 @@ test('comped entries use receipt funding and pass redemption, excluding later up
     getTransactionReceipt: async () => null,
   });
   assert.equal(unavailable.days[42].comped, undefined);
+});
+
+
+test('armed battle switches from awaiting RNG to settling when its committed word arrives', () => {
+  const day = 42;
+  const battleKey = '0x' + '151'.padStart(64, '0');
+  const logs = [
+    { parsed: { name: 'CrapsBonusOpened', args: { day: 42n, slot: 337n, battleKey,
+      bankroll: 300n * 10n ** 18n, goal: 1500n * 10n ** 18n, boardStake: 42n * 10n ** 18n, battleStake: 200n * 10n ** 18n, seed: 0n } } },
+    { parsed: { name: 'CrapsBonusArmed', args: { battleKey, slot: 337n, index: 99n } } },
+  ];
+  const pending = craps.crapsLobbySnapshotFromLogs(day, logs);
+  assert.equal(pending.settlementStates[0], 'awaiting-rng');
+  const ready = craps.crapsLobbySnapshotFromLogs(day, logs, { wordsByIndex: new Map([['99', 123n]]) });
+  assert.equal(ready.settlementStates[0], 'settling');
 });

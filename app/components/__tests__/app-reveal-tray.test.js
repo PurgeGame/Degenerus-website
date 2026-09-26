@@ -242,6 +242,8 @@ describe('<app-reveal-tray>', () => {
       el.querySelector('.rrt-degenerette-summary__amount').textContent,
       '200k FLIP',
     );
+    assert.ok(el.querySelector('.rrt-action__glyph'), 'unknown traits use a ticket icon');
+    assert.equal(el.querySelector('.rrt-action__fallback-logo'), null);
     el.disconnectedCallback();
   });
 
@@ -822,7 +824,7 @@ describe('<app-reveal-tray>', () => {
     const spinSummaryParts = pendingSpin.querySelector('.rrt-degenerette-summary').children;
     assert.match(spinSummaryParts[0].textContent, /ETH$/);
     assert.equal(spinSummaryParts[1].textContent, '×1');
-    assert.equal(spinSummaryParts[2].textContent, 'SPIN');
+    assert.equal(spinSummaryParts[2].textContent, 'CARD');
     assert.equal(pendingSpin.querySelector('.rrt-degenerette-summary__box'), null,
       'the pending spin count has no redundant leading icon');
     assert.equal(pendingSpin.querySelector('.rrt-action__progress'), null);

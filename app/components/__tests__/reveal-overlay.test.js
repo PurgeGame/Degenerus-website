@@ -351,12 +351,12 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[2].type, 'spins');
     assert.equal(seq.cards[2].rarity, 'rare', 'the mystery card has a neutral rarity');
     assert.equal(seq.cards[2].revealedRarity, 'epic', 'ETH becomes epic after the reveal');
-    assert.equal(seq.cards[2].label, 'DEGENERETTE BOARD');
+    assert.equal(seq.cards[2].label, 'DEGENERETTE CARD');
     assert.equal(seq.cards[2].value, '?', 'the mystery card does not leak its reel count');
     assert.equal(seq.cards[2].revealedValue, '×1', 'the reel count appears with the result');
     assert.doesNotMatch(seq.cards[2].label, /ETH|FLIP|WWXRP/,
       'the pre-spin card does not spoil the currency');
-    assert.equal(seq.cards[2].revealedLabel, 'ETH BOARD');
+    assert.equal(seq.cards[2].revealedLabel, 'ETH CARD');
     assert.equal(seq.cards[2].spin.reels.length, 1);
     assert.equal(seq.cards[2].spin.preSurvivalPayout, 50n);
     assert.equal(seq.cards[2].spin.survivalWinPayout, 100n);
@@ -579,10 +579,10 @@ describe('normalizeSequence', () => {
       ],
     });
     assert.deepEqual(seq.cards.map((card) => card.spin.spinType), ['wwxrp', 'flip']);
-    assert.ok(seq.cards.every((card) => card.label === 'DEGENERETTE BOARD'));
+    assert.ok(seq.cards.every((card) => card.label === 'DEGENERETTE CARD'));
     assert.ok(seq.cards.every((card) => card.rarity === 'rare'),
       'pre-spin card styling cannot leak the currency lane');
-    assert.deepEqual(seq.cards.map((card) => card.revealedLabel), ['WWXRP BOARD', 'FLIP BOARDS'],
+    assert.deepEqual(seq.cards.map((card) => card.revealedLabel), ['WWXRP CARD', 'FLIP CARDS'],
       'the mandatory post-reel flip discloses every currency, including a zero payout');
     assert.deepEqual(seq.cards.map((card) => card.value), ['?', '?'],
       'one-reel and three-reel lanes look identical before the first spin');
@@ -1375,13 +1375,13 @@ describe('normalizeSequence', () => {
       'distinct paid children remain receipt rows while the zero spin is omitted');
     assert.ok(settledSpins.every((card) => card.spin === null),
       'none of the completed children can re-enter reel choreography');
-    const spin = settledSpins.find((card) => card.label === 'FLIP DEGENERETTE BOARD');
+    const spin = settledSpins.find((card) => card.label === 'FLIP DEGENERETTE CARD');
     assert.ok(spin, 'the settled spin remains visible in the day receipt');
-    assert.equal(spin.label, 'FLIP DEGENERETTE BOARD');
+    assert.equal(spin.label, 'FLIP DEGENERETTE CARD');
     assert.equal(spin.value, '240 FLIP');
     assert.match(spin.sub, /2 of 3 paid/);
     assert.match(spin.sub, /LUCKBOX #17/);
-    assert.equal(settledSpins.some((card) => card.label === 'WWXRP DEGENERETTE BOARD'), false,
+    assert.equal(settledSpins.some((card) => card.label === 'WWXRP DEGENERETTE CARD'), false,
       'a zero-payout BoxSpin adds no noise to the daily summary');
   });
 
@@ -1856,7 +1856,7 @@ describe('buildBoxSpinBoard', () => {
     });
     assert.equal(legacy.survived, true,
       'a positive final payout proves survival when an older feed omits the packed bit');
-    assert.equal(board.headline, 'LUCKDEGENERETTE BOARD');
+    assert.equal(board.headline, 'LUCKDEGENERETTE CARD');
     assert.doesNotMatch(board.headline, /ETH|FLIP|WWXRP/,
       'the board heading stays neutral until the first reel lands');
   });
@@ -2016,7 +2016,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.total, 0n);
     assert.equal(board.rows.length, 3);
     assert.equal(board.survived, false);
-    assert.equal(board.headline, 'BIGGEST SPIN BOUNTY');
+    assert.equal(board.headline, 'BIGGEST CARD BOUNTY');
     assert.equal(board.currencyKnown, true,
       'a biggest-spin bounty is authored as FLIP and needs no mystery-currency draw');
     assert.ok(board.payoutAtRisk > 0n,
@@ -2036,7 +2036,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(sequence.kind, 'record-bounty');
     assert.equal(sequence.noVessel, true);
     assert.equal(sequence.spinBoard.rows.length, 3);
-    assert.equal(sequence.spinBoard.headline, 'BIGGEST SPIN BOUNTY');
+    assert.equal(sequence.spinBoard.headline, 'BIGGEST CARD BOUNTY');
   });
 
   test('rejects unknown or empty spin payloads instead of fabricating reels', () => {
@@ -2061,10 +2061,10 @@ describe('buildBoxSpinBoard', () => {
       'only mystery BoxSpins hide their reel count before reel one');
     assert.match(
       REVEAL_SRC,
-      /MORE FLIP BOARDS/,
+      /MORE FLIP CARDS/,
       'the FLIP landing introduces its two remaining reels without promising a nonexistent gate',
     );
-    assert.doesNotMatch(REVEAL_SRC, /MORE FLIP BOARDS · THEN SURVIVAL/);
+    assert.doesNotMatch(REVEAL_SRC, /MORE FLIP CARDS · THEN SURVIVAL/);
     assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 2_000/,
       'the box currency coin gets the compressed two-second track and landing');
     assert.match(
@@ -2498,7 +2498,7 @@ describe('reveal-overlay element', () => {
       'the left ticket is visibly the earned foil rather than a second paper ticket',
     );
     assert.match(chart.querySelector('.rvl-foil-match__foot').textContent,
-      /T5 BONUS6-FACE DEGENERETTE BOARD/);
+      /T5 BONUS6-FACE DEGENERETTE CARD/);
     assert.match(APP_CSS,
       /\.rvl-foil-match__compare\s*\{[^}]*grid-template-columns:\s*var\(--rvl-foil-ticket-size\)[^}]*var\(--rvl-foil-ticket-size\)/s,
       'one explicit pair grid keeps both tickets square and equally sized');
@@ -2991,7 +2991,7 @@ describe('reveal-overlay element', () => {
       'a live Luckbox spin moves straight from the opened case into its full reel board');
     assert.match(REVEAL_SRC,
       /pop = mountPopBoards\(rendered\.compare, board\.rows/,
-      'opening the box starts reel one without a redundant REVEAL BOARD gate');
+      'opening the box starts reel one without a redundant REVEAL CARD gate');
     assert.match(APP_CSS, /@keyframes rvl-lootbox-spin-board-launch/,
       'the real reel board launches from the open case position');
 
@@ -3388,7 +3388,7 @@ describe('reveal-overlay element', () => {
     assert.ok(openAll);
     openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     for (let i = 0; i < 20
-      && summary.querySelector('.rvl-collect-cta')?.textContent !== 'REVEAL 4 BOARDS'; i += 1) {
+      && summary.querySelector('.rvl-collect-cta')?.textContent !== 'REVEAL 4 CARDS'; i += 1) {
       await tick();
     }
 
@@ -3400,15 +3400,15 @@ describe('reveal-overlay element', () => {
     assert.equal(summary.querySelectorAll('.rvl-card--spins').length, 1,
       'every selected BoxSpin is represented by one aggregate grant card');
     assert.equal(spinGrantCard?.querySelector('.rvl-card-value')?.textContent, '×4');
-    assert.equal(spinGrantCard?.querySelector('.rvl-card-label')?.textContent, 'DEGENERETTE BOARDS');
-    assert.equal(playAll?.textContent, 'REVEAL 4 BOARDS');
+    assert.equal(spinGrantCard?.querySelector('.rvl-card-label')?.textContent, 'DEGENERETTE CARDS');
+    assert.equal(playAll?.textContent, 'REVEAL 4 CARDS');
     assert.equal(spinZone.hidden, true,
-      'the combined grant waits for the deliberate REVEAL BOARDS click');
+      'the combined grant waits for the deliberate REVEAL CARDS click');
     playAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     for (let i = 0; i < 20 && spinZone.hidden; i += 1) await tick();
 
     assert.equal(spinZone.hidden, false,
-      'the one REVEAL BOARDS confirmation enters the first selected spin');
+      'the one REVEAL CARDS confirmation enters the first selected spin');
     await revealPops(el);
     assert.equal(spinZone.querySelector('.rvl-spin-head').textContent, 'WWXRP DEGENERETTE',
       'the compact currency heading does not shift the reserved winnings area');
@@ -5464,7 +5464,7 @@ describe('reveal-overlay element', () => {
       assert.ok(done, 'the Day Summary lands directly on its terminal receipt');
       const summary = el.querySelector('[data-bind="rvl-summary"]');
       assert.equal(summary.querySelectorAll('.rvl-card-label')
-        .some((label) => label.textContent === 'WWXRP DEGENERETTE BOARD'), false,
+        .some((label) => label.textContent === 'WWXRP DEGENERETTE CARD'), false,
       'the zero-payout child is absent from the daily receipt');
       assert.equal(summary.querySelector('.rvl-collect-cta')?.textContent, 'BACK TO GAME');
       const tray = el.querySelector('[data-bind="rvl-tray"]');
@@ -5503,7 +5503,7 @@ describe('reveal-overlay element', () => {
     await tick();
 
     const grant = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(grant.querySelector('.rvl-collect-cta').textContent, 'REVEAL BOARD');
+    assert.equal(grant.querySelector('.rvl-collect-cta').textContent, 'REVEAL CARD');
     grant.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -5530,7 +5530,7 @@ describe('reveal-overlay element', () => {
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
     assert.equal(payoutMeter.hidden, true, 'the reserved winnings area replaces the duplicate payout card');
     assert.ok(el.querySelector('.dgn-winnings'));
-    assert.match(payoutMeter.textContent, /BOARD PAYOUT450 FLIPDOUBLE OR NOTHING · WIN 900 FLIP/);
+    assert.match(payoutMeter.textContent, /CARD PAYOUT450 FLIPDOUBLE OR NOTHING · WIN 900 FLIP/);
 
     const collect = el.querySelector('.rvl-dgn-spin-cta');
     assert.equal(collect.textContent, 'TAKE THE WIN');
@@ -5568,7 +5568,7 @@ describe('reveal-overlay element', () => {
     await revealPops(el);
     assert.match(
       payoutMeter.textContent,
-      /BOARD PAYOUT8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
+      /CARD PAYOUT8,000 FLIPDOUBLE OR NOTHING · WIN 16,000 FLIP/,
       'the reels use the chain result instead of the combo estimate',
     );
     assert.doesNotMatch(payoutMeter.textContent, /WIN ≈16,000 FLIP/,
@@ -5607,13 +5607,13 @@ describe('reveal-overlay element', () => {
     await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.match(zone.querySelector('.rvl-spin-head__title').textContent,
-      /BIGGEST SPIN BOUNTY/);
+      /BIGGEST CARD BOUNTY/);
     assert.equal(zone.querySelector('.rvl-box-currency-reveal'), null,
       'the fixed-FLIP bounty never mounts a currency-flip interstitial');
     assert.match(zone.querySelector('.rvl-box-payout-meter').textContent,
-      /BOARD PAYOUT.*FLIP.*DOUBLE OR NOTHING/s);
+      /CARD PAYOUT.*FLIP.*DOUBLE OR NOTHING/s);
     assert.match(zone.querySelector('.rvl-survival').textContent,
-      /BUSTED.*1 PAYING BOARD · \d[\d,.KM]* FLIP LOST/s);
+      /BUSTED.*1 PAYING CARD · \d[\d,.KM]* FLIP LOST/s);
     assert.doesNotMatch(zone.textContent, /CURRENCY FLIP/);
 
     zone.querySelector('.rvl-dgn-spin-cta')
@@ -5677,7 +5677,7 @@ describe('reveal-overlay element', () => {
     assert.equal(snapshots.length, 2, 'both pre-landing survival displays were captured');
     assert.deepEqual(snapshots[0], snapshots[1],
       'reel chips, the running payout, and the survival amount cannot identify the loss');
-    assert.doesNotMatch(JSON.stringify(snapshots), /[≈~]|PAYING BOARDS/);
+    assert.doesNotMatch(JSON.stringify(snapshots), /[≈~]|PAYING CARDS/);
   });
 
   test('a BoxSpin survival bust shows a plausible reel payout without a loss marker', async () => {
@@ -5727,17 +5727,17 @@ describe('reveal-overlay element', () => {
     const survival = zone.querySelector('.rvl-survival');
     assert.match(
       payoutMeter.textContent,
-      /BOARD PAYOUT[\d,.KM]+ FLIPDOUBLE OR NOTHING · WIN [\d,.KM]+ FLIP/,
+      /CARD PAYOUT[\d,.KM]+ FLIPDOUBLE OR NOTHING · WIN [\d,.KM]+ FLIP/,
     );
     assert.match(
       survival.textContent,
-      /BUSTED1 PAYING BOARD · [\d,.KM]+ FLIP LOST/,
+      /BUSTED1 PAYING CARD · [\d,.KM]+ FLIP LOST/,
     );
     assert.doesNotMatch(zone.textContent, /[≈~]/,
       'an approximation marker must never give away the survival loss');
     assert.doesNotMatch(
       zone.textContent,
-      /PAYOUT AT RISK|WIN LOCKED|BOARD PAYOUT AT RISK|FINAL PAYOUT LOST/,
+      /PAYOUT AT RISK|WIN LOCKED|CARD PAYOUT AT RISK|FINAL PAYOUT LOST/,
       'the estimate uses player-facing payout copy rather than an internal placeholder',
     );
     assert.doesNotMatch(REVEAL_SRC, /PAYOUT AT RISK|WIN LOCKED/,
@@ -5792,11 +5792,11 @@ describe('reveal-overlay element', () => {
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.match(
       zone.querySelector('.rvl-box-payout-meter').textContent,
-      /BOARD PAYOUT300 FLIPDOUBLE OR NOTHING · WIN 600 FLIP/,
+      /CARD PAYOUT300 FLIPDOUBLE OR NOTHING · WIN 600 FLIP/,
     );
     assert.match(
       zone.querySelector('.rvl-survival').textContent,
-      /BUSTED1 PAYING BOARD · 300 FLIP LOST/,
+      /BUSTED1 PAYING CARD · 300 FLIP LOST/,
     );
 
     zone.querySelector('.rvl-dgn-spin-cta')
@@ -5825,7 +5825,7 @@ describe('reveal-overlay element', () => {
     await tick();
 
     const grant = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'DEGENERETTE BOARD');
+    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'DEGENERETTE CARD');
     grant.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();

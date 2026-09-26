@@ -74,7 +74,8 @@ test('tomorrow uses today’s finalized word, with all reads pinned to one block
       livenessTriggered: capture('liveness', false), rngWordForDay: capture('seed', 123456n),
     };
     if (address === CONTRACTS.GAME_LENS) return {
-      protocolBoonPool: capture('pool', [12n * 10n ** 16n / DIV, 800n, 1n, 0n]),
+      // Audit 224de529: ProtocolBoonPool carries its ring `day` (the lens zeroes a stale slot).
+      protocolBoonPool: capture('pool', [12n * 10n ** 16n / DIV, 800n, 1n, 0n, 42n]),
       protocolBoonQuote: capture('quote', [50n, 400n, 1600n, 80_000n]),
     };
     throw Error('Unexpected contract');
@@ -86,6 +87,7 @@ test('tomorrow uses today’s finalized word, with all reads pinned to one block
   assert.equal(state.multiplierUnits, 1600);
   assert.equal(state.score, 400);
   assert.equal(state.pools[0].totalWageredWei, 12n * 10n ** 16n / DIV);
+  assert.equal(state.pools[0].day, 42, 'the pool read names the day its ring slot holds');
   for (const [, args] of reads) assert.deepEqual(args.at(-1), { blockTag: 999 });
   assert.equal(reads.find(([name]) => name === 'seed')[1][0], 42);
   // The quote asks for the smallest stake the lens accepts; any other size scales linearly.

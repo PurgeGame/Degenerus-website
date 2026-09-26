@@ -136,7 +136,7 @@ describe('live Decimator display math', () => {
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
-    }), 18_412n);
+    }), 20_458n);
   });
 
   test('reports the exact protocol bracket and score range for normal and century rounds', () => {
@@ -160,16 +160,16 @@ describe('live Decimator display math', () => {
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
-    }), 1_841_200_000_000_000_000_000n);
+    }), 2_045_800_000_000_000_000_000n);
     assert.equal(decimatorMod.decimatorEntryScoreWei({
       amountWei: 100_000n * FLIP,
-      previousScoreWei: 200_000n * FLIP,
+      previousBaseWei: 500_000n * FLIP,
       activityScore: 30_000,
       boonBps: 5_000,
     }), 125_000n * FLIP, 'past the multiplier cap, only the capped boon base remains');
     assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
       amountWei: 1_000n * FLIP,
-      previousScoreWei: 284_500n * FLIP,
+      previousBaseWei: 500_000n * FLIP,
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
@@ -177,7 +177,7 @@ describe('live Decimator display math', () => {
     }), 15_000n, 'the displayed total multiplier keeps the boon after the regular multiplier caps');
     assert.equal(decimatorMod.decimatorEffectiveBaseMultiplierBps({
       amountWei: 1_000n * FLIP,
-      previousScoreWei: 284_500n * FLIP,
+      previousBaseWei: 500_000n * FLIP,
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
@@ -185,7 +185,7 @@ describe('live Decimator display math', () => {
     }), 10_000n, 'the cap note isolates the non-boon portion at 100%');
     assert.equal(decimatorMod.decimatorMultiplierCapApplied({
       amountWei: 1_000n * FLIP,
-      previousScoreWei: 284_500n * FLIP,
+      previousBaseWei: 500_000n * FLIP,
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
@@ -195,7 +195,7 @@ describe('live Decimator display math', () => {
       activityScore: 235,
       dayOneActive: true,
       lastPurchaseDay: true,
-    }), 18_412n, 'an uncapped burn still reports its full timing multiplier');
+    }), 20_458n, 'an uncapped burn still reports its full timing multiplier');
     assert.equal(decimatorMod.decimatorMultiplierCapApplied({
       amountWei: 1_000n * FLIP,
       activityScore: 235,
@@ -207,7 +207,7 @@ describe('live Decimator display math', () => {
   test('floors a last-day 90% nominal multiplier to 100% base weight', () => {
     const args = {
       amountWei: 1_000n * FLIP,
-      previousScoreWei: 200_000n * FLIP,
+      previousBaseWei: 500_000n * FLIP,
       activityScore: 0,
       lastPurchaseDay: true,
     };
@@ -285,6 +285,30 @@ describe('live Decimator raw-burn total', () => {
     assert.deepEqual(ranges, [[base + 8, base + 12]],
       'an indexed stage-7 block can anchor the window without a timestamp');
   });
+
+  test('includes the opening auto-burn when the phase transition resets the purchase clock past it', async () => {
+    const base = Number(CHAIN.deployBlock);
+    const opening = base + 6;
+    const iface = new contractsMod.ethers.Interface([
+      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket)',
+    ]);
+    const burn = {
+      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, 500_000n * FLIP, 7]),
+      blockNumber: opening,
+    };
+    contractsMod.setProvider({
+      getBlockNumber: async () => base + 20,
+      getBlock: async block => ({ timestamp: 1_000 + (Number(block) - base) * 2 }),
+      getLogs: async ({ fromBlock, toBlock }) => burn.blockNumber >= Number(fromBlock)
+        && burn.blockNumber <= Number(toBlock) ? [burn] : [],
+    });
+    assert.equal(await decimatorMod.readDecimatorRawBurnTotal({
+      level: 45, sinceTimestamp: 1_030,
+    }), 0n, 'the shifted purchase clock misses the existing burn');
+    assert.equal(await decimatorMod.readDecimatorRawBurnTotal({
+      level: 45, sinceBlock: opening,
+    }), 500_000n * FLIP, 'the real opening block includes the same-transaction auto-burn');
+  });
 });
 
 describe('burnForDecimator', () => {
@@ -352,5 +376,36 @@ describe('burnForDecimator', () => {
       (caught) => caught.code === 'NotDecimatorWindow'
         && /entry window is closed/i.test(caught.userMessage),
     );
+  });
+});
+
+
+test('current base-entry cap crosses at 500k, independently of weighted score', () => {
+  assert.equal(decimatorMod.decimatorEntryScoreWei({
+    amountWei: 300_000n * FLIP, activityScore: 30_000,
+  }), 534_990n * FLIP);
+  assert.equal(decimatorMod.decimatorEntryScoreWei({
+    amountWei: 100_000n * FLIP, previousBaseWei: 450_000n * FLIP,
+    activityScore: 30_000,
+  }), 139_165n * FLIP);
+  // Boon credit is part of the base consuming the remaining allowance.
+  assert.equal(decimatorMod.decimatorEntryScoreWei({
+    amountWei: 100_000n * FLIP, previousBaseWei: 450_000n * FLIP,
+    activityScore: 30_000, boonBps: 5_000,
+  }), 164_165n * FLIP);
+});
+
+test('opening day takes precedence over the last-purchase-day haircut', () => {
+  assert.equal(decimatorMod.decimatorCurrentMultiplierBps({
+    activityScore: 0, dayOneActive: true, lastPurchaseDay: true,
+  }), 12_000n);
+});
+
+test('DecBet baseMilli is decoded independently of weight, bucket and claim flags', () => {
+  const weight = 700_000n * FLIP;
+  const baseMilli = 400_000_123n;
+  const word = weight | (5n << 192n) | (3n << 200n) | (1n << 208n) | (baseMilli << 216n);
+  assert.deepEqual(decimatorMod.decimatorBurnAccounting(word), {
+    totalBurnWeight: weight, totalBaseBurnWei: baseMilli * 10n ** 15n,
   });
 });

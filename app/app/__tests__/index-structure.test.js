@@ -168,19 +168,19 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
   });
 
-  test('Sacrifice follows AFKING PASSES, then Side Bets and the compact DGNRS rail', () => {
+  test('Side Bets follows AFKING PASSES, with boon draws inside the champion selector', () => {
     const passesEnd = html.indexOf('</details>', html.indexOf('id="afking-passes"'));
-    const sacrifice = html.indexOf('<app-sacrifice-panel>');
+    assert.equal(html.indexOf('<app-sacrifice-panel>'), -1, 'no duplicate standalone boon rail');
     const sideBets = html.indexOf('<section class="side-bets-rail"', passesEnd);
     const pari = html.indexOf('<app-parimutuel-panel>', sideBets);
     const sideBetsEnd = html.indexOf('</section>', pari);
     const rail = html.indexOf('<app-sdgnrs-burn-rail>', sideBetsEnd);
     const history = html.indexOf('<app-transaction-history>', rail);
-    assert.ok(passesEnd >= 0 && sacrifice > passesEnd && sideBets > sacrifice && pari > sideBets
+    assert.ok(passesEnd >= 0 && sideBets > passesEnd && pari > sideBets
       && sideBetsEnd > pari && rail > sideBetsEnd && history > rail,
-      'the sacrifice widget sits below the pass drawer, followed by Side Bets');
-    assert.deepEqual(html.slice(passesEnd, sideBets).match(/<app-[a-z-]+>/g), ['<app-sacrifice-panel>'],
-      'only the sacrifice widget is inserted before the Side Bets rail');
+      'Side Bets follows the pass drawer');
+    assert.equal(html.slice(passesEnd, sideBets).match(/<app-[a-z-]+>/g), null,
+      'the boon rail has moved into Degenerette');
     assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
       'the DGNRS rail immediately follows Side Bets');
     assert.match(appCss,
@@ -370,7 +370,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-ed035463-c811bb99-scoped-v1';
+    const revision = '?v=craps-ed035463-4868ec90-scoped-v1';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',

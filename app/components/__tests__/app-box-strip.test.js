@@ -1656,18 +1656,34 @@ describe('app-box-strip', () => {
 
   test('does not publish a Degenerette child box before its awarding result', async () => {
     const transactionHash = `0x${'de'.repeat(32)}`;
+    // Audit 224de529: DegeneretteResolved(player, index, betId, …, bytes spins) —
+    // all three keys indexed. The child box (index 0) sits inside that bet's
+    // settlement window, directly before its DegeneretteResolved.
     const resolvedTopic = contractsMod.ethers.id(
-      'DegeneretteResolved(address,uint64,uint8,uint256,uint32)',
+      'DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)',
     );
+    const openedTopic = contractsMod.ethers.id(
+      'LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)',
+    );
+    const word = (value) => contractsMod.ethers.toBeHex(value, 32);
     contractsMod.setProvider({
       getTransactionReceipt: async (hash) => String(hash).toLowerCase() === transactionHash
         ? {
             logs: [{
               address: CONTRACTS.GAME,
+              index: 35,
+              topics: [openedTopic, contractsMod.ethers.zeroPadValue(ADDR, 32), word(0)],
+              data: '0x',
+            }, {
+              address: CONTRACTS.GAME,
+              index: 36,
               topics: [
                 resolvedTopic,
                 contractsMod.ethers.zeroPadValue(ADDR, 32),
+                word(7),
+                word(1),
               ],
+              data: '0x',
             }],
           }
         : null,

@@ -503,7 +503,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       // extended at every level transition (DeityPerpetualQueued). Before it, a deity
       // purchase queued NO tickets at all, so the old "15 entries" copy was already
       // describing something the contract did not do.
-      'One whole ticket every level, renewed at every level transition, and three boons per day forever.',
+      'Perpetual drawing entries for your symbol in every color, plus one whole ticket every level and three boons per day forever.',
     ];
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
     assert.match(el.innerHTML, /1 TICKET \/ LEVEL · PERPETUAL/,

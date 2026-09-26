@@ -117,3 +117,21 @@ app-sacrifice-panel { display: block; min-width: 0; margin-bottom: 0.85rem; cont
 .sacrifice-demo__header { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; font-size: 0.75rem; color: #c0bac1; }
 .sacrifice-demo__header a { color: #dfcba4; margin-right: auto; }
 .sacrifice-demo__header select { border: 1px solid #5b4b50; border-radius: 4px; background: #1a131a; color: #f4eddf; padding: 0.5rem; }
+
+/* Show the three possible prizes for the selected champion. */
+app-sacrifice-panel[hidden] { display: none !important; }
+app-sacrifice-panel[compact] { width: 100%; margin: 0; }
+
+app-sacrifice-panel[compact] .sacrifice { grid-template-columns: minmax(0, 1fr); }
+app-sacrifice-panel[compact] .sacrifice__amount,
+app-sacrifice-panel[compact] .sacrifice__submit { display: none; }
+app-sacrifice-panel[compact] .sacrifice__side { display: block; padding: .35rem .2rem; }
+app-sacrifice-panel[compact] .sacrifice__side[hidden] { display: none; }
+app-sacrifice-panel[compact] .sacrifice__boon {
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  justify-items: center; gap: .15rem; padding: .15rem .05rem; text-align: center;
+}
+app-sacrifice-panel[compact] .sacrifice__boon-mark { grid-column: 1; grid-row: 1; width: 2rem; height: 2rem; }
+app-sacrifice-panel[compact] .sacrifice__boon small,
+app-sacrifice-panel[compact] .sacrifice__boon strong { grid-column: 1; font-size: .55rem; }
+app-sacrifice-panel[compact] .sacrifice__feedback { margin: .3rem 0 0; font-size: .55rem; line-height: 1.35; }

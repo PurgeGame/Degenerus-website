@@ -751,6 +751,7 @@ describe('app-parimutuel-panel', () => {
       lastPurchaseDay: true,
       futurePoolWei: 1_250_000_000_000n,
       totalBurnWeight: 2_500n * FLIP,
+      totalBaseBurnWei: 2_000n * FLIP,
       totalRoundScore: 15_150_625n * FLIP,
     }));
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
@@ -767,10 +768,10 @@ describe('app-parimutuel-panel', () => {
     assert.equal(degenScore.textContent, '235%');
     assert.equal(degenScore.getAttribute('data-score-tier'), 'purple');
     const multiplierValue = card.querySelector('.pari-decimator__multiplier-value');
-    assert.equal(multiplierValue.textContent, '184%');
+    assert.equal(multiplierValue.textContent, '205%');
     assert.equal(multiplierValue.getAttribute('data-score-tier'), 'purple');
     assert.equal(card.querySelector('.pari-decimator__multiplier-label').textContent, 'MULTI');
-    assert.match(card.textContent, /235%DEGEN=184%MULTI/);
+    assert.match(card.textContent, /235%DEGEN=205%MULTI/);
     assert.doesNotMatch(card.textContent, /DEGEN RATING/);
     assert.match(APP_CSS,
       /\.pari-decimator__head-copy\s*\{[^}]*flex-direction:\s*column;[^}]*justify-content:\s*space-between/s,
@@ -785,7 +786,7 @@ describe('app-parimutuel-panel', () => {
     assert.match(card.textContent, /ALL PLAYERS SCORE15,150,625/);
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+1,841 SCORE',
+      '+2,045 SCORE',
     );
     assert.match(PARI_SOURCE, /\+\$\{_fmtFlip\(boonScore\)\} BOON/,
       'the legacy fallback also names the concrete score added by a boon');
@@ -803,7 +804,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(input.value, '2000');
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+3,682 SCORE',
+      '+4,091 SCORE',
     );
     down.click();
     assert.equal(input.value, '1000');
@@ -813,7 +814,7 @@ describe('app-parimutuel-panel', () => {
     input.dispatchEvent({ type: 'input' });
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+5,523 SCORE',
+      '+6,137 SCORE',
     );
     assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN FOR');
     assert.match(APP_CSS,

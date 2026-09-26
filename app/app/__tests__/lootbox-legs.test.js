@@ -94,7 +94,7 @@ describe('lootboxRewardPresentation', () => {
       detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(13, 40n), {
-      label: 'WWXRP DEGENERETTE BOON',
+      label: 'WWXRP BURN BOON',
       value: '+12%',
       detail: '',
     });

@@ -40,12 +40,20 @@ describe('Decimator final payout breakdown', () => {
   });
 
   test('the removed terminal mode cannot be re-entered by passing the old option', () => {
-    // Audit 635b010a deleted the terminal decimator, so its all-ETH split went with it.
-    // A caller that still passes `{ terminal: true }` must get the ORDINARY split, not a
-    // silent branch back into a payout shape the contract can no longer produce.
+    // Removed terminal-draw metadata must not imply the gameOver claim latch.
     const split = decimatorPayoutBreakdown(7n * DECIMATOR_ETH_WEI, { terminal: true });
     assert.equal(split.claimableEthWei, 35n * DECIMATOR_ETH_WEI / 10n);
     assert.equal(split.rewardWei, 35n * DECIMATOR_ETH_WEI / 10n);
     assert.notEqual(split.rewardKind, 'eth');
   });
+});
+
+
+test('a regular round claimed after gameOver pays entirely in ETH', () => {
+  const split = decimatorPayoutBreakdown(13n * DECIMATOR_ETH_WEI, { cashOnly: true });
+  assert.equal(split.claimableEthWei, 13n * DECIMATOR_ETH_WEI);
+  assert.equal(split.rewardWei, 0n);
+  assert.equal(split.halfPasses, 0n);
+  assert.equal(split.luckboxWei, 0n);
+  assert.equal(split.rewardKind, 'eth');
 });

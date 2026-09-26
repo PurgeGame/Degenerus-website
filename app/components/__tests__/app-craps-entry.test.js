@@ -1553,3 +1553,20 @@ test('a settled chain replay can be opened on demand without preloaded artifacts
   const rows=crapsEntry.crapsResolutionPendingActions({address,replays:[replay],states,run:()=>{opened++;}});
   assert.equal(rows[0].state,'ready');assert.equal(typeof rows[0].run,'function');rows[0].run();assert.equal(opened,1);
 });
+
+
+test('Craps distinguishes queued work, an undrawn word, and actual settlement', () => {
+  assert.equal(crapsEntry.crapsSettlementLabel('queued'), 'QUEUED');
+  assert.equal(crapsEntry.crapsSettlementLabel('awaiting-rng'), 'WAITING FOR RNG');
+  assert.equal(crapsEntry.crapsSettlementLabel('settling'), 'SETTLING');
+  const address = '0xab12000000000000000000000000000000000000';
+  const replay = { battleKey: '0x' + '42'.padStart(64, '0'), viewerBetId: '1',
+    finalized: false, settlementState: 'awaiting-rng', buyInWei: '500000000000000000000' };
+  const [action] = crapsEntry.crapsResolutionPendingActions({ address, replays: [replay] });
+  assert.equal(action.shortLabel, 'Waiting for RNG');
+  assert.equal(action.detail, 'Waiting for the next randomness draw.');
+  assert.equal(action.run, null);
+  const states = new Map([[replayIdentity(replay.battleKey, replay.viewerBetId), { ready: true, status: 'ready' }]]);
+  const [ready] = crapsEntry.crapsResolutionPendingActions({ address, replays: [replay], states });
+  assert.equal(ready.shortLabel, 'Craps battle', 'a sealed replay outranks an older lobby snapshot');
+});

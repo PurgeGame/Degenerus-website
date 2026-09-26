@@ -111,6 +111,8 @@ describe('<app-decimator-burn>', () => {
     assert.match(COMPONENT, /actualMultiplierBps <= 10_000n/,
       'a total multiplier above 100% never receives a misleading capped note');
     assert.match(COMPONENT, /readDecimatorRawBurnTotal/);
+    assert.doesNotMatch(COMPONENT, /sinceTimestamp:\s*state\?\.levelStartTime/,
+      'The purchase clock resets after jackpot; burned FLIP must use the actual window opening');
     assert.equal((COMPONENT.match(/<button[^>]*data-bind="dbb-burn"/g) || []).length, 1);
     assert.match(SIDE_BETS, /querySelector\?\.\('app-decimator-burn'\)/,
       'the old side-bet entry yields when the full-width rail is mounted');

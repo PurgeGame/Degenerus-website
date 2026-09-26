@@ -194,8 +194,8 @@ describe('<app-deity-desk>', () => {
       'DEGENERETTE BOON');
     assert.equal(deityBoonActionLabel({ product: 'degenerette-flip', name: 'FLIP Degenerette' }, 1),
       'DEGENERETTE BOON');
-    assert.equal(deityBoonActionLabel({ product: 'degenerette-wwxrp', name: 'WWXRP Degenerette' }, 2),
-      'DEGENERETTE BOON');
+    assert.equal(deityBoonActionLabel({ product: 'degenerette-wwxrp', name: 'Incinerator' }, 2),
+      'WWXRP BURN BOON', 'WWXRP boons boost an incinerator burn, not a Degenerette bet');
     assert.equal(deityBoonActionLabel({ name: 'Mystery boon' }, 1), 'Mystery boon');
     assert.match(DESK_SRC, /issueDeityBoon\(\{ recipient: target, slot: action \}\)/);
     assert.match(DESK_SRC, /smiteWithDeity\(\{ deityId: model\.symbolId, target \}\)/);

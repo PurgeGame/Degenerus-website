@@ -215,6 +215,37 @@ describe('headless Mine FLIP resolver', () => {
     resolver.disconnectedCallback();
   });
 
+  test('a contract revert (RngNotReady during the VRF wait) retires the armed crank', async () => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    assert.equal(publishedResolver()?.state, 'ready');
+
+    // The crank that fired the daily request leaves _advanceDue() true, so every
+    // later simulation re-enters advanceGame and reverts RngNotReady. That is
+    // the chain's answer, not an RPC blink: the row must clear.
+    mineFlip.__setContractFactoryForTest(() => ({
+      mineFlip: Object.assign(
+        async () => ({ hash: '0xtx', wait: async () => ({ status: 1, logs: [] }) }),
+        {
+          estimateGas: async () => 100_000n,
+          staticCall: async () => {
+            const error = new Error('execution reverted (unknown custom error)');
+            error.code = 'CALL_EXCEPTION';
+            error.data = '0xbb3e844f'; // RngNotReady()
+            throw error;
+          },
+        },
+      ),
+      connect() { return this; },
+    }));
+    store.update('app.daySync', { day: 83, rngFulfilled: false });
+    await settle();
+    assert.equal(publishedResolver(), undefined,
+      'a pending VRF word is not crank work');
+    resolver.disconnectedCallback();
+  });
+
   test('re-probes immediately when the direct RNG day-sync witness changes', async () => {
     store.update('connected.address', TEST_ADDR);
     stubProbe({ hasWork: false });

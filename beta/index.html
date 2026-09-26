@@ -129,9 +129,9 @@
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=tutorial-fixtures-13",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ed035463-c811bb99-scoped-v1",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ed035463-c811bb99-scoped-v1",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ed035463-c811bb99-scoped-v1",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ed035463-4868ec90-scoped-v1",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ed035463-4868ec90-scoped-v1",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ed035463-4868ec90-scoped-v1",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-tutorial-native-tickets-20260914",
       "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-22",
       "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
@@ -408,7 +408,7 @@
         </div>
       </details>
 
-      <app-sacrifice-panel></app-sacrifice-panel>
+
 
       <!-- Side wagers stay available without occupying the future Craps
            column. Full-width placement lets active books flow horizontally,
@@ -565,6 +565,7 @@
     // Leaving the href absent preserves cascade position without requesting it;
     // the module loader attaches it and waits, preventing a flash on upgrade.
     const MODULE_STYLES = new Map([
+      ['/app/components/app-degenerette-panel.js', ['/app/styles/sacrifices.css']],
       ['/app/components/app-pass-section.js', ['/app/styles/deity-pass-purchase.css']],
       ['/app/components/app-craps-entry.js', ['/app/styles/craps-table.css']],
       ['/app/components/app-baf-eve.js', ['/app/styles/baf-eve.css']],

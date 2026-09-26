@@ -100,6 +100,9 @@ describe('standalone Decimator draw replay', () => {
 
   test('keeps the replay in ETH, then itemizes only the player final settlement', () => {
     const small = formatDecimatorSettlement(8n * 10n ** 18n);
+    const ended = formatDecimatorSettlement(13n * 10n ** 18n, 1n, { cashOnly: true });
+    assert.equal(ended.claimableLabel, '13 ETH');
+    assert.equal(ended.rewardLabel, 'NO REWARD LEG');
     assert.equal(small.claimableLabel, '4 ETH');
     assert.equal(small.rewardLabel, '4 ETH LUCKBOX');
     const large = formatDecimatorSettlement(13n * 10n ** 18n);
