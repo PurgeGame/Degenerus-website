@@ -820,6 +820,8 @@ test('the unified signboard presents Craps Autobattle and the Run It Up jackpot'
     'the finished logo does not reconstruct itself from unrelated game badges');
   assert.doesNotMatch(componentSource, /7 DAILY AUTOBATTLES/);
   assert.match(componentSource, /craps-entry__runup-kicker"[^>]*>FEATURING THE</);
+  assert.match(componentSource, /<span class="craps-entry__run-it-up-mark"[^>]*>\s*<span class="craps-entry__runup-kicker">FEATURING THE<\/span>\s*<img /,
+    'FEATURING THE rides inside the Run It Up mark, so it tracks the artwork at every size');
   assert.match(componentSource, /craps-entry__runup-submark"[^>]*>PROGRESSIVE JACKPOT</);
   assert.match(componentSource, /<header class="craps-entry__head">[\s\S]*?data-bind="craps-progressive"[\s\S]*?<\/header>/);
   assert.match(componentSource, /data-bind="craps-progressive-amount"/);
@@ -852,8 +854,16 @@ test('the unified signboard presents Craps Autobattle and the Run It Up jackpot'
     'Progressive Jackpot uses a straight recessed light rail instead of another oval');
   assert.doesNotMatch(cssSource, /\.craps-entry__identity--runup::after/,
     'the logo bay has no masking panel that can read as a stray dark rectangle');
-  assert.match(cssSource, /\.craps-entry__run-it-up-mark img\s*\{[^}]*clip-path:\s*inset\(0 0 31% 0\)/s,
+  assert.match(cssSource, /\.craps-entry__run-it-up-mark\s*\{[^}]*width:\s*67cqi[^}]*height:\s*calc\(67cqi \* 355 \/ 1400\)[^}]*overflow:\s*hidden/s,
+    'Run It Up scales with its bay like the Craps lockup, cropped to the arrow tip and letter base');
+  assert.match(cssSource, /\.craps-entry__run-it-up-mark img\s*\{[^}]*margin-top:\s*calc\(67cqi \* -8 \/ 1400\)[^}]*clip-path:\s*inset\(0 0 29\.8% 0\)/s,
     'the baked-in plaque is cropped directly at the artwork edge');
+  assert.doesNotMatch(cssSource, /\.craps-entry__run-it-up-mark img\s*\{[^}]*height:\s*2\.69rem/s,
+    'no fixed rem height caps the logo below its bay');
+  assert.match(cssSource, /\.craps-entry__identity--runup\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column[^}]*justify-content:\s*center/s,
+    'the mark and its plate stack as one centred column inside the bay');
+  assert.match(cssSource, /\.craps-entry__runup-submark\s*\{[^}]*position:\s*relative[^}]*flex:\s*none/s,
+    'the Progressive Jackpot rail sits in flow under the letters and never hangs past the bay');
   assert.doesNotMatch(cssSource, /\.craps-entry__head::(?:before|after)/,
     'the cabinet does not add decorative corner rivets');
   assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*display:\s*flex[^}]*width:\s*calc\(100% - \.72rem\)[^}]*height:\s*calc\(100% - \.16rem\)[^}]*place-self:\s*center[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
@@ -875,8 +885,8 @@ test('the unified signboard presents Craps Autobattle and the Run It Up jackpot'
     'Added is the blue half of the shared meter');
   assert.match(cssSource, /\.craps-entry__progressive-meter\s*\{[^}]*color:\s*#d69cff/s,
     'Run It Up keeps its purple number inside the gold plaque');
-  assert.match(cssSource, /\.craps-entry__runup-kicker\s*\{[^}]*top:\s*\.31rem[^}]*left:\s*47%/s,
-    'FEATURING THE stays lowered and shifted over UN IT');
+  assert.match(cssSource, /\.craps-entry__runup-kicker\s*\{[^}]*top:\s*calc\(67cqi \* 97 \/ 2800 - \.5em\)[^}]*left:\s*42%/s,
+    'FEATURING THE sits centred in the empty band over UN IT, left of the arrow');
   assert.doesNotMatch(componentSource, /data-bind="craps-entry-day"/);
   const wei = 10n ** 18n;
   assert.equal(crapsEntry.crapsHeaderBoostLabel(999n * wei), '999');

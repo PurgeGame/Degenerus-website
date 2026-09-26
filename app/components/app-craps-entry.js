@@ -12,8 +12,8 @@ BATTLE`,shortLabel:S,detail:_,icon:"/badges-circular/dice_04_5_silver.svg",iconB
                 </h2>
               </section>
               <section class="craps-entry__identity craps-entry__identity--runup" aria-label="Run It Up Progressive Jackpot">
-                <span class="craps-entry__runup-kicker" aria-hidden="true">FEATURING THE</span>
                 <span class="craps-entry__run-it-up-mark" aria-hidden="true">
+                  <span class="craps-entry__runup-kicker">FEATURING THE</span>
                   <img src="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2.webp" width="1400" height="517"
                        loading="lazy" decoding="async" alt="">
                 </span>

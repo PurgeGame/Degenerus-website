@@ -187,4 +187,9 @@ test('the centre face is the two dice badges and nothing else', () => {
   const css = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
   assert.match(css, /\.replay-ticket-center\.replay-ticket-center--craps:not\(\.replay-ticket-center--draw-toggle\)::before/);
   assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.replay-ticket-center\.replay-ticket-center--craps::before \{ animation: none; \}/);
+  assert.doesNotMatch(css, /(?:^|\})\s*\.replay-flame\s*\{\s*opacity:\s*0/,
+    'only the craps centre hides the flame; every other centre keeps it');
+  assert.match(css, /\.replay-ticket-center--craps:not\(\.replay-ticket-center--draw-toggle\) \.replay-flame \{ opacity: 0; \}/);
+  assert.equal(css.match(/@keyframes replay-craps-glow/g)?.length, 1, 'one glow, not an older copy overriding it');
+  assert.doesNotMatch(css, /replay-center-battle/, 'no styles left for the removed button face');
 });
