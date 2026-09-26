@@ -13,6 +13,7 @@ test('jackpot read failures distinguish an unavailable service from a pending dr
   const state = runInNewContext(`${helper}
     new (class {
       #unavailableReads = new Set();
+      #unavailableSince = new Map();
       #syncSpinControlState() {}
       ${source.slice(start, end)}
       record(key, error) { this.#recordJackpotRead(key, error); }
@@ -33,6 +34,52 @@ test('jackpot read failures distinguish an unavailable service from a pending dr
   assert.equal(state.has('rolls:42'), true);
   state.record('rolls:42');
   assert.equal(state.has('rolls:42'), false, 'successful retries clear the unavailable state');
+});
+
+test('a failed jackpot read keeps the loading face through the grace period', () => {
+  const helper = source.slice(source.indexOf('export function jackpotReadIsUnavailable('), source.indexOf('function escapeHtml('))
+    .replace('export function', 'function');
+  const grace = Number(source.match(/const JACKPOT_UNAVAILABLE_GRACE_MS = ([\d_]+);/)?.[1].replaceAll('_', ''));
+  assert.ok(grace > 0, 'the grace constant exists');
+  const recordStart = source.indexOf('  #recordJackpotRead(');
+  const recordEnd = source.indexOf('\n  /**', recordStart);
+  const readStart = source.indexOf('  #readUnavailable(');
+  const readEnd = source.indexOf('\n  /**', readStart);
+  const clock = { now: 1_000_000 };
+  const timers = [];
+  const state = runInNewContext(`${helper}
+    new (class {
+      #unavailableReads = new Set();
+      #unavailableSince = new Map();
+      #unavailableGraceTimer = null;
+      syncs = 0;
+      #syncSpinControlState() { this.syncs += 1; }
+      ${source.slice(recordStart, recordEnd)}
+      ${source.slice(readStart, readEnd)}
+      record(key, error) { this.#recordJackpotRead(key, error); }
+      shown(key) { return this.#readUnavailable(key); }
+    })()`, {
+    Date: { now: () => clock.now },
+    JACKPOT_UNAVAILABLE_GRACE_MS: grace,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+  });
+
+  state.record('rolls:3', { status: 503 });
+  assert.equal(state.shown('rolls:3'), false, 'a fresh failure keeps the loading face');
+  assert.equal(timers.length, 1, 'one repaint is scheduled for the end of the grace');
+  assert.ok(timers[0].ms >= grace, 'the repaint lands after the grace');
+  state.shown('rolls:3');
+  assert.equal(timers.length, 1, 'repeated renders do not stack timers');
+
+  clock.now += grace / 2;
+  state.record('rolls:3', { status: 503 });
+  assert.equal(state.shown('rolls:3'), false, 'a repeat failure keeps the first failure time');
+  clock.now += grace / 2;
+  assert.equal(state.shown('rolls:3'), true, 'continuous failure past the grace is shown');
+
+  state.record('rolls:3');
+  state.record('rolls:3', { status: 503 });
+  assert.equal(state.shown('rolls:3'), false, 'a success restarts the grace');
 });
 
 test('craps-pass winner tooltips render without aborting jackpot readiness', () => {

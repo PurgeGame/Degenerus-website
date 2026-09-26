@@ -12,6 +12,7 @@ import { moduleSpecifiers, localImportUrl } from '../../../db/module-imports.mjs
 import { checkAppModules } from '../../../db/check-app-modules.mjs';
 import { minifyPublishApp } from '../../../db/minify-publish-app.mjs';
 import { scriptHash } from '../../../db/csp-inline-hashes.mjs';
+import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../chain-config.js';
 
 test('publication parsing handles compact imports, re-exports, multiline and escaped paths', () => {
   const source = String.raw`
@@ -116,8 +117,12 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
     const routes = {
       '/beta/': ['text/html', `<script type="importmap">${importMap}</script><script type="module" src="/app/app/main.js"></script>`],
       '/app/app/main.js': ['text/javascript', 'import"../main.js";'],
-      '/app/app/chain-config.js': ['text/javascript', 'export*from"./chain-config.sepolia.js";'],
-      '/app/app/chain-config.sepolia.js': ['text/javascript', `export const GAME="${deployment.contracts.GAME}";`],
+      // The smoke checks the served ACTIVE profile for GAME, the accepted LINK token, the read
+      // schema pin and the day width, reading the expected values from the local chain-config.js.
+      '/app/app/chain-config.js': ['text/javascript', 'export*from"./chain-config.next.js";'],
+      '/app/app/chain-config.next.js': ['text/javascript',
+        `export const GAME="${deployment.contracts.GAME}";export const LINK_TOKEN="${CONTRACTS.LINK_TOKEN ?? ''}";`
+        + `export const readSchema="${CHAIN.readSchema ?? ''}";export const CRAPS_SCHEDULE={"daySeconds":${CRAPS_SCHEDULE?.daySeconds ?? 0}};`],
       '/app/main.js': ['text/javascript', 'import{value}from"./dep.js?rev=1";export*from"./star.js";import"ethers";const load=()=>import("./lazy.js");'],
       '/app/dep.js?rev=1': ['text/javascript', 'export const value=1;'],
       '/app/star.js': ['text/javascript', 'export const star=1;'],

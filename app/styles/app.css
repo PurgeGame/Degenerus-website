@@ -17762,39 +17762,63 @@ body.layout-basic .deg-block .deg-controls {
   gap: 0.45rem;
   margin: 0;
 }
+/* ETH | FLIP segmented toggle: one pill across the wager width, the selected
+   half tinted with its coin's ring color (#30d100 ETH green, #ed0e11 red). */
 body.layout-basic .deg-currency-picker {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
-  margin-bottom: 0.55rem;
-}
-body.layout-basic .deg-currency-picker__label {
-  display: block;
-  margin-bottom: 0.24rem;
-  text-align: center;
-}
-body.layout-basic .deg-currency-option {
-  position: relative;
   display: grid;
   box-sizing: border-box;
   width: 100%;
-  min-width: 0;
-  min-height: clamp(3.5rem, 7vw, 4.4rem);
-  place-items: center;
-  padding: 0.28rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+  padding: 0.2rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+}
+/* The segments name their currencies; the label stays for screen readers. */
+body.layout-basic .deg-currency-picker__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+body.layout-basic .deg-currency-option {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.6rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
   color: var(--text-secondary, #aaa);
   font: inherit;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 body.layout-basic .deg-currency-option img {
   display: block;
-  width: min(90%, 3.75rem);
-  height: min(90%, 3.75rem);
+  flex: 0 0 auto;
+  width: 1.8rem;
+  height: 1.8rem;
   object-fit: contain;
+}
+body.layout-basic .deg-currency-option__name {
+  font: 900 0.82rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+body.layout-basic .deg-currency-option:hover:not(.is-selected):not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #eee);
 }
 body.layout-basic .deg-currency-option boon-product-indicator {
   position: absolute;
@@ -17808,11 +17832,51 @@ body.layout-basic .deg-currency-option boon-product-indicator {
 body.layout-basic .deg-currency-option boon-product-indicator::after {
   display: none;
 }
-body.layout-basic .deg-currency-option.is-selected {
-  border-color: rgba(165, 180, 252, 0.78);
-  background: linear-gradient(145deg, rgba(99, 102, 241, 0.24), rgba(99, 102, 241, 0.08));
-  color: #e0e7ff;
-  box-shadow: inset 0 0 0 1px rgba(165, 180, 252, 0.18), 0 0 10px rgba(99, 102, 241, 0.16);
+body.layout-basic .deg-currency-option.is-selected[data-bind="deg-currency-option-0"] {
+  border-color: rgba(48, 209, 0, 0.72);
+  background: linear-gradient(145deg, rgba(48, 209, 0, 0.32), rgba(48, 209, 0, 0.1));
+  color: #eaffdf;
+  box-shadow: 0 0 12px rgba(48, 209, 0, 0.2);
+}
+body.layout-basic .deg-currency-option.is-selected[data-bind="deg-currency-option-1"] {
+  border-color: rgba(237, 14, 17, 0.72);
+  background: linear-gradient(145deg, rgba(237, 14, 17, 0.32), rgba(237, 14, 17, 0.1));
+  color: #ffe4e4;
+  box-shadow: 0 0 12px rgba(237, 14, 17, 0.2);
+}
+
+/* Quick bet-per-card picks under the steppers, lit in the currency color. */
+body.layout-basic .deg-amount-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+body.layout-basic .deg-amount-preset {
+  min-width: 0;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary, #aaa);
+  font: 800 0.66rem/1 "Roboto Mono", monospace;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+body.layout-basic .deg-amount-preset:hover:not(.is-selected) {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--text-primary, #eee);
+}
+body.layout-basic .deg-block--wager[data-currency="eth"] .deg-amount-preset.is-selected {
+  border-color: rgba(48, 209, 0, 0.72);
+  background: rgba(48, 209, 0, 0.18);
+  color: #eaffdf;
+}
+body.layout-basic .deg-block--wager[data-currency="flip"] .deg-amount-preset.is-selected {
+  border-color: rgba(237, 14, 17, 0.72);
+  background: rgba(237, 14, 17, 0.18);
+  color: #ffe4e4;
 }
 body.layout-basic .deg-currency-option:disabled {
   opacity: 0.32;
@@ -18885,6 +18949,28 @@ body.layout-basic .deg-block--wager .deg-place-cta[data-boon-effect]::after {
   letter-spacing: 0.04em;
   text-shadow: 0 0 8px rgba(203, 213, 225, 0.32);
 }
+/* Place Bet takes the selected currency's color. */
+body.layout-basic .deg-block--wager[data-currency="eth"] .deg-place-cta:not(:disabled) {
+  border-color: #30d100;
+  background: linear-gradient(135deg, #3de60a, #1e8f00);
+  color: #062300;
+  font-weight: 900;
+  box-shadow: 0 2px 14px rgba(48, 209, 0, 0.25);
+}
+body.layout-basic .deg-block--wager[data-currency="flip"] .deg-place-cta:not(:disabled) {
+  border-color: #ff4548;
+  background: linear-gradient(135deg, #ff3d40, #b3080b);
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 0 2px 14px rgba(237, 14, 17, 0.25);
+}
+body.layout-basic .deg-block--wager[data-currency] .deg-place-cta:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+body.layout-basic .deg-block--wager[data-currency="eth"] .deg-place-cta[data-boon-effect]:not(:disabled)::after {
+  color: rgba(6, 35, 0, 0.78);
+  text-shadow: none;
+}
 
 /* Shared Deity Pass art: the frame stays constant while each surface places
    the selected on-chain symbol behind its transparent socket. */
@@ -19787,10 +19873,7 @@ body.layout-basic app-degenerette-panel .dgn-ticket .dgn-q.q-hero img {
 
 /* Degenerette currency ETH uses the green circular Ethereum trait badge. */
 body.layout-basic .deg-currency-option[data-bind="deg-currency-option-0"] img {
-  width: min(126%, 5.2rem);
-  height: min(126%, 5.2rem);
-  max-width: none;
-  max-height: none;
+  transform: scale(1.26);
 }
 
 /* Daily coinflip receipts are outcomes rather than generic rarity cards. */

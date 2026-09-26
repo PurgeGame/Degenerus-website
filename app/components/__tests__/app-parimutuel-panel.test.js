@@ -654,12 +654,12 @@ describe('app-parimutuel-panel', () => {
       assert.equal(storeMod.get('app.poolBenchmarks').targetWei, '50');
       closing = false;
       const phaseClock = { level: LEVEL, jackpot: false, lastPurchaseDay: false, rngLocked: false };
-      storeMod.update('app.goldRush', { phaseClock });
+      storeMod.update('app.livePools', { phaseClock });
       await flush();
       assert.equal(storeMod.get('app.poolBenchmarks').targetWei, '110');
       assert.equal(storeMod.get('app.poolBenchmarks').ratchets.current, '110');
       const readsAfterReset = targetReads;
-      storeMod.update('app.goldRush', { phaseClock: { ...phaseClock }, components: { nextWei: '70' } });
+      storeMod.update('app.livePools', { phaseClock: { ...phaseClock }, components: { nextWei: '70' } });
       await flush();
       assert.equal(targetReads, readsAfterReset, 'ordinary pool ticks do not add benchmark RPC reads');
     } finally { el.disconnectedCallback(); }

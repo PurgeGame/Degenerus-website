@@ -8,8 +8,10 @@
 //   - a network error, a non-2xx status, and an unparseable body each fail
 //     over to the next endpoint FOR THAT REQUEST
 //   - a JSON-RPC error object inside a 200 (a revert) is returned unchanged
-//     and never triggers failover, EXCEPT a per-item rate limit (-32016),
-//     which is the endpoint refusing the request and fails over like a 429
+//     and never triggers failover, EXCEPT a per-item rate limit (-32016,
+//     -32007), which is the endpoint refusing the request and fails over like a 429
+//   - a walk every endpoint refused for rate retries after a short pause
+//     before the outage breaker arms
 //   - after 3 consecutive primary failures the fallback becomes preferred,
 //     and a recovered response resets the failure count
 //   - every endpoint dead → the last transport error surfaces
@@ -81,6 +83,38 @@ test('a rate limit inside a 200 fails over; a range refusal does not', async () 
   const sendRange = _makeFailoverSend([A, B], async (url) => { once.push(url); return ok(refused); });
   assert.deepEqual(await sendRange(PAYLOAD), [refused]);
   assert.deepEqual(once, [A]);
+});
+
+test('a walk refused for rate everywhere retries after a pause instead of failing', async () => {
+  // sepolia.base.org's refusal: HTTP 200 carrying -32007 "25/second request limit reached".
+  const limited = { id: 1, error: { code: -32007, message: '25/second request limit reached - reduce calls per second' } };
+  let refusals = 2;
+  const hits = [];
+  const waits = [];
+  const send = _makeFailoverSend([A, B], async (url) => {
+    hits.push(url);
+    if (refusals > 0) { refusals -= 1; return ok(limited); }
+    return ok({ id: 1, result: '0x1' });
+  }, 1_000, async (ms) => { waits.push(ms); });
+  assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
+  assert.deepEqual(hits, [A, B, A], 'the whole walk was refused, then the retry walk succeeded');
+  assert.equal(waits.length, 1);
+  assert.ok(waits[0] >= 400 && waits[0] <= 600, 'the first pause is ~500ms');
+  assert.equal(send._state.outageUntil, 0, 'a burst never arms the outage breaker');
+});
+
+test('a rate limit that outlasts the retries arms the outage breaker', async () => {
+  const waits = [];
+  let hits = 0;
+  const send = _makeFailoverSend([A, B], async () => {
+    hits += 1;
+    return { ok: false, status: 429, json: async () => ({}) };
+  }, 1_000, async (ms) => { waits.push(ms); });
+  await assert.rejects(send(PAYLOAD), /HTTP 429/);
+  assert.equal(hits, 6, 'the first walk plus two retry walks');
+  assert.equal(waits.length, 2);
+  assert.ok(waits[1] > waits[0], 'the second pause is longer');
+  assert.ok(send._state.outageUntil > 0);
 });
 
 test('three consecutive primary failures promote the fallback', async () => {

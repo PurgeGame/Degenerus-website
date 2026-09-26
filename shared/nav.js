@@ -355,7 +355,6 @@
 
     var pages = config.pages || [
       { key: 'app', label: 'Play', href: '/beta/' },
-      { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
       { key: 'theory', label: 'Game Theory', href: '/theory/' },
       { key: 'viewer', label: 'Viewer', href: '/app/viewer.html' },

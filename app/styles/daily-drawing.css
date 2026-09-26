@@ -1142,6 +1142,12 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-coin
   --jp-led-c: 129, 140, 248;
 }
 
+body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-craps {
+  --jp-led-a: 52, 211, 153;
+  --jp-led-b: 255, 214, 92;
+  --jp-led-c: 16, 185, 129;
+}
+
 body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-decimator {
   --jp-led-a: 255, 70, 95;
   --jp-led-b: 255, 189, 54;

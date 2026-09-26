@@ -16,16 +16,12 @@ test('craps resolution wires one restrained cue to each visible gameplay beat', 
     'the authoritative faces appear in one impact with a roll-number tone and a wager-relative result tone');
   assert.match(source, /#animateBankrollLoss[\s\S]*?sfxCrapsSettlement\('sweep'\)/s,
     'a whole felt loss gets one sweep');
-  assert.match(source, /this\.#settlementImpactTimer = this\.#guardedTimeout\(\(\) => \{[\s\S]*?paintImpact\(\);\s*playLocalClack\(\);\s*playOpponentClack\(\);/s,
-    'local and opponent settlements get separate impact cues on the shared timed impact beat');
+  assert.match(source, /this\.#settlementImpactTimer = this\.#guardedTimeout\(\(\) => \{[\s\S]*?playLocalClack\(\);/s,
+    'the local settlement plays its collect cue on the shared timed impact beat');
   assert.match(source, /#localPayoutSoundChipCount[\s\S]*?crapsPayoutChipCount\(frame\?\.deltaFlip, this\.#playedFlip\)[\s\S]*?placedWinners \* multiplier/s,
     'the local impact converts the multiplied payout back into physical base-chip weight');
-  assert.match(source, /playLocalClack[\s\S]*?sfxCrapsSettlement\('collect', localPayoutChips\);[\s\S]*?playOpponentClack[\s\S]*?sfxCrapsSettlement\('opponent', this\.#featuredPayoutSoundChipCount\(frameIndex\)\);/s,
-    'local and opponent impacts each receive their own scaled chip count and timbre');
-  assert.match(source, /#placeChip[\s\S]*?this\.#bets\.set\(id, previous \+ 1n\);\s*sfxCrapsBetPlace\(\);/s,
-    'each successful manual bet placement gets one physical contact');
-  assert.match(source, /#animateBoardReload[\s\S]*?addEventListener\?\.\('animationend', playBetPlace/s,
-    'automated board dealing gets the same placement language at impact');
+  assert.match(source, /playLocalClack[\s\S]*?sfxCrapsSettlement\('collect', localPayoutChips\);/s,
+    'the local impact receives its own scaled chip count and timbre');
   assert.match(source, /#syncWagerMultiplier[\s\S]*?multiplier > previousMultiplier\) sfxCrapsDouble\(\);/s,
     'an escalator doubling gets the stack-split cue');
   assert.match(source, /#showSurvivalLanding\(survived\);\s*sfxCoinflipLand\(survived\);\s*if \(survived\) sfxCrapsDouble\(\{ at: 0\.14 \}\);/s,

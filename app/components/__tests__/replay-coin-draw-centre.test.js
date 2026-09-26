@@ -39,9 +39,10 @@ function element() {
 }
 
 function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinComplete = true, bonusTraitDraw = false, toggleReady = false } = {}) {
-  const dom = { center: element(), button: element(), caption: element(), action: element() };
+  const dom = { center: element(), label: element() };
   const klass = `new (class {
     #coinDrawBattle = null; #coinDrawOpening = false; #coinDrawStatusFor = null;
+    #coinDrawStatus = null; #coinDrawSeen = new Set();
     #mainSpinComplete = false; #spinning = false; #selectedDay = null; #selectedPlayer = null;
     #hasBonus = false; #bonusScratchComplete = false; #drawViewSwitching = false; #bonusPhase = false;
     #dayBonusTraitDraw = true; #dayRoll1 = null; #dayRoll2 = null; #playerRoll1Wins = []; #playerRoll2Wins = [];
@@ -49,9 +50,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     opened = []; toggled = 0; toggleReady = false;
     querySelector(selector) {
       if (selector.includes('"center"')) return dom.center;
-      if (selector.includes('"craps-battle"')) return dom.button;
-      if (selector.includes('craps-battle-caption')) return dom.caption;
-      if (selector.includes('craps-battle-action')) return dom.action;
+      if (selector.includes('center-battle-label')) return dom.label;
       return null;
     }
     #mainReadyForBonus() { return this.toggleReady; }
@@ -71,8 +70,11 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     filter(addr) { this.#filterPlayerWins(addr); return this.#hasBonus; }
     distribute() { this.#distributePrizesFromRoll1(); return this.#centerWins; }
     sync() { return this.#syncCoinDrawCentre(); }
+    markSeen(key) { this.#coinDrawSeen.add(key); }
   })()`;
-  const instance = runInNewContext(klass, { dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console });
+  const instance = runInNewContext(klass, {
+    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'RESOLVE CRAPS BATTLE', CRAPS_CENTRE_LABEL: 'RESOLVE',
+  });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });
   return { instance, dom };
 }
@@ -86,9 +88,10 @@ test('purchase day, viewer drawn in: the centre glows, reads as a button and ope
   assert.equal(dom.center.getAttribute('role'), 'button');
   assert.equal(dom.center.getAttribute('tabindex'), '0');
   assert.match(dom.center.getAttribute('aria-label'), /CRAPS BATTLE · 2 RUNS · POT 9K FLIP/);
-  assert.equal(dom.button.hidden, false);
-  assert.equal(dom.caption.textContent, 'CRAPS BATTLE · 2 RUNS · POT 9K FLIP');
-  assert.equal(dom.action.textContent, 'BUSTED · WATCH YOUR RUN ›');
+  assert.equal(dom.label.textContent, 'RESOLVE', 'the centre carries its own button face');
+  instance.markSeen(`${model.key}:${model.player}`);
+  instance.sync();
+  assert.equal(dom.label.textContent, 'REPLAY', 'an opened battle offers a replay');
 
   instance.click({ target: { classList: { contains: () => false } } });
   assert.equal(instance.opened.length, 1, 'a centre click opens the battle, not a draw toggle');
@@ -109,7 +112,6 @@ test('purchase day, viewer not drawn or no viewer: no highlight and no click', (
     assert.equal(instance.sync(), null);
     assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
     assert.equal(dom.center.getAttribute('role'), null);
-    assert.equal(dom.button.hidden, true);
     instance.click({ target: { classList: { contains: () => false } } });
     instance.keydown({ key: 'Enter', preventDefault() {} });
     assert.equal(instance.opened.length, 0);
@@ -124,14 +126,12 @@ test('a highlight clears when the viewer changes to a wallet that was not drawn'
   instance.sync();
   assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
   assert.equal(dom.center.getAttribute('role'), null, 'no stale button role on the centre');
-  assert.equal(dom.button.hidden, true);
 });
 
 test('jackpot day: never highlighted, and the centre keeps its draw toggle', () => {
   const { instance, dom } = panel({ coinDrawBattle: null, bonusTraitDraw: true, toggleReady: true });
   assert.equal(instance.sync(), null);
   assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
-  assert.equal(dom.button.hidden, true);
   instance.click({ target: { classList: { contains: () => false } } });
   assert.equal(instance.opened.length, 0);
   assert.equal(instance.toggled, 1);
@@ -140,7 +140,7 @@ test('jackpot day: never highlighted, and the centre keeps its draw toggle', () 
 test('nothing lights before the main spin has played out', () => {
   const { instance, dom } = panel({ mainSpinComplete: false });
   assert.equal(instance.sync(), null);
-  assert.equal(dom.button.hidden, true);
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
 });
 
 test('purchase day has no Bonus Spin; its battle FLIP lands in the main centre', () => {
@@ -156,9 +156,24 @@ test('purchase day has no Bonus Spin; its battle FLIP lands in the main centre',
   assert.equal(jackpot.distribute().length, 0, 'and its roll-2 centre stays on the bonus board');
 });
 
-test('the ticket carries the centre dice and the battle caption button', () => {
-  assert.match(source, /<span class="replay-center-dice" aria-hidden="true">/);
-  assert.match(source, /<button type="button" class="replay-craps-battle" data-bind="craps-battle" hidden>/);
+test('the bottom key resolves the battle after the main spin, before the coinflip', () => {
+  const body = between('    btn.classList?.remove(\'is-craps\');', '    if (this.#coinflipHandoffReady()) {');
+  assert.match(body, /const crapsBattle = this\.#jackpotSpinsComplete\(\) \? this\.#coinDrawCentre\(\) : null;/,
+    'a level-0 purchase day plays its Bonus Spin first');
+  assert.match(body, /!this\.#coinDrawSeen\.has\(/, 'only until the viewer has opened it');
+  assert.match(body, /dataset\.replayAction = 'craps-battle'/);
+  assert.match(body, /CRAPS_BATTLE_LABEL/);
+  assert.match(source, /replayAction === 'craps-battle'\) \{\s*void this\.#openCoinDrawBattle\(revealBtn\);/,
+    'the key opens the same battle the centre does');
+  assert.match(source, /if \(result\?\.ok\) this\.#coinDrawSeen\.add\(/, 'a successful open retires the key step');
+});
+
+test('the centre carries badge dice and its own button face, with no caption pill', () => {
+  assert.match(source, /<span class="replay-center-dice" aria-hidden="true"><img src="\$\{CRAPS_CENTRE_DICE\[0\]\}"/);
+  assert.match(source, /badgeCircularPath\('dice', 4, 'silver'\)/, 'dice imagery uses the dice trait badges');
+  assert.doesNotMatch(source, /data-face="\d"><\/i>/, 'no hand-drawn pip dice');
+  assert.match(source, /class="replay-center-battle" data-bind="center-battle-label"/);
+  assert.doesNotMatch(source, /class="replay-craps-battle"/, 'the green caption pill is gone');
   assert.match(source, /import\('\.\.\/craps\/coin-draw-viewer\.js'\)/, 'the viewer loads only on click');
   const css = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
   assert.match(css, /\.replay-ticket-center\.replay-ticket-center--craps:not\(\.replay-ticket-center--draw-toggle\)::before/);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { CHAIN, CONTRACTS } from '../../app/chain-config.js';
+import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../../app/chain-config.js';
 import { crapsLobbySnapshotFromLogs } from '../../app/craps.js';
 
 globalThis.HTMLElement ??= class HTMLElement {};
@@ -26,8 +26,17 @@ const replayIdentity = (battleKey, viewerBetId, {
   contract = CONTRACTS.CRAPS,
 } = {}) => [chainId, contract.toLowerCase(), battleKey.toLowerCase(), viewerBetId].join(':');
 
+// The literal wall-clock instants in the next two tests were written for the 1,200 s testnet day
+// (2-minute battles). Pin them to THAT clock explicitly: the active profile moves with each run
+// (run #55/#56 are 600 s days), and a test reading it implicitly broke on the switch. The active
+// schedule itself is walked generically in 'the ACTIVE schedule ...' below.
+const CLOCK_1200 = Object.freeze({
+  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620, openerCloseSeconds: 0,
+  clockAlignSeconds: 300, routinePeriodSeconds: 120, eventLeadSeconds: 180,
+});
+
 test('the browser clock mirrors all seven contract battle boundaries', () => {
-  const period = (iso) => crapsEntry.crapsPeriodAt(Date.parse(iso));
+  const period = (iso) => crapsEntry.crapsPeriodAt(Date.parse(iso), CLOCK_1200);
   assert.equal(period('2026-08-28T22:57:00Z'), 0);
   assert.equal(period('2026-08-28T23:01:59Z'), 0);
   assert.equal(period('2026-08-28T23:02:00Z'), 1);
@@ -37,7 +46,7 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
   assert.equal(period('2026-08-28T23:10:00Z'), 5);
   assert.equal(period('2026-08-28T23:12:00Z'), 6);
   assert.equal(period('2026-08-28T23:14:00Z'), 7);
-  assert.deepEqual(crapsEntry.crapsBattleCloseLabels(Date.parse('2026-08-28T22:57:00Z')),
+  assert.deepEqual(crapsEntry.crapsBattleCloseLabels(Date.parse('2026-08-28T22:57:00Z'), CLOCK_1200),
     ['23:02', '23:04', '23:06', '23:08', '23:10', '23:12', '23:14']);
   assert.equal(
     crapsEntry.crapsBattleCountdownLabel(
@@ -60,6 +69,26 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
     ),
     '1h',
   );
+});
+
+test('the ACTIVE schedule steps through seven battles and ends on the event lead', () => {
+  const c = CRAPS_SCHEDULE;
+  // Battles 1..6 open every routine period after the aligned opener; the event window (7) is the
+  // last eventLeadSeconds of the day — so the seven battles exactly tile the day.
+  assert.equal(c.openerCloseSeconds + c.clockAlignSeconds + 6 * c.routinePeriodSeconds,
+    c.daySeconds - c.eventLeadSeconds, 'battle boundaries must tile the active day');
+  const dayStart = (c.anchorSeconds + 1000 * c.daySeconds) * 1000; // any whole day after the anchor
+  const at = (s) => crapsEntry.crapsPeriodAt(dayStart + s * 1000);
+  assert.equal(at(0), 0);
+  for (let p = 1; p <= 6; p++) {
+    const open = c.openerCloseSeconds + c.clockAlignSeconds + (p - 1) * c.routinePeriodSeconds;
+    assert.equal(at(open - 1), p - 1, `period ${p - 1} runs until ${open}s`);
+    assert.equal(at(open), p, `period ${p} opens at ${open}s`);
+  }
+  assert.equal(at(c.daySeconds - c.eventLeadSeconds), 7);
+  assert.equal(at(c.daySeconds - 1), 7);
+  assert.equal(at(c.daySeconds), 0, 'the next day starts over at the opener');
+  assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart).length, 7);
 });
 
 test('future slates keep using available comps after the final battle until rollover', () => {
@@ -515,6 +544,7 @@ test('the day row rolls to tomorrow after Battle 1 while later windows remain se
   const state = crapsEntry.crapsEntryState({
     day: 42,
     nowMs: Date.parse('2026-08-28T23:02:00Z'),
+    clock: CLOCK_1200,
   });
   assert.equal(state.fullDayOpen, true);
   assert.equal(state.currentPeriod, 1);

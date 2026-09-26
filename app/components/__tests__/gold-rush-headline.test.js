@@ -31,8 +31,8 @@ const { _testing } = await import('../gold-rush-headline.js');
 const { groupEth, fmtEth, fmtHeadline, easeOutCubic, headlineAmountFit } = _testing;
 
 // polling.js registers a visibilitychange listener behind a typeof guard, so it is
-// import-safe here; its _testing surface exposes the adaptive-cadence internals.
-const { _testing: pollingTesting } = await import('../../app/polling.js');
+// import-safe here.
+const { POLL_INTERVALS } = await import('../../app/polling.js');
 
 // ===========================================================================
 // Formatting
@@ -228,94 +228,23 @@ describe('gold-rush headline wiring', () => {
   });
 
   test('polling.js owns the goldRush cycle and writes app.goldRush', () => {
-    assert.match(polling, /goldRush: 15_000/);
+    assert.match(polling, /goldRush: 60_000/);
     assert.match(polling, /blockAndAggregate\.staticCall\(calls\)/);
     assert.match(polling, /CHAIN\.goldRushPublicRpcUrl/,
       'disconnected fallback is explicitly keyless, never the generic app RPC');
     assert.doesNotMatch(polling, /fetchJSONWithSignal\('\/game\/jackpot\/gold-rush'/,
       'headline never traverses the API/database route');
     assert.match(polling, /update\('app\.goldRush', payload\)/);
-    // Self-rescheduling setTimeout, NOT setInterval — the gap adapts.
+    // Wait a minute after completion so slow requests cannot overlap.
     assert.match(
       polling,
-      /TIMER_HANDLES\.goldRush = setTimeout\(runScheduledGoldRushCycle, _goldRushDelay\)/,
-      'the adaptive timeout enters through the major-draw admission gate',
+      /TIMER_HANDLES\.goldRush = setTimeout\(runScheduledGoldRushCycle, delay\)/,
+      'the minute timeout enters through the major-draw admission gate',
     );
   });
 });
 
-// ===========================================================================
-// Adaptive cadence (polling.js goldRushNextDelay)
-//
-// The point of the backoff is that the ticker's request budget should follow the
-// money, not the clock: tight while the headline moves, near-silent when it doesn't.
-// ===========================================================================
-
-describe('gold-rush adaptive cadence', () => {
-  const p = pollingTesting;
-  const { GOLD_RUSH_CADENCE, goldRushNextDelay, resetGoldRushCadence } = p;
-
-  const at = (atBlock) => ({ atBlock });
-
-  test('starts at the floor on the first payload', () => {
-    resetGoldRushCadence();
-    assert.equal(goldRushNextDelay(at(100)), GOLD_RUSH_CADENCE.active);
-  });
-
-  test('holds the floor while the headline keeps moving', () => {
-    resetGoldRushCadence();
-    for (let b = 100; b < 110; b += 1) {
-      assert.equal(goldRushNextDelay(at(b)), GOLD_RUSH_CADENCE.active, `block ${b}`);
-    }
-  });
-
-  test('doubles the gap every backoffAfter unchanged polls, capped at max', () => {
-    resetGoldRushCadence();
-    goldRushNextDelay(at(100));
-    const seen = [];
-    for (let i = 0; i < 20; i += 1) seen.push(goldRushNextDelay(at(100)));
-    // 15s → 30s → 60s (capped), two polls per step.
-    assert.deepEqual(seen.slice(0, 6), [15000, 30000, 30000, 60000, 60000, 60000]);
-    assert.equal(seen[seen.length - 1], GOLD_RUSH_CADENCE.max, 'settles at the cap');
-    for (const d of seen) assert.ok(d <= GOLD_RUSH_CADENCE.max, `never exceeds max: ${d}`);
-  });
-
-  test('snaps straight back to the floor the moment the block changes', () => {
-    resetGoldRushCadence();
-    goldRushNextDelay(at(100));
-    for (let i = 0; i < 20; i += 1) goldRushNextDelay(at(100));   // fully backed off
-    assert.equal(p.goldRushDelay, GOLD_RUSH_CADENCE.max, 'precondition: at the cap');
-    assert.equal(goldRushNextDelay(at(101)), GOLD_RUSH_CADENCE.active, 'burst caught at the floor');
-  });
-
-  test('a failed poll (null payload) backs off rather than hammering a down RPC', () => {
-    resetGoldRushCadence();
-    goldRushNextDelay(at(100));
-    goldRushNextDelay(null);
-    goldRushNextDelay(null);
-    assert.ok(p.goldRushDelay > GOLD_RUSH_CADENCE.active, `backed off, got ${p.goldRushDelay}`);
-  });
-
-  test('a null-atBlock payload (cold start, ready:false) does not reset the backoff', () => {
-    resetGoldRushCadence();
-    goldRushNextDelay({ atBlock: null });
-    goldRushNextDelay({ atBlock: null });
-    assert.ok(p.goldRushDelay > GOLD_RUSH_CADENCE.active, 'cold start counts as quiet');
-  });
-
-  // Delays used while quiet: 15,15,30,30,60,60,60,60 → 8 polls to cover 300s, against
-  // 20 at a fixed 15s interval. That is the whole point of the backoff;
-  // pin it so a cadence tweak has to own its effect on the idle request budget.
-  test('idle cost: a 5-minute silence is 8 requests, not 20', () => {
-    resetGoldRushCadence();
-    goldRushNextDelay(at(100));
-    let elapsed = 0;
-    let requests = 0;
-    while (elapsed < 300_000) {
-      elapsed += p.goldRushDelay;
-      requests += 1;
-      goldRushNextDelay(at(100));
-    }
-    assert.equal(requests, 8, `5-minute idle request count (fixed 15s would be 20)`);
-  });
+test('cosmetic headline samples once a minute while gameplay keeps its 15s cadence', () => {
+  assert.equal(POLL_INTERVALS.goldRush, 60_000);
+  assert.equal(POLL_INTERVALS.gameState, 15_000);
 });

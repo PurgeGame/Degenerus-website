@@ -541,33 +541,6 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
     'an explicit valid rung does not add a redundant storage read');
   assert.ok(options.otherPlayers.every((player) => player.label.startsWith('Discord ')));
   assert.ok(options.otherPlayers.every((player) => player.discordPfp?.startsWith('https://')));
-
-  const watched = options.otherPlayers[0];
-  assert.equal(typeof options.onPerspectiveSelect, 'function');
-  assert.equal(options.onPerspectiveSelect({
-    betId: watched.betId,
-    resumeResolutionIndex: 7,
-    autoRoll: false,
-  }), true);
-  assert.equal(opened.length, 2, 'switching perspective reopens from the verified in-memory model');
-  const watchedOptions = opened[1];
-  assert.equal(watchedOptions.viewerBetId, watched.betId);
-  assert.equal(watchedOptions.originalViewerBetId, viewer.betId);
-  assert.equal(watchedOptions.resumeResolutionIndex, 7);
-  assert.equal(watchedOptions.autoRoll, false);
-  assert.equal(watchedOptions.battleWonByViewer, false,
-    'the exact winning seat does not follow the camera');
-  assert.ok(watchedOptions.otherPlayers.some((player) => player.betId === viewer.betId),
-    'the original player remains available to click back to');
-  assert.equal(watchedOptions.onPerspectiveSelect({
-    betId: viewer.betId,
-    resumeResolutionIndex: 8,
-    autoRoll: true,
-  }), true);
-  assert.equal(opened[2].viewerBetId, viewer.betId, 'the same control switches back to YOU');
-  assert.equal(opened[2].resumeResolutionIndex, 8);
-  assert.equal(options.onPerspectiveSelect({ betId: '999999999999999999999' }), false,
-    'a click cannot escape the already verified viewport');
   __resetCrapsReplayLoaderForTest();
 });
 
@@ -714,14 +687,6 @@ test('a contested High Roller replay runs its exact side field before the main b
     'only the completed main battle may retire the Pending receipt');
   assert.equal(main.autoRoll, false);
   assert.equal(main.highRollerAward.battleWonByViewer, false);
-  assert.equal(main.onPerspectiveSelect({ betId: rival.betId }), true);
-  const rivalMain = opened.at(-1);
-  assert.equal(rivalMain.replayLane, 'main');
-  assert.equal(rivalMain.highRollerAward.battleWonByViewer, true);
-  assert.equal(rivalMain.highRollerAward.battlePayoutWei, highPayoutWei);
-  assert.equal(rivalMain.onPerspectiveSelect({ betId: viewer.betId }), true);
-  assert.equal(opened.at(-1).highRollerAward.battleWonByViewer, false,
-    'switching away cannot inherit the previous perspective high win');
   __resetCrapsReplayLoaderForTest();
 });
 

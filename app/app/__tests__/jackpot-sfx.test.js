@@ -584,30 +584,29 @@ class FakePopAudioContext extends FakeNoiseAudioContext {
   createGain() { return { ...super.createGain(), disconnect() {} }; }
 }
 
-test('pop scores have distinct cues, gold adds a shimmer, and batch volume is bounded', () => {
+test('bubble pops escalate with what is underneath, gold doubles the coin shower, and batch volume is bounded', () => {
   __resetForTest();
   globalThis.AudioContext = FakePopAudioContext;
   setMuted(false);
+  const counts = [];
   const cues = [];
-  const ruptureProfiles = [];
   for (let points = 0; points <= 3; points++) {
     stopDgnPops();
-    const before = FakeAudioContext.last?.bufferSources?.length || 0;
+    const before = FakeAudioContext.last?.oscillators?.length || 0;
     sfxDgnPop({ points });
-    const ctx = FakeAudioContext.last;
-    ruptureProfiles.push({ snaps: ctx.bufferSources.length - before, body: ctx.oscillators.at(-(points + 1)).frequency.values });
-    const count = points + 1;
-    cues.push(ctx.oscillators.slice(-count).map(node => node.frequency.value ?? node.frequency.values[0].value));
+    const added = FakeAudioContext.last.oscillators.slice(before);
+    counts.push(added.length);
+    cues.push(added.map(node => node.frequency.value ?? node.frequency.values[0].value));
   }
+  assert.deepEqual(counts, [1, 2, 3, 8], 'nothing is a bare pop, one and two points add chimes, three points is the coin shower');
   assert.equal(new Set(cues.map(JSON.stringify)).size, 4);
-  assert.deepEqual(ruptureProfiles.map(cue => cue.snaps), [1, 1, 2, 3]);
-  assert.equal(new Set(ruptureProfiles.map(cue => JSON.stringify(cue.body))).size, 4, 'the pop body changes with points, independently of the reward notes');
   const ctx = FakeAudioContext.last;
   const start = ctx.oscillators.length;
   sfxDgnPop({ points: 3, gold: true, count: 100 });
-  assert.equal(ctx.oscillators.length - start, 6, '100 quadrants produce one cue, not 100 chords');
-  assert.deepEqual(ctx.oscillators.slice(-2).map(node => node.frequency.value), [1760, 2349.32]);
-  const voices = [...ctx.oscillators.slice(-6), ctx.bufferSources.at(-1)];
+  assert.equal(ctx.oscillators.length - start, 15, '100 quadrants produce one gold shower, not 100');
+  const landing = ctx.oscillators.at(-2).frequency;
+  assert.equal(landing.value ?? landing.values[0].value, 3520, 'gold lands the doubled shower on its high ding');
+  const voices = [...ctx.oscillators.slice(-15), ctx.bufferSources.at(-1)];
   setMuted(true);
   assert.ok(voices.every(node => node.stops >= 2), 'muting stops scheduled and playing pop voices');
   const mutedCount = ctx.oscillators.length;

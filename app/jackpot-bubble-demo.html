@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-degenerus-tutorial>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jackpot bubbles · pop reveal preview</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/skeleton.css">
+  <link rel="stylesheet" href="/app/styles/forms.css">
+  <link rel="stylesheet" href="/app/styles/replay.css">
+</head>
+<body class="layout-basic">
+  <main style="max-width:640px;margin:3rem auto;padding:1rem">
+    <h1>Jackpot bubbles</h1>
+    <p>Pick a scenario, spin the jackpot, then pop its bubbles to hear the outcome-dependent pop.</p>
+    <label>Scenario
+      <select id="scenario-select">
+        <option value="misses">All misses</option>
+        <option value="near-misses">Near misses (blue/gold covers that turn pink)</option>
+        <option value="flip-wins">FLIP wins</option>
+        <option value="eth-win">ETH win</option>
+        <option value="solo-eth-win">Solo ETH win (gold)</option>
+        <option value="mixed">Mixed (one of each)</option>
+      </select>
+    </label>
+    <p id="scenario-describe" style="color:var(--text-dim, #888)"></p>
+    <label>Old reveal chime after the pop
+      <select id="chime-toggle">
+        <option value="off" selected>Off</option>
+        <option value="on">On</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="pop-demo-mute"> Mute</label>
+    <div id="replay-mount" style="margin-top:1.5rem"></div>
+  </main>
+  <script type="module" src="/app/jackpot-bubble-demo.js"></script>
+</body>
+</html>

@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-25600 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-25700 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -342,6 +342,10 @@ describe('app.css LOC budget', () => {
     // 25300 → 25600 covers the approved compact Craps entry table: one shared
     // six-column felt, wager/lane control states, and its phone-height pass.
     // This refines an existing surface and leaves only narrow repair headroom.
-    assert.ok(cssLines.length <= 25_600, `total <=25600, got ${cssLines.length}`);
+    // 25600 → 25700 for the two-currency Degenerette wager block: the ETH | FLIP
+    // segmented toggle replacing the three-slot coin grid, per-currency quick
+    // picks (.deg-amount-preset), and currency-colored Place Bet. An existing
+    // surface; ~50 lines of headroom.
+    assert.ok(cssLines.length <= 25_700, `total <=25700, got ${cssLines.length}`);
   });
 });

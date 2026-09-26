@@ -729,13 +729,13 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.deg-currency-picker\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
-      'three currency controls fill the wager width',
+      /\.deg-currency-picker\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'the ETH | FLIP segments split the wager width with no empty third slot',
     );
     assert.match(
       APP_CSS,
-      /\.deg-currency-option img\s*\{[^}]*width:\s*min\(90%, 3\.75rem\)/s,
-      'the circular currency art fills each enlarged control',
+      /\.deg-currency-option img\s*\{[^}]*width:\s*1\.8rem/s,
+      'the coin mark sits beside its currency name inside the segment',
     );
     assert.match(
       PANEL_SRC,
@@ -782,6 +782,40 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-0"]').getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
       'copying a ticket does not recreate the removed header status pill');
+    el.disconnectedCallback();
+  });
+
+  test('the segmented toggle names both currencies and colors the wager by currency', () => {
+    assert.match(PANEL_SRC, /data-bind="deg-currency-option-0"[\s\S]*?deg-currency-option__name">ETH</);
+    assert.match(PANEL_SRC, /data-bind="deg-currency-option-1"[\s\S]*?deg-currency-option__name">FLIP</);
+    assert.match(APP_CSS, /\.deg-currency-option\.is-selected\[data-bind="deg-currency-option-0"\]\s*\{[^}]*rgba\(48, 209, 0/s,
+      'selected ETH takes the ETH ring green');
+    assert.match(APP_CSS, /\.deg-currency-option\.is-selected\[data-bind="deg-currency-option-1"\]\s*\{[^}]*rgba\(237, 14, 17/s,
+      'selected FLIP takes the red ring');
+    assert.match(APP_CSS, /\.deg-block--wager\[data-currency="flip"\] \.deg-place-cta:not\(:disabled\)\s*\{/,
+      'Place Bet follows the selected currency color');
+    const el = instantiate();
+    const wager = el.querySelector('.deg-block--wager');
+    assert.equal(wager.getAttribute('data-currency'), 'eth');
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.equal(wager.getAttribute('data-currency'), 'flip');
+    el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
+    assert.equal(wager.getAttribute('data-currency'), 'eth');
+    el.disconnectedCallback();
+  });
+
+  test('quick picks follow the currency and set the bet per card', () => {
+    const el = instantiate();
+    const presets = () => Array.from(el.querySelector('[data-bind="deg-amount-presets"]').children);
+    assert.deepEqual(presets().map((chip) => chip.textContent), ['0.005', '0.01', '0.05', '0.25']);
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(presets().map((chip) => chip.textContent), ['100', '250', '1,000', '5,000']);
+    const lit = presets().filter((chip) => chip.getAttribute('aria-pressed') === 'true');
+    assert.deepEqual(lit.map((chip) => chip.textContent), ['250'], 'the default FLIP stake lights its pick');
+    presets()[2].dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="deg-amount"]').value, '1000');
+    assert.equal(presets()[2].getAttribute('aria-pressed'), 'true');
+    assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent, 'Place Bet · 5,000 FLIP');
     el.disconnectedCallback();
   });
 

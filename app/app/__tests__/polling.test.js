@@ -350,6 +350,97 @@ describe('gold-rush direct chain reader', () => {
       'without registered indexed cycles, rollover still refreshes from chain only');
   });
 
+  test('a minute caches GTJ reads and accumulates growth while gameplay pools stay fresh', async (t) => {
+    let now = 1_000;
+    t.mock.method(Date, 'now', () => now);
+    let reads = 0;
+    _testing.setGoldRushSnapshotReader(async () => {
+      reads += 1;
+      return { ...SNAPSHOT, blockNumber: 456 + reads * 100, nextWei: 200n + BigInt(reads - 1) * 20n };
+    });
+    const signal = new AbortController().signal;
+    const first = await _testing.pollGoldRush(signal);
+    assert.equal(first.headlineWei, '640');
+
+    now += 15_000;
+    _testing.publishGameState({
+      ...GAME_STATE,
+      blockNumber: '600',
+      phaseCurrentDay: 168,
+      phaseSlot0: SNAPSHOT.phaseSlot0.toString(),
+      prizePools: { ...GAME_STATE.prizePools, nextPrizePool: '210' },
+    });
+    assert.equal(storeMod.get('app.livePools').phaseClock.purchaseDay, 9);
+    assert.equal(storeMod.get('app.livePools').components.nextWei, '210');
+    assert.equal(storeMod.get('app.goldRush'), first, 'gameplay refresh does not move the cosmetic headline');
+
+    now += 30_000;
+    assert.equal(await _testing.pollGoldRush(signal), first, 'short tab returns reuse the headline');
+    assert.equal(reads, 1, 'no extra GTJ RPC inside the minute');
+    assert.equal(storeMod.get('app.livePools').blockNumber, 600, 'cached GTJ cannot rewind the live pools');
+
+    now += 15_000;
+    const next = await _testing.pollGoldRush(signal);
+    assert.equal(reads, 2);
+    assert.equal(next.headlineWei, '660');
+    assert.equal(next.prevHeadlineWei, '640');
+    assert.equal(next.deltaWei, '20', 'animation receives the whole minute of real growth');
+    assert.notEqual(next.atBlock, first.atBlock);
+  });
+
+  test('phase catch-up bypasses the read cache without accelerating the headline', async (t) => {
+    let now = 1_000;
+    t.mock.method(Date, 'now', () => now);
+    let reads = 0;
+    _testing.setGoldRushSnapshotReader(async () => ({
+      ...SNAPSHOT,
+      blockNumber: 456 + ++reads,
+      currentDay: 166n + BigInt(reads),
+      nextWei: 200n + BigInt(reads),
+    }));
+    const signal = new AbortController().signal;
+    const first = await _testing.pollGoldRush(signal);
+    now += 10_000;
+    await _testing.pollGoldRush(signal, { force: true });
+    assert.equal(reads, 2);
+    assert.equal(storeMod.get('app.livePools').phaseClock.purchaseDay, 9);
+    assert.equal(storeMod.get('app.goldRush'), first);
+  });
+
+  test('simultaneous GTJ readers share one request', async () => {
+    let reads = 0;
+    let finish;
+    _testing.setGoldRushSnapshotReader(() => {
+      reads += 1;
+      return new Promise((resolve) => { finish = resolve; });
+    });
+    const first = _testing.readGoldRushSnapshot();
+    const second = _testing.readGoldRushSnapshot();
+    assert.equal(reads, 1);
+    finish(SNAPSHOT);
+    assert.deepEqual(await Promise.all([first, second]), [SNAPSHOT, SNAPSHOT]);
+  });
+
+  test('failed refresh preserves the amount and a later real decrease still publishes', async (t) => {
+    let now = 1_000;
+    t.mock.method(Date, 'now', () => now);
+    let reads = 0;
+    _testing.setGoldRushSnapshotReader(async () => {
+      reads += 1;
+      if (reads === 2) throw new Error('RPC unavailable');
+      return { ...SNAPSHOT, blockNumber: 456 + reads, nextWei: reads === 1 ? 200n : 150n };
+    });
+    const signal = new AbortController().signal;
+    const first = await _testing.pollGoldRush(signal);
+    now += 60_000;
+    assert.equal(await _testing.pollGoldRush(signal), null);
+    assert.equal(storeMod.get('app.goldRush'), first);
+    now += 60_000;
+    const next = await _testing.pollGoldRush(signal);
+    assert.equal(next.headlineWei, '590');
+    assert.equal(next.deltaWei, '-50', 'payouts are not disguised as cosmetic growth');
+  });
+
   test('an RPC failure keeps the last good payload without consulting the API', async () => {
     const prior = _testing.buildGoldRushChainPayload(SNAPSHOT, GAME_STATE);
     storeMod.update('app.goldRush', prior);
@@ -374,7 +465,7 @@ describe('gold-rush direct chain reader', () => {
       GAME_STATE,
       quiet,
     );
-    assert.equal(quiet.atBlock, 456, 'empty blocks do not reset adaptive cadence');
+    assert.equal(quiet.atBlock, 456, 'empty blocks do not trigger a new headline animation');
     assert.equal(quiet.deltaWei, '0');
     assert.equal(moved.atBlock, 501);
     assert.equal(moved.fromBlock, 456);
@@ -393,7 +484,7 @@ describe('gold-rush direct chain reader', () => {
     assert.equal(nextDay.deltaWei, '0');
     assert.equal(nextDay.phaseClock.purchaseDay, 9);
     assert.equal(nextDay.atBlock, 500,
-      'a player-visible phase change resets the direct-chain adaptive cadence');
+      'a player-visible phase change marks a new direct-chain sample');
   });
 
   test('packed GAME state supplies jackpot draw and transition flags without the indexer', () => {

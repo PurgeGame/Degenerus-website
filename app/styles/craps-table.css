@@ -82,40 +82,21 @@ app-craps-table {
   flex: 0 0 auto;
 }
 
-.craps-dialog__dice i {
+/* Dice trait badges, the same pair the dice bay rolls (face 2 silver, face 5 blue). */
+.craps-dialog__dice img {
   position: absolute;
-  width: 1.72rem;
+  width: 1.9rem;
   aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  border-radius: 0.42rem;
-  background: linear-gradient(145deg, #fffdf2, #d8c8a4);
-  box-shadow: inset -0.12rem -0.16rem 0.3rem rgba(55, 33, 12, 0.24), 0 4px 8px rgba(0, 0, 0, 0.42);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.42));
 }
 
-.craps-dialog__dice i[data-face="2"] {
-  background:
-    radial-gradient(circle at 30% 30%, #751e25 0 8%, transparent 9%),
-    radial-gradient(circle at 70% 70%, #751e25 0 8%, transparent 9%),
-    linear-gradient(145deg, #fffdf2, #d8c8a4);
-}
-
-.craps-dialog__dice i[data-face="5"] {
-  background:
-    radial-gradient(circle at 28% 28%, #0a5039 0 7%, transparent 8%),
-    radial-gradient(circle at 72% 28%, #0a5039 0 7%, transparent 8%),
-    radial-gradient(circle at 50% 50%, #0a5039 0 7%, transparent 8%),
-    radial-gradient(circle at 28% 72%, #0a5039 0 7%, transparent 8%),
-    radial-gradient(circle at 72% 72%, #0a5039 0 7%, transparent 8%),
-    linear-gradient(145deg, #fffdf2, #d8c8a4);
-}
-
-.craps-dialog__dice i:first-child {
-  top: 0.05rem;
+.craps-dialog__dice img:first-child {
+  top: 0;
   left: 0;
   transform: rotate(-9deg);
 }
 
-.craps-dialog__dice i:last-child {
+.craps-dialog__dice img:last-child {
   right: 0;
   bottom: 0;
   transform: rotate(8deg);
@@ -680,504 +661,6 @@ app-craps-table {
 .craps-group--hard-4 { grid-area: hard4; border-radius: 0.65rem 0.2rem 0.2rem 0.65rem; }
 .craps-group--hard-8 { grid-area: hard8; border-radius: 0.2rem 0.65rem 0.65rem 0.2rem; }
 
-.craps-battle-board {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  box-sizing: border-box;
-  grid-area: leaderboard;
-  grid-template-rows: 1.28rem minmax(0, 1fr);
-  gap: 0.18rem;
-  padding: 0.3rem;
-  overflow: hidden;
-  border: 1.5px solid rgba(226, 190, 113, 0.52);
-  border-radius: 0.7rem;
-  background:
-    linear-gradient(90deg, rgba(33, 119, 77, 0.16), transparent 52%, rgba(114, 32, 38, 0.12)),
-    rgba(2, 28, 22, 0.66);
-  box-shadow: inset 0 0 0.8rem rgba(0, 0, 0, 0.26);
-}
-
-.craps-battle-board[hidden] { display: none !important; }
-
-.craps-battle-board__head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-  padding-inline: 0.28rem 0.16rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  white-space: nowrap;
-}
-
-.craps-battle-board__head strong {
-  color: #f5d57e;
-  font-size: 0.57rem;
-  font-weight: 1000;
-  letter-spacing: 0.09em;
-}
-
-.craps-battle-board__head small {
-  color: #7f9b8d;
-  font-size: 0.38rem;
-  font-weight: 900;
-  letter-spacing: 0.055em;
-}
-
-.craps-battle-board__rows {
-  display: grid;
-  min-height: 0;
-  grid-auto-flow: row;
-  grid-auto-rows: minmax(2.1rem, 1fr);
-  grid-template-columns: minmax(0, 1fr);
-  align-content: stretch;
-  gap: 0.13rem;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.craps-battle-board__rows::-webkit-scrollbar { display: none; }
-
-.craps-battle-rack {
-  --player-color: #55b8ff;
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 2.1rem;
-  grid-template-columns:
-    minmax(6.2rem, 0.78fr)
-    minmax(2.6rem, 0.22fr)
-    minmax(2.6rem, 0.22fr)
-    minmax(4.1rem, 1fr);
-  grid-template-areas: "identity amount last well";
-  grid-template-rows: minmax(0, 1fr);
-  align-items: center;
-  gap: 0.14rem;
-  padding: 0.12rem 0.2rem;
-  border: 1px solid rgba(147, 177, 157, 0.16);
-  border-radius: 0.22rem;
-  background: rgba(3, 18, 15, 0.58);
-  box-shadow:
-    inset 0.16rem 0 var(--player-color),
-    inset 0 0 0.4rem color-mix(in srgb, var(--player-color) 12%, transparent);
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-}
-
-.craps-battle-rack__felt-toggle {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: inherit;
-  appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.craps-battle-rack__felt-toggle:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--player-color) 9%, transparent);
-}
-
-.craps-battle-rack__felt-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--player-color) 78%, #fff);
-  outline-offset: -2px;
-}
-
-.craps-battle-rack__watch {
-  position: absolute;
-  z-index: 6;
-  top: 50%;
-  right: 0.22rem;
-  display: grid;
-  width: 0.92rem;
-  height: 0.92rem;
-  padding: 0;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--player-color) 42%, rgba(255, 255, 255, 0.16));
-  border-radius: 50%;
-  background: rgba(2, 17, 14, 0.84);
-  color: color-mix(in srgb, var(--player-color) 72%, #fff);
-  cursor: pointer;
-  transform: translateY(-50%);
-}
-
-.craps-battle-rack__watch span { font-size: 0.42rem; line-height: 1; transform: translateX(0.03rem); }
-
-.craps-battle-rack__watch:is(:hover, :focus-visible) {
-  border-color: color-mix(in srgb, var(--player-color) 78%, #fff);
-  background: color-mix(in srgb, var(--player-color) 20%, rgba(2, 17, 14, 0.9));
-}
-
-.craps-battle-rack__watch:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--player-color) 78%, #fff);
-  outline-offset: 1px;
-}
-
-.craps-battle-rack.is-felt-rival {
-  border-color: color-mix(in srgb, var(--player-color) 54%, rgba(255, 255, 255, 0.18));
-  background: color-mix(in srgb, var(--player-color) 10%, rgba(3, 18, 15, 0.7));
-}
-
-.craps-battle-rack.is-rank-shifting {
-  animation: craps-leaderboard-rank-shift var(--craps-speed-520, 520ms) cubic-bezier(0.2, 0.82, 0.24, 1) both;
-}
-
-.craps-battle-rack__identity {
-  display: grid;
-  min-width: 0;
-  grid-area: identity;
-  grid-template-columns: 1.25rem 1.55rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.16rem;
-}
-
-.craps-battle-rack.is-leader {
-  border-color: color-mix(in srgb, var(--player-color) 58%, #f2d278);
-  background: color-mix(in srgb, var(--player-color) 8%, rgba(3, 18, 15, 0.72));
-  box-shadow:
-    inset 0.16rem 0 var(--player-color),
-    inset 0 0 0.45rem color-mix(in srgb, var(--player-color) 14%, transparent);
-}
-
-.craps-battle-rack.is-collecting {
-  border-color: #ffe298;
-  box-shadow: inset 0 0 0.55rem rgba(255, 221, 132, 0.28), 0 0 0.55rem rgba(255, 221, 132, 0.22);
-  animation: craps-battle-rack-collect var(--craps-speed-680, 680ms) ease-out both;
-}
-
-.craps-battle-rack__rank {
-  color: #83968c;
-  font: 1000 0.56rem/1 "Roboto Mono", ui-monospace, monospace;
-  text-align: center;
-}
-
-.craps-battle-rack.is-leader .craps-battle-rack__rank { color: #ffe296; }
-
-.craps-battle-rack__avatar {
-  position: relative;
-  display: grid;
-  width: 1.36rem;
-  aspect-ratio: 1;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--player-color);
-  border-radius: 50%;
-  background: #111923;
-  color: #fff;
-  font: 1000 0.37rem/1 "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-battle-rack__avatar :is(img, b) {
-  width: 100%;
-  height: 100%;
-  grid-area: 1 / 1;
-  object-fit: cover;
-}
-.craps-battle-rack__avatar b { display: grid; place-items: center; }
-.craps-battle-rack__avatar img { position: relative; z-index: 1; }
-
-.craps-battle-rack__player {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 0.02rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-battle-rack__player :is(strong, em) {
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  font-style: normal;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-battle-rack__player strong { color: #e6eee9; font-size: 0.56rem; }
-.craps-battle-rack__player em { color: var(--player-color); font-size: 0.4rem; font-weight: 1000; letter-spacing: 0.035em; }
-
-.craps-battle-rack__well {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  height: 0.9rem;
-  grid-area: well;
-  align-items: center;
-  padding: 0 0.12rem;
-  overflow: hidden;
-  border: 1px solid rgba(151, 92, 38, 0.78);
-  border-radius: 0.2rem;
-  background:
-    linear-gradient(180deg, rgba(255, 236, 194, 0.13), transparent 30%),
-    linear-gradient(180deg, #5b3518, #2b1509 58%, #120905);
-  box-shadow: inset 0 0.12rem 0.18rem rgba(0, 0, 0, 0.62);
-}
-
-.craps-battle-rack__chips {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0;
-}
-
-.craps-battle-rack__amount {
-  display: grid;
-  min-width: 0;
-  height: 0.9rem;
-  box-sizing: border-box;
-  grid-area: amount;
-  align-content: center;
-  justify-items: end;
-  padding: 0 0.08rem 0 0;
-  color: #f7e4aa;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  font-style: normal;
-  line-height: 1;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.craps-battle-rack__amount strong {
-  font-size: clamp(0.48rem, 0.62vw, 0.59rem);
-  font-weight: 1000;
-  font-variant-numeric: tabular-nums;
-}
-
-.craps-battle-rack__amount.is-breakdown {
-  height: auto;
-  gap: 0.08rem;
-}
-
-.craps-battle-rack__amount-line {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.1rem;
-}
-
-.craps-battle-rack__amount-line small {
-  color: #78958a;
-  font-size: clamp(0.21rem, 0.3vw, 0.27rem);
-  font-weight: 1000;
-  letter-spacing: 0.045em;
-}
-
-.craps-battle-rack__amount-line strong {
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
-}
-
-.craps-battle-rack__amount-line--run strong { color: #7dd3fc; }
-.craps-battle-rack__amount-line--bounty strong { color: #ffe296; }
-
-.craps-battle-rack__last {
-  display: grid;
-  min-width: 0;
-  height: 0.9rem;
-  box-sizing: border-box;
-  grid-area: last;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.08rem;
-  padding: 0 0.08rem;
-  overflow: hidden;
-  border: 1px solid rgba(146, 174, 160, 0.2);
-  border-radius: 0.18rem;
-  background: rgba(3, 15, 13, 0.7);
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  font-style: normal;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.craps-battle-rack__last small {
-  color: #70867b;
-  font-size: 0.22rem;
-  font-weight: 1000;
-  letter-spacing: 0.025em;
-}
-
-.craps-battle-rack__last strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #71847a;
-  font-size: 0.46rem;
-  font-weight: 1000;
-  text-align: right;
-  text-overflow: ellipsis;
-}
-
-.craps-battle-rack__last[data-state="win"] {
-  border-color: rgba(79, 219, 123, 0.3);
-  background: rgba(15, 82, 43, 0.24);
-}
-
-.craps-battle-rack__last[data-state="win"] strong { color: #83f3a7; }
-
-.craps-battle-rack__last[data-state="loss"] {
-  border-color: rgba(255, 106, 116, 0.3);
-  background: rgba(112, 23, 31, 0.24);
-}
-
-.craps-battle-rack__last[data-state="loss"] strong { color: #ff9299; }
-
-.craps-battle-rack__last[data-state="push"] {
-  border-color: rgba(112, 184, 235, 0.26);
-  background: rgba(28, 76, 108, 0.22);
-}
-
-.craps-battle-rack__last[data-state="push"] strong { color: #9ed2ff; }
-
-.craps-battle-rack .df-bankroll__chip.craps-battle-rack__chip {
-  --battle-chip-hi: #ff5a52;
-  --battle-chip-tone: #df1119;
-  --battle-chip-lo: #85070b;
-  position: relative;
-  left: auto;
-  bottom: auto;
-  display: block;
-  width: auto;
-  min-width: 1px;
-  height: 0.62rem;
-  flex: 1 1 0;
-  border: 0;
-  border-radius: 0.035rem;
-  background: linear-gradient(180deg, var(--battle-chip-hi), var(--battle-chip-tone) 58%, var(--battle-chip-lo));
-  box-shadow: inset 1px 0 rgba(255, 255, 255, 0.22), inset -1px 0 rgba(0, 0, 0, 0.28);
-  opacity: 0.09;
-}
-
-.craps-battle-rack .craps-battle-rack__chip.is-filled { opacity: 1; }
-.craps-battle-rack .craps-battle-rack__chip.is-banked {
-  --battle-chip-hi: #55e723;
-  --battle-chip-tone: #30d100;
-  --battle-chip-lo: #1a7a09;
-}
-.craps-battle-rack .craps-battle-rack__chip.is-in-play {
-  --battle-chip-hi: #ff5a52;
-  --battle-chip-tone: #ed0e11;
-  --battle-chip-lo: #9c0608;
-}
-
-.craps-battle-rack .craps-battle-rack__chip.is-banked.is-reserve-risk {
-  --battle-chip-hi: #aab3ba;
-  --battle-chip-tone: #727d85;
-  --battle-chip-lo: #3b444a;
-}
-
-.craps-battle-rack .craps-battle-rack__chip.is-filled.is-goal-locked {
-  --battle-chip-hi: #68d8ff;
-  --battle-chip-tone: #1598f0;
-  --battle-chip-lo: #075596;
-  box-shadow: inset 1px 0 rgba(255, 255, 255, 0.26), inset -1px 0 rgba(0, 0, 0, 0.28), 0 0 0.16rem rgba(21, 152, 240, 0.36);
-}
-
-/* Danger and locked-win states supersede the ordinary bankroll colors. */
-.craps-battle-rack .craps-battle-rack__chip.is-filled.is-reserve-risk,
-.craps-battle-rack .craps-battle-rack__chip.is-filled.is-goal-locked {
-  background: linear-gradient(180deg, var(--battle-chip-hi), var(--battle-chip-tone) 58%, var(--battle-chip-lo));
-}
-
-.craps-battle-rack:is([data-state="bust"], [data-state="flip-bust"]) { opacity: 0.52; filter: grayscale(0.7); }
-.craps-battle-rack:is([data-state="bust"], [data-state="flip-bust"]) .craps-battle-rack__amount { color: #ff8484; }
-.craps-battle-rack:is([data-state="paid"], [data-state="cashout"]) .craps-battle-rack__amount { color: #7dd3fc; }
-.craps-battle-rack[data-state="risk"] .craps-battle-rack__player em { color: #9ed2ff; }
-.craps-battle-rack:is([data-state="paid"], [data-state="cashout"]) .craps-battle-rack__player em { color: #ffe18f; }
-
-/* Between-shooter survival coin pinned over the felt rival's portrait. It
-   shares the big coin's face-swap flip, then pops its verdict at the landing.
-   It stays absolute so it claims no column from the aligned top-ten rows. */
-.craps-battle-rack__coin {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  left: 1.52rem;
-  width: 1.45rem;
-  height: 1.45rem;
-  margin: auto 0;
-  pointer-events: none;
-}
-
-.craps-battle-rack__coin-face {
-  position: absolute;
-  inset: 0;
-  display: block;
-  background: center / contain no-repeat url('/shared/coinflip-face-red.svg');
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.62));
-}
-
-.craps-battle-rack__coin[data-cadence="paired"] {
-  --rack-coin-track: var(--craps-speed-3300, 3300ms);
-  --rack-coin-end: var(--craps-speed-700, 700ms);
-}
-
-.craps-battle-rack__coin[data-cadence="solo"] {
-  --rack-coin-track: var(--craps-speed-900, 900ms);
-  --rack-coin-end: var(--craps-speed-400, 400ms);
-}
-
-.craps-battle-rack__coin[data-phase="flipping"] .craps-battle-rack__coin-face {
-  --rack-coin-face-ending: craps-survival-face-end-loss;
-  animation-name: craps-survival-face-track, var(--rack-coin-face-ending);
-  animation-duration: var(--rack-coin-track), var(--rack-coin-end);
-  animation-timing-function: linear, linear;
-  animation-delay: 0ms, var(--rack-coin-track);
-  animation-fill-mode: forwards, forwards;
-}
-
-.craps-battle-rack__coin[data-phase="flipping"][data-result="win"] .craps-battle-rack__coin-face {
-  --rack-coin-face-ending: craps-survival-face-end-win;
-}
-
-.craps-battle-rack__coin[data-phase="landed"] .craps-battle-rack__coin-face {
-  background-image: url('/shared/coinflip-face-red.svg');
-}
-
-.craps-battle-rack__coin[data-phase="landed"][data-result="win"] .craps-battle-rack__coin-face {
-  background-image: url('/shared/coinflip-face-eth.svg');
-}
-
-.craps-battle-rack__coin-pop {
-  position: absolute;
-  z-index: 4;
-  top: 50%;
-  left: calc(100% + 0.14rem);
-  padding: 0.1rem 0.2rem 0.08rem;
-  border: 1px solid rgba(126, 231, 135, 0.55);
-  border-radius: 0.18rem;
-  background: rgba(3, 22, 14, 0.92);
-  color: #7ee787;
-  font: 1000 0.38rem/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.07em;
-  white-space: nowrap;
-  opacity: 0;
-  transform: translate(-0.3rem, -50%) scale(0.6);
-}
-
-.craps-battle-rack__coin[data-result="bust"] .craps-battle-rack__coin-pop {
-  border-color: rgba(255, 107, 107, 0.55);
-  color: #ff8484;
-}
-
-.craps-battle-rack__coin[data-phase="landed"] .craps-battle-rack__coin-pop {
-  animation: craps-rack-coin-pop var(--craps-speed-600, 600ms) cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
-}
-
 .craps-dice-bay {
   position: relative;
   display: grid;
@@ -1547,9 +1030,6 @@ app-craps-table {
 }
 
 .craps-bet:focus-visible,
-.craps-chip:focus-visible,
-.craps-slip-setup input:focus-visible,
-.craps-slip-actions button:focus-visible,
 .craps-dialog__close:focus-visible {
   outline: 2px solid #ffe4a3;
   outline-offset: 2px;
@@ -1746,9 +1226,6 @@ app-craps-table {
     rgba(0, 39, 27, 0.055);
 }
 
-.craps-group--line .craps-bet__terms,
-.craps-group--dont-line .craps-bet__terms { display: none; }
-
 :is(.craps-group--line, .craps-group--dont-line) .craps-bet__corner-grid { inset: 0.08rem 0.24rem; }
 :is(.craps-group--line, .craps-group--dont-line) .craps-bet__seat-chip { width: 1.95rem; height: 2.02rem; }
 
@@ -1759,255 +1236,6 @@ app-craps-table {
   right: 0.42rem;
   color: rgba(247, 224, 171, 0.7);
   font: 850 0.47rem/1 "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-bet__terms {
-  position: relative;
-  z-index: 1;
-  display: block;
-  min-width: 0;
-  color: rgba(235, 240, 225, 0.82);
-  font: 800 clamp(0.43rem, 0.9vw, 0.54rem)/1.1 "Roboto Mono", ui-monospace, monospace;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.craps-bet__terms span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.craps-bet__terms small {
-  color: rgba(215, 229, 210, 0.5);
-  font: inherit;
-  font-size: 0.78em;
-}
-
-.craps-bet__wager {
-  --stack-scale: 1;
-  position: absolute;
-  z-index: 10;
-  display: grid;
-  width: max-content;
-  justify-items: center;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.56));
-  pointer-events: none;
-}
-
-.craps-bet__wager[hidden] { display: none !important; }
-
-.craps-bet__wager img {
-  display: block;
-  width: 2rem;
-  height: 1.65rem;
-  object-fit: contain;
-  transform: scale(var(--stack-scale));
-  transform-origin: bottom center;
-}
-
-.craps-bet__wager output {
-  min-width: 0;
-  max-width: 4rem;
-  margin-top: -0.24rem;
-  padding: 0.1rem 0.24rem;
-  overflow: hidden;
-  border: 1px solid rgba(255, 225, 157, 0.68);
-  border-radius: 999px;
-  background: rgba(6, 8, 12, 0.92);
-  color: #fff3ce;
-  font: 1000 0.6rem/1 "Roboto Mono", ui-monospace, monospace;
-  text-overflow: ellipsis;
-}
-
-.craps-bet__player-slot {
-  position: absolute;
-  z-index: 10;
-  right: auto;
-  bottom: 0.22rem;
-  left: 0.3rem;
-  display: grid;
-  width: 2.5rem;
-  height: 2.15rem;
-  box-sizing: border-box;
-  grid-template-rows: 0.3rem minmax(0, 1fr);
-  place-items: end center;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: rgba(144, 246, 171, 0.52);
-  font: 950 0.28rem/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.12em;
-  pointer-events: none;
-}
-
-.craps-bet__wager-owner {
-  position: relative;
-  z-index: 6;
-  display: block;
-  color: #a8ffc0;
-  font: 950 0.3rem/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.1em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-}
-
-.craps-bet__player-slot[data-active="true"] {
-  border-color: transparent;
-  background: none;
-  box-shadow: none;
-}
-
-.craps-bet__player-slot > .craps-bet__wager {
-  position: relative;
-  inset: auto;
-  margin-inline: auto;
-}
-
-.craps-bet__player-slot .craps-bet__wager output {
-  border-color: rgba(123, 255, 157, 0.86);
-  background: rgba(5, 37, 17, 0.94);
-  color: #caffd7;
-}
-
-.craps-bet__wager--others {
-  z-index: 3;
-  top: auto;
-  right: 0.18rem;
-  bottom: 0.06rem;
-  left: auto;
-  display: grid;
-  max-width: calc(50% - 0.26rem);
-  grid-template-rows: 0.3rem minmax(0, 1fr);
-  justify-items: center;
-  filter: none;
-}
-
-.craps-bet__wager--others > .craps-bet__wager-owner { color: #ffb1b5; }
-
-.craps-bet__other-stack {
-  --player-color: #55b8ff;
-  --stack-scale: 1;
-  position: relative;
-  display: grid;
-  width: max-content;
-  justify-items: center;
-  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.58));
-}
-
-.craps-bet__other-stack + .craps-bet__other-stack { margin-left: -0.16rem; }
-
-.craps-bet__other-stack::after {
-  position: absolute;
-  z-index: 3;
-  top: 0.08rem;
-  right: 0.02rem;
-  width: 0.31rem;
-  height: 0.31rem;
-  border: 1px solid #071018;
-  border-radius: 50%;
-  background: var(--player-color);
-  box-shadow: 0 0 5px var(--player-color);
-  content: "";
-}
-
-.craps-bet__other-stack[data-combined="true"]::after { display: none; }
-
-.craps-bet__stack-dots {
-  position: absolute;
-  z-index: 4;
-  top: 0.03rem;
-  right: -0.08rem;
-  display: flex;
-  padding: 0.05rem;
-  border-radius: 999px;
-  background: #17090c;
-}
-
-.craps-bet__stack-dots i {
-  width: 0.27rem;
-  height: 0.27rem;
-  margin-left: -0.05rem;
-  border: 1px solid #071018;
-  border-radius: 50%;
-  background: var(--dot-color);
-  box-shadow: 0 0 3px var(--dot-color);
-}
-
-.craps-bet__stack-dots i:first-child { margin-left: 0; }
-
-.craps-bet__other-stack img {
-  display: block;
-  width: 1.85rem;
-  height: 1.5rem;
-  object-fit: contain;
-  transform: scale(var(--stack-scale));
-  transform-origin: bottom center;
-}
-
-.craps-bet__other-stack output {
-  max-width: 3.25rem;
-  margin-top: -0.24rem;
-  padding: 0.09rem 0.22rem;
-  overflow: hidden;
-  border: 1px solid #f15b63;
-  border-radius: 999px;
-  background: #3a0b10;
-  color: #ffe3e5;
-  font: 1000 0.58rem/1 "Roboto Mono", ui-monospace, monospace;
-  text-overflow: ellipsis;
-  box-shadow: inset 0.18rem 0 0 var(--player-color);
-}
-
-.craps-group--place :is(
-  [data-bet="place-4"],
-  [data-bet="hard-4"],
-  [data-bet="place-8"],
-  [data-bet="hard-8"]
-) .craps-bet__wager--others {
-  top: auto;
-  right: 0.08rem;
-  bottom: 0.02rem;
-  left: auto;
-}
-
-.craps-group--place :is(
-  [data-bet="place-4"],
-  [data-bet="hard-4"],
-  [data-bet="place-8"],
-  [data-bet="hard-8"]
-) .craps-bet__player-slot {
-  right: auto;
-  bottom: 0.08rem;
-  left: 0.1rem;
-  width: 1.68rem;
-  height: 1.48rem;
-}
-
-.craps-group--place :is(
-  [data-bet="place-4"],
-  [data-bet="hard-4"],
-  [data-bet="place-8"],
-  [data-bet="hard-8"]
-) :is(.craps-bet__wager img, .craps-bet__other-stack img) {
-  width: 1.32rem;
-  height: 1.05rem;
-}
-
-.craps-group--place :is(
-  [data-bet="place-4"],
-  [data-bet="hard-4"],
-  [data-bet="place-8"],
-  [data-bet="hard-8"]
-) :is(.craps-bet__wager output, .craps-bet__other-stack output) {
-  max-width: 2.15rem;
-  margin-top: -0.17rem;
-  padding: 0.06rem 0.14rem;
-  font-size: 0.5rem;
 }
 
 .craps-bet__corner-grid {
@@ -2030,13 +1258,6 @@ app-craps-table {
   color: var(--player-color);
   filter: none;
   pointer-events: none;
-}
-
-.craps-bet__seat-chip[data-seat="top-1"] { left: 0; width: 50%; }
-.craps-bet__seat-chip[data-seat="top-2"] { right: 0; left: auto; width: 50%; }
-
-.craps-group--place .craps-bet__seat-chip:not(.is-local) {
-  height: min(2.3rem, 44%);
 }
 
 .craps-bet__seat-art-set {
@@ -2084,14 +1305,6 @@ app-craps-table {
   transform: scale(var(--craps-bet-chip-scale, 1));
 }
 
-.craps-bet__seat-chip[data-seat="top-1"] .craps-bet__seat-art-set[data-kind="pile"] {
-  justify-self: start;
-}
-
-.craps-bet__seat-chip[data-seat="top-2"] .craps-bet__seat-art-set[data-kind="pile"] {
-  justify-self: end;
-}
-
 .craps-bet__seat-chip.is-local .craps-bet__seat-art-set[data-kind="pile"] {
   justify-self: end;
 }
@@ -2119,14 +1332,6 @@ app-craps-table {
   height: auto;
   max-width: 100%;
   max-height: 100%;
-}
-
-.craps-bet__seat-chip:not(.is-local) .craps-bet__seat-art {
-  align-self: end;
-  filter:
-    saturate(1.05)
-    drop-shadow(0 0 0.035rem color-mix(in srgb, var(--player-color) 78%, transparent))
-    drop-shadow(0 0.055rem 0.035rem rgba(0, 0, 0, 0.76));
 }
 
 .craps-bet__seat-chip.is-local {
@@ -2175,11 +1380,6 @@ app-craps-table {
   height: auto;
   max-width: 100%;
   max-height: 100%;
-}
-
-.craps-dialog__card[data-screen="placement"] .craps-bet__seat-chip.is-local .craps-bet__seat-art {
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 :is(.craps-group--hard-4, .craps-group--hard-8) .craps-bet__seat-chip.is-local .craps-bet__seat-art {
@@ -2278,685 +1478,6 @@ app-craps-table {
 
 .craps-resolution[hidden] { display: none !important; }
 
-.craps-resolution__head,
-.craps-resolution__receipt {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
-}
-
-.craps-resolution__head > span,
-.craps-resolution__receipt > span {
-  display: grid;
-  min-width: 0;
-  gap: 0.12rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-resolution__head small,
-.craps-resolution__receipt small {
-  color: #9a8251;
-  font-size: 0.48rem;
-  font-weight: 1000;
-  letter-spacing: 0.16em;
-}
-
-.craps-resolution__head strong {
-  color: #fff0bf;
-  font-size: clamp(0.78rem, 1.7vw, 1rem);
-  letter-spacing: 0.08em;
-}
-
-.craps-resolution__head button,
-.craps-resolution__receipt button {
-  min-height: 2.25rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid rgba(242, 224, 179, 0.3);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.045);
-  color: #c7cec8;
-  font: 950 0.52rem/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-
-.craps-resolution__stage {
-  display: grid;
-  min-height: 0;
-  grid-template-columns: minmax(12rem, 0.62fr) minmax(22rem, 1.38fr);
-  align-items: stretch;
-  gap: clamp(0.75rem, 2vw, 1.25rem);
-}
-
-.craps-resolution__roll {
-  display: grid;
-  min-height: 15rem;
-  place-content: center;
-  justify-items: center;
-  gap: 0.7rem;
-  border: 1px solid rgba(235, 207, 148, 0.28);
-  border-radius: 18px;
-  background: radial-gradient(circle, rgba(255, 226, 166, 0.08), transparent 58%), rgba(0, 0, 0, 0.22);
-  box-shadow: inset 0 0 2rem rgba(0, 0, 0, 0.26);
-}
-
-.craps-resolution__dice {
-  width: 9rem;
-  height: 5.8rem;
-  flex-basis: auto;
-  filter: drop-shadow(0 12px 12px rgba(0, 0, 0, 0.48));
-}
-
-.craps-resolution__dice i { width: 4.65rem; border-radius: 0.75rem; }
-.craps-resolution__dice.is-flashing { animation: craps-resolution-dice 0.44s cubic-bezier(0.14, 0.78, 0.2, 1) both; }
-
-.craps-resolution__roll-copy {
-  display: grid;
-  justify-items: center;
-  gap: 0.18rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  text-align: center;
-}
-
-.craps-resolution__roll-copy small { color: #8a938c; font-size: 0.52rem; font-weight: 950; letter-spacing: 0.14em; }
-.craps-resolution__roll-copy strong { color: #f8e2aa; font-size: clamp(1rem, 2.7vw, 1.55rem); line-height: 1; }
-.craps-resolution__roll-copy em { color: #919c95; font-size: 0.56rem; font-style: normal; font-weight: 900; letter-spacing: 0.08em; }
-.craps-resolution__roll[data-result="win"] .craps-resolution__roll-copy strong { color: #7dffa2; text-shadow: 0 0 16px rgba(74, 222, 128, 0.3); }
-.craps-resolution__roll[data-result="loss"] .craps-resolution__roll-copy strong { color: #ff858a; text-shadow: 0 0 16px rgba(248, 113, 113, 0.24); }
-
-.craps-resolution__tray {
-  display: grid;
-  min-width: 0;
-  grid-template-rows: auto minmax(12rem, 1fr) auto;
-  gap: 0.42rem;
-}
-
-.craps-resolution__tray > header,
-.craps-resolution__tray > footer {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-resolution__tray > header small { color: #8e9b92; font-size: 0.52rem; font-weight: 1000; letter-spacing: 0.16em; }
-.craps-resolution__tray > header strong { color: #e9ffd9; font-size: clamp(1rem, 2.5vw, 1.45rem); }
-.craps-resolution__tray > footer { color: #69776f; font-size: 0.46rem; font-weight: 950; letter-spacing: 0.12em; }
-.craps-resolution__tray > footer strong { color: #caaa66; font: inherit; }
-
-.craps-resolution__well {
-  position: relative;
-  min-height: 12rem;
-  overflow: hidden;
-  border: 0.55rem solid #351f0e;
-  border-top-color: #8d5d28;
-  border-bottom-color: #1e1108;
-  border-radius: 1rem 1rem 2.2rem 2.2rem;
-  background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 4px),
-    linear-gradient(180deg, #101419, #07090c);
-  box-shadow: inset 0 0 2.2rem #000, 0 8px 22px rgba(0, 0, 0, 0.34);
-}
-
-.craps-resolution__well > i {
-  position: absolute;
-  z-index: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  height: 0.28rem;
-  background: linear-gradient(90deg, #269a4d, #8cffaa, #f7d370);
-  box-shadow: 0 0 12px rgba(104, 255, 145, 0.55);
-  transition: width 0.5s ease;
-}
-
-.craps-resolution__chips {
-  position: absolute;
-  z-index: 1;
-  inset: 0.65rem 0.8rem 0.75rem;
-  display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  align-items: end;
-  justify-items: center;
-  gap: 0.1rem;
-}
-
-.craps-resolution__chips img {
-  width: min(100%, 4rem);
-  max-height: 5rem;
-  opacity: 0.035;
-  filter: grayscale(1) brightness(0.45);
-  transform: translateY(1rem) scale(0.78);
-  transition: opacity 0.24s ease, filter 0.24s ease, transform 0.38s cubic-bezier(0.16, 0.82, 0.24, 1.12);
-}
-
-.craps-resolution__chips img:nth-child(3n + 1) { rotate: -5deg; }
-.craps-resolution__chips img:nth-child(3n + 2) { rotate: 4deg; }
-.craps-resolution__chips img.is-filled {
-  opacity: 1;
-  filter: saturate(1.08) drop-shadow(0 5px 4px rgba(0, 0, 0, 0.52));
-  transform: translateY(0) scale(1);
-}
-
-.craps-resolution__receipt {
-  min-height: 3.2rem;
-  padding: 0.48rem 0.6rem;
-  border: 1px solid rgba(213, 175, 101, 0.22);
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.craps-resolution__receipt strong { color: #e9f3e8; font-size: clamp(0.7rem, 1.7vw, 0.92rem); letter-spacing: 0.06em; }
-.craps-resolution__receipt em { color: #e7bd61; font-size: 0.48rem; font-style: normal; font-weight: 950; letter-spacing: 0.08em; }
-.craps-resolution__receipt > div { display: flex; gap: 0.35rem; }
-.craps-resolution__receipt .craps-resolution__done { border-color: #e8c36f; background: linear-gradient(135deg, #e9bf5d, #a86419); color: #241400; }
-.craps-resolution[data-phase="complete"] .craps-resolution__well { border-color: #76511f #4d310f #201207; }
-
-.craps-controls {
-  position: relative;
-  z-index: 4;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.45rem;
-  padding: 0.48rem clamp(0.7rem, 1.8vw, 1.05rem) 0.55rem;
-  border-top: 1px solid rgba(219, 168, 88, 0.42);
-  background:
-    linear-gradient(90deg, rgba(107, 29, 34, 0.12), transparent 32%, rgba(20, 94, 64, 0.11)),
-    #0b0d12;
-  box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.34);
-}
-
-.craps-controls[hidden] { display: none !important; }
-
-/* Entry and competition are deliberately separate screens. Placement shows
-   only the editable board and its seven-chip rack; battle replaces the whole
-   setup footer with the live bankroll trough. */
-.craps-dialog__card[data-screen="placement"] .craps-groups {
-  grid-template-rows: auto 5.25rem;
-  grid-template-areas:
-    "place place place place place place place place place place place place"
-    "hard4 hard4 line line line line dont dont dont dont hard8 hard8";
-}
-
-.craps-dialog__card[data-screen="placement"] :is(
-  .craps-battle-board,
-  .craps-dice-bay,
-  .craps-player-strip,
-  .craps-bet__seat-chip:not(.is-local)
-) { display: none !important; }
-
-.craps-dialog__card[data-screen="battle"] .craps-controls { display: none !important; }
-
-.craps-player-strip {
-  display: flex;
-  min-width: 0;
-  grid-column: 1 / -1;
-  align-items: center;
-  padding: 0.24rem 0.38rem;
-  overflow: hidden;
-  border: 1px solid rgba(168, 183, 197, 0.18);
-  border-radius: 9px;
-  background: linear-gradient(90deg, rgba(23, 30, 39, 0.92), rgba(8, 13, 20, 0.78));
-}
-
-.craps-player-strip[hidden] { display: none !important; }
-
-.craps-player-strip__players {
-  display: flex;
-  min-width: 0;
-  width: 100%;
-  gap: 0.24rem;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.craps-table-seat {
-  --player-color: #55b8ff;
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 1.72rem auto;
-  align-items: center;
-  gap: 0.28rem;
-  padding: 0.1rem 0.44rem 0.1rem 0.12rem;
-  border: 1px solid color-mix(in srgb, var(--player-color) 55%, #19222c);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--player-color) 8%, #0b1017);
-}
-
-.craps-table-seat__avatar {
-  position: relative;
-  display: grid;
-  width: 1.68rem;
-  height: 1.68rem;
-  box-sizing: border-box;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid var(--player-color);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--player-color) 34%, #171d26);
-  color: #fff;
-  font: 1000 0.54rem/1 "Roboto Mono", ui-monospace, monospace;
-  box-shadow: 0 0 7px color-mix(in srgb, var(--player-color) 42%, transparent);
-}
-
-.craps-table-seat__avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-.craps-table-seat__avatar i {
-  position: absolute;
-  right: -0.03rem;
-  bottom: -0.03rem;
-  width: 0.42rem;
-  height: 0.42rem;
-  border: 2px solid #0b1017;
-  border-radius: 50%;
-  background: var(--player-color);
-}
-
-.craps-table-seat > span:last-child { display: flex; min-width: 0; align-items: baseline; gap: 0.22rem; }
-.craps-table-seat strong,
-.craps-table-seat small { white-space: nowrap; }
-.craps-table-seat strong { color: #e8edf0; font: 950 0.58rem/1 "Roboto Mono", ui-monospace, monospace; }
-.craps-table-seat small { color: var(--player-color); font: 900 0.48rem/1 "Roboto Mono", ui-monospace, monospace; }
-
-.craps-perks {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: clamp(0.48rem, 1.5vw, 1rem);
-  padding: 0.2rem 0.36rem;
-  border: 1px solid rgba(74, 222, 128, 0.15);
-  border-radius: 7px;
-  background: rgba(11, 86, 57, 0.08);
-  color: #77847d;
-  font: 900 0.54rem/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-.craps-perks > span { display: grid; gap: 0.08rem; }
-.craps-perks strong { color: #8ce7ae; font-size: 0.7rem; }
-.craps-perks > small { color: #a78855; font-size: 0.52rem; }
-
-.craps-controls__setup {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(14rem, 0.78fr) minmax(17rem, 0.9fr) minmax(25rem, 1.4fr);
-  align-items: start;
-  gap: clamp(0.48rem, 1.2vw, 0.72rem);
-}
-
-.craps-chip-picker,
-.craps-session-setup {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-  gap: 0.24rem;
-}
-
-.craps-session-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-}
-
-.craps-exact-hint {
-  color: #807156;
-  font-size: 0.52rem;
-  line-height: 1;
-}
-
-.craps-control-label {
-  color: #aeb4b0;
-  font-size: 0.64rem;
-  font-weight: 950;
-  letter-spacing: 0.14em;
-}
-
-.craps-control-label > strong {
-  margin-left: 0.32rem;
-  color: #ff9ca2;
-  font-size: 0.62rem;
-  letter-spacing: 0.05em;
-}
-
-.craps-control-label b {
-  display: inline-grid;
-  width: 1.05rem;
-  height: 1.05rem;
-  margin-right: 0.2rem;
-  place-items: center;
-  border: 1px solid rgba(239, 200, 120, 0.56);
-  border-radius: 50%;
-  color: #f4d28a;
-  font-size: 0.56rem;
-}
-
-.craps-chip-picker__chips {
-  display: flex;
-  min-width: 0;
-  min-height: 3.15rem;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0;
-  padding: 0.34rem 0.62rem 0.28rem;
-  overflow: hidden;
-  border: 1px solid rgba(146, 100, 52, 0.85);
-  border-radius: 0.48rem;
-  background:
-    linear-gradient(180deg, rgba(255, 220, 158, 0.13), transparent 24%),
-    repeating-linear-gradient(94deg, rgba(0, 0, 0, 0.1) 0 2px, transparent 2px 6px),
-    linear-gradient(180deg, #4d2e15 0%, #38200d 48%, #211105 100%);
-  box-shadow:
-    inset 0 0.55rem 0.75rem rgba(0, 0, 0, 0.58),
-    inset 0 -0.24rem rgba(0, 0, 0, 0.48),
-    0 1px rgba(240, 217, 166, 0.08);
-}
-
-.craps-entry-chip {
-  position: relative;
-  display: block;
-  width: clamp(2.7rem, 4.3vw, 3.45rem);
-  aspect-ratio: 4 / 3;
-  flex: 0 0 clamp(2.7rem, 4.3vw, 3.45rem);
-  margin-right: clamp(-0.82rem, -1vw, -0.52rem);
-  transition: opacity 0.2s ease, transform 0.2s ease, filter 0.2s ease;
-}
-
-.craps-entry-chip img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.craps-entry-chip.is-remaining {
-  filter: saturate(1.14) drop-shadow(0 0 4px rgba(237, 14, 17, 0.32));
-}
-.craps-entry-chip.is-placed { opacity: 0.12; transform: translateY(0.42rem) scale(0.82); filter: grayscale(0.7); }
-
-.craps-chip {
-  position: relative;
-  display: grid;
-  width: clamp(2.45rem, 5vw, 3.1rem);
-  min-width: 0;
-  aspect-ratio: 1;
-  padding: 0;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 50%;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-  transition: transform 0.14s ease, filter 0.14s ease;
-}
-
-.craps-chip img {
-  position: absolute;
-  inset: 0.14rem;
-  display: block;
-  width: calc(100% - 0.28rem);
-  height: calc(100% - 0.28rem);
-  filter: saturate(0.78) brightness(0.82);
-}
-
-.craps-chip strong {
-  position: relative;
-  z-index: 1;
-  max-width: 82%;
-  padding: 0.12rem 0.2rem;
-  overflow: hidden;
-  border: 1px solid rgba(255, 230, 177, 0.46);
-  border-radius: 999px;
-  background: rgba(7, 8, 10, 0.88);
-  color: #fff0c6;
-  font: 1000 clamp(0.62rem, 1.1vw, 0.72rem)/1 "Roboto Mono", ui-monospace, monospace;
-  text-shadow: 0 1px 1px #000;
-  text-overflow: ellipsis;
-}
-
-.craps-chip:hover,
-.craps-chip.is-selected {
-  transform: translateY(-2px);
-}
-
-.craps-chip:hover img,
-.craps-chip.is-selected img {
-  filter: saturate(1) brightness(1.08) drop-shadow(0 0 5px rgba(255, 216, 129, 0.42));
-}
-
-.craps-chip.is-selected {
-  border-color: #f4d07f;
-  box-shadow: 0 0 0 2px rgba(244, 208, 127, 0.15);
-}
-
-.craps-chip--remove {
-  width: auto;
-  min-width: 3.15rem;
-  aspect-ratio: auto;
-  align-self: stretch;
-  grid-template-rows: auto auto;
-  padding: 0.26rem 0.35rem;
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  border-radius: 7px;
-  background: rgba(127, 29, 29, 0.11);
-}
-
-.craps-chip--remove span {
-  color: #fca5a5;
-  font-size: 0.9rem;
-  line-height: 0.8;
-}
-
-.craps-chip--remove strong {
-  max-width: none;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #c8aaa9;
-  font: 900 0.38rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.06em;
-  text-shadow: none;
-}
-
-.craps-chip--remove.is-selected {
-  border-color: #f87171;
-  background: rgba(185, 28, 28, 0.22);
-}
-
-.craps-chip:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
-
-.craps-slip-setup {
-  display: grid;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.32rem;
-}
-
-.craps-slip-setup[hidden] { display: none !important; }
-
-.craps-slip-setup > label {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.15rem;
-}
-
-.craps-slip-setup > label > span {
-  grid-column: 1 / -1;
-  color: #9ca69f;
-  font-size: 0.54rem;
-  font-weight: 950;
-  letter-spacing: 0.1em;
-}
-
-.craps-slip-setup > label > input {
-  width: 100%;
-  min-width: 0;
-  height: 2.05rem;
-  box-sizing: border-box;
-  padding: 0.24rem 0.38rem;
-  border: 1px solid rgba(225, 187, 111, 0.34);
-  border-radius: 6px;
-  outline: 0;
-  background: #06090d;
-  color: #fae9bd;
-  font: 850 0.78rem/1 "Roboto Mono", ui-monospace, monospace;
-  appearance: textfield;
-}
-
-.craps-slip-setup > label > input::-webkit-inner-spin-button,
-.craps-slip-setup > label > input::-webkit-outer-spin-button { appearance: none; }
-
-.craps-slip-setup > label > small {
-  align-self: center;
-  color: #6f7a74;
-  font-size: 0.5rem;
-  white-space: nowrap;
-}
-
-.craps-controls__checkout {
-  display: grid;
-  min-width: 0;
-  grid-template-rows: auto auto;
-  gap: 0.3rem;
-}
-
-.craps-slip-summary {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-  gap: 0.42rem;
-  padding: 0.3rem 0.46rem;
-  border: 1px solid rgba(214, 181, 115, 0.22);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.26);
-}
-
-.craps-slip-summary > span + span {
-  padding-left: 0.42rem;
-  border-left: 1px solid rgba(214, 181, 115, 0.13);
-}
-
-.craps-slip-summary > span {
-  display: grid;
-  min-width: 0;
-  gap: 0.08rem;
-}
-
-.craps-slip-summary small {
-  color: #6f7874;
-  font-size: 0.5rem;
-  font-weight: 900;
-  letter-spacing: 0.09em;
-}
-
-.craps-slip-summary strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #d8ded8;
-  font: 850 0.72rem/1.1 "Roboto Mono", ui-monospace, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-slip-summary > i {
-  color: #69736e;
-  font-size: 0.62rem;
-  font-style: normal;
-}
-
-.craps-slip-summary__total {
-  text-align: right;
-}
-
-.craps-slip-summary__total strong {
-  color: #ffe3a0;
-  font-size: 0.86rem;
-}
-
-.craps-slip-actions {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) minmax(10rem, 1.3fr);
-  align-items: center;
-  gap: 0.42rem;
-}
-
-.craps-slip-actions__tools {
-  display: flex;
-  gap: 0.2rem;
-}
-
-.craps-slip-actions__tools button {
-  min-height: 2.1rem;
-  padding: 0.34rem 0.46rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #aeb5b0;
-  font: 900 0.58rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-
-.craps-slip-actions__tools button:disabled {
-  opacity: 0.34;
-  cursor: not-allowed;
-}
-
-.craps-slip-actions p {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: #78837d;
-  font-size: 0.58rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-}
-
-.craps-slip-actions p.is-error {
-  color: #fca5a5;
-}
-
-.craps-submit {
-  min-height: 2.55rem;
-  padding: 0.42rem 0.65rem;
-  border: 1px solid #f3cd77;
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 42%),
-    linear-gradient(135deg, #f0c35f, #bf7920);
-  color: #251501;
-  font-size: clamp(0.7rem, 1.25vw, 0.84rem);
-  font-weight: 1000;
-  letter-spacing: 0.035em;
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 5px 16px rgba(196, 121, 32, 0.22);
-}
-
-.craps-submit:hover:not(:disabled) {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-
-.craps-submit:disabled {
-  border-color: rgba(154, 159, 155, 0.24);
-  background: #242a2a;
-  color: #747d78;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
 @keyframes craps-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3001,18 +1522,6 @@ app-craps-table {
   to { opacity: 1; transform: scale(1.04); }
 }
 
-@keyframes craps-survival-coin-end-win {
-  0%   { transform: translate3d(0, 0, 0) rotateZ(0deg) rotateX(2070deg) scale(1); }
-  60%  { transform: translate3d(0, -7px, 0) rotateZ(-0.6deg) rotateX(2232deg) scale(1.04); }
-  100% { transform: translate3d(0, 0, 0) rotateZ(0deg) rotateX(2340deg) scale(1); }
-}
-
-@keyframes craps-survival-coin-end-loss {
-  0%   { transform: translate3d(0, 0, 0) rotateZ(0deg) rotateX(2070deg) scale(1); }
-  60%  { transform: translate3d(0, -7px, 0) rotateZ(0.6deg) rotateX(2124deg) scale(1.04); }
-  100% { transform: translate3d(0, 0, 0) rotateZ(0deg) rotateX(2160deg) scale(1); }
-}
-
 @keyframes craps-survival-face-track {
   0%         { background-image: url('/shared/coinflip-face-red.svg'); transform: scaleY(1); animation-timing-function: step-end; }
   4.347826%  { background-image: url('/shared/coinflip-face-eth.svg'); transform: scaleY(-1); animation-timing-function: step-end; }
@@ -3029,27 +1538,6 @@ app-craps-table {
   100%       { background-image: url('/shared/coinflip-face-red.svg'); transform: scaleY(1); }
 }
 
-@keyframes craps-survival-face-end-win {
-  0%         { background-image: url('/shared/coinflip-face-red.svg'); transform: scaleY(1); animation-timing-function: step-end; }
-  66.666667% { background-image: url('/shared/coinflip-face-eth.svg'); transform: scaleY(-1); }
-  100%       { background-image: url('/shared/coinflip-face-eth.svg'); transform: scaleY(-1); }
-}
-
-@keyframes craps-survival-face-end-loss {
-  0%, 100% { background-image: url('/shared/coinflip-face-red.svg'); transform: scaleY(1); }
-}
-
-@keyframes craps-rack-coin-pop {
-  0% { opacity: 0; transform: translate(-0.3rem, -50%) scale(0.6); }
-  100% { opacity: 1; transform: translate(0, -50%) scale(1); }
-}
-
-@keyframes craps-resolution-dice {
-  0% { opacity: 0; transform: translateY(-1.2rem) rotate(-8deg) scale(0.78); }
-  62% { opacity: 1; transform: translateY(0.18rem) rotate(2deg) scale(1.06); }
-  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
-}
-
 @media (max-width: 860px) {
   .craps-dialog__card { width: min(98vw, 48rem); }
   .craps-dialog__card[data-screen="battle"] .craps-table-rail {
@@ -3059,59 +1547,8 @@ app-craps-table {
       "leaderboard"
       "felt";
   }
-  .craps-battle-board {
-    min-height: 4.2rem;
-    grid-template-rows: 0.92rem 2.72rem;
-    gap: 0.12rem;
-    padding: 0.22rem 0.28rem;
-  }
-  .craps-battle-board__head { padding-inline: 0.18rem 0.08rem; }
-  .craps-battle-board__rows {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(10.5rem, 38%);
-    grid-auto-rows: auto;
-    grid-template-columns: none;
-    grid-template-rows: minmax(0, 1fr);
-    gap: 0.22rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-padding-inline: 0.1rem;
-    scroll-snap-type: inline proximity;
-  }
-  .craps-battle-rack {
-    min-height: 2.55rem;
-    grid-template-columns: minmax(2.8rem, 0.25fr) minmax(2.5rem, 0.22fr) minmax(0, 1fr);
-    grid-template-areas:
-      "identity identity identity"
-      "amount last well";
-    grid-template-rows: 1.12rem 0.82rem;
-    gap: 0.08rem 0.1rem;
-    padding: 0.14rem 0.16rem;
-    scroll-snap-align: start;
-  }
-  .craps-battle-rack__identity {
-    grid-template-columns: 0.78rem 1.08rem minmax(0, 1fr);
-    gap: 0.1rem;
-  }
-  .craps-battle-rack__rank { font-size: 0.52rem; }
-  .craps-battle-rack__avatar { width: 1rem; font-size: 0.3rem; }
-  .craps-battle-rack__coin { top: 0.14rem; bottom: auto; left: 1.04rem; width: 1.08rem; height: 1.08rem; margin: 0; }
-  .craps-battle-rack__player strong { display: block; font-size: 0.47rem; }
-  .craps-battle-rack__well { height: 0.72rem; grid-area: well; padding-inline: 0.08rem; }
-  .craps-battle-rack__amount { height: 0.72rem; grid-area: amount; padding-inline: 0.12rem; }
-  .craps-battle-rack__amount strong { font-size: 0.46rem; }
-  .craps-battle-rack__amount.is-breakdown { height: 0.76rem; gap: 0.01rem; }
-  .craps-battle-rack__amount-line { gap: 0.06rem; }
-  .craps-battle-rack__amount-line small { font-size: 0.18rem; letter-spacing: 0; }
-  .craps-battle-rack__amount-line strong { font-size: 0.37rem; }
-  .craps-battle-rack__last { height: 0.72rem; gap: 0.05rem; padding-inline: 0.07rem; }
-  .craps-battle-rack__last small { font-size: 0.18rem; letter-spacing: 0; }
-  .craps-battle-rack__last strong { font-size: 0.37rem; }
+
   .craps-table-felt { padding-inline: 0.82rem; }
-  .craps-controls__setup { grid-template-columns: minmax(0, 1fr) minmax(15rem, auto); }
-  .craps-controls__checkout { grid-column: 1 / -1; }
-  .craps-resolution__stage { grid-template-columns: minmax(11rem, 0.58fr) minmax(19rem, 1.42fr); }
-  .craps-resolution__chips { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
@@ -3125,12 +1562,7 @@ app-craps-table {
       "roll roll roll roll roll roll"
       "result result result result result result";
   }
-  .craps-dialog__card[data-screen="placement"] .craps-groups {
-    grid-template-rows: auto 5.25rem;
-    grid-template-areas:
-      "place place place place place place"
-      "hard4 line line dont dont hard8";
-  }
+
   .craps-dice-bay { min-height: 9rem; }
   .craps-group--place .craps-group__bets {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3204,7 +1636,7 @@ app-craps-table {
   .craps-dialog__prize-added output { font-size: clamp(0.48rem, 1.8vw, 0.6rem); }
   .craps-dialog__prize-added em { font-size: 0.24rem; }
   .craps-dialog__dice { width: 2.75rem; height: 1.78rem; }
-  .craps-dialog__dice i { width: 1.52rem; border-radius: 0.3rem; }
+  .craps-dialog__dice img { width: 1.66rem; }
   .craps-dialog__close { width: 1.85rem; height: 1.85rem; grid-column: 3; }
   .craps-bonus-roll { inset: 2.55rem 0 3.75rem; }
   .craps-bonus-roll__card {
@@ -3219,31 +1651,9 @@ app-craps-table {
     gap: 0.55rem;
     padding: 0.58rem;
   }
-  .craps-resolution__stage {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(10rem, 1fr);
-    gap: 0.55rem;
-  }
-  .craps-resolution__roll {
-    min-height: 6.6rem;
-    grid-template-columns: auto minmax(0, 1fr);
-    place-content: center;
-    justify-items: start;
-    gap: 0.55rem;
-    padding: 0.45rem;
-  }
-  .craps-resolution__dice { width: 5.2rem; height: 3.5rem; }
-  .craps-resolution__dice i { width: 2.75rem; border-radius: 0.48rem; }
-  .craps-resolution__roll-copy { justify-items: start; text-align: left; }
-  .craps-resolution__tray { grid-template-rows: auto minmax(9rem, 1fr) auto; }
-  .craps-resolution__well { min-height: 9rem; }
-  .craps-resolution__receipt { min-height: 2.8rem; padding: 0.4rem 0.48rem; }
-  .craps-resolution__receipt strong { font-size: 0.65rem; }
-  .craps-resolution__receipt em { font-size: 0.4rem; }
-  .craps-resolution__head button,
-  .craps-resolution__receipt button { min-height: 2rem; padding: 0.38rem 0.55rem; }
+
   .craps-table-rail { padding: 0.34rem; }
-  .craps-battle-board__rows { grid-auto-columns: minmax(10.25rem, 46%); }
+
   .craps-table-felt {
     display: grid;
     min-height: 100%;
@@ -3274,54 +1684,9 @@ app-craps-table {
   .craps-survival-coin,
   .craps-survival-landed { width: 6.5rem; }
   .craps-group--place .craps-group__bets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .craps-player-strip {
-    padding: 0.14rem 0.24rem;
-  }
-  .craps-table-seat {
-    min-width: 0;
-    grid-template-columns: 1.25rem auto;
-    gap: 0.18rem;
-    padding: 0.07rem 0.22rem 0.07rem 0.08rem;
-  }
-  .craps-table-seat__avatar { width: 1.52rem; height: 1.52rem; }
-  .craps-table-seat strong { font-size: 0.54rem; }
-  .craps-table-seat small { font-size: 0.44rem; }
+
   .craps-group--place .craps-bet { padding-inline: 0.18rem; }
-  .craps-group--place .craps-bet__player-slot {
-    right: auto;
-    bottom: 0.06rem;
-    left: 0.06rem;
-    width: 1.72rem;
-    height: 1.42rem;
-  }
-  .craps-group--place :is(.craps-bet__wager img, .craps-bet__other-stack img) {
-    width: 1.15rem;
-    height: 0.9rem;
-  }
-  .craps-group--place :is(.craps-bet__wager output, .craps-bet__other-stack output) {
-    max-width: 2rem;
-    margin-top: -0.16rem;
-    padding: 0.05rem 0.12rem;
-    font-size: 0.48rem;
-  }
-  .craps-group--place .craps-bet__wager--others {
-    top: auto;
-    right: 0.06rem;
-    bottom: 0.02rem;
-    left: auto;
-  }
-  .craps-group--place :is(
-    [data-bet="place-4"],
-    [data-bet="hard-4"],
-    [data-bet="place-8"],
-    [data-bet="hard-8"]
-  ) .craps-bet__player-slot {
-    right: auto;
-    bottom: 0.04rem;
-    left: 0.04rem;
-    width: 1.38rem;
-    height: 1.22rem;
-  }
+
   :is(.craps-group--line, .craps-group--dont-line) .craps-bet { padding-inline: 0.2rem; }
   :is(.craps-group--line, .craps-group--dont-line) .craps-bet__name {
     max-width: 100%;
@@ -3335,14 +1700,7 @@ app-craps-table {
     font-size: clamp(0.98rem, 4.1vw, 1.15rem);
     letter-spacing: 0.018em;
   }
-  .craps-group--place :is(
-    [data-bet="place-4"],
-    [data-bet="hard-4"],
-    [data-bet="place-8"],
-    [data-bet="hard-8"]
-  ) .craps-bet__terms {
-    width: 100%;
-  }
+
   .craps-bet__hardway-legend { bottom: 0.24rem; left: 0.24rem; }
   .craps-bet__hardway-legend small { font-size: 0.5rem; }
   .craps-bet__hardway-legend strong { font-size: 1.25rem; }
@@ -3350,53 +1708,10 @@ app-craps-table {
   .craps-bet { min-height: 3.5rem; }
   .craps-bet__name { font-size: 0.68rem; }
   .craps-bet--number .craps-bet__name { font-size: 1.35rem; }
-  .craps-bet__terms { font-size: 0.44rem; }
-  .craps-controls {
-    gap: 0.52rem;
-    padding: 0.52rem 0.58rem max(0.58rem, env(safe-area-inset-bottom));
-  }
-  .craps-perks {
-    justify-content: space-between;
-  }
-  .craps-controls__setup { grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.85fr); }
-  .craps-controls__checkout { grid-column: 1 / -1; }
-  .craps-chip-picker__chips { overflow-x: auto; padding: 0.12rem 0.14rem 0.16rem; }
-  .craps-chip { width: 2.65rem; flex: 0 0 2.65rem; }
-  .craps-chip--remove { width: 3rem; min-width: 3rem; }
-  .craps-slip-setup { width: 100%; grid-template-columns: minmax(0, 1fr); }
-  .craps-slip-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .craps-slip-actions { grid-template-columns: auto minmax(0, 1fr); }
-  .craps-slip-actions p { text-align: right; }
-  .craps-submit { grid-column: 1 / -1; }
 }
 
 @media (max-width: 390px) {
   .craps-dialog__dice { display: none; }
-  .craps-controls__setup { grid-template-columns: minmax(0, 1fr) 7.15rem; }
-  .craps-session-head { display: grid; gap: 0.2rem; }
-  .craps-perks {
-    width: 100%;
-    box-sizing: border-box;
-    justify-content: space-between;
-    gap: 0.18rem;
-    padding: 0.18rem 0.24rem;
-    font-size: 0.4rem;
-    letter-spacing: 0.025em;
-  }
-  .craps-perks strong { font-size: 0.58rem; }
-  .craps-chip { width: 2.42rem; flex-basis: 2.42rem; }
-  .craps-slip-summary { gap: 0.27rem; }
-  .craps-slip-summary strong { font-size: 0.64rem; }
-  .craps-slip-summary__total strong { font-size: 0.74rem; }
-  .craps-resolution__chips { inset-inline: 0.35rem; gap: 0; }
-  .craps-resolution__tray > header strong { font-size: 0.86rem; }
-}
-
-@media (max-width: 350px) {
-  .craps-group--line .craps-bet__player-slot { right: auto; left: 0.02rem; width: 1.95rem; }
-  .craps-group--line .craps-bet__wager--others { right: 0.02rem; width: 1.95rem; }
-  .craps-group--line :is(.craps-bet__wager img, .craps-bet__other-stack img) { width: 0.92rem; height: 0.68rem; }
-  .craps-group--line :is(.craps-bet__wager output, .craps-bet__other-stack output) { max-width: 1.75rem; font-size: 0.36rem; }
 }
 
 @media (max-width: 700px) {
@@ -3405,11 +1720,6 @@ app-craps-table {
   .craps-bet__seat-chip.is-local .craps-bet__seat-art {
     width: min(3.5rem, 98%);
     max-width: 98%;
-  }
-  .craps-entry-chip {
-    width: 2.35rem;
-    flex-basis: 2.35rem;
-    margin-right: -0.5rem;
   }
 }
 
@@ -3421,795 +1731,11 @@ app-craps-table {
   .craps-dialog__backdrop,
   .craps-dialog__card,
   .craps-bet.is-hit .craps-bet__seat-chip.is-local,
-  .craps-dice-bay[data-state="open"] .craps-dice-bay__dice,
-  .craps-resolution__dice.is-flashing {
+  .craps-dice-bay[data-state="open"] .craps-dice-bay__dice {
     animation: none !important;
   }
-  .craps-resolution__chips img,
-  .craps-resolution__well > i { transition: none; }
-  .craps-bet,
-  .craps-chip { transition: none; }
-}
 
-/* Resolution stays on the live felt. The trough always retains the physical
-   bankroll scale; goal lock only recolors its pips and overlays high-water
-   markers, so reaching a jackpot state never makes bankroll chips disappear. */
-.craps-run-rail {
-  position: relative;
-  z-index: 3;
-  display: grid;
-  height: 3.75rem;
-  min-width: 0;
-  box-sizing: border-box;
-  grid-row: 3;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "tray";
-  grid-template-rows: minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(0.38rem, 1vw, 0.68rem);
-  margin: 0;
-  padding: 0.3rem clamp(0.62rem, 1.6vw, 0.92rem) 0.34rem;
-  border: 0;
-  border-top: 1px solid rgba(219, 168, 88, 0.42);
-  border-radius: 0;
-  background:
-    linear-gradient(90deg, rgba(19, 74, 51, 0.2), transparent 48%, rgba(107, 29, 34, 0.08)),
-    #0b0d12;
-  box-shadow:
-    inset 0 1px rgba(255, 238, 196, 0.08),
-    inset 0 0 1.2rem rgba(0, 0, 0, 0.38),
-    0 5px 12px rgba(0, 0, 0, 0.25);
-}
-
-.craps-run-rail[hidden] { display: none !important; }
-
-.craps-run-rail[data-view="battle"] {
-  height: 4.35rem;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "tray";
-  padding-inline: clamp(0.9rem, 2.4vw, 1.5rem);
-}
-
-.craps-run-rail[data-view="battle"] .craps-run-rail__well { height: 2.25rem; }
-.craps-run-rail[data-view="battle"] .craps-run-rail__bankroll {
-  min-width: 7.4rem;
-  height: 2.65rem;
-  font-size: 0.78rem;
-}
-.craps-run-rail[data-view="battle"] .df-bankroll__chip.craps-run-chip { height: 0.94rem; }
-
-.craps-run-rail[data-bounty-win="true"] { height: 5.35rem; }
-
-.craps-run-rail__tray {
-  display: grid;
-  min-width: 0;
-  grid-area: tray;
-  grid-template-columns: minmax(max-content, 0.22fr) minmax(0, 1fr);
-  grid-template-areas:
-    "bankroll well"
-    ". bounty";
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: clamp(0.28rem, 0.7vw, 0.48rem);
-}
-
-.craps-run-rail__well {
-  position: relative;
-  box-sizing: border-box;
-  height: 1.82rem;
-  padding: 0.18rem 0.28rem 0.16rem;
-  overflow: hidden;
-  border: 1px solid rgba(146, 100, 52, 0.85);
-  border-radius: 0.42rem;
-  background:
-    linear-gradient(180deg, rgba(255, 220, 158, 0.12), transparent 26%),
-    repeating-linear-gradient(94deg, rgba(0, 0, 0, 0.1) 0 2px, transparent 2px 6px),
-    linear-gradient(180deg, #4d2e15 0%, #38200d 48%, #241407 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 226, 170, 0.28),
-    inset 0 0.5rem 0.7rem rgba(0, 0, 0, 0.62),
-    inset 0 -0.22rem rgba(0, 0, 0, 0.5),
-    0 1px rgba(240, 217, 166, 0.06);
-}
-
-.craps-run-rail__jp-scale {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  right: 0.28rem;
-  bottom: 0;
-  left: 0.28rem;
-  pointer-events: none;
-}
-
-.craps-run-rail__jp-scale[hidden] { display: none !important; }
-
-.craps-run-rail__jp-point,
-.craps-run-rail__high-point {
-  position: absolute;
-  top: 0.08rem;
-  bottom: 0.08rem;
-  width: 0;
-  border-left: 1px solid rgba(211, 241, 255, 0.72);
-}
-
-.craps-run-rail__jp-point[hidden] { display: none; }
-
-.craps-run-rail__jp-point::after {
-  position: absolute;
-  bottom: 0.02rem;
-  left: -0.15rem;
-  width: 0.3rem;
-  height: 0.08rem;
-  border-radius: 999px;
-  background: #d8f4ff;
-  box-shadow: 0 0 0.28rem rgba(89, 193, 255, 0.72);
-  content: '';
-}
-
-.craps-run-rail__jp-point--common { left: var(--craps-jp-target-at, 90%); }
-.craps-run-rail__jp-point--rare {
-  left: var(--craps-jp-target-at, 90%);
-  border-left-color: #f4d47a;
-}
-.craps-run-rail__jp-point--rare::after {
-  background: #ffe39a;
-  box-shadow: 0 0 0.3rem rgba(255, 207, 93, 0.72);
-}
-
-.craps-run-rail__jp-point > small {
-  position: absolute;
-  top: 0.04rem;
-  right: 0.18rem;
-  padding: 0.08rem 0.16rem;
-  border-radius: 0.2rem;
-  background: rgba(3, 24, 40, 0.86);
-  color: #9edfff;
-  font: 1000 clamp(0.31rem, 0.62vw, 0.4rem)/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.035em;
-  white-space: nowrap;
-  text-shadow: 0 0 0.25rem rgba(70, 174, 239, 0.55);
-}
-
-.craps-run-rail__jp-point--rare > small {
-  right: 0.18rem;
-  color: #ffe39a;
-  text-shadow: 0 0 0.25rem rgba(244, 196, 73, 0.58);
-}
-
-.craps-run-rail__high-point {
-  z-index: 2;
-  left: var(--craps-jp-high-at, 0%);
-  border-left: 2px solid #e7f8ff;
-  filter: drop-shadow(0 0 0.18rem rgba(118, 210, 255, 0.72));
-}
-
-.craps-run-rail__bankroll { grid-area: bankroll; }
-.craps-run-rail__well { grid-area: well; }
-
-.craps-run-rail__bounty {
-  display: grid;
-  min-width: 0;
-  min-height: 1.25rem;
-  grid-area: bounty;
-  grid-template-columns: auto minmax(0, 0.78fr) minmax(0, 1.22fr);
-  align-items: center;
-  gap: clamp(0.34rem, 0.8vw, 0.58rem);
-  margin-top: -0.18rem;
-  padding: 0.12rem 0.42rem 0.12rem 0.22rem;
-  overflow: hidden;
-  border: 1px solid rgba(232, 195, 111, 0.42);
-  border-radius: 0.34rem;
-  background: linear-gradient(90deg, rgba(100, 61, 12, 0.58), rgba(13, 10, 6, 0.82));
-  box-shadow: inset 0.13rem 0 #e8c36f, inset 0 0 0.55rem rgba(0, 0, 0, 0.4);
-  color: #ffe8a3;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-run-rail__bounty[hidden] { display: none !important; }
-.craps-run-rail__bounty[data-state="pending"] { opacity: 0; }
-.craps-run-rail__bounty[data-state="revealed"] {
-  opacity: 1;
-  animation: craps-bounty-receipt-in var(--craps-speed-420, 420ms) cubic-bezier(0.16, 0.82, 0.24, 1.15) both;
-}
-
-.craps-run-rail__bounty > img {
-  width: auto;
-  height: 1.35rem;
-  flex: 0 0 auto;
-  filter: saturate(1.12) drop-shadow(0 0 0.22rem rgba(241, 200, 94, 0.5));
-}
-
-.craps-run-rail__bounty > .craps-run-rail__bounty-component {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 0.11rem;
-  white-space: nowrap;
-}
-
-.craps-run-rail__bounty > .craps-run-rail__bounty-component > small {
-  color: #d5ac50;
-  font-size: clamp(0.34rem, 0.58vw, 0.44rem);
-  font-weight: 1000;
-  letter-spacing: 0.07em;
-}
-
-.craps-run-rail__bounty strong {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0.13rem;
-  font-size: clamp(0.67rem, 1.2vw, 0.86rem);
-  font-weight: 1000;
-  line-height: 1;
-}
-
-.craps-run-rail__bounty-component--battle {
-  padding-left: clamp(0.34rem, 0.8vw, 0.58rem);
-  border-left: 1px solid rgba(232, 195, 111, 0.24);
-}
-
-.craps-run-rail__bounty output { font-variant-numeric: tabular-nums; }
-.craps-run-rail__bounty em {
-  color: #b88f38;
-  font-size: 0.36em;
-  font-style: normal;
-  letter-spacing: 0.05em;
-}
-
-.craps-run-rail__bounty-boost {
-  display: inline;
-  color: #70c992;
-  letter-spacing: 0.035em;
-}
-
-.craps-run-rail__bounty-boost[hidden] { display: none !important; }
-.craps-run-rail__bounty-boost output { color: #bdf7d3; }
-
-.craps-run-rail__rack {
-  position: relative;
-  display: flex;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0;
-  padding: 0.08rem 0.16rem;
-  overflow: hidden;
-  border-radius: 0.2rem;
-  background: linear-gradient(180deg, #0c0704, #191008 78%, #120b06);
-  box-shadow:
-    inset 0 0.14rem 0.24rem rgba(0, 0, 0, 0.78),
-    inset 0 -1px 0 rgba(255, 220, 158, 0.09);
-}
-
-.craps-run-rail .df-bankroll__chip.craps-run-chip {
-  --craps-rack-chip-hi: #ff5a52;
-  --craps-rack-chip-tone: #e71922;
-  --craps-rack-chip-lo: #8f070b;
-  position: relative;
-  z-index: 1;
-  left: auto;
-  bottom: auto;
-  display: block;
-  width: auto;
-  height: 0.76rem;
-  box-sizing: border-box;
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0.07rem;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
-    linear-gradient(
-      180deg,
-      var(--craps-rack-chip-hi) 0 12%,
-      var(--craps-rack-chip-tone) 12% 62%,
-      var(--craps-rack-chip-lo) 62% 100%
-    );
-  opacity: 0;
-  box-shadow:
-    inset 0 0 0 1px rgba(10, 8, 2, 0.5),
-    0 1px 1px rgba(0, 0, 0, 0.5);
-  transform: translateY(0.28rem) scaleY(0.68);
-  transform-origin: 50% 50%;
-  transition:
-    opacity var(--craps-speed-160, 160ms) ease,
-    transform var(--craps-speed-280, 280ms) cubic-bezier(0.16, 0.82, 0.24, 1.12),
-    filter var(--craps-speed-180, 180ms) ease;
-}
-
-.craps-run-rail .craps-run-chip.is-filled {
-  opacity: 1;
-  transform: none;
-}
-
-.craps-run-rail .craps-run-chip.is-in-play {
-  --craps-rack-chip-hi: #ff5a52;
-  --craps-rack-chip-tone: #ed0e11;
-  --craps-rack-chip-lo: #9c0608;
-  filter: saturate(1.08) drop-shadow(0 0 0.12rem rgba(237, 14, 17, 0.3));
-}
-
-.craps-run-rail .craps-run-chip.is-banked {
-  --craps-rack-chip-hi: #55e723;
-  --craps-rack-chip-tone: #30d100;
-  --craps-rack-chip-lo: #1a7a09;
-}
-
-.craps-run-rail .craps-run-chip.is-banked.is-reserve-risk {
-  --craps-rack-chip-hi: #aab3ba;
-  --craps-rack-chip-tone: #727d85;
-  --craps-rack-chip-lo: #3b444a;
-}
-
-.craps-run-rail .craps-run-chip.is-filled.is-goal-locked {
-  --craps-rack-chip-hi: #68d8ff;
-  --craps-rack-chip-tone: #1598f0;
-  --craps-rack-chip-lo: #075596;
-  filter: saturate(1.08) drop-shadow(0 0 0.13rem rgba(21, 152, 240, 0.38));
-}
-
-/* Grey danger chips and blue locked-win chips supersede ordinary bankroll colors. */
-.craps-run-rail .craps-run-chip.is-filled.is-reserve-risk,
-.craps-run-rail .craps-run-chip.is-filled.is-goal-locked {
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(
-      180deg,
-      var(--craps-rack-chip-hi) 0 12%,
-      var(--craps-rack-chip-tone) 12% 62%,
-      var(--craps-rack-chip-lo) 62% 100%
-    );
-  filter: none;
-}
-
-.craps-run-rail .craps-run-chip.is-filled.is-goal-locked {
-  filter: saturate(1.08) drop-shadow(0 0 0.13rem rgba(21, 152, 240, 0.38));
-}
-
-/* Every participant gets the exact same 50-pip tray language. The wells can
-   resize with their row, but an empty, live, banked, danger, or locked
-   pip is physically identical wherever it appears. */
-:is(
-  .craps-battle-rack .df-bankroll__chip.craps-battle-rack__chip,
-  .craps-run-rail .df-bankroll__chip.craps-run-chip
-) {
-  --craps-rack-chip-hi: #ff5a52;
-  --craps-rack-chip-tone: #e71922;
-  --craps-rack-chip-lo: #8f070b;
-  position: relative;
-  z-index: 1;
-  left: auto;
-  bottom: auto;
-  display: block;
-  width: auto;
-  min-width: 0;
-  height: 0.76rem;
-  box-sizing: border-box;
-  flex: 1 1 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0.055rem;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 45%, rgba(0, 0, 0, 0.32)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0 10%, transparent 20% 70%, rgba(0, 0, 0, 0.34) 84% 100%),
-    linear-gradient(
-      180deg,
-      var(--craps-rack-chip-hi) 0 12%,
-      var(--craps-rack-chip-tone) 12% 62%,
-      var(--craps-rack-chip-lo) 62% 100%
-    );
-  opacity: 0.09;
-  box-shadow:
-    inset 0 0 0 1px rgba(10, 8, 2, 0.5),
-    0 1px 1px rgba(0, 0, 0, 0.5);
-  transform: none;
-  transform-origin: 50% 50%;
-  transition:
-    opacity var(--craps-speed-160, 160ms) ease,
-    filter var(--craps-speed-180, 180ms) ease;
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-filled { opacity: 1; }
-
-/* Only YOU receives a fractional leading pip. Opponent trays deliberately
-   retain whole cells so their compact leaderboard rows stay easy to scan. */
-.craps-run-rail .craps-run-chip.is-filled.is-partial {
-  clip-path: inset(0 var(--craps-pip-unfilled, 0%) 0 0);
-  transition:
-    clip-path var(--craps-speed-280, 280ms) cubic-bezier(0.16, 0.82, 0.24, 1),
-    opacity var(--craps-speed-160, 160ms) ease,
-    filter var(--craps-speed-180, 180ms) ease;
-}
-
-.craps-run-rail .craps-run-chip.is-filled.is-pip-arrival {
-  animation: craps-rack-pip-arrival var(--craps-speed-420, 420ms) ease-out;
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-in-play {
-  --craps-rack-chip-hi: #ff5a52;
-  --craps-rack-chip-tone: #ed0e11;
-  --craps-rack-chip-lo: #9c0608;
-  filter: saturate(1.08) drop-shadow(0 0 0.12rem rgba(237, 14, 17, 0.3));
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-banked {
-  --craps-rack-chip-hi: #55e723;
-  --craps-rack-chip-tone: #30d100;
-  --craps-rack-chip-lo: #1a7a09;
-}
-
-/* Bankroll growth stays visibly separate for the life of one shooter. The
-   same class is painted into YOU and every leaderboard tray; seven-out folds
-   these teal cells into the next shooter's ordinary green opening reserve. */
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-banked.is-new-this-shooter {
-  --craps-rack-chip-hi: #73f4e8;
-  --craps-rack-chip-tone: #15bdb5;
-  --craps-rack-chip-lo: #08736f;
-  filter: saturate(1.08) drop-shadow(0 0 0.12rem rgba(21, 189, 181, 0.34));
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-banked.is-reserve-risk {
-  --craps-rack-chip-hi: #aab3ba;
-  --craps-rack-chip-tone: #727d85;
-  --craps-rack-chip-lo: #3b444a;
-  filter: none;
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-filled.is-goal-locked {
-  --craps-rack-chip-hi: #68d8ff;
-  --craps-rack-chip-tone: #1598f0;
-  --craps-rack-chip-lo: #075596;
-  filter: saturate(1.08) drop-shadow(0 0 0.13rem rgba(21, 152, 240, 0.38));
-}
-
-/* Goal lock starts a fresh progressive scale. Earned reserve changes from
-   green to blue, unused capacity becomes readable light blue, and live risk
-   retains the same red language it used before the goal. */
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-progressive:not(.is-filled) {
-  --craps-rack-chip-hi: #e0f7ff;
-  --craps-rack-chip-tone: #8fd9f7;
-  --craps-rack-chip-lo: #4b9fc8;
-  opacity: 0.46;
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-progressive.is-filled.is-banked {
-  --craps-rack-chip-hi: #68d8ff;
-  --craps-rack-chip-tone: #1598f0;
-  --craps-rack-chip-lo: #075596;
-  filter: saturate(1.08) drop-shadow(0 0 0.13rem rgba(21, 152, 240, 0.38));
-}
-
-:is(
-  .craps-battle-rack .craps-battle-rack__chip,
-  .craps-run-rail .craps-run-chip
-).is-progressive.is-filled.is-in-play {
-  --craps-rack-chip-hi: #ff5a52;
-  --craps-rack-chip-tone: #ed0e11;
-  --craps-rack-chip-lo: #9c0608;
-  filter: saturate(1.08) drop-shadow(0 0 0.12rem rgba(237, 14, 17, 0.3));
-}
-
-.craps-battle-rack__progressive {
-  position: absolute;
-  z-index: 3;
-  inset: 0 0.12rem;
-  pointer-events: none;
-}
-
-.craps-battle-rack__progressive :is(
-  .craps-battle-rack__progressive-target,
-  .craps-battle-rack__progressive-high
-) {
-  position: absolute;
-  top: 0.04rem;
-  bottom: 0.04rem;
-  width: 0;
-  border-left: 1px solid rgba(226, 248, 255, 0.94);
-}
-
-.craps-battle-rack__progressive-target {
-  left: var(--craps-jp-target-at, 90%);
-  border-left-color: #82dcff !important;
-  filter: drop-shadow(0 0 0.1rem rgba(68, 187, 241, 0.8));
-}
-
-.craps-battle-rack__progressive[data-tier="rare"] .craps-battle-rack__progressive-target {
-  border-left-color: #ffe18a !important;
-  filter: drop-shadow(0 0 0.1rem rgba(255, 205, 88, 0.78));
-}
-
-.craps-battle-rack__progressive-target small {
-  position: absolute;
-  top: 0.02rem;
-  right: 0.08rem;
-  color: #a8e6ff;
-  font: 1000 0.18rem/1 "Roboto Mono", ui-monospace, monospace;
-  font-style: normal;
-  letter-spacing: 0.035em;
-}
-
-.craps-battle-rack__progressive[data-tier="rare"] .craps-battle-rack__progressive-target small {
-  color: #ffe49a;
-}
-
-.craps-battle-rack__progressive-high {
-  left: var(--craps-jp-high-at, 0%);
-  border-left-width: 2px !important;
-  filter: drop-shadow(0 0 0.12rem rgba(220, 246, 255, 0.86));
-}
-
-.craps-run-rail__bankroll {
-  display: grid;
-  width: max-content;
-  min-width: 7.4rem;
-  height: 2.3rem;
-  box-sizing: border-box;
-  place-content: center end;
-  justify-items: end;
-  gap: 0.14rem;
-  padding: 0.24rem 0.46rem 0.2rem;
-  border: 1px solid rgba(255, 178, 183, 0.4);
-  border-radius: 0.42rem;
-  background: linear-gradient(180deg, #2c090c, #120507);
-  color: #fff1f2;
-  font: 1000 clamp(0.72rem, 1.4vw, 0.92rem)/1 "Roboto Mono", ui-monospace, monospace;
-  letter-spacing: 0.025em;
-  text-align: right;
-  white-space: nowrap;
-  box-shadow: inset 0.18rem 0 #d73540, inset 0 0 0.65rem rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.42);
-}
-
-.craps-run-rail__bankroll > output {
-  min-width: max-content;
-  line-height: 0.88;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.craps-run-rail__round-bet {
-  display: inline-flex;
-  min-width: max-content;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 0.28rem;
-  color: #bc8588;
-  font: 950 clamp(0.34rem, 0.66vw, 0.43rem)/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.075em;
-  white-space: nowrap;
-}
-
-.craps-run-rail__round-bet output {
-  color: #ffd6d9;
-  font: 1000 clamp(0.46rem, 0.86vw, 0.58rem)/1 "Roboto Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.015em;
-}
-
-.craps-run-rail__well.is-goal-reached {
-  border-color: #287cb2 #8edcff #164263;
-  background:
-    linear-gradient(90deg, rgba(21, 152, 240, 0.16), rgba(104, 216, 255, 0.12) 72%, rgba(255, 218, 117, 0.1)),
-    linear-gradient(180deg, #030b12, #071724 75%, #030a10);
-  box-shadow: inset 0 0.3rem 0.55rem rgba(0, 0, 0, 0.82), 0 0 11px rgba(73, 178, 239, 0.24);
-}
-
-.craps-opponent-racks {
-  display: grid;
-  min-width: 0;
-  height: 2.52rem;
-  grid-area: opponents;
-  grid-auto-flow: column;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0.28rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.craps-opponent-racks::-webkit-scrollbar { display: none; }
-.craps-opponent-racks[hidden] { display: none !important; }
-.craps-opponent-racks[data-columns="1"] { grid-auto-columns: 100%; }
-.craps-opponent-racks[data-columns="2"] { grid-auto-columns: calc(50% - 0.14rem); }
-.craps-opponent-racks[data-columns="3"] { grid-auto-columns: calc(33.333% - 0.187rem); }
-
-.craps-opponent-rack {
-  --player-color: #55b8ff;
-  display: grid;
-  min-width: 0;
-  height: 100%;
-  box-sizing: border-box;
-  grid-template-columns: 1.48rem minmax(0, 1fr);
-  grid-template-areas:
-    "avatar head"
-    "avatar well";
-  grid-template-rows: 0.82rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.12rem 0.3rem;
-  padding: 0.18rem 0.28rem 0.2rem 0.2rem;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--player-color) 48%, #33261c);
-  border-radius: 0.48rem;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--player-color) 9%, transparent), transparent 32%),
-    #0a0b0e;
-  box-shadow: inset 0.15rem 0 var(--player-color), inset 0 0 0.5rem rgba(0, 0, 0, 0.42);
-}
-
-.craps-opponent-rack__avatar {
-  display: grid;
-  width: 1.26rem;
-  aspect-ratio: 1;
-  grid-area: avatar;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--player-color);
-  border-radius: 50%;
-  background: #111923;
-  color: #fff;
-  font: 1000 0.42rem/1 "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-opponent-rack__avatar :is(img, b) { width: 100%; height: 100%; object-fit: cover; }
-.craps-opponent-rack__avatar b { display: grid; place-items: center; }
-
-.craps-opponent-rack__head {
-  display: grid;
-  min-width: 0;
-  grid-area: head;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 0.28rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-opponent-rack__head strong,
-.craps-opponent-rack__head em {
-  min-width: 0;
-  overflow: hidden;
-  font-style: normal;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-opponent-rack__head strong { color: #e7edf1; font-size: 0.42rem; }
-.craps-opponent-rack__head em { color: var(--player-color); font-size: 0.37rem; font-weight: 1000; letter-spacing: 0.025em; }
-
-.craps-opponent-rack__well {
-  display: block;
-  min-width: 0;
-  height: 0.82rem;
-  box-sizing: border-box;
-  grid-area: well;
-  padding: 0.13rem 0.16rem;
-  overflow: hidden;
-  border: 1px solid rgba(132, 86, 42, 0.82);
-  border-radius: 0.24rem;
-  background: linear-gradient(180deg, #4b2c14, #1b0f07);
-  box-shadow: inset 0 0.18rem 0.24rem rgba(0, 0, 0, 0.78);
-}
-
-.craps-opponent-rack__chips {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  gap: 0;
-  overflow: hidden;
-  border-radius: 0.1rem;
-}
-
-.craps-opponent-rack .df-bankroll__chip.craps-opponent-rack__chip {
-  --mini-chip-hi: #ff5a52;
-  --mini-chip-tone: #df1119;
-  --mini-chip-lo: #85070b;
-  display: block;
-  min-width: 0;
-  height: 100%;
-  flex: 1 1 0;
-  border: 0;
-  border-radius: 0.035rem;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.28), transparent 52%, rgba(0, 0, 0, 0.3)),
-    linear-gradient(180deg, var(--mini-chip-hi), var(--mini-chip-tone) 58%, var(--mini-chip-lo));
-  opacity: 0.08;
-  box-shadow: inset 0 0 0 1px rgba(7, 4, 3, 0.45);
-}
-
-.craps-opponent-rack .craps-opponent-rack__chip.is-filled { opacity: 1; }
-.craps-opponent-rack .craps-opponent-rack__chip.is-banked {
-  --mini-chip-hi: #55e723;
-  --mini-chip-tone: #30d100;
-  --mini-chip-lo: #1a7a09;
-}
-.craps-opponent-rack .craps-opponent-rack__chip.is-in-play {
-  --mini-chip-hi: #ff5a52;
-  --mini-chip-tone: #ed0e11;
-  --mini-chip-lo: #9c0608;
-  filter: saturate(1.08) drop-shadow(0 0 0.08rem rgba(237, 14, 17, 0.26));
-}
-.craps-opponent-rack:is([data-state="bust"], [data-state="flip-bust"]) {
-  border-color: rgba(255, 74, 84, 0.56);
-  filter: saturate(0.68);
-}
-.craps-opponent-rack:is([data-state="bust"], [data-state="flip-bust"]) .craps-opponent-rack__avatar {
-  border-color: #ff5962;
-  filter: grayscale(0.8) brightness(0.58);
-}
-.craps-opponent-rack:is([data-state="bust"], [data-state="flip-bust"]) .craps-opponent-rack__head em { color: #ff7a82; }
-.craps-opponent-rack:is([data-state="cashout"], [data-state="paid"]) .craps-opponent-rack__head em { color: #ffe18f; }
-.craps-opponent-rack[data-state="risk"] .craps-opponent-rack__head em { color: #9ed2ff; }
-
-.craps-run-chip.is-lost {
-  z-index: 4;
-  animation: craps-bankroll-chip-loss var(--craps-speed-400, 400ms)
-    cubic-bezier(0.3, 0, 0.7, 0.25) var(--loss-delay, 0ms) forwards;
-}
-
-.craps-run-rail__well.is-seven-out .craps-run-chip.is-lost {
-  animation: craps-bankroll-chip-dust var(--craps-speed-240, 240ms)
-    ease-out var(--loss-delay, 0ms) forwards;
-}
-
-.craps-run-rail__well.is-crapping-out {
-  border-color: #6f251e;
-  box-shadow:
-    inset 0 0.3rem 0.55rem rgba(0, 0, 0, 0.88),
-    inset 0 0 1rem rgba(255, 44, 55, 0.18),
-    0 0 10px rgba(255, 48, 59, 0.2);
-}
-
-@keyframes craps-bankroll-chip-loss {
-  0% { opacity: 1; transform: translateY(0) scaleY(1); filter: brightness(1); }
-  28% { opacity: 1; transform: translateY(-0.18rem) scale(1.16); filter: brightness(1.7); }
-  100% { opacity: 0; transform: translateY(0.85rem) scale(0.25) rotate(18deg); filter: brightness(0.55); }
-}
-
-@keyframes craps-bankroll-chip-dust {
-  0%, 20% { opacity: 1; transform: scale(1); clip-path: inset(0); filter: brightness(1); }
-  48% {
-    opacity: 0.82;
-    transform: scaleX(1.06) scaleY(0.72);
-    clip-path: polygon(0 35%, 14% 28%, 27% 42%, 41% 31%, 55% 45%, 70% 29%, 84% 39%, 100% 32%, 100% 100%, 0 100%);
-    filter: grayscale(0.58) sepia(0.28) brightness(0.82);
-  }
-  100% {
-    opacity: 0;
-    transform: scaleX(1.12) scaleY(0.08);
-    clip-path: polygon(0 82%, 16% 75%, 32% 87%, 49% 76%, 65% 88%, 83% 77%, 100% 84%, 100% 100%, 0 100%);
-    filter: grayscale(0.9) sepia(0.42) blur(0.06rem) brightness(0.62);
-  }
+  .craps-bet { transition: none; }
 }
 
 .craps-resolver-toolbar {
@@ -4307,11 +1833,6 @@ app-craps-table {
   color: #241400;
 }
 
-.craps-run-rail[data-phase="complete"] {
-  border-color: rgba(232, 195, 111, 0.58);
-  box-shadow: inset 0 1px rgba(255, 238, 196, 0.1), 0 0 14px rgba(232, 195, 111, 0.1);
-}
-
 @keyframes craps-dice-pair-impact {
   0% { transform: scale(0.94); filter: brightness(1); }
   48% { transform: scale(1.07); filter: brightness(1.35) drop-shadow(0 0 9px rgba(255, 224, 157, 0.72)); }
@@ -4355,13 +1876,6 @@ app-craps-table {
   will-change: transform, opacity;
   animation: craps-payout-chip-flight var(--craps-speed-520, 520ms)
     cubic-bezier(0.25, 0.7, 0.24, 1) var(--flight-delay, 0ms) both;
-}
-
-.craps-payout-flight img.is-bounty-award {
-  width: clamp(1.3rem, 2vw, 1.75rem);
-  filter: saturate(1.2) brightness(1.16)
-    drop-shadow(0 0 7px rgba(255, 214, 105, 0.82))
-    drop-shadow(0 7px 5px rgba(0, 0, 0, 0.58));
 }
 
 .craps-payout-flight .craps-bonus-roll__flight {
@@ -4451,96 +1965,32 @@ app-craps-table {
 }
 
 .craps-bet.is-seven-clearing .craps-bet__corner-grid {
-  animation: craps-seven-out-stack-clear var(--craps-speed-360, 360ms)
-    cubic-bezier(0.42, 0, 0.72, 0.3) var(--board-clear-delay, 0ms) both;
+  animation: craps-bet-stack-fade var(--craps-speed-360, 360ms)
+    ease-out var(--board-clear-delay, 0ms) both;
 }
 
-/* Seven-out is destruction, not collection: losing stacks disintegrate where
-   they sit instead of following the same traveling arc as a winning payout. */
+/* Stacks never leave the felt. A seven-out fades the whole board to the same
+   muted OFF state a lost bet or a parked come-out stack takes, in place. */
 .craps-table-rail[data-board="clearing"]
   .craps-bet.is-seven-clearing .craps-bet__corner-grid {
-  will-change: opacity, filter;
-  animation: craps-seven-out-dust-field var(--craps-speed-240, 240ms)
-    ease-out var(--board-clear-delay, 0ms) both;
+  animation-duration: var(--craps-speed-240, 240ms);
 }
 
-.craps-table-rail[data-board="clearing"]
-  .craps-bet.is-seven-clearing .craps-bet__seat-art-set {
-  will-change: clip-path, filter, opacity, transform;
-  animation: craps-seven-out-chip-crumble var(--craps-speed-240, 240ms)
-    cubic-bezier(0.22, 0.68, 0.28, 1) var(--board-clear-delay, 0ms) both;
-}
-
-.craps-table-rail[data-board="clearing"]
-  .craps-bet.is-seven-clearing .craps-bet__seat-chip::before,
-.craps-table-rail[data-board="clearing"]
-  .craps-bet.is-seven-clearing .craps-bet__seat-chip::after {
-  position: absolute;
-  z-index: 8;
-  bottom: 9%;
-  left: 50%;
-  width: 0.11rem;
-  height: 0.11rem;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow:
-    -0.58rem -0.22rem 0 -0.02rem currentColor,
-    -0.34rem 0.08rem 0 -0.03rem currentColor,
-    -0.12rem -0.38rem 0 -0.035rem currentColor,
-    0.16rem -0.16rem 0 -0.025rem currentColor,
-    0.39rem 0.03rem 0 -0.035rem currentColor,
-    0.58rem -0.3rem 0 -0.03rem currentColor;
-  color: color-mix(in srgb, #b8aa91 82%, var(--player-color));
-  content: "";
-  opacity: 0;
-  pointer-events: none;
-  will-change: filter, opacity, transform;
-  animation: craps-seven-out-dust-left var(--craps-speed-240, 240ms)
-    ease-out var(--board-clear-delay, 0ms) both;
-}
-
-.craps-table-rail[data-board="clearing"]
-  .craps-bet.is-seven-clearing .craps-bet__seat-chip::after {
-  animation-name: craps-seven-out-dust-right;
-}
-
-.craps-bet.is-seven-cleared:not(.is-seven-reloading) .craps-bet__corner-grid {
-  visibility: hidden;
-  opacity: 0;
-}
-
-/* A made point keeps the same shooter's place and hardway stacks on the felt.
-   They are visibly parked, while the existing POINT / OFF readout is the one
-   table-level status label. A seven-out/new shooter still clears normally. */
-.craps-table-rail[data-board="come-out"][data-come-out="same-shooter"]
-  .craps-bet.is-seven-cleared:not(.is-seven-reloading) .craps-bet__corner-grid {
-  visibility: visible;
+.craps-bet.is-seven-cleared .craps-bet__corner-grid {
   opacity: 0.46;
   filter: grayscale(0.28) saturate(0.55) brightness(0.78);
 }
 
-.craps-bet.is-seven-cleared.is-seven-reloading .craps-bet__corner-grid {
-  visibility: visible;
-  animation: craps-board-stack-restore var(--craps-speed-140, 140ms)
-    cubic-bezier(0.16, 0.82, 0.24, 1.18)
-    calc(var(--board-deal-delay, 0ms) + var(--craps-speed-140, 140ms)) both;
+/* A player whose run is over keeps their stack on the felt, muted. */
+.craps-bet__seat-chip.is-inactive {
+  opacity: 0.46;
+  filter: grayscale(0.28) saturate(0.55) brightness(0.78);
 }
 
 .craps-table-rail[data-board="clearing"] .craps-table-felt {
   box-shadow:
     inset 0 0 0 1px rgba(255, 224, 163, 0.18),
     inset 0 0 1.4rem rgba(165, 28, 35, 0.22);
-}
-
-.craps-payout-flight img.is-board-deal {
-  width: clamp(1.35rem, 2.1vw, 1.9rem);
-  animation-name: craps-board-chip-deal;
-  animation-duration: var(--craps-speed-260, 260ms);
-  animation-timing-function: cubic-bezier(0.2, 0.68, 0.22, 1);
-}
-
-.craps-payout-flight img.is-board-deal.is-featured-deal {
-  width: clamp(1rem, 1.55vw, 1.35rem);
 }
 
 @keyframes craps-payout-chip-flight {
@@ -4551,143 +2001,20 @@ app-craps-table {
   100% { opacity: 0; transform: translate3d(var(--flight-end-x), var(--flight-end-y), 0) scale(0.34) rotate(680deg); }
 }
 
-@keyframes craps-bounty-receipt-in {
-  0% { opacity: 0; transform: translateY(-0.48rem) scale(0.96); filter: brightness(1.8); }
-  62% { opacity: 1; transform: translateY(0.05rem) scale(1.012); filter: brightness(1.22); }
-  100% { opacity: 1; transform: none; filter: none; }
-}
-
-@keyframes craps-seven-out-stack-clear {
-  0% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: brightness(1); }
-  24% { opacity: 1; transform: translate3d(0.08rem, -0.22rem, 0) scale(1.08) rotate(2deg); filter: brightness(1.35); }
-  100% { opacity: 0; transform: translate3d(0.55rem, 2.4rem, 0) scale(0.28) rotate(24deg); filter: brightness(0.48); }
-}
-
-@keyframes craps-seven-out-dust-field {
-  0%, 62% { opacity: 1; filter: none; }
-  100% { opacity: 0; filter: grayscale(0.72) sepia(0.24) blur(0.04rem); }
-}
-
-@keyframes craps-seven-out-chip-crumble {
-  0%, 18% {
-    opacity: 1;
-    transform: scale(var(--craps-bet-chip-scale, 1));
-    clip-path: inset(0);
-    filter: none;
-  }
-  46% {
-    opacity: 0.94;
-    transform: scale(var(--craps-bet-chip-scale, 1)) scaleX(1.02) scaleY(0.82);
-    clip-path: polygon(0 24%, 12% 17%, 25% 29%, 39% 18%, 53% 31%, 68% 16%, 83% 28%, 100% 20%, 100% 100%, 0 100%);
-    filter: grayscale(0.38) sepia(0.18) brightness(0.9);
-  }
-  72% {
-    opacity: 0.58;
-    transform: scale(var(--craps-bet-chip-scale, 1)) scaleX(1.06) scaleY(0.43);
-    clip-path: polygon(0 56%, 11% 48%, 24% 61%, 38% 51%, 52% 64%, 67% 49%, 82% 59%, 100% 52%, 100% 100%, 0 100%);
-    filter: grayscale(0.72) sepia(0.3) blur(0.025rem) brightness(0.72);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(var(--craps-bet-chip-scale, 1)) scaleX(1.12) scaleY(0.08);
-    clip-path: polygon(0 83%, 13% 76%, 28% 88%, 43% 78%, 58% 90%, 73% 77%, 87% 86%, 100% 80%, 100% 100%, 0 100%);
-    filter: grayscale(0.96) sepia(0.42) blur(0.08rem) brightness(0.55);
-  }
-}
-
-@keyframes craps-seven-out-dust-left {
-  0%, 28% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.3); filter: blur(0); }
-  46% { opacity: 0.88; transform: translate3d(-0.06rem, -0.04rem, 0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translate3d(-0.3rem, 0.16rem, 0) scale(0.64); filter: blur(0.07rem); }
-}
-
-@keyframes craps-seven-out-dust-right {
-  0%, 24% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.25) rotate(18deg); filter: blur(0); }
-  50% { opacity: 0.72; transform: translate3d(0.08rem, -0.08rem, 0) scale(0.82) rotate(18deg); filter: blur(0); }
-  100% { opacity: 0; transform: translate3d(0.34rem, 0.12rem, 0) scale(0.52) rotate(18deg); filter: blur(0.08rem); }
-}
-
-@keyframes craps-seven-out-other-clear {
-  0% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: saturate(1); }
-  100% { opacity: 0; transform: translate3d(-0.5rem, 2.1rem, 0) scale(0.3) rotate(-20deg); filter: saturate(0.45); }
-}
-
-@keyframes craps-board-chip-deal {
-  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.38) rotate(-22deg); }
-  9% { opacity: 1; transform: translate3d(0, -0.16rem, 0) scale(0.9) rotate(0); }
-  56% { opacity: 1; transform: translate3d(var(--flight-mid-x), var(--flight-mid-y), 0) scale(1.02) rotate(300deg); }
-  88% { opacity: 1; }
-  100% { opacity: 0; transform: translate3d(var(--flight-end-x), var(--flight-end-y), 0) scale(0.3) rotate(620deg); }
-}
-
-@keyframes craps-board-stack-restore {
-  0% { opacity: 0; transform: translateY(0.7rem) scale(0.42); filter: brightness(1.7); }
-  72% { opacity: 1; transform: translateY(-0.08rem) scale(1.08); filter: brightness(1.3); }
-  100% { opacity: 1; transform: none; filter: none; }
-}
-
-@keyframes craps-rack-pip-arrival {
-  0% { filter: brightness(1.9) drop-shadow(0 0 0.32rem rgba(141, 255, 200, 0.92)); }
-  55% { filter: brightness(1.28) drop-shadow(0 0 0.18rem rgba(91, 225, 161, 0.62)); }
-  100% { filter: none; }
-}
-
-@keyframes craps-battle-rack-collect {
-  0%, 100% { transform: none; }
-  55% { transform: translateX(0.12rem) scale(1.012); }
-}
-
-@keyframes craps-leaderboard-rank-shift {
-  from {
-    translate: var(--craps-rank-shift-x, 0) var(--craps-rank-shift-y, 0);
-    filter: brightness(1.16);
-  }
-  to { translate: 0 0; filter: none; }
+@keyframes craps-bet-stack-fade {
+  from { opacity: 1; filter: none; }
+  to { opacity: 0.46; filter: grayscale(0.28) saturate(0.55) brightness(0.78); }
 }
 
 @media (max-width: 760px) {
   .craps-dice-bay__dice img { width: auto; height: 132%; max-width: 56%; }
-  .craps-run-rail {
-    height: 3.75rem;
-    grid-template-areas: "tray";
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    align-content: center;
-    padding: 0.28rem 0.42rem;
-  }
-  .craps-run-rail[data-bounty-win="true"] {
-    height: 5.35rem;
-  }
-  .craps-run-rail__tray { grid-area: tray; }
-  .craps-run-rail__well { height: 1.82rem; }
-  .craps-run-rail__bankroll { min-width: 7.4rem; height: 2.28rem; padding-inline: 0.42rem; font-size: 0.65rem; }
-  .craps-run-rail .df-bankroll__chip.craps-run-chip { height: 0.76rem; }
+
   .craps-resolver-toolbar .craps-resolver-toolbar__roll { min-height: 2.14rem; }
-  .craps-run-rail__bounty {
-    min-height: 1.16rem;
-    gap: 0.24rem;
-    padding-inline: 0.16rem 0.28rem;
-  }
-  .craps-run-rail__bounty > img { height: 1.18rem; }
-  .craps-run-rail__bounty > .craps-run-rail__bounty-component { gap: 0.08rem; }
-  .craps-run-rail__bounty > .craps-run-rail__bounty-component > small { font-size: 0.31rem; letter-spacing: 0.035em; }
-  .craps-run-rail__bounty strong { font-size: 0.61rem; }
 }
 
 @media (max-width: 390px) {
-  .craps-run-rail__jp-point > small { font-size: 0.29rem; }
   .craps-resolver-toolbar { flex-wrap: wrap; padding: 0.24rem 0.38rem; }
   .craps-resolver-toolbar button { min-height: 1.48rem; padding-inline: 0.35rem; font-size: 0.38rem; }
-  .craps-run-rail__bounty-component--battle { padding-left: 0.22rem; }
-}
-
-@media (max-width: 340px) {
-  .craps-run-rail__bounty {
-    gap: 0.16rem;
-    padding-inline: 0.12rem 0.16rem;
-  }
-  .craps-run-rail__bounty-component--battle { padding-left: 0.14rem; }
-  .craps-run-rail__bounty-boost { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4698,20 +2025,14 @@ app-craps-table {
     animation: craps-dice-lock-readout-reduced var(--craps-roll-readout-ms, 900ms) ease-out both !important;
   }
   .craps-point-puck,
-  .craps-survival-coin,
-  .craps-run-chip,
-  .craps-run-chip.is-pip-arrival,
-  .craps-run-rail__well { transition: none; }
+  .craps-survival-coin { transition: none; }
   .craps-point-puck,
   .craps-survival-coin,
   .craps-survival-stage::before,
   .craps-shooter-boost,
   .craps-bonus-roll__reel,
   .craps-bonus-roll__amount,
-  .craps-dialog__prize-added,
-  .craps-battle-rack.is-rank-shifting,
-  .craps-run-chip.is-pip-arrival,
-  .craps-run-rail__bounty { animation: none !important; }
+  .craps-dialog__prize-added { animation: none !important; }
   .craps-payout-flight { display: none; }
   .craps-bet.is-winning {
     animation: none !important;
@@ -4723,19 +2044,10 @@ app-craps-table {
     filter: brightness(1.25) drop-shadow(0 0 0.35rem rgba(255, 228, 120, 0.9));
   }
   .craps-score-delta.is-popping strong { animation: none !important; opacity: 1; }
-  .craps-table-rail[data-board="clearing"]
-    .craps-bet.is-seven-clearing .craps-bet__corner-grid,
-  .craps-table-rail[data-board="clearing"]
-    .craps-bet.is-seven-clearing .craps-bet__seat-art-set,
-  .craps-run-rail__well.is-seven-out .craps-run-chip.is-lost {
-    opacity: 0;
+  .craps-bet.is-seven-clearing .craps-bet__corner-grid {
+    opacity: 0.46;
+    filter: grayscale(0.28) saturate(0.55) brightness(0.78);
     animation: none !important;
-  }
-  .craps-table-rail[data-board="clearing"]
-    .craps-bet.is-seven-clearing .craps-bet__seat-chip::before,
-  .craps-table-rail[data-board="clearing"]
-    .craps-bet.is-seven-clearing .craps-bet__seat-chip::after {
-    display: none;
   }
 }
 
@@ -4783,10 +2095,6 @@ app-craps-table {
 
 .craps-dialog__card[data-screen="battle"] .craps-bet__hardway-legend em {
   font-size: clamp(0.36rem, 0.5vw, 0.45rem);
-}
-
-.craps-dialog__card[data-screen="placement"] .craps-center-hud {
-  display: none !important;
 }
 
 .craps-center-hud {
@@ -5066,259 +2374,6 @@ app-craps-table {
   visibility: hidden;
 }
 
-.craps-center-hud .craps-run-rail {
-  z-index: 2;
-  height: 4.05rem;
-  grid-row: auto;
-  padding: 0.28rem 0.34rem;
-  border: 1px solid rgba(219, 168, 88, 0.35);
-  border-radius: 0.52rem;
-  background:
-    linear-gradient(90deg, rgba(19, 74, 51, 0.22), transparent 48%, rgba(107, 29, 34, 0.1)),
-    rgba(7, 10, 14, 0.92);
-  box-shadow: inset 0 0 0.75rem rgba(0, 0, 0, 0.42);
-}
-
-.craps-center-hud .craps-run-rail[data-view="battle"] {
-  height: 3.7rem;
-  padding-inline: 0.34rem;
-}
-
-.craps-center-hud .craps-run-rail[data-bounty-win="true"] { height: 5.35rem; }
-
-.craps-center-hud .craps-run-rail__tray {
-  grid-template-columns: minmax(10.25rem, 0.36fr) minmax(0, 1fr);
-  gap: 0.3rem;
-}
-
-.craps-center-hud .craps-run-rail__bankroll {
-  min-width: 10.25rem;
-  height: 3.1rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  place-content: stretch;
-  align-items: center;
-  justify-items: stretch;
-  gap: 0.06rem 0.25rem;
-  padding: 0.28rem 0.46rem 0.24rem 0.58rem;
-  text-align: left;
-}
-
-.craps-run-rail__bankroll-label {
-  grid-column: 1 / -1;
-  color: #bc8588;
-  font: 950 0.34rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.12em;
-}
-
-.craps-center-hud .craps-run-rail__bankroll > output {
-  grid-column: 1 / -1;
-  color: #fff6f6;
-  font-size: clamp(0.88rem, 1.45vw, 1.08rem);
-  text-align: left;
-}
-
-.craps-run-rail__stakes {
-  display: flex;
-  min-width: 0;
-  grid-column: 1 / -1;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.32rem;
-}
-
-.craps-center-hud :is(.craps-run-rail__round-bet, .craps-run-rail__target) {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0.2rem;
-  color: #a88689;
-  font: 950 clamp(0.31rem, 0.55vw, 0.39rem)/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.07em;
-  white-space: nowrap;
-}
-
-.craps-center-hud .craps-run-rail__target output {
-  color: #68ddd5;
-  font: 1000 clamp(0.46rem, 0.86vw, 0.58rem)/1 "Roboto Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.015em;
-}
-
-.craps-roll-history {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  align-items: stretch;
-  gap: 0.26rem;
-  font-family: "Roboto Mono", ui-monospace, monospace;
-}
-
-.craps-roll-history > header {
-  display: grid;
-  min-width: 0;
-  place-content: center;
-  gap: 0.2rem;
-  padding: 0.24rem 0.28rem;
-  border: 1px solid rgba(126, 178, 208, 0.18);
-  border-radius: 0.4rem;
-  background: rgba(5, 16, 21, 0.64);
-  text-align: center;
-}
-
-.craps-roll-history > header strong {
-  color: #e9c96f;
-  font-size: 0.62rem;
-  letter-spacing: 0.055em;
-}
-
-.craps-roll-history > header small {
-  color: #668293;
-  font-size: 0.27rem;
-  letter-spacing: 0.025em;
-}
-
-.craps-roll-history ol {
-  display: grid;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.2rem;
-  list-style: none;
-}
-
-.craps-roll-history li {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  box-sizing: border-box;
-  grid-template-rows: minmax(0, 1fr) auto;
-  place-items: center;
-  gap: 0.12rem;
-  padding: 0.3rem 0.24rem 0.26rem;
-  overflow: hidden;
-  border: 1px solid rgba(126, 178, 208, 0.16);
-  border-radius: 0.4rem;
-  background: rgba(4, 15, 19, 0.67);
-  color: #aebdc5;
-}
-
-.craps-roll-history li strong {
-  color: #edf6fa;
-  font-size: clamp(1.14rem, 1.9vw, 1.52rem);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.craps-roll-history li span {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  font-size: clamp(0.57rem, 0.9vw, 0.72rem);
-  font-weight: 1000;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-roll-history li[data-state="win"] {
-  border-color: rgba(79, 220, 130, 0.34);
-  background: rgba(17, 70, 45, 0.38);
-}
-.craps-roll-history li[data-state="win"] span { color: #8ff3ae; }
-.craps-roll-history li[data-state="loss"] {
-  border-color: rgba(238, 73, 83, 0.34);
-  background: rgba(84, 20, 27, 0.36);
-}
-.craps-roll-history li[data-state="loss"] span { color: #ff9ba2; }
-.craps-roll-history li[data-state="push"] span { color: #c4d1d7; }
-.craps-roll-history li[data-state="empty"] { opacity: 0.34; }
-
-.craps-roll-history li[data-roll-event]::after {
-  position: absolute;
-  top: 0.12rem;
-  right: 0.16rem;
-  content: attr(data-roll-marker);
-  font-size: clamp(0.25rem, 0.43vw, 0.32rem);
-  font-style: normal;
-  font-weight: 1000;
-  letter-spacing: 0.04em;
-  line-height: 1;
-}
-
-.craps-roll-history li[data-roll-event="point-set"] {
-  border-color: rgba(74, 219, 207, 0.7);
-  background:
-    linear-gradient(180deg, rgba(41, 179, 168, 0.18), transparent 64%),
-    rgba(4, 27, 29, 0.78);
-  box-shadow: inset 0 -0.13rem rgba(74, 219, 207, 0.52);
-}
-
-.craps-roll-history li[data-roll-event="point-set"]::after { color: #76e6dc; }
-
-.craps-roll-history li[data-roll-event="point-hit"] {
-  border-color: rgba(79, 220, 130, 0.74);
-  background:
-    linear-gradient(180deg, rgba(46, 180, 104, 0.22), transparent 64%),
-    rgba(8, 45, 28, 0.8);
-  box-shadow: inset 0 -0.13rem rgba(79, 220, 130, 0.58);
-}
-
-.craps-roll-history li[data-roll-event="point-hit"]::after { color: #83f3a7; }
-
-.craps-roll-history li[data-roll-event="seven-out"] {
-  border-color: rgba(255, 88, 98, 0.76);
-  background:
-    linear-gradient(180deg, rgba(200, 35, 48, 0.25), transparent 66%),
-    rgba(56, 12, 18, 0.78);
-  box-shadow: inset 0 -0.13rem rgba(255, 76, 88, 0.58);
-}
-
-.craps-roll-history li[data-roll-event="seven-out"]::after { color: #ff9299; }
-
-.craps-roll-history li[data-roll-event="survival"]::after { color: currentColor; }
-.craps-roll-history li[data-roll-event="survival"][data-state="win"] { color: #83f3a7; }
-.craps-roll-history li[data-roll-event="survival"][data-state="loss"] { color: #ff9299; }
-
-.craps-roll-history li[data-state="cursor"] {
-  opacity: 1;
-  border-color: rgba(241, 202, 106, 0.78);
-  background:
-    radial-gradient(circle at 50% 48%, rgba(241, 202, 106, 0.12), transparent 58%),
-    rgba(7, 19, 23, 0.78);
-  box-shadow:
-    inset 0 0 0.62rem rgba(241, 202, 106, 0.1),
-    0 0 0.42rem rgba(241, 202, 106, 0.12);
-}
-
-.craps-roll-history li[data-state="cursor"]::before {
-  position: absolute;
-  top: 0.18rem;
-  left: 50%;
-  width: 0.56rem;
-  height: 0.18rem;
-  content: "";
-  border-radius: 0.1rem;
-  background: #f1ca6a;
-  box-shadow: 0 0 0.38rem rgba(241, 202, 106, 0.72);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  transform: translateX(-50%);
-  animation: craps-roll-history-cursor 0.82s ease-in-out infinite alternate;
-}
-
-@keyframes craps-roll-history-cursor {
-  from { opacity: 0.42; filter: brightness(0.82); }
-  to { opacity: 1; filter: brightness(1.2); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .craps-roll-history li[data-state="cursor"]::before { animation: none; }
-}
-
 @media (max-width: 700px) {
   .craps-dialog__card[data-screen="battle"] .craps-groups {
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -5335,62 +2390,10 @@ app-craps-table {
   .craps-center-hud {
     grid-template-rows: minmax(6.15rem, 1fr) auto minmax(3.7rem, auto);
   }
-  .craps-center-hud .craps-run-rail {
-    height: 4.05rem;
-  }
-  .craps-center-hud .craps-run-rail[data-bounty-win="true"] { height: 5.35rem; }
-  .craps-center-hud .craps-run-rail[data-view="battle"] {
-    height: 3.7rem;
-    grid-template-areas: "tray";
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .craps-center-hud .craps-run-rail__tray {
-    grid-template-columns: minmax(8.4rem, 0.32fr) minmax(0, 1fr);
-  }
-  .craps-center-hud .craps-run-rail__bankroll {
-    min-width: 8.4rem;
-    height: 2.72rem;
-    padding-inline: 0.46rem;
-  }
-  .craps-run-rail__bankroll-label { font-size: 0.3rem; }
 }
 
 @media (max-width: 390px) {
   .craps-center-hud { gap: 0.22rem; padding: 0.24rem; }
-  .craps-center-hud .craps-run-rail { padding-inline: 0.24rem; }
-  .craps-center-hud .craps-run-rail__tray {
-    grid-template-columns: minmax(7.2rem, 0.32fr) minmax(0, 1fr);
-    gap: 0.2rem;
-  }
-  .craps-center-hud .craps-run-rail__bankroll {
-    min-width: 7.2rem;
-    padding-inline: 0.35rem;
-  }
-  .craps-run-rail__stakes { gap: 0.16rem; }
-  .craps-center-hud :is(.craps-run-rail__round-bet, .craps-run-rail__target) {
-    gap: 0.1rem;
-    font-size: 0.28rem;
-    letter-spacing: 0.025em;
-  }
-  .craps-roll-history {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.12rem;
-  }
-  .craps-roll-history > header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 0 0.08rem;
-    border: 0;
-    background: transparent;
-  }
-  .craps-roll-history > header strong { font-size: 0.58rem; }
-  .craps-roll-history > header small { font-size: 0.3rem; }
-  .craps-roll-history ol { gap: 0.12rem; }
-  .craps-roll-history li { padding: 0.22rem 0.14rem 0.2rem; }
-  .craps-roll-history li strong { font-size: 1.08rem; }
-  .craps-roll-history li span { font-size: 0.52rem; }
 }
 
 /* Phone resolvers are a fitted table, not a vertically scrolling desktop
@@ -5542,53 +2545,6 @@ app-craps-table {
     overflow: hidden;
   }
 
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail,
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail[data-view="battle"] {
-    height: 3.1rem;
-    padding: 0.18rem 0.24rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail[data-bounty-win="true"] {
-    height: 4.05rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__tray {
-    grid-template-columns: minmax(6.25rem, 0.34fr) minmax(0, 1fr);
-    gap: 0.2rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__bankroll {
-    min-width: 6.25rem;
-    height: 2.2rem;
-    padding: 0.18rem 0.32rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__well {
-    height: 1.7rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__bounty {
-    min-height: 1.18rem;
-    gap: 0.16rem;
-    padding-inline: 0.12rem 0.18rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__bounty > img {
-    height: 1.05rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history li {
-    padding-block: 0.16rem 0.14rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history li strong {
-    font-size: clamp(0.88rem, 4.2vw, 1.08rem);
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history li span {
-    font-size: clamp(0.42rem, 2vw, 0.52rem);
-  }
-
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud:has(.craps-dice-bay[data-state="winner"]) {
     grid-template-rows: minmax(4.2rem, 1fr) auto minmax(2.25rem, auto);
   }
@@ -5599,140 +2555,6 @@ app-craps-table {
 
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-survival-stage::before {
     width: clamp(4.2rem, 20vw, 5.2rem);
-  }
-}
-
-/* Portrait resolvers show the field in two compact leaderboard lanes. Entries
-   fill top-to-bottom before advancing horizontally, so four names stay in view
-   without turning the Top 10 into a tall stack above the table. */
-@media (orientation: portrait) and (max-width: 700px) {
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board {
-    min-height: clamp(5.35rem, 16dvh, 6rem);
-    grid-template-rows: 0.72rem minmax(0, 1fr);
-    gap: 0.1rem;
-    padding: 0.16rem 0.24rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__head {
-    padding-inline: 0.12rem 0.04rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__head strong {
-    font-size: 0.5rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__head small {
-    font-size: 0.32rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__rows {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(8.6rem, 46%);
-    grid-auto-rows: auto;
-    grid-template-columns: none;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 0.12rem 0.18rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: inline proximity;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack {
-    min-height: 0;
-    grid-template-columns: minmax(2.6rem, 0.3fr) minmax(2rem, 0.22fr) minmax(0, 1fr);
-    grid-template-areas:
-      "identity identity identity"
-      "amount last well";
-    grid-template-rows: minmax(0.76rem, 1fr) 0.62rem;
-    gap: 0.02rem 0.08rem;
-    padding: 0.05rem 0.1rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__identity {
-    grid-template-columns: 0.62rem 0.82rem minmax(0, 1fr);
-    gap: 0.06rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__rank {
-    font-size: 0.4rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__avatar {
-    width: 0.78rem;
-    font-size: 0.24rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__player {
-    gap: 0;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__player strong {
-    font-size: 0.4rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__player em {
-    font-size: 0.29rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__coin {
-    top: 0.04rem;
-    left: 0.72rem;
-    width: 0.84rem;
-    height: 0.84rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] :is(
-    .craps-battle-rack__well,
-    .craps-battle-rack__amount,
-    .craps-battle-rack__amount.is-breakdown
-  ) {
-    height: 0.58rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__well {
-    padding-inline: 0.05rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount {
-    padding-inline: 0.05rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount strong {
-    font-size: 0.38rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount.is-breakdown {
-    gap: 0;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount-line {
-    gap: 0.03rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount-line small {
-    font-size: 0.14rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__amount-line strong {
-    font-size: 0.29rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__last {
-    height: 0.58rem;
-    gap: 0.025rem;
-    padding-inline: 0.04rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__last small {
-    font-size: 0.16rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack__last strong {
-    font-size: 0.3rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack .df-bankroll__chip.craps-battle-rack__chip {
-    height: 0.48rem;
   }
 }
 
@@ -6024,10 +2846,6 @@ app-craps-table {
   gap: 0.42rem;
   padding: 0.45rem 0.55rem;
   overflow-y: auto;
-}
-
-.craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board {
-  display: none !important;
 }
 
 .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
@@ -6564,13 +3382,6 @@ app-craps-table {
   border-bottom: 0.28rem solid #f5ca62;
 }
 
-.craps-dialog__card.is-resolving[data-screen="battle"] :is(
-  .craps-center-hud .craps-run-rail,
-  .craps-center-hud .craps-roll-history
-) {
-  display: none !important;
-}
-
 .craps-race {
   --race-you: #6ef08c;
   --race-gold: #f5ca62;
@@ -6820,6 +3631,39 @@ app-craps-table {
 .craps-race-endpoint.is-you.is-leader > rect {
   stroke: #6ef08c;
   stroke-width: 2;
+}
+
+/* A seven-out on this shooter would send YOU to the survival flip or bust. */
+.craps-race-endpoint.is-you.is-danger > line {
+  stroke: #ff626b;
+}
+
+.craps-race-endpoint.is-you.is-danger > rect {
+  fill: #4d0d14;
+  stroke: #ff626b;
+  stroke-width: 2;
+  animation: craps-race-endpoint-danger 1.1s ease-in-out infinite alternate;
+}
+
+.craps-race-endpoint.is-you.is-danger .craps-race-endpoint-rank,
+.craps-race-endpoint.is-you.is-danger .craps-race-inline-endpoint {
+  fill: #ffc2c6;
+}
+
+.craps-race-endpoint.is-you.is-danger .craps-race-endpoint-avatar {
+  stroke: #ff626b;
+}
+
+@keyframes craps-race-endpoint-danger {
+  from { filter: drop-shadow(0 0 0.2rem rgba(255, 98, 107, 0.3)); }
+  to { filter: drop-shadow(0 0 0.65rem rgba(255, 98, 107, 0.85)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .craps-race-endpoint.is-you.is-danger > rect {
+    animation: none;
+    filter: drop-shadow(0 0 0.45rem rgba(255, 98, 107, 0.6));
+  }
 }
 
 .craps-race-endpoint-avatar {
@@ -7295,7 +4139,6 @@ app-craps-table {
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--biggest {
     display: none !important;
   }
-
 }
 
 @media (max-width: 850px) {
@@ -7423,32 +4266,6 @@ app-craps-table {
     gap: 0.34rem;
     padding: 0.28rem;
     overflow: hidden;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board {
-    min-height: 0;
-    height: 100%;
-    grid-template-rows: 0.92rem minmax(0, 1fr);
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__head small {
-    display: none;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-board__rows {
-    grid-auto-flow: row;
-    grid-auto-columns: auto;
-    grid-auto-rows: minmax(2.3rem, auto);
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scroll-snap-type: none;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-battle-rack {
-    min-height: 2.3rem;
-    scroll-snap-align: none;
   }
 
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt {
@@ -7592,46 +4409,6 @@ app-craps-table {
     grid-area: core;
   }
 
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail {
-    grid-area: rail;
-    height: 3.1rem;
-    padding: 0.18rem 0.24rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail[data-bounty-win="true"] {
-    height: 4.05rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__tray {
-    grid-template-columns: minmax(6.25rem, 0.34fr) minmax(0, 1fr);
-    gap: 0.2rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__bankroll {
-    min-width: 6.25rem;
-    height: 2.2rem;
-    padding: 0.18rem 0.32rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-center-hud .craps-run-rail__well {
-    height: 1.7rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history {
-    grid-area: history;
-    grid-template-columns: 3.7rem minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    gap: 0.16rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history > header {
-    padding: 0.12rem;
-  }
-
-  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-roll-history ol {
-    gap: 0.12rem;
-  }
-
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-winner-payoff {
     inset-inline: 0.08rem;
   }
@@ -7705,90 +4482,6 @@ app-craps-table {
   .craps-dialog__card.is-resolving[data-screen="battle"] .craps-winner-payoff__copy > strong {
     gap: 0.12rem;
     font-size: 1rem;
-  }
-}
-
-/* Finished battles become a compact result list. The winner keeps the rack
-   that explains the winning run; everyone else trades the now-empty trough
-   for a full-width identity and a clearer LAST result directly below it. */
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"]) .craps-battle-board__rows {
-  grid-auto-rows: max-content;
-  align-content: start;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack[data-battle-winner="true"] {
-  min-height: 2.7rem;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) {
-  --craps-finished-last-indent: 3.12rem;
-  min-height: 2.2rem;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-areas:
-    "identity amount"
-    "last amount";
-  grid-template-rows: auto auto;
-  gap: 0.05rem 0.35rem;
-  padding: 0.14rem 1.34rem 0.14rem 0.2rem;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__well {
-  display: none;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__amount {
-  height: auto;
-  align-self: center;
-  padding: 0;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last {
-  display: flex;
-  width: auto;
-  min-width: 0;
-  height: auto;
-  align-self: start;
-  justify-self: stretch;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: 0.22rem;
-  margin-left: var(--craps-finished-last-indent);
-  padding: 0;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last small {
-  font-size: 0.28rem;
-  letter-spacing: 0.08em;
-}
-
-.craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-  .craps-battle-rack:not([data-battle-winner="true"]) .craps-battle-rack__last strong {
-  overflow: visible;
-  font-size: clamp(0.44rem, 1vw, 0.54rem);
-  text-align: left;
-  text-overflow: clip;
-}
-
-@media (max-width: 860px) {
-  .craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-    .craps-battle-rack:not([data-battle-winner="true"]) {
-    --craps-finished-last-indent: 2.06rem;
-  }
-}
-
-@media (orientation: portrait) and (max-width: 700px) {
-  .craps-table-rail:has(.craps-run-rail[data-phase="complete"])
-    .craps-battle-rack:not([data-battle-winner="true"]) {
-    --craps-finished-last-indent: 1.56rem;
   }
 }
 

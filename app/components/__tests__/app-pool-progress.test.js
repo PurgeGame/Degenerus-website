@@ -769,17 +769,17 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the live target and phase publish before completed-level history is fetched');
   });
 
-  test('live pool values use the same fast sample as the Grand Prize ticker', () => {
+  test('live pool values use game samples independently of the cosmetic headline', () => {
     const nextFast = component.indexOf('goldRush?.components?.nextWei');
     const nextSlow = component.indexOf('gameState?.prizePools?.nextPrizePool', nextFast);
     const currentFast = component.indexOf('goldRush?.components?.currentWei');
     const currentSlow = component.indexOf('gameState?.prizePools?.currentPrizePool', currentFast);
     assert.ok(nextFast >= 0 && nextSlow > nextFast,
-      'purchase pool prefers app.goldRush and falls back to the 15s game-state sample');
+      'purchase pool prefers app.livePools and falls back to the 15s game-state sample');
     assert.ok(currentFast >= 0 && currentSlow > currentFast,
       'jackpot pool uses the same fast precedence');
-    assert.match(component, /subscribe\('app\.goldRush', \(\) => this\.#render\(\)\)/,
-      'every Grand Prize sample immediately repaints the pool instrument');
+    assert.match(component, /subscribe\('app\.livePools', \(\) => this\.#render\(\)\)/,
+      'every live pool sample immediately repaints the pool instrument');
   });
 
   test('phase day is chain-derived and can never collapse to a bare phase name', () => {

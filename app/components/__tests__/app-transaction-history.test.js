@@ -181,6 +181,56 @@ describe('transaction history composition', () => {
     assert.equal(result.items[1].day, 5);
   });
 
+  // GameAfkingModule packs AfkingDelivered: weiIn [0..127], day [128..151],
+  // pendingFlipAfter [152..175], affiliateBaseAfter [176..207].
+  const packAfkingDelivered = ({ weiIn, day, pendingFlipAfter = 0n, affiliateBaseAfter = 0n }) =>
+    weiIn | (day << 128n) | (pendingFlipAfter << 152n) | (affiliateBaseAfter << 176n);
+
+  test('unpacks day and weiIn from a packed AfkingDelivered API fact', async () => {
+    const player = '0xaa33333333333333333333333333333333333333';
+    const packed = packAfkingDelivered({ weiIn: 120_000_000_000n, day: 9n, pendingFlipAfter: 77n, affiliateBaseAfter: 5n });
+    history.__setAfkingHistoryFetcherForTest(async () => ({
+      toBlock: 999,
+      truncated: false,
+      events: [{
+        name: 'AfkingDelivered',
+        args: { player, packed: packed.toString() },
+        blockNumber: 12, logIndex: 0, transactionHash: '0xaa3',
+      }],
+    }));
+
+    const result = await history.loadAfkingPurchaseHistory(player, { provider: {} });
+    assert.equal(result.items[0].day, 9);
+    assert.equal(result.items[0].weiIn, '120000000000');
+  });
+
+  test('the AFKing chain scan decodes the contract AfkingDelivered log', async () => {
+    const { ethers } = await import('../../app/contracts.js');
+    const player = '0xaa44444444444444444444444444444444444444';
+    const iface = new ethers.Interface(['event AfkingDelivered(address indexed player, uint256 packed)']);
+    const encoded = iface.encodeEventLog('AfkingDelivered', [
+      player, packAfkingDelivered({ weiIn: 40_000_000_000n, day: 8n }),
+    ]);
+    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
+    let topicFilter = null;
+    const provider = {
+      getBlockNumber: async () => deployBlock + 5,
+      getLogs: async ({ topics, fromBlock }) => {
+        topicFilter = topics[0];
+        return fromBlock === deployBlock ? [{
+          ...encoded, blockNumber: deployBlock + 1, index: 0, transactionHash: '0xaa4',
+        }] : [];
+      },
+    };
+
+    const result = await history.loadAfkingPurchaseHistory(player, { provider });
+    assert.ok(topicFilter.includes(encoded.topics[0]), 'the scan asks for the contract topic');
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].eventName, 'AfkingDelivered');
+    assert.equal(result.items[0].day, 8);
+    assert.equal(result.items[0].weiIn, '40000000000');
+  });
+
   test('pages a truncated API response by since until the API catches up', async () => {
     const player = '0xaa22222222222222222222222222222222222222';
     const sinceValues = [];
@@ -776,7 +826,9 @@ describe('transaction history composition', () => {
     // next. Building the timestamp from the same anchor/period still exercises the real
     // arithmetic — the floor, the boundary subtraction, and the 1-based day — because the
     // expected day is chosen here and the function has to land back on it.
-    const { VOLUME_WINDOW } = await import('../../app/chain-config.sepolia.js');
+    // The ACTIVE profile — the one app-transaction-history.js itself imports. The dormant
+    // chain-config.sepolia.js keeps the hosted-era 1,200 s day and is not what the page runs.
+    const { VOLUME_WINDOW } = await import('../../app/chain-config.js');
     const { anchor, period, deployDayBoundary } = VOLUME_WINDOW;
     const day = 72;
     const startMs = ((deployDayBoundary + day - 1) * period + anchor) * 1000;
