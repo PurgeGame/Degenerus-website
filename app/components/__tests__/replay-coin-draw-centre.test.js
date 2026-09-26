@@ -39,7 +39,7 @@ function element() {
 }
 
 function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinComplete = true, bonusTraitDraw = false, toggleReady = false } = {}) {
-  const dom = { center: element(), label: element() };
+  const dom = { center: element() };
   const klass = `new (class {
     #coinDrawBattle = null; #coinDrawOpening = false; #coinDrawStatusFor = null;
     #coinDrawStatus = null; #coinDrawSeen = new Set();
@@ -50,7 +50,6 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     opened = []; toggled = 0; toggleReady = false;
     querySelector(selector) {
       if (selector.includes('"center"')) return dom.center;
-      if (selector.includes('center-battle-label')) return dom.label;
       return null;
     }
     #mainReadyForBonus() { return this.toggleReady; }
@@ -71,9 +70,10 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     distribute() { this.#distributePrizesFromRoll1(); return this.#centerWins; }
     sync() { return this.#syncCoinDrawCentre(); }
     markSeen(key) { this.#coinDrawSeen.add(key); }
+    fail(message) { this.#coinDrawStatus = { message, error: true }; }
   })()`;
   const instance = runInNewContext(klass, {
-    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'RESOLVE CRAPS BATTLE', CRAPS_CENTRE_LABEL: 'RESOLVE',
+    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'RESOLVE CRAPS BATTLE',
   });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });
   return { instance, dom };
@@ -87,11 +87,13 @@ test('purchase day, viewer drawn in: the centre glows, reads as a button and ope
   assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), true);
   assert.equal(dom.center.getAttribute('role'), 'button');
   assert.equal(dom.center.getAttribute('tabindex'), '0');
-  assert.match(dom.center.getAttribute('aria-label'), /CRAPS BATTLE · 2 RUNS · POT 9K FLIP/);
-  assert.equal(dom.label.textContent, 'RESOLVE', 'the centre carries its own button face');
-  instance.markSeen(`${model.key}:${model.player}`);
+  assert.equal(dom.center.getAttribute('aria-label'), 'You were drawn into the craps battle. Open it to watch your run.',
+    'no result and no pot before the battle is watched');
+  assert.equal(dom.center.classList.contains('is-error'), false);
+  instance.fail('Battle replay unavailable.');
   instance.sync();
-  assert.equal(dom.label.textContent, 'REPLAY', 'an opened battle offers a replay');
+  assert.equal(dom.center.classList.contains('is-error'), true, 'a failed open marks the diamond itself');
+  assert.equal(dom.center.title, 'Battle replay unavailable.');
 
   instance.click({ target: { classList: { contains: () => false } } });
   assert.equal(instance.opened.length, 1, 'a centre click opens the battle, not a draw toggle');
@@ -143,12 +145,18 @@ test('nothing lights before the main spin has played out', () => {
   assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
 });
 
-test('purchase day has no Bonus Spin; its battle FLIP lands in the main centre', () => {
+test('purchase day has no Bonus Spin; a drawn wallet\'s battle FLIP is paid at the table, not scratched', () => {
   const win = { winner: VIEWER, awardType: 'farFutureCoin', amount: String(700n * WEI), traitId: null };
   const { instance } = panel({ bonusTraitDraw: false });
   instance.setup({ coinDrawBattle: battle, player: VIEWER, day: 42, mainSpinComplete: true, bonusTraitDraw: false, roll2Wins: [win] });
   assert.equal(instance.filter(VIEWER), false, 'no bonus-trait draw, no Bonus Spin');
-  assert.deepEqual([...instance.distribute().map((row) => row.amount)], [win.amount]);
+  assert.deepEqual([...instance.distribute()], [], 'the centre opens the battle instead of hiding its FLIP');
+
+  // Without the battle payload the centre cannot open it, so the FLIP still lands there.
+  const fallback = panel({ coinDrawBattle: null, bonusTraitDraw: false }).instance;
+  fallback.setup({ coinDrawBattle: null, player: VIEWER, day: 42, mainSpinComplete: true, bonusTraitDraw: false, roll2Wins: [win] });
+  fallback.filter(VIEWER);
+  assert.deepEqual([...fallback.distribute().map((row) => row.amount)], [win.amount]);
 
   const jackpot = panel({ coinDrawBattle: null, bonusTraitDraw: true }).instance;
   jackpot.setup({ coinDrawBattle: null, player: VIEWER, day: 42, mainSpinComplete: true, bonusTraitDraw: true, roll2Wins: [win] });
@@ -168,11 +176,12 @@ test('the bottom key resolves the battle after the main spin, before the coinfli
   assert.match(source, /if \(result\?\.ok\) this\.#coinDrawSeen\.add\(/, 'a successful open retires the key step');
 });
 
-test('the centre carries badge dice and its own button face, with no caption pill', () => {
+test('the centre face is the two dice badges and nothing else', () => {
   assert.match(source, /<span class="replay-center-dice" aria-hidden="true"><img src="\$\{CRAPS_CENTRE_DICE\[0\]\}"/);
   assert.match(source, /badgeCircularPath\('dice', 4, 'silver'\)/, 'dice imagery uses the dice trait badges');
+  assert.match(source, /badgeCircularPath\('dice', 1, 'blue'\)/, 'a 5 and a 2');
   assert.doesNotMatch(source, /data-face="\d"><\/i>/, 'no hand-drawn pip dice');
-  assert.match(source, /class="replay-center-battle" data-bind="center-battle-label"/);
+  assert.doesNotMatch(source, /replay-center-battle|center-battle-label|CRAPS_CENTRE_LABEL/, 'no button face on the diamond');
   assert.doesNotMatch(source, /class="replay-craps-battle"/, 'the green caption pill is gone');
   assert.match(source, /import\('\.\.\/craps\/coin-draw-viewer\.js'\)/, 'the viewer loads only on click');
   const css = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');

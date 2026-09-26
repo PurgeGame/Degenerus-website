@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-25700 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-26000 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -346,6 +346,12 @@ describe('app.css LOC budget', () => {
     // segmented toggle replacing the three-slot coin grid, per-currency quick
     // picks (.deg-amount-preset), and currency-colored Place Bet. An existing
     // surface; ~50 lines of headroom.
-    assert.ok(cssLines.length <= 25_700, `total <=25700, got ${cssLines.length}`);
+    // 25700 → 25800 for the play-grid swap (Craps centre, Degenerette right): the compact
+    // right-track champion row and the referral strip under the grid. Existing surfaces.
+    // 25800 → 25900: the Degenerette row-height cap, full champion badges, and the restyled
+    // referral banner. Same surfaces; ~55 lines of headroom.
+    // 25900 → 26000: the referral strip's own phone layout (flame + two lines + coin over a
+    // full-width COPY LINK row), replacing inherited in-panel phone rules. Same surface.
+    assert.ok(cssLines.length <= 26_000, `total <=26000, got ${cssLines.length}`);
   });
 });

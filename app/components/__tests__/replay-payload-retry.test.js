@@ -127,6 +127,7 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
     #quadWinArrays = []; #centerWins = []; #centerScratched = false; #dayBonusTraitDraw = true;
     #sfxScratchStop() {} #sfxGreenReveal() {} #checkAllScratched() {}
     #popBubble(_target, _event, _instant, done) { done(); }
+    drawnIn = false; #coinDrawDrawnIn() { return this.drawnIn; }
     prize = { style: {}, classList: { remove() {}, add() {} }, setAttribute(k,v) { this[k] = v; } };
     querySelector(s) { return s.includes('center-prize') ? this.prize : null; }
     ${source.slice(start, end)}
@@ -142,6 +143,12 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
   assert.match(combined.innerHTML, /BONUS \+ AFKING/);
   assert.match(combined.title, /10 FLIP far-future bonus/);
   assert.match(combined.title, /4000 FLIP AFKing Seat Draw/);
+  // A wallet drawn into the day's craps battle is paid its battle FLIP on the table; only the
+  // seat stays under the centre.
+  render.drawnIn = true;
+  const drawn = render.run([seat, { awardType: 'farFutureCoin', amount: String(10n * 10n ** 18n), traitId: null }]);
+  assert.match(drawn.innerHTML, /AFKING SEAT/);
+  assert.doesNotMatch(drawn.innerHTML, /4010|BONUS/);
 });
 
 test('an open cabinet reuses the host result without roll or distribution requests', async () => {

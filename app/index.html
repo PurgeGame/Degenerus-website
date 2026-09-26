@@ -110,7 +110,8 @@
        uses; `npm run check:vendor` prevents a stale generated module.
        WalletConnect is also self-hosted as one lazy module, loaded only for a
        connect click or persisted session restoration. -->
-  <!-- Keep the three replay modules on one URL generation. A bare local
+  <!-- Keep the three replay modules (and the fill-draw viewer built on the
+       adapter) on one URL generation. A bare local
        static server can otherwise cache replay-contract.js after the lazy
        launcher itself has refreshed, producing a false "unsupported ruleset"
        for a hash already shipped by the current app. Bump the shared suffix
@@ -129,11 +130,12 @@
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=tutorial-fixtures-13",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ed035463-4868ec90-scoped-v1",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ed035463-4868ec90-scoped-v1",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ed035463-4868ec90-scoped-v1",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ed035463-4868ec90-scoped-v2",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ed035463-4868ec90-scoped-v2",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ed035463-4868ec90-scoped-v2",
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-ed035463-4868ec90-scoped-v2",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-tutorial-native-tickets-20260914",
-      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-22",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-23",
       "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
     }
   }
@@ -349,15 +351,18 @@
            disk for THE PIT. -->
 
       <!-- Second three-column instrument, aligned to the jackpot hero:
-           quests left, Degenerette center, and scheduled Craps entries right.
+           quests left, scheduled Craps entries center, and Degenerette right.
            Side Bets keeps its own full-width rail below AFKING Passes.
            Degenerette owns fresh and historical resolved spins in-panel. -->
-      <section class="play-grid" aria-label="Quests, Degenerette, and Craps">
+      <section class="play-grid" aria-label="Quests, Craps, and Degenerette">
         <app-quest-panel></app-quest-panel>
-        <app-degenerette-panel></app-degenerette-panel>
         <app-craps-entry></app-craps-entry>
         <app-craps-rules hidden></app-craps-rules>
+        <app-degenerette-panel></app-degenerette-panel>
       </section>
+      <!-- The referral card's strip under the play grid. app-degenerette-panel owns the card
+           and its logic and moves it here when the strip exists. -->
+      <div class="referral-strip" data-referral-strip hidden></div>
 
       <!-- The only permanent scoreboard in the game: five all-time marks.
            Their payouts still quote the shared FLIP pool without spending a
@@ -518,7 +523,7 @@
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js?v=tutorial-fixtures-13"></script>
   <script type="module" src="/app/components/app-pool-progress.js?v=tutorial-fixtures-13"></script>
-  <script type="module" src="/app/components/replay-panel.js?v=tutorial-navigation-22"></script>
+  <script type="module" src="/app/components/replay-panel.js?v=tutorial-navigation-23"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it

@@ -316,12 +316,15 @@ function installDeityOwners(owners = new Map()) {
   }));
 }
 import {
-  DGN_COLOR_HEX, DGN_TICKET_COPY_EVENT, dgnSymbolPath,
+  DGN_COLOR_HEX, DGN_TICKET_COPY_EVENT, dgnBadgePath,
 } from '../../app/dgn-traits.js';
-// Audit a5d4d2cd: the picker never picks a color — every rendered badge uses
-// this fixed neutral swatch (mirrors app-degenerette-panel.js's own
-// DGN_NEUTRAL_COLOR; duplicated here since the panel does not export it).
+// Audit a5d4d2cd: the picker never picks a color; the house rolls every color. The champion and
+// its picker wear full badges: WWXRP red, Ethereum green, every other symbol silver. Mirrors the
+// panel's degeneretteChampionBadgePath (checked against the export below), duplicated here because
+// the panel module loads only after this file's DOM stubs.
 const DGN_NEUTRAL_COLOR = 6; // 'silver'
+const degeneretteChampionBadgePath = (q, icon) => dgnBadgePath(q, icon,
+  q === 0 && icon === 0 ? 3 : q === 0 && icon === 6 ? 2 : DGN_NEUTRAL_COLOR);
 import { dgnHouseTraits, dgnScore } from '../../app/dgn-reels.js';
 
 // reveal-overlay.js subclasses HTMLElement at module scope, so it can only be
@@ -739,7 +742,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       PANEL_SRC,
-      /img\.src\s*=\s*dgnSymbolPath\(q, s, DGN_NEUTRAL_COLOR\)/,
+      /img\.src\s*=\s*degeneretteChampionBadgePath\(q, s\)/,
       'symbol choices use the standalone trait marks on the fixed neutral swatch — '
         + 'audit a5d4d2cd removed the per-quadrant picked color (t.c) entirely',
     );
@@ -776,13 +779,40 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     assert.equal(el.getTicketDraft().symbol, 0);
     assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
-      dgnSymbolPath(0, 0, DGN_NEUTRAL_COLOR),
+      degeneretteChampionBadgePath(0, 0),
       'the copied icon uses standalone neutral art, without its old color');
     assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'WWXRP');
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-0"]').getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-state"]'), null,
       'copying a ticket does not recreate the removed header status pill');
     el.disconnectedCallback();
+  });
+
+  test('champion badges: WWXRP red, Ethereum green, every other symbol silver', async () => {
+    const { degeneretteChampionBadgePath: exported } = await import('../app-degenerette-panel.js');
+    assert.match(exported(0, 0), /crypto_00_xrp_red\.svg$/);
+    assert.match(exported(0, 6), /crypto_06_ethereum_green\.svg$/);
+    assert.match(exported(1, 3), /zodiac_03_cancer_silver\.svg$/);
+    assert.match(exported(3, 4), /dice_04_5_silver\.svg$/);
+    for (let q = 0; q < 4; q++) {
+      for (let icon = 0; icon < 8; icon++) assert.equal(exported(q, icon), degeneretteChampionBadgePath(q, icon));
+    }
+    assert.match(PANEL_SRC, /<span class="dgn-symbol-preview__title">\s*<strong class="dgn-symbol-preview__name"[\s\S]*?<span class="dgn-symbol-preview__change"/,
+      'Change sits after the champion name, not over the badge');
+  });
+
+  test('the referral card moves to the page strip after its listeners are wired', () => {
+    const connect = PANEL_SRC.slice(PANEL_SRC.indexOf('  connectedCallback() {'), PANEL_SRC.indexOf('  disconnectedCallback() {'));
+    assert.ok(connect.indexOf('this.#wireEventHandlers();') < connect.indexOf('this.#mountReferralStrip();', connect.indexOf('this.#wireEventHandlers();')),
+      'the card is wired before it leaves the panel, so its listeners travel with it');
+    assert.match(PANEL_SRC, /document\.querySelector\('\[data-referral-strip\]'\)/);
+    assert.match(PANEL_SRC, /disconnectedCallback\(\) \{\s*this\.#unmountReferralStrip\(\);/,
+      'a disconnect returns the card to the panel');
+    for (const part of ['deg-referral-copy', 'deg-referral-info', 'deg-referral-feedback', 'deg-referral-coin-toggle']) {
+      assert.doesNotMatch(PANEL_SRC, new RegExp(`this\\.querySelector\\('\\[data-bind="${part}"\\]'\\)`),
+        `${part} is found through #referralQuery wherever the card lives`);
+    }
+    assert.match(APP_CSS, /\.referral-strip \.deg-referral-card\s*\{[^}]*display:\s*flex/s, 'the strip lays the card out as one bar');
   });
 
   test('the segmented toggle names both currencies and colors the wager by currency', () => {
@@ -816,6 +846,37 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-amount"]').value, '1000');
     assert.equal(presets()[2].getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent, 'Place Bet · 5,000 FLIP');
+    el.disconnectedCallback();
+  });
+
+  test('the +/- steppers move by the last quick pick pressed, per currency', () => {
+    const el = instantiate();
+    const amount = el.querySelector('[name="deg-amount"]');
+    const up = el.querySelector('[data-bind="deg-amount-up"]');
+    const down = el.querySelector('[data-bind="deg-amount-down"]');
+    const presets = () => Array.from(el.querySelector('[data-bind="deg-amount-presets"]').children);
+    amount.value = '0.01';
+    up.dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.015', 'before any pick the step is the ETH minimum');
+    presets()[2].dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.05');
+    up.dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.1');
+    up.dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.15');
+    down.dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.1');
+    assert.equal(up.getAttribute('aria-label'), 'Increase bet per card by 0.05 ETH');
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    presets()[2].dispatchEvent({ type: 'click' });
+    up.dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '2000', 'FLIP keeps its own step');
+    assert.equal(up.getAttribute('aria-label'), 'Increase bet per card by 1,000 FLIP');
+    el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
+    const before = Number(amount.value);
+    up.dispatchEvent({ type: 'click' });
+    assert.equal(Number(amount.value).toFixed(6), (before + 0.05).toFixed(6), 'back on ETH, + still steps 0.05');
+    assert.equal(up.getAttribute('aria-label'), 'Increase bet per card by 0.05 ETH', 'ETH remembers its pick');
     el.disconnectedCallback();
   });
 
@@ -2630,7 +2691,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         button.dispatchEvent({ type: 'click' });
         assert.equal(el.getTicketDraft().symbol, (q << 3) | icon);
         assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
-          dgnSymbolPath(q, icon, DGN_NEUTRAL_COLOR));
+          degeneretteChampionBadgePath(q, icon));
         assert.equal(button.getAttribute('aria-pressed'), 'true');
         assert.equal(choices.querySelectorAll('button')
           .filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
@@ -2719,7 +2780,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     );
     assert.equal(el.getTicketDraft().symbol, 19, 'the gold quadrant supplies its icon only');
     assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
-      dgnSymbolPath(2, 3, DGN_NEUTRAL_COLOR));
+      degeneretteChampionBadgePath(2, 3));
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-19"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });
@@ -2777,7 +2838,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     assert.equal(el.getTicketDraft().symbol, 22, 'the deity symbol overrides the inventory default');
     assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
-      dgnSymbolPath(2, 6, DGN_NEUTRAL_COLOR));
+      degeneretteChampionBadgePath(2, 6));
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
   });

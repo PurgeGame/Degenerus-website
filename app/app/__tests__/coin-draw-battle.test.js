@@ -125,14 +125,34 @@ test('clicking through opens the table on the viewer\'s own run', async () => {
   assert.equal(options.viewerPlayer, PLAYER.toLowerCase());
   assert.equal(options.viewerBetId, `coin-draw:${DAY}:${index}`);
   assert.equal(options.tableIndex, `coin-draw:${DAY}`);
-  assert.equal(options.resolutionHands.length, run.totalRolls, 'one frame per roll of this run');
-  assert.equal(options.fieldEntrants, battle.replay.runs.length);
-  assert.equal(options.otherPlayers.length, 0, 'other runs rolled other dice; none share this felt');
+  const runs = battle.replay.runs;
+  const longest = Math.max(...runs.map((entry) => entry.totalRolls));
+  const frames = options.resolutionHands;
+  assert.equal(frames.length, longest, 'the table rolls until the longest run is done');
+  assert.ok(frames.slice(0, run.totalRolls).every((frame) => frame.viewerClosed === false), 'the run\'s own rolls come first');
+  assert.ok(frames.slice(run.totalRolls).every((frame) => frame.viewerClosed === true && /^BATTLE (CONTINUES|COMPLETE) · /.test(frame.label)),
+    'then the field rolls on without it');
+  assert.equal(frames[run.totalRolls - 1].bankrollFlip, String(BigInt(run.bankrollOutWei) / WEI));
+  assert.equal(options.fieldEntrants, runs.length);
+  assert.equal(options.otherPlayers.length, runs.length - 1, 'every other run races on the same clock');
+  const rivals = runs.filter((_, i) => i !== index);
+  options.otherPlayers.forEach((rival, i) => {
+    const entry = rivals[i];
+    assert.equal(rival.player, entry.player);
+    assert.equal(rival.resolution.bankrollsFlip.length, longest, 'one bankroll per tick of the shared clock');
+    assert.equal(rival.resolution.roll, entry.totalRolls, 'a rival leaves the race on its own last roll');
+    assert.equal(rival.resolution.type, entry.stop === 'bust' ? 'bust' : 'cashout');
+    assert.equal(rival.resolution.rawEndingFlip, String(BigInt(entry.bankrollOutWei) / WEI));
+    assert.equal(rival.resolution.standing, runs.length + 1 - entry.rank, 'the chain rank breaks the table\'s ties');
+    assert.deepEqual(rival.resolution.survivals, [], 'a rival\'s own shooters are not the clock\'s');
+  });
+  const winner = runs.findIndex((entry) => entry.isWinner);
+  assert.equal(options.battleWinnerBetId, winner < 0 ? null : `coin-draw:${DAY}:${winner}`);
+  assert.equal(options.potRoll, BigInt(battle.replay.potWei) > 0n, 'the pot is rolled into the marquee');
   assert.equal(options.bankrollFlip, String(BigInt(run.bankrollInWei) / WEI));
   assert.equal(options.viewerResult.runPayoutWei, run.paidWei);
-  assert.match(options.entryLabel, /^FILL-DRAW BATTLE · RANK \d+\/\d+ · 3 UNITS$/);
+  assert.equal(options.entryLabel, 'FILL-DRAW BATTLE · 3 UNITS', 'no rank before the run is watched');
   assert.equal(Object.values(options.bets).reduce((n, v) => n + v, 0), 10, 'ten chips on the scattered board');
-  assert.equal(options.resolutionHands.at(-1).bankrollFlip, String(BigInt(run.bankrollOutWei) / WEI));
 
   const stranger = await openCoinDrawRun({ day: DAY, player: '0x' + '9'.repeat(40), doc, load: async () => battle });
   assert.equal(stranger.ok, false);
@@ -154,9 +174,14 @@ test('every run of a contract-executed battle projects onto the table, and a cap
   const i = replay.runs.findIndex((run) => run.stop === 'goal');
   replay.runs[i] = { ...replay.runs[i], stop: 'capped' };
   const options = coinDrawRunTableOptions({ key: 'coin-draw:1', runs: c.runs, pot: c.pot, replay }, i);
-  assert.equal(options.viewerResult.stop, null);
-  assert.equal(options.resolutionHands.at(-1).terminal, '');
-  assert.match(options.resolutionHands.at(-1).label, /(ROLL|SHOOTER) CAP$/);
+  const last = options.resolutionHands[replay.runs[i].totalRolls - 1];
+  assert.equal(options.viewerResult.stop, 'goal', 'a capped run is paid its bankroll, so the table locks it');
+  assert.equal(last.viewerTerminal, 'goal');
+  assert.match(last.label, /(ROLL|SHOOTER) CAP$/);
+  assert.doesNotMatch(last.label, /GOAL LOCKED/);
+  const rival = coinDrawRunTableOptions({ key: 'coin-draw:1', runs: c.runs, pot: c.pot, replay }, i === 0 ? 1 : 0)
+    .otherPlayers.find((entry) => entry.player === replay.runs[i].player);
+  assert.equal(rival.resolution.type, 'cashout', 'and a capped rival reads as locked, not busted');
 });
 
 test('the centre is the battle only for a wallet that was drawn into it', () => {
@@ -166,11 +191,12 @@ test('the centre is the battle only for a wallet that was drawn into it', () => 
     { player: addr(3), units: '1', paid: String(900n * WEI) },
   ] };
   const bust = coinDrawCentreModel(battle, addr(1).toUpperCase().replace('0X', '0x'));
-  assert.equal(bust.index, 0);
-  assert.equal(bust.outcome, 'BUSTED', 'a bust was still drawn in');
-  assert.equal(bust.caption, 'CRAPS BATTLE · 3 RUNS · POT 12.4K FLIP');
-  assert.equal(coinDrawCentreModel(battle, addr(2)).outcome, 'POT WON');
-  assert.equal(coinDrawCentreModel(battle, addr(3)).outcome, 'PAID 900');
+  assert.equal(bust.index, 0, 'a bust was still drawn in');
+  for (const player of [addr(1), addr(2), addr(3)]) {
+    const model = coinDrawCentreModel(battle, player);
+    assert.doesNotMatch(model.ariaLabel, /\d|POT|PAID|BUST|WON/i, 'the centre never spoils the run or the pot');
+    assert.deepEqual(Object.keys(model).sort(), ['ariaLabel', 'day', 'index', 'key', 'player']);
+  }
   assert.equal(coinDrawCentreModel(battle, addr(4)), null, 'not drawn: no highlight');
   assert.equal(coinDrawCentreModel(battle, null), null, 'no viewer: no highlight');
   assert.equal(coinDrawCentreModel(battle, ''), null);

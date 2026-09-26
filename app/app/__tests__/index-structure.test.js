@@ -224,20 +224,22 @@ describe('index.html basic-mode skeleton', () => {
     );
   });
 
-  test('the play grid keeps Quests left, Degenerette middle, and Craps entries right', () => {
+  test('the play grid keeps Quests left, Craps entries middle, and Degenerette right', () => {
     const rowMatch = html.match(/<section class="play-grid"[\s\S]*?<\/section>/);
     assert.ok(rowMatch, '<section class="play-grid"> present');
     const row = rowMatch[0];
     const quest = row.indexOf('<app-quest-panel>');
     const degenerette = row.indexOf('<app-degenerette-panel>');
     const craps = row.indexOf('<app-craps-entry>');
-    assert.ok(quest >= 0 && quest < degenerette && degenerette < craps,
-      'quests, Degenerette, and Craps are mounted in desktop track order');
+    assert.ok(quest >= 0 && quest < craps && craps < degenerette,
+      'quests, Craps, and Degenerette are mounted in desktop track order');
     assert.equal(row.indexOf('<app-parimutuel-panel>'), -1,
       'Side Bets does not consume the Craps column');
     assert.match(appCss,
-      /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests degenerette craps"/s,
-      'the desktop right track belongs to Craps');
+      /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests craps degenerette"/s,
+      'the wide centre track belongs to Craps, the right track to Degenerette');
+    assert.match(html, /<\/section>\s*<!--[\s\S]*?-->\s*<div class="referral-strip" data-referral-strip hidden><\/div>/,
+      'the referral strip sits directly under the play grid');
   });
 
   test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {
@@ -370,11 +372,12 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-ed035463-4868ec90-scoped-v1';
+    const revision = '?v=craps-ed035463-4868ec90-scoped-v2';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
       '/app/craps/replay-adapter.js',
+      '/app/craps/coin-draw-viewer.js',
     ]) {
       assert.equal(
         map.imports?.[modulePath],

@@ -417,6 +417,32 @@ test('battle start reveals the sealed bonus rung and flies its value into ADDED'
     'the Start gate is a large primary control below the bonus reel');
 });
 
+test('a fill-draw battle rolls its pot into the prize before the first roll', async () => {
+  const { crapsPotReelFace } = await import(moduleUrl);
+  assert.equal(crapsPotReelFace('28,100', 5, 9), '28,100', 'every digit stopped is the pot');
+  const spinning = crapsPotReelFace('1,234,500', 3, 7);
+  assert.match(spinning, /^1,23\d,\d{3}$/, 'stopped digits hold from the left and separators never move');
+  assert.equal(crapsPotReelFace('1,234,500', 3, 7), spinning, 'the same tick paints the same face every replay');
+  for (let seed = 0; seed < 40; seed += 1) {
+    assert.notEqual(crapsPotReelFace('9,000', 0, seed)[0], '0', 'a spinning figure never leads with zero');
+  }
+  assert.match(COMPONENT_SRC, /this\.#potRoll = detail\.potRoll === true;/, 'only a caller that says so rolls the pot');
+  assert.match(COMPONENT_SRC,
+    /#revealKind\(\) \{\s*if \(this\.#potRoll && this\.#bountyPoolWei != null && this\.#bountyPoolWei > 0n\) return 'pot';/,
+    'the pot roll takes the same start-of-battle gate as the bonus reel');
+  assert.match(COMPONENT_SRC,
+    /#startPotReveal\(onDone\)[\s\S]*?current\.textContent = copy;[\s\S]*?stage\.dataset\.state = 'flying';\s*this\.#flyBonusAmount\(\);[\s\S]*?this\.#settleBonusReveal\(\{ landed: true \}\)/s,
+    'the reel lands on the exact pot and flies it into the prize');
+  assert.match(COMPONENT_SRC,
+    /const bountyAmountCopy = bountyPoolWei == null \|\| potRolling\s*\? '—'/,
+    'the prize reads blank until the pot lands');
+  assert.match(COMPONENT_SRC, /bountyAdded\.hidden = this\.#potRoll;/, 'a pot has nothing ADDED to show');
+  assert.match(CSS_SRC, /\.craps-dialog__prize-added\[hidden\] \{ display: none !important; \}/,
+    'the hidden ADDED chip beats its own display rule');
+  assert.match(CSS_SRC, /\.craps-dialog__prize--bounty\.is-bonus-landed > strong \{\s*animation: craps-bonus-target-land/,
+    'the pot lands with the same bump ADDED gets');
+});
+
 test('craps model exposes the eleven WIP contract legs', async () => {
   const { CRAPS_BETS, CRAPS_BET_GROUPS } = await import(moduleUrl);
   assert.equal(CRAPS_BET_GROUPS.length, 3);

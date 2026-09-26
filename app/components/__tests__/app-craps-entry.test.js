@@ -777,10 +777,10 @@ test('an entered seat becomes amendable only after its board changes', () => {
   }), true);
 });
 
-test('the widget occupies the third play-grid track and loads with the idle panels', () => {
-  assert.match(indexSource, /<section class="play-grid"[^>]*>[\s\S]*?<app-quest-panel>[\s\S]*?<app-degenerette-panel>[\s\S]*?<app-craps-entry>/s);
+test('the widget occupies the centre play-grid track and loads with the idle panels', () => {
+  assert.match(indexSource, /<section class="play-grid"[^>]*>[\s\S]*?<app-quest-panel>[\s\S]*?<app-craps-entry>[\s\S]*?<app-degenerette-panel>/s);
   assert.match(indexSource, /['"]\/app\/components\/app-craps-entry\.js['"]/);
-  assert.match(cssSource, /grid-template-areas:\s*"quests degenerette craps"/);
+  assert.match(cssSource, /grid-template-areas:\s*"quests craps degenerette"/);
   assert.match(cssSource, /> app-craps-entry\s*\{[\s\S]*?grid-area:\s*craps/s);
   assert.match(componentSource, /data-craps-entry="day"/);
   assert.match(componentSource, /data-craps-entry="future-day"/);
@@ -1122,7 +1122,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'selected High Roller uses the gold state');
   assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__betting\s*\{[^}]*flex:\s*1 1 auto[^}]*grid-template-rows:\s*auto minmax\(0,1fr\)[^}]*\}[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.craps-entry__mini-felt\s*\{[^}]*grid-row:\s*2[^}]*grid-template-rows:\s*minmax\(2\.35rem,1\.35fr\) minmax\(1\.74rem,1fr\)/s,
     'the desktop betting felt, rather than the lobby, consumes the neighboring widgets’ extra height');
-  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__listing tbody :is\(th,td\)\s*\{[^}]*font-size:\s*\.57rem[^}]*\}[\s\S]*?\.craps-entry__money strong\s*\{[^}]*font-size:\s*\.6rem/s,
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__listing tbody :is\(th,td\)\s*\{[^}]*font-size:\s*\.7rem[^}]*\}[\s\S]*?\.craps-entry__money strong\s*\{[^}]*font-size:\s*\.74rem/s,
     'desktop lobby copy steps up when the full three-column row has room');
   assert.equal((componentSource.match(/data-craps-bet="(?:place-[45689]|place-10|hard-[48]|pass|dont-pass)"/g) || []).length, 10,
     'the felt exposes all ten supported contract betting spots as large tap targets');

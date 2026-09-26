@@ -319,6 +319,14 @@ app-craps-table {
   animation: craps-bonus-target-land 0.36s cubic-bezier(0.18, 0.88, 0.24, 1.3) both;
 }
 
+/* A fill-draw pot has nothing added to it. */
+.craps-dialog__prize-added[hidden] { display: none !important; }
+
+/* The fill-draw pot lands in the prize itself. */
+.craps-dialog__prize--bounty.is-bonus-landed > strong {
+  animation: craps-bonus-target-land 0.36s cubic-bezier(0.18, 0.88, 0.24, 1.3) both;
+}
+
 .craps-dialog__prize--jackpot:is([data-state="ready"], [data-state="won-you"]) {
   border-color: #dda5ff;
   box-shadow:
@@ -458,6 +466,14 @@ app-craps-table {
 }
 
 .craps-bonus-roll[data-state="landed"] .craps-bonus-roll__reel output { color: #c7f8d5; }
+
+/* The pot reel carries a whole FLIP figure, not a short multiplier: narrower digits, fixed width. */
+.craps-bonus-roll[data-kind="pot"] .craps-bonus-roll__reel output {
+  font-size: clamp(2rem, 6.4vw, 3.4rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.craps-bonus-roll[data-kind="pot"] .craps-bonus-roll__reel span { font-variant-numeric: tabular-nums; }
 
 .craps-bonus-roll__amount {
   color: #8ff0b1;
