@@ -939,8 +939,21 @@ test('YOU and the DANGER line share the seven-out survival-flip-or-bust threshol
   }
   assert.match(COMPONENT_SRC, /const sevenOutRisk = dangerFlip != null && amount < dangerFlip;/,
     'the YOU box reads the shared threshold');
-  assert.match(COMPONENT_SRC, /const danger = this\.#localSevenOutDangerFlip\(roundNumber\);\s*if \(danger != null\) this\.#raceDangerFlip = danger;/,
+  assert.match(COMPONENT_SRC, /const danger = this\.#localSevenOutDangerFlip\(roundNumber\);\s*if \(danger != null\) this\.#raceDangerFlip = this\.#raceDangerOnChart\(danger, roundNumber\);/,
     'the graph DANGER line reads the same threshold');
+  // The chart plots the stack OFF the felt; the threshold is felt-inclusive. The line is drawn
+  // less what is on the felt, the same entry the YOU box reads, so the two can never disagree.
+  assert.match(COMPONENT_SRC, /#raceDangerOnChart\(dangerFlip, roundNumber\) \{[\s\S]*?const feltInclusive = this\.#localBattleEntry\(roundNumber\)\.amount;\s*const onFelt = feltInclusive - this\.#raceValueAt\(local, roundNumber\);\s*const line = dangerFlip - \(onFelt > 0n \? onFelt : 0n\);/,
+    'crossing the line and turning red are one event');
+  {
+    // Worked case: 1,000 FLIP bankroll with 300 on the felt, threshold 900. The chart shows 700
+    // off the felt; the line sits at 600, so YOU (700) is above it and green, as the bankroll
+    // (1,000 >= 900) is safe. At a 850 bankroll (550 off the felt) YOU is under 600 and red.
+    const line = (danger, felt, off) => { const on = felt - off; const l = danger - (on > 0n ? on : 0n); return l > 0n ? l : 0n; };
+    assert.equal(line(900n, 1000n, 700n), 600n);
+    assert.equal(700n < line(900n, 1000n, 700n), 1000n < 900n);
+    assert.equal(550n < line(900n, 850n, 550n), 850n < 900n);
+  }
   assert.match(COMPONENT_SRC, /const danger = player\.local && standing\?\.sevenOutRisk === true;[\s\S]*?' is-danger'/,
     'the graph YOU box carries the danger state');
   assert.match(CSS_SRC, /\.craps-race-endpoint\.is-you\.is-danger > rect \{[^}]*stroke: #ff626b;[^}]*animation: craps-race-endpoint-danger/,

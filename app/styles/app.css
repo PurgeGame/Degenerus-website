@@ -19017,8 +19017,7 @@ body.layout-basic :is(.dgn-symbol-badge, .dgn-symbol-preview__art)[data-badge="f
 }
 
 /* Referral strip: the Degenerette referral card as one bar under the play grid. A lit
-   magenta-to-violet banner with a slow sheen, the flame in a glowing ring, and a gold
-   COPY LINK key. */
+   magenta-to-violet banner with a gold COPY LINK key. */
 body.layout-basic .play-grid:has(+ .referral-strip:not([hidden])) { margin-bottom: 0.55rem; }
 body.layout-basic .referral-strip { margin: 0 0 clamp(1rem, 3vw, 1.5rem); }
 body.layout-basic .referral-strip[hidden] { display: none !important; }
@@ -19041,15 +19040,6 @@ body.layout-basic .referral-strip .deg-referral-card {
     inset 0 -1px 0 rgba(0, 0, 0, 0.35),
     0 0 22px rgba(168, 85, 247, 0.28),
     0 10px 24px -14px rgba(0, 0, 0, 0.9);
-}
-body.layout-basic .referral-strip .deg-referral-card::after {
-  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.16) 45%, transparent 60%);
-  background-size: 250% 100%;
-  animation: referral-strip-sheen 6s ease-in-out infinite;
-}
-@keyframes referral-strip-sheen {
-  0% { background-position: 120% 0; }
-  55%, 100% { background-position: -120% 0; }
 }
 body.layout-basic .referral-strip .deg-referral-card__logo {
   position: static;
@@ -19179,9 +19169,6 @@ body.layout-basic .referral-strip .deg-referral-card__feedback { right: 3.4rem; 
     min-height: 2.6rem;
   }
   body.layout-basic .referral-strip .deg-referral-card__feedback { right: 3.9rem; bottom: 0.2rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  body.layout-basic .referral-strip .deg-referral-card::after { animation: none; }
 }
 body.layout-basic .deg-actions {
   justify-content: flex-start;
