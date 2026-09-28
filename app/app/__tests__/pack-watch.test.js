@@ -228,7 +228,7 @@ describe('pack-watch — deferred ticket reveals', () => {
   }
 
   test('a far-future pack record is not polled until the sweep reaches its level', async () => {
-    // level 12 + the six-key window: nothing past level 17 can have rolled.
+    // level 12's mint ceiling is 13: nothing past it can have rolled.
     const farLevel = LEVEL + 40;
     const seen = [];
     _routes['/tickets/by-trait'] = countingByTrait(seen);
@@ -379,9 +379,9 @@ describe('pack-watch — deferred ticket reveals', () => {
     };
     const owed = new Map([
       [LEVEL, 400],       // fully resolved purchase-phase level: never count it
-      [LEVEL + 1, 4],
-      [LEVEL + 3, 5],
-      [LEVEL + 6, 80],    // outside the next sweep: keep it in the bank
+      [LEVEL + 1, 9],
+      [LEVEL + 3, 5],     // above the mint ceiling: unminted far-future, keep it in the bank
+      [LEVEL + 6, 80],
     ]);
     const queried = [];
     packWatch.__setEntriesOwedReaderForTest(async (_address, level) => {
@@ -393,21 +393,69 @@ describe('pack-watch — deferred ticket reveals', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     assert.deepEqual([...new Set(queried)].sort((a, b) => a - b),
-      [LEVEL + 1, LEVEL + 2, LEVEL + 3, LEVEL + 4, LEVEL + 5],
-      'only unresolved levels in the contract live window are queried');
+      [LEVEL + 1],
+      'only unresolved levels up to the contract mint ceiling are queried');
     const [item] = pendingActions.getPendingActions();
     assert.equal(pendingActions.getPendingActions().length, 1,
       'all queue levels collapse into one quiet receipt');
     assert.equal(item.id, 'ticket-packs:pending');
     assert.equal(item.ticketCount, 2.25, 'nine owed entries retain quarter-ticket precision');
     assert.deepEqual(item.pendingPacks, [{
-      level: LEVEL + 1, count: 1, foilPack: false,
-    }, {
-      level: LEVEL + 3, count: 1.25, foilPack: false,
+      level: LEVEL + 1, count: 2.25, foilPack: false,
     }]);
     assert.equal(item.label, '2.25 TICKETS PENDING');
     assert.equal(item.passive, true);
     assert.equal(item.run, null);
+  });
+
+  test('tickets for a level above the mint ceiling never show as pending', async () => {
+    _routes['/game/state'] = {
+      level: LEVEL,
+      phase: 'PURCHASE',
+      jackpotPhaseFlag: false,
+      rngLockedFlag: false,
+      phaseTransitionActive: false,
+    };
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen);
+    await packWatch.recordPendingPack({ address: ADDR, level: LEVEL + 3, expectedTickets: 4 });
+    seen.length = 0;
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+
+    assert.equal(pendingActions.getPendingActions().length, 0,
+      'a level that is not minting yet has nothing queued before the next jackpot');
+    assert.deepEqual(seen, [], 'its unminted level is not polled');
+    assert.equal(packWatch.pendingPacks().length, 1,
+      'the receipt survives until its level starts minting');
+  });
+
+  test('the mint ceiling follows lastPurchaseDay and early activation', () => {
+    const base = {
+      level: LEVEL, phase: 'PURCHASE', jackpotPhaseFlag: false, phaseTransitionActive: false,
+    };
+    assert.deepEqual(packWatch.pendingTicketDrainLevels({ ...base, rngLockedFlag: false }),
+      [LEVEL + 1]);
+    assert.deepEqual(
+      packWatch.pendingTicketDrainLevels({ ...base, rngLockedFlag: false, lastPurchaseDay: true }),
+      [LEVEL + 1, LEVEL + 2],
+      'the last-purchase seal freezes the next level pool into the sweep');
+    assert.deepEqual(
+      packWatch.pendingTicketDrainLevels({ ...base, rngLockedFlag: true, lastPurchaseDay: true }),
+      [LEVEL, LEVEL + 1],
+      'the last-purchase request lock returns the ceiling to level + 1');
+    assert.deepEqual(
+      packWatch.pendingTicketDrainLevels({
+        ...base, rngLockedFlag: false, phaseSlot0: String(1n << 136n),
+      }),
+      [LEVEL + 1, LEVEL + 2],
+      'slot 0 byte 17 stands in when the field is absent');
+    assert.deepEqual(
+      packWatch.pendingTicketDrainLevels({ ...base, rngLockedFlag: false, earlyTicketLevel: LEVEL + 2 }),
+      [LEVEL + 1, LEVEL + 2],
+      'an early-activated next-level pool is minting');
+    assert.equal(packWatch.packInspectionWindow({ ...base, rngLockedFlag: false }).cap, LEVEL + 1);
   });
 
   test('a chain-discovered owed receipt promotes to an opener when its entries materialize', async () => {

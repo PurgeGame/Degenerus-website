@@ -200,6 +200,15 @@ describe('Plan 60-02 reason-map extensions (LBX write-path errors)', () => {
   });
 });
 
+describe('DGNRS.unwrapTo lifetime cap (audit eb1846c6)', () => {
+  test('UnwrapCapExceeded decodes to user-facing message + recovery', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'UnwrapCapExceeded' } });
+    assert.equal(decoded.code, 'UnwrapCapExceeded');
+    assert.match(decoded.userMessage, /40B DGNRS|unwrap cap/i);
+    assert.match(decoded.recoveryAction, /lower the amount|under the cap/i);
+  });
+});
+
 describe('WR-02 regressions: catch-all "E" must not hijack substring-fallback path', () => {
   test('reason "Error: insufficient gas" does NOT classify as E', () => {
     const result = decodeRevertReason({ reason: 'Error: insufficient gas' });

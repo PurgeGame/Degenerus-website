@@ -9,6 +9,7 @@ import * as crapsResults from '../craps-results.js';
 import * as readProvider from '../read-provider.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
 
 // The craps window mirrors itself to localStorage so a reload pays a 12-block
 // tail instead of the whole lookback. node has no Web Storage without a flag,
@@ -1091,8 +1092,8 @@ test('lobby entrant counts fold day tickets and one main-pot seat per High Rolle
   assert.equal(snapshot.playerEntries, null);
 });
 
-test('tomorrow face-cost ranges cover the shipped Normal and unknown High Roller presets', () => {
-  assert.deepEqual(craps.CRAPS_FUTURE_DAY_FACE_RANGES, {
+test('tomorrow face-cost ranges cover the shipped Normal and unknown High Roller presets (run 56)', () => {
+  assert.deepEqual(craps.crapsFutureDayFaceRanges(), {
     normal: {
       low: 4_200n,
       high: 126_000n,
@@ -1106,6 +1107,98 @@ test('tomorrow face-cost ranges cover the shipped Normal and unknown High Roller
       battle: { low: 9_000n, high: 4_800_000n },
     },
   });
+});
+
+test('tomorrow face-cost ranges reflect the run 57 six-window slate (five tier-drawn windows plus the fixed jackpot fee)', () => {
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    // CrapsBattle._bonusPreset packed tables (CrapsBattle.sol:2255-2256): each of the five
+    // tier-drawn windows spans 800..8,000 FLIP (600/1,800/4,500 bank + 200..400/600..1,400/
+    // 1,500..3,500 bounty); the sixth is the fixed 8,000 FLIP JACKPOT_FEE. A six-window slate
+    // therefore spans 5*800+8,000=12,000 to 5*8,000+8,000=48,000.
+    assert.deepEqual(craps.crapsFutureDayFaceRanges(), {
+      normal: {
+        low: 12_000n,
+        high: 48_000n,
+        wager: { low: 3_000n, high: 22_500n },
+        battle: { low: 9_000n, high: 25_500n },
+      },
+      high: {
+        low: 120_000n,
+        high: 4_800_000n,
+        wager: { low: 30_000n, high: 2_250_000n },
+        battle: { low: 90_000n, high: 2_550_000n },
+      },
+    });
+    assert.equal(craps.crapsFutureDayPrices().high, 500_000n, 'CrapsPriceLib.HIGH_RETAIL');
+  } finally {
+    useSchema(previous);
+  }
+});
+
+test('the future-day Normal retail price is unchanged and the High Roller retail price moves 450,000 -> 500,000', () => {
+  assert.deepEqual(craps.crapsFutureDayPrices(), { normal: 25_000n, high: 450_000n });
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    assert.deepEqual(craps.crapsFutureDayPrices(), { normal: 25_000n, high: 500_000n });
+  } finally {
+    useSchema(previous);
+  }
+});
+
+test('the schedule fork tracks CrapsBattle._BONUS_PERIODS_PER_DAY and its day-ticket high mask width', () => {
+  assert.equal(craps.crapsBonusWindows(), 7);
+  assert.equal(craps.crapsAllWindowsMask(), 0x7F);
+  assert.equal(craps.crapsEventHighMask(), 0x7Fn);
+  assert.equal(craps.crapsNormalPassesPerHigh(), 19);
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    assert.equal(craps.crapsBonusWindows(), 6, 'storage/CrapsBattleStorage.sol:88');
+    assert.equal(craps.crapsAllWindowsMask(), 0x3F, '_BET_DAYHIGH_MASK, storage/CrapsBattleStorage.sol:386');
+    assert.equal(craps.crapsEventHighMask(), 0x3Fn);
+    assert.equal(craps.crapsNormalPassesPerHigh(), 21, 'CrapsPriceLib.HIGH_EV, storage/CrapsBattleStorage.sol:788');
+  } finally {
+    useSchema(previous);
+  }
+});
+
+test('run 57 (audit 4f546796) day terms: five tier-drawn windows plus a flat 8,000 FLIP jackpot period', () => {
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    const word = '102858562227254754036121703853225298402533986033002165985066946425924666406226';
+    const day = craps.crapsBonusDayTerms(word);
+    assert.equal(day.windows.length, 6);
+    // Every ordinary window (bookends 0/4, routines 1-3) draws off the same tier table; only the
+    // jackpot period (5) is a flat, board-less fee.
+    for (const window of day.windows.slice(0, 5)) {
+      assert.equal(window.event, false);
+      assert.ok([600n, 1_800n, 4_500n].includes(window.bankrollFlip), 'CrapsBattle.sol:2255 bank table');
+      assert.equal(window.buyInFlip, window.bankrollFlip + window.battleStakeFlip);
+    }
+    const jackpot = day.windows[5];
+    assert.deepEqual(
+      { event: jackpot.event, tier: jackpot.tier, bankrollFlip: jackpot.bankrollFlip, battleStakeFlip: jackpot.battleStakeFlip, playedFlip: jackpot.playedFlip, postedStakeFlip: jackpot.postedStakeFlip },
+      { event: true, tier: 0, bankrollFlip: 0n, battleStakeFlip: 8_000n, playedFlip: 0n, postedStakeFlip: 0n },
+      'CrapsPriceLib.JACKPOT_FEE, libraries/CrapsPriceLib.sol:9',
+    );
+    assert.equal(day.buyInFlip, day.windows.reduce((sum, window) => sum + window.buyInFlip, 0n));
+  } finally {
+    useSchema(previous);
+  }
+});
+
+test('crapsWindowShareWei: run 56 halves the budget for the last window, run 57 zeroes the jackpot and gives ordinary windows the whole budget', () => {
+  const wei = 10n ** 18n;
+  const budget = 40_000n * wei;
+  assert.equal(craps.crapsWindowShareWei(budget, 10n, 6, 0), 20_000n * wei, 'run 56 event window takes half outright');
+  assert.equal(craps.crapsWindowShareWei(budget, 10n, 0, 1), 2_000n * wei, 'run 56 routine share comes out of the remaining half');
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    assert.equal(craps.crapsWindowShareWei(budget, 10n, 5, 0), 0n, 'CrapsBattle._windowShare: the jackpot period takes none of the boost budget');
+    assert.equal(craps.crapsWindowShareWei(budget, 10n, 0, 1), 4_000n * wei, 'ordinary windows split the WHOLE budget, not half of it');
+  } finally {
+    useSchema(previous);
+  }
 });
 
 test('armed and finalized owned seats retain viewer ids across the Pending lifecycle', () => {
@@ -1419,7 +1512,7 @@ test('the reserved-day upgrade refuses a day it could never name on-chain', asyn
   await assert.rejects(() => craps.upgradeCrapsReservedDay({ day: 0 }), /valid future Craps day/);
   await assert.rejects(() => craps.upgradeCrapsReservedDay({ day: 0x1000000 }), /valid future Craps day/);
   await assert.rejects(() => craps.convertCrapsNormalPassesToHigh({ highCount: 0 }), /High Roller comps/);
-  assert.equal(craps.CRAPS_NORMAL_PASSES_PER_HIGH, 19, 'mirrors CrapsBattle._PASSES_PER_HIGH');
+  assert.equal(craps.crapsNormalPassesPerHigh(), 19, 'mirrors CrapsBattle._PASSES_PER_HIGH');
 });
 
 test('scheduled Craps preflight stays on the public reader before a browser-wallet send', async () => {

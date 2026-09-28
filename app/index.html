@@ -128,14 +128,14 @@
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=tutorial-fixtures-13",
       "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=tutorial-fixtures-13",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
-      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=tutorial-fixtures-13",
+      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=craps-passes-0889affc-1",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ed035463-4868ec90-scoped-v3",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ed035463-4868ec90-scoped-v3",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ed035463-4868ec90-scoped-v3",
-      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-ed035463-4868ec90-scoped-v3",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-0889affc-49000956-scoped-v8",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-0889affc-49000956-scoped-v8",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-0889affc-49000956-scoped-v8",
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-0889affc-49000956-scoped-v8",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-tutorial-native-tickets-20260914",
-      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-24",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=tutorial-navigation-26",
       "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
     }
   }
@@ -360,14 +360,39 @@
         <app-craps-rules hidden></app-craps-rules>
         <app-degenerette-panel></app-degenerette-panel>
       </section>
-      <!-- The referral card's strip under the play grid. app-degenerette-panel owns the card
-           and its logic and moves it here when the strip exists. -->
-      <div class="referral-strip" data-referral-strip hidden></div>
 
-      <!-- The only permanent scoreboard in the game: five all-time marks.
-           Their payouts still quote the shared FLIP pool without spending a
-           separate display slot on it. -->
-      <app-records-rail></app-records-rail>
+      <nav class="panel-tools" aria-label="Your account and game tools">
+        <button type="button" class="panel-tools__button" data-panel-open="tickets" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-tickets">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v4a3 3 0 0 0 0 6v4H4v-4a3 3 0 0 0 0-6Z"/><path d="M15 5v14" stroke-dasharray="2 3"/></svg><span>YOUR TICKETS</span>
+        </button>
+        <button type="button" class="panel-tools__button" data-panel-open="passes" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-passes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="m12 7 1.4 2.8 3.1.5-2.2 2.2.5 3.1-2.8-1.5-2.8 1.5.5-3.1L6.5 10l3.1-.5Z"/></svg><span>AFKING PASSES</span>
+        </button>
+        <button type="button" class="panel-tools__button" data-panel-open="bounties" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-bounties">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v6a4 4 0 0 1-8 0Z"/><path d="M8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 2v5m-4 3h8m-7-3h6"/></svg><span>BOUNTIES</span>
+        </button>
+        <button type="button" class="panel-tools__button" data-panel-open="history" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-history">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg><span>TRANSACTION HISTORY</span>
+        </button>
+        <button type="button" class="panel-tools__button" data-panel-open="referrals" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-referrals">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg><span>REFERRALS</span>
+        </button>
+      </nav>
+
+      <!-- Account tools retain their mounted state inside focused popups. -->
+      <section class="panel-popup" id="panel-bounties" data-panel-popup="bounties" hidden
+               role="dialog" aria-modal="true" aria-labelledby="panel-bounties-title">
+        <div class="panel-popup__window">
+          <header class="panel-popup__header">
+            <h2 id="panel-bounties-title">BIGGEST BOUNTIES</h2>
+            <button type="button" class="panel-popup__close" data-panel-close aria-label="Close biggest bounties">×</button>
+          </header>
+          <div class="panel-popup__body">
+            <p class="panel-popup__status" data-panel-status role="status">Loading bounties…</p>
+            <div data-panel-component="app-records-rail"><app-records-rail></app-records-rail></div>
+          </div>
+        </div>
+      </section>
 
       <!-- Deity holders act from a compact daily-power desk outside the
            pass shop, immediately above the inventory those boons can affect. -->
@@ -375,43 +400,65 @@
 
       <!-- Task #12: ticket inventory — deduped ticket cards + the wide
            all-symbols × per-level chart (app-tickets-inventory.js) -->
-      <app-tickets-inventory></app-tickets-inventory>
-
-      <!-- Collapsed passes: subscription coverage plus three purchase
-           shortcuts. Owned passes deliberately live on their own surfaces
-           (for example, Deity ownership belongs to app-deity-desk above). -->
-      <details class="more-ways section-disclosure" id="afking-passes">
-        <summary class="more-ways__summary section-disclosure__bar">
-          <span class="section-disclosure__title">AFKING PASSES</span>
-          <span class="more-ways__summary-closed" data-bind="pass-summary-closed">
-            <span class="more-ways__sub-state" data-bind="pass-summary-state" hidden>
-              <b data-bind="pass-summary-subscription"></b>
-              <b data-bind="pass-summary-funding" hidden></b>
-            </span>
-            <span class="more-ways__quickbuys" aria-label="Quick buy passes">
-              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--lazy"
-                      data-write data-pass-quickbuy="lazy" aria-label="Quick buy Lazy pass">
-                <i aria-hidden="true">10</i>
-                <span><b data-bind="pass-summary-buy-lazy-name">BUY LAZY</b><small data-bind="pass-summary-buy-lazy-price">CHECKING…</small></span>
-              </button>
-              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--whale"
-                      data-write data-pass-quickbuy="whale" aria-label="Quick buy Whale pass">
-                <i aria-hidden="true">100</i>
-                <span><b data-bind="pass-summary-buy-whale-name">BUY WHALE</b><small data-bind="pass-summary-buy-whale-price">CHECKING…</small></span>
-              </button>
-              <button type="button" class="more-ways__quickbuy more-ways__quickbuy--deity"
-                      data-write data-pass-quickbuy="deity" aria-label="Choose a Deity pass symbol">
-                <i aria-hidden="true">✦</i>
-                <span><b data-bind="pass-summary-buy-deity-name">BUY DEITY</b><small data-bind="pass-summary-buy-deity-price">CHECKING…</small></span>
-              </button>
-            </span>
-          </span>
-          <span class="section-disclosure__chevron" aria-hidden="true"></span>
-        </summary>
-        <div class="more-ways__content">
-          <app-pass-section></app-pass-section>
+      <section class="panel-popup" id="panel-tickets" data-panel-popup="tickets" hidden
+               role="dialog" aria-modal="true" aria-labelledby="panel-tickets-title">
+        <div class="panel-popup__window">
+          <header class="panel-popup__header">
+            <h2 id="panel-tickets-title">YOUR TICKETS</h2>
+            <button type="button" class="panel-popup__close" data-panel-close aria-label="Close your tickets">×</button>
+          </header>
+          <div class="panel-popup__body">
+            <p class="panel-popup__status" data-panel-status role="status">Loading tickets…</p>
+            <div data-panel-component="app-tickets-inventory"><app-tickets-inventory></app-tickets-inventory></div>
+          </div>
         </div>
-      </details>
+      </section>
+
+      <!-- The pass shop opens in its own popup; owned Deity powers retain
+           their separate daily desk. The inner disclosure is its lazy-load hook. -->
+      <section class="panel-popup" id="panel-passes" data-panel-popup="passes" hidden
+               role="dialog" aria-modal="true" aria-labelledby="panel-passes-title">
+        <div class="panel-popup__window">
+          <header class="panel-popup__header">
+            <h2 id="panel-passes-title">AFKING PASSES</h2>
+            <button type="button" class="panel-popup__close" data-panel-close aria-label="Close afking passes">×</button>
+          </header>
+          <div class="panel-popup__body">
+            <details class="more-ways section-disclosure" id="afking-passes">
+              <summary class="more-ways__summary section-disclosure__bar">
+                <span class="section-disclosure__title">AFKING PASSES</span>
+                <span class="more-ways__summary-closed" data-bind="pass-summary-closed">
+                  <span class="more-ways__sub-state" data-bind="pass-summary-state" hidden>
+                    <b data-bind="pass-summary-subscription"></b>
+                    <b data-bind="pass-summary-funding" hidden></b>
+                  </span>
+                  <span class="more-ways__quickbuys" aria-label="Quick buy passes">
+                    <button type="button" class="more-ways__quickbuy more-ways__quickbuy--lazy"
+                            data-write data-pass-quickbuy="lazy" aria-label="Quick buy Lazy pass">
+                      <i aria-hidden="true">10</i>
+                      <span><b data-bind="pass-summary-buy-lazy-name">BUY LAZY</b><small data-bind="pass-summary-buy-lazy-price">CHECKING…</small></span>
+                    </button>
+                    <button type="button" class="more-ways__quickbuy more-ways__quickbuy--whale"
+                            data-write data-pass-quickbuy="whale" aria-label="Quick buy Whale pass">
+                      <i aria-hidden="true">100</i>
+                      <span><b data-bind="pass-summary-buy-whale-name">BUY WHALE</b><small data-bind="pass-summary-buy-whale-price">CHECKING…</small></span>
+                    </button>
+                    <button type="button" class="more-ways__quickbuy more-ways__quickbuy--deity"
+                            data-write data-pass-quickbuy="deity" aria-label="Choose a Deity pass symbol">
+                      <i aria-hidden="true">✦</i>
+                      <span><b data-bind="pass-summary-buy-deity-name">BUY DEITY</b><small data-bind="pass-summary-buy-deity-price">CHECKING…</small></span>
+                    </button>
+                  </span>
+                </span>
+                <span class="section-disclosure__chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="more-ways__content">
+                <app-pass-section></app-pass-section>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
 
 
 
@@ -426,30 +473,50 @@
            preview, and entry points into the existing burn and charity dialogs. -->
       <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
 
-      <!-- Full activity history stays collapsed and does not touch the indexer
-           until this dropdown opens. -->
-      <app-transaction-history>
-        <details class="txh section-disclosure" id="transaction-history" data-bind="txh-details" data-lazy-disclosure>
-          <summary class="txh__summary section-disclosure__bar">
-            <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
-            <span class="section-disclosure__chevron" aria-hidden="true"></span>
-          </summary>
-          <div class="txh__content" data-lazy-status role="status">Loading history…</div>
-        </details>
-      </app-transaction-history>
+      <!-- History and referrals load only when their popup is opened. -->
+      <section class="panel-popup" id="panel-history" data-panel-popup="history" hidden
+               role="dialog" aria-modal="true" aria-labelledby="panel-history-title">
+        <div class="panel-popup__window">
+          <header class="panel-popup__header">
+            <h2 id="panel-history-title">TRANSACTION HISTORY</h2>
+            <button type="button" class="panel-popup__close" data-panel-close aria-label="Close transaction history">×</button>
+          </header>
+          <div class="panel-popup__body">
+            <app-transaction-history>
+              <details class="txh section-disclosure" id="transaction-history" data-bind="txh-details" data-lazy-disclosure>
+                <summary class="txh__summary section-disclosure__bar">
+                  <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
+                  <span class="section-disclosure__chevron" aria-hidden="true"></span>
+                </summary>
+                <div class="txh__content" data-lazy-status role="status">Loading history…</div>
+              </details>
+            </app-transaction-history>
+          </div>
+        </div>
+      </section>
 
-      <!-- Account-scoped referral network: who referred this wallet, the
-           wallet's direct referrals, and its share link. User-requested final
-           panel, directly below Transaction History. -->
-      <app-affiliate-panel>
-        <details class="app-affiliate-panel aff-disclosure section-disclosure" id="referrals" data-bind="aff-details" data-lazy-disclosure>
-          <summary class="aff-summary section-disclosure__bar">
-            <strong class="section-disclosure__title">REFERRALS</strong>
-            <span class="section-disclosure__chevron" aria-hidden="true"></span>
-          </summary>
-          <div class="aff-content" data-lazy-status role="status">Loading referrals…</div>
-        </details>
-      </app-affiliate-panel>
+      <!-- Sharing and the referral network now have one home. -->
+      <section class="panel-popup" id="panel-referrals" data-panel-popup="referrals" hidden
+               role="dialog" aria-modal="true" aria-labelledby="panel-referrals-title">
+        <div class="panel-popup__window">
+          <header class="panel-popup__header">
+            <h2 id="panel-referrals-title">REFERRALS</h2>
+            <button type="button" class="panel-popup__close" data-panel-close aria-label="Close referrals">×</button>
+          </header>
+          <div class="panel-popup__body">
+            <div class="referral-strip" data-referral-strip hidden></div>
+            <app-affiliate-panel>
+              <details class="app-affiliate-panel aff-disclosure section-disclosure" id="referrals" data-bind="aff-details" data-lazy-disclosure>
+                <summary class="aff-summary section-disclosure__bar">
+                  <strong class="section-disclosure__title">REFERRALS</strong>
+                  <span class="section-disclosure__chevron" aria-hidden="true"></span>
+                </summary>
+                <div class="aff-content" data-lazy-status role="status">Loading referrals…</div>
+              </details>
+            </app-affiliate-panel>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -523,13 +590,15 @@
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js?v=tutorial-fixtures-13"></script>
   <script type="module" src="/app/components/app-pool-progress.js?v=tutorial-fixtures-13"></script>
-  <script type="module" src="/app/components/replay-panel.js?v=tutorial-navigation-24"></script>
+  <script type="module" src="/app/components/replay-panel.js?v=tutorial-navigation-26"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
        eager; the two large outer hero columns are scheduled below. -->
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
   <script type="module">
+    import { mountPanelPopups } from "/app/app/panel-popups.js";
+    mountPanelPopups();
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
     //
     //  LAZY_PANELS — custom elements inside a CLOSED <details>: nothing
@@ -668,6 +737,20 @@
       loaded.catch(() => { if (moduleLoads.get(src) === loaded) moduleLoads.delete(src); });
       return loaded;
     };
+    const POPUP_MODULES = new Map([
+      ['tickets', '/app/components/app-tickets-inventory.js'],
+      ['bounties', '/app/components/app-records-rail.js'],
+    ]);
+    document.addEventListener('app:panel-open', event => {
+      const src = POPUP_MODULES.get(event.detail?.name);
+      if (!src) return;
+      const status = event.target.querySelector('[data-panel-status]');
+      if (status) status.textContent = `Loading ${event.detail.name}…`;
+      void importModule(src).catch(error => {
+        if (status) status.textContent = 'Unable to load. Close and reopen to retry.';
+        console.error(`Unable to load ${src}`, error);
+      });
+    });
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     const requestModule = (src) => {
       void importModule(src).catch((error) => console.error(`Unable to load ${src}`, error));

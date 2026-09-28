@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { readChainRoute } from '../../chain/router.js';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
 import { resolveCoinDrawBattle, coinDrawWordForDay, replayCoinDrawBattle } from '../../chain/craps-engine.js';
+import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 import { materializeCoinDrawBattle, serializeCoinDrawReplay } from '../../chain/coin-draw-worker.js';
 import { chainCoinDrawBattle, __resetCoinDrawJobsForTest } from '../../chain/coin-draw.js';
 import { coinDrawRunTableOptions, openCoinDrawRun } from '../../craps/coin-draw-viewer.js';
@@ -21,16 +22,19 @@ const DAY_WORD = 0x5eed_c0ffee_1234_5678_9abc_def0_1357_9bdf_2468_ace0n;
 const addr = (i) => '0x' + (0xabc000n + BigInt(i)).toString(16).padStart(40, '0');
 
 // Forty-four draws over thirty wallets, PLAYER drawn three times; the viewed wallet is always in.
+// The fill-draw battle is run 56's CoinDrawBattle only: from audit 0889affc1 the daily jackpot
+// battle is a craps-table field (chain/craps.js), never a closed fill-draw field.
 function battleFixture() {
   const entrants = Array.from({ length: 44 }, (_, i) => (i % 15 === 3 ? PLAYER.toLowerCase() : addr(i % 29)));
   return resolveCoinDrawBattle(entrants, 61_234n * WEI, coinDrawWordForDay(DAY_WORD, LEVEL));
 }
 
 async function purchaseDay({ tamper = null } = {}) {
+  useSchema(RUN56_SCHEMA_HASH);
   const f = await rpcFixture(); const block = 9999; const forward = battleFixture();
   let index = 0;
   await f.event('GAME', 'DailyRngApplied', { day: DAY, rawWord: DAY_WORD, finalWord: DAY_WORD }, { block, index: index++ });
-  // A purchase day: bonusTargetLevel 0, because there is no bonus-trait draw.
+  // A run-56 purchase day: bonusTargetLevel 0, because there is no bonus-trait draw.
   await f.event('GAME', 'DailyWinningTraits', { day: DAY, mainTraitsPacked: 0x03020100, bonusTraitsPacked: 0xc3824100, bonusTargetLevel: 0 }, { block, index: index++ });
   for (const run of forward.runs) {
     const logged = tamper ? tamper(run) : run;
@@ -41,7 +45,7 @@ async function purchaseDay({ tamper = null } = {}) {
   return { f, forward };
 }
 
-test('a purchase day carries its fill-draw battle and no phantom bonus draw', async () => {
+test('a purchase day carries its fill-draw battle and no phantom bonus draw (run 56)', async () => {
   const { f, forward } = await purchaseDay();
   const roll2 = await readChainRoute(`/game/jackpot/day/${DAY}/roll2`, { client: f.client });
   assert.equal(roll2.bonusTraitDraw, false);
@@ -57,7 +61,8 @@ test('a purchase day carries its fill-draw battle and no phantom bonus draw', as
   assert.equal(summary.rollTwo.bonusTraitsPacked, 0xc3824100);
 });
 
-test('a jackpot day keeps its bonus draw and never carries a fill-draw battle', async () => {
+test('a jackpot day keeps its bonus draw and never carries a fill-draw battle (run 56)', async () => {
+  useSchema(RUN56_SCHEMA_HASH);
   const f = await rpcFixture(); const block = 9999;
   await f.event('GAME', 'DailyRngApplied', { day: DAY, finalWord: 333 }, { block, index: 0 });
   await f.event('GAME', 'DailyWinningTraits', { day: DAY, mainTraitsPacked: 123, bonusTraitsPacked: 456, bonusTargetLevel: LEVEL + 1 }, { block, index: 1 });
@@ -71,11 +76,12 @@ test('a jackpot day keeps its bonus draw and never carries a fill-draw battle', 
   assert.equal(summary.rollTwo.bonusDraw.length, 4);
 });
 
-test('the chain reader rebuilds and verifies the battle from events and the day word', async () => {
+test('the chain reader rebuilds and verifies the battle from events and the day word (run 56)', async () => {
   __resetCoinDrawJobsForTest();
   const { f, forward } = await purchaseDay();
   const battle = await chainCoinDrawBattle(DAY, { client: f.client, replay: materializeCoinDrawBattle });
   assert.equal(battle.replayError, null);
+  assert.equal(battle.replay.rules, 'per-wallet', 'the replay names the contract that played it');
   assert.equal(battle.dayWord, String(DAY_WORD));
   assert.equal(battle.replay.chipFlip, String(forward.chipFlip), 'the unlogged chip is recovered');
   assert.equal(battle.replay.runs.length, forward.runs.length);
@@ -88,6 +94,24 @@ test('the chain reader rebuilds and verifies the battle from events and the day 
   const winner = battle.replay.runs[battle.replay.winnerIndex];
   assert.equal(winner.player, forward.pot.winner);
   assert.equal(winner.rank, 1);
+  const longest = battle.replay.runs.reduce((a, b) => (b.totalRolls > a.totalRolls ? b : a));
+  const sameDice = battle.replay.runs.every((run) => JSON.stringify(run.hands.flat()) === JSON.stringify(longest.hands.flat().slice(0, run.totalRolls)));
+  assert.equal(sameDice, false, 'every wallet throws its own dice');
+  assert.equal(battle.replay.runs.some((run) => run.boosts.length > 0), false, 'CoinDrawBattle boosts no shooter');
+});
+
+test('from run 57 there is no fill-draw battle: the jackpot battle plays at the craps table', async () => {
+  __resetCoinDrawJobsForTest();
+  useSchema(CURRENT_SCHEMA_HASH);
+  try {
+    const f = await rpcFixture(); const block = 9999;
+    await f.event('GAME', 'DailyRngApplied', { day: DAY, rawWord: DAY_WORD, finalWord: DAY_WORD }, { block, index: 0 });
+    await f.event('GAME', 'DailyWinningTraits', { day: DAY, mainTraitsPacked: 0x03020100 }, { block, index: 1 });
+    await f.event('GAME', 'PrizePoolDailySnapshot', { day: DAY }, { block, index: 2 });
+    const roll2 = await readChainRoute(`/game/jackpot/day/${DAY}/roll2`, { client: f.client });
+    assert.equal(roll2.coinDrawBattle, null);
+    await assert.rejects(chainCoinDrawBattle(DAY, { client: f.client, replay: materializeCoinDrawBattle }), { code: 'NOT_FOUND' });
+  } finally { useSchema(RUN56_SCHEMA_HASH); }
 });
 
 test('a battle whose events do not reproduce fails closed but keeps the chain results', async () => {
@@ -106,7 +130,7 @@ test('a battle whose events do not reproduce fails closed but keeps the chain re
   assert.match(opened.message, /Battle replay unavailable\. Your run: \d+ rolls/);
 });
 
-test('clicking through opens the table on the viewer\'s own run', async () => {
+test('clicking through opens the table on the viewer\'s own run (first deployment: its own dice)', async () => {
   __resetCoinDrawJobsForTest();
   const { f } = await purchaseDay();
   const battle = await chainCoinDrawBattle(DAY, { client: f.client, replay: materializeCoinDrawBattle });
@@ -133,6 +157,18 @@ test('clicking through opens the table on the viewer\'s own run', async () => {
   assert.ok(frames.slice(run.totalRolls).every((frame) => frame.viewerClosed === true && /^BATTLE (CONTINUES|COMPLETE) · /.test(frame.label)),
     'then the field rolls on without it');
   assert.equal(frames[run.totalRolls - 1].bankrollFlip, String(BigInt(run.bankrollOutWei) / WEI));
+  // Each wallet throws its own dice: the viewer shoots its own rolls, then the pace run (a longest
+  // run) shoots the rest, and that shooter is a rival the table can name.
+  assert.ok(frames.slice(0, run.totalRolls).every((frame) => frame.shooterBetId === options.viewerBetId && frame.shooterPlayer === run.player),
+    'the viewer shoots its own rolls');
+  const paceShooters = new Set(frames.slice(run.totalRolls).map((frame) => frame.shooterBetId));
+  assert.ok(paceShooters.size <= 1, 'one pace run shoots everything after the viewer');
+  for (const betId of paceShooters) {
+    const paceRun = runs[Number(betId.split(':').at(-1))];
+    assert.equal(paceRun.totalRolls, longest, 'the pace run is a longest run');
+    assert.ok(frames.slice(run.totalRolls).every((frame) => frame.shooterPlayer === paceRun.player));
+    assert.ok(options.otherPlayers.some((rival) => rival.betId === betId), 'the pace shooter is on the table');
+  }
   assert.equal(options.fieldEntrants, runs.length);
   assert.equal(options.otherPlayers.length, runs.length - 1, 'every other run races on the same clock');
   const rivals = runs.filter((_, i) => i !== index);
@@ -159,15 +195,29 @@ test('clicking through opens the table on the viewer\'s own run', async () => {
   assert.equal(calls.length, 1, 'a wallet that was not drawn opens nothing');
 });
 
+test('fill-draw names come from profiles whatever case the addresses arrive in', async () => {
+  __resetCoinDrawJobsForTest();
+  const { f } = await purchaseDay();
+  const battle = await chainCoinDrawBattle(DAY, { client: f.client, replay: materializeCoinDrawBattle });
+  const shout = (address) => '0x' + address.slice(2).toUpperCase();
+  const replay = { ...battle.replay, runs: battle.replay.runs.map((run) => ({ ...run, player: shout(run.player) })) };
+  const profiles = new Map(battle.replay.runs.map((run, i) => [run.player.toLowerCase(), { name: `PLAYER-${i}`, avatar: null }]));
+  const options = coinDrawRunTableOptions({ ...battle, replay }, 0, { profiles });
+  assert.equal(options.viewerLabel, 'PLAYER-0');
+  assert.deepEqual(options.otherPlayers.map((rival) => rival.label), replay.runs.slice(1).map((_, i) => `PLAYER-${i + 1}`));
+});
+
 test('every run of a contract-executed battle projects onto the table, and a capped run closes as complete', () => {
   const golden = JSON.parse(readFileSync(new URL('../../../../database/src/craps/__tests__/coin-draw-golden.json', import.meta.url), 'utf8'));
   let projected = 0;
-  for (const c of golden.cases.slice(0, 10)) {
+  for (const c of golden.cases.slice(0, 20)) {
+    if (!c.pot && c.runs.every((r) => r.bankrollOut === '0')) continue; // no chip to recover
     const replay = serializeCoinDrawReplay(replayCoinDrawBattle({ word: BigInt(c.word), runs: c.runs, pot: c.pot }));
+    assert.equal(replay.rules, 'per-wallet');
     const battle = { key: `coin-draw:${c.id}`, transactionHash: '0x1', runs: c.runs, pot: c.pot, replay };
     replay.runs.forEach((_, i) => { coinDrawRunTableOptions(battle, i); projected++; });
   }
-  assert.ok(projected > 100);
+  assert.ok(projected > 200);
   // Capped non-goal runs are rare (the roll and shooter caps); drive the branch off a goal run.
   const c = golden.cases.find((g) => g.pot);
   const replay = serializeCoinDrawReplay(replayCoinDrawBattle({ word: BigInt(c.word), runs: c.runs, pot: c.pot }));

@@ -210,18 +210,21 @@ describe('index.html basic-mode skeleton', () => {
     }
   });
 
-  test('Referrals is the bottom panel directly after Transaction History', () => {
+  test('account tools share popup launchers, with sharing inside Referrals', () => {
     const history = html.indexOf('<app-transaction-history>');
     const referrals = html.indexOf('<app-affiliate-panel>');
     const mainClose = html.indexOf('</main>');
     assert.ok(history >= 0, 'Transaction History is mounted');
     assert.ok(referrals > history, 'Referrals follows Transaction History');
     assert.ok(referrals < mainClose, 'Referrals remains inside main');
-    assert.match(
-      html.slice(history, mainClose),
-      /<app-transaction-history>[\s\S]*?<\/app-transaction-history>\s*<!--[\s\S]*?-->\s*<app-affiliate-panel>[\s\S]*?<\/app-affiliate-panel>/,
-      'no other panel is inserted between Transaction History and Referrals',
-    );
+    for (const name of ['tickets', 'passes', 'bounties', 'history', 'referrals']) {
+      assert.match(html, new RegExp(`data-panel-open="${name}"[^>]*aria-haspopup="dialog"[^>]*aria-controls="panel-${name}"`));
+      assert.match(html, new RegExp(`id="panel-${name}"[^>]*data-panel-popup="${name}"[^>]*hidden[^>]*role="dialog"[^>]*aria-modal="true"`));
+    }
+    const referralPopup = html.slice(html.indexOf('id="panel-referrals"'), mainClose);
+    assert.match(referralPopup, /data-referral-strip/,
+      'share-link tools and referral network live in the same popup');
+    assert.match(html, /import \{ mountPanelPopups \} from "\/app\/app\/panel-popups\.js"/);
   });
 
   test('the play grid keeps Quests left, Craps entries middle, and Degenerette right', () => {
@@ -238,8 +241,8 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(appCss,
       /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests craps degenerette"/s,
       'the wide centre track belongs to Craps, the right track to Degenerette');
-    assert.match(html, /<\/section>\s*<!--[\s\S]*?-->\s*<div class="referral-strip" data-referral-strip hidden><\/div>/,
-      'the referral strip sits directly under the play grid');
+    assert.match(html, /<\/section>\s*<nav class="panel-tools"/,
+      'a compact tools row sits directly under the play grid');
   });
 
   test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {
@@ -372,7 +375,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-ed035463-4868ec90-scoped-v3';
+    const revision = '?v=craps-0889affc-49000956-scoped-v8';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',

@@ -64,6 +64,7 @@ import {
   SIM_CRAPS_REPLAY_VIEWER,
 } from '../../craps/fixtures/sim-battle-v1.js';
 import { CRAPS_REPLAY_ESCALATOR_SHOOTERS } from '../../craps/replay-engine.js';
+import { crapsBonusMultiplier } from '../../app/craps.js';
 
 const clone = (value) => structuredClone(value);
 const MANIFEST = validateCrapsReplayManifest(SIM_CRAPS_REPLAY_MANIFEST);
@@ -75,7 +76,7 @@ const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x4868ec90636b05bf06a79932f6eca67f20c9cfa84e3fab7c43edb44eb644dcaf';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x4900095622ad32b8e6953ea0b53124cee4a739990c1ec3474a250d0354559ad5';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -577,7 +578,11 @@ test('a Dice Run record replay recovers its sealed bonus rung before opening', a
 
   assert.deepEqual(readIndexes, [MANIFEST.settlement.boundIndex],
     'metadata-poor replay launchers recover the immutable word at the manifest-bound index');
-  assert.equal(opened[0]?.bonusMultiplier, 1,
+  // The rung is the contract's draw off (word, battle key); the fixture's key moves with each
+  // regeneration, so the expectation is derived rather than pinned to one fixture's rung.
+  const rung = crapsBonusMultiplier({ battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey, wordValue: 5n });
+  assert.ok([0.25, 1, 10, 100].includes(rung));
+  assert.equal(opened[0]?.bonusMultiplier, rung,
     'the shared opener derives the exact contract rung instead of skipping the pre-roll reveal');
   __resetCrapsReplayLoaderForTest();
 });

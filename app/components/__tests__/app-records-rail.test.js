@@ -546,6 +546,7 @@ describe('Dice Run record provenance', () => {
   const iface = new ethers.Interface([
     'event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)',
     'event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)',
+    'event CrapsProgressivePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,bool rare,uint16 poolBps,uint256 peak,uint256 scoreBps,uint256 candidate,uint256 paid,uint256 balance)',
   ]);
 
   function eventLog(name, values) {
@@ -578,6 +579,39 @@ describe('Dice Run record provenance', () => {
       battleWinnerBetId: BET_ID.toString(),
       battlePayoutWei: '77000',
       battleWinningStop: 1,
+    });
+  });
+
+  test('attributes the jackpot battle when no scheduled window pair exists (audit 9ee8986d)', () => {
+    // rewardJackpotBattle (CrapsBattle.sol:1945) has no CrapsBonusArmed/CrapsBattleFinalized
+    // of its own: betId is pinned to 0 and battleKey is the battle word, not a scheduled
+    // window's key. Run 56 never emits this shape (the mechanism doesn't exist there), so
+    // the loop below simply finds nothing and `replay` stays null, unchanged from before.
+    const battleWordKey = `0x${'cd'.repeat(32)}`;
+    const receipt = {
+      logs: [
+        eventLog('CrapsProgressivePaid', [
+          0n, battleWordKey, PLAYER, true, 1000, 900_000n, SCORE_BPS, 88_000n, 88_000n, 12_000n,
+        ]),
+      ],
+    };
+    const record = diceRunRecordFromReceipt({
+      player: PLAYER,
+      value: SCORE_BPS,
+      blockNumber: 123,
+      transactionHash: TX_HASH,
+    }, receipt);
+    assert.equal(record.player, PLAYER);
+    assert.equal(record.value, SCORE_BPS);
+    assert.deepEqual(record.replay, {
+      jackpotBattle: true,
+      battleKey: battleWordKey,
+      viewerBetId: '0',
+      settledMainPotWei: null,
+      battleWinner: PLAYER,
+      battleWinnerBetId: '0',
+      battlePayoutWei: '88000',
+      battleWinningStop: null,
     });
   });
 

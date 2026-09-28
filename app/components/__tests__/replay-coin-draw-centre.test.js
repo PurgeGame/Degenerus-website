@@ -88,7 +88,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     fail(message) { this.#coinDrawStatus = { message, error: true }; }
   })()`;
   const instance = runInNewContext(klass, {
-    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'RESOLVE CRAPS BATTLE',
+    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'JOIN CRAPS BATTLE',
     CHAIN: { id: 84532 }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
   });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });

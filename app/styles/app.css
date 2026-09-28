@@ -1,4 +1,5 @@
 @import url("./dgn-pop.css");
+@import url("./panel-popups.css");
 @import url("./lightweight.css");
 /* /app/styles/app.css — Phase 56 scope */
 
@@ -19215,6 +19216,81 @@ body.layout-basic .deg-block--wager[data-currency="eth"] .deg-place-cta[data-boo
   color: rgba(6, 35, 0, 0.78);
   text-shadow: none;
 }
+
+/* Degenerette cabinet: a champion medallion above a recessed betting desk.
+   The champion absorbs spare desktop height; wager controls keep their size. */
+body.layout-basic .play-grid .app-degenerette-panel { --deg-brass: #d5b577; --deg-lilac: #c4b3e9; position: relative; gap: 0.55rem; padding: 0.55rem 0.75rem 0.75rem; background: radial-gradient(ellipse at 50% 5%, rgba(116, 74, 168, 0.18), transparent 65%), linear-gradient(160deg, #181321, #100f18 68%, #17131a); box-shadow: inset 1px 0 rgba(255, 227, 170, 0.04); }
+body.layout-basic .play-grid .deg-header { flex: 0 0 auto; gap: 0.55rem; }
+body.layout-basic .play-grid .deg-header::before, body.layout-basic .play-grid .deg-header::after { height: 1px; background: linear-gradient(90deg, transparent, rgba(213, 181, 119, 0.55)); content: ''; }
+body.layout-basic .play-grid .deg-header::before { grid-column: 1; grid-row: 1; }
+body.layout-basic .play-grid .deg-header::after { grid-column: 3; grid-row: 1; margin-left: 1.65rem; transform: scaleX(-1); }
+body.layout-basic .play-grid .deg-heading h2 { color: #f1dfbb; font-size: 0.94rem; letter-spacing: 0.16em; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+body.layout-basic .play-grid .deg-header__info { width: 1.2rem; height: 1.2rem; border-color: rgba(213, 181, 119, 0.3); background: rgba(213, 181, 119, 0.05); color: #d5b577; }
+body.layout-basic .play-grid .deg-setup { gap: 0.65rem; }
+body.layout-basic .play-grid .deg-block--symbol { position: relative; isolation: isolate; gap: 0.6rem; padding: 0.7rem; border: 1px solid rgba(196, 179, 233, 0.2); border-radius: 12px; background: radial-gradient(ellipse at 28% 25%, rgba(153, 112, 215, 0.16), transparent 65%), linear-gradient(125deg, rgba(42, 32, 59, 0.85), rgba(17, 15, 25, 0.9)); box-shadow: inset 0 1px rgba(244, 229, 255, 0.06), 0 3px 9px rgba(0, 0, 0, 0.15); }
+body.layout-basic .play-grid .deg-block--symbol::before { position: absolute; z-index: -1; inset: 4px; border: 1px solid rgba(196, 179, 233, 0.07); border-radius: 9px; content: ''; pointer-events: none; }
+body.layout-basic .play-grid button.dgn-symbol-preview { grid-template-columns: 5.25rem minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; justify-items: start; gap: 0.28rem 0.75rem; padding: 0.2rem; border-radius: 8px; }
+body.layout-basic .play-grid .dgn-symbol-preview__art { grid-column: 1; grid-row: 1 / 3; width: 5.25rem; margin: 0; }
+body.layout-basic .play-grid .dgn-symbol-preview__art::after { position: absolute; inset: -2px; border: 1px solid rgba(213, 181, 119, 0.5); border-radius: 50%; background: radial-gradient(circle, transparent 65%, rgba(213, 181, 119, 0.08) 66%); box-shadow: 0 0 0 4px rgba(213, 181, 119, 0.04), 0 0 22px rgba(148, 94, 205, 0.16); content: ''; pointer-events: none; }
+/* Circular badge files include a generous transparent border in their viewBox. */
+body.layout-basic .play-grid .dgn-symbol-preview__art[data-badge="full"] img { width: 100%; height: 100%; transform: scale(1.32); }
+body.layout-basic .play-grid .dgn-symbol-preview__label { grid-column: 2; grid-row: 1; align-self: end; color: var(--deg-lilac); font-size: 0.58rem; letter-spacing: 0.15em; }
+body.layout-basic .play-grid .dgn-symbol-preview__title { grid-column: 2; grid-row: 2; align-self: start; flex-wrap: wrap; gap: 0.35rem 0.45rem; }
+body.layout-basic .play-grid .dgn-symbol-preview__name { width: 100%; color: #faf1df; font-size: 1.1rem; line-height: 1.15; overflow-wrap: anywhere; }
+body.layout-basic .play-grid .dgn-symbol-preview__change { padding: 0.2rem 0.45rem; border-color: rgba(213, 181, 119, 0.35); border-radius: 4px; background: rgba(213, 181, 119, 0.07); color: #e2c78f; font-size: 0.57rem; }
+body.layout-basic .play-grid .dgn-symbol-preview:hover .dgn-symbol-preview__change { border-color: #d5b577; background: rgba(213, 181, 119, 0.15); text-decoration: none; }
+body.layout-basic .play-grid .dgn-symbol-note { max-width: 36ch; color: #b7adc8; font-size: 0.66rem; line-height: 1.45; text-align: left; text-wrap: pretty; }
+body.layout-basic .play-grid .deg-wager-column { gap: 0.65rem; }
+body.layout-basic .play-grid .deg-block--wager { padding: 0.7rem; border-color: rgba(213, 181, 119, 0.25); border-radius: 12px; background: linear-gradient(180deg, rgba(10, 9, 15, 0.84), rgba(22, 18, 28, 0.94)); box-shadow: inset 0 1px rgba(255, 227, 170, 0.04); }
+body.layout-basic .play-grid .deg-currency-picker { gap: 0.25rem; margin-bottom: 0.8rem; padding: 0.22rem; border-color: rgba(196, 179, 233, 0.14); border-radius: 8px; background: #09090f; }
+body.layout-basic .play-grid .deg-currency-option { min-height: 2.45rem; gap: 0.4rem; padding: 0.25rem 0.4rem; border-radius: 5px; }
+body.layout-basic .play-grid .deg-currency-option img { width: 1.65rem; height: 1.65rem; }
+body.layout-basic .play-grid .deg-currency-option__name { font-size: 0.8rem; }
+body.layout-basic .play-grid .deg-block .deg-controls { grid-template-columns: minmax(0, 1.35fr) minmax(5.2rem, 1fr); gap: 0.55rem; }
+body.layout-basic .play-grid .deg-wager-field { gap: 0.4rem; }
+body.layout-basic .play-grid .deg-wager-field__label { color: #beb3cf; font-size: 0.59rem; letter-spacing: 0.1em; }
+body.layout-basic .play-grid :is(.deg-amount-shell, .deg-spin-shell) { grid-template-columns: 1.6rem minmax(0, 1fr) 1.6rem; border-color: rgba(213, 181, 119, 0.32); border-radius: 6px; background: #08080e; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4); }
+body.layout-basic .play-grid .deg-block :is(.deg-amount-input, .deg-ticket-count-select) { min-height: 2.4rem; padding-inline: 0.15rem; color: #fff4df; font-family: "Roboto Mono", monospace; font-size: 1.02rem; font-weight: 800; text-align: center; }
+body.layout-basic .play-grid .deg-stepper__button { min-height: 2.4rem; background: linear-gradient(180deg, rgba(213, 181, 119, 0.12), rgba(213, 181, 119, 0.045)); color: #d7c49d; font-size: 0.95rem; }
+body.layout-basic .play-grid .deg-stepper__button:hover:not(:disabled) { background: rgba(213, 181, 119, 0.24); color: #fff4df; }
+body.layout-basic .play-grid .deg-stepper__button:disabled { color: #655b4b; }
+body.layout-basic .play-grid .deg-amount-presets { gap: 0.35rem; margin-top: 0.55rem; }
+body.layout-basic .play-grid .deg-amount-preset { min-height: 1.85rem; border-radius: 5px; color: #c5bbd5; font-size: 0.67rem; }
+body.layout-basic .play-grid .deg-block--wager .deg-place-cta { min-height: 2.7rem; margin-top: 0.7rem; padding: 0.6rem 0.4rem; border-radius: 7px; font-size: 0.83rem; letter-spacing: 0.01em; box-shadow: inset 0 1px rgba(255, 255, 255, 0.22), 0 3px 0 rgba(0, 0, 0, 0.35); }
+body.layout-basic .play-grid .deg-block--wager .deg-place-cta:active:not(:disabled) { transform: translateY(1px); }
+body.layout-basic .play-grid :is(.deg-currency-option, .deg-amount-preset, .deg-stepper__button, .deg-place-cta):focus-visible { outline: 2px solid #f1dfbb; outline-offset: 2px; }
+body.layout-basic .play-grid :is(.deg-amount-shell, .deg-spin-shell):focus-within { border-color: #f1dfbb; outline: 1px solid #f1dfbb; outline-offset: 1px; }
+@media (min-width: 1100px) {
+  body.layout-basic .play-grid > app-degenerette-panel > .app-degenerette-panel { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #625070 transparent; }
+  body.layout-basic .play-grid .app-degenerette-panel { padding-bottom: 0.55rem; }
+  body.layout-basic .play-grid .deg-header { min-height: 2.1rem; }
+  body.layout-basic .play-grid .deg-setup { flex: 1 0 auto; gap: 0.5rem; }
+  body.layout-basic .play-grid .deg-block--symbol { flex: 1 0 auto; overflow: visible; justify-content: center; gap: 0.4rem; padding: 0.3rem 0.6rem; }
+  body.layout-basic .play-grid .deg-wager-column { flex: 0 0 auto; }
+  body.layout-basic .play-grid .deg-block--symbol:has(> app-sacrifice-panel:not([hidden])) .dgn-symbol-preview { grid-template-columns: 4rem minmax(0, 1fr); padding-block: 0; }
+  body.layout-basic .play-grid .deg-block--symbol:has(> app-sacrifice-panel:not([hidden])) .dgn-symbol-preview__art { width: 4rem; }
+  body.layout-basic .play-grid .deg-block--wager { padding: 0.6rem; }
+  body.layout-basic .play-grid .deg-currency-picker { margin-bottom: 0.55rem; }
+  body.layout-basic .play-grid .deg-currency-option { min-height: 2.2rem; }
+  body.layout-basic .play-grid .deg-wager-field { gap: 0.35rem; }
+  body.layout-basic .play-grid .deg-amount-presets { margin-top: 0.4rem; }
+  body.layout-basic .play-grid .deg-amount-preset { min-height: 1.7rem; }
+  body.layout-basic .play-grid .deg-block--wager .deg-place-cta { margin-top: 0.5rem; }
+}
+@media (max-width: 1099px) and (min-width: 601px) {
+  body.layout-basic .play-grid .deg-setup { grid-template-columns: minmax(0, 1fr) minmax(16rem, 1.1fr); align-items: stretch; }
+  body.layout-basic .play-grid .deg-block--symbol { height: auto; }
+}
+@media (max-width: 600px) {
+  body.layout-basic .play-grid .app-degenerette-panel { padding: 0.6rem 0.65rem 0.8rem; }
+  body.layout-basic .play-grid .deg-block--symbol { align-items: stretch; }
+  body.layout-basic .play-grid .dgn-symbol-note { max-width: none; }
+  body.layout-basic .play-grid .deg-stepper__button, body.layout-basic .play-grid .deg-currency-option, body.layout-basic .play-grid .deg-block :is(.deg-amount-input, .deg-ticket-count-select) { min-height: 2.75rem; }
+  body.layout-basic .play-grid .deg-amount-preset { min-height: 2.3rem; }
+  body.layout-basic .play-grid :is(.deg-amount-shell, .deg-spin-shell) { grid-template-columns: 1.9rem minmax(0, 1fr) 1.9rem; }
+  body.layout-basic .play-grid .deg-block--wager .deg-place-cta { min-height: 3rem; }
+}
+
 
 /* Shared Deity Pass art: the frame stays constant while each surface places
    the selected on-chain symbol behind its transparent socket. */

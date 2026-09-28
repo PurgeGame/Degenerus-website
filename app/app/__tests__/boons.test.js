@@ -110,9 +110,9 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(36).effect, '8% BONUS FLIP BET');
     assert.equal(boonTypePresentation(40).effect, '12% BONUS WWXRP BURN');
     assert.equal(boonTypePresentation(40).name, 'Incinerator');
-    assert.equal(boonTypePresentation(41).effect, '5% MORE CRAPS BANKROLL RETURN');
-    assert.equal(boonTypePresentation(42).effect, '10% MORE CRAPS BANKROLL RETURN');
-    assert.equal(boonTypePresentation(43).effect, '15% MORE CRAPS BANKROLL RETURN');
+    assert.equal(boonTypePresentation(41).effect, '5% CRAPS BOOST');
+    assert.equal(boonTypePresentation(42).effect, '10% CRAPS BOOST');
+    assert.equal(boonTypePresentation(43).effect, '15% CRAPS BOOST');
     assert.equal(boonTypePresentation(32).name, 'Degenerette');
     assert.equal(boonTypePresentation(36).name, 'Degenerette');
     assert.equal(boonTypePresentation(40).name, 'Incinerator',
@@ -166,7 +166,7 @@ describe('active boon product mapping', () => {
     assert.equal(BOON_FULL_NAMES[36], '8% BONUS FLIP BET');
     assert.equal(BOON_BOOST_PCT[40], 12);
     assert.equal(BOON_TYPE_NAMES[42], 'CRAPS_10');
-    assert.equal(BOON_FULL_NAMES[42], 'Craps bankroll return +10%');
+    assert.equal(BOON_FULL_NAMES[42], 'Craps boost +10%');
     assert.equal(BOON_BOOST_PCT[43], 15);
   });
 

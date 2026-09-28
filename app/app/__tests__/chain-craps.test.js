@@ -41,3 +41,57 @@ test('chain input assembly recovers actual seat packing and reproduces every set
   assert.deepEqual(assembled.terms,input.terms);assert.deepEqual(assembled.seats,input.seats);
   assert.equal(materializeReplay(assembled).entrants,24);
 });
+
+test('run 57+: the period-5 jackpot battle replays through the craps table, paid, day and awarded seats alike', async()=>{
+  const {rpcFixture,PLAYER}=await import('./helpers/chain-rpc.js');
+  const {keccak256}=await import('../../vendor/ethers-app.mjs');
+  const {loadReplayInputs}=await import('../../chain/craps.js');
+  const {settleBattle}=await import('../../chain/craps-engine.js');
+  const {useSchema,CURRENT_SCHEMA_HASH}=await import('../../chain/schema.js');
+  const previous=useSchema(CURRENT_SCHEMA_HASH);
+  try{
+    const f=await rpcFixture({head:4000,timestamp:48000,period:1000});
+    f.client.chain.codeHashes={CRAPS:keccak256('0x01')};
+    // Day 42's jackpot slot: _slotOf(42, 5) = 42 * 8 + 6. Its key is its slot (`_slotWindow`).
+    const slot=42n*8n+6n,daySlot=42n*8n,key='0x'+slot.toString(16).padStart(64,'0');
+    const word=BigInt(keccak256('0x6a61636b706f74'));const bankroll=1_800n*10n**18n;
+    const wallet=i=>'0x'+(0xbeef00n+BigInt(i)).toString(16).padStart(40,'0');
+    // Dense walk (`_seatId`): two paid seats, one day ticket, then two AWARDED seats (the same wallet
+    // twice: an award keys its dice to its bet id, so they are two different runs).
+    const seats=[
+      {betId:(slot<<64n)|1n,player:PLAYER.toLowerCase(),chips:0o3,award:0n,lane:'window'},
+      {betId:(slot<<64n)|2n,player:wallet(1),chips:0o1002,award:0n,lane:'window'},
+      {betId:(daySlot<<64n)|1n,player:wallet(2),chips:0,award:0n,lane:'day'},
+      {betId:(slot<<64n)|3n,player:wallet(3),chips:0o10,award:1n,lane:'window'},
+      {betId:(slot<<64n)|4n,player:wallet(3),chips:0o10,award:1n,lane:'window'},
+    ];
+    await f.field('CRAPS','_battles',5n|(5n<<32n),key);
+    await f.field('CRAPS','_dayTickets',1n,daySlot);
+    for(const [member,value] of [['word',word],['bankroll',bankroll],['bountyUnits',12n],['drawnCount',2n],['drawnUnits',2n]]) await f.field('CRAPS','_jackpotRounds',value,slot,member);
+    await f.event('CRAPS','JackpotBattleStarted',{slot,level:7,drawnEntries:2,drawnUnits:2,word},{block:3600,index:0});
+    let index=0;
+    for(const [i,seat] of seats.entries()){
+      const header=BigInt(seat.player)|(BigInt(seat.chips)<<160n)|((seat.award?100n:0n)<<190n)|(seat.award<<224n);
+      await f.field('CRAPS','_bets',header,seat.betId);
+      const r=settleBattle(seat.betId,header,bankroll/5n/(10n*10n**18n),bankroll,bankroll*5n,slot,(5n<<64n)|BigInt(i+1),word);
+      seat.won=r.bankrollOut;seat.paid=r.bankrollIn;
+      await f.event('CRAPS','CrapsBetSettled',{betId:seat.betId,player:seat.player,won:seat.won,paid:seat.paid},{block:3700,index:index++});
+    }
+    await f.event('CRAPS','CrapsBattleFinalized',{battleKey:key,winningScoreBps:12000},{block:3700,index:index++});
+    const assembled=await loadReplayInputs(f.s,key);
+    assert.equal(assembled.word,word,'the round\'s own word, not a lootbox index');
+    assert.equal(assembled.settlement.boundIndex,0n);
+    assert.equal(assembled.rollBudget,undefined,'the current contracts replay at the engine\'s 1,000-roll budget');
+    assert.deepEqual(assembled.terms,{bankroll,goal:bankroll*5n,boardStake:bankroll/5n,battleStake:12n*100n*10n**18n});
+    assert.deepEqual(assembled.seats.map(s=>[s.betId,s.lane,s.awardUnits??0]),seats.map(s=>[s.betId,s.lane,Number(s.award)]));
+    const bundle=materializeReplay(assembled);
+    assert.equal(bundle.entrants,5,'every settlement reproduced, the awarded seats on their own dice');
+    // The rotation timeline follows the contract's dense walk: paid, day ticket, then awarded.
+    const {rotationTurn,crapsSeed}=await import('../../chain/craps-engine.js');
+    const maxHands=JSON.parse(bundle.manifest.body.toString()).tape.maxHands;
+    const featured=JSON.parse(bundle.children.find(c=>c.name==='featured').body.toString());
+    const expected=seats.flatMap((seat,i)=>{const turn=rotationTurn(crapsSeed(word,slot),5n,BigInt(i+1));
+      return turn===0n||turn>BigInt(maxHands)?[]:[[Number(turn-1n),seat.betId.toString()]];}).sort((a,b)=>a[0]-b[0]);
+    assert.deepEqual(featured.shooterTimeline.map(row=>[row.shooter,row.betId]),expected);
+  }finally{useSchema(previous);}
+});

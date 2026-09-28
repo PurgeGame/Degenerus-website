@@ -1,0 +1,35 @@
+/* One compact entry row replaces the full-width utility disclosures. */
+.panel-tools { display: flex; flex-wrap: wrap; gap: .45rem; margin: .7rem 0 1rem; }
+.panel-tools__button { display: flex; flex: 1 1 9rem; min-width: 0; min-height: 3.5rem; align-items: center; justify-content: center; gap: .65rem; padding: .65rem .9rem; border: 1px solid #b8995838; border-radius: 9px; background: linear-gradient(150deg, #242032, #14131d); color: #e8dfce; font: 750 .72rem/1.2 "Inter", sans-serif; letter-spacing: .06em; cursor: pointer; }
+.panel-tools__button svg { width: 1.35rem; height: 1.35rem; flex: 0 0 auto; color: #cbb481; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.panel-tools__button:hover, .panel-tools__button[aria-expanded="true"] { border-color: #c4a66d; color: #fff1d3; background: #30263e; }
+.panel-tools__button:focus-visible, .panel-popup__close:focus-visible { outline: 2px solid #f2d595; outline-offset: 3px; }
+.panel-tools__button[hidden], .panel-popup[hidden] { display: none !important; }
+.panel-popup { position: fixed; z-index: 960; inset: 0; display: grid; place-items: center; box-sizing: border-box; padding: clamp(.5rem, 2vw, 1.5rem); background: #060711c9; backdrop-filter: blur(7px); }
+.panel-popup__window { display: flex; flex-direction: column; width: min(100%, 72rem); max-height: calc(100dvh - 3rem); min-width: 0; border: 1px solid #b8995880; border-radius: 16px; background: linear-gradient(145deg, #211b2c, #11121c 45%); box-shadow: 0 24px 80px #0009, inset 0 1px #fce4b31a; }
+.panel-popup[data-panel-popup="referrals"] .panel-popup__window { width: min(100%, 56rem); }
+.panel-popup__header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1.2rem; border-bottom: 1px solid #b899582b; }
+.panel-popup__header h2 { margin: 0; color: #f1dfbb; font: 800 .95rem/1.3 "Inter", sans-serif; letter-spacing: .11em; }
+.panel-popup__close { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid #c9b88d40; border-radius: 8px; background: #ffffff06; color: #e8ddc7; font: 400 1.6rem/1 sans-serif; cursor: pointer; }
+.panel-popup__close:hover { background: #c9b88d20; border-color: #c9b88d; }
+.panel-popup__body { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #685379 #11121c; padding: 1rem; }
+.panel-popup__status { padding: 1.5rem; color: #bab1ca; text-align: center; }
+.panel-popup__status[hidden] { display: none !important; }
+body.layout-basic .panel-popup[data-panel-popup] :is(.txh, .aff-disclosure, .more-ways, .app-tickets-inventory, .records-rail) { margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+body.layout-basic .panel-popup[data-panel-popup] :is(.txh__summary, .aff-summary, .more-ways__summary, .records-rail__summary) { display: none; }
+body.layout-basic .panel-popup[data-panel-popup] :is(.txh__content, .aff-content, .more-ways__content) { padding: 0; border: 0; }
+body.layout-basic .panel-popup[data-panel-popup] .referral-strip { margin: 0 0 1rem; }
+body.layout-basic .panel-popup[data-panel-popup] .referral-strip .deg-referral-card { flex-wrap: wrap; }
+body.layout-basic .panel-popup[data-panel-popup] .inv-head > h2, body.layout-basic .panel-popup[data-panel-popup] .inv-disclosure { display: none !important; }
+body.layout-basic .panel-popup[data-panel-popup] .app-tickets-inventory .inv-head { padding: 0 0 .85rem; min-height: 0; }
+body.layout-basic .panel-popup[data-panel-popup] .app-tickets-inventory .inv-window { max-height: 58dvh; }
+body.layout-basic .panel-popup[data-panel-popup] .records-rail__expanded { border-top: 0; }
+@media (max-width: 600px) {
+  .panel-tools { gap: .4rem; }
+  .panel-tools__button { flex-basis: calc(50% - .4rem); min-height: 3rem; padding: .55rem; font-size: .64rem; gap: .4rem; }
+  .panel-popup { padding: .4rem; }
+  .panel-popup__window { max-height: calc(100dvh - .8rem); border-radius: 12px; }
+  .panel-popup__header { padding: .55rem .7rem; }
+  .panel-popup__header h2 { font-size: .8rem; }
+  .panel-popup__body { padding: .7rem; }
+}

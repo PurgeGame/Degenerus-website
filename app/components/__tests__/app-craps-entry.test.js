@@ -91,6 +91,32 @@ test('the ACTIVE schedule steps through seven battles and ends on the event lead
   assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart).length, 7);
 });
 
+// Run 57+ (audit 4f546796) testnet shape: five explicit closes (CrapsBattle._currentBonusSlot's
+// `% 1200 seconds` if-chain), six periods total. Period 5 is the daily JACKPOT BATTLE and is not
+// clock-bound, so it is never reported as a "day complete" sentinel the way run 56's period 7 was.
+const CLOCK_PERIOD_CLOSES = Object.freeze({
+  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620,
+  periodCloseSeconds: Object.freeze([300, 480, 660, 840, 1_020]),
+});
+
+test('the current-schema clock steps through six periods and never reports the legacy "day complete" sentinel', () => {
+  const c = CLOCK_PERIOD_CLOSES;
+  assert.equal(crapsEntry.crapsBattlesPerDay(c), 6);
+  const dayStart = (c.anchorSeconds + 1000 * c.daySeconds) * 1000; // any whole day after the anchor
+  const at = (s) => crapsEntry.crapsPeriodAt(dayStart + s * 1000, c);
+  assert.equal(at(0), 0);
+  for (const [index, close] of c.periodCloseSeconds.entries()) {
+    assert.equal(at(close - 1), index, `period ${index} runs until ${close}s`);
+    assert.equal(at(close), index + 1, `period ${index + 1} opens at ${close}s`);
+  }
+  // Period 5 (the jackpot battle) opens at period 4's close and stays "current" for the rest of
+  // the day — there is no clock-only signal for when its RNG actually locks, unlike run 56's
+  // clock-bound event window.
+  assert.equal(at(c.daySeconds - 1), 5, 'the jackpot period never rolls to a legacy sentinel');
+  assert.equal(at(c.daySeconds), 0, 'the next day starts over at period 0');
+  assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart, c).length, 6);
+});
+
 test('future slates keep using available comps after the final battle until rollover', () => {
   const clock = {
     daySeconds: 86_400,
@@ -1009,7 +1035,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /data-bind="craps-previous-event-row"/);
   assert.match(componentSource, /snapshot\?\.yesterdayEventResult/);
   assert.match(componentSource,
-    /this\.#snapshot\?\.results\?\.\[CRAPS_BATTLES_PER_DAY - 1\][\s\S]*?this\.#previousEventResult = completedEvent/,
+    /this\.#snapshot\?\.results\?\.\[crapsBattlesPerDay\(\) - 1\][\s\S]*?this\.#previousEventResult = completedEvent/,
     'the completed event survives the day handoff while the fresh snapshot loads');
   assert.match(componentSource,
     /const previousEvent = crapsPreviousEventDuringRollover\(\{[\s\S]*?wordValue: currentWordFromStore\(state\.day\)/,
@@ -1190,7 +1216,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'inline picks feed the existing buy and amend calldata');
   assert.doesNotMatch(componentSource, />\s*(?:UNDO|CLEAR)\s*</,
     'the tiny surface carries no redundant undo or clear controls');
-  assert.match(componentSource, /CRAPS_FUTURE_DAY_PRICES/);
+  assert.match(componentSource, /crapsFutureDayPrices/);
   assert.match(componentSource, /readCrapsPassCredits/);
   assert.match(componentSource, /applyCrapsPasses/);
   assert.match(componentSource,
@@ -1220,11 +1246,11 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'future slate rows use an exact rollover clock instead of a vague day label');
   assert.match(componentSource, /<th scope="row"><time data-bind="craps-tomorrow-countdown">—<\/time><\/th>/,
     'the second future-slate row uses the same countdown treatment');
-  assert.match(componentSource, /CRAPS_FUTURE_DAY_FACE_RANGES/);
+  assert.match(componentSource, /crapsFutureDayFaceRanges/);
   // The next word has not been drawn, so one spanned cell carries the combined
   // cost with its seven-battle scope on the same line.
   assert.match(componentSource,
-    /data-bind="craps-tomorrow-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">[^<]+<\/strong><small>7 BATTLES<\/small><\/span>/,
+    /data-bind="craps-tomorrow-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">[^<]+<\/strong><small data-bind="craps-tomorrow-window-note">7 BATTLES<\/small><\/span>/,
     'the rollover row puts seven battles to the right of its combined cost');
   assert.match(componentSource, /craps-tomorrow-range', compactRange\(futureFaceRange\)/,
     'the rendered range is the combined low..high, never the split sub-ranges');

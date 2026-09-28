@@ -3400,6 +3400,26 @@ describe('foil match pending action', () => {
       assert.equal(action.score, 8);
       assert.equal(action.rewardFaces, 40_000,
         'Pending can name the deterministic bonus before the claim is sent');
+      // Run 57+ doubled the face table (FoilPackModule FOIL_FACES_T8 = 80,000).
+      const { useSchema, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
+      const priorSchema = useSchema(CURRENT_SCHEMA_HASH);
+      try {
+        document.dispatchEvent({
+          type: 'replay:scratch-complete',
+          detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
+        });
+        for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+        assert.equal(pendingActionsMod.getPendingActions()[0]?.rewardFaces, 80_000,
+          'the pending bonus reads the face table of the deployment the site reads');
+      } finally {
+        useSchema(priorSchema);
+        document.dispatchEvent({
+          type: 'replay:scratch-complete',
+          detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
+        });
+        for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+      }
+      assert.equal(pendingActionsMod.getPendingActions()[0]?.rewardFaces, 40_000);
       assert.equal(action.autoOpen, true,
         'AUTO may settle the permissionless claim for its fixed player');
       assert.equal(typeof action.run, 'function');

@@ -1833,6 +1833,29 @@ test('shooter identity cannot change with viewer-relative roster order', async (
   assert.equal(crapsShooterIdentity({ indexed: otherSeat, candidates: [main], viewerBetId: '1', viewerPlayer: main.player }).local, false);
   assert.equal(crapsShooterIdentity({ indexed: { player: main.player }, candidates: [{ ...main, local: true }] }).local, true);
   assert.equal(crapsShooterIdentity({ rotationPlayer: alt, candidates: [main, alt] }).label, 'ALT');
+  // A fill-draw frame names its shooter by seat and wallet only; the seat carries the name.
+  assert.equal(crapsShooterIdentity({ shooter: 3, indexed: { betId: '2', player: alt.player }, candidates: [main, alt] }).label, 'ALT');
+});
+
+test('a run that throws its own dice keeps its named shooter through the table\'s frames', async () => {
+  const { createCrapsResolutionRun } = await import(moduleUrl);
+  const run = createCrapsResolutionRun({
+    startingBankrollFlip: 300,
+    goalFlip: 600,
+    rolls: '0x33004400',
+    hands: [
+      { bankrollFlip: 420, label: 'WIN', shooterBetId: 'coin-draw:9:0', shooterPlayer: '0xaaa' },
+      { bankrollFlip: 420, label: 'BATTLE CONTINUES', viewerClosed: true, shooterBetId: 'coin-draw:9:4', shooterPlayer: '0xbbb' },
+      { bankrollFlip: 420, label: 'SHARED' },
+    ],
+  });
+  assert.deepEqual(run.frames.map(({ shooterBetId, shooterPlayer }) => [shooterBetId, shooterPlayer]), [
+    ['coin-draw:9:0', '0xaaa'],
+    ['coin-draw:9:4', '0xbbb'],
+    [null, null],
+  ]);
+  // The shooter card falls back to that seat when no shooter timeline names the hand.
+  assert.match(COMPONENT_SRC, /\?\? \(frame\?\.shooterBetId != null \|\| frame\?\.shooterPlayer/);
 });
 
 
