@@ -1,4 +1,4 @@
-/* The idle Growth lane becomes a live LINK-to-FLIP quote and donation card. */
+/* Shared funding card styles, also used inside the Incinerator popup. */
 body.layout-basic .pari-link {
   position: relative;
   box-sizing: border-box;
@@ -646,4 +646,46 @@ body.layout-basic .pari-funding-card__feedback {
     grid-template-columns: minmax(5.2rem, 1fr) minmax(6.7rem, 7.5rem) 4rem;
   }
   body.layout-basic .pari-funding-card__action[data-write] { width: 4rem; min-width: 4rem; }
+}
+
+/* A small live-value entry opens the complete LINK trade. */
+body.layout-basic .link-trade-open { gap: .4rem; max-width: 100%; padding: .4rem .55rem; border-color: #5daacd45; background: #14252e; color: #c8e8f5; }
+body.layout-basic .link-trade-open:hover, body.layout-basic .link-trade-open[aria-expanded="true"] { background: #1c3440; border-color: #7cc8eaa0; }
+.link-trade-open > img { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.link-trade-open > strong { padding: .22rem .3rem; border-radius: 3px; background: #86c1da15; color: #9bdcf6; font-size: .59rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+body.layout-basic .link-trade-popup .panel-popup__window { width: min(100%, 29rem); border-color: #5a9ebd55; }
+.link-trade { display: grid; gap: .65rem; min-width: 0; color: #d9e7ed; font: 500 .8rem/1.4 Inter, sans-serif; }
+.link-trade__balance { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .7rem .8rem; margin-bottom: .3rem; border: 1px solid #65b1d133; border-radius: 7px; background: #10232d; }
+.link-trade__balance > span { display: flex; align-items: center; gap: .45rem; color: #a6bfcc; font-size: .65rem; letter-spacing: .035em; }
+.link-trade__balance img { width: 1.3rem; height: 1.3rem; }
+.link-trade__balance > strong { color: #d1f0ff; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.link-trade__balance small { font-size: .65rem; color: #8eafbe; }
+.link-trade__label { color: #a4bac7; font-size: .64rem; font-weight: 700; letter-spacing: .04em; }
+.link-trade__amount { display: flex; align-items: center; gap: .65rem; min-width: 0; padding: .45rem .55rem; border: 1px solid #5a9ebd66; border-radius: 7px; background: #0d1922; }
+.link-trade__amount:focus-within { outline: 2px solid #7ac8ea80; outline-offset: 2px; }
+body.layout-basic .link-trade__amount input { width: 100%; min-width: 0; min-height: 2rem; padding: .15rem .1rem; margin: 0; border: 0; outline: 0; border-radius: 0; background: transparent; box-shadow: none; color: #e0f4ff; font: 700 1.15rem/1.4 Inter, sans-serif; font-variant-numeric: tabular-nums; }
+body.layout-basic .link-trade__amount input[aria-invalid="true"] { color: #f4aca1; }
+.link-trade__amount > span { color: #9ebbc9; font-size: .7rem; }
+.link-trade__amount button { flex: 0 0 auto; min-height: 2rem; padding: .3rem .55rem; border: 1px solid #66b5d044; border-radius: 4px; background: #173849; color: #b6e6fa; font: 750 .65rem/1.2 Inter, sans-serif; cursor: pointer; }
+body.layout-basic .link-trade__slider { display: block; width: 100%; min-width: 0; min-height: 1.75rem; margin: .15rem 0 -.4rem; padding: 0; border: 0; box-shadow: none; accent-color: #7cd1f2; cursor: pointer; }
+.link-trade__range { display: flex; justify-content: space-between; gap: .3rem; color: #789baa; font-size: .63rem; font-variant-numeric: tabular-nums; }
+.link-trade__range output { color: #b9d1db; }
+.link-trade__quote { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .7rem; padding: .9rem .8rem; margin-top: .25rem; border: 1px solid #c2aa5c35; border-radius: 7px; background: linear-gradient(115deg, #302d20, #1c2324); }
+.link-trade__quote > div { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+.link-trade__quote > div + div { text-align: right; padding-left: .7rem; border-left: 1px solid #d5c98425; }
+.link-trade__quote small { color: #b6b399; font-size: .6rem; font-weight: 700; letter-spacing: .045em; }
+.link-trade__quote > div > output, .link-trade__quote strong { color: #ffe7a3; font: 800 1.3rem/1.2 Inter, sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.link-trade__quote > div > span { color: #aaa997; font-size: .65rem; }
+.link-trade__quote[data-state="unavailable"] { opacity: .65; }
+.link-trade__note { margin: .15rem 0; color: #8fa7b4; font-size: .72rem; line-height: 1.55; }
+.link-trade__status, .link-trade__feedback { margin: 0; color: #afc9d5; font-size: .73rem; }
+.link-trade__feedback { color: #9dd9ae; }
+.link-trade__feedback[data-state="error"] { color: #f4aca1; }
+body.layout-basic .link-trade__submit { width: 100%; min-height: 2.8rem; padding: .65rem; border: 1px solid #83d1ee75; border-radius: 6px; background: linear-gradient(#237ba0, #155270); box-shadow: inset 0 1px #d6f4ff22; color: #e5f8ff; font: 750 .75rem/1.3 Inter, sans-serif; letter-spacing: .035em; cursor: pointer; }
+body.layout-basic .link-trade__submit:hover:not(:disabled) { filter: brightness(1.15); }
+body.layout-basic .link-trade :disabled { opacity: .5; cursor: default; }
+.link-trade button:focus-visible, .link-trade input[type="range"]:focus-visible { outline: 2px solid #9adfff; outline-offset: 3px; }
+@media (max-width: 380px) {
+  .link-trade-open > img { display: none; }
+  .link-trade__quote > div > output, .link-trade__quote strong { font-size: 1.05rem; }
 }

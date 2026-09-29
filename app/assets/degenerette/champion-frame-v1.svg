@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102" fill="none">
+  <!-- Overlay at exactly the same bounds as a /badges-circular/ SVG.
+       Its painted circle (r=35.2) remains entirely unobstructed. -->
+  <defs>
+    <linearGradient id="champion-v1-brass" x1="-29" y1="-36" x2="30" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff0b1"/>
+      <stop offset=".24" stop-color="#e5c575"/>
+      <stop offset=".53" stop-color="#a96e23"/>
+      <stop offset=".77" stop-color="#edcc83"/>
+      <stop offset="1" stop-color="#9c692b"/>
+    </linearGradient>
+    <linearGradient id="champion-v1-enamel" x1="-44" y1="-30" x2="-18" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a175e2"/>
+      <stop offset=".38" stop-color="#674095"/>
+      <stop offset="1" stop-color="#311d52"/>
+    </linearGradient>
+    <g id="champion-v1-wing" stroke-linejoin="round">
+      <path d="M-31-27  Q-41-25-48-32 L-45-17 Q-42-11-37-9 Q-36-20-31-27Z" fill="#20142e" stroke="#20142e" stroke-width="2.4"/>
+      <path d="M-37-9 -49-19 -46-2 -39 10 -37 3Z" fill="#20142e" stroke="#20142e" stroke-width="2.4"/>
+      <path d="M-37 9 -47 4 -43 22 -29 31 -32 22Z" fill="#20142e" stroke="#20142e" stroke-width="2.4"/>
+      <path d="M-28 28 -34 31 -25 42 -10 46 -18 36Z" fill="#20142e" stroke="#20142e" stroke-width="2.4"/>
+      <path d="M-31-27 Q-41-25-48-32 L-45-17 Q-42-11-37-9 Q-36-20-31-27Z" fill="url(#champion-v1-enamel)" stroke="url(#champion-v1-brass)" stroke-width="1.8"/>
+      <path d="M-37-9 -49-19 -46-2 -39 10 -37 3Z" fill="url(#champion-v1-enamel)" stroke="url(#champion-v1-brass)" stroke-width="1.8"/>
+      <path d="M-37 9 -47 4 -43 22 -29 31 -32 22Z" fill="url(#champion-v1-enamel)" stroke="url(#champion-v1-brass)" stroke-width="1.8"/>
+      <path d="M-28 28 -34 31 -25 42 -10 46 -18 36Z" fill="url(#champion-v1-enamel)" stroke="url(#champion-v1-brass)" stroke-width="1.8"/>
+      <path d="M-43-23-40-16 M-44-10-41-2 M-42 12-36 22 M-28 35-20 40" stroke="#e1c6ff" stroke-opacity=".67" stroke-width="1.3" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <use href="#champion-v1-wing"/>
+  <use href="#champion-v1-wing" transform="scale(-1 1)"/>
+  <circle r="37.1" stroke="#261a34" stroke-width="3.4"/>
+  <circle r="36.9" stroke="url(#champion-v1-brass)" stroke-width="2"/>
+  <path d="M-26.1-26.1A36.9 36.9 0 0 1 17-32.75" stroke="#fff2c3" stroke-width=".9" stroke-linecap="round"/>
+  <path d="m0 36.6 8.2 5.7L0 50l-8.2-7.7Z" fill="#251535" stroke="#35213d" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="m0 36.6 7.3 5.8L0 49.1l-7.3-6.7Z" fill="#b287f0" stroke="url(#champion-v1-brass)" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M0 36.6v8l-7.3-2.2Z" fill="#e4ccff"/>
+  <path d="m0 36.6 7.3 5.8L0 44.6Z" fill="#b586ed"/>
+  <path d="m-7.3 42.4 7.3 2.2v4.5Z" fill="#8754bd"/>
+  <path d="m0 44.6 7.3-2.2L0 49.1Z" fill="#583173"/>
+  <path d="m0 36.6 7.3 5.8L0 49.1l-7.3-6.7Z" stroke="#efd193" stroke-width="1.1" stroke-linejoin="round"/>
+</svg>

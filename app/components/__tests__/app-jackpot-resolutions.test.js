@@ -35,41 +35,43 @@ describe('Decimator resolution presentation', () => {
     );
   });
 
-  test('a winning unclaimed subbucket becomes an honest resolve action', () => {
+  test('an unpaid winning subbucket settles automatically, with no player action', () => {
+    // Audit ab95963ac: the walk is the only settlement path; claimDecimatorJackpot is gone.
     const view = decimatorResolutionView({
       currentLevel: 25,
       level: 25,
-      claimState: 'ready',
+      claimState: 'queued',
       outcome: {
         roundStatus: 'closed', bucket: 7, subbucket: 3,
         winningSubbucket: 3, payoutAmount: '1000000000000',
       },
     });
-    assert.equal(view.status, 'READY TO RESOLVE');
-    assert.equal(view.tone, 'ready');
-    assert.equal(view.actionable, true);
+    assert.equal(view.status, 'PAYING OUT');
+    assert.equal(view.tone, 'won');
+    assert.equal(view.actionable, false, 'there is nothing to send');
     assert.match(view.message, /1 ETH estimated pool share/);
+    assert.match(view.message, /Settles automatically/);
   });
 
   test('chain winner evidence survives a bucket-less indexer snapshot', () => {
     const view = decimatorResolutionView({
       currentLevel: 200,
       level: 200,
-      claimState: 'ready',
+      claimState: 'queued',
       outcome: { roundStatus: 'closed', bucket: null, payoutAmount: '0' },
     });
-    assert.equal(view.status, 'READY TO RESOLVE');
-    assert.equal(view.tone, 'ready');
-    assert.equal(view.actionable, true);
+    assert.equal(view.status, 'PAYING OUT');
+    assert.equal(view.tone, 'won');
+    assert.equal(view.actionable, false);
     assert.match(view.message, /still syncing/);
   });
 
-  test('claimed winners and losing entries remain visible without stale actions', () => {
+  test('paid winners and losing entries remain visible without stale actions', () => {
     const claimed = decimatorResolutionView({
       currentLevel: 26, level: 25, claimState: 'claimed',
       outcome: { roundStatus: 'closed', bucket: 7, subbucket: 3, winningSubbucket: 3, payoutAmount: '5' },
     });
-    assert.equal(claimed.status, 'RESOLVED');
+    assert.equal(claimed.status, 'PAID');
     assert.equal(claimed.actionable, false);
     assert.match(claimed.message, /claimable ETH/);
     assert.match(claimed.message, /Luckbox \/ Whale Half-Pass/);
@@ -311,7 +313,7 @@ test('stable settled Decimator/BAF rounds are latched and not refetched', () => 
   assert.match(src, /\['closed', 'skipped'\]\.includes/,
     "only terminal statuses latch — an 'open' round keeps polling");
   assert.match(src,
-    /const decChainWinner = \['ready', 'claimed'\]\.includes\(this\.\#decimatorClaimState\);[\s\S]{0,500}?if \(decTerminal && \([\s\S]{0,220}?hasDecimatorPosition\(this\.\#decimator\)/,
+    /const decChainWinner = DECIMATOR_WINNER_STATES\.includes\(this\.\#decimatorClaimState\);[\s\S]{0,500}?if \(decTerminal && \([\s\S]{0,220}?hasDecimatorPosition\(this\.\#decimator\)/,
     'a bucket-less terminal snapshot is not frozen before chain winner evidence catches up');
   assert.match(src, /if \(nextAddress !== this\.#address\) this\.#settled =/,
     'switching accounts invalidates the latch');
@@ -326,4 +328,13 @@ test('a failed consolation read reads as pending, never as "no consolation"', ()
   assert.match(none.status, /^LOSS/);
   const ready = bafResolutionView({ outcome: skipped, consolation: 5n * 10n ** 18n, consolationUnknown: false, level: 7, currentLevel: 9 });
   assert.equal(ready.status, 'CONSOLATION READY');
+});
+
+test('the Decimator final row only views the draw: no claim write exists (audit ab95963ac)', () => {
+  const src = readFileSync(
+    new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /claimDecimatorLevels|claimDecimatorJackpot/,
+    'mineFlip\'s walk is the only settlement path');
+  assert.match(src, /kind: 'decimator',[\s\S]{0,700}?shortLabel: decWaiting \? 'Processing' : 'View draw',[\s\S]{0,200}?write: false,/,
+    'the Decimator pending row never asks for a wallet');
 });

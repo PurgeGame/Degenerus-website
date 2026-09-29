@@ -468,6 +468,71 @@ describe('<app-affiliate-panel> — referral network', () => {
       'financial and affiliate-code controls are absent');
   });
 
+  test('sharing copies the connected wallet link while viewing another player', async () => {
+    storeMod.update('viewing.address', '0xbb12000000000000000000000000000000000000');
+    const el = instantiate({ open: false });
+    const link = el.querySelector('[data-bind="aff-copy-link"]');
+    assert.equal(el.querySelector('[data-bind="aff-share-url"]').value, `https://degener.us/beta/?ref=${CONNECTED}`);
+    assert.equal(el.querySelector('[data-bind="aff-copy-code"]'), null);
+    link.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(_clipboardCalls.at(-1), `https://degener.us/beta/?ref=${CONNECTED}`);
+    storeMod.update('connected.address', null);
+    assert.equal(link.disabled, true);
+    assert.equal(el.querySelector('[data-bind="aff-share-url"]').value, '');
+    el.disconnectedCallback();
+  });
+
+  test('sharing uses the resolved vanity code in the referral link', async () => {
+    const affiliate = await import('../../app/affiliate.js');
+    const encoded = '0x' + Buffer.from('LUCKY').toString('hex').padEnd(64, '0');
+    affiliate.__setFetchJSONForTest(async () => ({ affiliate: { ownCode: encoded } }));
+    const el = instantiate();
+    try {
+      await settle();
+      assert.equal(el.querySelector('[data-bind="aff-share-url"]').value, `https://degener.us/beta/?ref=${encoded}`);
+      el.querySelector('[data-bind="aff-copy-link"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      assert.equal(_clipboardCalls.at(-1), `https://degener.us/beta/?ref=${encoded}`);
+    } finally { affiliate.__setFetchJSONForTest(null); el.disconnectedCallback(); }
+  });
+
+  test('sharing stays available while a vanity-code lookup is pending', async () => {
+    const affiliate = await import('../../app/affiliate.js');
+    let finishLookup;
+    affiliate.__setFetchJSONForTest(() => new Promise(resolve => { finishLookup = resolve; }));
+    const el = instantiate();
+    try {
+      el.querySelector('[data-bind="aff-copy-link"]').dispatchEvent({ type: 'click' });
+      assert.equal(_clipboardCalls.at(-1), `https://degener.us/beta/?ref=${CONNECTED}`,
+        'copy starts synchronously during the click instead of waiting for the network');
+      await flushMicrotasks();
+    } finally {
+      finishLookup({});
+      affiliate.__setFetchJSONForTest(null);
+      el.disconnectedCallback();
+    }
+  });
+
+  test('sharing falls back to a selected field if clipboard access is rejected', async () => {
+    _clipboardShouldFail = true;
+    const original = document.execCommand;
+    let selected;
+    document.execCommand = command => {
+      assert.equal(command, 'copy');
+      selected = _docBody.querySelector('textarea')?.value;
+      return true;
+    };
+    const el = instantiate({ open: false });
+    try {
+      el.querySelector('[data-bind="aff-copy-link"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      assert.equal(selected, `https://degener.us/beta/?ref=${CONNECTED}`);
+      assert.equal(el.querySelector('textarea'), null, 'temporary copy field is removed');
+      assert.equal(el.querySelector('[data-bind="aff-share-feedback"]').textContent, 'Referral link copied.');
+    } finally { document.execCommand = original; el.disconnectedCallback(); }
+  });
+
   test('Referrals starts closed with no lookup, then loads counts inside when opened', async () => {
     _fetchHandler = async (url) => String(url).includes('/api/profiles?')
       ? { profiles: [] }
@@ -674,7 +739,7 @@ describe('<app-affiliate-panel> — referral network', () => {
   // not a metric that can be summed by combine.js.
   test("mode 'combined' renders the per-account note via the existing referees empty-state", async () => {
     let fetched = false;
-    _fetchHandler = async () => { fetched = true; return makeRefereesPayload(); };
+    _fetchHandler = async url => { if (String(url).includes('/referees')) fetched = true; return makeRefereesPayload(); };
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
     const el = instantiate();

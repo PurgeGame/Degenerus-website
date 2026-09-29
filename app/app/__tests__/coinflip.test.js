@@ -996,6 +996,21 @@ describe('Plan 62-03: depositCoinflip', () => {
     assert.equal(lastFakeContract._calls.setCoinflipAutoRebuy.length, 0);
   });
 
+  test('a TakeProfitTooLarge revert decodes to its own copy (audit ab95963ac)', async () => {
+    // Coinflip.sol:1318/:1360 revert above uint128 max; the client bound keeps it unreachable
+    // from the UI, but a revert that does arrive must not read as an unknown error.
+    const reverting = makeFakeContract({
+      staticCallShouldRevert: { setCoinflipAutoRebuyTakeProfit: true },
+      staticCallRevertName: { setCoinflipAutoRebuyTakeProfit: 'TakeProfitTooLarge' },
+    });
+    coinflipMod.__setContractFactoryForTest(() => reverting);
+    await assert.rejects(
+      coinflipMod.setCoinflipAutoRebuyTakeProfit({ takeProfit: 750n * 10n ** 18n }),
+      (error) => error.code === 'TakeProfitTooLarge' && /too large/i.test(error.userMessage),
+    );
+    assert.equal(reverting._calls.setCoinflipAutoRebuyTakeProfit.length, 0);
+  });
+
   test('rejects amount below 100 FLIP minimum (AmountLTMin defense-in-depth)', async () => {
     await assert.rejects(
       coinflipMod.depositCoinflip({ amount: '50000000000000000000' }),

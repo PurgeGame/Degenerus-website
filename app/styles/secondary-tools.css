@@ -1,0 +1,109 @@
+/* Keep actionable balances and live bets inline; supporting tools open popups. */
+body.layout-basic .secondary-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; width: fit-content; max-width: 100%; box-sizing: border-box; margin: .5rem 0 1rem; padding: 0; border: 0; background: transparent; }
+body.layout-basic .secondary-tools .side-bets-rail, body.layout-basic .secondary-tools .panel-tools { min-width: 0; margin: 0; }
+.secondary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
+.secondary-action, body.layout-basic .secondary-tools .panel-tools__button { display: inline-flex; align-items: center; justify-content: center; min-height: 2rem; box-sizing: border-box; gap: .35rem; padding: .35rem .55rem; border: 1px solid #bba0cf30; border-radius: 5px; background: #211c2a; color: #d9cedf; font: 750 .61rem/1.2 Inter, sans-serif; letter-spacing: .035em; cursor: pointer; }
+.secondary-action:hover, .secondary-action[aria-expanded="true"] { border-color: #bfa1d185; color: #fff0d6; background: #30263b; }
+.secondary-action[hidden] { display: none !important; }
+.secondary-action:focus-visible, .secondary-info:focus-visible { outline: 2px solid #e6c599; outline-offset: 2px; }
+body.layout-basic .secondary-tools .panel-tools { order: 2; gap: .3rem; }
+body.layout-basic .secondary-tools app-link-donation { display: block; order: 2; max-width: 100%; }
+body.layout-basic .secondary-tools .panel-tools__button svg { width: .85rem; height: .85rem; }
+.secondary-info { display: grid; place-items: center; flex: 0 0 auto; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: 50%; color: #bba7c9; background: transparent; cursor: pointer; }
+.secondary-info span { display: grid; place-items: center; width: 1rem; height: 1rem; box-sizing: border-box; border: 1px solid currentColor; border-radius: 50%; font: 700 .72rem/1 Georgia, serif; }
+.secondary-info:hover, .secondary-info[aria-expanded="true"] { color: #ffe3a9; background: #ffffff0b; }
+/* Token balances and redemption are a separate, self-contained card. */
+body.layout-basic main > app-sdgnrs-burn-rail { display: block; width: fit-content; max-width: 100%; margin: .5rem 0 1rem; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .55rem; min-height: 0; padding: .5rem .65rem; border: 1px solid #ab83cd50; border-radius: 8px; background: linear-gradient(115deg, #241b2e, #15121d); box-shadow: inset 0 1px #eed7ff0c; overflow: visible; isolation: auto; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail::before, body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail::after, body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__logo { display: none; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--balances { display: grid; gap: .2rem; padding: .15rem 0; border: 0; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--balances > small { display: block; color: #af9ebc; font-size: .48rem; line-height: 1.2; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__balances { flex-wrap: wrap; gap: .3rem; overflow: visible; font-size: .69rem; line-height: 1.3; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__token { gap: .2rem; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__token em { font-size: .58rem; letter-spacing: 0; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__actions { display: flex; width: auto; flex: 0 0 auto; margin: 0; gap: .3rem; }
+body.layout-basic app-sdgnrs-burn-rail :is(.sdgnrs-rail__vote, .sdgnrs-rail__burn) { display: flex; align-items: center; justify-content: center; gap: .3rem; width: auto; min-height: 2rem; padding: .35rem .55rem; border: 1px solid #bba0cf30; border-radius: 5px; background: #211c2a; box-shadow: none; font-size: .61rem; letter-spacing: .035em; color: #ddd0e7; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__burn { order: -1; color: #f0b8ac; border-color: #c982783b; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__burn:disabled { color: #8d808b; opacity: .65; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__burn-emblem { width: .7rem; height: .9rem; border: 0; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__burn-emblem img { width: .6rem; height: .85rem; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__vote-label { display: flex; gap: .25rem; line-height: 1.2; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__vote > span { font-size: .65rem; text-shadow: none; }
+body.layout-basic .secondary-popup .panel-popup__window { width: min(100%, 40rem); }
+.secondary-popup__intro, .secondary-popup__empty { margin: 0 0 .8rem; color: #c6b9d1; font: 400 .8rem/1.5 Inter, sans-serif; }
+.secondary-popup__empty[hidden] { display: none !important; }
+body.layout-basic .secondary-popup[data-panel-popup] .pari-bet-container { display: block; width: 100%; }
+.secondary-token-metrics { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; margin-bottom: .9rem; }
+body.layout-basic .secondary-token-metrics .sdgnrs-rail__metric { display: grid; grid-area: auto; align-content: center; min-height: 4rem; padding: .75rem; border: 1px solid #ba94d63d; border-radius: 8px; background: #241c2d; }
+body.layout-basic .secondary-token-metrics .sdgnrs-rail__metric > small { font-size: .58rem; line-height: 1.3; white-space: normal; }
+body.layout-basic .secondary-token-metrics .sdgnrs-rail__value { flex-wrap: wrap; overflow: visible; line-height: 1.5; }
+body.layout-basic .secondary-token-metrics .sdgnrs-rail__value [hidden] { display: none !important; }
+@media (max-width: 440px) {
+  body.layout-basic .secondary-tools { gap: .4rem; }
+  body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__balances { font-size: .64rem; }
+  .secondary-token-metrics { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Independent game pods occupy their own row above the account buttons. */
+body.layout-basic .secondary-tools .side-bets-rail,
+body.layout-basic .secondary-tools .side-bets-rail > app-parimutuel-panel { display: contents; }
+body.layout-basic .secondary-tools .side-bets-rail .app-parimutuel { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: .65rem; }
+body.layout-basic .secondary-tools .side-bets-rail .app-parimutuel:not(.has-live-book):not(:has(.pari-error:not([hidden]))) { display: none; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-bet-container { flex: 0 1 22rem; max-width: 100%; align-self: center; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-bet-container--growth { width: 22rem; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-books { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-error { flex-basis: 100%; }
+
+/* Incinerator: identity + available balance, amount/MAX, and Burn. */
+body.layout-basic app-wwxrp-burn .pari-wwxrp { grid-template-areas: "identity amount burn"; grid-template-columns: minmax(6.5rem, 1fr) minmax(5rem, 1fr) auto; grid-template-rows: auto; min-height: 0; height: auto; gap: .4rem; padding: .45rem; border: 1px solid #b8766438; border-radius: 6px; background: #211a20; box-shadow: none; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__mark,
+body.layout-basic app-wwxrp-burn .pari-wwxrp__identity > strong,
+body.layout-basic app-wwxrp-burn .pari-wwxrp__balance > small { display: none; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__identity { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__identity > small { display: block; color: #d2a99e; font-size: .51rem; line-height: 1.2; letter-spacing: .025em; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__balance { display: flex; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__balance > strong { color: #f1d8cc; font-size: .72rem; line-height: 1.2; text-shadow: none; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__balance > strong::after { content: " WWXRP"; font: 650 .54rem/1.2 Inter, sans-serif; color: #b49c99; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__amount { width: 100%; max-width: none; gap: .2rem; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__amount > small { font-size: .48rem; color: #bba1a3; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__amount-control { height: 2rem; grid-template-columns: minmax(1rem, 1fr) auto; border-radius: 5px; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__unit { display: none; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__amount-control > input { font-size: .72rem; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__amount-control > button { padding-inline: .35rem; font-size: .52rem; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__burn[data-write] { grid-area: burn; width: auto; min-width: 0; min-height: 2rem; align-self: end; padding: .4rem .55rem; border-radius: 5px; background: #48282a; border-color: #d8988355; box-shadow: none; color: #f4c4b1; font-size: .62rem; }
+body.layout-basic app-wwxrp-burn .pari-wwxrp__feedback { position: static; grid-column: 1 / -1; margin: .3rem 0 0; padding: .35rem; font-size: .65rem; }
+
+/* The full live Growth controls fit alongside the small balance controls. */
+body.layout-basic .secondary-tools .side-bets-rail .pari-book { padding: .45rem .55rem; border: 1px solid #8fb7a13b; border-radius: 8px; background: linear-gradient(115deg, #1e2627, #151c1e); box-shadow: none; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--open { grid-template-areas: "head today" "context today" "bonus bonus"; grid-template-columns: minmax(7.5rem, .9fr) minmax(8rem, 1fr); grid-template-rows: auto auto auto; gap: .1rem .5rem; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book .pari-book__title { font-size: .61rem; white-space: normal; overflow: visible; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--open .pari-book__bench { font-size: .58rem; line-height: 1.4; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--open .pari-side { min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--open .pari-side__cta { min-height: 1.85rem; border-radius: 5px; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--open :is(.pari-split__labels, .pari-prebet-bonus) { font-size: .52rem; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-prebet-bonus { grid-area: bonus; display: flex; flex-wrap: wrap; justify-content: center; margin-top: .15rem; padding-top: .25rem; border-top: 1px solid #a5c5c018; white-space: normal; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-prebet-bonus > * { white-space: normal; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .7rem; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held .pari-book__head { margin: 0; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held .pari-book__context { display: none; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held .pari-today { flex: 1 1 auto; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held .pari-your-bet { gap: .25rem .4rem; margin: 0; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held :is(.pari-your-bet__label, .pari-your-bet__pick, .pari-your-bet__payout) { font-size: .63rem; line-height: 1.4; }
+body.layout-basic .secondary-tools .side-bets-rail .pari-book--held .pari-results { flex-basis: 100%; }
+
+/* Keep the estimated redemption beside the Burn action. */
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--value { display: grid; min-width: 0; gap: .2rem; padding: .15rem 0; border: 0; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--value > small { color: #af9ebc; font-size: .48rem; line-height: 1.2; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--value .sdgnrs-rail__value { flex-wrap: wrap; overflow: visible; gap: .2rem; font-size: .68rem; line-height: 1.3; }
+body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--value .sdgnrs-rail__flip { font-size: .61rem; }
+@media (max-width: 440px) {
+  body.layout-basic .secondary-tools .side-bets-rail .pari-bet-container--growth { flex-basis: 100%; }
+  body.layout-basic .secondary-tools .side-bets-rail .pari-book--open { grid-template-areas: "head today" "context today" "bonus bonus"; grid-template-columns: minmax(6.9rem, .9fr) minmax(7rem, 1fr); }
+  body.layout-basic app-sdgnrs-burn-rail .sdgnrs-rail__metric--balances { flex-basis: auto; }
+}
+
+.incinerator-summary { display: flex; align-items: center; gap: .65rem; padding: .65rem; border: 1px solid #c9827845; border-radius: 8px; background: linear-gradient(115deg, #2a1d22, #1b151d); box-shadow: inset 0 1px #f5d1bc0a; }
+.incinerator-summary__badge { display: block; flex: 0 0 1.75rem; width: 1.75rem; height: 1.75rem; object-fit: contain; filter: drop-shadow(0 0 5px #ed0e1126); }
+.incinerator-summary__balance { display: flex; align-items: baseline; gap: .25rem; color: #f1d2c4; font: 750 .72rem/1.3 Inter, sans-serif; font-variant-numeric: tabular-nums; }
+.incinerator-summary__balance small { color: #bfaaa1; font-size: .58rem; }
+.incinerator-summary .secondary-action { color: #f0b8ac; border-color: #c982783b; }

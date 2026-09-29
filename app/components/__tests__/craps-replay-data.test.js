@@ -41,6 +41,7 @@ import {
   validateCrapsReplayPointer,
 } from '../../craps/replay-contract.js';
 import {
+  crapsReplayRide,
   decodeCrapsReplayTape,
   replayCrapsSeat,
 } from '../../craps/replay-engine.js';
@@ -76,7 +77,7 @@ const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x4900095622ad32b8e6953ea0b53124cee4a739990c1ec3474a250d0354559ad5';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x91c7eb96ecf9b2ac17a7c90ca9852ec8f4e4e2a6fc615266a5e4080dea2e9128';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -1345,4 +1346,30 @@ test('a shooter outside the featured players retains identity through collection
   assert.equal(model.tableOptions.shooterTimeline[0].label, 'Outside Shooter');
   assert.equal(model.tableOptions.shooterTimeline[0].betId, '123');
   assert.equal(model.tableOptions.otherPlayers.some((seat) => seat.player === player), false);
+});
+
+test('a jackpot High Roller seat replays its won off runCapitalWei, and fails closed on a wrong one', () => {
+  // CrapsBattle._ride (audit e579cd318): `floor(tail * capital / bankroll)`, split as the contract splits it.
+  assert.equal(crapsReplayRide(600n, 21_000n, 3_000n), 4_200n);
+  assert.equal(crapsReplayRide(0n, 21_000n, 3_000n), 0n);
+  assert.equal(crapsReplayRide(1_234n, 5_000n, 1_800n), 3_427n);
+  const tape = decodeCrapsReplayTape(SIM_CRAPS_REPLAY_MANIFEST);
+  const high = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => player.entryMultiple > 1);
+  const wei = 10n ** 18n;
+  const bankroll = BigInt(SIM_CRAPS_REPLAY_MANIFEST.terms.bankrollWei);
+  const tail = BigInt(high.wonWei) / BigInt(high.entryMultiple);
+  // Whole copies spelled out as a capital reproduce the same won.
+  assert.doesNotThrow(() => replayCrapsSeat(SIM_CRAPS_REPLAY_MANIFEST,
+    { ...high, runCapitalWei: (bankroll * BigInt(high.entryMultiple)).toString() }, tape));
+  // A jackpot seat's `bankroll + highExtra`: the won the chain would emit for it verifies…
+  const capital = bankroll + 18_000n * wei;
+  const jackpotWon = crapsReplayRide(tail, capital, bankroll);
+  assert.equal(validateCrapsReplayPlayer({ ...high, runCapitalWei: capital.toString() }).runCapitalWei, capital.toString());
+  assert.doesNotThrow(() => replayCrapsSeat(SIM_CRAPS_REPLAY_MANIFEST,
+    { ...high, runCapitalWei: capital.toString(), wonWei: jackpotWon.toString() }, tape));
+  // …and the old whole-copy won against that capital does not.
+  assert.throws(() => replayCrapsSeat(SIM_CRAPS_REPLAY_MANIFEST, { ...high, runCapitalWei: capital.toString() }, tape),
+    /won amount/);
+  assert.throws(() => validateCrapsReplayPlayer({ ...high, runCapitalWei: '0' }), /runCapitalWei/);
+  assert.equal('runCapitalWei' in validateCrapsReplayPlayer(high), false, 'absent stays absent');
 });

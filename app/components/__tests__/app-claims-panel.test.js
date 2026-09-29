@@ -888,24 +888,21 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     assert.equal(args[1], 500n, 'amount sourced from /pending flip.amount');
   });
 
-  test('clicking decimator row invokes claimDecimatorLevels with ASCENDING-SORTED levels', async () => {
+  test('no Decimator row or claim: the Mine FLIP walk pays winners (audit ab95963ac)', async () => {
+    // Unsettled Decimator winnings are in /pending and the dashboard, but claimDecimatorJackpot
+    // is gone: the walk credits each winner (its ETH half lands in the ETH row).
     const el = mountPanel({
       dashboardLevels: [
-        { level: 15, ethAmount: '300', claimed: 0 },
+        { level: 25, ethAmount: '300', claimed: 0 },
         { level: 5, ethAmount: '200', claimed: 0 },
-        { level: 10, ethAmount: '400', claimed: 0 },
       ],
     });
     await flushMicrotasks();
     const root = getRenderRoot(el);
-    const btn = root.querySelector('.clm-row[data-prize-key="decimator"] .clm-row__claim-cta');
-    btn.dispatchEvent({ type: 'click' });
-    await settle(120);
-    assert.equal(fakeContract._calls.claimDecimatorJackpot.length, 3, '3 sequential txes');
-    // Redeploy #7: claimDecimatorJackpot(address player, uint24 lvl) — level is arg[1].
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[0][1], 5, 'level 5 first (ascending)');
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[1][1], 10);
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[2][1], 15);
+    assert.equal(root.querySelector('.clm-row[data-prize-key="decimator"]'), null, 'no decimator row');
+    assert.ok(root.querySelector('.clm-row[data-prize-key="eth"]'), 'the ETH row still renders');
+    const panelSrc = readFileSync(new URL('../app-claims-panel.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(panelSrc, /claimDecimatorLevels/, 'the panel has no decimator claim path');
   });
 
   test('click sets `.clm-row--claiming` class + button label `Claiming…` during pending', async () => {
@@ -944,7 +941,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
   test('on revert, row gets `.clm-row--error` and `.clm-row__error` textContent = userMessage', async () => {
     const reverting = makeFakeClaimsContract({
       staticCallShouldRevert: { claimWinnings: true },
-      staticCallRevertName: { claimWinnings: 'DecAlreadyClaimed' },
+      staticCallRevertName: { claimWinnings: 'NothingToClaim' },
     });
     claimsMod.__setContractFactoryForTest(() => reverting);
     const el = mountPanel();
@@ -958,14 +955,14 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     const errEl = rowEl.querySelector('.clm-row__error');
     assert.ok(errEl, '.clm-row__error element rendered');
     // Decoded userMessage must be present (textContent only — T-58-18).
-    assert.match(errEl.textContent, /already claimed/i);
+    assert.match(errEl.textContent, /Nothing to claim/i);
   });
 
   test('error auto-clears on next-success-anywhere across the panel', async () => {
     // First, trip an error on eth row.
     const reverting = makeFakeClaimsContract({
       staticCallShouldRevert: { claimWinnings: true },
-      staticCallRevertName: { claimWinnings: 'DecAlreadyClaimed' },
+      staticCallRevertName: { claimWinnings: 'NothingToClaim' },
     });
     claimsMod.__setContractFactoryForTest(() => reverting);
     const el = mountPanel();
@@ -1560,8 +1557,8 @@ describe('app-claims-panel — Plan 62-06 affiliate row whitelist + claim handle
   test("VISIBLE_PRIZE_KEYS includes 'affiliate' (whitelist extension)", () => {
     assert.match(
       PANEL_SRC_62_06,
-      /VISIBLE_PRIZE_KEYS\s*=\s*\[\s*'eth'\s*,\s*'flip'\s*,\s*'decimator'\s*,\s*'affiliate'\s*\]/,
-      "VISIBLE_PRIZE_KEYS extended to include 'affiliate'",
+      /VISIBLE_PRIZE_KEYS\s*=\s*\[\s*'eth'\s*,\s*'flip'\s*,\s*'affiliate'\s*\]/,
+      "VISIBLE_PRIZE_KEYS includes 'affiliate' (and, since audit ab95963ac, no 'decimator')",
     );
   });
 
@@ -1945,7 +1942,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
     };
   }
 
-  test('renders summed eth/flip/decimator rows from app.playerCombined; /pending never fetched; no affiliate row', async () => {
+  test('renders summed eth/flip rows from app.playerCombined; /pending never fetched; no affiliate or decimator row', async () => {
     setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
     globalThis.localStorage.setItem('spun_day_84532_42', '1');
     storeMod.update('viewing.combined', true);
@@ -1971,7 +1968,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
     const keys = rows.map((r) => r.attributes['data-prize-key']);
     assert.ok(keys.includes('eth'), 'eth row present');
     assert.ok(keys.includes('flip'), 'flip row present');
-    assert.ok(keys.includes('decimator'), 'decimator row present (level 2 unclaimed only)');
+    assert.ok(!keys.includes('decimator'), 'no decimator row: the Mine FLIP walk pays winners (audit ab95963ac)');
     assert.ok(!keys.includes('affiliate'), 'no affiliate row — combine.js omits it as identity');
 
     assert.ok(
@@ -1986,7 +1983,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
     // Claim CTAs carry data-write (auto-disabled by the global manager since
     // deriveCanSign() is false in 'combined' mode).
     const ctas = root.querySelectorAll('.clm-row__claim-cta');
-    assert.equal(ctas.length, 3, 'one CTA per visible row');
+    assert.equal(ctas.length, 2, 'one CTA per visible row');
     for (const c of ctas) {
       assert.ok(Object.prototype.hasOwnProperty.call(c.attributes, 'data-write'), 'CTA carries data-write');
     }

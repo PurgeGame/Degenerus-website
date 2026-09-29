@@ -1,6 +1,7 @@
 // db/craps-schedule.mjs: the six-period schedule build-chain-manifest.mjs pins into a deployment's
 // crapsSchedule, parsed from CrapsBattle._currentBonusSlot's if-chain (audit 0889affc1), against the
-// vendored run-57 sources the launcher deploys: the 1,200 s testnet overlay and the mainnet tree.
+// vendored sources the launcher deploys (run 58, audit 3c79c1486): the 1,200 s testnet overlay and the
+// mainnet tree.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -46,3 +46,12 @@ test('the Craps bonus reveal has a complete private lifecycle before the table i
   assert.match(CRAPS_TABLE, /this\.#startBonusReveal\(onDone\)/);
   assert.match(CRAPS_TABLE, /this\.#settleBonusReveal\(\{ landed: true \}\)/);
 });
+
+
+test('WWXRP bypasses cached inline-form code when the Incinerator popup ships', () => {
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]);
+  const source = '/app/components/app-wwxrp-burn.js';
+  assert.equal(map.imports[source], `${source}?v=incinerator-badge-20260928`,
+    'both lazy parent imports and direct imports resolve to the new widget generation');
+});

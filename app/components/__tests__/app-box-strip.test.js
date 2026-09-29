@@ -264,6 +264,39 @@ function fireTxFailed(transactionHash) {
   }));
 }
 
+// Audit 2525eb7fd removed openBox(player, index). Readiness is now the entry read
+// (lootbox.js readLootboxBoxState) and OPEN sends the in-order openBoxes(maxCount)
+// sweep. These fakes still describe ONE box's door as `openBox` (a staticCall probe
+// plus a send); this adapter maps it onto the new surface so every race keeps its
+// meaning: the probe becomes the entry read, and the sweep that reaches the box is
+// that send. A box the sweep opened reads back as settled.
+function useBoxDoor(fake) {
+  if (!fake?.openBox) return fake;
+  const opened = new Set();
+  let target = null;
+  lootboxMod.__setBoxStateReaderForTest(async ({ player, lootboxIndex }) => {
+    const key = `${String(player).toLowerCase()}:${String(lootboxIndex)}`;
+    if (player) target = { player, index: BigInt(lootboxIndex), key };
+    if (opened.has(key)) return { pending: false, worded: true, swept: false, rngLocked: false };
+    try {
+      await fake.openBox.staticCall?.(player, BigInt(lootboxIndex));
+      return { pending: true, worded: true, swept: false, rngLocked: false };
+    } catch (error) {
+      const name = lootboxMod.openBoxRevertName(error);
+      if (name === 'NothingToClaim') return { pending: false, worded: true, swept: false, rngLocked: false };
+      if (name === 'RngNotReady') return { pending: true, worded: false, swept: false, rngLocked: false };
+      if (name === 'RngLocked') return { pending: true, worded: true, swept: false, rngLocked: true };
+      throw error;
+    }
+  });
+  fake.openBoxes = Object.assign(async () => {
+    const tx = await fake.openBox(target.player, target.index);
+    opened.add(target.key);
+    return tx;
+  }, { staticCall: async () => undefined });
+  return fake;
+}
+
 describe('app-box-strip', () => {
   beforeEach(() => {
     globalThis.localStorage.clear();
@@ -551,11 +584,13 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
       getTransactionReceipt: async (hash) => receiptFor(hash),
     });
-    lootboxMod.__setContractFactoryForTest(() => ({
+    const fake = {
       interface: { parseLog: (log) => log.parsed },
       boxIndexComplete: async () => false,
       openBox: { staticCall: async () => undefined },
-    }));
+    };
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
@@ -888,7 +923,7 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a spin-only settled box recovers in the background without sending openBox', async () => {
+  test('a spin-only settled box recovers in the background without sending the open sweep', async () => {
     const calls = { complete: [], open: [] };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
@@ -910,6 +945,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     let indexed = false;
     const settledLeg = {
       uid: 'indexed-after-sync-8',
@@ -1021,6 +1057,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async () => ({
       ok: true,
       status: 200,
@@ -1093,6 +1130,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async (url) => {
       const exactRead = competitorOpened && String(url).includes('lootboxIndex=8');
       if (exactRead) resultReads += 1;
@@ -1144,12 +1182,12 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a targeted competing openBox settles the box even though the sweep frontier never moves', async () => {
-    // Someone else called openBox(player, 8) directly (or the sweep opened this
-    // player's entry then ran out of budget mid-index). The boxes are settled
-    // and the rewards are credited, but boxCursorIndex has NOT passed 8, so
-    // boxIndexComplete(8) stays false indefinitely. Only the revert REASON
-    // (NothingToClaim) distinguishes "already opened" from "still waiting".
+  test('a sweep that stops mid-index settles the box even though the frontier never moves', async () => {
+    // A sweep opened this player's entry then ran out of budget mid-index. The
+    // boxes are settled and the rewards are credited, but boxCursorIndex has NOT
+    // passed 8, so boxIndexComplete(8) stays false indefinitely. Only the probe's
+    // REASON (NothingToClaim: the zeroed entry) distinguishes "already opened"
+    // from "still waiting".
     let raced = false;
     const calls = { complete: 0, staticCall: 0, open: 0 };
     const nothingToClaim = () => {
@@ -1181,6 +1219,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     // The indexer has not caught up with the competitor's settlement yet.
     globalThis.fetch = async () => ({
       ok: true, status: 200, json: async () => ({ items: [] }),
@@ -1226,11 +1265,12 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a competitor landing between the probe and the write is recovered from the wrapped revert', async () => {
-    // The tightest window: our readiness probe passes, then the competitor's
-    // openBox mines before our wallet broadcast. openLootBox's own pre-flight
-    // catches it and rethrows through _structuredRevertError, so the raw ethers
-    // error is only reachable on `.cause` — and boxIndexComplete never moves.
+  test('a competitor landing between the probe and the write still replays the result it credited', async () => {
+    // The tightest window: our readiness probe passes, then a competitor's sweep
+    // opens this entry before our openBoxes mines. Since audit 2525eb7fd there is
+    // no per-box door to fail fast: our in-order sweep lands and opens nothing of
+    // ours, the entry reads back settled, and the competitor's legs replay —
+    // while boxIndexComplete never moves.
     let clicked = false;
     let probesAfterClick = 0;
     let indexed = false;
@@ -1252,20 +1292,17 @@ describe('app-box-strip', () => {
     const fake = {
       boxIndexComplete: async () => false,
       openBox: Object.assign(
-        async () => { calls.open += 1; throw new Error('must not be written'); },
+        async () => {
+          // Our sweep mines after the competitor's: the entry is already zeroed,
+          // and the competitor's settlement legs have indexed.
+          calls.open += 1;
+          indexed = true;
+          return { hash: '0xoursweep', wait: async () => ({ status: 1, hash: '0xoursweep', logs: [] }) };
+        },
         {
           staticCall: async () => {
-            if (!clicked) return undefined; // background polls: the box is still live
-            probesAfterClick += 1;
-            // The strip's readiness probe still sees a live box; openLootBox's
-            // own pre-flight, one RPC later, is already too late.
-            if (probesAfterClick === 1) return undefined;
-            // The competitor's settlement legs index while our write is rejected.
-            indexed = true;
-            const err = new Error('execution reverted (unknown custom error)');
-            err.code = 'CALL_EXCEPTION';
-            err.revert = { name: 'NothingToClaim', signature: 'NothingToClaim()', args: [] };
-            throw err;
+            // Background polls and the strip's own readiness probe see a live box.
+            if (clicked) probesAfterClick += 1;
           },
         },
       ),
@@ -1278,6 +1315,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
@@ -1297,9 +1335,9 @@ describe('app-box-strip', () => {
       .find((item) => item.id === 'lootbox:8');
     clicked = true;
     assert.equal(await action.run(), true,
-      'the wrapped NothingToClaim replays the competitor-settled result');
-    assert.equal(probesAfterClick, 2, 'the race opened between the two pre-flights');
-    assert.equal(calls.open, 0, 'no doomed wallet write is broadcast');
+      'the settled entry replays the competitor-settled result');
+    assert.equal(probesAfterClick, 1, 'the race opened after the readiness probe');
+    assert.equal(calls.open, 1, 'our in-order sweep still lands; it opened nothing of ours');
     assert.equal(revealMod.__takeQueuedForTest()[0]?.lootboxIndex, 8,
       'the player still sees the prizes the competitor credited to them');
     el.disconnectedCallback();
@@ -1329,6 +1367,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async () => ({
       ok: true, status: 200, json: async () => ({ items: [] }),
     });
@@ -1365,6 +1404,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     const errors = [];
     const unsubscribe = pendingActionsMod.subscribePendingActionErrors((message) => {
       errors.push(message);
@@ -1384,6 +1424,45 @@ describe('app-box-strip', () => {
       'the production tray receives the reason even though the legacy inline error is absent');
     assert.equal(pendingActionsMod.getPendingActions()[0].state, 'ready',
       'a failed attempt remains available to retry');
+    unsubscribe();
+    el.disconnectedCallback();
+  });
+
+  test('an OPEN sweep that stops before this box keeps it armed and says why', async () => {
+    // Audit 2525eb7fd: OPEN is one gas-bounded openBoxes sweep in queue order. When its
+    // budget runs out on the boxes ahead (afking boxes go first), this entry is still queued.
+    const calls = { open: [] };
+    const fake = {
+      boxIndexComplete: async () => false,
+      openBoxes: Object.assign(async (...args) => {
+        calls.open.push(args);
+        return { hash: '0xshort', wait: async () => ({ status: 1, hash: '0xshort', logs: [] }) };
+      }, { staticCall: async () => undefined }),
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    lootboxMod.__setBoxStateReaderForTest(() => ({ pending: true, worded: true, swept: false, rngLocked: false }));
+    const errors = [];
+    const unsubscribe = pendingActionsMod.subscribePendingActionErrors((message) => { errors.push(message); });
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+    const action = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
+    assert.equal(await action.run(), false);
+    assert.deepEqual(calls.open, [[lootboxMod.OPEN_BOXES_BATCH]], 'one budgeted in-order sweep');
+    assert.deepEqual(errors, ['Opened the boxes ahead of yours. Tap OPEN again to reach it.']);
+    const still = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
+    assert.equal(still?.state, 'ready', 'the box stays armed for the next OPEN or crank');
+    assert.notEqual(still?.resolved, true);
+    assert.equal(revealMod.__takeQueuedForTest().length, 0);
     unsubscribe();
     el.disconnectedCallback();
   });
@@ -1412,6 +1491,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
 
     let indexed = false;
     let companionProjected = false;
@@ -1502,6 +1582,7 @@ describe('app-box-strip', () => {
       getTransactionReceipt: async () => { receiptReads += 1; return null; },
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
@@ -1572,11 +1653,13 @@ describe('app-box-strip', () => {
         return { logs: [] };
       },
     });
-    lootboxMod.__setContractFactoryForTest(() => ({
+    const fake = {
       interface: { parseLog: log => log.parsed },
       boxIndexComplete: async () => { throw Error('temporary RPC failure'); },
       openBox: { staticCall: async () => undefined },
-    }));
+    };
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
     globalThis.fetch = async url => ({
       ok: true, status: 200,
       json: async () => ({ items: String(url).includes('/lootbox/feed') ? [{
@@ -1604,6 +1687,7 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
+    useBoxDoor(fake);
 
     const el = instantiate();
     storeMod.update('connected.address', ADDR);

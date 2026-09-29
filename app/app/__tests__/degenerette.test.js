@@ -11,10 +11,11 @@
 //   placeDegeneretteBet(player, currency, amountPerSpin, spinCount, symbol) payable
 //     → appends a word to degeneretteQueue[index], emits
 //       DegeneretteBetPlaced(player, index, betId = queue position + 1, packed)
-//   The mineFlip() keeper sweep settles it once the index's word lands; the
-//   optional resolveDegeneretteBets(index, betIds[]) settles it early. Either
-//   way one DegeneretteResolved(player, index, betId, totalPayout,
-//   resultTraits, spins) carries every spin.
+//   The mineFlip() keeper sweep settles it once the index's word lands; since
+//   audit 2525eb7fd the optional early settle is one in-order openBoxes(maxCount)
+//   sweep (the per-bet resolveDegeneretteBets door is gone). Either way one
+//   DegeneretteResolved(player, index, betId, totalPayout, resultTraits, spins)
+//   carries every spin.
 //
 // AUDIT a5d4d2cd (vendored into degenerus-sim) replaced the old
 // `uint32 customTraits, uint8 heroQuadrant` pair with a single `uint8 symbol`
@@ -23,8 +24,8 @@
 // See DegenerusGameDegeneretteModule.sol.
 //
 // Sources:
-//  - DegenerusGame.sol — placeDegeneretteBet / resolveDegeneretteBets(uint48, uint64[])
-//    (delegate-called via GAME) and degeneretteBetInfo(uint48, uint64).
+//  - DegenerusGame.sol — placeDegeneretteBet (delegate-called via GAME), openBoxes(uint256)
+//    and degeneretteBetInfo(uint48, uint64).
 //  - DegenerusGameDegeneretteModule.sol — InvalidBet / UnsupportedCurrency errors,
 //    DegeneretteBetPlaced / DegeneretteResolved events.
 //
@@ -36,6 +37,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import * as degeneretteMod from '../degenerette.js';
+import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
@@ -55,7 +57,7 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     placeDegeneretteBet: [],
-    resolveDegeneretteBets: [],
+    openBoxes: [],
     degeneretteBetInfo: [],
     claimableWinningsOf: [],
   };
@@ -89,12 +91,12 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('placeDegeneretteBet') }
     ),
-    resolveDegeneretteBets: Object.assign(
+    openBoxes: Object.assign(
       async (...args) => {
-        calls.resolveDegeneretteBets.push(args);
-        return sendTxStub('resolveDegeneretteBets')(...args);
+        calls.openBoxes.push(args);
+        return sendTxStub('openBoxes')(...args);
       },
-      { staticCall: staticCallStub('resolveDegeneretteBets') }
+      { staticCall: staticCallStub('openBoxes') }
     ),
     degeneretteBetInfo: async (...args) => {
       calls.degeneretteBetInfo.push(args);
@@ -452,7 +454,7 @@ describe('Plan 62-03: placeBet', () => {
 });
 
 // ===========================================================================
-// resolveBets — the OPTIONAL early settle: resolveDegeneretteBets(index, betIds[]).
+// resolveBets — the OPTIONAL early settle: one in-order openBoxes(maxCount) sweep.
 // ===========================================================================
 
 describe('resolveBets (optional early settle)', () => {
@@ -473,22 +475,31 @@ describe('resolveBets (optional early settle)', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes resolveDegeneretteBets(index, betIds[]) behind its static-call gate', async () => {
+  test('settle now sends one in-order openBoxes sweep behind its static-call gate', async () => {
+    // Audit 2525eb7fd: there is no per-bet door; the sweep settles whatever is queued first.
+    lastFakeContract = makeFakeContract({ betInfo: 0n });
+    degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
     const result = await degeneretteMod.resolveBets({ index: 7, betIds: [42n] });
-    assert.equal(lastFakeContract._calls.resolveDegeneretteBets.length, 1);
-    const [args] = lastFakeContract._calls.resolveDegeneretteBets;
-    assert.equal(args[0], 7n, 'the RNG index is the first argument (uint48)');
-    assert.deepEqual(args[1], [42n], 'betIds passed as array of BigInt');
-    assert.equal(args.length, 2, 'no player argument: credits always go to each bet owner');
-    assert.deepEqual(lastFakeContract._order,
-      ['static:resolveDegeneretteBets', 'send:resolveDegeneretteBets']);
+    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]],
+      'one gas-bounded budget; credits always go to each owner');
+    assert.deepEqual(lastFakeContract._order, ['static:openBoxes', 'send:openBoxes']);
+    assert.deepEqual(lastFakeContract._calls.degeneretteBetInfo, [[7n, 42n]],
+      'the bet word is re-read after the sweep');
     assert.equal(result.index, 7n);
+    assert.equal(result.settled, true, 'a zeroed word: the sweep reached the bet');
+  });
+
+  test('a sweep that stops before the bet reports it still queued', async () => {
+    lastFakeContract = makeFakeContract({ betInfo: 0x1234n });
+    degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
+    const result = await degeneretteMod.resolveBets({ index: 7, betIds: [42n] });
+    assert.equal(result.settled, false);
   });
 
   test('requires the index: a bare betId names nothing (ids restart per index)', async () => {
     await assert.rejects(degeneretteMod.resolveBets({ betIds: [42n] }), /bet index is required/i);
     await assert.rejects(degeneretteMod.resolveBets({ index: 2n ** 48n, betIds: [1n] }), /out of range/i);
-    assert.equal(lastFakeContract._calls.resolveDegeneretteBets.length, 0);
+    assert.equal(lastFakeContract._calls.openBoxes.length, 0);
   });
 
   test('rejects empty betIds array', async () => {
@@ -499,22 +510,22 @@ describe('resolveBets (optional early settle)', () => {
   });
 
   test('coerces betIds entries to BigInt', async () => {
-    await degeneretteMod.resolveBets({ index: '7', betIds: [42] });
-    const [args] = lastFakeContract._calls.resolveDegeneretteBets;
-    assert.equal(args[1][0], 42n, 'number coerced to BigInt');
+    const result = await degeneretteMod.resolveBets({ index: '7', betIds: [42] });
+    assert.equal(result.betIds[0], 42n, 'number coerced to BigInt');
+    assert.deepEqual(lastFakeContract._calls.degeneretteBetInfo, [[7n, 42n]]);
   });
 
-  test('a reverted first id (already settled by the sweep) never reaches the wallet', async () => {
+  test('a sweep whose simulation reverts never reaches the wallet', async () => {
     const reverting = makeFakeContract({
-      staticCallShouldRevert: { resolveDegeneretteBets: true },
-      staticCallRevertName: { resolveDegeneretteBets: 'InvalidBet' },
+      staticCallShouldRevert: { openBoxes: true },
+      staticCallRevertName: { openBoxes: 'InvalidBet' },
     });
     degeneretteMod.__setContractFactoryForTest(() => reverting);
     await assert.rejects(
       degeneretteMod.resolveBets({ index: 7, betIds: [42n] }),
       (error) => error.code === 'InvalidBet',
     );
-    assert.equal(reverting._calls.resolveDegeneretteBets.length, 0);
+    assert.equal(reverting._calls.openBoxes.length, 0);
   });
 });
 
@@ -594,6 +605,53 @@ describe('queued bet word and settled spins', () => {
     }
   });
 
+  test('audit 881ebb32d: 9/9 pays 250,250.25x base, 8/9 20,354.57x; WWXRP keeps its own 8/9', () => {
+    for (const currency of [0, 1]) {
+      const rows = degeneretteMod.degenerettePayoutTable({ currency }).rows;
+      assert.equal(rows[9].basePayoutCentiX, 25_025_025n);
+      assert.equal(rows[8].basePayoutCentiX, 2_035_457n);
+      assert.equal(rows[7].basePayoutCentiX, 62_500n, 'scores 0-7 are unchanged');
+    }
+    const wwxrp = degeneretteMod.degenerettePayoutTable({ currency: 3 }).rows;
+    assert.equal(wwxrp[9].basePayoutCentiX, 100_000_000n);
+    assert.equal(wwxrp[8].basePayoutCentiX, 480_677n);
+  });
+
+  test('the paid-stake recovery and 1,000,000x ceiling match the Solidity harness', () => {
+    // DegeneretteMathHarness.paidStake / capPaidPayout at audit 3c79c1486 (fixtures/README.md).
+    const rows = JSON.parse(readFileSync(
+      new URL('./fixtures/degenerette-paid-stake-vectors.json', import.meta.url), 'utf8'));
+    assert.equal(rows.length, 168);
+    for (const [word, paidUnits, rawUnits, amounts, capped] of rows) {
+      const bet = degeneretteMod.decodeDegeneretteBetWord(word);
+      const unit = degeneretteMod.degeneretteStakeUnit(bet.currency);
+      assert.equal(String(degeneretteMod.degenerettePaidStakePerSpin(word) / unit), paidUnits, `paid units of ${word}`);
+      assert.equal(paidUnits, rawUnits, 'placement-built words recover the stake actually paid');
+      if (bet.currency !== 1) continue; // ETH rows: the harness is the mainnet 1-gwei unit
+      amounts.forEach((amount, i) => {
+        assert.equal(String(degeneretteMod.capDegenerettePaidPayout(word, BigInt(amount))), capped[i]);
+      });
+    }
+  });
+
+  test('a boon-boosted 9/9 is capped at 1,000,000x the stake paid; an unboosted one is not', () => {
+    const FLIP_STAKE = 100n;
+    // Tier 3 (+12%) consumed at placement: 100 paid FLIP ride as 112 (bits 252..253 = 3).
+    const boosted = betWord({ currency: 1, activity: 30_000, stakeUnits: 112n }) | (3n << 252n);
+    assert.equal(degeneretteMod.decodeDegeneretteBetWord(boosted).boonTier, 3);
+    assert.equal(degeneretteMod.degenerettePaidStakePerSpin(boosted), FLIP_STAKE * FLIP);
+    const spins = spinsHex([{ traits: 0x01020304, score: 9, gold: 4 }]);
+    const [capped] = degeneretteMod.degeneretteSpinResults({ player: CONNECTED, index: 1n, betId: 1n, spins }, boosted);
+    assert.equal(capped.payout, FLIP_STAKE * FLIP * 1_000_000n / 2n,
+      'FLIP caps at half the ceiling before its survival double');
+    const plain = betWord({ currency: 1, activity: 30_000, stakeUnits: FLIP_STAKE });
+    const [uncapped] = degeneretteMod.degeneretteSpinResults({ player: CONNECTED, index: 1n, betId: 2n, spins }, plain);
+    assert.equal(uncapped.payout, degeneretteMod.degeneretteSpinPayout({
+      currency: 1, amountPerSpin: FLIP_STAKE * FLIP, activityScore: 30_000, score: 9, goldMatches: 4,
+    }), 'without a boon the 9/9 stays below the ceiling (999,999.999x after the double)');
+    assert.ok(uncapped.payout < FLIP_STAKE * FLIP * 1_000_000n / 2n);
+  });
+
   test('degeneretteSpinResults prices every spin from the bet word', () => {
     // S4 = 10x base; one matched gold is ×5/4; FLIP at activity 0 returns 90%:
     // 100 FLIP × 10 × 1.25 × 0.9 = 1,125 FLIP.
@@ -645,9 +703,22 @@ describe('degenerette fresh-state and chain replay', () => {
     assert.equal(await degeneretteMod.readBetInfo({ betId: 42 }), null, 'no index, no slot');
   });
 
-  test('canResolveBets simulates the exact settle entrypoint', async () => {
-    assert.equal(await degeneretteMod.canResolveBets({ index: 7, betIds: [42] }), true);
-    assert.equal(await degeneretteMod.canResolveBets({ betIds: [42] }), false);
+  test('canResolveBets: the index word has landed and the bet is still queued', async () => {
+    // No settle door to simulate since audit 2525eb7fd: the word is read from storage.
+    const worded = [];
+    lootboxMod.__setBoxStateReaderForTest(({ lootboxIndex }) => {
+      worded.push(BigInt(lootboxIndex));
+      return { pending: false, worded: true, swept: false, rngLocked: false };
+    });
+    try {
+      assert.equal(await degeneretteMod.canResolveBets({ index: 7, betIds: [42] }), true);
+      assert.deepEqual(worded, [7n]);
+      assert.equal(await degeneretteMod.canResolveBets({ betIds: [42] }), false);
+      lootboxMod.__setBoxStateReaderForTest(() => ({ pending: false, worded: false, swept: false, rngLocked: false }));
+      assert.equal(await degeneretteMod.canResolveBets({ index: 7, betIds: [42] }), false, 'no word yet');
+    } finally {
+      lootboxMod.__resetContractFactoryForTest();
+    }
   });
 
   function eventContract(queries, { spins, packed = null, placedPacked = null } = {}) {
@@ -990,9 +1061,10 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     );
   });
 
-  test('canonical ABI: resolveDegeneretteBets(uint48 index, …) and degeneretteBetInfo(uint48, uint64)', () => {
-    assert.ok(SRC.includes('function resolveDegeneretteBets(uint48 index, uint64[] calldata betIds) external'));
+  test('canonical ABI: openBoxes(uint256) and degeneretteBetInfo(uint48, uint64); no per-bet door', () => {
+    assert.ok(SRC.includes("'function openBoxes(uint256 maxCount) external returns (uint256 opened)'"));
     assert.ok(SRC.includes('function degeneretteBetInfo(uint48 index, uint64 betId) external view returns (uint256 packed)'));
+    assert.ok(!SRC.includes("'function resolveDegeneretteBets"), 'audit 2525eb7fd removed resolveDegeneretteBets');
   });
 
   // Checked against degenerus-audit forge-out (audit 224de529): the per-spin

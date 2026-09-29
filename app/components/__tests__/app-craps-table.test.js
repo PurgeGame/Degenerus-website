@@ -43,14 +43,16 @@ test('the last score change is a pinned dice-bay badge, not a flying balance tok
     'the number hides itself once the pop-and-fade ends');
   assert.match(CSS_SRC, /@keyframes craps-score-delta-pop \{[\s\S]*?100% \{ opacity: 0;/s,
     'the pop ends faded out');
-  assert.match(pop, /delta < 0n \? -delta : delta, this\.#entryMultiple/);
+  // The seat's own scale: entry-multiple copies, or a jackpot High Roller's run capital.
+  assert.match(pop, /this\.#playerMoney\(delta < 0n \? -delta : delta\)/);
   assert.match(pop, /amount\.textContent = `\$\{delta > 0n \? '\+' : '−'\}\$\{magnitude\}`/);
   assert.match(pop, /badge\.dataset\.tone = delta > 0n \? 'win' : 'loss'/);
   assert.match(pop, /void badge\.offsetWidth;\s*badge\.classList\?\.add\('is-popping'\)/,
     'every non-zero change restarts the pop');
   assert.match(COMPONENT_SRC, /this\.#popScoreDelta\(frame, \{ animate: animateRace \}\)/,
     'a restored perspective shows the frame’s change without animating it');
-  assert.match(COMPONENT_SRC, /write\('craps-race-stack', formatCrapsCompactFlip\(crapsPlayerMoney\(stack, this\.#entryMultiple\)\)\)/);
+  assert.match(COMPONENT_SRC, /write\('craps-race-stack', formatCrapsCompactFlip\(this\.#playerMoney\(stack\)\)\)/);
+  assert.match(COMPONENT_SRC, /#playerMoney\(value\) \{\s*return crapsPlayerMoney\(value, this\.#entryMultiple, this\.#runCapitalFlip, this\.#bankroll\);/);
   assert.doesNotMatch(COMPONENT_SRC, /racePendingBalance|raceBalanceLandTimer|craps-race-transfer--balance|#animateRaceDelta/,
     'no balance token flies to the stack any more');
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#hideScoreDelta\(\)/);
@@ -1805,6 +1807,13 @@ test('high roller money scales without changing base run comparisons or exact cr
   assert.equal(crapsPlayerMoney(3000n, 100), 300000n);
   assert.equal(crapsPlayerMoney(3000n, 1), 3000n);
   assert.equal(crapsPlayerMoney(-600n, 10), -6000n);
+  // A jackpot High Roller (audit e579cd318) rides `bankroll + highExtra` pro rata instead of H
+  // copies: `_ride(value, 1,800 + 18,000, 1,800)`, floored like the contract.
+  assert.equal(crapsPlayerMoney(3600n, 10, 19_800n, 1_800n), 39_600n);
+  assert.equal(crapsPlayerMoney(1_000n, 10, 19_800n, 1_800n), 11_000n);
+  assert.equal(crapsPlayerMoney(-1_000n, 10, 19_800n, 1_800n), -11_000n);
+  assert.equal(crapsPlayerMoney(1_234n, 10, 5_000n, 1_800n), 3_427n);
+  assert.equal(crapsPlayerMoney(3000n, 10, null, 1_800n), 30000n, 'no capital: whole copies');
   assert.equal(crapsPlayerMoney(1234567890123456789n, 100), 123456789012345678900n);
   const players = aggregateCrapsTableBets([
     { player: 'low', entryMultiple: 1, chips: { passLine: 1 }, resolution: { startingBankrollFlip: 3000 } },

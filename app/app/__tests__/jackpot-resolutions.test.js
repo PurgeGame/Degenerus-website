@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import * as resolutions from '../jackpot-resolutions.js';
 import * as contracts from '../contracts.js';
@@ -108,35 +109,32 @@ describe('chain-authoritative resolution probes', () => {
     store.__resetForTest();
   });
 
-  test('Decimator static-call success is ready and canonical reverts become stable states', async () => {
-    const ready = method();
-    resolutions.__setResolutionFactoriesForTest({
-      decimator: () => ({ claimDecimatorJackpot: ready, connect() { return this; } }),
-    });
-    assert.deepEqual(
-      await resolutions.readDecimatorClaimState({ player: PLAYER, level: 25 }),
-      { state: 'ready', errorName: null },
-    );
-    assert.deepEqual(ready.calls, [['static', PLAYER, 25]]);
-
-    for (const [name, state] of [
-      ['DecAlreadyClaimed', 'claimed'],
-      ['DecNotWinner', 'lost'],
-      ['DecClaimInactive', 'pending'],
-      ['RngNotReady', 'waiting'],
-      ['NoWork', 'pending'],
+  test('a Decimator round is a pure entry read: no claim is simulated (audit ab95963ac)', async () => {
+    // mineFlip's walk is the only settlement path; claimDecimatorJackpot is gone.
+    for (const [overrides, state] of [
+      [{ roundStatus: 'open' }, 'pending'],
+      [{ bucket: null, subBucket: null, position: null, winningSubbucket: null }, 'lost'],
+      [{ subBucket: 2 }, 'lost'],
+      [{ winningSubbucket: null }, 'unknown'],
+      [{}, 'queued'],
+      [{ claimed: true }, 'claimed'],
     ]) {
-      const error = new Error(name);
-      error.revert = { name };
-      const reverting = method({ error });
       resolutions.__setResolutionFactoriesForTest({
-        decimator: () => ({ claimDecimatorJackpot: reverting, connect() { return this; } }),
+        entry: () => ({
+          level: 25, bucket: 5, subBucket: 1, position: 3, winningSubbucket: 1,
+          claimed: false, roundStatus: 'closed', ...overrides,
+        }),
       });
-      assert.equal(
-        (await resolutions.readDecimatorClaimState({ player: PLAYER, level: 25 })).state,
-        state,
+      assert.deepEqual(
+        await resolutions.readDecimatorClaimState({ player: PLAYER, level: 25 }),
+        { state, errorName: null },
+        JSON.stringify(overrides),
       );
     }
+    assert.equal(resolutions.decimatorEntryWinning({ bucket: 5, subBucket: 1, winningSubbucket: 1 }), true);
+    assert.equal(resolutions.decimatorEntryWinning({ bucket: 5, subBucket: 2, winningSubbucket: 1 }), false);
+    const src = readFileSync(new URL('../jackpot-resolutions.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /claimDecimatorJackpot\(/, 'no claim ABI or call remains');
   });
 
   test('BAF reads exact consolation and preflights before the closure-form send', async () => {

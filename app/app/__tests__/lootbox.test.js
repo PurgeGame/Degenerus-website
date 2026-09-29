@@ -46,8 +46,8 @@ function makeFakeContract(opts = {}) {
     buyLootboxAndPresaleBoxStatic: [],
     buyPresaleBox: [],
     buyPresaleBoxStatic: [],
-    openBox: [],
-    openBoxStatic: [],
+    openBoxes: [],
+    openBoxesStatic: [],
     boxIndexComplete: [],
     claimableWinningsOf: [], afkingFundingOf: [],
     purchaseInfo: [],
@@ -56,7 +56,7 @@ function makeFakeContract(opts = {}) {
     if (methodName === 'purchase') calls.purchaseStatic.push(args);
     if (methodName === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
     if (methodName === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
-    if (methodName === 'openBox') calls.openBoxStatic.push(args);
+    if (methodName === 'openBoxes') calls.openBoxesStatic.push(args);
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[methodName] || 'RngNotReady' };
@@ -98,12 +98,13 @@ function makeFakeContract(opts = {}) {
     lootboxPresaleActiveFlag: async () => opts.presaleActive ?? true,
     presaleBoxCreditOf: async () => opts.presaleCredit ?? (2n * lootboxMod.PRESALE_BOX_MIN_WEI),
     presaleBoxEthRemaining: async () => opts.presaleRemaining ?? (50n * 10n ** 18n),
-    openBox: Object.assign(
+    // Audit 2525eb7fd: the per-box openBox door is gone; openBoxes(maxCount) sweeps in order.
+    openBoxes: Object.assign(
       async (...args) => {
-        calls.openBox.push(args);
+        calls.openBoxes.push(args);
         return makeFakeTx(makeFakeReceipt(opts.openLogs));
       },
-      { staticCall: staticCallStub('openBox') }
+      { staticCall: staticCallStub('openBoxes') }
     ),
     boxIndexComplete: async (...args) => {
       calls.boxIndexComplete.push(args);
@@ -977,12 +978,25 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lootboxMod.scaledTicketPriceWei(113), 4n * ETHER / 100n / DIV, 'cycle repeats (113 ≡ 13)');
   });
 
-  test('openLootBox calls the on-chain openBox method (redeploy #7 rename)', async () => {
-    await lootboxMod.openLootBox({ lootboxIndex: 7n });
-    assert.equal(lastFakeContract._calls.openBox.length, 1);
-    const [args] = lastFakeContract._calls.openBox;
-    assert.equal(args[0], CONNECTED);
-    assert.equal(args[1], 7n);
+  test('openLootBox sends the in-order openBoxes sweep and reports whether it reached the box', async () => {
+    // Audit 2525eb7fd removed openBox(player, index); OPEN is one gas-bounded sweep.
+    const reads = [];
+    lootboxMod.__setBoxStateReaderForTest((args) => {
+      reads.push([args.player, BigInt(args.lootboxIndex)]);
+      return { pending: false, worded: true, swept: false, rngLocked: false };
+    });
+    const opened = await lootboxMod.openLootBox({ lootboxIndex: 7n });
+    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]]);
+    assert.deepEqual(lastFakeContract._calls.openBoxesStatic, [[lootboxMod.OPEN_BOXES_BATCH]],
+      'the same budget is simulated before the wallet opens');
+    assert.equal(lootboxMod.OPEN_BOXES_BATCH, 80n, 'GameAfkingModule OPEN_BATCH');
+    assert.equal(opened.opened, true);
+    assert.deepEqual(reads, [[CONNECTED, 7n]], 'the entry is re-read after the sweep');
+
+    lootboxMod.__setBoxStateReaderForTest(() => ({ pending: true, worded: true, swept: false, rngLocked: false }));
+    const short = await lootboxMod.openLootBox({ lootboxIndex: 7n });
+    assert.equal(short.opened, false, 'a sweep that stopped before the box leaves it queued');
+    assert.ok(!('openBox' in lastFakeContract), 'no per-box door exists to call');
   });
 
   test('index completion uses the sweep frontier while opens remain owner-pinned', async () => {
@@ -994,9 +1008,15 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.deepEqual(lastFakeContract._calls.boxIndexComplete, [[7n]],
       'completion is index-wide and never pretends to inspect one player');
 
+    const reads = [];
+    lootboxMod.__setBoxStateReaderForTest((args) => {
+      reads.push([args.player, BigInt(args.lootboxIndex)]);
+      return { pending: false, worded: true, swept: true, rngLocked: false };
+    });
     await lootboxMod.openLootBox({ player: other, lootboxIndex: 7 });
-    assert.deepEqual(lastFakeContract._calls.openBox, [[other, 7n]],
-      'permissionless open stays pinned to the tracked owner');
+    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]]);
+    assert.deepEqual(reads, [[other, 7n]],
+      'the sweep result is read for the tracked owner\'s entry');
   });
 
   test('parseLootboxIdxFromReceipt extracts purchase indexes from LootBoxIdx logs', () => {
@@ -1117,31 +1137,68 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.deepEqual(lootboxMod.parseTraitsGeneratedFromReceipt(undefined, lastFakeContract), []);
   });
 
-  test('canOpenLootbox probes the exact owner and index without sending', async () => {
+  test('canOpenLootbox reads the exact owner and index without sending', async () => {
     const owner = '0xcd34000000000000000000000000000000000000';
     const c = makeFakeContract();
     lootboxMod.__setContractFactoryForTest(() => c);
+    const reads = [];
+    lootboxMod.__setBoxStateReaderForTest((args) => {
+      reads.push([args.player, BigInt(args.lootboxIndex)]);
+      return { pending: true, worded: true, swept: false, rngLocked: false };
+    });
     assert.equal(await lootboxMod.canOpenLootbox({ player: owner, lootboxIndex: 7n }), true);
-    assert.deepEqual(c._calls.openBoxStatic, [[owner, 7n]]);
-    assert.deepEqual(c._calls.openBox, [], 'readiness probe never opens the box');
+    assert.deepEqual(reads, [[owner, 7n]]);
+    assert.deepEqual(c._calls.openBoxes, [], 'readiness probe never opens anything');
+    assert.deepEqual(c._calls.openBoxesStatic, []);
   });
 
-  test('canOpenLootbox fails closed when the exact open simulation rejects', async () => {
-    const c = makeFakeContract({ staticCallShouldRevert: { openBox: true } });
-    lootboxMod.__setContractFactoryForTest(() => c);
-    assert.equal(
-      await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }),
-      false,
-    );
-    assert.deepEqual(c._calls.openBoxStatic, [[CONNECTED, 7n]]);
+  test('the box probe keeps its reasons: settled, waiting for the word, locked', async () => {
+    for (const [state, reason, settled] of [
+      [{ pending: false, worded: true, swept: false, rngLocked: false }, 'NothingToClaim', true],
+      [{ pending: false, worded: true, swept: true, rngLocked: false }, 'NothingToClaim', true],
+      [{ pending: true, worded: false, swept: false, rngLocked: false }, 'RngNotReady', false],
+      [{ pending: true, worded: true, swept: false, rngLocked: true }, 'RngLocked', false],
+    ]) {
+      lootboxMod.__setBoxStateReaderForTest(() => state);
+      const probe = await lootboxMod.probeOpenLootbox({ player: CONNECTED, lootboxIndex: 7n });
+      assert.equal(probe.ok, false);
+      assert.equal(probe.reason, reason);
+      assert.equal(probe.settled, settled);
+      assert.equal(await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }), false);
+    }
   });
 
   test('canOpenLootbox remains available through the public reader without a wallet', async () => {
     contractsMod.clearProvider();
+    lootboxMod.__setBoxStateReaderForTest(() => ({ pending: true, worded: true, swept: false, rngLocked: false }));
     assert.equal(
       await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }),
       true,
     );
+  });
+
+  test('the box-state read uses the generated schema\'s slots', async () => {
+    // lootboxOrder / presaleBoxEth are mapping(uint48 => mapping(address => uint256)),
+    // lootboxRngWordByIndex mapping(uint48 => uint256), boxCursorIndex packs into its slot.
+    const { fields } = await import('../../chain/generated/game.js');
+    const { ethers } = await import('../contracts.js');
+    const coder = ethers.AbiCoder.defaultAbiCoder();
+    const inner = (root, index) => ethers.keccak256(coder.encode(['uint48', 'uint256'], [index, BigInt(root)]));
+    const nested = (root, index, who) => ethers.keccak256(coder.encode(['address', 'bytes32'], [who, inner(root, index)]));
+    const words = new Map([
+      [nested(fields.lootboxOrder.slot, 7n, CONNECTED).toLowerCase(), 1n],
+      [inner(fields.lootboxRngWordByIndex.slot, 7n).toLowerCase(), 0xabcn],
+      [`0x${BigInt(fields.boxCursorIndex.slot).toString(16)}`, 6n << BigInt(fields.boxCursorIndex.offset * 8)],
+    ]);
+    const provider = {
+      getStorage: async (_address, slot) => ethers.toBeHex(words.get(String(slot).toLowerCase()) ?? 0n, 32),
+    };
+    const state = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 7n, provider });
+    assert.deepEqual(state, { pending: true, worded: true, swept: false, rngLocked: false });
+    words.set(`0x${BigInt(fields.boxCursorIndex.slot).toString(16)}`, 8n << BigInt(fields.boxCursorIndex.offset * 8));
+    const later = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 7n, provider, blockTag: 12 });
+    assert.equal(later.swept, true, 'past the frontier the whole index is done');
+    assert.equal(later.pending, false);
   });
 });
 

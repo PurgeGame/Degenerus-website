@@ -217,16 +217,28 @@ describe('live Decimator display math', () => {
     assert.equal(decimatorMod.decimatorMultiplierCapApplied(args), true);
   });
 
-  test('decodes the day-one byte and current nested burn slot exactly', () => {
+  test('decodes the day-one byte and the entry pointer / list-entry slots exactly', async () => {
     assert.equal(decimatorMod.decimatorDayOneActive(1n << 248n), true);
     assert.equal(decimatorMod.decimatorDayOneActive(0n), false);
+    // Audit 3c79c1486: decPointer[player] (slot 75) names the entry, decEntry[key] (slot 40) holds it.
     assert.equal(
-      decimatorMod.decimatorBurnStorageSlot(
-        '0x7776145203f4c8f87fffae24593c92ec7d38880c',
-        35,
-      ),
-      '0xdb9cca4b04e4fa8cc2558955384e79623b0e53611c4b9159a845b8303ffc27f6',
+      decimatorMod.decimatorPointerStorageSlot('0x7776145203f4c8f87fffae24593c92ec7d38880c'),
+      '0xbf02e7c03d7a3a5c3de12ff58418f2116b97863a49f75bb79085d8fc3e5b236c',
     );
+    assert.deepEqual(
+      decimatorMod.decimatorPointerDecode(35n | (5n << 24n) | (3n << 32n) | (7n << 40n)),
+      { level: 35, bucket: 5, subBucket: 3, position: 7 },
+    );
+    const key = decimatorMod.decimatorEntryKey(35, 5, 3, 7);
+    assert.equal(key, 9857134627913735n, '_decEntryKey: lvl << 48 | denom << 40 | sub << 32 | position');
+    assert.equal(
+      decimatorMod.decimatorEntryStorageSlot(key),
+      '0x40651b1446c56c30091f255a0cbd34791e34c3a808d4c43a01a26f90b927d039',
+    );
+    // The pinned roots are the generated read schema's (the same forge build the site reads).
+    const { fields } = await import('../../chain/generated/game.js');
+    assert.equal(fields.decEntry?.slot, '40');
+    assert.equal(fields.decPointer?.slot, '75');
   });
 });
 
@@ -401,11 +413,13 @@ test('opening day takes precedence over the last-purchase-day haircut', () => {
   }), 12_000n);
 });
 
-test('DecBet baseMilli is decoded independently of weight, bucket and claim flags', () => {
-  const weight = 700_000n * FLIP;
+test('DecEntry owner, weightMilli and baseMilli decode independently', () => {
+  // Audit 3c79c1486: owner[0..159] | weightMilli uint64 [160..223] | baseMilli uint32 [224..255].
+  const owner = '0x7776145203f4c8f87fffae24593c92ec7d38880c';
+  const weightMilli = 700_000_000n; // 700,000 FLIP
   const baseMilli = 400_000_123n;
-  const word = weight | (5n << 192n) | (3n << 200n) | (1n << 208n) | (baseMilli << 216n);
+  const word = BigInt(owner) | (weightMilli << 160n) | (baseMilli << 224n);
   assert.deepEqual(decimatorMod.decimatorBurnAccounting(word), {
-    totalBurnWeight: weight, totalBaseBurnWei: baseMilli * 10n ** 15n,
+    owner, totalBurnWeight: 700_000n * FLIP, totalBaseBurnWei: baseMilli * 10n ** 15n,
   });
 });

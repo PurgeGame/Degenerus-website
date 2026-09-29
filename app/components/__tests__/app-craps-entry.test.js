@@ -4,6 +4,14 @@ import test from 'node:test';
 
 import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../../app/chain-config.js';
 import { crapsLobbySnapshotFromLogs } from '../../app/craps.js';
+import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
+
+// Run a case against one read schema and restore the deployment's own afterwards. The run-56
+// fixtures below are the seven-window slate; the active profile reads the current schema.
+function withSchema(hash, fn) {
+  const previous = useSchema(hash);
+  try { return fn(); } finally { useSchema(previous); }
+}
 
 globalThis.HTMLElement ??= class HTMLElement {};
 globalThis.customElements ??= {
@@ -71,14 +79,22 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
   );
 });
 
-test('the ACTIVE schedule steps through seven battles and ends on the event lead', () => {
-  const c = CRAPS_SCHEDULE;
+// Run 56's legacy clock (the shape the run-56 profile pinned): an aligned opener, six routine
+// periods and a clock-bound event window tiling a 1,200 s testnet day.
+const RUN56_LEGACY_CLOCK = Object.freeze({
+  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620,
+  openerCloseSeconds: 0, clockAlignSeconds: 300, routinePeriodSeconds: 120, eventLeadSeconds: 180,
+});
+
+test('the run-56 legacy clock steps through seven battles and ends on the event lead', () => {
+  const c = RUN56_LEGACY_CLOCK;
+  assert.equal(crapsEntry.crapsBattlesPerDay(c), 7);
   // Battles 1..6 open every routine period after the aligned opener; the event window (7) is the
   // last eventLeadSeconds of the day — so the seven battles exactly tile the day.
   assert.equal(c.openerCloseSeconds + c.clockAlignSeconds + 6 * c.routinePeriodSeconds,
     c.daySeconds - c.eventLeadSeconds, 'battle boundaries must tile the active day');
   const dayStart = (c.anchorSeconds + 1000 * c.daySeconds) * 1000; // any whole day after the anchor
-  const at = (s) => crapsEntry.crapsPeriodAt(dayStart + s * 1000);
+  const at = (s) => crapsEntry.crapsPeriodAt(dayStart + s * 1000, c);
   assert.equal(at(0), 0);
   for (let p = 1; p <= 6; p++) {
     const open = c.openerCloseSeconds + c.clockAlignSeconds + (p - 1) * c.routinePeriodSeconds;
@@ -88,7 +104,7 @@ test('the ACTIVE schedule steps through seven battles and ends on the event lead
   assert.equal(at(c.daySeconds - c.eventLeadSeconds), 7);
   assert.equal(at(c.daySeconds - 1), 7);
   assert.equal(at(c.daySeconds), 0, 'the next day starts over at the opener');
-  assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart).length, 7);
+  assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart, c).length, 7);
 });
 
 // Run 57+ (audit 4f546796) testnet shape: five explicit closes (CrapsBattle._currentBonusSlot's
@@ -273,7 +289,7 @@ test('winner-list goal colors and actual winner buy-ins come from sealed result 
   'a High Roller who wins the shared main field still shows the 100x price they paid');
 });
 
-test('settled High Roller seats show their full buy-in in either view, including yesterday’s Event', () => {
+test('settled High Roller seats show their full buy-in in either view, including yesterday’s Event (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
   const day = 604;
   const wei = 10n ** 18n;
   const player = '0x0000000000000000000000000000000000000011';
@@ -313,7 +329,7 @@ test('settled High Roller seats show their full buy-in in either view, including
       ), (150000n * wei).toString(), 'the High Roller view overrides an incomplete 1x reservation echo');
     }
   }
-});
+}));
 
 test('result Added amount and color include an actual progressive payout', () => {
   assert.equal(crapsEntry.crapsAddedResultWei('800', null), 800n);
@@ -631,17 +647,19 @@ test('the Craps day quest offers exact Today terms only before Battle 1 resolves
 });
 
 test('lobby order keeps the next event first, tomorrow above newest settled history', () => {
+  // The ACTIVE clock's six battles (periods 0..5, the jackpot battle last).
+  assert.equal(crapsEntry.crapsBattlesPerDay(), 6);
   assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 0, futureDay: false }),
-    ['day', 0, 1, 2, 3, 4, 5, 6, 'tomorrow']);
+    ['day', 0, 1, 2, 3, 4, 5, 'tomorrow']);
   assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 3, futureDay: true }),
-    [3, 4, 5, 6, 'day', 2, 1, 0]);
+    [3, 4, 5, 'day', 2, 1, 0]);
   assert.deepEqual(crapsEntry.crapsLobbyRowOrder({
     currentPeriod: 2,
     futureDay: true,
     settledPeriods: [2],
-  }), [3, 4, 5, 6, 'day', 2, 1, 0]);
-  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 7, futureDay: true }),
-    ['day', 6, 5, 4, 3, 2, 1, 0]);
+  }), [3, 4, 5, 'day', 2, 1, 0]);
+  assert.deepEqual(crapsEntry.crapsLobbyRowOrder({ currentPeriod: 6, futureDay: true }),
+    ['day', 5, 4, 3, 2, 1, 0]);
 });
 
 test('the authoritative chain day wins while indexed game state is stale at rollover', () => {
@@ -672,14 +690,14 @@ test('the previous day clears as soon as the new day is rolled', () => {
   }), null, 'older history can never leak into a later rollover');
 });
 
-test('entry terms combine exact economics with the event-published added FLIP ceiling', () => {
+test('entry terms combine exact economics with the event-published added FLIP ceiling (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
   const word = '102858562227254754036121703853225298402533986033002165985066946425924666406226';
   const schedule = {
     windows: Array.from({ length: 7 }, (_, period) => ({
       addedFlipWei: BigInt(period + 1) * 10n ** 18n,
     })),
   };
-  const terms = crapsEntry.crapsEntryTerms({ wordValue: word, schedule });
+  const terms = crapsEntry.crapsEntryTerms({ wordValue: word, schedule, clock: RUN56_LEGACY_CLOCK });
   assert.equal(terms.complete, true);
   assert.equal(terms.buyInFlip, 17_300n);
   assert.equal(terms.addedFlipWei, 28n * 10n ** 18n);
@@ -691,24 +709,25 @@ test('entry terms combine exact economics with the event-published added FLIP ce
     [2_000n, 5, 5], [400n, 5, 5], [500n, 5, 5], [400n, 5, 5],
     [400n, 5, 5], [1_500n, 5, 5], [12_100n, 5, 5],
   ]);
-});
+}));
 
 test('entry selections use the reserved day slot and numbered battle slots', () => {
+  // The ACTIVE clock's six battles: period 5 (the jackpot battle) is remainder 6, slot 42 * 8 + 6.
   assert.deepEqual(crapsEntry.crapsEntrySelection({ day: 42, kind: 'day' }), {
     entryKind: 'day',
     entryDay: 42,
     entryPeriod: null,
     battleSlot: '336',
     tableIndex: '336',
-    entryLabel: 'DAY 42 · ALL 7 BATTLES',
+    entryLabel: 'DAY 42 · ALL 6 BATTLES',
   });
-  assert.deepEqual(crapsEntry.crapsEntrySelection({ day: 42, kind: 'window', period: 6 }), {
+  assert.deepEqual(crapsEntry.crapsEntrySelection({ day: 42, kind: 'window', period: 5 }), {
     entryKind: 'window',
     entryDay: 42,
-    entryPeriod: 6,
-    battleSlot: '343',
-    tableIndex: '343',
-    entryLabel: 'DAY 42 · BATTLE 7',
+    entryPeriod: 5,
+    battleSlot: '342',
+    tableIndex: '342',
+    entryLabel: 'DAY 42 · BATTLE 6',
   });
   assert.deepEqual(crapsEntry.crapsEntrySelection({ day: 42, kind: 'future-day' }), {
     entryKind: 'future-day',
@@ -716,7 +735,7 @@ test('entry selections use the reserved day slot and numbered battle slots', () 
     entryPeriod: null,
     battleSlot: '344',
     tableIndex: '344',
-    entryLabel: 'DAY 43 · RESERVE ALL 7 BATTLES',
+    entryLabel: 'DAY 43 · RESERVE ALL 6 BATTLES',
   });
   assert.deepEqual(crapsEntry.crapsEntrySelection({
     day: 42,
@@ -728,15 +747,15 @@ test('entry selections use the reserved day slot and numbered battle slots', () 
     entryPeriod: null,
     battleSlot: '360',
     tableIndex: '360',
-    entryLabel: 'DAY 45 · RESERVE ALL 7 BATTLES',
+    entryLabel: 'DAY 45 · RESERVE ALL 6 BATTLES',
   });
   assert.throws(
     () => crapsEntry.crapsEntrySelection({ day: 42, kind: 'future-day', targetDay: 42 }),
     /future Craps day/,
   );
   assert.throws(
-    () => crapsEntry.crapsEntrySelection({ day: 42, kind: 'window', period: 7 }),
-    /seven Craps battles/,
+    () => crapsEntry.crapsEntrySelection({ day: 42, kind: 'window', period: 6 }),
+    /six Craps battles/,
   );
 });
 
@@ -780,11 +799,44 @@ test('lobby rows build exact normal, High Roller, and future-day contract calls'
   assert.equal(futurePass.totalFlip, '0');
   assert.equal(futurePass.stakedWei, '0');
 
-  const futureHigh = crapsEntry.crapsEntryWager({
-    day: 42, kind: 'future-day', highRoller: true, contractChips: board,
+  // CrapsPriceLib.HIGH_RETAIL: 450,000 FLIP through run 56, 500,000 on the current contracts.
+  for (const [hash, price] of [[RUN56_SCHEMA_HASH, '450000'], [CURRENT_SCHEMA_HASH, '500000']]) {
+    const futureHigh = withSchema(hash, () => crapsEntry.crapsEntryWager({
+      day: 42, kind: 'future-day', highRoller: true, contractChips: board,
+    }));
+    assert.deepEqual(futureHigh.contractArgs, [43, 1, true, board]);
+    assert.equal(futureHigh.totalFlip, price);
+  }
+});
+
+test('a newcomer wallet is quoted the 5% burn premium on every paid door, never on a comp', () => {
+  // CrapsBattle._entryPrice (audit e579cd318): `price + price / 20`, burn only.
+  const board = 0x1241111;
+  const window = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'window', period: 3, buyInFlip: 400n, contractChips: board, newcomer: true,
   });
-  assert.deepEqual(futureHigh.contractArgs, [43, 1, true, board]);
-  assert.equal(futureHigh.totalFlip, '450000');
+  assert.equal(window.totalFlip, '420');
+  assert.equal(window.stakedWei, (420n * 10n ** 18n).toString());
+  assert.equal(window.newcomerPremium, true);
+  assert.deepEqual(window.contractArgs, [3, board, 1], 'the calldata never carries the premium');
+  const high = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'day', buyInFlip: 12_600n, highRoller: true, highMult: 10, contractChips: board, newcomer: true,
+  });
+  assert.equal(high.totalFlip, '132300');
+  const future = withSchema(CURRENT_SCHEMA_HASH, () => crapsEntry.crapsEntryWager({
+    day: 42, kind: 'future-day', contractChips: board, newcomer: true,
+  }));
+  assert.equal(future.totalFlip, '26250');
+  const comp = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'future-day', contractChips: board, usePass: true, newcomer: true,
+  });
+  assert.equal(comp.totalFlip, '0');
+  assert.equal(comp.newcomerPremium, false);
+  const options = crapsEntry.crapsDayQuestPurchaseOptions({
+    state: { day: 42, currentPeriod: 0 }, todayPrice: 12_600n, playerEntries: null, newcomer: true,
+  });
+  assert.equal(options.today.price, '13230');
+  assert.equal(options.tomorrow.price, '26250');
 });
 
 test('an entered seat becomes amendable only after its board changes', () => {
@@ -1124,8 +1176,10 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*aria-live="polite"[^>]*><span data-craps-place-prompt="top">PLACE<\/span><span data-craps-place-prompt="bottom">YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
     'the readable two-line betting callout owns the middle section before the lane selector');
   assert.match(cssSource, /\.craps-entry__surface-strip\s*\{[^}]*grid-template-columns:\s*minmax\(0,1\.35fr\) minmax\(3\.2rem,\.34fr\) minmax\(6\.7rem,\.92fr\)/s);
-  assert.match(cssSource, /\.craps-entry__place-prompt\s*\{[^}]*color:\s*#ff8588[^}]*font-size:\s*\.39rem/s,
+  assert.match(cssSource, /\.craps-entry__place-prompt\s*\{[^}]*color:\s*#ff8588[^}]*font-size:\s*\.5rem/s,
     'the center callout is red and large enough to read');
+  assert.match(cssSource, /\.craps-entry__surface-strip \{\n  position: relative;\n  isolation: isolate;\n  min-height: 2\.05rem;/,
+    'the top bar is tall enough for its two-line labels');
   assert.match(componentSource,
     /class="craps-entry__lane"[^>]*role="group"[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/,
     'Low Stakes and High Roller remain one mutually exclusive control');
@@ -1133,8 +1187,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the standard lane uses the approved Low Stakes label');
   assert.match(componentSource, /data-craps-lane="high"[^>]*>[\s\S]*?<span>HIGH<br>ROLLER<\/span>/,
     'both lane labels use the larger two-line treatment');
-  assert.match(cssSource, /\.craps-entry__lane button > span\s*\{[^}]*font-size:\s*0\.44rem[^}]*line-height:\s*0\.88/s,
-    'the stacked lane copy is larger without increasing the header height');
+  assert.match(cssSource, /\.craps-entry__lane button > span\s*\{[^}]*font-size:\s*0\.54rem[^}]*line-height:\s*1\.04/s,
+    'the stacked lane copy reads at full size in the taller top bar');
   assert.doesNotMatch(componentSource, /data-craps-lane="normal"[^>]*>[\s\S]*?<span>NORMAL<\/span>/,
     'the retired Normal label is not rendered in the lane selector');
   assert.match(cssSource,
@@ -1156,8 +1210,16 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'selected Low Stakes uses the silver state');
   assert.match(cssSource, /\[data-craps-lane="high"\]\[aria-pressed="true"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #f8d56c, #c98b18\)/s,
     'selected High Roller uses the gold state');
-  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__betting\s*\{[^}]*flex:\s*1 1 auto[^}]*grid-template-rows:\s*auto minmax\(0,1fr\)[^}]*\}[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.craps-entry__mini-felt\s*\{[^}]*grid-row:\s*2[^}]*grid-template-rows:\s*minmax\(2\.35rem,1\.35fr\) minmax\(1\.74rem,1fr\)/s,
-    'the desktop betting felt, rather than the lobby, consumes the neighboring widgets’ extra height');
+  assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__betting\s*\{[^}]*flex:\s*0 0 auto[^}]*grid-template-rows:\s*auto auto[^}]*\}[\s\S]*?\.craps-entry__surface-strip\s*\{[^}]*grid-row:\s*1[^}]*\}[\s\S]*?\.craps-entry__mini-felt\s*\{[^}]*grid-row:\s*2[^}]*grid-template-rows:\s*3\.7rem 2\.8rem/s,
+    'the desktop table keeps one fixed height instead of stretching into leftover space');
+  assert.match(cssSource, /\.craps-entry__lobby \{\n  border-radius: 0;[^}]*flex: 1 0 auto;[^}]*min-height: var\(--craps-lobby-full, auto\)/,
+    'the schedule holds its fullest measured height and takes any slack as blank space');
+  assert.match(componentSource, /#fitLobby\(\) \{[\s\S]*?\(CRAPS_LOBBY_ROW_BUDGET \+ 0\.25\) \* rowHeight[\s\S]*?--craps-lobby-full/,
+    'the schedule is sized for the row budget, not the rare fullest state');
+  assert.match(componentSource, /export const CRAPS_LOBBY_ROW_BUDGET = 8;/);
+  assert.match(componentSource, /if \(resultsHead\) resultsHead\.hidden = !resultsStarted;\s*this\.#trimLobbyRows\(body, resultsHead\);/,
+    'rows past the budget drop from the tail of the urgency order after every reorder');
+  assert.match(cssSource, /\.craps-entry__listing tr\.craps-entry__row--trimmed \{ display: none !important; \}/);
   assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__listing tbody :is\(th,td\)\s*\{[^}]*font-size:\s*\.7rem[^}]*\}[\s\S]*?\.craps-entry__money strong\s*\{[^}]*font-size:\s*\.74rem/s,
     'desktop lobby copy steps up when the full three-column row has room');
   assert.equal((componentSource.match(/data-craps-bet="(?:place-[45689]|place-10|hard-[48]|pass|dont-pass)"/g) || []).length, 10,
@@ -1190,7 +1252,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the rules control reads as a distinct but coherent felt spot');
   assert.match(cssSource, /\.craps-entry__bet-spot--hard \.craps-entry__bet-label b\s*\{[^}]*font-size:\s*\.76rem/s,
     'the compact lower row scales its most important labels too');
-  assert.match(cssSource, /@media \(max-width: 768px\)[^{]*\{[^}]*\.craps-entry__mini-felt\s*\{[^}]*grid-template-rows:\s*2\.75rem 2\.5rem/s,
+  assert.match(cssSource, /@media \(max-width: 768px\)[^{]*\{[^}]*\.craps-entry__mini-felt\s*\{[^}]*grid-template-rows:\s*3\.7rem 2\.8rem/s,
     'narrow screens enlarge both whole-cell tap targets without resizing the chip artwork');
   assert.match(cssSource, /\.craps-entry__betting\s*\{[^}]*community-coinflip-felt-v6\.webp[^}]*#06351f/s,
     'one rich green felt texture spans the complete wager table');
@@ -1635,4 +1697,23 @@ test('Craps distinguishes queued work, an undrawn word, and actual settlement', 
   const states = new Map([[replayIdentity(replay.battleKey, replay.viewerBetId), { ready: true, status: 'ready' }]]);
   const [ready] = crapsEntry.crapsResolutionPendingActions({ address, replays: [replay], states });
   assert.equal(ready.shortLabel, 'Craps battle', 'a sealed replay outranks an older lobby snapshot');
+});
+
+test('the schedule keeps its row budget by dropping the tail, never an open battle', () => {
+  const { crapsLobbyTrimmedRows, CRAPS_LOBBY_ROW_BUDGET } = crapsEntry;
+  assert.equal(CRAPS_LOBBY_ROW_BUDGET, 8);
+  const row = 'row';
+  // Start of day: FULL DAY, six open battles, tomorrow — exactly the budget.
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row])], []);
+  // Rollover overlap: the previous event is the ninth row, the tail, so it drops.
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row, row])], [8]);
+  // Mid-day: four open, the day row, a half-height results header, two results.
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, 'head', row, row])], []);
+  // Hidden rows cost nothing.
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, null, row, null, row])], []);
+  // A header whose results were all trimmed goes with them.
+  assert.deepEqual(
+    [...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, 'head', row, row])].sort((a, b) => a - b),
+    [7, 8, 9],
+  );
 });

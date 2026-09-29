@@ -112,6 +112,7 @@ beforeEach(() => {
 
 afterEach(() => {
   history.setTransactionHistoryLoaderForTest(null);
+  history.setHistoryFetcherForTest(null);
   history.__resetAfkingHistoryForTest();
   store.update('viewing.address', null);
   store.update('connected.address', null);
@@ -490,14 +491,14 @@ describe('transaction history composition', () => {
     ]);
   });
 
-  test('does not invoke its loader before the dropdown opens', async () => {
+  test('opens empty and only invokes its loader after a category is selected', async () => {
     const player = '0x2222222222222222222222222222222222222222';
     store.update('connected.address', player);
     const calls = [];
     history.setTransactionHistoryLoaderForTest(async (address, options) => {
       calls.push({ address, options });
       return {
-        rows: [], warnings: [], total: 26,
+        rows: [{id:'purchase', type:'pass-purchase', title:'Pass', deltas:[]}], warnings: [], total: 26,
         hasNext: Number(options?.page) === 0,
       };
     });
@@ -519,18 +520,26 @@ describe('transaction history composition', () => {
     details.open = true;
     details.dispatchEvent({ type: 'toggle' });
     for (let index = 0; index < 5; index += 1) await Promise.resolve();
-    assert.deepEqual(calls, [{ address: player, options: { limit: 10, page: 0 } }]);
+    assert.equal(calls.length, 0, 'opening the popup does not load history');
+    element.querySelector('[data-bind="txh-filter-buys"]').dispatchEvent({ type: 'click' });
+    for (let index = 0; index < 5; index += 1) await Promise.resolve();
+    assert.deepEqual(calls, [{ address: player, options: { limit: 10, page: 0, category: 'buys', force: false } }]);
 
     details.open = false;
     details.dispatchEvent({ type: 'toggle' });
     details.open = true;
     details.dispatchEvent({ type: 'toggle' });
     for (let index = 0; index < 3; index += 1) await Promise.resolve();
-    assert.equal(calls.length, 1, 'reopening the same loaded page uses its in-memory result');
+    assert.equal(calls.length, 1, 'reopening does not request history');
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 0, 'reopening clears rows');
+    assert.equal(element.querySelector('[data-bind="txh-filter-buys"]').getAttribute('aria-pressed'), 'false');
+    element.querySelector('[data-bind="txh-filter-buys"]').dispatchEvent({ type: 'click' });
+    await Promise.resolve();
+    assert.equal(calls.length, 1, 'reselecting uses the category cache');
 
     element.querySelector('[data-bind="txh-next"]').dispatchEvent({ type: 'click' });
     for (let index = 0; index < 5; index += 1) await Promise.resolve();
-    assert.deepEqual(calls.at(-1), { address: player, options: { limit: 10, page: 1 } });
+    assert.deepEqual(calls.at(-1), { address: player, options: { limit: 10, page: 1, category: 'buys', force: false } });
     assert.equal(element.querySelector('[data-bind="txh-page"]').textContent, 'PAGE 2');
 
     element.querySelector('[data-bind="txh-prev"]').dispatchEvent({ type: 'click' });
@@ -540,7 +549,7 @@ describe('transaction history composition', () => {
     element.disconnectedCallback();
   });
 
-  test('starts with all activity visible, then focuses the category that was clicked', async () => {
+  test('shows all available categories but loads only the selected type', async () => {
     const player = '0x2525252525252525252525252525252525252525';
     store.update('connected.address', player);
     let loads = 0;
@@ -566,13 +575,18 @@ describe('transaction history composition', () => {
 
     for (const key of ['buys', 'jackpots', 'pack-opens', 'lootboxes', 'degenerette']) {
       const button = element.querySelector(`[data-bind="txh-filter-${key}"]`);
-      assert.equal(button.getAttribute('aria-pressed'), 'true', `${key} starts selected`);
-      assert.match(button.className, /is-selected/);
+      assert.equal(button.getAttribute('aria-pressed'), 'false', `${key} starts unselected`);
+      assert.doesNotMatch(button.className, /is-selected/);
     }
-    assert.equal(element.querySelectorAll('tbody')[0].children.length, 5);
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 0);
+    assert.equal(loads, 0);
+    for (const key of ['coinflip', 'craps', 'growth', 'decimator', 'incinerator', 'redemptions', 'salvage', 'rewards', 'funds', 'charity']) {
+      assert.ok(element.querySelector(`[data-bind="txh-filter-${key}"]`), key);
+    }
 
     const buys = element.querySelector('[data-bind="txh-filter-buys"]');
     buys.dispatchEvent({ type: 'click' });
+    for (let index = 0; index < 5; index += 1) await Promise.resolve();
     assert.equal(buys.getAttribute('aria-pressed'), 'true');
     assert.ok(element.querySelector('[data-history-id="buy"]'));
     assert.equal(element.querySelectorAll('tbody')[0].children.length, 1);
@@ -584,11 +598,12 @@ describe('transaction history composition', () => {
 
     const jackpots = element.querySelector('[data-bind="txh-filter-jackpots"]');
     jackpots.dispatchEvent({ type: 'click' });
+    for (let index = 0; index < 5; index += 1) await Promise.resolve();
     assert.equal(jackpots.getAttribute('aria-pressed'), 'true');
     assert.equal(buys.getAttribute('aria-pressed'), 'false');
     assert.ok(element.querySelector('[data-history-id="jackpot"]'));
     assert.equal(element.querySelectorAll('tbody')[0].children.length, 1);
-    assert.equal(loads, 1, 'filtering the loaded page does not refetch history');
+    assert.equal(loads, 2, 'each category gets its own page of history');
 
     assert.equal(history.transactionHistoryCategory({ type: 'afking-purchase' }), 'buys');
     assert.equal(history.transactionHistoryCategory({ type: 'lootbox-result' }), 'lootboxes');
@@ -628,6 +643,7 @@ describe('transaction history composition', () => {
     const details = element.querySelector('[data-bind="txh-details"]');
     details.open = true;
     details.dispatchEvent({ type: 'toggle' });
+    element.querySelector('[data-bind="txh-filter-jackpots"]').dispatchEvent({ type: 'click' });
     for (let index = 0; index < 5; index += 1) await Promise.resolve();
 
     const row = element.querySelector('[data-history-id="mixed-assets"]');
@@ -858,5 +874,101 @@ describe('transaction history composition', () => {
       'desktop filters live in the same toolbar as row and paging controls');
     assert.match(source, /<th scope="col">ETH<\/th>[\s\S]*<th scope="col">COINS<\/th>[\s\S]*<th scope="col">ITEMS<\/th>/);
     assert.doesNotMatch(source, /TX \/ BLOCK/);
+  });
+});
+
+
+describe('category history loading', () => {
+  const player = '0x9999999999999999999999999999999999999999';
+  let savedFetch;
+  beforeEach(() => {
+    savedFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, options) => ({ ok: true, json: async () => JSON.parse(options.body)
+      .map(call => ({ id: call.id, result: { timestamp: '0x69000000' } })) });
+  });
+  afterEach(() => { globalThis.fetch = savedFetch; });
+  const bet = n => ({ name: 'BetPlaced', args: { player, round: n, over: true },
+    blockNumber: n, logIndex: 0, transactionHash: `0x${n.toString(16).padStart(64, '0')}` });
+
+  test('does no reads without a category and pages selected activity beyond 200 rows', async () => {
+    const calls = [];
+    const events = Array.from({ length: 260 }, (_, i) => bet(1000 - i));
+    history.setHistoryFetcherForTest(async path => {
+      calls.push(path);
+      if (path === '/replay/rng') return { days: [] };
+      const url = new URL(path, 'https://test.invalid');
+      assert.equal(url.pathname, `/player/${player}/facts`);
+      assert.equal(url.searchParams.get('names'), 'BetPlaced,BetClaimed');
+      const before = Number(url.searchParams.get('before') || Infinity);
+      const limit = Number(url.searchParams.get('limit'));
+      const remaining = events.filter(row => row.blockNumber * 1000000 < before);
+      const chunk = remaining.slice(0, limit);
+      return { events: chunk, nextCursor: remaining.length > limit ? chunk.at(-1).blockNumber * 1000000 : null };
+    });
+    assert.deepEqual((await history.loadTransactionHistory(player)).rows, []);
+    assert.equal(calls.length, 0);
+    const pages = [];
+    for (let page = 0; page < 3; page++) pages.push(await history.loadTransactionHistory(player, { category: 'growth', page, limit: 100 }));
+    assert.deepEqual(pages.map(result => result.rows.length), [100, 100, 60]);
+    assert.deepEqual(pages.map(result => result.hasNext), [true, true, false]);
+    assert.equal(new Set(pages.flatMap(result => result.rows.map(row => row.id))).size, 260);
+    assert.ok(pages.every(result => result.warnings.length === 0));
+  });
+
+  test('empty ranges resume and a short page does not skip later rows', async () => {
+    let reads = 0;
+    history.setHistoryFetcherForTest(async path => {
+      if (path === '/replay/rng') return { days: [] };
+      reads++;
+      if (reads <= 3) return { events: [], nextCursor: (1000 - reads) * 1000000 };
+      if (reads === 4) return { events: [bet(990), bet(989)], nextCursor: 980000000 };
+      if (reads <= 6) return { events: [], nextCursor: (980 - reads) * 1000000 };
+      return { events: [bet(970), bet(969)], nextCursor: null };
+    });
+    const empty = await history.loadTransactionHistory(player, { category: 'growth' });
+    assert.equal(empty.rows.length, 0);
+    assert.equal(empty.hasNext, true);
+    const first = await history.loadTransactionHistory(player, { category: 'growth' });
+    assert.equal(first.rows.length, 2);
+    assert.equal(first.hasNext, true);
+    const next = await history.loadTransactionHistory(player, { category: 'growth', page: 1 });
+    assert.deepEqual(next.rows.map(row => row.blockNumber), [970n, 969n]);
+    assert.equal(next.hasNext, false);
+  });
+
+  test('reports source failures without manufacturing an empty complete ledger', async () => {
+    history.setHistoryFetcherForTest(async () => { throw Error('offline'); });
+    const result = await history.loadTransactionHistory(player, { category: 'growth' });
+    assert.deepEqual(result.warnings, ['growth']);
+    assert.deepEqual(result.rows, []);
+  });
+
+  test('late responses cannot replace another category or repopulate a closed popup', async () => {
+    store.update('connected.address', player);
+    const resolvers = new Map();
+    history.setTransactionHistoryLoaderForTest((_address, { category }) => new Promise(resolve => resolvers.set(category, resolve)));
+    const element = new history.AppTransactionHistory();
+    element.connectedCallback();
+    const details = element.querySelector('[data-bind="txh-details"]');
+    details.open = true;
+    details.dispatchEvent({ type: 'toggle' });
+    element.querySelector('[data-bind="txh-filter-growth"]').dispatchEvent({ type: 'click' });
+    element.querySelector('[data-bind="txh-filter-craps"]').dispatchEvent({ type: 'click' });
+    resolvers.get('growth')({ rows: [{ id: 'stale', category: 'growth', title: 'Stale', deltas: [] }] });
+    await Promise.resolve();
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 0);
+    resolvers.get('craps')({ rows: [{ id: 'current', category: 'craps', title: 'Craps', deltas: [] }] });
+    await Promise.resolve();
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 1);
+    element.querySelector('[data-bind="txh-filter-funds"]').dispatchEvent({ type: 'click' });
+    details.open = false;
+    details.dispatchEvent({ type: 'toggle' });
+    resolvers.get('funds')({ rows: [{ id: 'closed', category: 'funds', title: 'Closed', deltas: [] }] });
+    await Promise.resolve();
+    assert.equal(element.querySelectorAll('tbody')[0].children.length, 0);
+    details.open = true;
+    details.dispatchEvent({ type: 'toggle' });
+    assert.match(element.querySelector('[data-bind="txh-message"]').textContent, /Choose a transaction type/);
+    element.disconnectedCallback();
   });
 });

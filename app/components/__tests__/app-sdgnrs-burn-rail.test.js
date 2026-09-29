@@ -48,7 +48,7 @@ describe('<app-sdgnrs-burn-rail>', () => {
     assert.equal(formatGnrusLifetimeFunding(null), '—');
   });
 
-  test('keeps balances, burn value, lifetime GNRUS funding, Vote, and Burn in one rail', () => {
+  test('keeps balances and redemption inline, with donation totals in the charity action', () => {
     assert.match(COMPONENT, /class="sdgnrs-rail__logo"/);
     assert.match(COMPONENT, /data-bind="sdr-dgnrs-wrap" hidden/);
     assert.match(COMPONENT, /data-bind="sdr-plus" hidden/);
@@ -59,8 +59,13 @@ describe('<app-sdgnrs-burn-rail>', () => {
     assert.match(COMPONENT, /SDGNRS_CHARITY_VOTE_DIALOG_REQUEST_EVENT/);
     assert.match(COMPONENT, /data-bind="sdr-burn"/);
     assert.ok(COMPONENT.indexOf('data-bind="sdr-gnrus"')
-      < COMPONENT.indexOf('data-bind="sdr-vote"'),
-    'the GNRUS donation amount appears immediately before its Vote action');
+      > COMPONENT.indexOf('id="panel-token-details"'),
+    'the details popup still explains the lifetime charity total');
+    assert.match(COMPONENT, /data-bind="sdr-vote"[\s\S]*?data-bind="sdr-gnrus-total"[\s\S]*?ETH DONATED[\s\S]*?<\/button>/,
+      'the live charity total is visible directly inside the Vote action');
+    assert.match(COMPONENT, /data-bind="sdr-info"/);
+    assert.ok(COMPONENT.indexOf('data-bind="sdr-eth"')
+      < COMPONENT.indexOf('id="panel-token-details"'), 'approximate burn value stays beside the burn action');
     assert.match(COMPONENT,
       /sdgnrs-rail__vote-label"><span>CHARITY<\/span><span>VOTE<\/span>/,
       'the Vote action uses the requested two-line label');
@@ -91,14 +96,13 @@ describe('<app-sdgnrs-burn-rail>', () => {
     assert.doesNotMatch(COMPONENT, />\s*\*\s*</, 'the expected-value line has no asterisk');
   });
 
-  test('mounts directly below AFKING PASSES and loads in the idle tier', () => {
-    const passes = INDEX.indexOf('id="afking-passes"');
+  test('mounts with WWXRP below tickets and loads from the bottom row', () => {
+    const tickets = INDEX.indexOf('<app-tickets-inventory>');
+    const tools = INDEX.indexOf('class="bottom-tools"');
+    const wwxrp = INDEX.indexOf('<app-wwxrp-burn');
     const rail = INDEX.indexOf('<app-sdgnrs-burn-rail>');
-    const history = INDEX.indexOf('<app-transaction-history>');
-    assert.ok(passes >= 0 && passes < rail && rail < history);
-    assert.match(INDEX, /'\/app\/components\/app-sdgnrs-burn-rail\.js'/);
-    assert.match(CSS, /#afking-passes\s*\{\s*margin-bottom:\s*0\.65rem;/s);
-    assert.match(CSS, /app-sdgnrs-burn-rail\s*\{[^}]*margin:\s*0 0 0\.65rem;/s,
-      'the rail has the same gap above and below');
+    assert.ok(tickets >= 0 && tickets < tools && tools < wwxrp && wwxrp < rail);
+    assert.ok(INDEX.includes("['.bottom-tools', '/app/components/app-sdgnrs-burn-rail.js']"),
+      'the currency row triggers the token panel load');
   });
 });

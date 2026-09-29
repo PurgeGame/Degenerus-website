@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102" fill="none">
+  <!-- Same bounds as the circular trait badge; its full r=35.2 face stays clear. -->
+  <defs>
+    <clipPath id="champion-aura-v2-clear-center">
+      <path clip-rule="evenodd" d="M-51-51H51V51H-51ZM35.25 0A35.25 35.25 0 1 0-35.25 0A35.25 35.25 0 1 0 35.25 0Z"/>
+    </clipPath>
+    <radialGradient id="champion-aura-v2-bloom" cx="0" cy="0" fx="0" fy="0" r="50" gradientUnits="userSpaceOnUse">
+      <stop offset=".7" stop-color="#fff6c2" stop-opacity="0"/>
+      <stop offset=".73" stop-color="#fff2b4" stop-opacity=".85"/>
+      <stop offset=".78" stop-color="#d0acff" stop-opacity=".66"/>
+      <stop offset=".86" stop-color="#9963f4" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#8b4cea" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="champion-aura-v2-core" x1="-25" y1="-34" x2="27" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffdf0"/>
+      <stop offset=".25" stop-color="#ffe9a0"/>
+      <stop offset=".52" stop-color="#edceff"/>
+      <stop offset=".76" stop-color="#fffdf0"/>
+      <stop offset="1" stop-color="#f7cc72"/>
+    </linearGradient>
+    <filter id="champion-aura-v2-soft" x="-51" y="-51" width="102" height="102" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+    <g id="champion-aura-v2-rays" stroke-linecap="round">
+      <path d="M-27-34.2A43.6 43.6 0 0 1-4-43.4M13-41.6A43.6 43.6 0 0 1 37.4-22.4M40.7 15.5A43.6 43.6 0 0 1 19.1 39.2M-7.6 42.9A43.6 43.6 0 0 1-32.4 29.2" stroke="#ffe8ad" stroke-width=".95"/>
+      <path d="M-40.2-7.8A41 41 0 0 1-31.4-26.4M7.1 40.4A41 41 0 0 1-16.7 37.4" stroke="#ead4ff" stroke-width="1.35"/>
+      <path d="M39.7-4.8 46-5.5M-40.9 11.7-46 13.2M10.6-39.6 12.1-45.1" stroke="#f4ddff" stroke-width="1.2"/>
+      <path d="M-9-48.4-7.6-44.1-3.4-42.8-7.6-41.5-9-37.2-10.3-41.5-14.6-42.8-10.3-44.1Z" fill="#fff8d9"/>
+      <path d="m31.5 26.4 1.2 3.5 3.5 1.2-3.5 1.1-1.2 3.5-1.1-3.5-3.5-1.1 3.5-1.2Z" fill="#fff7d7"/>
+      <circle cx="-36.7" cy="-21.2" r="1.15" fill="#fff4c7"/>
+      <circle cx="-25.4" cy="37.3" r=".85" fill="#f5deff"/>
+    </g>
+  </defs>
+  <g clip-path="url(#champion-aura-v2-clear-center)">
+    <circle r="50" fill="url(#champion-aura-v2-bloom)"/>
+    <circle r="37.2" stroke="#bc80ff" stroke-width="4.5" opacity=".8" filter="url(#champion-aura-v2-soft)"/>
+    <circle r="36.5" stroke="#fff1a5" stroke-width="2.4" opacity=".55" filter="url(#champion-aura-v2-soft)"/>
+    <use href="#champion-aura-v2-rays" opacity=".65" filter="url(#champion-aura-v2-soft)"/>
+    <circle r="36.4" stroke="url(#champion-aura-v2-core)" stroke-width="1.5"/>
+    <path d="M-25.7-25.7A36.4 36.4 0 0 1-2.5-36.3M31.5 18.2A36.4 36.4 0 0 1 10.7 34.8" stroke="#fffdf1" stroke-width=".7" stroke-linecap="round"/>
+    <use href="#champion-aura-v2-rays"/>
+  </g>
+</svg>

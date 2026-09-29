@@ -197,6 +197,8 @@ const storeMod = await import('../../app/store.js');
 
 const REVEAL_SRC = readFileSync(new URL('../reveal-overlay.js', import.meta.url), 'utf8');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const DGN_POP_CSS = readFileSync(new URL('../../styles/dgn-pop.css', import.meta.url), 'utf8');
+const DGN_WINNINGS_CSS = readFileSync(new URL('../../styles/dgn-winnings.css', import.meta.url), 'utf8');
 const SDGNRS_LOGO_SVG = readFileSync(
   new URL('../../../specials/special_eth.svg', import.meta.url),
   'utf8',
@@ -5977,7 +5979,30 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
-  test('Reveal all crosses a mystery-currency gate and completes every board once', async () => {
+  test('Degenerette cards keep a centred mystery frame and clear the bottom controls', () => {
+    assert.match(DGN_POP_CSS,
+      /\[data-layout="mystery"\] > \.dgn-pop__card:nth-child\(1\) \{ grid-column: 2;/,
+      'card 1 sits in the centre slot before and after its currency lands');
+    assert.match(DGN_POP_CSS, /\[data-layout="mystery"\] > \.dgn-pop__card:nth-child\(2\) \{ grid-column: 1;/);
+    assert.match(DGN_POP_CSS, /\[data-layout="mystery"\] > \.dgn-pop__card:nth-child\(3\) \{ grid-column: 3;/);
+    const stageRule = /\.rvl-stage\.rvl-stage--degenerette\.rvl-stage--pop \{\n  padding-bottom:[^}]*\}/.exec(DGN_POP_CSS)?.[0] || '';
+    assert.ok(stageRule, 'the pop stage reserves a bottom band for its controls');
+    assert.doesNotMatch(stageRule, /[\s;]padding:/,
+      'no padding shorthand may cancel the reserved band under the tickets');
+    assert.match(DGN_POP_CSS,
+      /\.rvl-stage--pop:has\(\.rvl-dgn-actions:not\(\[hidden\]\)\) \{\n  padding-bottom: max\(4rem,/,
+      'one control row keeps a 4rem band, not the old 6rem');
+    assert.match(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*height: 78px;/,
+      'the payout bar stays compact');
+    assert.doesNotMatch(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*sticky/,
+      'the bar is no longer pinned to the top');
+    assert.match(DGN_POP_CSS, /\.dgn-pop__viewport > \.dgn-winnings \{\n  position: sticky; bottom: 0;/,
+      'under a scrolling bet the bar holds the bottom edge of the cards');
+    assert.doesNotMatch(APP_CSS, /rvl-lootbox-spin-board-launch[^;]*\bboth;/,
+      'a held launch transform would pin Reveal all over the tickets');
+  });
+
+  test('the FLIP bonus pair opens beside card 1, then Reveal all completes every board once', async () => {
     queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'flip', payout: 1000n * 10n ** 18n,
       survived: true, preSurvivalPayout: 500n * 10n ** 18n,
       reels: [0, 1, 2].map(spinIndex => ({ spinIndex, heroQuadrant: 0,
@@ -5985,10 +6010,25 @@ describe('reveal-overlay element', () => {
     }] });
     const el = instantiate(); await tick();
     clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')); await tick();
+    const grid = el.querySelector('.dgn-pop__grid');
+    assert.equal(grid.dataset.layout, 'mystery', 'card 1 holds the centre slot of the bonus frame');
+    const viewportKids = [...el.querySelector('.dgn-pop__viewport').children].map(node => node.className);
+    assert.deepEqual(viewportKids, ['dgn-pop__grid', 'dgn-winnings'],
+      'the payout bar and its coin flips ride directly under the cards');
+    assert.equal(grid.dataset.size, '1');
     assert.deepEqual(el.querySelectorAll('.dgn-pop__card').map(card => card.hidden), [false, true, true]);
+    assert.equal(el.querySelector('.dgn-pop__all').hidden, true,
+      'a sealed card cannot leak its three-reel lane through Reveal all');
+    clickPop(el.querySelector('.dgn-pop__flame')); await tick(); await tick();
+    const cards = el.querySelectorAll('.dgn-pop__card');
+    assert.deepEqual(cards.map(card => card.hidden), [false, false, false]);
+    assert.equal(grid.dataset.size, '3');
+    assert.deepEqual(cards.map(card => card.classList.contains('dgn-pop__card--bonus')), [false, true, true]);
+    assert.deepEqual(cards.map(card => card.classList.contains('is-arriving')), [false, true, true],
+      'only the unlocked bonus pair animates in');
+    assert.equal(el.querySelector('.dgn-pop__all').hidden, false);
     clickPop(el.querySelector('.dgn-pop__all')); await tick(); await tick();
     assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
-    assert.deepEqual(el.querySelectorAll('.dgn-pop__card').map(card => card.hidden), [false, false, false]);
     assert.match(el.querySelector('.rvl-survival').textContent, /SURVIVED/);
     assert.match(el.querySelector('.rvl-spin-total').textContent, /1,?000 FLIP/);
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();

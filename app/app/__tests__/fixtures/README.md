@@ -20,10 +20,22 @@ were produced by Solidity, not the JavaScript implementation under test.
 
 `degenerette-payout-vectors.json` holds 642 tuples `[currency, stakePerSpin,
 activityScore, score, goldMatches, payout]` returned by
-`DegeneretteMathHarness.payout` — the production `_degenerettePayout` — compiled
-at degenerus-audit 224de529 (the prebuilt `forge-out` artifact, deployed to a
-scratch anvil), September 26, 2026. They span ETH, FLIP and WWXRP, stakes from
-the 1,000-wei testnet ETH unit to 777 FLIP, activity 0 to 65,535, scores 0-9 and
-0/1/4 matched golds. DegeneretteResolved no longer emits per-spin payouts, so the
-UI prices every settled spin with `degeneretteSpinPayout`; these vectors pin it to
-the contract. The full 5,616-tuple run matched with zero mismatches.
+`DegeneretteMathHarness.payout` — the production `_degenerettePayout`. The
+inputs were first drawn at degenerus-audit 224de529, September 26, 2026; the
+payouts were regenerated September 29, 2026 at degenerus-audit 3c79c1486 (the
+250,250x 9/9, 20,354x 8/9, re-weighted ETH bonus factors and WWXRP's own 8/9
+prizes from 881ebb32d) from a `forge-out` artifact whose metadata source hashes
+match that commit, deployed to a scratch anvil. 368 of the 642 changed. They
+span ETH, FLIP and WWXRP, stakes from the 1,000-wei testnet ETH unit to 777
+FLIP, activity 0 to 65,535, scores 0-9 and 0/1/4 matched golds.
+DegeneretteResolved does not emit per-spin payouts, so the UI prices every
+settled spin with `degeneretteSpinPayout`; these vectors pin it to the contract.
+
+`degenerette-paid-stake-vectors.json` holds 168 rows `[betWord, paidUnits,
+rawUnits, [amounts], [capped]]` from the same 3c79c1486 harness:
+`paidStake(betWord)` in stake units and `capPaidPayout(betWord, amount)` for four
+amounts straddling the 1,000,000x paid-stake ceiling. Bet words are built the way
+placement builds them (boosted stake units, consumed boon tier 0-3 in bits
+252..253) for ETH and FLIP at 1-25 spins. The harness is the mainnet module
+(1-gwei ETH unit, 10 ETH boon cap), so ETH rows pin the recovered units; the
+capped amounts are compared for FLIP, whose units are unscaled on both chains.

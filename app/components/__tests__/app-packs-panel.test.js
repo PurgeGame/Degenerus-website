@@ -630,19 +630,11 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
 function makeFakeRngContract(opts = {}) {
   const calls = {
     purchase: [], purchaseCoin: [],
-    openBox: [],
+    openBoxes: [],
     lootboxRngWordByIndex: [],
   };
-  const state = { rngWord: opts.rngWord ?? 0n };  // tests mutate to drive RNG progression
+  const state = { rngWord: opts.rngWord ?? 0n, opened: false };  // tests mutate to drive RNG progression
   const stk = (name) => async () => {
-    // Production readiness is now the exact openBox simulation. Preserve the
-    // old mutable RNG seam by making that simulation reject until the fake
-    // word arrives.
-    if (name === 'openBox' && state.rngWord === 0n) {
-      const err = new Error('static-call revert');
-      err.revert = { name: 'RngNotReady' };
-      throw err;
-    }
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[name] || 'RngNotReady' };
@@ -671,16 +663,18 @@ function makeFakeRngContract(opts = {}) {
       },
       { staticCall: stk('purchaseCoin') }
     ),
-    openBox: Object.assign(
+    // Audit 2525eb7fd: the in-order openBoxes(maxCount) sweep is the only open door.
+    openBoxes: Object.assign(
       async (...args) => {
-        calls.openBox.push(args);
+        calls.openBoxes.push(args);
+        state.opened = true;
         return makeFakeBuyTx(makeFakeBuyReceipt([
           { parsed: { name: 'TraitsGenerated', args: {
-            player: args[0], level: 1n, queueIdx: 0n, startIndex: 0n, count: 4n, entropy: 0xdeadbeefn,
+            player: CONNECTED, level: 1n, queueIdx: 0n, startIndex: 0n, count: 4n, entropy: 0xdeadbeefn,
           } } },
         ]));
       },
-      { staticCall: stk('openBox') }
+      { staticCall: stk('openBoxes') }
     ),
     lootboxRngWordByIndex: async (idx) => { calls.lootboxRngWordByIndex.push(idx); return state.rngWord; },
     interface: { parseLog: (log) => log.parsed ?? null },
@@ -703,6 +697,10 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     contractsMod.setProvider(makeFakeBuyProvider(CONNECTED));
     fakeContract = makeFakeRngContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    // Readiness is the entry read: queued until the sweep opens it, worded once the fake RNG lands.
+    lootboxMod.__setBoxStateReaderForTest(() => ({
+      pending: !fakeContract._state.opened, worded: fakeContract._state.rngWord !== 0n, swept: false, rngLocked: false,
+    }));
     if (typeof globalThis.document !== 'undefined') globalThis.document.visibilityState = 'visible';
     await import('../app-packs-panel.js');
   });
@@ -777,7 +775,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     // without waiting for /play/ pack-animator import (gsap unavailable in tests).
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openBox.length, 1, 'openLootBox called exactly once');
+    assert.equal(fakeContract._calls.openBoxes.length, 1, 'openLootBox called exactly once');
     // After cancel-token bump, the post-tx reveal sequence void-returns; row stays in opening status.
     assert.equal(el._state.lootboxRowStatuses[0], 'opening', 'row left in opening (cancel-token superseded reveal)');
     el.disconnectedCallback();
@@ -795,7 +793,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     openBtn.dispatchEvent({ type: 'click' });
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openBox.length, 1, 'only one openLootBox tx despite double-click');
+    assert.equal(fakeContract._calls.openBoxes.length, 1, 'only one openLootBox tx despite double-click');
     el.disconnectedCallback();
   });
 
@@ -853,6 +851,10 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     contractsMod.setProvider(makeFakeBuyProvider(CONNECTED));
     fakeContract = makeFakeRngContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    // Readiness is the entry read: queued until the sweep opens it, worded once the fake RNG lands.
+    lootboxMod.__setBoxStateReaderForTest(() => ({
+      pending: !fakeContract._state.opened, worded: fakeContract._state.rngWord !== 0n, swept: false, rngLocked: false,
+    }));
     if (typeof globalThis.document !== 'undefined') globalThis.document.visibilityState = 'visible';
     // Reset stub fetch to throw — individual tests opt in by overriding.
     globalThis.fetch = async () => { throw new Error('fetch should not be called unless test opts in'); };
@@ -1033,7 +1035,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     assert.equal(el._state.lootboxRowsCount, 1, 'row added from boot CTA');
     assert.equal(el._state.unrevealedPacksFromIndexerCount, 0, 'CTA backing data cleared');
     // Verify D-07 step 5: NO open tx auto-fired (openLootBox not called)
-    assert.equal(fakeContract._calls.openBox.length, 0, 'NO auto-fire — Open click is explicit');
+    assert.equal(fakeContract._calls.openBoxes.length, 0, 'NO auto-fire — Open click is explicit');
     // CTA is now hidden (count=0)
     assert.equal(cta.hidden, true, 'CTA hidden after walk-through started');
     el.disconnectedCallback();

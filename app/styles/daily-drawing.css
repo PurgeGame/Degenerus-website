@@ -3,14 +3,15 @@
    at-capacity app.css and owns only the cabinet's responsive identity pass. */
 
 body.layout-basic .jackpot-hero__machine {
-  --jp-board-size: clamp(15rem, 68cqi, 28rem);
-  --jp-foil-size: clamp(2.75rem, 11.8cqi, 5.65rem);
+  --jp-board-size: min(68cqi, 28rem);
+  --jp-foil-size: min(11.8cqi, 5.65rem);
   --jp-side-gap: clamp(0.2rem, 0.85cqi, 0.42rem);
   --jp-stage-top: 3.18rem;
   --jp-action-width: min(var(--jp-board-size), 18rem);
   --jp-chainlink-size: clamp(2.3rem, 7.6cqi, 2.9rem);
   --jp-chainlink-gap: clamp(1.15rem, 4.2cqi, 1.8rem);
   width: min(100%, 48rem);
+  container-name: jackpot-cabinet;
   margin-inline: auto;
   padding: 0.24rem 0.34rem 0.38rem;
   /* The plate is built in fab order, bottom up: bare laminate, the woven glass
@@ -1773,6 +1774,15 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
     inset 0 0 0 1px rgba(247, 250, 252, 0.18),
     0 0 6px rgba(74, 222, 128, 0.78),
     0 0 16px rgba(34, 197, 94, 0.42);
+}
+
+/* Size this against the cabinet, including narrow desktop grid columns. The
+   main draw key remains available; auxiliary hardware needs room on both sides. */
+@container jackpot-cabinet (max-width: 24rem) {
+  body.layout-basic .jackpot-hero__machine > app-all-in-machine-control,
+  body.layout-basic .jackpot-hero__machine replay-panel[single-button] .jackpot-chainlink {
+    display: none;
+  }
 }
 
 @media (max-width: 430px) {

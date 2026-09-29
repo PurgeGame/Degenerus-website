@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { ethers } from '../contracts.js';
@@ -9,7 +10,7 @@ import * as crapsResults from '../craps-results.js';
 import * as readProvider from '../read-provider.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 
 // The craps window mirrors itself to localStorage so a reload pays a 12-block
 // tail instead of the whole lookback. node has no Web Storage without a flag,
@@ -108,8 +109,13 @@ function fakeProvider() {
 }
 
 let contract;
+// This suite's fixtures are the run-56 seven-window slate; the current-schema cases switch with
+// `useSchema(CURRENT_SCHEMA_HASH)` themselves. Pin the default explicitly, so the suite does not
+// silently change meaning whenever the deployment profile's `readSchema` moves to a new run.
+let defaultSchema;
 
 beforeEach(() => {
+  defaultSchema = useSchema(RUN56_SCHEMA_HASH);
   store.__resetForTest();
   store.update('connected.address', PLAYER);
   store.update('viewing.address', null);
@@ -120,6 +126,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useSchema(defaultSchema);
   craps.__resetCrapsContractFactoryForTest();
   readProvider._resetSharedReadProviderForTests();
   contracts.clearProvider();
@@ -2060,4 +2067,54 @@ test('armed battle switches from awaiting RNG to settling when its committed wor
   assert.equal(pending.settlementStates[0], 'awaiting-rng');
   const ready = craps.crapsLobbySnapshotFromLogs(day, logs, { wordsByIndex: new Map([['99', 123n]]) });
   assert.equal(ready.settlementStates[0], 'settling');
+});
+
+// ---- run 58 (audit e579cd318): the table surface and newcomer pricing ----
+
+const SIM_CONTRACTS = new URL('../../../../degenerus-sim/contracts/', import.meta.url);
+const flatSol = (path) => readFileSync(new URL(path, SIM_CONTRACTS), 'utf8').replace(/\s+/g, ' ');
+
+test('the craps ABI tracks the run-58 surface: no armBonusWindow, no standing bar, no rollover', () => {
+  const iface = new contracts.ethers.Interface(craps.FLIP_CRAPS_ABI);
+  const battle = flatSol('CrapsBattle.sol');
+  assert.equal(iface.getFunction('armBonusWindow'), null, 'keepScheduled arms in order; the door is gone');
+  assert.ok(!battle.includes('function armBonusWindow('));
+  assert.equal(iface.getFunction('createBattle').format('sighash'),
+    'createBattle(uint32,uint8,uint16,uint24,uint40,bool,uint16)', 'minScore left the custom terms');
+  assert.ok(battle.includes('function createBattle( uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult ) external returns (uint64 slot)'));
+  assert.equal(iface.getEvent('CrapsProgressiveRolled'), null);
+  assert.equal(iface.getError('ScoreRequiredForBonus'), null);
+  assert.ok(!battle.includes('ScoreRequiredForBonus') && !battle.includes('CrapsProgressiveRolled'));
+  // resolveSlot survives for CUSTOM battles only.
+  assert.ok(battle.includes('function resolveSlot(uint64 slot, uint64 budgetUnits) external { if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();'));
+});
+
+test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
+  const battle = flatSol('CrapsBattle.sol');
+  assert.ok(battle.includes('function _entryPrice(address player, uint256 basePrice) internal view returns (uint256) { uint256 packed = IGameCraps(_GAME).mintPackedFor(player); if (uint24(packed >> BitPackingLib.LEVEL_COUNT_SHIFT) > 2 || ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1) != 0) return basePrice; uint256 lastMintLevel = uint24(packed); if (lastMintLevel != 0 && lastMintLevel + 1 >= IGameCraps(_GAME).level()) return basePrice; return basePrice + basePrice / 20; }'));
+  const bits = flatSol('libraries/BitPackingLib.sol');
+  assert.ok(bits.includes('uint256 internal constant LEVEL_COUNT_SHIFT = 24;'));
+  assert.ok(bits.includes('uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;'));
+  // Comps never pay it; every other tagged burn and the paid upgrade do.
+  assert.ok(battle.includes('if (grossAndFlags & _CRAPS_FLAG_COMP == 0) { grossAndFlags = _tag(_entryPrice(player, grossAndFlags & ~uint256(0xFF)), grossAndFlags & 0xFF); }'));
+  assert.ok(battle.includes('else { burned = _entryPrice(player, burned); _burnCoin(burned); }'));
+
+  const mint = ({ last = 0n, count = 0n, deity = false } = {}) => last | (count << 24n) | (deity ? 1n << 184n : 0n);
+  assert.equal(craps.crapsNewcomerPricing(mint(), 5), true, 'no history');
+  assert.equal(craps.crapsNewcomerPricing(mint({ last: 3n, count: 2n }), 5), true, 'two levels, none recent');
+  assert.equal(craps.crapsNewcomerPricing(mint({ last: 4n, count: 1n }), 5), false, 'minted at the previous level');
+  assert.equal(craps.crapsNewcomerPricing(mint({ last: 5n, count: 1n }), 5), false, 'minted this level');
+  assert.equal(craps.crapsNewcomerPricing(mint({ last: 1n, count: 3n }), 9), false, 'three credited levels');
+  assert.equal(craps.crapsNewcomerPricing(mint({ deity: true }), 9), false, 'a deity pass');
+  assert.equal(craps.crapsNewcomerPricing(mint(), 0), true, 'level 0, no mint: lastMintLevel is zero');
+  const wei = 10n ** 18n;
+  assert.equal(craps.crapsEntryPriceWei(8_000n * wei, true), 8_400n * wei);
+  assert.equal(craps.crapsEntryPriceWei(8_000n * wei, false), 8_000n * wei);
+  assert.equal(craps.crapsEntryPriceFlip(25_000n, true), 26_250n);
+  assert.equal(craps.crapsEntryPriceFlip(4_500n, true), 4_725n);
+});
+
+test('a run-56 deployment never quotes the newcomer premium', async () => {
+  // The default schema in this suite is run 56, whose CRAPS surface predates `_entryPrice`.
+  assert.equal(await craps.readCrapsNewcomerPricing(PLAYER), false);
 });

@@ -300,12 +300,14 @@ import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as affiliateMod from '../../app/affiliate.js';
 import * as passesMod from '../../app/passes.js';
+import * as profilesMod from '../../app/profiles.js';
 import { DEGENERETTE_PREFERENCES_KEY } from '../../app/degenerette-preferences.js';
 import { CHAIN, ETH_DIVISOR } from '../../app/chain-config.js';
 
-function installDeityOwners(owners = new Map()) {
+function installDeityOwners(owners = new Map(), tokenURI = async () => null) {
   passesMod.__setDeityReadContractFactoryForTest(() => ({
     name: async () => 'Degenerus Deity Pass',
+    tokenURI,
     ownerOf: async (symbolId) => {
       const owner = owners.get(Number(symbolId));
       if (owner) return owner;
@@ -372,11 +374,11 @@ function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: lo
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
 // Default fake contract: place returns DegeneretteBetPlaced(index=7, betId=42)
-// carrying the real queued bet word for its arguments; the optional settle
-// resolveDegeneretteBets(index, ids) returns one DegeneretteResolved whose
-// `spins` hold every spin (audit 224de529 — no per-spin event any more).
+// carrying the real queued bet word for its arguments; the optional settle —
+// one in-order openBoxes(maxCount) sweep since audit 2525eb7fd — returns one
+// DegeneretteResolved for that bet whose `spins` hold every spin (audit 224de529).
 function makeFakeDegContract(opts = {}) {
-  const calls = { placeDegeneretteBet: [], resolveDegeneretteBets: [] };
+  const calls = { placeDegeneretteBet: [], openBoxes: [] };
   const stk = (name) => async () => {
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
@@ -399,17 +401,17 @@ function makeFakeDegContract(opts = {}) {
       },
       { staticCall: stk('placeDegeneretteBet') }
     ),
-    resolveDegeneretteBets: Object.assign(
+    openBoxes: Object.assign(
       async (...args) => {
-        calls.resolveDegeneretteBets.push(args);
+        calls.openBoxes.push(args);
         const defaultLogs = [
           {
             parsed: {
               name: 'DegeneretteResolved',
               args: {
                 player: CONNECTED,
-                index: BigInt(args[0]),
-                betId: BigInt(args[1][0]),
+                index: 7n,
+                betId: 42n,
                 totalPayout: 5n * 10n ** 16n,
                 resultTraits: 1234n,
                 spins: spinsHex([{ traits: 1234, score: 4 }]),
@@ -422,7 +424,7 @@ function makeFakeDegContract(opts = {}) {
           : (Array.isArray(opts.resolveLogs) ? opts.resolveLogs : defaultLogs);
         return makeFakeTx(makeFakeReceipt(logs));
       },
-      { staticCall: stk('resolveDegeneretteBets') }
+      { staticCall: stk('openBoxes') }
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -588,7 +590,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(el.innerHTML, /Build one ticket/i, 'header subtitle removed');
     assert.match(
       el.innerHTML,
-      /<a class="deg-learn-link" href="\/learn\/degenerette\/">DEGENERETTE<\/a>/,
+      /<a class="deg-learn-link" href="\/learn\/degenerette\/"[^>]*>(?:(?!<\/a>)[\s\S])*Play Degenerette\b/,
       'Degenerette heading links to its Learn page',
     );
     assert.match(
@@ -648,8 +650,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
     assert.match(PANEL_SRC, /aria-label="Bet per card"/);
     assert.match(PANEL_SRC, /aria-label="Number of cards"/);
-    assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_green\.svg/,
-      'ETH uses the green circular Degenerus trait badge');
+    assert.match(PANEL_SRC, /data-bind="deg-currency-option-0"[\s\S]*?<img src="\/app\/assets\/degenerette\/coin-eth\.svg"/,
+      'ETH pays with a silver coin, so the wager never repeats the Ethereum champion badge');
+    assert.doesNotMatch(PANEL_SRC.slice(wagerAt, PANEL_SRC.indexOf('</section>', wagerAt)),
+      /crypto_06_ethereum_green\.svg/,
+      'the green Ethereum trait badge belongs to the champion, not the currency switch');
     assert.doesNotMatch(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
       'the blue ETH currency badge is no longer used');
     assert.match(PANEL_SRC, /data-bind="deg-currency-option-1"[\s\S]*?\/whitepaper\/flame-logo-split\.svg/,
@@ -676,8 +681,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     const placeAt = PANEL_SRC.indexOf('class="deg-place-cta"', wagerAt);
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
-    assert.ok(placeAt > wagerAt && placeAt < wagerEnd,
-      'Place bet is owned by and sits below the wager controls');
+    assert.ok(placeAt > wagerAt && placeAt < wagerEnd, 'Place bet is owned by the wager deck');
+    assert.ok(placeAt < PANEL_SRC.indexOf('class="deg-currency-head"', wagerAt)
+      && placeAt < PANEL_SRC.indexOf('class="deg-currency-picker"', wagerAt),
+      'Place bet heads the deck, above the currency row (and first in its tab order)');
+    assert.match(APP_CSS, /\.deg-block--wager \.deg-place-cta \{[^}]*margin: 1px 0 10px/,
+      'room for its lip, then a clear gap before the currency row');
     assert.match(PANEL_SRC, /deg-wager-field__label">Bet per card/);
     assert.match(PANEL_SRC, /deg-wager-field__label">Cards/);
     assert.match(
@@ -797,8 +806,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     for (let q = 0; q < 4; q++) {
       for (let icon = 0; icon < 8; icon++) assert.equal(exported(q, icon), degeneretteChampionBadgePath(q, icon));
     }
-    assert.match(PANEL_SRC, /<span class="dgn-symbol-preview__title">\s*<strong class="dgn-symbol-preview__name"[\s\S]*?<span class="dgn-symbol-preview__change"/,
-      'Change sits after the champion name, not over the badge');
+    assert.match(PANEL_SRC, /<\/button>\s*<span class="dgn-symbol-preview__title">\s*<button type="button" class="deg-deity"/,
+      'the deity trigger is separate from the carousel button');
+    assert.doesNotMatch(PANEL_SRC + APP_CSS, /dgn-symbol-preview__(change|chevron)/);
+    assert.match(APP_CSS, /\.dgn-symbol-preview__title \{[^}]*top: calc\(var\(--deg-top\) \+ var\(--deg-champ\) \* 0\.84 \+ 4px\)/,
+      'the name plate starts below the bezel (84% of the art box), clear of the badge');
   });
 
   test('the referral card moves to the page strip after its listeners are wired', () => {
@@ -837,7 +849,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
   test('quick picks follow the currency and set the bet per card', () => {
     const el = instantiate();
     const presets = () => Array.from(el.querySelector('[data-bind="deg-amount-presets"]').children);
-    assert.deepEqual(presets().map((chip) => chip.textContent), ['0.005', '0.01', '0.05', '0.25']);
+    assert.deepEqual(presets().map((chip) => chip.textContent), ['0.005', '0.05', '0.25', '1']);
+    assert.deepEqual(presets().filter((chip) => chip.getAttribute('aria-pressed') === 'true'), [],
+      'the 0.01 ETH default matches no pick, so none is lit');
     el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(presets().map((chip) => chip.textContent), ['100', '250', '1,000', '5,000']);
     const lit = presets().filter((chip) => chip.getAttribute('aria-pressed') === 'true');
@@ -846,6 +860,26 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-amount"]').value, '1000');
     assert.equal(presets()[2].getAttribute('aria-pressed'), 'true');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent, 'Place Bet · 5,000 FLIP');
+    el.disconnectedCallback();
+  });
+
+  test('the 1 ETH quick pick places a full-scale 1 ETH stake per card, unclamped', async () => {
+    // No maximum bet: placement checks only the minimum, the 1-gwei stake unit
+    // and a 64-bit unit count (DegenerusGameDegeneretteModule.sol:584-585, 689).
+    const fake = makeFakeDegContract();
+    degeneretteMod.__setContractFactoryForTest(() => fake);
+    const el = instantiate();
+    await settle(40);
+    const presets = () => Array.from(el.querySelector('[data-bind="deg-amount-presets"]').children);
+    presets()[3].dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="deg-amount"]').value, '1');
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(fake._calls.placeDegeneretteBet.length, 1);
+    const [args] = fake._calls.placeDegeneretteBet;
+    assert.equal(Number(args[1]), 0, 'the ETH lane');
+    assert.equal(args[2], (10n ** 18n) / BigInt(ETH_DIVISOR),
+      'one displayed ETH per card at chain scale (the /1M testnet build divides it)');
     el.disconnectedCallback();
   });
 
@@ -858,7 +892,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     amount.value = '0.01';
     up.dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '0.015', 'before any pick the step is the ETH minimum');
-    presets()[2].dispatchEvent({ type: 'click' });
+    presets()[1].dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '0.05');
     up.dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '0.1');
@@ -1152,7 +1186,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       claimableWinningsOf: async () => spendableClaimableWei + 1n,
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } },
       ),
@@ -1464,7 +1498,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     });
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 13n,
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } },
       ),
@@ -1550,7 +1584,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('the READY card is an optional early settle: resolveDegeneretteBets(index, [betId])', async () => {
+  test('the READY card is an optional early settle: one in-order openBoxes sweep', async () => {
     useDegeneretteFeed(readyFeedItem());
     let resolveArgs = null;
     degeneretteMod.__setContractFactoryForTest(() => ({
@@ -1560,7 +1594,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         ])),
         { staticCall: async () => undefined },
       ),
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async (...args) => {
           resolveArgs = args;
           return makeFakeTx(makeFakeReceipt([
@@ -1600,10 +1634,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await runPendingDegeneretteAction();
     await settle(80);
 
-    assert.ok(resolveArgs, 'resolveDegeneretteBets invoked');
-    assert.equal(resolveArgs[0], 7n, 'the RNG index names the queue');
-    assert.deepEqual(resolveArgs[1], [42n], 'betIds = [parsed BetPlaced.betId]');
-    assert.equal(resolveArgs.length, 2, 'no player argument: credits go to the bet owner');
+    // Audit 2525eb7fd: no per-bet door; the sweep's budget is GameAfkingModule OPEN_BATCH.
+    assert.deepEqual(resolveArgs, [80n], 'openBoxes(OPEN_BOXES_BATCH): credits go to every owner it reaches');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the resolved action leaves the tray once the full reveal is queued');
     const [sequence] = (await loadReveal()).__takeQueuedForTest();
@@ -1615,6 +1647,44 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(sequence?.spins?.[0]?.payout, 9n * ((10n ** 16n) / BigInt(ETH_DIVISOR)));
     assert.equal(sequence?.headline, 'BET #7-42');
 
+    el.disconnectedCallback();
+  });
+
+  test('a settle sweep that stops before the bet leaves it READY and says why', async () => {
+    // The in-order sweep can spend its budget on boxes and bets queued ahead of this one.
+    useDegeneretteFeed(readyFeedItem());
+    const sweeps = [];
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async (...args) => makeFakeTx(makeFakeReceipt([
+          { parsed: { name: 'DegeneretteBetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: placedWord(args) } } },
+        ])),
+        { staticCall: async () => undefined },
+      ),
+      openBoxes: Object.assign(
+        async (...args) => { sweeps.push(args); return makeFakeTx(makeFakeReceipt([])); },
+        { staticCall: async () => undefined },
+      ),
+      degeneretteBetInfo: async () => 0x1234n, // still queued after the sweep
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect(_s) { return this; },
+    }));
+    const el = instantiate();
+    await flushMicrotasks();
+    const amountInput = el.querySelector('[name="deg-amount"]');
+    if (amountInput) amountInput.value = '0.01';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(80);
+
+    await runPendingDegeneretteAction();
+    await settle(80);
+
+    assert.equal(sweeps.length, 1, 'one sweep was sent');
+    const ready = pendingActionsMod.getPendingActions().find((item) => item.kind === 'degenerette');
+    assert.equal(ready?.phase, 'result-ready', 'the bet is still READY for the next tap or crank');
+    assert.equal(el.querySelector('[data-bind="deg-error"]')?.textContent,
+      'Settled the work queued ahead of this bet. Tap again to reach it.');
+    assert.equal((await loadReveal()).__takeQueuedForTest().length, 0, 'nothing is revealed early');
     el.disconnectedCallback();
   });
 
@@ -1642,7 +1712,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       ),
       // The queued word stays put until someone's mineFlip() sweep reaches it.
       degeneretteBetInfo: async () => (settled ? 0n : packed),
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => { settleWrites += 1; return makeFakeTx(makeFakeReceipt()); },
         { staticCall: async () => undefined },
       ),
@@ -1798,7 +1868,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         }]));
       }, { staticCall: async () => undefined }),
       degeneretteBetInfo: async (_index, betId) => (settled.has(BigInt(betId)) ? 0n : words.get(BigInt(betId)) ?? 0n),
-      resolveDegeneretteBets: Object.assign(async () => makeFakeTx(makeFakeReceipt()),
+      openBoxes: Object.assign(async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } }),
       filters: {
         DegeneretteResolved: (player, index, betId) => ({ event: 'resolved', player, index, betId }),
@@ -1908,7 +1978,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         claimableReads += 1;
         return (10n ** 16n) / BigInt(ETH_DIVISOR) + 1n;
       },
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -1944,7 +2014,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
@@ -1985,7 +2055,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         async () => ({ hash: '0xpendingbet', wait: async () => wait }),
         { staticCall: async () => undefined },
       ),
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
@@ -2174,7 +2244,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       degeneretteBetInfo: async () => packed,
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -2236,7 +2306,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       degeneretteBetInfo: async (_index, betId) => (
         BigInt(betId) === oldBetId ? 0n : packed
       ),
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -2327,7 +2397,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'already-resolved chain events recover a result while the DB feed lags');
   });
 
-  test('referral is its own full-width wager-column bubble and copies the connected player default link', async () => {
+  test('referral keeps the clickable coin beside Copy Link and copies the connected player default link', async () => {
     affiliateMod.__setFetchJSONForTest(async () => ({ affiliate: { ownCode: null } }));
     const priorNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
     const copied = [];
@@ -2351,7 +2421,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         'FLIP is highlighted in red');
       assert.match(el.innerHTML,
         /deg-referral-card__forever[\s\S]*?FOREVER[\s\S]*?deg-referral-card__coin[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/,
-        'the two-sided flipping coin sits directly after FOREVER');
+        'the two-sided flipping coin follows the referral invitation');
       assert.match(el.innerHTML,
         /deg-referral-card__coin-static[\s\S]*?flame-logo-split\.svg[\s\S]*?coin-face--wwxrp[\s\S]*?coin-face--eth/,
         'the isolated FLIP fallback precedes distinct WWXRP and ETH faces');
@@ -2429,8 +2499,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS,
         /\.deg-referral-card__coin:focus-visible\s*\{[^}]*outline:\s*0;[^}]*drop-shadow/s,
         'keyboard focus uses an artwork glow rather than a control box');
-      assert.match(el.innerHTML, /class="deg-referral-card__logo" src="\/whitepaper\/flame-logo\.svg"/,
-        'one clean Degenerus mark anchors the referral action row');
+      assert.doesNotMatch(el.innerHTML, /class="deg-referral-card__logo"/,
+        'the static Degenerus logo is removed');
+      assert.match(el.innerHTML,
+        /class="deg-referral-card__actions">\s*<button[^>]*class="deg-referral-card__coin"[\s\S]*?<\/button>\s*<button[^>]*class="deg-referral-card__copy-btn"/,
+        'the clickable coin is immediately beside Copy Link');
       assert.doesNotMatch(el.innerHTML, /deg-referral-card__(?:graphic|link|flame)/,
         'the old chain-link ornament is gone');
       assert.doesNotMatch(el.innerHTML, /deg-referral-status/,
@@ -2571,7 +2644,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(el.innerHTML, /Pick one Hero symbol/);
       assert.match(el.innerHTML, /rolled icon that matches your Hero scores 2/);
       assert.match(el.innerHTML,
-        /When you bet ETH,[\s\S]*?selected Hero symbol[\s\S]*?main jackpot drawing[\s\S]*?color is still random/,
+        /ETH bets[\s\S]*?selected symbol[\s\S]*?Daily Drawing[\s\S]*?Colors still roll at random/,
         'the info sheet explains the selected Hero symbol\'s ETH-only main-jackpot influence');
       const info = el.querySelector('[data-bind="deg-basics-info"]');
       const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
@@ -2731,6 +2804,336 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.notEqual(document.body.style.overflow, 'hidden');
   });
 
+  describe('deity owner card', () => {
+    const OWNER = '0x00408f0acdf24dbdc296e89677fc20f55be6625b';
+    const AVATAR = 'https://cdn.discordapp.com/avatars/1/sleepy.png';
+    const profiles = (entries) => async (url) => {
+      if (String(url).includes('/api/profiles')) return { profiles: entries };
+      if (String(url).includes('/players/sim')) return { players: [] };
+      return { player: null, pending: {} };
+    };
+    const pick = (el, symbol) => el.querySelector(`[data-bind="dgn-symbol-choice-${symbol}"]`).dispatchEvent({ type: 'click' });
+    beforeEach(() => profilesMod.__resetSimRosterForTest());
+
+    test('shows the owner\'s Discord avatar and name for a minted ordinary deity, on ETH and FLIP', async () => {
+      installDeityOwners(new Map([[22, OWNER], [6, OWNER]]));
+      _fetchHandler = profiles([{ address: OWNER, discord_name: 'Sleepy Lamp', discord_avatar: AVATAR }]);
+      const el = instantiate();
+      const card = el.querySelector('[data-bind="dgn-deity-owner"]');
+      pick(el, 22);
+      assert.equal(card.hidden, true, 'hidden until the owner\'s profile resolves');
+      await settle(60);
+      assert.equal(card.hidden, false);
+      assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, 'Sleepy Lamp');
+      assert.equal(el.querySelector('[data-bind="dgn-deity-avatar"]').src, AVATAR);
+      assert.equal(card.getAttribute('aria-label'), 'Sleepy Lamp’s deity boons');
+      assert.equal(card.dataset.boonGiver, undefined, 'a Discord owner gives gifts, not a boon draw: no glow');
+      assert.match(el.querySelector('[data-bind="dgn-symbol-open"]').getAttribute('aria-label'), /^Your symbol: King, deity Sleepy Lamp\. Swipe/);
+      el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+      assert.equal(card.hidden, false, 'the deity owns the symbol whatever the currency');
+      pick(el, 21);
+      await settle(40);
+      assert.equal(card.hidden, true, 'an unminted symbol has no deity card');
+      assert.doesNotMatch(el.querySelector('[data-bind="dgn-symbol-open"]').getAttribute('aria-label'), /deity/);
+      pick(el, 6);
+      await settle(40);
+      assert.equal(card.hidden, false, 'a protocol hero shows its boon-draw deity, not the catalog owner');
+      assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, 'sDGNRS');
+      assert.equal(card.dataset.boonGiver, 'sdgnrs');
+      el.disconnectedCallback();
+    });
+
+    test('boon-draw deities come from SACRIFICE_DEITIES: a glowing card, their draw, any new entry', async () => {
+      const { SACRIFICE_DEITIES, boonGiverForSymbol } = await import('../../app/sacrifices.js');
+      for (const deity of SACRIFICE_DEITIES) {
+        assert.ok(deity.deityName && deity.deityLogo && /^\d+, \d+, \d+$/.test(deity.deityGlow), `${deity.key} carries its card fields`);
+      }
+      const extra = { key: 'guild', heroSymbol: 22, deityName: 'Guild', deityLogo: '/guild.svg', deityGlow: '1, 2, 3' };
+      assert.equal(boonGiverForSymbol(22, [...SACRIFICE_DEITIES, extra]), extra, 'a new entry is picked up by hero symbol');
+      assert.equal(boonGiverForSymbol(22), null);
+      assert.doesNotMatch(PANEL_SRC, /\[0, 6\]\.includes|icon === 6 \?|symbol === 0 \|\| symbol === 6/,
+        'no hardcoded protocol heroes: the panel asks the list');
+      assert.match(PANEL_SRC, /import \* as sacrifices from '\.\.\/app\/sacrifices\.js';/, 'namespace import: a stale cached module cannot break linking');
+      assert.match(PANEL_SRC, /#boonGiver\(\) \{\s*if \(typeof sacrifices\.boonGiverForSymbol === 'function'\) return sacrifices\.boonGiverForSymbol\(this\.#dgnSymbol\);/);
+      installDeityOwners();
+      const el = instantiate();
+      const card = el.querySelector('[data-bind="dgn-deity-owner"]');
+      const boons = el.querySelector('[data-bind="dgn-champion-boons"]');
+      for (const deity of SACRIFICE_DEITIES) {
+        pick(el, deity.heroSymbol);
+        assert.equal(card.hidden, false, `${deity.key}'s card shows at once, with no profile lookup`);
+        assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, deity.deityName);
+        assert.equal(el.querySelector('[data-bind="dgn-deity-avatar"]').src, deity.deityLogo);
+        assert.equal(card.dataset.boonGiver, deity.key);
+        assert.equal(boons.getAttribute('champion'), deity.key);
+        assert.equal(boons.hidden, false, 'its draw shows on ETH');
+      }
+      el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+      assert.equal(card.hidden, false, 'the card stays on FLIP');
+      assert.equal(boons.hidden, true, 'the draw is ETH-only');
+      pick(el, 21);
+      assert.equal(card.hidden, true, 'leaving the hero clears the giver card');
+      assert.equal(card.dataset.boonGiver, undefined);
+      el.disconnectedCallback();
+    });
+
+    test('an owner without a linked avatar, or with no profile, shows no card', async () => {
+      installDeityOwners(new Map([[22, OWNER]]));
+      _fetchHandler = profiles([{ address: OWNER, discord_name: 'Sleepy Lamp', discord_avatar: '' }]);
+      const el = instantiate();
+      pick(el, 22);
+      await settle(60);
+      assert.equal(el.querySelector('[data-bind="dgn-deity-owner"]').hidden, true, 'a name alone is not enough');
+      el.disconnectedCallback();
+      profilesMod.__resetSimRosterForTest();
+      _fetchHandler = profiles([]);
+      const el2 = instantiate();
+      pick(el2, 22);
+      await settle(60);
+      assert.equal(el2.querySelector('[data-bind="dgn-deity-owner"]').hidden, true, 'no profile, no card');
+      el2.disconnectedCallback();
+    });
+
+    test('a late profile for a symbol the player has swiped past is dropped', async () => {
+      installDeityOwners(new Map([[22, OWNER]]));
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      _fetchHandler = async (url) => {
+        if (String(url).includes('/api/profiles')) {
+          await gate;
+          return { profiles: [{ address: OWNER, discord_name: 'Sleepy Lamp', discord_avatar: AVATAR }] };
+        }
+        return String(url).includes('/players/sim') ? { players: [] } : { player: null, pending: {} };
+      };
+      const el = instantiate();
+      pick(el, 22);
+      await settle(60);
+      pick(el, 23);
+      release();
+      await settle(60);
+      assert.equal(el.getTicketDraft().symbol, 23);
+      assert.equal(el.querySelector('[data-bind="dgn-deity-owner"]').hidden, true);
+      assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, '');
+      el.disconnectedCallback();
+    });
+
+    test('deity gifts are a compact popover in the wing beside their trigger', () => {
+      const popover = APP_CSS.match(/\.deg-quickplay-controls > \.deg-boon-popover \{([^}]*)\}/)?.[1] || '';
+      assert.match(popover, /position: absolute;[^;]*;[^]*visibility: hidden/, 'hidden and outside the layout flow');
+      assert.match(popover, /left: 6px; right: auto;/, 'over the left wing, above the deity card');
+      assert.match(popover, /width: min\(calc\(50cqw - var\(--deg-champ\) \* 0\.42 - 12px\), 6\.6rem\)/, 'never wider than the wing: it never covers the champion');
+      assert.match(popover, /border: 0;/, 'no brass rim');
+      assert.match(APP_CSS, /\.deg-quickplay-controls:not\(:has\(\.deg-deity:not\(\[hidden\]\)\)\) > \.deg-boon-popover \{ left: auto; right: 6px; \}/, 'right wing when only the nameplate triggers it');
+      assert.match(APP_CSS, /\.deg-quickplay-controls > \.deg-boon-popover::after \{[^}]*transform: rotate\(45deg\)/, 'a caret points at the trigger');
+      assert.match(APP_CSS, /\.deg-boon-popover \.sacrifice__boon\[data-used="true"\] \.sacrifice__boon-mark::after \{[^}]*content: '\\2713'/, 'a spent gift keeps a check');
+      assert.match(APP_CSS, /\.deg-boon-popover\.is-open \{ visibility: visible; pointer-events: auto;/);
+      assert.match(PANEL_SRC, /id="deg-deity-boons" role="tooltip"/);
+    });
+
+    test('boon-draw deities glow, except on FLIP; their triggers focus with the lavender halo', () => {
+      assert.match(APP_CSS, /\.deg-deity\[data-boon-giver\] \.deg-deity__pfp \{[^}]*rgba\(var\(--deg-giver-rgb\), 0\.95\)/);
+      assert.match(APP_CSS, /\.deg-setup:has\(\.deg-block--wager\[data-currency="flip"\]\) \.deg-deity\[data-boon-giver\]:not\(:focus-visible\) \.deg-deity__pfp \{ box-shadow: 0 0 0 1px rgba\(0, 0, 0, 0\.7\), 0 2px 5px rgba\(0, 0, 0, 0\.6\); \}/,
+        'the draw is ETH-only, so FLIP drops the glow (focus still shows)');
+      assert.match(APP_CSS, /:is\(\.deg-deity, \.dgn-symbol-preview__name\):focus-visible \{ outline: none; \}/);
+      assert.match(APP_CSS, /\.deg-deity:focus-visible \.deg-deity__pfp \{ box-shadow: 0 0 0 1px rgba\(0, 0, 0, 0\.7\), 0 0 10px 4px rgba\(208, 176, 255, 0\.9\); \}/);
+      assert.match(APP_CSS, /\.dgn-symbol-preview__name:focus-visible \{[^}]*box-shadow: 0 0 12px 3px rgba\(208, 176, 255, 0\.75\)/);
+      assert.match(APP_CSS, /@media \(forced-colors: active\) \{[^{}]*:is\(\.deg-deity, \.dgn-symbol-preview__name\):focus-visible \{ outline: 2px solid CanvasText; \}/);
+      assert.doesNotMatch(APP_CSS, /:is\(\.deg-deity, \.dgn-symbol-preview__name\):focus-visible \{ outline: 2px solid var\(--deg-brass-hi\)/, 'no brass focus outline');
+    });
+  });
+
+  test('closing the picker restores a focus ring only after keyboard use', () => {
+    const el = instantiate();
+    const trigger = el.querySelector('[data-bind="dgn-symbol-open"]');
+    const dialog = el.querySelector('[data-bind="dgn-symbol-dialog"]');
+    const calls = [];
+    trigger.focus = (options) => { calls.push(options); document.activeElement = trigger; };
+    trigger.dispatchEvent({ type: 'click' });
+    dialog.dispatchEvent({ type: 'pointerdown' });
+    el.querySelector('[data-bind="dgn-symbol-choice-3"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(calls.at(-1), { preventScroll: true, focusVisible: false }, 'a mouse or touch pick shows no ring');
+    trigger.dispatchEvent({ type: 'click' });
+    dialog.dispatchEvent({ type: 'keydown', key: 'Escape' });
+    el.querySelector('[data-bind="dgn-symbol-close"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(calls.at(-1), { preventScroll: true, focusVisible: true }, 'a keyboard close keeps the ring');
+    trigger.dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="dgn-symbol-close"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(calls.at(-1), { preventScroll: true, focusVisible: true }, 'a fresh open forgets the last pointer');
+    assert.match(APP_CSS, /\.dgn-symbol-preview:focus-visible \.dgn-symbol-preview__art\[data-badge="full"\]::before \{ box-shadow: 0 6px 14px rgba\(0, 0, 0, 0\.7\), 0 0 20px 9px rgba\(208, 176, 255, 0\.95\); \}/,
+      'keyboard focus is a soft lavender halo, not a cream ring');
+    assert.doesNotMatch(APP_CSS, /\.dgn-symbol-preview:focus-visible \+ \.dgn-symbol-preview__title \{ outline: 2px solid var\(--deg-brass-hi\)/);
+    assert.match(APP_CSS, /@media \(forced-colors: active\) \{[^{}]*\.dgn-symbol-preview:focus-visible \+ \.dgn-symbol-preview__title \{ outline: 2px solid CanvasText; \}/);
+    el.disconnectedCallback();
+  });
+
+  describe('champion carousel', () => {
+    const pick = (el, symbol) => {
+      el.querySelector('[data-bind="dgn-symbol-open"]').dispatchEvent({ type: 'click' });
+      el.querySelector(`[data-bind="dgn-symbol-choice-${symbol}"]`).dispatchEvent({ type: 'click' });
+    };
+    const drag = (el, dx, dy = 0) => {
+      const stage = el.querySelector('[data-bind="dgn-symbol-stage"]');
+      const at = (type, x, y) => stage.dispatchEvent({ type, pointerId: 1, pointerType: 'mouse', button: 0, clientX: x, clientY: y });
+      at('pointerdown', 200, 50);
+      at('pointermove', 200 + dx / 2, 50 + dy / 2);
+      at('pointermove', 200 + dx, 50 + dy);
+      at('pointerup', 200 + dx, 50 + dy);
+    };
+
+    test('step math: one step per neighbour spacing, at least one past 24px, at most three', async () => {
+      const { degeneretteCarouselSteps: steps, degeneretteWrapSymbol: wrap } = await import('../app-degenerette-panel.js');
+      assert.equal(steps(-23, 60), 0, 'under the threshold nothing moves');
+      assert.equal(steps(-24, 60), 1, 'past the threshold a short flick still steps once');
+      assert.equal(steps(-70, 60), 1);
+      assert.equal(steps(-100, 60), 2);
+      assert.equal(steps(-1000, 60), 3, 'one flick steps at most three');
+      assert.equal(steps(40, 60), -1, 'dragging right brings the left-hand neighbours in');
+      assert.equal(steps(-100, 0), 2, 'an unmeasured spacing falls back to 60px');
+      assert.equal(wrap(32), 0);
+      assert.equal(wrap(-1), 31);
+      assert.equal(wrap(31 + 3), 2);
+      assert.equal(wrap(-3), 29);
+    });
+
+    test('neighbours wear the picker art of the symbols either side, wrapping 31 to 0', () => {
+      const el = instantiate();
+      pick(el, 31);
+      const src = (bind) => el.querySelector(`[data-bind="dgn-symbol-neighbour-${bind}"]`).src;
+      assert.equal(src('next-1'), degeneretteChampionBadgePath(0, 0));
+      assert.equal(src('next-3'), degeneretteChampionBadgePath(0, 2));
+      assert.equal(src('prev-1'), degeneretteChampionBadgePath(3, 6));
+      assert.equal(src('prev-3'), degeneretteChampionBadgePath(3, 4));
+      assert.equal(PANEL_SRC.includes('data-preview-ticket'), false, 'the example ticket is gone');
+      el.disconnectedCallback();
+    });
+
+    test('a drag steps the symbol and swallows the click that follows it', () => {
+      const el = instantiate();
+      pick(el, 6);
+      const dialog = el.querySelector('[data-bind="dgn-symbol-dialog"]');
+      const trigger = el.querySelector('[data-bind="dgn-symbol-open"]');
+      drag(el, -70);
+      assert.equal(el.getTicketDraft().symbol, 7, 'dragging left one spacing steps forward once');
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-carousel"]').style.transform || '', '', 'the reel container stays fixed');
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Bitcoin', 'the live name announces it');
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-7"]').getAttribute('aria-pressed'), 'true',
+        'the drag lands on the same state the picker shows');
+      assert.equal(el.querySelector('[data-bind="dgn-champion-boons"]').hidden, true,
+        'the boon rail follows the new champion');
+      trigger.dispatchEvent({ type: 'click' });
+      assert.equal(dialog.open, false, 'the release click does not open the picker');
+      trigger.dispatchEvent({ type: 'click' });
+      assert.equal(dialog.open, true, 'the next tap does');
+      el.querySelector('[data-bind="dgn-symbol-close"]').dispatchEvent({ type: 'click' });
+      drag(el, 1000);
+      assert.equal(el.getTicketDraft().symbol, 4, 'one flick is capped at three steps');
+      drag(el, 30);
+      assert.equal(el.getTicketDraft().symbol, 3, 'just past the threshold still steps once');
+      drag(el, 20);
+      assert.equal(el.getTicketDraft().symbol, 3, 'a drag under the threshold snaps back');
+      trigger.dispatchEvent({ type: 'click' });
+      assert.equal(dialog.open, false, 'even a short drag keeps its click');
+      el.disconnectedCallback();
+    });
+
+    test('a mostly vertical move is page scroll, not a drag', () => {
+      const el = instantiate();
+      pick(el, 6);
+      drag(el, 6, 60);
+      assert.equal(el.getTicketDraft().symbol, 6);
+      el.querySelector('[data-bind="dgn-symbol-open"]').dispatchEvent({ type: 'click' });
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, true, 'a tap after a scroll still opens the picker');
+      assert.match(APP_CSS, /\.deg-quickplay-stage \{[^}]*touch-action: pan-y/, 'the browser keeps vertical panning');
+      el.disconnectedCallback();
+    });
+
+    test('tapping a neighbour selects it without opening the picker', () => {
+      const el = instantiate();
+      pick(el, 0);
+      el.querySelector('[data-bind="dgn-symbol-neighbour-next-2"]').dispatchEvent({ type: 'click' });
+      assert.equal(el.getTicketDraft().symbol, 2);
+      el.querySelector('[data-bind="dgn-symbol-neighbour-prev-3"]').dispatchEvent({ type: 'click' });
+      assert.equal(el.getTicketDraft().symbol, 31, 'stepping back from 2 by three wraps to 31');
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, false);
+      el.disconnectedCallback();
+    });
+
+    test('ArrowLeft and ArrowRight on the champion step the symbol', () => {
+      const el = instantiate();
+      pick(el, 0);
+      const trigger = el.querySelector('[data-bind="dgn-symbol-open"]');
+      let prevented = 0;
+      const key = (k) => trigger.dispatchEvent({ type: 'keydown', key: k, preventDefault() { prevented += 1; } });
+      key('ArrowLeft');
+      assert.equal(el.getTicketDraft().symbol, 31);
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 8');
+      key('ArrowRight');
+      key('ArrowRight');
+      assert.equal(el.getTicketDraft().symbol, 1);
+      assert.equal(prevented, 3);
+      key('Enter');
+      key('ArrowUp');
+      assert.equal(el.getTicketDraft().symbol, 1, 'other keys keep their usual meaning');
+      assert.equal(prevented, 3);
+      el.disconnectedCallback();
+    });
+
+    test('a wheel over the champion steps the symbol: one notch one step, bursts rate-limited', async () => {
+      const el = instantiate();
+      pick(el, 6);
+      const stage = el.querySelector('[data-bind="dgn-symbol-stage"]');
+      let prevented = 0;
+      const wheel = (deltaX, deltaY, deltaMode = 0) => stage.dispatchEvent({ type: 'wheel', deltaX, deltaY, deltaMode, preventDefault() { prevented += 1; } });
+      const pause = () => new Promise((done) => setTimeout(done, 130));
+      wheel(0, 100);
+      assert.equal(el.getTicketDraft().symbol, 7, 'a vertical wheel over the stage steps the symbol');
+      assert.equal(prevented, 1, 'and the page does not scroll under it');
+      await pause();
+      wheel(0, 100);
+      assert.equal(el.getTicketDraft().symbol, 8, 'one notch is one step');
+      await pause();
+      wheel(0, -3, 1);
+      assert.equal(el.getTicketDraft().symbol, 8, 'three lines (48px) are short of a notch');
+      wheel(0, -1, 1);
+      assert.equal(el.getTicketDraft().symbol, 7, 'line-mode deltas are pixels x16; negative steps back');
+      await pause();
+      wheel(0, 30);
+      wheel(0, 20);
+      assert.equal(el.getTicketDraft().symbol, 7, 'small deltas accumulate toward a notch');
+      wheel(0, 20);
+      assert.equal(el.getTicketDraft().symbol, 8);
+      await pause();
+      for (let i = 0; i < 10; i++) wheel(0, 120);
+      assert.equal(el.getTicketDraft().symbol, 9, 'a rapid burst steps at most once per ~110ms');
+      await pause();
+      wheel(-80, 10);
+      assert.equal(el.getTicketDraft().symbol, 8, 'a dominant horizontal delta steps too');
+      el.disconnectedCallback();
+    });
+
+    test('a wheel over the wager desk scrolls the page and leaves the symbol alone', () => {
+      const el = instantiate();
+      pick(el, 6);
+      let prevented = 0;
+      const desk = el.querySelector('.deg-block--wager');
+      assert.ok(desk, 'the wager desk renders');
+      desk.dispatchEvent({ type: 'wheel', deltaX: 0, deltaY: 120, deltaMode: 0, preventDefault() { prevented += 1; } });
+      assert.equal(el.getTicketDraft().symbol, 6);
+      assert.equal(prevented, 0, 'only the champion stage takes the wheel');
+      assert.match(el.querySelector('[data-bind="dgn-symbol-open"]').getAttribute('aria-label'),
+        /Swipe, scroll, or use the arrow keys to change it; activate to open the full list\./);
+      el.disconnectedCallback();
+    });
+
+    test('every way of choosing a symbol goes through one selection path', () => {
+      assert.equal(PANEL_SRC.match(/this\.#dgnSymbol = degeneretteWrapSymbol\(/g)?.length, 1);
+      assert.match(PANEL_SRC, /btn\.addEventListener\('click', \(\) => \{\s*this\.#selectSymbol\(symbol\);\s*this\.#closeSymbolDialog\(\);/,
+        'the picker uses the same path as the carousel');
+      assert.match(PANEL_SRC, /this\.#selectSymbol\(target, true\);/, 'animated selection uses the same draft setter');
+      assert.match(PANEL_SRC, /prefers-reduced-motion: reduce\)'\)\?\.matches/, 'reduced motion changes without the slide');
+    });
+  });
+
   test('Lightweight mode keeps the editable Hero without scanning inventory for a default', async () => {
     writeLightweightModePreference(true);
     const seen = [];
@@ -2800,8 +3203,25 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const boons = el.querySelector('[data-bind="dgn-champion-boons"]');
     assert.equal(boons.hidden, false);
     assert.equal(boons.getAttribute('champion'), initial === 6 ? 'sdgnrs' : 'vault');
+    const luck = el.querySelector('[data-bind="deg-symbol-boost"]');
+    const logo = el.querySelector('[data-bind="deg-logo-lockup"]');
+    assert.equal(luck.hidden, false);
+    assert.match(PANEL_SRC, /data-bind="deg-symbol-boost">Pick a lucky symbol\. Make it luckier\.<\/span>/,
+      'the accessible copy reads both lines of the sign');
+    assert.equal(logo.getAttribute('data-benefits'), null, 'one sign serves every state: nothing is cropped');
+    assert.equal(el.querySelector('[data-bind="deg-deity-favor"]'), null, 'the deity favor line is retired');
+    for (const symbol of [0, 6]) {
+      el.querySelector(`[data-bind="dgn-symbol-choice-${symbol}"]`).dispatchEvent({ type: 'click' });
+      assert.equal(boons.hidden, false, 'both boon-bearing champions show their boon draw with ETH');
+      el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+      assert.equal(boons.hidden, true, 'FLIP wagers never enter a boon draw, so the rail hides');
+      assert.equal(luck.hidden, false, 'the invitation to pick a symbol applies to both currencies');
+      el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
+      assert.equal(boons.hidden, false, 'switching back to ETH restores the boon rail');
+    }
     el.querySelector('[data-bind="dgn-symbol-choice-7"]').dispatchEvent({ type: 'click' });
     assert.equal(boons.hidden, true, 'other champions do not show protocol boon draws');
+    assert.equal(luck.hidden, false, 'ordinary symbols keep the invitation to pick');
     el.disconnectedCallback();
   });
 
@@ -2843,6 +3263,51 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       degeneretteChampionBadgePath(2, 6));
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').getAttribute('aria-pressed'), 'true');
     el.disconnectedCallback();
+  });
+
+  test('any owned deity shows its gifts and NFT colors after a walletless lightweight picker edit', async () => {
+    storeMod.update('connected.address', null);
+    storeMod.update('viewing.address', null);
+    localStorage.setItem('degenerus:lightweight-mode:v1', '1');
+    const image = 'data:image/svg+xml,%3Csvg%20viewBox%3D%22-51%20-51%20102%20102%22%3E%3Ccircle%20r%3D%2246%22%20fill%3D%22%23fa12ab%22%2F%3E%3C%2Fsvg%3E';
+    installDeityOwners(new Map([[22, CONNECTED]]), async () => `data:application/json,${encodeURIComponent(JSON.stringify({ image }))}`);
+    const el = instantiate();
+    el.querySelector('[data-bind="dgn-symbol-choice-22"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(el.getTicketDraft().symbol, 22, 'late ownership/appearance never replaces an edited pick');
+    const boons = el.querySelector('[data-bind="dgn-champion-boons"]');
+    assert.equal(boons.hidden, false);
+    assert.equal(boons.getAttribute('deity-owner'), CONNECTED);
+    assert.match(boons.title, /owner chooses/);
+    const selected = el.querySelector('[data-bind="dgn-selected-symbol"]');
+    assert.equal(selected.src, image);
+    assert.equal(selected.classList.contains('dgn-deity-art'), true);
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').querySelector('img').src, image);
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.equal(boons.hidden, true, 'a minted deity\'s rail hides while FLIP is selected');
+    el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
+    assert.equal(boons.hidden, false, 'the minted deity\'s rail returns with ETH');
+    el.querySelector('[data-bind="dgn-symbol-choice-21"]').dispatchEvent({ type: 'click' });
+    assert.equal(boons.hidden, true);
+    assert.equal(boons.getAttribute('deity-owner'), null);
+    assert.equal(selected.classList.contains('dgn-deity-art'), false);
+    assert.equal(selected.src, degeneretteChampionBadgePath(2, 5));
+    el.disconnectedCallback();
+  });
+
+  test('NFT metadata completing after disconnect cannot mutate the champion', async () => {
+    let finish;
+    installDeityOwners(new Map([[22, CONNECTED]]), () => new Promise(resolve => { finish = resolve; }));
+    const el = instantiate();
+    el.querySelector('[data-bind="dgn-symbol-choice-22"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(typeof finish, 'function');
+    const img = el.querySelector('[data-bind="dgn-selected-symbol"]');
+    const before = img.src;
+    el.disconnectedCallback();
+    finish(`data:application/json,${encodeURIComponent(JSON.stringify({ image: 'data:image/svg+xml,%3Csvg%2F%3E' }))}`);
+    await settle(40);
+    assert.equal(img.src, before);
   });
 
   test('picker drives the single symbol (quadrant<<3|icon) passed to placeDegeneretteBet', async () => {
@@ -2920,7 +3385,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
             name: 'DegeneretteResolved',
             args: {
               player: CONNECTED,
-              index: BigInt(args[0]),
+              index: 7n,
               betId: 42n,
               totalPayout: 5n * 10n ** 16n,
               resultTraits: BigInt(houses[0]),
@@ -2984,7 +3449,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         calls.info.push(args);
         return 0n;
       },
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => {
           calls.resolve += 1;
           return makeFakeTx(makeFakeReceipt());
@@ -3143,7 +3608,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         infoReads += 1;
         return infoReads === 1 ? packed : 0n;
       },
-      resolveDegeneretteBets: Object.assign(
+      openBoxes: Object.assign(
         async () => {
           resolveWrites += 1;
           return makeFakeTx(makeFakeReceipt());

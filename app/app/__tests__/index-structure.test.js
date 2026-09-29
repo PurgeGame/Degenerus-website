@@ -8,8 +8,8 @@
 //   - body carries layout-basic (PIT later adds layout-pro without rework)
 //   - NO page-header/search block — the nav bar carries logo + Discord + wallet;
 //     content starts at chain chip → jackpot hero (purchase +
-//     draw + coinflip, ONE widget) → quests/degenerette/craps grid → tickets
-//     inventory → AFKING Passes → Side Bets rail → footer
+//     draw + coinflip, ONE widget) → quests/degenerette/craps grid → compact utility grid →
+//     bounties → tickets → supporting popups → footer
 //   - aggregate claims and winnings strips are unmounted
 //   - lootboxes + passes live inside the collapsed <details class="more-ways">
 //   - boons and the legacy coinflip panel remain absent; Referrals is mounted
@@ -58,13 +58,16 @@ describe('index.html basic-mode skeleton', () => {
       '<app-daily-flip>',
       'class="play-grid"',
       '<app-quest-panel>',
-      '<app-degenerette-panel>',
-      '<app-tickets-inventory>',
-      'class="more-ways section-disclosure"',
-      '<app-pass-section>',
       'class="side-bets-rail"',
       '<app-parimutuel-panel>',
+      'data-referral-strip',
+      '<app-degenerette-panel>',
+      'class="player-extras"',
+      '<app-records-rail>',
+      '<app-tickets-inventory>',
       '<app-sdgnrs-burn-rail>',
+      'class="more-ways section-disclosure"',
+      '<app-pass-section>',
       '<footer>',
     ];
     let prev = -1;
@@ -143,7 +146,7 @@ describe('index.html basic-mode skeleton', () => {
 
 
 
-  test('more-ways is the AFKING PASSES drawer (packs panel gone — combined buy owns lootboxes)', () => {
+  test('AFKING keeps a visible purchase bar and its detailed shop in a popup', () => {
     const detailsMatch = html.match(/<details class="more-ways section-disclosure"[^>]*>([\s\S]*?)<\/details>/);
     assert.ok(detailsMatch, '<details class="more-ways"> block present');
     assert.doesNotMatch(detailsMatch[0], /^<details class="more-ways section-disclosure"[^>]*\bopen\b[^>]*>/,
@@ -151,46 +154,55 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(detailsMatch[0], /\bid="afking-passes"/,
       'the purchase shortcut has a stable drawer target');
     assert.match(detailsMatch[1], /<summary class="more-ways__summary section-disclosure__bar">[\s\S]*section-disclosure__title">AFKING PASSES<[\s\S]*section-disclosure__chevron/);
+    const bar = html.match(/<section class="pass-quickbar"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(bar, 'the purchase bar remains visible outside the popup');
     for (const bind of [
       'pass-summary-subscription',
       'pass-summary-funding',
       'pass-summary-buy-lazy-price',
       'pass-summary-buy-whale-price',
       'pass-summary-buy-deity-price',
-    ]) assert.match(detailsMatch[1], new RegExp(`data-bind="${bind}"`));
+    ]) assert.match(bar, new RegExp(`data-bind="${bind}"`));
     assert.doesNotMatch(detailsMatch[1], /pass-summary-(?:deity|active-pass)/,
       'the closed shop bar does not duplicate owned-pass state');
     for (const product of ['lazy', 'whale', 'deity']) {
-      assert.match(detailsMatch[1], new RegExp(`data-pass-quickbuy="${product}"`));
+      assert.match(bar, new RegExp(`data-pass-quickbuy="${product}"`));
     }
+    assert.match(bar, /data-pass-quantity="-1"/);
+    assert.match(bar, /data-pass-quantity="1"/);
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
   });
 
-  test('Side Bets follows AFKING PASSES, with boon draws inside the champion selector', () => {
-    const passesEnd = html.indexOf('</details>', html.indexOf('id="afking-passes"'));
-    assert.equal(html.indexOf('<app-sacrifice-panel>'), -1, 'no duplicate standalone boon rail');
-    const sideBets = html.indexOf('<section class="side-bets-rail"', passesEnd);
-    const pari = html.indexOf('<app-parimutuel-panel>', sideBets);
-    const sideBetsEnd = html.indexOf('</section>', pari);
-    const rail = html.indexOf('<app-sdgnrs-burn-rail>', sideBetsEnd);
-    const history = html.indexOf('<app-transaction-history>', rail);
-    assert.ok(passesEnd >= 0 && sideBets > passesEnd && pari > sideBets
-      && sideBetsEnd > pari && rail > sideBetsEnd && history > rail,
-      'Side Bets follows the pass drawer');
-    assert.equal(html.slice(passesEnd, sideBets).match(/<app-[a-z-]+>/g), null,
-      'the boon rail has moved into Degenerette');
-    assert.doesNotMatch(html.slice(sideBetsEnd, rail), /<app-[a-z-]+>/,
-      'the DGNRS rail immediately follows Side Bets');
-    assert.match(appCss,
-      /\.side-bets-rail \.app-parimutuel\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'WWXRP and the Growth/LINK lane split the review-width rail evenly');
-    assert.match(appCss, /@media \(max-width: 580px\)[\s\S]*?\.side-bets-rail \.app-parimutuel/s,
-      'the rail stacks only on genuinely narrow phones');
-    assert.doesNotMatch(html.slice(sideBets, sideBetsEnd), /SIDE BETS/,
-      'the compact rail has no redundant Side Bets label');
+  test('Growth betting and referrals share the quests column', () => {
+    const start = html.indexOf('<div class="quest-hub"');
+    const tools = html.slice(start, html.indexOf('<app-craps-entry>'));
+    assert.match(tools, /<app-quest-panel>/);
+    assert.match(tools, /data-referral-strip/);
+    assert.equal((html.match(/data-referral-strip/g) || []).length, 1);
+    for (const tag of ['app-parimutuel-panel']) {
+      assert.match(tools, new RegExp(`<${tag}[ >]`));
+      assert.equal((html.match(new RegExp(`<${tag}[ >]`, 'g')) || []).length, 1);
+    }
+    assert.equal(html.indexOf('<app-sacrifice-panel>'), -1, 'boon draws stay inside the champion selector');
     assert.match(html, /data-href="\/app\/styles\/sdgnrs-burn-rail\.css"/);
+    for (const name of ['app-parimutuel-panel']) {
+      assert.ok(html.includes(`['.quest-hub', '/app/components/${name}.js']`),
+        'lazy loading observes the visible grid instead of a collapsed host');
+    }
+  });
+
+  test('LINK, WWXRP, and DGNRS have one lazy-loaded home below ticket inventory', () => {
+    const bottom = html.indexOf('<section class="bottom-tools"');
+    assert.ok(bottom > html.indexOf('<app-tickets-inventory>'));
+    assert.ok(bottom < html.indexOf('<footer>'));
+    const dock = html.slice(bottom, html.indexOf('</section>', bottom));
+    for (const name of ['app-link-donation', 'app-wwxrp-burn', 'app-sdgnrs-burn-rail']) {
+      assert.match(dock, new RegExp(`<${name}[ >]`));
+      assert.equal((html.match(new RegExp(`<${name}[ >]`, 'g')) || []).length, 1);
+      assert.ok(html.includes(`['.bottom-tools', '/app/components/${name}.js']`));
+    }
   });
 
   test('Tickets, AFKING PASSES, Transaction History, and Referrals share one disclosure-bar treatment', () => {
@@ -210,20 +222,30 @@ describe('index.html basic-mode skeleton', () => {
     }
   });
 
-  test('account tools share popup launchers, with sharing inside Referrals', () => {
+  test('account tools use popups while the referral invitation stays visible', () => {
+    const tools = html.indexOf('id="account-tools"');
+    assert.ok(tools > html.indexOf('id="nav-slot"') && tools < html.indexOf('<main>'),
+      'account tool markup belongs to the top bar');
+    assert.match(html, /navAuth\.before\(accountTools\)/, 'navigation adopts the existing buttons');
+    assert.doesNotMatch(html.slice(html.indexOf('class="secondary-tools"'), html.indexOf('<app-sdgnrs-burn-rail>')),
+      /data-panel-open="(?:history|referrals)"/, 'the lower pods no longer contain account buttons');
     const history = html.indexOf('<app-transaction-history>');
     const referrals = html.indexOf('<app-affiliate-panel>');
     const mainClose = html.indexOf('</main>');
     assert.ok(history >= 0, 'Transaction History is mounted');
     assert.ok(referrals > history, 'Referrals follows Transaction History');
     assert.ok(referrals < mainClose, 'Referrals remains inside main');
-    for (const name of ['tickets', 'passes', 'bounties', 'history', 'referrals']) {
+    for (const name of ['passes', 'history', 'referrals']) {
       assert.match(html, new RegExp(`data-panel-open="${name}"[^>]*aria-haspopup="dialog"[^>]*aria-controls="panel-${name}"`));
       assert.match(html, new RegExp(`id="panel-${name}"[^>]*data-panel-popup="${name}"[^>]*hidden[^>]*role="dialog"[^>]*aria-modal="true"`));
     }
+    assert.doesNotMatch(html, /data-panel-popup="(?:tickets|bounties)"/);
+    assert.match(html, /<app-records-rail><\/app-records-rail>/);
+    assert.match(html, /<app-tickets-inventory><\/app-tickets-inventory>/);
     const referralPopup = html.slice(html.indexOf('id="panel-referrals"'), mainClose);
-    assert.match(referralPopup, /data-referral-strip/,
-      'share-link tools and referral network live in the same popup');
+    assert.doesNotMatch(referralPopup, /data-referral-strip/,
+      'the sharing invitation is outside the closed popup');
+    assert.match(html, /class="referral-strip referral-strip--compact" data-referral-strip/);
     assert.match(html, /import \{ mountPanelPopups \} from "\/app\/app\/panel-popups\.js"/);
   });
 
@@ -236,13 +258,21 @@ describe('index.html basic-mode skeleton', () => {
     const craps = row.indexOf('<app-craps-entry>');
     assert.ok(quest >= 0 && quest < craps && craps < degenerette,
       'quests, Craps, and Degenerette are mounted in desktop track order');
-    assert.equal(row.indexOf('<app-parimutuel-panel>'), -1,
-      'Side Bets does not consume the Craps column');
+    assert.ok(row.indexOf('<app-parimutuel-panel>') > quest && row.indexOf('<app-parimutuel-panel>') < craps,
+      'Growth is inside the quest column before Craps');
     assert.match(appCss,
       /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests craps degenerette"/s,
       'the wide centre track belongs to Craps, the right track to Degenerette');
-    assert.match(html, /<\/section>\s*<nav class="panel-tools"/,
-      'a compact tools row sits directly under the play grid');
+    const extras = html.indexOf('<div class="player-extras">');
+    const bounties = html.indexOf('<app-records-rail>');
+    assert.ok(extras > html.indexOf('<section class="play-grid"') && extras < bounties,
+      'the pass row sits below the games and above Bounties');
+    assert.ok(html.indexOf('id="pass-quickbar"') > extras && html.indexOf('id="pass-quickbar"') < bounties);
+    assert.doesNotMatch(html.slice(extras, bounties), /data-referral-strip|app-parimutuel-panel/);
+    const incinerator = html.indexOf('<app-wwxrp-burn hidden>');
+    assert.ok(incinerator > html.indexOf('<app-tickets-inventory>'),
+      'the independent Incinerator belongs below inventory');
+    assert.equal((html.match(/<app-wwxrp-burn\b/g) || []).length, 1);
   });
 
   test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {
@@ -337,6 +367,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-quest-panel.js',
       '/app/components/app-degenerette-panel.js',
       '/app/components/app-parimutuel-panel.js',
+      '/app/components/app-wwxrp-burn.js',
       '/app/components/app-records-rail.js',
       '/app/components/app-deity-desk.js',
       '/app/components/app-decimator-burn.js',
@@ -375,7 +406,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-0889affc-49000956-scoped-v8';
+    const revision = '?v=craps-e579cd31-91c7eb96-scoped-v9';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',

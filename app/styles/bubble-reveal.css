@@ -252,22 +252,19 @@
   z-index: 5;
   color: #f0c15f;
   pointer-events: none;
-  width: 25px;
-  height: 19px;
+  width: 88%;
+  height: 88%;
   position: absolute;
-  top: 7px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%) translateY(-1%) scale(1.025);
 }
 
-.bubble-reveal__hero svg {
-  fill: currentColor;
-  stroke: #75541e;
-  stroke-width: 1px;
-  stroke-linejoin: round;
+.bubble-reveal__hero img {
   width: 100%;
   height: 100%;
   display: block;
+  object-fit: contain;
 }
 
 .bubble-reveal.is-popping .bubble-reveal__film {

@@ -81,9 +81,13 @@ test('contract ABI integration: new pending tickets are counted in entries, not 
 });
 
 test('contract ABI integration: Decimator winners divide by the entire winning field and split odd wei correctly',async()=>{
+  // Audit 3c79c1486: the pointer names the entry; the entry holds owner + weight in thousandths of a FLIP.
+  const {decimatorEntryKey}=await import('../../chain/games.js');
   const f=await rpcFixture();
-  for(const [member,value] of Object.entries({burn:10,bucket:2,subBucket:1,claimed:0}))await f.field('GAME','decBurn',value,10,PLAYER,member);
-  for(const [member,value] of Object.entries({poolWei:303,totalBurn:30}))await f.field('GAME','decClaimRounds',value,10,member);
+  for(const [member,value] of Object.entries({lvl:10,bucket:2,subBucket:1,position:0}))await f.field('GAME','decPointer',value,PLAYER,member);
+  const key=decimatorEntryKey(10,2,1,0);
+  await f.field('GAME','decEntry',BigInt(PLAYER),key,'owner');await f.field('GAME','decEntry',10,key,'weightMilli');
+  for(const [member,value] of Object.entries({poolWei:303,totalBurn:30n*10n**15n}))await f.field('GAME','decClaimRounds',value,10,member);
   await f.field('GAME','decBucketOffsetPacked',1,10);
   const row=await readChainRoute(`/player/${PLAYER}/decimator?level=10`,{client:f.client});assert.equal(row.ethAmount,'50');assert.equal(row.lootboxAmount,'51');
 });
@@ -101,9 +105,13 @@ test('contract ABI integration: all late settlements in a transaction stay under
   const replay=await readChainRoute('/replay/day/120',{client:f.client});assert.equal(replay.rng.finalWord,'333');assert.equal(replay.distributions.length,1);
 });
 
-test('contract ABI integration: coin-draw craps winners and the fill-draw battle map onto jackpot awards',async()=>{
+test('contract ABI integration: coin-draw craps winners and the fill-draw battle map onto jackpot awards',async t=>{
   // Audit 5790a946: a coin draw's craps half logs CoinDrawCrapsWin (no trait, no amount), and the
   // purchase-day fill draw is played by COIN_DRAW_BATTLE, which logs its own run/pot events.
+  // Both exist only in the frozen run-56 schema (audit 224de529): from 0889affc1 the jackpot battle
+  // plays at the craps table and CoinDrawCrapsWin is gone, so this pins run 56's still-live reader.
+  const {useSchema,RUN56_SCHEMA_HASH}=await import('../../chain/schema.js');
+  const previous=useSchema(RUN56_SCHEMA_HASH); t.after(()=>useSchema(previous));
   const f=await rpcFixture();const block=9999;const OTHER='0x'+'22'.repeat(20);const THIRD='0x'+'33'.repeat(20);
   await f.event('GAME','DailyRngApplied',{day:120,finalWord:333},{block,index:0});
   await f.event('GAME','DailyWinningTraits',{day:120,mainTraitsPacked:123,bonusTraitsPacked:456},{block,index:1});
@@ -153,4 +161,13 @@ test('closed BAF standings preserve contract tie order and exclude the vault',as
   await f.event('JACKPOTS','BafFlipRecorded',{lvl:10,player:f.contracts.VAULT,newTotal:100n*10n**18n});
   const data=await readChainRoute('/leaderboards/baf?level=10',{client:f.client});
   assert.deepEqual(data.entries.map(e=>e.player),[OTHER_PLAYER,PLAYER]);assert.equal(data.entries[1].score,String(10n**18n));
+});
+
+test('contract ABI integration: a Bingo proof for a level the game has left is refused as expired',async()=>{
+  // Audit 628b3eed7: claimBingo reverts BingoExpired once `lvl < level` (DegenerusGameBingoModule.sol:146).
+  const {bingoProof}=await import('../../chain/positions.js');
+  const f=await rpcFixture(); await f.field('GAME','level',6);
+  await assert.rejects(bingoProof(PLAYER,5,3,{client:f.client}),error=>error.code==='BingoExpired');
+  await assert.rejects(bingoProof(PLAYER,6,3,{client:f.client}),error=>error.code!=='BingoExpired',
+    'the current level is still open (its proof fails later, for want of entries)');
 });

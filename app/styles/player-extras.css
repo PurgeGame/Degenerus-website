@@ -1,0 +1,499 @@
+/* A compact control section, with the referral ad as its visual accent. */
+body.layout-basic .player-extras {
+  --extras-border: #b39ac137;
+  --utility-height: 5rem;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin: .75rem 0;
+  padding: 0;
+}
+
+body.layout-basic .player-extras .pass-quickbar,
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--utility-height);
+  height: var(--utility-height);
+  margin: 0;
+  padding: .35rem .6rem;
+  border: 1px solid var(--extras-border, #b39ac137);
+  border-radius: 8px;
+  background: linear-gradient(115deg, #251e2e, #17151f 75%);
+  box-shadow: inset 0 1px #f9e9ff08, 0 4px 14px #00000012;
+}
+
+body.layout-basic .player-extras .pass-quickbar {
+  display: flex;
+  flex: 0 1 auto;
+  width: max-content;
+  height: 3rem;
+  min-height: 3rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .6rem;
+  border-color: #b39ac137;
+  background: #1c1924;
+  box-shadow: none;
+}
+
+body.layout-basic .player-extras .pass-quickbar__heading,
+body.layout-basic .deg-referral-card__heading {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .15rem;
+  min-width: 0;
+}
+
+body.layout-basic .player-extras .pass-quickbar h2,
+body.layout-basic .deg-referral-card__heading h2 {
+  margin: 0;
+  color: #ded2e8;
+  font: 800 .61rem/1.3 Inter, sans-serif;
+  letter-spacing: .055em;
+}
+
+body.layout-basic .player-extras .pass-quickbar__info,
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__info-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b8a7c6;
+  font: 700 .72rem/1 Georgia, serif;
+  cursor: pointer;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__info-btn {
+  /* Same inset ring and target size as the pass information button. */
+  outline: 1px solid #b8a7c6;
+  outline-offset: -.4rem;
+}
+
+body.layout-basic .player-extras .pass-quickbar__info:hover,
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__info-btn:hover {
+  background: #ffffff0b;
+  color: #ffe3a9;
+}
+
+body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuys {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: stretch;
+  gap: .3rem;
+  width: max-content;
+  max-width: 100%;
+}
+
+body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy {
+  width: 5.2rem;
+  flex: 0 1 5.2rem;
+  min-width: 0;
+  min-height: 2.2rem;
+  padding: .25rem .35rem;
+  border-radius: 5px;
+}
+
+body.layout-basic .player-extras .more-ways__quickbuy b { font-size: .58rem; line-height: 1.3; }
+body.layout-basic .player-extras .more-ways__quickbuy small { font-size: .54rem; line-height: 1.4; }
+body.layout-basic .player-extras .pass-quickbar__whale { min-width: 0; flex: 0 0 auto; flex-direction: row; gap: .25rem; }
+body.layout-basic .player-extras .pass-quickbar__quantity { border-radius: 7px; }
+body.layout-basic .player-extras .pass-quickbar__quantity button { width: 1.5rem; min-width: 1.5rem; min-height: 2.1rem; }
+body.layout-basic .player-extras .pass-quickbar__quantity output { min-width: 1rem; font-size: .7rem; }
+
+body.layout-basic .player-extras .pass-quickbar .more-ways__sub-state {
+  /* The pass popup owns subscription details; the purchase strip stays fixed. */
+  display: none !important;
+}
+
+body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .player-extras .referral-strip {
+  display: flex;
+  flex: 0 0 26rem;
+  min-width: 0;
+  width: 26rem;
+  max-width: 100%;
+  margin: 0;
+}
+
+body.layout-basic .bottom-tools > app-wwxrp-burn {
+  display: block;
+  flex: 0 0 15rem;
+  min-width: 0;
+  max-width: 100%;
+}
+body.layout-basic .bottom-tools > app-wwxrp-burn[hidden] { display: none !important; }
+
+body.layout-basic .bottom-tools .incinerator-summary {
+  box-sizing: border-box;
+  height: 3rem;
+  padding: .35rem .5rem;
+  gap: .5rem;
+  border: 1px solid #c982783b;
+  background: #21191f;
+  box-shadow: none;
+}
+body.layout-basic .bottom-tools .incinerator-summary__balance { min-width: 0; flex: 1; flex-wrap: wrap; }
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card {
+  display: grid;
+  container-type: normal;
+  grid-template-areas: none;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto 1.75rem;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: .05rem .6rem;
+  overflow: visible;
+  border-color: #dba66180;
+  background:
+    radial-gradient(ellipse at 90% 100%, #d8994033, transparent 55%),
+    linear-gradient(110deg, #54203e, #362344 55%, #282033);
+  box-shadow: inset 0 1px #ffe0ad18, 0 2px 12px #0002;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card::after {
+  content: '';
+  border-radius: inherit;
+  background: repeating-linear-gradient(115deg, transparent 0 18px, #fff 18px 19px);
+  opacity: .025;
+}
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__heading { display: contents; }
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__heading h2 {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  color: #fff1d6;
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: .055em;
+  text-shadow: 0 1px 2px #16091d80;
+}
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__info-btn {
+  grid-column: 4;
+  grid-row: 1 / span 2;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  align-content: center;
+  align-self: start;
+  min-width: 0;
+  min-height: 0;
+  gap: .2rem;
+  margin: 0;
+  padding: 0;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy > strong {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: .15rem .35rem;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy > strong > span {
+  color: #f7ecda;
+  font-size: .76rem;
+  line-height: 1.25;
+  letter-spacing: .015em;
+  text-shadow: none;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__free { color: #89f2b3; text-shadow: none; }
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__flip { color: #ffa08e; text-shadow: none; }
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy .deg-referral-card__forever {
+  position: relative;
+  gap: .25rem;
+  color: #f5d99f;
+  font-size: .76rem;
+  letter-spacing: .015em;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__forever > quest-objective-indicator {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  width: 1.18rem;
+  height: 1.18rem;
+  margin-block: -.3rem;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__actions { display: contents; }
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__coin {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  position: relative;
+  inset: auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 0;
+  min-height: 0;
+  transform: none;
+  filter: drop-shadow(0 2px 7px #0006);
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__coin:is(:active, .is-tactile-pressed) { transform: none !important; }
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy-btn {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  min-width: 5.5rem;
+  min-height: 2.2rem;
+  padding: .35rem .5rem;
+  border: 1px solid #f8dda68c;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #ffe3a0, #e4b75c);
+  box-shadow: inset 0 1px #fff4, 0 2px 6px #0002;
+  color: #302316;
+  font-size: .61rem;
+  letter-spacing: .045em;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy-btn:hover:not(:disabled) {
+  border-color: #ffeabd;
+  background: linear-gradient(180deg, #ffe3ad, #e4bd76);
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy-btn:disabled {
+  opacity: .8;
+  filter: saturate(.8);
+}
+
+body.layout-basic .referral-strip.referral-strip--compact button:focus-visible {
+  outline: 2px solid #f3d395;
+  outline-offset: 3px;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__feedback {
+  /* Copy already confirms on the button. Keep its live announcement accessible
+     without inserting another row into the ad. Errors float below the card. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  margin: 0;
+  padding: 0;
+}
+
+body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__feedback.is-error {
+  z-index: 5;
+  top: calc(100% + .3rem);
+  right: .5rem;
+  bottom: auto;
+  left: .5rem;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  padding: .4rem .6rem;
+  border: 1px solid #e392aa66;
+  border-radius: 5px;
+  background: #241820;
+  box-shadow: 0 3px 12px #0006;
+  font-size: .6rem;
+  line-height: 1.4;
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+
+/* Flatten the component shells so the live controls can share rows. */
+body.layout-basic .player-extras .player-extras__more,
+body.layout-basic .player-extras .secondary-tools,
+body.layout-basic .player-extras .side-bets-rail,
+body.layout-basic .player-extras app-parimutuel-panel,
+body.layout-basic .player-extras .app-parimutuel.has-live-book,
+body.layout-basic .player-extras .app-parimutuel:has(.pari-error:not([hidden])),
+body.layout-basic .player-extras .pari-bet-container:not([hidden]),
+body.layout-basic .player-extras .pari-books:not([hidden]) {
+  display: contents;
+  content-visibility: visible;
+}
+
+body.layout-basic .bottom-tools app-sdgnrs-burn-rail,
+body.layout-basic .bottom-tools app-link-donation {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  order: 0;
+  content-visibility: visible;
+}
+body.layout-basic .bottom-tools app-sdgnrs-burn-rail { flex: 0 1 26rem; width: 26rem; }
+body.layout-basic .bottom-tools app-link-donation { flex: 0 0 15rem; }
+
+body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuys { width: max-content; min-width: 0; }
+body.layout-basic .player-extras .pass-quickbar .more-ways__summary-closed { min-width: 0; }
+body.layout-basic .player-extras .pass-quickbar__heading { flex: 0 0 auto; }
+body.layout-basic .player-extras .pass-quickbar h2 { max-width: 4.7rem; white-space: normal; font-size: .65rem; line-height: 1.4; }
+
+body.layout-basic .player-extras .side-bets-rail .pari-book {
+  flex: 0 1 22rem;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--utility-height);
+  margin: 0;
+  padding: .45rem .55rem;
+  border: 1px solid #8fb7a13b;
+  background: linear-gradient(115deg, #1e2627, #151c1e);
+  border-radius: 8px;
+  box-shadow: none;
+}
+body.layout-basic .player-extras .side-bets-rail .pari-book:not(.pari-decimator) { height: var(--utility-height); }
+body.layout-basic .player-extras .side-bets-rail .pari-book--open {
+  grid-template-columns: minmax(0, 1fr) 8.5rem;
+  grid-template-rows: 1fr 1fr auto;
+  align-content: center;
+  gap: .1rem .5rem;
+}
+body.layout-basic .player-extras .side-bets-rail .pari-book .pari-book__title { font-size: .61rem; }
+body.layout-basic .player-extras .side-bets-rail .pari-prebet-bonus { padding-top: .2rem; margin-top: .15rem; }
+body.layout-basic .player-extras .side-bets-rail .pari-error:not([hidden]) {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
+  max-width: 100%;
+  padding: .5rem .75rem;
+  border: 1px solid #e392aa66;
+  border-radius: 5px;
+  background: #241820;
+}
+
+body.layout-basic .bottom-tools .link-trade-open {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: start;
+  gap: .25rem .5rem;
+  width: 100%;
+  height: 3rem;
+  padding: .35rem .55rem;
+  border: 1px solid #5daacd45;
+  border-radius: 6px;
+  background: #14252e;
+  text-align: left;
+}
+body.layout-basic .bottom-tools .link-trade-open:hover,
+body.layout-basic .bottom-tools .link-trade-open[aria-expanded="true"] { background: #6eaac614; }
+body.layout-basic .bottom-tools .link-trade-open > img {
+  display: block;
+  grid-row: 1 / span 2;
+  width: 1.4rem;
+  height: 1.4rem;
+}
+body.layout-basic .bottom-tools .link-trade-open > span { grid-column: 2; align-self: end; }
+body.layout-basic .bottom-tools .link-trade-open > strong { grid-column: 2; align-self: start; padding: 0; background: none; }
+body.layout-basic .bottom-tools .link-trade-open::after {
+  content: '';
+  width: .4rem;
+  height: .4rem;
+  margin-right: .25rem;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  color: #99c9df;
+}
+
+body.layout-basic .bottom-tools app-sdgnrs-burn-rail .sdgnrs-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 3.5rem;
+  min-height: 0;
+  margin: 0;
+  padding: .35rem .5rem;
+  gap: .65rem;
+  border: 1px solid #ab83cd50;
+  background: #1c1725;
+  box-shadow: none;
+}
+body.layout-basic .bottom-tools .sdgnrs-rail .sdgnrs-rail__metric { flex: 0 1 auto; align-self: center; min-height: 2.5rem; align-content: start; gap: .2rem; padding: 0; border: 0; }
+body.layout-basic .bottom-tools .sdgnrs-rail .secondary-info { min-width: 1.5rem; min-height: 1.5rem; width: 1.5rem; height: 1.5rem; }
+body.layout-basic .bottom-tools .sdgnrs-rail__actions { margin-left: auto; }
+body.layout-basic .bottom-tools .sdgnrs-rail :is(.sdgnrs-rail__vote, .sdgnrs-rail__burn) { min-height: 2rem; padding: .3rem .45rem; }
+body.layout-basic .bottom-tools .sdgnrs-rail .sdgnrs-rail__balances { display: grid; gap: 0; font-size: .7rem; line-height: 1.25; }
+body.layout-basic .bottom-tools .sdgnrs-rail__balances > i { display: none; }
+body.layout-basic .bottom-tools .sdgnrs-rail__metric--value .sdgnrs-rail__value { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .2rem; font-size: .7rem; line-height: 1.25; }
+body.layout-basic .bottom-tools .sdgnrs-rail__value > b:first-child { grid-column: 1 / -1; }
+
+@media (max-width: 1199px) {
+  body.layout-basic .player-extras .pass-quickbar { height: 4rem; min-height: 4rem; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1.25rem minmax(0, 1fr); gap: .1rem; padding-block: .2rem; }
+  body.layout-basic .player-extras .pass-quickbar__heading { justify-content: space-between; }
+  body.layout-basic .player-extras .pass-quickbar h2 { max-width: none; }
+}
+@media (min-width: 700px) and (max-width: 899px) {
+  body.layout-basic .player-extras .pass-quickbar,
+  body.layout-basic .player-extras .referral-strip { flex: 0 1 calc((100% - .5rem) / 2); width: auto; }
+}
+@media (max-width: 899px) {
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card { grid-template-columns: 2rem minmax(0, 1fr) auto 1.5rem; gap: .05rem .3rem; }
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__coin { width: 2rem; height: 2rem; }
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__heading h2 { font-size: .8rem; }
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy > strong > span,
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy .deg-referral-card__forever { font-size: .62rem; }
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__info-btn { width: 1.5rem; min-width: 1.5rem; }
+  body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__copy-btn { min-width: 4.8rem; padding-inline: .35rem; font-size: .56rem; }
+}
+@media (max-width: 699px) {
+  body.layout-basic .player-extras { gap: .5rem; padding: 0; }
+  body.layout-basic .player-extras .pass-quickbar,
+  body.layout-basic .player-extras .referral-strip,
+  body.layout-basic .bottom-tools > app-wwxrp-burn,
+  body.layout-basic .bottom-tools app-sdgnrs-burn-rail,
+  body.layout-basic .player-extras .side-bets-rail .pari-book,
+  body.layout-basic .bottom-tools app-link-donation { flex: 1 1 100%; width: 100%; }
+  body.layout-basic .bottom-tools .incinerator-summary,
+  body.layout-basic .bottom-tools .link-trade-open { height: 3rem; }
+  body.layout-basic .bottom-tools app-sdgnrs-burn-rail .sdgnrs-rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 1.75rem;
+    height: 5rem;
+    gap: .3rem .5rem;
+    padding-block: .25rem;
+  }
+  body.layout-basic .bottom-tools .sdgnrs-rail__metric--balances { grid-area: 1 / 1; }
+  body.layout-basic .bottom-tools .sdgnrs-rail__metric--value { grid-area: 1 / 2; }
+  body.layout-basic .bottom-tools .sdgnrs-rail .sdgnrs-rail__metric { align-self: start; min-height: 0; gap: .1rem; }
+  body.layout-basic .bottom-tools .sdgnrs-rail .secondary-info { grid-area: 2 / 1; }
+  body.layout-basic .bottom-tools .sdgnrs-rail__actions { grid-area: 2 / 1 / 3 / -1; justify-self: end; }
+  body.layout-basic .bottom-tools .sdgnrs-rail :is(.sdgnrs-rail__vote, .sdgnrs-rail__burn) { min-height: 1.75rem; padding-block: .2rem; }
+  body.layout-basic .bottom-tools .sdgnrs-rail .sdgnrs-rail__balances,
+  body.layout-basic .bottom-tools .sdgnrs-rail__metric--value .sdgnrs-rail__value { font-size: .65rem; line-height: 1.2; }
+}
+@media (max-width: 899px) {
+  body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy { width: 5rem; flex-basis: 5rem; padding-inline: .2rem; }
+  body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy b { font-size: .56rem; }
+  body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy small { font-size: .52rem; }
+}
+

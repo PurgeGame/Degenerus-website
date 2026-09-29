@@ -394,6 +394,8 @@ test('WWXRP footer keeps decimal parsing exact and compacts large balances', () 
   assert.equal(wwxrpWidget.parseWwxrpAmount('25'), 25n * FLIP);
   assert.equal(wwxrpWidget.parseWwxrpAmount('25.125'), 25_125n * (10n ** 15n));
   assert.equal(wwxrpWidget.parseWwxrpAmount('25.1234567890123456789'), null);
+  assert.equal(wwxrpWidget.formatWwxrpBalance(0n), '0');
+  assert.equal(wwxrpWidget.formatWwxrpBalance(1n), '<1');
   assert.equal(wwxrpWidget.formatWwxrpBalance(999n * FLIP), '999');
   assert.equal(wwxrpWidget.formatWwxrpBalance(12_345n * FLIP), '12.3K');
   assert.equal(wwxrpWidget.formatWwxrpBalance(999_999n * FLIP), '1M');
@@ -437,7 +439,7 @@ describe('app-parimutuel-panel', () => {
     contractsMod.clearProvider();
   });
 
-  test('shows WWXRP beside the LINK donation quote when no live book is open', async () => {
+  test('keeps Growth separate from the bottom currency tools', async () => {
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
     assert.doesNotMatch(el.innerHTML, /SIDE BETS|panel-header|pari-learn-link/,
@@ -450,12 +452,11 @@ describe('app-parimutuel-panel', () => {
       'the removed strip leaves no dead styling behind');
     assert.doesNotMatch(DAILY_FLIP_SOURCE, /record-strip|readBiggestFlipRecord/,
       'the record rail no longer consumes space in the daily coinflip');
-    assert.match(PARI_SOURCE,
-      /<div class="pari-bet-container pari-bet-container--wwxrp">\s*<app-wwxrp-burn><\/app-wwxrp-burn>\s*<\/div>/,
-      'WWXRP owns the first side-bet container');
-    assert.match(PARI_SOURCE,
-      /<div class="pari-bet-container pari-bet-container--growth"[\s\S]*?<\/div>\s*<div class="pari-bet-container pari-bet-container--link"\s*data-bind="pari-link-container">\s*<app-link-donation><\/app-link-donation>/,
-      'Growth and the idle LINK replacement remain separate sibling containers');
+    assert.doesNotMatch(el.innerHTML, /<app-wwxrp-burn/,
+      'the player extras row owns the only Incinerator instance');
+    assert.doesNotMatch(PARI_SOURCE, /<app-link-donation>/, 'the page owns the only LINK instance below inventory');
+    assert.match(LINK_DONATION_SOURCE, /data-panel-popup="link-trade"/,
+      'the LINK widget owns its trade popup');
     assert.match(WWXRP_SOURCE,
       /readFlipWidgetBalances[\s\S]*MIN_WWXRP_BURN_WEI[\s\S]*burnWwxrp/,
       'the footer owns the authoritative balance read, minimum, and burn write path');
@@ -471,7 +472,7 @@ describe('app-parimutuel-panel', () => {
     assert.match(WWXRP_SOURCE,
       /<section class="pari-wwxrp pari-funding-card pari-funding-card--wwxrp"/,
       'the Incinerator opts into the same compact card geometry as LINK');
-    assert.match(LINK_DONATION_SOURCE, /pari-link pari-funding-card pari-funding-card--link/);
+    assert.match(LINK_DONATION_SOURCE, /class="link-trade"/);
     assert.match(LINK_DONATION_CSS,
       /\.pari-funding-card\s*\{[^}]*height:\s*100%/s,
       'the peer funding card stretches to the Incinerator row instead of leaving a short mismatched box');
@@ -498,14 +499,14 @@ describe('app-parimutuel-panel', () => {
     assert.equal(el.querySelector('[data-bind="pari-books"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, true,
       'the closed Growth container vacates its entire grid lane');
-    assert.equal(el.querySelector('[data-bind="pari-link-container"]').hidden, false,
-      'the LINK quote takes Growth\'s lane while the book is closed');
+    assert.doesNotMatch(PARI_SOURCE, /<app-link-donation>/,
+      'Growth never creates a duplicate of the bottom LINK trade');
     assert.equal(el.querySelector('[data-bind="pari-empty"]'), null);
     assert.doesNotMatch(PARI_SOURCE, /Books are closed|pari-empty/,
       'closed books leave no placeholder copy or dead box behind');
   });
 
-  test('WWXRP shows an inline amount and burns from self view without a dialog', async () => {
+  test('WWXRP keeps its balance inline and burns the chosen amount from its popup', async () => {
     let burned = null;
     wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
       balances: async () => ({ wwxrpBalance: 12_345n * FLIP }),
@@ -525,10 +526,13 @@ describe('app-parimutuel-panel', () => {
     const burn = el.querySelector('[data-bind="wwxrp-burn"]');
     const input = el.querySelector('[data-bind="wwxrp-amount"]');
     assert.equal(el.querySelector('[data-bind="wwxrp-burn-label"]').textContent, 'BURN');
-    assert.equal(el.querySelector('[data-bind="wwxrp-dialog"]'), null);
-    assert.doesNotMatch(WWXRP_SOURCE,
-      /wwxrp-dialog|wwxrp-accept|aria-haspopup="dialog"|#openDialog|#closeDialog/,
-      'the amount and write action stay in the rail instead of opening a nested popup');
+    assert.equal(el.querySelector('[data-bind="wwxrp-summary-balance"]').textContent, '12.3K');
+    assert.equal(el.querySelector('[data-bind="wwxrp-dialog"]').hidden, true);
+    assert.ok(el.querySelector('[data-bind="wwxrp-open"]'));
+    assert.ok(WWXRP_SOURCE.indexOf('data-bind="wwxrp-summary-balance"')
+      < WWXRP_SOURCE.indexOf('id="panel-incinerator"'), 'balance and launcher stay outside the popup');
+    assert.ok(WWXRP_SOURCE.indexOf('data-bind="wwxrp-amount"')
+      > WWXRP_SOURCE.indexOf('id="panel-incinerator"'), 'the amount belongs to the popup');
     assert.match(WWXRP_SOURCE,
       /class="pari-wwxrp__amount[^\"]*"[\s\S]*data-bind="wwxrp-amount"[\s\S]*data-bind="wwxrp-max"[\s\S]*class="pari-wwxrp__burn[^\"]*"/,
       'the amount field is immediately before the BURN key');
@@ -537,7 +541,7 @@ describe('app-parimutuel-panel', () => {
 
     input.value = '24';
     input.dispatchEvent({ type: 'input' });
-    assert.equal(burn.disabled, true, 'the on-chain 25 WWXRP minimum is enforced inline');
+    assert.equal(burn.disabled, true, 'the popup enforces the on-chain 25 WWXRP minimum');
     input.value = '25';
     input.dispatchEvent({ type: 'input' });
     assert.equal(burn.disabled, false);
@@ -582,19 +586,44 @@ describe('app-parimutuel-panel', () => {
     const el = await mountWwxrp();
     const balance = el.querySelector('[data-bind="wwxrp-balance"]');
     assert.equal(balance.textContent, '250');
+    assert.equal(el.hidden, false, 'a funded wallet sees the Incinerator pod');
 
     storeMod.update('viewing.address', viewed);
     assert.equal(balance.textContent, '—',
       'the old wallet amount is invalidated before the replacement read settles');
+    assert.equal(el.hidden, true, 'the pod is hidden while the new wallet balance is unknown');
     assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, true);
 
     await Promise.resolve();
     resolveViewed({ wwxrpBalance: 0n });
     await flush();
     assert.equal(balance.textContent, '0');
+    assert.equal(el.hidden, true, 'the zero-balance wallet has no Incinerator pod');
   });
 
-  test('LINK funding swap quotes FLIP from the entered amount and funds inline', async () => {
+  test('any positive WWXRP holding reveals the pod without bypassing the burn minimum', async () => {
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({ balances: async () => ({ wwxrpBalance: 1n }) });
+    const el = await mountWwxrp();
+    assert.equal(el.hidden, false);
+    assert.equal(el.querySelector('[data-bind="wwxrp-summary-balance"]').textContent, '<1');
+    assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, true);
+  });
+
+  test('burning the last WWXRP hides the Incinerator pod', async () => {
+    let balance = 25n * FLIP;
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
+      balances: async () => ({ wwxrpBalance: balance }),
+      burn: async ({ amount }) => { balance -= amount; return { receipt: { status: 1 } }; },
+    });
+    const el = await mountWwxrp();
+    assert.equal(el.hidden, false);
+    el.querySelector('[data-bind="wwxrp-burn"]').click();
+    await flush();
+    assert.equal(balance, 0n);
+    assert.equal(el.hidden, true);
+  });
+
+  test('LINK trade quotes the selected amount with a live value badge and average multiplier', async () => {
     let donated = null;
     linkDonationWidget.__setLinkDonationWidgetDepsForTest({
       read: async () => ({
@@ -618,8 +647,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(el.querySelector('[data-bind="link-quote-input"]').textContent, '1 LINK');
     assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '749 FLIP');
     assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '3×');
-    assert.equal(el.querySelector('[data-bind="link-donate-label"]').textContent, 'FUND');
-    assert.match(LINK_DONATION_SOURCE, /<strong>LINK FUNDING SWAP<\/strong>/);
+    assert.equal(el.querySelector('[data-bind="link-donate-label"]').textContent, 'TRADE LINK FOR FLIP');
+    assert.equal(el.querySelector('[data-bind="link-current-value"]').textContent, '300% VALUE');
     assert.equal(donate.disabled, false);
 
     input.value = '200';
@@ -627,6 +656,9 @@ describe('app-parimutuel-panel', () => {
     assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '100K FLIP',
       'the amount-weighted reward updates as the player types');
     assert.equal(el.querySelector('[data-bind="link-multiplier"]').textContent, '2×');
+    assert.equal(el.querySelector('[data-bind="link-average-value"]').textContent, '200% value');
+    assert.equal(el.querySelector('[data-bind="link-current-value"]').textContent, '300% VALUE',
+      'the entry advertises the current rate while the popup shows the amount-weighted rate');
     donate.click();
     await flush();
 
@@ -637,6 +669,83 @@ describe('app-parimutuel-panel', () => {
     assert.match(LINK_DONATION_SOURCE,
       /subscriptionBalanceWei:[\s\S]*ethPerLinkWei:[\s\S]*mintPriceWei:/,
       'the visible FLIP figure is derived from all live reward inputs');
+  });
+
+  test('the LINK slider, manual input, and MAX preserve exact token amounts', async () => {
+    const balance = 500n * FLIP + 123n;
+    let traded;
+    linkDonationWidget.__setLinkDonationWidgetDepsForTest({
+      read: async () => ({ balanceWei: balance, subscriptionBalanceWei: 0n,
+        ethPerLinkWei: FLIP / 100n, mintPriceWei: FLIP / 25n }),
+      donate: async ({ amount }) => { traded = amount; },
+    });
+    const el = await mountLinkDonation();
+    const input = el.querySelector('[data-bind="link-amount"]');
+    const slider = el.querySelector('[data-bind="link-slider"]');
+    slider.value = '5000';
+    slider.dispatchEvent({ type: 'input', target: slider });
+    assert.equal(input.value, '250.000000000000000061');
+    assert.equal(linkDonationWidget.parseLinkDonationAmount(input.value), balance / 2n);
+    assert.equal(slider.value, '5000', 'token rounding leaves the selected slider step stable');
+    input.value = '125';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '2500', 'the percentage rounds for display without changing the exact amount');
+    input.value = '501';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(el.querySelector('[data-bind="link-donate"]').disabled, true);
+    input.dispatchEvent({ type: 'keydown', key: 'Enter' });
+    await flush();
+    assert.equal(traded, undefined);
+    el.querySelector('[data-bind="link-max"]').click();
+    assert.equal(input.value, '500.000000000000000123');
+    assert.equal(slider.value, '10000');
+    el.querySelector('[data-bind="link-donate"]').click();
+    await flush();
+    assert.equal(traded, balance, 'the trade uses the exact displayed amount');
+  });
+
+  for (const [name, overrides] of [
+    ['zero balance', { balanceWei: 0n }],
+    ['missing quote', { mintPriceWei: null }],
+    ['zero reward', { subscriptionBalanceWei: 1000n * FLIP }],
+  ]) {
+    test(`LINK trades stay locked with ${name}`, async () => {
+      let traded = false;
+      linkDonationWidget.__setLinkDonationWidgetDepsForTest({
+        read: async () => ({ balanceWei: 50n * FLIP, subscriptionBalanceWei: 0n,
+          ethPerLinkWei: FLIP / 100n, mintPriceWei: FLIP / 25n, ...overrides }),
+        donate: async () => { traded = true; },
+      });
+      const el = await mountLinkDonation();
+      assert.equal(el.querySelector('[data-bind="link-donate"]').disabled, true);
+      assert.equal(el.querySelector('[data-bind="link-status"]').hidden, false);
+      el.querySelector('[data-bind="link-amount"]').dispatchEvent({ type: 'keydown', key: 'Enter' });
+      await flush();
+      assert.equal(traded, false, 'keyboard submission respects the same gate');
+      if (name === 'zero balance') assert.equal(el.querySelector('[data-bind="link-slider"]').disabled, true);
+    });
+  }
+
+  test('LINK wallet changes clear old balances and quotes before the next read resolves', async () => {
+    let resolveNext;
+    linkDonationWidget.__setLinkDonationWidgetDepsForTest({
+      read: async ({ player }) => player === TEST_ADDR
+        ? { balanceWei: 50n * FLIP, subscriptionBalanceWei: 0n,
+          ethPerLinkWei: FLIP / 100n, mintPriceWei: FLIP / 25n }
+        : new Promise(resolve => { resolveNext = resolve; }),
+    });
+    const el = await mountLinkDonation();
+    storeMod.update('viewing.address', '0xbb12000000000000000000000000000000000000');
+    await flush();
+    assert.equal(el.querySelector('[data-bind="link-balance"]').textContent, '—');
+    assert.equal(el.querySelector('[data-bind="link-quote-reward"]').textContent, '— FLIP');
+    assert.equal(el.querySelector('[data-bind="link-donate"]').disabled, true);
+    resolveNext({ balanceWei: FLIP / 2n, subscriptionBalanceWei: 0n,
+      ethPerLinkWei: FLIP / 100n, mintPriceWei: FLIP / 25n });
+    await flush();
+    assert.equal(el.querySelector('[data-bind="link-amount"]').value, '0.5');
+    assert.equal(el.querySelector('[data-bind="link-donate"]').disabled, true,
+      'a viewed wallet cannot submit a trade');
   });
 
   test('refreshes benchmarks immediately on a same-level phase reset, once per phase', async () => {
@@ -905,8 +1014,9 @@ describe('app-parimutuel-panel', () => {
     assert.equal(card.hidden, false);
     assert.equal(el.querySelector('[data-bind="pari-growth-container"]').hidden, false,
       'an open Growth market reveals its independent container');
-    assert.equal(el.querySelector('[data-bind="pari-link-container"]').hidden, true,
-      'Growth replaces the idle LINK donation card instead of sharing its lane');
+    assert.doesNotMatch(PARI_SOURCE, /<app-link-donation><\/app-link-donation>/,
+      'an open Growth market does not mount a duplicate LINK button');
+
     assert.match(card.querySelector('.pari-book__title').textContent, /GROWTH BET · Level 42/);
     assert.equal(card.querySelector('.pari-book__ask'), null,
       'the live book does not repeat the wager as a question');
@@ -941,7 +1051,7 @@ describe('app-parimutuel-panel', () => {
       'the split percentages appear once beside the bar',
     );
     assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
-      '1,000 FLIP BET · +150 FLIP · +1 STREAK',
+      '1,000 FLIP BET · 150 FLIP BONUS · +1 STREAK',
       'the fixed bet and complete contract-quoted growth reward are visible before betting');
     assert.match(
       APP_CSS,

@@ -593,6 +593,56 @@ describe('bingo event watcher', () => {
     assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false);
   });
 
+  test('a Bingo from a level the game has left is never offered (audit 628b3eed7)', async () => {
+    // claimBingo reverts BingoExpired once `lvl < level` (DegenerusGameBingoModule.sol:146).
+    store.update('app.gameState', { level: 35 });
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [
+          { player: PLAYER, level: 34, quadrant: 0, symbol: 2, slots: [1, 2, 3, 4, 5, 6, 7, 8] },
+          { player: PLAYER, level: 35, quadrant: 1, symbol: 10, slots: [11, 12, 13, 14, 15, 16, 17, 18] },
+          { player: PLAYER, level: 36, quadrant: 2, symbol: 18, slots: [21, 22, 23, 24, 25, 26, 27, 28] },
+        ],
+        claimed: [],
+      }),
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    const claims = pending.getPendingActions().filter((row) => row.shortLabel === 'Claim Bingo');
+    assert.deepEqual(claims.map((row) => row.id).sort(), ['bingo-claim:35', 'bingo-claim:36'],
+      'the current level and the minted levels above it stay claimable; level 34 expired');
+  });
+
+  test('a BingoExpired race retires the stale Bingo action', async () => {
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{ player: PLAYER, level: 37, quadrant: 3, symbol: 27, slots: [8, 7, 6, 5, 4, 3, 2, 1] }],
+        claimed: [],
+      }),
+      claim: async () => {
+        const raw = new Error('execution reverted');
+        raw.revert = { name: 'BingoExpired' };
+        const wrapped = new Error("This level's Bingo expired when the next level started.");
+        wrapped.code = 'BingoExpired';
+        wrapped.cause = raw;
+        throw wrapped;
+      },
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    const claim = pending.getPendingActions().find((row) => row.shortLabel === 'Claim Bingo');
+    assert.ok(claim);
+    await claim.run();
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
+      'an expired Bingo is terminal for its level');
+  });
+
   test('an already-claimed static-call race retires the stale Bingo action', async () => {
     bingo.__setBingoReadersForTest({
       index: async () => ({

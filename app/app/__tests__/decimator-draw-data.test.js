@@ -10,7 +10,9 @@ import {
 } from '../decimator-draw-data.js';
 
 const game = new ethers.Interface([
-  'event DecBurnRecorded(address indexed player,uint24 indexed lvl,uint8 bucket,uint8 subBucket,uint256 effectiveAmount,uint256 newTotalBurn)',
+  // Audit 3c79c1486: the record carries the entry's position in its (level, bucket, subbucket)
+  // list, so topic0 moved; the old six-field signature would match no log at all.
+  'event DecBurnRecorded(address indexed player,uint24 indexed lvl,uint8 bucket,uint8 subBucket,uint32 position,uint256 effectiveAmount,uint256 newTotalBurn)',
   'event DecimatorResolved(uint24 indexed lvl,uint64 packedOffsets,uint256 poolWei,uint256 totalBurn)',
 ]);
 const flip = new ethers.Interface([
@@ -43,11 +45,12 @@ function packedOffsets(entries) {
 const level = 15;
 const offsets = packedOffsets({ 6: 0, 7: 2 });
 const burnLogs = [
-  // A later record replaces this row: players can migrate buckets before lock.
-  log(game, 'DecBurnRecorded', [PLAYER_A, level, 8, 1, 100n, 100n], 10),
-  log(game, 'DecBurnRecorded', [PLAYER_B, level, 7, 2, 50n, 50n], 11),
-  log(game, 'DecBurnRecorded', [PLAYER_C, level, 6, 1, 80n, 80n], 12),
-  log(game, 'DecBurnRecorded', [PLAYER_A, level, 7, 2, 150n, 150n], 13),
+  // A later record replaces this row: players can migrate buckets before lock. The migrated
+  // entry re-opens at the end of its new list (position 1 behind B).
+  log(game, 'DecBurnRecorded', [PLAYER_A, level, 8, 1, 0, 100n, 100n], 10),
+  log(game, 'DecBurnRecorded', [PLAYER_B, level, 7, 2, 0, 50n, 50n], 11),
+  log(game, 'DecBurnRecorded', [PLAYER_C, level, 6, 1, 0, 80n, 80n], 12),
+  log(game, 'DecBurnRecorded', [PLAYER_A, level, 7, 2, 1, 150n, 150n], 13),
 ];
 const resolutionLog = log(
   game,

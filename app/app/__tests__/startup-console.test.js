@@ -38,7 +38,7 @@ describe('startup console routing', () => {
     const mineFlip = read('../mine-flip.js');
     const wwxrp = read('../wwxrp-draw.js');
     const launch = read('../launch-claims.js');
-    const decimatorReader = between(decimator, 'function _readerProvider()', 'function _decimatorContract');
+    const decimatorReader = between(decimator, 'function _readerProvider()', 'function _bafContract');
     const mineProbe = between(mineFlip, 'export async function probeMineFlip', 'export async function mineFlip');
     const drawDays = between(wwxrp, 'export async function readPlayerWwxrpDrawDays', 'export async function readWwxrpDrawOutcome');
     const drawOutcome = between(wwxrp, 'export async function readWwxrpDrawOutcome', 'export async function claimWwxrpDraw');
@@ -53,10 +53,13 @@ describe('startup console routing', () => {
     assert.match(launch, /function _readerProvider\(\)[\s\S]*sharedReadProvider\(\)[\s\S]*getProvider\(\)/);
   });
 
-  test('NoWork is a decoded non-actionable Decimator probe state', () => {
+  test('the Decimator state is a pure read with no claim probe (audit ab95963ac)', () => {
+    // mineFlip's walk is the only settlement path, so there is no claim to simulate and
+    // nothing a startup read could surface as a wallet prompt.
     const decimator = read('../jackpot-resolutions.js');
-    assert.match(decimator, /'error NoWork\(\)'/);
-    assert.match(decimator, /name === 'NoWork'[^\n]*return \{ state: 'pending'/);
+    const probe = between(decimator, 'export async function readDecimatorClaimState', 'export async function readBafConsolation');
+    assert.doesNotMatch(probe, /requireStaticCall|staticCall|NoWork/);
+    assert.match(probe, /return \{ state: 'queued', errorName: null \};/);
   });
 
   test('app declares an existing branded favicon instead of implicit /favicon.ico', () => {

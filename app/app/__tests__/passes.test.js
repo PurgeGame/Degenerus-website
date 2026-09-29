@@ -242,6 +242,37 @@ describe('deity pass NFT catalog', () => {
 // Deity daily boon slots + issuance.
 // ===========================================================================
 
+describe('deity NFT appearance', () => {
+  afterEach(() => passesMod.__resetDeityReadContractFactoryForTest());
+
+  test('preserves the NFT renderer’s custom colors and shares a cached metadata read', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102"><circle r="46" fill="#fa12ab"/></svg>';
+    const image = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+    let reads = 0;
+    passesMod.__setDeityReadContractFactoryForTest(() => ({ tokenURI: async (id) => {
+      assert.equal(id, 22);
+      reads += 1;
+      return `data:application/json;base64,${Buffer.from(JSON.stringify({ image })).toString('base64')}`;
+    } }));
+    const [first, second] = await Promise.all([passesMod.readDeityPassAppearance(22), passesMod.readDeityPassAppearance(22)]);
+    assert.deepEqual(first, { src: image, canonicalBadge: true });
+    assert.deepEqual(second, first);
+    assert.equal(reads, 1);
+  });
+
+  test('failed or malformed metadata falls back and can be retried', async () => {
+    const responses = [null, 'data:application/json;base64,bad',
+      `data:application/json,${encodeURIComponent(JSON.stringify({ image: 'https://example.com/image.svg' }))}`,
+      `data:application/json,${encodeURIComponent(JSON.stringify({ image: 'data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%20100%20100%22%2F%3E' }))}`];
+    let reads = 0;
+    passesMod.__setDeityReadContractFactoryForTest(() => ({ tokenURI: async () => responses[reads++] }));
+    for (let i = 0; i < 3; i++) assert.equal(await passesMod.readDeityPassAppearance(10), null);
+    assert.equal((await passesMod.readDeityPassAppearance(10)).canonicalBadge, false, 'external renderer keeps its own layout');
+    assert.equal(await passesMod.readDeityPassAppearance(32), null);
+    assert.equal(reads, 4);
+  });
+});
+
 describe('deity daily boons', () => {
   afterEach(() => {
     passesMod.__resetDeityBoonReadContractFactoryForTest();

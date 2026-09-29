@@ -4499,6 +4499,7 @@ describe('app-decimator-panel — combined mode (account-switcher)', () => {
     assert.match(summary.textContent, /3(\.0+)? ETH/, '1+2 ETH summed across the 2 unclaimed levels');
     assert.match(summary.textContent, /2 levels/, 'level 7 (claimed) excluded from the count');
     assert.match(summary.textContent, /Buying needs a single account/);
+    assert.match(summary.textContent, /awaiting its Mine FLIP payout/, 'there is no claim: the walk pays it');
     el.disconnectedCallback();
   });
 
@@ -4515,7 +4516,7 @@ describe('app-decimator-panel — combined mode (account-switcher)', () => {
 
     const summary = el.querySelector('[data-bind="dec-combined-summary"]');
     assert.equal(summary.hidden, false);
-    assert.match(summary.textContent, /no unclaimed decimator jackpot/i);
+    assert.match(summary.textContent, /no decimator jackpot awaiting payout/i);
     el.disconnectedCallback();
   });
 

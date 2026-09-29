@@ -617,7 +617,7 @@ test('the Daily Drawing is a responsive branded attraction rather than an empty 
   );
   assert.match(
     DRAWING_CSS,
-    /--jp-board-size:\s*clamp\(15rem, 68cqi, 28rem\);[\s\S]*?width:\s*min\(100%, 48rem\);/,
+    /--jp-board-size:\s*min\(68cqi, 28rem\);[\s\S]*?width:\s*min\(100%, 48rem\);/,
     'the board grows at stacked widths while the illustrated cabinet stops stretching',
   );
   assert.match(
@@ -2042,7 +2042,6 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     // only the day pin/banner. Foil claims now live in the shared pending tray.
     const required = [
       'ldj-status-cold-start',
-      'ldj-status-empty-day',
       'ldj-status-resolved',
       'ldj-new-day-banner',
       'day',
@@ -2064,12 +2063,6 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.ok(cold, 'cold-start section exists');
     assert.equal(cold.style.display, 'none', 'large cold-start copy stays out of layout');
     assert.doesNotMatch(el.innerHTML, /Game starts soon/i);
-    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
-    assert.ok(empty, 'empty-day section exists');
-    assert.equal(
-      empty.style.display, 'none',
-      'empty-day hidden by default',
-    );
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
     assert.ok(resolved, 'resolved section exists');
     assert.equal(
@@ -2111,15 +2104,13 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     storeMod.update('app.lastDay', { day: null, status: 'pre-game' });
     await flushMicrotasks();
     const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
-    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
     assert.ok(cold, 'cold-start section exists');
     assert.equal(cold.style.display, 'none', 'cold-start copy cannot move the jackpot');
-    assert.equal(empty.style.display, 'none', 'empty-day hidden');
     assert.equal(resolved.style.display, 'none', 'resolved hidden');
   });
 
-  test('status:resolved-no-winners payload → empty-day visible with day-N copy + day label updated', async () => {
+  test('status:resolved-no-winners payload renders as a resolved day with no rollover copy', async () => {
     const el = instantiate();
     storeMod.update('app.lastDay', {
       day: 5, level: 2, summary: null, winners: [],
@@ -2129,14 +2120,11 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     });
     await flushMicrotasks();
     const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
-    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
     assert.equal(cold.style.display, 'none', 'cold-start hidden');
-    assert.notEqual(empty.style.display, 'none', 'empty-day visible');
-    assert.equal(resolved.style.display, 'none', 'resolved hidden');
-    const copy = el.querySelector('[data-bind="ldj-empty-copy"]');
-    assert.match(copy.textContent, /Day 5 had no winners/, 'day-5 copy present');
-    assert.match(copy.textContent, /day 6/, 'rolled-to-day-6 copy present');
+    assert.notEqual(resolved.style.display, 'none', 'the draw renders like any resolved day');
+    assert.doesNotMatch(el.innerHTML, /no winners|rolled to day/i,
+      'a pot never rolls to the next day, so no copy may claim it did');
     const dayLbl = el.querySelector('[data-bind="day"]');
     assert.match(dayLbl.textContent, /Day 5/);
   });
@@ -2160,9 +2148,8 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     });
     await flushMicrotasks();
 
-    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
-    assert.equal(empty.style.display, 'none', 'the false rollover sentence stays hidden');
+    assert.doesNotMatch(el.innerHTML, /rolled to day/i, 'no rollover sentence exists');
     assert.notEqual(resolved.style.display, 'none', 'the resolved draw stays visible');
   });
 
@@ -2184,10 +2171,8 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     });
     await flushMicrotasks();
     const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
-    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
     assert.equal(cold.style.display, 'none', 'cold-start hidden');
-    assert.equal(empty.style.display, 'none', 'empty-day hidden');
     assert.notEqual(resolved.style.display, 'none', 'resolved visible');
     const dayLbl = el.querySelector('[data-bind="day"]');
     assert.match(dayLbl.textContent, /Day 7/);
@@ -2195,7 +2180,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
 
   test('first payload pins day; same-day refresh stays put; genuinely newer day auto-renders', async () => {
     const el = instantiate();
-    // First payload: pin to day 5 empty-day
+    // First payload: pin to day 5 (a sealed day with no win rows)
     storeMod.update('app.lastDay', {
       day: 5, level: 2, summary: null, winners: [],
       roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
@@ -2868,7 +2853,7 @@ describe('foil match pending action', () => {
     );
     assert.match(
       DRAWING_CSS,
-      /--jp-foil-size:\s*clamp\(2\.75rem, 11\.8cqi, 5\.65rem\)/,
+      /--jp-foil-size:\s*min\(11\.8cqi, 5\.65rem\)/,
       'the four sockets are slightly larger while remaining tied to the cabinet width',
     );
     // An empty socket says exactly one thing: a ticket-shaped processor drops in
@@ -3303,7 +3288,11 @@ describe('foil match pending action', () => {
       'a keeper winning the same claim race retires the stale action');
   });
 
-  test('a revealed T8 line appears in pending with its actual ticket and match reason', async () => {
+  test('a revealed T8 line appears in pending with its actual ticket and match reason', async (t) => {
+    // The 40,000 baseline is run 56's face table; pin it so the active deployment cannot move it.
+    const { useSchema: pinSchema, RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
+    const deployedSchema = pinSchema(RUN56_SCHEMA_HASH);
+    t.after(() => pinSchema(deployedSchema));
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
     const packed = traits.reduce((word, trait, quadrant) => (
@@ -3401,8 +3390,7 @@ describe('foil match pending action', () => {
       assert.equal(action.rewardFaces, 40_000,
         'Pending can name the deterministic bonus before the claim is sent');
       // Run 57+ doubled the face table (FoilPackModule FOIL_FACES_T8 = 80,000).
-      const { useSchema, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
-      const priorSchema = useSchema(CURRENT_SCHEMA_HASH);
+      const priorSchema = pinSchema(CURRENT_SCHEMA_HASH);
       try {
         document.dispatchEvent({
           type: 'replay:scratch-complete',
@@ -3412,7 +3400,7 @@ describe('foil match pending action', () => {
         assert.equal(pendingActionsMod.getPendingActions()[0]?.rewardFaces, 80_000,
           'the pending bonus reads the face table of the deployment the site reads');
       } finally {
-        useSchema(priorSchema);
+        pinSchema(priorSchema);
         document.dispatchEvent({
           type: 'replay:scratch-complete',
           detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
