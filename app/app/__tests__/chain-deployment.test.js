@@ -21,7 +21,7 @@ test('next-deployment preparation verifies both RPCs and never activates an inco
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));server.unref();const base=`http://127.0.0.1:${server.address().port}`;
   const directory=await mkdtemp(join(tmpdir(),'chain-deployment-')),path=join(directory,'manifest.json');
   const original=await readFile(new URL('app/app/chain-config.js',root),'utf8');
-  const manifest={chainId:f.client.chain.id,chainName:'Fixture',explorerUrl:'https://example.invalid',gameDeployBlock:1,readSchema:SCHEMA_HASH,crapsReplayEngineVersion:'craps-solidity-e579cd31-v1',contracts:{...f.contracts,LINK_TOKEN:'0x'+'11'.repeat(20)},publicRpcUrls:[base+'/rpc',base+'/fallback'],dayClock:f.client.clock,crapsSchedule:{daySeconds:1000,anchorSeconds:0,blockSeconds:12,periodCloseSeconds:[100,300,500,700,900]},ethDivisor:'1',ticketDivisor:'100'};
+  const manifest={chainId:f.client.chain.id,chainName:'Fixture',explorerUrl:'https://example.invalid',gameDeployBlock:1,readSchema:SCHEMA_HASH,crapsReplayEngineVersion:'craps-solidity-32c60453-v1',contracts:{...f.contracts,LINK_TOKEN:'0x'+'11'.repeat(20)},publicRpcUrls:[base+'/rpc',base+'/fallback'],dayClock:f.client.clock,crapsSchedule:{daySeconds:1000,anchorSeconds:0,blockSeconds:12,periodCloseSeconds:[100,300,500,700,900]},ethDivisor:'1',ticketDivisor:'100'};
   const run=async(...args)=>{await writeFile(path,JSON.stringify(manifest));return exec(process.execPath,[fileURLToPath(new URL('db/prepare-chain-deployment.mjs',root)),'--manifest',path,...args]);};
   try{
     const result=await run('--verify');assert.match(result.stdout,/Active selector unchanged/);

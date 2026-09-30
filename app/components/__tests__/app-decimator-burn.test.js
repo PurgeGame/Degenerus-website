@@ -85,32 +85,22 @@ describe('<app-decimator-burn>', () => {
     assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
   });
 
-  test('renders raw burn, prize, player score, bracket, and one aggregate multiplier', () => {
+  test('is simple: the ETH pool, the burn input, the multiplier and the current score', () => {
     assert.match(COMPONENT, /data-bind="dbb-prize"/);
-    assert.match(COMPONENT, /data-bind="dbb-burned"/);
-    assert.doesNotMatch(COMPONENT, /dbb-total-weight|TOTAL WEIGHT/);
-    assert.match(COMPONENT, /YOUR DECIMATOR SCORE[\s\S]*data-bind="dbb-player-score"/);
-    assert.doesNotMatch(COMPONENT, /YOUR WEIGHT/);
+    assert.match(COMPONENT, /YOUR SCORE[\s\S]*data-bind="dbb-player-score"/);
+    assert.match(COMPONENT, /<small>YOUR MULTIPLIER<\/small>/);
+    assert.match(COMPONENT, /name="dbb-amount"/);
     assert.match(COMPONENT, /SCORE —/);
     assert.match(COMPONENT, /decimatorEffectiveMultiplierBps/);
-    assert.match(COMPONENT, /formatDecimatorBurnQuote\(weight, boonWeight\)/,
+    assert.match(COMPONENT, /formatDecimatorBurnQuote\(stack, boonStack\)/,
       'the burn quote names the concrete score added by an active Decimator boon');
-    assert.match(COMPONENT, /<small>YOUR MULTIPLIER<\/small>/,
-      'the strip labels selected-burn score divided by spend, after contract caps');
-    assert.match(COMPONENT, /data-bind="dbb-bracket-number"/);
-    assert.match(COMPONENT, /data-bind="dbb-bracket-range"/,
-      'the contract bracket gets a dedicated number slot beside its Degen Rating range');
-    assert.match(COMPONENT, /degenScoreLootTier\(bracketScore\)/,
-      'the range uses the shared Degen Rating loot color');
+    assert.match(COMPONENT, /0\.9 for each day since the window opened/, 'the multiplier explains entry timing');
+    // No dice: the board comes from the main Craps widget and is never shown here.
+    assert.doesNotMatch(COMPONENT, /BOARD|dbb-board|dbb-rating|DEGEN RATING|FLIP BURNED|dbb-burned|BRACKET|CAPPED/);
+    assert.doesNotMatch(COMPONENT, /readDecimatorRawBurnTotal|readDecimatorBoardChips|ui\.crapsBoard/,
+      'the rail does no log scan or board read it does not show');
     assert.doesNotMatch(COMPONENT, /dbb__modifier-list|dbb-mod--|TODAY'S MODIFIERS/,
       'activity, timing, and boon contributors collapse into the actual multiplier');
-    assert.match(COMPONENT, /data-bind="dbb-multi-cap" hidden/);
-    assert.match(COMPONENT, /\(BASE CAPPED\)|\(CAPPED\)/,
-      'the small cap note stays inline with the multiplier without a bubble');
-    assert.match(COMPONENT, /Total includes activity, timing, and any boon/);
-    assert.match(COMPONENT, /actualMultiplierBps <= 10_000n/,
-      'a total multiplier above 100% never receives a misleading capped note');
-    assert.match(COMPONENT, /readDecimatorRawBurnTotal/);
     assert.doesNotMatch(COMPONENT, /sinceTimestamp:\s*state\?\.levelStartTime/,
       'The purchase clock resets after jackpot; burned FLIP must use the actual window opening');
     assert.equal((COMPONENT.match(/<button[^>]*data-bind="dbb-burn"/g) || []).length, 1);
@@ -127,16 +117,13 @@ describe('<app-decimator-burn>', () => {
       'prize and burned FLIP stack at every width so both totals keep the full stats track');
     assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-area:\s*score/s,
       'the player score owns the far-side grid slot');
-    assert.match(CSS, /\.dbb__entry-meta\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)[^}]*min-height:\s*2\.82rem/s,
-      'bracket and aggregate multiplier align over the input and action columns');
-    assert.match(CSS, /\.dbb__bracket-id strong\s*\{[^}]*font:\s*1000 1\.62rem/s,
-      'the bracket number has a large dedicated score-plate slot');
+    assert.match(CSS, /\.dbb__entry-meta\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*min-height:\s*2\.82rem/s,
+      'the multiplier owns one full-width row over the input and action');
+    assert.match(CSS, /\.dbb__actual-multi\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*space-between/s,
+      'label left, value right');
+    assert.doesNotMatch(CSS, /\.dbb__(?:plate|board|rating)\b|\.dbb-stat--burned/, 'the retired plate styles are gone');
     assert.match(CSS, /\.dbb__actual-multi strong\s*\{[^}]*font:\s*1000 clamp\(0\.86rem, 1\.15vw, 1\.12rem\)/s,
       'the actual multiplier is the dominant context value');
-    assert.match(CSS, /\.dbb__bracket-score strong\[data-score-tier="gold"\]/,
-      'Degen Rating ranges share the normal tier palette');
-    assert.match(CSS, /\.dbb__bracket-score\s*\{[^}]*justify-items:\s*center[^}]*text-align:\s*center/s,
-      'the Degen Rating range is centered in its half of the bracket plate');
     assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)/s);
     assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.96rem, 1\.25vw, 1\.14rem\)/s);
     assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.04rem, 1\.45vw, 1\.26rem\)/s);
@@ -178,8 +165,8 @@ describe('<app-decimator-burn>', () => {
     assert.match(DEMO_HTML, /src="\/app\/decimator-demo\.js"/);
     assert.match(DEMO_JS, /decWindowOpen:\s*true/);
     assert.match(DEMO_JS, /activityScore:\s*235/);
-    assert.match(DEMO_JS, /dayOneActive:\s*true/);
-    assert.match(DEMO_JS, /lastPurchaseDay:\s*true/);
+    assert.match(DEMO_JS, /daysLate:\s*1/);
+
     assert.match(DEMO_JS, /boonType:\s*15/);
     assert.match(DEMO_JS, /rawBurnWei:\s*8_420_000n \* FLIP/);
     assert.match(DEMO_JS, /document\.createElement\('app-decimator-burn'\)/,

@@ -77,7 +77,7 @@ async function jackpotDay(schema) {
   return f;
 }
 
-test('run 57+: a jackpot day has one board, no bonus draw, and no closed battle (it plays at the craps table)', async () => {
+test('run 57+: the main board includes a Craps seat reveal without counting it as winnings', async () => {
   const f = await jackpotDay(CURRENT_SCHEMA_HASH);
   const summary = await readChainRoute(`/game/jackpot/day/${DAY}/summary`, { client: f.client });
   assert.equal(summary.rollOne.mainTraitsPacked, MAIN);
@@ -85,7 +85,12 @@ test('run 57+: a jackpot day has one board, no bonus draw, and no closed battle 
   assert.equal(summary.rollTwo.bonusTraitsPacked, null);
   assert.equal(summary.rollTwo.bonusTargetLevel, null);
   assert.deepEqual(summary.rollTwo.bonusDraw, [], 'no bonus badges for a draw that never happened');
-  assert.equal(summary.rollTwo.coinDrawBattle, null);
+  const battle = summary.rollTwo.coinDrawBattle;
+  assert.equal(battle.kind, 'jackpot');
+  assert.equal(battle.day, DAY);
+  assert.equal(battle.key, `0x${(BigInt(DAY) * 8n + 6n).toString(16).padStart(64, '0')}`);
+  assert.deepEqual(battle.entrants, [{ player: PLAYER,
+    betId: String(((BigInt(DAY) * 8n + 6n) << 64n) | 1n), units: '1' }]);
   const roll1 = await readChainRoute(`/game/jackpot/day/${DAY}/roll1`, { client: f.client });
   assert.equal(roll1.level, LEVEL, 'the level comes from dailyFoilDraw bits 64-87');
   assert.deepEqual(roll1.wins.map(row => row.awardType).sort(), ['eth', 'tickets', 'tickets'],
@@ -93,7 +98,7 @@ test('run 57+: a jackpot day has one board, no bonus draw, and no closed battle 
   assert.deepEqual(summary.rollOne.tickets.map(row => row.traitId), [0x41], 'the daily ticket summary keeps its own leg');
   const roll2 = await readChainRoute(`/game/jackpot/day/${DAY}/roll2`, { client: f.client });
   assert.equal(roll2.bonusTraitDraw, false);
-  assert.equal(roll2.coinDrawBattle, null);
+  assert.deepEqual(roll2.coinDrawBattle, battle);
   assert.deepEqual(roll2.wins, [], 'an awarded battle seat is not a jackpot win');
   const winners = await readChainRoute(`/game/jackpot/day/${DAY}/winners`, { client: f.client });
   assert.equal(winners.winners.find(w => w.address === PLAYER).hasBonus, false);

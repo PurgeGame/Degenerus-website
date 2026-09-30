@@ -3040,15 +3040,17 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.rvl-stage--lootbox \.rvl-card--dgnrs\.rvl-card--mini \.rvl-card-value\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/s,
-      'multi-card compact receipt tiles may still contain an exact sDGNRS amount',
+      /\.rvl-stage--lootbox \.rvl-card--dgnrs\.rvl-card--mini \.rvl-card-value\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;/s,
+      'compact receipt tiles never replace reward digits with an ellipsis',
     );
     const stagedCard = el.querySelector('[data-bind="rvl-summary"]')
       ?.querySelector('.rvl-card--dgnrs');
     const stagedValue = stagedCard?.querySelector('.rvl-card-value');
     assert.match(stagedCard?.className || '', /\brvl-card--mini\b/,
       'the singleton receipt retains the shared compact-card DOM class');
-    assert.equal(stagedValue?.textContent, '44,200,000');
+    assert.equal(stagedValue?.textContent, '44.2M');
+    assert.equal(stagedValue?.title, '44,200,000 DGNRS');
+    assert.equal(stagedValue?.getAttribute('aria-label'), '44,200,000 DGNRS');
     assert.equal(stagedValue?.classList.contains('rvl-card-value--long'), false,
       'the screenshot-sized value is handled by the singleton rule before the long tier');
     assert.match(
@@ -5138,7 +5140,7 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('reduced motion keeps manual popping and one tally across every board', async () => {
+  test('reduced motion keeps manual popping and independent scores on each ticket', async () => {
     queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0,
       totalPayout: 0n, spins: [0, 1].map(spinIndex => ({
         spinIndex, playerTraits: 0xC0804000, houseTraits: 0xC0804000, score: 9, payout: 0n,
@@ -5146,18 +5148,23 @@ describe('reveal-overlay element', () => {
     });
     const el = instantiate(); await tick();
     assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 2);
-    assert.equal(el.querySelectorAll('.dgn-pop__score').length, 1);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '0');
+    assert.equal(el.querySelectorAll('.dgn-pop__score').length, 0);
+    assert.equal(el.querySelector('.dgn-winnings__score'), null);
+    assert.equal(el.querySelector('.dgn-pop__ticket-score'), null);
+    assert.equal(el.querySelector('.dgn-pop__payout'), null);
     assert.equal(el.querySelector('.rvl-spin-total'), null);
     const cells = el.querySelectorAll('.dgn-pop__cell');
     clickPop(cells[0]);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    assert.equal(el.querySelector('.dgn-pop__flame').dataset.points, '3');
     clickPop(cells[0]);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    assert.equal(el.querySelector('.dgn-pop__flame').dataset.points, '3');
     clickPop(el.querySelector('.dgn-pop__flame'));
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '9');
+    assert.equal(el.querySelector('.dgn-pop__ticket-score').textContent, '9');
+    assert.equal(el.querySelectorAll('.dgn-pop__payout').length, 1);
     await revealPops(el);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '18');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['9', '9']);
+    assert.equal(el.querySelectorAll('.dgn-pop__payout').length, 2);
+    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, '0 ETH');
     assert.equal(el.querySelectorAll('.dgn-pop__player').length, 8);
     assert.equal(el.querySelector('.rvl-dgn-auto-cta'), null);
     assert.equal(el.querySelector('.rvl-dgn-skip-cta'), null);
@@ -5165,6 +5172,22 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').textContent, 'UNLUCKY');
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('an unverified historical reel stays neutral until its recorded score is revealed', async () => {
+    queueReveal({ kind: 'degenerette', currency: 1, heroIdx: 0, totalPayout: 0n,
+      spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: null, score: 1, payout: 0n }],
+    });
+    const el = instantiate(); await tick();
+    clickPop(el.querySelector('.dgn-pop__cell'));
+    const center = el.querySelector('.dgn-pop__flame');
+    assert.equal(center.dataset.points, undefined, 'unknown points must not look like a red miss');
+    assert.equal(el.querySelector('.dgn-pop__payout'), null);
+    await revealPops(el);
+    assert.equal(center.dataset.score, '1');
+    assert.equal(center.dataset.points, '1');
+    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, '0 FLIP');
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
   test('only the completed payout summary splits real ETH from awarded Luckboxes', async () => {
@@ -5394,7 +5417,8 @@ describe('reveal-overlay element', () => {
     clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta'));
     await tick();
     assert.doesNotMatch(el.querySelector('.rvl-spin-head').textContent, /WWXRP/);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '0');
+    assert.equal(el.querySelector('.dgn-pop__ticket-score'), null);
+    assert.equal(el.querySelector('.dgn-pop__payout'), null);
     assert.equal(el.querySelector('.rvl-spin-total'), null);
     await revealPops(el);
     assert.match(el.querySelector('.rvl-spin-head').textContent, /WWXRP/);
@@ -5418,7 +5442,8 @@ describe('reveal-overlay element', () => {
       assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.bubble-reveal__hero'));
     });
     await revealPops(el);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['9', '9', '9']);
+    assert.equal(el.querySelector('.dgn-pop__payout'), null, 'group awards have no invented ticket payout');
     assert.match(el.querySelector('.rvl-survival').textContent, /BUSTED/);
     assert.equal(el.querySelector('.rvl-box-currency-reveal'), null);
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
@@ -5528,7 +5553,7 @@ describe('reveal-overlay element', () => {
     );
     assert.match(survival.textContent, /SURVIVED/);
     assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 3);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '4');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['3', '1', '0']);
     const payoutMeter = el.querySelector('.rvl-box-payout-meter');
     assert.equal(payoutMeter.hidden, true, 'the reserved winnings area replaces the duplicate payout card');
     assert.ok(el.querySelector('.dgn-winnings'));
@@ -5856,7 +5881,9 @@ describe('reveal-overlay element', () => {
     await tick();
     await revealPops(el);
     assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 4);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '3');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['0', '0', '3', '0']);
+    assert.equal(el.querySelectorAll('.dgn-pop__payout-amount')[2].textContent, '+272,965 FLIP');
+    assert.equal(el.querySelectorAll('.dgn-pop__payout-detail')[2].textContent, 'BEFORE FLIP');
     assert.match(el.querySelector('.rvl-spin-total').textContent, /SURVIVAL FLIP BUSTED/);
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-bust'));
@@ -5953,7 +5980,7 @@ describe('reveal-overlay element', () => {
     const cell = el.querySelector('.dgn-pop__cell');
     assert.equal(cell.querySelector('.dgn-pop__gold'), null, 'covered gold does not announce a match');
     clickPop(cell);
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '1');
+    assert.equal(el.querySelector('.dgn-pop__flame').dataset.points, '1');
     assert.equal(cell.dataset.points, '1');
     assert.ok(cell.querySelector('.dgn-pop__gold'));
     assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD ×1.25');
@@ -5971,11 +5998,11 @@ describe('reveal-overlay element', () => {
     const el = instantiate(); await tick();
     const cell = el.querySelector('.dgn-pop__cell');
     clickPop(cell);
-    const score = el.querySelector('.dgn-pop__score');
-    assert.equal(score.textContent, '3');
+    const score = el.querySelector('.dgn-pop__flame');
+    assert.equal(score.dataset.points, '3');
     clickPop(el.querySelector('[data-bind="rvl-close"]')); await tick();
     clickPop(el.querySelectorAll('.dgn-pop__cell')[1]);
-    assert.equal(score.textContent, '3');
+    assert.equal(score.dataset.points, '3');
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
@@ -6028,7 +6055,8 @@ describe('reveal-overlay element', () => {
       'only the unlocked bonus pair animates in');
     assert.equal(el.querySelector('.dgn-pop__all').hidden, false);
     clickPop(el.querySelector('.dgn-pop__all')); await tick(); await tick();
-    assert.equal(el.querySelector('.dgn-pop__score').textContent, '27');
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['9', '9', '9']);
+    assert.equal(el.querySelector('.dgn-pop__payout'), null, 'group awards have no invented ticket payout');
     assert.match(el.querySelector('.rvl-survival').textContent, /SURVIVED/);
     assert.match(el.querySelector('.rvl-spin-total').textContent, /1,?000 FLIP/);
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();

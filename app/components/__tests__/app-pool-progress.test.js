@@ -562,7 +562,7 @@ describe('special level-transition jackpot countdown', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
       level: 34, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'decimator', label: 'DECIMATOR DRAWING IN:', level: 35,
+      kind: 'decimator', label: 'DECIMATOR BATTLE IN:', level: 35,
     });
     assert.equal(transitionJackpotCountdownModel({
       level: 34, jackpot: false, lastPurchaseDay: false,
@@ -834,7 +834,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /pool-jackpot-countdown/);
     assert.match(component, /secondsUntilDayCrossover/,
       'the strip shares the top-bar countdown clock');
-    assert.match(component, /DECIMATOR DRAWING IN:/);
+    assert.match(component, /DECIMATOR BATTLE IN:/);
     assert.doesNotMatch(component, /DECIMATOR CROSSOVER/);
     assert.match(component, /BIG ASS FLIP LOCKS IN:/);
     assert.match(component, /pool-special-jackpot-countdown/);

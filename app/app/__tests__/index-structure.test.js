@@ -59,7 +59,7 @@ describe('index.html basic-mode skeleton', () => {
       'class="play-grid"',
       '<app-quest-panel>',
       'class="side-bets-rail"',
-      '<app-parimutuel-panel>',
+      '<app-parimutuel-panel quest>',
       'data-referral-strip',
       '<app-degenerette-panel>',
       'class="player-extras"',
@@ -258,7 +258,7 @@ describe('index.html basic-mode skeleton', () => {
     const craps = row.indexOf('<app-craps-entry>');
     assert.ok(quest >= 0 && quest < craps && craps < degenerette,
       'quests, Craps, and Degenerette are mounted in desktop track order');
-    assert.ok(row.indexOf('<app-parimutuel-panel>') > quest && row.indexOf('<app-parimutuel-panel>') < craps,
+    assert.ok(row.indexOf('<app-parimutuel-panel quest>') > quest && row.indexOf('<app-parimutuel-panel quest>') < craps,
       'Growth is inside the quest column before Craps');
     assert.match(appCss,
       /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests craps degenerette"/s,
@@ -406,7 +406,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-e579cd31-91c7eb96-scoped-v9';
+    const revision = '?v=craps-32c60453-9d347929-scoped-v12-player-best';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -473,7 +473,7 @@ describe('index.html basic-mode skeleton', () => {
     }
     assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
       'component upgrade waits for its scoped stylesheet');
-    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v3"/,
+    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v4-player-best"/,
       'the resolver redesign has its own deferred-style cache identity');
     assert.match(html, /link\.dataset\.rev[\s\S]*?encodeURIComponent\(revision\)/,
       'the deferred-style loader applies an explicitly declared cache identity');

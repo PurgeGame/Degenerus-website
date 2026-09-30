@@ -80,16 +80,23 @@ test('contract ABI integration: new pending tickets are counted in entries, not 
   const data=await readChainRoute(`/player/${PLAYER}/holdings`,{client:f.client});assert.equal(data.tickets.find(row=>row.level===5).pendingEntries,12);assert.equal(data.tickets.find(row=>row.level===5).entryCount,12);
 });
 
-test('contract ABI integration: Decimator winners divide by the entire winning field and split odd wei correctly',async()=>{
-  // Audit 3c79c1486: the pointer names the entry; the entry holds owner + weight in thousandths of a FLIP.
-  const {decimatorEntryKey}=await import('../../chain/games.js');
-  const f=await rpcFixture();
-  for(const [member,value] of Object.entries({lvl:10,bucket:2,subBucket:1,position:0}))await f.field('GAME','decPointer',value,PLAYER,member);
-  const key=decimatorEntryKey(10,2,1,0);
-  await f.field('GAME','decEntry',BigInt(PLAYER),key,'owner');await f.field('GAME','decEntry',10,key,'weightMilli');
-  for(const [member,value] of Object.entries({poolWei:303,totalBurn:30n*10n**15n}))await f.field('GAME','decClaimRounds',value,10,member);
-  await f.field('GAME','decBucketOffsetPacked',1,10);
-  const row=await readChainRoute(`/player/${PLAYER}/decimator?level=10`,{client:f.client});assert.equal(row.ethAmount,'50');assert.equal(row.lootboxAmount,'51');
+test('contract ABI integration: Decimator winners split the pool with the champion bonus and its odd wei',async()=>{
+  // Audit 32c604531: the wallet slot names its entry, one word keyed lvl << 64 | id (owner | chips << 160 |
+  // whole-FLIP stack << 190); ranked winners wait in the
+  // heap until paid. 303 wei over 3 winners: 5% (15) to the champion, 96 each, and the division dust (3)
+  // to the champion too, so the champion's place pays 303 - 2 x 96 = 111.
+  const {decimatorCoinHeads}=await import('../../chain/games.js');
+  const id=4n; const word=[...Array(64).keys()].map(i=>BigInt(i+1)).find(w=>decimatorCoinHeads(w,10,id));
+  const seed=async(paid,place,champion)=>{
+    const f=await rpcFixture();
+    await f.field('GAME','decBattlePlayers',(10n<<64n)|id,PLAYER);
+    await f.field('GAME','decBattleEntries',BigInt(PLAYER)|(10n<<190n),(10n<<64n)|id);
+    for(const [member,value] of Object.entries({poolWei:303,count:30,phase:2,winners:3,paid,rngWord:word,champion}))await f.field('GAME','decBattleRounds',value,10,member);
+    await f.field('GAME','decBattleHeap',id,place);
+    return readChainRoute(`/player/${PLAYER}/decimator?level=10`,{client:f.client});
+  };
+  const champ=await seed(0,0,id);assert.equal(champ.ethAmount,'111');assert.equal(champ.champion,true);assert.equal(champ.halfPasses,'0');
+  const other=await seed(1,2,9n);assert.equal(other.ethAmount,'96');assert.equal(other.winner,true);assert.equal(other.lootboxAmount,'0');
 });
 
 test('contract ABI integration: all late settlements in a transaction stay under their actual day anchor',async()=>{

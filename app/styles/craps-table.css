@@ -3712,6 +3712,11 @@ app-craps-table {
   font-variant-numeric: tabular-nums;
 }
 
+.craps-race-endpoint-entries {
+  fill: #c8dfd1;
+  font: 800 8px "Roboto Mono", monospace;
+}
+
 /* Reserve a separate result band beneath phone dice, including while the
    number animates. The label is centered by its grid, never translated. */
 @media (max-width: 959px) {

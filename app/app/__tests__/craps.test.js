@@ -200,6 +200,48 @@ test('daily word derivation reproduces the seven published buy-ins, speeds, and 
   );
 });
 
+test('Main Event funding follows its pool roll after the unrolled High Roller reserve', () => {
+  const wei = 10n ** 18n;
+  for (const [word, expected] of [[1n, 9_500n], [2n, 57_000n], [46n, 380_000n], [34n, 1_900_000n]]) {
+    assert.equal(craps.crapsMainEventAddedWei(20_000n * wei, word), expected * wei);
+  }
+  assert.equal(craps.crapsMainEventAddedWei(20_000n, 0n), null);
+  assert.equal(craps.crapsMainEventAddedWei(null, 1n), null);
+});
+
+test('current Main Event results include real funding and all jackpot-awarded seats exactly once', () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  const wei = 10n ** 18n;
+  const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
+  const slot = 41n * 8n + 6n;
+  const key = ethers.toBeHex(slot, 32);
+  const event = (name, values) => iface.encodeEventLog(iface.getEvent(name), values);
+  const logs = [
+    event('CrapsBonusOpened', [key, slot, 0n, 0n, 0n, 0n, 8_000n * wei]),
+    event('JackpotBattleLocked', [slot, 42, 20_000n * wei, 24]),
+    event('JackpotBattleStarted', [slot, 3, 80, 80, 2]),
+    // A detached jackpot must never inflate the paid Main Event's count.
+    event('JackpotBattleLocked', [slot + 1n, 42, 40_000n * wei, 0]),
+    event('JackpotBattleStarted', [slot + 1n, 3, 500, 500, 1]),
+    event('CrapsBattleFinalized', [key, 1, 1, 0, 0, 0, 70_000n * wei]),
+    event('CrapsBattlePaid', [77, key, PLAYER, 70_000n * wei]),
+  ];
+  for (const day of [41, 42]) {
+    const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs);
+    const result = day === 41 ? snapshot.results[5] : snapshot.yesterdayEventResult;
+    const entrants = day === 41 ? snapshot.entrants.windows[5] : snapshot.entrants.previousEvent;
+    assert.equal(result.mainEventAddedWei, 57_000n * wei);
+    assert.equal(result.winnerBoostWei, null, 'whole-field funding is not reclassified as the winner\'s personal boost');
+    assert.equal(entrants.total, 104, '24 paid/day seats plus 80 jackpot seats');
+    assert.equal(entrants.awarded, 80);
+    assert.equal(entrants.high, 0, 'awarded seats do not become High Rollers');
+    assert.equal(entrants.mainPotStakeWei, null, 'awarded seats do not invent paid entry stakes');
+  }
+  const pending = craps.crapsLobbySnapshotFromLogs(42, logs.slice(0, 2));
+  assert.equal(pending.entrants.previousEvent.total, 24);
+  assert.equal(pending.entrants.previousEvent.awarded, 0);
+});
+
 test('opening logs supply the honest added-FLIP ceiling and include later donations', () => {
   const day = 42;
   const wei = 10n ** 18n;
@@ -1455,8 +1497,17 @@ test('resolved High Roller replays retain their full stake and exact side-field 
 
 test('the surviving chain reads normalize their values', async () => {
   assert.equal(await craps.readCrapsProgressivePool(), '1250000000000000000000000');
-  assert.deepEqual(await craps.readCrapsPassCredits(PLAYER), { normal: 17, high: 2 });
-  assert.deepEqual(craps.decodeCrapsPassCredits((9n << 32n) | 23n), { normal: 23, high: 9 });
+  const unset = { chips: 0, placed: 0, initialized: false };
+  assert.deepEqual(await craps.readCrapsPassCredits(PLAYER), { normal: 17, high: 2, preferredBoard: unset });
+  assert.deepEqual(craps.decodeCrapsPassCredits((9n << 32n) | 23n), { normal: 23, high: 9, preferredBoard: unset });
+  // CrapsPreferenceLib: pass x1 (leg 0), place 6 x2 (leg 3), hard 8 x3 (leg 8), two bits a leg.
+  const compact = 1n | (2n << 6n) | (3n << 16n);
+  const saved = (compact << 64n) | (1n << 84n) | (4n << 32n) | 5n;
+  assert.deepEqual(craps.decodeCrapsPassCredits(saved), {
+    normal: 5, high: 4,
+    preferredBoard: { chips: 1 | (2 << 9) | (3 << 24), placed: 6, initialized: true },
+  });
+  assert.deepEqual(craps.decodeCrapsPreferredBoard(1n << 84n), { chips: 0, placed: 0, initialized: true });
   assert.match(craps.crapsPassCreditsStorageKey(PLAYER), /^0x[0-9a-f]{64}$/);
 });
 
@@ -1815,7 +1866,7 @@ test('an AlreadyInBonus repair reads only the affected player entry topics from 
 });
 
 function windowApiKey() {
-  return `craps-window-api:v1:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
+  return `craps-window-api:v2:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
     + `:${Number(CHAIN.deployBlock) || 0}`;
 }
 

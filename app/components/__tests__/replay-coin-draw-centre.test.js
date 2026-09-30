@@ -52,6 +52,11 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     #hasBonus = false; #bonusScratchComplete = false; #drawViewSwitching = false; #bonusPhase = false;
     #dayBonusTraitDraw = true; #dayRoll1 = null; #dayRoll2 = null; #playerRoll1Wins = []; #playerRoll2Wins = [];
     #quadWinArrays = []; #centerWins = []; #skipSpinId = null; #animId = 0;
+    #centerScratched = true; #bubbleCovers = new Map();
+    popped = 0;
+    #revealCenter() { this.popped++; this.#centerScratched = true; }
+    cover() { this.#centerScratched = false; this.#bubbleCovers.set('center', {}); }
+    finishPop() { this.#bubbleCovers.delete('center'); this.#syncCoinDrawCentre(); }
     opened = []; toggled = 0; toggleReady = false;
     querySelector(selector) {
       if (selector.includes('"center"')) return dom.center;
@@ -124,6 +129,60 @@ test('purchase day, viewer drawn in: the centre glows, reads as a button and ope
   assert.equal(instance.opened.length, 2);
 });
 
+test('the center first pops its cover; a separate click opens the revealed Craps battle', () => {
+  storage.clear();
+  const { instance, dom } = panel();
+  instance.cover();
+  assert.equal(instance.stepDue(), null, 'the shared key cannot spoil a covered center');
+  instance.sync();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false,
+    'the battle is concealed before the center is popped');
+  assert.equal(dom.center.getAttribute('aria-label'), null,
+    'the covered center does not announce the hidden outcome');
+  instance.click({ target: { classList: { contains: () => false } } });
+  assert.equal(instance.popped, 1);
+  assert.equal(instance.opened.length, 0, 'revealing the center never opens the table in the same click');
+  instance.sync();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false,
+    'the result waits for the pop animation to finish');
+  instance.finishPop();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), true);
+  instance.keydown({ key: 'Enter', preventDefault() {} });
+  assert.equal(instance.opened.length, 1, 'the revealed battle stays keyboard accessible');
+});
+
+test('a nonparticipant pops the center to a flame without a battle action', () => {
+  const { instance, dom } = panel({ coinDrawBattle: null });
+  instance.cover();
+  instance.sync();
+  let prevented = false;
+  instance.keydown({ key: ' ', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(instance.popped, 1);
+  assert.equal(instance.opened.length, 0);
+  instance.finishPop();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--flame'), true);
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
+});
+
+test('current jackpot seats reveal Craps and carry the exact seat into its replay', () => {
+  const key = '0x' + (41 * 8 + 6).toString(16).padStart(64, '0');
+  const currentBattle = { kind: 'jackpot', key, day: 42, entrants: [{ player: VIEWER, betId: '616123', units: '1' }] };
+  const model = coinDrawCentreModel(currentBattle, VIEWER);
+  assert.equal(model.kind, 'jackpot');
+  assert.equal(model.key, key);
+  assert.equal(model.viewerBetId, '616123');
+  assert.equal(coinDrawCentreModel(currentBattle, OTHER), null);
+  assert.equal(coinDrawCentreModel({ ...currentBattle, entrants: [{ player: VIEWER }] }, VIEWER), null);
+  const { instance, dom } = panel({ coinDrawBattle: currentBattle });
+  instance.cover();
+  instance.sync();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), false);
+  instance.click({ target: { classList: { contains: () => false } } });
+  instance.finishPop();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps'), true);
+});
+
 test('purchase day, viewer not drawn or no viewer: no highlight and no click', () => {
   for (const player of [OTHER.replace('cd', 'ef'), null, '']) {
     const { instance, dom } = panel({ player });
@@ -183,7 +242,7 @@ test('purchase day has no Bonus Spin; a drawn wallet\'s battle FLIP is paid at t
 test('the bottom key resolves the battle after the main spin, before the coinflip', () => {
   const body = between('    btn.classList?.remove(\'is-craps\');', '    if (this.#coinflipHandoffReady()) {');
   assert.match(body, /const crapsBattle = this\.#coinDrawStepDue\(\);/);
-  assert.match(source, /#coinDrawStepDue\(\) \{\s*const model = this\.#jackpotSpinsComplete\(\) \? this\.#coinDrawCentre\(\) : null;\s*return model && !this\.#coinDrawWasSeen\(model\) \? model : null;/,
+  assert.match(source, /#coinDrawStepDue\(\) \{[\s\S]*?const model = this\.#jackpotSpinsComplete\(\) \? this\.#coinDrawCentre\(\) : null;\s*return model && !this\.#coinDrawWasSeen\(model\) \? model : null;/,
     'a level-0 purchase day plays its Bonus Spin first, and the key asks only until the battle is opened');
   assert.match(body, /dataset\.replayAction = 'craps-battle'/);
   assert.match(body, /CRAPS_BATTLE_LABEL/);
@@ -252,7 +311,7 @@ test('a due battle outranks DAY SUMMARY on the shared key', () => {
 });
 
 test('opening a battle always ends: a deadline, a worker timeout, and a table it loads itself', () => {
-  assert.match(source, /const result = await Promise\.race\(\[\s*openCoinDrawRun\(\{ day: model\.day, player: model\.player, opener, signal: controller\?\.signal \?\? null \}\),\s*timedOut,\s*\]\);/);
+  assert.match(source, /const result = await Promise\.race\(\[\s*model\.kind === 'jackpot'\s*\? openJackpotDrawRun\(\{ battleKey: model\.key, viewerBetId: model\.viewerBetId, opener, signal: controller\?\.signal \?\? null \}\)\s*: openCoinDrawRun\(\{ day: model\.day, player: model\.player, opener, signal: controller\?\.signal \?\? null \}\),\s*timedOut,\s*\]\);/);
   const viewer = readFileSync(new URL('../../craps/coin-draw-viewer.js', import.meta.url), 'utf8');
   const entry = readFileSync(new URL('../app-craps-entry.js', import.meta.url), 'utf8');
   const pinned = entry.match(/from '\.\/app-craps-table\.js(\?rev=[^']+)'/)[1];

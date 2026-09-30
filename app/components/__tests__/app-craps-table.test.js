@@ -244,7 +244,7 @@ test('bonus display uses ordinary schedule procs, and receipts never invent firs
 });
 
 test('exit portraits wait for completed settlement without shifting their roll coordinate', () => {
-  assert.match(COMPONENT_SRC, /player\.endStep > Math\.min\(resolved, this\.#raceSettledRollCount\)/);
+  assert.match(COMPONENT_SRC, /player\.finishedStep > Math\.min\(resolved, this\.#raceSettledRollCount\)/);
   assert.match(COMPONENT_SRC, /const continueRun = \(\) => \{[\s\S]*?this\.#raceSettledRollCount = nextIndex \+ 1;\s*this\.#paintRaceChart\(nextIndex \+ 1\)/);
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0/);
   assert.match(COMPONENT_SRC, /if \(!animateRace\) this\.#raceSettledRollCount = index \+ 1/);
@@ -552,19 +552,19 @@ test('bankroll rack separates live action from chips sitting out', async () => {
     'a payout already enlarged by the wager multiplier produces a heavier chip count');
 });
 
-test('felt stacks physically double every three completed shooters', async () => {
+test('felt stacks physically double every three completed shooters, then every shooter from 30', async () => {
   const {
     crapsEscalatedChipPresentation,
     crapsWagerMultiplierForShooter,
   } = await import(moduleUrl);
 
   // ⛔ EVERY THREE SHOOTERS, capped at uint32.max — both moved at the 2026-08-29 re-vendor
-  // (`Craps._ESC_HANDS` 5 -> 3, `_ESC_CAP` uint16 -> uint32.max). Shooter 255 is past the
-  // ceiling and pins there; 75 and 80 sit either side of a doubling to prove the step, not just
-  // the cap.
+  // (`Craps._ESC_HANDS` 5 -> 3, `_ESC_CAP` uint16 -> uint32.max) — and EVERY SHOOTER from 30
+  // (`_ESC_FAST_FROM`, audit 32c604531). 29/30/31 straddle the switch, 51 is the last doubling
+  // and 52 the first shooter at the ceiling; 255 pins there.
   assert.deepEqual(
-    [0, 4, 5, 9, 10, 14, 15, 75, 80, 255].map(crapsWagerMultiplierForShooter),
-    [1, 2, 2, 8, 8, 16, 32, 33_554_432, 67_108_864, 4_294_967_295],
+    [0, 4, 5, 9, 10, 14, 15, 29, 30, 31, 51, 52, 255].map(crapsWagerMultiplierForShooter),
+    [1, 2, 2, 8, 8, 16, 32, 512, 1_024, 2_048, 2_147_483_648, 4_294_967_295, 4_294_967_295],
   );
   // The ordinals below are chosen for the MULTIPLIER they land on (1x, 2x, 4x, 8x, 16x), not for
   // themselves — the presentation is a function of the multiple, and the ordinals that produce
@@ -677,6 +677,59 @@ test('stake/theo helpers use whole FLIP inputs and contract payout math', async 
     fieldEntrants: 24,
     loadedEntrants: 2,
   }), null, 'a featured-only viewport cannot invent a full-field remaining count');
+});
+
+test('the race shows each wallet once, follows its current best entry, and counts surviving seats', async () => {
+  const { crapsRacePlayerGroups, rankCrapsBattleEntries } = await import(moduleUrl);
+  const alice = '0xabcdef0000000000000000000000000000001234';
+  const bob = '0x1111111111111111111111111111111111111111';
+  const players = [
+    { key: 'a1', player: alice, label: 'Same name', local: true, color: '#abcdef', endStep: 4 },
+    { key: 'a2', player: alice.toUpperCase(), label: 'Same name', color: '#123456', endStep: 8 },
+    { key: 'b1', player: bob, label: 'Same name', endStep: 9 },
+  ];
+  const entry = (key, highPoint, state = 'live') => ({ key, state, highPoint, goal: 1_000n,
+    rankRoll: 4, rankStanding: 0, rankStop: key === 'a1' ? 'goal' : 'bust', rankPeak: 9_999n });
+  let groups = crapsRacePlayerGroups(players, rankCrapsBattleEntries([
+    entry('a1', 150n), entry('a2', 200n), entry('b1', 100n),
+  ]));
+  assert.equal(groups.length, 2, 'wallets group case-insensitively; names never merge different owners');
+  assert.equal(groups[0].key, 'a2', 'the top entry uses this roll, not the sealed future goal result');
+  assert.equal(groups[0].local, true, 'your leading sibling still appears as YOU');
+  assert.equal(groups[0].color, '#abcdef');
+  assert.equal(groups[0].entriesRemaining, 2);
+  assert.equal(groups[0].playerEntryCount, 2);
+
+  groups = crapsRacePlayerGroups(players, rankCrapsBattleEntries([
+    entry('a1', 300n), entry('a2', 200n, 'bust'), entry('b1', 100n),
+  ]));
+  assert.equal(groups[0].key, 'a1', 'the representative changes when another entry leads');
+  assert.equal(groups[0].color, '#abcdef', 'the owner keeps one line color across entry changes');
+  assert.equal(groups[0].entriesRemaining, 1);
+
+  groups = crapsRacePlayerGroups(players, rankCrapsBattleEntries([
+    entry('a1', 1_200n, 'cashout'), entry('a2', 200n, 'bust'), entry('b1', 100n),
+  ]));
+  assert.equal(groups[0].key, 'a1', 'a finished goal entry remains the best result');
+  assert.equal(groups[0].entriesRemaining, 0, 'completed runs no longer count as still playing');
+  assert.equal(groups[0].finishedStep, 8, 'show one finished-player portrait after their last entry finishes');
+});
+
+test('two entries from one wallet remain separate boards and keep their entry numbers', async () => {
+  const { aggregateCrapsTableBets } = await import(moduleUrl);
+  const player = '0x1111111111111111111111111111111111111111';
+  const table = aggregateCrapsTableBets([
+    { player, betId: '20', label: 'Alice · ENTRY 1/2', entryNumber: 1, playerEntryCount: 2,
+      chips: { passLine: 1 }, resolution: { bankrollsFlip: [100, 200] } },
+    { player, betId: '21', label: 'Alice · ENTRY 2/2', entryNumber: 2, playerEntryCount: 2,
+      chips: { dontPassLine: 1 }, resolution: { bankrollsFlip: [100, 0] } },
+  ]);
+  assert.equal(table.playerCount, 2);
+  assert.deepEqual(table.players.map(({ betId, entryNumber, playerEntryCount, bankrollsFlip }) =>
+    ({ betId, entryNumber, playerEntryCount, bankrollsFlip })), [
+    { betId: '20', entryNumber: 1, playerEntryCount: 2, bankrollsFlip: ['100', '200'] },
+    { betId: '21', entryNumber: 2, playerEntryCount: 2, bankrollsFlip: ['100', '0'] },
+  ]);
 });
 
 test('other players aggregate generic chip counts without entering the local seven', async () => {

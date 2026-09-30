@@ -317,10 +317,11 @@ async function flush() {
   for (let i = 0; i < 8; i += 1) await Promise.resolve();
 }
 
-async function mount() {
+async function mount({ quest = false } = {}) {
   await import('../app-parimutuel-panel.js');
   const Ctor = customElements.get('app-parimutuel-panel');
   const el = new Ctor();
+  if (quest) el.setAttribute('quest', '');
   _docBody.appendChild(el);
   el.connectedCallback();
   await flush();
@@ -856,12 +857,10 @@ describe('app-parimutuel-panel', () => {
     }));
     decimatorMod.__setDecimatorContextReaderForTest(async () => ({
       activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
+      daysLate: 1,
       futurePoolWei: 1_250_000_000_000n,
-      totalBurnWeight: 2_500n * FLIP,
-      totalBaseBurnWei: 2_000n * FLIP,
-      totalRoundScore: 15_150_625n * FLIP,
+      stackWei: 2_500n * FLIP,
+      totalStackWei: 15_150_625n * FLIP,
     }));
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
 
@@ -877,10 +876,11 @@ describe('app-parimutuel-panel', () => {
     assert.equal(degenScore.textContent, '235%');
     assert.equal(degenScore.getAttribute('data-score-tier'), 'purple');
     const multiplierValue = card.querySelector('.pari-decimator__multiplier-value');
-    assert.equal(multiplierValue.textContent, '205%');
+    // decBattleMultBps(235) = 17,049 at 0.9 for one day late: 15,344 bps.
+    assert.equal(multiplierValue.textContent, '153%');
     assert.equal(multiplierValue.getAttribute('data-score-tier'), 'purple');
     assert.equal(card.querySelector('.pari-decimator__multiplier-label').textContent, 'MULTI');
-    assert.match(card.textContent, /235%DEGEN=205%MULTI/);
+    assert.match(card.textContent, /235%DEGEN=153%MULTI/);
     assert.doesNotMatch(card.textContent, /DEGEN RATING/);
     assert.match(APP_CSS,
       /\.pari-decimator__head-copy\s*\{[^}]*flex-direction:\s*column;[^}]*justify-content:\s*space-between/s,
@@ -895,9 +895,9 @@ describe('app-parimutuel-panel', () => {
     assert.match(card.textContent, /ALL PLAYERS SCORE15,150,625/);
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+2,045 SCORE',
+      '+1,534 SCORE',
     );
-    assert.match(PARI_SOURCE, /\+\$\{_fmtFlip\(boonScore\)\} BOON/,
+    assert.match(PARI_SOURCE, /\+\$\{_fmtFlip\(boonStack\)\} BOON/,
       'the legacy fallback also names the concrete score added by a boon');
     assert.doesNotMatch(card.textContent, /ACTIVITY|DAY 1|LAST DAY|TOTAL BURN WEIGHT/);
     assert.doesNotMatch(card.textContent, /Level 43|BURN WINDOW OPEN|Minimum 1,000|Bucket 7/);
@@ -913,7 +913,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(input.value, '2000');
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+4,091 SCORE',
+      '+3,068 SCORE',
     );
     down.click();
     assert.equal(input.value, '1000');
@@ -923,7 +923,7 @@ describe('app-parimutuel-panel', () => {
     input.dispatchEvent({ type: 'input' });
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+6,137 SCORE',
+      '+4,603 SCORE',
     );
     assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN FOR');
     assert.match(APP_CSS,
@@ -939,8 +939,8 @@ describe('app-parimutuel-panel', () => {
     await flush();
 
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, 3_000n * FLIP],
-      ['send', TEST_ADDR, 3_000n * FLIP],
+      ['static', TEST_ADDR, 3_000n * FLIP, 0],
+      ['send', TEST_ADDR, 3_000n * FLIP, 0],
     ]);
     el.disconnectedCallback();
   });
@@ -999,8 +999,8 @@ describe('app-parimutuel-panel', () => {
     });
     await flush();
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, 3_000n * FLIP],
-      ['send', TEST_ADDR, 3_000n * FLIP],
+      ['static', TEST_ADDR, 3_000n * FLIP, 0],
+      ['send', TEST_ADDR, 3_000n * FLIP, 0],
     ]);
     el.disconnectedCallback();
   });
@@ -1058,6 +1058,63 @@ describe('app-parimutuel-panel', () => {
       /\.pari-prebet-bonus\s*\{[^}]*justify-content:\s*center[^}]*font-size:\s*0\.55rem/s,
       'the reward remains a compact line rather than another card');
   });
+
+  for (const earnsReward of [true, false]) {
+    test(`timed quest keeps the stake and choices clear with reward eligibility ${earnsReward}`, async () => {
+      installContract({
+        growth: { [LEVEL]: { openRound: LEVEL, over: 3n, under: 1n } },
+        ratchets: { prev: 100n * RAW_ETH, current: 110n * RAW_ETH },
+        marketGate: { mayBet: true, earnsReward },
+      });
+      const el = await mount({ quest: true });
+      const card = growthCard(el);
+      assert.equal(card.querySelector('.pari-quest__role').textContent, 'TIMED');
+      assert.equal(card.querySelector('.pari-book__title').textContent, 'Growth bet');
+      assert.equal(card.querySelector('.pari-clock').textContent, 'L42 · OPEN');
+      assert.equal(card.querySelector('.pari-book__offered').textContent, '10%');
+      assert.doesNotMatch(card.textContent, /ETH/);
+      assert.equal(card.querySelector('.pari-quest__stake').textContent, '1,000 FLIP BET');
+      const buttons = card.querySelectorAll('.pari-side__cta');
+      assert.equal(buttons.length, 2);
+      assert.equal(buttons[0].getAttribute('aria-label'), 'Bet under 10%');
+      assert.equal(buttons[1].getAttribute('aria-label'), 'Bet over 10%');
+      assert.deepEqual(buttons.map(button => button.textContent), ['UNDER', 'OVER']);
+      assert.match(buttons[0].title, /1,000 FLIP bet.*25%/);
+      assert.match(buttons[1].title, /1,000 FLIP bet.*75%/);
+      assert.equal(card.querySelector('.pari-prebet-bonus')?.textContent ?? null,
+        earnsReward ? '150 FLIP BONUS · +1 STREAK' : null);
+      el.disconnectedCallback();
+    });
+  }
+
+  for (const { current, outcome, percentage, tone } of [
+    { current: 110n, outcome: 1, percentage: '10%', tone: 'won' },
+    { current: 110n, outcome: 2, percentage: '10%', tone: 'lost' },
+    { current: 90n, outcome: 1, percentage: '-10%', tone: 'won' },
+    { current: 110n, outcome: 0, percentage: '10%', tone: null },
+  ]) {
+    for (const side of [0, 1, 2]) {
+      test(`timed Growth ${percentage} uses prior outcome ${outcome} with held side ${side}`, async () => {
+        installContract({
+          growth: {
+            [LEVEL]: { openRound: LEVEL, over: 3n, under: 1n, side },
+            [LEVEL - 1]: { outcome },
+            [LEVEL - 2]: { outcome: outcome === 1 ? 2 : 1 },
+          },
+          ratchets: { prev: 100n * RAW_ETH, current: current * RAW_ETH },
+        });
+        const el = await mount({ quest: true });
+        const card = growthCard(el);
+        const offered = card.querySelector('.pari-book__offered');
+        assert.equal(offered.textContent, percentage);
+        assert.equal(offered.className, `pari-book__offered${tone ? ` pari-book__offered--${tone}` : ''}`,
+          'the immediately previous settlement decides the color, not the sign or the player’s side');
+        assert.doesNotMatch(card.textContent, /ETH/);
+        if (side) assert.equal(card.querySelector('.pari-your-bet__pick').textContent, side === 1 ? 'OVER' : 'UNDER');
+        el.disconnectedCallback();
+      });
+    }
+  }
 
   test('an allowed player who cannot earn the growth reward sees no bet bonus', async () => {
     installContract({

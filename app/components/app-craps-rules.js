@@ -262,7 +262,7 @@ var o=Object.defineProperty;var a=(t,r)=>o(t,"name",{value:r,configurable:!0});e
             </section>
             <section>
               <strong>REACH THE GOAL.</strong>
-              <p>Your bets will be played automatically until your run is over. The goal is to run your stack up to 5× your starting bankroll. Every 3 shooters, all bets are doubled. After a 7-out, if you cannot cover the next betting round, you are at risk. If you have less than half a bet, you bust; if you have at least half a bet, you receive a double-or-nothing survival flip that will allow you to continue half the time.</p>
+              <p>Your bets will be played automatically until your run is over. The goal is to run your stack up to 5× your starting bankroll. Every 3 shooters, all bets are doubled, and from the 31st shooter they double every shooter. After a 7-out, if you cannot cover the next betting round, you are at risk. If you have less than half a bet, you bust; if you have at least half a bet, you receive a double-or-nothing survival flip that will allow you to continue half the time.</p>
               <p>After reaching the goal, that amount is locked in. You keep playing with the winnings above it until they can no longer cover the next bet, then you keep your remaining stack, including the protected goal amount.</p>
             </section>
             <section>
@@ -271,7 +271,7 @@ var o=Object.defineProperty;var a=(t,r)=>o(t,"name",{value:r,configurable:!0});e
             </section>
             <section aria-labelledby="craps-rules-riu-title">
               <strong id="craps-rules-riu-title">RUN IT UP.</strong>
-              <p>Win the main Battle and reach a peak of at least <strong>25× your starting bankroll</strong> to claim a share of the Run It Up progressive jackpot. Reach <strong>120×</strong> for a bigger payout, with the biggest shares awarded in the daily Event.</p>
+              <p>Win the main Battle and reach a peak of at least <strong>25× your starting bankroll</strong> to claim a share of the Run It Up progressive jackpot. Reach <strong>120×</strong> for a bigger payout. The Main Event qualifies too.</p>
             </section>
           </div>
 

@@ -25,9 +25,9 @@ const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'u
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 describe('<app-deity-desk>', () => {
-  test('active holders retain the Deity Pass wordmark beside their chosen symbol', () => {
+  test('active holders put their live badge beside the compact Deity Pass label', () => {
     assert.match(DESK_SRC,
-      /class="deity-pass-lockup deity-desk__wordmark"[\s\S]*?data-bind="deity-desk-symbol"[\s\S]*?deity-pass-lockup-v3\.webp/);
+      /class="deity-pass-lockup deity-desk__wordmark"[\s\S]*?data-bind="deity-desk-symbol"[\s\S]*?deity-pass-lockup__name/);
     assert.match(APP_CSS, /\.deity-desk__wordmark\s*\{[^}]*width:\s*min\(11\.2rem, 100%\)/s);
   });
 
@@ -251,10 +251,10 @@ describe('<app-deity-desk>', () => {
     assert.match(APP_CSS, /\.deity-desk__actions button\[data-boon-product="decimator"\]/,
       'boon buttons use product-specific color treatments');
     assert.match(DESK_SRC, /deity-pass-lockup__symbol" data-bind="deity-desk-symbol"/,
-      'the owned symbol occupies the branded pass socket');
+      'the owned symbol remains the identity mark');
     assert.match(APP_CSS,
-      /\.deity-pass-lockup__symbol\s*\{[^}]*left:\s*4\.86%[^}]*top:\s*15\.31%[^}]*width:\s*16%[^}]*height:\s*70%/s,
-      'every Deity surface shares the measured transparent symbol opening');
+      /\.deity-pass-lockup__symbol\s*\{[^}]*inset:\s*-22\.44%[^}]*width:\s*144\.88%[^}]*height:\s*144\.88%/s,
+      'the badge fills its medallion without the SVG empty margins');
     assert.match(APP_CSS, /\.deity-desk__suggestions\s*\{[^}]*position:\s*absolute[^}]*max-height:/s,
       'Discord matches open as a bounded dropdown beneath the target field');
     assert.doesNotMatch(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*attr\(data-boon-pips\)/s,

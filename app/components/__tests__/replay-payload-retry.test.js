@@ -124,8 +124,9 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
   const revealStart = source.indexOf('  #revealCenter(');
   const revealEnd = source.indexOf('  // --- Quadrant reveal', revealStart);
   const render = runInNewContext(`new (class {
-    #quadWinArrays = []; #centerWins = []; #centerScratched = false; #dayBonusTraitDraw = true;
+    #quadWinArrays = []; #centerWins = []; #centerScratched = false; #dayBonusTraitDraw = true; #bonusPhase = true;
     #sfxScratchStop() {} #sfxGreenReveal() {} #checkAllScratched() {}
+    #syncDrawToggleAffordance() {}
     #popBubble(_target, _event, _instant, done) { done(); }
     drawnIn = false; #coinDrawDrawnIn() { return this.drawnIn; }
     prize = { style: {}, classList: { remove() {}, add() {} }, setAttribute(k,v) { this[k] = v; } };

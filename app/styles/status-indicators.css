@@ -504,13 +504,31 @@ body.layout-basic .dbb__burn:has(> quest-objective-indicator:not([hidden])) {
   padding-right: 2rem;
 }
 
+/* Quest bubbles sit at the outer edges and point inward at their currency. */
 body.layout-basic .deg-currency-option > quest-objective-indicator {
   --quest-objective-art: url('/app/assets/quest-objective-tail-right.svg');
   z-index: 2;
-  top: 0.2rem;
+  top: 50%;
   left: 0.2rem;
   width: 1.18rem;
   height: 1.18rem;
+  min-width: 0;
+  min-height: 0;
+  translate: 0 -50%;
+}
+
+body.layout-basic .deg-currency-option[data-bind="deg-currency-option-1"] > quest-objective-indicator {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
+  right: 0.2rem;
+  left: auto;
+}
+
+body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-0"]:has(> quest-objective-indicator:not([hidden])) {
+  padding-left: 1.7rem;
+}
+
+body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-1"]:has(> quest-objective-indicator:not([hidden])) {
+  padding-right: 1.7rem;
 }
 
 body.layout-basic .deg-referral-card__forever {

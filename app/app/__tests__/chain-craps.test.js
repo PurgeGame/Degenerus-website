@@ -83,7 +83,7 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
     const assembled=await loadReplayInputs(f.s,key);
     assert.equal(assembled.word,word,'the round\'s own word, not a lootbox index');
     assert.equal(assembled.settlement.boundIndex,0n);
-    assert.equal(assembled.rollBudget,undefined,'the current contracts replay at the engine\'s 1,000-roll budget');
+    assert.equal(assembled.rollBudget,undefined,'the current contracts replay at the engine\'s default roll budget');
     // Audit e579cd318: a jackpot high seat rides `bankroll + highExtra` of fee-funded capital,
     // highExtra = (H - 1) * JACKPOT_FEE (8,000 FLIP) * multiplierBps / 20_000 (CrapsBattle.sol:318).
     assert.deepEqual(assembled.terms,{bankroll,goal:bankroll*5n,boardStake:bankroll/5n,battleStake:12n*100n*10n**18n,

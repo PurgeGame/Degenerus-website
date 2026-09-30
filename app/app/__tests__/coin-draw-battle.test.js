@@ -12,7 +12,7 @@ import { resolveCoinDrawBattle, coinDrawWordForDay, replayCoinDrawBattle } from 
 import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 import { materializeCoinDrawBattle, serializeCoinDrawReplay } from '../../chain/coin-draw-worker.js';
 import { chainCoinDrawBattle, __resetCoinDrawJobsForTest } from '../../chain/coin-draw.js';
-import { coinDrawRunTableOptions, openCoinDrawRun } from '../../craps/coin-draw-viewer.js';
+import { coinDrawRunTableOptions, openCoinDrawRun, openJackpotDrawRun } from '../../craps/coin-draw-viewer.js';
 import { coinDrawCentreModel } from '../coin-draw-centre.js';
 
 const WEI = 10n ** 18n;
@@ -128,6 +128,52 @@ test('a battle whose events do not reproduce fails closed but keeps the chain re
   const opened = await openCoinDrawRun({ day: DAY, player: PLAYER, load: async () => battle, doc: { querySelector: () => null } });
   assert.equal(opened.ok, false);
   assert.match(opened.message, /Battle replay unavailable\. Your run: \d+ rolls/);
+});
+
+test('current jackpot draw opens the awarded seat through the normal replay and preserves its opener', async () => {
+  const battleKey = '0x' + '12'.repeat(32);
+  const viewerBetId = '12345678901234567890';
+  const opener = { id: 'centre' };
+  const calls = [];
+  const result = await openJackpotDrawRun({ battleKey, viewerBetId, opener,
+    doc: { querySelector: () => ({ open: (...args) => calls.push(args) }) },
+    openReplay: async (table, request) => {
+      assert.equal(request.battleKey, battleKey);
+      assert.equal(request.viewerBetId, viewerBetId);
+      assert.equal(typeof request.fetchImpl, 'function');
+      table.open({ viewerBetId, tableIndex: battleKey });
+      return { ready: true };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [[{ viewerBetId, tableIndex: battleKey }, opener]]);
+});
+
+test('an unsettled current jackpot battle stays closed with a retry message', async () => {
+  let opened = false;
+  const result = await openJackpotDrawRun({
+    doc: { querySelector: () => ({ open: () => { opened = true; } }) },
+    openReplay: async () => ({ ready: false }),
+  });
+  assert.equal(opened, false);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /still settling/);
+});
+
+test('a current jackpot replay completing after its deadline never opens the table', async () => {
+  const controller = new AbortController();
+  let opened = false;
+  const result = await openJackpotDrawRun({ signal: controller.signal,
+    doc: { querySelector: () => ({ open: () => { opened = true; } }) },
+    openReplay: async table => {
+      controller.abort();
+      table.open({});
+      return { ready: true };
+    },
+  });
+  assert.equal(opened, false);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /canceled/);
 });
 
 test('clicking through opens the table on the viewer\'s own run (first deployment: its own dice)', async () => {

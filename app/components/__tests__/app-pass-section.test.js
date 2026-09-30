@@ -533,8 +533,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelectorAll('.pass-product-sigil').length, 3,
       'Whale, Lazy, and AFKing retain compact code-native sigils');
     assert.match(el.innerHTML,
-      /class="deity-pass-lockup pass-deity-wordmark"[\s\S]*?data-bind="pass-deity-brand-symbol"[\s\S]*?deity-pass-lockup-v3\.webp/,
-      'Deity uses its dedicated art-directed title instead of a generic infinity tile');
+      /class="deity-pass-lockup pass-deity-wordmark"[\s\S]*?data-bind="pass-deity-brand-symbol"[\s\S]*?deity-pass-lockup__name/,
+      'Deity uses its live badge and compact label');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-product-row--whale\s*\{[^}]*linear-gradient/s);
@@ -1146,6 +1146,87 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     el.disconnectedCallback();
   });
+
+  for (const scenario of [
+    { name: 'new seat opens only subscription setup', seat: true, active: false, view: 'subscription' },
+    { name: 'active subscription gets a purchase celebration', seat: true, active: true, view: 'celebration' },
+    { name: 'a subscription activated during purchase is not offered setup', seat: true, activeAfter: true, view: 'celebration' },
+    { name: 'unavailable subscription read keeps the celebration', seat: true, unavailable: true, view: 'celebration' },
+    { name: 'an exhausted seat grant does not offer unusable setup', seat: false, active: false, view: 'celebration' },
+  ]) {
+    test(`Deity purchase follow-up: ${scenario.name}`, async () => {
+      let purchased = false;
+      const contract = makeFakePassContract();
+      const purchase = contract.purchaseDeityPass;
+      contract.purchaseDeityPass = Object.assign(async (...args) => {
+        const tx = await purchase(...args);
+        purchased = true;
+        return tx;
+      }, { staticCall: purchase.staticCall });
+      passesMod.__setContractFactoryForTest(() => contract);
+      passesMod.__setAfkingReadContractFactoryForTest(() => ({
+        token: { balanceOf: async () => (scenario.active || (purchased && scenario.seat)) ? 1n : 0n },
+        game: {
+          subInfo: async () => {
+            if (purchased && scenario.unavailable) throw Error('RPC unavailable');
+            return [Boolean(scenario.active || (purchased && scenario.activeAfter)), 2n, 1n, 10n];
+          },
+          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
+        },
+      }));
+      const el = instantiate();
+      await settle(60);
+      await el.quickBuyPass('deity');
+      el.querySelector('[data-symbol-id="7"]').dispatchEvent({ type: 'click' });
+      el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
+      await settle(100);
+
+      assert.equal(contract._calls.purchaseDeityPass.length, 1);
+      assert.equal(el.querySelector('[data-bind="pass-deity-dialog"]').hidden, true);
+      assert.equal(el.getAttribute('data-pass-followup'), scenario.view);
+      assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, scenario.view !== 'subscription');
+      assert.equal(el.querySelector('[data-bind="pass-deity-success"]').hidden, scenario.view !== 'celebration');
+      assert.equal(el.querySelector('[data-bind="pass-deity-success-title"]').textContent, 'GOD OF BITCOIN');
+      assert.equal(el.querySelector('[data-bind="pass-deity-success-symbol"]').src, '/badges-circular/crypto_07_bitcoin_gold.svg');
+      const closer = scenario.view === 'subscription' ? 'pass-afking-dialog-close' : 'pass-deity-success-close';
+      el.querySelector(`[data-bind="${closer}"]`).dispatchEvent({ type: 'click' });
+      assert.equal(el.getAttribute('data-pass-followup'), null, 'dismissal clears the focused purchase flow');
+      assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true);
+      assert.equal(el.querySelector('[data-bind="pass-deity-success"]').hidden, true);
+      el.disconnectedCallback();
+    });
+  }
+
+  for (const action of ['dismiss', 'switch account']) {
+    test(`Deity follow-up ignores a late subscription read after ${action}`, async () => {
+      let defer = false, finish;
+      passesMod.__setAfkingReadContractFactoryForTest(() => ({
+        token: { balanceOf: async () => 1n },
+        game: {
+          subInfo: () => defer ? new Promise(resolve => { finish = resolve; }) : Promise.resolve([false, 0n, 0n, 0n]),
+          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
+        },
+      }));
+      const el = instantiate();
+      await settle(60);
+      await el.quickBuyPass('deity');
+      defer = true;
+      el.querySelector('[data-symbol-id="7"]').dispatchEvent({ type: 'click' });
+      el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
+      await settle(100);
+      assert.equal(el.getAttribute('data-pass-followup'), 'celebration');
+      assert.equal(typeof finish, 'function');
+      const resolvePurchaseRead = finish;
+      if (action === 'dismiss') el.querySelector('[data-bind="pass-deity-success-close"]').dispatchEvent({ type: 'click' });
+      else storeMod.update('connected.address', '0xcd34000000000000000000000000000000000000');
+      resolvePurchaseRead([false, 0n, 0n, 0n]);
+      await settle(60);
+      assert.equal(el.getAttribute('data-pass-followup'), null);
+      assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true);
+      assert.equal(el.querySelector('[data-bind="pass-deity-success"]').hidden, true);
+      el.disconnectedCallback();
+    });
+  }
 
   test('Deity dialog keeps taken symbols aligned and prices off PAID sales, not minted passes', async () => {
     const vault = '0x3333000000000000000000000000000000000000';

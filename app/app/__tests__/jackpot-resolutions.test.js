@@ -109,20 +109,21 @@ describe('chain-authoritative resolution probes', () => {
     store.__resetForTest();
   });
 
-  test('a Decimator round is a pure entry read: no claim is simulated (audit ab95963ac)', async () => {
-    // mineFlip's walk is the only settlement path; claimDecimatorJackpot is gone.
+  test('a Decimator event is a pure entry read: no claim is simulated (audit 92a1358d0)', async () => {
+    // Keepers settle the battle and credit winners; there is no claim door to simulate.
     for (const [overrides, state] of [
-      [{ roundStatus: 'open' }, 'pending'],
-      [{ bucket: null, subBucket: null, position: null, winningSubbucket: null }, 'lost'],
-      [{ subBucket: 2 }, 'lost'],
-      [{ winningSubbucket: null }, 'unknown'],
+      [{ phase: 0, roundStatus: 'open', coin: null, winner: false }, 'pending'],
+      [{ phase: 1, roundStatus: 'settling', winner: false }, 'pending'],
+      [{ phase: 1, roundStatus: 'settling', coin: 'tails', winner: false }, 'lost'],
+      [{ entryId: null, coin: null, winner: false }, 'lost'],
+      [{ coin: 'heads', winner: false }, 'lost'],
       [{}, 'queued'],
       [{ claimed: true }, 'claimed'],
     ]) {
       resolutions.__setResolutionFactoriesForTest({
         entry: () => ({
-          level: 25, bucket: 5, subBucket: 1, position: 3, winningSubbucket: 1,
-          claimed: false, roundStatus: 'closed', ...overrides,
+          level: 25, entryId: '3', stack: '1900', chips: 0, phase: 2, roundStatus: 'closed',
+          coin: 'heads', winner: true, claimed: false, ...overrides,
         }),
       });
       assert.deepEqual(
@@ -131,8 +132,9 @@ describe('chain-authoritative resolution probes', () => {
         JSON.stringify(overrides),
       );
     }
-    assert.equal(resolutions.decimatorEntryWinning({ bucket: 5, subBucket: 1, winningSubbucket: 1 }), true);
-    assert.equal(resolutions.decimatorEntryWinning({ bucket: 5, subBucket: 2, winningSubbucket: 1 }), false);
+    assert.equal(resolutions.decimatorEntryWinning({ entryId: '3', winner: true }), true);
+    assert.equal(resolutions.decimatorEntryWinning({ entryId: '3', winner: false }), false);
+    assert.equal(resolutions.decimatorEntryWinning({ entryId: null, winner: true }), false);
     const src = readFileSync(new URL('../jackpot-resolutions.js', import.meta.url), 'utf8');
     assert.doesNotMatch(src, /claimDecimatorJackpot\(/, 'no claim ABI or call remains');
   });

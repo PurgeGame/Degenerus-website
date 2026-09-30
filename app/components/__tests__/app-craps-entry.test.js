@@ -175,6 +175,25 @@ test('the legacy launcher omits the retired goal presentation', () => {
   assert.doesNotMatch(cssSource, /craps-entry__goal|data-goal-result/);
 });
 
+test('the board loads the player\'s saved board and shares it with the Decimator', () => {
+  const saved = (1 | (2 << 9) | (1 << 24)) >>> 0;
+  assert.deepEqual(crapsEntry.unpackCrapsEntryBoard(saved), {
+    passLine: 1, place4: 0, place5: 0, place6: 2, place8: 0, place9: 0, place10: 0, hard4: 0, hard8: 1, dontPassLine: 0,
+  });
+  assert.equal(crapsEntry.packCrapsEntryBoard(crapsEntry.unpackCrapsEntryBoard(saved)), saved, 'unpack inverts pack');
+  assert.equal(crapsEntry.packCrapsEntryBoard(crapsEntry.unpackCrapsEntryBoard(0)), 0);
+  // The comp read carries CrapsBattle.preferredBoardOf; seeding never marks the board as edited,
+  // which would offer to amend slips entered with a different board.
+  assert.match(componentSource, /this\.#passCredits = credits;\s*this\.#seedBoard\(credits\?\.preferredBoard\);/);
+  assert.match(componentSource, /#seedBoard\(preferred\) \{\s*if \(this\.#boardSet \|\| !preferred\) return;/);
+  assert.doesNotMatch(componentSource.slice(componentSource.indexOf('#seedBoard(preferred) {'), componentSource.indexOf('#publishBoard() {')),
+    /#boardSet = true/);
+  assert.match(componentSource, /update\('ui\.crapsBoard', Object\.freeze\(\{/,
+    'the Decimator burns the board this widget shows');
+  assert.match(componentSource, /this\.#schedulePlayer !== player\) this\.#resetBoard\(\)/,
+    'one wallet\'s board never rides into another\'s entries');
+});
+
 test('the compact surface keeps ten chips and packs the audited contract order', () => {
   assert.deepEqual([0, 1, 2, 3].map(crapsEntry.crapsEntryNextSpotCount), [1, 2, 3, 0],
     'spot clicks add through three chips and the fourth click clears the stack');
@@ -671,23 +690,26 @@ test('the authoritative chain day wins while indexed game state is stale at roll
     'once available, the direct chain clock is authoritative in either disagreement direction');
 });
 
-test('the previous day clears as soon as the new day is rolled', () => {
+test('yesterday’s Main Event survives today’s draw and expires at the next day', () => {
   const day28 = Object.freeze({ day: 28, winner: '0x2800000000000000000000000000000000000000' });
-  assert.strictEqual(crapsEntry.crapsPreviousEventDuringRollover({
+  assert.strictEqual(crapsEntry.crapsPreviousEventResult({
     day: 29,
     wordValue: 0,
     result: day28,
-  }), day28, 'the old result may bridge the pre-roll handoff');
-  assert.equal(crapsEntry.crapsPreviousEventDuringRollover({
+  }), day28, 'the result bridges the pre-roll handoff');
+  assert.strictEqual(crapsEntry.crapsPreviousEventResult({
     day: 29,
     wordValue: '123',
     result: day28,
-  }), null, 'the current day word clears the old result immediately');
-  assert.equal(crapsEntry.crapsPreviousEventDuringRollover({
+  }), day28, 'today’s draw must not hide yesterday’s Main Event');
+  assert.equal(crapsEntry.crapsPreviousEventResult({
     day: 30,
     wordValue: 0,
     result: day28,
   }), null, 'older history can never leak into a later rollover');
+  assert.equal(crapsEntry.crapsPreviousEventResult({ day: 29 }), null,
+    'a missing result stays pending rather than showing a made-up winner');
+  assert.equal(crapsEntry.crapsPreviousEventResult({ day: null, result: day28 }), null);
 });
 
 test('entry terms combine exact economics with the event-published added FLIP ceiling (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
@@ -727,7 +749,7 @@ test('entry selections use the reserved day slot and numbered battle slots', () 
     entryPeriod: 5,
     battleSlot: '342',
     tableIndex: '342',
-    entryLabel: 'DAY 42 · BATTLE 6',
+    entryLabel: 'DAY 42 · MAIN EVENT',
   });
   assert.deepEqual(crapsEntry.crapsEntrySelection({ day: 42, kind: 'future-day' }), {
     entryKind: 'future-day',
@@ -1052,8 +1074,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /craps-entry__rolling-terms" colspan="3"><strong data-bind="craps-battle-entry">ROLLING<\/strong>[\s\S]*?craps-entry__operator craps-entry__open-cell" hidden>\+<[\s\S]*?craps-entry__battle-fee craps-entry__open-cell" hidden/s,
     'individual rows never flash an unexplained dash-plus-dash before the day word lands');
   assert.match(componentSource, /const dayRolling = !futureDay && !dayReady[\s\S]*?fullDayTerms\.colSpan = futureDay \|\| dayRolling \? 3 : 1[\s\S]*?fullDaySeparator\.hidden = futureDay \|\| dayRolling/s);
-  assert.match(componentSource, /const rolling = !ready && !result[\s\S]*?termsCell\.colSpan = rolling \? 3 : 1[\s\S]*?entryPriceNode\.textContent = rolling \? 'ROLLING'/s,
-    'resolved terms restore the normal wager and battle columns');
+  assert.match(componentSource, /const rolling = !ready && !result[\s\S]*?termsCell\.colSpan = mainEvent \|\| rolling \? 3 : 1[\s\S]*?entryPriceNode\.textContent = mainEvent \? 'MAIN EVENT' : rolling \? 'ROLLING'/s,
+    'ordinary rows restore the wager and battle columns; the Main Event keeps its name beside the buy-in');
   assert.match(cssSource, /\.craps-entry__rolling-terms strong\s*\{[^}]*color:\s*#d8b4fe[^}]*letter-spacing:\s*\.08em/s);
   assert.match(componentSource, /data-bind="craps-day-countdown"/,
     'the full-day entry head carries the opener countdown');
@@ -1090,10 +1112,14 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     /this\.#snapshot\?\.results\?\.\[crapsBattlesPerDay\(\) - 1\][\s\S]*?this\.#previousEventResult = completedEvent/,
     'the completed event survives the day handoff while the fresh snapshot loads');
   assert.match(componentSource,
-    /const previousEvent = crapsPreviousEventDuringRollover\(\{[\s\S]*?wordValue: currentWordFromStore\(state\.day\)/,
-    'the prior-day row expires as soon as the current day word lands');
+    /const previousEvent = crapsPreviousEventResult\(\{\s*day: state\.day,\s*result: snapshot\?\.yesterdayEventResult/,
+    'the prior-day result is independent of today’s draw');
+  assert.match(componentSource, /previousEventRow\.hidden = previousEventDay == null/,
+    'yesterday stays visible while its result is pending');
+  assert.match(componentSource, /if \(previousEventDay != null && !previousEvent\) \{\s*awaitingSettlement = true/,
+    'yesterday’s pending event keeps settlement polling active after rollover');
   assert.match(componentSource, /appendLobbyRow\(previousEventRow\)/,
-    'the rollover-only prior-day result stays pinned beneath the reset current slate');
+    'yesterday’s Main Event stays pinned beneath the current slate');
   assert.match(componentSource, /resultsHead\.hidden = false;[\s\S]*?body\.appendChild\(resultsHead\)/,
     'the shared results heading moves directly above the first completed row');
   assert.match(componentSource, /\.craps-entry__battle\[data-craps-period\]/,
@@ -1216,7 +1242,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the schedule holds its fullest measured height and takes any slack as blank space');
   assert.match(componentSource, /#fitLobby\(\) \{[\s\S]*?\(CRAPS_LOBBY_ROW_BUDGET \+ 0\.25\) \* rowHeight[\s\S]*?--craps-lobby-full/,
     'the schedule is sized for the row budget, not the rare fullest state');
-  assert.match(componentSource, /export const CRAPS_LOBBY_ROW_BUDGET = 8;/);
+  assert.match(componentSource, /export const CRAPS_LOBBY_ROW_BUDGET = 9\.5;/);
   assert.match(componentSource, /if \(resultsHead\) resultsHead\.hidden = !resultsStarted;\s*this\.#trimLobbyRows\(body, resultsHead\);/,
     'rows past the budget drop from the tail of the urgency order after every reorder');
   assert.match(cssSource, /\.craps-entry__listing tr\.craps-entry__row--trimmed \{ display: none !important; \}/);
@@ -1387,7 +1413,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the compact battle/day row labels cannot spill into adjacent columns');
   assert.doesNotMatch(componentSource, /craps-battle-winner-label|winnerLabel\.textContent = `BATTLE/,
     'resolved rows do not repeat their battle numbers beneath the shared WINNER heading');
-  assert.match(componentSource, /`DAY \$\{previousEvent\.day\} EVENT`/,
+  assert.match(componentSource, /`DAY \$\{previousEventDay\} MAIN EVENT`/,
     'the previous-event row label stays concise beneath the shared heading');
   assert.doesNotMatch(cssSource, /\.craps-entry__result:not\(\[hidden\]\)\s*\{[^}]*display:\s*grid/s);
   assert.match(cssSource, /data-state="completed"/);
@@ -1699,21 +1725,22 @@ test('Craps distinguishes queued work, an undrawn word, and actual settlement', 
   assert.equal(ready.shortLabel, 'Craps battle', 'a sealed replay outranks an older lobby snapshot');
 });
 
-test('the schedule keeps its row budget by dropping the tail, never an open battle', () => {
+test('the schedule fits the full day and always reserves yesterday’s Main Event', () => {
   const { crapsLobbyTrimmedRows, CRAPS_LOBBY_ROW_BUDGET } = crapsEntry;
-  assert.equal(CRAPS_LOBBY_ROW_BUDGET, 8);
+  assert.equal(CRAPS_LOBBY_ROW_BUDGET, 9.5);
   const row = 'row';
-  // Start of day: FULL DAY, six open battles, tomorrow — exactly the budget.
+  // Start of day: FULL DAY, six open battles, tomorrow, results header, yesterday.
   assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row])], []);
-  // Rollover overlap: the previous event is the ninth row, the tail, so it drops.
-  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row, row])], [8]);
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row, 'head', 'previous'])], []);
+  // Even an overfull legacy slate trims ordinary history before the pinned row.
+  assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, row, 'head', row, 'previous'])], [9]);
   // Mid-day: four open, the day row, a half-height results header, two results.
   assert.deepEqual([...crapsLobbyTrimmedRows([row, row, row, row, row, 'head', row, row])], []);
   // Hidden rows cost nothing.
   assert.deepEqual([...crapsLobbyTrimmedRows([row, null, row, null, row])], []);
   // A header whose results were all trimmed goes with them.
   assert.deepEqual(
-    [...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, 'head', row, row])].sort((a, b) => a - b),
+    [...crapsLobbyTrimmedRows([row, row, row, row, row, row, row, 'head', row, row], 8)].sort((a, b) => a - b),
     [7, 8, 9],
   );
 });

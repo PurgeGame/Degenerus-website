@@ -22,6 +22,30 @@ function rows(count, row) {
 }
 
 describe('public jackpot bucket summaries', () => {
+  test('daily and early-bird ticket prizes keep separate exact amounts and counts', () => {
+    const wins = [
+      ...rows(48, { traitId: 182, awardType: 'tickets', sourceLevel: 4, level: 4, amount: '68' }),
+      ...rows(32, { traitId: 182, awardType: 'tickets', sourceLevel: 3, level: 4, amount: '4' }),
+    ];
+    for (const build of [buildRoll1BucketSummaries, buildRoll2BucketSummaries]) {
+      const [summary] = build(wins, [182]);
+      assert.equal(summary.ticketWinnerCount, 80);
+      assert.deepEqual(summary.ticketAwards, [
+        { entries: 4n, winnerCount: 32, sourceLevel: 3, level: 4 },
+        { entries: 68n, winnerCount: 48, sourceLevel: 4, level: 4 },
+      ]);
+      assert.equal(summary.ticketAwards.reduce((total, award) => total + award.entries * BigInt(award.winnerCount), 0n), summary.ticketEntriesTotal);
+    }
+  });
+
+  test('equal amounts from different ticket draws stay separate', () => {
+    const [summary] = buildRoll1BucketSummaries([
+      ...rows(32, { traitId: 24, awardType: 'tickets', sourceLevel: 3, level: 4, amount: '4' }),
+      ...rows(40, { traitId: 24, awardType: 'tickets', sourceLevel: 4, level: 4, amount: '4' }),
+    ], [24]);
+    assert.deepEqual(summary.ticketAwards.map(award => award.winnerCount), [32, 40]);
+  });
+
   test('solo jackpot ETH truncates to tenths and drops decimals at 1,000', () => {
     assert.equal(formatEthTruncated('12390000000000'), '12.3');
     assert.equal(formatEthTruncated('999990000000000'), '999.9',

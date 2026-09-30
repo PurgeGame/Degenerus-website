@@ -20,11 +20,11 @@ const {
 } = await import('../app-jackpot-resolutions.js');
 
 describe('Decimator resolution presentation', () => {
-  test('only an account with a recorded bucket has a Decimator position', () => {
+  test('only an account with a recorded entry has a Decimator position', () => {
     assert.equal(hasDecimatorPosition(null), false);
-    assert.equal(hasDecimatorPosition({ bucket: null }), false);
-    assert.equal(hasDecimatorPosition({ bucket: 0, roundStatus: 'closed' }), false);
-    assert.equal(hasDecimatorPosition({ bucket: 7, roundStatus: 'closed' }), true);
+    assert.equal(hasDecimatorPosition({ entryId: null }), false);
+    assert.equal(hasDecimatorPosition({ entryId: '0', roundStatus: 'closed' }), false);
+    assert.equal(hasDecimatorPosition({ entryId: '7', roundStatus: 'closed' }), true);
   });
 
   test('seen receipts are scoped to the exact deployment', () => {
@@ -35,22 +35,35 @@ describe('Decimator resolution presentation', () => {
     );
   });
 
-  test('an unpaid winning subbucket settles automatically, with no player action', () => {
-    // Audit ab95963ac: the walk is the only settlement path; claimDecimatorJackpot is gone.
+  test('an unpaid winner settles automatically, with no player action', () => {
+    // Keepers settle the battle and credit winners; there is no claim.
     const view = decimatorResolutionView({
       currentLevel: 25,
       level: 25,
       claimState: 'queued',
       outcome: {
-        roundStatus: 'closed', bucket: 7, subbucket: 3,
-        winningSubbucket: 3, payoutAmount: '1000000000000',
+        roundStatus: 'closed', entryId: '7', coin: 'heads', winner: true, claimed: false,
+        ethAmount: '1000000000000', halfPasses: '1',
       },
     });
     assert.equal(view.status, 'PAYING OUT');
     assert.equal(view.tone, 'won');
     assert.equal(view.actionable, false, 'there is nothing to send');
-    assert.match(view.message, /1 ETH estimated pool share/);
+    assert.match(view.message, /1 ETH \+ 1 half whale pass/);
     assert.match(view.message, /Settles automatically/);
+  });
+
+  test('an entry reads locked, then its coin, while the event settles', () => {
+    const locked = decimatorResolutionView({ currentLevel: 24, level: 25,
+      outcome: { roundStatus: 'open', entryId: '7', stack: '1900000000000000000000' } });
+    assert.equal(locked.status, 'ENTRY LOCKED');
+    assert.match(locked.message, /plays the shared dice when Level 25 starts/);
+    const tails = decimatorResolutionView({ currentLevel: 25, level: 25,
+      outcome: { roundStatus: 'settling', entryId: '7', coin: 'tails' } });
+    assert.deepEqual([tails.status, tails.tone], ['TAILS', 'lost']);
+    const heads = decimatorResolutionView({ currentLevel: 25, level: 25,
+      outcome: { roundStatus: 'settling', entryId: '7', coin: 'heads' } });
+    assert.deepEqual([heads.status, heads.tone], ['HEADS', 'waiting']);
   });
 
   test('chain winner evidence survives a bucket-less indexer snapshot', () => {
@@ -58,7 +71,7 @@ describe('Decimator resolution presentation', () => {
       currentLevel: 200,
       level: 200,
       claimState: 'queued',
-      outcome: { roundStatus: 'closed', bucket: null, payoutAmount: '0' },
+      outcome: { roundStatus: 'closed', entryId: null, winner: false },
     });
     assert.equal(view.status, 'PAYING OUT');
     assert.equal(view.tone, 'won');
@@ -69,20 +82,25 @@ describe('Decimator resolution presentation', () => {
   test('paid winners and losing entries remain visible without stale actions', () => {
     const claimed = decimatorResolutionView({
       currentLevel: 26, level: 25, claimState: 'claimed',
-      outcome: { roundStatus: 'closed', bucket: 7, subbucket: 3, winningSubbucket: 3, payoutAmount: '5' },
+      outcome: { roundStatus: 'closed', entryId: '7', coin: 'heads', winner: true, claimed: true, champion: true,
+        ethAmount: '5000000000000', halfPasses: '0' },
     });
     assert.equal(claimed.status, 'PAID');
     assert.equal(claimed.actionable, false);
-    assert.match(claimed.message, /claimable ETH/);
-    assert.match(claimed.message, /Luckbox \/ Whale Half-Pass/);
+    assert.match(claimed.message, /^Champion\. Paid 5 ETH\.$/);
 
     const lost = decimatorResolutionView({
       currentLevel: 26, level: 25, claimState: 'lost',
-      outcome: { roundStatus: 'closed', bucket: 7, subbucket: 2, winningSubbucket: 3, payoutAmount: '0' },
+      outcome: { roundStatus: 'closed', entryId: '7', coin: 'heads', winner: false, winners: 42 },
     });
-    assert.equal(lost.status, 'NOT SELECTED');
-    assert.match(lost.message, /Winning subbucket 3/);
+    assert.equal(lost.status, 'NOT PLACED');
+    assert.match(lost.message, /outside the top 42/);
     assert.equal(lost.actionable, false);
+    const tails = decimatorResolutionView({
+      currentLevel: 26, level: 25, claimState: 'lost',
+      outcome: { roundStatus: 'closed', entryId: '7', coin: 'tails', winner: false, winners: 42 },
+    });
+    assert.match(tails.message, /landed tails/);
   });
 });
 
@@ -180,7 +198,7 @@ test('the headless watcher is mounted between the jackpot hero and Side Bets row
   assert.match(html, /'\/app\/components\/app-jackpot-resolutions\.js'/);
 });
 
-test('a due Decimator replaces the primary jackpot action and opens the full wheel', () => {
+test('a due Decimator replaces the primary jackpot action and opens the results receipt', () => {
   const resolutions = readFileSync(new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
   const replay = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
   const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'utf8');
@@ -206,7 +224,7 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.doesNotMatch(resolutions, /autoOpen:\s*!willWrite/,
     'neither full-screen final is ever auto-opened, Auto open preference or not');
   assert.match(resolutions, /autoOpen:\s*false,[\s\S]{0,120}?primarySurface:\s*'jackpot'/,
-    'the Decimator takeover waits for its own View draw click');
+    'the Decimator takeover waits for its own View results click');
   assert.match(resolutions, /autoOpen:\s*false,\s*\n\s*order:\s*13,/,
     'the BAF ceremony waits for its own click too');
   assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
@@ -215,7 +233,7 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
     /const bafUnseen = bafFinalIsNews\(\{[\s\S]*?participated: bafParticipated/,
     'a participating player keeps a late-indexed BAF receipt after the x10 boundary');
   assert.match(replay, /subscribePendingActions[\s\S]*?#setPrimaryDecimatorAction/);
-  assert.match(replay, /'RUN DECIMATOR DRAW'/);
+  assert.match(replay, /'DECIMATOR RESULTS'/);
   assert.match(replay,
     /this\.#revealStateBeforeDecimator = null;[\s\S]{0,400}?this\.#syncSpinControlState\(\);/,
     'returning from Decimator recomputes the jackpot button instead of restoring stale processing');
@@ -224,20 +242,17 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(css, /\.decimator-draw-modal\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/s);
   assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.decimator-draw-modal__close/,
     'the takeover has an explicit phone treatment');
+  assert.doesNotMatch(overlay, /iframe|\/decimator-draw\//,
+    'the receipt renders in the app; the retired bucket wheel page is not loaded');
   assert.match(overlay,
-    /event\?\.source !== current\.frame\.contentWindow[\s\S]*?event\?\.origin !== window\.location\.origin/,
-    'the iframe bridge accepts commands only from the active same-origin draw');
-  assert.match(overlay,
-    /message\.action === 'exit'[\s\S]*?removeActive\(\)/,
-    'the completed draw can close its own app takeover');
-  assert.match(overlay,
-    /message\.action === 'sound'[\s\S]*?playDrawSound/,
-    'iframe motion cues use the main app’s already-unlocked sound engine');
+    /insertBefore\(renderReceipt\(snapshot, names\), close\)[\s\S]*?onReady\?\.\(\)/,
+    'the result is marked seen only after the receipt is on screen');
+  assert.match(overlay, /\/app\/styles\/decimator-receipt\.css/, 'the receipt brings its own stylesheet');
   assert.match(overlay,
     /openDecimatorDraw[\s\S]*?warmupSfx\(\)[\s\S]*?removeActive\(\)/,
     'manual draw launch warms WebAudio before the first asynchronous snapshot read');
   assert.match(overlay,
-    /decimator-draw-modal__retry[\s\S]*?DRAW DATA UNAVAILABLE[\s\S]*?return Boolean\(active\?\.overlay === overlay/,
+    /decimator-draw-modal__retry[\s\S]*?RESULTS UNAVAILABLE[\s\S]*?return Boolean\(active\?\.overlay === overlay/,
     'an RPC load failure stays in the fullscreen with a retry instead of becoming a failed action');
 });
 
@@ -330,11 +345,11 @@ test('a failed consolation read reads as pending, never as "no consolation"', ()
   assert.equal(ready.status, 'CONSOLATION READY');
 });
 
-test('the Decimator final row only views the draw: no claim write exists (audit ab95963ac)', () => {
+test('the Decimator final row only views the results: no claim write exists', () => {
   const src = readFileSync(
     new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /claimDecimatorLevels|claimDecimatorJackpot/,
-    'mineFlip\'s walk is the only settlement path');
-  assert.match(src, /kind: 'decimator',[\s\S]{0,700}?shortLabel: decWaiting \? 'Processing' : 'View draw',[\s\S]{0,200}?write: false,/,
+    'keepers settle the battle; there is no claim');
+  assert.match(src, /kind: 'decimator',[\s\S]{0,700}?shortLabel: decWaiting \? 'Processing' : 'View results',[\s\S]{0,200}?write: false,/,
     'the Decimator pending row never asks for a wallet');
 });

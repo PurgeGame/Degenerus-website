@@ -4,7 +4,7 @@ body.layout-basic .play-grid > .quest-hub {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: .5rem;
+  gap: .375rem;
   padding: .55rem;
 }
 body.layout-basic .play-grid .quest-hub > app-quest-panel { display: block; min-width: 0; }
@@ -23,14 +23,15 @@ body.layout-basic .play-grid .quest-hub .qst-streak-chip { padding: .25rem .4rem
 body.layout-basic .play-grid .quest-hub .qst-score-control { min-width: 0; padding: .3rem .4rem; }
 body.layout-basic .play-grid .quest-hub .qst-slots {
   grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: minmax(5.5rem, 1fr);
+  grid-auto-rows: minmax(4.5rem, 1fr);
   gap: .375rem;
 }
 body.layout-basic .play-grid .quest-hub .qst-slot {
+  container: quest-card / size;
   height: auto;
-  min-height: 5.5rem;
-  gap: .25rem;
-  padding: .4rem .5rem;
+  min-height: 4.5rem;
+  gap: .2rem;
+  padding: .3rem .5rem;
   border-radius: 7px;
   box-shadow: inset 0 1px #ffffff09;
 }
@@ -52,7 +53,22 @@ body.layout-basic .play-grid .quest-hub .qst-slot-reward-logo { width: .9rem; he
 body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .54rem; letter-spacing: .025em; white-space: nowrap; }
 body.layout-basic .play-grid .quest-hub .qst-meter { height: .25rem; }
 
-body.layout-basic .play-grid .quest-hub__rewards { display: grid; gap: .5rem; min-width: 0; }
+/* Use the space the card already has. Size containment keeps larger text
+   from making the shared game row taller or changing the query's own size. */
+@container quest-card (min-width: 18rem) and (min-height: 3.7rem) {
+  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-reward { font-size: .68rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .62rem; }
+  body.layout-basic .play-grid .quest-hub :is(.qst-slot-role, .qst-slot-status) { font-size: .62rem; }
+}
+@container quest-card (min-width: 14rem) and (min-height: 5.25rem) {
+  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1.05rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-reward { font-size: .68rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .62rem; }
+  body.layout-basic .play-grid .quest-hub :is(.qst-slot-role, .qst-slot-status) { font-size: .62rem; }
+}
+
+body.layout-basic .play-grid .quest-hub__rewards { display: grid; gap: .375rem; min-width: 0; }
 body.layout-basic .play-grid .quest-hub .side-bets-rail { margin: 0; min-width: 0; }
 body.layout-basic .play-grid .quest-hub .side-bets-rail:not(:has(.has-live-book, .pari-error:not([hidden]))) { display: none; }
 body.layout-basic .play-grid .quest-hub .app-parimutuel,
@@ -70,80 +86,226 @@ body.layout-basic .play-grid .quest-hub .pari-books {
 }
 body.layout-basic .play-grid .quest-hub .pari-bet-container[hidden],
 body.layout-basic .play-grid .quest-hub .pari-books[hidden] { display: none; }
+/* Growth is a fourth quest: status, reward, and one short betting row. */
 body.layout-basic .play-grid .quest-hub .pari-book {
+  position: relative;
   display: grid;
   box-sizing: border-box;
-  grid-template-areas: "head" "context" "today" "bonus";
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto auto 1.75rem;
+  grid-template-areas: none;
   align-content: center;
+  align-items: center;
+  height: 5.5rem;
+  min-height: 5.5rem;
   min-width: 0;
-  min-height: 8rem;
   margin: 0;
-  padding: .45rem .5rem;
-  gap: .3rem;
-  border: 1px solid #8fb7a14d;
+  padding: .35rem .5rem .55rem;
+  gap: .2rem .4rem;
+  border: 1px solid #dcae5e61;
   border-radius: 7px;
-  background: linear-gradient(115deg, #1e2b29, #141e21);
-  box-shadow: inset 0 1px #b7eed50a;
+  background: radial-gradient(circle at 92% 12%, #dcae5e16, transparent 45%), linear-gradient(145deg, #dcae5e0d, #080a15a3);
+  box-shadow: inset 0 1px #ffffff09;
 }
 body.layout-basic .play-grid .quest-hub .pari-book[hidden] { display: none; }
-body.layout-basic .play-grid .quest-hub .pari-book__head { grid-area: head; margin: 0; }
-body.layout-basic .play-grid .quest-hub .pari-book__title { font-size: .66rem; }
-body.layout-basic .play-grid .quest-hub .pari-book__context { grid-area: context; margin: 0; }
-body.layout-basic .play-grid .quest-hub .pari-book__bench { font-size: .59rem; line-height: 1.3; letter-spacing: .015em; }
-body.layout-basic .play-grid .quest-hub .pari-book__target { display: inline; margin: 0; }
-body.layout-basic .play-grid .quest-hub .pari-today { grid-area: today; gap: .2rem; }
-body.layout-basic .play-grid .quest-hub .pari-side { min-height: 0; padding: 0; border: 0; background: none; }
-body.layout-basic .play-grid .quest-hub .pari-side__cta { min-height: 2rem; padding: .3rem; border-radius: 5px; }
-body.layout-basic .play-grid .quest-hub .pari-side__verb { font-size: .76rem; }
-body.layout-basic .play-grid .quest-hub .pari-split__labels { font-size: .54rem; }
+body.layout-basic .play-grid .quest-hub .pari-book__head,
+body.layout-basic .play-grid .quest-hub .pari-today,
+body.layout-basic .play-grid .quest-hub .pari-sides,
+body.layout-basic .play-grid .quest-hub .pari-side { display: contents; }
+body.layout-basic .play-grid .quest-hub .pari-quest__role {
+  grid-area: 1 / 1 / 2 / 3;
+  color: #f1c775;
+  font: 950 .57rem/1 Inter, sans-serif;
+  letter-spacing: .1em;
+}
+body.layout-basic .play-grid .quest-hub .pari-quest__role::before { content: '\25f7\20'; font-size: .8rem; vertical-align: -.04em; }
+body.layout-basic .play-grid .quest-hub .pari-clock {
+  display: block;
+  grid-area: 1 / 2 / 2 / 4;
+  justify-self: end;
+  padding: .15rem .3rem;
+  border: 1px solid #dcae5e59;
+  border-radius: 999px;
+  background: #dcae5e17;
+  color: #f1c775;
+  font: 850 .53rem/1 Inter, sans-serif;
+}
+body.layout-basic .play-grid .quest-hub .pari-book__title {
+  grid-area: 2 / 1 / 3 / 4;
+  margin: 0;
+  font-size: .8rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+body.layout-basic .play-grid .quest-hub .pari-book__context {
+  grid-area: 3 / 2;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: .12rem;
+  margin: 0;
+}
+body.layout-basic .play-grid .quest-hub .pari-book__offered { display: block; margin: 0; font-size: .9rem; line-height: 1.1; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-quest__stake { color: #bcb0a0; font: 800 .48rem/1.1 Inter, sans-serif; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-side__cta {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: .2rem;
+  border-radius: 5px;
+}
+body.layout-basic .play-grid .quest-hub .pari-side--under .pari-side__cta { grid-area: 3 / 1; }
+body.layout-basic .play-grid .quest-hub .pari-side--over .pari-side__cta { grid-area: 3 / 3; }
+body.layout-basic .play-grid .quest-hub .pari-side__verb { font-size: .69rem; }
 body.layout-basic .play-grid .quest-hub .pari-prebet-bonus {
-  grid-area: bonus;
+  grid-area: 2 / 1 / 3 / 4;
+  justify-self: end;
+  margin: 0 0 0 5rem;
+  padding: 0;
+  border: 0;
+  gap: 0;
+}
+body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__label { display: none; }
+body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__value { font-size: .56rem; letter-spacing: 0; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-split { position: absolute; right: .5rem; bottom: .2rem; left: .5rem; height: 3px; margin: 0; }
+body.layout-basic .play-grid .quest-hub .pari-split__labels {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+body.layout-basic .play-grid .quest-hub .pari-your-bet {
+  grid-area: 3 / 1 / 4 / 4;
   display: flex;
   flex-wrap: wrap;
-  gap: .15rem .3rem;
+  justify-content: flex-start;
+  align-content: center;
+  gap: .2rem .4rem;
   margin: 0;
-  padding-top: .25rem;
-  border-top: 1px solid #a5c5c025;
-  font-size: .55rem;
-  white-space: normal;
 }
-body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__value { font-size: .61rem; white-space: normal; }
-body.layout-basic .play-grid .quest-hub .pari-book--held { grid-template-rows: auto auto 1fr; }
-body.layout-basic .play-grid .quest-hub .pari-book--held .pari-book__context { display: none; }
-body.layout-basic .play-grid .quest-hub .pari-your-bet { margin: 0; gap: .25rem .4rem; }
-body.layout-basic .play-grid .quest-hub :is(.pari-your-bet__label, .pari-your-bet__pick, .pari-your-bet__payout) { font-size: .65rem; }
+body.layout-basic .play-grid .quest-hub :is(.pari-your-bet__label, .pari-your-bet__pick, .pari-your-bet__payout) { font-size: .62rem; }
 body.layout-basic .play-grid .quest-hub .pari-error { margin: .25rem 0 0; font-size: .7rem; }
 
-/* Retain the ad's artwork and copy, with a two-row lockup for a narrow column. */
-body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 4.5rem; width: 100%; max-width: 26rem; margin: 0; }
+/* The ad is a ticket: coin, invitation and reward on the body, COPY LINK as its gold stub. */
+body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 3.75rem; width: 100%; max-width: 26rem; margin: 0; container: referral-ad / inline-size; }
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card {
-  grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
-  grid-template-rows: auto auto;
-  gap: .1rem .35rem;
-  padding: .45rem .5rem;
-  border-radius: 7px;
+  --ad-stub: 4.1rem;
+  --ad-edge: #e6b866a6;
+  grid-template-columns: 2.4rem minmax(0, 1fr) var(--ad-stub);
+  grid-template-rows: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  gap: 0 .5rem;
+  padding: 0 0 0 .5rem;
+  border-color: var(--ad-edge);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 1.7rem 50%, #ffc2573d, transparent 2.3rem),
+    radial-gradient(120% 90% at 55% -30%, #ff4f8a26, transparent 60%),
+    linear-gradient(100deg, #45183f, #301838 52%, #22172e);
+  box-shadow: inset 0 1px #ffe6b524, 0 4px 14px #0006;
 }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__heading h2 {
-  grid-area: 1 / 2;
+/* Tear-off notches where the body meets the stub. */
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card::before {
+  position: absolute;
+  z-index: 2;
+  top: -1px;
+  right: calc(var(--ad-stub) - .3rem);
+  bottom: -1px;
+  width: .6rem;
+  background:
+    radial-gradient(circle at 50% 0, var(--site-surface, #17151f) .26rem, var(--ad-edge) .27rem .33rem, transparent .34rem),
+    radial-gradient(circle at 50% 100%, var(--site-surface, #17151f) .26rem, var(--ad-edge) .27rem .33rem, transparent .34rem);
+  content: '';
+  pointer-events: none;
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__coin {
+  grid-area: 1 / 1 / -1 / 2;
   align-self: center;
-  font-size: .86rem;
-  letter-spacing: .025em;
+  width: 2.4rem;
+  height: 2.4rem;
+  filter: drop-shadow(0 0 .45rem #ffb54a59) drop-shadow(0 2px 3px #0008);
 }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__coin { width: 2rem; height: 2rem; grid-row: 1; }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__info-btn { grid-area: 1 / 3; }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy { grid-area: 2 / 1 / 3 / 3; align-self: center; padding-right: 4.75rem; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__heading { grid-area: 2 / 2; display: flex; align-items: center; gap: .2rem; min-width: 0; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__heading h2 {
+  color: #f3c977;
+  font: 850 .56rem/1.2 Inter, sans-serif;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  text-shadow: none;
+  white-space: nowrap;
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__info-btn {
+  width: 1.1rem;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  min-height: 1.1rem;
+  margin: -.2rem 0;
+  outline-color: #f3c97799;
+  outline-offset: -.18rem;
+  color: #f3c977;
+  font-size: .58rem;
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy { grid-area: 3 / 2; align-self: start; min-height: auto; margin: .22rem 0 0; padding: 0; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy > strong { flex-wrap: wrap; align-items: baseline; gap: 0 .28rem; white-space: nowrap; }
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy > strong > span,
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever { font-size: .58rem; }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy > strong { gap: .12rem .2rem; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever {
+  color: #fff4e0;
+  font-size: .9rem;
+  font-weight: 950;
+  line-height: 1.05;
+  letter-spacing: .01em;
+  text-shadow: 0 1px 2px #0007;
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__earn { color: #d9cbe0; font-size: .66rem; font-weight: 650; letter-spacing: 0; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__free { color: #9ef7c2; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__flip { color: #fff4e0; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever { gap: .25rem; color: #ffd678; }
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn {
-  grid-area: 2 / 2 / 3 / 4;
-  justify-self: end;
-  min-width: 4.5rem;
-  min-height: 1.75rem;
-  padding: .3rem .4rem;
-  font-size: .55rem;
+  grid-area: 1 / 3 / -1 / 4;
+  align-self: stretch;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: .18rem;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: .3rem .35rem;
+  border: 0;
+  border-left: 1px dashed #6b451a8c;
+  border-radius: 0 7px 7px 0;
+  background:
+    radial-gradient(90% 60% at 50% 0, #fff6d680, transparent 70%),
+    linear-gradient(180deg, #ffe39c, #efbd5f 55%, #d69b3c);
+  box-shadow: inset 0 1px #fff7, inset 0 -1px #8a5a1f59;
+  color: #2c1c0a;
+  font: 950 .6rem/1.1 Inter, sans-serif;
+  letter-spacing: .09em;
+  text-align: center;
+  white-space: normal;
+}
+/* A pseudo-element icon survives the label swaps (COPYING…, CODE COPIED). */
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn::before {
+  width: .85rem;
+  height: .85rem;
+  background: currentColor;
+  content: '';
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn:hover:not(:disabled) {
+  background:
+    radial-gradient(90% 60% at 50% 0, #fffbe8a6, transparent 70%),
+    linear-gradient(180deg, #ffeab3, #f5c870 55%, #e0a748);
+}
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn:disabled { opacity: .85; filter: saturate(.75); }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn:focus-visible { outline-color: #2c1c0a; outline-offset: -4px; }
+/* Wider cards fit the reward on one larger line. */
+@container referral-ad (min-width: 20rem) {
+  body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card { --ad-stub: 4.6rem; grid-template-columns: 2.6rem minmax(0, 1fr) var(--ad-stub); gap: 0 .6rem; padding-left: .6rem; }
+  body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__coin { width: 2.6rem; height: 2.6rem; }
+  body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy > strong > span,
+  body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever { font-size: 1rem; }
+  body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__earn { font-size: .7rem; }
 }
 
 @media (min-width: 1100px) {
@@ -152,18 +314,11 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
   body.layout-basic .play-grid .quest-hub .qst-slots { flex: 1; }
 }
 @media (min-width: 700px) and (max-width: 1099px) {
-  body.layout-basic .play-grid .quest-hub .qst-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  body.layout-basic .play-grid .quest-hub .qst-slot { grid-column: auto; }
+  body.layout-basic .play-grid .quest-hub .qst-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(5.5rem, 1fr); }
+  body.layout-basic .play-grid .quest-hub .qst-slot { grid-column: auto; min-height: 5.5rem; }
   body.layout-basic .play-grid .quest-hub__rewards { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  body.layout-basic .play-grid .quest-hub .pari-book--open:not(.pari-book--held) {
-    min-height: 5.5rem;
-    grid-template-areas: "head today" "context today" "bonus bonus";
-    grid-template-columns: minmax(0, 1fr) minmax(7rem, 1fr);
-    grid-template-rows: auto auto auto;
-    gap: .2rem .5rem;
-  }
-  body.layout-basic .play-grid .quest-hub .pari-book__target { display: block; }
-  body.layout-basic .play-grid .quest-hub .pari-book--held { min-height: 5.5rem; }
   body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 5.5rem; }
-  body.layout-basic .play-grid .quest-hub__rewards:not(:has(.has-live-book)) .referral-strip { --utility-height: 4.5rem; }
+  body.layout-basic .play-grid .quest-hub__rewards:not(:has(.has-live-book)) .referral-strip { --utility-height: 3.75rem; }
+  body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card { grid-template-columns: 3.2rem minmax(0, 1fr) var(--ad-stub); }
+  body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card__coin { width: 3.2rem; height: 3.2rem; }
 }

@@ -49,6 +49,7 @@ import {
   createCrapsReplayTableModel,
   crapsReplayBattleAward,
   crapsReplayPrizeAmounts,
+  crapsReplayWalletEntries,
   loadCrapsReplayProfiles,
   normalizeCrapsReplayShooters,
   openCrapsReplayTable,
@@ -64,7 +65,7 @@ import {
   SIM_CRAPS_REPLAY_SHARDS,
   SIM_CRAPS_REPLAY_VIEWER,
 } from '../../craps/fixtures/sim-battle-v1.js';
-import { CRAPS_REPLAY_ESCALATOR_SHOOTERS } from '../../craps/replay-engine.js';
+import { CRAPS_REPLAY_ESCALATOR_SHOOTERS, crapsReplayWagerMultiplier } from '../../craps/replay-engine.js';
 import { crapsBonusMultiplier } from '../../app/craps.js';
 
 const clone = (value) => structuredClone(value);
@@ -77,7 +78,7 @@ const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x91c7eb96ecf9b2ac17a7c90ca9852ec8f4e4e2a6fc615266a5e4080dea2e9128';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -878,6 +879,13 @@ test('the escalator doubles the wager on the documented shooter boundaries', () 
   }
 });
 
+test('the escalator doubles every shooter from 30 and pins at uint32.max from 52 (audit 32c604531)', () => {
+  assert.deepEqual(
+    [0, 3, 29, 30, 31, 32, 51, 52, 511].map((n) => String(crapsReplayWagerMultiplier(n))),
+    ['1', '2', '512', '1024', '2048', '4096', '2147483648', '4294967295', '4294967295'],
+  );
+});
+
 test('survival flips carry their real ordinal, including the shooter a lost flip never reached', () => {
   const tape = decodeCrapsReplayTape(MANIFEST);
   const lost = ALL_PLAYERS.filter((p) => p.survivals.some((s) => !s.survived));
@@ -1219,6 +1227,45 @@ test('loader rechecks the pointer but single-flights immutable sharded artifacts
   __resetCrapsReplayLoaderForTest();
 });
 
+test('wallet entry numbers deduplicate seats and use stable numeric bet order', () => {
+  const wallet = '0xabcdef0000000000000000000000000000001234';
+  const players = [
+    { player: wallet, betId: '100000000000000000000' },
+    { player: wallet.toUpperCase(), betId: '10' },
+    { player: wallet, betId: '2' },
+    { player: wallet, betId: '10' },
+    { player: '0x1111111111111111111111111111111111111111', betId: '3' },
+    { player: 'anonymous', betId: '4' },
+  ];
+  const entries = crapsReplayWalletEntries(players);
+  assert.deepEqual([...entries], [
+    ['2', { entryNumber: 1, playerEntryCount: 3 }],
+    ['10', { entryNumber: 2, playerEntryCount: 3 }],
+    ['100000000000000000000', { entryNumber: 3, playerEntryCount: 3 }],
+    ['3', { entryNumber: 1, playerEntryCount: 1 }],
+  ]);
+  assert.deepEqual(crapsReplayWalletEntries(players.toReversed()), entries);
+});
+
+test('multiple wallet entries keep their identity when the replay perspective changes', () => {
+  const base = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS);
+  const target = base.tableOptions.otherPlayers.find(player => player.playerEntryCount > 1);
+  assert.ok(target, 'fixture includes several distinct seats owned by one wallet');
+  const switched = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS, { perspectiveBetId: target.betId });
+  assert.equal(switched.tableOptions.viewerLabel, target.label);
+  assert.equal(switched.tableOptions.viewerEntryNumber, target.entryNumber);
+  assert.equal(switched.tableOptions.viewerEntryCount, target.playerEntryCount);
+  assert.doesNotMatch(target.label, / · ENTRY \d+\/\d+$/, 'player names stay uncluttered');
+  const walletSeats = base.fullViewport.seats.filter(trace => trace.player.player.toLowerCase() === target.player.toLowerCase());
+  assert.equal(target.playerEntryCount, walletSeats.length, 'featured and shard copies are not double counted');
+  const sameWallet = switched.tableOptions.otherPlayers.filter(player => player.player.toLowerCase() === target.player.toLowerCase());
+  assert.equal(sameWallet.length, target.playerEntryCount - 1, 'the other runs remain separate opponents');
+  for (const player of sameWallet) {
+    assert.notEqual(player.entryNumber, target.entryNumber);
+    assert.equal(player.playerEntryCount, target.playerEntryCount);
+  }
+});
+
 test('live Discord identity overlays the sealed seat labels, and an outage keeps them', () => {
   const base = createCrapsReplayTableModel(SIM_CRAPS_REPLAY_ARTIFACTS).tableOptions;
   assert.ok(base.otherPlayers.length > 0);
@@ -1240,7 +1287,7 @@ test('live Discord identity overlays the sealed seat labels, and an outage keeps
   const dressed = overlaid.otherPlayers.find((player) => player.betId === target.betId);
   assert.equal(dressed.label, 'DegenDave', 'a linked wallet shows its Discord name');
   assert.equal(dressed.discordPfp, 'https://cdn.discordapp.com/avatars/1/a.png');
-  assert.equal(overlaid.viewerLabel, 'ViewerVera', 'YOU carries the viewer Discord name into the ten rows');
+  assert.equal(overlaid.viewerLabel, 'ViewerVera', 'YOU carries the viewer Discord name');
   assert.equal(overlaid.viewerDiscordPfp, 'https://cdn.discordapp.com/avatars/2/b.png');
   for (const other of overlaid.otherPlayers) {
     if (profiles.has(String(other.player).toLowerCase())) continue;

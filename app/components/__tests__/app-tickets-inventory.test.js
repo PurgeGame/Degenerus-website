@@ -486,7 +486,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     const cardsDuringRollover = el.querySelectorAll('.inv-card').length;
     const goldDuringRollover = el.querySelectorAll('.inv-card--gold').length;
     await flushMicrotasks();
-    assert.match(el.querySelector('.inv-empty')?.textContent || '', /No tickets at level 18/);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
+    assert.match(el.querySelector('[data-bind="salvage-context"]').textContent, /No tickets held at level 18/);
     assert.equal(cardsDuringRollover, 0,
       'selecting the new empty level immediately removes the prior level cards');
     assert.equal(goldDuringRollover, 0,
@@ -494,7 +495,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('a level tile expands its tickets and the selected tile contracts them', async () => {
+  test('a level tile opens its ticket popup and closing it resets the tile', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     const el = mount({ expanded: false });
     await flushMicrotasks();
@@ -508,8 +509,8 @@ describe('app-tickets-inventory — cards + chart', () => {
       'ticket holdings use the shared section disclosure shell');
     assert.equal(toggle.hidden, true,
       'the generic far-right dropdown is removed when concrete level tiles exist');
-    assert.match(el.innerHTML, /data-bind="inv-level-tab"[\s\S]*?aria-expanded="false" aria-controls="ticket-inventory-details"/,
-      'each level tile is the disclosure control for the shared ticket details');
+    assert.match(el.innerHTML, /data-bind="inv-level-tab"[\s\S]*?aria-expanded="false" aria-controls="panel-tickets" aria-haspopup="dialog"/,
+      'each level tile opens a dialog');
     assert.match(
       el.innerHTML,
       /class="inv-meta" data-bind="inv-meta" hidden aria-hidden="true"/,
@@ -537,7 +538,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(level.getAttribute('aria-busy'), 'true',
       'the chosen tile confirms that its ticket view is loading');
     assert.equal(level.classList.contains('is-active'), true);
-    assert.equal(window.hidden, false, 'the ticket surface drops from the selected level');
+    assert.equal(window.hidden, false, 'the ticket surface is visible inside the popup');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, false);
     assert.equal(el.querySelectorAll('img').length, 0,
       'expensive badge construction is deferred long enough for feedback to paint');
     await flushMicrotasks();
@@ -549,13 +551,11 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.match(APP_CSS,
       /\.inv-level-btn\[aria-busy="true"\]\s*\{[^}]*border-color:[^}]*box-shadow:/s,
       'the deferred render has an immediate visible pressed/loading state');
-    assert.match(APP_CSS, /\.inv-window:not\(\[hidden\]\)\s*\{[^}]*animation:\s*inv-window-drop/s,
-      'opening a level visibly drops its ticket surface');
-
-    level.dispatchEvent({ type: 'click' });
+    closePanelPopup('tickets');
     assert.equal(level.getAttribute('aria-expanded'), 'false');
     assert.equal(level.classList.contains('is-active'), false);
-    assert.equal(window.hidden, true, 'pressing the selected level contracts the ticket surface');
+    assert.equal(window.hidden, true, 'closing the popup hides ticket detail');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
     el.disconnectedCallback();
   });
 
@@ -1329,13 +1329,13 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('404 / no tickets → empty state, no crash', async () => {
+  test('no tickets opens Salvage Swap after the holdings read completes', async () => {
     const el = mount();
     await flushMicrotasks();
 
-    const empty = el.querySelector('.inv-empty');
-    assert.ok(empty, 'empty state rendered');
-    assert.match(empty.textContent, /No tickets at level 17/, 'level-specific copy');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
+    assert.match(el.querySelector('[data-bind="salvage-context"]').textContent, /No tickets held at level 17/);
     el.disconnectedCallback();
   });
 
@@ -1498,7 +1498,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     el.disconnectedCallback();
   });
 
-  test('leaving combined mode restores the cards view', async () => {
+  test('leaving combined mode closes the popup and reopening a level restores cards', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
@@ -1516,6 +1516,9 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     await flushMicrotasks();
 
     assert.equal(el.querySelector('[data-bind="inv-combined"]').hidden, true, 'combined view hidden again');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true, 'changing accounts closes the old reader');
+    el.querySelectorAll('[data-bind="inv-level-tab"]')[0].dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
     assert.equal(el.querySelector('[data-bind="inv-cards"]').hidden, false, 'cards view restored');
     el.disconnectedCallback();
   });

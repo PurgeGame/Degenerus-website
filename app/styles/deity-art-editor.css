@@ -1,0 +1,92 @@
+body.layout-basic .deity-art-editor {
+  box-sizing: border-box; width: min(45rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem);
+  margin: auto; padding: 1.3rem; overflow: auto; overscroll-behavior: contain;
+  border: 1px solid #bda66170; border-radius: 18px; color: #f3edf9;
+  background: radial-gradient(ellipse at 4% 0%, #7c582735, transparent 55%), #101017;
+  box-shadow: 0 24px 90px #000b; font-family: Inter, system-ui, sans-serif;
+}
+.deity-art-editor::backdrop { background: #03020cd9; backdrop-filter: blur(7px); }
+.deity-art-editor [hidden] { display: none !important; }
+.deity-art-editor__header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
+.deity-art-editor__eyebrow { color: #d7b976; font: 800 .6rem/1.4 Inter, sans-serif; letter-spacing: .18em; }
+.deity-art-editor h2 { margin: .3rem 0; padding: 0; border: 0; color: #fff5dc; font-size: 1.5rem; line-height: 1.15; }
+.deity-art-editor__header p { margin: 0; color: #a9a1b5; font-size: .8rem; }
+.deity-art-editor button { cursor: pointer; font: inherit; }
+.deity-art-editor button:disabled { cursor: default; opacity: .45; }
+.deity-art-editor :is(button, input):focus-visible { outline: 2px solid #dfc992; outline-offset: 3px; }
+.deity-art-editor .deity-art-editor__close { width: 2.75rem; min-height: 2.75rem; flex: 0 0 auto; padding: 0; border: 1px solid #ffffff1c; border-radius: 9px; background: #ffffff05; color: #cdc3db; font-size: 1.4rem; }
+.deity-art-editor__body { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 1.3rem; }
+.deity-art-editor__previews { display: grid; align-content: start; gap: .85rem; }
+.deity-art-editor__champion { display: grid; justify-items: center; padding: 1rem .7rem .8rem; border: 1px solid #c4b5fd23; border-radius: 13px; background: radial-gradient(ellipse, #57397c24, transparent 70%), #07080e; }
+.deity-art-editor__champion > span, .deity-art-editor__nft > span { color: #a89ab8; font: 800 .57rem/1.4 Inter, sans-serif; letter-spacing: .12em; }
+.deity-art-editor__champion > div { width: min(100%, 11rem); aspect-ratio: 1; }
+.deity-art-editor__champion img { display: block; width: 100%; height: 100%; object-fit: contain; clip-path: circle(45.098% at 50% 50%); }
+.deity-art-editor__champion strong { color: #f0e3ff; font-size: .88rem; }
+.deity-art-editor__nft { display: flex; align-items: center; justify-content: center; gap: .8rem; }
+.deity-art-editor__nft img { display: block; width: 4.2rem; aspect-ratio: 1; }
+.deity-art-editor__nft small { display: block; margin-top: .25rem; color: #81788e; font-weight: 500; letter-spacing: 0; }
+.deity-art-editor__controls { min-width: 0; margin: 0; }
+.deity-art-editor__controls fieldset { display: grid; gap: .9rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.deity-art-editor__controls legend { margin-bottom: .75rem; color: #ebe3f3; font-size: .88rem; font-weight: 750; }
+.deity-art-editor__color { display: grid; grid-template-columns: minmax(0, 1fr) 2.2rem 5.2rem; align-items: center; gap: .4rem; }
+.deity-art-editor__color b { display: block; color: #ded5e8; font-size: .73rem; font-weight: 700; }
+.deity-art-editor__color small { display: block; margin-top: .25rem; color: #928a9f; font-size: .65rem; line-height: 1.4; }
+.deity-art-editor__color input[type=color] { box-sizing: border-box; width: 2.2rem; height: 2.5rem; padding: .15rem; border: 1px solid #ffffff25; border-radius: 7px; background: #17121f; cursor: pointer; }
+.deity-art-editor__color input[type=text] { box-sizing: border-box; width: 100%; min-width: 0; height: 2.5rem; padding: .4rem; border: 1px solid #ffffff1f; border-radius: 7px; background: #07070c; color: #cbc2db; font: .7rem ui-monospace, monospace; }
+.deity-art-editor__color input[aria-invalid=true] { border-color: #f87171; }
+.deity-art-editor__swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .35rem; margin-top: -.35rem; }
+.deity-art-editor__swatches button { min-width: 0; height: 2rem; padding: .35rem; border: 1px solid #ffffff1a; border-radius: 6px; background: #1b1720; }
+.deity-art-editor__swatches button::before { content: ''; display: block; width: 100%; height: 100%; border-radius: 3px; background: var(--swatch); }
+.deity-art-editor__swatches button[aria-pressed=true] { border-color: #fff1bc; box-shadow: 0 0 0 1px #fff1bc; }
+.deity-art-editor__note, .deity-art-editor__scope { color: #aa9dbc; font-size: .68rem; line-height: 1.5; margin: .85rem 0; }
+.deity-art-editor__note:empty, .deity-art-editor__scope:empty { display: none; }
+.deity-art-editor__footer { display: grid; grid-template-columns: auto 1fr; gap: .6rem; margin-top: 1.1rem; }
+.deity-art-editor__footer button { min-height: 2.75rem; padding: .65rem .85rem; border: 1px solid #c5b1df30; border-radius: 8px; background: #201b2b; color: #d7cce7; font-size: .64rem; font-weight: 850; letter-spacing: .04em; }
+.deity-art-editor__footer [data-art=save] { border-color: #e2bd6e80; background: linear-gradient(#dabb79, #9c7739); color: #211704; }
+.deity-art-editor__status { min-height: 1.5em; margin: .55rem 0 0; color: #d6c59c; font-size: .7rem; line-height: 1.5; }
+@media (max-width: 600px) {
+  body.layout-basic .deity-art-editor { padding: 1rem; }
+  .deity-art-editor__body { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .deity-art-editor__previews { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .8rem; }
+  .deity-art-editor__champion { padding: .7rem .5rem; }
+  .deity-art-editor__champion > div { width: 7.5rem; }
+  .deity-art-editor__nft { flex-direction: column; text-align: center; }
+  .deity-art-editor__nft img { width: 4rem; }
+  .deity-art-editor__header { margin-bottom: .85rem; }
+  .deity-art-editor h2 { font-size: 1.3rem; }
+  .deity-art-editor__color { grid-template-columns: minmax(0, 1fr) 2.2rem 5rem; }
+}
+/* Holder controls: five independent colors and a bounded layout. */
+body.layout-basic .deity-art-editor { width: min(50rem, calc(100vw - 1.5rem)); }
+.deity-art-editor__header { position: sticky; z-index: 2; top: -1.3rem; margin: -1.3rem -1.3rem 1rem; padding: 1.3rem; background: #14121afa; border-bottom: 1px solid #d6ba7b1a; }
+.deity-art-editor__body { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+.deity-art-editor__champion img { clip-path: none; }
+.deity-art-editor__champion > div { margin: .7rem 0; }
+.deity-art-editor__previews > .deity-art-editor__scope { margin: 0; text-align: center; }
+.deity-art-editor__color { grid-template-columns: minmax(0, 1fr) 2.2rem 5rem 1.9rem; margin: .8rem 0; }
+.deity-art-editor__color label { min-width: 0; }
+.deity-art-editor__color small { font-size: .58rem; color: #928699; }
+.deity-art-editor__color [data-default] { min-width: 0; min-height: 2.5rem; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #c8b5e2; font-size: 1.15rem; }
+.deity-art-editor__color [data-default]:hover:not(:disabled) { background: #c4b5fd15; }
+.deity-art-editor__swatches { margin: .1rem 0 1rem; }
+.deity-art-editor__tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; margin-bottom: .65rem; padding: .25rem; border: 1px solid #ffffff12; border-radius: 9px; background: #06060b; }
+.deity-art-editor__tabs button { min-height: 2.5rem; padding: .4rem; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #a79bb9; font-size: .74rem; font-weight: 750; }
+.deity-art-editor__tabs button[aria-selected=true] { border-color: #d2b67442; background: #302839; color: #fff0c6; }
+.deity-art-editor__tabs i { color: #f4ca78; font-style: normal; }
+.deity-art-editor__controls fieldset { display: block; }
+.deity-art-editor__sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.deity-art-editor__slider { display: grid; gap: .8rem; margin: 1.35rem 0; }
+.deity-art-editor__slider > span { display: flex; justify-content: space-between; gap: .6rem; color: #dbd0e7; font-size: .76rem; font-weight: 650; }
+.deity-art-editor__slider output { color: #e0c188; font: .7rem ui-monospace, monospace; }
+.deity-art-editor__slider input[type=range] { width: 100%; min-height: 2rem; margin: 0; padding: 0; accent-color: #dbba76; cursor: pointer; }
+.deity-art-editor__layout-actions { display: flex; justify-content: space-between; gap: .5rem; }
+.deity-art-editor__layout-actions button { min-height: 2.5rem; padding: .4rem .6rem; border: 1px solid #c4b5fd26; border-radius: 6px; background: #221c2b; color: #cdbede; font-size: .6rem; font-weight: 750; }
+.deity-art-editor .deity-art-editor__restore { display: block; min-height: 2.25rem; margin: .3rem 0 0 auto; padding: .25rem 0; border: 0; background: transparent; color: #ac9bbb; font-size: .68rem; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 600px) {
+  .deity-art-editor__header { top: -1rem; margin: -1rem -1rem .8rem; padding: 1rem; }
+  .deity-art-editor__body { grid-template-columns: minmax(0, 1fr); }
+  .deity-art-editor__champion > div { width: 6rem; margin: .5rem 0; }
+  .deity-art-editor__previews > .deity-art-editor__scope { display: none; }
+  .deity-art-editor__color { grid-template-columns: minmax(0, 1fr) 2rem 4.5rem 1.65rem; gap: .3rem; }
+  .deity-art-editor__color input[type=color] { width: 2rem; }
+}

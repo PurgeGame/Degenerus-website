@@ -66,7 +66,7 @@ test('the popup leads with the run loop and states the Run It Up qualification',
   assert.match(componentSource, /Win the main Battle/);
   assert.match(componentSource, /25× your starting bankroll/);
   assert.match(componentSource, /120×/);
-  assert.match(componentSource, /biggest shares awarded in the daily Event/);
+  assert.match(componentSource, /The Main Event qualifies too/);
   assert.doesNotMatch(componentSource, /class="craps-rules__riu"/,
     'Run It Up shares the plain section layout');
 });

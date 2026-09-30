@@ -259,6 +259,9 @@ globalThis.localStorage = {
 
 let _fetchHandler = async () => ({ player: null, pending: {} });
 globalThis.fetch = async (url) => {
+  if (String(url).startsWith('/badges-circular/')) {
+    return { ok: true, text: async () => readFileSync(new URL(`../../..${url}`, import.meta.url), 'utf8') };
+  }
   const data = await _fetchHandler(url);
   return {
     ok: true,
@@ -300,14 +303,23 @@ import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as affiliateMod from '../../app/affiliate.js';
 import * as passesMod from '../../app/passes.js';
+import { DEITY_CUSTOMIZATION_DEPLOYMENTS, __setDeityCustomizationFactoryForTest } from '../../app/deity-customization.js';
+import { invalidateDeitySymbolAppearance } from '../../app/deity-symbol-art.js';
 import * as profilesMod from '../../app/profiles.js';
 import { DEGENERETTE_PREFERENCES_KEY } from '../../app/degenerette-preferences.js';
-import { CHAIN, ETH_DIVISOR } from '../../app/chain-config.js';
+import { CHAIN, CONTRACTS, ETH_DIVISOR } from '../../app/chain-config.js';
 
-function installDeityOwners(owners = new Map(), tokenURI = async () => null) {
+function installDeityOwners(owners = new Map(), ringColor = async () => null) {
+  invalidateDeitySymbolAppearance();
+  __setDeityCustomizationFactoryForTest(address => address.toLowerCase() === CONTRACTS.DEITY_PASS.toLowerCase()
+    ? { renderer: async () => DEITY_CUSTOMIZATION_DEPLOYMENTS[84532].renderer }
+    : { pass: async () => CONTRACTS.DEITY_PASS, effectiveTokenStyle: async id => {
+      const color = await ringColor(id);
+      return { colors: { rimColor: color || '' }, overrideMask: color ? 1 : 0 };
+    } });
   passesMod.__setDeityReadContractFactoryForTest(() => ({
     name: async () => 'Degenerus Deity Pass',
-    tokenURI,
+    tokenURI: async () => { throw Error('The symbol selector must not read NFT artwork'); },
     ownerOf: async (symbolId) => {
       const owner = owners.get(Number(symbolId));
       if (owner) return owner;
@@ -650,11 +662,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
     assert.match(PANEL_SRC, /aria-label="Bet per card"/);
     assert.match(PANEL_SRC, /aria-label="Number of cards"/);
-    assert.match(PANEL_SRC, /data-bind="deg-currency-option-0"[\s\S]*?<img src="\/app\/assets\/degenerette\/coin-eth\.svg"/,
-      'ETH pays with a silver coin, so the wager never repeats the Ethereum champion badge');
-    assert.doesNotMatch(PANEL_SRC.slice(wagerAt, PANEL_SRC.indexOf('</section>', wagerAt)),
-      /crypto_06_ethereum_green\.svg/,
-      'the green Ethereum trait badge belongs to the champion, not the currency switch');
+    assert.match(PANEL_SRC, /data-bind="deg-currency-option-0"[\s\S]*?<img src="\/badges-circular\/crypto_06_ethereum_green\.svg"/,
+      'the ETH currency choice uses the green Ethereum badge');
     assert.doesNotMatch(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
       'the blue ETH currency badge is no longer used');
     assert.match(PANEL_SRC, /data-bind="deg-currency-option-1"[\s\S]*?\/whitepaper\/flame-logo-split\.svg/,
@@ -664,21 +673,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(FLIP_LOGO_SRC, /fill="#ed0e11"/,
       'the FLIP mark uses the exact red WWXRP ring color');
     assert.match(PANEL_SRC, /\/shared\/coinflip-face-red\.svg/);
-    assert.match(
-      APP_CSS,
-      /\.deg-currency-option boon-product-indicator\s*\{[^}]*animation:\s*none;[^}]*box-shadow:\s*none;[^}]*filter:\s*none;/s,
-      'the applied Degenerette boon keeps only the arrow-shaped glow, not a square host glow',
-    );
-    assert.match(
-      APP_CSS,
-      /\.deg-currency-option boon-product-indicator::after\s*\{[^}]*display:\s*none;/s,
-      'the Degenerette boon arrow does not repeat the currency badge already shown by its option',
-    );
-    assert.doesNotMatch(
-      APP_CSS,
-      /:is\([^)]*\.deg-currency-option[^)]*\)\.has-active-boon/s,
-      'an active Degenerette arrow does not add a second square outline around the currency tile',
-    );
+    assert.doesNotMatch(PANEL_SRC, /<boon-product-indicator/,
+      'currency controls leave boon details to the portrait');
     const placeAt = PANEL_SRC.indexOf('class="deg-place-cta"', wagerAt);
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
     assert.ok(placeAt > wagerAt && placeAt < wagerEnd, 'Place bet is owned by the wager deck');
@@ -809,8 +805,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /<\/button>\s*<span class="dgn-symbol-preview__title">\s*<button type="button" class="deg-deity"/,
       'the deity trigger is separate from the carousel button');
     assert.doesNotMatch(PANEL_SRC + APP_CSS, /dgn-symbol-preview__(change|chevron)/);
-    assert.match(APP_CSS, /\.dgn-symbol-preview__title \{[^}]*top: calc\(var\(--deg-top\) \+ var\(--deg-champ\) \* 0\.84 \+ 4px\)/,
-      'the name plate starts below the bezel (84% of the art box), clear of the badge');
+    assert.match(APP_CSS, /\.dgn-symbol-preview__title \{[^}]*top: auto; bottom: 6px;/,
+      'the name plate stays at the bottom of the showcase');
   });
 
   test('the referral card moves to the page strip after its listeners are wired', () => {
@@ -859,7 +855,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     presets()[2].dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[name="deg-amount"]').value, '1000');
     assert.equal(presets()[2].getAttribute('aria-pressed'), 'true');
-    assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent, 'Place Bet · 5,000 FLIP');
+    assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent, 'Buy 5 Cards - 5,000 FLIP');
     el.disconnectedCallback();
   });
 
@@ -931,7 +927,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     spins.value = '3';
     spins.dispatchEvent({ type: 'change' });
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 375 FLIP');
+      'Buy 3 Cards - 375 FLIP');
     el.disconnectedCallback();
   });
 
@@ -950,7 +946,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     spins.value = '2';
     spins.dispatchEvent({ type: 'change' });
     const place = el.querySelector('[data-bind="deg-place-cta"]');
-    assert.equal(place.textContent, 'Place Bet · 2 ETH');
+    assert.equal(place.textContent, 'Buy 2 Cards - 2.00 ETH');
     assert.equal(place.getAttribute('data-boon-effect'), '+0.24 ETH BOON');
     assert.match(place.getAttribute('aria-label'), /plus 0\.24 ETH from your boon/);
     el.disconnectedCallback();
@@ -977,7 +973,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     amount.dispatchEvent({ type: 'input' });
     spins.value = '25';
     spins.dispatchEvent({ type: 'change' });
-    assert.equal(place.textContent, 'Place Bet · 25 ETH');
+    assert.equal(place.textContent, 'Buy 25 Cards - 25.00 ETH');
     assert.equal(place.getAttribute('data-boon-effect'), '+1.2 ETH BOON',
       'only the first 10 ETH receives the 12% boost');
 
@@ -986,7 +982,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     amount.dispatchEvent({ type: 'input' });
     spins.value = '15';
     spins.dispatchEvent({ type: 'change' });
-    assert.equal(place.textContent, 'Place Bet · 150,000 FLIP');
+    assert.equal(place.textContent, 'Buy 15 Cards - 150,000 FLIP');
     assert.equal(place.getAttribute('data-boon-effect'), '+12000 FLIP BOON',
       'only the first 100,000 FLIP receives the 12% boost');
 
@@ -1034,7 +1030,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('wager steppers start at five spins and update the Place Bet total', () => {
+  test('wager steppers update the card count and total on the Buy button', () => {
     const el = instantiate();
     const amount = el.querySelector('[name="deg-amount"]');
     const spins = el.querySelector('[name="deg-ticket-count"]');
@@ -1042,17 +1038,23 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(spins.children.find((option) => option.value === '5')?.textContent, '5',
       'the select repeats no "spins" text inside the field');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 0.05 ETH');
+      'Buy 5 Cards - 0.05 ETH');
 
     el.querySelector('[data-bind="deg-spins-up"]').dispatchEvent({ type: 'click' });
     assert.equal(spins.value, '6');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 0.06 ETH');
+      'Buy 6 Cards - 0.06 ETH');
 
     el.querySelector('[data-bind="deg-amount-up"]').dispatchEvent({ type: 'click' });
     assert.equal(amount.value, '0.015');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 0.09 ETH');
+      'Buy 6 Cards - 0.09 ETH');
+
+    spins.value = '1';
+    spins.dispatchEvent({ type: 'change' });
+    const buy = el.querySelector('[data-bind="deg-place-cta"]');
+    assert.equal(buy.textContent, 'Buy 1 Card - 0.015 ETH');
+    assert.equal(buy.getAttribute('aria-label'), 'Buy 1 Card for 0.015 ETH total');
     el.disconnectedCallback();
   });
 
@@ -1094,7 +1096,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-ticket-count"]').value, '5');
     assert.equal(el.querySelector('[name="deg-amount"]').value, '0.016');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 0.08 ETH');
+      'Buy 5 Cards - 0.08 ETH');
 
     document.dispatchEvent(new CustomEvent('quest:activate', {
       detail: { questType: 8, target: String(2_000n * 10n ** 18n), variant: 'secondary' },
@@ -1103,7 +1105,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-ticket-count"]').value, '5');
     assert.equal(el.querySelector('[name="deg-amount"]').value, '400');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 2,000 FLIP');
+      'Buy 5 Cards - 2,000 FLIP');
 
     // At the lowest ETH target, five spins would fall below the 0.005 minimum;
     // the preset chooses four valid spins while keeping the quest total exact.
@@ -1113,7 +1115,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-ticket-count"]').value, '4');
     assert.equal(el.querySelector('[name="deg-amount"]').value, '0.005');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
-      'Place Bet · 0.02 ETH');
+      'Buy 4 Cards - 0.02 ETH');
 
     assert.equal(fake._calls.placeDegeneretteBet.length, 0,
       'bare quest activations only configure the wager');
@@ -1941,7 +1943,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     // Twelve decimals: finer than the 1 gwei-equivalent ETH stake unit.
     amount.value = '0.012345678912';
     amount.dispatchEvent({ type: 'input' });
-    assert.equal(place.textContent, 'Place Bet · 0.061728 ETH',
+    assert.equal(place.textContent, 'Buy 5 Cards - 0.061728 ETH',
       'the label already prices the floored per-card wager');
     amount.dispatchEvent({ type: 'change' });
     assert.equal(amount.value, '0.012345678', 'commit shows exactly what will be sent');
@@ -2413,8 +2415,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.equal(button.disabled, true);
       storeMod.update('connected.address', CONNECTED);
       await settle(50);
-      assert.match(el.innerHTML, /REFER FRIENDS[\s\S]*?deg-referral-card__free">FREE<\/span>[\s\S]*?deg-referral-card__flip">FLIP<\/span>[\s\S]*?FOREVER/,
-        'the compact three-line referral promise is part of the graphic');
+      assert.match(el.innerHTML, /<h2>Refer friends\.<\/h2>[\s\S]*?deg-referral-card__earn">Earn<\/span>[\s\S]*?deg-referral-card__free">FREE<\/span>[\s\S]*?deg-referral-card__flip">FLIP<\/span>[\s\S]*?deg-referral-card__forever[\s\S]*?FOREVER/,
+        'the invitation reads in order: Refer friends. Earn FREE FLIP FOREVER');
       assert.match(APP_CSS, /\.deg-referral-card__free\s*\{[^}]*color:\s*#4ade80/s,
         'FREE is highlighted in green');
       assert.match(APP_CSS, /\.deg-referral-card__flip\s*\{[^}]*color:\s*#f87171/s,
@@ -2630,86 +2632,27 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     }
   });
 
-  test('Degenerette basics quotes the guaranteed floor at the player Degen Score and explains ETH Hero influence', async () => {
-    decimatorMod.__setDecimatorContextReaderForTest(async () => ({ activityScore: 305 }));
-    _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
-      ? { cards: [] }
-      : { scoreBreakdown: { totalBps: 12 }, degenerette: { pendingBets: [] } };
+  test('Degenerette basics offers a demo and concise champion, boon and jackpot copy', async () => {
     const el = instantiate();
     try {
       await settle();
       assert.match(el.innerHTML, /data-bind="deg-basics-info"[^>]*aria-label="How Degenerette works"/);
-      // Audit a5d4d2cd: the player picks one Hero symbol (quadrant + icon);
-      // every other quadrant and every color (Hero included) is house-rolled.
-      assert.match(el.innerHTML, /Pick one Hero symbol/);
-      assert.match(el.innerHTML, /rolled icon that matches your Hero scores 2/);
-      assert.match(el.innerHTML,
-        /ETH bets[\s\S]*?selected symbol[\s\S]*?Daily Drawing[\s\S]*?Colors still roll at random/,
-        'the info sheet explains the selected Hero symbol\'s ETH-only main-jackpot influence');
+      assert.match(el.innerHTML, /Pick a champion[\s\S]*?champion’s symbol counts double/);
+      assert.match(el.innerHTML, /data-bind="deg-basics-demo"/);
+      assert.match(el.innerHTML, /DEMO · NO BET/);
+      assert.match(el.innerHTML, /Deity boons[\s\S]*?ETH bets[\s\S]*?Vault’s XRP[\s\S]*?sDGNRS’s ETH/);
+      assert.match(el.innerHTML, /ETH bets give your champion more weight in the next Daily Drawing/);
+      assert.equal(el.querySelectorAll('.deg-payout-table').length, 0);
+      assert.doesNotMatch(el.innerHTML, /deg-payout-tables|keeper crank|shared RNG|No second transaction/);
       const info = el.querySelector('[data-bind="deg-basics-info"]');
       const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
-      assert.match(el.innerHTML, /Selected card · ETH \/ FLIP payouts/);
-
-      // Audit a5d4d2cd: payout no longer depends on the picked symbol at all —
-      // there is one shared table for every quadrant/icon choice, scaled only
-      // by currency and Degen Score. The preview quotes the guaranteed floor
-      // (goldMatches=0) since matched-gold is unknowable pre-spin.
-      const expectedEth = degeneretteMod.degenerettePayoutTable({ currency: 0, activityScore: 305 }).rows;
-      const expectedFlip = degeneretteMod.degenerettePayoutTable({ currency: 1, activityScore: 305 }).rows;
-      const centix = (hundredths) => {
-        const n = BigInt(hundredths);
-        const whole = (n / 100n).toString();
-        const frac = (n % 100n).toString().padStart(2, '0').replace(/0$/, '');
-        return frac ? `${whole}.${frac}` : whole;
-      };
-
-      let payoutTables = el.querySelectorAll('.deg-payout-table');
-      assert.equal(payoutTables.length, 1, 'one guaranteed-floor payout table');
-      let payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
-      assert.equal(payoutRows.length, 9, 'the universal zero scores share one 0–1 row');
-      assert.ok(payoutRows.every((row) => row.children.length === 3),
-        'each row contains score plus ETH and FLIP');
-      const payoutHeadings = payoutTables[0].querySelectorAll('th')
-        .map((heading) => heading.textContent).join(' ');
-      assert.match(payoutHeadings, /GUARANTEED FLOOR/);
-      assert.match(payoutHeadings, /ETH/);
-      assert.match(payoutHeadings, /FLIP/);
-      assert.match(payoutHeadings, /DEGEN SCORE 305/,
-        'the visible quote prefers the live GAME score over a stale indexed score');
-      assert.doesNotMatch(payoutHeadings, /GOLD|HERO/,
-        'the table no longer varies by a picked gold-quadrant count — there is nothing to pick');
-      assert.equal(payoutRows[1].children[1].textContent, centix(expectedEth[2].multiplierHundredths),
-        'score 2 ETH matches degenerettePayoutTable\'s real guaranteed-floor output at Degen Score 305');
-      assert.equal(payoutRows[1].children[2].textContent, centix(expectedFlip[2].multiplierHundredths),
-        'score 2 FLIP matches degenerettePayoutTable\'s real guaranteed-floor output at Degen Score 305');
-      assert.equal(payoutRows[5].children[1].textContent, centix(expectedEth[6].multiplierHundredths),
-        'score 6 includes the ETH-only high-score bonus');
-      assert.equal(payoutRows[5].children[2].textContent, centix(expectedFlip[6].multiplierHundredths),
-        'score 6 keeps the distinct FLIP schedule');
-      assert.match(el.querySelector('[data-bind="deg-payout-context"]')?.textContent || '',
-        /Degen Score 305/,
-        'the explanatory copy says the player score is applied');
-      assert.match(el.querySelector('[data-bind="deg-payout-context"]')?.textContent || '',
-        /gold.*matches more than this floor|matches.*gold.*pays more/i,
-        'the copy explains a matched-gold spin can beat the quoted floor');
-
-      // Picking a different quadrant/icon does not change the table at all —
-      // this is the core semantic change from the old per-picked-gold tables.
-      document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
-        detail: { traitIds: [56, 121, 130, 203] },
-      }));
-      el.querySelector('[data-bind="dgn-symbol-choice-16"]').dispatchEvent({ type: 'click' });
-      payoutTables = el.querySelectorAll('.deg-payout-table');
-      payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
-      assert.equal(payoutRows[1].children[1].textContent, centix(expectedEth[2].multiplierHundredths),
-        'the guaranteed-floor table is identical regardless of the chosen quadrant/icon');
-      assert.doesNotMatch(payoutHeadings, /WWXRP/);
       assert.equal(dialog.hidden, true);
       info.dispatchEvent({ type: 'click', preventDefault() {} });
       assert.equal(dialog.hidden, false);
       el.querySelector('[data-bind="deg-basics-close"]')
         .dispatchEvent({ type: 'click', preventDefault() {} });
       assert.equal(dialog.hidden, true);
+      assert.equal(document.activeElement, info, 'closing returns focus to the info button');
     } finally {
       el.disconnectedCallback();
     }
@@ -2767,6 +2710,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         assert.equal(el.getTicketDraft().symbol, (q << 3) | icon);
         assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
           degeneretteChampionBadgePath(q, icon));
+        if (q === 3) {
+          const label = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'][icon];
+          assert.equal(button.getAttribute('aria-label'), label);
+          assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, label);
+          assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, `God of ${label}:`);
+        }
         assert.equal(button.getAttribute('aria-pressed'), 'true');
         assert.equal(choices.querySelectorAll('button')
           .filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
@@ -2776,7 +2725,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
           'selection returns focus to the badge');
       }
     }
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 8');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Eight');
     el.disconnectedCallback();
   });
 
@@ -2825,6 +2774,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       await settle(60);
       assert.equal(card.hidden, false);
       assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, 'Sleepy Lamp');
+      assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, 'God of King:');
       assert.equal(el.querySelector('[data-bind="dgn-deity-avatar"]').src, AVATAR);
       assert.equal(card.getAttribute('aria-label'), 'Sleepy Lamp’s deity boons');
       assert.equal(card.dataset.boonGiver, undefined, 'a Discord owner gives gifts, not a boon draw: no glow');
@@ -2839,6 +2789,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       await settle(40);
       assert.equal(card.hidden, false, 'a protocol hero shows its boon-draw deity, not the catalog owner');
       assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, 'sDGNRS');
+      assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, 'God of Ethereum:');
       assert.equal(card.dataset.boonGiver, 'sdgnrs');
       el.disconnectedCallback();
     });
@@ -2917,13 +2868,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       el.disconnectedCallback();
     });
 
-    test('deity gifts are a compact popover in the wing beside their trigger', () => {
+    test('deity gifts use a readable floating popover above their trigger', () => {
       const popover = APP_CSS.match(/\.deg-quickplay-controls > \.deg-boon-popover \{([^}]*)\}/)?.[1] || '';
       assert.match(popover, /position: absolute;[^;]*;[^]*visibility: hidden/, 'hidden and outside the layout flow');
-      assert.match(popover, /left: 6px; right: auto;/, 'over the left wing, above the deity card');
-      assert.match(popover, /width: min\(calc\(50cqw - var\(--deg-champ\) \* 0\.42 - 12px\), 6\.6rem\)/, 'never wider than the wing: it never covers the champion');
+      assert.match(popover, /left: auto; right: 6px;/, 'above the portrait on the right');
+      assert.match(popover, /width: min\(calc\(100cqw - 12px\), 14rem\)/, 'full labels have room while the card stays inside the widget width');
       assert.match(popover, /border: 0;/, 'no brass rim');
-      assert.match(APP_CSS, /\.deg-quickplay-controls:not\(:has\(\.deg-deity:not\(\[hidden\]\)\)\) > \.deg-boon-popover \{ left: auto; right: 6px; \}/, 'right wing when only the nameplate triggers it');
       assert.match(APP_CSS, /\.deg-quickplay-controls > \.deg-boon-popover::after \{[^}]*transform: rotate\(45deg\)/, 'a caret points at the trigger');
       assert.match(APP_CSS, /\.deg-boon-popover \.sacrifice__boon\[data-used="true"\] \.sacrifice__boon-mark::after \{[^}]*content: '\\2713'/, 'a spent gift keeps a check');
       assert.match(APP_CSS, /\.deg-boon-popover\.is-open \{ visibility: visible; pointer-events: auto;/);
@@ -2959,7 +2909,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     trigger.dispatchEvent({ type: 'click' });
     el.querySelector('[data-bind="dgn-symbol-close"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(calls.at(-1), { preventScroll: true, focusVisible: true }, 'a fresh open forgets the last pointer');
-    assert.match(APP_CSS, /\.dgn-symbol-preview:focus-visible \.dgn-symbol-preview__art\[data-badge="full"\]::before \{ box-shadow: 0 6px 14px rgba\(0, 0, 0, 0\.7\), 0 0 20px 9px rgba\(208, 176, 255, 0\.95\); \}/,
+    assert.match(APP_CSS, /\.dgn-symbol-preview:focus-visible \.dgn-symbol-preview__art\[data-badge="full"\]::before \{[^}]*box-shadow: 0 6px 14px rgba\(0, 0, 0, 0\.7\), 0 0 20px 9px rgba\(208, 176, 255, 0\.95\); \}/,
       'keyboard focus is a soft lavender halo, not a cream ring');
     assert.doesNotMatch(APP_CSS, /\.dgn-symbol-preview:focus-visible \+ \.dgn-symbol-preview__title \{ outline: 2px solid var\(--deg-brass-hi\)/);
     assert.match(APP_CSS, /@media \(forced-colors: active\) \{[^{}]*\.dgn-symbol-preview:focus-visible \+ \.dgn-symbol-preview__title \{ outline: 2px solid CanvasText; \}/);
@@ -3000,9 +2950,10 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       pick(el, 31);
       const src = (bind) => el.querySelector(`[data-bind="dgn-symbol-neighbour-${bind}"]`).src;
       assert.equal(src('next-1'), degeneretteChampionBadgePath(0, 0));
-      assert.equal(src('next-3'), degeneretteChampionBadgePath(0, 2));
+      assert.equal(src('next-2'), degeneretteChampionBadgePath(0, 1));
       assert.equal(src('prev-1'), degeneretteChampionBadgePath(3, 6));
-      assert.equal(src('prev-3'), degeneretteChampionBadgePath(3, 4));
+      assert.equal(src('prev-2'), degeneretteChampionBadgePath(3, 5));
+      assert.equal(el.querySelectorAll('.deg-carousel__sym').length, 4, 'two neighbours on each side of the champion');
       assert.equal(PANEL_SRC.includes('data-preview-ticket'), false, 'the example ticket is gone');
       el.disconnectedCallback();
     });
@@ -3052,8 +3003,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       pick(el, 0);
       el.querySelector('[data-bind="dgn-symbol-neighbour-next-2"]').dispatchEvent({ type: 'click' });
       assert.equal(el.getTicketDraft().symbol, 2);
-      el.querySelector('[data-bind="dgn-symbol-neighbour-prev-3"]').dispatchEvent({ type: 'click' });
-      assert.equal(el.getTicketDraft().symbol, 31, 'stepping back from 2 by three wraps to 31');
+      el.querySelector('[data-bind="dgn-symbol-neighbour-prev-2"]').dispatchEvent({ type: 'click' });
+      assert.equal(el.getTicketDraft().symbol, 0, 'the second left neighbour selects two symbols back');
       assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, false);
       el.disconnectedCallback();
     });
@@ -3066,7 +3017,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       const key = (k) => trigger.dispatchEvent({ type: 'keydown', key: k, preventDefault() { prevented += 1; } });
       key('ArrowLeft');
       assert.equal(el.getTicketDraft().symbol, 31);
-      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 8');
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Eight');
       key('ArrowRight');
       key('ArrowRight');
       assert.equal(el.getTicketDraft().symbol, 1);
@@ -3265,12 +3216,13 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
-  test('any owned deity shows its gifts and NFT colors after a walletless lightweight picker edit', async () => {
+  test('an owned deity shows its gifts and effective NFT rim after a walletless picker edit', async () => {
     storeMod.update('connected.address', null);
     storeMod.update('viewing.address', null);
     localStorage.setItem('degenerus:lightweight-mode:v1', '1');
-    const image = 'data:image/svg+xml,%3Csvg%20viewBox%3D%22-51%20-51%20102%20102%22%3E%3Ccircle%20r%3D%2246%22%20fill%3D%22%23fa12ab%22%2F%3E%3C%2Fsvg%3E';
-    installDeityOwners(new Map([[22, CONNECTED]]), async () => `data:application/json,${encodeURIComponent(JSON.stringify({ image }))}`);
+    const standard = readFileSync(new URL(`../../..${degeneretteChampionBadgePath(2, 6)}`, import.meta.url), 'utf8');
+    const image = `data:image/svg+xml,${encodeURIComponent(standard.replace('r="35.2" fill="#5e5e5e"', 'r="35.2" fill="#fa12ab"'))}`;
+    installDeityOwners(new Map([[22, CONNECTED]]), async () => '#fa12ab');
     const el = instantiate();
     el.querySelector('[data-bind="dgn-symbol-choice-22"]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -3281,7 +3233,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.match(boons.title, /owner chooses/);
     const selected = el.querySelector('[data-bind="dgn-selected-symbol"]');
     assert.equal(selected.src, image);
-    assert.equal(selected.classList.contains('dgn-deity-art'), true);
+    assert.equal(selected.classList.contains('dgn-deity-art'), false, 'the standard badge keeps its full size and geometry');
     assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').querySelector('img').src, image);
     el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
     assert.equal(boons.hidden, true, 'a minted deity\'s rail hides while FLIP is selected');
@@ -3295,7 +3247,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
-  test('NFT metadata completing after disconnect cannot mutate the champion', async () => {
+  test('a rim override completing after disconnect cannot mutate the champion', async () => {
     let finish;
     installDeityOwners(new Map([[22, CONNECTED]]), () => new Promise(resolve => { finish = resolve; }));
     const el = instantiate();
@@ -3305,7 +3257,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const img = el.querySelector('[data-bind="dgn-selected-symbol"]');
     const before = img.src;
     el.disconnectedCallback();
-    finish(`data:application/json,${encodeURIComponent(JSON.stringify({ image: 'data:image/svg+xml,%3Csvg%2F%3E' }))}`);
+    finish('#fa12ab');
     await settle(40);
     assert.equal(img.src, before);
   });
@@ -3322,7 +3274,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     await settle(40);
 
     el.querySelector('[data-bind="dgn-symbol-choice-29"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Die 6');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Six');
 
     const amountInput = el.querySelector('[name="deg-amount"]');
     if (amountInput) amountInput.value = '0.01';

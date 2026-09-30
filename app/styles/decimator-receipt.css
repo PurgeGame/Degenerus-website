@@ -1,0 +1,50 @@
+/* Decimator results receipt (app-decimator-draw-overlay.js loads this on open): the viewer's
+   verdict, then every paid winner ranked by stack x peak. The modal shell lives in app.css. */
+.dec-receipt {
+  display: grid;
+  box-sizing: border-box;
+  width: min(100%, 44rem);
+  height: 100dvh;
+  margin: 0 auto;
+  padding: max(3.6rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.9rem;
+  font-family: var(--font-mono, "Roboto Mono", monospace);
+}
+.dec-receipt__head small { color: #ffbd36; font-size: 0.62rem; font-weight: 950; letter-spacing: 0.14em; }
+.dec-receipt__head h2 { margin: 0.2rem 0 0.7rem; font-size: clamp(1.6rem, 6vw, 2.4rem); font-weight: 1000; letter-spacing: 0.08em; }
+.dec-receipt__facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45rem; margin: 0; }
+.dec-receipt__facts div { padding: 0.5rem 0.55rem; border: 1px solid rgba(255, 189, 54, 0.22); border-radius: 7px; background: rgba(255, 189, 54, 0.05); }
+.dec-receipt__facts dt { color: rgba(255, 228, 163, 0.7); font-size: 0.5rem; font-weight: 950; letter-spacing: 0.12em; }
+.dec-receipt__facts dd { margin: 0.25rem 0 0; overflow: hidden; font-size: 0.86rem; font-weight: 1000; text-overflow: ellipsis; white-space: nowrap; }
+.dec-receipt__you { display: grid; gap: 0.3rem; padding: 0.8rem 0.9rem; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 9px; background: rgba(255, 255, 255, 0.04); }
+.dec-receipt__you strong { font-size: 1.3rem; font-weight: 1000; letter-spacing: 0.08em; }
+.dec-receipt__you p { margin: 0; color: rgba(255, 255, 255, 0.82); font-family: "Inter", system-ui, sans-serif; font-size: 0.82rem; line-height: 1.4; }
+.dec-receipt__you.is-won { border-color: rgba(170, 255, 223, 0.55); background: rgba(74, 222, 128, 0.08); }
+.dec-receipt__you.is-won strong { color: #aaffdf; }
+.dec-receipt__you.is-lost strong { color: #fda4af; }
+.dec-receipt__score { color: rgba(255, 228, 163, 0.78); font-size: 0.62rem; font-weight: 900; letter-spacing: 0.08em; }
+.dec-receipt__board { display: grid; min-height: 0; grid-template-rows: auto minmax(0, 1fr); gap: 0.45rem; }
+.dec-receipt__board h3 { margin: 0; color: #ffbd36; font-size: 0.62rem; font-weight: 950; letter-spacing: 0.14em; }
+.dec-receipt__empty { margin: 0; color: rgba(255, 255, 255, 0.7); font-family: "Inter", system-ui, sans-serif; font-size: 0.8rem; }
+.dec-receipt__winners { display: grid; align-content: start; gap: 0.25rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.dec-receipt__winners li {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr) 4.2rem minmax(0, auto);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.72rem;
+}
+.dec-receipt__winners li.is-you { outline: 1px solid rgba(170, 255, 223, 0.6); background: rgba(74, 222, 128, 0.08); }
+.dec-receipt__rank { color: #ffbd36; font-weight: 1000; text-align: center; }
+.dec-receipt__name { overflow: hidden; font-family: "Inter", system-ui, sans-serif; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.dec-receipt__peak { color: rgba(255, 255, 255, 0.72); text-align: right; }
+.dec-receipt__prize { color: #aaffdf; font-weight: 900; text-align: right; white-space: nowrap; }
+@media (max-width: 520px) {
+  .dec-receipt__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dec-receipt__winners li { grid-template-columns: 1.6rem minmax(0, 1fr) auto; }
+  .dec-receipt__peak { display: none; }
+}

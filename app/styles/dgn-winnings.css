@@ -1,10 +1,10 @@
-/* One compact bar under the cards: coin well, payout, status, and score keep
+/* One compact bar under the cards: coin well, payout, and status keep
    this fixed footprint through every flip so the cards above never shift. */
 .dgn-winnings {
   box-sizing: border-box; position: relative; z-index: 30;
-  display: grid; grid-template-columns: 60px minmax(0, 1fr) auto;
+  display: grid; grid-template-columns: 60px minmax(0, 1fr);
   grid-template-rows: auto auto auto;
-  grid-template-areas: 'coin label score' 'coin amount score' 'coin status score';
+  grid-template-areas: 'coin label' 'coin amount' 'coin status';
   align-content: center; align-items: center; column-gap: 12px; row-gap: 1px;
   width: 100%; max-width: 620px; height: 78px;
   margin: 8px auto 0; padding: 8px 16px 8px 9px; border: 1px solid #738a8180; border-radius: 14px;
@@ -23,10 +23,6 @@
 .dgn-winnings__value { color: #ffe7a5; font: 900 clamp(1.1rem, 4.2vw, 1.5rem)/1.1 system-ui; overflow-wrap: anywhere; }
 .dgn-winnings__secondary { color: #e9ca87; font: 750 .62rem/1.2 system-ui; }
 .dgn-winnings__secondary:empty { display: none; }
-.dgn-winnings__score { grid-area: score; padding-left: 12px; border-left: 1px solid #738a8140; }
-.dgn-winnings .dgn-pop__tally { position: static; padding: 0; background: none; border-radius: 0; }
-.dgn-winnings .dgn-pop__score-label { font-size: .48rem; letter-spacing: .1em; }
-.dgn-winnings .dgn-pop__score { font-size: 1.7rem; line-height: 1.05; }
 .dgn-winnings__status { grid-area: status; color: #a9bcb2; font: 800 .54rem/1.2 system-ui; letter-spacing: .075em; }
 .dgn-winnings__status:empty { display: none; }
 .dgn-winnings__announcement,
@@ -53,5 +49,4 @@
 .rvl-stage--pop .rvl-dgn-actions--fixed { min-height: 44px; }
 @media (max-width: 380px) {
   .dgn-winnings { column-gap: 9px; padding-inline: 8px 12px; }
-  .dgn-winnings__score { padding-left: 9px; }
 }

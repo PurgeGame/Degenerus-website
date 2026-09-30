@@ -1,5 +1,5 @@
-@import url("./dgn-pop.css?v=center-click-20260928");
-@import url("./panel-popups.css?v=compact-salvage-20260928");
+@import url("./dgn-pop.css?v=ticket-payout-20260929");
+@import url("./panel-popups.css?v=badge-ticket-popup-20260930");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
 @import url("./lightweight.css");
 /* /app/styles/app.css — Phase 56 scope */
@@ -8886,14 +8886,13 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(0.78rem, 3vw, 1rem);
 }
 
-/* Compact Luckbox receipt tiles keep exact sDGNRS/DGNRS amounts in the DOM,
-   but may ellipsize them rather than spilling into a neighboring tile. The
-   full-size reveal gets a fitted type tier below and must remain complete. */
+/* Receipt values use numeric abbreviations, with the full amount in their
+   accessible label and tooltip. Never turn a reward into an ellipsis. */
 .rvl-stage--lootbox .rvl-card--dgnrs.rvl-card--mini .rvl-card-value {
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 .rvl-card-label {
   font-size: 0.75rem;
@@ -9983,8 +9982,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.44);
 }
 /* A one-reward receipt is a hero card, despite retaining the shared `mini`
-   DOM class. Fit its exact DGNRS total instead of applying the multi-card
-   ellipsis treatment above. */
+   DOM class. Keep the abbreviated DGNRS total prominent. */
 .rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] .rvl-card--dgnrs .rvl-card-value {
   overflow: visible;
   font-size: clamp(1.4rem, 7vw, 1.85rem);
@@ -17790,18 +17788,6 @@ body.layout-basic .deg-currency-option:hover:not(.is-selected):not(:disabled) {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary, #eee);
 }
-body.layout-basic .deg-currency-option boon-product-indicator {
-  position: absolute;
-  right: 0.18rem;
-  top: 0.18rem;
-  z-index: 2;
-  animation: none;
-  box-shadow: none;
-  filter: none;
-}
-body.layout-basic .deg-currency-option boon-product-indicator::after {
-  display: none;
-}
 body.layout-basic .deg-currency-option.is-selected[data-bind="deg-currency-option-0"] {
   border-color: rgba(48, 209, 0, 0.72);
   background: linear-gradient(145deg, rgba(48, 209, 0, 0.32), rgba(48, 209, 0, 0.1));
@@ -18516,124 +18502,62 @@ body.layout-basic .deg-referral-dialog__link-label input:focus-visible {
   background: rgba(76, 29, 149, 0.16);
   color: #ede9fe;
 }
-body.layout-basic .deg-basics-dialog__card { width: min(94vw, 62rem); max-width: 62rem; }
-body.layout-basic .deg-payouts {
-  display: grid;
-  min-width: 0;
-  gap: 0.52rem;
+/* A hands-on example and two short reasons to pick a champion. */
+body.layout-basic .deg-basics-dialog__card {
+  width: min(100%, 42rem); max-width: 42rem; max-height: calc(100dvh - 2rem);
+  padding: 1.25rem; gap: .8rem; overscroll-behavior: contain;
 }
-body.layout-basic .deg-payouts__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.8rem;
+body.layout-basic .deg-basics-dialog__intro {
+  margin: 0; max-width: 35rem; color: #c8c7da; font-size: .85rem; line-height: 1.5;
 }
-body.layout-basic .deg-payouts__head h4 {
-  margin: 0;
-  color: #fff;
-  font-size: 0.9rem;
-  letter-spacing: 0.035em;
+body.layout-basic .deg-basics-dialog__body {
+  display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  align-items: center; gap: 1.4rem; min-width: 0;
 }
-body.layout-basic .deg-payouts__head p {
-  max-width: 35rem;
-  margin: 0;
-  color: #9295ac;
-  font-size: 0.6rem;
-  line-height: 1.35;
-  text-align: right;
+body.layout-basic .deg-basics-demo { min-width: 0; }
+body.layout-basic .deg-basics-demo__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; min-height: 2.25rem; color: #b5a9d2;
+  font: 800 .6rem/1.2 system-ui; letter-spacing: .1em;
 }
-body.layout-basic .deg-payouts__tables {
-  display: block;
-  min-width: 0;
+body.layout-basic .deg-basics-demo__head button {
+  min-height: 2.25rem; padding: .35rem .55rem; border: 0; border-radius: 6px;
+  background: transparent; color: #ddd6fe; font: 800 .6rem/1.2 system-ui; cursor: pointer;
 }
-body.layout-basic .deg-payout-group {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(196, 181, 253, 0.18);
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.2);
+body.layout-basic .deg-basics-demo__head button:hover { background: #c4b5fd18; }
+body.layout-basic .deg-basics-demo__head button:focus-visible { outline: 2px solid #c4b5fd; }
+body.layout-basic .deg-basics-demo .dgn-pop { display: flex; flex-direction: column; }
+body.layout-basic .deg-basics-demo .dgn-pop__grid { max-width: 100%; }
+body.layout-basic .deg-basics-demo .dgn-pop__hint {
+  order: 1; margin: .6rem 0 0; min-height: 1.4em; color: #b5a9d2;
+  align-self: center; width: max-content; max-width: calc(100vw - 4rem);
+  font-size: .64rem; white-space: normal;
 }
-body.layout-basic .deg-payout-group[open] {
-  grid-column: 1 / -1;
-  border-color: rgba(196, 181, 253, 0.42);
-  background: rgba(76, 29, 149, 0.12);
+body.layout-basic .deg-basics-demo :is(.dgn-pop__tally, .dgn-pop__number, .dgn-pop__gold-total) { display: none !important; }
+body.layout-basic .deg-basics-dialog__features { display: grid; gap: 1.2rem; }
+body.layout-basic .deg-basics-dialog__features h4 {
+  margin: 0 0 .3rem; color: #ede9fe; font-size: .85rem; font-weight: 850;
 }
-body.layout-basic .deg-payout-group summary {
-  padding: 0.48rem 0.55rem;
-  color: #c4b5fd;
-  font-size: 0.57rem;
-  font-weight: 950;
-  letter-spacing: 0.09em;
-  text-align: center;
-  cursor: pointer;
-  white-space: nowrap;
+body.layout-basic .deg-basics-dialog__features p {
+  margin: 0; color: #b9bbcd; font-size: .79rem; line-height: 1.5;
 }
-body.layout-basic .deg-payout-group[open] summary {
-  border-bottom: 1px solid rgba(196, 181, 253, 0.16);
-  color: #ede9fe;
-  text-align: left;
+body.layout-basic .deg-basics-dialog__card > .deg-referral-dialog__learn { justify-self: end; }
+@media (max-width: 580px) {
+  body.layout-basic .deg-basics-dialog { padding: .65rem; }
+  body.layout-basic .deg-basics-dialog__card {
+    padding: 1rem; gap: .7rem; max-height: calc(100dvh - 1.3rem);
+  }
+  body.layout-basic .deg-basics-dialog__card h3 { min-height: 2rem; padding-right: 3rem; }
+  body.layout-basic .deg-basics-dialog__body { grid-template-columns: minmax(0, 1fr); gap: .9rem; }
+  body.layout-basic .deg-basics-demo { width: min(100%, 13rem); justify-self: center; }
+  body.layout-basic .deg-basics-dialog__features { gap: .8rem; }
+  body.layout-basic .deg-basics-dialog__intro { font-size: .78rem; }
+  body.layout-basic .deg-basics-dialog__features p { font-size: .75rem; }
 }
-body.layout-basic .deg-payout-table-wrap {
-  width: min(100%, 32rem);
-  min-width: 0;
-  margin-inline: auto;
-  overflow-x: auto;
-  border: 1px solid rgba(196, 181, 253, 0.24);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  scrollbar-width: thin;
-}
-body.layout-basic .deg-payout-table {
-  width: 100%;
-  min-width: 18rem;
-  border-collapse: collapse;
-  color: #d8d9e7;
-  font-size: 0.62rem;
-  font-variant-numeric: tabular-nums;
-}
-body.layout-basic .deg-payout-table th,
-body.layout-basic .deg-payout-table td {
-  padding: 0.34rem 0.48rem;
-  border-bottom: 1px solid rgba(196, 181, 253, 0.1);
-  text-align: right;
-  white-space: nowrap;
-}
-body.layout-basic .deg-payout-table thead th {
-  color: #8f91aa;
-  font-size: 0.48rem;
-  font-weight: 950;
-  letter-spacing: 0.075em;
-}
-body.layout-basic .deg-payout-table thead tr:first-child th {
-  border-bottom-color: rgba(196, 181, 253, 0.24);
-  color: #c4b5fd;
-  text-align: center;
-}
-body.layout-basic .deg-payout-table thead tr:last-child th {
-  color: #a9abc1;
-  text-align: center;
-}
-body.layout-basic .deg-payout-table th:first-child { text-align: left; }
-body.layout-basic .deg-payout-table tbody th { color: #fff; }
-body.layout-basic .deg-payout-table tbody td { color: #fde68a; font-weight: 850; }
-body.layout-basic .deg-payout-table :is(th, td).is-current {
-  background: rgba(124, 58, 237, 0.13);
-  color: #fff1a8;
-}
-body.layout-basic .deg-payout-table tbody th,
-body.layout-basic .deg-payout-table thead tr:first-child th:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: #100c1a;
-}
-body.layout-basic .deg-payout-table thead tr:first-child th:first-child { z-index: 3; }
-body.layout-basic .deg-payout-table tbody tr:last-child th,
-body.layout-basic .deg-payout-table tbody tr:last-child td { border-bottom: 0; }
-@media (max-width: 640px) {
-  body.layout-basic .deg-payouts__head { display: grid; gap: 0.24rem; }
-  body.layout-basic .deg-payouts__head p { text-align: left; }
-  body.layout-basic .deg-payout-table { min-width: 18rem; }
+@media (max-width: 580px) and (max-height: 650px) {
+  body.layout-basic .deg-basics-demo { width: min(100%, 10rem); }
+  body.layout-basic .deg-basics-dialog__card { gap: .55rem; padding: .9rem; }
+  body.layout-basic .deg-basics-dialog__body, body.layout-basic .deg-basics-dialog__features { gap: .65rem; }
 }
 body.layout-basic .deg-referral-dialog__custom {
   display: grid;
@@ -19099,15 +19023,6 @@ body.layout-basic .deg-block--wager .deg-place-cta {
   font-size: 0.74rem;
   white-space: nowrap;
 }
-body.layout-basic .deg-block--wager .deg-place-cta[data-boon-effect]::after {
-  display: block;
-  margin-top: 0.12rem;
-  color: #cbd5e1;
-  content: attr(data-boon-effect);
-  font: 950 0.52rem/1 "Roboto Mono", monospace;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 8px rgba(203, 213, 225, 0.32);
-}
 /* Place Bet takes the selected currency's color. */
 body.layout-basic .deg-block--wager[data-currency="eth"] .deg-place-cta:not(:disabled) {
   border-color: #30d100;
@@ -19126,10 +19041,7 @@ body.layout-basic .deg-block--wager[data-currency="flip"] .deg-place-cta:not(:di
 body.layout-basic .deg-block--wager[data-currency] .deg-place-cta:hover:not(:disabled) {
   filter: brightness(1.1);
 }
-body.layout-basic .deg-block--wager[data-currency="eth"] .deg-place-cta[data-boon-effect]:not(:disabled)::after {
-  color: rgba(6, 35, 0, 0.78);
-  text-shadow: none;
-}
+
 
 /* Degenerette cabinet: the sign, one showcase window (the champion in a brass bezel between its
    picker neighbours, over an enamel nameplate), the boon drawer, then a machined wager deck.
@@ -19155,85 +19067,106 @@ body.layout-basic .play-grid .deg-quickplay-brand { flex: 1 1 auto; min-height: 
 body.layout-basic .deg-quickplay-brand .deg-header { display: block; flex: 0 0 auto; min-height: 0; }
 body.layout-basic .deg-quickplay-brand .deg-header::before,
 body.layout-basic .deg-quickplay-brand .deg-header::after { display: none; }
-body.layout-basic .deg-quickplay-brand .deg-heading { box-sizing: border-box; width: 100%; padding-right: 1.25rem; }
+body.layout-basic .deg-quickplay-brand .deg-heading { box-sizing: border-box; width: 100%; padding: 0; }
 /* One sign in every state; the accessible copy in the link reads the same words. */
 body.layout-basic .deg-quickplay-brand .deg-learn-link { position: relative; display: block; width: 100%; aspect-ratio: 2061 / 763; }
 body.layout-basic .deg-quickplay-brand .deg-learn-link:focus-visible { outline: 2px solid var(--deg-brass-hi); outline-offset: 2px; border-radius: 6px; }
-/* The NFT's radius-46 badge is fitted to the same radius-35.2 footprint as
-   the site badges. Clip away its rectangular card, retaining its actual colors. */
-.dgn-deity-art { clip-path: circle(45.098% at 50% 50%); scale: 0.765217; }
 body.layout-basic .deg-quickplay-logo { display: block; width: 100%; height: auto; }
 body.layout-basic .deg-lockup-copy { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-/* A small ringed "i", with a full-size hit area around it. */
+/* Float the info button independently; the sign stays centered at full width. */
 body.layout-basic .deg-quickplay-brand .deg-header__info { position: absolute; top: -0.3rem; right: -0.45rem; left: auto; bottom: auto; display: grid; width: 1.9rem; height: 1.9rem; min-width: 0; min-height: 0; place-items: center; border: 0; border-radius: 50%; background: radial-gradient(circle, rgba(20, 15, 28, 0.92) 0 0.5rem, rgba(213, 181, 119, 0.5) 0.5rem calc(0.5rem + 1px), transparent calc(0.5rem + 1.5px)); color: var(--deg-brass-hi); font: italic 700 0.66rem/1 Georgia, serif; transform: none; }
 body.layout-basic .deg-quickplay-brand .deg-header__info:hover { background: radial-gradient(circle, rgba(40, 30, 52, 0.95) 0 0.5rem, var(--deg-brass-hi) 0.5rem calc(0.5rem + 1px), transparent calc(0.5rem + 1.5px)); color: #fff; }
 body.layout-basic .deg-quickplay-brand .deg-header__info:focus-visible { outline: 2px solid var(--deg-brass-hi); outline-offset: -3px; }
 
-/* Showcase window: a carousel. The champion is centred in its bezel with its picker neighbours
-   fading into the wings; drag, swipe or arrow keys step, a tap opens the picker, pan-y keeps page scroll. */
-body.layout-basic .deg-quickplay-controls { --deg-champ: min(calc((100cqh - 12px - 1.2rem) / 0.84), 42cqw); --deg-top: max(4px, calc((100cqh - var(--deg-champ) * 0.84 - 4px - 1.2rem) / 2)); position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-height: 6.6rem; overflow: hidden; container-type: size; border: 1px solid rgba(201, 163, 92, 0.34); border-radius: 11px; background: radial-gradient(closest-side at 50% 44%, rgba(160, 108, 246, 0.42), rgba(160, 108, 246, 0.1) 60%, transparent 100%), linear-gradient(180deg, #1d1429 0%, #120d1a 100%); box-shadow: inset 0 1px 0 rgba(255, 236, 190, 0.08), inset 0 -18px 22px -12px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 236, 190, 0.04); }
+/* A continuous backdrop for the sliding symbols; their own rings supply the color.
+   Drag, swipe or arrow keys step, a tap opens the picker, pan-y keeps page scroll. */
+body.layout-basic .deg-quickplay-controls {
+  --deg-champ: min(calc((100cqh - 12px - 1.2rem) / 0.84), 42cqw);
+  --deg-top: max(4px, calc((100cqh - var(--deg-champ) * 0.84 - 4px - 1.2rem) / 2));
+  position: relative; display: flex; flex: 1 1 auto; flex-direction: column;
+  min-height: 6.6rem; overflow: hidden; container-type: size;
+  border: 1px solid #baabd22b; border-radius: 11px;
+  background: linear-gradient(180deg, #191421, #100d17);
+  box-shadow: inset 0 1px #e4d6ff09, 0 1px #0005;
+}
+/* Broad, edgeless light follows the row's vertical position at every size. */
+body.layout-basic .deg-quickplay-controls::before {
+  content: ''; position: absolute; pointer-events: none;
+  top: calc(var(--deg-top) + var(--deg-champ) * 0.42);
+  left: 0; width: 100%; height: calc(var(--deg-champ) * 1.35);
+  transform: translateY(-50%);
+  background: radial-gradient(ellipse at center, #a48ac62b, #7a649815 42%, transparent 72%);
+}
+/* Keep the bottom identities readable over the illuminated reel. */
+body.layout-basic .deg-quickplay-controls::after {
+  content: ''; position: absolute; z-index: 4; pointer-events: none;
+  right: 1px; bottom: 1px; left: 1px; height: 2.7rem;
+  border-radius: 0 0 9px 9px;
+  background: linear-gradient(180deg, transparent, #100c17b3 55%, #100c17f2);
+}
 body.layout-basic .play-grid .deg-quickplay-brand button.dgn-symbol-preview { position: static; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; align-items: center; justify-content: center; padding: 0; border-radius: 0; }
-body.layout-basic .deg-quickplay-stage { position: absolute; inset: 0; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-mask: linear-gradient(90deg, transparent, #000 21%, #000 79%, transparent); mask: linear-gradient(90deg, transparent, #000 21%, #000 79%, transparent); }
+body.layout-basic .deg-quickplay-stage { position: absolute; inset: 0; touch-action: pan-y; cursor: grab; -webkit-user-select: none; user-select: none; -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
 body.layout-basic .deg-quickplay-stage.is-dragging { cursor: grabbing; }
 body.layout-basic .deg-carousel { position: absolute; inset: 0; }
 body.layout-basic .deg-carousel__sym { position: absolute; top: calc(var(--deg-top) + var(--deg-champ) * 0.42); left: 50%; width: var(--deg-champ); height: var(--deg-champ); transform: translate(-50%, -50%) scale(0.28); transform-origin: center; -webkit-user-drag: none; }
 body.layout-basic .deg-carousel.is-moving img,
 body.layout-basic .deg-quickplay-stage.is-dragging .deg-carousel img { will-change: transform, opacity; }
-/* The champion sits in a knurled brass bezel; its own badge art stays untouched on top. */
+/* The holder fixes carousel geometry; the artwork carries the moving emphasis. */
 body.layout-basic .play-grid .deg-quickplay-brand button.dgn-symbol-preview .dgn-symbol-preview__art[data-badge="full"] { position: absolute; z-index: 3; top: calc(var(--deg-top) - var(--deg-champ) * 0.08); left: 50%; width: var(--deg-champ); max-width: none; height: var(--deg-champ); margin: 0; transform: translateX(-50%); }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"]::before { position: absolute; z-index: -1; display: block; inset: 8%; border-radius: 50%; background: radial-gradient(circle closest-side, transparent 81%, #07050b 81.5% 86.5%, rgba(255, 244, 205, 0.55) 87% 88%, transparent 88.5% 98.5%, rgba(0, 0, 0, 0.55) 99%), repeating-conic-gradient(from 3deg, rgba(58, 38, 10, 0.55) 0 1.4deg, transparent 1.4deg 7.5deg), conic-gradient(from 200deg, #6e4f22, #f7e3a8 11%, #c49a50 24%, #6a4b1f 40%, #d6b064 57%, #fbe9b8 65%, #97712f 81%, #6e4f22); box-shadow: 0 5px 12px rgba(0, 0, 0, 0.6), 0 0 22px rgba(150, 100, 235, 0.3); content: ''; }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"]::before { box-shadow: 0 6px 14px rgba(0, 0, 0, 0.7), 0 0 30px rgba(170, 120, 255, 0.5); }
-/* Moving badges expose the socket: keep the brass as a hollow rim, so it
-   cannot cover the incoming symbol with the old solid backing disc. */
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"]::before {
-  -webkit-mask: radial-gradient(circle closest-side, transparent 80.5%, #000 81.5%);
-  mask: radial-gradient(circle closest-side, transparent 80.5%, #000 81.5%);
-}
+body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"]::before { display: none; }
 body.layout-basic .play-grid .dgn-symbol-btn.is-selected .dgn-symbol-badge { isolation: isolate; }
 body.layout-basic .play-grid .dgn-symbol-btn.is-selected .dgn-symbol-badge::before { position: absolute; z-index: -1; display: block; inset: 8%; border-radius: 50%; background: radial-gradient(circle closest-side, transparent 81%, #07050b 81.5% 86.5%, transparent 87%), conic-gradient(from 200deg, #6e4f22, #f7e3a8 11%, #c49a50 24%, #6a4b1f 40%, #d6b064 57%, #fbe9b8 65%, #97712f 81%, #6e4f22); content: ''; }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"] img { position: relative; width: 100%; height: 100%; filter: none; }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:hover .dgn-symbol-preview__art[data-badge="full"]::before { box-shadow: 0 5px 12px rgba(0, 0, 0, 0.6), 0 0 28px rgba(170, 120, 255, 0.55); }
+body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__art[data-badge="full"] img { position: relative; width: 100%; height: 100%; }
+/* Focus transfers between the actual badges as they slide through centre. */
+body.layout-basic .play-grid .deg-quickplay-brand .deg-carousel img {
+  filter: drop-shadow(0 5px 6px #0007)
+    drop-shadow(0 0 9px rgba(205, 181, 241, calc(var(--deg-symbol-focus, 0) * 0.32)));
+}
 body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible { outline: none; }
 body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible .dgn-symbol-preview__art { outline: none; }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible .dgn-symbol-preview__art[data-badge="full"]::before { box-shadow: 0 6px 14px rgba(0, 0, 0, 0.7), 0 0 20px 9px rgba(208, 176, 255, 0.95); }
+body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible .dgn-symbol-preview__art[data-badge="full"]::before { display: block; inset: 13%; background: transparent; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.7), 0 0 20px 9px rgba(208, 176, 255, 0.95); }
 /* A transformed/filtered button would become the badge's containing block
    during pointerdown and move it out from under the pointer before click. */
 body.layout-basic .deg-quickplay-brand button.dgn-symbol-preview.is-tactile-pressed { transform: none !important; filter: none !important; }
-/* The name sits on a violet enamel plate just under the bezel, clear of the badge. */
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__title { position: absolute; z-index: 5; top: calc(var(--deg-top) + var(--deg-champ) * 0.84 + 4px); left: 50%; display: flex; box-sizing: border-box; height: 1.2rem; min-height: 0; padding: 0; overflow: visible; transform: translateX(-50%); anchor-name: --deg-plate; pointer-events: none; border: 1px solid #d9b56a; border-radius: 999px; background: #1a1222; box-shadow: inset 0 1px 0 rgba(255, 244, 205, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 3px 8px rgba(0, 0, 0, 0.7); white-space: nowrap; }
-body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__name { display: flex; height: 100%; align-items: center; padding: 0 0.75rem; border-radius: 999px; background: linear-gradient(180deg, #6a3bc4, #3f1f86 60%, #2d1566); color: #fff6de; font: 850 0.7rem/1 "Inter", sans-serif; letter-spacing: 0.02em; text-shadow: 0 1px 0 #1a0a3a; }
+/* The symbol plate and deity name share the showcase's bottom edge. */
+body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__title { position: absolute; z-index: 5; top: auto; bottom: 6px; left: 50%; display: flex; box-sizing: border-box; height: 1.2rem; min-height: 0; padding: 0; overflow: visible; transform: translateX(-50%); anchor-name: --deg-plate; pointer-events: none; border: 1px solid #d9b56a; border-radius: 999px; background: #1a1222; box-shadow: inset 0 1px 0 rgba(255, 244, 205, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 3px 8px rgba(0, 0, 0, 0.7); white-space: nowrap; }
+body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview__name { display: flex; height: 100%; align-items: center; padding: 0 0.75rem; border-radius: 999px; background: linear-gradient(180deg, #6a3bc4, #3f1f86 60%, #2d1566); color: #fff6de; font: 850 0.78rem/1 "Inter", sans-serif; letter-spacing: 0.02em; text-shadow: 0 1px 0 #1a0a3a; }
 body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible + .dgn-symbol-preview__title .dgn-symbol-preview__name { background: linear-gradient(180deg, #9a6cff, #6a3bd6 60%, #4c24a8); color: #fff; text-shadow: 0 1px 0 #2a0f5c, 0 0 8px rgba(255, 255, 255, 0.35); }
 @media (forced-colors: active) { body.layout-basic .play-grid .deg-quickplay-brand .dgn-symbol-preview:focus-visible + .dgn-symbol-preview__title { outline: 2px solid CanvasText; } }
-/* The symbol's deity owner: a brass-ringed Discord avatar and name, pinned to the window's left
-   inner edge (in line with the boon rail's first icon) and ending 8px before the plate. */
-body.layout-basic .play-grid .deg-deity { position: absolute; top: 50%; left: calc(50% - 50cqw + 7px); right: calc(100% + 8px); display: flex; box-sizing: border-box; align-items: center; gap: 0.3rem; transform: translateY(-50%); }
+/* Text anchors the left wing; the larger portrait balances the far right.
+   Both sit on the same bottom edge as the symbol nameplate. */
+body.layout-basic .play-grid .deg-deity { position: absolute; bottom: -1px; left: calc(50% - 50cqw + 7px); right: calc(100% + 8px); display: flex; box-sizing: border-box; height: 3.25rem; flex-direction: column; align-items: flex-start; justify-content: flex-end; }
 body.layout-basic .play-grid .deg-deity[hidden] { display: none; }
-body.layout-basic .play-grid .deg-deity__pfp { flex: none; box-sizing: border-box; width: 1.45rem; height: 1.45rem; padding: 1.5px; border-radius: 50%; object-fit: cover; background: conic-gradient(from 200deg, #6e4f22, #f7e3a8 11%, #c49a50 24%, #6a4b1f 40%, #d6b064 57%, #fbe9b8 65%, #97712f 81%, #6e4f22); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 2px 5px rgba(0, 0, 0, 0.6); }
-body.layout-basic .play-grid .deg-deity__text { display: flex; min-width: 0; flex-direction: column; gap: 2px; text-align: left; }
-body.layout-basic .play-grid .deg-deity__label { color: var(--deg-brass); font: 800 0.4rem/1 "Inter", sans-serif; letter-spacing: 0.18em; text-transform: uppercase; }
-body.layout-basic .play-grid .deg-deity__name { overflow: hidden; color: var(--deg-ink); font: 750 0.58rem/1.1 "Inter", sans-serif; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+body.layout-basic .play-grid .deg-deity__pfp { position: absolute; bottom: 0; left: calc(100cqw - 14px - 2.75rem); box-sizing: border-box; width: 2.75rem; height: 2.75rem; padding: 1.5px; border-radius: 50%; object-fit: cover; background: conic-gradient(from 200deg, #6e4f22, #f7e3a8 11%, #c49a50 24%, #6a4b1f 40%, #d6b064 57%, #fbe9b8 65%, #97712f 81%, #6e4f22); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 2px 5px rgba(0, 0, 0, 0.6); }
+body.layout-basic .play-grid .deg-deity__text { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: 2px; text-align: left; }
+body.layout-basic .play-grid .deg-deity__label { align-self: flex-start; max-width: 100%; color: var(--deg-brass); font: 800 0.53rem/1.1 "Inter", sans-serif; letter-spacing: 0.015em; text-transform: none; white-space: normal; overflow-wrap: anywhere; }
+body.layout-basic .play-grid .deg-deity__name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-height: 2.2em; overflow: hidden; color: var(--deg-ink); font: 750 0.68rem/1.1 "Inter", sans-serif; white-space: normal; overflow-wrap: anywhere; text-shadow: 0 1px 2px #000; }
 
-/* Boon previews: a compact card in the carousel wing beside its trigger (left, over the deity card;
-   right when only the nameplate triggers it), never over the champion. It needs a definite width:
-   the panel is an inline-size container. No brass rim; a caret points at the trigger. */
-body.layout-basic .play-grid .deg-quickplay-controls > .deg-boon-popover { position: absolute; z-index: 8; left: 6px; right: auto; bottom: calc(100cqh - var(--deg-top) - var(--deg-champ) * 0.84 + 4px); width: min(calc(50cqw - var(--deg-champ) * 0.42 - 12px), 6.6rem); margin: 0; visibility: hidden; pointer-events: none; border: 0; border-radius: 9px; background: linear-gradient(180deg, #251c33, #16111f); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 10px 24px rgba(0, 0, 0, 0.75); }
-body.layout-basic .play-grid .deg-quickplay-controls:not(:has(.deg-deity:not([hidden]))) > .deg-boon-popover { left: auto; right: 6px; }
+/* Boon previews get a readable floating card above the trigger, rather than being
+   squeezed into the carousel wing. Let it extend upward in short showcases while
+   clipping the moving carousel itself; opening details never changes the layout. */
+body.layout-basic .play-grid .deg-quickplay-controls:has(> .deg-boon-popover.is-open) { overflow: visible; z-index: 6; }
+body.layout-basic .play-grid .deg-quickplay-stage { overflow: hidden; border-radius: inherit; }
+body.layout-basic .play-grid .deg-quickplay-controls > .deg-boon-popover { position: absolute; z-index: 8; left: auto; right: 6px; bottom: calc(1.2rem + 12px); width: min(calc(100cqw - 12px), 14rem); margin: 0; visibility: hidden; pointer-events: none; border: 0; border-radius: 9px; background: linear-gradient(180deg, #251c33, #16111f); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 10px 24px rgba(0, 0, 0, 0.75); }
+body.layout-basic .play-grid .deg-quickplay-controls:has(.deg-deity:not([hidden])) > .deg-boon-popover { bottom: calc(3.25rem + 12px); }
 body.layout-basic .play-grid .deg-quickplay-controls > .deg-boon-popover.is-open { visibility: visible; pointer-events: auto; }
-body.layout-basic .play-grid .deg-quickplay-controls > .deg-boon-popover::after { position: absolute; bottom: -4px; left: 12px; width: 9px; height: 9px; transform: rotate(45deg); background: #16111f; box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55); content: ''; }
+body.layout-basic .play-grid .deg-quickplay-controls > .deg-boon-popover::after { position: absolute; bottom: -4px; right: 20px; width: 9px; height: 9px; transform: rotate(45deg); background: #16111f; box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55); content: ''; }
 body.layout-basic .app-degenerette-panel .deg-boon-popover :is(.sacrifice__side, .sacrifice__deity) { padding: 0; border: 0; background: none; box-shadow: none; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__deity { padding: 4px; border-radius: 9px; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boons { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon { display: grid; grid-template-columns: 1.1rem minmax(0, 1fr); grid-template-rows: auto auto; min-height: 0; align-items: center; justify-items: start; column-gap: 0.28rem; row-gap: 1px; padding: 2px 6px 2px 2px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); box-shadow: none; text-align: left; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon-mark { grid-column: 1; grid-row: 1 / 3; width: 1.1rem; height: 1.1rem; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon small { grid-column: 2; grid-row: 1; max-width: 100%; overflow: hidden; color: #bdb2cc; font: 700 0.42rem/1.1 "Inter", sans-serif; letter-spacing: 0.08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon strong { grid-column: 2; grid-row: 2; font: 850 0.58rem/1 ui-monospace, monospace; white-space: nowrap; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__deity { padding: 6px; border-radius: 9px; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boons { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); grid-template-rows: auto auto; min-height: 0; align-items: center; justify-items: start; column-gap: 0.4rem; row-gap: 2px; padding: 3px 7px 3px 4px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); box-shadow: none; text-align: left; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon-mark { grid-column: 1; grid-row: 1 / 3; width: 1.4rem; height: 1.4rem; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon small { grid-column: 2; grid-row: 1; min-width: 0; max-width: 100%; overflow: visible; color: #cfc4dd; font: 700 0.58rem/1.2 "Inter", sans-serif; letter-spacing: 0.04em; text-overflow: clip; text-transform: uppercase; white-space: normal; }
+body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon strong { grid-column: 2; grid-row: 2; min-width: 0; max-width: 100%; font: 850 0.68rem/1.1 ui-monospace, monospace; white-space: normal; overflow-wrap: anywhere; }
 /* A spent gift dims and keeps a small check on its glyph. */
 body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon[data-used="true"] { opacity: 0.48; }
 body.layout-basic .app-degenerette-panel .deg-boon-popover .sacrifice__boon[data-used="true"] .sacrifice__boon-mark::after { position: absolute; z-index: 2; right: -2px; bottom: -1px; display: grid; width: 0.6rem; height: 0.6rem; place-items: center; border-radius: 50%; background: #1b1524; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7); color: #e8e3f2; font: 900 0.4rem/1 "Inter", sans-serif; content: '\2713'; }
 body.layout-basic .play-grid .deg-quickplay-brand :is(.deg-deity, .dgn-symbol-preview__name) {
   pointer-events: auto; min-width: 0; min-height: 0; margin: 0; border: 0; cursor: pointer;
 }
-body.layout-basic .play-grid .deg-quickplay-brand .deg-deity { padding: 0; border-radius: 5px; background: none; box-shadow: none; }
+/* Only the portrait is a pointer target; the deity name remains plain text. */
+body.layout-basic .play-grid .deg-quickplay-brand .deg-deity { padding: 0; border-radius: 5px; background: none; box-shadow: none; pointer-events: none; }
+body.layout-basic .play-grid .deg-quickplay-brand .deg-deity__pfp { pointer-events: auto; }
 /* Boon-draw deities (SACRIFICE_DEITIES) glow in their own color; the draw is ETH-only, so FLIP drops it. */
 body.layout-basic .play-grid .deg-deity[data-boon-giver] .deg-deity__pfp { padding: 1px; background: #0d0a12; object-fit: contain; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 0 7px 3px rgba(var(--deg-giver-rgb), 0.95), 0 0 20px 7px rgba(var(--deg-giver-rgb), 0.4); }
 body.layout-basic .play-grid .deg-deity[data-boon-giver] .deg-deity__name { text-shadow: 0 1px 2px #000, 0 0 10px rgba(var(--deg-giver-rgb), 0.55); }
@@ -19262,7 +19195,8 @@ body.layout-basic .play-grid .deg-currency-option { position: relative; z-index:
 body.layout-basic .play-grid .deg-currency-option.is-selected[data-bind] { border-color: transparent; background: transparent; color: var(--deg-ink); box-shadow: none; }
 body.layout-basic .play-grid .deg-currency-option img { width: 1.35rem; height: 1.35rem; opacity: 0.45; transition: opacity 0.16s; }
 body.layout-basic .play-grid .deg-currency-option.is-selected img { opacity: 1; }
-/* The FLIP mark's ring fills 90% of its box, the ETH coin 96%: size them to one disc. */
+/* Account for the badge SVG's padding so ETH and FLIP have equal visible discs. */
+body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-0"] img { width: 1.875rem; height: 1.875rem; margin: -0.2625rem; }
 body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-1"] img { width: 1.44rem; height: 1.44rem; margin: -0.045rem; }
 body.layout-basic .play-grid .deg-currency-option__name { font: 800 0.74rem/1 "Inter", sans-serif; letter-spacing: 0.12em; }
 body.layout-basic .play-grid .deg-currency-option:hover:not(.is-selected):not(:disabled) { background: transparent; color: #d9d0e6; }
@@ -19278,14 +19212,34 @@ body.layout-basic .play-grid .deg-stepper__button:hover:not(:disabled) { backgro
 body.layout-basic .play-grid .deg-stepper__button:active:not(:disabled) { background: #1a1522; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); }
 body.layout-basic .play-grid .deg-stepper__button:disabled { background: #17131d; color: #5c5268; box-shadow: none; }
 body.layout-basic .play-grid .deg-amount-presets { gap: 5px; margin-top: 6px; }
-body.layout-basic .play-grid .deg-amount-preset { min-height: 1.45rem; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; background: linear-gradient(180deg, #1f1a27, #17131d); color: #b3a8c3; font-family: "Inter", sans-serif; font-size: 0.62rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.6); }
+body.layout-basic .play-grid .deg-amount-preset { min-height: 1.45rem; padding: 0.1rem 0.25rem; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; background: linear-gradient(180deg, #1f1a27, #17131d); color: #d9d0e6; font-family: "Inter", sans-serif; font-size: 1rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.6); }
 body.layout-basic .play-grid .deg-amount-preset:hover:not(.is-selected) { border-color: rgba(255, 255, 255, 0.16); color: #fff; }
 body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-amount-preset.is-selected { border-color: rgba(255, 255, 255, 0.1); background: linear-gradient(180deg, var(--deg-key-hi), var(--deg-key)); color: #fff; box-shadow: inset 0 -2px 0 var(--deg-accent), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.6); }
-body.layout-basic .play-grid .deg-block--wager .deg-place-cta { min-height: 2.3rem; margin: 1px 0 10px; padding: 0.35rem 0.4rem; border: 0; border-radius: 9px; font: 850 0.84rem/1 "Inter", sans-serif; letter-spacing: 0.01em; }
-body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:not(:disabled) { border: 0; font-weight: 850; background: linear-gradient(180deg, color-mix(in srgb, var(--deg-accent) 82%, #fff) 0%, var(--deg-accent) 38%, color-mix(in srgb, var(--deg-accent) 86%, #000) 100%); color: var(--deg-accent-ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), inset 0 -10px 16px -8px rgba(0, 0, 0, 0.22), 0 3px 0 var(--deg-accent-lip), 0 5px 10px rgba(0, 0, 0, 0.45); }
-body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:hover:not(:disabled) { filter: brightness(1.07); }
-body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 1px 0 var(--deg-accent-lip), 0 2px 5px rgba(0, 0, 0, 0.45); }
+body.layout-basic .play-grid .deg-block--wager .deg-place-cta {
+  position: relative; isolation: isolate; box-sizing: border-box; overflow: hidden;
+  min-height: 2.5rem; margin: 1px 0 10px; padding: 0.4rem 0.65rem;
+  border: 1px solid transparent; border-radius: 11px;
+  font: 800 1rem/1.15 "Inter", sans-serif; letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:not(:disabled) {
+  border-color: color-mix(in srgb, var(--deg-accent) 55%, #fff);
+  font-weight: 800; color: var(--deg-accent-ink);
+  background: radial-gradient(ellipse at 50% -45%, #ffffff85, transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--deg-accent) 72%, #fff), var(--deg-accent) 48%, color-mix(in srgb, var(--deg-accent) 84%, #000));
+  box-shadow: inset 0 1px 0 #ffffff70, inset 0 -2px 0 #00000020,
+    0 4px 0 var(--deg-accent-lip), 0 7px 14px #0008,
+    0 0 18px color-mix(in srgb, var(--deg-accent) 25%, transparent);
+}
+body.layout-basic .play-grid .deg-block--wager .deg-place-cta::before {
+  content: ''; position: absolute; z-index: -1; inset: 3px;
+  border: 1px solid #ffffff2b; border-radius: 7px; pointer-events: none;
+}
+body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:hover:not(:disabled) { filter: brightness(1.09); transform: translateY(-1px); }
+body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 2px 5px #0003, 0 2px 0 var(--deg-accent-lip), 0 3px 8px #0007; }
 body.layout-basic .play-grid .deg-block--wager .deg-place-cta:disabled { border: 1px solid rgba(255, 255, 255, 0.06); background: linear-gradient(180deg, #221c29, #1a1520); color: #8a8097; opacity: 1; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 0 #0a080d; }
+body.layout-basic .play-grid .deg-block--wager .deg-place-cta:disabled::before { opacity: 0.25; }
 body.layout-basic .play-grid :is(.deg-currency-option, .deg-amount-preset, .deg-stepper__button, .deg-place-cta):focus-visible { outline: 2px solid var(--deg-brass-hi); outline-offset: 2px; }
 body.layout-basic .play-grid :is(.deg-amount-shell, .deg-spin-shell):focus-within { border-color: var(--deg-brass-hi); outline: 1px solid var(--deg-brass-hi); outline-offset: 1px; }
 @media (max-width: 600px) {
@@ -19298,6 +19252,7 @@ body.layout-basic .play-grid :is(.deg-amount-shell, .deg-spin-shell):focus-withi
 }
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .play-grid .deg-currency-picker::before, body.layout-basic .play-grid .deg-currency-option img { transition: none; }
+  body.layout-basic .play-grid .deg-block--wager .deg-place-cta { transition: none; }
 }
 
 /* Symbol picker: the same lacquer and brass as the cabinet. */
@@ -19314,53 +19269,54 @@ body.layout-basic .play-grid .dgn-symbol-dialog .dgn-symbol-btn.is-selected { bo
 body.layout-basic .play-grid .dgn-symbol-dialog button:focus-visible { outline-color: var(--deg-brass-hi); }
 
 
-/* Shared Deity Pass art: the frame stays constant while each surface places
-   the selected on-chain symbol behind its transparent socket. */
+/* A generous live badge carries the identity; the label stays small and crisp. */
 body.layout-basic .deity-pass-lockup {
-  position: relative;
-  isolation: isolate;
-  display: block;
+  --deity-badge-size: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: .7rem;
   min-width: 0;
-  aspect-ratio: 1400 / 320;
+  text-align: left;
 }
-body.layout-basic .deity-pass-lockup__frame {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
+body.layout-basic .deity-pass-lockup__badge {
+  position: relative;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  pointer-events: none;
+  flex: 0 0 var(--deity-badge-size);
+  width: var(--deity-badge-size);
+  height: var(--deity-badge-size);
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, #37293f, #100d18 75%);
+  box-shadow: 0 0 0 1px #f5d27d35, 0 3px 8px #0009, 0 0 16px #d1ae4912;
 }
 body.layout-basic .deity-pass-lockup__symbol {
   position: absolute;
-  z-index: 1;
-  left: 4.86%;
-  top: 15.31%;
+  /* Remove the standard badge SVG's empty margins without cropping its ring. */
+  inset: -22.44%;
   display: block;
-  width: 16%;
-  height: 70%;
-  border-radius: 50%;
+  width: 144.88%;
+  height: 144.88%;
+  max-width: none;
   object-fit: contain;
 }
 body.layout-basic .deity-pass-lockup__symbol[hidden] { display: none !important; }
-/* Before a symbol is chosen the lockup's ring is empty, which reads as a
-   broken image on the shop shelf. Fill it with the invitation instead: the
-   chosen symbol sits on z-index 1 and simply covers this once it exists. */
-body.layout-basic .deity-pass-lockup::before {
-  position: absolute;
-  z-index: 0;
-  left: 4.86%;
-  top: 15.31%;
-  display: grid;
-  width: 16%;
-  height: 70%;
-  place-items: center;
-  color: rgba(255, 214, 120, 0.5);
-  content: '?';
-  font: 900 0.9em/1 "Inter", system-ui, sans-serif;
-  pointer-events: none;
+body.layout-basic .deity-pass-lockup__unselected {
+  position: absolute; inset: 5px; display: grid; place-items: center;
+  border: 1px solid #e5c47c55; border-radius: 50%; color: #e5c47c;
+  font: 400 1.6rem/1 Georgia, serif;
+}
+body.layout-basic .deity-pass-lockup__badge:has(img:not([hidden])) .deity-pass-lockup__unselected { display: none; }
+body.layout-basic .deity-pass-lockup__name { display: grid; gap: .2rem; justify-items: start; }
+body.layout-basic .deity-pass-lockup__name > span {
+  color: #f1d89c;
+  background: linear-gradient(180deg, #fff6d2 15%, #e6c477 55%, #b48a3d);
+  background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  font: 700 1.3rem/1 Georgia, 'Times New Roman', serif;
+  letter-spacing: .09em;
+}
+body.layout-basic .deity-pass-lockup__name > small {
+  margin: 0; color: #bfa36e;
+  font: 800 .55rem/1.2 Inter, sans-serif; letter-spacing: .38em;
 }
 
 body.layout-basic .deity-desk[hidden] { display: none !important; }
@@ -19368,7 +19324,15 @@ body.layout-basic .deity-desk { position: relative; isolation: isolate; display:
 body.layout-basic .deity-desk::after { position: absolute; z-index: -1; right: -1.5rem; top: 50%; width: 8rem; height: 8rem; background: url('/whitepaper/flame-center.svg') center / contain no-repeat; content: ''; filter: grayscale(1); opacity: 0.025; pointer-events: none; transform: translateY(-50%) rotate(-10deg); }
 body.layout-basic .deity-desk__identity { display: block; min-width: 11.4rem; }
 body.layout-basic .deity-desk__identity-copy { display: grid; gap: 0.16rem; }
-body.layout-basic .deity-desk__wordmark { width: min(11.2rem, 100%); filter: drop-shadow(0 0 7px rgba(250, 204, 21, 0.18)); }
+body.layout-basic .deity-desk__wordmark {
+  width: min(11.2rem, 100%); padding: 0; border: 0; border-radius: 4px;
+  background: transparent; box-shadow: none;
+  cursor: pointer;
+}
+body.layout-basic .deity-desk__wordmark:not(:disabled):hover .deity-pass-lockup__badge { box-shadow: 0 0 0 1px #f5d27d80, 0 3px 8px #0009, 0 0 18px #d1ae4933; }
+body.layout-basic .deity-desk__wordmark:focus-visible { outline: 2px solid #e9d098; outline-offset: 4px; }
+body.layout-basic .deity-desk__wordmark:disabled { opacity: 1; cursor: default; }
+body.layout-basic .deity-desk__wordmark[aria-busy="true"] { cursor: progress; }
 body.layout-basic .deity-desk__target-head > label { color: #a8914d; font: 850 0.5rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.12em; white-space: nowrap; }
 body.layout-basic .deity-desk__identity strong { color: #ffeba9; font: 800 0.66rem/1 "Roboto Mono", ui-monospace, monospace; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
 body.layout-basic .deity-desk__budget { color: rgba(255, 235, 169, 0.42); font: 700 0.5rem/1 "Roboto Mono", ui-monospace, monospace; letter-spacing: 0.045em; white-space: nowrap; }
@@ -19754,7 +19718,6 @@ body.layout-basic .dbb-stat strong em {
 }
 body.layout-basic .dbb-stat--prize { border-color: rgba(74, 222, 128, 0.25); background: linear-gradient(145deg, rgba(5, 71, 41, 0.35), rgba(4, 15, 13, 0.46)); }
 body.layout-basic .dbb-stat--prize strong { color: #86efac; text-shadow: 0 0 11px rgba(74, 222, 128, 0.22); }
-body.layout-basic .dbb-stat--burned strong { color: #fca5a5; font-size: clamp(0.86rem, 1.05vw, 1rem); }
 body.layout-basic .dbb-stat--score {
   grid-area: score;
   border-color: rgba(251, 191, 36, 0.3);
@@ -19778,27 +19741,12 @@ body.layout-basic .dbb__entry {
   padding: 0.12rem 0;
 }
 
-body.layout-basic .dbb__entry-meta { display: grid; grid-template-columns: minmax(9.5rem, 1.08fr) minmax(7.4rem, 0.82fr); min-width: 0; min-height: 2.82rem; overflow: hidden; border: 1px solid rgba(var(--dbb-red), 0.22); border-radius: 8px; background: rgba(3, 5, 10, 0.34); }
-body.layout-basic .dbb__bracket { display: grid; grid-template-columns: 4.05rem minmax(0, 1fr); min-width: 0; }
-body.layout-basic .dbb__bracket-id { display: grid; align-content: center; justify-items: center; gap: 0.12rem; padding: 0.26rem 0.34rem; border-right: 1px solid rgba(var(--dbb-red), 0.24); background: linear-gradient(145deg, rgba(var(--dbb-red), 0.18), rgba(69, 10, 20, 0.09)); }
-body.layout-basic .dbb__bracket-id small { color: rgba(254, 202, 202, 0.72); font: 950 0.43rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.08em; white-space: nowrap; }
-body.layout-basic .dbb__bracket-id strong { display: flex; align-items: baseline; color: #fff1f2; font: 1000 1.62rem/0.84 "Roboto Mono", monospace; text-shadow: 0 0 12px rgba(var(--dbb-red), 0.34); }
-body.layout-basic .dbb__bracket-id strong b { font: inherit; }
-body.layout-basic .dbb__bracket-score { display: grid; min-width: 0; align-content: center; justify-items: center; gap: 0.22rem; padding: 0.38rem 0.5rem; text-align: center; }
-body.layout-basic .dbb__bracket-score small { color: rgba(165, 180, 252, 0.78); font: 900 0.54rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.105em; }
-body.layout-basic .dbb__bracket-score strong { overflow: hidden; color: #c7d2fe; font: 1000 0.98rem/1 "Roboto Mono", monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; text-shadow: 0 0 9px rgba(129, 140, 248, 0.34); white-space: nowrap; }
-body.layout-basic .dbb__bracket-score strong[data-score-tier="white"] { color: #f8fafc; text-shadow: 0 0 9px rgba(248, 250, 252, 0.34); }
-body.layout-basic .dbb__bracket-score strong[data-score-tier="green"] { color: #4ade80; text-shadow: 0 0 9px rgba(74, 222, 128, 0.48); }
-body.layout-basic .dbb__bracket-score strong[data-score-tier="purple"] { color: #c084fc; text-shadow: 0 0 9px rgba(192, 132, 252, 0.48); }
-body.layout-basic .dbb__bracket-score strong[data-score-tier="orange"] { color: #f5a623; text-shadow: 0 0 9px rgba(245, 166, 35, 0.48); }
-body.layout-basic .dbb__bracket-score strong[data-score-tier="gold"] { color: #fde047; text-shadow: 0 0 9px rgba(253, 224, 71, 0.5); }
-body.layout-basic .dbb__actual-multi { display: grid; min-width: 0; align-content: center; gap: 0.18rem; padding: 0.38rem 0.52rem; }
+body.layout-basic .dbb__entry-meta { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 2.82rem; overflow: hidden; border: 1px solid rgba(var(--dbb-red), 0.22); border-radius: 8px; background: rgba(3, 5, 10, 0.34); }
+body.layout-basic .dbb__actual-multi { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.38rem 0.62rem; }
 body.layout-basic .dbb__actual-multi small { color: rgba(253, 230, 138, 0.66); font: 900 0.6rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.105em; }
-body.layout-basic .dbb__actual-multi { border-left: 1px solid rgba(251, 191, 36, 0.2); background: linear-gradient(90deg, rgba(92, 56, 4, 0.08), rgba(92, 56, 4, 0.22)); text-align: right; }
+body.layout-basic .dbb__actual-multi { background: linear-gradient(90deg, rgba(92, 56, 4, 0.08), rgba(92, 56, 4, 0.22)); text-align: right; }
 body.layout-basic .dbb__actual-multi strong { display: flex; min-width: 0; align-items: baseline; justify-content: flex-end; gap: 0.3rem; overflow: hidden; color: #fcd34d; font: 1000 clamp(0.86rem, 1.15vw, 1.12rem)/0.95 "Roboto Mono", monospace; font-variant-numeric: tabular-nums; text-overflow: ellipsis; text-shadow: 0 0 10px rgba(251, 191, 36, 0.18); white-space: nowrap; }
 body.layout-basic .dbb__actual-multi strong b { font: inherit; }
-body.layout-basic .dbb__actual-multi strong em { color: rgba(253, 230, 138, 0.72); font: 950 0.48rem/1 "Inter", system-ui, sans-serif; font-style: normal; letter-spacing: 0.025em; text-shadow: none; }
-body.layout-basic .dbb__actual-multi strong em[hidden] { display: none !important; }
 body.layout-basic .dbb__entry-controls { display: grid; grid-template-columns: minmax(9.5rem, 1.08fr) minmax(7.4rem, 0.82fr); align-items: end; gap: 0.4rem; min-width: 0; }
 
 body.layout-basic .dbb__input {
@@ -19990,9 +19938,6 @@ body.layout-basic .dbb__feedback.is-error { color: #fca5a5; }
 
 @media (max-width: 360px) {
   body.layout-basic .dbb__entry-meta { min-height: 3.05rem; }
-  body.layout-basic .dbb__bracket { grid-template-columns: 3.55rem minmax(0, 1fr); }
-  body.layout-basic .dbb__bracket-id strong { font-size: 1.38rem; }
-  body.layout-basic .dbb__bracket-score strong { font-size: 0.8rem; }
   body.layout-basic .dbb__actual-multi strong { font-size: 0.78rem; }
 }
 
@@ -24433,13 +24378,6 @@ body.decimator-draw-open { overflow: hidden !important; }
   overflow: hidden;
   background: #07080d;
   color: #fff;
-}
-.decimator-draw-modal__frame {
-  display: block;
-  width: 100%;
-  height: 100dvh;
-  border: 0;
-  background: #07080d;
 }
 .decimator-draw-modal__close {
   position: fixed;

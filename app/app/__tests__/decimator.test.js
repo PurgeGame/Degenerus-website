@@ -117,12 +117,13 @@ describe('decimator purchase helper exports', () => {
 });
 
 describe('live Decimator display math', () => {
-  test('matches the deployed piecewise activity multiplier at every curve knee', () => {
+  test('matches the battle multiplier (decBattleMultBps) at every curve knee', () => {
     assert.equal(decimatorMod.decimatorActivityMultiplierBps(0), 10_000n);
     assert.equal(decimatorMod.decimatorActivityMultiplierBps(235), 17_049n);
-    assert.equal(decimatorMod.decimatorActivityMultiplierBps(500), 17_676n);
-    assert.equal(decimatorMod.decimatorActivityMultiplierBps(30_000), 17_833n);
-    assert.equal(decimatorMod.decimatorActivityMultiplierBps(99_999), 17_833n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(500), 19_000n, '1.9x at 500');
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(1_000), 19_016n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(30_000), 20_000n, '2x at 30,000');
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(99_999), 20_000n);
   });
 
   test('quotes 10% of futurepool for normal Decimators and 30% at x00', () => {
@@ -130,115 +131,70 @@ describe('live Decimator display math', () => {
     assert.equal(decimatorMod.decimatorPoolWei(1_000n, 100), 300n);
   });
 
-  test('folds timing adjustments into the displayed entry multiplier in contract order', () => {
+  test('times an entry at 0.9 per day since the window opened, floored like _dayFactor', () => {
+    assert.equal(decimatorMod.decimatorDayFactorWei(0), 10n ** 18n);
+    assert.equal(decimatorMod.decimatorDayFactorWei(1), 9n * 10n ** 17n);
+    assert.equal(decimatorMod.decimatorDayFactorWei(2), 81n * 10n ** 16n);
+    assert.equal(decimatorMod.decimatorDayFactorWei(3), 729n * 10n ** 15n);
     assert.equal(decimatorMod.decimatorCurrentMultiplierBps({ activityScore: 235 }), 17_049n);
-    assert.equal(decimatorMod.decimatorCurrentMultiplierBps({
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }), 20_458n);
+    assert.equal(decimatorMod.decimatorCurrentMultiplierBps({ activityScore: 235, daysLate: 1 }), 15_344n);
   });
 
-  test('reports the exact protocol bracket and score range for normal and century rounds', () => {
-    assert.deepEqual(decimatorMod.decimatorBracket(0, { level: 25 }), {
-      bucket: 12, minScore: 0, maxScore: 9,
+  test('credits the exact stack recordDecBurn records, whole FLIP, boon capped at 50k base', () => {
+    // 1,704.9 and 1,534.41 FLIP: recordDecBurn keeps whole FLIP of chips (audit 32c604531).
+    assert.equal(decimatorMod.decimatorStackCreditWei({ amountWei: 1_000n * FLIP, activityScore: 235 }), 1_704n * FLIP);
+    assert.equal(decimatorMod.decimatorStackCreditWei({ amountWei: 1_000n * FLIP, activityScore: 235, daysLate: 1 }),
+      1_534n * FLIP);
+    // 100k FLIP with a 50% boon: the boost applies to 50k, so 125k base at 2x.
+    const boosted = { amountWei: 100_000n * FLIP, activityScore: 30_000, boonBps: 5_000 };
+    assert.equal(decimatorMod.decimatorStackCreditWei(boosted), 250_000n * FLIP);
+    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps(boosted), 25_000n);
+    assert.equal(decimatorMod.decimatorStackCreditWei({ amountWei: 0n }), 0n);
+  });
+
+  test('checks and summarizes boards under the normal battle rules', () => {
+    const board = 1 | (2 << 9) | (1 << 24);
+    assert.deepEqual(decimatorMod.decimatorBoardSummary(board), {
+      named: 4, random: 6,
+      legs: [{ label: 'PASS', count: 1 }, { label: '6', count: 2 }, { label: 'HARD 8', count: 1 }],
     });
-    assert.deepEqual(decimatorMod.decimatorBracket(235, { level: 25 }), {
-      bucket: 6, minScore: 180, maxScore: 249,
-    });
-    assert.deepEqual(decimatorMod.decimatorBracket(1_000, { level: 25 }), {
-      bucket: 5, minScore: 250, maxScore: null,
-    }, 'normal rounds clamp every 250+ score into bracket 5');
-    assert.deepEqual(decimatorMod.decimatorBracket(1_000, { level: 100 }), {
-      bucket: 2, minScore: 1_000, maxScore: null,
-    }, 'century rounds expose the full ladder through bracket 2');
+    assert.equal(decimatorMod.decimatorBoardValid(0), true, 'zero leaves all ten to the dice');
+    assert.equal(decimatorMod.decimatorBoardValid(board), true);
+    assert.equal(decimatorMod.decimatorBoardValid(1 | (1 << 27)), false, 'never both pass lines');
+    assert.equal(decimatorMod.decimatorBoardValid(4 << 3), false, 'at most three on a spot');
+    assert.equal(decimatorMod.decimatorBoardValid((3 << 3) | (3 << 6) | (2 << 9)), false, 'at most seven named');
+    assert.equal(decimatorMod.decimatorBoardValid((3 << 3) | (3 << 6) | (1 << 9)), true);
   });
 
-  test('quotes added Decimator score with boon and multiplier caps', () => {
-    assert.equal(decimatorMod.decimatorEntryScoreWei({
-      amountWei: 1_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }), 2_045_800_000_000_000_000_000n);
-    assert.equal(decimatorMod.decimatorEntryScoreWei({
-      amountWei: 100_000n * FLIP,
-      previousBaseWei: 500_000n * FLIP,
-      activityScore: 30_000,
-      boonBps: 5_000,
-    }), 125_000n * FLIP, 'past the multiplier cap, only the capped boon base remains');
-    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
-      amountWei: 1_000n * FLIP,
-      previousBaseWei: 500_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-      boonBps: 5_000,
-    }), 15_000n, 'the displayed total multiplier keeps the boon after the regular multiplier caps');
-    assert.equal(decimatorMod.decimatorEffectiveBaseMultiplierBps({
-      amountWei: 1_000n * FLIP,
-      previousBaseWei: 500_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-      boonBps: 5_000,
-    }), 10_000n, 'the cap note isolates the non-boon portion at 100%');
-    assert.equal(decimatorMod.decimatorMultiplierCapApplied({
-      amountWei: 1_000n * FLIP,
-      previousBaseWei: 500_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }), true);
-    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
-      amountWei: 1_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }), 20_458n, 'an uncapped burn still reports its full timing multiplier');
-    assert.equal(decimatorMod.decimatorMultiplierCapApplied({
-      amountWei: 1_000n * FLIP,
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }), false);
-  });
-
-  test('floors a last-day 90% nominal multiplier to 100% base weight', () => {
-    const args = {
-      amountWei: 1_000n * FLIP,
-      previousBaseWei: 500_000n * FLIP,
-      activityScore: 0,
-      lastPurchaseDay: true,
-    };
-    assert.equal(decimatorMod.decimatorCurrentMultiplierBps(args), 9_000n);
-    assert.equal(decimatorMod.decimatorEffectiveBaseMultiplierBps(args), 10_000n);
-    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps(args), 10_000n);
-    assert.equal(decimatorMod.decimatorMultiplierCapApplied(args), true);
-  });
-
-  test('decodes the day-one byte and the entry pointer / list-entry slots exactly', async () => {
-    assert.equal(decimatorMod.decimatorDayOneActive(1n << 248n), true);
-    assert.equal(decimatorMod.decimatorDayOneActive(0n), false);
-    // Audit 3c79c1486: decPointer[player] (slot 75) names the entry, decEntry[key] (slot 40) holds it.
-    assert.equal(
-      decimatorMod.decimatorPointerStorageSlot('0x7776145203f4c8f87fffae24593c92ec7d38880c'),
-      '0xbf02e7c03d7a3a5c3de12ff58418f2116b97863a49f75bb79085d8fc3e5b236c',
-    );
-    assert.deepEqual(
-      decimatorMod.decimatorPointerDecode(35n | (5n << 24n) | (3n << 32n) | (7n << 40n)),
-      { level: 35, bucket: 5, subBucket: 3, position: 7 },
-    );
-    const key = decimatorMod.decimatorEntryKey(35, 5, 3, 7);
-    assert.equal(key, 9857134627913735n, '_decEntryKey: lvl << 48 | denom << 40 | sub << 32 | position');
-    assert.equal(
-      decimatorMod.decimatorEntryStorageSlot(key),
-      '0x40651b1446c56c30091f255a0cbd34791e34c3a808d4c43a01a26f90b927d039',
-    );
-    // The pinned roots are the generated read schema's (the same forge build the site reads).
+  test('decodes the battle entry and round words at the generated schema slots', async () => {
     const { fields } = await import('../../chain/generated/game.js');
-    assert.equal(fields.decEntry?.slot, '40');
-    assert.equal(fields.decPointer?.slot, '75');
+    assert.equal(fields.decBattleEntries?.slot, '40');
+    assert.equal(fields.decBattleRounds?.slot, '41');
+    assert.equal(fields.decBattlePlayers?.slot, '43');
+    const { ethers } = contractsMod;
+    const coder = ethers.AbiCoder.defaultAbiCoder();
+    const player = '0x7776145203f4c8f87fffae24593c92ec7d38880c';
+    assert.equal(decimatorMod.decimatorPlayerStorageSlot(player, 43n),
+      ethers.keccak256(coder.encode(['address', 'uint256'], [player, 43n])));
+    assert.equal(decimatorMod.decimatorEntryStorageSlot(35, 9n, 40n),
+      ethers.keccak256(coder.encode(['uint256', 'uint256'], [(35n << 64n) | 9n, 40n])));
+    assert.equal(decimatorMod.decimatorRoundStorageSlot(35, 41n), ethers.keccak256(coder.encode(['uint256', 'uint256'], [35n, 41n])));
+    assert.deepEqual(decimatorMod.decimatorPlayerSlotDecode((35n << 64n) | 9n), { level: 35, entryId: 9n });
+    const word = BigInt(player) | (0x1234n << 160n) | (7_000n << 190n);
+    assert.deepEqual(decimatorMod.decimatorEntryDecode(word), { owner: BigInt(player), chips: 0x1234, stackWei: 7_000n * FLIP });
+    const round = 5n * FLIP | (412n << 128n) | (31n << 192n) | (2n << 216n) | (42n << 224n) | (42n << 232n) | (17n << 240n);
+    assert.deepEqual(decimatorMod.decimatorRoundDecode(round), {
+      poolWei: 5n * FLIP, entrants: 412, openedDay: 31, phase: 2, capacity: 42, winners: 42, paid: 17,
+    });
+  });
+
+  test('takes the board from the main Craps widget for the same player', async () => {
+    storeMod.__resetForTest();
+    storeMod.update('ui.crapsBoard', { player: CONNECTED, chips: 1 | (2 << 9), edited: true });
+    assert.equal(await decimatorMod.readDecimatorBoardChips(CONNECTED.toUpperCase().replace('0X', '0x')), 1 | (2 << 9));
+    assert.equal(await decimatorMod.readDecimatorBoardChips('0x' + '99'.repeat(20)), 0,
+      'another wallet falls back to its own saved board (none readable here)');
+    storeMod.__resetForTest();
   });
 });
 
@@ -252,10 +208,10 @@ describe('live Decimator raw-burn total', () => {
     const base = Number(CHAIN.deployBlock);
     let head = base + 10;
     const iface = new contractsMod.ethers.Interface([
-      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket)',
+      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId)',
     ]);
     const encoded = (amount, blockNumber) => ({
-      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, amount, 0]),
+      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, amount, 1]),
       blockNumber,
     });
     const emitted = [
@@ -302,7 +258,7 @@ describe('live Decimator raw-burn total', () => {
     const base = Number(CHAIN.deployBlock);
     const opening = base + 6;
     const iface = new contractsMod.ethers.Interface([
-      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket)',
+      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId)',
     ]);
     const burn = {
       ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, 500_000n * FLIP, 7]),
@@ -337,22 +293,49 @@ describe('burnForDecimator', () => {
     storeMod.__resetForTest();
   });
 
-  test('preflights then burns the acting player amount through closure-form sendTx', async () => {
+  test('preflights then burns the acting player amount with the Craps widget board', async () => {
     const fake = makeFakeContract();
     decimatorMod.__setContractFactoryForTest(() => fake);
     const amount = 2_500n * FLIP;
+    const board = 1 | (2 << 9) | (1 << 24);
+    storeMod.update('ui.crapsBoard', { player: CONNECTED, chips: board, edited: true });
 
     const result = await decimatorMod.burnForDecimator({ amount });
 
     assert.equal(result.amount, amount);
+    assert.equal(result.chips, board);
     assert.deepEqual(fake._order, ['static', 'send']);
-    assert.deepEqual(fake._calls[0], ['static', CONNECTED, amount]);
-    assert.deepEqual(fake._calls[1], [CONNECTED, amount]);
+    assert.deepEqual(fake._calls[0], ['static', CONNECTED, amount, board]);
+    assert.deepEqual(fake._calls[1], [CONNECTED, amount, board]);
     assert.equal(result.receipt.status, 1);
     assert.match(
       DECIMATOR_SRC,
-      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(target, amountWei\)/,
+      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(target, amountWei, board\)/,
       'write is built with the fresh signer inside sendTx',
+    );
+  });
+
+  test('an explicit board wins, and an invalid one never reaches the contract', async () => {
+    const fake = makeFakeContract();
+    let builds = 0;
+    decimatorMod.__setContractFactoryForTest(() => { builds += 1; return fake; });
+    await decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 0 });
+    assert.deepEqual(fake._calls[1], [CONNECTED, 1_000n * FLIP, 0]);
+    builds = 0;
+    await assert.rejects(
+      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 1 | (1 << 27) }),
+      /not a valid Decimator board/,
+    );
+    assert.equal(builds, 0);
+  });
+
+  test('names the module\'s bare E() revert', async () => {
+    const error = new Error('reverted');
+    error.revert = { name: 'E' };
+    decimatorMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
+    await assert.rejects(
+      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 0 }),
+      (caught) => caught.code === 'DecimatorEntryRejected',
     );
   });
 
@@ -388,38 +371,5 @@ describe('burnForDecimator', () => {
       (caught) => caught.code === 'NotDecimatorWindow'
         && /entry window is closed/i.test(caught.userMessage),
     );
-  });
-});
-
-
-test('current base-entry cap crosses at 500k, independently of weighted score', () => {
-  assert.equal(decimatorMod.decimatorEntryScoreWei({
-    amountWei: 300_000n * FLIP, activityScore: 30_000,
-  }), 534_990n * FLIP);
-  assert.equal(decimatorMod.decimatorEntryScoreWei({
-    amountWei: 100_000n * FLIP, previousBaseWei: 450_000n * FLIP,
-    activityScore: 30_000,
-  }), 139_165n * FLIP);
-  // Boon credit is part of the base consuming the remaining allowance.
-  assert.equal(decimatorMod.decimatorEntryScoreWei({
-    amountWei: 100_000n * FLIP, previousBaseWei: 450_000n * FLIP,
-    activityScore: 30_000, boonBps: 5_000,
-  }), 164_165n * FLIP);
-});
-
-test('opening day takes precedence over the last-purchase-day haircut', () => {
-  assert.equal(decimatorMod.decimatorCurrentMultiplierBps({
-    activityScore: 0, dayOneActive: true, lastPurchaseDay: true,
-  }), 12_000n);
-});
-
-test('DecEntry owner, weightMilli and baseMilli decode independently', () => {
-  // Audit 3c79c1486: owner[0..159] | weightMilli uint64 [160..223] | baseMilli uint32 [224..255].
-  const owner = '0x7776145203f4c8f87fffae24593c92ec7d38880c';
-  const weightMilli = 700_000_000n; // 700,000 FLIP
-  const baseMilli = 400_000_123n;
-  const word = BigInt(owner) | (weightMilli << 160n) | (baseMilli << 224n);
-  assert.deepEqual(decimatorMod.decimatorBurnAccounting(word), {
-    owner, totalBurnWeight: 700_000n * FLIP, totalBaseBurnWei: baseMilli * 10n ** 15n,
   });
 });

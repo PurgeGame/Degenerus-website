@@ -29,7 +29,7 @@ describe('Base Sepolia presentation helpers', () => {
     assert.match(html, /target="_blank"/);
     assert.match(html, /rel="noopener noreferrer"/);
     assert.match(html, /src="\/app\/components\/testnet-beta-banner\.js"/);
-    assert.match(html, /href="\/app\/styles\/status-indicators\.css"/);
+    assert.match(html, /href="\/app\/styles\/status-indicators\.css(?:\?v=[^"]+)?"/);
     assert.match(css, /\.testnet-beta-banner\s*\{/);
     assert.match(css, /\.testnet-beta-banner__faucet\s*\{/);
   });

@@ -5,131 +5,121 @@ import {
   __resetDecimatorDrawProviderForTest,
   __setDecimatorDrawProviderForTest,
   buildDecimatorDrawSnapshot,
+  decimatorCoinHeads,
+  decimatorPeakMultiple,
+  decimatorScoreWei,
   loadDecimatorDrawSnapshot,
-  unpackDecimatorWinningSubbuckets,
 } from '../decimator-draw-data.js';
 
+// Audit 92a1358d0: the Decimator is a shared-dice craps battle.
 const game = new ethers.Interface([
-  // Audit 3c79c1486: the record carries the entry's position in its (level, bucket, subbucket)
-  // list, so topic0 moved; the old six-field signature would match no log at all.
-  'event DecBurnRecorded(address indexed player,uint24 indexed lvl,uint8 bucket,uint8 subBucket,uint32 position,uint256 effectiveAmount,uint256 newTotalBurn)',
-  'event DecimatorResolved(uint24 indexed lvl,uint64 packedOffsets,uint256 poolWei,uint256 totalBurn)',
+  'event DecBurnRecorded(address indexed player,uint24 indexed lvl,uint64 indexed entryId,uint256 baseAmount,uint256 credited,uint256 stack,uint32 chips)',
+  'event DecimatorResolved(uint24 indexed lvl,uint256 rngWord,uint256 poolWei,uint64 entrants)',
+  'event DecimatorRun(uint24 indexed lvl,uint64 indexed entryId,uint256 normalizedPeak)',
+  'event DecimatorRanked(uint24 indexed lvl,uint64 champion,uint8 winners)',
+  'event DecimatorClaimed(address indexed player,uint24 indexed lvl,uint64 indexed entryId,uint256 amountWei,uint256 halfPasses)',
 ]);
 const flip = new ethers.Interface([
-  'event DecimatorBurn(address indexed player,uint256 amountBurned,uint8 bucket)',
+  'event DecimatorBurn(address indexed player,uint256 amountBurned,uint64 entryId)',
 ]);
 
 const PLAYER_A = '0x00000000000000000000000000000000000000a1';
 const PLAYER_B = '0x00000000000000000000000000000000000000b2';
 const PLAYER_C = '0x00000000000000000000000000000000000000c3';
+const FLIP = 10n ** 18n;
+const level = 15;
+// A sealed word under which A (1) and B (2) are heads and C (3) is tails, as _run computes it.
+const WORD = Array.from({ length: 256 }, (_, i) => BigInt(i + 1))
+  .find(word => decimatorCoinHeads(word, level, 1n) && decimatorCoinHeads(word, level, 2n) && !decimatorCoinHeads(word, level, 3n));
 
 function log(iface, event, args, blockNumber, index = 0) {
   const encoded = iface.encodeEventLog(iface.getEvent(event), args);
-  return {
-    data: encoded.data,
-    topics: encoded.topics,
-    blockNumber,
-    index,
-    blockHash: `0x${String(blockNumber).padStart(64, '0')}`,
-  };
+  return { data: encoded.data, topics: encoded.topics, blockNumber, index, blockHash: `0x${String(blockNumber).padStart(64, '0')}` };
 }
 
-function packedOffsets(entries) {
-  let packed = 0n;
-  for (const [bucket, subbucket] of Object.entries(entries)) {
-    packed |= BigInt(subbucket) << BigInt((Number(bucket) - 2) * 4);
-  }
-  return packed;
-}
-
-const level = 15;
-const offsets = packedOffsets({ 6: 0, 7: 2 });
 const burnLogs = [
-  // A later record replaces this row: players can migrate buckets before lock. The migrated
-  // entry re-opens at the end of its new list (position 1 behind B).
-  log(game, 'DecBurnRecorded', [PLAYER_A, level, 8, 1, 0, 100n, 100n], 10),
-  log(game, 'DecBurnRecorded', [PLAYER_B, level, 7, 2, 0, 50n, 50n], 11),
-  log(game, 'DecBurnRecorded', [PLAYER_C, level, 6, 1, 0, 80n, 80n], 12),
-  log(game, 'DecBurnRecorded', [PLAYER_A, level, 7, 2, 1, 150n, 150n], 13),
+  // A second burn by A adds to its one entry; its last record carries the final stack and board.
+  log(game, 'DecBurnRecorded', [PLAYER_A, level, 1, 100n * FLIP, 100n * FLIP, 100n * FLIP, 0], 10),
+  log(game, 'DecBurnRecorded', [PLAYER_B, level, 2, 50n * FLIP, 50n * FLIP, 50n * FLIP, 1], 11),
+  log(game, 'DecBurnRecorded', [PLAYER_C, level, 3, 80n * FLIP, 80n * FLIP, 80n * FLIP, 0], 12),
+  log(game, 'DecBurnRecorded', [PLAYER_A, level, 1, 50n * FLIP, 50n * FLIP, 150n * FLIP, 9], 13),
 ];
-const resolutionLog = log(
-  game,
-  'DecimatorResolved',
-  [level, offsets, 1_000n, 280n],
-  14,
-);
+const resolutionLog = log(game, 'DecimatorResolved', [level, WORD, 1_000n, 3], 14);
+const settleLogs = [
+  // Peaks are in engine units over the 3,000-FLIP starting bankroll.
+  log(game, 'DecimatorRun', [level, 1, 6_000n * FLIP], 15, 0),
+  log(game, 'DecimatorRun', [level, 2, 30_000n * FLIP], 15, 1),
+  log(game, 'DecimatorRanked', [level, 2, 2], 16, 0),
+  // Heap order pays the champion first; the receipt re-sorts by score.
+  log(game, 'DecimatorClaimed', [PLAYER_B, level, 2, 700n, 1n], 17, 0),
+  log(game, 'DecimatorClaimed', [PLAYER_A, level, 1, 300n, 0n], 17, 1),
+  // Another level's credit in the same range is ignored.
+  log(game, 'DecimatorClaimed', [PLAYER_C, 25, 3, 999n, 0n], 17, 2),
+];
 const flipLogs = [
-  log(flip, 'DecimatorBurn', [PLAYER_A, 70n, 7], 10),
-  log(flip, 'DecimatorBurn', [PLAYER_B, 80n, 7], 11),
+  log(flip, 'DecimatorBurn', [PLAYER_A, 70n, 1], 10),
+  log(flip, 'DecimatorBurn', [PLAYER_B, 80n, 2], 11),
 ];
 
 afterEach(() => __resetDecimatorDrawProviderForTest());
 
-describe('Decimator draw log reconstruction', () => {
-  test('decodes the contract packed winner offsets', () => {
-    const winners = unpackDecimatorWinningSubbuckets(offsets);
-    assert.equal(winners['6'], 0);
-    assert.equal(winners['7'], 2);
-    assert.equal(winners['12'], 0);
+describe('Decimator results reconstruction', () => {
+  test('scores are stack x peak over the 3,000-FLIP bankroll', () => {
+    assert.equal(decimatorPeakMultiple(6_000n * FLIP), '2.00');
+    assert.equal(decimatorPeakMultiple(7_843n * FLIP), '2.61');
+    assert.equal(decimatorScoreWei(150n * FLIP, 6_000n * FLIP), 300n * FLIP);
   });
 
-  test('keeps each player final bucket and builds authoritative aggregate scores', () => {
+  test('ranks paid winners by score and reads the viewer\'s own coin and run', () => {
     const snapshot = buildDecimatorDrawSnapshot({
-      level,
-      player: PLAYER_A,
-      gameLogs: [...burnLogs, resolutionLog],
-      flipLogs,
-      ethDisplayScale: 1n,
-      network: 'test',
-      gameAddress: '0xgame',
+      level, player: PLAYER_A, gameLogs: [...burnLogs, resolutionLog, ...settleLogs], flipLogs,
+      ethDisplayScale: 1n, network: 'test', gameAddress: '0xgame',
     });
-
-    assert.deepEqual(snapshot.subbucketTotals, [
-      { bucket: 7, subbucket: 2, score: '200' },
-      { bucket: 6, subbucket: 1, score: '80' },
-    ]);
-    assert.equal(snapshot.winningScore, '200');
-    assert.equal(snapshot.totalFlipBurned, '150');
     assert.equal(snapshot.poolWei, '1000');
-    assert.deepEqual(snapshot.winnerPlayers, [
-      { address: PLAYER_A, bucket: 7, subbucket: 2, score: '150' },
-      { address: PLAYER_B, bucket: 7, subbucket: 2, score: '50' },
+    assert.equal(snapshot.entrants, 3);
+    assert.equal(snapshot.totalFlipBurned, '150');
+    assert.equal(snapshot.ranked, true);
+    assert.equal(snapshot.winnerCount, 2);
+    assert.equal(snapshot.championEntryId, '2');
+    assert.deepEqual(snapshot.winners.map(row => [row.rank, row.address, row.score, row.peakMultiple, row.ethWei, row.halfPasses, row.champion]), [
+      [1, PLAYER_B, String(500n * FLIP), '10.00', '700', '1', true],
+      [2, PLAYER_A, String(300n * FLIP), '2.00', '300', '0', false],
     ]);
-    assert.deepEqual(snapshot.players, [{
-      address: PLAYER_A,
-      bucket: 7,
-      subbucket: 2,
-      score: '150',
-    }]);
-    assert.ok(!snapshot.subbucketTotals.some((row) => row.bucket === 8),
-      'the migrated player must not remain in their obsolete bucket');
+    assert.deepEqual(snapshot.you, {
+      entryId: '1', address: PLAYER_A, coin: 'heads', stack: String(150n * FLIP), chips: 9,
+      peak: String(6_000n * FLIP), peakMultiple: '2.00', score: String(300n * FLIP),
+      rank: 2, winner: true, ethWei: '300', halfPasses: '0',
+    });
+    const tails = buildDecimatorDrawSnapshot({ level, player: PLAYER_C, gameLogs: [...burnLogs, resolutionLog, ...settleLogs], flipLogs });
+    assert.equal(tails.you.coin, 'tails');
+    assert.equal(tails.you.winner, false);
+    assert.equal(tails.you.peak, null);
   });
 
-  test('loader requests level-indexed game logs and bounds raw FLIP burns to the resolution', async () => {
+  test('an unsealed level is still syncing', () => {
+    assert.throws(() => buildDecimatorDrawSnapshot({ level, player: PLAYER_A, gameLogs: burnLogs, flipLogs }), /not indexed/);
+  });
+
+  test('loader bounds entries to the seal and settlement to after it', async () => {
     const calls = [];
     __setDecimatorDrawProviderForTest({
-      async getBlockNumber() { return 14; },
+      async getBlockNumber() { return 17; },
       async getLogs(filter) {
         calls.push(filter);
-        if (calls.length === 1) return [resolutionLog];
-        if (calls.length === 2) return burnLogs;
+        if (filter.topics.length === 2) return [resolutionLog];
+        if (filter.topics.length === 3) return burnLogs;
+        if (Array.isArray(filter.topics[0])) return settleLogs;
         return flipLogs;
       },
     });
-
-    const snapshot = await loadDecimatorDrawSnapshot({
-      level,
-      player: PLAYER_A,
-      fromBlock: 10,
-    });
-    assert.equal(snapshot.winningScore, '200');
-    assert.equal(calls.length, 3);
-    assert.ok(calls.every((call) => Number.isInteger(call.fromBlock)
-      && Number.isInteger(call.toBlock)), 'every log query is numerically bounded');
-    assert.equal(calls[0].topics.length, 2, 'resolution query includes the indexed level');
-    assert.equal(calls[1].topics.length, 3, 'burn query includes player wildcard + indexed level');
-    assert.equal(calls[2].fromBlock, 10);
-    assert.equal(calls[2].toBlock, 14);
+    const snapshot = await loadDecimatorDrawSnapshot({ level, player: PLAYER_A, fromBlock: 10 });
+    assert.equal(snapshot.winners.length, 2);
+    assert.ok(calls.every((call) => Number.isInteger(call.fromBlock) && Number.isInteger(call.toBlock)),
+      'every log query is numerically bounded');
+    const burns = calls.find(call => call.topics.length === 3);
+    assert.deepEqual([burns.fromBlock, burns.toBlock], [10, 14], 'entries close at the seal');
+    const settle = calls.find(call => Array.isArray(call.topics[0]));
+    assert.deepEqual([settle.fromBlock, settle.toBlock], [14, 17], 'runs, ranking and credits follow it');
   });
 
   test('loader scans large ranges in chunks below the public RPC cap', async () => {
@@ -138,19 +128,15 @@ describe('Decimator draw log reconstruction', () => {
       async getBlockNumber() { return 4_000; },
       async getLogs(filter) {
         calls.push(filter);
-        const includesFixture = Number(filter.fromBlock) <= 14 && Number(filter.toBlock) >= 14;
-        if (filter.topics.length === 2) return includesFixture ? [resolutionLog] : [];
-        if (filter.topics.length === 3) return burnLogs;
+        const includes = block => Number(filter.fromBlock) <= block && Number(filter.toBlock) >= block;
+        if (filter.topics.length === 2) return includes(14) ? [resolutionLog] : [];
+        if (filter.topics.length === 3) return includes(10) ? burnLogs : [];
+        if (Array.isArray(filter.topics[0])) return includes(15) ? settleLogs : [];
         return flipLogs;
       },
     });
-
-    const snapshot = await loadDecimatorDrawSnapshot({
-      level,
-      player: PLAYER_A,
-      fromBlock: 10,
-    });
-    assert.equal(snapshot.winningScore, '200');
+    const snapshot = await loadDecimatorDrawSnapshot({ level, player: PLAYER_A, fromBlock: 10 });
+    assert.equal(snapshot.winners.length, 2);
     assert.ok(calls.length > 3, 'the resolution search walks newest chunks first');
     assert.ok(calls.every((call) => Number(call.toBlock) - Number(call.fromBlock) + 1 <= 1_800),
       'no eth_getLogs request exceeds the Base public range limit');

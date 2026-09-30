@@ -662,6 +662,14 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       centerScratched: true,
     }), 0, 'scratching the winning center completes the possible-win gate');
 
+    assert.equal(countUnscratchedPotentialWinPanels({
+      quadOwned: [false, false, false, false],
+      scratched: [false, false, false, false],
+      centerReveal: true,
+      centerWinCount: 0,
+      centerScratched: false,
+    }), 1, 'the main center remains required even when its hidden result is a miss');
+
     assert.match(
       REPLAY_PANEL_SRC,
       /#mainReadyForBonus\(\)\s*\{[^}]*#mainSpinComplete[^}]*#mainPotentialScratchComplete/s,
