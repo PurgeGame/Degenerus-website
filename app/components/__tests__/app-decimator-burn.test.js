@@ -108,31 +108,20 @@ describe('<app-decimator-burn>', () => {
       'the old side-bet entry yields when the full-width rail is mounted');
   });
 
-  test('uses the full rail for legible primary values and controls', () => {
-    assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-areas:\s*"identity stats entry score"/s,
-      'the wide layout puts accumulated score beyond the input and Degen Rating context');
-    assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*6\.1rem/s,
-      'the desktop event rail stays compact without shrinking its primary values');
-    assert.match(CSS, /\.dbb__stats\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
-      'prize and burned FLIP stack at every width so both totals keep the full stats track');
-    assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-area:\s*score/s,
-      'the player score owns the far-side grid slot');
-    assert.match(CSS, /\.dbb__entry-meta\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*min-height:\s*2\.82rem/s,
-      'the multiplier owns one full-width row over the input and action');
-    assert.match(CSS, /\.dbb__actual-multi\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*space-between/s,
-      'label left, value right');
-    assert.doesNotMatch(CSS, /\.dbb__(?:plate|board|rating)\b|\.dbb-stat--burned/, 'the retired plate styles are gone');
-    assert.match(CSS, /\.dbb__actual-multi strong\s*\{[^}]*font:\s*1000 clamp\(0\.86rem, 1\.15vw, 1\.12rem\)/s,
-      'the actual multiplier is the dominant context value');
-    assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)/s);
+  test('keeps the event rail compact with readable values and paired controls', () => {
+    assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-areas:\s*"identity stats entry score"/s);
+    assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*4\.5rem/s);
+    assert.match(CSS, /\.dbb__entry\s*\{[^}]*grid-template-columns:\s*5\.7rem minmax\(0, 1fr\)/s,
+      'the multiplier sits beside the burn controls on desktop');
+    assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.08fr\) minmax\(0, 1fr\)/s,
+      'the amount and action share a row, including on phones');
+    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb\s*\{[^}]*grid-template-areas:\s*"identity identity" "stats score" "entry entry"/s,
+      'mobile keeps the prize and player score side by side');
+    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*3rem/s);
+    assert.match(CSS, /\.dbb__burn\s*\{[^}]*min-height:\s*3rem/s,
+      'the compact action retains a full touch target');
     assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.96rem, 1\.25vw, 1\.14rem\)/s);
-    assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.04rem, 1\.45vw, 1\.26rem\)/s);
-    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*2\.58rem/s);
-    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
-    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__input-control\s*\{[^}]*height:\s*4rem/s,
-      'phone burn entry matches the full-height Tickets and Luckbox touch controls');
-    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__stepper\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'phone increment controls sit side by side instead of in a tiny vertical rail');
+    assert.doesNotMatch(CSS, /\.dbb__(?:plate|board|rating)\b|\.dbb-stat--burned/);
   });
 
   test('puts the unfinished Decimator quest shortcut on the burn action', () => {

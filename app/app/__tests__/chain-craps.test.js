@@ -24,6 +24,7 @@ test('chain input assembly recovers actual seat packing and reproduces every set
   const input=fixture(),f=await rpcFixture({head:4000,timestamp:48000,period:1000});
   const key=input.battleKey,slot=input.settlement.boundSlot;
   f.client.chain.codeHashes={CRAPS:keccak256('0x01')};
+  f.client.chain.crapsReplayEngineVersion='craps-hot12-own30-longest-v3';
   await f.field('CRAPS','_battles',24n|(24n<<32n),key);
   const daySeats=input.seats.filter(s=>s.lane==='day').length;
   await f.field('CRAPS','_dayTickets',daySeats,slot/8n*8n);
@@ -36,10 +37,14 @@ test('chain input assembly recovers actual seat packing and reproduces every set
     await f.field('CRAPS','_bets',BigInt(seat.player)|(BigInt(seat.chips)<<160n)|(BigInt(seat.standing)<<190n)|high,seat.betId);
     await f.event('CRAPS','CrapsBetSettled',{betId:seat.betId,player:seat.player,won:seat.chainWon,paid:seat.chainPaid},{block:3501,index:i});
   }
+  await f.event('CRAPS','CrapsProgressiveFunded',{day:42,contribution:1000,balance:123456},{block:3500,index:3});
   await f.event('CRAPS','CrapsBattleFinalized',{battleKey:key,winningScoreBps:59080},{block:3501,index:24});
+  await f.event('CRAPS','CrapsProgressiveFunded',{day:43,contribution:1000,balance:124456},{block:3501,index:25});
   const assembled=await loadReplayInputs(f.s,key);
   assert.deepEqual(assembled.terms,input.terms);assert.deepEqual(assembled.seats,input.seats);
   assert.equal(materializeReplay(assembled).entrants,24);
+  assert.equal(assembled.prize.progressivePoolWei,'123456');
+  assert.equal(assembled.progressive.amountWei,123456n);
 });
 
 test('run 57+: the period-5 jackpot battle replays through the craps table, paid, day and awarded seats alike', async()=>{
@@ -52,6 +57,7 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
   try{
     const f=await rpcFixture({head:4000,timestamp:48000,period:1000});
     f.client.chain.codeHashes={CRAPS:keccak256('0x01')};
+  f.client.chain.crapsReplayEngineVersion='craps-hot12-own30-longest-v3';
     // Day 42's jackpot slot: _slotOf(42, 5) = 42 * 8 + 6. Its key is its slot (`_slotWindow`).
     const slot=42n*8n+6n,daySlot=42n*8n,key='0x'+slot.toString(16).padStart(64,'0');
     const word=BigInt(keccak256('0x6a61636b706f74'));const bankroll=1_800n*10n**18n;
@@ -67,7 +73,7 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
     ];
     await f.field('CRAPS','_battles',5n|(5n<<32n),key);
     await f.field('CRAPS','_dayTickets',1n,daySlot);
-    for(const [member,value] of [['word',word],['bankroll',bankroll],['bountyUnits',12n],['drawnCount',2n],['drawnUnits',2n],['multiplierBps',15_000n]]) await f.field('CRAPS','_jackpotRounds',value,slot,member);
+    for(const [member,value] of [['word',word],['bankroll',bankroll],['bountyUnits',12n],['drawnCount',2n],['drawnUnits',2n],['multiplierBps',30_000n]]) await f.field('CRAPS','_jackpotRounds',value,slot,member);
     await f.event('CRAPS','JackpotBattleStarted',{slot,level:7,drawnEntries:2,drawnUnits:2,word},{block:3600,index:0});
     // The day runs a 3x high lane (no high seat sits in this field).
     await f.event('CRAPS','CrapsHighRollerDayOpened',{day:42,multiplier:3,mainBudget:0,highBudget:0},{block:3600,index:1});
@@ -79,15 +85,27 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
       seat.won=r.bankrollOut;seat.paid=r.bankrollIn;
       await f.event('CRAPS','CrapsBetSettled',{betId:seat.betId,player:seat.player,won:seat.won,paid:seat.paid},{block:3700,index:index++});
     }
-    await f.event('CRAPS','CrapsBattleFinalized',{battleKey:key,winningScoreBps:12000},{block:3700,index:index++});
+    const pot = 6_017n * 10n**18n + 23n; // Exact remainder, not just five posted bounties.
+    await f.event('CRAPS','CrapsBattleFinalized',{battleKey:key,winningScoreBps:12000,pot},{block:3700,index:index++});
+    // The RIU award is 5% of the pool. Later funding in the same block must
+    // neither replace the historical pool nor inflate the winner's receipt.
+    const poolBefore = 129_039n * 10n**18n + 123n, award = poolBefore / 20n;
+    await f.event('CRAPS','CrapsProgressivePaid',{
+      battleKey:key,betId:seats[0].betId,player:seats[0].player,
+      poolBps:500,scoreBps:350000,candidate:award,paid:award,balance:poolBefore-award,
+    },{block:3700,index:index++});
+    await f.event('CRAPS','CrapsProgressiveFunded',{
+      day:43,contribution:500_000n*10n**18n,balance:poolBefore-award+500_000n*10n**18n,
+    },{block:3700,index:index++});
     const assembled=await loadReplayInputs(f.s,key);
     assert.equal(assembled.word,word,'the round\'s own word, not a lootbox index');
     assert.equal(assembled.settlement.boundIndex,0n);
+    assert.deepEqual(assembled.prize,{mainPotWei:String(pot),jackpotMultiplierBps:30_000,progressivePoolWei:String(poolBefore)});
     assert.equal(assembled.rollBudget,undefined,'the current contracts replay at the engine\'s default roll budget');
     // Audit e579cd318: a jackpot high seat rides `bankroll + highExtra` of fee-funded capital,
     // highExtra = (H - 1) * JACKPOT_FEE (8,000 FLIP) * multiplierBps / 20_000 (CrapsBattle.sol:318).
     assert.deepEqual(assembled.terms,{bankroll,goal:bankroll*5n,boardStake:bankroll/5n,battleStake:12n*100n*10n**18n,
-      highExtra:(3n-1n)*8_000n*10n**18n*15_000n/20_000n});
+      highExtra:(3n-1n)*8_000n*10n**18n*30_000n/20_000n});
     assert.deepEqual(assembled.seats.map(s=>[s.betId,s.lane,s.awardUnits??0]),seats.map(s=>[s.betId,s.lane,Number(s.award)]));
     const bundle=materializeReplay(assembled);
     assert.equal(bundle.entrants,5,'every settlement reproduced, the awarded seats on their own dice');
@@ -96,7 +114,9 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
     const maxHands=JSON.parse(bundle.manifest.body.toString()).tape.maxHands;
     const featured=JSON.parse(bundle.children.find(c=>c.name==='featured').body.toString());
     const expected=seats.flatMap((seat,i)=>{const turn=rotationTurn(crapsSeed(word,slot),5n,BigInt(i+1));
-      return turn===0n||turn>BigInt(maxHands)?[]:[[Number(turn-1n),seat.betId.toString()]];}).sort((a,b)=>a[0]-b[0]);
+      const rows=[]; if(turn!==0n) for(let hand=Number(turn-1n);hand<maxHands;hand+=seats.length) rows.push([hand,seat.betId.toString()]); return rows;}).sort((a,b)=>a[0]-b[0]);
     assert.deepEqual(featured.shooterTimeline.map(row=>[row.shooter,row.betId]),expected);
+    assert.equal(assembled.progressive.amountWei,award);
+    assert.equal(assembled.progressive.status,'won');
   }finally{useSchema(previous);}
 });

@@ -2,7 +2,7 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ethers, setProvider, clearProvider } from '../contracts.js';
 import { update, __resetForTest } from '../store.js';
-import { CONTRACTS } from '../chain-config.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
 import {
   readDeityCustomization, readDeityRingColor, saveDeityCustomization, canCustomizeDeity,
   DEITY_CUSTOMIZATION_DEPLOYMENTS, DEITY_CUSTOMIZATION_ABI, __setDeityCustomizationFactoryForTest,
@@ -40,6 +40,13 @@ beforeEach(() => {
 });
 afterEach(() => { __setDeityCustomizationFactoryForTest(null); clearProvider(); __resetForTest(); });
 const save = extra => saveDeityCustomization({ symbolId: 8, owner: OWNER, renderer: RENDERER, ...extra });
+
+test('customization targets the same Deity Pass deployment as purchases', () => {
+  const deployment = DEITY_CUSTOMIZATION_DEPLOYMENTS[CHAIN.id];
+  assert.ok(deployment, 'register the customization renderer when enabling a new chain');
+  assert.equal(deployment.pass.toLowerCase(), CONTRACTS.DEITY_PASS.toLowerCase(),
+    'update the verified customization deployment when redeploying the Deity Pass');
+});
 
 test('ABI encodes the deployed tuple setters and geometry reset', () => {
   const iface = new ethers.Interface(DEITY_CUSTOMIZATION_ABI);

@@ -179,7 +179,7 @@ globalThis.localStorage = {
 const {
   queueReveal, normalizeSequence, buildIndividualLootboxSequences,
   combineLootboxSequences, daySummaryAnimatedCards,
-  buildDegeneretteSpinFrames,
+  buildDegeneretteSpinFrames, buildPaperTicket,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   boxSpinScorePays, settleBoxSpinPayoutPresentation,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
@@ -1460,6 +1460,15 @@ describe('normalizeSequence', () => {
       spin: null,
     });
     assert.equal(won.consolationOnly, false);
+    const chain = normalizeSequence({
+      kind: 'jackpot', day: 9, prizes: [], activity: {
+        crapsWinningsAmount: String(1_234n * 10n ** 18n),
+        crapsWinCount: 3, crapsPayoutCount: 3,
+      },
+    });
+    assert.equal(chain.cards[0].value, '+1,234 FLIP');
+    assert.equal(chain.cards[0].sub, '3 BATTLE PAYOUTS',
+      'a run, pot and progressive payment cannot be presented as three different battles');
     assert.match(REVEAL_SRC,
       /card\.type === 'craps-result'[\s\S]*?#buildCrapsResultLogo\(card\)/,
       'the Craps win receipt mounts the Craps Autobattle lockup');
@@ -2144,6 +2153,29 @@ describe('buildBoxSpinBoard', () => {
 });
 
 describe('buildDegeneretteSpinFrames', () => {
+  test('only issued paper tickets use the monkey; ordinary examples keep the die', () => {
+    for (const foil of [false, true]) {
+      const issued = buildPaperTicket([0, 64, 128, 253], foil, { issued: true });
+      const example = buildPaperTicket([0, 64, 128, 253], foil);
+      assert.equal(issued.querySelectorAll('img').filter((img) => img.src?.includes('gold-six-monkey')).length, 1);
+      assert.equal(example.querySelectorAll('img').some((img) => img.src?.includes('gold-six-monkey')), false);
+    }
+  });
+
+  test('transient reels omit gold six but still land on an actual gold-six result', () => {
+    for (const houseTraits of [0xFD824100, 0xE7824100]) {
+      for (let spinIndex = 0; spinIndex < 128; spinIndex++) {
+        const frames = buildDegeneretteSpinFrames({ playerTraits: 0xFD824100, houseTraits, spinIndex });
+        for (const frame of frames) {
+          const die = frame.traits[3];
+          if (frame.lockedColors[3] && frame.lockedSymbols[3]) continue;
+          assert.ok(die.col !== 7 || die.sym !== 5, 'an unlocked preview cannot show gold six');
+        }
+        assert.deepEqual(frames.at(-1).traits, dgnUnpackTicket(houseTraits));
+      }
+    }
+  });
+
   test('randomizes all eight component locks and lands on the verified ticket', () => {
     const args = {
       playerTraits: 0x12345678,
@@ -3052,7 +3084,7 @@ describe('reveal-overlay element', () => {
     assert.equal(stagedValue?.title, '44,200,000 DGNRS');
     assert.equal(stagedValue?.getAttribute('aria-label'), '44,200,000 DGNRS');
     assert.equal(stagedValue?.classList.contains('rvl-card-value--long'), false,
-      'the screenshot-sized value is handled by the singleton rule before the long tier');
+      'abbreviated receipts do not need the full-size amount fitting class');
     assert.match(
       APP_CSS,
       /\.rvl-stage--lootbox > \.rvl-card-zone \.rvl-card--dgnrs \.rvl-card-value--long\s*\{[^}]*font-size:\s*clamp\(1\.5rem, 5vw, 1\.75rem\);[^}]*letter-spacing:\s*-0\.035em;/s,
@@ -3061,7 +3093,7 @@ describe('reveal-overlay element', () => {
     assert.match(
       APP_CSS,
       /\.rvl-stage--lootbox \.rvl-summary-grid\[data-card-count="1"\] \.rvl-card--dgnrs \.rvl-card-value\s*\{[^}]*overflow:\s*visible;[^}]*font-size:\s*clamp\(1\.4rem, 7vw, 1\.85rem\);[^}]*text-overflow:\s*clip;/s,
-      'the singleton hero receipt shows the complete screenshot-sized amount even though its card is compact in the DOM',
+      'the singleton hero receipt keeps its abbreviated amount prominent',
     );
     assert.match(
       APP_CSS,
@@ -3079,6 +3111,35 @@ describe('reveal-overlay element', () => {
     el.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+  });
+
+  test('multi-reward receipts abbreviate DGNRS without rounding up or losing the full amount', async () => {
+    const el = instantiate();
+    for (const [amount, compact] of [
+      [9_999n, '9,999'],
+      [10_000n, '10K'],
+      [999_999n, '999.99K'],
+      [999_999_999n, '999.99M'],
+      [1_250_000_000n, '1.25B'],
+      [1_250_000_000_000n, '1.25T'],
+    ]) {
+      queueReveal({
+        kind: 'lootbox', lootboxIndex: 49,
+        legs: [
+          { legType: 'dgnrs', amount: amount * 10n ** 18n },
+          { legType: 'flip', amount: 100n * 10n ** 18n },
+        ],
+      });
+      await tick();
+      const summary = el.querySelector('[data-bind="rvl-summary"]');
+      const value = summary.querySelector('.rvl-card--dgnrs').querySelector('.rvl-card-value');
+      assert.equal(value.textContent, compact);
+      assert.equal(value.title, `${amount.toLocaleString('en-US')} DGNRS`);
+      assert.equal(value.getAttribute('aria-label'), value.title);
+      summary.querySelector('.rvl-collect-cta')
+        .dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+    }
   });
 
   test('a referral receipt finishes instead of offering its own stale Pending action', async () => {
@@ -5164,7 +5225,7 @@ describe('reveal-overlay element', () => {
     await revealPops(el);
     assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['9', '9']);
     assert.equal(el.querySelectorAll('.dgn-pop__payout').length, 2);
-    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, '0 ETH');
+    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, 'LOSS');
     assert.equal(el.querySelectorAll('.dgn-pop__player').length, 8);
     assert.equal(el.querySelector('.rvl-dgn-auto-cta'), null);
     assert.equal(el.querySelector('.rvl-dgn-skip-cta'), null);
@@ -5172,6 +5233,41 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').textContent, 'UNLUCKY');
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('the champion stays on the player badge through exact, symbol-only, color-only and missed reveals', async () => {
+    const cases = [
+      { houseTraits: 0xC0804000, score: 9, points: 3, bonus: true },
+      { houseTraits: 0xC0804008, score: 8, points: 2, bonus: true },
+      { houseTraits: 0xC0804001, score: 7, points: 1, bonus: false },
+      { houseTraits: 0xC0804009, score: 6, points: 0, bonus: false },
+    ];
+    queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
+      spins: cases.map((row, spinIndex) => ({ ...row, spinIndex, playerTraits: 0xC0804000, payout: 0n })),
+    });
+    const el = instantiate(); await tick();
+    const cards = el.querySelectorAll('.dgn-pop__card');
+    cards.forEach((card, index) => {
+      const cell = card.querySelectorAll('.dgn-pop__cell')[0];
+      assert.equal(cell.dataset.champion, 'covered');
+      assert.ok(cell.querySelector('.bubble-reveal').querySelector('.dgn-pop__champion'));
+      assert.equal(cell.querySelector('.dgn-pop__champion-bonus'), null, 'covered cards never disclose the bonus');
+      assert.equal(cell.querySelector('.bubble-reveal__hero'), null, 'the full-size aura is retired from pop boards');
+      const chosenBadge = cell.querySelector('.bubble-reveal__badge-art').src;
+      clickPop(cell);
+      const player = cell.querySelector('.dgn-pop__player');
+      assert.ok(player.querySelector('.dgn-pop__champion'), 'the glow remains on your badge even after a miss');
+      assert.equal(player.querySelector('.dgn-pop__player-art').src, chosenBadge, 'the crown stays with the original selection');
+      assert.equal(cell.querySelector('.dgn-pop__hero'), null, 'the house symbol never inherits the champion marker');
+      assert.equal(Boolean(player.querySelector('.dgn-pop__champion-bonus')), cases[index].bonus);
+      assert.equal(cell.dataset.champion, cases[index].bonus ? 'match' : 'miss');
+      assert.equal(Number(cell.dataset.points), cases[index].points);
+      assert.match(cell.getAttribute('aria-label'), cases[index].bonus
+        ? /Champion match: \+1 bonus point included/ : /Champion symbol did not match/);
+    });
+    await revealPops(el);
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => Number(node.textContent)), [9, 8, 7, 6]);
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
   test('an unverified historical reel stays neutral until its recorded score is revealed', async () => {
@@ -5186,7 +5282,7 @@ describe('reveal-overlay element', () => {
     await revealPops(el);
     assert.equal(center.dataset.score, '1');
     assert.equal(center.dataset.points, '1');
-    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, '0 FLIP');
+    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, 'LOSS');
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
@@ -5439,7 +5535,7 @@ describe('reveal-overlay element', () => {
     assert.equal(cards.length, 3);
     cards.forEach((card, i) => {
       const q = [0, 2, 3][i];
-      assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.bubble-reveal__hero'));
+      assert.ok(card.querySelectorAll('.dgn-pop__cell')[q].querySelector('.dgn-pop__champion'));
     });
     await revealPops(el);
     assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['9', '9', '9']);
@@ -5883,7 +5979,7 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 4);
     assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => node.textContent), ['0', '0', '3', '0']);
     assert.equal(el.querySelectorAll('.dgn-pop__payout-amount')[2].textContent, '+272,965 FLIP');
-    assert.equal(el.querySelectorAll('.dgn-pop__payout-detail')[2].textContent, 'BEFORE FLIP');
+    assert.equal(el.querySelectorAll('.dgn-pop__payout')[2].querySelector('.dgn-pop__payout-detail').textContent, 'BEFORE FLIP');
     assert.match(el.querySelector('.rvl-spin-total').textContent, /SURVIVAL FLIP BUSTED/);
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-bust'));
@@ -5983,8 +6079,13 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('.dgn-pop__flame').dataset.points, '1');
     assert.equal(cell.dataset.points, '1');
     assert.ok(cell.querySelector('.dgn-pop__gold'));
-    assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD ×1.25');
+    assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD BONUS ×1.25');
     await revealPops(el);
+    assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, 'LOSS');
+    assert.equal(el.querySelector('.dgn-pop__number').textContent, 'CARD 1 · LOSS');
+    assert.equal(el.querySelector('.dgn-pop__gold-total').hidden, true,
+      'a completed loss does not advertise a gold payout boost');
+    assert.equal(cell.querySelector('.dgn-pop__gold').textContent, 'GOLD BONUS');
     for (let i = 0; i < 120 && el.querySelector('.rvl-dgn-spin-cta').hidden; i++) await tick();
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').hidden, false);
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, false);

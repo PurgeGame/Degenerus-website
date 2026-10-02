@@ -208,6 +208,11 @@
   justify-content: center;
   pointer-events: auto;
   cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .replay-ticket-center::before {
@@ -221,6 +226,14 @@
   box-sizing: border-box;
   transform: translate(-50%, -50%) rotate(45deg);
   transition: background 0.4s ease, border-color 0.4s ease;
+}
+
+/* Focus follows the diamond, including while its reveal button owns focus.
+   Keep the rectangular hit area free of native tap/focus decoration. */
+.replay-ticket-center:focus-visible::before,
+.replay-ticket-center:has(.replay-bubble-trigger--center:focus-visible)::before {
+  outline: 2px solid #f2e7ff;
+  outline-offset: 4px;
 }
 
 .replay-ticket-center.revealed::before {
@@ -349,7 +362,7 @@
   display: none;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.12s ease-out;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -515,7 +528,7 @@
   justify-content: flex-end;
   align-items: stretch;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.12s ease-out;
   pointer-events: none;
 }
 
@@ -1104,7 +1117,7 @@
 /* --- Public result when the viewed player has no winning entry ----------------
    Every main-draw quadrant stays scratchable. Its red cover communicates that
    the player cannot win there; scratching reveals the bucket's actual badge,
-   ETH amount and the exact prize/count for each ticket draw. */
+   ETH amount and one combined pile of all tickets awarded. */
 .replay-prize-reveal.replay-bucket-reveal {
   box-sizing: border-box;
   display: grid;
@@ -1124,6 +1137,11 @@
 .replay-prize-reveal.replay-bucket-reveal--q1 { padding: 4% 4% 14% 14%; }
 .replay-prize-reveal.replay-bucket-reveal--q2 { padding: 14% 14% 4% 4%; }
 .replay-prize-reveal.replay-bucket-reveal--q3 { padding: 14% 4% 4% 14%; }
+
+/* Give the lower main-draw miss receipts room for the fanned ticket edges. */
+.replay-prize-reveal.replay-bucket-reveal--main-miss:is(.replay-bucket-reveal--q2, .replay-bucket-reveal--q3) {
+  padding-bottom: calc(4% + 0.8rem);
+}
 
 /* Ordinary public results use one badge scale in both draws. The main draw's
    loss tint and the bonus draw's neutral surface must not change its size. */
@@ -1161,6 +1179,7 @@
 }
 
 .replay-bucket-reveal--solo-eth .replay-bucket-badge-stage {
+  grid-template-rows: minmax(0, 1fr);
   place-items: start center;
 }
 
@@ -1185,21 +1204,12 @@
   gap: 0.22rem;
 }
 
-/* Daily and early-bird draws share a symbol, but keep their own award rows. */
-.replay-prize-reveal.replay-bucket-reveal--multiple-ticket-awards {
-  grid-template-rows: minmax(0, 1fr) clamp(2.7rem, 11vw, 3.7rem);
-}
-.replay-bucket-reveal--multiple-ticket-awards .replay-bucket-receipt { gap: 0.1rem; }
-.replay-bucket-reveal--multiple-ticket-awards .replay-bucket-ticket-icon {
-  width: 1.35em;
-  height: 1.35em;
-}
-
-/* A solo receipt remains one compact row when the bucket also has tickets.
-   This preserves badge height instead of stacking rewards into its lane. */
+/* Keep solo rewards together when they fit; narrow tickets wrap the pile
+   beneath the ETH amount so neither value gets clipped. */
 .replay-bucket-reveal--solo-eth .replay-bucket-receipt {
   height: auto;
   flex-direction: row;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 0.3rem;
   transform: translateY(-0.28rem);
@@ -1276,6 +1286,26 @@
 .replay-bucket-ticket-count {
   line-height: 1;
 }
+
+/* One fanned pile for the bucket's combined ticket award. */
+.replay-bucket-ticket-pile {
+  position: relative;
+  display: inline-block;
+  width: 2.45em;
+  height: 1.95em;
+  flex: 0 0 auto;
+}
+.replay-bucket-ticket-pile .replay-bucket-ticket-icon {
+  position: absolute;
+  top: 0.1em;
+  left: 0.36em;
+  width: 1.72em;
+  height: 1.72em;
+  box-shadow: 0 1px 2px #19354e59;
+}
+.replay-bucket-ticket-pile .replay-bucket-ticket-icon:nth-child(1) { transform: translateX(-0.3em) rotate(-18deg); }
+.replay-bucket-ticket-pile .replay-bucket-ticket-icon:nth-child(2) { transform: translateX(0.3em) rotate(16deg); }
+.replay-bucket-ticket-pile .replay-bucket-ticket-icon:nth-child(3) { transform: translateY(-0.08em) rotate(-2deg); }
 
 .replay-bucket-craps {
   gap: 0.2em;
@@ -1361,6 +1391,29 @@
 }
 .replay-bubble-trigger:disabled { opacity: 1; cursor: default; }
 .replay-bubble-trigger:focus-visible { outline: 3px solid #fff1a5; outline-offset: -5px; }
+/* Start tearing on the first frame. Jackpot's shorter duration is also used
+   by the cover's cleanup timer; other reveal surfaces keep their own pace. */
+.replay-bubble-trigger > .bubble-reveal.is-popping {
+  animation-name: replay-bubble-puncture;
+  animation-timing-function: cubic-bezier(.16, .8, .3, 1);
+}
+@keyframes replay-bubble-puncture {
+  from { --bubble-reveal-aperture: 1px; }
+  to { --bubble-reveal-aperture: var(--bubble-reveal-pop-radius); }
+}
+/* Scale the rim instead of laying out a growing width/height every frame. */
+.replay-bubble-trigger .bubble-reveal__burst::after {
+  width: calc(var(--bubble-reveal-pop-radius) * 2);
+  height: calc(var(--bubble-reveal-pop-radius) * 2);
+}
+.replay-bubble-trigger > .bubble-reveal.is-popping .bubble-reveal__burst::after {
+  animation-name: replay-bubble-rim;
+  animation-timing-function: cubic-bezier(.16, .8, .3, 1);
+}
+@keyframes replay-bubble-rim {
+  from { opacity: .65; transform: translate(-50%, -50%) scale(0); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
 .replay-tq .replay-bubble-trigger .bubble-reveal__badge {
   /* The cover's resting 1.025 scale brings this to the spinning badge's 122%. */
   flex-shrink: 0;
@@ -1368,24 +1421,53 @@
   height: 119%;
 }
 .replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; }
+.replay-bubble-trigger--center:focus-visible { outline: none; }
 .replay-bubble-trigger--center .bubble-reveal { border-radius: 0; }
 .replay-bubble-trigger--center .bubble-reveal__badge {
-  width: 60%;
-  height: 60%;
+  width: 68%;
+  height: 68%;
 }
 .replay-bubble-trigger--center .bubble-reveal__badge-art {
-  filter: drop-shadow(0 2px 2px #251044b3);
+  filter: drop-shadow(0 1px 1px #19082be6) drop-shadow(0 0 3px #ece1ff4d);
 }
 .replay-bubble-trigger--center .bubble-reveal__film {
-  background: radial-gradient(ellipse at 35% 24%, #aa80ed, #7954ce 48%, #482677);
+  background:
+    radial-gradient(ellipse at 35% 18%, #c7a6ff80, transparent 60%),
+    linear-gradient(145deg, #a27cdf, #6941ad 48%, #351b64);
+  box-shadow: none;
 }
-.replay-bubble-trigger--center:is(:hover, :focus-visible) .bubble-reveal__film {
-  filter: brightness(1.16);
+/* The center is a cut amethyst seal. Its facets follow the diamond instead
+   of cropping the shared bubble's square rim and circular badge highlights. */
+.replay-bubble-trigger--center .bubble-reveal__skin {
+  background: conic-gradient(from 0deg at 50% 50%, #f0dfff1a 0deg 90deg,
+    #18073030 90deg 180deg, #18073014 180deg 270deg, #f0dfff30 270deg);
+  box-shadow: none;
+}
+.replay-bubble-trigger--center .bubble-reveal__skin::before {
+  inset: auto;
+  top: 50%; left: 50%;
+  width: 64%; height: 64%;
+  border: 1px solid #ead5ff99;
+  border-radius: 1px;
+  background: none;
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: inset 1px 1px 0 #fff2, inset -1px -1px 0 #200c4480,
+    0 0 0 2px #28134080;
+}
+.replay-bubble-trigger--center .bubble-reveal__skin::after,
+.replay-bubble-trigger--center .bubble-reveal__glint,
+.replay-bubble-trigger--center .bubble-reveal__lowlight,
+.replay-bubble-trigger--center .bubble-reveal__badge-optics { display: none; }
+.replay-bubble-trigger--center:focus-visible .bubble-reveal__film {
+  filter: brightness(1.12);
+}
+@media (hover: hover) and (pointer: fine) {
+  .replay-bubble-trigger--center:hover .bubble-reveal__film { filter: brightness(1.12); }
 }
 .replay-ticket-center.replay-ticket-center--covered::before {
-  background: #7954ce;
-  border-color: #dac5ff;
-  box-shadow: 0 0 0 2px #3b245b, 0 0 10px #9c70e86b;
+  background: #6941ad;
+  border-color: #d7bcf7;
+  box-shadow: 0 0 0 1px #32154f, 0 2px 5px #1c092e80, 0 0 9px #9c70e84d;
   animation: none;
 }
 .replay-ticket-center--covered > :is(.replay-flame, .replay-center-dice) { visibility: hidden; }
@@ -1395,7 +1477,7 @@
   box-shadow: inset 0 0 0 1px #ffb7b74d;
 }
 .replay-ticket-center--popped > :is(.replay-flame, .replay-center-dice) {
-  animation: replay-center-pop-out 280ms cubic-bezier(.2,.8,.3,1.3) both;
+  animation: replay-center-pop-out 180ms cubic-bezier(.2,.8,.3,1.3) both;
 }
 @keyframes replay-center-pop-out {
   from { scale: .65; opacity: 0; }

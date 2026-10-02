@@ -79,15 +79,15 @@
   <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/jackpot.css">
   <link rel="stylesheet" href="/app/styles/viewer.css" media="print" data-deferred-css>
-  <link rel="stylesheet" href="/app/styles/replay.css?v=ticket-draw-awards-20260929" media="print" data-deferred-css>
+  <link rel="stylesheet" href="/app/styles/replay.css?v=main-miss-bottom-inset-20261001" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/boons.css" media="print" data-deferred-css>
-  <link rel="stylesheet" href="/app/styles/app.min.css?v=dgnrs-receipt-20260930">
+  <link rel="stylesheet" href="/app/styles/app.min.css?v=boon-tooltip-fit-20261001">
   <link rel="stylesheet" data-href="/app/styles/link-donation.css" data-rev="link-trade-20260928">
-  <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css">
+  <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css" data-rev="larger-flames-20261002">
   <link rel="stylesheet" data-href="/app/styles/sacrifices.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css?v=narrow-cabinet-20260928">
-  <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=badge-ticket-popup-20260930">
+  <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=deity-picker-clean-20260930">
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
@@ -100,10 +100,10 @@
   <link rel="stylesheet" href="/app/styles/status-indicators.css?v=currency-quest-sides-20260929">
   <!-- BUY IN is part of the static three-column hero, so its final visual
        layer stays render-blocking and loads after the shared status badges. -->
-  <link rel="stylesheet" href="/app/styles/purchase-desk.css">
+  <link rel="stylesheet" href="/app/styles/purchase-desk.css?v=afking-luckbox-shelf-v21-20261002">
   <link rel="stylesheet" href="/app/styles/player-extras.css?v=token-row-20260929">
   <link rel="stylesheet" href="/app/styles/site-composition.css?v=quest-hub-20260929">
-  <link rel="stylesheet" href="/app/styles/quest-hub.css?v=growth-percentage-20260929">
+  <link rel="stylesheet" href="/app/styles/quest-hub.css?v=compact-growth-result-20261002">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -122,10 +122,23 @@
   <script type="importmap">
   {
     "imports": {
-      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=charity-total-20260929",
-      "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=champion-match-20260929",
-      "/app/app/craps.js": "/app/app/craps.js?v=decimator-battle-20260930",
-      "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=decimator-battle-20260930",
+      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=eligible-bounties-20261002",
+      "/app/components/app-box-strip.js": "/app/components/app-box-strip.js?v=pending-deployment-scope-20261001",
+      "/app/app/bingo-watch.js": "/app/app/bingo-watch.js?v=pending-recent-receipts-20261001",
+      "/app/components/app-sdgnrs-redemptions.js": "/app/components/app-sdgnrs-redemptions.js?v=pending-deployment-scope-20261001",
+      "/app/app/lootbox-legs.js": "/app/app/lootbox-legs.js?v=degenerette-bounty-once-20260930",
+      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=larger-flames-20261002",
+      "/app/app/sacrifices.js": "/app/app/sacrifices.js?v=larger-flames-20261002",
+      "/app/components/dgn-winnings.js": "/app/components/dgn-winnings.js?v=smooth-degenerette-20260930",
+      "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=champion-glow-centered-one-20260930",
+      "/app/app/pack-watch.js": "/app/app/pack-watch.js?v=next-rng-only-20260930",
+      "/app/app/main.js": "/app/app/main.js?v=next-rng-only-20260930",
+      "/app/app/craps.js": "/app/app/craps.js?v=actual-bankroll-peak-20261001",
+      "/app/chain/craps.js": "/app/chain/craps.js?v=riu-pool-20260930",
+      "/app/chain/craps-results.js": "/app/chain/craps-results.js?v=actual-bankroll-peak-20261001",
+      "/app/chain/viewer.js": "/app/chain/viewer.js?v=day-summary-craps-20260930",
+      "/app/components/last-day-jackpot.js": "/app/components/last-day-jackpot.js?v=day-summary-craps-20260930",
+      "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=peak-precision-under-ten-20261002",
       "/app/components/app-craps-rules.js": "/app/components/app-craps-rules.js?v=main-event-20260929",
       "/app/components/app-tickets-inventory.js": "/app/components/app-tickets-inventory.js?v=badge-ticket-popup-20260930",
       "/app/components/app-transaction-history.js": "/app/components/app-transaction-history.js?v=category-history-20260928",
@@ -139,30 +152,34 @@
       "lean-qr": "/app/vendor/lean-qr.mjs",
       "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
-      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=decimator-walk-paid-20260929",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=afking-luckbox-shelf-v21-20261002",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
-      "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=deity-logo-ring-20260929",
+      "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
+      "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=boon-tooltip-fit-20261001",
       "/app/components/app-deity-desk.js": "/app/components/app-deity-desk.js?v=badge-ticket-popup-20260930",
       "/app/components/deity-art-editor.js": "/app/components/deity-art-editor.js?v=deity-logo-ring-20260929",
-      "/app/app/deity-customization.js": "/app/app/deity-customization.js?v=deity-logo-ring-20260929",
+      "/app/app/deity-customization.js": "/app/app/deity-customization.js?v=deity-deployment-20260930",
       "/app/app/deity-symbol-art.js": "/app/app/deity-symbol-art.js?v=deity-logo-ring-20260929",
       "/app/app/deity-art.js": "/app/app/deity-art.js?v=deity-customizer-20260929",
+      "/app/app/deity-symbol.js": "/app/app/deity-symbol.js?v=deity-picker-clean-20260930",
       "/app/app/passes.js": "/app/app/passes.js?v=deity-customizer-20260929",
-      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=badge-ticket-popup-20260930",
+      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=deity-picker-clean-20260930",
       "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=incinerator-badge-20260928",
       "/app/components/app-link-donation.js": "/app/components/app-link-donation.js?v=link-trade-20260928",
-      "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=decimator-battle-20260930",
+      "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=compact-growth-result-20261002",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=craps-passes-0889affc-1",
-      "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=tutorial-fixtures-13",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-32c60453-9d347929-scoped-v12-player-best",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-32c60453-9d347929-scoped-v12-player-best",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-32c60453-9d347929-scoped-v12-player-best",
-      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-32c60453-9d347929-scoped-v12-player-best",
+      "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=pending-decimator-tooltip-20261001",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-ec9947f7-feab7a70-scoped-v14-riu-pool",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-ec9947f7-feab7a70-scoped-v14-riu-pool",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-ec9947f7-feab7a70-scoped-v14-riu-pool",
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-ec9947f7-feab7a70-scoped-v14-riu-pool",
       "/app/app/coin-draw-centre.js": "/app/app/coin-draw-centre.js?v=center-pop-20260929",
       "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=decimator-battle-20260930",
-      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=dgnrs-receipt-20260930",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=reveal-controls-day-summary-craps-20260930",
       "/app/app/jackpot-buckets.js": "/app/app/jackpot-buckets.js?v=ticket-draw-awards-20260929",
-      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=decimator-battle-20260930",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=local-bubble-win-sound-20261001",
+      "/app/components/bubble-reveal.js": "/app/components/bubble-reveal.js?v=smooth-degenerette-20260930",
+      "/app/components/win-flights.js": "/app/components/win-flights.js?v=batched-measurements-20260930",
       "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
     }
   }
@@ -392,7 +409,7 @@
         <div class="quest-hub" role="group" aria-label="Quests and rewards">
           <app-quest-panel></app-quest-panel>
           <div class="quest-hub__rewards">
-            <div class="side-bets-rail" aria-label="Growth bet">
+            <div class="side-bets-rail" aria-label="Timed growth quest">
               <app-parimutuel-panel quest></app-parimutuel-panel>
             </div>
             <div class="referral-strip referral-strip--compact" data-referral-strip hidden></div>
@@ -599,7 +616,7 @@
     }
   </script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
-  <script type="module" src="/app/app/main.js"></script>
+  <script type="module" src="/app/app/main.js?v=next-rng-only-20260930"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-sound-toggle.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
@@ -612,8 +629,8 @@
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js?v=tutorial-fixtures-13"></script>
   <script type="module" src="/app/components/app-pool-progress.js?v=decimator-battle-20260930"></script>
-  <script type="module" src="/app/components/replay-panel.js?v=decimator-battle-20260930"></script>
-  <script type="module" src="/app/components/last-day-jackpot.js"></script>
+  <script type="module" src="/app/components/replay-panel.js?v=local-bubble-win-sound-20261001"></script>
+  <script type="module" src="/app/components/last-day-jackpot.js?v=day-summary-craps-20260930"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
        eager; the two large outer hero columns are scheduled below. -->
@@ -662,11 +679,11 @@
     // the module loader attaches it and waits, preventing a flash on upgrade.
     const MODULE_STYLES = new Map([
       ['/app/components/app-degenerette-panel.js', ['/app/styles/sacrifices.css']],
-      ['/app/components/app-pass-section.js', ['/app/styles/deity-pass-purchase.css?v=badge-ticket-popup-20260930']],
+      ['/app/components/app-pass-section.js', ['/app/styles/deity-pass-purchase.css?v=deity-picker-clean-20260930']],
       ['/app/components/app-craps-entry.js', ['/app/styles/craps-table.css']],
       ['/app/components/app-baf-eve.js', ['/app/styles/baf-eve.css']],
       ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
-      ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css?v=badge-ticket-popup-20260930']],
+      ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css?v=deity-picker-clean-20260930']],
       ['/app/components/app-sacrifice-panel.js', ['/app/styles/sacrifices.css']],
       ['/app/components/app-link-donation.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-wwxrp-burn.js', ['/app/styles/link-donation.css']],

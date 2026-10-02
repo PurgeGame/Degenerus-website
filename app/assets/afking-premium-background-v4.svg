@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 138 44" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="pf-body" x1="0" y1="0" x2=".2" y2="1">
+      <stop stop-color="#6d4869"/>
+      <stop offset=".1" stop-color="#4e2a4e"/>
+      <stop offset=".48" stop-color="#342035"/>
+      <stop offset=".51" stop-color="#261528"/>
+      <stop offset=".87" stop-color="#211421"/>
+      <stop offset="1" stop-color="#493247"/>
+    </linearGradient>
+    <linearGradient id="pf-rim" x1="0" y1="0" x2=".78" y2="1">
+      <stop stop-color="#f5e9f5"/>
+      <stop offset=".18" stop-color="#988096"/>
+      <stop offset=".41" stop-color="#dbc8da"/>
+      <stop offset=".58" stop-color="#60445f"/>
+      <stop offset=".81" stop-color="#44303f"/>
+      <stop offset="1" stop-color="#a992a5"/>
+    </linearGradient>
+    <linearGradient id="pf-sheen" x1="0" y1="0" x2="1" y2=".38">
+      <stop stop-color="#e9d6f1" stop-opacity="0"/>
+      <stop offset=".36" stop-color="#cba5de" stop-opacity=".02"/>
+      <stop offset=".49" stop-color="#fbeaff" stop-opacity=".14"/>
+      <stop offset=".51" stop-color="#fbeaff" stop-opacity=".04"/>
+      <stop offset=".74" stop-color="#a46abe" stop-opacity=".01"/>
+      <stop offset="1" stop-color="#c3a5d5" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="pf-stub" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#8b6783" stop-opacity=".37"/>
+      <stop offset=".49" stop-color="#594255" stop-opacity=".15"/>
+      <stop offset=".51" stop-color="#1a101d" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#7f5c78" stop-opacity=".25"/>
+    </linearGradient>
+    <pattern id="pf-engrave" patternUnits="userSpaceOnUse" width="6" height="6">
+      <path d="M-1 1L5 7M2-2L8 4" fill="none" stroke="#e7cfe8" stroke-width=".2" opacity=".055"/>
+    </pattern>
+    <path id="pf-shape" d="M5.5 .65H105.2A3.5 3.5 0 0 0 112.2 .65H132.5A4.85 4.85 0 0 1 137.35 5.5V38.5A4.85 4.85 0 0 1 132.5 43.35H112.2A3.5 3.5 0 0 0 105.2 43.35H5.5A4.85 4.85 0 0 1 .65 38.5V5.5A4.85 4.85 0 0 1 5.5 .65Z"/>
+    <clipPath id="pf-clip"><use href="#pf-shape"/></clipPath>
+  </defs>
+  <g clip-path="url(#pf-clip)">
+    <path d="M0 0H138V44H0Z" fill="url(#pf-body)"/>
+    <path d="M0 0H138V44H0Z" fill="url(#pf-engrave)"/>
+    <path d="M-8 0H125L87 44H-8Z" fill="url(#pf-sheen)"/>
+    <path d="M108.7 0H138V44H108.7Z" fill="url(#pf-stub)"/>
+    <path d="M5.5 2.1H103.7M113.7 2.1H132.5" fill="none" stroke="#f5dcf3" stroke-opacity=".25" stroke-width=".45"/>
+    <path d="M4 4V39M134.4 4V39" fill="none" stroke="#e4c5e3" stroke-opacity=".1" stroke-width=".35"/>
+    <path d="M5.5 41.2H103.7M113.7 41.2H132.5" fill="none" stroke="#c7a5c2" stroke-opacity=".25" stroke-width=".5"/>
+    <path d="M5.5 40.2H103.7M113.7 40.2H132.5" fill="none" stroke="#070508" stroke-opacity=".6" stroke-width=".6"/>
+    <path d="M109 7.5V36.5" fill="none" stroke="#0e0910" stroke-opacity=".7" stroke-width="1" stroke-dasharray="1.5 2.1"/>
+    <path d="M108.5 7.5V36.5" fill="none" stroke="#c5a5bf" stroke-opacity=".38" stroke-width=".5" stroke-dasharray="1.5 2.1"/>
+  </g>
+  <use href="#pf-shape" fill="none" stroke="#120d14" stroke-width="1.3"/>
+  <use href="#pf-shape" fill="none" stroke="url(#pf-rim)" stroke-width=".65"/>
+</svg>

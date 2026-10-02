@@ -3201,6 +3201,35 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('purchase samples omit gold six even when entropy or the repeat-avoidance step selects it', async () => {
+    const original = globalThis.crypto.getRandomValues;
+    let symbol = 5;
+    let el;
+    globalThis.crypto.getRandomValues = (words) => {
+      words.fill(0);
+      if (words.length === 8) { words[6] = 0xffffffff; words[7] = symbol; }
+      else if (words.length === 3) { words[0] = 3; words[1] = 0xffffffff; words[2] = symbol; }
+      return words;
+    };
+    try {
+      el = instantiate();
+      await settle(60);
+      const entry = el.querySelector('[data-bind="dec-entry-face"]');
+      const ticketBadge = el.querySelector('[data-bind="dec-ticket-badge-3"]');
+      assert.notEqual(entry.getAttribute('data-trait-id'), '253');
+      assert.doesNotMatch(ticketBadge.getAttribute('src'), /dice_05_6_gold|gold-six-monkey/);
+      symbol = 4;
+      const addEntry = el.querySelector('[data-bind="dec-ticket-add-entry"]');
+      addEntry.dispatchEvent({ type: 'click' });
+      assert.equal(entry.getAttribute('data-trait-id'), '252');
+      addEntry.dispatchEvent({ type: 'click' });
+      assert.notEqual(entry.getAttribute('data-trait-id'), '253', 'advancing a repeated gold five skips gold six');
+    } finally {
+      el?.disconnectedCallback();
+      globalThis.crypto.getRandomValues = original;
+    }
+  });
+
   test('a shelf add flies its actual artwork into the TIX receipt and confirms the landing', async () => {
     const el = instantiate();
     await settle(60);
@@ -4034,7 +4063,7 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('Foil Pack keeps LIMIT 1 and prints its four-ticket identity on the wrapper', async () => {
+  test('Foil Pack keeps LIMIT: ONE and prints its four-ticket identity on the wrapper', async () => {
     const el = instantiate();
     await settle(60);
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -4047,13 +4076,13 @@ describe('Foil pack buy leg', () => {
       'the foil wrapper has no redundant FOIL PACK overlay label');
     assert.match(PANEL_SRC, /<span class="dec-pack-count">4 FOILS<\/span>/);
     assert.match(el.innerHTML,
-      /class="dec-ticket-piece dec-ticket-piece--foil"[\s\S]*?class="dec-foil-limit-stamp"><strong>LIMIT<\/strong><small>1<\/small>[\s\S]*?class="dec-pack-shine"[\s\S]*?class="dec-pack-mark dec-foil-pack-badge"><img src="\/whitepaper\/flame-logo\.svg"[\s\S]*?data-bind="dec-foil-level"[\s\S]*?4 FOILS[\s\S]*?class="dec-foil-selected-check">✓/,
+      /class="dec-ticket-piece dec-ticket-piece--foil"[\s\S]*?class="dec-foil-limit-stamp"><strong>LIMIT:<\/strong> <small>ONE<\/small>[\s\S]*?class="dec-pack-shine"[\s\S]*?class="dec-pack-mark dec-foil-pack-badge"><img src="\/whitepaper\/flame-logo\.svg"[\s\S]*?data-bind="dec-foil-level"[\s\S]*?4 FOILS[\s\S]*?class="dec-foil-selected-check">✓/,
       'foil art keeps its stamp, badge, level, and punchy four-foil identity');
     assert.equal((el.innerHTML.match(/class="dec-pack-shine"/g) || []).length, 1,
       'only the foil pack shines; the normal pack stays matte');
     assert.match(PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece__art > \.dec-foil-limit-stamp\s*\{[^}]*z-index:\s*13;[^}]*top:\s*0\.18rem;[^}]*left:\s*0\.14rem;[^}]*min-width:\s*2\.9rem;[^}]*background:\s*#26050a;[^}]*clip-path:\s*none;[^}]*opacity:\s*1;[^}]*transform:\s*rotate\(8deg\);/s,
-      'LIMIT 1 retains its split red stamp and stays readable even against a cached legacy template');
+      /\.dec-ticket-piece__art > \.dec-foil-limit-stamp\s*\{[^}]*z-index:\s*13;[^}]*top:\s*0\.18rem;[^}]*left:\s*0\.14rem;[^}]*min-width:\s*3\.5rem;[^}]*background:\s*#26050a;[^}]*clip-path:\s*none;[^}]*opacity:\s*1;[^}]*transform:\s*rotate\(8deg\);/s,
+      'LIMIT: ONE retains its larger red stamp and stays readable even against a cached legacy template');
     assert.match(PURCHASE_DESK_CSS,
       /\.dec-foil-pack-face \.dec-pack-mark:not\(\.dec-foil-pack-badge\)\s*\{[^}]*display:\s*none;/s,
       'foil suppresses only an unclassified legacy duplicate mark');

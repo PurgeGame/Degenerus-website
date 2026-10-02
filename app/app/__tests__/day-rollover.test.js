@@ -78,7 +78,7 @@ describe('authoritative day rollover reducer', () => {
   });
 
   test('the fulfilled word is proof the request happened, without the lock', () => {
-    // isRngFulfilled() reads `rngWordCurrent != 0`, assigned by the VRF
+    // isRngFulfilled() checks readiness, set by the VRF
     // callback. A cold load landing after the callback sees no lock edge, no
     // indexed jackpot and no resolved coinflip, and used to conclude nothing
     // had been requested at all.
@@ -92,7 +92,7 @@ describe('authoritative day rollover reducer', () => {
   });
 
   test('the latch survives the advance pipeline zeroing the word', () => {
-    // DegenerusGameAdvanceModule.sol zeroes rngWordCurrent once it has drained
+    // DegenerusGameAdvanceModule.sol restores the waiting sentinel once it has drained
     // the word, so isRngFulfilled() goes back to false mid-processing. That is
     // not the word un-arriving.
     let state = apply(null, {

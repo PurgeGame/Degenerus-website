@@ -444,7 +444,7 @@ describe('rngMilestoneSatisfied', () => {
   });
 
   test('a false fulfillment read is not evidence, because the word gets drained', () => {
-    // The advance pipeline zeroes rngWordCurrent once it consumes the word, so
+    // The advance pipeline restores waiting once it consumes the word, so
     // isRngFulfilled() reads false both before the callback and after the
     // drain. Only `true` may ever be treated as proof.
     assert.equal(rngMilestoneSatisfied({ live: live({ rngFulfilled: false }) }), false);

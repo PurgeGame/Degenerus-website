@@ -306,6 +306,69 @@ test('the narrow Added read combines battle and Run It Up funding with one-log f
   ]), 50_000n * wei, 'the prior day remains a safe per-day fallback during rollover');
 });
 
+test('daily Added includes the full Main Event input once and uses its prior allocation until lock', () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  const wei = 10n ** 18n;
+  const slot = 45n * 8n + 6n;
+  const locked = { parsed: { name: 'JackpotBattleLocked', args: {
+    slot, requestDay: 46n, added: 20_000n * wei, paidEntries: 100n,
+  } } };
+  const logs = [
+    { parsed: { name: 'CrapsHighRollerDayOpened', args: { day: 46n, mainBoostBudget: 32_000n * wei } } },
+    { parsed: { name: 'CrapsProgressiveFunded', args: { day: 46n, contribution: 32_001n * wei } } },
+    locked, locked,
+    { parsed: { name: 'HighRollerReserveFunded', args: { slot, contribution: 1_000n * wei } } },
+  ];
+  assert.equal(craps.crapsAddedPerDayFromLogs(46, logs), 84_001n * wei,
+    'the full allocation already includes its reserve; neither repeated logs nor seats add more');
+  logs.push({ parsed: { name: 'JackpotBattleLocked', args: {
+    slot: 46n * 8n + 6n, requestDay: 47n, added: 30_000n * wei, paidEntries: 200n,
+  } } });
+  assert.equal(craps.crapsAddedPerDayFromLogs(46, logs), 94_001n * wei,
+    'today\'s locked allocation replaces yesterday\'s estimate');
+});
+
+test('lobby daily totals include Main Event capital without requiring an ordinary boost word for it', () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  const wei = 10n ** 18n;
+  const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
+  const event = (name, values) => iface.encodeEventLog(iface.getEvent(name), values);
+  const day = 42;
+  const mainSlot = 41n * 8n + 6n;
+  const logs = [
+    event('CrapsHighRollerDayOpened', [41, 1, 25_000n * wei, 0]),
+    event('CrapsProgressiveFunded', [41, 25_000n * wei, 100_000n * wei]),
+    event('CrapsHighRollerDayOpened', [42, 1, 30_000n * wei, 0]),
+    event('CrapsProgressiveFunded', [42, 30_000n * wei, 130_000n * wei]),
+    event('CrapsBonusOpened', [ethers.toBeHex(mainSlot, 32), mainSlot, 0, 0, 0, 0, 8_000n * wei]),
+    event('JackpotBattleLocked', [mainSlot, 42, 20_000n * wei, 24]),
+    event('JackpotBattleStarted', [mainSlot, 3, 80, 80, 2]),
+  ];
+  const wordsByIndex = {};
+  let ordinaryAdded = 0n;
+  for (let period = 0; period < 5; period += 1) {
+    const slot = 41n * 8n + BigInt(period + 1);
+    const key = ethers.toBeHex(slot, 32);
+    const index = BigInt(100 + period);
+    const word = BigInt(50_000 + period);
+    wordsByIndex[String(index)] = word;
+    logs.push(
+      event('CrapsBonusOpened', [key, slot, 500_000n * wei, 600n * wei, 0, 0, 200n * wei]),
+      event('CrapsBonusArmed', [key, slot, index]),
+    );
+    ordinaryAdded += craps.crapsRealizedBoostWei({ ceilingWei: 500_000n * wei, battleKey: key, wordValue: word });
+  }
+  const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs, { wordsByIndex });
+  assert.equal(snapshot.yesterdayComplete, true,
+    'the Main Event is separately funded and has no CrapsBonusArmed word');
+  assert.equal(snapshot.yesterdayMainEventFundedWei, 20_000n * wei);
+  assert.equal(snapshot.yesterdayTotalAddedWei, ordinaryAdded + 45_000n * wei);
+  assert.equal(snapshot.yesterdayAverageAddedWei, 70_000n * wei);
+  assert.equal(snapshot.todayAverageAddedWei, 80_000n * wei);
+  assert.equal(craps.crapsAddedPerDayFromLogs(day, logs), snapshot.todayAverageAddedWei,
+    'the standalone read and full lobby agree');
+});
+
 test('lobby history resolves current winners and yesterday exact protocol boost', () => {
   const day = 42;
   const wei = 10n ** 18n;
@@ -519,6 +582,7 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
     winner: '0x00000000000000000000000000000000000000ee',
     amountWei: 98_700n * wei,
     winningStop: 1,
+    winningScoreBps: 0,
     buyInWei: (bankrolls[6] + 200n) * wei,
     highMultiple: 10,
     entryMultiple: null,
@@ -645,6 +709,7 @@ test('lobby history preserves the High Roller payment and sole-rider goal verdic
     amountWei: 9_000n * wei,
     bankrollRider: false,
     winningStop: null,
+    winningScoreBps: null,
     entryMultiple: 10,
     winnerBoostWei: null,
     // No CrapsProtocolAwardSplit in this fixture, so nothing of the lane award was
@@ -2125,7 +2190,7 @@ test('armed battle switches from awaiting RNG to settling when its committed wor
 const SIM_CONTRACTS = new URL('../../../../degenerus-sim/contracts/', import.meta.url);
 const flatSol = (path) => readFileSync(new URL(path, SIM_CONTRACTS), 'utf8').replace(/\s+/g, ' ');
 
-test('the craps ABI tracks the run-58 surface: no armBonusWindow, no standing bar, no rollover', () => {
+test('the craps ABI keeps custom-only resolution without the retired work-budget argument', () => {
   const iface = new contracts.ethers.Interface(craps.FLIP_CRAPS_ABI);
   const battle = flatSol('CrapsBattle.sol');
   assert.equal(iface.getFunction('armBonusWindow'), null, 'keepScheduled arms in order; the door is gone');
@@ -2137,7 +2202,7 @@ test('the craps ABI tracks the run-58 surface: no armBonusWindow, no standing ba
   assert.equal(iface.getError('ScoreRequiredForBonus'), null);
   assert.ok(!battle.includes('ScoreRequiredForBonus') && !battle.includes('CrapsProgressiveRolled'));
   // resolveSlot survives for CUSTOM battles only.
-  assert.ok(battle.includes('function resolveSlot(uint64 slot, uint64 budgetUnits) external { if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();'));
+  assert.ok(battle.includes('function resolveSlot(uint64 slot, uint64) external { if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();'));
 });
 
 test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
@@ -2168,4 +2233,23 @@ test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
 test('a run-56 deployment never quotes the newcomer premium', async () => {
   // The default schema in this suite is run 56, whose CRAPS surface predates `_entryPrice`.
   assert.equal(await craps.readCrapsNewcomerPricing(PLAYER), false);
+});
+
+
+test('hottest shooter keeps its separate regular-pool prize and pass credit', () => {
+  const key = `0x${'da'.repeat(32)}`, wei = 10n ** 18n;
+  const event = (name, args) => ({ parsed: { name, args } });
+  const logs = [
+    event('CrapsBonusOpened', {battleKey:key,slot:337n,seed:0n,bankroll:300n*wei,goal:1500n*wei,boardStake:105n*wei,battleStake:200n*wei}),
+    event('CrapsBattlePaid', {battleKey:key,betId:1n,player:PLAYER,amount:900n*wei}),
+    event('CrapsHottestShooterPaid', {battleKey:key,betId:1n,player:PLAYER,rolls:37n,amount:80n*wei}),
+    event('CrapsProtocolAwardSplit', {battleKey:key,player:PLAYER,source:5n,grossProtocol:80n*wei,liquidFlip:60n*wei}),
+  ];
+  const snapshot = craps.crapsLobbySnapshotFromLogs(42, logs, { player:PLAYER });
+  const result = snapshot.results[0];
+  assert.equal(result.amountWei, 900n*wei);
+  assert.equal(result.hottestPaidWei, 80n*wei);
+  assert.equal(result.hottestResult.rolls, 37);
+  assert.equal(result.hottestResult.passValueWei, String(20n*wei));
+  assert.equal(result.winnerPassWei, 20n*wei);
 });

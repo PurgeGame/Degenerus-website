@@ -1180,7 +1180,8 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   test('the box-state read uses the generated schema\'s slots', async () => {
     // lootboxOrder / presaleBoxEth are mapping(uint48 => mapping(address => uint256)),
     // lootboxRngWordByIndex mapping(uint48 => uint256), boxCursorIndex packs into its slot.
-    const { fields } = await import('../../chain/generated/game.js');
+    const { loadSchema } = await import('../../chain/schema.js');
+    const { fields } = await loadSchema('GAME');
     const { ethers } = await import('../contracts.js');
     const coder = ethers.AbiCoder.defaultAbiCoder();
     const inner = (root, index) => ethers.keccak256(coder.encode(['uint48', 'uint256'], [index, BigInt(root)]));

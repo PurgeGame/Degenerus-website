@@ -520,11 +520,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
     assert.match(el.innerHTML, /1 TICKET \/ LEVEL · PERPETUAL/,
       'the perpetual ticket is a visible deity perk, not only body copy');
-    assert.match(el.innerHTML, /genesis passes, held by the VAULT and sDGNRS/,
-      'the picker states why two of the 32 symbols can never be bought');
-    assert.match(el.innerHTML, /30 of the 32 symbols are for sale/);
-    assert.match(el.innerHTML, /24&nbsp;ETH rising to 300&nbsp;ETH on the 24th, then doubling to 19,200&nbsp;ETH/,
-      'the rebased ladder is stated where the symbol is chosen');
+    assert.doesNotMatch(el.innerHTML, /pass-deity-dialog__note/,
+      'the picker keeps the current price and selected symbol without paragraphs of fine print');
     assert.doesNotMatch(el.innerHTML, /15 entries every level/,
       'the pre-635b010a deity entry claim is gone');
     assert.match(el.innerHTML, /AFKING SUBSCRIPTION/);
@@ -1129,9 +1126,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const select = el.querySelector('[data-bind="pass-deity-select"]');
     const buy = el.querySelector('[data-bind="pass-deity-buy"]');
     assert.ok(select.children.some((option) => option.value === '7'), 'symbol-id=7 option present');
+    const sixTile = el.querySelector('[data-symbol-id="29"]');
+    assert.equal(sixTile.querySelector('img').src, '/badges-circular/dice_05_6_silver.svg');
+    sixTile.dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-deity-preview"]').src, '/badges-circular/dice_05_6_silver.svg');
+    for (const brandSymbol of el.querySelectorAll('[data-bind="pass-deity-brand-symbol"]')) {
+      assert.equal(brandSymbol.src, '/badges-circular/dice_05_6_silver.svg');
+    }
+    assert.match(el.querySelector('[data-bind="pass-deity-symbol-entries"]').textContent, /EXCLUDES GOLD/);
     el.querySelector('[data-symbol-id="7"]').dispatchEvent({ type: 'click' });
     assert.equal(select.value, '7', 'visual symbol tile drives the canonical selection');
     assert.equal(el.querySelector('[data-bind="pass-deity-selected-name"]').textContent, 'GOD OF BITCOIN');
+    assert.match(el.querySelector('[data-bind="pass-deity-symbol-entries"]').textContent, /ALL COLORS/);
     for (const brandSymbol of el.querySelectorAll('[data-bind="pass-deity-brand-symbol"]')) {
       assert.equal(brandSymbol.src, '/badges-circular/crypto_07_bitcoin_gold.svg',
         'the selected symbol fills every visible Deity Pass art socket');

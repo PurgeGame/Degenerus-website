@@ -900,9 +900,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(packWatch.pendingPacks().length, 1, 'record remains pending through indexer lag');
     assert.deepEqual(pendingActions.getPendingActions()[0]?.pendingPacks, [{
       level: LEVEL, count: 1, foilPack: false,
-    }, {
-      level: LEVEL, count: 4, foilPack: true,
-    }], 'standard and foil balances remain distinct in the consolidated dropdown');
+    }], 'only the queued standard ticket appears; foil indexing is not an upcoming RNG');
 
     const foilLines = Array.from({ length: 4 }, (_unused, i) => (
       card(i + 1, true).entries.map((entry) => entry.traitId)
@@ -1033,7 +1031,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(takeQueued().length, 1, 'the next attempt stages the foil pack');
   });
 
-  test('bottom-panel indexing copy follows foil-only versus mixed pack identity', async () => {
+  test('incomplete foils stay hidden while only queued standard tickets count toward the next RNG', async () => {
     _routes['/tickets/by-trait'] = byTrait([card(0, false)]);
     await packWatch.recordPendingPack({
       address: ADDR,
@@ -1043,22 +1041,75 @@ describe('pack-watch — deferred ticket reveals', () => {
       expectedTickets: 4,
       sourceKey: 'foil-only',
     });
-    let [item] = pendingActions.getPendingActions();
-    assert.equal(item.label, '4 TICKETS PENDING');
-    assert.equal(item.detail, 'Foil pack is still indexing');
+    assert.deepEqual(pendingActions.getPendingActions(), [], 'an incomplete foil is not openable yet');
+    assert.equal(packWatch.pendingPacks().length, 1, 'keep the foil receipt for recovery');
 
-    // Pending rows merge per level. Adding an ordinary pack must immediately
-    // change the shared row to neutral ticket-pack copy even though its foil
-    // companion is still catching up.
+    // A known purchase in the minting window can appear while its foil
+    // companion remains hidden. The foil must not inflate its quantity.
     await packWatch.recordPendingPack({
       address: ADDR,
       level: LEVEL,
       expectedTickets: 1,
       sourceKey: 'ordinary-pack',
     });
+    let [item] = pendingActions.getPendingActions();
+    assert.equal(item.label, '1 TICKET PENDING');
+    assert.equal(item.detail, 'Opens after the next ticket RNG');
+    assert.deepEqual(item.pendingPacks, [{ level: LEVEL, count: 1, foilPack: false }]);
+
+    // Once the queue drains, a lagging foil projection must not resurrect a
+    // waiting count. Both packs become an opener when the foil is complete.
+    packWatch.__setEntriesOwedReaderForTest(async () => 0);
+    _routes['/tickets/by-trait'] = byTrait([card(0, true)]);
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(pendingActions.getPendingActions(), []);
+    assert.equal(packWatch.pendingPacks().length, 1);
+
+    _routes['/foil'] = {
+      present: true, level: LEVEL,
+      lines: [1, 2, 3, 4].map(i => card(i, true).entries.map(entry => entry.traitId)),
+    };
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
     [item] = pendingActions.getPendingActions();
-    assert.equal(item.label, '5 TICKETS PENDING');
-    assert.equal(item.detail, 'Ticket pack is still indexing');
-    assert.doesNotMatch(item.detail, /foil/i);
+    assert.equal(item.state, 'ready');
+    assert.equal(item.ticketCount, 5);
+    assert.equal(typeof item.run, 'function');
+  });
+
+  test('unknown receipts stay hidden until tickets are openable', async () => {
+    _routes['/tickets/by-trait'] = byTrait([]);
+    await packWatch.recordPendingPack({ address: ADDR, level: LEVEL });
+    assert.deepEqual(pendingActions.getPendingActions(), []);
+    assert.equal(packWatch.pendingPacks().length, 1);
+
+    _routes['/tickets/by-trait'] = byTrait([card(0, true)]);
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    const [item] = pendingActions.getPendingActions();
+    assert.equal(item.state, 'ready');
+    assert.equal(item.ticketCount, 1);
+  });
+
+  test('future tickets enter Pending only when their level joins the next RNG window', async () => {
+    const futureLevel = LEVEL + 2;
+    _routes['/tickets/by-trait'] = byTrait([card(0, false), card(1, false)]);
+    await packWatch.recordPendingPack({
+      address: ADDR, level: futureLevel, expectedTickets: 2,
+    });
+    assert.deepEqual(pendingActions.getPendingActions(), []);
+    assert.equal(packWatch.pendingPacks().length, 1);
+
+    store.update('app.gameState', {
+      level: LEVEL, jackpotPhaseFlag: false, earlyTicketLevel: futureLevel,
+    });
+    packWatch.__setEntriesOwedReaderForTest(async (_address, level) => level === futureLevel ? 8 : 0);
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    const [item] = pendingActions.getPendingActions();
+    assert.equal(item.state, 'waiting');
+    assert.equal(item.ticketCount, 2);
+    assert.deepEqual(item.pendingPacks, [{ level: futureLevel, count: 2, foilPack: false }]);
   });
 });

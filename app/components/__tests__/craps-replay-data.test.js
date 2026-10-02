@@ -26,7 +26,7 @@ import {
   CRAPS_REPLAY_MAX_HANDS,
   CRAPS_REPLAY_MAX_ROLLS,
   __resetCrapsReplayLoaderForTest,
-  assertSupportedCrapsReplayRuleset,
+  assertSupportedCrapsReplayRuleset as rawassertSupportedCrapsReplayRuleset,
   crapsReplayArtifactPaths,
   crapsReplayPointerPath,
   crapsReplaySeatFromBetId,
@@ -34,7 +34,7 @@ import {
   decodeCrapsReplayRankTimeline,
   encodeCrapsReplayLadder,
   encodeCrapsReplayRankTimeline,
-  loadCrapsReplay,
+  loadCrapsReplay as rawloadCrapsReplay,
   validateCrapsReplayCollection,
   validateCrapsReplayManifest,
   validateCrapsReplayPlayer,
@@ -46,13 +46,13 @@ import {
   replayCrapsSeat,
 } from '../../craps/replay-engine.js';
 import {
-  createCrapsReplayTableModel,
+  createCrapsReplayTableModel as rawcreateCrapsReplayTableModel,
   crapsReplayBattleAward,
   crapsReplayPrizeAmounts,
   crapsReplayWalletEntries,
   loadCrapsReplayProfiles,
   normalizeCrapsReplayShooters,
-  openCrapsReplayTable,
+  openCrapsReplayTable as rawopenCrapsReplayTable,
   protocolSeatLabel,
 } from '../../craps/replay-adapter.js';
 import { CONTRACTS } from '../../app/chain-config.js';
@@ -68,6 +68,12 @@ import {
 import { CRAPS_REPLAY_ESCALATOR_SHOOTERS, crapsReplayWagerMultiplier } from '../../craps/replay-engine.js';
 import { crapsBonusMultiplier } from '../../app/craps.js';
 
+const fixtureRuntime = { runtimeCodeHashes: [SIM_CRAPS_REPLAY_MANIFEST.ruleset.runtimeCodeHash] };
+const assertSupportedCrapsReplayRuleset = (m, o) => rawassertSupportedCrapsReplayRuleset(m, { ...fixtureRuntime, ...o });
+const loadCrapsReplay = o => rawloadCrapsReplay({ ...fixtureRuntime, ...o });
+const createCrapsReplayTableModel = (a, o) => rawcreateCrapsReplayTableModel(a, { ...fixtureRuntime, ...o });
+const openCrapsReplayTable = (t, o) => rawopenCrapsReplayTable(t, { ...fixtureRuntime, ...o });
+
 const clone = (value) => structuredClone(value);
 const MANIFEST = validateCrapsReplayManifest(SIM_CRAPS_REPLAY_MANIFEST);
 const REPLAY_DEPLOYMENT = Object.freeze({
@@ -78,7 +84,8 @@ const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
+const RUN_59_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
+const CURRENT_CRAPS_RUNTIME_HASH = '0xfeab7a704e27e9bdc52d71958f8de70e0e107c620368f162984d378acf81ed60';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -113,40 +120,21 @@ function contestedHighRollerFixture() {
   return { existing, promoted };
 }
 
-test('the differentially verified run-44 Craps runtime is explicitly replayable', () => {
-  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
-  manifest.ruleset.runtimeCodeHash = RUN_44_CRAPS_RUNTIME_HASH;
-  assert.equal(
-    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
-    RUN_44_CRAPS_RUNTIME_HASH,
-  );
+test('old deployment runtimes cannot authorize duration-rule replay', () => {
+  for (const runtime of [RUN_44_CRAPS_RUNTIME_HASH, RUN_47_CRAPS_RUNTIME_HASH, RUN_49_CRAPS_RUNTIME_HASH, RUN_59_CRAPS_RUNTIME_HASH]) {
+    const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
+    manifest.ruleset.runtimeCodeHash = runtime;
+    assert.throws(() => assertSupportedCrapsReplayRuleset(manifest), /unsupported ruleset/);
+  }
+  const legacy = clone(SIM_CRAPS_REPLAY_MANIFEST);
+  legacy.schemaVersion = 1;
+  assert.throws(() => validateCrapsReplayManifest(legacy), /unsupported schema/);
 });
 
-test('the run-49 Craps runtime (a8d068839 at 0xf864dc42…) stays replayable', () => {
-  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
-  manifest.ruleset.runtimeCodeHash = RUN_49_CRAPS_RUNTIME_HASH;
-  assert.equal(
-    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
-    RUN_49_CRAPS_RUNTIME_HASH,
-  );
-});
-
-test('the differentially verified run-47 Craps runtime is explicitly replayable', () => {
-  const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
-  manifest.ruleset.runtimeCodeHash = RUN_47_CRAPS_RUNTIME_HASH;
-  assert.equal(
-    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
-    RUN_47_CRAPS_RUNTIME_HASH,
-  );
-});
-
-test('the differentially verified current Craps runtime is explicitly replayable', () => {
+test('current deployment runtime authorizes duration-rule replay without a test override', () => {
   const manifest = clone(SIM_CRAPS_REPLAY_MANIFEST);
   manifest.ruleset.runtimeCodeHash = CURRENT_CRAPS_RUNTIME_HASH;
-  assert.equal(
-    assertSupportedCrapsReplayRuleset(manifest).ruleset.runtimeCodeHash,
-    CURRENT_CRAPS_RUNTIME_HASH,
-  );
+  assert.doesNotThrow(() => rawassertSupportedCrapsReplayRuleset(manifest));
 });
 
 test('full-field chip positions use a compact, exact roll-aligned codec', () => {
@@ -477,6 +465,46 @@ test('Discord identities load in endpoint-sized batches without one failure blan
   assert.equal(profiles.get(addresses[0])?.name, 'Discord 01');
   assert.equal(profiles.has(addresses[8]), false);
   assert.equal(profiles.get(addresses[17])?.name, 'Discord 12');
+});
+
+test('a jackpot replay carries its exact prize and lottery rung without caller-supplied amounts', async () => {
+  const mainPotWei = String(61_017n * 10n ** 18n + 23n);
+  for (const jackpotMultiplierBps of [5_000, 30_000, 200_000, 1_000_000]) {
+    __resetCrapsReplayLoaderForTest();
+    const prize = { mainPotWei, jackpotMultiplierBps, progressivePoolWei: String(129_039n * 10n ** 18n) };
+    const pointer = { ...SIM_CRAPS_REPLAY_POINTER, prize };
+    assert.deepEqual(validateCrapsReplayPointer(pointer, REPLAY_DEPLOYMENT).prize, prize);
+    const bodies = new Map([
+      ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
+      [SIM_CRAPS_REPLAY_PATHS.pointer, pointer],
+      [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+      [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+    ]);
+    let options;
+    let settlementReads = 0;
+    await openCrapsReplayTable({ open: value => { options = value; } }, {
+      ...REPLAY_DEPLOYMENT,
+      battleKey: pointer.battleKey,
+      viewerBetId: SIM_CRAPS_REPLAY_VIEWER.betId,
+      fetchImpl: async path => ({ ok: bodies.has(path), status: bodies.has(path) ? 200 : 404,
+        json: async () => clone(bodies.get(path)) }),
+      loadProfiles: async () => new Map(),
+      loadSettlementWord: async () => { settlementReads++; return 5n; },
+      loadEntryBoonPercent: async () => 0,
+    });
+    assert.equal(options.bountyPoolWei, mainPotWei);
+    assert.equal(options.bountyPoolScope, 'main');
+    assert.equal(options.jackpot.poolAmountFlip, '129039');
+    assert.equal(options.jackpot.amountFlip, String(BigInt(MANIFEST.progressive.amountWei) / 10n**18n),
+      'the full pool never replaces the award');
+    assert.equal(options.jackpotMultiplier, jackpotMultiplierBps / 10_000);
+    assert.equal(options.bonusMultiplier, undefined, 'the ordinary boost never substitutes for the jackpot roll');
+    assert.equal(settlementReads, 0, 'jackpot fields have their own frozen word, not a lootbox RNG index');
+  }
+  assert.throws(() => validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER,
+    prize: { mainPotWei, jackpotMultiplierBps: 15_000 } }, REPLAY_DEPLOYMENT), /unsupported jackpot multiplier/);
+  assert.throws(() => validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER,
+    prize: { mainPotWei: '-1', jackpotMultiplierBps: 5_000 } }, REPLAY_DEPLOYMENT), /mainPotWei/);
 });
 
 test('replay opening carries repaired prizes, the paid battle receipt, and live identities into the table', async () => {
@@ -1363,15 +1391,9 @@ test('protocol seats are named from the active chain profile, not hardcoded', ()
 
 test('rotation survives validation and both viewer and opponent table projection', () => {
   const artifacts = clone(SIM_CRAPS_REPLAY_ARTIFACTS);
-  const markRotation = (player) => {
-    if (player.boosts.length) player.boosts[0].rotation = true;
-  };
-  markRotation(artifacts.viewer);
-  artifacts.featured.players.forEach(markRotation);
-  artifacts.shards?.forEach((shard) => shard.players.forEach(markRotation));
-  const raw = artifacts.featured.players.find((player) => player.boosts.length);
+  const raw = artifacts.featured.players.find((player) => player.boosts.some((boost) => boost.rotation));
   assert.ok(raw);
-  assert.equal(validateCrapsReplayPlayer(raw).boosts[0].rotation, true);
+  assert.equal(validateCrapsReplayPlayer(raw).boosts.some((boost) => boost.rotation), true);
   const invalid = clone(raw);
   invalid.boosts[0].rotation = 'true';
   assert.throws(() => validateCrapsReplayPlayer(invalid), /rotation.*boolean/);
@@ -1401,7 +1423,9 @@ test('a jackpot High Roller seat replays its won off runCapitalWei, and fails cl
   assert.equal(crapsReplayRide(0n, 21_000n, 3_000n), 0n);
   assert.equal(crapsReplayRide(1_234n, 5_000n, 1_800n), 3_427n);
   const tape = decodeCrapsReplayTape(SIM_CRAPS_REPLAY_MANIFEST);
-  const high = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => player.entryMultiple > 1);
+  const paid = SIM_CRAPS_REPLAY_FEATURED.players.find((player) => BigInt(player.wonWei) > 0n);
+  assert.ok(paid, 'fixture includes a paid run');
+  const high = { ...paid, entryMultiple: 3, wonWei: (BigInt(paid.wonWei) / BigInt(paid.entryMultiple) * 3n).toString() };
   const wei = 10n ** 18n;
   const bankroll = BigInt(SIM_CRAPS_REPLAY_MANIFEST.terms.bankrollWei);
   const tail = BigInt(high.wonWei) / BigInt(high.entryMultiple);
@@ -1419,4 +1443,57 @@ test('a jackpot High Roller seat replays its won off runCapitalWei, and fails cl
     /won amount/);
   assert.throws(() => validateCrapsReplayPlayer({ ...high, runCapitalWei: '0' }), /runCapitalWei/);
   assert.equal('runCapitalWei' in validateCrapsReplayPlayer(high), false, 'absent stays absent');
+});
+
+test('hot activation is shared across viewer switches, survives viewer exit, and resets on the next shooter', () => {
+  const tape = decodeCrapsReplayTape(MANIFEST);
+  assert.ok(tape.hotShooters.length > 0);
+  let boundaryChecks = 0;
+  for (const viewer of ALL_PLAYERS) {
+    const model = createCrapsReplayTableModel({ ...SIM_CRAPS_REPLAY_ARTIFACTS, viewer });
+    const frames = model.tableOptions.resolutionHands;
+    for (let i = 0; i < frames.length; i++) {
+      const shooter = tape.offsets.findLastIndex(start => start <= i);
+      const completed = i - tape.offsets[shooter] + 1;
+      const expected = tape.hotShooters.some(e => e.shooter === shooter) && completed >= 12;
+      assert.equal(frames[i].hotShooterActive, expected, `viewer ${viewer.betId}, roll ${i}`);
+      if (completed === 11 || completed === 12 || completed === 13) boundaryChecks++;
+      if (completed === 12 && expected && !frames[i].viewerClosed) {
+        assert.equal(frames[i].hotProfitWei, '0', 'roll 12 activates but earns no hot profit');
+      }
+    }
+    // Seeking is a pure frame selection; it cannot retain the later activation.
+    for (const e of tape.hotShooters) {
+      const start = tape.offsets[e.shooter];
+      if (frames[start + 11]) {
+        assert.equal(frames[start + 11].hotShooterActive, true);
+        assert.equal(frames[start + 10].hotShooterActive, false);
+      }
+    }
+  }
+  assert.ok(boundaryChecks > 10);
+});
+
+test('schema 2 requires a truthful shared activation list, even with no hot payout', () => {
+  const missing = clone(MANIFEST); delete missing.tape.hotShooters;
+  assert.throws(() => decodeCrapsReplayTape(missing), /hotShooters/);
+  const falsified = clone(MANIFEST); falsified.tape.hotShooters = [];
+  assert.throws(() => decodeCrapsReplayTape(falsified), /activation does not match shared dice/);
+});
+
+test('danger projection boosts late Don’t Pass profit, excludes principal and early profit, and floors before scaling', async () => {
+  const { crapsSevenOutSwingFlip, crapsBoostAtRoll } = await import('../app-craps-table.js');
+  const wei = 10n ** 18n;
+  const common = { chips: new Map([['dont-pass', 1n]]), chipFlip: 60n,
+    multiplier: 8, hotPercent: 30, rotationPercent: 30,
+    eligibleProfitWei: (100n * wei).toString(), hotProfitWei: '0' };
+  // Late DP profit 45 * 8; combined hot bonus (45 * .60) * 8 = 216.
+  assert.equal(crapsSevenOutSwingFlip({ ...common, hotActive: true }), 576n);
+  assert.equal(crapsSevenOutSwingFlip({ ...common, hotActive: false }), 360n);
+  assert.equal(crapsSevenOutSwingFlip({ ...common, chipFlip: 1n, multiplier: 1,
+    hotActive: true, eligibleProfitWei: '0' }), 1n, 'fractional profit plus bonus crosses one FLIP');
+  const terms = { hotPercent: 30, hotAfterRolls: 12, hotActive: true, rotationPercent: 30 };
+  assert.equal(crapsBoostAtRoll(terms, 11), null);
+  assert.equal(crapsBoostAtRoll(terms, 12).percent, 60);
+  assert.equal(crapsBoostAtRoll(terms, 0), null);
 });

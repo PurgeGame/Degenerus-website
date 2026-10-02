@@ -144,7 +144,9 @@ test('foil claims read back per deployment: run 57+ claims are all the main draw
   for (const schema of [RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
     useSchema(schema);
     const f = await rpcFixture();
-    f.answer('GAME_LENS', 'foilRecordOf', [[true, 3, 31_500, 0]]);
+    f.answer('GAME_LENS', 'foilRecordOf', [schema === RUN56_SCHEMA_HASH
+      ? [true, 3, 31_500, 0]
+      : [true, 3, 31_500, 0, false, 0, [0, 0, 0, 0]]]);
     await f.event('GAME', 'FoilMatchClaimed', schema === RUN56_SCHEMA_HASH
       ? { player: PLAYER, day: DAY, ticketIndex: 2, drawKind: 1, tier: 5, faces: 24 }
       : { player: PLAYER, day: DAY, ticketIndex: 2, tier: 5, faces: 48 });

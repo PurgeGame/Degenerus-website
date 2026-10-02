@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">
+  <defs>
+    <radialGradient id="volume" gradientUnits="userSpaceOnUse" cx="-12" cy="-17" r="61">
+      <stop offset="0" stop-color="white" stop-opacity=".32"/>
+      <stop offset=".35" stop-color="white" stop-opacity=".08"/>
+      <stop offset=".52" stop-color="#14212c" stop-opacity="0"/>
+      <stop offset=".75" stop-color="#101a29" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#101a29" stop-opacity=".73"/>
+    </radialGradient>
+    <radialGradient id="shine">
+      <stop offset="0" stop-color="white" stop-opacity=".46"/>
+      <stop offset=".55" stop-color="white" stop-opacity=".14"/>
+      <stop offset="1" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="white" stop-opacity=".38"/>
+      <stop offset=".4" stop-color="white" stop-opacity="0"/>
+      <stop offset=".7" stop-color="#142536" stop-opacity=".42"/>
+      <stop offset="1" stop-color="white" stop-opacity=".3"/>
+    </linearGradient>
+  </defs>
+  <circle r="35.2" fill="url(#volume)"/>
+  <circle r="34.8" fill="none" stroke="url(#rim)" stroke-width=".8"/>
+  <ellipse cx="-10" cy="-22" rx="23" ry="10" transform="rotate(-22)" fill="url(#shine)"/>
+  <path d="M-28-13 Q-20-30-4-29" fill="none" stroke="white" stroke-opacity=".34" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

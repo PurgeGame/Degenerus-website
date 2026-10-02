@@ -379,7 +379,7 @@ describe('<app-reveal-tray>', () => {
     const action = actions[0];
     assert.match(action.className, /rrt-action--lootbox-stacks/);
     assert.match(action.querySelector('.rrt-lootbox-summary').textContent,
-      /7× LUCKBOX/);
+      /7 LUCKBOXES/);
     const stacks = action.querySelectorAll('.rrt-lootbox-stack');
     assert.equal(stacks.length, 3);
     assert.deepEqual(stacks.map((stack) => stack.getAttribute('data-box-size')),
@@ -393,6 +393,89 @@ describe('<app-reveal-tray>', () => {
     assert.deepEqual(stacks.map((stack) => (
       stack.querySelector('.rrt-lootbox-stack__case').getAttribute('data-lootbox-case-model')
     )), ['small', 'medium', 'large']);
+    el.disconnectedCallback();
+  });
+
+  test('multiple pending luckboxes share one card and open the next ready receipt', async () => {
+    const opened = [];
+    let rows;
+    const box = (id, state) => ({
+      id, kind: 'lootbox', label: 'Luckbox', compact: true, pinned: true, state,
+      write: true,
+      run: async () => {
+        opened.push(id);
+        rows = rows.filter(row => row.id !== id);
+        pending.publishPendingActions('lootboxes', rows);
+      },
+    });
+    rows = [box('box:waiting', 'waiting'), box('box:ready1', 'ready'), box('box:ready2', 'ready')];
+    pending.publishPendingActions('lootboxes', rows);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const actions = () => el.querySelectorAll('.rrt-action--lootbox-summary');
+    assert.equal(actions().length, 1);
+    assert.equal(actions()[0].querySelector('.rrt-lootbox-summary__unit').textContent, '3 LUCKBOXES');
+    assert.equal(actions()[0].querySelector('.rrt-lootbox-summary__status').textContent, '2 ready · 1 waiting');
+    assert.equal(actions()[0].getAttribute('data-write'), '', 'the chosen box still needs its wallet guard');
+    assert.equal(pending.getPendingActions().length, 3, 'Open All and recovery retain every separate receipt');
+    actions()[0].dispatchEvent({ type: 'click' });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(opened, ['box:ready1'], 'a waiting box does not block the ready result behind it');
+    assert.equal(actions().length, 1);
+    assert.equal(actions()[0].querySelector('.rrt-lootbox-summary__unit').textContent, '2 LUCKBOXES');
+    actions()[0].dispatchEvent({ type: 'click' });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(opened, ['box:ready1', 'box:ready2']);
+    assert.equal(actions()[0].querySelector('.rrt-lootbox-summary__unit').textContent, 'LUCKBOX');
+    assert.equal(actions()[0].getAttribute('data-action-id'), 'box:waiting');
+    assert.match(actions()[0].className, /is-waiting/);
+    el.disconnectedCallback();
+  });
+
+  test('grouped luckboxes count combo contents and leave other reward types separate', () => {
+    pending.publishPendingActions('lootboxes', [
+      { id: 'box:combo', kind: 'lootbox', label: 'Luckbox', state: 'waiting', pinned: true,
+        lootboxStacks: [{ label: 'SMALL', count: 2 }, { label: 'LARGE', count: 2 }] },
+      { id: 'box:single', kind: 'lootbox', label: 'Luckbox', state: 'waiting', pinned: true },
+      { id: 'box:presale', kind: 'lootbox', label: 'Presale box', lootboxLabel: 'PRESALE BOX', state: 'waiting', pinned: true, compact: true },
+    ]);
+    pending.publishPendingActions('redemption', [{
+      id: 'redemption:1', kind: 'lootbox', label: 'sDGNRS redemption', lootboxLabel: 'REDEMPTION',
+      state: 'waiting', pinned: true, compact: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const labels = el.querySelectorAll('.rrt-lootbox-summary__unit').map(node => node.textContent);
+    assert.deepEqual(labels, ['5 LUCKBOXES', 'PRESALE BOX', 'REDEMPTION']);
+    assert.equal(el.querySelector('.rrt-lootbox-summary__status').textContent, '5 waiting');
+    assert.equal(el.querySelectorAll('.rrt-lootbox-mini').length, 3, 'each compact card uses one case illustration');
+    el.disconnectedCallback();
+  });
+
+  test('a busy box locks its grouped card and CLEAR still dismisses every original receipt', async () => {
+    let opened = 0, cleared = 0;
+    const rows = ['box:1', 'box:2'].map(id => ({
+      id, kind: 'lootbox', label: 'Luckbox', compact: true, state: 'ready',
+      run: () => { opened += 1; }, clearAll: () => { cleared += 1; },
+    }));
+    pending.publishPendingActions('lootboxes', [{ ...rows[0], state: 'busy' }, rows[1]]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const group = el.querySelector('.rrt-action--lootbox-summary');
+    assert.equal(group.disabled, true);
+    assert.equal(group.querySelector('.rrt-lootbox-summary__status').textContent, 'Opening…');
+    group.dispatchEvent({ type: 'click' });
+    assert.equal(opened, 0);
+    pending.publishPendingActions('lootboxes', rows);
+    el.querySelector('[data-bind="rrt-clear"]').dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    assert.equal(cleared, 1, 'one owner cleanup for the underlying receipts');
+    pending.publishPendingActions('lootboxes', rows);
+    assert.equal(pending.getPendingActions().length, 0, 'neither original receipt returns after polling');
+    pending.publishPendingActions('lootboxes', [...rows, { ...rows[0], id: 'box:3' }]);
+    assert.deepEqual(pending.getPendingActions().map(row => row.id), ['box:3']);
     el.disconnectedCallback();
   });
 
@@ -613,6 +696,31 @@ describe('<app-reveal-tray>', () => {
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1);
     el.disconnectedCallback();
+  });
+
+  test('Decimator hover text keeps the final coin and payout hidden until opened', () => {
+    for (const detail of [
+      'Your final coin landed tails, so your entry sat out the dice.',
+      'Heads, but your stack × peak finished outside the top 42.',
+      'Champion. Paid 5 ETH.',
+    ]) {
+      pending.publishPendingActions('jackpot-resolutions', [{
+        id: 'decimator-resolution:0xabc:25',
+        kind: 'decimator',
+        label: 'Level 25 Decimator results',
+        detail,
+        state: 'ready',
+        primarySurface: 'jackpot',
+        run: async () => {},
+      }]);
+      const el = new trayModule.AppRevealTray();
+      el.connectedCallback();
+      const action = el.querySelector('.rrt-action--decimator');
+      assert.equal(action.title, 'L25 DECIMATOR');
+      assert.equal(action.getAttribute('aria-label'), 'L25 DECIMATOR');
+      assert.equal(action.querySelector('.rrt-action__detail'), null);
+      el.disconnectedCallback();
+    }
   });
 
   test('pins ready reveal work, delegates the click, and hides after its owner clears', async () => {

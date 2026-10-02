@@ -2696,6 +2696,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
   test('picker shows one symbol and can select all 32 contract symbols', () => {
     const el = instantiate();
+    const deityDomains = [
+      ['WWXRP', 'Tron', 'Sui', 'Monero', 'Solana', 'Chainlink', 'Ethereum', 'Bitcoin'],
+      ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Libra', 'Sagittarius', 'Aquarius'],
+      ['Clubs', 'Diamonds', 'Hearts', 'Spades', 'Horseshoes', 'Cashsack', 'Kings', 'Aces'],
+      ['Ones', 'Deuces', 'Treys', 'Fours', 'Fives', 'Sixes', 'Sevens', 'Eights'],
+    ];
     assert.equal(el.querySelector('[data-bind="dgn-ticket"]'), null);
     assert.equal(el.querySelector('[name="deg-custom-ticket"]'), null);
     assert.equal(el.querySelector('[name="deg-quadrant"]'), null);
@@ -2710,11 +2716,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         assert.equal(el.getTicketDraft().symbol, (q << 3) | icon);
         assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
           degeneretteChampionBadgePath(q, icon));
+        assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent,
+          `God of ${deityDomains[q][icon]}:`);
         if (q === 3) {
           const label = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'][icon];
           assert.equal(button.getAttribute('aria-label'), label);
           assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, label);
-          assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, `God of ${label}:`);
         }
         assert.equal(button.getAttribute('aria-pressed'), 'true');
         assert.equal(choices.querySelectorAll('button')
@@ -2774,7 +2781,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       await settle(60);
       assert.equal(card.hidden, false);
       assert.equal(el.querySelector('[data-bind="dgn-deity-name"]').textContent, 'Sleepy Lamp');
-      assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, 'God of King:');
+      assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent, 'God of Kings:');
       assert.equal(el.querySelector('[data-bind="dgn-deity-avatar"]').src, AVATAR);
       assert.equal(card.getAttribute('aria-label'), 'Sleepy Lamp’s deity boons');
       assert.equal(card.dataset.boonGiver, undefined, 'a Discord owner gives gifts, not a boon draw: no glow');
@@ -2872,7 +2879,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       const popover = APP_CSS.match(/\.deg-quickplay-controls > \.deg-boon-popover \{([^}]*)\}/)?.[1] || '';
       assert.match(popover, /position: absolute;[^;]*;[^]*visibility: hidden/, 'hidden and outside the layout flow');
       assert.match(popover, /left: auto; right: 6px;/, 'above the portrait on the right');
-      assert.match(popover, /width: min\(calc\(100cqw - 12px\), 14rem\)/, 'full labels have room while the card stays inside the widget width');
+      assert.match(popover, /width: min\(calc\(100cqw - 12px\), 17rem\)/, 'full labels have room while the card stays inside the widget width');
       assert.match(popover, /border: 0;/, 'no brass rim');
       assert.match(APP_CSS, /\.deg-quickplay-controls > \.deg-boon-popover::after \{[^}]*transform: rotate\(45deg\)/, 'a caret points at the trigger');
       assert.match(APP_CSS, /\.deg-boon-popover \.sacrifice__boon\[data-used="true"\] \.sacrifice__boon-mark::after \{[^}]*content: '\\2713'/, 'a spent gift keeps a check');

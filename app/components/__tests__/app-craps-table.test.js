@@ -232,7 +232,7 @@ test('battle rank follows visible peaks while live and final goal peaks/bust rol
 });
 
 test('bonus display uses ordinary schedule procs, and receipts never invent first place', () => {
-  assert.match(COMPONENT_SRC, /const hotPercent = viewerLive\s*\? viewerFrame\.shooterBoost\?\.percent \?\? null\s*: crapsHotShooterBoost\(selectedBoost\)/);
+  assert.match(COMPONENT_SRC, /const hot = roundNumber > 0 && viewerFrame\?\.hotShooterActive === true/);
   assert.match(COMPONENT_SRC, /#announceShooterBoost\(roundNumber, onDone\) \{\s*this\.#paintRaceShooter\(roundNumber \+ 1\)/);
   assert.match(COMPONENT_SRC, /shooter\.hot \? 7 : CRAPS_DICE_BADGE_COLORS/);
   assert.match(COMPONENT_SRC, /const finalRank = battleWon \? 1 : this\.#localRankAtRound\(resultRound, local\?\.rank, standings\);/);
@@ -403,7 +403,7 @@ test('battle start reveals the sealed bonus rung and flies its value into ADDED'
     /#beginBonusReveal\(\)[\s\S]*?const onDone = this\.#bonusRevealContinue;[\s\S]*?this\.#startBonusReveal\(onDone\)/s,
     'the Start click carries the prepared continuation directly into resolution');
   assert.match(COMPONENT_SRC,
-    /const targetIndex = CRAPS_BONUS_MULTIPLIERS\.indexOf\(targetMultiplier\)[\s\S]*?paintReel\(targetIndex\)[\s\S]*?amount\.textContent = `\+\$\{formatCrapsWei\(this\.#addedFlipWei\)\} FLIP`/s,
+    /const targetIndex = multipliers\.indexOf\(targetMultiplier\)[\s\S]*?paintReel\(targetIndex\)[\s\S]*?amount\.textContent = `\$\{jackpot \? '' : '\+'\}\$\{formatCrapsWei\(amountWei\)\} FLIP`/s,
     'the reel cycles cosmetic values but lands only on the sealed rung and exact added amount');
   assert.match(COMPONENT_SRC,
     /#flyBonusAmount\(\)[\s\S]*?source\.getBoundingClientRect\(\)[\s\S]*?target\.getBoundingClientRect\(\)[\s\S]*?flight\.className = 'craps-bonus-roll__flight'[\s\S]*?--flight-end-x[\s\S]*?host\.appendChild\(flight\)/s,
@@ -438,7 +438,7 @@ test('a fill-draw battle rolls its pot into the prize before the first roll', as
   assert.match(COMPONENT_SRC,
     /const bountyAmountCopy = bountyPoolWei == null \|\| potRolling\s*\? '—'/,
     'the prize reads blank until the pot lands');
-  assert.match(COMPONENT_SRC, /bountyAdded\.hidden = this\.#potRoll;/, 'a pot has nothing ADDED to show');
+  assert.match(COMPONENT_SRC, /bountyAdded\.hidden = this\.#potRoll \|\| this\.#jackpotMultiplier != null;/, 'a pot has nothing ADDED to show');
   assert.match(CSS_SRC, /\.craps-dialog__prize-added\[hidden\] \{ display: none !important; \}/,
     'the hidden ADDED chip beats its own display rule');
   assert.match(CSS_SRC, /\.craps-dialog__prize--bounty\.is-bonus-landed > strong \{\s*animation: craps-bonus-target-land/,
@@ -968,7 +968,7 @@ test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-e
   );
 });
 
-test('YOU and the DANGER line share the seven-out survival-flip-or-bust threshold', async () => {
+test('YOU tracks live seven-out risk while the DANGER line follows only the increasing stake ladder', async () => {
   const { crapsSevenOutSwingFlip, crapsSevenOutDangerFlip, crapsNextShooterAffordability } = await import(moduleUrl);
   // 60 FLIP chips: 540 FLIP of pass/place/hard legs lose on a seven-out, Don't Pass wins 45.
   const chips = new Map([['pass', 2n], ['place-6', 3n], ['place-8', 3n], ['hard-4', 1n], ['dont-pass', 1n]]);
@@ -993,22 +993,11 @@ test('YOU and the DANGER line share the seven-out survival-flip-or-bust threshol
     assert.equal(bankroll < line(), verdict === 'survival' || verdict === 'bust', `bankroll ${bankroll}`);
   }
   assert.match(COMPONENT_SRC, /const sevenOutRisk = dangerFlip != null && amount < dangerFlip;/,
-    'the YOU box reads the shared threshold');
-  assert.match(COMPONENT_SRC, /const danger = this\.#localSevenOutDangerFlip\(roundNumber\);\s*if \(danger != null\) this\.#raceDangerFlip = this\.#raceDangerOnChart\(danger, roundNumber\);/,
-    'the graph DANGER line reads the same threshold');
-  // The chart plots the stack OFF the felt; the threshold is felt-inclusive. The line is drawn
-  // less what is on the felt, the same entry the YOU box reads, so the two can never disagree.
-  assert.match(COMPONENT_SRC, /#raceDangerOnChart\(dangerFlip, roundNumber\) \{[\s\S]*?const feltInclusive = this\.#localBattleEntry\(roundNumber\)\.amount;\s*const onFelt = feltInclusive - this\.#raceValueAt\(local, roundNumber\);\s*const line = dangerFlip - \(onFelt > 0n \? onFelt : 0n\);/,
-    'crossing the line and turning red are one event');
-  {
-    // Worked case: 1,000 FLIP bankroll with 300 on the felt, threshold 900. The chart shows 700
-    // off the felt; the line sits at 600, so YOU (700) is above it and green, as the bankroll
-    // (1,000 >= 900) is safe. At a 850 bankroll (550 off the felt) YOU is under 600 and red.
-    const line = (danger, felt, off) => { const on = felt - off; const l = danger - (on > 0n ? on : 0n); return l > 0n ? l : 0n; };
-    assert.equal(line(900n, 1000n, 700n), 600n);
-    assert.equal(700n < line(900n, 1000n, 700n), 1000n < 900n);
-    assert.equal(550n < line(900n, 850n, 550n), 850n < 900n);
-  }
+    'the YOU box keeps responding to the current risk');
+  assert.match(COMPONENT_SRC, /this\.#raceDangerFlip = this\.#raceWagerForShooter\(currentShooter \+ 1\);/,
+    'the graph reference is the next shooter\'s stake');
+  assert.doesNotMatch(COMPONENT_SRC, /#raceDangerOnChart/,
+    'changing live bets and boosts cannot pull the reference line down');
   assert.match(COMPONENT_SRC, /const danger = player\.local && standing\?\.sevenOutRisk === true;[\s\S]*?' is-danger'/,
     'the graph YOU box carries the danger state');
   assert.match(CSS_SRC, /\.craps-race-endpoint\.is-you\.is-danger > rect \{[^}]*stroke: #ff626b;[^}]*animation: craps-race-endpoint-danger/,
@@ -1521,7 +1510,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the shared dice switch to gold for the active Hot Shooter');
   assert.match(COMPONENT_SRC, /colorIndex === 7 && normalizedFace === 6[\s\S]*?dice_05_6_gold-standard\.svg/s,
     'the gold six uses the standard upright badge face');
-  assert.match(COMPONENT_SRC, /panel\.classList\?\.toggle\('is-hot', shooter\.hot\)[\s\S]*?boost\.innerHTML = `HOT <b>\+\$\{shooter\.hotPercent\}%<\/b>`/s,
+  assert.match(COMPONENT_SRC, /panel\.classList\?\.toggle\('is-hot', shooter\.hot\)[\s\S]*?boost\.innerHTML = shooter\.hotPercent != null \? `HOT <b>\+\$\{shooter\.hotPercent\}%<\/b>`/s,
     'the named shooter card carries the persistent Hot Shooter marker');
   assert.match(COMPONENT_SRC, /#shooterOrdinalAtRound[\s\S]*?this\.#isSevenOut[\s\S]*?#wagerMultiplierAtRound/s,
     'wager growth follows completed seven-outs rather than individual dice rolls');
@@ -1811,10 +1800,8 @@ test('standalone demo and main app both mount the same component', () => {
   assert.match(DEMO_SCRIPT_SRC, /resolution:\s*\{\s*type:\s*'cashout'/);
   assert.match(DEMO_SCRIPT_SRC, /const survivalRun = params\.get\('run'\) === 'survival'/);
   assert.match(DEMO_SCRIPT_SRC, /const bonusRun = params\.get\('run'\) === 'bonus'/);
-  assert.match(DEMO_SCRIPT_SRC, /\[0, 5\]\.includes\(index\)[\s\S]*?shooterBoost:\s*\{ active: true, percent: 20 \}/s,
-    'the dedicated bonus route activates the local player at two shooter boundaries');
-  assert.match(DEMO_SCRIPT_SRC, /shooterBoosts:\s*\[\{ active: true, percent: 30 \}, null, \{ active: true, percent: 30 \}\]/,
-    'the demo also exercises a player-specific opponent eligibility schedule');
+  assert.match(DEMO_SCRIPT_SRC, /bonusRun \|\| params\.has\('sim'\)/,
+    'the bonus demo uses the verified shared tape with a mid-hand activation');
   assert.match(DEMO_SCRIPT_SRC, /bankrollFlip:\s*420[\s\S]*?survival:\s*\{\s*survived:\s*true\s*\}[\s\S]*?bankrollFlip:\s*360[\s\S]*?survival:\s*\{\s*survived:\s*false\s*\}/s,
     'the demo exercises both outcomes only in the actual survival bankroll band');
   assert.match(DEMO_SCRIPT_SRC, /bankrollsFlip:\s*survivalRun \? \[540, 360\] : \[540, 0\]/,
@@ -2004,4 +1991,14 @@ test('lowest speed waits for one click per roll and higher speeds resume autopla
   table._setResolutionSpeed(0.5);
   table._rollNextResolution();
   assert.equal(rolls, 3, 'closed or completed replays cannot be advanced');
+});
+
+
+test('a busted hottest shooter receives their prize in the receipt total', async () => {
+  const { crapsWinnerPayoffPresentation } = await import('../app-craps-table.js');
+  const result = crapsWinnerPayoffPresentation({runPayoutWei:'0',battleWonByViewer:false,
+    battlePayoutWei:'900', hottestShooterPayoutWei:'100'});
+  assert.equal(result.totalWei, '100');
+  assert.equal(crapsWinnerPayoffPresentation({runPayoutWei:'0',battleWonByViewer:true,
+    battlePayoutWei:'900',hottestShooterPayoutWei:'100'}).totalWei, '1000');
 });

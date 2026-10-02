@@ -48,6 +48,7 @@ const ABI = [
 const iface = new ethers.Interface(ABI);
 
 const TEST_BLOCK = Number(CHAIN.deployBlock) + 100;
+const STORAGE_KEY = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME).toLowerCase()}:${PLAYER}`;
 
 function log(name, args, { blockNumber = TEST_BLOCK, index = 1, tx = '0xabc' } = {}) {
   const event = iface.getEvent(name);
@@ -69,6 +70,10 @@ describe('bingo event watcher', () => {
     reveal.__resetForTest();
     bingo.__resetBingoWatchForTest();
     store.__resetForTest();
+    // These lifecycle tests start after the watcher's initial history sync.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      rows: [], consumed: [], historyBaseline: { blockNumber: 0, logIndex: -1 },
+    }));
   });
 
   afterEach(() => bingo.__resetBingoWatchForTest());
@@ -613,6 +618,63 @@ describe('bingo event watcher', () => {
     const claims = pending.getPendingActions().filter((row) => row.shortLabel === 'Claim Bingo');
     assert.deepEqual(claims.map((row) => row.id).sort(), ['bingo-claim:35', 'bingo-claim:36'],
       'the current level and the minted levels above it stay claimable; level 34 expired');
+  });
+
+  test('a fresh load retires old claimed Bingo history and cached reveals', async () => {
+    store.update('app.gameState', { level: 35 });
+    const receipt = (level) => ({
+      id: `0xbingo${level}:1`, transactionHash: `0xbingo${level}`, logIndex: 1,
+      blockNumber: TEST_BLOCK + level, player: PLAYER, level, symbol: 0,
+      flipReward: '2000', dgnrsPaid: '77',
+    });
+    const storageKey = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME).toLowerCase()}:${PLAYER}`;
+    localStorage.setItem(storageKey, JSON.stringify({
+      rows: [receipt(10)], consumed: [], historyBaseline: { blockNumber: 0, logIndex: -1 },
+    }));
+    bingo.__setBingoReadersForTest({
+      index: async () => ({ claimed: [receipt(10), receipt(34), receipt(35)] }),
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    assert.deepEqual(pending.getPendingActions().filter(row => row.kind === 'bingo')
+      .map(row => row.id), ['bingo:0xbingo34:1', 'bingo:0xbingo35:1']);
+    assert.equal(JSON.parse(localStorage.getItem(storageKey)).rows.some(row => row.level === 10), false);
+    bingo.__resetBingoWatchForTest();
+    pending.__resetPendingActionsForTest();
+    bingo.__setBingoReadersForTest({ index: async () => ({ claimed: [receipt(10)] }) });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    assert.equal(pending.getPendingActions().some(row => row.id === 'bingo:0xbingo10:1'), false,
+      'a new session cannot resurrect the paid historical Bingo');
+  });
+
+  test('a fresh browser baselines paid Bingos and preserves newly indexed reveals across reloads', async () => {
+    localStorage.clear();
+    store.update('app.gameState', { level: 35 });
+    const oldReceipt = {
+      id: '0xold:1', transactionHash: '0xold', logIndex: 1,
+      blockNumber: TEST_BLOCK, player: PLAYER, level: 35, symbol: 0,
+      flipReward: '2000', dgnrsPaid: '77',
+    };
+    // A legacy client could already have cached this historical paid event.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ rows: [oldReceipt], consumed: [] }));
+    const claimed = [oldReceipt];
+    bingo.__setBingoReadersForTest({ index: async () => ({ claimed }) });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    assert.equal(pending.getPendingActions().length, 0,
+      'even a previously paid current-level Bingo is history on first sync');
+    claimed.push({ ...oldReceipt, id: '0xnew:2', transactionHash: '0xnew',
+      blockNumber: TEST_BLOCK + 1, logIndex: 2, level: 36 });
+    await bingo.refreshBingoWatch();
+    assert.deepEqual(pending.getPendingActions().map(row => row.id), ['bingo:0xnew:2']);
+    bingo.__resetBingoWatchForTest();
+    pending.__resetPendingActionsForTest();
+    bingo.__setBingoReadersForTest({ index: async () => ({ claimed }) });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    assert.deepEqual(pending.getPendingActions().map(row => row.id), ['bingo:0xnew:2'],
+      'unseen new work survives reload without reviving the baseline');
   });
 
   test('a BingoExpired race retires the stale Bingo action', async () => {

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 44" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="ticket-face" x1="0" y1="0" x2="0.8" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#4d2a3a"/>
+      <stop offset=".52" stop-color="#35202d"/>
+      <stop offset="1" stop-color="#251921"/>
+    </linearGradient>
+    <linearGradient id="ticket-edge" x1="0" y1="0" x2=".25" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#b28b9c" stop-opacity=".8"/>
+      <stop offset=".48" stop-color="#795366" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#503446"/>
+    </linearGradient>
+    <linearGradient id="stub-face" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#654455" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#37212f" stop-opacity=".12"/>
+    </linearGradient>
+    <clipPath id="ticket-cut">
+      <path d="M7 .75H191.5A4.5 4.5 0 0 0 200.5 .75H243A6.25 6.25 0 0 1 249.25 7V37A6.25 6.25 0 0 1 243 43.25H200.5A4.5 4.5 0 0 0 191.5 43.25H7A6.25 6.25 0 0 1 .75 37V7A6.25 6.25 0 0 1 7 .75Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#ticket-cut)">
+    <path d="M0 0H250V44H0Z" fill="url(#ticket-face)"/>
+    <path d="M196 0H250V44H196Z" fill="url(#stub-face)"/>
+    <path d="M8 2H189M203 2H242" fill="none" stroke="#eadfe4" stroke-opacity=".09" stroke-linecap="round"/>
+    <path d="M7 41.75H189M203 41.75H243" fill="none" stroke="#100c11" stroke-opacity=".48"/>
+    <path d="M196 9V35" fill="none" stroke="#b894a5" stroke-opacity=".4" stroke-width=".75" stroke-dasharray="1.5 2.5"/>
+  </g>
+  <path d="M7 .75H191.5A4.5 4.5 0 0 0 200.5 .75H243A6.25 6.25 0 0 1 249.25 7V37A6.25 6.25 0 0 1 243 43.25H200.5A4.5 4.5 0 0 0 191.5 43.25H7A6.25 6.25 0 0 1 .75 37V7A6.25 6.25 0 0 1 7 .75Z" fill="none" stroke="url(#ticket-edge)" stroke-width=".85"/>
+</svg>

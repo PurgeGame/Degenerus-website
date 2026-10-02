@@ -194,9 +194,22 @@ const {
   lootboxResultLegsReadyForReveal,
   pendingBoxesKey,
   revealedBoxesKey,
+  lootboxResultCursorKey,
+  resolvedBoxRowsFromLegs,
 } = await import('../app-box-strip.js');
-const { CHAIN, CONTRACTS } = await import('../../app/chain-config.js');
+const { CHAIN, CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
 const ORIGINAL_FETCH = globalThis.fetch;
+
+test('a record bounty cannot create a phantom Pending Luckbox', () => {
+  const player = '0x0000000000000000000000000000000000000001';
+  for (const spinType of ['record', 'unknown_3']) {
+    assert.deepEqual(resolvedBoxRowsFromLegs([{
+      player, legType: 'spin', lootboxIndex: 77,
+      transactionHash: '0xrecord', logIndex: 12,
+      spin: { spinType, spinCount: 3, payout: '900', reels: [] },
+    }], player), []);
+  }
+});
 
 const ADDR = '0xAbCd00000000000000000000000000000000AbCd';
 const ADDR_LC = ADDR.toLowerCase();
@@ -499,6 +512,8 @@ describe('app-box-strip', () => {
       'the exact Small/Medium/Large counts remain attached to the shared RNG row');
     const pending = pendingActionsMod.getPendingActions()
       .find((item) => item.id === 'lootbox:27');
+    assert.equal(pending.amountLabel, '0.56 ETH',
+      'the label sums the Small, Medium, and two Large boxes at their purchase price');
     assert.deepEqual(
       pending.lootboxStacks.map((stack) => ({
         label: stack.label, count: stack.count, model: stack.lootboxCaseModel,
@@ -520,6 +535,51 @@ describe('app-box-strip', () => {
     restored.disconnectedCallback();
   });
 
+  for (const size of ['custom', 'large']) test(`six 1 ETH ${size} boxes retain their 6 ETH label through polling and reload`, async () => {
+    const oneEth = 10n ** 18n / ETH_DIVISOR;
+    const price = oneEth / 25n;
+    const boxOrder = lootboxMod.packBoxOrder(size === 'custom'
+      ? { customCount: 6, customSizeWei: oneEth } : { large: 6 });
+    // Reproduce a cached result whose amount was overwritten by one smaller
+    // settlement leg while its actual six-box purchase order survived.
+    localStorage.setItem(KEY, JSON.stringify([{
+      index: 27, resultKey: '27', fromReceipt: true,
+      transactionHash: '0xbuy', boxOrders: [String(boxOrder)],
+      amountWei: String(oneEth * 4n / 10n),
+      ticketPriceWei: size === 'custom' ? null : String(price),
+      ready: true, resolved: true, hasLootboxLeg: true,
+    }]));
+    globalThis.fetch = async url => ({
+      ok: true, status: 200,
+      json: async () => ({ items: String(url).includes('/lootbox/legs') ? [{
+        player: ADDR_LC, transactionHash: '0xsettled', logIndex: 1,
+        lootboxIndex: 27, legType: 'opened',
+        rewardData: { amount: String(oneEth * 4n / 10n), futureTickets: 100, flip: '0' },
+      }] : [] }),
+    });
+    let el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    const pendingBox = () => pendingActionsMod.getPendingActions()
+      .find(item => item.id === 'lootbox:27');
+    assert.equal(pendingBox().amountLabel, '6 ETH');
+    await el.__pollForTest();
+    assert.equal(pendingBox().amountLabel, '6 ETH');
+    assert.equal(pendingBox().lootboxStacks[0].count, 6);
+    assert.equal(BigInt(pendingBox().lootboxStacks[0].amountWei), oneEth);
+    el.disconnectedCallback();
+    el = instantiate({ trayOnly: true });
+    await el.__pollForTest();
+    assert.equal(pendingBox().amountLabel, '6 ETH');
+    await pendingBox().run();
+    const [replay] = revealMod.__takeQueuedForTest();
+    assert.equal(BigInt(replay.amountWei), 6n * oneEth,
+      'the opener inherits the same full purchase value as Pending');
+    assert.deepEqual(replay.boxOrders, [String(boxOrder)]);
+    assert.equal(replay.legs[0].amount, oneEth * 4n / 10n,
+      'the actual settlement reward is preserved independently of the purchase label');
+    el.disconnectedCallback();
+  });
+
   test('regular and presale purchases sharing one RNG index merge into one complete open action', async () => {
     const el = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);
@@ -530,6 +590,7 @@ describe('app-box-strip', () => {
       hasLootboxLeg: true, hasPresaleLeg: false,
     }], {
       transactionHash: '0xregular',
+      boxOrder: lootboxMod.packBoxOrder({ small: 1 }),
       lootBoxAmountWei: 10_000_000_000n,
       presaleBoxAmountWei: 0n,
     });
@@ -720,6 +781,67 @@ describe('app-box-strip', () => {
     assert.equal(globalThis.localStorage.getItem(KEY), null,
       'completion removes the now-consumed durable receipt');
     el.disconnectedCallback();
+  });
+
+  test('a poll started during a batch reveal cannot restore completed boxes as stuck OPENING rows', async () => {
+    let holdProbe = false;
+    let probeEntered;
+    const entered = new Promise(resolve => { probeEntered = resolve; });
+    let releaseProbe;
+    const gate = new Promise(resolve => { releaseProbe = resolve; });
+    lootboxMod.__setContractFactoryForTest(() => ({
+      boxIndexComplete: async index => {
+        if (holdProbe && index === 10n) { probeEntered(); await gate; }
+        return false;
+      },
+    }));
+    lootboxMod.__setBoxStateReaderForTest(async () => ({
+      pending: true, worded: false, swept: false, rngLocked: false,
+    }));
+    localStorage.setItem(KEY, JSON.stringify([8, 9, 10].map(index => ({
+      index, resultKey: String(index), fromReceipt: true,
+      ready: index !== 10, resolved: index !== 10,
+    }))));
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    for (const index of [8, 9]) revealMod.queueReveal({
+      kind: 'lootbox', legs: [{ legType: 'dgnrs', amount: 10n ** 18n }],
+      lootboxRelease: { address: ADDR, key: String(index), lootboxIndex: index },
+    });
+    holdProbe = true;
+    const poll = el.__pollForTest();
+    await entered;
+    for (const index of [8, 9]) document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_COMPLETE_EVENT, {
+      detail: { address: ADDR, key: String(index), lootboxIndex: index },
+    }));
+    assert.deepEqual(pendingActionsMod.getPendingActions().map(item => item.id), ['lootbox:10']);
+    releaseProbe();
+    await poll;
+    assert.deepEqual(pendingActionsMod.getPendingActions().map(item => item.id), ['lootbox:10'],
+      'a late pre-completion snapshot must not republish the finished batch');
+    assert.deepEqual(JSON.parse(localStorage.getItem(KEY)).map(box => box.index), [10],
+      'only the genuinely waiting box remains durable');
+  });
+
+  test('boot repairs an old completed-batch cache before publishing any pending action', async () => {
+    localStorage.setItem(KEY, JSON.stringify([8, 9, 10].map(index => ({
+      index, resultKey: String(index), fromReceipt: true,
+      ready: index !== 10, resolved: index !== 10, opening: index !== 10,
+    }))));
+    localStorage.setItem(revealedBoxesKey(CHAIN.id, ADDR), JSON.stringify(['8', '9']));
+    const el = instantiate({ trayOnly: true });
+    const snapshots = [];
+    const unsubscribe = pendingActionsMod.subscribePendingActions(items => {
+      snapshots.push(items.map(item => item.id));
+    });
+    storeMod.update('connected.address', ADDR);
+    assert.deepEqual(pendingActionsMod.getPendingActions().map(item => item.id), ['lootbox:10']);
+    assert.deepEqual(JSON.parse(localStorage.getItem(KEY)).map(box => box.index), [10]);
+    await el.__pollForTest();
+    assert.ok(snapshots.every(ids => !ids.includes('lootbox:8') && !ids.includes('lootbox:9')),
+      'completed results never become clickable or auto-openable during startup');
+    unsubscribe();
   });
 
   test('aborting a queued lootbox presentation restores its pending receipt', async () => {
@@ -1855,7 +1977,8 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('discovers the newest DB-only result and replays every indexed BoxSpin reel', async () => {
+  test('discovers a DB-only Luckbox without repeating the same-sweep Degenerette bounty', async () => {
+    localStorage.setItem(lootboxResultCursorKey(CHAIN.id, ADDR), '10');
     const txHash = '0xfeed';
     const reels = [
       { spinIndex: 0, score: 1, playerTraits: [], resultTraits: [] },
@@ -1863,6 +1986,12 @@ describe('app-box-strip', () => {
       { spinIndex: 2, score: 3, playerTraits: [], resultTraits: [] },
     ];
     const legs = [
+      {
+        uid: 'record', player: ADDR_LC, legType: 'spin', lootboxIndex: 77,
+        transactionHash: txHash, logIndex: 13, ord: 130,
+        spin: { spinType: 'record', spinCount: 3, survived: true,
+          payout: '1800', ethShare: '0', reels },
+      },
       {
         uid: 's1', player: ADDR_LC, legType: 'spin', lootboxIndex: null,
         transactionHash: txHash, logIndex: 12, ord: 120,
@@ -1915,6 +2044,8 @@ describe('app-box-strip', () => {
     await pending.run();
     const [replay] = revealMod.__takeQueuedForTest();
     assert.equal(replay.kind, 'lootbox');
+    assert.equal(replay.legs.filter(leg => leg.legType === 'spin').length, 1,
+      'the bounty already presented by Degenerette cannot return inside this Luckbox');
     assert.equal(replay.lootboxIndex, 77);
     const spin = replay.legs.find((leg) => leg.legType === 'spin');
     assert.equal(spin.spinCount, 3);
@@ -1947,6 +2078,7 @@ describe('app-box-strip', () => {
   });
 
   test('does not publish settled ticket packs before their parent lootbox is opened', async () => {
+    localStorage.setItem(lootboxResultCursorKey(CHAIN.id, ADDR), '0');
     const transactionHash = '0xpack-after-parent';
     const resultKey = '91';
     globalThis.fetch = async (url) => {
@@ -2042,6 +2174,47 @@ describe('app-box-strip', () => {
     storeMod.update('connected.address', ADDR_LC);
     await tick();
     assert.equal(el.querySelectorAll('.bxs-chip').length, 2, 'restored from storage');
+  });
+
+  test('a fresh load ignores box receipts and cursors from a previous deployment', async () => {
+    const legacyKey = `pending-boxes:${CHAIN.id}:${ADDR_LC}`;
+    const otherDeploymentKey = KEY.replace(String(CONTRACTS.GAME).toLowerCase(), '0xpreviousgame');
+    for (const key of [legacyKey, otherDeploymentKey]) {
+      localStorage.setItem(key, JSON.stringify([{ index: 8, ready: true, fromReceipt: true }]));
+    }
+    localStorage.setItem(`lootbox-result-cursor:${CHAIN.id}:${ADDR_LC}`, '999999999');
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    assert.equal(pendingActionsMod.getPendingActions().length, 0);
+    assert.equal(localStorage.getItem(KEY), null);
+    assert.equal(localStorage.getItem(lootboxResultCursorKey(CHAIN.id, ADDR)), '0',
+      'the new game establishes its own result baseline');
+    el.disconnectedCallback();
+  });
+
+  test('a fresh load baselines settled box history, then discovers new results', async () => {
+    const legs = [{
+      uid: 'old-box', player: ADDR_LC, legType: 'opened', lootboxIndex: 70,
+      transactionHash: '0xold', logIndex: 1, ord: 10,
+      rewardData: { amount: '50', futureTickets: 0, roundedUp: false, flip: '0' },
+    }];
+    globalThis.fetch = async (url) => ({
+      ok: true, status: 200,
+      json: async () => ({ items: String(url).includes('/lootbox/legs') ? legs : [] }),
+    });
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the latest historical opening is not outstanding work');
+    legs.push({
+      ...legs[0], uid: 'new-box', lootboxIndex: 71,
+      transactionHash: '0xnew', ord: 20,
+    });
+    await el.__pollForTest();
+    assert.deepEqual(pendingActionsMod.getPendingActions().map(row => row.id), ['lootbox:71']);
+    el.disconnectedCallback();
   });
 
   test('reload preserves a claimed result as passive sync work with its settlement hash', async () => {

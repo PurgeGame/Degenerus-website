@@ -208,25 +208,25 @@ test('the compact surface keeps ten chips and packs the audited contract order',
   assert.deepEqual({
     placed: initial.placed,
     random: initial.random,
-    chance: initial.chance,
+    hotPercent: initial.hotPercent,
     stacks: [initial.leftRandomStack, initial.rightRandomStack],
-  }, { placed: 0, random: 10, chance: 15, stacks: [5, 5] });
+  }, { placed: 0, random: 10, hotPercent: 30, stacks: [5, 5] });
 
   const fivePlaced = crapsEntry.crapsEntryBoardSummary({ place4: 3, place8: 2 });
   assert.deepEqual({
     placed: fivePlaced.placed,
     random: fivePlaced.random,
-    chance: fivePlaced.chance,
+    hotPercent: fivePlaced.hotPercent,
     stacks: [fivePlaced.leftRandomStack, fivePlaced.rightRandomStack],
-  }, { placed: 5, random: 5, chance: 8, stacks: [5, 0] });
+  }, { placed: 5, random: 5, hotPercent: 10, stacks: [5, 0] });
 
   const sevenPlaced = crapsEntry.crapsEntryBoardSummary({ place4: 3, place8: 3, hard4: 1 });
   assert.deepEqual({
     placed: sevenPlaced.placed,
     random: sevenPlaced.random,
-    chance: sevenPlaced.chance,
+    hotPercent: sevenPlaced.hotPercent,
     stacks: [sevenPlaced.leftRandomStack, sevenPlaced.rightRandomStack],
-  }, { placed: 7, random: 3, chance: 5, stacks: [3, 0] });
+  }, { placed: 7, random: 3, hotPercent: 5, stacks: [3, 0] });
 });
 
 test('High Roller selection exposes only the High Roller entrant field', () => {
@@ -306,6 +306,32 @@ test('winner-list goal colors and actual winner buy-ins come from sealed result 
     entryMultiple: 100,
   }, false), '50000000000000000000000',
   'a High Roller who wins the shared main field still shows the 100x price they paid');
+});
+
+test('Peak is a bankroll multiplier and never borrows a different lane winner’s score', () => {
+  for (const [score, label] of [[0, '—'], [10000, '1.0×'], [62500, '6.3×'],
+    [99999, '10.0×'], [100000, '10×'], [105000, '11×'],
+    [123456, '12×'], [5030000, '503×']]) {
+    assert.equal(crapsEntry.crapsWinnerPeakLabel({ winningScoreBps: score, entryMultiple: 100 }), label,
+      'buy-in copies do not scale the normalized bankroll peak');
+    if (score > 0) assert.equal(crapsEntry.crapsWinnerPeakLabel({
+      peakBankrollWei: String(score), startingBankrollWei: '10000',
+    }), label, 'actual peak data uses the same precision as the goal-score fallback');
+  }
+  for (const score of [null, undefined, -1, 'bad']) {
+    assert.equal(crapsEntry.crapsWinnerPeakLabel({ winningScoreBps: score }), '—');
+  }
+  const result = { winningScoreBps: 62500,
+    highResult: { amountWei: '9000', bankrollRider: false } };
+  assert.equal(crapsEntry.crapsWinnerPeakLabel(crapsEntry.crapsWinnerResultForLane(result, true)), '—');
+  assert.equal(crapsEntry.crapsWinnerPeakLabel(crapsEntry.crapsWinnerResultForLane({
+    ...result, highResult: { ...result.highResult, winningScoreBps: 35000 },
+  }, true)), '3.5×');
+  assert.equal(crapsEntry.crapsWinnerPeakLabel({ winningStop: 0, winningScoreBps: 0,
+    peakBankrollWei: '6250000000000000000000', startingBankrollWei: '1000000000000000000000',
+    entryMultiple: 100 }), '6.3×', 'a busted winner retains its actual high point without scaling by bought copies');
+  assert.equal(crapsEntry.crapsWinnerPeakLabel({ winningStop: 0, winningScoreBps: 0 }), '—',
+    'missing actual peak data never turns a bust into a misleading zero peak');
 });
 
 test('settled High Roller seats show their full buy-in in either view, including yesterday’s Event (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
@@ -412,6 +438,9 @@ test('winner-list results follow the selected main or High Roller lane', () => {
   assert.deepEqual(crapsEntry.crapsWinnerResultForLane(main, true), {
     ...main,
     ...main.highResult,
+    winningScoreBps: null,
+    peakBankrollWei: null,
+    startingBankrollWei: null,
     lane: 'high',
   }, 'a contested High Roller field paints its own winner and side prize');
 
@@ -1054,8 +1083,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource,
     /bindText\('craps-added-total', addedReady\s*\? crapsHeaderBoostLabel\(addedMetric\.valueWei\)/,
     'the selected average-or-yesterday amount no longer carries a redundant plus sign');
-  assert.match(componentSource, /including the daily Run It Up funding/,
-    'the accessible headline makes the jackpot contribution explicit');
+  assert.match(componentSource, /including Main Event and daily Run It Up funding/,
+    'the accessible headline names both daily funding contributions');
   assert.match(cssSource, /\.craps-entry__daily-added\s*\{[^}]*background:\s*linear-gradient\(180deg,rgba\(203,217,225,\.28\)[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong\s*\{[^}]*color:\s*#58d5ff/s,
     'the daily addition keeps its blue readout inside the silver plaque');
   assert.match(cssSource, /@media \(min-width: 1100px\)[\s\S]*?\.craps-entry__head\s*\{[^}]*min-height:\s*5\.66rem[^}]*grid-template-rows:\s*minmax\(0,1fr\) 2\.02rem[^}]*\}[\s\S]*?\.craps-entry__daily-added > strong,body\.layout-basic \.craps-entry__progressive-meter\s*\{[^}]*font-size:\s*1\.15rem[^}]*\}[\s\S]*?\.craps-entry__added-key\s*\{[^}]*font-size:\s*\.46rem[^}]*line-height:\s*\.9[^}]*\}[\s\S]*?\.craps-entry__flip-mark\s*\{[^}]*width:\s*1\.5rem/s,
@@ -1084,7 +1113,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /data-bind="craps-battle-payout"/);
   assert.match(componentSource, /data-bind="craps-battle-boost"/);
   assert.match(componentSource,
-    /data-bind="craps-results-head"[^>]*hidden>[\s\S]*?<span>WINNER<\/span><span>TOTAL WON<\/span><span>ADDED<\/span><span>BUY IN<\/span>[\s\S]*?<th scope="col">ENTRANTS<\/th>/,
+    /data-bind="craps-results-head"[^>]*hidden>[\s\S]*?<span>WINNER<\/span><span>TOTAL WON<\/span><span>PEAK<\/span><span>ADDED<\/span><span>BUY IN<\/span>[\s\S]*?<th scope="col">ENTRANTS<\/th>/,
     'settled rows get one shared header with Added as a real column');
   assert.match(componentSource,
     /class="craps-entry__result-total"><strong><output data-bind="craps-battle-payout">—<\/output><\/strong><\/span>[\s\S]*?class="craps-entry__result-added" data-bind="craps-battle-boost-detail"><strong><output data-bind="craps-battle-boost">—<\/output><\/strong><\/span>/,
@@ -1197,7 +1226,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.doesNotMatch(componentSource, /comp reserves the next slate/,
     'the selected comp is already visible on the control and needs no idle explainer');
   assert.match(componentSource,
-    /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-chance">15<\/output>%[\s\S]*?HOT SHOOTER BONUS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
+    /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-percent">30<\/output>%[\s\S]*?HOT BONUS · AFTER 12 ROLLS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
     'the random equation and right-side Normal/High Roller selector share one thin strip');
   assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*aria-live="polite"[^>]*><span data-craps-place-prompt="top">PLACE<\/span><span data-craps-place-prompt="bottom">YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
     'the readable two-line betting callout owns the middle section before the lane selector');
@@ -1396,8 +1425,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(cssSource, /\.craps-entry__listing tbody :is\(th,td\)[^{]*\{[^}]*font-size:\s*\.53rem/s,
     'the dense lobby keeps its larger readable body type');
   assert.match(cssSource, /\.craps-entry__result\s*\{/);
-  assert.match(cssSource, /:is\(\.craps-entry__result-grid,\.craps-entry__results-head-grid\)\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,1\.25fr\) minmax\(0,1fr\) minmax\(0,\.72fr\) minmax\(0,\.7fr\) 1\.02rem/s,
-    'the shared header and settled rows use exactly the same five tracks');
+  assert.match(cssSource, /:is\(\.craps-entry__result-grid,\.craps-entry__results-head-grid\)\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,1\.15fr\) minmax\(0,1fr\) minmax\(0,\.65fr\) minmax\(0,\.72fr\) minmax\(0,\.7fr\) 1\.02rem/s,
+    'the shared header and settled rows align the six tracks including Peak');
   assert.match(cssSource, /\.craps-entry__results-head\s*\{[^}]*height:\s*\.78rem/s);
   assert.doesNotMatch(cssSource, /\.craps-entry__boost-mark/,
     'the old oval boost badge is fully removed');

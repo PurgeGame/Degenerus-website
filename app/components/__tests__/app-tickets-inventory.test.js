@@ -996,6 +996,41 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
+  test('gold six uses the monkey on its ticket and chart only at levels where it is owned', async () => {
+    _dashboardTickets = [{ level: 17, entryCount: 4 }, { level: 18, entryCount: 4 }];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened', [1, 72, 129, 253])] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
+    const el = mount();
+    await flushMicrotasks();
+    const images = el.querySelector('[data-bind="inv-cards"]').querySelectorAll('img');
+    assert.equal(images.filter((img) => img.src === '/app/assets/jackpot/gold-six-monkey-v1.svg').length, 1);
+    el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    const chart = el.querySelector('[data-bind="inv-chart"]');
+    const chartImages = chart.querySelectorAll('img');
+    assert.ok(chartImages.length > 0);
+    assert.equal(chartImages.filter((img) => img.src.includes('gold-six-monkey')).length, 1,
+      'the owned gold-six cell matches its issued ticket');
+    assert.equal(chartImages.some((img) => img.src.includes('dice_05_6_gold')), false);
+
+    el.querySelectorAll('[data-bind="inv-level-tab"]')[1].dispatchEvent({ type: 'click' });
+    assert.equal(chart.querySelectorAll('img').some((img) => img.src.includes('gold-six-monkey')), false,
+      'changing level immediately clears the previous ownership artwork');
+    await flushMicrotasks();
+    assert.equal(chart.querySelectorAll('img').some((img) => img.src.includes('gold-six-monkey')), false,
+      'owning gold six at level 17 does not change the level 18 chart');
+    assert.ok(chart.querySelectorAll('img').some((img) => img.src === '/app/assets/craps/dice_05_6_gold-standard.svg'),
+      'an unowned gold six shows the ordinary die');
+    assert.equal(chart.querySelectorAll('.chart-cell').length, 256);
+    assert.equal(chart.querySelectorAll('img').length, 256, 'every chart slot shows a badge');
+
+    el.querySelectorAll('[data-bind="inv-level-tab"]')[0].dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(chart.querySelectorAll('img').filter((img) => img.src.includes('gold-six-monkey')).length, 1,
+      'returning to the owned level restores the monkey');
+    el.disconnectedCallback();
+  });
+
   test('foil tickets are grouped immediately after gold tickets', async () => {
     const plain = [1, 72, 129, 200];
     const foil = [2, 73, 130, 201];
@@ -1146,6 +1181,34 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(calls.length, 8, 'the projection reads only the eight relevant buckets');
     assert.ok(calls.every((call) => call.level === 17 && call.offset === 0 && call.limit === 0),
       'zero-limit reads retrieve live bucket totals without scanning holder arrays');
+    el.disconnectedCallback();
+  });
+
+  test('God of 6 does not grant the unique gold-six entry or its monkey chart artwork', async () => {
+    _deitySymbols = [29];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
+    const readTraits = [];
+    inventoryMod.__setDeityEntryContractFactoryForTest(() => ({
+      getEntries: async (traitId) => {
+        readTraits.push(traitId);
+        return { total: 100n };
+      },
+    }));
+    const el = mount();
+    await flushMicrotasks();
+    el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    const chart = el.querySelector('[data-bind="inv-chart"]');
+    assert.equal(chart.querySelectorAll('.has-deity').length, 7);
+    assert.equal(readTraits.includes(253), false, 'gold six has no virtual ownership to project');
+    assert.equal(inventoryMod.deityVirtualEntryCount(253, 100), 0);
+    assert.equal(inventoryMod.deityVirtualEntryCount(252, 100), 1, 'other gold Deity entries remain');
+    const goldSix = chart.querySelectorAll('img').find((img) => img.src.includes('dice_05_6_gold'));
+    assert.ok(goldSix, 'an unowned gold six keeps the normal die');
+    assert.equal(goldSix.parentElement.querySelector('.cell-deity-count'), null);
+    assert.equal(chart.querySelectorAll('img').some((img) => img.src.includes('gold-six-monkey')), false);
+    assert.equal(el.querySelector('.inv-deity-pass__badge').src, '/app/assets/craps/dice_05_6_gold-standard.svg');
     el.disconnectedCallback();
   });
 
@@ -1314,7 +1377,7 @@ describe('app-tickets-inventory — cards + chart', () => {
       level: 17,
       expectedTickets: 0.25,
     });
-    const loose = cardAt(0, 'opened', [1]);
+    const loose = cardAt(0, 'partial', [253]);
     const payload = byTraitPayload({ cards: [loose] });
     payload.totalEntries = 1;
     _byLevel.set(17, payload);
@@ -1326,6 +1389,10 @@ describe('app-tickets-inventory — cards + chart', () => {
       'the rolled quarter entry shows without waiting for a pack reveal');
     assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0\.25 tickets/);
     assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '0.25');
+    el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
+    const chart = el.querySelector('[data-bind="inv-chart"]');
+    assert.equal(chart.querySelectorAll('img').filter((img) => img.src.includes('gold-six-monkey')).length, 1,
+      'the rare gold-six entry counts as owned before the other ticket quadrants are generated');
     el.disconnectedCallback();
   });
 

@@ -1,15 +1,14 @@
 {
-  "provenance": "degenerus-sim/scripts/craps-replay-fixture.ts --word 5 --verify; native TypeScript producer, rotating-shooter rules; buildCrapsReplayBundle includes production tape.seed for shooterTimeline",
   "manifest": {
-    "schemaVersion": 1,
+    "schemaVersion": 3,
     "kind": "craps-replay-manifest",
     "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
-    "digest": "1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1",
+    "digest": "5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310",
     "ruleset": {
-      "engineVersion": "craps-solidity-ed035463-v1",
+      "engineVersion": "craps-hot12-own30-longest-v3",
       "chainId": 31337,
       "contract": "0xd02c36ab81619cd5d7f7d235c68e734124cd3df1",
-      "runtimeCodeHash": "0x300a278f022ee77a2a30959a1d9db9ab540d2aa4d113d927c3ec297a6c3dad0a"
+      "runtimeCodeHash": "0x1212121212121212121212121212121212121212121212121212121212121212"
     },
     "settlement": {
       "boundSlot": "340",
@@ -28,7 +27,13 @@
       "maxHands": 12,
       "totalRolls": 119,
       "rolls": "QxFUMjUxFWYTRVQxIxQxUyNEFCMkYjYWYzNWIhRiETJmJiFFZRMVVFNURkUlZlQUZVUhMSVhQVYxMlFFFTERQ0JCNBYURBJlVWIWJlY1EmYzJTJDUkMkEiRTViVRVVJmIUZlISI0FDJVZUQRIlJDVDRUNhJhNTQ=",
-      "handOffsets": "AAAAAAAAAC0AAAA1AAAAQAAAAEsAAABSAAAAVAAAAFwAAABfAAAAZgAAAG4AAABx"
+      "handOffsets": "AAAAAAAAAC0AAAA1AAAAQAAAAEsAAABSAAAAVAAAAFwAAABfAAAAZgAAAG4AAABx",
+      "hotShooters": [
+        {
+          "shooter": 0,
+          "afterRolls": 12
+        }
+      ]
     },
     "progressive": {
       "scoreBpsBefore": "59080",
@@ -42,214 +47,1374 @@
       "entrants": 24,
       "shardSize": 8,
       "shardCount": 3,
-      "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1/featured.json",
-      "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/1d8f2825766c9b6ff5202a80eb3bb62746585bbae3e49ffc7c4f3ec9d58479b1/seats/{shard}.json"
+      "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310/featured.json",
+      "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310/seats/{shard}.json"
     },
     "verification": {
       "allSeatsReplayOk": true,
       "settledEntrants": 24,
-      "replayedWonDigest": "0x80fd98e68d4fe23b9a7d68eac41186e77378d5ffb8c1d1a4a4487e661798f30e"
+      "replayedWonDigest": "0x7c29b7d35ebc2497a35b16dead87d1d70e8075227058ba83791051b44a5797e3"
     },
     "publishedAt": "2026-08-28T18:00:00.000Z"
   },
   "players": [
     {
       "betId": "6198106008766409342977",
+      "seat": "1",
       "player": "0x0000000000000000000000000000000000000002",
-      "standing": 899,
+      "name": "Day seat 1",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 899,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "120000000000000000000",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADq4xEZT9oKAAAAAAAAAAAA4FDl7ndY3gAAAAAAAAAAANYEHlUhHKYAAAAAAAAAAAE77lwMdmMGAAAAAAAAAAABCPk9MMu/1gAAAAAAAAAAAOoS5mTJCy4AAAAAAAAAAACtW8cSzLWuAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABMAAAATAAAAEwAAABQAAAAUAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAADQAAAA0AAAANAAAADQAAAA0AAAAQAAAAEAAAABAAAAAKAAAACgAAAAoAAAAT"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549441",
+      "seat": "1",
       "player": "0x0000000000000000000000000000000000000002",
-      "standing": 999,
+      "name": "Seat 1",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 999,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "0",
+        "60000000000000000000",
+        "240000000000000000000",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAACux2Ar/HDqAAAAAAAAAAAApDU1ASPvvgAAAAAAAAAAAJJRiX2OKNYAAAAAAAAAAAFO+D0XuaA2AAAAAAAAAAABFGw6Uc9yVgAAAAAAAAAAAPWF44XMva4AAAAAAAAAAACaczSK0j1uAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAADQAAAA0AAAANAAAAEgAAABIAAAASAAAAEgAAAA4AAAAOAAAACgAAAAoAAAAKAAAACgAAAAoAAAASAAAAEgAAABIAAAAOAAAADgAAAA4AAAAU"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 1,
+          "percent": 0,
+          "hotPercent": 7,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6198106008766409342978",
+      "seat": "2",
       "player": "0x0000000000000000000000000000000000000003",
-      "standing": 898,
+      "name": "Day seat 2",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 898,
+      "resolvedBoardWei": [
+        "180000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD9yN0WWZc2AAAAAAAAAAAA+1hc+MUqogAAAAAAAAAAAQn7Xao/thoAAAAAAAAAAAGFlLjaSoi6AAAAAAAAAAABWAthXM1ImgAAAAAAAAAAASJgXtIL8+IAAAAAAAAAAAEVXbOJnwYiAAAAAAAAAAAAxA0FBPY4MgAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAABQAAAAUAAAAFAAAABwAAAAcAAAAHAAAABwAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAEQ=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 9,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549442",
+      "seat": "2",
       "player": "0x0000000000000000000000000000000000000003",
-      "standing": 998,
+      "name": "Seat 2",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 998,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFIDW7Tx2ReAAAAAAAAAAABTB5EWmluqgAAAAAAAAAAAU/ptk+JNAIAAAAAAAAAAAFTKmEhpG9yAAAAAAAAAAABIDVCRfnMQgAAAAAAAAAAAOqKP7s4d4oAAAAAAAAAAACepViUvQyqAAAAAAAAAAAAZ1oAoO4aOgAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAEAAAABAAAAAQAAAAEAAAABAAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAACwAAAAsAAAALAAAADAAAAAwAAAAMAAAADAAAAAsAAAALAAAADAAAAAwAAAAMAAAADAAAAAwAAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAAEw=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 2,
+          "percent": 0,
+          "hotPercent": 5,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": true
+        },
+        {
+          "shooter": 9,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6198106008766409342979",
+      "seat": "3",
       "player": "0x0000000000000000000000000000000000000004",
-      "standing": 897,
+      "name": "Day seat 3",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "17724000000000000000000",
-      "paidWei": "17724000000000000000000"
+      "standing": 897,
+      "resolvedBoardWei": [
+        "120000000000000000000",
+        "0",
+        "180000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "60000000000000000000",
+        "180000000000000000000",
+        "0",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFQKCmFsaVEAAAAAAAAAAABRMXTplJVPAAAAAAAAAAAAUtHKUqIzBwAAAAAAAAAAAE+RH4CG95cAAAAAAAAAAABCjnQ4GgnXAAAAAAAAAAAAMkseHZHgpwAAAAAAAAAAACVIctUk8ucAAAAAAAAAAAALQxxESxdnAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAADwAAAA8AAAAPAAAADgAAAA4AAAAOAAAADgAAAA8AAAAPAAAAEgAAABIAAAASAAAAEgAAABIAAAALAAAACwAAAAsAAAAPAAAADwAAAA8AAAAP"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 35,
+          "hotPercent": 5,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": true,
+          "rotation": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "831000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549443",
+      "seat": "3",
       "player": "0x0000000000000000000000000000000000000004",
-      "standing": 997,
+      "name": "Seat 3",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "1369600000000000000000",
-      "paidWei": "0"
+      "standing": 997,
+      "resolvedBoardWei": [
+        "0",
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 11,
+      "totalRolls": 113,
+      "unitsPlayed": "37",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEsjp5zCiY+AAAAAAAAAAABKH3I7Ggb8gAAAAAAAAAAAR4xAVMR37oAAAAAAAAAAAEIgePaXFN6AAAAAAAAAAAAzwtvWns5agAAAAAAAAAAALAlGI54hMIAAAAAAAAAAABMZfdjNWYCAAAAAAAAAAAAdQSXvz8+NAAAAAAAAAAAAKw8geZ5ExgAAAAAAAAAAACZpzOmtIcwAAAAAAAAAAAALxkFpOZ7YAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAHAAAABwAAAAcAAAAHAAAABwAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAsAAAALAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAAFQAAABUAAAAVAAAAFgAAABYAAAAWAAAAFgAAABUAAAAVAAAAFAAAABQAAAAUAAAAFAAAABQAAAAWAAAAFgAAABYAAAAUAAAAFAAAABQAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAAK"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 3,
+          "percent": 0,
+          "hotPercent": 7,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 7,
+          "survived": true
+        },
+        {
+          "shooter": 8,
+          "survived": true
+        },
+        {
+          "shooter": 9,
+          "survived": true
+        },
+        {
+          "shooter": 10,
+          "survived": true
+        }
+      ],
+      "wonWei": "868800000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549444",
+      "seat": "4",
       "player": "0x0000000000000000000000000000000000000005",
-      "standing": 996,
+      "name": "Seat 4",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "1983000000000000000000",
-      "paidWei": "0"
+      "standing": 996,
+      "resolvedBoardWei": [
+        "180000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "0",
+        "0",
+        "180000000000000000000",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD0RU/WMFYoAAAAAAAAAAAA5NIkcC771AAAAAAAAAAAAPHUz7ib6ZQAAAAAAAAAAAGa94JmI/xUAAAAAAAAAAABbW4q6Ka8NAAAAAAAAAAAATfDKF3lZ3wAAAAAAAAAAAEqwH0VeHm8AAAAAAAAAAAAv2p3//XQTAAAAAAAAAAAAG4ZyXtNAlwAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAATAAAAEwAAABMAAAATAAAAEwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAADAAAAAwAAAAMAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABw=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 4,
+          "percent": 0,
+          "hotPercent": 5,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "2031000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549445",
+      "seat": "5",
       "player": "0x0000000000000000000000000000000000000006",
-      "standing": 995,
+      "name": "Seat 5",
+      "avatarUrl": null,
       "entryMultiple": 10,
+      "standing": 995,
+      "resolvedBoardWei": [
+        "120000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "240000000000000000000",
+        "60000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 7,
+      "totalRolls": 92,
+      "unitsPlayed": "13",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADp1dZ0GPd2AAAAAAAAAAAA0xEqtVpXZgAAAAAAAAAAANOb8dhe4U4AAAAAAAAAAAD7uYH3rr5eAAAAAAAAAAAAx67U1fsHXgAAAAAAAAAAAIahfGvaYp4AAAAAAAAAAAAAAAAAAAAAAAA="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAFwAAABcAAAAXAAAAFQAAABUAAAAVAAAAFQAAABYAAAAWAAAAGAAAABgAAAAYAAAAGAAAABgAAAATAAAAEwAAABMAAAAX"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 5,
+          "percent": 0,
+          "hotPercent": 5,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 7,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549446",
+      "seat": "6",
       "player": "0x0000000000000000000000000000000000000007",
-      "standing": 994,
+      "name": "Seat 6",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "0",
-      "paidWei": "0"
+      "standing": 994,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "180000000000000000000",
+        "0",
+        "0",
+        "0",
+        "180000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFazyXCl6GGAAAAAAAAAAABTcx6eiqzxgAAAAAAAAAAAVku0FmKA84AAAAAAAAAAAFmMXuh9vGOAAAAAAAAAAABK6V43AzDrgAAAAAAAAAAAOqYIHHsHu4AAAAAAAAAAACPhXF28Z6uAAAAAAAAAAAADWrAorBVLgAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAACQAAAAkAAAAJAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACwAAAAsAAAALAAAACwAAAAsAAAAOAAAADgAAAA4AAAARAAAAEQAAABEAAAAR"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 25,
+          "hotPercent": 25,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 6,
+          "percent": 0,
+          "hotPercent": 25,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "247500000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549447",
+      "seat": "7",
       "player": "0x0000000000000000000000000000000000000008",
-      "standing": 993,
+      "name": "Seat 7",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "3236000000000000000000",
-      "paidWei": "0"
+      "standing": 993,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000",
+        "180000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 12,
+      "totalRolls": 119,
+      "unitsPlayed": "45",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEqiPo6qdwsAAAAAAAAAAABJAeklnNlTAAAAAAAAAAAARilTrcUFUQAAAAAAAAAAAFrC4uBxfcEAAAAAAAAAAABP61QkFrehAAAAAAAAAAAAP6f+CY6OcQAAAAAAAAAAACjjUkrP7mEAAAAAAAAAAAAb4KcCYwChAAAAAAAAAAAANICjMqrF0gAAAAAAAAAAALK7EP++zuQAAAAAAAAAAAB4Lw451KEEAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAsAAAALAAAACwAAAAwAAAAMAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAABwAAAAcAAAAHAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAKAAAACgAAAAoAAAAMAAAADAAAAAwAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAAU"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 30,
+          "hotPercent": 30,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 7,
+          "percent": 0,
+          "hotPercent": 30,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": true
+        },
+        {
+          "shooter": 9,
+          "survived": true
+        },
+        {
+          "shooter": 12,
+          "survived": false
+        }
+      ],
+      "wonWei": "0",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549448",
+      "seat": "8",
       "player": "0x0000000000000000000000000000000000000009",
-      "standing": 992,
+      "name": "Seat 8",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "1494000000000000000000",
-      "paidWei": "0"
+      "standing": 992,
+      "resolvedBoardWei": [
+        "240000000000000000000",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAElrupa2ta2AAAAAAAAAAABC6mTygD7NgAAAAAAAAAAASUkIzfWTM4AAAAAAAAAAAFfsCX9wHquAAAAAAAAAAABR9Xr+PjGzgAAAAAAAAAAAQbIk47YIg4AAAAAAAAAAAE/KXnIsChOAAAAAAAAAAAAvQ7I9G7ezgAAAAAAAAAAAFT5brEHcM4AAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAAMAAAADAAAAAwAAAAMAAAADAAAAAoAAAAKAAAACgAAAAkAAAAJAAAACQAAAAoAAAAKAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACgAAAAoAAAAKAAAABgAAAAYAAAAGAAAABgAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAACQ=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        },
+        {
+          "shooter": 8,
+          "percent": 0,
+          "hotPercent": 5,
+          "rotationPercent": 30,
+          "hotAfterRolls": 12,
+          "hotActive": false,
+          "rotation": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "1567500000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549449",
+      "seat": "9",
       "player": "0x0000000000000000000000000000000000000001",
-      "standing": 991,
+      "name": "Seat 9",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "455000000000000000000",
-      "paidWei": "0"
+      "standing": 991,
+      "resolvedBoardWei": [
+        "0",
+        "0",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "120000000000000000000",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 7,
+      "totalRolls": 92,
+      "unitsPlayed": "13",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADCdmaCMylAAAAAAAAAAAAAvmWQ+5Ee9AAAAAAAAAAAAKaLVvbJaxQAAAAAAAAAAADvL5NLKZqEAAAAAAAAAAAAriI64Qj1xAAAAAAAAAAAAI875BUGQRwAAAAAAAAAAAAcTvsVRAz8AAA="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAFwAAABcAAAAXAAAAFwAAABcAAAAYAAAAGAAAABgAAAAW"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "522200000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549450",
+      "seat": "10",
       "player": "0x0000000000000000000000000000000000000002",
-      "standing": 990,
+      "name": "Seat 10",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "0",
-      "paidWei": "0"
+      "standing": 990,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFIyMh2QLgkAAAAAAAAAAABPwbH/+8F1AAAAAAAAAAAAUEx5IwBLXQAAAAAAAAAAAGsh+mhg9bkAAAAAAAAAAABeZLKxdkztAAAAAAAAAAAATiFclu4jvQAAAAAAAAAAADsoIs1PSQUAAAAAAAAAAAAhIsw8dW2FAAAAAAAAAAAABx11q5uSBQAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAAAgAAAAIAAAACAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAADA=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "525000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549451",
+      "seat": "11",
       "player": "0x0000000000000000000000000000000000000003",
-      "standing": 989,
+      "name": "Seat 11",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "0",
-      "paidWei": "0"
+      "standing": 989,
+      "resolvedBoardWei": [
+        "0",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "240000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADmnBv9V4+4AAAAAAAAAAAA6dzGz3LLKAAAAAAAAAAAANduVCjYelgAAAAAAAAAAAD8Szl2DRv4AAAAAAAAAAAAwtTE9iwB6AAAAAAAAAAAAK9QxAmInUgAAAAAAAAAAABLkaLeRX6IAAAAAAAAAAAAiiCadB4PUAAAAAAAAAAAAH0d7yuxIZAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAARAAAAEQAAABEAAAARAAAAEQAAABMAAAATAAAAEwAAABUAAAAVAAAAFQAAABMAAAATAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFQAAABUAAAAVAAAAFQAAABUAAAAXAAAAFwAAABcAAAAVAAAAFQAAABUAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABA=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 7,
+          "survived": true
+        }
+      ],
+      "wonWei": "2308000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549452",
+      "seat": "12",
       "player": "0x0000000000000000000000000000000000000004",
-      "standing": 988,
+      "name": "Seat 12",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "1590000000000000000000",
-      "paidWei": "0"
+      "standing": 988,
+      "resolvedBoardWei": [
+        "180000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAEj1xIW/ptuAAAAAAAAAAABGhURoKzpHgAAAAAAAAAAASv4vSRCsAYAAAAAAAAAAAGnkhhUTYKmAAAAAAAAAAABegjA1tBChgAAAAAAAAAAATj7aGyvncYAAAAAAAAAAAEr+L0kQrAGAAAAAAAAAAAAw+Ni4NtCBgAAAAAAAAAAAFvOCJ1z1AYAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAALAAAACwAAAAsAAAALAAAACwAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAAAwAAAAMAAAADAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAACA=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "1693500000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549453",
+      "seat": "13",
       "player": "0x0000000000000000000000000000000000000005",
-      "standing": 987,
+      "name": "Seat 13",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "18720000000000000000000",
-      "paidWei": "18720000000000000000000"
+      "standing": 987,
+      "resolvedBoardWei": [
+        "120000000000000000000",
+        "0",
+        "120000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "0",
+        "180000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 10,
+      "totalRolls": 110,
+      "unitsPlayed": "29",
+      "stop": "goal",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD4lJiS+tG2AAAAAAAAAAAA54EXw+vZqgAAAAAAAAAAAOkhbSz5d2IAAAAAAAAAAAEJqBliCcnCAAAAAAAAAAAA1Z1sQFYSwgAAAAAAAAAAAJ/yabWUvgoAAAAAAAAAAABr57yT4QcKAAAAAAAAAAAAbHl0Ej9kpAAAAAAAAAAAAX7U7//roJgAAAAAAAAAAAQJWmQlMhAYAAA="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAASAAAAEgAAABIAAAASAAAAEgAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFgAAABYAAAAWAAAAFgAAABYAAAAUAAAAFAAAABQAAAATAAAAEwAAABMAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAAB"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 7,
+          "survived": true
+        },
+        {
+          "shooter": 8,
+          "survived": true
+        }
+      ],
+      "wonWei": "19062000000000000000000",
+      "paidWei": "19062000000000000000000",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549454",
+      "seat": "14",
       "player": "0x0000000000000000000000000000000000000006",
-      "standing": 986,
+      "name": "Seat 14",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "2152200000000000000000",
-      "paidWei": "0"
+      "standing": 986,
+      "resolvedBoardWei": [
+        "120000000000000000000",
+        "0",
+        "60000000000000000000",
+        "180000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD6IBzp+vRYAAAAAAAAAAAA6qzxg/maBAAAAAAAAAAAAO3tnFYU1XQAAAAAAAAAAAEyO5+SULWkAAAAAAAAAAAA/jDycJz+pAAAAAAAAAAAAMiF7+XbqewAAAAAAAAAAADCBJpBpTMMAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAAEgAAABIAAAASAAAADwAAAA8AAAAPAAAADwAAABIAAAASAAAAEwAAABMAAAATAAAAEwAAABMAAAAJAAAACQAAAAkAAAAJAAAACQAAAAkAAAAW"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 30,
+          "hotPercent": 30,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": false
+        }
+      ],
+      "wonWei": "0",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549455",
+      "seat": "15",
       "player": "0x0000000000000000000000000000000000000007",
-      "standing": 985,
+      "name": "Seat 15",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "0",
-      "paidWei": "0"
+      "standing": 985,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "60000000000000000000",
+        "180000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAE9G4Hvfa0AAAAAAAAAAAABIxYrXqPRgAAAAAAAAAAAASVBR+q1+SAAAAAAAAAAAAFJCJ7x4YbwAAAAAAAAAAABFhOAFjbjwAAAAAAAAAAAANUGJ6wWPwAAAAAAAAAAAACJIUCFmtQgAAAAAAAAAAAABwaPsVmKoAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAKAAAACgAAAAoAAAAKAAAACgAAAAsAAAALAAAACwAAAAoAAAAKAAAACgAAAAkAAAAJAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAACgAAAAoAAAAKAAAADgAAAA4AAAAOAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAAEAAAABAAAAAQAAAAEAAAABAAAAAPAAAADwAAAA8AAAASAAAAEgAAABIAAAAS"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 18,
+          "hotPercent": 18,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "129600000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549456",
+      "seat": "16",
       "player": "0x0000000000000000000000000000000000000008",
-      "standing": 984,
+      "name": "Seat 16",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "940000000000000000000",
-      "paidWei": "0"
+      "standing": 984,
+      "resolvedBoardWei": [
+        "180000000000000000000",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "180000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAE+Icw5WrviAAAAAAAAAAABJBx1qIDgYgAAAAAAAAAAATPVBKAEf6oAAAAAAAAAAAFqCs5Nyl5KAAAAAAAAAAABU0Yijwu+OgAAAAAAAAAAARI4yiTrGXoAAAAAAAAAAAEjka6FfFZ6AAAAAAAAAAAAoXb9sTsM+gAAAAAAAAAAADlho23TnvoAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAIAAAACAAAAAgAAAAIAAAACAAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAACAAAAAgAAAAIAAAABQAAAAUAAAAFAAAABQAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAcAAAADAAAAAwAAAAMAAAAEAAAABAAAAAQAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAACg=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [],
+      "wonWei": "1058500000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549457",
+      "seat": "17",
       "player": "0x0000000000000000000000000000000000000009",
-      "standing": 983,
+      "name": "Seat 17",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 983,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 7,
+      "totalRolls": 92,
+      "unitsPlayed": "13",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADvMlnWGlWYAAAAAAAAAAAA6yGET3hLTAAAAAAAAAAAAOSgLqtB1GwAAAAAAAAAAAEsLty5mPAMAAAAAAAAAAAA8aLZ867CLAAAAAAAAAAAANK8gyesDYQAAAAAAAAAAAAAAAAAAAAAAAA="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAAPAAAADwAAAA8AAAAPAAAADwAAABIAAAASAAAAEgAAABIAAAASAAAAEgAAABIAAAASAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEQAAABEAAAARAAAAEQAAABEAAAAVAAAAFQAAABUAAAAY"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 7,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549458",
+      "seat": "18",
       "player": "0x0000000000000000000000000000000000000001",
-      "standing": 982,
+      "name": "Seat 18",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "1110000000000000000000",
-      "paidWei": "0"
+      "standing": 982,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAFPnWJirRtcAAAAAAAAAAABTFy3kJHf7AAAAAAAAAAAAU6H1BykB4wAAAAAAAAAAAFRyH7uv0L8AAAAAAAAAAABHtNgExSfzAAAAAAAAAAAAN3GB6jz+wwAAAAAAAAAAACR4SCCeJAsAAAAAAAAAAAAQ9Ecz+r9rAAAAAAAAAAAAHqfjldpDZgAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAADAAAAAwAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAADAAAAAwAAAAMAAAACwAAAAsAAAALAAAACwAAAAwAAAAMAAAADwAAAA8AAAAPAAAADwAAAA8AAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAABQ=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": true
+        }
+      ],
+      "wonWei": "2262000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549459",
+      "seat": "19",
       "player": "0x0000000000000000000000000000000000000002",
-      "standing": 981,
+      "name": "Seat 19",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 981,
+      "resolvedBoardWei": [
+        "60000000000000000000",
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "120000000000000000000",
+        "180000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 8,
+      "totalRolls": 95,
+      "unitsPlayed": "17",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAADq4xEZT9oKAAAAAAAAAAAA4FDl7ndY3gAAAAAAAAAAANYEHlUhHKYAAAAAAAAAAAE77lwMdmMGAAAAAAAAAAABCPk9MMu/1gAAAAAAAAAAAOoS5mTJCy4AAAAAAAAAAACtW8cSzLWuAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAEwAAABMAAAATAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAVAAAAFQAAABUAAAAVAAAAFQAAABUAAAAVAAAAFQAAABQAAAAUAAAAFAAAABUAAAAVAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAFAAAABQAAAAUAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAAEQAAABEAAAARAAAADgAAAA4AAAAOAAAADgAAAA4AAAARAAAAEQAAABEAAAALAAAACwAAAAsAAAAY"
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 7,
+          "hotPercent": 7,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549460",
+      "seat": "20",
       "player": "0x0000000000000000000000000000000000000003",
-      "standing": 980,
+      "name": "Seat 20",
+      "avatarUrl": null,
       "entryMultiple": 1,
+      "standing": 980,
+      "resolvedBoardWei": [
+        "180000000000000000000",
+        "120000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0",
+        "60000000000000000000",
+        "0",
+        "120000000000000000000",
+        "60000000000000000000"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAD9yN0WWZc2AAAAAAAAAAAA+1hc+MUqogAAAAAAAAAAAQn7Xao/thoAAAAAAAAAAAGFlLjaSoi6AAAAAAAAAAABWAthXM1ImgAAAAAAAAAAASJgXtIL8+IAAAAAAAAAAAEVXbOJnwYiAAAAAAAAAAAAxA0FBPY4MgAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAABcAAAAXAAAAFwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADQAAAA0AAAANAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAADgAAAA4AAAAOAAAABgAAAAYAAAAGAAAACAAAAAgAAAAIAAAACAAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAGA=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 5,
+          "hotPercent": 5,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 9,
+          "survived": false
+        }
+      ],
       "wonWei": "0",
-      "paidWei": "0"
+      "paidWei": "0",
+      "replayOk": true
     },
     {
       "betId": "6271892985061247549461",
+      "seat": "21",
       "player": "0x0000000000000000000000000000000000000004",
-      "standing": 979,
+      "name": "Seat 21",
+      "avatarUrl": null,
       "entryMultiple": 1,
-      "wonWei": "740000000000000000000",
-      "paidWei": "0"
+      "standing": 979,
+      "resolvedBoardWei": [
+        "0",
+        "60000000000000000000",
+        "120000000000000000000",
+        "0",
+        "120000000000000000000",
+        "240000000000000000000",
+        "60000000000000000000",
+        "0",
+        "0",
+        "0"
+      ],
+      "bankrollInWei": "3000000000000000000000",
+      "goalWei": "15000000000000000000000",
+      "handsPlayed": 9,
+      "totalRolls": 102,
+      "unitsPlayed": "21",
+      "stop": "bust",
+      "ladder": {
+        "encoding": "uint128be/base64",
+        "values": "AAAAAAAAAKKhXQlRm+AAAAAAAAAAAAHmssdohHEIAAAAAAAAAAAB3PDG8jK+uAAAAAAAAAAAAeAxccRN+igAAAAAAAAAAAHKglRLmG3oAAAAAAAAAAABmKLDtfbeiAAAAAAAAAAAAVeVa0vWOcgAAAAAAAAAAADVerp3lPBIAAAAAAAAAAAAbWVgNC2CSAAAAAAAAAAAAHK1ZiTzlpAAAA=="
+      },
+      "rankTimeline": {
+        "encoding": "uint32be/base64",
+        "values": "AAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAABgAAAAYAAAAGAAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAABg=="
+      },
+      "boosts": [
+        {
+          "shooter": 0,
+          "percent": 30,
+          "hotPercent": 30,
+          "rotationPercent": 0,
+          "hotAfterRolls": 12,
+          "hotActive": true
+        }
+      ],
+      "survivals": [
+        {
+          "shooter": 8,
+          "survived": true
+        }
+      ],
+      "wonWei": "2116000000000000000000",
+      "paidWei": "0",
+      "replayOk": true
     }
   ],
   "hashes": {
-    "seats/0000": "4a49898bb5e127ee6c05721a271727ead1c4f2c7bb1aca5b3ae100bba12bc23f",
-    "seats/0001": "3257370fe0278076dd61624b40092458f9578b9bfd7e124202fc1e52ae143f00",
-    "seats/0002": "c6a6ab9cf20e110324fc331a6c8060879f6239b8e33489b89f2480ef3a62cfb2",
-    "featured": "48f030d2cae34e8550ee0ee4416cdc05c3cf4896db5f2000e07ac62eabd07f77"
+    "seats/0000": "a7a147f9ba6acc174efcafb1ed2652e1a920aef6d54c59d6dd5fee8409042cc1",
+    "seats/0001": "752da87ea6a27ca539b9eb6834692e93895e3c864dfedb425e2d7f663e793942",
+    "seats/0002": "f9d380629ffee4ea7198c0ea77c0ccfc81633bf8edb0a12a8f83ceb3c8925659",
+    "featured": "6e78e7f8fff870c3ecc2e51295708fd50ca68a8036727d84252e0929132b60c4"
   }
 }

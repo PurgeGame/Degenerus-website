@@ -1297,8 +1297,8 @@ describe('rail wiring', () => {
       'the popup does not repeat the amount or expose the player balance');
     assert.doesNotMatch(COMPONENT, /AVAILABLE TO SPEND|NEED .* AVAILABLE/,
       'balance copy stays out of both the popup and its insufficient-funds notice');
-    assert.doesNotMatch(COMPONENT, /recordBountyAffordability|_readWalletBalance|WALLET READY|quote\.funds/,
-      'the shortcut does not guess wallet affordability before opening the real transaction path');
+    assert.match(COMPONENT, /recordBountyUnavailableReason/,
+      'the shortcut checks the exact preset against account-scoped spendable funds');
     assert.match(COMPONENT, /action: `BUY \$\{tickets\}`[\s\S]*?amount: fullCost/,
       'ticket confirmation keeps its distinct ticket count and ETH cost together in the CTA');
     assert.match(COMPONENT, /readLiveRecordMark/,

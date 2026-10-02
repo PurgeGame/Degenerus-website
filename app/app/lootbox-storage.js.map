@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["lootbox-storage.js"],
+  "sourcesContent": ["import { CHAIN, CONTRACTS } from './chain-config.js';\n\n// RNG indices and result cursors belong to one GAME deployment.\nconst DEPLOYMENT = `${String(CONTRACTS.GAME || '').toLowerCase()}:${CHAIN.deployBlock}`;\n\nexport function pendingBoxesKey(chainId, address) {\n  return `pending-boxes:${chainId}:${String(address || '').toLowerCase()}:${DEPLOYMENT}`;\n}\n\nexport function revealedBoxesKey(chainId, address) {\n  return `revealed-lootboxes:${chainId}:${String(address || '').toLowerCase()}:${DEPLOYMENT}`;\n}\n\nexport function lootboxResultCursorKey(chainId, address) {\n  return `lootbox-result-cursor:${chainId}:${String(address || '').toLowerCase()}:${DEPLOYMENT}`;\n}\n"],
+  "mappings": "+EAAA,OAAS,SAAAA,EAAO,aAAAC,MAAiB,oBAGjC,MAAMC,EAAa,GAAG,OAAOD,EAAU,MAAQ,EAAE,EAAE,YAAY,CAAC,IAAID,EAAM,WAAW,GAE9E,gBAAS,gBAAgBG,EAASC,EAAS,CAChD,MAAO,iBAAiBD,CAAO,IAAI,OAAOC,GAAW,EAAE,EAAE,YAAY,CAAC,IAAIF,CAAU,EACtF,CAFgBG,EAAA,mCAIT,gBAAS,iBAAiBF,EAASC,EAAS,CACjD,MAAO,sBAAsBD,CAAO,IAAI,OAAOC,GAAW,EAAE,EAAE,YAAY,CAAC,IAAIF,CAAU,EAC3F,CAFgBG,EAAA,qCAIT,gBAAS,uBAAuBF,EAASC,EAAS,CACvD,MAAO,yBAAyBD,CAAO,IAAI,OAAOC,GAAW,EAAE,EAAE,YAAY,CAAC,IAAIF,CAAU,EAC9F,CAFgBG,EAAA",
+  "names": ["CHAIN", "CONTRACTS", "DEPLOYMENT", "chainId", "address", "__name"]
+}

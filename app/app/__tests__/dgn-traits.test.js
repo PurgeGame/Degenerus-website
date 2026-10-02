@@ -40,7 +40,7 @@ describe('dgnBadgePath', () => {
     assert.equal(dgnBadgePath(0, 0, 0), '/badges-circular/crypto_00_xrp_pink.svg');
     assert.equal(dgnDisplaySymbol(3, 5, 7), '6ix');
     assert.equal(dgnDisplaySymbol(3, 5, 6), '6');
-    assert.equal(dgnBadgePath(3, 5, 7), '/badges-circular/dice_05_6_gold.svg');
+    assert.equal(dgnBadgePath(3, 5, 7), '/app/assets/craps/dice_05_6_gold-standard.svg');
   });
   test('round crypto picker art exposes its complete disc in every color', () => {
     const colors = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];

@@ -269,13 +269,6 @@ body.layout-basic .pass-deity-dialog__wordmark {
   margin-bottom: .65rem;
 }
 
-body.layout-basic .pass-deity-dialog__head small,
-body.layout-basic .pass-deity-dialog__selection small {
-  color: #b99a45;
-  font: 900 0.5rem/1 var(--font-mono, "Roboto Mono", monospace);
-  letter-spacing: 0.13em;
-}
-
 body.layout-basic .pass-deity-dialog__head strong {
   color: #fff0b5;
   font-size: clamp(1rem, 3vw, 1.28rem);
@@ -355,8 +348,8 @@ body.layout-basic .pass-deity-symbol-group {
 
 body.layout-basic .pass-deity-symbol-group__title {
   color: rgba(226, 206, 145, 0.68);
-  font: 900 0.54rem/1 var(--font-mono, "Roboto Mono", monospace);
-  letter-spacing: 0.12em;
+  font: 800 0.68rem/1.2 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.04em;
 }
 
 body.layout-basic .pass-deity-grid {
@@ -370,8 +363,8 @@ body.layout-basic .pass-deity-symbol {
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 4.8rem;
-  grid-template-rows: minmax(3.5rem, 1fr) auto;
+  min-height: 4.2rem;
+  grid-template-rows: minmax(3.4rem, 1fr);
   place-items: center;
   gap: 0.08rem;
   padding: 0.18rem 0.1rem 0.24rem;
@@ -388,16 +381,6 @@ body.layout-basic .pass-deity-symbol img {
   height: min(3.55rem, 94%);
   object-fit: contain;
   transition: transform 0.14s ease;
-}
-
-body.layout-basic .pass-deity-symbol > span {
-  max-width: 100%;
-  overflow: hidden;
-  color: inherit;
-  font: 850 0.46rem/1 var(--font-mono, "Roboto Mono", monospace);
-  letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 body.layout-basic .pass-deity-symbol:hover:not(:disabled) {
@@ -436,21 +419,10 @@ body.layout-basic .pass-deity-symbol--genesis {
   border-color: rgba(147, 197, 253, 0.32);
 }
 
-body.layout-basic .pass-deity-dialog__note {
-  display: block;
-  max-width: 46ch;
-  margin-top: 0.3rem;
-  font-size: 0.62rem;
-  line-height: 1.45;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  color: #a79c78;
-}
-
 body.layout-basic .pass-deity-symbol--genesis::after {
   content: attr(data-genesis-holder);
-  /* A separate grid row keeps the holder below the symbol name at every size. */
-  font-size: 0.42rem;
+  /* Keep the protocol holder visible without repeating the symbol name. */
+  font-size: 0.55rem;
   line-height: 1;
   letter-spacing: 0.06em;
   color: #93c5fd;
@@ -523,7 +495,7 @@ body.layout-basic .pass-deity-error {
   }
 
   body.layout-basic .pass-deity-symbol {
-    min-height: 4.55rem;
-    grid-template-rows: minmax(3.3rem, 1fr) auto;
+    min-height: 4rem;
+    grid-template-rows: minmax(3.1rem, 1fr);
   }
 }

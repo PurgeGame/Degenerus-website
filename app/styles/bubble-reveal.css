@@ -272,6 +272,29 @@
   animation: none;
 }
 
+/* Grouped reveals fade the already-painted cover as a single layer. Keep the
+   individual-tap puncture above, but never run a mask/size animation per cell
+   when an entire card or collection opens together. */
+.bubble-reveal.is-batch-pop.is-popping {
+  animation: var(--bubble-reveal-duration) cubic-bezier(.16, .8, .3, 1) both bubble-reveal-batch;
+}
+.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__film {
+  mask-image: none;
+}
+.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__film,
+.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__skin,
+.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__badge {
+  animation: none;
+  transition: none;
+}
+.bubble-reveal.is-batch-pop .bubble-reveal__burst {
+  display: none;
+}
+@keyframes bubble-reveal-batch {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(.94); }
+}
+
 @keyframes bubble-reveal-inflate {
   0% {
     box-shadow: inset 0 0 0 1px #eff9ff80;

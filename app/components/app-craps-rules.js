@@ -258,7 +258,11 @@ var o=Object.defineProperty;var a=(t,r)=>o(t,"name",{value:r,configurable:!0});e
           <div class="craps-rules__steps">
             <section>
               <strong>PLACE YOUR BETS.</strong>
-              <p>Place between 0 and 7 chips on the simplified craps table, with 3 max per spot. Your final board will include your selections, plus enough random bets for a total of 10 chips bet. Allowing more of your bets to be assigned randomly increases your chances of receiving a <strong class="craps-rules__hot-shooter">Hot Shooter</strong> bonus.</p>
+              <p>Place between 0 and 7 chips on the simplified craps table, with 3 max per spot. Your final board will include your selections, plus enough random bets for a total of 10 chips bet. After a shooter survives 12 rolls, the whole table becomes <strong class="craps-rules__hot-shooter">Hot</strong>. Winnings from roll 13 onward earn a bonus of 5–30%; more random chips earn the larger bonus. Earlier winnings and returned stakes are not boosted. On your designated shooter turn, going Hot adds another 30 percentage points to the same late winnings—up to 60% total.</p>
+            </section>
+            <section>
+              <strong>HOTTEST SHOOTER.</strong>
+              <p>The longest shared shooting hand wins 10% of the regular battle pool; the battle winner receives 90%. Ties go to the earlier hand. You remain eligible after your own bankroll busts, and the same player can win both prizes. High Rollers are eligible for this regular-pool prize; their separate pool stays unchanged. Custom battles keep their full winner prize.</p>
             </section>
             <section>
               <strong>REACH THE GOAL.</strong>

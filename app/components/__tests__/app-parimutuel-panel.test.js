@@ -1069,7 +1069,7 @@ describe('app-parimutuel-panel', () => {
       const el = await mount({ quest: true });
       const card = growthCard(el);
       assert.equal(card.querySelector('.pari-quest__role').textContent, 'TIMED');
-      assert.equal(card.querySelector('.pari-book__title').textContent, 'Growth bet');
+      assert.equal(card.querySelector('.pari-book__title').textContent, 'Predict this level’s growth');
       assert.equal(card.querySelector('.pari-clock').textContent, 'L42 · OPEN');
       assert.equal(card.querySelector('.pari-book__offered').textContent, '10%');
       assert.doesNotMatch(card.textContent, /ETH/);
@@ -1087,30 +1087,45 @@ describe('app-parimutuel-panel', () => {
     });
   }
 
-  for (const { current, outcome, percentage, tone } of [
-    { current: 110n, outcome: 1, percentage: '10%', tone: 'won' },
-    { current: 110n, outcome: 2, percentage: '10%', tone: 'lost' },
-    { current: 90n, outcome: 1, percentage: '-10%', tone: 'won' },
-    { current: 110n, outcome: 0, percentage: '10%', tone: null },
+  for (const { current, outcome, percentage, prev = 100n } of [
+    { current: 110n, outcome: 1, percentage: '10%' },
+    { current: 110n, outcome: 2, percentage: '10%' },
+    { current: 90n, outcome: 1, percentage: '-10%' },
+    { current: 110n, outcome: 0, percentage: '10%' },
+    { current: 1013n, outcome: 1, percentage: '1.3%', prev: 1000n },
   ]) {
     for (const side of [0, 1, 2]) {
-      test(`timed Growth ${percentage} uses prior outcome ${outcome} with held side ${side}`, async () => {
+      test(`timed Growth ${percentage} colors the open threshold and compact held side ${side} after outcome ${outcome}`, async () => {
         installContract({
           growth: {
             [LEVEL]: { openRound: LEVEL, over: 3n, under: 1n, side },
             [LEVEL - 1]: { outcome },
             [LEVEL - 2]: { outcome: outcome === 1 ? 2 : 1 },
           },
-          ratchets: { prev: 100n * RAW_ETH, current: current * RAW_ETH },
+          ratchets: { prev: prev * RAW_ETH, current: current * RAW_ETH },
         });
         const el = await mount({ quest: true });
         const card = growthCard(el);
-        const offered = card.querySelector('.pari-book__offered');
-        assert.equal(offered.textContent, percentage);
-        assert.equal(offered.className, `pari-book__offered${tone ? ` pari-book__offered--${tone}` : ''}`,
-          'the immediately previous settlement decides the color, not the sign or the player’s side');
+        assert.equal(card.classList.contains('pari-book--quest-complete'), side !== 0,
+          'participation completes the timed quest for either side');
+        assert.equal(card.querySelector('.pari-clock').textContent, `L42 · ${side ? 'COMPLETE' : 'OPEN'}`);
+        if (!side) {
+          const offered = card.querySelector('.pari-book__offered');
+          assert.equal(offered.textContent, percentage);
+          const tone = outcome === 1 ? 'won' : outcome === 2 ? 'lost' : null;
+          assert.equal(offered.className, `pari-book__offered${tone ? ` pari-book__offered--${tone}` : ''}`,
+            'the open betting threshold reflects the immediately previous outcome');
+        }
         assert.doesNotMatch(card.textContent, /ETH/);
-        if (side) assert.equal(card.querySelector('.pari-your-bet__pick').textContent, side === 1 ? 'OVER' : 'UNDER');
+        if (side) {
+          assert.equal(card.querySelector('.pari-book__title').textContent,
+            `${side === 1 ? 'Over' : 'Under'} ${percentage} to win ${side === 1 ? '1,333' : '4,000'} FLIP`);
+          assert.equal(card.querySelector('.pari-book__title').className,
+            `pari-book__title pari-book__title--${side === 1 ? 'over' : 'under'}`);
+          assert.equal(card.querySelector('.pari-your-bet'), null, 'no duplicate stake receipt beneath the compact result');
+          assert.equal(card.querySelector('.pari-split'), null, 'the result has no extra betting bar');
+          assert.equal(card.querySelector('.pari-book__offered'), null, 'the completed receipt does not retain the colored history number');
+        }
         el.disconnectedCallback();
       });
     }

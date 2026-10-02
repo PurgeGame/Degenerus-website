@@ -938,6 +938,38 @@ describe('parseOpenLegsFromReceipt', () => {
 // ---------------------------------------------------------------------------
 
 describe('openLegsFromFeed', () => {
+  test('a Luckbox never replays the Degenerette record bounty from the same sweep', () => {
+    const transactionHash = `0x${'ae'.repeat(32)}`;
+    const row = { player: PLAYER, transactionHash, lootboxIndex: 7 };
+    const rows = [
+      { ...row, logIndex: 1, legType: 'opened', rewardData: { futureTickets: 100, flip: '0' } },
+      { ...row, logIndex: 2, legType: 'spin', spin: { spinType: 'flip', betId: '11', payout: '20', reels: [] } },
+      { ...row, logIndex: 3, legType: 'spin', spin: { spinType: 'record', betId: '12', payout: '30', reels: [] } },
+      { ...row, logIndex: 4, legType: 'spin', spin: { spinType: 'unknown_3', betId: '13', payout: '0', reels: [] } },
+      // An ETH box can produce a legitimate index-zero recirculated child.
+      { ...row, lootboxIndex: 0, logIndex: 5, legType: 'opened', rewardData: { futureTickets: 200, flip: '0' } },
+    ];
+    for (const options of [{ lootboxIndex: 7 }, { lootboxIndex: 7, transactionHash }]) {
+      const legs = openLegsFromFeed(rows, { player: PLAYER, ...options });
+      assert.deepEqual(legs.map(leg => leg.legType), ['opened', 'spin', 'opened']);
+      assert.deepEqual(legs.filter(leg => leg.legType === 'spin').map(leg => leg.betId), ['11']);
+      assert.equal(legs[2].wholeTickets, 2, 'the legitimate child box remains revealable');
+    }
+  });
+
+  test('receipt parsing keeps record bounties for Degenerette and excludes them for Luckboxes', () => {
+    const packed = packSpin(1n, 2n, 4) | (1n << 216n);
+    const receipt = { logs: [
+      log('LootBoxOpened', [PLAYER, 7n, 100n, 5, 100, 0n, false]),
+      log('BoxSpin', [PLAYER, (1n << 63n) | (1n << 60n) | 11n, packed, 20n, 0n]),
+      log('BoxSpin', [PLAYER, (1n << 63n) | (3n << 60n) | 12n, packed, 30n, 0n]),
+    ] };
+    assert.deepEqual(parseOpenLegsFromReceipt(receipt, PLAYER)
+      .filter(leg => leg.legType === 'spin').map(leg => leg.spinType), ['flip', 'record']);
+    assert.deepEqual(parseOpenLegsFromReceipt(receipt, PLAYER, { includeRecordBounties: false })
+      .filter(leg => leg.legType === 'spin').map(leg => leg.spinType), ['flip']);
+  });
+
   test('rebuilds every same-player leg in the anchored transaction, in log order', () => {
     const tx = `0x${'ab'.repeat(32)}`;
     const packed = packSpin(1n, 2n, 4) | (1n << 216n);
@@ -1160,7 +1192,7 @@ describe('openLegsFromDegenerettePayouts', () => {
 describe('readOpenLegsFromChain', () => {
   afterEach(() => contractsMod.clearProvider());
 
-  test('finds the exact indexed open event and rebuilds its whole receipt', async () => {
+  test('chain recovery keeps box rewards without replaying a same-receipt record bounty', async () => {
     const txHash = `0x${'ef'.repeat(32)}`;
     const opened = log('LootBoxOpened', [
       PLAYER, 7n, 1_000n, 6, 400, 120n, false,
@@ -1178,6 +1210,8 @@ describe('readOpenLegsFromChain', () => {
           logs: [
             opened,
             log('LootBoxReward', [PLAYER, 11, 1_000n, 500n]),
+            log('BoxSpin', [PLAYER, (1n << 63n) | (3n << 60n) | 12n,
+              packSpin(1n, 2n, 4) | (1n << 216n), 30n, 0n]),
           ],
         };
       },

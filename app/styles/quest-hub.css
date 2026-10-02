@@ -18,25 +18,25 @@ body.layout-basic .play-grid .quest-hub .qst-header {
   min-height: 2.4rem;
   gap: .3rem;
 }
-body.layout-basic .play-grid .quest-hub .qst-header h2 { font-size: .88rem; letter-spacing: .07em; }
+body.layout-basic .play-grid .quest-hub .qst-header h2 { font-size: 1rem; letter-spacing: .07em; }
 body.layout-basic .play-grid .quest-hub .qst-streak-chip { padding: .25rem .4rem; }
 body.layout-basic .play-grid .quest-hub .qst-score-control { min-width: 0; padding: .3rem .4rem; }
 body.layout-basic .play-grid .quest-hub .qst-slots {
   grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: minmax(4.5rem, 1fr);
+  grid-auto-rows: minmax(5.25rem, 1fr);
   gap: .375rem;
 }
 body.layout-basic .play-grid .quest-hub .qst-slot {
   container: quest-card / size;
   height: auto;
-  min-height: 4.5rem;
+  min-height: 5.25rem;
   gap: .2rem;
   padding: .3rem .5rem;
   border-radius: 7px;
   box-shadow: inset 0 1px #ffffff09;
 }
-body.layout-basic .play-grid .quest-hub .qst-slot-role { font-size: .57rem; letter-spacing: .1em; }
-body.layout-basic .play-grid .quest-hub .qst-slot-status { padding: .15rem .3rem; font-size: .55rem; }
+body.layout-basic .play-grid .quest-hub .qst-slot-role { font-size: .7rem; letter-spacing: .08em; }
+body.layout-basic .play-grid .quest-hub .qst-slot-status { padding: .18rem .3rem; font-size: .7rem; letter-spacing: .025em; }
 body.layout-basic .play-grid .quest-hub .qst-slot-core { gap: .4rem; }
 body.layout-basic .play-grid .quest-hub .qst-slot-icon { flex-basis: 2rem; width: 2rem; height: 2rem; }
 body.layout-basic .play-grid .quest-hub .qst-slot-icon img { width: 1.8rem; height: 1.8rem; }
@@ -47,25 +47,23 @@ body.layout-basic .play-grid .quest-hub .qst-slot-copy {
   gap: .2rem .4rem;
 }
 body.layout-basic .play-grid .quest-hub :is(.qst-slot-name, .qst-slot-note) { grid-column: 1 / -1; }
-body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: .83rem; line-height: 1.2; }
-body.layout-basic .play-grid .quest-hub .qst-slot-reward { gap: .2rem; font-size: .59rem; letter-spacing: 0; }
+body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: .95rem; line-height: 1.2; }
+body.layout-basic .play-grid .quest-hub .qst-slot-note { font-size: .75rem; }
+body.layout-basic .play-grid .quest-hub .qst-slot-reward { gap: .2rem; font-size: .75rem; letter-spacing: 0; }
 body.layout-basic .play-grid .quest-hub .qst-slot-reward-logo { width: .9rem; height: .9rem; flex-basis: .9rem; }
-body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .54rem; letter-spacing: .025em; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .7rem; letter-spacing: .025em; white-space: nowrap; }
 body.layout-basic .play-grid .quest-hub .qst-meter { height: .25rem; }
 
 /* Use the space the card already has. Size containment keeps larger text
    from making the shared game row taller or changing the query's own size. */
 @container quest-card (min-width: 18rem) and (min-height: 3.7rem) {
-  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1rem; }
-  body.layout-basic .play-grid .quest-hub .qst-slot-reward { font-size: .68rem; }
-  body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .62rem; }
-  body.layout-basic .play-grid .quest-hub :is(.qst-slot-role, .qst-slot-status) { font-size: .62rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1.1rem; }
 }
 @container quest-card (min-width: 14rem) and (min-height: 5.25rem) {
-  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1.05rem; }
-  body.layout-basic .play-grid .quest-hub .qst-slot-reward { font-size: .68rem; }
-  body.layout-basic .play-grid .quest-hub .qst-slot-reward-extra { font-size: .62rem; }
-  body.layout-basic .play-grid .quest-hub :is(.qst-slot-role, .qst-slot-status) { font-size: .62rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slot-name { font-size: 1.15rem; }
+}
+@container quest-card (max-width: 15rem) {
+  body.layout-basic .play-grid .quest-hub .qst-slot-copy { grid-template-columns: minmax(0, 1fr); }
 }
 
 body.layout-basic .play-grid .quest-hub__rewards { display: grid; gap: .375rem; min-width: 0; }
@@ -92,12 +90,12 @@ body.layout-basic .play-grid .quest-hub .pari-book {
   display: grid;
   box-sizing: border-box;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: auto auto 1.75rem;
+  grid-template-rows: auto auto 2rem auto;
   grid-template-areas: none;
   align-content: center;
   align-items: center;
-  height: 5.5rem;
-  min-height: 5.5rem;
+  height: auto;
+  min-height: 6.75rem;
   min-width: 0;
   margin: 0;
   padding: .35rem .5rem .55rem;
@@ -115,7 +113,7 @@ body.layout-basic .play-grid .quest-hub .pari-side { display: contents; }
 body.layout-basic .play-grid .quest-hub .pari-quest__role {
   grid-area: 1 / 1 / 2 / 3;
   color: #f1c775;
-  font: 950 .57rem/1 Inter, sans-serif;
+  font: 950 .7rem/1 Inter, sans-serif;
   letter-spacing: .1em;
 }
 body.layout-basic .play-grid .quest-hub .pari-quest__role::before { content: '\25f7\20'; font-size: .8rem; vertical-align: -.04em; }
@@ -128,14 +126,18 @@ body.layout-basic .play-grid .quest-hub .pari-clock {
   border-radius: 999px;
   background: #dcae5e17;
   color: #f1c775;
-  font: 850 .53rem/1 Inter, sans-serif;
+  font: 850 .65rem/1 Inter, sans-serif;
 }
 body.layout-basic .play-grid .quest-hub .pari-book__title {
   grid-area: 2 / 1 / 3 / 4;
   margin: 0;
-  font-size: .8rem;
+  font-size: .95rem;
+  line-height: 1.2;
   letter-spacing: 0;
   text-transform: none;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
 }
 body.layout-basic .play-grid .quest-hub .pari-book__context {
   grid-area: 3 / 2;
@@ -145,27 +147,27 @@ body.layout-basic .play-grid .quest-hub .pari-book__context {
   gap: .12rem;
   margin: 0;
 }
-body.layout-basic .play-grid .quest-hub .pari-book__offered { display: block; margin: 0; font-size: .9rem; line-height: 1.1; white-space: nowrap; }
-body.layout-basic .play-grid .quest-hub .pari-quest__stake { color: #bcb0a0; font: 800 .48rem/1.1 Inter, sans-serif; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-book__offered { display: block; margin: 0; font-size: 1rem; line-height: 1.1; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-quest__stake { color: #bcb0a0; font: 800 .6rem/1.1 Inter, sans-serif; white-space: nowrap; }
 body.layout-basic .play-grid .quest-hub .pari-side__cta {
   width: 100%;
-  min-height: 1.75rem;
+  min-height: 2rem;
   padding: .2rem;
   border-radius: 5px;
 }
 body.layout-basic .play-grid .quest-hub .pari-side--under .pari-side__cta { grid-area: 3 / 1; }
 body.layout-basic .play-grid .quest-hub .pari-side--over .pari-side__cta { grid-area: 3 / 3; }
-body.layout-basic .play-grid .quest-hub .pari-side__verb { font-size: .69rem; }
+body.layout-basic .play-grid .quest-hub .pari-side__verb { font-size: .8rem; }
 body.layout-basic .play-grid .quest-hub .pari-prebet-bonus {
-  grid-area: 2 / 1 / 3 / 4;
-  justify-self: end;
-  margin: 0 0 0 5rem;
+  grid-area: 4 / 1 / 5 / 4;
+  justify-self: start;
+  margin: 0;
   padding: 0;
   border: 0;
   gap: 0;
 }
 body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__label { display: none; }
-body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__value { font-size: .56rem; letter-spacing: 0; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__value { font-size: .7rem; letter-spacing: 0; white-space: nowrap; }
 body.layout-basic .play-grid .quest-hub .pari-split { position: absolute; right: .5rem; bottom: .2rem; left: .5rem; height: 3px; margin: 0; }
 body.layout-basic .play-grid .quest-hub .pari-split__labels {
   position: absolute;
@@ -182,8 +184,21 @@ body.layout-basic .play-grid .quest-hub .pari-your-bet {
   align-content: center;
   gap: .2rem .4rem;
   margin: 0;
+  border-color: #ffffff24;
+  background: #ffffff08;
 }
-body.layout-basic .play-grid .quest-hub :is(.pari-your-bet__label, .pari-your-bet__pick, .pari-your-bet__payout) { font-size: .62rem; }
+body.layout-basic .play-grid .quest-hub :is(.pari-your-bet__label, .pari-your-bet__pick, .pari-your-bet__payout) { font-size: .75rem; color: #d5dae3; }
+body.layout-basic .play-grid .quest-hub .pari-book--quest-complete {
+  grid-template-rows: auto auto;
+  min-height: 3.75rem;
+  padding: .4rem .5rem;
+  border-color: #4ade806e;
+  background: radial-gradient(circle at 92% 12%, #4ade801b, transparent 45%), linear-gradient(145deg, #4ade8012, #080a15a3);
+}
+body.layout-basic .play-grid .quest-hub .pari-book--quest-complete :is(.pari-quest__role, .pari-clock) { color: #9af3b6; }
+body.layout-basic .play-grid .quest-hub .pari-book--quest-complete .pari-clock { border-color: #4ade8059; background: #4ade8017; }
+body.layout-basic .play-grid .quest-hub .pari-book__title--over { color: #4ade80; }
+body.layout-basic .play-grid .quest-hub .pari-book__title--under { color: #f87171; }
 body.layout-basic .play-grid .quest-hub .pari-error { margin: .25rem 0 0; font-size: .7rem; }
 
 /* The ad is a ticket: coin, invitation and reward on the body, COPY LINK as its gold stub. */
@@ -314,10 +329,10 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
   body.layout-basic .play-grid .quest-hub .qst-slots { flex: 1; }
 }
 @media (min-width: 700px) and (max-width: 1099px) {
-  body.layout-basic .play-grid .quest-hub .qst-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(5.5rem, 1fr); }
-  body.layout-basic .play-grid .quest-hub .qst-slot { grid-column: auto; min-height: 5.5rem; }
+  body.layout-basic .play-grid .quest-hub .qst-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(7rem, 1fr); }
+  body.layout-basic .play-grid .quest-hub .qst-slot { grid-column: auto; min-height: 7rem; }
   body.layout-basic .play-grid .quest-hub__rewards { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 5.5rem; }
+  body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 6.75rem; }
   body.layout-basic .play-grid .quest-hub__rewards:not(:has(.has-live-book)) .referral-strip { --utility-height: 3.75rem; }
   body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card { grid-template-columns: 3.2rem minmax(0, 1fr) var(--ad-stub); }
   body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card__coin { width: 3.2rem; height: 3.2rem; }

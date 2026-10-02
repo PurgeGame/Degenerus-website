@@ -1,4 +1,4 @@
-@import url("./bubble-reveal.css");
+@import url("./bubble-reveal.css?v=smooth-degenerette-20260930");
 @import url("./dgn-winnings.css?v=ticket-payout-20260929");
 /* Shared Degenerette surface: a covered ticket becomes the result in place. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 1200px); max-width: 1200px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }
@@ -10,9 +10,10 @@
 .rvl-stage--pop .rvl-spin-zone, .rvl-stage--pop .rvl-dgn-stage { width: 100%; max-width: none; }
 .rvl-stage--pop .rvl-spin-head { justify-content: center; }
 .dgn-pop-mount { width: 100%; }
-.dgn-pop { --pop-line: #72817f; width: 100%; color: #f3f4ef; text-align: center; }
+.dgn-pop { --pop-line: #72817f; --pop-badge-size: 118%; width: 100%; color: #f3f4ef; text-align: center; }
 .dgn-pop [hidden] { display: none !important; }
 .dgn-pop__hint { margin: .6rem 0 1rem; color: #b6c3bc; font: 500 .75rem/1.4 system-ui; }
+.dgn-pop__champion-guide { display: flex; flex: none; justify-content: center; align-items: center; gap: .35rem; margin: -.65rem 0 .75rem; color: #ded4ea; font: 600 .67rem/1.4 system-ui; }
 .dgn-pop__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; width: 100%; margin: auto; }
 .dgn-pop__grid[data-size="1"] { grid-template-columns: minmax(0, 1fr); max-width: min(360px, 72vw); }
 .dgn-pop__grid[data-size="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
@@ -24,16 +25,26 @@
 .dgn-pop__cell:focus-visible, .dgn-pop__flame:focus-visible { outline: 3px solid #fff4aa; outline-offset: -4px; z-index: 12; }
 .dgn-pop__badge { display: block; width: 78%; height: 78%; object-fit: contain; pointer-events: none; border-radius: 50%; }
 .dgn-pop__cell.is-open { background: #34423f; box-shadow: inset 0 2px 9px #0006; cursor: default; }
-.dgn-pop__cell.is-open .dgn-pop__badge { width: 69%; height: 69%; background: none; }
+/* Circular badge artwork occupies only 70 of its 102 SVG units. Account for
+   that padding so the visible medallion fills most of the quadrant. */
+.dgn-pop__cell.is-open .dgn-pop__badge { position: absolute; top: 50%; left: 50%; translate: -50% -50%; width: var(--pop-badge-size); height: var(--pop-badge-size); max-width: none; background: none; }
+.dgn-pop .bubble-reveal__badge { width: var(--pop-badge-size); height: var(--pop-badge-size); flex-shrink: 0; }
 .dgn-pop__cell[data-points="0"] { background: #8f2038; }
 .dgn-pop__cell[data-points="1"] { background: #1679da; }
 .dgn-pop__cell[data-points="2"] { background: #00a88b; }
 .dgn-pop__cell[data-points="3"] { background: #a137eb; }
 .dgn-pop__cell.is-match { box-shadow: inset 0 0 0 1px #ffffff65, inset 0 0 22px #ffffff22; }
-.dgn-pop__player { position: absolute; width: 27%; height: 27%; right: 5%; bottom: 5%; background: none; border: 0; pointer-events: none; filter: drop-shadow(0 1px 2px #0005); }
-.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q2 .dgn-pop__player { left: 5%; right: auto; }
-.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 5%; bottom: auto; }
-.dgn-pop__hero { position: absolute; z-index: 2; width: 69%; height: 69%; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; filter: drop-shadow(0 1px 2px #0008); }
+.dgn-pop__player { position: absolute; width: 42%; height: 42%; right: 3%; bottom: 3%; background: none; border: 0; pointer-events: none; filter: drop-shadow(0 1px 2px #0009); }
+.dgn-pop__player-art { display: block; width: 100%; height: 100%; object-fit: contain; }
+.dgn-pop__player.is-champion { z-index: 3; }
+.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q2 .dgn-pop__player { left: 3%; right: auto; }
+.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 3%; bottom: auto; }
+/* Trace the medallion's visible edge inside its padded SVG canvas. The halo
+   follows your champion through hits and misses without covering its symbol. */
+.dgn-pop__champion { position: absolute; z-index: 5; inset: 15%; border: 2px solid #f6e8ff; border-radius: 50%; box-shadow: 0 0 4px #fff, 0 0 12px 3px #c887ffcc, 0 0 24px 5px #ad54ff77, inset 0 0 6px #edcaffaa; pointer-events: none; }
+.dgn-pop__player .dgn-pop__champion { border-width: 1.5px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffdd, 0 0 15px 3px #ad54ff88; }
+.dgn-pop__champion-bonus { position: absolute; top: -5px; right: -7px; padding: 1px 4px; border: 1px solid #e4c6ff; border-radius: 999px; background: #281534; color: #fff; box-shadow: 0 0 7px #d19aff88; font: 900 clamp(9px, 3.4cqi, 12px)/1.2 system-ui; font-variant-numeric: tabular-nums; }
+.dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 12px; height: 12px; margin: 2px 4px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffbb; }
 /* Match the jackpot's white seal: a fixed, unrotated hit area with its
    diamond drawn inside, so the flame stays upright at the four-way seam. */
 .dgn-pop__flame { position: absolute; z-index: 15; top: 50%; left: 50%; width: 32%; height: 32%; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; }
@@ -69,6 +80,9 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 .dgn-pop__flame[data-points]::before { background: var(--score-paper); border-color: var(--score-ink); box-shadow: 0 0 0 2px #09100ed9, 0 0 16px var(--score-glow), inset 0 0 12px #ffffff20; transition: background-color 140ms ease-out, border-color 140ms ease-out; }
 .dgn-pop__flame[data-score]::before { border-width: 3px; box-shadow: 0 0 0 3px #09100ee6, 0 0 22px var(--score-glow), inset 0 0 14px #ffffff30; }
 .dgn-pop__ticket-score { position: relative; z-index: 1; color: #fff; font: 950 clamp(24px, 63cqi, 76px)/1 system-ui; font-variant-numeric: tabular-nums; text-shadow: 0 2px 1px #0009, 0 0 12px var(--score-glow); pointer-events: none; animation: dgn-pop-score 480ms cubic-bezier(.2, .8, .3, 1) both; }
+/* The 1's heavy stem sits right of its advance center; balance its visible
+   weight inside the diamond rather than moving it farther right. */
+.dgn-pop__flame[data-score="1"] .dgn-pop__ticket-score { translate: -.035em -.03em; }
 @keyframes dgn-pop-score { 0% { opacity: 0; scale: .55; } 45% { opacity: 1; scale: 1.25; } 72% { scale: .95; } 100% { scale: 1; } }
 
 /* Each completed paid ticket gets a readable receipt beat, then leaves the
@@ -105,7 +119,20 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 .dgn-pop__cell.is-match .dgn-pop__badge,
 .dgn-pop__cell.is-match .dgn-pop__player { animation: dgn-pop-match 420ms ease-out both; }
 .dgn-pop__cell.is-match .dgn-pop__increment { animation: dgn-pop-point 650ms ease-out both; }
-@keyframes dgn-pop-match { 0%,100% { scale: 1; } 35% { scale: 1.12; filter: drop-shadow(0 0 5px #fff5b9); } }
+@keyframes dgn-pop-match { 0%,100% { scale: 1; } 35% { scale: 1.12; } }
+/* A grouped reveal celebrates the card total once, rather than bouncing every
+   matching symbol and point label at the same time. */
+.dgn-pop__card.is-batch-reveal .dgn-pop__cell { transition: none; }
+.dgn-pop__card.is-batch-reveal .dgn-pop__badge,
+.dgn-pop__card.is-batch-reveal .dgn-pop__player,
+.dgn-pop__card.is-batch-reveal .dgn-pop__increment { animation: none; }
+/* Offscreen results are final when scrolled into view. Their persistent card
+   receipt remains visible; transient popups and score bounces do no work. */
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__ticket-score { animation: none; }
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__payout { display: none; }
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__cell,
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__flame,
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__flame::before { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .dgn-pop__cell.is-match .dgn-pop__badge, .dgn-pop__cell.is-match .dgn-pop__player { animation: none; }
   .dgn-pop__ticket-score { animation: none; }
