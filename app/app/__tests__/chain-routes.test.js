@@ -11,6 +11,10 @@ test('contract ABI integration: current state and balances use RPC without any H
   // jackpotFlags bit 0 (JACKPOT_TURBO) is the one-day schedule; normal is three days.
   assert.equal(state.jackpotDays,3);await f.field('GAME','jackpotFlags',3);
   const turbo=await readChainRoute('/game/state',{client:f.client});assert.equal(turbo.jackpotFlags,3);assert.equal(turbo.jackpotDays,1);
+  await f.field('GAME','decimatorFlags',2);
+  assert.equal((await readChainRoute('/game/state',{client:f.client})).decWindowOpen,false);
+  await f.field('GAME','decimatorFlags',3);
+  assert.equal((await readChainRoute('/game/state',{client:f.client})).decWindowOpen,true);
   const p=await readChainRoute(`/player/${PLAYER}`,{client:f.client});assert.equal(p.claimableEth,'123456789');assert.equal(p.flipBalance,'987654321');
   assert.equal(p.tickets,null);assert.equal(f.requests.filter(r=>r.method==='eth_getLogs').length,0,'money HUD must not scan history');
 });
@@ -53,7 +57,7 @@ test('contract ABI integration: a keeper-swept bet feeds its own spins, Luckbox 
   const placeTx='0x'+'aa'.repeat(32), sweepTx='0x'+'bb'.repeat(32);
   await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:7,betId:1,packed},{block:9990,index:0,tx:placeTx});
   await f.event('COINFLIP','BigRecordUpdated',{kind:1,player:PLAYER,value:10n**18n,paid:900n*10n**18n+5n,sdgnrsPaid:0},{block:9990,index:1,tx:placeTx});
-  await f.field('GAME','lootboxRngWordByIndex',0xabcd,7);
+  await f.event('GAME','LootboxRngApplied',{index:7,word:0xabcd},{block:9994,index:0});
   const spins='0x'+(1234).toString(16).padStart(8,'0')+'04'; // one spin: S4, no gold
   const record=(1n<<63n)|(3n<<60n)|5n;
   await f.event('GAME','LootBoxOpened',{player:PLAYER,lootboxIndex:7,amount:1,futureLevel:1,futureTickets:4},{block:9995,index:10,tx:sweepTx}); // human box
@@ -91,7 +95,8 @@ test('contract ABI integration: Decimator winners split the pool with the champi
     const f=await rpcFixture();
     await f.field('GAME','decBattlePlayers',(10n<<64n)|id,PLAYER);
     await f.field('GAME','decBattleEntries',BigInt(PLAYER)|(10n<<190n),(10n<<64n)|id);
-    for(const [member,value] of Object.entries({poolWei:303,count:30,phase:2,winners:3,paid,rngWord:word,champion}))await f.field('GAME','decBattleRounds',value,10,member);
+    for(const [member,value] of Object.entries({poolWei:303,count:30,phase:2,winners:3,paid,champion}))await f.field('GAME','decBattleRounds',value,10,member);
+    await f.event('GAME','DecimatorResolved',{lvl:10,rngWord:word,poolWei:303,entrants:30});
     await f.field('GAME','decBattleHeap',id,place);
     return readChainRoute(`/player/${PLAYER}/decimator?level=10`,{client:f.client});
   };
@@ -174,6 +179,7 @@ test('contract ABI integration: a Bingo proof for a level the game has left is r
   // Audit 628b3eed7: claimBingo reverts BingoExpired once `lvl < level` (DegenerusGameBingoModule.sol:146).
   const {bingoProof}=await import('../../chain/positions.js');
   const f=await rpcFixture(); await f.field('GAME','level',6);
+  await f.field('GAME','ticketBufferLevels',6n | (7n << 24n));
   await assert.rejects(bingoProof(PLAYER,5,3,{client:f.client}),error=>error.code==='BingoExpired');
   await assert.rejects(bingoProof(PLAYER,6,3,{client:f.client}),error=>error.code!=='BingoExpired',
     'the current level is still open (its proof fails later, for want of entries)');

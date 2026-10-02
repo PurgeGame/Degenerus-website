@@ -28,9 +28,9 @@ test('chain input assembly recovers actual seat packing and reproduces every set
   await f.field('CRAPS','_battles',24n|(24n<<32n),key);
   const daySeats=input.seats.filter(s=>s.lane==='day').length;
   await f.field('CRAPS','_dayTickets',daySeats,slot/8n*8n);
-  await f.field('GAME','lootboxRngWordByIndex',input.word,512);
+  await f.event('GAME','LootboxRngApplied',{index:1,word:input.word},{block:3500,index:4});
   await f.event('CRAPS','CrapsBonusOpened',{battleKey:key,slot,bankroll:input.terms.bankroll,goal:input.terms.goal,boardStake:input.terms.boardStake/10n*7n,battleStake:input.terms.battleStake},{block:3500,index:0});
-  await f.event('CRAPS','CrapsBonusArmed',{battleKey:key,slot,index:512},{block:3500,index:1});
+  await f.event('CRAPS','CrapsBonusArmed',{battleKey:key,slot,index:1},{block:3500,index:1});
   await f.event('CRAPS','CrapsHighRollerDayOpened',{day:42,multiplier:Math.max(...input.seats.map(s=>s.multiple))},{block:3500,index:2});
   for(const [i,seat] of input.seats.entries()){
     const high=seat.multiple>1?1n<<(217n+(seat.lane==='day'?slot%8n-1n:0n)):0n;

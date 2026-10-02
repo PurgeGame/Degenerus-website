@@ -675,7 +675,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('BUY AFKING PASS is offered only after an exact no-pass read and opens the pass drawer', async () => {
+  test('AFKing passes is visible before ownership loads and opens the pass drawer', async () => {
     const drawer = makeFakeElement('details');
     drawer.setAttribute('id', 'afking-passes');
     drawer.classList.add('more-ways');
@@ -690,10 +690,9 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     _docBody.appendChild(drawer);
 
     const el = instantiate();
-    await settle(60);
     const jump = el.querySelector('[data-bind="dec-afking-jump"]');
     assert.ok(jump, 'purchase panel exposes the pass shortcut');
-    assert.equal(jump.hidden, false, 'definitive no-seat read reveals the acquisition shortcut');
+    assert.equal(jump.hidden, false, 'pass browsing is available immediately');
     jump.dispatchEvent({ type: 'click' });
     assert.equal(drawer.open, true);
     assert.equal(drawer.getAttribute('open'), '');
@@ -701,7 +700,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('BUY AFKING PASS stays hidden for an existing seat or subscription', async () => {
+  test('AFKing passes stays visible for an existing seat or subscription', async () => {
     for (const state of [
       { hasToken: true },
       { active: true },
@@ -711,8 +710,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       await settle(60);
       assert.equal(
         el.querySelector('[data-bind="dec-afking-jump"]').hidden,
-        true,
-        `holder state ${JSON.stringify(state)} does not receive an acquisition prompt`,
+        false,
+        `holder state ${JSON.stringify(state)} can still open passes`,
       );
       el.disconnectedCallback();
     }
@@ -811,7 +810,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.match(el.innerHTML,
-      /data-bind="dec-custom-box-toggle"[\s\S]*?class="dec-custom-box-logo"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?<strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
+      /data-bind="dec-custom-box-toggle"[\s\S]*?<strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'the custom-chest action labels the section while boon and quest markers keep dedicated slots');
     assert.match(el.innerHTML,
       /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-presale-row" hidden[\s\S]*?data-bind="dec-custom-box-buy"[\s\S]*?data-bind="dec-custom-box-buy-action">BUY IN<\/span>[\s\S]*?data-bind="dec-custom-box-buy-amount" hidden/,

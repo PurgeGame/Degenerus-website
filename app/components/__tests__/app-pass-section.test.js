@@ -423,18 +423,6 @@ function instantiate() {
   return el;
 }
 
-function mountQuickbar() {
-  const bar = makeFakeElement('section');
-  bar.setAttribute('id', 'pass-quickbar');
-  bar.innerHTML = INDEX_HTML.match(/<section class="pass-quickbar"[\s\S]*?<\/section>/)[0];
-  // The lightweight HTML parser does not retain arbitrary data attributes.
-  for (const product of ['lazy', 'whale', 'deity']) {
-    bar.querySelector(`.more-ways__quickbuy--${product}`).setAttribute('data-pass-quickbuy', product);
-  }
-  _docBody.appendChild(bar);
-  return bar;
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -601,69 +589,9 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       funding: 'FUNDED FOR: 5 DAYS',
       fundedDays: 5n,
     });
-    assert.deepEqual(
-      [...INDEX_HTML.matchAll(/data-pass-quickbuy="(lazy|whale|deity)"/g)].map((match) => match[1]),
-      ['lazy', 'whale', 'deity'],
-      'the closed bar has one shortcut for each purchasable pass type',
-    );
-    assert.doesNotMatch(INDEX_HTML, /pass-summary-(?:deity|active-pass)/,
-      'owned Deity, Whale, and Lazy state is not duplicated in the shop bar');
-    assert.ok(INDEX_HTML.indexOf('<app-deity-desk>') < INDEX_HTML.indexOf('id="afking-passes"'),
-      'the dedicated Deity bar remains the ownership surface above the pass shop');
-    assert.match(PASS_SOURCE, /async quickBuyPass\(product\)[\s\S]*?#onLazyBuyClick\(\)[\s\S]*?#onWhaleBuyClick\(\)/,
-      'summary shortcuts reuse the existing transaction implementations');
-    assert.match(INDEX_HTML,
-      /data-pass-quickbuy[\s\S]*?event\.preventDefault\(\)[\s\S]*?quickBuyPass/,
-      'a quick-buy click loads the lazy component without toggling the summary');
-    assert.match(STATUS_CSS, /\.more-ways\[open\][^{]*\.more-ways__summary-closed\s*\{[^}]*display:\s*none/s,
-      'summary details disappear when the full pass desk is open');
-    assert.match(STATUS_CSS,
-      /@media \(max-width: 620px\)[\s\S]*?\.more-ways__quickbuys\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s,
-      'all three quick buys remain uniformly sized on phones');
-    assert.match(STATUS_CSS,
-      /\.more-ways__sub-state\s*\{[^}]*min-height:\s*2\.15rem[\s\S]*?\.more-ways__sub-state > b\s*\{[^}]*min-height:\s*2\.15rem/s,
-      'subscription coverage keeps its compact two-part presentation');
+    assert.doesNotMatch(INDEX_HTML, /id="pass-quickbar"|data-pass-quickbuy=/,
+      'pass purchases live in the popup rather than a duplicate lower strip');
   });
-
-  test('quick buys hide unknown offers and follow the Lazy purchase window and boons', async () => {
-    _fetchHandler = async (url) => String(url).includes('/player/')
-      ? { level: 12 }
-      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
-    const bar = mountQuickbar();
-    instantiate();
-    const lazy = bar.querySelector('[data-pass-quickbuy="lazy"]');
-    const deity = bar.querySelector('[data-pass-quickbuy="deity"]');
-    const whale = bar.querySelector('[data-pass-quickbuy="whale"]');
-    assert.equal(lazy.hidden, true, 'unknown availability never flashes an offer');
-    assert.equal(deity.hidden, true);
-    assert.equal(whale.hidden, false);
-    await settle(60);
-    assert.equal(lazy.hidden, true, 'the closed Lazy purchase window has no shortcut');
-    assert.equal(deity.hidden, false, 'a verified available Deity offer appears');
-
-    storeMod.update('app.boons', {
-      address: CONNECTED.toLowerCase(), boons: [{ boonType: 31, consumed: false }],
-    });
-    assert.equal(lazy.hidden, false, 'a usable Lazy boon opens its shortcut');
-    storeMod.update('app.boons', null);
-    assert.equal(lazy.hidden, true, 'the shortcut disappears when the boon is gone');
-  });
-
-  for (const state of ['owned', 'sold out']) {
-    test(`quick buys hide Deity when ${state} while keeping available Lazy visible`, async () => {
-      _fetchHandler = async () => ({ level: 1, phase: 'PURCHASE', jackpotPhaseFlag: false });
-      const owners = state === 'owned'
-        ? new Map([[7, CONNECTED]])
-        : new Map(Array.from({ length: 32 }, (_, symbol) => [symbol, '0x1111000000000000000000000000000000000000']));
-      passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(owners));
-      const bar = mountQuickbar();
-      instantiate();
-      await settle(60);
-      assert.equal(bar.querySelector('[data-pass-quickbuy="deity"]').hidden, true);
-      assert.equal(bar.querySelector('[data-pass-quickbuy="lazy"]').hidden, false);
-      assert.equal(bar.querySelector('[data-pass-quickbuy="whale"]').hidden, false);
-    });
-  }
 
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
     const el = instantiate();

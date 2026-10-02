@@ -57,6 +57,7 @@ function makeFakeContract(opts = {}) {
     if (methodName === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
     if (methodName === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
     if (methodName === 'openBoxes') calls.openBoxesStatic.push(args);
+    if (opts.staticCallError?.[methodName]) throw opts.staticCallError[methodName];
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[methodName] || 'RngNotReady' };
@@ -91,6 +92,7 @@ function makeFakeContract(opts = {}) {
     buyPresaleBox: Object.assign(
       async (...args) => {
         calls.buyPresaleBox.push(args);
+        if (opts.presaleShouldReject) throw opts.presaleShouldReject;
         return makeFakeTx(makeFakeReceipt(opts.presaleLogs));
       },
       { staticCall: staticCallStub('buyPresaleBox') }
@@ -917,6 +919,66 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
   });
 
+  test('standalone presale can be paid entirely from AFKing funds', async () => {
+    const amount = lootboxMod.PRESALE_BOX_MIN_WEI;
+    const contract = makeFakeContract({ afkingRaw: amount * 2n });
+    lootboxMod.__setContractFactoryForTest(() => contract);
+
+    const { payment } = await lootboxMod.purchasePresaleBox({
+      boxAmountWei: amount,
+      useAfking: true,
+    });
+
+    assert.equal(payment.afkingUsedWei, amount);
+    assert.deepEqual(contract._calls.buyPresaleBoxStatic[0], [
+      CONNECTED, amount, { value: 0n },
+    ]);
+    assert.deepEqual(contract._calls.buyPresaleBox[0], contract._calls.buyPresaleBoxStatic[0]);
+  });
+
+  for (const phase of ['preflight', 'send']) {
+    test(`standalone presale preserves wallet timeout details during ${phase}`, async () => {
+      const message = 'Wallet is not responding. Open your wallet and try again.';
+      const cause = Object.assign(new Error(message), { code: 'WALLET_UNRESPONSIVE' });
+      const contract = makeFakeContract(phase === 'preflight'
+        ? { staticCallError: { buyPresaleBox: cause } }
+        : { presaleShouldReject: cause });
+      lootboxMod.__setContractFactoryForTest(() => contract);
+
+      await assert.rejects(
+        lootboxMod.purchasePresaleBox({ boxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI }),
+        (error) => {
+          assert.equal(error.userMessage, message);
+          assert.equal(error.message, message);
+          assert.ok(error.cause, 'the original error remains available for diagnostics');
+          return true;
+        },
+      );
+      assert.equal(contract._calls.buyPresaleBox.length, phase === 'preflight' ? 0 : 1,
+        'a failed preflight never sends; a send error never triggers a second purchase');
+    });
+  }
+
+  test('standalone presale shows safe nested RPC feedback without leaking provider blobs', async () => {
+    const message = 'Request rate limit reached. Try again shortly.';
+    const cause = Object.assign(new Error('could not coalesce error (UNKNOWN_ERROR, ethers)'), {
+      code: 'UNKNOWN_ERROR',
+      info: { error: { code: -32005, message } },
+    });
+    const contract = makeFakeContract({ staticCallError: { buyPresaleBox: cause } });
+    lootboxMod.__setContractFactoryForTest(() => contract);
+
+    await assert.rejects(
+      lootboxMod.purchasePresaleBox({ boxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI }),
+      (error) => {
+        assert.equal(error.userMessage, message);
+        assert.equal(error.cause, cause);
+        return true;
+      },
+    );
+    assert.equal(contract._calls.buyPresaleBox.length, 0);
+  });
+
   test('presale queue rollover replaces compact E() with an actionable retry message', async () => {
     const reverting = makeFakeContract({
       staticCallShouldRevert: { buyLootboxAndPresaleBox: true },
@@ -1177,28 +1239,25 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
   });
 
-  test('the box-state read uses the generated schema\'s slots', async () => {
-    // lootboxOrder / presaleBoxEth are mapping(uint48 => mapping(address => uint256)),
-    // lootboxRngWordByIndex mapping(uint48 => uint256), boxCursorIndex packs into its slot.
-    const { loadSchema } = await import('../../chain/schema.js');
+  test('the box-state read uses the current schema and physical read buffer', async (t) => {
+    const { loadSchema, useSchema, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
+    const previous = useSchema(CURRENT_SCHEMA_HASH); t.after(() => useSchema(previous));
     const { fields } = await loadSchema('GAME');
     const { ethers } = await import('../contracts.js');
     const coder = ethers.AbiCoder.defaultAbiCoder();
     const inner = (root, index) => ethers.keccak256(coder.encode(['uint48', 'uint256'], [index, BigInt(root)]));
     const nested = (root, index, who) => ethers.keccak256(coder.encode(['address', 'bytes32'], [who, inner(root, index)]));
     const words = new Map([
-      [nested(fields.lootboxOrder.slot, 7n, CONNECTED).toLowerCase(), 1n],
-      [inner(fields.lootboxRngWordByIndex.slot, 7n).toLowerCase(), 0xabcn],
-      [`0x${BigInt(fields.boxCursorIndex.slot).toString(16)}`, 6n << BigInt(fields.boxCursorIndex.offset * 8)],
+      [nested(fields.lootboxOrder.slot, 1n, CONNECTED).toLowerCase(), 1n],
+      [`0x${BigInt(fields.rngWordCurrent.slot).toString(16)}`, 0xabcn],
+      ['0x0', 1n << 255n], // published, write buffer 0, read buffer 1
     ]);
-    const provider = {
-      getStorage: async (_address, slot) => ethers.toBeHex(words.get(String(slot).toLowerCase()) ?? 0n, 32),
-    };
-    const state = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 7n, provider });
+    const provider = { getStorage: async (_address, slot) => ethers.toBeHex(words.get(String(slot).toLowerCase()) ?? 0n, 32) };
+    const state = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 1n, provider });
     assert.deepEqual(state, { pending: true, worded: true, swept: false, rngLocked: false });
-    words.set(`0x${BigInt(fields.boxCursorIndex.slot).toString(16)}`, 8n << BigInt(fields.boxCursorIndex.offset * 8));
-    const later = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 7n, provider, blockTag: 12 });
-    assert.equal(later.swept, true, 'past the frontier the whole index is done');
+    words.set(`0x${BigInt(fields.humanReadComplete.slot).toString(16)}`, 1n << BigInt(fields.humanReadComplete.offset * 8));
+    const later = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 1n, provider, blockTag: 12 });
+    assert.equal(later.swept, true, 'completed read cohorts cannot open again');
     assert.equal(later.pending, false);
   });
 });

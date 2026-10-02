@@ -3421,17 +3421,12 @@ body.layout-basic .inv-viewport {
   overflow: auto;
   scrollbar-gutter: stable;
 }
-/* At the untouched desktop height, Chart mode opens to its natural 2×2
-   footprint. A manual grip/native resize removes this class and restores the
-   player's persisted scroll-window height. */
+/* Chart mode fits its content by default, within the popup's viewport limit.
+   A manual resize restores the player's persisted scroll-window height. */
 @media (min-width: 641px) {
   body.layout-basic .inv-window.inv-window--fit-chart {
     height: auto !important;
-    max-height: none;
     resize: none;
-  }
-  body.layout-basic .inv-window.inv-window--fit-chart .inv-viewport {
-    overflow: visible;
   }
 }
 body.layout-basic .inv-resize-grip {
@@ -3462,6 +3457,9 @@ body.layout-basic .inv-cards {
 
 body.layout-basic .inv-card {
   position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
   /* Large players can own thousands of unique tickets. Keep their scroll
      geometry, but let the browser skip layout/paint and image decoding for
      cards well outside the inventory viewport. */
@@ -3533,27 +3531,6 @@ body.layout-basic .inv-deity-pass__name {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body.layout-basic .inv-card--degenerette-copy {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  color: inherit;
-  font: inherit;
-  cursor: copy;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
-}
-body.layout-basic .inv-card--degenerette-copy:hover,
-body.layout-basic .inv-card--degenerette-copy:focus-visible {
-  border-color: rgba(165, 180, 252, 0.72);
-  outline: 0;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
-  transform: translateY(-1px);
-}
-body.layout-basic .inv-card--degenerette-copy.inv-card--copied {
-  border-color: rgba(74, 222, 128, 0.82);
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2), 0 0 14px rgba(34, 197, 94, 0.16);
-}
-
 body.layout-basic .inv-count {
   position: absolute;
   top: 2px;
@@ -3606,8 +3583,15 @@ body.layout-basic .inv-empty { color: var(--text-secondary); font-size: 0.85rem;
 
 body.layout-basic .inv-chart {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
+}
+
+/* One row of four 8×8 grids keeps all 256 traits visible on a desktop. */
+@media (min-width: 1024px) {
+  body.layout-basic .tickets-popup .inv-chart {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 body.layout-basic .inv-chart__deity-note {

@@ -3910,63 +3910,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   body.layout-basic .app-decimator-panel .dec-purchase-flyer { display: none; }
 }
 
-/* Share the Luckbox shelf: passes above the small case, custom controls above gold. */
-.app-decimator-panel .dec-luckbox-shelf {
-  position: relative;
-  min-width: 0;
-}
-
-.app-decimator-panel .dec-luckbox-shelf > .dec-afking-jump {
-  position: absolute;
-  z-index: 3;
-  top: 3px;
-  left: 6px;
-}
-
-.app-decimator-panel .dec-luckbox-shelf:has(> .dec-input-group--lootbox[hidden]):has(> .dec-afking-jump:not([hidden])) {
-  min-height: 71px;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-builder-head {
-  z-index: 2;
-  grid-template-columns: minmax(0, 1.66fr) minmax(0, 1.34fr);
-  min-height: 30px;
-  padding-left: 0;
-  pointer-events: none;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-builder-title {
-  grid-column: 2;
-  justify-self: stretch;
-  display: flex;
-  justify-content: center;
-  pointer-events: auto;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-custom-box-toggle {
-  max-width: 100%;
-  gap: 4px;
-  padding: 2px 4px;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-custom-box-toggle__copy {
-  width: 62px;
-  min-width: 0;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-custom-box-toggle strong {
-  display: block;
-  white-space: normal;
-  font-size: 9px;
-  line-height: 1.15;
-  text-align: center;
-}
-
-body.layout-basic .app-decimator-panel .dec-luckbox-shelf .dec-builder-title > .dec-input-accessories {
-  left: auto;
-  right: calc(100% + .15rem);
-}
-
 /* The cards and PASSES lettering form one freestanding clickable mark. */
 .app-decimator-panel .dec-afking-jump {
   position: relative;

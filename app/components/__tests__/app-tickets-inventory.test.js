@@ -965,19 +965,21 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('clicking an opened inventory ticket publishes its traits to Degenerette', async () => {
+  test('inventory tickets are display cards and clicking them does not copy into Degenerette', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     let copied = null;
     document.addEventListener('degenerette:copy-ticket', (event) => { copied = event.detail; });
     const el = mount();
     await flushMicrotasks();
 
-    const ticket = el.querySelector('.inv-card--degenerette-copy');
-    assert.ok(ticket, 'opened card is an accessible copy control');
+    const ticket = el.querySelector('.inv-card');
+    assert.equal(ticket.tagName, 'DIV');
+    assert.equal(ticket.getAttribute('aria-label'), null);
+    assert.equal(el.querySelector('.inv-card--degenerette-copy'), null);
     el.querySelector('[data-bind="inv-cards"]').dispatchEvent({ type: 'click', target: ticket });
-    assert.deepEqual(copied, { traitIds: COMBO, level: 17, foil: false });
-    assert.ok(ticket.classList.contains('inv-card--copied'));
-    assert.equal(ticket.getAttribute('aria-label'), 'Copied to Degenerette');
+    assert.equal(copied, null);
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, false,
+      'clicking a ticket leaves its inventory open');
     el.disconnectedCallback();
   });
 
@@ -1238,7 +1240,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('untouched desktop chart mode fits its full natural height until manually resized', async () => {
+  test('desktop chart mode fits its content until manually resized', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     const el = mount();
     await flushMicrotasks();
@@ -1246,7 +1248,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
     const frame = el.querySelector('[data-bind="inv-window"]');
     assert.ok(frame.classList.contains('inv-window--fit-chart'),
-      'default-size chart opts into its full 2×2 natural footprint');
+      'default-size chart fits the responsive grid');
 
     el.querySelector('[data-bind="inv-resize-grip"]').dispatchEvent({
       type: 'keydown',

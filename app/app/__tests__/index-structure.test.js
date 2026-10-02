@@ -62,7 +62,7 @@ describe('index.html basic-mode skeleton', () => {
       '<app-parimutuel-panel quest>',
       'data-referral-strip',
       '<app-degenerette-panel>',
-      'class="player-extras"',
+      'class="player-desk"',
       '<app-records-rail>',
       '<app-tickets-inventory>',
       '<app-sdgnrs-burn-rail>',
@@ -146,7 +146,7 @@ describe('index.html basic-mode skeleton', () => {
 
 
 
-  test('AFKING keeps a visible purchase bar and its detailed shop in a popup', () => {
+  test('AFKING keeps its shop in a popup without a duplicate lower purchase bar', () => {
     const detailsMatch = html.match(/<details class="more-ways section-disclosure"[^>]*>([\s\S]*?)<\/details>/);
     assert.ok(detailsMatch, '<details class="more-ways"> block present');
     assert.doesNotMatch(detailsMatch[0], /^<details class="more-ways section-disclosure"[^>]*\bopen\b[^>]*>/,
@@ -154,22 +154,8 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(detailsMatch[0], /\bid="afking-passes"/,
       'the purchase shortcut has a stable drawer target');
     assert.match(detailsMatch[1], /<summary class="more-ways__summary section-disclosure__bar">[\s\S]*section-disclosure__title">AFKING PASSES<[\s\S]*section-disclosure__chevron/);
-    const bar = html.match(/<section class="pass-quickbar"[\s\S]*?<\/section>/)?.[0];
-    assert.ok(bar, 'the purchase bar remains visible outside the popup');
-    for (const bind of [
-      'pass-summary-subscription',
-      'pass-summary-funding',
-      'pass-summary-buy-lazy-price',
-      'pass-summary-buy-whale-price',
-      'pass-summary-buy-deity-price',
-    ]) assert.match(bar, new RegExp(`data-bind="${bind}"`));
-    assert.doesNotMatch(detailsMatch[1], /pass-summary-(?:deity|active-pass)/,
-      'the closed shop bar does not duplicate owned-pass state');
-    for (const product of ['lazy', 'whale', 'deity']) {
-      assert.match(bar, new RegExp(`data-pass-quickbuy="${product}"`));
-    }
-    assert.match(bar, /data-pass-quantity="-1"/);
-    assert.match(bar, /data-pass-quantity="1"/);
+    assert.doesNotMatch(html, /id="pass-quickbar"|data-pass-quickbuy=/,
+      'the Buy In shortcut replaces the lower purchase strip');
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
@@ -236,7 +222,10 @@ describe('index.html basic-mode skeleton', () => {
     assert.ok(referrals > history, 'Referrals follows Transaction History');
     assert.ok(referrals < mainClose, 'Referrals remains inside main');
     for (const name of ['passes', 'history', 'referrals']) {
-      assert.match(html, new RegExp(`data-panel-open="${name}"[^>]*aria-haspopup="dialog"[^>]*aria-controls="panel-${name}"`));
+      const triggerSource = name === 'passes'
+        ? readFileSync(resolvePath(__dirname, '../../components/app-decimator-panel.js'), 'utf8')
+        : html;
+      assert.match(triggerSource, new RegExp(`<button(?=[^>]*data-panel-open="${name}")(?=[^>]*aria-haspopup="dialog")(?=[^>]*aria-controls="panel-${name}")[^>]*>`));
       assert.match(html, new RegExp(`id="panel-${name}"[^>]*data-panel-popup="${name}"[^>]*hidden[^>]*role="dialog"[^>]*aria-modal="true"`));
     }
     assert.doesNotMatch(html, /data-panel-popup="(?:tickets|bounties)"/);
@@ -263,12 +252,11 @@ describe('index.html basic-mode skeleton', () => {
     assert.match(appCss,
       /@media \(min-width:\s*1100px\)[\s\S]*?\.play-grid\s*\{[^}]*grid-template-areas:\s*"quests craps degenerette"/s,
       'the wide centre track belongs to Craps, the right track to Degenerette');
-    const extras = html.indexOf('<div class="player-extras">');
+    const desk = html.indexOf('<section class="player-desk"');
     const bounties = html.indexOf('<app-records-rail>');
-    assert.ok(extras > html.indexOf('<section class="play-grid"') && extras < bounties,
-      'the pass row sits below the games and above Bounties');
-    assert.ok(html.indexOf('id="pass-quickbar"') > extras && html.indexOf('id="pass-quickbar"') < bounties);
-    assert.doesNotMatch(html.slice(extras, bounties), /data-referral-strip|app-parimutuel-panel/);
+    assert.ok(desk > html.indexOf('<section class="play-grid"') && bounties > desk);
+    assert.doesNotMatch(html.slice(desk, bounties), /player-extras|pass-quickbar/,
+      'no empty pass strip remains above Bounties');
     const incinerator = html.indexOf('<app-wwxrp-burn hidden>');
     assert.ok(incinerator > html.indexOf('<app-tickets-inventory>'),
       'the independent Incinerator belongs below inventory');
@@ -406,7 +394,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-ec9947f7-feab7a70-scoped-v14-riu-pool';
+    const revision = '?v=craps-be793ed7-6ea7a7c7-scoped-v14-riu-pool';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
