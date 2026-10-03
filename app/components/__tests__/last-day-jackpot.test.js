@@ -1552,7 +1552,7 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     )?.[1] || '';
     assert.match(
       dayChange,
-      /await this\.#loadPlayerTraits\(\);[\s\S]*const rollDataReady/,
+      /await this\.#loadPlayerTraits\(\{ required: true \}\);[\s\S]*const rollDataReady/,
       'loading colors hydrate from the target purchase-level holdings before the gate clears',
     );
     const { replayAttractShouldRun, replayHoldingsLevel } = await import('../replay-panel.js');

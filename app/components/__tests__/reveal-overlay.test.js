@@ -1128,6 +1128,27 @@ describe('normalizeSequence', () => {
     assert.match(seq.title, /PACK 2\/3/);
   });
 
+  test('jackpot: whale pass awards reach the summary with correct half-pass quantities', async () => {
+    const { buildDaySummaryPrizes } = await import('../../app/day-summary-prizes.js');
+    for (const [amount, count, value] of [
+      ['1', 1, '½ whale pass'], ['2', 1, '1 whale pass'], ['1', 3, '1½ whale passes'],
+    ]) {
+      const sequence = normalizeSequence({ kind: 'jackpot', day: 446,
+        prizes: buildDaySummaryPrizes({ breakdown: [{ awardType: 'whale_pass', amount, count }] }),
+      });
+      assert.equal(sequence.cards.length, 1);
+      const card = sequence.cards[0];
+      assert.equal(card.type, 'whalepass');
+      assert.equal(card.value, value);
+      assert.equal(card.rarity, 'legendary');
+      assert.equal(card.summaryDetail, true);
+      assert.equal(card.countText, null, 'fractional pass text is not fed to the integer counter');
+      assert.equal(sequence.consolationOnly, false);
+      assert.equal(sequence.big, true);
+    }
+    assert.equal(normalizeSequence({ kind: 'jackpot', prizes: [{ type: 'whale-pass', amount: 0n }] }), null);
+  });
+
   test('jackpot: bonus day passes use the normal craps comp card', () => {
     const sequence = normalizeSequence({ kind: 'jackpot', day: 446,
       prizes: [{ type: 'craps-pass', amount: 2n, winningTraitIds: [18] }],

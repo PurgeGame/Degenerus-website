@@ -5,6 +5,49 @@ import { runInNewContext } from 'node:vm';
 
 const source = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 
+test('failed ticket preload retries before Spin becomes ready, then clicking reuses ownership without another read', async () => {
+  const loadStart = source.indexOf('  async #loadPlayerTraits(');
+  const loadEnd = source.indexOf('\n  // --- Event Handlers ---', loadStart);
+  const readyStart = source.indexOf('  #dayDataReady(');
+  const readyEnd = source.indexOf('\n  /**', readyStart);
+  let reads = 0; let resolveTraits;
+  const panel = runInNewContext(`new (class {
+    #selectedPlayer = '0xabc'; #selectedDay = 42; #loadedDay = 42;
+    #selectedLevel = 6; #dayRoll1 = { purchaseLevel: 7 };
+    #jpProcessingSignals = { ticketsReady: true }; #tutorialFixture = null;
+    #playerTraitsLoadSeq = 0; #playerTraitsPending = true; #playerTraitIds = new Set();
+    #traitsCacheAddress = null; #traitsTicketsReadyAtLoad = false; #optionalTicketReads = new Set();
+    retries = []; #scheduleDayDataReload(day) { this.retries.push(day); }
+    #syncSpinControlState() {} #hasExactDayRolls() { return true; }
+    ${source.slice(loadStart, loadEnd)}
+    ${source.slice(readyStart, readyEnd)}
+    load() { return this.#loadPlayerTraits({ required: true }); }
+    ready() { return this.#dayDataReady(); }
+    owns(trait) { return this.#playerTraitIds.has(trait); }
+  })()`, {
+    AbortController, console: { warn() {} }, readLightweightModePreference: () => true,
+    replayHoldingsLevel: ({ exactPurchaseLevel }) => exactPurchaseLevel,
+    fetchJSON: async () => {
+      reads++;
+      if (reads === 1) throw new Error('read timed out');
+      return new Promise(resolve => { resolveTraits = resolve; });
+    },
+  });
+  assert.equal(panel.ready(), false);
+  await panel.load();
+  assert.equal(panel.ready(), false, 'failed ownership is not an empty, ready inventory');
+  assert.deepEqual([...panel.retries], [42]);
+  const loading = panel.load();
+  assert.equal(panel.ready(), false, 'retry must settle before enabling the spin');
+  resolveTraits({ cards: [{ entries: [{ traitId: 253 }, { traitId: 0 }] }] });
+  await loading;
+  assert.equal(panel.ready(), true);
+  assert.equal(panel.owns(253), true);
+  assert.equal(panel.owns(0), true);
+  await panel.load();
+  assert.equal(reads, 2, 'the enabled spin consumes cached holdings without network work');
+});
+
 test('jackpot read failures distinguish an unavailable service from a pending draw and recover per source', () => {
   const helper = source.slice(source.indexOf('export function jackpotReadIsUnavailable('), source.indexOf('function escapeHtml('))
     .replace('export function', 'function');

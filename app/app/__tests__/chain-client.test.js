@@ -109,6 +109,67 @@ test('a saturated single-block log response refuses to invent a complete invento
   await assert.rejects(read.logs({address:GAME},{fromBlock:1,toBlock:1}),{code:'LOG_LIMIT'});
 });
 
+function busyBlock({ unsupported = false, incomplete = false, reorg = false } = {}) {
+  const topic = wordHex(7);
+  const txs = ['0xaaa', '0xbbb'];
+  const rows = Array.from({ length: 1678 }, (_, i) => ({
+    address: GAME, topics: [topic, wordHex(9)], data: '0x',
+    blockNumber: '0x2', blockHash: HASH, transactionHash: txs[i < 1000 ? 0 : 1],
+    transactionIndex: i < 1000 ? '0x0' : '0x1', logIndex: '0x' + i.toString(16),
+  }));
+  const receipts = txs.map(transactionHash => ({
+    transactionHash, blockHash: HASH, blockNumber: '0x2',
+    logs: rows.filter(row => row.transactionHash === transactionHash),
+  }));
+  receipts[1].logs.push({ ...rows[0], address: OTHER.slice(0, 42), logIndex: '0x700' });
+  receipts[1].logs.push({ ...rows[0], topics: [wordHex(8)], logIndex: '0x701' });
+  const calls = []; let headers = 0;
+  const read = client(async (method, args) => {
+    calls.push({ method, args });
+    if (method === 'eth_getLogs') {
+      const { fromBlock, toBlock } = args[0];
+      return Number(fromBlock) <= 2 && Number(toBlock) >= 2 ? rows.slice(0, 1000) : [];
+    }
+    if (method === 'eth_getBlockByNumber') return {
+      number: '0x2', timestamp: '0x4', hash: reorg && ++headers > 1 ? OTHER : HASH, transactions: txs,
+    };
+    if (method === 'eth_getBlockReceipts') {
+      if (unsupported) throw new Error('method not found (-32601)');
+      return incomplete ? receipts.slice(0, 1) : receipts;
+    }
+    if (method === 'eth_getTransactionReceipt') return receipts.find(receipt => receipt.transactionHash === args[0]);
+    throw new Error('unexpected ' + method);
+  });
+  return { read, calls, filter: { address: GAME, topics: [[topic, wordHex(10)], null] } };
+}
+
+test('busy ticket blocks recover every matching log from verified receipts, including truncated transactions', async () => {
+  for (const unsupported of [false, true]) {
+    const { read, calls, filter } = busyBlock({ unsupported });
+    const rows = await read.logs(filter, { fromBlock: 2, toBlock: 2 });
+    assert.equal(rows.length, 1678, 'includes the second transaction absent from the truncated log response');
+    assert.equal(new Set(rows.map(row => row.transactionHash)).size, 2);
+    assert.equal(rows.at(-1).logIndex, 1677);
+    assert.equal(calls.filter(call => call.method === 'eth_getTransactionReceipt').length, unsupported ? 2 : 0);
+  }
+});
+
+test('receipt recovery rejects missing transactions and block changes', async () => {
+  for (const [options, code] of [[{ incomplete: true }, 'LOG_LIMIT'], [{ reorg: true }, 'CHAIN_REORG']]) {
+    const { read, filter } = busyBlock(options);
+    await assert.rejects(read.logs(filter, { fromBlock: 2, toBlock: 2 }), { code });
+  }
+});
+
+test('a dense block does not force duplicate full-range retries or thousands of one-block reads', async () => {
+  const { read, calls, filter } = busyBlock();
+  const rows = await read.logs(filter, { fromBlock: 1, toBlock: 2000 });
+  assert.equal(rows.length, 1678);
+  const ranges = calls.filter(call => call.method === 'eth_getLogs').map(call => call.args[0]);
+  assert.ok(ranges.length < 40, `used ${ranges.length} log queries`);
+  assert.equal(Number(ranges[1].toBlock), 1000, 'halves the actual requested range immediately');
+});
+
 // A fixed 2s chain: block n is stamped 2n and its hash encodes n, so parent links are checkable.
 function fixedChain(head, { onHeader, onReceipt, receiptBlock } = {}) {
   const hashOf = n => '0x' + n.toString(16).padStart(64, '0');

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["whale-pass-format.js"],
+  "sourcesContent": ["/** Jackpot amounts count half-passes; a purchased Whale Pass is two halves. */\nexport function formatWhalePassAward(halfPassValue) {\n  let halfPasses = 0n;\n  try { halfPasses = BigInt(halfPassValue || 0); } catch { /* invalid amount */ }\n  if (halfPasses < 0n) halfPasses = 0n;\n  const wholePasses = halfPasses / 2n;\n  const hasHalf = halfPasses % 2n === 1n;\n  const amount = hasHalf\n    ? (wholePasses === 0n ? '½' : `${wholePasses}½`)\n    : wholePasses.toString();\n  const singular = wholePasses === 1n && !hasHalf\n    || wholePasses === 0n && hasHalf;\n  return `${amount} whale pass${singular ? '' : 'es'}`;\n}\n"],
+  "mappings": "+EACO,gBAAS,qBAAqBA,EAAe,CAClD,IAAIC,EAAa,GACjB,GAAI,CAAEA,EAAa,OAAOD,GAAiB,CAAC,CAAG,MAAQ,CAAuB,CAC1EC,EAAa,KAAIA,EAAa,IAClC,MAAMC,EAAcD,EAAa,GAC3BE,EAAUF,EAAa,KAAO,GAMpC,MAAO,GALQE,EACVD,IAAgB,GAAK,IAAM,GAAGA,CAAW,IAC1CA,EAAY,SAAS,CAGT,cAFCA,IAAgB,IAAM,CAACC,GACnCD,IAAgB,IAAMC,EACc,GAAK,IAAI,EACpD,CAZgBC,EAAA",
+  "names": ["halfPassValue", "halfPasses", "wholePasses", "hasHalf", "__name"]
+}

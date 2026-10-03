@@ -296,14 +296,6 @@ var pt=Object.defineProperty;var S=(g,e)=>pt(g,"name",{value:e,configurable:!0})
           </button>
         </div>
 
-        <button type="button" class="dec-afking-jump" data-bind="dec-afking-jump"
-                data-panel-open="passes" aria-controls="panel-passes" aria-haspopup="dialog"
-                aria-expanded="false" aria-label="Open AFKing passes"
-                title="Choose an AFKing pass">
-          <img class="dec-afking-jump__face" src="/app/assets/afking-passes-teal-ember-v18.svg"
-               alt="" aria-hidden="true" width="72" height="54">
-        </button>
-
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
 
@@ -316,10 +308,17 @@ var pt=Object.defineProperty;var S=(g,e)=>pt(g,"name",{value:e,configurable:!0})
           <span class="dec-desk-cage__seal"></span>
         </div>
 
-        <!-- ALL IN keeps its normal half-width action footprint above the ledgers.
-             During the redemption window FLIP then receives a full compact row,
-             matching the collapsed ETH ledger beneath it. -->
+        <!-- The pass mark and optional FLIP balance share the upper wallet row;
+             ETH stays below them without adding height when FLIP arrives. -->
         <div class="dec-funds-stack">
+          <button type="button" class="dec-afking-jump" data-bind="dec-afking-jump"
+                  data-panel-open="passes" aria-controls="panel-passes" aria-haspopup="dialog"
+                  aria-expanded="false" aria-label="Open AFKing passes"
+                  title="Choose an AFKing pass">
+            <img class="dec-afking-jump__face" src="/app/assets/afking-passes-teal-ember-v18.svg"
+                 alt="" aria-hidden="true" width="72" height="54">
+          </button>
+
           <button type="button" class="dec-all-in" data-bind="dec-all-in" disabled
                   aria-label="Use all available ETH for tickets">
             <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"

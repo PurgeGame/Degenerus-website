@@ -3968,6 +3968,28 @@ body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-
   display: none;
 }
 
+/* Fit FLIP beside the pass mark inside its existing 65px row. The ETH ledger
+   stays full width below, with only the wallet grid's small gap between rows. */
+body.layout-basic .app-decimator-panel .dec-funds-stack:has(> .dec-afking-jump:not([hidden])) {
+  grid-template-columns: 86px minmax(0, 1fr);
+}
+
+body.layout-basic .app-decimator-panel .dec-funds-stack > .dec-afking-jump {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+
+body.layout-basic .app-decimator-panel
+  .dec-funds-stack:has(> .dec-afking-jump:not([hidden])) > .dec-flip-balance {
+  grid-column: 2;
+  grid-row: 1;
+  height: auto;
+  grid-template-areas: "action label" "value value";
+  grid-template-rows: auto auto;
+  align-self: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-decimator-panel .dec-afking-jump,
   .app-decimator-panel .dec-afking-jump__face { transition: none; }

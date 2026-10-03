@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveFoil, foilCuts, deriveTraits, decodeEntryReveal, isFoil } from '../../chain/traits.js';
+import { deriveFoil, foilCuts, deriveTraits, decodeEntryReveal, isFoil, ticketStreamReplay } from '../../chain/traits.js';
 import { ticketInventory } from '../../chain/tickets.js';
 import { contractInterface, wordHex, ChainClient } from '../../chain/client.js';
 import { cachedLogs, clearEventMemoryForTests, previousEvents } from '../../chain/event-store.js';
@@ -67,6 +67,63 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
   const expected = [...deriveTraits(baseKey, 0, 32, 123456789n), ...deriveFoil({ buyer: PLAYER, level: 7, entropy: 456n, multBps: 31500 }).flat(), 0, 64, 128, 192, 1, 65, 129, 193].sort((a, b) => a - b);
   assert.deepEqual(actual, expected);
   assert.equal(queries.length, 5); assert.ok(queries.every(query => Number(query.fromBlock) === 10));
+});
+
+test('versioned solo streams distinguish sixteen ordinary entries from foil and retain the gold-six cap across chunks', () => {
+  const identity = (0x20n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
+  const eventKey = identity | (1n << 255n) | 256n;
+  assert.deepEqual(ticketStreamReplay(eventKey), { identity, offset: 256, goldSixTaken: true, foil: false });
+  assert.equal(isFoil(identity, 16), false);
+  assert.equal(isFoil((0x23n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n), 16), true);
+  const whole = deriveTraits(identity, 0, 4096, 123456789n);
+  assert.equal(whole.filter(trait => trait === 253).length, 1);
+  const taken = deriveTraits(identity | (1n << 255n), 0, 4096, 123456789n);
+  assert.equal(taken.filter(trait => trait === 253).length, 0);
+  const state = { goldSixTaken: false };
+  const split = new Uint8Array(4096);
+  for (let offset = 0; offset < split.length; offset += 256) {
+    split.set(deriveTraits(identity, offset, 256, 123456789n, state), offset);
+  }
+  assert.deepEqual(split, whole, 'yielding between chunks must not issue extra gold sixes');
+});
+
+test('current inventory replays cohort words and encoded offsets without Advance events or batch receipts', async () => {
+  clearEventMemoryForTests();
+  const iface = await contractInterface('GAME');
+  const identity = (0x21n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
+  const foilKey = (0x23n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
+  const rows = [];
+  const push = (name, args) => rows.push({ ...iface.encodeEventLog(name, args), address: GAME,
+    blockNumber: 20, blockHash: HASH, transactionHash: wordHex(500), transactionIndex: 0, logIndex: rows.length });
+  push('LootboxRngApplied', [1, 111n, 17]);
+  push('TraitsGenerated', [PLAYER, identity, 16]);
+  push('LootboxRngApplied', [0, 222n, 17]);
+  push('TraitsGenerated', [PLAYER, identity | 32n, 512]);
+  push('TraitsGenerated', [PLAYER, foilKey, 16]);
+  let receipts = 0;
+  const client = new ChainClient({ validateDeployment: false, chain: { id: 98765, deployBlock: 1 }, contracts: { GAME },
+    provider: { send: async (method, [filter]) => {
+      if (method === 'eth_getTransactionReceipt') receipts++;
+      assert.equal(method, 'eth_getLogs', 'versioned streams need no per-batch receipt download');
+      return rows.filter(row => filter.topics.every((want, i) => want == null || want === row.topics[i]));
+    } },
+  });
+  const foilLines = [0xc0804000n, 0xc1814101n, 0xc2824202n, 0xc3834303n];
+  const snapshot = { client, block: { number: 25, hash: HASH },
+    field: async (_contract, _name, level) => level === 7 ? 10n : 0n,
+    call: async (_contract, method) => {
+      if (method === 'entriesOwedView') return 0n;
+      assert.equal(method, 'foilRecordOf');
+      return { present: true, resolved: true, lines: foilLines };
+    },
+  };
+  const inventory = await ticketInventory(snapshot, PLAYER, 7);
+  const actual = inventory.cards.flatMap(card => card.entries.map(entry => entry.traitId)).sort((a, b) => a - b);
+  const expected = [...deriveTraits(identity, 0, 16, 111n), ...deriveTraits(identity, 32, 512, 222n),
+    0, 64, 128, 192, 1, 65, 129, 193, 2, 66, 130, 194, 3, 67, 131, 195].sort((a, b) => a - b);
+  assert.deepEqual(actual, expected);
+  assert.equal(inventory.totalEntries, 544);
+  assert.equal(receipts, 0);
 });
 
 test('cached event tails replay the bounded window after a checkpoint reorg', async () => {

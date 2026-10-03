@@ -5,6 +5,18 @@ import assert from 'node:assert/strict';
 
 import { buildDaySummaryPrizes } from '../day-summary-prizes.js';
 
+test('includes grouped whale pass awards and preserves contract half-pass units', () => {
+  assert.deepEqual(buildDaySummaryPrizes({ hasWhalePass: true, breakdown: [
+    { awardType: 'whale_pass', amount: '1', count: 3, traitId: null },
+    { awardType: 'whale_pass', amount: '2', count: 1, traitId: 420 },
+  ] }), [{ type: 'whale-pass', amount: 5n }]);
+  assert.deepEqual(buildDaySummaryPrizes({ hasWhalePass: true, breakdown: [] }), [],
+    'a flag without an awarded amount cannot invent a pass');
+  assert.deepEqual(buildDaySummaryPrizes({ breakdown: [
+    { awardType: 'whale_pass', amount: '0' },
+  ] }), []);
+});
+
 describe('Day Summary level-transition prizes', () => {
   test('recovers grouped BAF amounts when the aggregate is zero and keeps Decimator distinct', () => {
     const prizes = buildDaySummaryPrizes({

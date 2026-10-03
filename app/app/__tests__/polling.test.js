@@ -698,6 +698,37 @@ describe('abortAllInflight stub for Phase 58', () => {
 // ===========================================================================
 
 describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
+  test('game refreshes let a slow jackpot read finish instead of cancelling it', async () => {
+    let release;
+    const waiting = new Promise(resolve => { release = resolve; });
+    const jackpotSignals = [];
+    const payload = { day: 35, status: 'resolved', winners: [{ address: 'winner' }] };
+    fetchImpl = async (url, opts) => {
+      if (url.includes('/game/jackpot/last-day')) {
+        jackpotSignals.push(opts.signal);
+        await waiting;
+        if (opts.signal.aborted) throw opts.signal.reason;
+        return { ok: true, status: 200, json: async () => payload };
+      }
+      return {
+        ok: true, status: 200,
+        json: async () => url.endsWith('/game/state') ? { dailyRng: { day: 35 } } : {},
+      };
+    };
+    start();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    // The same refresh happens on each game poll while app.lastDay is behind,
+    // and also on a day-sync notification. RPC backoff can outlast either.
+    const refreshes = [refreshForDayShift(), refreshForDayShift()];
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const cancelled = jackpotSignals.some(signal => signal.aborted);
+    release();
+    await Promise.all(refreshes);
+    assert.equal(cancelled, false, 'a retry must not abort the read it is waiting for');
+    assert.equal(jackpotSignals.length, 1, 'overlapping jackpot requests share the running read');
+    assert.equal(storeMod.get('app.lastDay')?.day, 35, 'the delayed result reaches the widget');
+  });
+
   test('a completion-triggered read bypasses browser HTTP cache', async () => {
     let captured = null;
     fetchImpl = async (url, opts) => {
