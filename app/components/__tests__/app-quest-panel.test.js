@@ -1370,7 +1370,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('[data-bind="qst-action-dgn-symbol-name"]').textContent, 'Heart');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'DEGENERETTE · 5 SPINS · 0.08 ETH',
+      'DEGENERETTE · 5 CARDS · 0.08 ETH',
     );
 
     el.querySelector('[data-bind="qst-action-dgn-spins-up"]').dispatchEvent({ type: 'click' });

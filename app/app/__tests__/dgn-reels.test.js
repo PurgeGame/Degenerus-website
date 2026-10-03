@@ -118,7 +118,7 @@ describe('dgn-reels: dgnDeriveSpins self-check', () => {
       spins,
     });
     assert.equal(out.verified, false);
-    assert.match(out.reason, /spin 0/);
+    assert.match(out.reason, /card 0/);
     assert.equal(out.rows[0].houseTraits, null, 'unverified spin zero stays blank for caller fallback');
     assert.equal(out.rows[1].houseTraits, spins[1]._house, 'spin two remains playable');
     assert.equal(out.rows[2].houseTraits, spins[2]._house, 'spin three remains playable');
@@ -136,7 +136,7 @@ describe('dgn-reels: dgnDeriveSpins self-check', () => {
       spins,
     });
     assert.equal(out.verified, false);
-    assert.match(out.reason, /score mismatch on spin 3/);
+    assert.match(out.reason, /score mismatch on card 3/);
     assert.equal(out.rows[0].houseTraits, spins[0]._house);
     assert.equal(out.rows[1].houseTraits, spins[1]._house);
     assert.equal(out.rows[2].houseTraits, null, 'only the mismatched spin fails closed');

@@ -277,7 +277,7 @@ describe('Plan 62-03: placeBet', () => {
         symbol: 0,
         msgValueWei: 0n,
       }),
-      /Spins must be 1-25 for ETH/i,
+      /Cards must be 1-25 for ETH/i,
     );
   });
 
@@ -305,7 +305,7 @@ describe('Plan 62-03: placeBet', () => {
           symbol: 0,
           msgValueWei: 0n,
         }),
-        new RegExp(`Spins must be 1-${cap} for ${unit}`, 'i'),
+        new RegExp(`Cards must be 1-${cap} for ${unit}`, 'i'),
         `${unit} rejects ${cap + 1} spins`,
       );
     }
