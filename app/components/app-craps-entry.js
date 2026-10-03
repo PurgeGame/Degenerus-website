@@ -109,7 +109,7 @@ BATTLE`,shortLabel:S,detail:m,icon:"/badges-circular/dice_04_5_silver.svg",iconB
           <div class="craps-entry__surface-strip" aria-label="Entry lane and Hot Shooter bonus status">
             <span class="craps-entry__bonus-equation" aria-live="polite">
               <span class="craps-entry__bonus-equation-line"><strong><output data-bind="craps-random-count">10</output></strong><small>RANDOM</small><b>=</b>
-                <strong class="craps-entry__hot-value"><output data-bind="craps-hot-shooter-percent">30</output>%</strong><small>HOT BONUS · AFTER 12 ROLLS</small></span>
+                <strong class="craps-entry__hot-value"><output data-bind="craps-hot-shooter-percent">30</output>%</strong><small>HOT SHOOTER BONUS</small></span>
             </span>
             <strong class="craps-entry__place-prompt" aria-label="Place your bets" aria-live="polite" aria-atomic="true"><span data-craps-place-prompt="top">PLACE</span><span data-craps-place-prompt="bottom">YOUR BETS</span></strong>
             <div class="craps-entry__lane" role="group" aria-label="Craps entry lane">

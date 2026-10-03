@@ -53,6 +53,7 @@ import {
   loadCrapsReplayProfiles,
   normalizeCrapsReplayShooters,
   openCrapsReplayTable as rawopenCrapsReplayTable,
+  prepareCrapsReplayTable,
   protocolSeatLabel,
 } from '../../craps/replay-adapter.js';
 import { CONTRACTS } from '../../app/chain-config.js';
@@ -85,7 +86,7 @@ const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e84469
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
 const RUN_59_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x3a047c851081c8be906bfc4c4a62bb4943cb449e06a542ed0e125a41cdd758e0';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x04c1bb41779dfb8189409054d440caf57c377a7a41c0202feed2a4bec0b8737a';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -465,6 +466,39 @@ test('Discord identities load in endpoint-sized batches without one failure blan
   assert.equal(profiles.get(addresses[0])?.name, 'Discord 01');
   assert.equal(profiles.has(addresses[8]), false);
   assert.equal(profiles.get(addresses[17])?.name, 'Discord 12');
+});
+
+test('a fully prepared replay opens later without reloading artifacts, profiles, or settlement data', async () => {
+  __resetCrapsReplayLoaderForTest();
+  const bodies = new Map([
+    ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
+    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
+    [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
+  ]);
+  let reads = 0; let acknowledged = 0;
+  const prepared = await prepareCrapsReplayTable({
+    ...fixtureRuntime, ...REPLAY_DEPLOYMENT,
+    battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey, viewerBetId: SIM_CRAPS_REPLAY_VIEWER.betId,
+    fetchImpl: async path => {
+      reads++;
+      return { ok: bodies.has(path), status: bodies.has(path) ? 200 : 404, json: async () => clone(bodies.get(path)) };
+    },
+    loadProfiles: async () => { reads++; return new Map(); },
+    loadSettlementWord: async () => { reads++; return 5n; },
+    loadEntryBoonPercent: async () => { reads++; return 0; },
+    onResolutionAcknowledged: () => { acknowledged++; },
+  });
+  assert.equal(prepared.ready, true);
+  assert.equal(acknowledged, 0);
+  const before = reads; const opened = [];
+  prepared.open({ open: options => opened.push(options) });
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].viewerBetId, SIM_CRAPS_REPLAY_VIEWER.betId);
+  assert.equal(reads, before, 'the opening action only presents the prepared model');
+  assert.equal(acknowledged, 0, 'only the actual result acknowledgement may mark it watched');
+  opened[0].onResolutionAcknowledged();
+  assert.equal(acknowledged, 1);
 });
 
 test('a jackpot replay carries its exact prize and lottery rung without caller-supplied amounts', async () => {

@@ -7,7 +7,7 @@ var He=Object.defineProperty;var y=(p,e)=>He(p,"name",{value:e,configurable:!0})
                 <div class="deg-heading">
                   <h2><a class="deg-learn-link" href="/learn/degenerette/"
                          data-bind="deg-logo-lockup">
-                    <img class="deg-quickplay-logo" src="/app/assets/degenerette/degenerette-sign-v20.webp"
+                    <img class="deg-quickplay-logo" src="/app/assets/degenerette/degenerette-sign-v21.webp"
                          width="2061" height="763" decoding="async" alt="" aria-hidden="true">
                     <span class="deg-lockup-copy">
                       Play Degenerette and

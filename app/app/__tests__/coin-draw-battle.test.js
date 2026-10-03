@@ -12,7 +12,7 @@ import { resolveCoinDrawBattle, coinDrawWordForDay, replayCoinDrawBattle } from 
 import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 import { materializeCoinDrawBattle, serializeCoinDrawReplay } from '../../chain/coin-draw-worker.js';
 import { chainCoinDrawBattle, __resetCoinDrawJobsForTest } from '../../chain/coin-draw.js';
-import { coinDrawRunTableOptions, openCoinDrawRun, openJackpotDrawRun } from '../../craps/coin-draw-viewer.js';
+import { coinDrawRunTableOptions, openCoinDrawRun, openJackpotDrawRun, preloadJackpotDrawRun } from '../../craps/coin-draw-viewer.js';
 import { coinDrawCentreModel } from '../coin-draw-centre.js';
 
 const WEI = 10n ** 18n;
@@ -137,12 +137,11 @@ test('current jackpot draw opens the awarded seat through the normal replay and 
   const calls = [];
   const result = await openJackpotDrawRun({ battleKey, viewerBetId, opener,
     doc: { querySelector: () => ({ open: (...args) => calls.push(args) }) },
-    openReplay: async (table, request) => {
+    prepareReplay: async (request) => {
       assert.equal(request.battleKey, battleKey);
       assert.equal(request.viewerBetId, viewerBetId);
       assert.equal(typeof request.fetchImpl, 'function');
-      table.open({ viewerBetId, tableIndex: battleKey });
-      return { ready: true };
+      return { ready: true, open: table => table.open({ viewerBetId, tableIndex: battleKey }) };
     },
   });
   assert.equal(result.ok, true);
@@ -153,7 +152,7 @@ test('an unsettled current jackpot battle stays closed with a retry message', as
   let opened = false;
   const result = await openJackpotDrawRun({
     doc: { querySelector: () => ({ open: () => { opened = true; } }) },
-    openReplay: async () => ({ ready: false }),
+    prepareReplay: async () => ({ ready: false }),
   });
   assert.equal(opened, false);
   assert.equal(result.ok, false);
@@ -165,15 +164,65 @@ test('a current jackpot replay completing after its deadline never opens the tab
   let opened = false;
   const result = await openJackpotDrawRun({ signal: controller.signal,
     doc: { querySelector: () => ({ open: () => { opened = true; } }) },
-    openReplay: async table => {
+    prepareReplay: async () => {
       controller.abort();
-      table.open({});
-      return { ready: true };
+      return { ready: true, open: table => table.open({}) };
     },
   });
   assert.equal(opened, false);
   assert.equal(result.ok, false);
   assert.match(result.message, /canceled/);
+});
+
+test('jackpot preloading stays hidden, shares an in-flight click, and retains the exact awarded seat', async () => {
+  const battleKey = '0x' + '34'.repeat(32);
+  const viewerBetId = '777';
+  const opened = []; let builds = 0; let finish;
+  const doc = { querySelector: () => ({ open: (...args) => opened.push(args) }) };
+  const prepareReplay = async request => {
+    builds++;
+    assert.equal(request.battleKey, battleKey);
+    assert.equal(request.viewerBetId, viewerBetId);
+    return new Promise(resolve => { finish = () => resolve({ ready: true,
+      open: table => table.open({ viewerBetId, tableIndex: battleKey }),
+    }); });
+  };
+  const request = { battleKey, viewerBetId, doc, prepareReplay };
+  const warm = preloadJackpotDrawRun(request);
+  await Promise.resolve();
+  assert.equal(builds, 1);
+  assert.equal(opened.length, 0, 'background preparation does not reveal the battle');
+  const opener = { id: 'jackpot-button' };
+  const click = openJackpotDrawRun({ ...request, opener });
+  await Promise.resolve();
+  assert.equal(builds, 1, 'clicking mid-preload shares its work');
+  finish();
+  assert.equal((await warm).ready, true);
+  assert.equal((await click).ok, true);
+  assert.deepEqual(opened, [[{ viewerBetId, tableIndex: battleKey }, opener]]);
+  await openJackpotDrawRun(request);
+  assert.equal(builds, 1, 'a later open needs no replay, profile, or table-model reload');
+});
+
+test('failed and unsettled preloads do not poison later clicks or another wallet seat', async () => {
+  const battleKey = '0x' + '56'.repeat(32);
+  const opened = [];
+  const doc = { querySelector: () => ({ open: options => opened.push(options) }) };
+  let builds = 0;
+  const prepareReplay = async ({ viewerBetId }) => {
+    builds++;
+    if (builds === 1) throw new Error('RPC unavailable');
+    if (builds === 2) return { ready: false };
+    return { ready: true, open: table => table.open({ viewerBetId }) };
+  };
+  const request = { battleKey, viewerBetId: '888', doc, prepareReplay };
+  await assert.rejects(preloadJackpotDrawRun(request), /RPC unavailable/);
+  assert.equal((await preloadJackpotDrawRun(request)).ready, false);
+  assert.equal(opened.length, 0);
+  assert.equal((await openJackpotDrawRun(request)).ok, true);
+  assert.equal((await openJackpotDrawRun({ ...request, viewerBetId: '889' })).ok, true);
+  assert.equal(builds, 4);
+  assert.deepEqual(opened, [{ viewerBetId: '888' }, { viewerBetId: '889' }]);
 });
 
 test('clicking through opens the table on the viewer\'s own run (first deployment: its own dice)', async () => {

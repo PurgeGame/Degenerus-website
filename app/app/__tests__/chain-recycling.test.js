@@ -83,7 +83,8 @@ test('header-tail schemas append validity bitmaps and keep deployed stamped-head
   try {
     const current = await loadSchema('GAME');
     const f = await rpcFixture();
-    assert.equal(current.fields.traitBucketLive.slot, '76');
+    // 75 from audit 5b25fded0 (earlyBirdWhalePasses removed; every later Game slot moved down one).
+    assert.equal(current.fields.traitBucketLive.slot, '75');
     await f.field('GAME', 'traitBucketLive', 1n << 255n, 0);
     await f.field('GAME', 'traitBucketLive', 1n << 7n, 1);
     assert.equal(await f.s.field('GAME', 'traitBucketLive', 0), 1n << 255n);

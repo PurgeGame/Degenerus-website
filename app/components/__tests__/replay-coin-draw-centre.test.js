@@ -25,6 +25,75 @@ const battle = { kind: 'fill-draw', key: 'coin-draw:42', day: 42, pot: String(9_
   { player: VIEWER, units: '1', bankrollOut: String(12n * WEI), rolls: '31', paid: '0' },
 ] };
 
+function preloadPanel() {
+  const timers = new Map(); let nextTimer = 0; const warmed = [];
+  const state = { reads: false, animating: false, document: { readyState: 'complete', visibilityState: 'visible' } };
+  const methods = between('  #cancelCoinDrawPreload() {', '  #drawToggleReady() {')
+    .replace("await import('../craps/coin-draw-viewer.js')", 'await loadViewer()');
+  const instance = runInNewContext(`new (class {
+    #coinDrawPreloadTimer = null; #coinDrawPreloadKey = null; #tutorialFixture = null;
+    #dayLoadInFlight = null; #badgeWarmPromise = Promise.resolve();
+    model = { kind: 'jackpot', key: 'battle-42', viewerBetId: '71', player: 'player-1' };
+    isConnected = true; ready = true; seen = false;
+    #coinDrawModel() { return this.model; }
+    #dayDataReady() { return this.ready; }
+    #coinDrawWasSeen() { return this.seen; }
+    ${methods}
+    schedule() { this.#scheduleCoinDrawPreload(); }
+    disconnect() { this.isConnected = false; this.#cancelCoinDrawPreload(); }
+  })()`, {
+    document: state.document, isMajorDrawActive: () => state.animating, hasPendingApiReads: () => state.reads,
+    setTimeout(fn) { const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    loadViewer: async () => ({ preloadJackpotDrawRun: async request => { warmed.push(request); } }),
+  });
+  const tick = async () => {
+    const next = timers.entries().next().value;
+    assert.ok(next, 'preload has scheduled another idle check');
+    timers.delete(next[0]); await next[1]();
+  };
+  return { instance, state, timers, warmed, tick };
+}
+
+test('awarded battle warms after page/data loading and active animations finish, before any battle click', async () => {
+  const { instance, state, timers, warmed, tick } = preloadPanel();
+  instance.schedule(); instance.schedule();
+  assert.equal(timers.size, 1, 'same selection schedules only one warmup');
+  state.reads = true;
+  await tick(); assert.equal(warmed.length, 0);
+  state.reads = false; state.document.readyState = 'interactive';
+  await tick(); assert.equal(warmed.length, 0);
+  state.document.readyState = 'complete'; state.animating = true;
+  await tick(); assert.equal(warmed.length, 0);
+  state.animating = false; state.document.visibilityState = 'hidden';
+  await tick(); assert.equal(warmed.length, 0);
+  state.document.visibilityState = 'visible';
+  await tick();
+  assert.equal(warmed.length, 1);
+  assert.deepEqual({ ...warmed[0] }, { battleKey: 'battle-42', viewerBetId: '71' });
+  assert.equal(instance.seen, false, 'preloading never counts as watching the battle');
+  instance.schedule();
+  assert.equal(timers.size, 0, 'polls cannot repeatedly rebuild a prepared selection');
+});
+
+test('preload skips nonparticipants, seen battles, incomplete jackpots, and stale or disconnected selections', async () => {
+  for (const change of [p => { p.model = null; }, p => { p.seen = true; }, p => { p.ready = false; }]) {
+    const { instance, timers } = preloadPanel();
+    change(instance); instance.schedule(); assert.equal(timers.size, 0);
+  }
+  const changed = preloadPanel();
+  changed.instance.schedule();
+  changed.instance.model = { ...changed.instance.model, viewerBetId: '72', player: 'player-2' };
+  await changed.tick();
+  assert.equal(changed.warmed.length, 0, 'do not fetch the prior wallet seat');
+  changed.instance.schedule(); await changed.tick();
+  assert.equal(changed.warmed[0].viewerBetId, '72');
+  const disconnected = preloadPanel();
+  disconnected.instance.schedule(); disconnected.instance.disconnect();
+  assert.equal(disconnected.timers.size, 0);
+  assert.equal(disconnected.warmed.length, 0);
+});
+
 function element() {
   const classes = new Set(); const attrs = new Map();
   return {

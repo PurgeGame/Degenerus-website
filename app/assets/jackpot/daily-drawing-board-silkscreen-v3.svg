@@ -22,7 +22,7 @@
      font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
      font-weight="700" letter-spacing="1.2">
     <!-- Fab legend on the free strip below the LCD, in both layouts. -->
-    <text x="150" y="1234" font-size="18">DGN-VRF · REV PG · SN 0x22e64634312a58bdde8c83d53f508ce4332137e3</text>
+    <text x="150" y="1234" font-size="18">DGN-VRF · REV PG · SN 0x1efd825c9543700cb8b1d500a4203dfc9b09f1b2</text>
     <!-- The house rule, printed the way a fab prints its own part number. -->
     <text x="1170" y="1234" font-size="18" text-anchor="end">ZERO RAKE</text>
   </g>

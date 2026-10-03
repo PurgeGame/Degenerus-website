@@ -58,6 +58,7 @@ test('identical concurrent JSON reads share one network request', async () => {
   const first = api.fetchJSON('/player/0xabc');
   const second = api.fetchJSON('/player/0xabc');
   const third = api.fetchJSON('/player/0xabc');
+  assert.equal(api.hasPendingApiReads(), true, 'optional replay warmups yield to active reads');
   assert.equal(calls, 1);
   finish();
   assert.deepEqual(await Promise.all([first, second, third]), [
@@ -65,6 +66,7 @@ test('identical concurrent JSON reads share one network request', async () => {
     { player: 'shared' },
     { player: 'shared' },
   ]);
+  assert.equal(api.hasPendingApiReads(), false, 'settled data releases the optional warmup gate');
 });
 
 test('background wallet reads leave one personalized slot reserved for interactions', async () => {

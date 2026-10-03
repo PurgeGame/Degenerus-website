@@ -1226,7 +1226,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.doesNotMatch(componentSource, /comp reserves the next slate/,
     'the selected comp is already visible on the control and needs no idle explainer');
   assert.match(componentSource,
-    /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-percent">30<\/output>%[\s\S]*?HOT BONUS · AFTER 12 ROLLS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
+    /class="craps-entry__surface-strip"[\s\S]*?data-bind="craps-random-count">10<\/output>[\s\S]*?data-bind="craps-hot-shooter-percent">30<\/output>%[\s\S]*?HOT SHOOTER BONUS[\s\S]*?data-craps-lane="normal"[\s\S]*?data-craps-lane="high"/s,
     'the random equation and right-side Normal/High Roller selector share one thin strip');
   assert.match(componentSource, /<strong class="craps-entry__place-prompt"[^>]*aria-live="polite"[^>]*><span data-craps-place-prompt="top">PLACE<\/span><span data-craps-place-prompt="bottom">YOUR BETS<\/span><\/strong>\s*<div class="craps-entry__lane"/,
     'the readable two-line betting callout owns the middle section before the lane selector');

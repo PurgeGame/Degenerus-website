@@ -54,11 +54,13 @@ globalThis.customElements = {
 
 const body = makeElement('body');
 const documentListeners = new Map();
+const dispatchedEvents = [];
 globalThis.document = {
   body,
   hidden: false,
   readyState: 'complete',
   createElement: (tag) => makeElement(tag),
+  dispatchEvent(event) { dispatchedEvents.push(event); return true; },
   querySelector: (selector) => body.querySelector(selector),
   addEventListener(type, listener) {
     if (!documentListeners.has(type)) documentListeners.set(type, []);
@@ -73,6 +75,7 @@ globalThis.document = {
 
 const store = await import('../../app/store.js');
 const contracts = await import('../../app/contracts.js');
+const { CONTRACTS } = await import('../../app/chain-config.js');
 const readProvider = await import('../../app/read-provider.js');
 const mineFlip = await import('../../app/mine-flip.js');
 const pending = await import('../../app/pending-actions.js');
@@ -129,6 +132,7 @@ function publishedResolver() {
 }
 
 beforeEach(() => {
+  dispatchedEvents.length = 0;
   pending.__resetPendingActionsForTest();
   store.__resetForTest();
   mineFlip.__resetContractFactoryForTest();
@@ -309,7 +313,41 @@ describe('headless Mine FLIP resolver', () => {
       throw error;
     };
     await assert.rejects(publishedResolver().run(), /raw/);
+    assert.equal(dispatchedEvents.filter((event) => event.type === 'app-mine-flip:reward').length, 0);
     failed.disconnectedCallback();
+  });
+
+  test('a confirmed paid crank emits the actual reward once even after the pending row clears', async () => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    const iface = new contracts.ethers.Interface([
+      'event MinerBounty(uint8 kind, address indexed miner, uint256 flipAmount)',
+    ]);
+    const amountWei = 125n * 10n ** 18n;
+    resolver.__queueForTest()[0].run = async () => {
+      stubProbe({ hasWork: false });
+      return { receipt: { status: 1, logs: [{
+        address: CONTRACTS.GAME,
+        ...iface.encodeEventLog(iface.getEvent('MinerBounty'), [1, TEST_ADDR, amountWei]),
+      }] } };
+    };
+    await publishedResolver().run();
+    const events = dispatchedEvents.filter((event) => event.type === 'app-mine-flip:reward');
+    assert.equal(events.length, 1);
+    assert.deepEqual(events[0].detail, { player: TEST_ADDR, amountWei: amountWei.toString() });
+    assert.equal(publishedResolver(), undefined);
+    resolver.disconnectedCallback();
+  });
+
+  test('a success with no bounty does not celebrate free FLIP', async () => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    resolver.__queueForTest()[0].run = async () => ({ receipt: { status: 1, logs: [] } });
+    await publishedResolver().run();
+    assert.equal(dispatchedEvents.filter((event) => event.type === 'app-mine-flip:reward').length, 0);
+    resolver.disconnectedCallback();
   });
 });
 

@@ -43,6 +43,11 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
   push('Advance', [5, 7], 11, 4);
   logs.push({ ...reveal([topic, topic, wordHex(0), wordHex(0)], [0, 64, 128, 192, 1, 65, 129, 193], 0xff),
     address: GAME, blockNumber: 20, transactionIndex: 12, transactionHash: wordHex(12), blockHash: HASH, logIndex: 5 });
+  // Audit 95d88f68b: a direct L+1 jackpot round reveals whole tickets by owner registry index.
+  // PLAYER is registry ID 3 (index 2) and holds lanes 0 and 2; lane 1 belongs to someone else.
+  const lane = (q0, q1, q2, q3) => BigInt(q0) | (BigInt(64 + q1) << 8n) | (BigInt(128 + q2) << 16n) | (BigInt(192 + q3) << 24n);
+  push('JackpotTicketBatchTraits', [7, 3, [2n | (9n << 32n) | (2n << 64n), 0n, 0n, 0n],
+    [lane(3, 4, 5, 6) | (lane(9, 9, 9, 9) << 32n) | (lane(7, 8, 9, 10) << 64n), 0n, 0n, 0n]], 13, 6);
   const queries = [];
   const client = new ChainClient({ validateDeployment: false, chain: { id: 999, deployBlock: 1 }, contracts: { GAME }, provider: { send: async (method, params) => {
     if (method === 'eth_getLogs') {
@@ -54,7 +59,10 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
     throw new Error(`Unexpected RPC ${method}`);
   } } });
   const snapshot = { client, block: { number: 25, hash: HASH },
-    field: async (_contract, name, key) => { assert.equal(name, 'ticketGenerationStartBlock'); return key === 7 ? 10n : 0n; },
+    field: async (_contract, name, key) => {
+      if (name === 'ticketOwnerId') { assert.equal(key, PLAYER); return 3n; }
+      assert.equal(name, 'ticketGenerationStartBlock'); return key === 7 ? 10n : 0n;
+    },
     call: async (_contract, method) => {
       if (method === 'foilRecordOf') return { present: true, resolveDay: 3n, multBps: 31500n };
       if (method === 'rngWordForDay') return 456n;
@@ -62,11 +70,12 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
       throw new Error(method);
     } };
   const inventory = await ticketInventory(snapshot, PLAYER, 7);
-  assert.equal(inventory.totalEntries, 56); assert.equal(inventory.pendingEntries, 8);
+  assert.equal(inventory.totalEntries, 64); assert.equal(inventory.pendingEntries, 8);
   const actual = inventory.cards.flatMap(card => card.entries.map(entry => entry.traitId)).sort((a, b) => a - b);
-  const expected = [...deriveTraits(baseKey, 0, 32, 123456789n), ...deriveFoil({ buyer: PLAYER, level: 7, entropy: 456n, multBps: 31500 }).flat(), 0, 64, 128, 192, 1, 65, 129, 193].sort((a, b) => a - b);
+  const expected = [...deriveTraits(baseKey, 0, 32, 123456789n), ...deriveFoil({ buyer: PLAYER, level: 7, entropy: 456n, multBps: 31500 }).flat(), 0, 64, 128, 192, 1, 65, 129, 193,
+    3, 68, 133, 198, 7, 72, 137, 202].sort((a, b) => a - b);
   assert.deepEqual(actual, expected);
-  assert.equal(queries.length, 5); assert.ok(queries.every(query => Number(query.fromBlock) === 10));
+  assert.equal(queries.length, 6); assert.ok(queries.every(query => Number(query.fromBlock) === 10));
 });
 
 test('versioned solo streams distinguish sixteen ordinary entries from foil and retain the gold-six cap across chunks', () => {

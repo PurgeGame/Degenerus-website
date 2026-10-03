@@ -10,9 +10,13 @@ import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_STABLE_OWNERS_SCHEMA_HASH } from
 
 const PLAYER = `0x${'b'.repeat(40)}`;
 
-/** A snapshot whose far-future registry holds `farOwed` ({level: entries}) for PLAYER. */
+/** A snapshot whose far-future registry holds `farOwed` ({level: entries}) for PLAYER. Lanes sit where
+ *  DegenerusGameStorage writes them (audit 65267b9d1): slot (level - 1) % 100 of farFutureOwed[id], its
+ *  queue tag naming the level once past the first cycle. `reads.pending` counts reads of the owner's
+ *  uint256[13] array words — a full read is 13, whatever the window. */
 function fakeSnapshot(active, farOwed = {}) {
   const reads = { pending: 0, ids: 0, stamps: [] };
+  const lanes = new Map(Object.entries(farOwed).map(([level, amount]) => [(Number(level) - 1) % 100, { level: Number(level), amount: BigInt(amount) }]));
   const s = {
     block: { number: 100, hash: `0x${'0'.repeat(64)}` },
     client: { chain: { id: 84532 }, address: (name) => `0x${name === 'GAME' ? 'a'.repeat(40) : 'c'.repeat(40)}` },
@@ -25,11 +29,17 @@ function fakeSnapshot(active, farOwed = {}) {
       if (name === 'ticketGenerationStartBlock') { reads.stamps.push(Number(keys[0])); return 0n; }
       if (name === 'ticketOwnerId') { reads.ids += 1; return 1n; }
       if (name === 'ticketOwners') return PLAYER;
-      if (name === 'ticketPending') {
+      if (name === 'ticketQueueLevels') {
+        const lane = lanes.get((Number(keys[0]) & 0x3fffff) - 1);
+        return lane && lane.level > 100 ? BigInt(lane.level) : 0n;
+      }
+      if (name === 'farFutureOwed') {
         reads.pending += 1;
-        const entry = Object.entries(farOwed).find(([level]) => ((Number(level) - 1) % 128) + 1 === Number(keys[0]));
-        const amount = BigInt(entry?.[1] ?? 0);
-        return (1n << 255n) | (amount ? (((amount << 8n) | (1n << 41n)) << 84n) | (BigInt(entry[0]) << 174n) : 0n);
+        let word = 0n;
+        for (const [position, { amount }] of lanes) {
+          if (amount && Math.floor(position / 8) === Number(keys[1])) word |= (0x80000000n | amount) << BigInt((position % 8) * 32);
+        }
+        return word;
       }
       throw new Error(`unexpected field ${contract}.${name}`);
     },
@@ -42,7 +52,7 @@ beforeEach(() => { useSchema(CURRENT_SCHEMA_HASH); __resetFarHoldingsCacheForTes
 test('far-future holdings are read once, then served from cache on every later poll', async () => {
   const first = fakeSnapshot(10, { 40: 3 });
   const rows = await playerHoldings(first.s, PLAYER);
-  assert.equal(first.reads.pending, 95, 'first load walks the 95 far-future levels');
+  assert.equal(first.reads.pending, 13, 'first load reads the whole uint256[13] once, not one read per level');
   assert.equal(first.reads.ids, 1, 'resolve the global owner ID once for the whole scan');
   assert.deepEqual(rows.map((row) => [row.level, row.entryCount]), [[40, 3]]);
   const later = fakeSnapshot(10, { 40: 3 });
@@ -72,7 +82,7 @@ test('a confirmed buy/open clears the cache so the next poll reads fresh', async
   clearFarHoldings(); // what the degenerus:tx-confirmed listener does
   const fresh = fakeSnapshot(10, { 40: 3, 60: 1 });
   assert.deepEqual((await playerHoldings(fresh.s, PLAYER)).map((row) => row.level), [40, 60]);
-  assert.equal(fresh.reads.pending, 95);
+  assert.equal(fresh.reads.pending, 13);
 });
 
 test('near counts read generation-window stamps only up to active+2', async () => {
@@ -91,13 +101,21 @@ test('an unregistered wallet needs no pending balance reads', async () => {
   assert.equal(reads.pending, 0);
 });
 
-test('the sentinel and normal lanes never masquerade as future holdings', async () => {
-  const { s } = fakeSnapshot(10);
-  const field = s.field.bind(s);
-  s.field = async (contract, name, ...keys) => name === 'ticketPending'
-    ? (1n << 255n) | (7n << 8n) | (1n << 41n) | (11n << 50n) | (1n << 83n)
+test('an unheld lane, or a lane under another cycle\'s tag, never masquerades as a future holding', async () => {
+  const unheld = fakeSnapshot(10);
+  const field = unheld.s.field.bind(unheld.s);
+  // Every lane carries entries but none has the held bit (bit 31).
+  unheld.s.field = async (contract, name, ...keys) => name === 'farFutureOwed'
+    ? Array.from({ length: 8 }, (_, k) => 7n << BigInt(32 * k)).reduce((a, b) => a | b)
     : field(contract, name, ...keys);
-  assert.deepEqual((await farFutureQueue(s, PLAYER)).rows, []);
+  assert.deepEqual((await farFutureQueue(unheld.s, PLAYER)).rows, []);
+  const reused = fakeSnapshot(10, { 40: 3 });
+  const reusedField = reused.s.field.bind(reused.s);
+  // The slot's queue has moved to a later cycle: its held lane belongs to that level, not this one.
+  reused.s.field = async (contract, name, ...keys) => name === 'ticketQueueLevels'
+    ? BigInt((Number(keys[0]) & 0x3fffff) + 100)
+    : reusedField(contract, name, ...keys);
+  assert.deepEqual((await farFutureQueue(reused.s, PLAYER)).rows, []);
 });
 
 
@@ -116,10 +134,10 @@ test('a pinned older deployment still reads its per-level owner records', async 
 });
 
 
-test('far-future pending words wrap physical keys and reject an older occupant', async () => {
-  const current = fakeSnapshot(127, { 129: 8 });
-  assert.deepEqual((await farFutureQueue(current.s, PLAYER, { levels: [129] })).rows.map(row => [row.level, row.entryCount]), [[129, 8]]);
+test('far-future lanes wrap at 100 slots and reject an older occupant', async () => {
+  const current = fakeSnapshot(99, { 101: 8 });
+  assert.deepEqual((await farFutureQueue(current.s, PLAYER, { levels: [101] })).rows.map(row => [row.level, row.entryCount]), [[101, 8]]);
   clearFarHoldings(current.s, PLAYER);
-  const stale = fakeSnapshot(127, { 1: 16 });
-  assert.deepEqual((await farFutureQueue(stale.s, PLAYER, { levels: [129] })).rows, []);
+  const stale = fakeSnapshot(99, { 1: 16 });
+  assert.deepEqual((await farFutureQueue(stale.s, PLAYER, { levels: [101] })).rows, []);
 });
