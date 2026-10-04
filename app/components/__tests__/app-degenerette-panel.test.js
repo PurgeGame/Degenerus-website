@@ -12,6 +12,11 @@ import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { writeLightweightModePreference } from '../../app/ui-preferences.js';
 import { readFileSync } from 'node:fs';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-pass-section.test.js).
@@ -387,10 +392,10 @@ function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt 
 
 // Default fake contract: place returns DegeneretteBetPlaced(index=7, betId=42)
 // carrying the real queued bet word for its arguments; the optional settle —
-// one in-order openBoxes(maxCount) sweep since audit 2525eb7fd — returns one
+// one in-order mineFlip() sweep since audit 18490c6fe — returns one
 // DegeneretteResolved for that bet whose `spins` hold every spin (audit 224de529).
 function makeFakeDegContract(opts = {}) {
-  const calls = { placeDegeneretteBet: [], openBoxes: [] };
+  const calls = { placeDegeneretteBet: [], mineFlip: [] };
   const stk = (name) => async () => {
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
@@ -413,9 +418,9 @@ function makeFakeDegContract(opts = {}) {
       },
       { staticCall: stk('placeDegeneretteBet') }
     ),
-    openBoxes: Object.assign(
+    mineFlip: Object.assign(
       async (...args) => {
-        calls.openBoxes.push(args);
+        calls.mineFlip.push(args);
         const defaultLogs = [
           {
             parsed: {
@@ -436,7 +441,7 @@ function makeFakeDegContract(opts = {}) {
           : (Array.isArray(opts.resolveLogs) ? opts.resolveLogs : defaultLogs);
         return makeFakeTx(makeFakeReceipt(logs));
       },
-      { staticCall: stk('openBoxes') }
+      { staticCall: stk('mineFlip') }
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -1188,7 +1193,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       claimableWinningsOf: async () => spendableClaimableWei + 1n,
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } },
       ),
@@ -1500,7 +1505,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     });
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 13n,
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } },
       ),
@@ -1508,7 +1513,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       connect() { return this; },
     }));
     lootboxMod.__setContractFactoryForTest(() => ({
-      requestLootboxRng: Object.assign(
+      mineFlip: Object.assign(
         async () => {
           requestSubmitted = true;
           requestWrites += 1;
@@ -1586,7 +1591,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('the READY card is an optional early settle: one in-order openBoxes sweep', async () => {
+  test('the READY card is an optional early settle: one in-order mineFlip sweep', async () => {
     useDegeneretteFeed(readyFeedItem());
     let resolveArgs = null;
     degeneretteMod.__setContractFactoryForTest(() => ({
@@ -1596,7 +1601,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         ])),
         { staticCall: async () => undefined },
       ),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async (...args) => {
           resolveArgs = args;
           return makeFakeTx(makeFakeReceipt([
@@ -1636,8 +1641,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await runPendingDegeneretteAction();
     await settle(80);
 
-    // Audit 2525eb7fd: no per-bet door; the sweep's budget is GameAfkingModule OPEN_BATCH.
-    assert.deepEqual(resolveArgs, [80n], 'openBoxes(OPEN_BOXES_BATCH): credits go to every owner it reaches');
+    // Audit 18490c6fe: no per-bet door and no openBoxes valve; the settle tap sends one mineFlip()
+    // with the shared gas floor (no estimateGas on the fake → MINE_FLIP_MIN_GAS_LIMIT).
+    assert.deepEqual(resolveArgs, [{ gasLimit: 10_000_000n }], 'mineFlip(): credits go to every owner it reaches');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the resolved action leaves the tray once the full reveal is queued');
     const [sequence] = (await loadReveal()).__takeQueuedForTest();
@@ -1663,7 +1669,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         ])),
         { staticCall: async () => undefined },
       ),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async (...args) => { sweeps.push(args); return makeFakeTx(makeFakeReceipt([])); },
         { staticCall: async () => undefined },
       ),
@@ -1714,7 +1720,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       ),
       // The queued word stays put until someone's mineFlip() sweep reaches it.
       degeneretteBetInfo: async () => (settled ? 0n : packed),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => { settleWrites += 1; return makeFakeTx(makeFakeReceipt()); },
         { staticCall: async () => undefined },
       ),
@@ -1870,7 +1876,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         }]));
       }, { staticCall: async () => undefined }),
       degeneretteBetInfo: async (_index, betId) => (settled.has(BigInt(betId)) ? 0n : words.get(BigInt(betId)) ?? 0n),
-      openBoxes: Object.assign(async () => makeFakeTx(makeFakeReceipt()),
+      mineFlip: Object.assign(async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } }),
       filters: {
         DegeneretteResolved: (player, index, betId) => ({ event: 'resolved', player, index, betId }),
@@ -1980,7 +1986,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         claimableReads += 1;
         return (10n ** 16n) / BigInt(ETH_DIVISOR) + 1n;
       },
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -2016,7 +2022,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
@@ -2057,7 +2063,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         async () => ({ hash: '0xpendingbet', wait: async () => wait }),
         { staticCall: async () => undefined },
       ),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt([])),
         { staticCall: async () => undefined },
       ),
@@ -2246,7 +2252,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         { staticCall: async () => undefined },
       ),
       degeneretteBetInfo: async () => packed,
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -2308,7 +2314,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       degeneretteBetInfo: async (_index, betId) => (
         BigInt(betId) === oldBetId ? 0n : packed
       ),
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -3408,7 +3414,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         calls.info.push(args);
         return 0n;
       },
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => {
           calls.resolve += 1;
           return makeFakeTx(makeFakeReceipt());
@@ -3567,7 +3573,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         infoReads += 1;
         return infoReads === 1 ? packed : 0n;
       },
-      openBoxes: Object.assign(
+      mineFlip: Object.assign(
         async () => {
           resolveWrites += 1;
           return makeFakeTx(makeFakeReceipt());

@@ -46,8 +46,8 @@ function makeFakeContract(opts = {}) {
     buyLootboxAndPresaleBoxStatic: [],
     buyPresaleBox: [],
     buyPresaleBoxStatic: [],
-    openBoxes: [],
-    openBoxesStatic: [],
+    mineFlip: [],
+    mineFlipStatic: [],
     boxIndexComplete: [],
     claimableWinningsOf: [], afkingFundingOf: [],
     purchaseInfo: [],
@@ -56,7 +56,7 @@ function makeFakeContract(opts = {}) {
     if (methodName === 'purchase') calls.purchaseStatic.push(args);
     if (methodName === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
     if (methodName === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
-    if (methodName === 'openBoxes') calls.openBoxesStatic.push(args);
+    if (methodName === 'mineFlip') calls.mineFlipStatic.push(args);
     if (opts.staticCallError?.[methodName]) throw opts.staticCallError[methodName];
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
@@ -100,13 +100,14 @@ function makeFakeContract(opts = {}) {
     lootboxPresaleActiveFlag: async () => opts.presaleActive ?? true,
     presaleBoxCreditOf: async () => opts.presaleCredit ?? (2n * lootboxMod.PRESALE_BOX_MIN_WEI),
     presaleBoxEthRemaining: async () => opts.presaleRemaining ?? (50n * 10n ** 18n),
-    // Audit 2525eb7fd: the per-box openBox door is gone; openBoxes(maxCount) sweeps in order.
-    openBoxes: Object.assign(
+    // Audit 2525eb7fd removed the per-box openBox door and audit 18490c6fe the openBoxes(maxCount)
+    // valve: mineFlip() is the only door, and its stages open boxes in order.
+    mineFlip: Object.assign(
       async (...args) => {
-        calls.openBoxes.push(args);
+        calls.mineFlip.push(args);
         return makeFakeTx(makeFakeReceipt(opts.openLogs));
       },
-      { staticCall: staticCallStub('openBoxes') }
+      { staticCall: staticCallStub('mineFlip') }
     ),
     boxIndexComplete: async (...args) => {
       calls.boxIndexComplete.push(args);
@@ -189,10 +190,14 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     let staticCalls = 0;
     let release;
     const held = new Promise((resolve) => { release = resolve; });
+    const froms = [];
     lootboxMod.__setContractFactoryForTest(() => ({
-      requestLootboxRng: {
-        staticCall: async () => {
+      // Audit 18490c6fe: only mineFlip requests the mid-day RNG; the probe simulates it as the
+      // connected account, whose donated LINK credit can pay a below-threshold request.
+      mineFlip: {
+        staticCall: async (overrides) => {
           staticCalls += 1;
+          froms.push(overrides?.from);
           await held;
         },
       },
@@ -211,6 +216,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       { signerReads: 0, callsBeforeRelease: 1 },
       'background consumers avoid MetaMask and share one in-flight eth_call',
     );
+    assert.deepEqual(froms, [CONNECTED], 'mineFlip is simulated as the connected account');
   });
 
   test('decodes the authoritative mid-day RNG queue fill and request latch', async () => {
@@ -1040,18 +1046,18 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lootboxMod.scaledTicketPriceWei(113), 4n * ETHER / 100n / DIV, 'cycle repeats (113 ≡ 13)');
   });
 
-  test('openLootBox sends the in-order openBoxes sweep and reports whether it reached the box', async () => {
-    // Audit 2525eb7fd removed openBox(player, index); OPEN is one gas-bounded sweep.
+  test('openLootBox sends mineFlip, the only door, and reports whether it reached the box', async () => {
+    // Audit 2525eb7fd removed openBox(player, index); audit 18490c6fe removed openBoxes(maxCount).
     const reads = [];
     lootboxMod.__setBoxStateReaderForTest((args) => {
       reads.push([args.player, BigInt(args.lootboxIndex)]);
       return { pending: false, worded: true, swept: false, rngLocked: false };
     });
     const opened = await lootboxMod.openLootBox({ lootboxIndex: 7n });
-    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]]);
-    assert.deepEqual(lastFakeContract._calls.openBoxesStatic, [[lootboxMod.OPEN_BOXES_BATCH]],
-      'the same budget is simulated before the wallet opens');
-    assert.equal(lootboxMod.OPEN_BOXES_BATCH, 80n, 'GameAfkingModule OPEN_BATCH');
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]],
+      'no estimate on the fake, so the miner gas floor');
+    assert.deepEqual(lastFakeContract._calls.mineFlipStatic, [[]], 'the crank is simulated before the wallet opens');
+    assert.ok(!('openBoxes' in lastFakeContract) && !('OPEN_BOXES_BATCH' in lootboxMod), 'the removed valve is gone');
     assert.equal(opened.opened, true);
     assert.deepEqual(reads, [[CONNECTED, 7n]], 'the entry is re-read after the sweep');
 
@@ -1076,7 +1082,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       return { pending: false, worded: true, swept: true, rngLocked: false };
     });
     await lootboxMod.openLootBox({ player: other, lootboxIndex: 7 });
-    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]]);
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]]);
     assert.deepEqual(reads, [[other, 7n]],
       'the sweep result is read for the tracked owner\'s entry');
   });
@@ -1210,8 +1216,8 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     });
     assert.equal(await lootboxMod.canOpenLootbox({ player: owner, lootboxIndex: 7n }), true);
     assert.deepEqual(reads, [[owner, 7n]]);
-    assert.deepEqual(c._calls.openBoxes, [], 'readiness probe never opens anything');
-    assert.deepEqual(c._calls.openBoxesStatic, []);
+    assert.deepEqual(c._calls.mineFlip, [], 'readiness probe never opens anything');
+    assert.deepEqual(c._calls.mineFlipStatic, []);
   });
 
   test('the box probe keeps its reasons: settled, waiting for the word, locked', async () => {

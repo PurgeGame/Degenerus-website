@@ -278,7 +278,7 @@ function fireTxFailed(transactionHash) {
 }
 
 // Audit 2525eb7fd removed openBox(player, index). Readiness is now the entry read
-// (lootbox.js readLootboxBoxState) and OPEN sends the in-order openBoxes(maxCount)
+// (lootbox.js readLootboxBoxState) and OPEN sends mineFlip() (audit 18490c6fe removed openBoxes)
 // sweep. These fakes still describe ONE box's door as `openBox` (a staticCall probe
 // plus a send); this adapter maps it onto the new surface so every race keeps its
 // meaning: the probe becomes the entry read, and the sweep that reaches the box is
@@ -302,7 +302,7 @@ function useBoxDoor(fake) {
       throw error;
     }
   });
-  fake.openBoxes = Object.assign(async () => {
+  fake.mineFlip = Object.assign(async () => {
     const tx = await fake.openBox(target.player, target.index);
     opened.add(target.key);
     return tx;
@@ -1551,12 +1551,12 @@ describe('app-box-strip', () => {
   });
 
   test('an OPEN sweep that stops before this box keeps it armed and says why', async () => {
-    // Audit 2525eb7fd: OPEN is one gas-bounded openBoxes sweep in queue order. When its
-    // budget runs out on the boxes ahead (afking boxes go first), this entry is still queued.
+    // Audits 2525eb7fd / 18490c6fe: OPEN sends mineFlip, whose stages sweep boxes in queue
+    // order. When a call ends on the boxes ahead (afking boxes go first), this entry is still queued.
     const calls = { open: [] };
     const fake = {
       boxIndexComplete: async () => false,
-      openBoxes: Object.assign(async (...args) => {
+      mineFlip: Object.assign(async (...args) => {
         calls.open.push(args);
         return { hash: '0xshort', wait: async () => ({ status: 1, hash: '0xshort', logs: [] }) };
       }, { staticCall: async () => undefined }),
@@ -1579,7 +1579,7 @@ describe('app-box-strip', () => {
     el.__setReadyForTest(8);
     const action = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
     assert.equal(await action.run(), false);
-    assert.deepEqual(calls.open, [[lootboxMod.OPEN_BOXES_BATCH]], 'one budgeted in-order sweep');
+    assert.deepEqual(calls.open, [[{ gasLimit: 10_000_000n }]], 'one mineFlip at the miner gas floor');
     assert.deepEqual(errors, ['Opened the boxes ahead of yours. Tap OPEN again to reach it.']);
     const still = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
     assert.equal(still?.state, 'ready', 'the box stays armed for the next OPEN or crank');

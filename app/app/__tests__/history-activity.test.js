@@ -2,12 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HISTORY_FILTERS, historyEventActivities, historyEventNames } from '../history-activity.js';
 import { eventCatalog } from '../../chain/facts.js';
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
 const player = `0x${'1'.repeat(40)}`;
 const other = `0x${'2'.repeat(40)}`;
 const unit = 10n ** 18n;
 const event = (name, args, logIndex = 0) => ({ name, args, logIndex, blockNumber: 123, transactionHash: `0x${'a'.repeat(64)}` });
 test('every additional category reads known events with a player topic', async () => {
-  const catalog = await eventCatalog();
+  // The deployment the site ships for: the eb04b2e80 surface (AffiliateOwnerRegistered is new there).
+  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  let catalog;
+  try { catalog = await eventCatalog(); } finally { useSchema(previous); }
   for (const [key] of HISTORY_FILTERS) {
     for (const name of historyEventNames(key)) {
       const events = catalog.filter(row => row.event.name === name);

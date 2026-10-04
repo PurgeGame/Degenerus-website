@@ -168,6 +168,13 @@ body.layout-basic .play-grid .quest-hub .pari-prebet-bonus {
 }
 body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__label { display: none; }
 body.layout-basic .play-grid .quest-hub .pari-prebet-bonus__value { font-size: .7rem; letter-spacing: 0; white-space: nowrap; }
+body.layout-basic .play-grid .quest-hub .pari-quest__reward {
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: .25rem .4rem;
+  white-space: normal;
+}
 body.layout-basic .play-grid .quest-hub .pari-split { position: absolute; right: .5rem; bottom: .2rem; left: .5rem; height: 3px; margin: 0; }
 body.layout-basic .play-grid .quest-hub .pari-split__labels {
   position: absolute;
@@ -197,8 +204,22 @@ body.layout-basic .play-grid .quest-hub .pari-book--quest-complete {
 }
 body.layout-basic .play-grid .quest-hub .pari-book--quest-complete :is(.pari-quest__role, .pari-clock) { color: #9af3b6; }
 body.layout-basic .play-grid .quest-hub .pari-book--quest-complete .pari-clock { border-color: #4ade8059; background: #4ade8017; }
-body.layout-basic .play-grid .quest-hub .pari-book__title--over { color: #4ade80; }
-body.layout-basic .play-grid .quest-hub .pari-book__title--under { color: #f87171; }
+body.layout-basic .play-grid .quest-hub .pari-book__prediction--over { color: #4ade80; }
+body.layout-basic .play-grid .quest-hub .pari-book__prediction--under { color: #f87171; }
+body.layout-basic .play-grid .quest-hub .pari-book__reward {
+  display: inline-flex;
+  align-items: center;
+  gap: .2em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+body.layout-basic .play-grid .quest-hub .pari-book__reward > img {
+  display: block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+}
 body.layout-basic .play-grid .quest-hub .pari-error { margin: .25rem 0 0; font-size: .7rem; }
 
 /* The ad is a ticket: coin, invitation and reward on the body, COPY LINK as its gold stub. */

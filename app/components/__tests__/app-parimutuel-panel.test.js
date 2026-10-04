@@ -23,6 +23,11 @@ import * as pari from '../../app/parimutuel.js';
 import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import { invalidateJSONCache } from '../../app/api.js';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const LEVEL = 42;
@@ -572,6 +577,69 @@ describe('app-parimutuel-panel', () => {
       'the mismatched split flame compartment is removed');
   });
 
+  test('the Incinerator slider, typed amount, and MAX preserve exact burn amounts', async () => {
+    const balance = 500n * FLIP + 123n;
+    let burned;
+    let finishBurn;
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({
+      balances: async () => ({ wwxrpBalance: balance }),
+      burn: ({ amount }) => {
+        burned = amount;
+        return new Promise(resolve => { finishBurn = resolve; });
+      },
+    });
+    const el = await mountWwxrp();
+    const input = el.querySelector('[data-bind="wwxrp-amount"]');
+    const slider = el.querySelector('[data-bind="wwxrp-slider"]');
+    const burn = el.querySelector('[data-bind="wwxrp-burn"]');
+    assert.equal(slider.value, '0');
+    assert.equal(slider.disabled, false);
+    slider.value = '5000';
+    slider.dispatchEvent({ type: 'input', target: slider });
+    assert.equal(input.value, '262.500000000000000061');
+    assert.equal(slider.value, '5000');
+    assert.equal(slider.getAttribute('aria-valuetext'), `${input.value} WWXRP`);
+    assert.equal(burned, undefined, 'moving the slider does not send a transaction');
+
+    input.value = '120';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '2000');
+    input.value = '24';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '0');
+    assert.equal(input.value, '24', 'an invalid typed amount is left editable');
+    assert.equal(burn.disabled, true);
+    input.value = '501';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '10000');
+    assert.equal(burn.disabled, true);
+
+    el.querySelector('[data-bind="wwxrp-max"]').click();
+    assert.equal(input.value, '500.000000000000000123');
+    assert.equal(slider.value, '10000');
+    slider.value = '0';
+    slider.dispatchEvent({ type: 'input', target: slider });
+    assert.equal(input.value, '25');
+    slider.value = '10000';
+    slider.dispatchEvent({ type: 'input', target: slider });
+    assert.equal(wwxrpWidget.parseWwxrpAmount(input.value), balance);
+    burn.click();
+    assert.equal(burned, balance);
+    assert.equal(slider.disabled, true);
+    assert.equal(input.disabled, true);
+    finishBurn();
+    await flush();
+    assert.equal(slider.disabled, false);
+  });
+
+  test('the Incinerator slider locks when the balance has no selectable burn range', async () => {
+    wwxrpWidget.__setWwxrpBurnWidgetDepsForTest({ balances: async () => ({ wwxrpBalance: 25n * FLIP }) });
+    const el = await mountWwxrp();
+    assert.equal(el.querySelector('[data-bind="wwxrp-slider"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, false,
+      'an exact minimum balance can still be burned');
+  });
+
   test('WWXRP clears the previous wallet balance synchronously when view scope changes', async () => {
     const viewed = '0xcd34000000000000000000000000000000000000';
     let resolveViewed;
@@ -594,6 +662,7 @@ describe('app-parimutuel-panel', () => {
       'the old wallet amount is invalidated before the replacement read settles');
     assert.equal(el.hidden, true, 'the pod is hidden while the new wallet balance is unknown');
     assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="wwxrp-slider"]').disabled, true);
 
     await Promise.resolve();
     resolveViewed({ wwxrpBalance: 0n });
@@ -608,6 +677,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(el.hidden, false);
     assert.equal(el.querySelector('[data-bind="wwxrp-summary-balance"]').textContent, '<1');
     assert.equal(el.querySelector('[data-bind="wwxrp-burn"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="wwxrp-slider"]').disabled, true);
   });
 
   test('burning the last WWXRP hides the Incinerator pod', async () => {
@@ -1082,7 +1152,14 @@ describe('app-parimutuel-panel', () => {
       assert.match(buttons[0].title, /1,000 FLIP bet.*25%/);
       assert.match(buttons[1].title, /1,000 FLIP bet.*75%/);
       assert.equal(card.querySelector('.pari-prebet-bonus')?.textContent ?? null,
-        earnsReward ? '150 FLIP BONUS · +1 STREAK' : null);
+        earnsReward ? 'REWARD:150 FLIP+1 STREAK' : null);
+      if (earnsReward) {
+        const reward = card.querySelector('.qst-slot-reward');
+        assert.equal(reward.getAttribute('aria-label'), 'Reward: 150 FLIP +1 quest streak');
+        assert.equal(reward.querySelector('.qst-slot-reward-label').textContent, 'REWARD:');
+        assert.equal(reward.querySelector('.qst-slot-reward-logo').src, '/whitepaper/flame-logo-split.svg');
+        assert.equal(card.querySelector('.qst-slot-reward-extra').textContent, '+1 STREAK');
+      }
       el.disconnectedCallback();
     });
   }
@@ -1119,9 +1196,19 @@ describe('app-parimutuel-panel', () => {
         assert.doesNotMatch(card.textContent, /ETH/);
         if (side) {
           assert.equal(card.querySelector('.pari-book__title').textContent,
-            `${side === 1 ? 'Over' : 'Under'} ${percentage} to win ${side === 1 ? '1,333' : '4,000'} FLIP`);
-          assert.equal(card.querySelector('.pari-book__title').className,
-            `pari-book__title pari-book__title--${side === 1 ? 'over' : 'under'}`);
+            `${side === 1 ? 'Over' : 'Under'} ${percentage} to win ${side === 1 ? '1,333' : '4,000'}`);
+          const title = card.querySelector('.pari-book__title');
+          assert.equal(title.className, 'pari-book__title', 'the full sentence keeps its neutral color');
+          const prediction = title.querySelector('.pari-book__prediction');
+          assert.equal(prediction.textContent, `${side === 1 ? 'Over' : 'Under'} ${percentage}`);
+          assert.equal(prediction.className,
+            `pari-book__prediction pari-book__prediction--${side === 1 ? 'over' : 'under'}`);
+          assert.equal(title.children[1].textContent, ' to win ');
+          const reward = title.querySelector('.pari-book__reward');
+          assert.equal(reward.textContent, side === 1 ? '1,333' : '4,000');
+          assert.equal(reward.children[0].tagName, 'IMG');
+          assert.equal(reward.children[0].src, '/whitepaper/flame-logo-split.svg');
+          assert.equal(reward.children[0].alt, 'FLIP', 'the logo retains an accessible currency label');
           assert.equal(card.querySelector('.pari-your-bet'), null, 'no duplicate stake receipt beneath the compact result');
           assert.equal(card.querySelector('.pari-split'), null, 'the result has no extra betting bar');
           assert.equal(card.querySelector('.pari-book__offered'), null, 'the completed receipt does not retain the colored history number');

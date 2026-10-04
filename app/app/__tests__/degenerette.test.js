@@ -12,7 +12,7 @@
 //     → appends a word to degeneretteQueue[index], emits
 //       DegeneretteBetPlaced(player, index, betId = queue position + 1, packed)
 //   The mineFlip() keeper sweep settles it once the index's word lands; since
-//   audit 2525eb7fd the optional early settle is one in-order openBoxes(maxCount)
+//   audit 18490c6fe the optional early settle is one mineFlip() (openBoxes(maxCount) is gone),
 //   sweep (the per-bet resolveDegeneretteBets door is gone). Either way one
 //   DegeneretteResolved(player, index, betId, totalPayout, resultTraits, spins)
 //   carries every spin.
@@ -24,7 +24,7 @@
 // See DegenerusGameDegeneretteModule.sol.
 //
 // Sources:
-//  - DegenerusGame.sol — placeDegeneretteBet (delegate-called via GAME), openBoxes(uint256)
+//  - DegenerusGame.sol — placeDegeneretteBet (delegate-called via GAME), mineFlip()
 //    and degeneretteBetInfo(uint48, uint64).
 //  - DegenerusGameDegeneretteModule.sol — InvalidBet / UnsupportedCurrency errors,
 //    DegeneretteBetPlaced / DegeneretteResolved events.
@@ -41,6 +41,11 @@ import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of passes.test.js shape.
@@ -57,7 +62,7 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     placeDegeneretteBet: [],
-    openBoxes: [],
+    mineFlip: [],
     degeneretteBetInfo: [],
     claimableWinningsOf: [],
   };
@@ -91,12 +96,12 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('placeDegeneretteBet') }
     ),
-    openBoxes: Object.assign(
+    mineFlip: Object.assign(
       async (...args) => {
-        calls.openBoxes.push(args);
-        return sendTxStub('openBoxes')(...args);
+        calls.mineFlip.push(args);
+        return sendTxStub('mineFlip')(...args);
       },
-      { staticCall: staticCallStub('openBoxes') }
+      { staticCall: staticCallStub('mineFlip') }
     ),
     degeneretteBetInfo: async (...args) => {
       calls.degeneretteBetInfo.push(args);
@@ -454,7 +459,7 @@ describe('Plan 62-03: placeBet', () => {
 });
 
 // ===========================================================================
-// resolveBets — the OPTIONAL early settle: one in-order openBoxes(maxCount) sweep.
+// resolveBets — the OPTIONAL early settle: one mineFlip(), the only door (audit 18490c6fe).
 // ===========================================================================
 
 describe('resolveBets (optional early settle)', () => {
@@ -475,14 +480,14 @@ describe('resolveBets (optional early settle)', () => {
     contractsMod.clearProvider();
   });
 
-  test('settle now sends one in-order openBoxes sweep behind its static-call gate', async () => {
+  test('settle now sends one mineFlip behind its static-call gate', async () => {
     // Audit 2525eb7fd: there is no per-bet door; the sweep settles whatever is queued first.
     lastFakeContract = makeFakeContract({ betInfo: 0n });
     degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
     const result = await degeneretteMod.resolveBets({ index: 7, betIds: [42n] });
-    assert.deepEqual(lastFakeContract._calls.openBoxes, [[lootboxMod.OPEN_BOXES_BATCH]],
-      'one gas-bounded budget; credits always go to each owner');
-    assert.deepEqual(lastFakeContract._order, ['static:openBoxes', 'send:openBoxes']);
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]],
+      'the miner gas floor (no estimate on the fake); credits always go to each owner');
+    assert.deepEqual(lastFakeContract._order, ['static:mineFlip', 'send:mineFlip']);
     assert.deepEqual(lastFakeContract._calls.degeneretteBetInfo, [[7n, 42n]],
       'the bet word is re-read after the sweep');
     assert.equal(result.index, 7n);
@@ -499,7 +504,7 @@ describe('resolveBets (optional early settle)', () => {
   test('requires the index: a bare betId names nothing (ids restart per index)', async () => {
     await assert.rejects(degeneretteMod.resolveBets({ betIds: [42n] }), /bet index is required/i);
     await assert.rejects(degeneretteMod.resolveBets({ index: 2n ** 48n, betIds: [1n] }), /out of range/i);
-    assert.equal(lastFakeContract._calls.openBoxes.length, 0);
+    assert.equal(lastFakeContract._calls.mineFlip.length, 0);
   });
 
   test('rejects empty betIds array', async () => {
@@ -517,15 +522,15 @@ describe('resolveBets (optional early settle)', () => {
 
   test('a sweep whose simulation reverts never reaches the wallet', async () => {
     const reverting = makeFakeContract({
-      staticCallShouldRevert: { openBoxes: true },
-      staticCallRevertName: { openBoxes: 'InvalidBet' },
+      staticCallShouldRevert: { mineFlip: true },
+      staticCallRevertName: { mineFlip: 'InvalidBet' },
     });
     degeneretteMod.__setContractFactoryForTest(() => reverting);
     await assert.rejects(
       degeneretteMod.resolveBets({ index: 7, betIds: [42n] }),
       (error) => error.code === 'InvalidBet',
     );
-    assert.equal(reverting._calls.openBoxes.length, 0);
+    assert.equal(reverting._calls.mineFlip.length, 0);
   });
 });
 
@@ -1056,13 +1061,14 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   test('payable preflight carries the same ETH value as the wallet send', () => {
     assert.match(
       SRC,
-      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amount, tc, sym, \{ value \}\]/,
+      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amountArg, tc, sym, \{ value \}\]/,
       'ETH bets must not be simulated with msg.value=0',
     );
   });
 
-  test('canonical ABI: openBoxes(uint256) and degeneretteBetInfo(uint48, uint64); no per-bet door', () => {
-    assert.ok(SRC.includes("'function openBoxes(uint256 maxCount) external returns (uint256 opened)'"));
+  test('canonical ABI: mineFlip() and degeneretteBetInfo(uint48, uint64); no per-bet door', () => {
+    assert.ok(SRC.includes("'function mineFlip() external'"));
+    assert.ok(!SRC.includes("'function openBoxes("), 'audit 18490c6fe removed openBoxes');
     assert.ok(SRC.includes('function degeneretteBetInfo(uint48 index, uint64 betId) external view returns (uint256 packed)'));
     assert.ok(!SRC.includes("'function resolveDegeneretteBets"), 'audit 2525eb7fd removed resolveDegeneretteBets');
   });
@@ -1114,7 +1120,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   // used to pass a `log.parsed`-only stub, so production parsed nothing.
   test('parsers default to receiptParser() rather than requiring a contract', () => {
     assert.match(SRC, /parseBetPlacedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
-    assert.match(SRC, /parseBetResolvedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
+    assert.match(SRC, /parseBetResolvedFromReceipt\(receipt, contract = receiptParser\(\)(, \{ packed = null \} = \{\})?\)/);
     assert.match(SRC, /parseSpinResultsFromReceipt\(receipt, contract = receiptParser\(\)/);
     assert.match(SRC, /new ethers\.Interface\(DEGENERETTE_ABI\)/);
   });

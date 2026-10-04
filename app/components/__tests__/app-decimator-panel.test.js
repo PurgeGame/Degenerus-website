@@ -12,6 +12,11 @@ import { test, describe, beforeEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-packs-panel.test.js — Phase 60).

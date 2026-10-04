@@ -13,6 +13,11 @@ import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import { CHAIN } from '../chain-config.js';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 const DECIMATOR_SRC = readFileSync(
   new URL('../decimator.js', import.meta.url),
@@ -310,7 +315,7 @@ describe('burnForDecimator', () => {
     assert.equal(result.receipt.status, 1);
     assert.match(
       DECIMATOR_SRC,
-      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(target, amountWei, board\)/,
+      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(target, amountRaw, board\)/,
       'write is built with the fresh signer inside sendTx',
     );
   });

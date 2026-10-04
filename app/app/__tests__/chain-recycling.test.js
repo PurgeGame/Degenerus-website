@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_HEADER_TAIL_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_HEADER_TAIL_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
 import { retainedTicketLevels, pendingBoxWord, lootboxWord, lootboxSession, inLootboxSession, liveLootboxWord } from '../../chain/recycling.js';
 import { bingoProof, bingoCandidates } from '../../chain/positions.js';
 
@@ -89,10 +89,16 @@ test('header-tail schemas append validity bitmaps and keep deployed stamped-head
     await f.field('GAME', 'traitBucketLive', 1n << 7n, 1);
     assert.equal(await f.s.field('GAME', 'traitBucketLive', 0), 1n << 255n);
     assert.equal(await f.s.field('GAME', 'traitBucketLive', 1), 1n << 7n);
+    // Audit 085c92162 dropped slot 5's uint32 nudge gap: the ticket buffer stamps moved 5:14 -> 5:10.
+    assert.deepEqual(current.fields.ticketBufferLevels, { slot: '5', offset: 10, type: 'inplace:uint48' });
+    useSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+    const run63 = await loadSchema('GAME');
+    assert.deepEqual(run63.fields.ticketBufferLevels, { slot: '5', offset: 14, type: 'inplace:uint48' },
+      'the frozen run-63 schema keeps the deployed offset for the still-live run');
     useSchema(BEFORE_HEADER_TAIL_SCHEMA_HASH);
     const old = await loadSchema('GAME');
     assert.equal(old.fields.traitBucketLive, undefined);
-    assert.deepEqual(old.fields.ticketBufferLevels, current.fields.ticketBufferLevels);
+    assert.deepEqual(old.fields.ticketBufferLevels, run63.fields.ticketBufferLevels);
     assert.deepEqual(old.fields.lvlTraitEntry, current.fields.lvlTraitEntry, 'original parity mapping root retained');
   } finally { useSchema(previous); }
 });

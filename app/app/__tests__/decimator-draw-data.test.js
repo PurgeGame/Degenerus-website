@@ -10,6 +10,11 @@ import {
   decimatorScoreWei,
   loadDecimatorDrawSnapshot,
 } from '../decimator-draw-data.js';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // Audit 92a1358d0: the Decimator is a shared-dice craps battle.
 const game = new ethers.Interface([

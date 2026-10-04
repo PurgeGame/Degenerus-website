@@ -211,20 +211,21 @@ test('Main Event funding follows its pool roll after the unrolled High Roller re
 
 test('current Main Event results include real funding and all jackpot-awarded seats exactly once', () => {
   useSchema(CURRENT_SCHEMA_HASH);
+  // Audit b05ea7c50: these raw logs carry whole FLIP; the decode hands token wei to every fold.
   const wei = 10n ** 18n;
   const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
   const slot = 41n * 8n + 6n;
   const key = ethers.toBeHex(slot, 32);
   const event = (name, values) => iface.encodeEventLog(iface.getEvent(name), values);
   const logs = [
-    event('CrapsBonusOpened', [key, slot, 0n, 0n, 0n, 0n, 8_000n * wei]),
-    event('JackpotBattleLocked', [slot, 42, 20_000n * wei, 24]),
+    event('CrapsBonusOpened', [key, slot, 0n, 0n, 0n, 0n, 8_000n]),
+    event('JackpotBattleLocked', [slot, 42, 20_000n, 24]),
     event('JackpotBattleStarted', [slot, 3, 80, 80, 2]),
     // A detached jackpot must never inflate the paid Main Event's count.
-    event('JackpotBattleLocked', [slot + 1n, 42, 40_000n * wei, 0]),
+    event('JackpotBattleLocked', [slot + 1n, 42, 40_000n, 0]),
     event('JackpotBattleStarted', [slot + 1n, 3, 500, 500, 1]),
-    event('CrapsBattleFinalized', [key, 1, 1, 0, 0, 0, 70_000n * wei]),
-    event('CrapsBattlePaid', [77, key, PLAYER, 70_000n * wei]),
+    event('CrapsBattleFinalized', [key, 1, 1, 0, 0, 0, 70_000n]),
+    event('CrapsBattlePaid', [77, key, PLAYER, 70_000n]),
   ];
   for (const day of [41, 42]) {
     const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs);
@@ -330,18 +331,19 @@ test('daily Added includes the full Main Event input once and uses its prior all
 
 test('lobby daily totals include Main Event capital without requiring an ordinary boost word for it', () => {
   useSchema(CURRENT_SCHEMA_HASH);
+  // Audit b05ea7c50: these raw logs carry whole FLIP; the decode hands token wei to every fold.
   const wei = 10n ** 18n;
   const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
   const event = (name, values) => iface.encodeEventLog(iface.getEvent(name), values);
   const day = 42;
   const mainSlot = 41n * 8n + 6n;
   const logs = [
-    event('CrapsHighRollerDayOpened', [41, 1, 25_000n * wei, 0]),
-    event('CrapsProgressiveFunded', [41, 25_000n * wei, 100_000n * wei]),
-    event('CrapsHighRollerDayOpened', [42, 1, 30_000n * wei, 0]),
-    event('CrapsProgressiveFunded', [42, 30_000n * wei, 130_000n * wei]),
-    event('CrapsBonusOpened', [ethers.toBeHex(mainSlot, 32), mainSlot, 0, 0, 0, 0, 8_000n * wei]),
-    event('JackpotBattleLocked', [mainSlot, 42, 20_000n * wei, 24]),
+    event('CrapsHighRollerDayOpened', [41, 1, 25_000n, 0]),
+    event('CrapsProgressiveFunded', [41, 25_000n, 100_000n]),
+    event('CrapsHighRollerDayOpened', [42, 1, 30_000n, 0]),
+    event('CrapsProgressiveFunded', [42, 30_000n, 130_000n]),
+    event('CrapsBonusOpened', [ethers.toBeHex(mainSlot, 32), mainSlot, 0, 0, 0, 0, 8_000n]),
+    event('JackpotBattleLocked', [mainSlot, 42, 20_000n, 24]),
     event('JackpotBattleStarted', [mainSlot, 3, 80, 80, 2]),
   ];
   const wordsByIndex = {};
@@ -353,7 +355,7 @@ test('lobby daily totals include Main Event capital without requiring an ordinar
     const word = BigInt(50_000 + period);
     wordsByIndex[String(index)] = word;
     logs.push(
-      event('CrapsBonusOpened', [key, slot, 500_000n * wei, 600n * wei, 0, 0, 200n * wei]),
+      event('CrapsBonusOpened', [key, slot, 500_000n, 600n, 0, 0, 200n]),
       event('CrapsBonusArmed', [key, slot, index]),
     );
     ordinaryAdded += craps.crapsRealizedBoostWei({ ceilingWei: 500_000n * wei, battleKey: key, wordValue: word });
@@ -2241,10 +2243,10 @@ test('armed battle switches from awaiting RNG to settling when its committed wor
 const SIM_CONTRACTS = new URL('../../../../degenerus-sim/contracts/', import.meta.url);
 const flatSol = (path) => readFileSync(new URL(path, SIM_CONTRACTS), 'utf8').replace(/\s+/g, ' ');
 
-test('the craps ABI keeps custom-only resolution without the retired work-budget argument', () => {
+test('the craps ABI carries no settlement door: mineFlip settles every field (audit 18490c6fe)', () => {
   const iface = new contracts.ethers.Interface(craps.FLIP_CRAPS_ABI);
   const battle = flatSol('CrapsBattle.sol');
-  assert.equal(iface.getFunction('armBonusWindow'), null, 'keepScheduled arms in order; the door is gone');
+  assert.equal(iface.getFunction('armBonusWindow'), null, 'the stages arm in order; the door is gone');
   assert.ok(!battle.includes('function armBonusWindow('));
   assert.equal(iface.getFunction('createBattle').format('sighash'),
     'createBattle(uint32,uint8,uint16,uint24,uint40,bool,uint16)', 'minScore left the custom terms');
@@ -2252,8 +2254,14 @@ test('the craps ABI keeps custom-only resolution without the retired work-budget
   assert.equal(iface.getEvent('CrapsProgressiveRolled'), null);
   assert.equal(iface.getError('ScoreRequiredForBonus'), null);
   assert.ok(!battle.includes('ScoreRequiredForBonus') && !battle.includes('CrapsProgressiveRolled'));
-  // resolveSlot survives for CUSTOM battles only.
-  assert.ok(battle.includes('function resolveSlot(uint64 slot, uint64) external { if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();'));
+  // Audit 18490c6fe: resolveSlot and keepScheduled[Budgeted] are gone from the table and the ABI;
+  // closeBattle still binds a custom field to a table index.
+  for (const name of ['resolveSlot', 'keepScheduled', 'keepScheduledBudgeted']) {
+    assert.equal(iface.getFunction(name), null, `${name} left the ABI`);
+    assert.ok(!battle.includes(`function ${name}(`), `${name} left CrapsBattle`);
+  }
+  assert.ok(iface.getFunction('closeBattle'));
+  assert.ok(battle.includes('function closeBattle(uint64 slot) external returns (uint48 index)'));
 });
 
 test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
@@ -2263,7 +2271,8 @@ test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
   assert.ok(bits.includes('uint256 internal constant LEVEL_COUNT_SHIFT = 24;'));
   assert.ok(bits.includes('uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;'));
   // Comps never pay it; every other tagged burn and the paid upgrade do.
-  assert.ok(battle.includes('if (grossAndFlags & _CRAPS_FLAG_COMP == 0) { grossAndFlags = _tag(_entryPrice(player, grossAndFlags & ~uint256(0xFF)), grossAndFlags & 0xFF); }'));
+  // Audit b05ea7c50: the burn codec is (whole FLIP << 8) | flags, so the price is `>> 8`.
+  assert.ok(battle.includes('if (grossAndFlags & _CRAPS_FLAG_COMP == 0) { grossAndFlags = _tag(_entryPrice(player, grossAndFlags >> 8), grossAndFlags & 0xFF); }'));
   assert.ok(battle.includes('else { burned = _entryPrice(player, burned); _burnCoin(burned); }'));
 
   const mint = ({ last = 0n, count = 0n, deity = false } = {}) => last | (count << 24n) | (deity ? 1n << 184n : 0n);

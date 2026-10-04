@@ -86,7 +86,7 @@ const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e84469
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
 const RUN_59_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x04c1bb41779dfb8189409054d440caf57c377a7a41c0202feed2a4bec0b8737a';
+const CURRENT_CRAPS_RUNTIME_HASH = '0xa927f767f8e3ca2c101826a63dd98dbcc8fdd952029f2a73701479ac525e8ee6';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -115,8 +115,10 @@ function contestedHighRollerFixture() {
   )));
   const validated = validateCrapsReplayPlayer(promoted);
   promoted.entryMultiple = existing.entryMultiple;
+  // Engine pin -v4 (audit eb04b2e80): won rides the ladder tail FLOORED to whole FLIP, x 10^18 on the wire.
+  const SUB = 10n ** 18n;
   promoted.wonWei = (
-    BigInt(validated.ladderWei.at(-1)) * BigInt(promoted.entryMultiple)
+    (BigInt(validated.ladderWei.at(-1)) / SUB) * SUB * BigInt(promoted.entryMultiple)
   ).toString();
   return { existing, promoted };
 }

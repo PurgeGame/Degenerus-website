@@ -3,9 +3,9 @@
     "schemaVersion": 3,
     "kind": "craps-replay-manifest",
     "battleKey": "0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71",
-    "digest": "5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310",
+    "digest": "2f1d04dbe7dd9595d6108fe36c93dd9de96f00c665908b4bbf8f7fe6d8cce0c1",
     "ruleset": {
-      "engineVersion": "craps-hot12-own30-longest-v3",
+      "engineVersion": "craps-hot12-own30-longest-v4",
       "chainId": 31337,
       "contract": "0xd02c36ab81619cd5d7f7d235c68e734124cd3df1",
       "runtimeCodeHash": "0x1212121212121212121212121212121212121212121212121212121212121212"
@@ -47,13 +47,13 @@
       "entrants": 24,
       "shardSize": 8,
       "shardCount": 3,
-      "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310/featured.json",
-      "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/5a9259ed299dc271ba97c8b67d948bda57e9843ec966c4742a3cc57a50424310/seats/{shard}.json"
+      "featuredPath": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/2f1d04dbe7dd9595d6108fe36c93dd9de96f00c665908b4bbf8f7fe6d8cce0c1/featured.json",
+      "shardPathTemplate": "/craps/replays/v1/chains/31337/contracts/0xd02c36ab81619cd5d7f7d235c68e734124cd3df1/battles/0x1f8c0721d45731ca3ed66c8afae21a3e4680c1bca99279907aa73e0aefc1ad71/results/2f1d04dbe7dd9595d6108fe36c93dd9de96f00c665908b4bbf8f7fe6d8cce0c1/seats/{shard}.json"
     },
     "verification": {
       "allSeatsReplayOk": true,
       "settledEntrants": 24,
-      "replayedWonDigest": "0x7c29b7d35ebc2497a35b16dead87d1d70e8075227058ba83791051b44a5797e3"
+      "replayedWonDigest": "0x0d21ad6a9fbc1b92a1d1807540290627cf9f2bc738e34d967b1fc6e5ede9a034"
     },
     "publishedAt": "2026-08-28T18:00:00.000Z"
   },
@@ -417,7 +417,7 @@
           "survived": true
         }
       ],
-      "wonWei": "868800000000000000000",
+      "wonWei": "868000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -596,7 +596,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "247500000000000000000",
+      "wonWei": "247000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -725,7 +725,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "1567500000000000000000",
+      "wonWei": "1567000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -774,7 +774,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "522200000000000000000",
+      "wonWei": "522000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -926,7 +926,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "1693500000000000000000",
+      "wonWei": "1693000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -1087,7 +1087,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "129600000000000000000",
+      "wonWei": "129000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -1136,7 +1136,7 @@
         }
       ],
       "survivals": [],
-      "wonWei": "1058500000000000000000",
+      "wonWei": "1058000000000000000000",
       "paidWei": "0",
       "replayOk": true
     },
@@ -1412,9 +1412,9 @@
     }
   ],
   "hashes": {
-    "seats/0000": "a7a147f9ba6acc174efcafb1ed2652e1a920aef6d54c59d6dd5fee8409042cc1",
-    "seats/0001": "752da87ea6a27ca539b9eb6834692e93895e3c864dfedb425e2d7f663e793942",
-    "seats/0002": "f9d380629ffee4ea7198c0ea77c0ccfc81633bf8edb0a12a8f83ceb3c8925659",
-    "featured": "6e78e7f8fff870c3ecc2e51295708fd50ca68a8036727d84252e0929132b60c4"
+    "seats/0000": "cf387b366ffcda4155e09cabe85318238eaf989a0c96aaff0300ece778914e3e",
+    "seats/0001": "17fd73428e18a9b62e7fc07ac4ce0710d428b6f48c93871a9a84e5532e370d01",
+    "seats/0002": "a0d0a73108ae8b709ef177b3d2f8d90b1e0bcafc54efb8a94a30170dec3b5a8e",
+    "featured": "963a80571e0acdf09f3ca107186dce80028b9dd6ed35c3e436fd68dfc704638c"
   }
 }

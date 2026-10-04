@@ -630,7 +630,7 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
 function makeFakeRngContract(opts = {}) {
   const calls = {
     purchase: [], purchaseCoin: [],
-    openBoxes: [],
+    mineFlip: [],
     lootboxRngWordByIndex: [],
   };
   const state = { rngWord: opts.rngWord ?? 0n, opened: false };  // tests mutate to drive RNG progression
@@ -663,10 +663,10 @@ function makeFakeRngContract(opts = {}) {
       },
       { staticCall: stk('purchaseCoin') }
     ),
-    // Audit 2525eb7fd: the in-order openBoxes(maxCount) sweep is the only open door.
-    openBoxes: Object.assign(
+    // Audit 18490c6fe: mineFlip() is the only door; its stages open boxes in order.
+    mineFlip: Object.assign(
       async (...args) => {
-        calls.openBoxes.push(args);
+        calls.mineFlip.push(args);
         state.opened = true;
         return makeFakeBuyTx(makeFakeBuyReceipt([
           { parsed: { name: 'TraitsGenerated', args: {
@@ -674,7 +674,7 @@ function makeFakeRngContract(opts = {}) {
           } } },
         ]));
       },
-      { staticCall: stk('openBoxes') }
+      { staticCall: stk('mineFlip') }
     ),
     lootboxRngWordByIndex: async (idx) => { calls.lootboxRngWordByIndex.push(idx); return state.rngWord; },
     interface: { parseLog: (log) => log.parsed ?? null },
@@ -775,7 +775,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     // without waiting for /play/ pack-animator import (gsap unavailable in tests).
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openBoxes.length, 1, 'openLootBox called exactly once');
+    assert.equal(fakeContract._calls.mineFlip.length, 1, 'openLootBox called exactly once');
     // After cancel-token bump, the post-tx reveal sequence void-returns; row stays in opening status.
     assert.equal(el._state.lootboxRowStatuses[0], 'opening', 'row left in opening (cancel-token superseded reveal)');
     el.disconnectedCallback();
@@ -793,7 +793,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     openBtn.dispatchEvent({ type: 'click' });
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openBoxes.length, 1, 'only one openLootBox tx despite double-click');
+    assert.equal(fakeContract._calls.mineFlip.length, 1, 'only one openLootBox tx despite double-click');
     el.disconnectedCallback();
   });
 
@@ -1035,7 +1035,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     assert.equal(el._state.lootboxRowsCount, 1, 'row added from boot CTA');
     assert.equal(el._state.unrevealedPacksFromIndexerCount, 0, 'CTA backing data cleared');
     // Verify D-07 step 5: NO open tx auto-fired (openLootBox not called)
-    assert.equal(fakeContract._calls.openBoxes.length, 0, 'NO auto-fire — Open click is explicit');
+    assert.equal(fakeContract._calls.mineFlip.length, 0, 'NO auto-fire — Open click is explicit');
     // CTA is now hidden (count=0)
     assert.equal(cta.hidden, true, 'CTA hidden after walk-through started');
     el.disconnectedCallback();

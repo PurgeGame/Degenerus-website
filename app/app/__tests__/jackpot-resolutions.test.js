@@ -7,6 +7,11 @@ import { readFileSync } from 'node:fs';
 import * as resolutions from '../jackpot-resolutions.js';
 import * as contracts from '../contracts.js';
 import * as store from '../store.js';
+// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
+// Pin that schema so the suite reads the same under any deployment profile; whole-token units
+// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 
