@@ -348,3 +348,23 @@ test('the centre is the battle only for a wallet that was drawn into it', () => 
   assert.equal(coinDrawCentreModel(null, addr(1)), null, 'no battle (a jackpot day): no highlight');
   assert.equal(coinDrawCentreModel({ ...battle, kind: 'opener' }, addr(1)), null);
 });
+
+test('awarded-seat result colors use the chain winner and exact run credit', async () => {
+  for (const [seat, paid, winnerId, tone] of [
+    ['881', '0', '881', 'won'], ['882', '120', '999', 'profit'], ['883', '0', '999', 'lost'],
+  ]) {
+    const options = { viewerBetId: seat, viewerResult: { runPayoutWei: paid } };
+    const result = await openJackpotDrawRun({
+      battleKey: '0x' + '78'.repeat(32), viewerBetId: seat,
+      doc: { querySelector: () => ({ open(detail) {
+        assert.equal(detail.battleWonByViewer, seat === winnerId);
+        assert.equal(detail.battleWinnerBetId, winnerId);
+      } }) },
+      prepareReplay: async () => ({ ready: true, mainModel: { tableOptions: options },
+        open: table => table.open(options) }),
+      loadWinner: async () => ({ betId: winnerId, winner: PLAYER, battlePaidWei: 500n }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.resultTone, tone);
+  }
+});

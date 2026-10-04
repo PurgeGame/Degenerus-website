@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { coinDrawCentreModel } from '../../app/coin-draw-centre.js';
+import { coinDrawCentreModel, coinDrawResultTone } from '../../app/coin-draw-centre.js';
 
 const source = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 const between = (from, to) => {
@@ -38,6 +38,9 @@ function preloadPanel() {
     #coinDrawModel() { return this.model; }
     #dayDataReady() { return this.ready; }
     #coinDrawWasSeen() { return this.seen; }
+    #coinDrawResultTone() { return this.seen ? 'won' : null; }
+    #rememberCoinDrawResult() {}
+    #syncCoinDrawCentre() {}
     ${methods}
     schedule() { this.#scheduleCoinDrawPreload(); }
     disconnect() { this.isConnected = false; this.#cancelCoinDrawPreload(); }
@@ -116,7 +119,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
   const dom = { center: element() };
   const klass = `new (class {
     #coinDrawBattle = null; #coinDrawOpening = false; #coinDrawStatusFor = null;
-    #coinDrawStatus = null; #coinDrawSeen = new Set();
+    #coinDrawStatus = null; #coinDrawSeen = new Set(); #coinDrawResults = new Map();
     #mainSpinComplete = false; #spinning = false; #selectedDay = null; #selectedPlayer = null;
     #hasBonus = false; #bonusScratchComplete = false; #drawViewSwitching = false; #bonusPhase = false;
     #dayBonusTraitDraw = true; #dayRoll1 = null; #dayRoll2 = null; #playerRoll1Wins = []; #playerRoll2Wins = [];
@@ -157,12 +160,12 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     markSeen(key) { this.#coinDrawSeen.add(key); }
     stepDue() { return this.#coinDrawStepDue(); }
     publishDue() { this.#publishCoinDrawDue(); }
-    open(model) { this.#markCoinDrawSeen(model); }
-    forget() { this.#coinDrawSeen.clear(); }
+    open(model, tone) { this.#markCoinDrawSeen(model, tone); }
+    forget() { this.#coinDrawSeen.clear(); this.#coinDrawResults.clear(); }
     fail(message) { this.#coinDrawStatus = { message, error: true }; }
   })()`;
   const instance = runInNewContext(klass, {
-    dom, coinDrawCentreModel, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'JOIN CRAPS BATTLE',
+    dom, coinDrawCentreModel, coinDrawResultTone, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'JOIN CRAPS BATTLE',
     CHAIN: { id: 84532 }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
   });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });
@@ -317,7 +320,7 @@ test('the bottom key resolves the battle after the main spin, before the coinfli
   assert.match(body, /CRAPS_BATTLE_LABEL/);
   assert.match(source, /replayAction === 'craps-battle'\) \{\s*void this\.#openCoinDrawBattle\(revealBtn\);/,
     'the key opens the same battle the centre does');
-  assert.match(source, /if \(result\?\.ok\) this\.#markCoinDrawSeen\(model\);/, 'a successful open retires the key step');
+  assert.match(source, /if \(result\?\.ok\) this\.#markCoinDrawSeen\(model, result\.resultTone\);/, 'a successful open retires the key step');
 });
 
 test('the centre face is the two dice badges and nothing else', () => {
@@ -338,19 +341,36 @@ test('the centre face is the two dice badges and nothing else', () => {
   assert.doesNotMatch(css, /replay-center-battle/, 'no styles left for the removed button face');
 });
 
-test('an opened battle stays opened across a reload, and the key asks until then', () => {
+test('an opened battle stays inactive across a reload, while another wallet can still view it', () => {
   storage.clear();
-  const { instance } = panel();
+  const { instance, dom } = panel();
   const model = instance.sync();
   assert.equal(instance.stepDue()?.key, model.key, 'due after every spin');
   instance.spinsComplete = false;
   assert.equal(instance.stepDue(), null, 'never before the spins are done');
   instance.spinsComplete = true;
   instance.open(model);
+  instance.sync();
   assert.equal(instance.stepDue(), null);
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps-seen'), true);
+  assert.equal(dom.center.getAttribute('aria-disabled'), 'true');
+  assert.equal(dom.center.getAttribute('tabindex'), '-1');
+  assert.equal(dom.center.title, 'Craps battle already viewed. You lost.');
+  instance.click({ target: { classList: { contains: () => false } } });
+  instance.keydown({ key: 'Enter', preventDefault() {} });
+  instance.keydown({ key: ' ', preventDefault() {} });
+  assert.equal(instance.opened.length, 0, 'mouse and keyboard cannot reopen a viewed battle');
   assert.deepEqual(storage.keys(), [`craps-battle-seen:84532:${VIEWER}:42`], 'scoped by chain, wallet and day');
   instance.forget();
   assert.equal(instance.stepDue(), null, 'a fresh mount reads the stored mark');
+  instance.sync();
+  assert.equal(dom.center.getAttribute('aria-disabled'), 'true');
+  instance.setup({ coinDrawBattle: battle, player: OTHER, day: 42, mainSpinComplete: true, bonusTraitDraw: false });
+  instance.sync();
+  assert.equal(dom.center.classList.contains('replay-ticket-center--craps-seen'), false);
+  assert.equal(dom.center.getAttribute('aria-disabled'), 'false');
+  instance.click({ target: { classList: { contains: () => false } } });
+  assert.equal(instance.opened.length, 1, 'switching wallets restores that wallet’s unviewed action');
   const other = panel({ player: OTHER }).instance;
   other.setup({ coinDrawBattle: { ...battle }, player: OTHER, day: 42, mainSpinComplete: true, bonusTraitDraw: false });
   assert.ok(other.stepDue(), 'another wallet in the same battle is still asked');
@@ -388,4 +408,22 @@ test('opening a battle always ends: a deadline, a worker timeout, and a table it
   assert.match(viewer, /if \(signal\?\.aborted\) return \{ ok: false,[^}]*\};\s*table\.open\(/, 'an abandoned open never pops the table later');
   const chain = readFileSync(new URL('../../chain/coin-draw.js', import.meta.url), 'utf8');
   assert.match(chain, /setTimeout\(\(\) => \{\s*worker\.terminate\(\);\s*reject\(new ChainDataError\([^)]*'REPLAY_TIMEOUT'\)\);\s*\}, REPLAY_WORKER_TIMEOUT_MS\);/);
+});
+
+test('viewed jackpot result colors persist per wallet and stay concealed until opened', () => {
+  const key = '0x' + (41 * 8 + 6).toString(16).padStart(64, '0');
+  const current = { kind: 'jackpot', key, day: 42, entrants: [{ player: VIEWER, betId: '61' }] };
+  for (const tone of ['won', 'profit', 'lost']) {
+    storage.clear();
+    const { instance, dom } = panel({ coinDrawBattle: current });
+    const model = instance.sync();
+    assert.equal(dom.center.dataset.crapsResult, undefined, 'never reveal a result on the unopened badge');
+    instance.open(model, tone); instance.sync();
+    assert.equal(dom.center.dataset.crapsResult, tone);
+    assert.equal(dom.center.getAttribute('aria-disabled'), 'true');
+    instance.forget(); instance.sync();
+    assert.equal(dom.center.dataset.crapsResult, tone, 'reload retains the confirmed result');
+    instance.cover(); instance.sync();
+    assert.equal(dom.center.dataset.crapsResult, undefined, 'a covered ticket cannot leak its result color');
+  }
 });

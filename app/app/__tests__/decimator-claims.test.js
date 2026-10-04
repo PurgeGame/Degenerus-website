@@ -6,7 +6,7 @@ import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
 
 // Audit 92a1358d0: the Decimator is a shared-dice craps battle. A wallet holds ONE entry per
 // event: decBattlePlayers[player] = lvl << 64 | id names it and (audit 32c604531)
-// decBattleEntries[lvl << 64 | id] = owner | chips << 160 | whole-FLIP stack << 190. Sealing stores the word;
+// decBattleEntries[lvl << 64 | id] = owner | chips << 160 | whole-FLIP stack << 190. Sealing emits the word in DecimatorResolved (the round struct no longer stores it);
 // the entry's final coin drops tails, heads runs play the dice, and ranked winners are paid in
 // heap order as claimable ETH or half whale passes. There is no claim.
 const LEVEL = 25;
@@ -26,7 +26,6 @@ async function round({ phase, word = HEADS_WORD, winners = 0, paid = 0, pool = 0
   await f.field('GAME', 'decBattleEntries', BigInt(PLAYER) | (BigInt(CHIPS) << 160n) | (STACK_FLIP << 190n), (BigInt(LEVEL) << 64n) | ID);
   await f.field('GAME', 'decBattleRounds', count, LEVEL, 'count');
   await f.field('GAME', 'decBattleRounds', phase, LEVEL, 'phase');
-  await f.field('GAME', 'decBattleRounds', word, LEVEL, 'rngWord');
   await f.field('GAME', 'decBattleRounds', winners, LEVEL, 'winners');
   await f.field('GAME', 'decBattleRounds', paid, LEVEL, 'paid');
   await f.field('GAME', 'decBattleRounds', pool, LEVEL, 'poolWei');
@@ -34,6 +33,8 @@ async function round({ phase, word = HEADS_WORD, winners = 0, paid = 0, pool = 0
   await f.event('GAME', 'DecBurnRecorded', {
     player: PLAYER, lvl: LEVEL, entryId: ID, baseAmount: 1_000n * 10n ** 18n, credited: STACK, stack: STACK, chips: CHIPS,
   }, { block: 9000 });
+  // The round struct no longer stores the word; the sealing event DecimatorResolved carries it.
+  if (phase) await f.event('GAME', 'DecimatorResolved', { lvl: LEVEL, rngWord: word, poolWei: pool, entrants: count }, { block: 9100 });
   return f;
 }
 const read = f => readChainRoute(`/player/${PLAYER}/decimator?level=${LEVEL}`, { client: f.client });

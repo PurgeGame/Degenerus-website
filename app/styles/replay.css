@@ -298,29 +298,53 @@
   width: 44%;
   aspect-ratio: 1;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 6px rgba(110, 231, 183, 0.55));
-  animation: replay-craps-dice-float 2.2s ease-in-out infinite;
+  animation: none;
+  transform: rotate(var(--die-tilt, 0deg));
 }
 .replay-center-dice img:first-child { top: 18.5%; left: 15.5%; --die-tilt: -12deg; }
-.replay-center-dice img:last-child { top: 37.5%; left: 40.5%; --die-tilt: 10deg; animation-delay: -1.1s; }
+.replay-center-dice img:last-child { top: 37.5%; left: 40.5%; --die-tilt: 10deg; }
 .replay-ticket-center--craps:hover .replay-center-dice img,
 .replay-ticket-center--craps:focus-visible .replay-center-dice img { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 9px rgba(167, 243, 208, 0.85)); }
-.replay-ticket-center--craps.is-working .replay-center-dice img { animation: replay-craps-dice-spin 0.7s linear infinite; }
+
+/* A viewed battle stays on the ticket as a quiet, inactive result. */
+.replay-ticket-center.replay-ticket-center--craps-seen:not(.replay-ticket-center--draw-toggle) {
+  cursor: default;
+}
+.replay-ticket-center.replay-ticket-center--craps-seen:not(.replay-ticket-center--draw-toggle)::before {
+  background: linear-gradient(145deg, #4b5156, #343a40 52%, #252b30);
+  border-color: #8b949e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  animation: none;
+  filter: none;
+}
+.replay-ticket-center.replay-ticket-center--craps-seen:not(.replay-ticket-center--draw-toggle) .replay-center-dice img {
+  animation: none;
+  transform: rotate(var(--die-tilt, 0deg));
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  opacity: 1;
+}
+/* Result colors belong to the background; the dice keep their original artwork. */
+.replay-ticket-center.replay-ticket-center--craps-seen[data-craps-result="won"]:not(.replay-ticket-center--draw-toggle)::before {
+  background: linear-gradient(145deg, #9a6b11, #d39b25 52%, #735010);
+  border-color: #fcd34d;
+  box-shadow: inset 0 0 0 1px rgba(255, 247, 202, 0.28);
+}
+.replay-ticket-center.replay-ticket-center--craps-seen[data-craps-result="profit"]:not(.replay-ticket-center--draw-toggle)::before {
+  background: linear-gradient(145deg, #164a7b, #2478b5 52%, #123a66);
+  border-color: #7dd3fc;
+  box-shadow: inset 0 0 0 1px rgba(224, 242, 254, 0.2);
+}
+.replay-ticket-center.replay-ticket-center--craps-seen[data-craps-result="lost"]:not(.replay-ticket-center--draw-toggle)::before {
+  background: linear-gradient(145deg, #731f24, #a72d36 52%, #541820);
+  border-color: #f87171;
+  box-shadow: inset 0 0 0 1px rgba(254, 226, 226, 0.16);
+}
 /* The dice replace the flame while the battle owns the centre. */
 .replay-ticket-center--craps:not(.replay-ticket-center--draw-toggle) .replay-flame { opacity: 0; }
 
 @keyframes replay-craps-glow {
   0%, 100% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.26), 0 0 12px rgba(16, 185, 129, 0.5); }
   50% { box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.4), 0 0 28px rgba(16, 185, 129, 0.85); }
-}
-
-@keyframes replay-craps-dice-float {
-  0%, 100% { transform: rotate(var(--die-tilt, 0deg)) translateY(0); }
-  50% { transform: rotate(var(--die-tilt, 0deg)) translateY(-2%); }
-}
-
-@keyframes replay-craps-dice-spin {
-  from { transform: rotate(var(--die-tilt, 0deg)); }
-  to { transform: rotate(calc(var(--die-tilt, 0deg) + 360deg)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

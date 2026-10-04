@@ -10,7 +10,7 @@ import * as crapsResults from '../craps-results.js';
 import * as readProvider from '../read-provider.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
-import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 
 // The craps window mirrors itself to localStorage so a reload pays a 12-block
 // tail instead of the whole lookback. node has no Web Storage without a flag,
@@ -527,7 +527,7 @@ test('lobby history resolves current winners and yesterday exact protocol boost'
     },
   ];
   const wordsByIndex = new Map([
-    ...previous.map(({ index, word }) => [index, word]),
+    ...previous.map(({ index, word }) => [index, word, 1n]),
     [currentIndex, currentWord],
   ]);
   const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs, { wordsByIndex, player: PLAYER });
@@ -1027,6 +1027,57 @@ test('settlement words are read out of GAME storage, which is where they live', 
   assert.deepEqual(reads[0], [CONTRACTS.GAME, expectedKey]);
   // An undrawn word stays pending rather than reading as a zero boost.
   assert.equal(await craps.readCrapsSettlementWord(901n, provider), null);
+});
+
+test('recycled settlement tags recover each battle’s own published word after storage is reused', async () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  craps.__resetCrapsSettlementWordsForTest();
+  const iface = new ethers.Interface((await loadSchema('GAME')).abi);
+  const arm = (slot, index, blockNumber, logIndex) => ({
+    parsed: { name: 'CrapsBonusArmed', args: { slot, index, battleKey: ethers.toBeHex(slot, 32) } },
+    blockNumber, logIndex,
+  });
+  const arms = [arm(337n, 0n, 100, 5), arm(338n, 0n, 102, 5), arm(339n, 1n, 103, 5)];
+  const publication = (index, word, blockNumber, logIndex) => ({
+    ...iface.encodeEventLog(iface.getEvent('LootboxRngApplied'), [index, word, 1n]),
+    blockNumber, logIndex,
+  });
+  const events = [publication(0n, 999n, 100, 4), publication(0n, 222n, 102, 6),
+    publication(0n, 111n, 100, 6)]; // RPC order is deliberately shuffled.
+  const reads = [];
+  const provider = { getLogs: async filter => { reads.push(filter); return events; } };
+  const words = await craps.readRecycledCrapsSettlementWords(42, arms, ['0', '1'], provider, 104);
+  assert.equal(words.get(ethers.toBeHex(337n, 32)), 111n);
+  assert.equal(words.get(ethers.toBeHex(338n, 32)), 222n);
+  assert.equal(words.has(ethers.toBeHex(339n, 32)), false, 'undrawn remains unknown');
+  assert.equal(reads[0].address, CONTRACTS.GAME);
+  assert.equal(reads[0].fromBlock, 100);
+  assert.equal(reads[0].toBlock, 104);
+  assert.deepEqual(reads[0].topics, [iface.getEvent('LootboxRngApplied').topicHash],
+    'the event index is not indexed; the query filters by publication topic only');
+  // A later publication must not rewrite a completed battle. Unknown tags keep polling.
+  events.push(publication(0n, 333n, 105, 1), publication(1n, 444n, 105, 2));
+  const later = await craps.readRecycledCrapsSettlementWords(42, arms, ['0', '1'], provider, 106);
+  assert.equal(later.get(ethers.toBeHex(337n, 32)), 111n);
+  assert.equal(later.get(ethers.toBeHex(338n, 32)), 222n);
+  assert.equal(later.get(ethers.toBeHex(339n, 32)), 444n);
+  assert.equal(reads[1].fromBlock, 103, 'completed battles use their session memo');
+  const historical = await craps.readRecycledCrapsSettlementWords(42, [arms[2]], ['1'], {
+    getLogs: async () => [],
+  }, 104);
+  assert.equal(historical.size, 0, 'a future publication cannot leak into an earlier pinned head');
+  const wei = 10n ** 18n;
+  const logs = arms.slice(0, 2).flatMap(row => [row,
+    { parsed: { name: 'CrapsBonusOpened', args: { battleKey: row.parsed.args.battleKey,
+      slot: row.parsed.args.slot, seed: 50000n * wei, bankroll: 1000n * wei,
+      goal: 5000n * wei, boardStake: 140n * wei, battleStake: 100n * wei } } },
+    { parsed: { name: 'CrapsBattlePaid', args: { battleKey: row.parsed.args.battleKey,
+      betId: row.parsed.args.slot << 64n | 1n, player: PLAYER, amount: 1000n * wei } } },
+  ]);
+  const snapshot = craps.crapsLobbySnapshotFromLogs(42, logs, { wordsByIndex: words });
+  for (let i = 0; i < 2; i++) assert.equal(snapshot.results[i].winnerBoostWei,
+    craps.crapsRealizedBoostWei({ ceilingWei: 50000n * wei,
+      battleKey: arms[i].parsed.args.battleKey, wordValue: [111n, 222n][i] }));
 });
 
 test('a drawn settlement word is remembered across heads; an undrawn one keeps polling', async () => {

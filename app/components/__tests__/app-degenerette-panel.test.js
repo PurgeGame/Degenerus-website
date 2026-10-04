@@ -992,9 +992,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     const { boonIndicatorModel } = await import('../../app/boons.js');
     assert.match(boonIndicatorModel(payload, 'degenerette-eth').title,
-      /up to 10 ETH.*bet, split across its spins/i);
+      /up to 10 ETH.*bet, split across its cards/i);
     assert.match(boonIndicatorModel(payload, 'degenerette-flip').title,
-      /up to 100,000 FLIP.*bet, split across its spins/i);
+      /up to 100,000 FLIP.*bet, split across its cards/i);
     assert.match(boonIndicatorModel(payload, 'degenerette-wwxrp').title,
       /draw weight of your next Daily Incinerator WWXRP burn/i);
     assert.doesNotMatch(boonIndicatorModel(payload, 'degenerette-wwxrp').title, /Degenerette|bet/i);
