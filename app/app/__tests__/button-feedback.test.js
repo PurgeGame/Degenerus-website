@@ -17,7 +17,7 @@ function fakeRoot() {
   };
 }
 
-function fakeButton({ disabled = false, ariaDisabled = null } = {}) {
+function fakeButton({ disabled = false, ariaDisabled = null, feedback = null } = {}) {
   const classes = new Set();
   return {
     tagName: 'BUTTON', disabled, parentElement: null,
@@ -26,7 +26,9 @@ function fakeButton({ disabled = false, ariaDisabled = null } = {}) {
       remove(name) { classes.delete(name); },
       contains(name) { return classes.has(name); },
     },
-    getAttribute(name) { return name === 'aria-disabled' ? ariaDisabled : null; },
+    getAttribute(name) {
+      return name === 'aria-disabled' ? ariaDisabled : name === 'data-button-feedback' ? feedback : null;
+    },
   };
 }
 
@@ -56,5 +58,16 @@ describe('delegated button feedback', () => {
     root.listeners.get('click')({ target: ariaDisabled });
     assert.equal(disabled.classList.contains('is-tactile-pressed'), false);
     assert.equal(ariaDisabled.classList.contains('is-tactile-pressed'), false);
+  });
+
+  test('controls with their own feedback skip the delegated effect for pointer and keyboard', () => {
+    const root = fakeRoot();
+    const button = fakeButton({ feedback: 'off' });
+    const icon = { tagName: 'SPAN', parentElement: button };
+    initButtonFeedback(root);
+    for (const type of ['pointerdown', 'click', 'keydown', 'keyup']) {
+      root.listeners.get(type)({ target: icon, key: 'Enter' });
+      assert.equal(button.classList.contains('is-tactile-pressed'), false, type);
+    }
   });
 });

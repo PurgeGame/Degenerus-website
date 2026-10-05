@@ -123,7 +123,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     #mainSpinComplete = false; #spinning = false; #selectedDay = null; #selectedPlayer = null;
     #hasBonus = false; #bonusScratchComplete = false; #drawViewSwitching = false; #bonusPhase = false;
     #dayBonusTraitDraw = true; #dayRoll1 = null; #dayRoll2 = null; #playerRoll1Wins = []; #playerRoll2Wins = [];
-    #quadWinArrays = []; #centerWins = []; #skipSpinId = null; #animId = 0;
+    #quadWinArrays = []; #centerWins = []; #skipSpinId = null; #animId = 0; #advanceSpin = null;
     #centerScratched = true; #bubbleCovers = new Map();
     popped = 0;
     #revealCenter() { this.popped++; this.#centerScratched = true; }

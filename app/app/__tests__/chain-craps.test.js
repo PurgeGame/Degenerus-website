@@ -96,7 +96,8 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
     ];
     await f.field('CRAPS','_battles',5n|(5n<<32n),key);
     await f.field('CRAPS','_dayTickets',1n,daySlot);
-    for(const [member,value] of [['word',word],['bankroll',bankroll],['bountyUnits',12n],['drawnCount',2n],['drawnUnits',2n],['multiplierBps',30_000n]]) await f.field('CRAPS','_jackpotRounds',value,slot,member);
+    // Audit bcdba75a9: the round keeps its own drawn fee (slot 5, `entryPrice`) — this day drew 10,000.
+    for(const [member,value] of [['word',word],['bankroll',bankroll],['bountyUnits',12n],['drawnCount',2n],['drawnUnits',2n],['multiplierBps',30_000n],['entryPrice',10_000n]]) await f.field('CRAPS','_jackpotRounds',value,slot,member);
     await f.event('CRAPS','JackpotBattleStarted',{slot,level:7,drawnEntries:2,drawnUnits:2,word},{block:3600,index:0});
     // The day runs a 3x high lane (no high seat sits in this field).
     await f.event('CRAPS','CrapsHighRollerDayOpened',{day:42,multiplier:3,mainBudget:0,highBudget:0},{block:3600,index:1});
@@ -127,10 +128,10 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
       'presentation figures are token wei');
     assert.equal(assembled.rollBudget,undefined,'the current contracts replay at the engine\'s default roll budget');
     // Audit e579cd318: a jackpot high seat rides `bankroll + highExtra` of fee-funded capital,
-    // highExtra = (H - 1) * JACKPOT_FEE (8,000 FLIP) * multiplierBps / 20_000 (CrapsBattle.sol:318) —
-    // whole FLIP since audit b05ea7c50, like every term the producer takes.
+    // highExtra = (H - 1) * r.entryPrice * multiplierBps / 20_000 (CrapsBattle.sol:322; the round's own
+    // fee since audit bcdba75a9, the fixed 8,000 before) — whole FLIP since audit b05ea7c50.
     assert.deepEqual(assembled.terms,{bankroll,goal:bankroll*5n,boardStake:bankroll/5n,battleStake:12n*100n,
-      highExtra:(3n-1n)*8_000n*30_000n/20_000n});
+      highExtra:(3n-1n)*10_000n*30_000n/20_000n});
     assert.deepEqual(assembled.seats.map(s=>[s.betId,s.lane,s.awardUnits??0]),seats.map(s=>[s.betId,s.lane,Number(s.award)]));
     const bundle=materializeReplay(assembled);
     assert.equal(bundle.entrants,5,'every settlement reproduced, the awarded seats on their own dice');

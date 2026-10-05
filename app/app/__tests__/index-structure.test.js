@@ -394,7 +394,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-eb04b2e8-a927f767-scoped-v14-riu-pool';
+    const revision = '?v=craps-eb04b2e8-f44e4711-scoped-v14-riu-pool';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -461,7 +461,7 @@ describe('index.html basic-mode skeleton', () => {
     }
     assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
       'component upgrade waits for its scoped stylesheet');
-    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="resolution-race-v4-player-best"/,
+    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="player-score-v15"/,
       'the resolver redesign has its own deferred-style cache identity');
     assert.match(html, /link\.dataset\.rev[\s\S]*?encodeURIComponent\(revision\)/,
       'the deferred-style loader applies an explicitly declared cache identity');

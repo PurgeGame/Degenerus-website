@@ -30,40 +30,22 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
-test('the last score change is a pinned dice-bay badge, not a flying balance token', () => {
+test('the last result follows the viewed graph entry and expires with reduced motion', () => {
   const pop = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #popScoreDelta(frame, { animate = true } = {})'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
-  assert.match(COMPONENT_SRC, /<output class="craps-score-delta" data-bind="craps-score-delta" data-tone="push"[\s\S]*?<strong data-bind="craps-score-delta-amount">—<\/strong>/s,
-    'the number lives in the dice bay as a bare amount, no label or bubble');
-  assert.match(COMPONENT_SRC, /data-bind="craps-die-two"[\s\S]*?<\/span>\s*<output class="craps-score-delta"/s,
-    'the number is a child of the dice bay, beside the STACK score');
-  assert.doesNotMatch(COMPONENT_SRC, /<small>LAST ROLL<\/small>/);
-  assert.match(pop, /if \(delta === 0n \|\| !animate\) \{\s*this\.#hideScoreDelta\(\);\s*return;/,
-    'a push or a restored perspective shows no number at all');
-  assert.match(pop, /amount\.addEventListener\?\.\('animationend'[\s\S]*?this\.#hideScoreDelta\(\)/s,
-    'the number hides itself once the pop-and-fade ends');
-  assert.match(CSS_SRC, /@keyframes craps-score-delta-pop \{[\s\S]*?100% \{ opacity: 0;/s,
-    'the pop ends faded out');
-  // The seat's own scale: entry-multiple copies, or a jackpot High Roller's run capital.
-  assert.match(pop, /this\.#playerMoney\(delta < 0n \? -delta : delta\)/);
-  assert.match(pop, /amount\.textContent = `\$\{delta > 0n \? '\+' : '−'\}\$\{magnitude\}`/);
-  assert.match(pop, /badge\.dataset\.tone = delta > 0n \? 'win' : 'loss'/);
-  assert.match(pop, /void badge\.offsetWidth;\s*badge\.classList\?\.add\('is-popping'\)/,
-    'every non-zero change restarts the pop');
-  assert.match(COMPONENT_SRC, /this\.#popScoreDelta\(frame, \{ animate: animateRace \}\)/,
-    'a restored perspective shows the frame’s change without animating it');
-  assert.match(COMPONENT_SRC, /write\('craps-race-stack', formatCrapsCompactFlip\(this\.#playerMoney\(stack\)\)\)/);
-  assert.match(COMPONENT_SRC, /#playerMoney\(value\) \{\s*return crapsPlayerMoney\(value, this\.#entryMultiple, this\.#runCapitalFlip, this\.#bankroll\);/);
-  assert.doesNotMatch(COMPONENT_SRC, /racePendingBalance|raceBalanceLandTimer|craps-race-transfer--balance|#animateRaceDelta/,
-    'no balance token flies to the stack any more');
+  assert.match(COMPONENT_SRC, /role="img" aria-label="Battle bankroll trajectories"><\/svg>\s*<output class="craps-score-delta"/,
+    'the result is a stable sibling of the SVG so repaints only move it');
+  assert.match(COMPONENT_SRC, /deltaBadge\.style\.left =/);
+  assert.match(COMPONENT_SRC, /deltaBadge\.style\.top =/);
+  assert.match(COMPONENT_SRC, /deltaBadge\.dataset\.entryKey = currentMarker\.player\.key/);
+  assert.match(pop, /delta === 0n \|\| !animate \|\| frame\?\.viewerClosed === true/,
+    'pushes, restored views and spectated rolls cannot show stale personal results');
+  assert.match(pop, /this\.#scoreDeltaTimer = this\.#guardedTimeout/,
+    'expiry does not depend on a CSS animationend event');
+  assert.match(pop, /this\.#playerMoney\(delta < 0n \? -delta : delta\)/,
+    'the result retains the viewed seat’s actual money amount');
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#hideScoreDelta\(\)/);
-  assert.match(CSS_SRC, /\.craps-score-delta \{[\s\S]*?position: absolute;[\s\S]*?bottom: 0\.3rem;\s*left: 0\.45rem;[\s\S]*?padding: 0;/s,
-    'the number is pinned to the dice bay corner beside the STACK score on every layout, with no bubble');
-  assert.match(CSS_SRC, /\.craps-dice-bay:has\(\.craps-winner-payoff:not\(\[hidden\]\)\) \.craps-score-delta \{ display: none; \}/,
-    'the final TOTAL WON card is never covered by the per-roll number');
-  assert.match(CSS_SRC, /\.craps-score-delta\[hidden\] \{ display: none !important; \}/);
-  assert.match(CSS_SRC, /\.craps-score-delta\[data-tone="win"\][\s\S]*?\.craps-score-delta\[data-tone="loss"\]/s);
-  assert.match(CSS_SRC, /@keyframes craps-score-delta-pop/);
-  assert.doesNotMatch(CSS_SRC, /craps-race-balance|craps-race-transfer--balance/);
+  assert.match(CSS_SRC, /transform: translate\(-100%, -100%\)/);
+  assert.match(CSS_SRC, /@keyframes craps-score-delta-pop \{[\s\S]*?100% \{ opacity: 0;/);
 });
 
 test('resolution acknowledgment is gated on painted completion and exact-once state', async () => {
@@ -902,11 +884,11 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
     /\.craps-center-hud\s*\{[\s\S]*?grid-template-areas:\s*"race-player roll"/s,
     'the player panel and large dice share the primary mobile action row');
   assert.match(COMPONENT_SRC,
-    /const compactRace = Boolean[\s\S]*?raceBounds\.height \/ raceBounds\.width[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
-    'the graph adopts the rendered mobile panel aspect ratio instead of letterboxing a desktop plot');
+    /const width = raceBounds\?\.width > 0 \? raceBounds\.width[\s\S]*?const height = raceBounds\?\.height > 0 \? raceBounds\.height[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
+    'the graph uses the rendered panel dimensions on every screen');
   assert.match(COMPONENT_SRC,
-    /\? \{ left: 48, right: 12, top: 20, bottom: 56 \}[\s\S]*?if \(compactRace\) \{[\s\S]*?craps-race-inline-endpoint/s,
-    'compact graphs keep rank and amount inside the plot without a right-side card gutter');
+    /\? \{ left: 48, right: 112, top: 52, bottom: 66 \}/,
+    'compact graphs reserve only a small gutter for entry dots and the leader portrait');
 
   const landscapeRaceCss = CSS_SRC.slice(
     CSS_SRC.indexOf('/* A phone in landscape has enough horizontal room'),
@@ -918,6 +900,32 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
   assert.match(landscapeRaceCss,
     /grid-template-areas:\s*"place place place place"\s*"hard4 hard8 line dont"\s*"hud hud hud hud"/s,
     'landscape keeps every wager above the dice as well');
+});
+
+test('race bankroll axes use round, zero-based ticks with room for revealed peaks', async () => {
+  const { crapsRaceBankrollScale } = await import(moduleUrl);
+  const normal = crapsRaceBankrollScale({ high: 3810n, starting: 2400n, danger: 600n });
+  assert.deepEqual(normal, { max: 5000n, ticks: [0n, 1000n, 2000n, 3000n, 4000n, 5000n] });
+  assert.equal(crapsRaceBankrollScale({ high: 4000n }).max, normal.max,
+    'small increases do not change the scale on every roll');
+  const opponent = crapsRaceBankrollScale({ high: 42_000n, starting: 3000n });
+  assert.equal(opponent.max, 50_000n, 'an opponent above the viewer goal must still fit');
+  assert.equal(crapsRaceBankrollScale({ high: 3000n, danger: 9000n }).max, 12_500n);
+  assert.equal(crapsRaceBankrollScale({ high: 3000n, wager: 9000n }).max, 12_500n);
+  for (const high of [0n, 1n, 9n, 101n, 4300n, 9800n, 10100n, 10n ** 40n]) {
+    const scale = crapsRaceBankrollScale({ high });
+    assert.ok(scale.max > high);
+    assert.equal(scale.ticks[0], 0n);
+    assert.equal(scale.ticks.at(-1), scale.max);
+    assert.ok(scale.ticks.every((tick, i) => i === 0 || tick - scale.ticks[i - 1] === scale.ticks[1]));
+  }
+});
+
+test('race roll ticks cover the same full history as the plotted lines', async () => {
+  const { crapsRaceRollAxis } = await import(moduleUrl);
+  assert.deepEqual(crapsRaceRollAxis(13), { max: 20, ticks: [0, 5, 10, 15, 20] });
+  assert.deepEqual(crapsRaceRollAxis(120), { max: 120, ticks: [0, 50, 100] });
+  assert.deepEqual(crapsRaceRollAxis(1000), { max: 1000, ticks: [0, 200, 400, 600, 800, 1000] });
 });
 
 test('LAST 5 uses fixed circular slots with a blank advancing cursor and table-event markers', async () => {
@@ -998,10 +1006,10 @@ test('YOU tracks live seven-out risk while the DANGER line follows only the incr
     'the graph reference is the next shooter\'s stake');
   assert.doesNotMatch(COMPONENT_SRC, /#raceDangerOnChart/,
     'changing live bets and boosts cannot pull the reference line down');
-  assert.match(COMPONENT_SRC, /const danger = player\.local && standing\?\.sevenOutRisk === true;[\s\S]*?' is-danger'/,
-    'the graph YOU box carries the danger state');
-  assert.match(CSS_SRC, /\.craps-race-endpoint\.is-you\.is-danger > rect \{[^}]*stroke: #ff626b;[^}]*animation: craps-race-endpoint-danger/,
-    'the danger YOU box is red and pulses');
+  assert.match(COMPONENT_SRC, /danger: isYou && standing\?\.sevenOutRisk === true,[\s\S]*?' is-danger'/,
+    'each owned entry dot carries its own danger state');
+  assert.match(CSS_SRC, /\.craps-race-endpoint\.is-you\.is-danger :is\([\s\S]*?stroke: #ff626b;[\s\S]*?animation: craps-race-endpoint-danger/,
+    'owned dots at risk are red and pulse');
 });
 
 test('resolution run pairs exact bankroll snapshots with each shared shooter', async () => {

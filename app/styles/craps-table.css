@@ -736,17 +736,17 @@ app-craps-table {
 
 .craps-dice-bay__lock-readout[hidden] { display: none !important; }
 
-/* Last score change: a bare glowing number in the dice bay's bottom-left
-   corner, right beside the STACK score. The dice are round, so that corner
-   stays clear on every layout. */
+/* The chart positions this bare result above the viewed entry on every paint.
+   Animate the number independently so resizing never restarts the pop. */
 .craps-score-delta {
   --craps-score-delta-color: #f2e0b3;
   --craps-score-delta-glow: rgba(242, 224, 179, 0.5);
   position: absolute;
   z-index: 5;
-  bottom: 0.3rem;
-  left: 0.45rem;
+  top: 0;
+  left: 0;
   display: block;
+  transform: translate(-100%, -100%);
   margin: 0;
   padding: 0;
   color: var(--craps-score-delta-color);
@@ -771,22 +771,19 @@ app-craps-table {
 .craps-score-delta strong {
   display: block;
   opacity: 0;
-  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  font-size: clamp(1.05rem, 1.6vw, 1.4rem);
   font-weight: 1000;
   line-height: 1;
   white-space: nowrap;
   -webkit-text-stroke: 0.05em rgba(24, 15, 3, 0.92);
   paint-order: stroke fill;
   text-shadow: 0 2px 2px rgba(15, 9, 2, 0.92), 0 0 0.65rem var(--craps-score-delta-glow);
-  transform-origin: 0 100%;
+  transform-origin: 75% 100%;
 }
 
 .craps-score-delta.is-popping strong {
-  animation: craps-score-delta-pop var(--craps-speed-900, 900ms) ease-out both;
+  animation: craps-score-delta-pop var(--craps-score-delta-ms, 1400ms) ease-out both;
 }
-
-/* The final TOTAL WON card owns the bay; the per-roll number yields to it. */
-.craps-dice-bay:has(.craps-winner-payoff:not([hidden])) .craps-score-delta { display: none; }
 
 @keyframes craps-score-delta-pop {
   0% { opacity: 0; transform: translateY(0.35rem) scale(0.55); }
@@ -3407,15 +3404,14 @@ app-craps-table {
   min-height: 17rem;
   grid-area: race;
   overflow: hidden;
-  border: 1px solid rgba(180, 214, 196, 0.2);
+  border: 1px solid rgba(180, 214, 196, 0.16);
   border-radius: 0.55rem;
-  background:
-    radial-gradient(circle at 58% 28%, rgba(38, 130, 90, 0.08), transparent 36%),
-    linear-gradient(180deg, rgba(6, 30, 22, 0.96), rgba(3, 16, 11, 0.98));
-  box-shadow: inset 0 1.1rem 2rem rgba(0, 0, 0, 0.16), inset 0 -1.4rem 2.4rem rgba(0, 0, 0, 0.25);
+  background: linear-gradient(180deg, #091c16, #07140f);
 }
 
 .craps-race__chart {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -3436,11 +3432,33 @@ app-craps-table {
 }
 
 .craps-race-axis {
-  fill: #78998a;
+  fill: #91aa9c;
   stroke: rgba(3, 18, 12, 0.92);
   stroke-width: 3px;
   paint-order: stroke;
-  font: 850 11px/1 "Roboto Mono", monospace;
+  font: 600 11px/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.craps-race-heading {
+  fill: #d7e4dc;
+  font: 800 12px/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.craps-race-unit {
+  fill: #91aa9c;
+  font: 600 9px/1 "Roboto Mono", monospace;
+  letter-spacing: 0.04em;
+}
+
+.craps-race-target {
+  fill: #f5ca62;
+  font: 700 11px/1 "Roboto Mono", monospace;
+}
+
+.craps-race-target.is-riu {
+  fill: #dfadf7;
 }
 
 .craps-race-axis-title {
@@ -3476,10 +3494,9 @@ app-craps-table {
 }
 
 .craps-race-danger {
-  stroke: #ff535b;
-  stroke-width: 3;
-  stroke-dasharray: none;
-  filter: drop-shadow(0 0 0.3rem rgba(255, 83, 91, 0.36));
+  stroke: #dc6870;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
 }
 
 .craps-race-threshold-label rect,
@@ -3529,20 +3546,19 @@ app-craps-table {
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.16;
+  opacity: 0.3;
   vector-effect: non-scaling-stroke;
 }
 
 .craps-race-path.is-leader {
-  stroke-width: 2.4;
+  stroke-width: 2;
   opacity: 0.9;
-  filter: drop-shadow(0 0 0.2rem rgba(245, 202, 98, 0.42));
 }
 
 .craps-race-path.is-you {
-  stroke-width: 4;
+  stroke-width: 2.75;
   opacity: 1;
-  filter: drop-shadow(0 0 0.42rem rgba(110, 240, 140, 0.62));
+  filter: drop-shadow(0 0 0.16rem rgba(110, 240, 140, 0.3));
 }
 
 .craps-race-path.is-you.is-leader {
@@ -3621,100 +3637,94 @@ app-craps-table {
   font: 1000 13px/1 "Roboto Mono", monospace;
 }
 
-.craps-race-endpoint > line {
-  stroke: #6ef08c;
-  stroke-width: 1.35;
+.craps-race-marker-link {
+  stroke: #f5ca62;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  opacity: 0.35;
 }
 
-.craps-race-endpoint > rect {
-  fill: #0b4328;
+.craps-race-marker-link.is-you { stroke: #6ef08c; }
+
+.craps-race-label-link {
   stroke: #6ef08c;
   stroke-width: 1.5;
-  rx: 5;
-  filter: drop-shadow(0 0 0.4rem rgba(110, 240, 140, 0.28));
 }
 
-.craps-race-endpoint.is-leader > line {
-  stroke: #f5ca62;
+.craps-race-endpoint.is-leader .craps-race-label-link { stroke: #f5ca62; }
+
+.craps-race-score {
+  fill: #baffca;
+  font: 800 12px/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-.craps-race-endpoint.is-leader > rect {
-  fill: #624908;
-  stroke: #f5ca62;
-  filter: drop-shadow(0 0 0.45rem rgba(245, 202, 98, 0.34));
+.craps-race-endpoint .craps-race-dot {
+  fill: #91a99d;
+  stroke: #07140f;
+  stroke-width: 1;
+  opacity: 0.55;
 }
 
-.craps-race-endpoint.is-you.is-leader > rect {
+.craps-race-endpoint.is-you .craps-race-dot {
+  fill: #6ef08c;
+  stroke: #d0ffdb;
+  opacity: 1;
+}
+
+.craps-race-current-ring {
+  fill: none;
   stroke: #6ef08c;
-  stroke-width: 2;
-}
-
-/* A seven-out on this shooter would send YOU to the survival flip or bust. */
-.craps-race-endpoint.is-you.is-danger > line {
-  stroke: #ff626b;
-}
-
-.craps-race-endpoint.is-you.is-danger > rect {
-  fill: #4d0d14;
-  stroke: #ff626b;
-  stroke-width: 2;
-  animation: craps-race-endpoint-danger 1.1s ease-in-out infinite alternate;
-}
-
-.craps-race-endpoint.is-you.is-danger .craps-race-endpoint-rank,
-.craps-race-endpoint.is-you.is-danger .craps-race-inline-endpoint {
-  fill: #ffc2c6;
-}
-
-.craps-race-endpoint.is-you.is-danger .craps-race-endpoint-avatar {
-  stroke: #ff626b;
-}
-
-@keyframes craps-race-endpoint-danger {
-  from { filter: drop-shadow(0 0 0.2rem rgba(255, 98, 107, 0.3)); }
-  to { filter: drop-shadow(0 0 0.65rem rgba(255, 98, 107, 0.85)); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .craps-race-endpoint.is-you.is-danger > rect {
-    animation: none;
-    filter: drop-shadow(0 0 0.45rem rgba(255, 98, 107, 0.6));
-  }
+  stroke-width: 1.5;
 }
 
 .craps-race-endpoint-avatar {
   fill: #0a1b12;
   stroke: #ffe08a;
-  stroke-width: 1.5;
+  stroke-width: 2;
 }
 
-.craps-race-endpoint.is-you .craps-race-endpoint-avatar {
-  stroke: #6ef08c;
+.craps-race-endpoint.is-you .craps-race-endpoint-avatar { stroke: #6ef08c; }
+.craps-race-endpoint.is-current .craps-race-endpoint-avatar { stroke-width: 3; }
+.craps-race-endpoint.is-out { opacity: 0.45; }
+
+/* Preserve the seven-out warning on your dots instead of a text card. */
+.craps-race-endpoint.is-you.is-danger :is(.craps-race-dot, .craps-race-current-ring, .craps-race-endpoint-avatar),
+.craps-race-endpoint.is-you.is-out :is(.craps-race-dot, .craps-race-current-ring, .craps-race-endpoint-avatar) {
+  stroke: #ff626b;
+}
+
+.craps-race-endpoint.is-you.is-danger .craps-race-dot,
+.craps-race-endpoint.is-you.is-out .craps-race-dot { fill: #ff626b; }
+
+.craps-race-endpoint.is-you.is-danger .craps-race-score,
+.craps-race-endpoint.is-you.is-out .craps-race-score { fill: #ff626b; }
+
+.craps-race-endpoint.is-you.is-danger .craps-race-label-link,
+.craps-race-endpoint.is-you.is-out .craps-race-label-link { stroke: #ff626b; }
+
+.craps-race-endpoint.is-leader .craps-race-dot,
+.craps-race-endpoint.is-leader.is-you .craps-race-dot {
+  fill: #f5ca62;
+  opacity: 1;
+}
+
+.craps-race-endpoint.is-you.is-danger {
+  animation: craps-race-endpoint-danger 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes craps-race-endpoint-danger {
+  from { filter: drop-shadow(0 0 0.2rem rgba(255, 98, 107, 0.3)); }
+  to { filter: drop-shadow(0 0 0.45rem rgba(255, 98, 107, 0.65)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .craps-race-endpoint.is-you.is-danger { animation: none; }
 }
 
 .craps-race-endpoint-initials {
   fill: white;
   font: 1000 9px/1 "Roboto Mono", monospace;
-}
-
-.craps-race-endpoint-rank {
-  fill: #baffca;
-  font: 1000 11px/1 "Roboto Mono", monospace;
-}
-
-.craps-race-endpoint.is-leader .craps-race-endpoint-rank {
-  fill: #fff0a9;
-}
-
-.craps-race-endpoint-value {
-  fill: white;
-  font: 1000 14px/1 "Roboto Mono", monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-.craps-race-endpoint-entries {
-  fill: #c8dfd1;
-  font: 800 8px "Roboto Mono", monospace;
 }
 
 /* Reserve a separate result band beneath phone dice, including while the
@@ -3750,24 +3760,6 @@ app-craps-table {
 @keyframes craps-mobile-readout-in {
   from { opacity: 0; }
   15%, to { opacity: 1; }
-}
-
-.craps-race-inline-endpoint {
-  fill: #baffca;
-  stroke: rgba(2, 18, 11, 0.96);
-  stroke-width: 3px;
-  paint-order: stroke;
-  font: 1000 10px/1 "Roboto Mono", monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.craps-race-endpoint.is-leader .craps-race-inline-endpoint {
-  fill: #fff0a9;
-}
-
-.craps-race-endpoint.is-you.is-leader .craps-race-inline-endpoint {
-  stroke: #0b512c;
 }
 
 .craps-race-cover {

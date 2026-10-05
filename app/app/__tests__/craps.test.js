@@ -10,7 +10,7 @@ import * as crapsResults from '../craps-results.js';
 import * as readProvider from '../read-provider.js';
 import * as reasonMap from '../reason-map.js';
 import * as store from '../store.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
 
 // The craps window mirrors itself to localStorage so a reload pays a 12-block
 // tail instead of the whole lookback. node has no Web Storage without a flag,
@@ -210,7 +210,9 @@ test('Main Event funding follows its pool roll after the unrolled High Roller re
 });
 
 test('current Main Event results include real funding and all jackpot-awarded seats exactly once', () => {
-  useSchema(CURRENT_SCHEMA_HASH);
+  // Run 64's fixed fee and unrolled subsidy (frozen schema 54fe7634); audit bcdba75a9's subsidy
+  // roll is pinned in run65-contracts.test.js.
+  useSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH);
   // Audit b05ea7c50: these raw logs carry whole FLIP; the decode hands token wei to every fold.
   const wei = 10n ** 18n;
   const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
@@ -1277,7 +1279,8 @@ test('tomorrow face-cost ranges cover the shipped Normal and unknown High Roller
 });
 
 test('tomorrow face-cost ranges reflect the run 57 six-window slate (five tier-drawn windows plus the fixed jackpot fee)', () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  // Runs 57-64 (through the frozen schema 54fe7634); the variable fee is in run65-contracts.test.js.
+  const previous = useSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH);
   try {
     // CrapsBattle._bonusPreset packed tables (CrapsBattle.sol:2255-2256): each of the five
     // tier-drawn windows spans 800..8,000 FLIP (600/1,800/4,500 bank + 200..400/600..1,400/
@@ -1330,7 +1333,8 @@ test('the schedule fork tracks CrapsBattle._BONUS_PERIODS_PER_DAY and its day-ti
 });
 
 test('run 57 (audit 4f546796) day terms: five tier-drawn windows plus a flat 8,000 FLIP jackpot period', () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  // Runs 57-64 (through the frozen schema 54fe7634); the variable fee is in run65-contracts.test.js.
+  const previous = useSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH);
   try {
     const word = '102858562227254754036121703853225298402533986033002165985066946425924666406226';
     const day = craps.crapsBonusDayTerms(word);

@@ -3,31 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BAF Resolution Demo</title>
+  <title>BAF Reveal — Layout Lab</title>
   <link rel="stylesheet" href="/app/styles/base.css">
   <link rel="stylesheet" href="/app/styles/app.css">
   <link rel="stylesheet" href="/app/styles/baf-resolution.css">
   <link rel="stylesheet" href="/app/styles/baf-resolution-demo.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "ethers": "https://esm.sh/ethers@6.16.0"
-    }
-  }
-  </script>
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs"}}</script>
 </head>
 <body class="layout-basic baf-resolution-demo-page">
-  <main class="baf-resolution-demo">
-    <small>LOCAL VISUAL DEMO</small>
-    <h1>BAF RESOLUTION</h1>
-    <p>Close the final to switch outcomes.</p>
-    <nav aria-label="BAF demo states">
-      <button type="button" data-state="winner">PLAYER WINS</button>
-      <button type="button" data-state="miss">PLAYER MISSES</button>
-      <button type="button" data-state="skipped">BAF LOSS</button>
-      <a href="/app/event-rails-demo.html">EVENT RAILS</a>
+  <aside class="baf-demo-controls" aria-label="BAF reveal demo controls">
+    <div class="baf-demo-controls__title"><b>BAF REVEAL LAB</b><small>SAMPLE DRAWS</small></div>
+    <nav aria-label="Comparison layout">
+      <button type="button" data-layout="cards" aria-pressed="false">01 Cards</button>
+      <button type="button" data-layout="lanes" aria-pressed="false">02 Score lanes</button>
+      <button type="button" data-layout="ledger" aria-pressed="false">03 Ledger</button>
+      <button type="button" data-layout="bracket" aria-pressed="false">04 Bracket</button>
+      <button type="button" data-layout="tickets" aria-pressed="false">05 Tickets</button>
+      <button type="button" data-layout="spotlight" aria-pressed="true">06 Spotlight</button>
     </nav>
-  </main>
+    <div class="baf-demo-controls__settings">
+      <label>Groups <select id="baf-demo-count" aria-label="Number of comparison groups">
+        <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option><option selected>10</option><option>16</option><option>24</option>
+      </select></label>
+      <label>Coin <select id="baf-demo-coin"><option value="corner">Corner</option><option value="center" selected>Center</option></select></label>
+      <label>Outcome <select id="baf-demo-state"><option value="winner">Player wins</option><option value="miss">Player misses</option><option value="skipped">BAF loss</option></select></label>
+      <label>Cut <select id="baf-demo-cut"><option value="4">#4 wins</option><option value="3">#3 wins</option><option value="pending">Pending</option></select></label>
+      <button type="button" id="baf-demo-replay">↻ Replay</button>
+    </div>
+  </aside>
+  <main class="baf-resolution-demo"><h1>BAF REVEAL LAB</h1><p>Choose a layout or replay to open the board.</p></main>
   <script type="module" src="/app/baf-resolution-demo.js"></script>
 </body>
 </html>

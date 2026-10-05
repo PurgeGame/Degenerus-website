@@ -1,12 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Interface } from '../../vendor/ethers-app.mjs';
-import { ChainClient, mappingSlot, wordHex } from '../../chain/client.js';
+import { ChainClient, mappingSlot, wordHex, contractInterface } from '../../chain/client.js';
 
 const GAME = '0x1111111111111111111111111111111111111111';
 const HASH = '0x' + 'ab'.repeat(32);
 const OTHER = '0x' + 'cd'.repeat(32);
 const header = { number: '0x64', timestamp: '0x3e8', hash: HASH };
+
+test('concurrent cold ABI reads share one interface and event-decode cache', async () => {
+  const loaded = await Promise.all(Array.from({ length: 12 }, () => contractInterface('VAULT')));
+  assert.equal(new Set(loaded).size, 1, 'cache the schema flight before constructing the ABI');
+  assert.equal(await contractInterface('VAULT'), loaded[0]);
+});
 function client(send, options = {}) {
   return new ChainClient({ provider: { send }, chain: { id: 1, deployBlock: 1 }, contracts: { GAME },
     clock: { anchor: 0, period: 100, deployDayBoundary: 1 }, validateDeployment: false, ...options });

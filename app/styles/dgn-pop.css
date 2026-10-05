@@ -1,5 +1,5 @@
-@import url("./bubble-reveal.css?v=smooth-degenerette-20260930");
-@import url("./dgn-winnings.css?v=ticket-payout-20260929");
+@import url("./bubble-reveal.css?v=reveal-efficiency-20261004");
+@import url("./dgn-winnings.css?v=reward-spot-20261005");
 /* Shared Degenerette surface: a covered ticket becomes the result in place. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 1200px); max-width: 1200px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }
 .rvl-stage.rvl-stage--pop > * { flex-shrink: 0; }
@@ -167,14 +167,14 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid {
   --gap: .9rem; --label: 2.4rem;
   --fit-w: calc(100cqw - .5rem); --fit-h: calc(100cqh - .5rem - var(--pop-footer, 0px));
-  --cols: 2; --card: max(120px, min((var(--fit-w) - var(--gap)) / 2, 380px, (var(--fit-h) - 2 * var(--label) - var(--gap)) / 2));
+  --cols: 2; --card: max(110px, min((var(--fit-w) - var(--gap)) / 2, 380px, (var(--fit-h) - 2 * var(--label) - var(--gap)) / 2));
   box-sizing: border-box; gap: var(--gap); padding: .2rem;
   width: max-content; max-width: none; margin: auto;
   grid-template-columns: repeat(var(--cols), var(--card));
 }
 /* The payout bar sits right under the cards: the pair centres as one group,
    and the bar sticks to the bottom edge once a large bet has to scroll. */
-.rvl-stage--pop .dgn-pop__viewport:has(> .dgn-winnings) { --pop-footer: 86px; }
+.rvl-stage--pop .dgn-pop__viewport:has(> .dgn-winnings) { --pop-footer: 104px; }
 .rvl-stage--pop .dgn-pop__viewport:has(> .dgn-winnings) > .dgn-pop__grid { margin: auto auto 0; }
 .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings {
   position: sticky; bottom: 0; flex-shrink: 0; margin: 8px auto auto;

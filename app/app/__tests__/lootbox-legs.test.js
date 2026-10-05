@@ -38,7 +38,7 @@ import { CHAIN, CONTRACTS } from '../chain-config.js';
 // FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
 // Pin that schema so the suite reads the same under any deployment profile; whole-token units
 // (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
 pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
@@ -1196,6 +1196,90 @@ describe('openLegsFromDegenerettePayouts', () => {
 
 describe('readOpenLegsFromChain', () => {
   afterEach(() => contractsMod.clearProvider());
+
+  test('current counted box seeds do not depend on spend or a recovered ticket price', (t) => {
+    const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
+    t.after(() => pinTestSchema(previous));
+    const context = {
+      rngWord: 89340965503094331071506645430717258826669948937240635946072716178043072020739n,
+      player: '0x411087a5f752d3b5545e8301ad7e6cef1351e480',
+    };
+    // Independent on-chain fixture: one custom box settled by mineFlip.
+    const betId = 9918476789771525913n;
+    for (const boxOrder of [429496746377216n, 1n]) {
+      const ids = deriveHumanLootboxSpinBetIds({ ...context, boxOrders: [boxOrder] });
+      assert.ok(ids.includes(betId), 'the first box uses BoxOpen and nonce 1, even without a price');
+    }
+  });
+
+  for (const crossesChunk of [false, true]) {
+    test(`recovers the original whole-token spin after its queue index is reused${crossesChunk ? ' across scan chunks' : ''}`, async (t) => {
+      const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
+      t.after(() => pinTestSchema(previous));
+      const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
+      const purchaseHash = '0x62e20b139ca534c2ba3ab3e86fde0134de8948d19466fc98092847d8faf11375';
+      const batchHash = '0x0bb811b839c93b00e5ae860756757e8bd18cd0c1ae604b59c856c80a2844e556';
+      const laterHash = `0x${'ab'.repeat(32)}`;
+      const purchaseBlock = CHAIN.deployBlock + 2655;
+      const spinBlock = purchaseBlock + (crossesChunk ? 1801 : 11);
+      const rngWord = 89340965503094331071506645430717258826669948937240635946072716178043072020739n;
+      const amountWei = 100000000000n;
+      const boxOrder = 429496746377216n;
+      const betId = 9918476789771525913n;
+      const packed = 54025205625969836776031948201722931779593183940514304167866456632851n;
+      const purchaseCall = new ethers.Interface([
+        'function purchase(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,bool foil)',
+      ]);
+      const purchase = { ...log('LootBoxBuy', [player, 1n, amountWei]),
+        transactionHash: purchaseHash, blockNumber: purchaseBlock, index: 59 };
+      const spin = { ...log('BoxSpin', [player, betId, packed, 0n, 0n]),
+        transactionHash: batchHash, blockNumber: spinBlock, index: 268 };
+      const publication = (blockNumber, index, word) => ({
+        ...log('LootboxRngApplied', [1n, word, 99n]), blockNumber, index,
+      });
+      const rngLogs = [
+        publication(purchaseBlock, 58, 111n), // previous round, earlier in the purchase block
+        publication(purchaseBlock + 9, 1, rngWord),
+        publication(spinBlock + 178, 1, 8752500828625591217090591293740862393462862129282725389683906258817288266542n),
+        publication(spinBlock + 326, 1, 38850288845440436283593745819566019314705621024041324473128790265168159235080n),
+      ];
+      const laterOpened = { ...log('LootBoxOpened', [player, 1n, amountWei, 6, 400, 120n, false]),
+        transactionHash: laterHash, blockNumber: spinBlock + 178, index: 2 };
+      const receiptsRead = [];
+      const transactionsRead = [];
+      contractsMod.setProvider({
+        getBlockNumber: async () => spinBlock + 500,
+        getLogs: async (filter) => {
+          const events = [purchase, spin, ...rngLogs, laterOpened];
+          return events.filter(event => event.topics[0] === filter.topics[0]
+            && event.blockNumber >= filter.fromBlock && event.blockNumber <= filter.toBlock).reverse();
+        },
+        getTransaction: async (hash) => {
+          transactionsRead.push(hash);
+          assert.equal(hash, purchaseHash, 'deterministic recovery does not inspect unrelated settlements');
+          return { to: GAME, data: purchaseCall.encodeFunctionData('purchase', [
+            player, 0n, boxOrder, ethers.ZeroHash, 1, false,
+          ]), value: 0n };
+        },
+        getTransactionReceipt: async (hash) => {
+          receiptsRead.push(hash);
+          if (hash === purchaseHash) return { hash, blockNumber: purchaseBlock, logs: [purchase] };
+          if (hash === laterHash) return { hash, blockNumber: laterOpened.blockNumber, logs: [laterOpened] };
+          assert.equal(hash, batchHash);
+          return { hash, blockNumber: spinBlock, logs: [spin] };
+        },
+      });
+      const legs = await readOpenLegsFromChain({ player, lootboxIndex: 1,
+        purchaseTransactionHashes: [purchaseHash], boxAmountWei: amountWei });
+      assert.deepEqual(legs.map(leg => leg.legType), ['spin']);
+      assert.equal(legs[0].betId, betId);
+      assert.equal(legs[0].transactionHash, batchHash, 'save the immutable settlement for subsequent reveals');
+      assert.equal(legs[0].payout, 0n, 'a losing spin still supplies a complete reveal');
+      assert.equal(legs[0].reels.length, 1);
+      assert.deepEqual(receiptsRead, [purchaseHash, batchHash]);
+      assert.deepEqual(transactionsRead, [purchaseHash]);
+    });
+  }
 
   test('chain recovery keeps box rewards without replaying a same-receipt record bounty', async () => {
     const txHash = `0x${'ef'.repeat(32)}`;

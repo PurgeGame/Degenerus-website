@@ -203,6 +203,55 @@ describe('live Decimator display math', () => {
   });
 });
 
+describe('live Decimator quote context', () => {
+  afterEach(() => {
+    decimatorMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('reads the active GAME schema to recover entry timing and the displayed multiplier', async () => {
+    const { loadSchema } = await import('../../chain/schema.js');
+    const { fields } = await loadSchema('GAME');
+    const { ethers } = contractsMod;
+    const iface = new ethers.Interface([
+      'function playerActivityScore(address) view returns (uint256)',
+      'function currentDayView() view returns (uint24)',
+      'function futurePrizePoolView() view returns (uint256)',
+    ]);
+    const values = { playerActivityScore: 235n, currentDayView: 32n, futurePrizePoolView: 1000n };
+    const storage = new Map([
+      [decimatorMod.decimatorRoundStorageSlot(25, fields.decBattleRounds.slot), (412n << 128n) | (31n << 192n)],
+      [decimatorMod.decimatorPlayerStorageSlot(CONNECTED, fields.decBattlePlayers.slot), (25n << 64n) | 1n],
+      [decimatorMod.decimatorEntryStorageSlot(25, 1n, fields.decBattleEntries.slot), BigInt(CONNECTED) | (284_500n << 190n)],
+    ]);
+    const reads = [];
+    contractsMod.setProvider({
+      getBlockNumber: async () => 900,
+      call: async (tx) => {
+        const method = iface.getFunction(tx.data.slice(0, 10)).name;
+        return iface.encodeFunctionResult(method, [values[method]]);
+      },
+      getStorage: async (_address, slot, tag) => {
+        reads.push({ slot, tag });
+        if (!storage.has(slot)) throw new Error('Unexpected storage slot');
+        return ethers.toBeHex(storage.get(slot), 32);
+      },
+      getLogs: async () => { throw new Error('The quote must not scan round history'); },
+    });
+    const context = await decimatorMod.readDecimatorContext(CONNECTED, 25, { includeRoundTotal: false });
+    assert.equal(context.activityScore, 235);
+    assert.equal(context.daysLate, 1, 'a case-sensitive schema lookup must not silently erase timing');
+    assert.equal(context.stackWei, 284_500n * FLIP);
+    assert.equal(context.entrants, 412);
+    assert.equal(context.totalStackWei, null);
+    assert.equal(reads.length, 3);
+    assert.ok(reads.every(({ tag }) => tag === 900), 'quote reads share one block');
+    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
+      amountWei: 1_000n * FLIP, activityScore: context.activityScore, daysLate: context.daysLate, boonBps: 5_000,
+    }), 23_010n);
+  });
+});
+
 describe('live Decimator raw-burn total', () => {
   afterEach(() => {
     decimatorMod.__resetContractFactoryForTest();

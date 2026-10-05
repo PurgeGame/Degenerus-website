@@ -14,11 +14,14 @@ function harness({ reducedMotion = false } = {}) {
     createElement() {
       let text = '';
       return {
-        children: [], className: '', classList: { add() {}, remove() {} },
-        setAttribute() {},
+        children: [], textWrites: 0, className: '', classList: { add() {}, remove() {} },
+        attributes: {}, eventListeners: {},
+        setAttribute(key, value) { this.attributes[key] = String(value); },
+        getAttribute(key) { return this.attributes[key] ?? null; },
+        addEventListener(type, fn) { this.eventListeners[type] = fn; },
         appendChild(node) { this.children.push(node); },
         get textContent() { return text + this.children.map(node => node.textContent).join(''); },
-        set textContent(value) { text = String(value); this.children = []; },
+        set textContent(value) { this.textWrites++; text = String(value); this.children = []; },
       };
     },
   };
@@ -82,4 +85,40 @@ test('closing stops the counter and ignores later payout updates', () => {
   assert.equal(frames.size, 0);
   winnings.update('10,000 FLIP'); frame(1000);
   assert.equal(value.textContent, before);
+});
+
+test('quadrant progress with unchanged winnings preserves the readout and live announcement', () => {
+  const { winnings, frames } = harness();
+  winnings.update('0 FLIP', { detail: '0 / 25 CARDS', duration: 0 });
+  const writes = node => node.textWrites + node.children.reduce((sum, child) => sum + writes(child), 0);
+  const before = writes(winnings.element);
+  for (let i = 0; i < 3; i++) winnings.update('0 FLIP', { detail: '0 / 25 CARDS' });
+  assert.equal(writes(winnings.element), before, 'partial quadrants neither rewrite nor re-announce unchanged winnings');
+  assert.equal(frames.size, 0);
+  winnings.dispose();
+});
+
+test('the shared reward spot gates opening, opens once, and ignores clicks after disposal', () => {
+  const { doc, winnings } = harness();
+  const slot = winnings.element.children[0];
+  const button = slot.children.find(node => node.className === 'dgn-winnings__lootbox');
+  let opens = 0;
+  const reward = { artSrc: '/case.webp', amountText: '0.01 ETH', onOpen: () => { opens++; } };
+  assert.equal(button.hidden, true);
+  winnings.showCoin(doc.createElement('span'), 'CURRENCY FLIP');
+  assert.equal(winnings.coinSlot.hidden, false);
+  winnings.showLootbox({ ...reward, onOpen: null });
+  assert.equal(winnings.coinSlot.hidden, true);
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, true);
+  button.eventListeners.click({});
+  assert.equal(opens, 0);
+  winnings.showLootbox({ ...reward, complete: true });
+  assert.equal(button.disabled, false);
+  button.eventListeners.click({}); button.eventListeners.click({});
+  assert.equal(opens, 1);
+  winnings.showLootbox(reward);
+  winnings.dispose();
+  button.eventListeners.click({});
+  assert.equal(opens, 1);
 });

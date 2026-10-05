@@ -1399,6 +1399,42 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  for (const draftSymbol of [null, 29]) {
+    test(`Degenerette quest replaces ${draftSymbol == null ? 'a missing' : 'a Dice'} hero with an eligible random symbol`, async (t) => {
+      t.mock.method(Math, 'random', () => 0.999999);
+      const events = [];
+      const listener = event => events.push(event.detail);
+      document.addEventListener('quest:activate', listener);
+      if (draftSymbol != null) {
+        const draft = makeFakeElement('app-degenerette-panel');
+        draft.getTicketDraft = () => ({ symbol: draftSymbol });
+        _docBody.appendChild(draft);
+      }
+      _fetchHandler = async (url) => {
+        if (String(url).includes('/game/state')) return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+        if (String(url).includes('/game/quests/day/')) return {
+          day: 1, quests: [{ slot: 0, questType: 7, target: '80000000000' }],
+        };
+        return makeQuestsPayload({ quests: [
+          { day: 1, slot: 0, questType: 7, progress: '0', target: '80000000000', completed: false },
+        ] });
+      };
+      storeMod.update('app.lastDay', { day: 1 });
+      const el = instantiate();
+      try {
+        await settle(40);
+        el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
+        assert.equal(el.querySelector('[data-bind="qst-action-dgn-symbol-name"]').textContent, 'Ace');
+        el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+        assert.equal(events.length, 1);
+        assert.equal(events[0].symbol, 23, 'even the highest random draw stays in Cards');
+      } finally {
+        document.removeEventListener('quest:activate', listener);
+        el.disconnectedCallback();
+      }
+    });
+  }
+
   test('bonus quest unlocks once the primary quest is complete', async () => {
     _fetchHandler = async () => makeQuestsPayload({
       quests: [

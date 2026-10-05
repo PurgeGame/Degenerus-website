@@ -64,6 +64,25 @@ async function finish(f, battleKey, betId, amount, block, player = PLAYER) {
   await f.event('CRAPS', 'CrapsBattlePaid', { battleKey, betId, player, amount }, { block });
 }
 
+test('Dice Run record hits stay attached to the finalizing battle through lobby enrichment', async () => {
+  const f = await fixture(), slot = 337n, betId = betOf(slot);
+  const battleKey = await arm(f, slot, 1);
+  await settle(f, betId, 500n, 3501);
+  await f.event('CRAPS', 'CrapsBattleFinalized', { battleKey, winningScoreBps: 1_500_000n }, { block: 3501 });
+  await f.event('CRAPS', 'CrapsBattlePaid', { battleKey, betId, player: PLAYER, amount: 100n }, { block: 3501 });
+  await f.event('COINFLIP', 'BigRecordUpdated', { kind: 4, player: PLAYER, value: 1_500_000n }, { block: 3501 });
+  const otherKey = await arm(f, slot + 1n, 1);
+  await settle(f, betOf(slot + 1n), 300n, 3502);
+  await finish(f, otherKey, betOf(slot + 1n), 100n, 3502);
+  const totals = crapsWinnerTotalsFromPayload(42, await read(f));
+  assert.equal(totals.find(row => row.battleKey === battleKey).biggestDiceRunHit, true);
+  assert.equal(totals.find(row => row.battleKey === otherKey).biggestDiceRunHit, false);
+  const result = { battleKey, betId: String(betId), winner: PLAYER };
+  const enriched = crapsLobbySnapshotWithWinnerTotals({ results: [result], yesterdayEventResult: result }, totals);
+  assert.equal(enriched.results[0].biggestDiceRunHit, true);
+  assert.equal(enriched.yesterdayEventResult.biggestDiceRunHit, true);
+});
+
 test('winner totals include runs settled before the final payout transaction and every paid component', async () => {
   const f = await fixture(), slot = 337n, betId = betOf(slot);
   const battleKey = await arm(f, slot, 2);

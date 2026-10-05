@@ -111,16 +111,16 @@ describe('<app-decimator-burn>', () => {
   test('keeps the event rail compact with readable values and paired controls', () => {
     assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-areas:\s*"identity stats entry score"/s);
     assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*4\.5rem/s);
-    assert.match(CSS, /\.dbb__entry\s*\{[^}]*grid-template-columns:\s*5\.7rem minmax\(0, 1fr\)/s,
+    assert.match(CSS, /\.dbb__entry\s*\{[^}]*grid-template-columns:\s*var\(--dbb-stat-width\) minmax\(0, 1fr\)/s,
       'the multiplier sits beside the burn controls on desktop');
-    assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.08fr\) minmax\(0, 1fr\)/s,
+    assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
       'the amount and action share a row, including on phones');
     assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb\s*\{[^}]*grid-template-areas:\s*"identity identity" "stats score" "entry entry"/s,
       'mobile keeps the prize and player score side by side');
-    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*3rem/s);
-    assert.match(CSS, /\.dbb__burn\s*\{[^}]*min-height:\s*3rem/s,
+    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*var\(--dbb-control-height\)/s);
+    assert.match(CSS, /\.dbb__burn\s*\{[^}]*min-height:\s*var\(--dbb-control-height\)/s,
       'the compact action retains a full touch target');
-    assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.96rem, 1\.25vw, 1\.14rem\)/s);
+    assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 var\(--dbb-value-size\)/s);
     assert.doesNotMatch(CSS, /\.dbb__(?:plate|board|rating)\b|\.dbb-stat--burned/);
   });
 

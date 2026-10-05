@@ -2,6 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+test('each history replay links the reward spot to a fresh luckbox presentation', async () => {
+  const { degeneretteReplaySequences } = await import('../degenerette-replay.js');
+  const original = { kind: 'degenerette', lootboxLegs: [{ legType: 'dgnrs', amount: 7n }] };
+  const first = degeneretteReplaySequences(original);
+  const second = degeneretteReplaySequences(original);
+  assert.equal(first[0].lootboxPresentationId, first[1].presentationId);
+  assert.notEqual(first[1].presentationId, second[1].presentationId);
+  assert.equal(original.lootboxPresentationId, undefined, 'the saved history row stays unchanged');
+});
+
 test('settled replay helpers import without a DOM or interactive panel registration', async () => {
   assert.equal(typeof globalThis.HTMLElement, 'undefined');
   const replay = await import('../degenerette-replay.js');

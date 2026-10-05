@@ -210,6 +210,19 @@ describe('Plan 62-03: placeBet', () => {
     assert.equal(args[5].value, msgValueWei, 'msg.value matches msgValueWei');
   });
 
+  test('rejects every Dice hero before simulation or a wallet request', async () => {
+    for (let symbol = 24; symbol < 32; symbol++) {
+      await assert.rejects(degeneretteMod.placeBet({
+        currency: 1,
+        amountPerTicketWei: 100n * 10n ** 18n,
+        ticketCount: 1,
+        symbol,
+      }), /Dice cannot be heroes/);
+    }
+    assert.deepEqual(lastFakeContract._order, []);
+    assert.equal(lastFakeContract._calls.placeDegeneretteBet.length, 0);
+  });
+
   test('claimable-first ETH wager preserves the sentinel and sends only the wallet shortfall', async () => {
     const amountPerTicket = 10n ** 16n;
     const ticketCount = 3;

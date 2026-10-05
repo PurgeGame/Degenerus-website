@@ -1946,6 +1946,49 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  for (const held of [false, true]) test(`confirmed mining immediately credits Tomorrow once (held=${held})`, async () => {
+    const unit = 10n ** 18n;
+    _currentStakeWei = String((held ? 9000n : 1000n) * unit);
+    seedTomorrowHold(1000n * unit);
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    if (held) {
+      storeMod.update('app.lastDay', { day: 67, status: 'resolved', summary: {
+        rollTwo: { coin: [{ traitId: 12, winnerCount: 1 }], bonusDraw: [], farFuture: { winnerCount: 0 } },
+      }, roll2: { day: 67, wins: [] } });
+      localStorage.removeItem('jackpot_complete_day_84532_67');
+    }
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /1,000 FLIP/);
+    let finishRead;
+    const pending = new Promise(resolve => { finishRead = resolve; });
+    let finishOldRead;
+    const oldRead = new Promise(resolve => { finishOldRead = resolve; });
+    let reads = 0;
+    coinflipMod.__setCurrentStakeReaderForTest(async () => ++reads === 1 ? oldRead : pending);
+    document.dispatchEvent({ type: contractsMod.TX_CONFIRMED_EVENT });
+    await flushMicrotasks();
+    const total = (held ? 9125n : 1125n) * unit;
+    const detail = { player: TEST_ADDR, transactionHash: '0xmining-confirmed', blockNumber: 123,
+      amountWei: String(125n * unit), stake: { day: 68, amountWei: String(125n * unit), totalWei: String(total) } };
+    document.dispatchEvent({ type: 'app-mine-flip:reward', detail: { ...detail, player: '0xother' } });
+    assert.match(tomorrow().textContent, /1,000 FLIP/, 'another wallet cannot alter this stake');
+    document.dispatchEvent({ type: 'app-mine-flip:reward', detail });
+    assert.match(tomorrow().textContent, /1,125 FLIP/, 'the receipt paints before any network read finishes');
+    document.dispatchEvent({ type: 'app-mine-flip:reward', detail });
+    assert.match(tomorrow().textContent, /1,125 FLIP/, 'duplicate receipt delivery cannot add the reward again');
+    if (held) assert.doesNotMatch(tomorrow().textContent, /9,125/,
+      'the mining credit does not reveal unrelated hidden winnings');
+    finishOldRead(_currentStakeWei);
+    await flushMicrotasks();
+    assert.match(tomorrow().textContent, /1,125 FLIP/, 'an older in-flight read cannot roll back the receipt');
+    finishRead(total);
+    await flushMicrotasks();
+    assert.match(tomorrow().textContent, /1,125 FLIP/, 'the post-receipt snapshot does not double-count the credit');
+    el.disconnectedCallback();
+  });
+
   test('Available Funds excludes auto-rebuy carry even while RNG is locked', async () => {
     const unit = 10n ** 18n;
     coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
@@ -2137,7 +2180,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(fundsDialog.querySelector('[data-bind="pfd-title"]').textContent, 'Cash out');
     assert.equal(
       fundsDialog.querySelector('[data-bind="pfd-subtitle"]').textContent,
-      'Move claimable funds to your wallet.',
+      'Send ETH and FLIP to your wallet.',
       'the combined mode explains the destination once instead of repeating card notes',
     );
     assert.equal(fundsDialog.querySelectorAll('.pfd-asset__icon').length, 2,

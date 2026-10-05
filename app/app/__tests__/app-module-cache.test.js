@@ -32,7 +32,7 @@ test('the LINK donation ABI dependency revalidates before a new importer can reu
 test('the Craps entry pins the table module generation that supplies its public exports', () => {
   assert.match(
     CRAPS_ENTRY,
-    /from '\.\/app-craps-table\.js\?rev=base-flip-graph-v12-riu-pool'/,
+    /from '\.\/app-craps-table\.js\?rev=player-score-v15'/,
     'the entry cannot reuse the pre-race table generation after the resolver redesign lands',
   );
 });

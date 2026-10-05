@@ -8,6 +8,7 @@ const {
   bafGateWon,
   buildBafResolutionSnapshot,
   normalizeBafPrizeHits,
+  normalizeBafComparisons,
   normalizeBafTopFour,
   loadBafResolutionSnapshot,
   __setBafResolutionFetcherForTest,
@@ -254,32 +255,25 @@ describe('BAF fullscreen presentation', () => {
   const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
   const demo = readFileSync(new URL('../../baf-resolution-demo.js', import.meta.url), 'utf8');
 
-  test('runs a large dedicated coin before wallet results and the final-day wheel', () => {
-    assert.match(overlay, /data-stage="coin"/);
-    assert.match(overlay, /shell\.dataset\.stage = 'coin-flip'/);
-    assert.match(overlay, /shell\.dataset\.stage = 'results'/);
-    assert.match(overlay, /shell\.dataset\.stage = snapshot\.gateWon \? 'wheel' : 'wheel-loss'/);
-    assert.match(overlay, /shell\.dataset\.stage = 'complete'/);
-    assert.match(overlay, /appendCoinFaces\(rotor/,
-      'the ceremony uses the same compositor-safe normal daily coin faces');
-    assert.match(css, /\.baf-res__coin-scene\s*\{[^}]*clamp\(16rem, 36vmin, 24rem\)/s,
-      'the BAF coin, rather than a dashboard of global standings, owns the stage');
-    assert.match(css, /@keyframes baf-res-flip-win/);
-    assert.match(css, /@keyframes baf-res-flip-loss/);
+  test('keeps the leaderboard, click-to-flip gate, and player comparisons on one board', () => {
+    assert.match(overlay, /data-bind="baf-flip"/);
+    assert.match(overlay, /TOP FOUR/);
+    assert.match(overlay, /YOUR DRAWING TABLE/);
+    assert.match(overlay, /data-bind="baf-cut-coin"/);
+    assert.match(overlay, /dice_02_3_blue/);
+    assert.match(overlay, /dice_03_4_purple/);
+    assert.match(overlay, /appendCoinFaces\(rotor/);
     assert.match(overlay, /BAF LOSS/);
-    assert.doesNotMatch(overlay, /TOP FOUR|PRIZE MAP/,
-      'global leaderboard and prize-map clutter no longer compete with the player reveal');
-    assert.match(css, /\.baf-res__payout\.is-loss/);
+    assert.doesNotMatch(overlay, /gate\.hidden = true|playerResults\.hidden = true/);
   });
 
-  test('shows only this wallet’s prize-bearing draw results', () => {
+  test('uses explicit comparison groups and keeps recorded payouts when slates are unavailable', () => {
+    assert.match(overlay, /snapshot\.comparisons/);
     assert.match(overlay, /snapshot\.player\.prizeHits/);
-    assert.match(overlay, /YOUR WALLET ONLY/);
-    assert.match(overlay, /Only this wallet’s prize-bearing ticket draws and direct BAF awards are shown/);
-    assert.match(overlay, /NO PRIZE LANDED ON YOUR TICKETS/);
-    assert.match(overlay, /LEVEL \$\{hit\.level\} TICKET PAYOUT/);
-    assert.match(css, /\.baf-res__result-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,/s);
-    assert.match(css, /\.baf-res__result-card\[data-kind="tickets"\]/);
+    assert.match(overlay, /Four-player comparison details are not available/);
+    assert.match(overlay, /NO COMPARISONS THIS ROUND/);
+    assert.match(css, /overflow-y: auto/);
+    assert.doesNotMatch(overlay, /hits\.slice\(0, 6\)/, 'no prize receipts disappear beyond six');
   });
 
   test('replaces the generic BAF receipt and retains a live review page', () => {
@@ -288,7 +282,7 @@ describe('BAF fullscreen presentation', () => {
     assert.match(index, /href="\/app\/styles\/baf-resolution\.css"/);
     assert.match(demo, /player = winner \? PLAYERS\[3\]/);
     assert.match(demo, /status: skipped \? 'skipped' : 'closed'/);
-    assert.match(demo, /history: winner \? \{ wins:/);
+    assert.match(demo, /history: winner \? \{ wins \}/);
   });
 
   test('parks the normal coinflip during fetch, then mounts with explicit close controls', () => {
@@ -310,19 +304,61 @@ describe('BAF fullscreen presentation', () => {
     assert.match(css, /\.baf-res__pool strong\s*\{[^}]*clamp\(1\.05rem/s);
   });
 
-  test('finishes with a short honest spin of the final-day weighted pie', () => {
+  test('retains the final-day odds without running a draw on a losing gate', () => {
     assert.match(overlay, /buildBafDrawAllocation\(draw, snapshot\.player\.address\)/);
-    assert.match(overlay, /data-bind="baf-draw-pie"/);
     assert.match(overlay, /data-bind="baf-draw-player-percent"/);
     assert.match(overlay, /label: 'YOU'/);
     assert.match(overlay, /label: 'EVERYONE ELSE'/);
-    assert.match(overlay, /if \(snapshot\.gateWon\) \{[\s\S]*wheel\?\.classList\.add\('is-spinning'\)/s,
-      'a losing gate never animates a weighted draw that did not occur');
-    assert.match(css, /\.baf-res__draw-ticks\s*\{[^}]*repeating-conic-gradient/s);
-    assert.match(css, /\.baf-res__draw-pie\s*\{[^}]*var\(--baf-draw-pie/s);
-    assert.match(css, /\.baf-res__draw-wheel\.is-spinning \.baf-res__draw-pie\s*\{[^}]*animation:\s*baf-res-wheel-spin/s);
+    assert.match(overlay, /if \(snapshot\.gateWon\) \{[\s\S]*wheel\?\.classList\.add\('is-spinning'\)/s);
     assert.match(css, /@keyframes baf-res-wheel-spin/);
-    assert.match(css, /data-stage="wheel"[\s\S]*data-stage="wheel-loss"[\s\S]*data-stage="complete"[\s\S]*\.baf-res__weighted/s,
-      'the wheel is the final scene rather than a permanent dashboard panel');
+  });
+});
+
+const slate = (own = PLAYER_4) => ({
+  id: 'round-7', round: 7,
+  players: [
+    { player: own, score: String(10n * FLIP), prizes: [] },
+    { player: PLAYER_2, score: String(30n * FLIP), prizes: [{ kind: 'tickets', amount: '12', level: 47 }] },
+    { player: PLAYER_1, score: String(40n * FLIP), prizes: [{ kind: 'eth', amount: '900' }] },
+    { player: PLAYER_3, score: String(20n * FLIP), prizes: [] },
+  ],
+});
+
+describe('BAF four-player comparisons', () => {
+  test('ranks exact scores and retains the viewed player even when their draw loses', () => {
+    const groups = normalizeBafComparisons([slate()], PLAYER_4.toUpperCase());
+    assert.deepEqual(groups[0].players.map((row) => row.player), [PLAYER_1, PLAYER_2, PLAYER_3, PLAYER_4]);
+    assert.equal(groups[0].players[3].isPlayer, true);
+    assert.deepEqual(groups[0].players[3].prizes, []);
+    assert.deepEqual(groups[0].players[1].prizes, [{ kind: 'tickets', amount: '12', level: 47 }]);
+  });
+
+  test('filters other wallets and incomplete groups without inventing missing opponents', () => {
+    const unrelated = slate('0x5555555555555555555555555555555555555555');
+    const incomplete = { ...slate(), players: slate().players.slice(1) };
+    const unknownScore = slate();
+    delete unknownScore.players[2].score;
+    assert.deepEqual(normalizeBafComparisons([unrelated, incomplete, unknownScore], PLAYER_4), []);
+    assert.deepEqual(normalizeBafComparisons(null, PLAYER_4), []);
+  });
+
+  test('preserves all groups beyond ten and unknown prizes remain unknown', () => {
+    const unknown = slate();
+    delete unknown.players[0].prizes;
+    const groups = normalizeBafComparisons(Array.from({ length: 24 }, () => unknown), PLAYER_4);
+    assert.equal(groups.length, 24);
+    assert.equal(groups[0].players[3].prizes, null);
+  });
+
+  test('accepts explicit slates from resolution metadata and suppresses them after a gate loss', () => {
+    for (const status of ['closed', 'skipped']) {
+      const snapshot = buildBafResolutionSnapshot({
+        level: 40, player: PLAYER_4,
+        metadata: { status, rngWord: status === 'closed' ? '1' : '2', comparisons: [slate()] },
+      });
+      assert.equal(snapshot.comparisons.length, status === 'closed' ? 1 : 0);
+      assert.equal(snapshot.comparisonsAvailable, true);
+    }
+    assert.equal(model().comparisonsAvailable, false);
   });
 });

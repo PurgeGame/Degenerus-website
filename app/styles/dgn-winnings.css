@@ -2,21 +2,38 @@
    this fixed footprint through every flip so the cards above never shift. */
 .dgn-winnings {
   box-sizing: border-box; position: relative; z-index: 30;
-  display: grid; grid-template-columns: 60px minmax(0, 1fr);
+  display: grid; grid-template-columns: 88px minmax(0, 1fr);
   grid-template-rows: auto auto auto;
-  grid-template-areas: 'coin label' 'coin amount' 'coin status';
+  grid-template-areas: 'reward label' 'reward amount' 'reward status';
   align-content: center; align-items: center; column-gap: 12px; row-gap: 1px;
-  width: 100%; max-width: 620px; height: 78px;
+  width: 100%; max-width: 620px; height: 96px;
   margin: 8px auto 0; padding: 8px 16px 8px 9px; border: 1px solid #738a8180; border-radius: 14px;
   background: linear-gradient(145deg, #1a2b25, #0b1412); color: #f5f1dc;
   box-shadow: 0 7px 18px #0006, inset 0 1px #ffffff18; text-align: left;
 }
-.dgn-winnings__coin {
-  grid-area: coin; position: relative; display: grid; place-items: center;
-  width: 60px; height: 60px; border-radius: 50%;
-  background: radial-gradient(circle, #102019 45%, #728d7920 68%, #07100c 70%);
+.dgn-winnings__reward {
+  grid-area: reward; position: relative; display: grid; justify-items: center;
+  grid-template-rows: 60px 14px; align-content: center;
+  width: 88px; height: 78px; border-radius: 10px;
+  background: radial-gradient(ellipse at 50% 35%, #30463760, #07100c 80%);
   box-shadow: inset 0 0 0 1px #9baa8d40, inset 0 4px 14px #0006;
 }
+.dgn-winnings__coin { position: relative; display: grid; place-items: center; width: 60px; height: 60px; }
+.dgn-winnings__reward-label { align-self: center; color: #b7c7b9; font: 850 .5rem/1.2 system-ui; letter-spacing: .06em; white-space: nowrap; }
+.dgn-winnings__lootbox {
+  position: absolute; inset: 0; display: grid; grid-template-rows: 60px 14px;
+  align-content: center; justify-items: center; width: 100%; height: 100%;
+  margin: 0; padding: 0 3px; border: 1px solid #dcc07660; border-radius: inherit;
+  color: #ffe7a5; background: radial-gradient(ellipse at 50% 40%, #b9832830, #07100c 80%);
+  box-shadow: none; cursor: pointer; touch-action: manipulation;
+}
+.dgn-winnings__lootbox:disabled { opacity: 1; cursor: default; }
+.dgn-winnings__lootbox:not(:disabled) { border-color: #ffe7a5; box-shadow: inset 0 0 16px #e9ca8720, 0 0 12px #e9ca8730; }
+.dgn-winnings__lootbox:not(:disabled) .dgn-winnings__reward-label { color: #ffe7a5; }
+.dgn-winnings__lootbox:not(:disabled):hover { background-color: #594722; }
+.dgn-winnings__lootbox:focus-visible { outline: 2px solid #ffe7a5; outline-offset: 3px; }
+.dgn-winnings__lootbox-art { align-self: center; width: 80px; height: 58px; object-fit: contain; filter: drop-shadow(0 3px 4px #0009); pointer-events: none; }
+.dgn-winnings [hidden] { display: none !important; }
 .dgn-winnings__placeholder { width: 40%; height: 48%; object-fit: contain; opacity: .22; filter: invert(1); }
 .dgn-winnings__label { grid-area: label; color: #c7d5bb; font: 850 .56rem/1.2 system-ui; letter-spacing: .13em; }
 .dgn-winnings__amount { grid-area: amount; min-width: 0; display: grid; gap: 1px; font-variant-numeric: tabular-nums; }

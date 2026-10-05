@@ -5326,7 +5326,7 @@ describe('reveal-overlay element', () => {
     }
   });
 
-  test('a Degenerette box win is named on the result and opens directly from its final button', async () => {
+  test('an earned Degenerette box stays sealed until all cards finish, then opens from its reward spot once', async () => {
     let duplicateRuns = 0;
     pendingActionsMod.publishPendingActions('lootboxes', [{
       id: 'lootbox:tx:0xdegbox',
@@ -5339,9 +5339,12 @@ describe('reveal-overlay element', () => {
       kind: 'degenerette',
       currency: 0,
       lootboxAwarded: true,
-      totalPayout: 5n * 10n ** 16n,
+      lootboxPresentationId: 'lootbox-reveal:0x0000000000000000000000000000000000000001:tx:0xdegbox',
+      lootboxEth: 5n * 10n ** 16n,
+      totalPayout: 10n * 10n ** 16n,
       spins: [
         { spinIndex: 0, playerTraits: 13, houseTraits: 13, score: 5, payout: 5n * 10n ** 16n },
+        { spinIndex: 1, playerTraits: 13, houseTraits: 13, score: 5, payout: 5n * 10n ** 16n },
       ],
     });
     queueReveal({
@@ -5357,13 +5360,23 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     await tick();
 
+    const reward = el.querySelector('.dgn-winnings__lootbox');
+    assert.equal(reward.hidden, true, 'covered results do not reveal the earned box');
+    clickPop(el.querySelector('.dgn-pop__flame')); await tick();
+    assert.equal(reward.hidden, false, 'the first winning card adds a box to the dedicated spot');
+    assert.equal(reward.disabled, true, 'more cards must be revealed before the box can open');
+    assert.match(reward.getAttribute('aria-label'), /25,000 ETH/);
+    clickPop(reward); await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true);
     await revealPops(el);
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
     assert.equal(zone.querySelector('.rvl-dgn-result-details'), null,
       'the won Luckbox is not repeated in a second stats section');
     const cta = zone.querySelector('.rvl-dgn-spin-cta');
     assert.equal(cta.textContent, 'OPEN LUCKBOX');
-    cta.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(reward.disabled, false);
+    assert.match(reward.getAttribute('aria-label'), /Open luckbox: 50,000 ETH/);
+    clickPop(reward); clickPop(reward);
     await tick();
 
     assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, false,
@@ -5385,6 +5398,28 @@ describe('reveal-overlay element', () => {
         transactionHash: '0xdegbox',
       },
     }), false, 'an indexer refresh after collection cannot reopen the settled box');
+  });
+
+  test('the reward spot opens its own box ahead of unrelated queued rewards without dropping them', async () => {
+    queueReveal({ kind: 'degenerette', currency: 0, totalPayout: 20n,
+      lootboxEth: 10n, lootboxPresentationId: 'own-box',
+      spins: [{ spinIndex: 0, playerTraits: 13, houseTraits: 13, score: 5, payout: 20n }],
+    });
+    queueReveal({ kind: 'lootbox', presentationId: 'other-box',
+      legs: [{ legType: 'dgnrs', amount: 99n * 10n ** 18n }],
+    });
+    queueReveal({ kind: 'lootbox', presentationId: 'own-box',
+      legs: [{ legType: 'dgnrs', amount: 7n * 10n ** 18n }],
+    });
+    const el = instantiate(); await tick();
+    await revealPops(el);
+    clickPop(el.querySelector('.dgn-winnings__lootbox')); await tick();
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.match(summary.textContent, /7/);
+    assert.doesNotMatch(summary.textContent, /99/);
+    clickPop(summary.querySelector('.rvl-collect-cta')); await tick();
+    assert.match(summary.textContent, /99/, 'the other reward remains queued for its normal reveal');
+    clickPop(summary.querySelector('.rvl-collect-cta')); await tick();
   });
 
   test('a settled ETH Degenerette loss has one UNLUCKY action and no Back to Game', async () => {
@@ -6141,7 +6176,7 @@ describe('reveal-overlay element', () => {
     assert.match(DGN_POP_CSS,
       /\.rvl-stage--pop:has\(\.rvl-dgn-actions:not\(\[hidden\]\)\) \{\n  padding-bottom: max\(4rem,/,
       'one control row keeps a 4rem band, not the old 6rem');
-    assert.match(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*height: 78px;/,
+    assert.match(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*height: 96px;/,
       'the payout bar stays compact');
     assert.doesNotMatch(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*sticky/,
       'the bar is no longer pinned to the top');

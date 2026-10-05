@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { readChainRoute } from '../../chain/router.js';
 import { decimatorCoinHeads, decimatorPayout } from '../../chain/games.js';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
+// Run 64's per-entry coin and one-wallet-one-place layout (frozen schema 54fe7634, audit ca2bb497f).
+// Pinned so this file reads the same once a deployment profile moves to audit 12daf8060, whose
+// survivor sampling and generated entries are pinned in run65-contracts.test.js.
+import { useSchema as pinTestSchema, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
+pinTestSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH);
 
 // Audit 92a1358d0: the Decimator is a shared-dice craps battle. A wallet holds ONE entry per
 // event: decBattlePlayers[player] = lvl << 64 | id names it and (audit 32c604531)

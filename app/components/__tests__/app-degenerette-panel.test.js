@@ -798,6 +798,17 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('copying a ticket with only gold Dice uses its Crypto symbol', () => {
+    const el = instantiate();
+    document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
+      detail: { traitIds: [3, 65, 130, 253], level: 17 },
+    }));
+    assert.equal(el.getTicketDraft().symbol, 3);
+    assert.equal(el.querySelector('[data-bind="dgn-selected-symbol"]').src,
+      degeneretteChampionBadgePath(0, 3));
+    el.disconnectedCallback();
+  });
+
   test('champion badges: WWXRP red, Ethereum green, every other symbol silver', async () => {
     const { degeneretteChampionBadgePath: exported } = await import('../app-degenerette-panel.js');
     assert.match(exported(0, 0), /crypto_00_xrp_red\.svg$/);
@@ -1162,6 +1173,28 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       amount: el.querySelector('[name="deg-amount"]').value,
       ticket: el.getTicketDraft(),
     }, normalDraft, 'the quest bet leaves every ordinary Degenerette setting untouched');
+    el.disconnectedCallback();
+  });
+
+  test('stale Dice quest heroes cannot replace the picker or submit a bet', async () => {
+    const fake = makeFakeDegContract();
+    degeneretteMod.__setContractFactoryForTest(() => fake);
+    const el = instantiate();
+    const original = el.getTicketDraft().symbol;
+    for (const selection of [
+      { symbol: 29 },
+      { heroQuadrant: 3, traitIds: [0, 64, 128, 253] },
+    ]) {
+      for (const submit of [false, true]) {
+        document.dispatchEvent(new CustomEvent('quest:activate', {
+          detail: { questType: 8, target: String(2_000n * 10n ** 18n), submit, ...selection },
+        }));
+        await settle(20);
+        assert.equal(el.getTicketDraft().symbol, original);
+        assert.match(el.querySelector('.deg-error').textContent, /Dice cannot be heroes/);
+      }
+    }
+    assert.equal(fake._calls.placeDegeneretteBet.length, 0);
     el.disconnectedCallback();
   });
 
@@ -2112,7 +2145,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
   });
 
   test('completed results have one authoritative full-screen reveal path', () => {
-    assert.match(PANEL_SRC, /import \{ queueReveal \} from '\.\/reveal-queue\.js'/);
+    assert.match(PANEL_SRC, /import \{ queueReveal, withLootboxPresentationId \} from '\.\/reveal-queue\.js'/);
     assert.match(PANEL_SRC, /buildDegeneretteRevealSequence\(\{/,
       'receipt, DB, and chain recovery share a normalized sequence builder');
     assert.match(PANEL_SRC, /queueReveal\(sequence\)/,
@@ -2700,20 +2733,24 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     reveal.__takeQueuedForTest();
   });
 
-  test('picker shows one symbol and can select all 32 contract symbols', () => {
+  test('picker offers all 24 eligible heroes and excludes Dice', () => {
     const el = instantiate();
     const deityDomains = [
       ['WWXRP', 'Tron', 'Sui', 'Monero', 'Solana', 'Chainlink', 'Ethereum', 'Bitcoin'],
       ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Libra', 'Sagittarius', 'Aquarius'],
       ['Clubs', 'Diamonds', 'Hearts', 'Spades', 'Horseshoes', 'Cashsack', 'Kings', 'Aces'],
-      ['Ones', 'Deuces', 'Treys', 'Fours', 'Fives', 'Sixes', 'Sevens', 'Eights'],
     ];
     assert.equal(el.querySelector('[data-bind="dgn-ticket"]'), null);
     assert.equal(el.querySelector('[name="deg-custom-ticket"]'), null);
     assert.equal(el.querySelector('[name="deg-quadrant"]'), null);
     const choices = el.querySelector('[data-bind="dgn-symbol-choices"]');
-    assert.equal(choices.querySelectorAll('button').length, 32);
-    for (let q = 0; q < 4; q++) {
+    assert.equal(choices.querySelectorAll('button').length, 24);
+    assert.equal(choices.querySelector('[data-bind="dgn-symbol-group-3"]'), null);
+    assert.match(el.innerHTML, /24 symbols\. Pick one/);
+    for (let symbol = 24; symbol < 32; symbol++) {
+      assert.equal(choices.querySelector(`[data-bind="dgn-symbol-choice-${symbol}"]`), null);
+    }
+    for (let q = 0; q < 3; q++) {
       for (let icon = 0; icon < 8; icon++) {
         el.querySelector('[data-bind="dgn-symbol-open"]').dispatchEvent({ type: 'click' });
         assert.equal(el.querySelector('[data-bind="dgn-symbol-dialog"]').open, true);
@@ -2724,11 +2761,6 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
           degeneretteChampionBadgePath(q, icon));
         assert.equal(el.querySelector('[data-bind="dgn-deity-label"]').textContent,
           `God of ${deityDomains[q][icon]}:`);
-        if (q === 3) {
-          const label = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'][icon];
-          assert.equal(button.getAttribute('aria-label'), label);
-          assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, label);
-        }
         assert.equal(button.getAttribute('aria-pressed'), 'true');
         assert.equal(choices.querySelectorAll('button')
           .filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
@@ -2738,7 +2770,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
           'selection returns focus to the badge');
       }
     }
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Eight');
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Ace');
     el.disconnectedCallback();
   });
 
@@ -2952,20 +2984,20 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       assert.equal(steps(-1000, 60), 3, 'one flick steps at most three');
       assert.equal(steps(40, 60), -1, 'dragging right brings the left-hand neighbours in');
       assert.equal(steps(-100, 0), 2, 'an unmeasured spacing falls back to 60px');
-      assert.equal(wrap(32), 0);
-      assert.equal(wrap(-1), 31);
-      assert.equal(wrap(31 + 3), 2);
-      assert.equal(wrap(-3), 29);
+      assert.equal(wrap(24), 0);
+      assert.equal(wrap(-1), 23);
+      assert.equal(wrap(23 + 3), 2);
+      assert.equal(wrap(-3), 21);
     });
 
-    test('neighbours wear the picker art of the symbols either side, wrapping 31 to 0', () => {
+    test('neighbours wrap from Cards to Crypto without showing Dice', () => {
       const el = instantiate();
-      pick(el, 31);
+      pick(el, 23);
       const src = (bind) => el.querySelector(`[data-bind="dgn-symbol-neighbour-${bind}"]`).src;
       assert.equal(src('next-1'), degeneretteChampionBadgePath(0, 0));
       assert.equal(src('next-2'), degeneretteChampionBadgePath(0, 1));
-      assert.equal(src('prev-1'), degeneretteChampionBadgePath(3, 6));
-      assert.equal(src('prev-2'), degeneretteChampionBadgePath(3, 5));
+      assert.equal(src('prev-1'), degeneretteChampionBadgePath(2, 6));
+      assert.equal(src('prev-2'), degeneretteChampionBadgePath(2, 5));
       assert.equal(el.querySelectorAll('.deg-carousel__sym').length, 4, 'two neighbours on each side of the champion');
       assert.equal(PANEL_SRC.includes('data-preview-ticket'), false, 'the example ticket is gone');
       el.disconnectedCallback();
@@ -3029,8 +3061,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       let prevented = 0;
       const key = (k) => trigger.dispatchEvent({ type: 'keydown', key: k, preventDefault() { prevented += 1; } });
       key('ArrowLeft');
-      assert.equal(el.getTicketDraft().symbol, 31);
-      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Eight');
+      assert.equal(el.getTicketDraft().symbol, 23);
+      assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Ace');
       key('ArrowRight');
       key('ArrowRight');
       assert.equal(el.getTicketDraft().symbol, 1);
@@ -3200,6 +3232,36 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
+  test('gold Dice do not take priority over an eligible gold ticket', async () => {
+    storeMod.update('app.lastDay', { day: 130, roll1: { purchaseLevel: 25 } });
+    _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
+      ? { cards: [
+        { entries: [3, 64, 128, 253].map(traitId => ({ traitId })) },
+        { entries: [0, 65, 187, 192].map(traitId => ({ traitId })) },
+      ] }
+      : { player: null, pending: {} };
+    const el = instantiate();
+    await settle(50);
+    assert.equal(el.getTicketDraft().symbol, 19);
+    el.disconnectedCallback();
+  });
+
+  for (const traitIds of [[3, 64, 128, 253], [253]]) {
+    test(`Dice deity and gold Dice in a ${traitIds.length === 4 ? 'complete' : 'partial'} ticket keep an eligible default`, async () => {
+      installDeityOwners(new Map([[29, CONNECTED]]));
+      storeMod.update('app.lastDay', { day: 130, roll1: { purchaseLevel: 25 } });
+      _fetchHandler = async (url) => String(url).includes('/tickets/by-trait')
+        ? { cards: [{ entries: traitIds.map(traitId => ({ traitId })) }] }
+        : { player: null, pending: {} };
+      const el = instantiate();
+      const initial = el.getTicketDraft().symbol;
+      await settle(50);
+      assert.ok([0, 6].includes(initial));
+      assert.equal(el.getTicketDraft().symbol, initial);
+      el.disconnectedCallback();
+    });
+  }
+
   test('a deity holder defaults the Hero quadrant to their owned deity symbol', async () => {
     installDeityOwners(new Map([[22, CONNECTED]])); // symbol 22 = quadrant 2 (cards), icon 6
     storeMod.update('app.lastDay', {
@@ -3278,7 +3340,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
   test('picker drives the single symbol (quadrant<<3|icon) passed to placeDegeneretteBet', async () => {
     // Audit a5d4d2cd: the OLD picker built a full uint32 customTicket across
     // all 4 quadrants (each [QQ][CCC][SSS]) plus a separate heroQuadrant arg.
-    // The new picker has exactly one chosen quadrant + icon = symbol (0..31),
+    // The new picker has exactly one chosen quadrant + icon = symbol (0..23),
     // sent as placeDegeneretteBet's 5th positional arg — there is no longer a
     // 6th "heroQuadrant" arg; the 6th slot is the payable value override.
     const fake = makeFakeDegContract();
@@ -3286,8 +3348,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const el = instantiate();
     await settle(40);
 
-    el.querySelector('[data-bind="dgn-symbol-choice-29"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Six');
+    el.querySelector('[data-bind="dgn-symbol-choice-23"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-name"]').textContent, 'Ace');
 
     const amountInput = el.querySelector('[name="deg-amount"]');
     if (amountInput) amountInput.value = '0.01';
@@ -3296,7 +3358,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     assert.equal(fake._calls.placeDegeneretteBet.length, 1, 'placeDegeneretteBet invoked once');
     const args = fake._calls.placeDegeneretteBet[0];
-    const expectedSymbol = (3 << 3) | 5; // quadrant 3, icon 5 → 29
+    const expectedSymbol = (2 << 3) | 7; // quadrant 2, icon 7 → 23
     assert.equal(Number(args[4]), expectedSymbol,
       'symbol packs quadrant<<3|icon — the sole ticket input now');
     assert.equal(args.length, 6,
@@ -3620,6 +3682,10 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       'a final survival bust still names the FLIP value produced by its reels');
     assert.equal(lootboxSequence?.kind, 'lootbox');
     assert.equal(lootboxSequence?.title, 'DEGENERETTE LUCKBOX');
+    assert.equal(sequence.lootboxPresentationId, lootboxSequence.presentationId,
+      'the reward spot opens this exact box even with a record bounty queued first');
+    assert.equal(revealMod.normalizeSequence(sequence).spinBoard.lootboxPresentationId,
+      lootboxSequence.presentationId, 'normalization preserves the reward link');
     assert.equal(lootboxSequence?.settledExpected, true,
       'an auto-resolved fractional-only box still has a visible result');
     assert.notEqual(lootboxSequence?.noVessel, true,

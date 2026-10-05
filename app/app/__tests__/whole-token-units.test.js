@@ -9,7 +9,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { useSchema, hasWholeTokens, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, hasWholeTokens, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
 import * as units from '../token-units.js';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
 import { eventFacts } from '../../chain/facts.js';
@@ -63,22 +63,42 @@ describe('the chain boundary unit', () => {
     });
   });
 
-  test('every rescaled event arg and call output exists in the eb04b2e80 ABI', () => current(async () => {
+  // Both whole-token deployments share the tables: run 64 (frozen 54fe7634, audit ca2bb497f) and the
+  // current audit. Audit 01f11477c dropped RedemptionSubmitted.flipEscrowed, so an entry must match
+  // at least one of the two ABIs.
+  test('every rescaled event arg and call output exists in a whole-token ABI', async () => {
+    const abis = [];
+    for (const hash of [CURRENT_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH]) {
+      await withSchema(hash, async () => {
+        const byContract = {};
+        for (const key of [...Object.keys(units.WHOLE_TOKEN_EVENT_FIELDS), ...Object.keys(units.WHOLE_TOKEN_CALL_FIELDS)]) {
+          const contract = key.split('.')[0];
+          byContract[contract] ??= (await loadSchema(contract)).abi;
+        }
+        abis.push(byContract);
+      });
+    }
     for (const [key, spec] of Object.entries(units.WHOLE_TOKEN_EVENT_FIELDS)) {
       const [contract, name] = key.split('.');
-      const fragment = (await loadSchema(contract)).abi.find(f => f.type === 'event' && f.name === name);
-      assert.ok(fragment, `${key} is an event at ${contract}`);
-      for (const field of Object.keys(spec)) assert.ok(fragment.inputs.some(i => i.name === field), `${key}.${field}`);
+      const fragments = abis.map(abi => abi[contract].find(f => f.type === 'event' && f.name === name)).filter(Boolean);
+      assert.ok(fragments.length, `${key} is an event at ${contract}`);
+      for (const field of Object.keys(spec)) assert.ok(fragments.some(f => f.inputs.some(i => i.name === field)), `${key}.${field}`);
     }
     for (const [key, spec] of Object.entries(units.WHOLE_TOKEN_CALL_FIELDS)) {
       const [contract, name] = key.split('.');
-      const fragments = (await loadSchema(contract)).abi.filter(f => f.type === 'function' && f.name === name);
+      const fragments = abis.flatMap(abi => abi[contract].filter(f => f.type === 'function' && f.name === name));
       assert.ok(fragments.length, `${key} is a function at ${contract}`);
       for (const field of Object.keys(spec)) {
         assert.ok(fragments.some(f => f.outputs.some((o, i) => o.name === field || String(i) === field)), `${key} -> ${field}`);
       }
     }
-  }));
+    await current(async () => {
+      for (const key of ['GAME.DecimatorReferenceUpdated', 'GAME.DecimatorJackpotPlan', 'SDGNRS.RedemptionBatchClosed', 'CRAPS.JackpotSubsidyRolled']) {
+        const [contract, name] = key.split('.');
+        assert.ok((await loadSchema(contract)).abi.some(f => f.type === 'event' && f.name === name), `${key} is current`);
+      }
+    });
+  });
 
   test('decoded FLIP events and calls become token wei; ETH, DGNRS and per-row rules stay exact', () => current(async () => {
     const f = await rpcFixture();
@@ -328,9 +348,10 @@ describe('FLIP/WWXRP transaction arguments are whole tokens', () => {
   test('a Decimator burn sends whole FLIP', async () => {
     const c = fakeContract(['decimatorBurn']);
     decimatorMod.__setContractFactoryForTest(() => c);
-    await decimatorMod.burnForDecimator({ amount: 1_500n * WEI, player: CONNECTED, chips: 0 });
-    assert.deepEqual(c._calls.decimatorBurn, [[CONNECTED, 1_500n, 0]]);
-    await assert.rejects(decimatorMod.burnForDecimator({ amount: 1_500n * WEI + 1n, player: CONNECTED, chips: 0 }), /whole FLIP/);
+    // 2,500 clears the 2,000-FLIP minimum of audit 12daf8060 (1,000 on run 64).
+    await decimatorMod.burnForDecimator({ amount: 2_500n * WEI, player: CONNECTED, chips: 0 });
+    assert.deepEqual(c._calls.decimatorBurn, [[CONNECTED, 2_500n, 0]]);
+    await assert.rejects(decimatorMod.burnForDecimator({ amount: 2_500n * WEI + 1n, player: CONNECTED, chips: 0 }), /whole FLIP/);
   });
 
   test('a WWXRP draw entry sends whole WWXRP', async () => {
