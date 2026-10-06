@@ -1,74 +1,36 @@
 <!doctype html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Starter Tutorial · Degenerus</title>
-  <meta name="description"
-    content="A short, read-only Degenerus tour using the public sDGNRS protocol wallet." />
-  <link rel="stylesheet" href="/learn/learn.css" />
-  <script defer src="/js/ref.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
+  <title>Information pages being revised · Degenerus</title>
+  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
+    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+    .brand img { width: 28px; height: 32px; object-fit: contain; }
+    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
+    p { margin: 0 0 14px; color: #babcc3; }
+    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
+    a { color: #e8c783; text-underline-offset: 4px; }
+    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
+    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
+  </style>
 </head>
-
 <body>
-  <header class="brand">
-    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
-    <div class="brand-name">DEGENERUS PROTOCOL</div>
-    <div class="brand-sub">Starter Tutorial</div>
-  </header>
-
-  <div class="crumb"><a href="/app/">&larr; Back to the app</a></div>
-
-  <h1>Meet the sDGNRS wallet</h1>
-  <p class="lede">You can explore Degenerus before connecting anything. The app uses the public sDGNRS protocol
-    wallet as its read-only example, so every number you see comes from a real indexed address.</p>
-
-  <section class="tutorial-wallet" aria-labelledby="tutorial-wallet-title">
-    <img src="/whitepaper/flame-logo.svg" alt="">
-    <div>
-      <div class="figlab" id="tutorial-wallet-title">PUBLIC EXAMPLE WALLET</div>
-      <strong>sDGNRS</strong>
-      <code data-bind="tutorial-wallet-address">Loading address…</code>
-    </div>
-  </section>
-
-  <h2>What to look at</h2>
-  <ol>
-    <li><strong>Jackpot:</strong> scratch through the latest public drawing and see how its ticket traits line up.</li>
-    <li><strong>Tickets:</strong> browse the wallet’s level inventory; gold traits are listed first.</li>
-    <li><strong>Quests and side games:</strong> inspect their state without signing or spending anything.</li>
-  </ol>
-
-  <div class="cta">
-    <strong>This tutorial is intentionally small for now.</strong>
-    <p class="fine" style="margin: 0.3rem 0 0.5rem;">We can add guided steps here as the player experience settles.</p>
-    <a class="btn" data-bind="tutorial-open-wallet" href="/app/">Open the sDGNRS wallet</a>
-    <a class="btn ghost" data-bind="tutorial-explorer" href="/app/">View on explorer</a>
-    <a class="btn ghost" href="/learn/sdgnrs/">What is sDGNRS?</a>
-  </div>
-
-  <footer>
-    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot;
-    <a href="/whitepaper/">Whitepaper</a> &middot; <a href="/app/">Play</a>
-  </footer>
-
-  <script type="module">
-    import { CHAIN, CONTRACTS } from '/app/app/chain-config.js';
-
-    const address = CONTRACTS.SDGNRS;
-    const addressEl = document.querySelector('[data-bind="tutorial-wallet-address"]');
-    const appLink = document.querySelector('[data-bind="tutorial-open-wallet"]');
-    const explorerLink = document.querySelector('[data-bind="tutorial-explorer"]');
-    if (address) {
-      if (addressEl) addressEl.textContent = address;
-      if (appLink) appLink.href = `/app/?as=${encodeURIComponent(address)}`;
-      if (explorerLink) explorerLink.href = `${CHAIN.etherscanBase}/address/${address}`;
-    } else {
-      if (addressEl) addressEl.textContent = 'Available after deployment';
-      if (explorerLink) explorerLink.hidden = true;
-    }
-  </script>
+  <main data-info-pages-paused="2026-10-06">
+    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
+    <h1>Information pages are being revised.</h1>
+    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
+    <p>Previously published versions are out of date.</p>
+    <nav aria-label="Available links">
+      <a class="play" href="/beta/">Open the game</a>
+      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
+    </nav>
+  </main>
 </body>
-
 </html>

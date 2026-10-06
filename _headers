@@ -170,3 +170,105 @@
 
 /symbols/*
   Cache-Control: public, max-age=604800
+
+# BEGIN temporary information-page pause
+/
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/index.html
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/shared/score-info
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/shared/score-info.html
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/GAME_THEORY_ANALYSIS.md
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/FAR-FUTURE-SWAP-SPEC.md
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/learn
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/learn/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/whitepaper
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/whitepaper/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/theory
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/theory/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/wtf
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/wtf/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/investors
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/investors/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/agents
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/agents/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/affiliates
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/affiliates/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+# END temporary information-page pause

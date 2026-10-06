@@ -1,95 +1,36 @@
 <!doctype html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FLIP · Degenerus Mechanics</title>
-  <meta name="description"
-    content="FLIP is the Degenerus reward token. During redemption windows, 1,000 FLIP buys one ticket whose ETH price follows the level curve." />
-  <link rel="stylesheet" href="/learn/learn.css" />
-  <script defer src="/js/ref.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
+  <title>Information pages being revised · Degenerus</title>
+  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
+    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+    .brand img { width: 28px; height: 32px; object-fit: contain; }
+    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
+    p { margin: 0 0 14px; color: #babcc3; }
+    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
+    a { color: #e8c783; text-underline-offset: 4px; }
+    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
+    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
+  </style>
 </head>
-
 <body>
-  <header class="brand">
-    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
-    <div class="brand-name">DEGENERUS PROTOCOL</div>
-    <div class="brand-sub">Mechanics</div>
-  </header>
-
-  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
-
-  <h1>FLIP</h1>
-  <p class="lede">FLIP is the protocol's reward and burn token. During each level's redemption window, 1,000 FLIP
-    buys one ticket. The introductory curve runs from 0.01 ETH to 0.24 ETH; later 100-level cycles run from 0.04 ETH
-    to 0.24 ETH. That fixed redemption rate creates utility, not a guaranteed market price.</p>
-
-  <h2>Where FLIP comes from</h2>
-  <p>Protocol reward paths mint FLIP through affiliate commissions, quests, coinflip bonuses, jackpot side-prizes,
-    lootbox rolls, and <a href="/learn/tickets/">ticket-purchase bonuses</a>. Ticket and lootbox ETH still routes
-    fully into game pools; the purchase bonus is minted on top of the deposit, not carved out of it. Most
-    protocol-issued FLIP first enters the daily <a href="/learn/coinflip/">coinflip</a> as a stake.</p>
-
-  <img class="coin" src="/shared/coinflip-coin.svg" alt="The daily coinflip coin, spinning between its red flame face and green ETH face" />
-  <p class="figcap">Most reward-path FLIP rides this coin before it settles. Green, the stake receives the day's win
-    multiplier. Red, it burns.</p>
-
-  <h2>The ratchet</h2>
-  <p>1,000 FLIP redeems for one ticket during each level's redemption window, the stretch from the moment the
-    pool hits its target through the jackpot days, so FLIP's utility value rides the
-    ticket price curve. A stash earned at level 3 buys the same tickets at level 90, when each one costs 16x more ETH.
-    If FLIP trades below that utility benchmark, buyers may prefer FLIP-funded tickets. Whether market arbitrage
-    closes the gap still depends on liquidity, timing, ticket demand, and game risk.</p>
-
-  <h2>Where FLIP goes to die</h2>
-  <p>Its major protocol sinks burn it:</p>
-  <table>
-    <tr>
-      <th>Sink</th>
-      <th>Cost</th>
-    </tr>
-    <tr>
-      <td>One ticket, any level</td>
-      <td>1,000 FLIP</td>
-    </tr>
-    <tr>
-      <td><a href="/learn/decimator/">Decimator</a> entry</td>
-      <td>1,000 FLIP minimum</td>
-    </tr>
-    <tr>
-      <td>The <a href="/learn/endgame/">death bet</a></td>
-      <td>1,000 FLIP minimum</td>
-    </tr>
-    <tr>
-      <td><a href="/learn/degenerette/">Degenerette</a> spins</td>
-      <td>100 FLIP minimum, stake burns win or lose</td>
-    </tr>
-    <tr>
-      <td>RNG nudge</td>
-      <td>100 FLIP, compounding 50% per nudge already queued</td>
-    </tr>
-    <tr>
-      <td>Decurse a cursed player</td>
-      <td>100 FLIP</td>
-    </tr>
-    <tr>
-      <td>Smite an enemy (deity holders)</td>
-      <td>200 FLIP</td>
-    </tr>
-  </table>
-
-  <div class="cta">
-    <strong>Earning FLIP is a job. Several, actually.</strong>
-    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Quests and referred activity credit it as daily coinflip stakes.</p>
-    <a class="btn" href="/learn/quests/">Quests</a>
-    <a class="btn ghost" href="/learn/affiliates/">The Affiliate Deal</a>
-  </div>
-
-  <footer>
-    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
-    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
-  </footer>
+  <main data-info-pages-paused="2026-10-06">
+    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
+    <h1>Information pages are being revised.</h1>
+    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
+    <p>Previously published versions are out of date.</p>
+    <nav aria-label="Available links">
+      <a class="play" href="/beta/">Open the game</a>
+      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
+    </nav>
+  </main>
 </body>
-
 </html>
