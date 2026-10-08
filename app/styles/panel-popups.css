@@ -16,16 +16,13 @@
 .panel-popup__status { padding: 1.5rem; color: #bab1ca; text-align: center; }
 .panel-popup__status[hidden] { display: none !important; }
 /* The account sale quote stays readable on narrow screens. */
-.liquidation-popup .panel-popup__window { width: min(100%, 38rem); }
+.liquidation-popup .panel-popup__window { width: min(100%, 28rem); }
 .liquidation-popup .panel-popup__body { color: #cbc2d6; font-size: .85rem; line-height: 1.5; }
-.liquidation-intro { margin-top: 0; }
-.liquidation-quote { display: grid; gap: .3rem; padding: 1rem; border: 1px solid #92d8ad55; border-radius: 9px; background: #92d8ad0c; }
+.liquidation-quote { display: grid; gap: .3rem; padding: .75rem .25rem .25rem; text-align: center; }
 .liquidation-quote[hidden] { display: none; }
 .liquidation-quote > span { font-size: .72rem; color: #c3d9cb; }
-.liquidation-quote > strong { color: #c5f3d5; font-size: clamp(1.1rem, 4vw, 1.7rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.liquidation-terms { padding: 0 1rem; border: 1px solid #b8995838; border-radius: 9px; background: #b8995808; font-size: .78rem; }
-.liquidation-terms p { margin: .7rem 0; }
-.liquidation-terms strong { color: #f1dfbb; }
+.liquidation-quote > strong { color: #c5f3d5; font-size: clamp(1.35rem, 4vw, 1.9rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.liquidation-warning { margin: .8rem 0 .25rem; color: #e8dfce; overflow-wrap: anywhere; }
 .liquidation-popup [data-bind="liquidation-status"] { margin: .75rem 0; }
 .liquidation-consent { display: flex; align-items: flex-start; gap: .65rem; margin: 1rem 0; cursor: pointer; font-size: .82rem; font-weight: 500; letter-spacing: normal; text-transform: none; }
 .liquidation-consent input { flex: 0 0 auto; width: 1.1rem; height: 1.1rem; margin: .15rem 0 0; accent-color: #c7a8ee; }
