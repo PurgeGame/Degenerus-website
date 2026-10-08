@@ -353,7 +353,7 @@ test('Craps resolution speed inherits the main reveal pace and scales the full r
   );
   assert.match(
     COMPONENT_SRC,
-    /this\.#setResolutionSpeed\(readDegeneretteSpeed\(\)\)[\s\S]*?addEventListener\('input',[\s\S]*?#setResolutionSpeed[\s\S]*?addEventListener\('change',[\s\S]*?persist: true/s,
+    /this\.#setResolutionSpeed\(readDegeneretteSpeed\(\), \{ immediate: true \}\)[\s\S]*?addEventListener\('input',[\s\S]*?#setResolutionSpeed[\s\S]*?addEventListener\('change',[\s\S]*?persist: true/s,
     'each opening starts from the main slider and a committed local change writes it back',
   );
   assert.match(
