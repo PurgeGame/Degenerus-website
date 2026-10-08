@@ -5,16 +5,16 @@ import { createHash } from 'node:crypto';
 import { crapsFixture as fixture, manifest, hashes } from './helpers/craps-fixture.js';
 
 
-test('browser producer reproduces the independent production replay fixture byte for byte', () => {
-  const bundle = materializeReplay(fixture());
+test('browser producer reproduces the independent production replay fixture byte for byte', async () => {
+  const bundle = await materializeReplay(fixture());
   assert.equal(bundle.digest, manifest.digest);
   assert.deepEqual(JSON.parse(bundle.manifest.body.toString()), manifest);
   for (const child of bundle.children) assert.equal(createHash('sha256').update(child.body).digest('hex'), hashes[child.name]);
 });
 
-test('one wrong settlement wei refuses the entire browser replay', () => {
+test('one wrong settlement wei refuses the entire browser replay', async () => {
   const input = fixture(); input.seats[0].chainWon += 1n;
-  assert.throws(() => materializeReplay(input), /would publish won/);
+  await assert.rejects(() => materializeReplay(input), /would publish won/);
 });
 
 // Audit b05ea7c50: a scheduled bet lives in one of 64 day banks — key `id & (2^73 - 1)`, the
@@ -29,9 +29,9 @@ test('chain input assembly recovers actual seat packing and reproduces every set
   const {rpcFixture}=await import('./helpers/chain-rpc.js');
   const {keccak256}=await import('../../vendor/ethers-app.mjs');
   const {loadReplayInputs}=await import('../../chain/craps.js');
-  const {useSchema,CURRENT_SCHEMA_HASH}=await import('../../chain/schema.js');
-  const {CRAPS_REPLAY_ENGINE_VERSION}=await import('../../craps/replay-contract.js');
-  const previous=useSchema(CURRENT_SCHEMA_HASH);
+  const {useSchema,BEFORE_WALLET_IDS_SCHEMA_HASH}=await import('../../chain/schema.js');
+  const CRAPS_REPLAY_ENGINE_VERSION = 'craps-hot12-own30-longest-v4';
+  const previous=useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try{
     // The fixture is the v4 producer's own (whole-FLIP chain units). The current layout keeps no
     // standing (bits 190..205 carry the day tag), so the reader reports zero for every seat.
@@ -58,7 +58,7 @@ test('chain input assembly recovers actual seat packing and reproduces every set
     const assembled=await loadReplayInputs(f.s,key);
     assert.deepEqual(assembled.terms,input.terms,'whole-FLIP terms reach the producer unscaled');
     assert.deepEqual(assembled.seats,input.seats);
-    assert.equal(materializeReplay(assembled).entrants,24);
+    assert.equal((await materializeReplay(assembled)).entrants,24);
     assert.equal(assembled.prize.progressivePoolWei,String(123456n*10n**18n),'presentation keeps token wei');
     assert.equal(assembled.progressive.amountWei,123456n,'the producer takes the chain figure');
     // A day bank reused 64 days later no longer holds this field's slips.
@@ -72,10 +72,10 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
   const {rpcFixture,PLAYER}=await import('./helpers/chain-rpc.js');
   const {keccak256}=await import('../../vendor/ethers-app.mjs');
   const {loadReplayInputs}=await import('../../chain/craps.js');
-  const {settleBattle}=await import('../../chain/craps-engine.js');
-  const {useSchema,CURRENT_SCHEMA_HASH}=await import('../../chain/schema.js');
-  const {CRAPS_REPLAY_ENGINE_VERSION}=await import('../../craps/replay-contract.js');
-  const previous=useSchema(CURRENT_SCHEMA_HASH);
+  const {settleBattle}=await import('../../chain/schemas/5cd4b457/craps-engine.js');
+  const {useSchema,BEFORE_WALLET_IDS_SCHEMA_HASH}=await import('../../chain/schema.js');
+  const CRAPS_REPLAY_ENGINE_VERSION = 'craps-hot12-own30-longest-v4';
+  const previous=useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try{
     const f=await rpcFixture({head:4000,timestamp:48000,period:1000});
     f.client.chain.codeHashes={CRAPS:keccak256('0x01')};
@@ -133,10 +133,10 @@ test('run 57+: the period-5 jackpot battle replays through the craps table, paid
     assert.deepEqual(assembled.terms,{bankroll,goal:bankroll*5n,boardStake:bankroll/5n,battleStake:12n*100n,
       highExtra:(3n-1n)*10_000n*30_000n/20_000n});
     assert.deepEqual(assembled.seats.map(s=>[s.betId,s.lane,s.awardUnits??0]),seats.map(s=>[s.betId,s.lane,Number(s.award)]));
-    const bundle=materializeReplay(assembled);
+    const bundle=await materializeReplay(assembled);
     assert.equal(bundle.entrants,5,'every settlement reproduced, the awarded seats on their own dice');
     // The rotation timeline follows the contract's dense walk: paid, day ticket, then awarded.
-    const {rotationTurn,crapsSeed}=await import('../../chain/craps-engine.js');
+    const {rotationTurn,crapsSeed}=await import('../../chain/schemas/5cd4b457/craps-engine.js');
     const maxHands=JSON.parse(bundle.manifest.body.toString()).tape.maxHands;
     const featured=JSON.parse(bundle.children.find(c=>c.name==='featured').body.toString());
     const expected=seats.flatMap((seat,i)=>{const turn=rotationTurn(crapsSeed(word,slot),5n,BigInt(i+1));

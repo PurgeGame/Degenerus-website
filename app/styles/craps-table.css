@@ -3161,6 +3161,12 @@ app-craps-table {
   font-style: normal;
 }
 
+.craps-race-shooter > em img {
+  width: 6.5rem;
+  height: 1.8rem;
+  object-fit: contain;
+}
+
 .craps-race-shooter > em b {
   color: #fff4bb;
   font-size: 1rem;
@@ -5956,4 +5962,176 @@ app-craps-table {
   .craps-race-result__lane { padding: .7rem .4rem; gap: .5rem; }
   .craps-race-result__lane h3 { font-size: .65rem; }
   .craps-race-result__lane-winner b { font-size: .72rem; }
+}
+
+/* The shooter's revealed hand, shared by the countdown and longest-run record. */
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel:has(.has-progress) {
+  grid-template-rows: minmax(3.55rem, auto) minmax(0, 1fr);
+}
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress {
+  position: relative;
+  grid-template-columns: 1.65rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 0.14rem 0.25rem;
+  padding: 0.2rem 0.28rem;
+  border-radius: 0.3rem;
+}
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress .craps-race-shooter__avatar {
+  width: 1.6rem;
+  height: 1.6rem;
+  grid-row: 1;
+  grid-column: 1;
+}
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress .craps-race-shooter__copy {
+  grid-row: 1;
+  grid-column: 2;
+}
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress.is-hot {
+  border-color: #a78b47;
+  background: #082119;
+  box-shadow: none;
+}
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress.is-hot.is-your-shooter {
+  border-color: #72c98d;
+  background: #08251b;
+}
+.craps-race-shooter.has-progress.is-your-shooter .craps-race-shooter__avatar { border-color: #72c98d; }
+.craps-hot-meter {
+  display: grid;
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  gap: 0.2rem;
+}
+.craps-hot-meter[hidden] { display: none; }
+.craps-hot-meter__labels {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #bac6d6;
+  font: 800 0.55rem/1 "Roboto Mono", monospace;
+  white-space: nowrap;
+}
+.craps-hot-meter__track {
+  display: block;
+  height: 0.3rem;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #1b2e3e;
+}
+.craps-hot-meter__track::before {
+  content: '';
+  display: block;
+  height: 100%;
+  width: var(--progress, 0%);
+  background: #91aad8;
+  transition: width 250ms ease-out;
+}
+.craps-race-shooter.is-hot .craps-hot-meter__track::before { background: #d7b458; }
+.craps-race-shooter.is-your-shooter .craps-hot-meter__track::before { background: #67d9f1; }
+.craps-hot-record { display: inline-flex; align-items: center; gap: 0.12rem; color: #a9bbb5; }
+.craps-hot-record svg {
+  width: 0.65rem;
+  height: 0.65rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.craps-hot-record.is-leading { color: #f3ca63; }
+.craps-hot-record.is-new-record { color: #fff0bd; }
+.craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress > em {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+.craps-race-shooter.has-progress > em[hidden] { display: none; }
+.craps-race-shooter.has-progress > em img { min-width: 0; max-width: 72%; height: 1.6rem; }
+.craps-race-shooter.has-progress > em b { flex: none; }
+.craps-race-shooter.is-your-shooter > em b { color: #92dfa9; }
+@media (min-width: 960px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-rail:has(.has-progress) {
+    grid-template-rows: 17rem 25rem;
+  }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-table-felt:has(.has-progress) {
+    height: 17rem;
+  }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress > em {
+    position: absolute;
+    grid-area: auto;
+    right: 0.3rem;
+    top: 0.15rem;
+    gap: 0.25rem;
+  }
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-shooter.has-progress.is-hot .craps-race-shooter__copy {
+    padding-right: 9.5rem;
+  }
+  .craps-race-shooter.has-progress > em img { max-width: none; }
+}
+@media (max-width: 959px) {
+  .craps-dialog__card.is-resolving[data-screen="battle"] .craps-race-player-panel:has(.has-progress.is-hot) {
+    grid-template-rows: minmax(5.2rem, auto) minmax(0, 1fr);
+  }
+  .craps-hot-meter__labels { font-size: 0.48rem; gap: 0.25rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .craps-hot-meter__track::before { transition: none; }
+}
+
+/* Decimator is a skin of the same felt, dice, race, and replay controls. */
+.craps-decimator-context { display: none; }
+app-craps-table[data-skin="decimator"] .craps-decimator-context { display: flex; justify-content: space-between; align-items: center; gap: .8rem; color: #c2c9d3; font: 600 11px/1.4 ui-monospace, monospace; padding: .35rem 1rem; background: #15151f; border-block: 1px solid #772438; }
+.craps-decimator-context button, .craps-decimator-field button { flex-shrink: 0; border: 1px solid #ab5163; border-radius: 4px; padding: .45rem .6rem; background: #271723; color: #f3d5db; font: 700 10px ui-monospace, monospace; cursor: pointer; }
+app-craps-table[data-skin="decimator"] .craps-dialog__brand-logo { object-fit: contain; width: clamp(180px, 25vw, 350px); }
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--goal { display: flex !important; flex-direction: column; justify-content: center; gap: .2rem; }
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize em { display: inline; }
+app-craps-table[data-skin="decimator"] .craps-dialog__prize--bounty > strong { gap: .4rem; }
+app-craps-table[data-skin="decimator"] .craps-dialog__prize--bounty > strong > img,
+app-craps-table[data-skin="decimator"] .craps-race-you-stack img { display: none; }
+app-craps-table[data-skin="decimator"] .craps-dialog__prize--goal em { font-size: 9px; white-space: nowrap; }
+app-craps-table[data-skin="decimator"] .craps-race-result__card { max-height: 85dvh; overflow: auto; }
+.craps-decimator-result-logo { display: block; width: min(100%, 310px); height: auto; margin: auto; }
+.craps-decimator-winners { margin: 1rem 0; padding: 0; list-style: none; text-align: left; }
+.craps-decimator-winners li { display: grid; grid-template-columns: 1fr auto; gap: .3rem .8rem; padding: .5rem; border-top: 1px solid #454252; font-size: 12px; }
+.craps-decimator-winners li span { color: #c9bfa9; }
+.craps-decimator-winners li strong { grid-column: 1/-1; color: #9df3c1; }
+.craps-decimator-field { position: absolute; inset: 5% 3%; z-index: 25; display: flex; flex-direction: column; padding: 1rem; border: 1px solid #ab5163; border-radius: 10px; background: #10131bf5; color: #ede5d8; font: 12px/1.5 ui-monospace, monospace; box-shadow: 0 20px 80px #000; }
+.craps-decimator-field[hidden] { display: none; }
+.craps-decimator-field header, .craps-decimator-field footer { display: flex; justify-content: space-between; gap: .6rem; align-items: center; }
+.craps-decimator-field ol { overflow: auto; min-height: 0; flex: 1; padding: 0; list-style: none; }
+.craps-decimator-field li { display: grid; grid-template-columns: 1fr 1fr auto; gap: .5rem; padding: .45rem; border-top: 1px solid #333849; }
+.craps-decimator-field li[data-eligible="false"] strong { color: #ef899c; }
+.craps-decimator-field li[data-eligible="true"] strong { color: #8be9b0; }
+@media (max-width: 600px) {
+  app-craps-table[data-skin="decimator"] .craps-decimator-context { font-size: 9px; padding: .25rem .5rem; gap: .35rem; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__brand-logo { width: 155px; }
+  .craps-decimator-field { padding: .6rem; font-size: 10px; }
+  .craps-decimator-field li { grid-template-columns: 1fr auto; }
+  .craps-decimator-field li span:nth-child(2) { grid-row: 2; color: #b1b8c6; }
+  .craps-decimator-field li strong { grid-column: 2; grid-row: 1/3; align-self: center; }
+}
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] { max-width: 100%; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+app-craps-table[data-skin="decimator"] .craps-dialog__head { grid-row: 1; }
+app-craps-table[data-skin="decimator"] .craps-decimator-context { grid-row: 2; }
+app-craps-table[data-skin="decimator"] .craps-table-rail { grid-row: 3; }
+app-craps-table[data-skin="decimator"] .craps-resolver-toolbar { grid-row: 4; }
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prizes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--goal { border: 1px solid #7d5060; border-radius: 4px; background: #281922; padding: .25rem; text-align: center; }
+app-craps-table[data-skin="decimator"] .craps-dialog__prize--goal output { font-size: clamp(.9rem, 2vw, 1.6rem); }
+@media (max-width: 600px) {
+  app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__head { grid-template-columns: minmax(80px, .75fr) minmax(0, 1.5fr) 1.75rem; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__brand-logo { width: 100%; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--goal em { font-size: 6px; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__prize--goal small { font-size: 6px; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__prize--goal output { font-size: .8rem; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] .craps-dialog__prize--bounty > strong { grid-column: 1/-1; }
+}
+app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] { width: min(calc(100vw - 2rem), 82.5rem); }
+@media (max-width: 600px) {
+  app-craps-table[data-skin="decimator"] .craps-dialog { padding: 0; }
+  app-craps-table[data-skin="decimator"] .craps-dialog__card.is-resolving[data-screen="battle"] { width: 100vw; }
 }

@@ -43,7 +43,6 @@
    follows your champion through hits and misses without covering its symbol. */
 .dgn-pop__champion { position: absolute; z-index: 5; inset: 15%; border: 2px solid #f6e8ff; border-radius: 50%; box-shadow: 0 0 4px #fff, 0 0 12px 3px #c887ffcc, 0 0 24px 5px #ad54ff77, inset 0 0 6px #edcaffaa; pointer-events: none; }
 .dgn-pop__player .dgn-pop__champion { border-width: 1.5px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffdd, 0 0 15px 3px #ad54ff88; }
-.dgn-pop__champion-bonus { position: absolute; top: -5px; right: -7px; padding: 1px 4px; border: 1px solid #e4c6ff; border-radius: 999px; background: #281534; color: #fff; box-shadow: 0 0 7px #d19aff88; font: 900 clamp(9px, 3.4cqi, 12px)/1.2 system-ui; font-variant-numeric: tabular-nums; }
 .dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 12px; height: 12px; margin: 2px 4px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffbb; }
 /* Match the jackpot's white seal: a fixed, unrotated hit area with its
    diamond drawn inside, so the flame stays upright at the four-way seam. */
@@ -97,8 +96,8 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 @keyframes dgn-pop-payout { 0%, 5% { opacity: 0; transform: translateY(8px) scale(.85); } 13%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-5px); } }
 
 .dgn-pop__increment { position: absolute; inset: 30% 0 auto; color: white; font: 900 clamp(1.25rem, 4vw, 2rem)/1 system-ui; text-shadow: 0 2px 5px #000; pointer-events: none; opacity: 0; }
-.dgn-pop__cell.is-gold { box-shadow: inset 0 0 0 3px #f2cb62, inset 0 0 14px #e1a02f80; }
-.dgn-pop__gold { position: absolute; bottom: 4%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 90%; padding: 2px 4px; border-radius: 3px; color: #ffe8a1; background: #322608e8; font: 900 clamp(.4rem, 1.1vw, .56rem)/1.1 system-ui; pointer-events: none; }
+.dgn-pop__cell.is-wild { box-shadow: inset 0 0 0 3px #d9dcf2, inset 0 0 14px #9aa7ff80; }
+.dgn-pop__wild { position: absolute; bottom: 4%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 90%; padding: 2px 4px; border-radius: 3px; color: #eef0ff; background: #1b1d3ae8; font: 900 clamp(.4rem, 1.1vw, .56rem)/1.1 system-ui; pointer-events: none; }
 .dgn-pop__gold-total { min-height: 1.3em; display: block; color: #f4d07c; font: 800 .64rem/1.3 system-ui; }
 /* Reserve the bonus caption so a gold match does not recenter the ticket. */
 .dgn-pop .dgn-pop__gold-total[hidden] { display: block !important; visibility: hidden; }

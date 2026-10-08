@@ -104,6 +104,28 @@ test('run 57+: the main board includes a Craps seat reveal without counting it a
   assert.equal(winners.winners.find(w => w.address === PLAYER).hasBonus, false);
 });
 
+test('converted jackpot roll1 carries Decimator slot buckets and recipient entry awards', async () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  const f = await rpcFixture(); const block = 9999; const level = 15;
+  await f.field('GAME', 'dailyFoilDraw', packCurrent(MAIN, level), DAY);
+  await f.event('GAME', 'DailyRngApplied', { day: DAY, rawWord: 777, finalWord: 777 }, { block, index: 0 });
+  await f.event('GAME', 'DailyWinningTraits', { day: DAY, mainTraitsPacked: MAIN }, { block, index: 1 });
+  await f.event('GAME', 'DecimatorJackpotPlan', { lvl: level, word: 777, originalPool: 1000,
+    originalStack: 9000, originalCount: 3, generatedEntries: 3, traits: MAIN, weights: 1n | (2n << 16n) }, { block, index: 2 });
+  await f.event('GAME', 'DecimatorGenerated', { lvl: level, id: 4, recipient: PLAYER, quadrant: 0,
+    chips: 0, normalizedPeak: 3000n * WEI, score: 9000000n * WEI }, { block, index: 3 });
+  await f.event('GAME', 'JackpotEthWin', { winner: OTHER_PLAYER, level, traitId: 0xc3, amount: 5n * WEI, entryIndex: 1 }, { block, index: 4 });
+  await f.event('GAME', 'PrizePoolDailySnapshot', { day: DAY }, { block, index: 5 });
+  const roll1 = await readChainRoute(`/game/jackpot/day/${DAY}/roll1`, { client: f.client });
+  assert.deepEqual(roll1.decimatorEntries.map(row => [row.traitId, row.entries, row.survivors]), [[0, 1, 1], [0x41, 2, 0]]);
+  const mine = roll1.wins.find(row => row.winner === PLAYER);
+  assert.deepEqual([mine.awardType, mine.amount, mine.decimatorEntryId, mine.traitId], ['decimator_entry', '1', '4', 0]);
+  const winners = await readChainRoute(`/game/jackpot/day/${DAY}/winners`, { client: f.client });
+  const entryWinner = winners.winners.find(row => row.address === PLAYER);
+  assert.equal(String(entryWinner.totalEth), '0', 'an entry award never becomes ETH');
+  assert.equal(entryWinner.breakdown[0].awardType, 'decimator_entry');
+});
+
 test('run 56: a jackpot day keeps its bonus draw and the early-bird tickets on roll 2', async () => {
   const f = await jackpotDay(RUN56_SCHEMA_HASH);
   const summary = await readChainRoute(`/game/jackpot/day/${DAY}/summary`, { client: f.client });

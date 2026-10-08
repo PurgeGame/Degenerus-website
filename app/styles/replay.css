@@ -699,8 +699,7 @@
   opacity: 1;
 }
 
-/* Its 92% badge intentionally reaches into the receipt lane. The quadrant's
-   YOU WON label must remain the foreground layer once that receipt appears. */
+/* Keep the solo winner's receipt in the foreground during reward effects. */
 .replay-tq.q-solo-eth-win
   .replay-prize-reveal.replay-player-win-reveal {
   z-index: 7;
@@ -1542,3 +1541,9 @@
 /* These packed badge targets use the layout's explicit size; shell button padding
    must not enlarge them into adjacent badges or clip the right edge on phones. */
 .replay-badge-wrap[role="button"] { box-sizing: border-box; min-width: 0; min-height: 0; padding: 0; }
+
+/* Converted jackpot buckets award Decimator slots, not a zero-value ETH prize. */
+.replay-bucket-decimator { column-gap: .3rem; color: #5c1616; text-shadow: 0 1px 0 #ffffff59; }
+.replay-bucket-decimator > img { width: 1.8em; height: 1.8em; object-fit: contain; }
+.replay-badge-reward-pop__row--decimator-entry { color: #e9ba66; }
+.replay-badge-reward-pop__row--decimator-entry b { font-size: .8em; }

@@ -30,6 +30,48 @@ const INDEX_SRC = readFileSync(indexUrl, 'utf8');
 const GOLD_CHIP_SRC = readFileSync(goldChipUrl, 'utf8');
 const GOLD_STACK_SRC = readFileSync(goldStackUrl, 'utf8');
 
+test('shooter progress counts only revealed rolls and keeps the earlier longest hand on ties', async () => {
+  const { crapsShooterProgress } = await import(moduleUrl);
+  const frames = [
+    ...Array.from({ length: 12 }, () => ({ shooter: 0 })),
+    ...Array.from({ length: 15 }, () => ({ shooter: 1 })),
+    { shooter: 2 },
+  ];
+  assert.equal(crapsShooterProgress(frames, 0).rolls, 0);
+  assert.equal(crapsShooterProgress(frames, 11).rolls, 11);
+  assert.equal(crapsShooterProgress(frames, 12).rolls, 12);
+  const next = crapsShooterProgress(frames, 12, { upcoming: true });
+  assert.equal(next.shooter, 1);
+  assert.equal(next.rolls, 0, 'the new shooter resets before their first result');
+  assert.equal(next.bestRolls, 12);
+  assert.equal(crapsShooterProgress(frames, 24).leading, false, 'a tied hand does not steal the record');
+  assert.equal(crapsShooterProgress(frames, 25).newRecord, true);
+  assert.equal(crapsShooterProgress(frames, 25).bestShooter, 1);
+  assert.equal(crapsShooterProgress(frames, 26).newRecord, false, 'only breaking the prior hand triggers the flash');
+  assert.equal(crapsShooterProgress(frames, 28).bestRolls, 15);
+  assert.equal(crapsShooterProgress(frames, 5).bestRolls, 5, 'backward seeking cannot retain the future record');
+  const legacy = [{ label: 'Come-out 7' }, { label: 'Point 6 made' }, { label: 'Seven-out' }, { label: 'Point 5 set' }];
+  assert.equal(crapsShooterProgress(legacy, 3).rolls, 3);
+  assert.equal(crapsShooterProgress(legacy, 4).rolls, 1);
+});
+
+test('the graph crowns only a confirmed full-field leader, including with a partial viewport', async () => {
+  const { crapsRaceLeader, crapsStandingAtRound } = await import(moduleUrl);
+  const standings = [
+    { key: 'local', rank: 1, rankTimeline: [2, 2, 2] },
+    { key: 'other', rank: 2, rankTimeline: [3, 1, 3] },
+  ];
+  const context = { fieldEntrants: 100, roundNumber: 1 };
+  assert.equal(crapsRaceLeader(standings, context), null, 'a checkpoint rank cannot confirm the current leader');
+  assert.equal(crapsRaceLeader(standings, { ...context, roundNumber: 2 }), null, 'an unloaded leader is not impersonated');
+  assert.equal(crapsRaceLeader(standings, { ...context, roundNumber: 3 }), null, 'a finished rank timeline cannot freeze first place');
+  assert.equal(crapsStandingAtRound({ rankTimeline: [2, 1], roundNumber: 2 }), null);
+  assert.equal(crapsRaceLeader(standings, { ...context, finalized: true }), null, 'final rank requires the winner or full field');
+  assert.equal(crapsRaceLeader([{ ...standings[0], battleWinner: true }, standings[1]],
+    { ...context, finalized: true }).key, 'local');
+  assert.equal(crapsRaceLeader(standings, { fieldEntrants: 2 }).key, 'local', 'complete fields use the shared current standings');
+});
+
 test('the last result follows the viewed graph entry and expires with reduced motion', () => {
   const pop = COMPONENT_SRC.slice(COMPONENT_SRC.indexOf('  #popScoreDelta(frame, { animate = true } = {})'), COMPONENT_SRC.indexOf('  #paintRaceDashboard('));
   assert.match(COMPONENT_SRC, /role="img" aria-label="Battle bankroll trajectories"><\/svg>\s*<output class="craps-score-delta"/,
@@ -214,8 +256,8 @@ test('battle rank follows visible peaks while live and final goal peaks/bust rol
 });
 
 test('bonus display uses ordinary schedule procs, and receipts never invent first place', () => {
-  assert.match(COMPONENT_SRC, /const hot = roundNumber > 0 && viewerFrame\?\.hotShooterActive === true/);
-  assert.match(COMPONENT_SRC, /#announceShooterBoost\(roundNumber, onDone\) \{\s*this\.#paintRaceShooter\(roundNumber \+ 1\)/);
+  assert.match(COMPONENT_SRC, /const hot = !upcoming && roundNumber > 0 && viewerFrame\?\.hotShooterActive === true/);
+  assert.match(COMPONENT_SRC, /#announceShooterBoost\(roundNumber, onDone\) \{\s*this\.#paintRaceShooter\(roundNumber, \{ upcoming: true \}\)/);
   assert.match(COMPONENT_SRC, /shooter\.hot \? 7 : CRAPS_DICE_BADGE_COLORS/);
   assert.match(COMPONENT_SRC, /const finalRank = battleWon \? 1 : this\.#localRankAtRound\(resultRound, local\?\.rank, standings\);/);
   assert.match(COMPONENT_SRC, /finalRank == null \? '—'/);
@@ -1518,7 +1560,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the shared dice switch to gold for the active Hot Shooter');
   assert.match(COMPONENT_SRC, /colorIndex === 7 && normalizedFace === 6[\s\S]*?dice_05_6_gold-standard\.svg/s,
     'the gold six uses the standard upright badge face');
-  assert.match(COMPONENT_SRC, /panel\.classList\?\.toggle\('is-hot', shooter\.hot\)[\s\S]*?boost\.innerHTML = shooter\.hotPercent != null \? `HOT <b>\+\$\{shooter\.hotPercent\}%<\/b>`/s,
+  assert.match(COMPONENT_SRC, /panel\.classList\?\.toggle\('is-hot', shooter\.hot\)[\s\S]*?boost\.innerHTML = .*hot-shooter-.*shooter\.hotPercent/s,
     'the named shooter card carries the persistent Hot Shooter marker');
   assert.match(COMPONENT_SRC, /#shooterOrdinalAtRound[\s\S]*?this\.#isSevenOut[\s\S]*?#wagerMultiplierAtRound/s,
     'wager growth follows completed seven-outs rather than individual dice rolls');
@@ -1528,7 +1570,7 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'felt stacks use no redundant player labels');
   assert.match(COMPONENT_SRC, /function playerChipArt[\s\S]*?stack-\$\{level\}-high-\$\{face\}\.svg/s,
     'one through seven chips on a player spot render as their true physical stack height');
-  assert.match(COMPONENT_SRC, /const count = normalizeCrapsChipsPerBet\(raw\);[\s\S]*?result\.set\(bet\.id, BigInt\(count\)\)/s,
+  assert.match(COMPONENT_SRC, /const count = maxChips === CRAPS_MAX_CHIPS_PER_BET \? normalizeCrapsChipsPerBet\(raw\) : clampInteger\(raw, 0, maxChips, 0\);[\s\S]*?result\.set\(bet\.id, BigInt\(count\)\)/s,
     'initial and remote placements retain their contract-bounded per-spot counts instead of collapsing them to one');
   assert.match(COMPONENT_SRC, /red: '\/shared\/flip-chips\/coin-high-red\.svg'[\s\S]*?green: '\/shared\/flip-chips\/coin-high-green\.svg'[\s\S]*?gold: '\/shared\/flip-chips\/coin-high-gold\.svg'[\s\S]*?silver: '\/shared\/flip-chips\/coin-high-silver\.svg'/s,
     'the component uses canonical high-angle FLIP vectors plus the temporary metallic boost skin');

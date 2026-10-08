@@ -233,12 +233,15 @@ body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__co
 }
 
 body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__forever > quest-objective-indicator {
-  position: relative;
-  inset: auto;
-  flex: 0 0 auto;
+  position: absolute;
+  top: -0.65rem;
+  right: auto;
+  bottom: auto;
+  left: calc(100% - 0.35rem);
+  flex: none;
   width: 1.18rem;
   height: 1.18rem;
-  margin-block: -.3rem;
+  margin: 0;
 }
 
 body.layout-basic .referral-strip.referral-strip--compact .deg-referral-card__actions { display: contents; }
@@ -496,4 +499,3 @@ body.layout-basic .bottom-tools .sdgnrs-rail__value > b:first-child { grid-colum
   body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy b { font-size: .56rem; }
   body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuy small { font-size: .52rem; }
 }
-

@@ -84,6 +84,7 @@ const { CONTRACTS } = await import('../../app/chain-config.js');
 const readProvider = await import('../../app/read-provider.js');
 const mineFlip = await import('../../app/mine-flip.js');
 const pending = await import('../../app/pending-actions.js');
+const { writeMineFlipButtonPreference } = await import('../../app/ui-preferences.js');
 const module = await import('../app-mine-flip.js');
 const { AppMineFlipResolver } = module;
 
@@ -145,9 +146,49 @@ beforeEach(() => {
   readProvider._resetSharedReadProviderForTests();
   body.children = [];
   store.update('ui.mode', 'self');
+  writeMineFlipButtonPreference(true);
 });
 
 describe('headless Mine FLIP resolver', () => {
+  test('the preference immediately hides shared work and prevents a stale click from running', async (t) => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    const resolver = await mountResolver();
+    t.after(() => resolver.disconnectedCallback());
+    const staleAction = publishedResolver();
+    let runs = 0;
+    resolver.__queueForTest()[0].run = async () => { runs += 1; };
+
+    writeMineFlipButtonPreference(false);
+    assert.equal(publishedResolver(), undefined);
+    await staleAction.run();
+    assert.equal(runs, 0);
+
+    // New chain data must not bring either UI surface back while switched off.
+    store.update('app.daySync', { day: 84, rngFulfilled: true });
+    await settle();
+    assert.equal(publishedResolver(), undefined);
+
+    writeMineFlipButtonPreference(true);
+    assert.equal(publishedResolver()?.state, 'ready');
+    await settle();
+    assert.equal(publishedResolver()?.state, 'ready');
+  });
+
+  test('a saved off preference suppresses startup and in-flight probes', async (t) => {
+    store.update('connected.address', TEST_ADDR);
+    stubProbe({ hasWork: true });
+    writeMineFlipButtonPreference(false);
+    const resolver = await mountResolver();
+    t.after(() => resolver.disconnectedCallback());
+    assert.equal(publishedResolver(), undefined);
+
+    writeMineFlipButtonPreference(true); // Starts a fresh asynchronous probe.
+    writeMineFlipButtonPreference(false);
+    await settle();
+    assert.equal(publishedResolver(), undefined);
+  });
+
   test('publishes ready crank work into the bottom pending-actions registry', async () => {
     store.update('connected.address', TEST_ADDR);
     stubProbe({ hasWork: true });

@@ -303,7 +303,7 @@ body.layout-basic boon-product-indicator[data-boon-direction="down"][data-boon-s
 boon-product-indicator[data-boon-product="lootbox"] { --boon-logo: url('/app/assets/lootbox/degenerus-lootbox-case-medium-v14-locked-front.webp'); }
 boon-product-indicator[data-boon-product="coinflip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
 boon-product-indicator[data-boon-product="quests"] { --boon-logo: url('/app/assets/boons/boon-quest-micro.svg'); }
-boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg'); }
+boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg?v=casino-v2'); }
 boon-product-indicator[data-boon-product="degenerette-eth"] { --boon-logo: url('/badges-circular/crypto_06_ethereum_green.svg'); }
 boon-product-indicator[data-boon-product="degenerette-flip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
 boon-product-indicator[data-boon-product="degenerette-wwxrp"] { --boon-logo: url('/shared/coinflip-face-red.svg'); }
@@ -336,11 +336,11 @@ body.layout-basic boon-product-indicator {
   margin: 0;
 }
 
-/* Game-style objective waypoint. Default to the full left-pointing quote
-   bubble so the tail remains unmistakable at control-badge size; placements
-   on an action's left edge explicitly select the mirrored right-facing art. */
+/* Quest callouts sit at upper corners and point diagonally into their action.
+   Mirror the same down-left artwork for an upper-left placement. */
 quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
+  --quest-objective-art: url('/app/assets/quest-objective-tail-bottom-left.svg');
+  --quest-objective-flip: 1;
   position: relative;
   display: inline-grid;
   box-sizing: border-box;
@@ -358,20 +358,16 @@ quest-objective-indicator::before {
   position: absolute;
   inset: 0;
   background: var(--quest-objective-art) center / contain no-repeat;
+  transform: scaleX(var(--quest-objective-flip));
   content: "";
 }
 
-quest-objective-indicator[data-quest-pointer="left"] {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
-}
-
-/* Point the callout back toward controls that sit below and to its left. */
 quest-objective-indicator[data-quest-pointer="bottom-left"] {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-bottom-left.svg');
+  --quest-objective-flip: 1;
 }
 
-quest-objective-indicator[data-quest-pointer="right"] {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-right.svg');
+quest-objective-indicator[data-quest-pointer="bottom-right"] {
+  --quest-objective-flip: -1;
 }
 
 quest-objective-indicator[data-quest-count]:not([data-quest-count="1"])::after {
@@ -391,6 +387,12 @@ quest-objective-indicator[data-quest-count]:not([data-quest-count="1"])::after {
   font: 950 0.47rem/1 "Roboto Mono", monospace;
 }
 
+/* Keep the count on the side opposite the pointer. */
+quest-objective-indicator[data-quest-pointer="bottom-right"][data-quest-count]:not([data-quest-count="1"])::after {
+  right: auto;
+  left: -0.25rem;
+}
+
 quest-objective-indicator:focus-visible {
   outline: 2px solid rgba(251, 191, 36, 0.9);
   outline-offset: 2px;
@@ -404,10 +406,33 @@ body.layout-basic quest-objective-indicator {
   z-index: 4;
   display: grid;
   flex: none;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
+  padding: 0;
   cursor: pointer;
   /* Enlarge the marker visually without changing any host's measured box. */
   scale: 1.1;
+}
+
+/* Quest bubbles (including their pulse and count badge) can extend beyond
+   their action's frame. Clip card artwork on its inner art element instead
+   of clipping the control or the builder that also owns the callout. Keep
+   this shared by every quest placement so a new frame cannot hide a bubble. */
+body.layout-basic :is(
+  .dec-purchase-builders,
+  .dec-input-group.dec-purchase-builder,
+  .dec-ticket-pieces,
+  .dec-ticket-piece,
+  .dec-input-accessories,
+  .dec-foil-label,
+  .dec-flip-balance,
+  .dec-flip-balance__action,
+  .deg-currency-option,
+  .deg-referral-card__forever,
+  .dbb__burn
+):has(quest-objective-indicator:not([hidden])) {
+  overflow: visible;
 }
 
 /* Only ambient-motion.js's explicit decorative targets receive this marker.
@@ -470,20 +495,18 @@ body.layout-basic .app-decimator-panel .dec-foil-label {
 }
 
 body.layout-basic .app-decimator-panel .dec-foil-label > quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
   position: absolute;
-  top: 50%;
-  left: 0;
+  top: -0.5rem;
+  right: -0.3rem;
   width: 1.02rem;
   height: 1.02rem;
-  translate: 0 -50%;
 }
 
 body.layout-basic .app-decimator-panel .dec-flip-balance__action > .dec-redeem-quest {
   position: absolute;
   z-index: 3;
-  top: -0.32rem;
-  left: calc(100% + 0.43rem);
+  top: -0.65rem;
+  left: calc(100% - 0.35rem);
   width: 1.18rem;
   height: 1.18rem;
   flex-basis: 1.18rem;
@@ -493,42 +516,30 @@ body.layout-basic .app-decimator-panel .dec-flip-balance__action > .dec-redeem-q
 body.layout-basic .dbb__burn > quest-objective-indicator {
   position: absolute;
   z-index: 3;
-  top: 50%;
-  right: 0.42rem;
+  top: 0.08rem;
+  right: 0.1rem;
   width: 1.2rem;
   height: 1.2rem;
-  translate: 0 -50%;
 }
 
 body.layout-basic .dbb__burn:has(> quest-objective-indicator:not([hidden])) {
-  padding-right: 2rem;
+  padding-right: 1.55rem;
 }
 
-/* Quest bubbles sit at the outer edges and point inward at their currency. */
+/* Quest bubbles occupy the outer upper corners of the currency buttons. */
 body.layout-basic .deg-currency-option > quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-right.svg');
   z-index: 2;
-  top: 50%;
-  left: 0.2rem;
+  top: -0.55rem;
+  left: -0.25rem;
   width: 1.18rem;
   height: 1.18rem;
   min-width: 0;
   min-height: 0;
-  translate: 0 -50%;
 }
 
 body.layout-basic .deg-currency-option[data-bind="deg-currency-option-1"] > quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
-  right: 0.2rem;
+  right: -0.25rem;
   left: auto;
-}
-
-body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-0"]:has(> quest-objective-indicator:not([hidden])) {
-  padding-left: 1.7rem;
-}
-
-body.layout-basic .play-grid .deg-currency-option[data-bind="deg-currency-option-1"]:has(> quest-objective-indicator:not([hidden])) {
-  padding-right: 1.7rem;
 }
 
 body.layout-basic .deg-referral-card__forever {
@@ -540,20 +551,11 @@ body.layout-basic .deg-referral-card__forever {
 body.layout-basic .deg-referral-card__forever > quest-objective-indicator {
   position: absolute;
   z-index: 3;
-  top: -0.5rem;
+  top: -0.65rem;
   right: auto;
-  left: calc(100% + 0.35rem);
+  left: calc(100% - 0.35rem);
   width: 1.18rem;
   height: 1.18rem;
-}
-
-@media (max-width: 520px) {
-  body.layout-basic .deg-referral-card__forever { position: static; }
-  body.layout-basic .deg-referral-card__forever > quest-objective-indicator {
-    top: -0.18rem;
-    right: -0.12rem;
-    left: auto;
-  }
 }
 
 body.layout-basic .app-decimator-panel .dec-input-label {

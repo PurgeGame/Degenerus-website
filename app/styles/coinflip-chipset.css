@@ -1742,22 +1742,19 @@ body.layout-basic .jackpot-hero .df-baf-score {
   width: 5.1rem;
 }
 
-/* The quest waypoint stays below BAF. The deposit boon instead docks inside
-   the right edge of whichever blue wager oval currently opens Add Bet. */
-body.layout-basic .df-table-quest {
+/* The quest bubble points down-right into Today's upper-left corner.
+   The deposit boon docks inside whichever wager oval opens Add Bet. */
+body.layout-basic .df-table-quest,
+body.layout-basic .jackpot-hero .df-table-quest {
   z-index: 6;
-  top: calc(var(--df-score-cap-top) + 1.8rem);
+  top: calc(50% + 0.45rem);
   right: auto;
   bottom: auto;
+  left: calc(50% - min(6.8rem, calc(50% - 3rem)) - 0.3rem);
   width: 1.18rem;
   height: 1.18rem;
   pointer-events: auto;
-}
-
-body.layout-basic .df-table-quest { left: 0.3rem; scale: 1; }
-
-body.layout-basic .jackpot-hero .df-table-quest {
-  left: calc(var(--df-table-content-inset) + 0.12rem);
+  scale: 1;
 }
 
 body.layout-basic :is(.df-bet-oval, .df-tomorrow-bet-oval) > .df-table-boon {
@@ -1807,6 +1804,10 @@ body.layout-basic .jackpot-hero .df-funds {
 
   body.layout-basic .jackpot-hero .df-bet-oval {
     height: 4.15rem;
+  }
+
+  body.layout-basic .jackpot-hero .df-table-quest {
+    top: calc(50% + 0.17rem);
   }
 }
 
@@ -2263,12 +2264,4 @@ body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept:disabled {
   body.layout-basic .df-add-bet-dialog .df-reverse-dialog__close {
     transition: none;
   }
-}
-
-/* The Coinflip quest belongs beside Today's wager rather than beneath BAF.
-   Keep its right-facing tail aimed into the centered blue oval. */
-body.layout-basic .df-table-quest,
-body.layout-basic .jackpot-hero .df-table-quest {
-  top: calc(var(--df-score-cap-top) + 4.9rem);
-  left: calc(50% - min(6.8rem, calc(50% - 3rem)) - 1.28rem);
 }

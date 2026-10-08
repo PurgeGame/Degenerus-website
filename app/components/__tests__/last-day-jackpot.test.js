@@ -1640,8 +1640,8 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /const soloSize = soloIdx < 0 \? 0 : 92[\s\S]*?const sizePct = isSoloBadge \? soloSize : position\.size[\s\S]*?replay-badge-wrap--solo/,
-      'the solo bucket badge expands to fill nearly the entire quadrant',
+      /const sizePct = position\.size[\s\S]*?replay-badge-wrap--solo/,
+      'the solo badge respects the layout size that clears the center diamond',
     );
     assert.match(
       REPLAY_CSS,
@@ -5149,6 +5149,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     const packsGate = deferred();
     const viewerGate = deferred();
     const winnersGate = deferred();
+    const viewerPath = `/viewer/player/${address}/day/${day}`;
+    const isViewerRequest = (url) => new URL(url, 'http://localhost').pathname === viewerPath;
     const priorFetch = globalThis.fetch;
     const requested = [];
     const response = (value) => ({
@@ -5162,7 +5164,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       if (path.includes(`/player/${address}/packs?day=${day}`)) {
         return packsGate.promise.then(response);
       }
-      if (path.includes(`/viewer/player/${address}/day/${day}`)) {
+      if (isViewerRequest(path)) {
         return viewerGate.promise.then(response);
       }
       if (path.includes(`/game/jackpot/day/${day}/winners`)) {
@@ -5195,7 +5197,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.equal(cta.hidden, true, 'the summary stays unavailable while the first reel is starting');
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 0,
         'spin start cannot admit pack parsing into the active reel');
-      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 0,
+      assert.equal(requested.filter(isViewerRequest).length, 0,
         'spin start cannot admit viewer reconstruction into the active reel');
       assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 0,
         'spin start cannot admit winner processing into the active reel');
@@ -5207,7 +5209,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       await flushMicrotasks();
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 0,
         'spin completion cannot move summary work into the scratch interaction');
-      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 0,
+      assert.equal(requested.filter(isViewerRequest).length, 0,
         'the viewer feed also waits until the scratch interaction is over');
       assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 0,
         'the authoritative winners feed also waits until the scratch interaction is over');
@@ -5220,7 +5222,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.equal(cta.hidden, false, 'the summary action is visible');
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
         'final scratch starts one pack snapshot when active presentation is over');
-      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
+      assert.equal(requested.filter(isViewerRequest).length, 1,
         'final scratch starts one viewer snapshot when active presentation is over');
       assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
         'final scratch starts one winner snapshot when active presentation is over');
@@ -5229,7 +5231,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       await Promise.resolve();
       assert.equal(requested.filter((url) => url.includes(`/packs?day=${day}`)).length, 1,
         'the click does not launch a replacement pack request');
-      assert.equal(requested.filter((url) => url.includes(`/viewer/player/${address}/day/${day}`)).length, 1,
+      assert.equal(requested.filter(isViewerRequest).length, 1,
         'the click does not launch a replacement viewer request');
       assert.equal(requested.filter((url) => url.includes(`/game/jackpot/day/${day}/winners`)).length, 1,
         'the click does not launch a replacement winner request');
@@ -5518,7 +5520,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'the summary loads the full indexed reward legs, not just opened counts');
       assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');
       assert.equal(
-        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}_v3`),
+        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}_v4`),
         '1',
         'the consumed state survives a refresh for this player and day',
       );
@@ -5529,6 +5531,79 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.equal(revealMod.__takeQueuedForTest().length, 0);
     } finally {
       if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('DAY SUMMARY refreshes jackpot Craps winnings after the battle, overriding a stale day snapshot', async () => {
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0x9100000000000000000000000000000000000001';
+    const unit = 10n ** 18n;
+    const priorFetch = globalThis.fetch;
+    let settled = false;
+    let crapsReads = 0;
+    globalThis.fetch = async (url) => {
+      const path = new URL(url, 'http://localhost').pathname;
+      let value = null;
+      if (path === `/viewer/player/${address}/day/5/craps`) {
+        crapsReads++;
+        value = { address, day: 5, totalWinnings: settled ? String(1234n * unit) : '0',
+          winCount: settled ? 3 : 0, payoutCount: settled ? 3 : 0,
+          jackpot: { totalWinnings: settled ? String(1200n * unit) : '0', payoutCount: settled ? 2 : 0,
+            normalPasses: settled ? 3 : 0, highPasses: settled ? 1 : 0 } };
+      } else if (path === `/viewer/player/${address}/day/5`) {
+        value = { address, day: 5, activity: {
+          craps: { totalWinnings: String(34n * unit), winCount: 1, payoutCount: 1 },
+        } };
+      } else if (path === `/player/${address}/packs`) {
+        value = { address, day: 5, ticketRevealPacks: [], lootboxPacks: [] };
+      } else if (path === '/game/jackpot/day/5/winners') {
+        value = { day: 5, winners: [] };
+      }
+      return { ok: true, status: 200, json: async () => value };
+    };
+    let el;
+    try {
+      storeMod.update('connected.address', address);
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      globalThis.localStorage.setItem(`day_summary_${CHAIN.id}_5_${address}_v3`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', { ...RESOLVED_PAYLOAD_DAY5, winners: [] });
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(crapsReads, 1, 'the summary warmed its initial empty result');
+      const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+      assert.equal(cta.hidden, false, 'an older receipt can reopen to include its jackpot winnings');
+
+      const replay = globalThis.document.querySelector('replay-panel');
+      replay.setAttribute('data-craps-battle-due', '');
+      globalThis.document.dispatchEvent({ type: 'replay:craps-battle-due', detail: { due: true } });
+      assert.equal(cta.hidden, true, 'the pending battle gates the summary');
+      settled = true;
+      replay.removeAttribute('data-craps-battle-due');
+      globalThis.document.dispatchEvent({ type: 'replay:craps-battle-due', detail: { due: false } });
+      cta.dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await new Promise((resolve) => setImmediate(resolve));
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.equal(crapsReads, 2, 'battle completion refreshes even within the API response cache lifetime');
+      assert.ok(queued, 'the winnings summary queued');
+      assert.equal(queued.activity.crapsWinningsAmount, String(1234n * unit));
+      assert.equal(queued.activity.crapsPayoutCount, 3);
+      assert.equal(queued.activity.crapsJackpotWinningsAmount, String(1200n * unit));
+      assert.equal(queued.activity.crapsJackpotPayoutCount, 2);
+      assert.equal(queued.activity.crapsJackpotNormalPasses, 3);
+      assert.equal(queued.activity.crapsJackpotHighPasses, 1);
+      assert.deepEqual(revealMod.normalizeSequence(queued).cards.filter(c => c.type === 'craps-result').map(c => c.value),
+        ['+34 FLIP', '+1,200 FLIP'], 'ordinary and jackpot credits each appear exactly once');
+    } finally {
+      el?.disconnectedCallback();
       globalThis.fetch = priorFetch;
       revealMod.__resetForTest();
     }

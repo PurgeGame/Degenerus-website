@@ -35,7 +35,7 @@ function model({ status = 'closed', player = PLAYER_4, rank = 4, history = [] } 
     metadata: {
       status,
       day: 9,
-      // 1 is an odd gate word and EntropyLib.hash2(1, 1) selects rank 4.
+      // 1 is an odd gate word and the staged BAF winner stream selects rank 4.
       rngWord: status === 'closed' ? '1' : '2',
       estimatedPoolWei: status === 'closed' ? '1000' : null,
       awards: { ethCount: 3, ethUnique: 2, ethTotal: '50', ticketCount: 4, ticketUnique: 3, ticketEntries: '40' },
@@ -67,6 +67,10 @@ describe('BAF resolution model', () => {
     assert.equal(bafGateWon(2), false);
     assert.equal(bafCutSurvivorRank(1), 4);
     assert.equal(bafCutSurvivorRank(5), 3);
+    assert.equal(bafCutSurvivorRank(3), 3);
+    assert.equal(bafCutSurvivorRank(1, 'legacy'), 3);
+    assert.equal(bafCutSurvivorRank(7, 'legacy'), 4);
+    assert.equal(bafCutSurvivorRank('invalid'), null);
   });
 
   test('the vault cannot occupy a ranked prize in the resolution', async () => {
@@ -170,6 +174,24 @@ describe('BAF resolution model', () => {
     assert.equal(snapshot.awards.tickets, '10');
   });
 
+  test('complete round awards replace a truncated wallet history without including other winners', () => {
+    const snapshot = buildBafResolutionSnapshot({
+      level: 40, player: PLAYER_4,
+      metadata: { status: 'closed', day: 9, rngWord: '1', wins: [
+        ...Array.from({ length: 60 }, () => ({ winner: PLAYER_4, level: 40, awardType: 'eth_baf', amount: '2' })),
+        { winner: PLAYER_4, level: 47, sourceLevel: 41, awardType: 'tickets_baf', amount: '12' },
+        { winner: PLAYER_4, level: 40, day: 9, awardType: 'whale_pass_baf', amount: '14' },
+        { winner: PLAYER_1, level: 40, awardType: 'eth_baf', amount: '999' },
+      ] },
+      history: { wins: [{ level: 40, awardType: 'eth_baf', amount: '2' }] },
+    });
+    assert.equal(snapshot.player.prizeHits.length, 62);
+    assert.equal(snapshot.player.eth, '120');
+    assert.equal(snapshot.player.tickets, '3');
+    assert.equal(snapshot.player.whalePassHalves, '14');
+    assert.equal(snapshot.player.wonAny, true);
+  });
+
   test('a skipped gate has no cut survivor and preserves consolation', () => {
     const snapshot = model({ status: 'skipped', player: '0xabc', rank: 12 });
     assert.equal(snapshot.gateWon, false);
@@ -201,7 +223,7 @@ describe('BAF resolution model', () => {
         '/leaderboards/baf?level=40',
         `/player/${PLAYER_4}/baf?level=40`,
         `/player/${PLAYER_4}/jackpot-history`,
-        `/leaderboards/coinflip?day=9&player=${PLAYER_4}`,
+        `/leaderboards/coinflip?day=9&player=${PLAYER_4}&rngWord=1`,
       ]);
     } finally {
       __resetBafResolutionFetcherForTest();

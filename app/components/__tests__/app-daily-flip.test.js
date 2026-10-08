@@ -3574,7 +3574,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(CHIPSET_CSS,
       /\.df-bankroll__chip--total\s*\{[^}]*--df-bankroll-chip-(?:hi|tone|lo)/s,
       'the semantic total marker never introduces a yellow or gold material treatment');
-    assert.match(APP_INDEX, /href="\/app\/styles\/app(?:\.min)?\.css(?:\?[^\"]+)?"[\s\S]*?href="\/app\/styles\/coinflip-chipset\.css"/,
+    assert.match(APP_INDEX, /href="\/app\/styles\/app(?:\.min)?\.css(?:\?[^\"]+)?"[\s\S]*?href="\/app\/styles\/coinflip-chipset\.css(?:\?[^\"]+)?"/,
       'the reviewed chipset loads after the base coinflip geometry');
     assert.match(
       APP_CSS,
@@ -4126,19 +4126,19 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /class="df-tomorrow-bet-oval"[\s\S]*?<boon-product-indicator class="df-table-boon"\s+product="coinflip"><\/boon-product-indicator>[\s\S]*?data-bind="df-tomorrow-chip-rack"/s,
       'the Coinflip deposit boon starts beside the clickable Tomorrow oval');
     assert.match(el.innerHTML,
-      /class="df-table-quest"\s+data-quest-pointer="right"\s+product="coinflip"/s,
-      'the left-edge Coinflip quest waypoint points inward across the felt');
+      /class="df-table-quest"\s+data-quest-pointer="bottom-right"\s+product="coinflip"/s,
+      'the upper-left Coinflip quest bubble points down-right into the wager');
     assert.doesNotMatch(el.innerHTML, /df-next-bet__(?:boon|quest)/,
       'the status icons remain independent from the amount-control markup');
     assert.match(CHIPSET_CSS,
-      /\.df-table-quest\s*\{[^}]*z-index:\s*6;[^}]*top:\s*calc\(var\(--df-score-cap-top\) \+ 1\.8rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem;/s,
-      'the quest waypoint alone stays directly below BAF');
+      /\.df-table-quest\s*\{[^}]*z-index:\s*6;[^}]*top:\s*calc\(50% \+ 0\.45rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem;/s,
+      'the quest bubble sits just above Today’s oval');
     assert.match(CHIPSET_CSS,
       /:is\(\.df-bet-oval, \.df-tomorrow-bet-oval\) > \.df-table-boon\s*\{[^}]*top:\s*50%;[^}]*right:\s*0\.18rem;[^}]*width:\s*1\.05rem;[^}]*height:\s*1\.05rem;[^}]*translate:\s*0 -50%/s,
       'the deposit boon docks at the right side of the active bet oval');
     assert.match(CHIPSET_CSS,
-      /\.jackpot-hero \.df-table-quest\s*\{[^}]*left:\s*calc\(var\(--df-table-content-inset\) \+ 0\.12rem\)/s,
-      'the remaining quest waypoint follows the table inset on the full jackpot board');
+      /\.jackpot-hero \.df-table-quest\s*\{[^}]*left:\s*calc\(50% - min\(6\.8rem, calc\(50% - 3rem\)\) - 0\.3rem\)/s,
+      'the quest bubble follows the upper-left wager corner on the full jackpot board');
     assert.match(DAILY_FLIP_SOURCE,
       /const actionableOval = positionsShifted \? todayOval : lowerOval;[\s\S]*?actionableOval\.appendChild\(depositBoon\)/s,
       'the single boon follows Today when that oval becomes the live Add Bet surface');

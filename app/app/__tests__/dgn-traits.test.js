@@ -1,3 +1,5 @@
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(CURRENT_SCHEMA_HASH);
 // /app/app/__tests__/dgn-traits.test.js — shared Degenerette trait codecs.
 // Run: cd website && node --test app/app/__tests__/dgn-traits.test.js
 //
@@ -14,7 +16,7 @@ import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
   dgnBadgePath, dgnDisplaySymbol, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent, applyDgnTraitColor,
-  dgnPartitionTicketEntries,
+  dgnPartitionTicketEntries, dgnHeroQuadrant, dgnColorName,
 } from '../dgn-traits.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -95,22 +97,36 @@ describe('applyDgnTraitColor', () => {
 });
 
 describe('dgnUnpackTicket', () => {
-  test('byte q → {sym: bits 2:0, col: bits 5:3} (color/symbol NOT swapped)', () => {
+  test('byte q → {sym: bits 2:0, col: bits 5:3} (color/symbol NOT swapped), no quadrant tags', () => {
     // byte 0b00101110 = 0x2E → sym 6, col 5
     const t = dgnUnpackTicket(0x2En);
-    assert.deepEqual(t[0], { sym: 6, col: 5 });
-    assert.deepEqual(t[1], { sym: 0, col: 0 });
+    assert.deepEqual(t[0], { sym: 6, col: 5, wild: false });
+    assert.deepEqual(t[1], { sym: 0, col: 0, wild: false });
   });
-  test('four quadrants LSB-first', () => {
-    // q0=0x01 (sym1), q1=0x08 (col1), q2=0x3F (sym7 col7), q3=0x00
-    const packed = 0x01n | (0x08n << 8n) | (0x3Fn << 16n);
+  test('four lanes LSB-first; bit 6 is a wild lane with no color', () => {
+    // q0=0x01 (sym1), q1=0x08 (col1), q2=0x3F (sym7 col7), q3=0x45 (wild, sym5)
+    const packed = 0x01n | (0x08n << 8n) | (0x3Fn << 16n) | (0x45n << 24n);
     const t = dgnUnpackTicket(packed);
     assert.deepEqual(t, [
-      { sym: 1, col: 0 }, { sym: 0, col: 1 }, { sym: 7, col: 7 }, { sym: 0, col: 0 },
+      { sym: 1, col: 0, wild: false }, { sym: 0, col: 1, wild: false },
+      { sym: 7, col: 7, wild: false }, { sym: 5, col: null, wild: true },
     ]);
+    assert.equal(dgnHeroQuadrant(packed), 3);
+    assert.equal(dgnHeroQuadrant(0x3Fn), null);
   });
   test('garbage input → zeroed traits, no throw', () => {
-    assert.deepEqual(dgnUnpackTicket('not-a-number')[0], { sym: 0, col: 0 });
+    assert.deepEqual(dgnUnpackTicket('not-a-number')[0], { sym: 0, col: 0, wild: false });
+  });
+  test('a wild lane renders on the neutral ring and is named WILD, never color 0', () => {
+    const [wild] = dgnUnpackTicket(0x42n);
+    assert.equal(wild.col, null);
+    assert.equal(dgnColorName(wild.col), 'wild');
+    assert.equal(dgnBadgePath(0, wild.sym, wild.col), dgnBadgePath(0, wild.sym, 6));
+    assert.notEqual(dgnBadgePath(0, wild.sym, wild.col), dgnBadgePath(0, wild.sym, 0));
+    const attrs = {};
+    const el = { style: { setProperty() {} }, setAttribute(name, value) { attrs[name] = value; } };
+    applyDgnTraitColor(el, wild.col);
+    assert.equal(attrs['data-trait-color'], 'wild');
   });
 });
 
@@ -164,7 +180,24 @@ describe('dgnComputeMatches', () => {
     const m = dgnComputeMatches(player, house);
     assert.deepEqual(m.states, ['full', 'sym', 'col', 'miss']);
     assert.equal(m.fullCount, 1);
-    assert.deepEqual(dgnScoringMatchStates(player, house), ['full', 'sym', 'miss', 'miss'],
-      'color-only similarity is a zero-point miss in Degenerette');
+    assert.equal(m.wilds, 0);
+    assert.deepEqual(dgnScoringMatchStates(player, house), ['full', 'sym', 'col', 'miss'],
+      'colors score on their own, so a color-only cell bears a point');
+  });
+
+  test('a wild lane matches any color and house wilds are counted', () => {
+    const player = [
+      { sym: 1, col: null, wild: true }, { sym: 3, col: 4, wild: false },
+      { sym: 5, col: 6, wild: false }, { sym: 7, col: 0, wild: false },
+    ];
+    const house = [
+      { sym: 2, col: 5, wild: false },     // wild hero vs any color: col only
+      { sym: 3, col: null, wild: true },   // house wild: full
+      { sym: 5, col: null, wild: true },   // house wild: full
+      { sym: 0, col: 1, wild: false },     // miss
+    ];
+    const m = dgnComputeMatches(player, house);
+    assert.deepEqual(m.states, ['col', 'full', 'full', 'miss']);
+    assert.equal(m.wilds, 2);
   });
 });

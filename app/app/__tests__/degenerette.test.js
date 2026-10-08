@@ -610,7 +610,7 @@ describe('queued bet word and settled spins', () => {
 
   test('degeneretteSpinPayout matches the Solidity _degenerettePayout on harness vectors', () => {
     const vectors = JSON.parse(readFileSync(
-      new URL('./fixtures/degenerette-payout-vectors.json', import.meta.url), 'utf8'));
+      new URL('./fixtures/legacy/degenerette-payout-vectors.json', import.meta.url), 'utf8'));
     assert.ok(vectors.length > 600);
     for (const [currency, stake, activity, score, gold, expected] of vectors) {
       assert.equal(
@@ -638,7 +638,7 @@ describe('queued bet word and settled spins', () => {
   test('the paid-stake recovery and 1,000,000x ceiling match the Solidity harness', () => {
     // DegeneretteMathHarness.paidStake / capPaidPayout at audit 3c79c1486 (fixtures/README.md).
     const rows = JSON.parse(readFileSync(
-      new URL('./fixtures/degenerette-paid-stake-vectors.json', import.meta.url), 'utf8'));
+      new URL('./fixtures/legacy/degenerette-paid-stake-vectors.json', import.meta.url), 'utf8'));
     assert.equal(rows.length, 168);
     for (const [word, paidUnits, rawUnits, amounts, capped] of rows) {
       const bet = degeneretteMod.decodeDegeneretteBetWord(word);
@@ -1052,7 +1052,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   const stripped = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
   test('uses closure-form sendTx — minimum 2 occurrences (one per writer)', () => {
-    const matches = SRC.match(/sendTx\(\s*\(s\)\s*=>/g) || [];
+    const matches = SRC.match(/sendTx\(\s*(?:async\s*)?\(s\)\s*=>/g) || [];
     assert.ok(matches.length >= 2, `expected >= 2 closure-form sendTx, got ${matches.length}`);
   });
 
@@ -1074,7 +1074,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
   test('payable preflight carries the same ETH value as the wallet send', () => {
     assert.match(
       SRC,
-      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amountArg, tc, sym, \{ value \}\]/,
+      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[await accountArg\(buyer\), cur, amountArg, tc, sym, \{ value \}\]/,
       'ETH bets must not be simulated with msg.value=0',
     );
   });
@@ -1135,7 +1135,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     assert.match(SRC, /parseBetPlacedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
     assert.match(SRC, /parseBetResolvedFromReceipt\(receipt, contract = receiptParser\(\)(, \{ packed = null \} = \{\})?\)/);
     assert.match(SRC, /parseSpinResultsFromReceipt\(receipt, contract = receiptParser\(\)/);
-    assert.match(SRC, /new ethers\.Interface\(DEGENERETTE_ABI\)/);
+    assert.match(SRC, /new ethers\.Interface\(walletAbi\(DEGENERETTE_ABI, run66GAME\)\)/);
   });
 
   test('uses exact contract state probes instead of the retired lootbox RNG poll helper', () => {

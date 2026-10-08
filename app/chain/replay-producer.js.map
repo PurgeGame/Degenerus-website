@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["replay-producer.js"],
+  "sourcesContent": ["// The salt changed at run 66. A deployment must use the producer that generated\n// its settlements, even while another deployment is active in the same site.\nexport function loadCrapsProducer(version) {\n  if (version === 'craps-hot12-own30-longest-v5') return import('./craps-engine.js');\n  if (version === 'craps-hot12-own30-longest-v4') return import('./schemas/5cd4b457/craps-engine.js');\n  throw new Error(`Unsupported craps replay deployment engine version: ${version}`);\n}\n"],
+  "mappings": "+EAEO,gBAAS,kBAAkBA,EAAS,CACzC,GAAIA,IAAY,+BAAgC,MAAO,QAAO,mBAAmB,EACjF,GAAIA,IAAY,+BAAgC,MAAO,QAAO,oCAAoC,EAClG,MAAM,IAAI,MAAM,uDAAuDA,CAAO,EAAE,CAClF,CAJgBC,EAAA",
+  "names": ["version", "__name"]
+}

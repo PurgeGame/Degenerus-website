@@ -6,15 +6,22 @@ import {
   readLightweightModePreference, writeLightweightModePreference, syncLightweightMode,
   AFKING_LOW_FUND_WARNING_STORAGE_KEY,
   ALL_IN_BUTTON_STORAGE_KEY,
+  MINE_FLIP_BUTTON_STORAGE_KEY,
+  HIDE_BALANCES_STORAGE_KEY,
+  readHideBalancesPreference,
+  writeHideBalancesPreference,
+  syncBalancePrivacy,
   BIGGEST_BOUNTIES_MODE_STORAGE_KEY,
   REVEAL_AUTO_OPEN_STORAGE_KEY,
   readAfkingLowFundWarningPreference,
   readAllInButtonPreference,
+  readMineFlipButtonPreference,
   readBiggestBountiesModePreference,
   readRevealAutoOpenPreference,
   subscribeUiPreferences,
   writeAfkingLowFundWarningPreference,
   writeAllInButtonPreference,
+  writeMineFlipButtonPreference,
   writeBiggestBountiesModePreference,
   writeRevealAutoOpenPreference,
 } from '../ui-preferences.js';
@@ -29,6 +36,58 @@ globalThis.localStorage = {
 beforeEach(() => localStorage.clear());
 
 describe('shared UI preferences', () => {
+  test('Hide balances defaults to No and persists ETH/Both choices for live consumers', (t) => {
+    const seen = [];
+    t.after(subscribeUiPreferences(detail => seen.push(detail)));
+    const previousDocument = globalThis.document;
+    const attributes = new Map();
+    globalThis.document = { documentElement: { setAttribute: (key, value) => attributes.set(key, value) } };
+    t.after(() => { globalThis.document = previousDocument; });
+    assert.equal(readHideBalancesPreference(), 'none');
+    for (const mode of ['eth', 'both', 'none']) {
+      assert.equal(writeHideBalancesPreference(mode), mode);
+      assert.equal(localStorage.getItem(HIDE_BALANCES_STORAGE_KEY), mode);
+      assert.equal(readHideBalancesPreference(), mode);
+      assert.equal(attributes.get('data-blur-balances'), mode, 'all balance surfaces update together');
+      assert.deepEqual(seen.at(-1), { name: 'hideBalances', value: mode });
+    }
+    localStorage.setItem(HIDE_BALANCES_STORAGE_KEY, 'both');
+    syncBalancePrivacy();
+    assert.equal(attributes.get('data-blur-balances'), 'both', 'restores the saved mode on load');
+    localStorage.setItem(HIDE_BALANCES_STORAGE_KEY, 'unexpected');
+    assert.equal(readHideBalancesPreference(), 'none');
+    assert.equal(writeHideBalancesPreference('unexpected'), 'none');
+  });
+
+  test('Mine FLIP defaults on, saves either choice, and notifies mounted consumers', (t) => {
+    const seen = [];
+    t.after(subscribeUiPreferences((detail) => seen.push(detail)));
+    assert.equal(readMineFlipButtonPreference(), true);
+    for (const enabled of [false, true]) {
+      assert.equal(writeMineFlipButtonPreference(enabled), enabled);
+      assert.equal(localStorage.getItem(MINE_FLIP_BUTTON_STORAGE_KEY), enabled ? '1' : '0');
+      assert.equal(readMineFlipButtonPreference(), enabled);
+      assert.deepEqual(seen.at(-1), { name: 'mineFlipButton', value: enabled });
+    }
+  });
+
+  test('Mine FLIP can still be switched off when browser storage is unavailable', () => {
+    const saved = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem() { throw new Error('blocked'); },
+      setItem() { throw new Error('blocked'); },
+    };
+    try {
+      writeMineFlipButtonPreference(false);
+      assert.equal(readMineFlipButtonPreference(), false);
+      writeMineFlipButtonPreference(true);
+      assert.equal(readMineFlipButtonPreference(), true);
+    } finally {
+      globalThis.localStorage = saved;
+      writeMineFlipButtonPreference(true);
+    }
+  });
+
   test('automatic reveals stay opt-in and notify live consumers', () => {
     const seen = [];
     const unsubscribe = subscribeUiPreferences((detail) => seen.push(detail));

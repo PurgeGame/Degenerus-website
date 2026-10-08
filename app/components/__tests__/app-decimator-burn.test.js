@@ -78,7 +78,7 @@ describe('<app-decimator-burn>', () => {
     assert.match(CSS, /app-decimator-burn\s*\{[^}]*display:\s*block/s);
     assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-columns:/s);
     assert.match(CSS, /\.dbb__reactor::before[\s\S]*animation:\s*dbb-reactor-spin/s);
-    assert.match(COMPONENT, /src="\/app\/assets\/decimator-draw-mark\.svg"/,
+    assert.match(COMPONENT, /src="\/app\/assets\/decimator-draw-mark\.svg\?v=casino-v2"/,
       'the burn strip uses the dedicated Decimator wheel and selector mark');
     assert.match(COMPONENT, /BURN <img src="\/whitepaper\/flame-logo-split\.svg" alt="FLIP"> TO WIN/,
       'the event cue uses the FLIP mark rather than a generic live-window dot');
@@ -135,18 +135,9 @@ describe('<app-decimator-burn>', () => {
       /<quest-objective-indicator product="decimator"><\/quest-objective-indicator>/,
       'click-to-open quest control lives on the burn CTA');
     assert.match(STATUS_CSS,
-      /\.dbb__burn > quest-objective-indicator\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*right:\s*0\.42rem/s,
-      'the zero-footprint marker is pinned inside the action edge');
+      /\.dbb__burn > quest-objective-indicator\s*\{[^}]*position:\s*absolute[^}]*top:\s*0\.08rem[^}]*right:\s*0\.1rem/s,
+      'the zero-footprint marker is pinned inside the upper-right action corner');
     assert.doesNotMatch(STATUS_CSS, /\.dbb__input-control > quest-objective-indicator/);
-  });
-
-  test('the shared mini wheel has ten slots, one green lower slot, and a gold selector', () => {
-    const mark = readFileSync(new URL('../../assets/decimator-draw-mark.svg', import.meta.url), 'utf8');
-    assert.match(mark, /stroke="url\(#dec-red\)"[\s\S]*stroke-dasharray="9\.45 4\.53"/);
-    assert.match(mark, /stroke="url\(#dec-green\)"[\s\S]*stroke-dasharray="9\.45 130\.35"[\s\S]*rotate\(90 32 32\)/);
-    assert.match(mark, /fill="url\(#dec-gold\)"/);
-    assert.doesNotMatch(mark, /stroke-dasharray="7\.1 4\.55"/,
-      'the previous twelve-slot cadence is gone');
   });
 
   test('has a forced-open visual demo with every aggregate input active', () => {

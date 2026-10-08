@@ -1006,7 +1006,7 @@ describe('Plan 62-02: passes.js source-level invariants', () => {
     // Simulating at value 0 priced the buy from claimable instead of the
     // payment, so the gate could reject a buy the real tx would have settled.
     assert.ok(
-      SRC.includes("c, 'purchaseDeityPass', [buyer, sid, affiliateCode, { value }], signer"),
+      SRC.includes("c, 'purchaseDeityPass', [await accountArg(buyer), sid, affiliateCode, { value }], signer"),
       'deity pre-flight passes the overrides object',
     );
   });

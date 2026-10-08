@@ -400,8 +400,8 @@ const STATUS_CSS = readFileSync(
   new URL('../../styles/status-indicators.css', import.meta.url),
   'utf8',
 );
-const QUEST_LEFT_ICON = readFileSync(
-  new URL('../../assets/quest-objective-tail-left.svg', import.meta.url),
+const QUEST_BOTTOM_LEFT_ICON = readFileSync(
+  new URL('../../assets/quest-objective-tail-bottom-left.svg', import.meta.url),
   'utf8',
 );
 const PURCHASE_LEARN_SRC = readFileSync(
@@ -870,8 +870,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-builder-title > \.dec-input-accessories > quest-objective-indicator\s*\{[^}]*quest-objective-tail-left\.svg[^}]*right:\s*auto;[^}]*left:\s*0;/s,
-      'the first Luckbox marker points its speech tail left toward the title',
+      /\.dec-builder-title > \.dec-input-accessories > quest-objective-indicator\s*\{[^}]*right:\s*auto;[^}]*left:\s*-0\.35rem;/s,
+      'the Luckbox marker points down-left into the title corner',
     );
     assert.match(
       STATUS_CSS,
@@ -890,10 +890,10 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-ticket-piece--ticket > \.dec-ticket-single-quest,[\s\S]*?\.dec-ticket-piece--pack > \.dec-ticket-pack-quest\s*\{[^}]*quest-objective-tail-left\.svg[^}]*top:\s*-0\.14rem;[^}]*right:\s*-0\.1rem;[^}]*width:\s*1\.18rem;[^}]*min-width:\s*0;[^}]*height:\s*1\.18rem;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*translate:\s*none;/s,
-      'single and level quest markers use the full left-pointing bubble at each upper-right corner',
+      /\.dec-ticket-piece--ticket > \.dec-ticket-single-quest,[\s\S]*?\.dec-ticket-piece--pack > \.dec-ticket-pack-quest\s*\{[^}]*top:\s*-0\.6rem;[^}]*right:\s*-0\.2rem;[^}]*width:\s*1\.18rem;[^}]*min-width:\s*0;[^}]*height:\s*1\.18rem;[^}]*min-height:\s*0;[^}]*padding:\s*0;[^}]*translate:\s*none;/s,
+      'single and level quest markers use the down-left bubble at each upper-right corner',
     );
-    assert.match(QUEST_LEFT_ICON, /tail[\s\S]*leaves the bubble's left edge/i,
+    assert.match(QUEST_BOTTOM_LEFT_ICON, /tail leaves the[\s\S]*lower-left edge/i,
       'the shared ticket marker retains its complete speech-bubble point');
     assert.match(
       PURCHASE_DESK_CSS,
@@ -1051,7 +1051,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*3\.1rem minmax\(0, 1fr\) minmax\(6\.45rem, 0\.7fr\);[^}]*gap:\s*0\.3rem;/s,
+      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*var\(--dec-clear-column\) minmax\(0, 1fr\) minmax\(6\.45rem, 0\.7fr\);[^}]*gap:\s*var\(--dec-order-gap\);/s,
       'the buy row reserves enough width to show fractional ticket totals without clipping',
     );
     assert.match(
@@ -1076,12 +1076,12 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       PURCHASE_DESK_CSS,
-      /\.dec-buy-row--flip\s*\{[^}]*grid-template-columns:\s*3\.1rem minmax\(0, 1fr\);[^}]*\}[\s\S]*?\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s,
+      /\.dec-buy-row--flip\s*\{[^}]*grid-template-columns:\s*var\(--dec-clear-column\) minmax\(0, 1fr\);[^}]*\}[\s\S]*?\.dec-buy-row--flip > \.dec-buy-cta\[data-write\]\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*2;/s,
       'FLIP mode gives its detailed burn quote a full-width row beneath Clear and TIX',
     );
     assert.match(
       compactHeroCss,
-      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*3rem minmax\(6\.2rem, 0\.9fr\) minmax\(6\.25rem, 1\.1fr\)[^}]*padding-top:\s*0\.3rem/s,
+      /\.dec-buy-row\s*\{[^}]*grid-template-columns:\s*var\(--dec-clear-column\) minmax\(6\.2rem, 0\.9fr\) minmax\(6\.25rem, 1\.1fr\)[^}]*padding-top:\s*0\.3rem/s,
       'mobile and medium Clear, TIX, and Buy share one compact control line',
     );
     assert.match(
@@ -1864,7 +1864,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-funds-use-wallet"]').hidden, false,
       'a lower funded source can be promoted after expansion');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-label"]').textContent, 'WALLET');
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12');
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '0.02');
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds-claim"]').disabled, false,
@@ -1960,7 +1960,7 @@ describe('combined ticket + lootbox buy', () => {
     el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     assert.equal(
       el.querySelector('[data-bind="dec-funds-wallet"]').textContent,
-      '12,345.67 ETH',
+      '12,345.67',
     );
     el.disconnectedCallback();
   });
@@ -1981,9 +1981,9 @@ describe('combined ticket + lootbox buy', () => {
       'collapsed Total includes Claimable, AFKING, and Wallet');
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable-display"]').hidden, true,
       'individual sources wait for the disclosure to open');
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87');
     assert.equal(el.querySelector('[data-bind="dec-funds-afking-display"]').hidden, true,
       'AFKING waits for the disclosure to open');
     assert.ok(el.querySelectorAll('.dec-funds__priority').every((button) => button.hidden),
@@ -2061,7 +2061,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable-display"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true,
       'wallet waits for the disclosure even when it needs gas');
-    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87');
     el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-funds-afking-display"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false);
@@ -2379,7 +2379,7 @@ describe('combined ticket + lootbox buy', () => {
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
-    assert.match(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, /ETH$/);
+    assert.match(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, /^[\d,.]+$/);
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds"]').classList.contains('dec-funds--flip'), false);
     el.querySelector('[data-bind="dec-funds-claim"]').dispatchEvent({ type: 'click' });
@@ -4632,6 +4632,12 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       'no FLIP balance while the redemption window is closed');
     assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, true,
       'no FLIP affordance while the redemption window is closed');
+    uiPreferencesMod.writeHideBalancesPreference('both');
+    assert.equal(el.querySelector('[data-bind="dec-flip-balance"]').hidden, true,
+      'blurring balances cannot open a closed FLIP redemption window');
+    assert.equal(el.querySelector('.dec-purchase-footer').getAttribute('data-blur-balances'), 'both');
+    assert.equal(el.querySelector('[data-bind="dec-funds-privacy-mode"]').hidden, true, 'privacy never exposes an unavailable currency switch');
+    uiPreferencesMod.writeHideBalancesPreference('none');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
@@ -4665,6 +4671,49 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       'opening the ETH disclosure does not move the inactive FLIP control');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
+  });
+
+  test('Blurred FLIP stays out of Buy In and its currency switch moves into ETH funds', async (t) => {
+    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
+    const el = instantiate();
+    t.after(() => {
+      el.disconnectedCallback();
+      uiPreferencesMod.writeHideBalancesPreference('none');
+      claimsMod.__resetContractFactoryForTest();
+    });
+    await settle(60);
+    const eth = el.querySelector('[data-bind="dec-funds"]');
+    const flip = el.querySelector('[data-bind="dec-flip-balance"]');
+    const footer = el.querySelector('.dec-purchase-footer');
+    const mode = el.querySelector('[data-bind="dec-flip-check"]');
+    for (const privacy of ['none', 'eth', 'both']) {
+      uiPreferencesMod.writeHideBalancesPreference(privacy);
+      assert.equal(footer.getAttribute('data-blur-balances'), privacy);
+      assert.equal(eth.hidden, false, 'privacy preserves the ETH row');
+      assert.equal(flip.hidden, privacy === 'both', 'Buy In omits a private FLIP balance');
+      const slot = el.querySelector('[data-bind="dec-funds-privacy-mode"]');
+      assert.equal(slot.hidden, privacy !== 'both');
+      assert.equal(el.querySelector('.dec-flip-balance__action').parentElement, privacy === 'both' ? slot : flip);
+    }
+
+    el.querySelector('[data-bind="dec-funds-total-flip"]').dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, true);
+    assert.equal(flip.hidden, true, 'switching currency keeps the private FLIP balance out of Buy In');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').textContent, 'USE ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-eth"]').hidden, true, 'one switch occupies the ETH row');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-privacy-mode"]').hidden, false, 'switch remains available while ETH sources are expanded');
+    el.querySelector('[data-bind="dec-funds-total-flip"]').dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, false);
+
+    storeMod.update('app.daySync', { day: 68 });
+    assert.equal(footer.getAttribute('data-blur-balances'), 'both', 'a refreshed snapshot preserves privacy');
+    assert.equal(eth.hidden, false);
+    assert.equal(flip.hidden, true);
+    uiPreferencesMod.writeHideBalancesPreference('none');
+    assert.equal(footer.getAttribute('data-blur-balances'), 'none');
+    assert.equal(flip.hidden, false);
+    assert.equal(el.querySelector('.dec-flip-balance__action').parentElement, flip, 'restores the original control when privacy is off');
   });
 
   test('window OPEN keeps the full-width FLIP balance and its toggle beneath ALL IN', async () => {
@@ -4766,7 +4815,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       PANEL_SRC,
-      /<span class="dec-flip-balance__action">[\s\S]*?data-bind="dec-funds-total-flip"[\s\S]*?<quest-objective-indicator class="dec-redeem-quest"[\s\S]*?data-quest-pointer="left"[\s\S]*?product="redeem-flip"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
+      /<span class="dec-flip-balance__action">[\s\S]*?data-bind="dec-funds-total-flip"[\s\S]*?<quest-objective-indicator class="dec-redeem-quest"[\s\S]*?data-quest-pointer="bottom-left"[\s\S]*?product="redeem-flip"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
       'the redeem quest marker is anchored to the USE FLIP action itself',
     );
     assert.match(
@@ -4776,7 +4825,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       STATUS_CSS,
-      /\.dec-flip-balance__action > \.dec-redeem-quest\s*\{[^}]*top:\s*-0\.32rem;[^}]*left:\s*calc\(100% \+ 0\.43rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
+      /\.dec-flip-balance__action > \.dec-redeem-quest\s*\{[^}]*top:\s*-0\.65rem;[^}]*left:\s*calc\(100% - 0\.35rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
       'the larger badge stays above/right while its lower-left tail aims at USE FLIP',
     );
     assert.match(

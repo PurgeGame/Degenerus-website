@@ -1,3 +1,4 @@
+import * as legacyReels from '../../app/legacy/dgn-reels.js';
 // /app/components/__tests__/app-degenerette-panel.test.js — Phase 62 Plan 62-03 (BUY-05)
 // Run: cd website && node --test app/components/__tests__/app-degenerette-panel.test.js
 //
@@ -344,7 +345,8 @@ import {
 const DGN_NEUTRAL_COLOR = 6; // 'silver'
 const degeneretteChampionBadgePath = (q, icon) => dgnBadgePath(q, icon,
   q === 0 && icon === 0 ? 3 : q === 0 && icon === 6 ? 2 : DGN_NEUTRAL_COLOR);
-import { dgnHouseTraits, dgnScore } from '../../app/dgn-reels.js';
+import { dgnHouseTraits, dgnScoreWilds } from '../../app/dgn-reels.js';
+import { fixtureBetFeedItem } from '../../app/__tests__/helpers/degenerette-fixture-bet.js';
 
 // reveal-overlay.js subclasses HTMLElement at module scope, so it can only be
 // imported AFTER the fakeDOM globals below are installed — hence lazily.
@@ -483,11 +485,11 @@ function placedWord(args) {
   });
 }
 
-/** DegeneretteResolved.spins: 5 bytes per spin — big-endian traits, then score | gold << 4. */
+/** DegeneretteResolved.spins: 5 bytes per spin — big-endian lanes, then score | wilds << 4. */
 function spinsHex(rows) {
-  return '0x' + rows.map(({ traits, score, gold = 0 }) => (
+  return '0x' + rows.map(({ traits, score, wilds = 0 }) => (
     (Number(traits) >>> 0).toString(16).padStart(8, '0')
-      + ((score & 15) | (gold << 4)).toString(16).padStart(2, '0')
+      + ((score & 15) | (wilds << 4)).toString(16).padStart(2, '0')
   )).join('');
 }
 
@@ -1643,7 +1645,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
                 name: 'DegeneretteResolved',
                 args: {
                   player: CONNECTED, index: 7n, betId: 42n, totalPayout: 5n * 10n ** 16n,
-                  resultTraits: 1234n, spins: spinsHex([{ traits: 1234, score: 4 }]),
+                  resultTraits: 1234n, spins: spinsHex([{ traits: 1234, score: 5 }]),
                 },
               },
             },
@@ -1683,9 +1685,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(sequence?.kind, 'degenerette');
     assert.equal(sequence?.currency, 0);
     assert.equal(sequence?.spins?.length, 1);
-    // The spin's payout is priced from the queued word: 0.01 ETH × S4 (10×) ×
+    // The spin's payout is priced from the queued word: 0.01 ETH × S5 (10×) ×
     // 90% at activity 0 — exactly what the retired DegeneretteResult carried.
-    assert.equal(sequence?.spins?.[0]?.payout, 9n * ((10n ** 16n) / BigInt(ETH_DIVISOR)));
+    assert.equal(sequence?.spins?.[0]?.payout, 225n * ((10n ** 15n) / BigInt(ETH_DIVISOR)));
     assert.equal(sequence?.headline, 'BET #7-42');
 
     el.disconnectedCallback();
@@ -2676,7 +2678,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     try {
       await settle();
       assert.match(el.innerHTML, /data-bind="deg-basics-info"[^>]*aria-label="How Degenerette works"/);
-      assert.match(el.innerHTML, /Pick a champion[\s\S]*?champion’s symbol counts double/);
+      assert.match(el.innerHTML, /Pick a champion[\s\S]*?champion is wild and matches any color/);
       assert.match(el.innerHTML, /data-bind="deg-basics-demo"/);
       assert.match(el.innerHTML, /DEMO · NO BET/);
       assert.match(el.innerHTML, /Deity boons[\s\S]*?ETH bets[\s\S]*?Vault’s XRP[\s\S]*?sDGNRS’s ETH/);
@@ -3396,15 +3398,13 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
     globalThis.window.matchMedia = () => ({ matches: true });
     const rngWord = 0xabcdn;
-    const playerTraits = 0x03020100;
+    const playerTraits = 0x2B1A4301; // lane 1 is the wild hero (symbol 3)
     const houses = [0, 1].map((spinIdx) => dgnHouseTraits({
       rngWord,
       index: 7,
       spinIdx,
-      currency: 0,
-      playerTraits,
-      heroQuadrant: 0,
     }));
+    const tails = houses.map((house) => ({score:legacyReels.dgnScore(playerTraits, house, 0), wilds:legacyReels.dgnGoldMatches(playerTraits, house)}));
     degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract({
       resolveLogs: (args) => [
         {
@@ -3418,8 +3418,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
               resultTraits: BigInt(houses[0]),
               // One event carries both spins (audit 224de529).
               spins: spinsHex([
-                { traits: playerTraits, score: dgnScore(playerTraits, houses[0], 0) },
-                { traits: playerTraits, score: dgnScore(playerTraits, houses[1], 0) },
+                { traits: playerTraits, ...tails[0] },
+                { traits: playerTraits, ...tails[1] },
               ]),
             },
           },
@@ -3609,7 +3609,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
                   spinIndex: 1,
                   playerTicket: String(0x04030201n),
                   resultTicket: String(0x07060509n),
-                  score: 2,
+                  score: 3,
                 },
                 { spinIndex: 2, playerTicket: '5', resultTicket: '6', score: 1 },
               ],
@@ -3711,16 +3711,23 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
-  test('Pending opens the reported five-card receipt through the panel', async () => {
+  test('Pending opens a five-card receipt through the panel', async () => {
     revealMod.__takeQueuedForTest();
-    const bet = JSON.parse(readFileSync(new URL('../../app/__tests__/fixtures/degenerette-run55-bet1.json', import.meta.url)));
-    bet.player = CONNECTED.toLowerCase();
+    const { vector, item, amountPerSpin } = await fixtureBetFeedItem(5, { owner: CONNECTED.toLowerCase() });
+    const bet = {
+      ...item,
+      id: 1,
+      blockNumber: '47271947',
+      transactionHash: `0x${'4c'.repeat(32)}`,
+      logIndex: 5,
+    };
+    const resolved = bet.results[0];
     const key = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
-    localStorage.setItem(key, JSON.stringify({ betId: '1', index: '538', currency: 0,
-      amountPerSpin: '1000000000000', spinCount: 5, hero: 0, ticket: '0' }));
+    localStorage.setItem(key, JSON.stringify({ betId: '1', index: String(vector.index), currency: 0,
+      amountPerSpin: String(amountPerSpin), spinCount: 5, hero: vector.symbol >> 3, ticket: '0' }));
     let complete = false;
-    useDegeneretteFeed(() => ({ ...bet, results: complete ? bet.results
-      : bet.results.filter(r => r.resultType === 'resolved') }));
+    useDegeneretteFeed(() => ({ ...bet, results: [complete ? resolved
+      : { ...resolved, resultData: { ...resolved.resultData, spins: undefined } }] }));
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 0n, connect() { return this; },
     }));
@@ -3738,6 +3745,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       const [sequence] = revealMod.__takeQueuedForTest();
       assert.equal(sequence?.spins?.length, 5);
       assert.equal(sequence?.betId, '1');
+      assert.equal(sequence?.spins?.[0]?.houseTraits, Number(BigInt(vector.house)));
       assert.equal(localStorage.getItem(key), null);
     } finally { el.disconnectedCallback(); }
   });

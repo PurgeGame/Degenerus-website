@@ -59,7 +59,7 @@ var Ee=Object.defineProperty;var S=(h,t)=>Ee(h,"name",{value:t,configurable:!0})
           <strong class="df-baf-score__value" data-bind="df-baf-score">—</strong>
         </div>
         <quest-objective-indicator class="df-table-quest"
-                                   data-quest-pointer="right"
+                                   data-quest-pointer="bottom-right"
                                    product="coinflip"></quest-objective-indicator>
         <header class="df-title-bar">
           <div class="df-title-bar__heading">

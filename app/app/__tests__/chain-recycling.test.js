@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_HEADER_TAIL_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_HEADER_TAIL_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
 import { retainedTicketLevels, pendingBoxWord, lootboxWord, lootboxSession, inLootboxSession, liveLootboxWord } from '../../chain/recycling.js';
 import { bingoProof, bingoCandidates } from '../../chain/positions.js';
 
 test('recycled schema keeps retained Bingo open until actual parity reassignment', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     await f.field('GAME', 'level', 3);
@@ -21,7 +21,7 @@ test('recycled schema keeps retained Bingo open until actual parity reassignment
 });
 
 test('binary storage masks processed orders and binds repeated tags by publication order', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     await f.field('GAME', 'rngFlagsAndNudges', (1n << 12n) | (1n << 15n));
@@ -49,7 +49,7 @@ test('binary raw decoder accepts only the published read payload and kills termi
 });
 
 test('same-block publication ordinals isolate repeated physical tags', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 111, requestId: 2 }, { block: 8, index: 1 });
@@ -65,7 +65,7 @@ test('same-block publication ordinals isolate repeated physical tags', async () 
 });
 
 test('an old resolution does not hide a new bet reusing the same physical tag and id', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const { pendingBets } = await import('../../chain/pending.js');
     const f = await rpcFixture();
@@ -79,7 +79,7 @@ test('an old resolution does not hide a new bet reusing the same physical tag an
 
 
 test('header-tail schemas append validity bitmaps and keep deployed stamped-header schemas intact', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const current = await loadSchema('GAME');
     const f = await rpcFixture();

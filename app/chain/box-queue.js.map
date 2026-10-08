@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["box-queue.js"],
+  "sourcesContent": ["import { hasWalletIds } from './schema.js';\nexport const QUEUED_ENTRY_TAG = 1n << 46n;\n/** Purchase buffer/position -> settlement reference; old deployments used the RNG index. */\nexport function boxReference(index, position) {\n  if (!hasWalletIds() || position == null) return BigInt(index);\n  const buffer = BigInt(index), p = BigInt(position);\n  if (buffer < 0n || buffer > 1n || p < 0n || p > 0xffffffffn) throw new RangeError('Invalid box queue position.');\n  return QUEUED_ENTRY_TAG | (p << 1n) | buffer;\n}\nexport function boxQueuePosition(reference) {\n  const ref = BigInt(reference);\n  if (ref < QUEUED_ENTRY_TAG || ref >= 2n * QUEUED_ENTRY_TAG) return null;\n  return { buffer: ref & 1n, position: (ref & (QUEUED_ENTRY_TAG - 1n)) >> 1n };\n}\n"],
+  "mappings": "+EAAA,OAAS,gBAAAA,MAAoB,cACtB,aAAM,iBAAmB,IAAM,IAE/B,gBAAS,aAAaC,EAAOC,EAAU,CAC5C,GAAI,CAACF,EAAa,GAAKE,GAAY,KAAM,OAAO,OAAOD,CAAK,EAC5D,MAAME,EAAS,OAAOF,CAAK,EAAGG,EAAI,OAAOF,CAAQ,EACjD,GAAIC,EAAS,IAAMA,EAAS,IAAMC,EAAI,IAAMA,EAAI,YAAa,MAAM,IAAI,WAAW,6BAA6B,EAC/G,OAAO,iBAAoBA,GAAK,GAAMD,CACxC,CALgBE,EAAA,6BAMT,gBAAS,iBAAiBC,EAAW,CAC1C,MAAMC,EAAM,OAAOD,CAAS,EAC5B,OAAIC,EAAM,kBAAoBA,GAAO,GAAK,iBAAyB,KAC5D,CAAE,OAAQA,EAAM,GAAI,UAAWA,EAAO,iBAAmB,KAAQ,EAAG,CAC7E,CAJgBF,EAAA",
+  "names": ["hasWalletIds", "index", "position", "buffer", "p", "__name", "reference", "ref"]
+}

@@ -3,7 +3,7 @@ var P=Object.defineProperty;var l=(s,t)=>P(s,"name",{value:t,configurable:!0});i
         <header class="dbb__identity">
           <span class="dbb__reactor" aria-hidden="true">
             <span class="dbb__reactor-ring"></span>
-            <img src="/app/assets/decimator-draw-mark.svg" alt="">
+            <img src="/app/assets/decimator-draw-mark.svg?v=casino-v2" alt="">
           </span>
           <span class="dbb__identity-copy">
             <small>LEVEL <span data-bind="dbb-level">—</span> EVENT</small>

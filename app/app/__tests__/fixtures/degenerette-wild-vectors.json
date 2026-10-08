@@ -1,0 +1,384 @@
+{
+  "description": "Canonical Degenerette wild-color reels. Lane byte: bit7 0 | bit6 wild | bits5-3 color | bits2-0 symbol; quadrant = byte position. DegeneretteResolved tail byte = score | houseWilds << 4. BoxSpin spin = player:32 | house:32 | score:8 per 72 bits, count at 216, survived at 224.",
+  "generator": "scripts/data/degenerette_wild_vectors.py",
+  "tables": {
+    "base_centix": [
+      0,
+      0,
+      0,
+      50,
+      300,
+      1000,
+      10000,
+      62500,
+      1817328,
+      23000000
+    ],
+    "eth_add_centix": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      240,
+      4600,
+      105000,
+      22408400
+    ],
+    "wwxrp_s8_centix": 480677,
+    "wwxrp_s9_centix": 100000000,
+    "wwxrp_floor_scaled": 5762468903,
+    "wwxrp_bonus_factors": {
+      "6": 356636,
+      "7": 1825147,
+      "8": 5245201,
+      "9": 2242955
+    },
+    "activity_knees": [
+      0,
+      305,
+      500,
+      30000
+    ],
+    "flip_curve_bps": [
+      9000,
+      9891,
+      9970,
+      9990
+    ],
+    "wwxrp_curve_bps": [
+      7000,
+      12400,
+      12760,
+      13000
+    ]
+  },
+  "producers": [
+    {
+      "rand": "0xd75a18c6d12c58ed025021a185c9e6c5dadb9df5671cdd85284dc0c036f93983",
+      "ordinary": "0x2e292d18",
+      "house": "0x2e294540"
+    },
+    {
+      "rand": "0xd66716e854d5410f42c8a85bac108d24a6634ae0d44ff7bdd8c2b41ae334493e",
+      "ordinary": "0x38232832",
+      "house": "0x38232832"
+    },
+    {
+      "rand": "0x99d0c8439dcfc1fa251eca5711ec03561e1006b8a5c353caf97ce1d81fddb4e0",
+      "ordinary": "0x13371000",
+      "house": "0x13371000"
+    },
+    {
+      "rand": "0x21edf6a1163973dc13811dc6646ea913b0a6a3131604a91cdf0fe17bb64f6f26",
+      "ordinary": "0x211e2333",
+      "house": "0x211e2333"
+    },
+    {
+      "rand": "0xa091610fc5cc18c4d71d6c2f42fdafff66e284a636644dc9b42bc72418b0a6f7",
+      "ordinary": "0x273f0e3c",
+      "house": "0x273f0e3c"
+    },
+    {
+      "rand": "0x9f20cfc7aa73a9d20f8e9c5f0c275a10f503cf616950351cd5fc022036da25c0",
+      "ordinary": "0x17072100",
+      "house": "0x17072100"
+    }
+  ],
+  "bet_spins": [
+    {
+      "word": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "index": 1,
+      "symbol": 0,
+      "spin": 0,
+      "player": "0x063d1940",
+      "house": "0x27112e1d",
+      "score": 1,
+      "wilds": 0,
+      "tail_byte": 1,
+      "activity": 0,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "0",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "0"
+    },
+    {
+      "word": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "index": 1,
+      "symbol": 1,
+      "spin": 0,
+      "player": "0x2b262241",
+      "house": "0x2d183326",
+      "score": 2,
+      "wilds": 0,
+      "tail_byte": 2,
+      "activity": 305,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "0",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "0"
+    },
+    {
+      "word": "0x000000000000000000000000000000000000000000000000000000000000000d",
+      "index": 1,
+      "symbol": 9,
+      "spin": 0,
+      "player": "0x2c2f4137",
+      "house": "0x0c2a0600",
+      "score": 3,
+      "wilds": 0,
+      "tail_byte": 3,
+      "activity": 500,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "4985000000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "498"
+    },
+    {
+      "word": "0x000000000000000000000000000000000000000000000000000000000000001d",
+      "index": 1,
+      "symbol": 17,
+      "spin": 0,
+      "player": "0x27412228",
+      "house": "0x2f184020",
+      "score": 4,
+      "wilds": 1,
+      "tail_byte": 20,
+      "activity": 30000,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "37462500000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "3746"
+    },
+    {
+      "word": "0x000000000000000000000000000000000000000000000000000000000000005a",
+      "index": 1,
+      "symbol": 5,
+      "spin": 3,
+      "player": "0x0d160745",
+      "house": "0x0f151f42",
+      "score": 5,
+      "wilds": 1,
+      "tail_byte": 21,
+      "activity": 0,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "112500000000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "11250"
+    },
+    {
+      "word": "0x000000000000000000000000000000000000000000000000000000000000008f",
+      "index": 1,
+      "symbol": 12,
+      "spin": 7,
+      "player": "0x253b4437",
+      "house": "0x45320437",
+      "score": 6,
+      "wilds": 1,
+      "tail_byte": 22,
+      "activity": 305,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "1266375000000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "123637"
+    },
+    {
+      "word": "0x0000000000000000000000000000000000000000000000000000000000001050",
+      "index": 1,
+      "symbol": 20,
+      "spin": 24,
+      "player": "0x3344200b",
+      "house": "0x43441f43",
+      "score": 7,
+      "wilds": 3,
+      "tail_byte": 55,
+      "activity": 500,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "11709687500000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "1090468"
+    },
+    {
+      "word": "0x000000000000000000000000000000000000000000000000000000000000007f",
+      "index": 1,
+      "symbol": 2,
+      "spin": 0,
+      "player": "0x162b1c42",
+      "house": "0x47254533",
+      "score": 3,
+      "wilds": 2,
+      "tail_byte": 35,
+      "activity": 30000,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "7492500000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "749"
+    },
+    {
+      "word": "0x00000000000000000000000000000000000000000000000000000000000064c5",
+      "index": 1,
+      "symbol": 11,
+      "spin": 0,
+      "player": "0x3f3b430e",
+      "house": "0x2f43430e",
+      "score": 8,
+      "wilds": 2,
+      "tail_byte": 40,
+      "activity": 30000,
+      "eth_stake_wei": "10000000000000000",
+      "eth_payout_wei": "288076600800000000000",
+      "flip_stake": "1000",
+      "flip_payout_pre_survival": "27232660"
+    }
+  ],
+  "flip_survival": [
+    {
+      "word": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "owner": "0x00000000000000000000000000000000000000aa",
+      "bet_id": 1,
+      "survives": true
+    },
+    {
+      "word": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "owner": "0x00000000000000000000000000000000000000aa",
+      "bet_id": 1,
+      "survives": false
+    }
+  ],
+  "box_spins": [
+    {
+      "currency": 3,
+      "award_seed": "0x0000000000000000000000000000000000000000000000000000000000057d10",
+      "spin_seed": "0xfe9612290b4ec4cfd8042365b6527d0782bdb798f79b231bdf73fe5af36e6060",
+      "symbol": 15,
+      "hero": 15,
+      "player": "0x3031473d",
+      "natural_house": "0x3041473d",
+      "house": "0x3041473d",
+      "help_applied": false,
+      "score": 9,
+      "wilds": 2,
+      "activity": 0,
+      "stake": "1000000000000000000",
+      "raw_payout": "864370335450000000000000"
+    },
+    {
+      "currency": 0,
+      "award_seed": null,
+      "spin_seed": "0xfe9612290b4ec4cfd8042365b6527d0782bdb798f79b231bdf73fe5af36e6060",
+      "symbol": 15,
+      "hero": 15,
+      "player": "0x3031473d",
+      "natural_house": "0x3041473d",
+      "house": "0x3041473d",
+      "help_applied": false,
+      "score": 9,
+      "wilds": 2,
+      "activity": 30000,
+      "stake": "10000000000000000",
+      "raw_payout": "6807810000000000000000"
+    },
+    {
+      "currency": 3,
+      "award_seed": "0x0000000000000000000000000000000000000000000000000000000000000003",
+      "spin_seed": "0x82a0abd29e861b1e5b0b9a0e3e142d32ad1e83427e7ad1cf146f181e2876872f",
+      "symbol": 32,
+      "hero": 19,
+      "player": "0x02433812",
+      "natural_house": "0x323e470f",
+      "house": "0x323e470f",
+      "help_applied": false,
+      "score": 3,
+      "wilds": 1,
+      "activity": 305,
+      "stake": "1000000000000000000",
+      "raw_payout": "360154306437500000"
+    },
+    {
+      "currency": 3,
+      "award_seed": "0x0000000000000000000000000000000000000000000000000000000000000006",
+      "spin_seed": "0x6aee103ac6466d8bfb93252edfb242d26524262618b820c8136e3b9205a37376",
+      "symbol": 6,
+      "hero": 6,
+      "player": "0x103f3746",
+      "natural_house": "0x263b311f",
+      "house": "0x263b311f",
+      "help_applied": false,
+      "score": 3,
+      "wilds": 0,
+      "activity": 305,
+      "stake": "1000000000000000000",
+      "raw_payout": "288123445150000000"
+    },
+    {
+      "currency": 3,
+      "award_seed": "0x000000000000000000000000000000000000000000000000000000000000006f",
+      "spin_seed": "0x400121ecb2c03a18318f4b662282acf1e1906d3206a3d85036f43717db47baea",
+      "symbol": 32,
+      "hero": 0,
+      "player": "0x01250740",
+      "natural_house": "0x113a1020",
+      "house": "0x11221020",
+      "help_applied": true,
+      "score": 4,
+      "wilds": 0,
+      "activity": 305,
+      "stake": "1000000000000000000",
+      "raw_payout": "1728740670900000000"
+    },
+    {
+      "currency": 3,
+      "award_seed": "0x00000000000000000000000000000000000000000000000000000000000000ae",
+      "spin_seed": "0x7168a5f5838bb2c6e622eaaa2e4cb8a38544c8d71b9be6af8b2e7537707319ec",
+      "symbol": 6,
+      "hero": 6,
+      "player": "0x0b1d3546",
+      "natural_house": "0x0c35231e",
+      "house": "0x0c35251e",
+      "help_applied": true,
+      "score": 5,
+      "wilds": 0,
+      "activity": 305,
+      "stake": "1000000000000000000",
+      "raw_payout": "5762468903000000000"
+    }
+  ],
+  "flip_box_chain": {
+    "box_seed": "0x2c604bf7eb6b472a4dadec0e2d1bbb5aa5ea8463fa2013307a57e6870620e511",
+    "spins": [
+      {
+        "spin_seed": "0xc7f4b2bd8d1ca978ff875381a46545219f24ad7a0bd668e7b788de89e410dbee",
+        "hero": 14,
+        "player": "0x3a0e4617",
+        "natural_house": "0x0b2c4323",
+        "house": "0x0b2c4323",
+        "help_applied": false,
+        "score": 2,
+        "wilds": 1
+      },
+      {
+        "spin_seed": "0x4e1d12e7468253cd02aeed8ad4dae880c4a2e649c153329e58ce9ffa4fa5cf6c",
+        "hero": 18,
+        "player": "0x2a423614",
+        "natural_house": "0x2a04010a",
+        "house": "0x2a04010a",
+        "help_applied": false,
+        "score": 3,
+        "wilds": 0
+      },
+      {
+        "spin_seed": "0x4f768b455c3ab3cf19009c3bc5ca05bd25d957734643cc113bd8d2d45213b3d9",
+        "hero": 15,
+        "player": "0x01294701",
+        "natural_house": "0x21031132",
+        "house": "0x21031132",
+        "help_applied": false,
+        "score": 2,
+        "wilds": 0
+      }
+    ],
+    "survived": false,
+    "packed_spins": "0x0000000003022103113201294701032a04010a2a423614020b2c43233a0e4617"
+  }
+}

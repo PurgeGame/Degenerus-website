@@ -63,7 +63,7 @@ test('contract ABI integration: a keeper-swept bet feeds its own spins, Luckbox 
   await f.event('GAME','DegeneretteBetPlaced',{player:PLAYER,index:7,betId:1,packed},{block:9990,index:0,tx:placeTx});
   await f.event('COINFLIP','BigRecordUpdated',{kind:1,player:PLAYER,value:10n**18n,paid:900n*10n**18n+5n,sdgnrsPaid:0},{block:9990,index:1,tx:placeTx});
   await f.event('GAME','LootboxRngApplied',{index:7,word:0xabcd},{block:9994,index:0});
-  const spins='0x'+(1234).toString(16).padStart(8,'0')+'04'; // one spin: S4, no gold
+  const spins='0x'+(1234).toString(16).padStart(8,'0')+'05'; // one spin: S5, no house wilds
   const record=(1n<<63n)|(3n<<60n)|5n;
   await f.event('GAME','LootBoxOpened',{player:PLAYER,lootboxIndex:7,amount:1,futureLevel:1,futureTickets:4},{block:9995,index:10,tx:sweepTx}); // human box
   await f.event('GAME','LootBoxOpened',{player:PLAYER,lootboxIndex:0,amount:2,futureLevel:1,futureTickets:4},{block:9995,index:11,tx:sweepTx}); // our direct box
@@ -78,8 +78,8 @@ test('contract ABI integration: a keeper-swept bet feeds its own spins, Luckbox 
   const resolved=item.results.find(r=>r.resultType==='resolved');
   assert.equal(resolved.resultData.spinCount,1);assert.equal(resolved.resultData.spins,spins);
   const [spin]=item.results.filter(r=>r.resultType==='result');
-  assert.equal(spin.resultData.matches,'4');assert.equal(spin.resultData.playerTraits,'1234');
-  assert.equal(spin.payout,String(9n*stake),'S4 at activity 0 is 10x base at 90% — the module payout math');
+  assert.equal(spin.resultData.matches,'5');assert.equal(spin.resultData.playerTraits,'1234');
+  assert.equal(spin.payout,String(225n*stake/10n),'Legacy S5 at activity 0 is 25x base at 90% — the module payout math');
   assert.deepEqual(item.lootboxPayouts.map(p=>[p.rewardType,Number(p.logIndex)]),[['opened',11],['BoxSpin',13]],
     'the sweep\'s human box and the other bettor\'s settlement are not this bet\'s rewards');
 });

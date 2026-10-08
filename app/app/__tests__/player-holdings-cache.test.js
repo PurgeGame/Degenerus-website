@@ -6,7 +6,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { playerHoldings, __resetFarHoldingsCacheForTest } from '../../chain/player.js';
 import { farFutureQueue, clearFarHoldings } from '../../chain/positions.js';
-import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_STABLE_OWNERS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_STABLE_OWNERS_SCHEMA_HASH } from '../../chain/schema.js';
 
 const PLAYER = `0x${'b'.repeat(40)}`;
 
@@ -47,7 +47,7 @@ function fakeSnapshot(active, farOwed = {}) {
   return { s, reads };
 }
 
-beforeEach(() => { useSchema(CURRENT_SCHEMA_HASH); __resetFarHoldingsCacheForTest(); });
+beforeEach(() => { useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); __resetFarHoldingsCacheForTest(); });
 
 test('far-future holdings are read once, then served from cache on every later poll', async () => {
   const first = fakeSnapshot(10, { 40: 3 });
@@ -130,7 +130,7 @@ test('a pinned older deployment still reads its per-level owner records', async 
     };
     const result = await farFutureQueue(s, PLAYER, { levels: [40] });
     assert.deepEqual(result.rows.map(row => [row.level, row.entryCount, row.ownerPosition]), [[40, 3, 2]]);
-  } finally { useSchema(CURRENT_SCHEMA_HASH); }
+  } finally { useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); }
 });
 
 

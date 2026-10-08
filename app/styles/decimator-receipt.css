@@ -38,6 +38,8 @@
   background: rgba(255, 255, 255, 0.035);
   font-size: 0.72rem;
 }
+.dec-receipt__winners .dec-receipt__score { grid-column: 2 / 4; grid-row: 2; font-size: .56rem; }
+.dec-receipt__winners .dec-receipt__prize { grid-column: 4; grid-row: 1 / 3; }
 .dec-receipt__winners li.is-you { outline: 1px solid rgba(170, 255, 223, 0.6); background: rgba(74, 222, 128, 0.08); }
 .dec-receipt__rank { color: #ffbd36; font-weight: 1000; text-align: center; }
 .dec-receipt__name { overflow: hidden; font-family: "Inter", system-ui, sans-serif; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
@@ -47,4 +49,6 @@
   .dec-receipt__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dec-receipt__winners li { grid-template-columns: 1.6rem minmax(0, 1fr) auto; }
   .dec-receipt__peak { display: none; }
+  .dec-receipt__winners .dec-receipt__score { grid-column: 2; }
+  .dec-receipt__winners .dec-receipt__prize { grid-column: 3; }
 }

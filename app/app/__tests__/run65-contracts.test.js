@@ -15,7 +15,7 @@ globalThis.customElements ??= {
 
 const {
   useSchema, loadSchema, hasWholeTokens, hasDecimatorSurvivorSampling, hasRedemptionBatches,
-  hasVariableJackpotPrice, CURRENT_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH,
+  hasVariableJackpotPrice, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH,
   BEFORE_WHOLE_TOKENS_SCHEMA_HASH,
 } = await import('../../chain/schema.js');
 const sampling = await import('../../chain/decimator-sampling.js');
@@ -43,7 +43,7 @@ const withSchema = async (hash, fn) => {
   const previous = useSchema(hash);
   try { return await fn(); } finally { useSchema(previous); }
 };
-const run65 = fn => withSchema(CURRENT_SCHEMA_HASH, fn);
+const run65 = fn => withSchema(BEFORE_WALLET_IDS_SCHEMA_HASH, fn);
 const run64 = fn => withSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH, fn);
 
 describe('schema profiles', () => {
@@ -53,7 +53,7 @@ describe('schema profiles', () => {
       assert.equal(hasDecimatorSurvivorSampling(), true);
       assert.equal(hasRedemptionBatches(), true);
       assert.equal(hasVariableJackpotPrice(), true);
-      const current = await import('../../chain/generated/index.js');
+      const current = await import('../../chain/schemas/5cd4b457/index.js');
       assert.equal(current.CONTRACT_REVISION, '12daf806061f61a3d39f3e2e0e1323b12bc6baa8');
     });
     await run64(async () => {
@@ -388,13 +388,11 @@ describe('sDGNRS redemption batches (audit 01f11477c)', () => {
   }));
 
   test('the new event shapes decode: batch ids, no per-burn ETH or FLIP escrow', () => run65(async () => {
-    const source = flatSol('sDGNRS.sol');
-    for (const signature of [
-      'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint32 indexed batchId);',
-      'event RedemptionClaimed( address indexed player, uint32 indexed batchId, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid );',
-      'function claimParkedRedemption(address player, uint32 batchId) external {',
-      'function claimRedemption(address player, uint32 batchId) external {',
-    ]) assert.ok(source.includes(signature), signature);
+    const schema = new ethers.Interface((await loadSchema('SDGNRS')).abi);
+    assert.equal(schema.getEvent('RedemptionSubmitted').inputs[0].type, 'address');
+    for (const name of ['claimParkedRedemption', 'claimRedemption']) {
+      assert.deepEqual(schema.getFunction(name).inputs.map(input => input.type), ['address','uint32']);
+    }
     const iface = new ethers.Interface([
       'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint32 indexed batchId)',
       'event RedemptionClaimed(address indexed player, uint32 indexed batchId, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid)',

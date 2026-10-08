@@ -13,6 +13,15 @@ body.layout-basic .jackpot-hero > app-decimator-panel {
   --dec-desk-ink: #09070c;
 }
 
+.app-decimator-panel {
+  --dec-clear-column: 3.1rem;
+  --dec-order-gap: 0.3rem;
+}
+
+@media (max-width: 1099px) {
+  .app-decimator-panel { --dec-clear-column: 3rem; }
+}
+
 /* The decorative seal spacer + dormant bonus window exist only as art for
    this sheet. Outside the basic layout they must never paint (deliberate
    namespace exception: this is the off-switch that keeps them inert). */
@@ -2326,13 +2335,17 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-
   transform: scale(1) rotate(-6deg);
 }
 
+/* Corner quest bubbles extend above their purchase frame, including their pulse. */
+body.layout-basic .app-decimator-panel .dec-purchase-builder {
+  overflow: visible;
+}
+
 body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket > .dec-ticket-single-quest,
 body.layout-basic .app-decimator-panel .dec-ticket-piece--pack > .dec-ticket-pack-quest {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
   position: absolute;
   z-index: 14;
-  top: -0.14rem;
-  right: -0.1rem;
+  top: -0.6rem;
+  right: -0.2rem;
   bottom: auto;
   width: 1.18rem;
   min-width: 0;
@@ -2387,10 +2400,9 @@ body.layout-basic .app-decimator-panel .dec-input-group--lootbox
 
 body.layout-basic .app-decimator-panel .dec-input-group--lootbox
   .dec-builder-title > .dec-input-accessories > quest-objective-indicator {
-  --quest-objective-art: url('/app/assets/quest-objective-tail-left.svg');
-  top: 0.14rem;
+  top: -0.35rem;
   right: auto;
-  left: 0;
+  left: -0.35rem;
   width: 1.08rem;
   height: 1.08rem;
 }
@@ -3262,9 +3274,9 @@ body.layout-basic .app-decimator-panel .dec-presale--over-limit .dec-presale__co
 
 body.layout-basic .app-decimator-panel .dec-buy-row {
   display: grid;
-  grid-template-columns: 3.1rem minmax(0, 1fr) minmax(6.45rem, 0.7fr);
+  grid-template-columns: var(--dec-clear-column) minmax(0, 1fr) minmax(6.45rem, 0.7fr);
   align-items: stretch;
-  gap: 0.3rem;
+  gap: var(--dec-order-gap);
   margin-top: 0.06rem;
   padding-top: 0.06rem;
 }
@@ -3404,7 +3416,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-wr
    on a full-width burn action instead of squeezing its two-part quote into the
    narrow ETH purchase column. Clear and TIX stay together on the row above. */
 body.layout-basic .app-decimator-panel .dec-buy-row--flip {
-  grid-template-columns: 3.1rem minmax(0, 1fr);
+  grid-template-columns: var(--dec-clear-column) minmax(0, 1fr);
 }
 
 body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-write] {
@@ -3701,8 +3713,8 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-buy-row {
-    grid-template-columns: 3rem minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
-    gap: 0.3rem;
+    grid-template-columns: var(--dec-clear-column) minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+    gap: var(--dec-order-gap);
     margin-top: 0;
     padding-top: 0.3rem;
   }
@@ -3740,7 +3752,23 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   }
 
   body.layout-basic .app-decimator-panel .dec-buy-row--flip {
-    grid-template-columns: 3rem minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+    grid-template-columns: var(--dec-clear-column) minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+  }
+
+  /* Fit the pass below Clear within the existing 48px control cell. */
+  body.layout-basic .app-decimator-panel .dec-clear-actions {
+    gap: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions > .dec-ticket-clear {
+    height: 1.5rem;
+    min-height: 1.5rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions > .dec-afking-jump {
+    position: static;
+    width: var(--dec-clear-column);
+    height: 1.5rem;
   }
 
   /* Below the three-column desktop hero, the order controls are one compact
@@ -3968,8 +3996,10 @@ body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-
   display: none;
 }
 
-/* Anchor the pass mark directly below Clear, independently of wallet rows. */
+/* The pass occupies the open space under Clear. It never reserves a column
+   in the balance rows or pushes the purchase controls down. */
 .app-decimator-panel .dec-clear-actions {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -3979,6 +4009,100 @@ body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-
 
 .app-decimator-panel .dec-buy-row > .dec-ticket-total__field {
   align-self: start;
+}
+
+.app-decimator-panel .dec-purchase-footer {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--dec-order-gap);
+  margin-top: auto;
+}
+
+.app-decimator-panel .dec-clear-actions > .dec-afking-jump {
+  position: absolute;
+  top: var(--dec-afking-top, calc(100% + 0.5rem));
+  left: 0;
+  /* Preserve the mark's 72:57 proportions as the spare felt grows. */
+  width: calc(min(5.15rem, var(--dec-afking-space, 2.6rem)) * 72 / 57);
+  height: min(5.15rem, var(--dec-afking-space, 2.6rem));
+  min-height: 0;
+  margin: 0;
+}
+
+.app-decimator-panel .dec-clear-actions .dec-afking-jump__face {
+  width: 100%;
+  height: 100%;
+}
+
+/* Desktop FLIP purchases have a second action row. Keep its full-width burn
+   button clear before placing the pass in the space below the order rail. */
+@media (min-width: 1100px) {
+  .app-decimator-panel .dec-buy-row--flip .dec-afking-jump {
+    top: var(--dec-afking-top, calc(100% + var(--dec-order-gap) + 2.55rem + 0.5rem));
+  }
+
+  /* If the expanded ETH breakdown consumes the spare felt, keep the pass
+     under Clear within its existing control cell. */
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions {
+    gap: 0;
+  }
+
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions > .dec-ticket-clear {
+    height: 1.275rem;
+    min-height: 1.275rem;
+  }
+
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions > .dec-afking-jump {
+    position: static;
+    width: var(--dec-clear-column);
+    height: 1.275rem;
+  }
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
+  grid-column: 1;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* When FLIP is private, its currency switch shares the ETH instrument.
+   The existing button and quest marker move together into this slot. */
+.dec-funds__privacy-mode[hidden] { display: none; }
+
+body.layout-basic .app-decimator-panel .dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) {
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.42rem;
+}
+
+.dec-funds__privacy-mode {
+  display: inline-flex;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__summary {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__total {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.dec-funds.is-expanded > .dec-funds__privacy-mode {
+  grid-row: 1;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__breakdown {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 @media (prefers-reduced-motion: reduce) {

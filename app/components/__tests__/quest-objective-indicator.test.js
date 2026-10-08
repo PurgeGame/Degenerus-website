@@ -14,10 +14,6 @@ const QUEST_BOTTOM_LEFT_ICON = readFileSync(
   new URL('../../assets/quest-objective-tail-bottom-left.svg', import.meta.url),
   'utf8',
 );
-const QUEST_RIGHT_ICON = readFileSync(
-  new URL('../../assets/quest-objective-tail-right.svg', import.meta.url),
-  'utf8',
-);
 
 class FakeHTMLElement {
   constructor() {
@@ -243,8 +239,8 @@ describe('<quest-objective-indicator>', () => {
 
   test('uses a distinct quest-waypoint symbol, not boon or bounty language', () => {
     assert.match(STATUS_CSS,
-      /quest-objective-indicator\s*\{[^}]*url\('\/app\/assets\/quest-objective-tail-left\.svg'\)/s,
-      'the shared marker defaults to the full left-facing quote bubble');
+      /quest-objective-indicator\s*\{[^}]*url\('\/app\/assets\/quest-objective-tail-bottom-left\.svg'\)/s,
+      'the shared marker defaults to the down-left corner bubble');
     assert.match(STATUS_CSS,
       /quest-objective-indicator\[hidden\]\s*\{\s*display:\s*none\s*!important/);
     assert.match(QUEST_ICON, /Unfinished quest/);
@@ -255,15 +251,13 @@ describe('<quest-objective-indicator>', () => {
       'the enlarged bubble retains compact punctuation with a clearer gap');
     assert.match(QUEST_BOTTOM_LEFT_ICON, /tail leaves the[\s\S]*lower-left edge/i);
     assert.match(STATUS_CSS,
-      /\[data-quest-pointer="left"\][\s\S]*?quest-objective-tail-left\.svg/s,
-      'right-edge markers can explicitly point left into their action');
+      /\[data-quest-pointer="bottom-right"\]\s*\{[^}]*--quest-objective-flip:\s*-1/s,
+      'upper-left markers mirror the same diagonal artwork');
     assert.match(STATUS_CSS,
-      /\[data-quest-pointer="bottom-left"\][\s\S]*?quest-objective-tail-bottom-left\.svg/s,
-      'hosts can select artwork whose pointer aims back at their control');
-    assert.match(QUEST_RIGHT_ICON, /tail leaves the[\s\S]*right edge/i);
-    assert.match(STATUS_CSS,
-      /\[data-quest-pointer="right"\][\s\S]*?quest-objective-tail-right\.svg/s,
-      'a left-edge game marker can explicitly point right into its felt');
+      /quest-objective-indicator::before\s*\{[^}]*transform:\s*scaleX\(var\(--quest-objective-flip\)\)/s,
+      'only the artwork flips, preserving the count and control');
+    assert.doesNotMatch(STATUS_CSS, /quest-objective-tail-(?:left|right)\.svg/,
+      'side-facing artwork is no longer used');
     assert.match(STATUS_CSS,
       /body\.layout-basic quest-objective-indicator\s*\{[^}]*position:\s*absolute;[^}]*flex:\s*none;/s,
       'quest markers never participate in the host box dimensions');

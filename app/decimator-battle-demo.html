@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decimator Battle Demo</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/decimator-receipt.css">
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs"}}</script>
+  <style>body{margin:0;background:#07080d;color:#fff}.dec-demo-bar{position:fixed;top:.65rem;left:1rem;right:1rem;z-index:4;display:flex;justify-content:space-between;align-items:center;gap:.5rem;font:11px monospace;color:#e9ba66}.dec-demo-bar>div{display:flex;gap:.4rem}.dec-demo-bar button{border:1px solid #e9ba6655;border-radius:4px;background:#17130e;color:#e9ba66;padding:.5rem;cursor:pointer}@media(max-width:520px){.dec-demo-bar{font-size:8px;left:.7rem;right:.7rem}.dec-demo-bar button{font-size:8px;padding:.5rem .3rem}}</style>
+</head>
+<body><nav class="dec-demo-bar" aria-label="Demo controls"><span>LOCAL DEMO · SIMULATED</span><div><button id="miss" type="button">ELIMINATED PLAYER</button> <button id="restart" type="button">RESTART</button></div></nav><main id="battle"></main><script type="module" src="/app/decimator-battle-demo.js"></script></body>
+</html>

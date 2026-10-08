@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fixtureBetFeedItem } from './helpers/degenerette-fixture-bet.js';
 
 test('each history replay links the reward spot to a fresh luckbox presentation', async () => {
   const { degeneretteReplaySequences } = await import('../degenerette-replay.js');
@@ -27,57 +28,10 @@ test('settled replay helpers import without a DOM or interactive panel registrat
   }
 });
 
-// The run #55 fixture is a real Base Sepolia chain feed in the PRE-224de529
-// wire format (per-player nonce, old packed layout, one DegeneretteResult row
-// per spin). Re-express that exact bet in the audit 224de529 format — queued
-// bet word + one DegeneretteResolved carrying `spins` — to prove the new
-// decoding reproduces the same verified reels and the same per-spin payouts
-// the old events carried.
-async function run55BetInNewFormat() {
-  const { dgnHouseTraits, dgnGoldMatches } = await import('../dgn-reels.js');
-  const { degeneretteStakeUnit } = await import('../degenerette.js');
-  const bet = JSON.parse(readFileSync(new URL('./fixtures/degenerette-run55-bet1.json', import.meta.url)));
-  const old = BigInt(bet.packedData);
-  const symbol = Number(old & 0x1Fn);
-  const spinCount = Number((old >> 32n) & 0xFFn);
-  const currency = Number((old >> 40n) & 0x3n);
-  const amountPerSpin = (old >> 42n) & ((1n << 128n) - 1n);
-  const activity = (old >> 202n) & 0xFFFFn;
-  const record = ((old >> 220n) & ((1n << 36n) - 1n)) !== 0n;
-  const stakeUnits = amountPerSpin / degeneretteStakeUnit(currency);
-  assert.equal(stakeUnits * degeneretteStakeUnit(currency), amountPerSpin, 'the run #55 stake is a whole unit');
-  const packed = BigInt(bet.player) | (BigInt(symbol) << 160n) | (BigInt(spinCount) << 165n)
-    | (BigInt(currency) << 170n) | ((record ? 1n : 0n) << 171n) | (activity << 172n) | (stakeUnits << 188n);
-  const rows = bet.results.filter((row) => row.resultType === 'result')
-    .sort((a, b) => Number(a.resultData.spinIndex) - Number(b.resultData.spinIndex));
-  const spins = '0x' + rows.map((row) => {
-    const traits = Number(row.resultData.playerTraits) >>> 0;
-    const house = dgnHouseTraits({ rngWord: bet.rngWord, index: bet.betIndex,
-      spinIdx: Number(row.resultData.spinIndex), currency, playerTraits: traits, heroQuadrant: symbol >> 3 });
-    const tail = Number(row.resultData.matches) | (dgnGoldMatches(traits, house) << 4);
-    return traits.toString(16).padStart(8, '0') + tail.toString(16).padStart(2, '0');
-  }).join('');
-  const resolved = bet.results.find((row) => row.resultType === 'resolved');
-  return {
-    old: bet,
-    oldRows: rows,
-    item: {
-      ...bet,
-      packedData: String(packed),
-      results: [{
-        ...resolved,
-        resultData: {
-          player: bet.player, index: String(bet.betIndex), betId: bet.betId,
-          totalPayout: resolved.resultData.totalPayout, resultTraits: resolved.resultData.resultTraits, spins,
-        },
-      }],
-    },
-  };
-}
-
-test('the reported five-card bet opens a complete replay from its audit 224de529 chain feed', async () => {
+test('a five-card bet opens a complete replay from its DegeneretteResolved wire format', async () => {
   const { degeneretteRevealSequenceFromFeedItem, dgnDecodePacked } = await import('../degenerette-replay.js');
-  const { item, oldRows } = await run55BetInNewFormat();
+  const { ETH_DIVISOR } = await import('../chain-config.js');
+  const { vector, item } = await fixtureBetFeedItem(5);
   assert.equal(dgnDecodePacked(item.packedData).owner, item.player);
   const sequence = degeneretteRevealSequenceFromFeedItem(item);
   assert.ok(sequence, 'a settled bet must produce a reveal');
@@ -86,12 +40,28 @@ test('the reported five-card bet opens a complete replay from its audit 224de529
   assert.equal(sequence.betId, '1');
   assert.equal(sequence.betIndex, String(item.betIndex));
   assert.equal(sequence.headline, `BET #${item.betIndex}-1`, 'betIds restart per index, so the index names the bet');
-  // Per-spin payouts are no longer emitted; the module's math over score,
-  // matched gold, stake and activity reproduces what DegeneretteResult carried.
-  assert.deepEqual(sequence.spins.map((row) => String(row.payout)),
-    oldRows.map((row) => String(row.resultData.payout)));
-  assert.equal(sequence.recordBountySpins.length, 1);
-  assert.deepEqual(sequence.recordBountySpins[0].reels.map(r => r.heroQuadrant), [0, 0, 0]);
+  assert.equal(sequence.heroIdx, vector.symbol >> 3);
+  // Spin 0 is the shared vector: its reel, score and payout.
+  const [zero] = sequence.spins;
+  assert.equal(zero.houseTraits, Number(BigInt(vector.house)));
+  assert.equal(zero.score, vector.score);
+  const expected = BigInt(vector.eth_payout_wei);
+  const gap = expected - zero.payout * BigInt(ETH_DIVISOR);
+  assert.ok(gap >= 0n && gap < BigInt(ETH_DIVISOR), 'the spin pays the vector payout at the chain wei scale');
+  assert.ok(zero.payout > 0n);
+  assert.equal(sequence.recordBountySpins.length, 0);
+});
+
+test('a house reel that disagrees with the emitted wild count fails closed', async () => {
+  const { degeneretteRevealSequenceFromFeedItem } = await import('../degenerette-replay.js');
+  const { item } = await fixtureBetFeedItem(2);
+  const resolved = item.results[0].resultData;
+  // Corrupt spin 1's wild count (the tail byte's bits 4-6).
+  const hex = resolved.spins.slice(2);
+  const tail = parseInt(hex.slice(18, 20), 16) ^ 0x10;
+  resolved.spins = `0x${hex.slice(0, 18)}${tail.toString(16).padStart(2, '0')}`;
+  assert.equal(degeneretteRevealSequenceFromFeedItem(item), null,
+    'an unverifiable later reel never plays a partial round');
 });
 
 test('feed fragments merge per (player, index, betId), never across indices', async () => {

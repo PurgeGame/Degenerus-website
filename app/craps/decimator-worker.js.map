@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["decimator-worker.js"],
+  "sourcesContent": ["import { buildDecimatorReplay } from './decimator-replay.js?v=decimator-skin-20261006';\nself.onmessage = ({ data }) => {\n  try { self.postMessage({ replay: buildDecimatorReplay(data) }); }\n  catch (error) { self.postMessage({ error: error.message }); }\n};\n"],
+  "mappings": "AAAA,OAAS,wBAAAA,MAA4B,kDACrC,KAAK,UAAY,CAAC,CAAE,KAAAC,CAAK,IAAM,CAC7B,GAAI,CAAE,KAAK,YAAY,CAAE,OAAQD,EAAqBC,CAAI,CAAE,CAAC,CAAG,OACzDC,EAAO,CAAE,KAAK,YAAY,CAAE,MAAOA,EAAM,OAAQ,CAAC,CAAG,CAC9D",
+  "names": ["buildDecimatorReplay", "data", "error"]
+}

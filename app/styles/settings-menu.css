@@ -35,7 +35,10 @@ body.layout-basic .nav-settings__panel {
   right: 0;
   box-sizing: border-box;
   width: min(19rem, calc(100vw - 1rem));
+  max-height: calc(100dvh - 10rem);
   overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(245, 166, 35, 0.38);
   border-radius: 13px;
   background:
@@ -278,4 +281,32 @@ body.layout-basic .nav-settings__speed-control output {
     right: 0.5rem;
     width: min(19rem, calc(100vw - 1rem));
   }
+}
+
+/* One number-only privacy treatment for both balance instruments. Currency
+   labels stay sharp; award pulses cannot change the blur or expose a delta. */
+html .app-decimator-panel .dec-funds__number,
+html .app-decimator-panel [data-bind="dec-flip-balance-value"],
+html .app-daily-flip [data-bind="df-funds-flip-total"] {
+  transition: none;
+}
+
+html:is([data-blur-balances="eth"], [data-blur-balances="both"]) .app-decimator-panel .dec-funds__number,
+html[data-blur-balances="both"] .app-decimator-panel [data-bind="dec-flip-balance-value"],
+html[data-blur-balances="both"] .app-daily-flip [data-bind="df-funds-flip-total"] {
+  filter: blur(6px) !important;
+  text-shadow: none;
+  transition: none !important;
+  user-select: none;
+}
+
+html:is([data-blur-balances="eth"], [data-blur-balances="both"]) .dec-funds .balance-rise .dec-funds__value,
+html[data-blur-balances="both"] .df-funds__display--flip-total.balance-rise .df-funds__value {
+  animation: none;
+}
+
+html:is([data-blur-balances="eth"], [data-blur-balances="both"]) .dec-funds .balance-rise::after,
+html[data-blur-balances="both"] .dec-flip-balance.balance-rise::after,
+html[data-blur-balances="both"] .df-funds__display--flip-total.balance-rise::after {
+  display: none;
 }

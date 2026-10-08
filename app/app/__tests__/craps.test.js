@@ -2268,17 +2268,15 @@ test('the craps ABI carries no settlement door: mineFlip settles every field (au
   assert.ok(battle.includes('function closeBattle(uint64 slot) external returns (uint48 index)'));
 });
 
-test('newcomer pricing mirrors CrapsBattle._entryPrice exactly', () => {
+test('newcomer pricing mirrors CrapsBattle account pricing', () => {
   const battle = flatSol('CrapsBattle.sol');
-  assert.ok(battle.includes('function _entryPrice(address player, uint256 basePrice) internal view returns (uint256) { uint256 packed = IGameCraps(_GAME).mintPackedFor(player); if (uint24(packed >> BitPackingLib.LEVEL_COUNT_SHIFT) > 2 || ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1) != 0) return basePrice; uint256 lastMintLevel = uint24(packed); if (lastMintLevel != 0 && lastMintLevel + 1 >= IGameCraps(_GAME).level()) return basePrice; return basePrice + basePrice / 20; }'));
+  assert.ok(battle.includes('function _newcomer(uint32 id) internal view returns (bool)'));
+  assert.ok(battle.includes('uint256 packed = IGameCraps(_GAME).mintPackedOfId(id);'));
+  assert.ok(battle.includes('return lastMintLevel == 0 || lastMintLevel + 1 < IGameCraps(_GAME).level();'));
+  assert.ok(battle.includes('if (account & _ACCOUNT_NEWCOMER != 0) grossAndFlags += ((grossAndFlags >> 8) / 20) << 8;'));
   const bits = flatSol('libraries/BitPackingLib.sol');
   assert.ok(bits.includes('uint256 internal constant LEVEL_COUNT_SHIFT = 24;'));
-  assert.ok(bits.includes('uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;'));
-  // Comps never pay it; every other tagged burn and the paid upgrade do.
-  // Audit b05ea7c50: the burn codec is (whole FLIP << 8) | flags, so the price is `>> 8`.
-  assert.ok(battle.includes('if (grossAndFlags & _CRAPS_FLAG_COMP == 0) { grossAndFlags = _tag(_entryPrice(player, grossAndFlags >> 8), grossAndFlags & 0xFF); }'));
-  assert.ok(battle.includes('else { burned = _entryPrice(player, burned); _burnCoin(burned); }'));
-
+  assert.ok(bits.includes('uint256 internal constant HAS_DEITY_PASS_SHIFT = 172;'));
   const mint = ({ last = 0n, count = 0n, deity = false } = {}) => last | (count << 24n) | (deity ? 1n << 184n : 0n);
   assert.equal(craps.crapsNewcomerPricing(mint(), 5), true, 'no history');
   assert.equal(craps.crapsNewcomerPricing(mint({ last: 3n, count: 2n }), 5), true, 'two levels, none recent');

@@ -10308,7 +10308,9 @@ body.layout-basic .rrt-mining-reward strong { min-width: 0; overflow-wrap: anywh
   .rvl-stage--day-summary {
     width: 100%;
     min-height: calc(100dvh - 1rem);
-    max-height: none;
+    /* Scroll the receipts inside the stage. Scrolling the filtered backdrop
+       also moves its fixed action button over the final jackpot card. */
+    max-height: calc(100dvh - 1rem);
     align-self: flex-start;
     justify-content: flex-start;
     gap: 0.5rem;
@@ -10415,6 +10417,25 @@ body.layout-basic .rrt-mining-reward strong { min-width: 0; overflow-wrap: anywh
 .rvl-rq.q-sym { box-shadow: inset 0 0 0 2px #f5a623; }
 .rvl-rq.q-col { box-shadow: inset 0 0 0 2px rgba(6, 182, 212, 0.8); }
 .rvl-rq.q-miss { opacity: 0.55; }
+
+/* Wild lane: the neutral ring carries a WILD tag in place of a color. */
+.rvl-rq.is-wild,
+body.layout-basic .dgn-rq.is-wild { position: relative; }
+.rvl-rq.is-wild::after,
+body.layout-basic .dgn-rq.is-wild::after {
+  content: 'WILD';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  z-index: 2;
+  text-align: center;
+  font: 800 0.5rem/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+  pointer-events: none;
+}
 
 .rvl-spin-score {
   font-size: 0.72rem;

@@ -68,5 +68,17 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
     const log={...encoded,address:contracts[name],blockNumber:toBeHex(block),blockHash:hash(block),transactionHash:tx,transactionIndex:'0x0',logIndex:toBeHex(index)};logs.push(log);return log;
   };
   const answer=(name,method,values)=>answers.set(name+'.'+method,typeof values==='function'?values:()=>values);
-  return {client,s,field,event,answer,requests,contracts,logs,storage,header};
+  // Run 66 (audit 98cd2a781) wallet IDs: `wallet(id, address)` writes GAME's wallet table row and
+  // answers walletIdOf for it. A smurf row passes `{ owner: ownerId }` instead of an address.
+  const walletIds=new Map();
+  if(interfaces.get(contracts.GAME.toLowerCase())?.iface.getFunction('walletIdOf'))
+    answers.set('GAME.walletIdOf',([a])=>[BigInt(walletIds.get(String(a).toLowerCase())??0)]);
+  const wallet=async(id,address,{owner=0}={})=>{
+    const length=await s.location('GAME','wallets',['length']);const k=key(contracts.GAME,length.slot);
+    if((storage.get(k)??0n)<=BigInt(id))storage.set(k,BigInt(id)+1n);s.reads.clear();
+    const element=(address?BigInt(address):0n)|(BigInt(owner)<<160n);
+    await field('GAME','wallets',element,id);
+    if(address)walletIds.set(address.toLowerCase(),Number(id));
+  };
+  return {client,s,field,event,answer,wallet,requests,contracts,logs,storage,header};
 }

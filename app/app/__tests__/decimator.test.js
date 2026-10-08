@@ -172,7 +172,7 @@ describe('live Decimator display math', () => {
   });
 
   test('decodes the battle entry and round words at the generated schema slots', async () => {
-    const { fields } = await import('../../chain/generated/game.js');
+    const { fields } = await import('../../chain/schemas/5cd4b457/game.js');
     assert.equal(fields.decBattleEntries?.slot, '40');
     assert.equal(fields.decBattleRounds?.slot, '41');
     assert.equal(fields.decBattlePlayers?.slot, '43');
@@ -364,7 +364,7 @@ describe('burnForDecimator', () => {
     assert.equal(result.receipt.status, 1);
     assert.match(
       DECIMATOR_SRC,
-      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(target, amountRaw, board\)/,
+      /sendTx\(\s*\(freshSigner\)\s*=>[\s\S]*?\.decimatorBurn\(id, amountRaw, board\)/,
       'write is built with the fresh signer inside sendTx',
     );
   });

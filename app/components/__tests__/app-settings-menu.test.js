@@ -8,12 +8,14 @@ const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'ut
 const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
 describe('top-bar player settings', () => {
-  test('one gear menu owns sound, feedback, Auto, bounties, reveal speed, AFKing alerts, and eligible ALL IN', () => {
+  test('one gear menu owns sound, feedback, Auto, Mine FLIP, bounties, reveal speed, AFKing alerts, and eligible ALL IN', () => {
     for (const marker of [
       'id = BUTTON_ID',
       'data-bind="settings-actions"',
       'data-bind="settings-lightweight"',
       'data-bind="settings-auto-reveals"',
+      'data-bind="settings-mine-flip-button"',
+      'data-bind="settings-hide-balances-description"',
       'data-bind="settings-bounties-description"',
       'data-bind="settings-reveal-speed"',
       'data-bind="settings-afking-funding-warning"',
@@ -52,6 +54,13 @@ describe('top-bar player settings', () => {
     assert.match(settings, /readDegeneretteSpeed\(\)/);
     assert.match(settings, /writeDegeneretteSpeed\(value\)/);
     assert.match(settings, /writeRevealAutoOpenPreference\(auto\.checked\)/);
+    assert.match(settings, /readMineFlipButtonPreference\(\)/);
+    assert.match(settings, /writeMineFlipButtonPreference\(mineFlip\.checked\)/);
+    assert.match(settings, /readHideBalancesPreference\(\)/);
+    assert.match(settings, /writeHideBalancesPreference\(choice\.dataset\.hideBalances\)/);
+    for (const mode of ['none', 'eth', 'both']) {
+      assert.ok(settings.includes(`data-hide-balances="${mode}"`));
+    }
     assert.match(settings, /readAfkingLowFundWarningPreference\(\)/);
     assert.match(settings, /writeAfkingLowFundWarningPreference\(afkingFundingWarning\.checked\)/);
   });

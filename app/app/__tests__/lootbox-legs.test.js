@@ -9,13 +9,12 @@
 //   roundedUp adds the Bernoulli +1 (LootboxModule.sol:1378-1389).
 // parseOpenLegsFromReceipt: ethers-encoded logs at the GAME address.
 
-import { test, describe, afterEach } from 'node:test';
+import { test, describe, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   OPEN_EVENTS_ABI,
   decodeBoxSpin,
-  boxSpinHeroQuadrant,
   deriveHumanLootboxBoonType,
   deriveHumanLootboxSpinBetIds,
   deriveHumanBoxSpinPayoutAtRisk,
@@ -38,7 +37,7 @@ import { CHAIN, CONTRACTS } from '../chain-config.js';
 // FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
 // Pin that schema so the suite reads the same under any deployment profile; whole-token units
 // (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
 pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
@@ -49,12 +48,10 @@ function packSpin(playerTicket, resultTicket, score) {
   return BigInt(playerTicket) | (BigInt(resultTicket) << 32n) | (BigInt(score) << 64n);
 }
 
-// Audit a5d4d2cd: packedSpins carries each reel's resolved hero quadrant at
-// bits [225 + i*2 .. 226 + i*2]. Test fixtures that care about the decoded
-// heroQuadrant must set it explicitly now (real packed data always does).
-function packReelHero(reelIndex, heroQuadrant) {
-  return BigInt(heroQuadrant & 3) << (225n + BigInt(reelIndex) * 2n);
-}
+// Degenerette lane ticket: byte q = [0 | wild | color | symbol]; the hero
+// lane of a player ticket is its wild lane (0x40 | symbol).
+const lane = (symbol, color = 0, wild = false) => (wild ? 0x40 | symbol : (color << 3) | symbol);
+const ticket = (...lanes) => lanes.reduce((word, byte, q) => word | (BigInt(byte) << BigInt(q * 8)), 0n);
 
 test('lootbox presentation identity converges receipt and indexed paths', () => {
   const tx = `0x${'aa'.repeat(32)}`;
@@ -448,7 +445,7 @@ describe('human BoxSpin payout enrichment', () => {
       survived: false,
       payout: 0n,
       reels: [
-        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 2 },
+        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 3 },
         { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
         { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
       ],
@@ -463,7 +460,7 @@ describe('human BoxSpin payout enrichment', () => {
       spin,
       player: PLAYER,
       ...context,
-    }), 70_783_427_625_000_000_000n);
+    }), 424_700_565_750_000_000_000n);
 
     const [enriched] = await enrichHumanBoxSpinLegs([spin], {
       player: PLAYER,
@@ -471,16 +468,16 @@ describe('human BoxSpin payout enrichment', () => {
       blockNumber: 50_000,
       context,
     });
-    assert.equal(enriched.preSurvivalPayout, 70_783_427_625_000_000_000n);
+    assert.equal(enriched.preSurvivalPayout, 424_700_565_750_000_000_000n);
   });
 
   test('leaves non-FLIP and already-exact spin legs untouched', async () => {
     const exact = {
       legType: 'spin', spinType: 'flip', payout: 0n,
-      preSurvivalPayout: 42n, reels: [{ score: 2 }],
+      preSurvivalPayout: 42n, reels: [{ score: 3 }],
     };
     const wwxrp = {
-      legType: 'spin', spinType: 'wwxrp', payout: 0n, reels: [{ score: 2 }],
+      legType: 'spin', spinType: 'wwxrp', payout: 0n, reels: [{ score: 3 }],
     };
     const rows = [exact, wwxrp];
     assert.equal(await enrichHumanBoxSpinLegs(rows, {
@@ -529,7 +526,7 @@ describe('human BoxSpin payout enrichment', () => {
       survived: false,
       payout: 0n,
       reels: [
-        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 2 },
+        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 3 },
         { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
         { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
       ],
@@ -539,7 +536,7 @@ describe('human BoxSpin payout enrichment', () => {
       blockNumber: 50_000,
     });
 
-    assert.equal(enriched.preSurvivalPayout, 70_783_427_625_000_000_000n);
+    assert.equal(enriched.preSurvivalPayout, 424_700_565_750_000_000_000n);
     assert.deepEqual(reads.map((read) => read.blockTag), [49_999, 49_999, 49_999]);
     assert.deepEqual(new Set(reads.map((read) => read.slot)), new Set([
       boxSlot, rngSlot, timingSlot,
@@ -556,20 +553,20 @@ describe('human BoxSpin payout enrichment', () => {
     const packedBox = amountWei | (amountWei << 128n) | (60n << 192n);
     const context = { rngWord: 123_456_789n, packedBox, currentLevel: 45 };
     const reels = [
-      { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 2 },
+      { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 3 },
       { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
       { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
     ];
-    const stake = 70_783_427_625_000_000_000n;
+    const stake = 424_700_565_750_000_000_000n;
     const base = {
       legType: 'spin', betId: '10440597654418005774', spinType: 'flip', reels,
     };
 
-    // 2 x 70.7834... FLIP sits under FLIP_ROUND_THRESHOLD, so the contract
-    // takes the whole-FLIP floor: 141 FLIP.
-    assert.equal(boxSpinFlipSurvivalPayout(stake, 123n), 141n * oneFlip);
+    // 2 x 424.7005... FLIP sits under FLIP_ROUND_THRESHOLD, so the contract
+    // takes the whole-FLIP floor: 849 FLIP.
+    assert.equal(boxSpinFlipSurvivalPayout(stake, 123n), 849n * oneFlip);
 
-    const won = { ...base, survived: true, payout: 141n * oneFlip };
+    const won = { ...base, survived: true, payout: 849n * oneFlip };
     const busted = { ...base, survived: false, payout: 0n };
     const args = { player: PLAYER, lootboxIndex: 7, blockNumber: 50_000, context };
     const [enrichedWon] = await enrichHumanBoxSpinLegs([won], args);
@@ -581,7 +578,7 @@ describe('human BoxSpin payout enrichment', () => {
       'the losing branch names it too, from identical inputs');
     assert.equal(enrichedWon.preSurvivalPayout, enrichedBusted.preSurvivalPayout,
       'the stake is a property of the reels and the box, never of the coin');
-    assert.equal(enrichedWon.survivalWinPayout, 141n * oneFlip);
+    assert.equal(enrichedWon.survivalWinPayout, 849n * oneFlip);
     assert.equal(enrichedBusted.survivalWinPayout, enrichedWon.survivalWinPayout,
       'the lost branch retains the exact rounded potential win as well as the reel stake');
     assert.equal(
@@ -602,7 +599,7 @@ describe('human BoxSpin payout enrichment', () => {
       // Not reachable from the derived stake under either rounding rule.
       payout: 999n * (10n ** 18n),
       reels: [
-        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 2 },
+        { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 3 },
         { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
         { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
       ],
@@ -621,61 +618,51 @@ describe('human BoxSpin payout enrichment', () => {
 function _feedPayout(value) { return BigInt(value ?? 0); }
 
 describe('decodeBoxSpin', () => {
+  before(() => pinTestSchema(CURRENT_SCHEMA_HASH));
+  after(() => pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH));
   test('single WWXRP spin: type + count + reels + traits decode', () => {
     // betId: box-origin, type 0 (WWXRP), entropy 12345
     const betId = (1n << 63n) | (0n << 60n) | 12345n;
-    // player 0x11223344, result 0x55667788, score 3, count 1, reel-0 hero = 1
-    const packed = packSpin(0x11223344n, 0x55667788n, 3) | (1n << 216n) | packReelHero(0, 1);
+    // Player wild hero on lane 1 (symbol 3); the house rolls a wild on lane 2.
+    const player = ticket(lane(2, 1), lane(3, 0, true), lane(5, 4), lane(6, 2));
+    const result = ticket(lane(2, 1), lane(3, 5), lane(7, 0, true), lane(1, 3));
+    const packed = packSpin(player, result, 4) | (1n << 216n);
     const d = decodeBoxSpin(betId, packed);
     assert.equal(d.betId, betId, 'the synthetic id remains available for replay verification');
     assert.equal(d.boxOrigin, true);
     assert.equal(d.spinType, 'wwxrp');
-    assert.equal(d.heroQuadrant, 1, 'a single-reel spin reads its packed reel hero directly');
+    assert.equal(d.heroQuadrant, 1, 'a single-reel spin reads its hero from the player wild lane');
     assert.equal(d.spinCount, 1);
     assert.equal(d.survived, null, 'survived is FLIP-only');
     assert.equal(d.reels.length, 1);
-    assert.equal(d.reels[0].playerTicket, 0x11223344n);
-    assert.equal(d.reels[0].resultTicket, 0x55667788n);
-    assert.equal(d.reels[0].score, 3);
-    assert.equal(d.reels[0].heroQuadrant, 1, 'the reel carries its own packed hero too');
-    // Trait unpack: byte q → {sym: b&7, col: (b>>3)&7}. 0x44 = 0b01000100 →
-    // sym 4, col 0 (quadrant bits 7-6 ignored).
-    assert.deepEqual(d.reels[0].playerTraits[0], { sym: 4, col: 0 });
+    assert.equal(d.reels[0].playerTicket, player);
+    assert.equal(d.reels[0].resultTicket, result);
+    assert.equal(d.reels[0].score, 4);
+    assert.equal(d.reels[0].heroQuadrant, 1);
+    assert.equal(d.reels[0].wilds, 1, 'the wild count is the house wild lanes');
+    assert.deepEqual(d.reels[0].playerTraits[0], { sym: 2, col: 1, wild: false });
+    assert.deepEqual(d.reels[0].playerTraits[1], { sym: 3, col: null, wild: true });
+    assert.deepEqual(d.reels[0].resultTraits[2], { sym: 7, col: null, wild: true });
   });
 
-  test('the live one-symbol WWXRP win decodes its matching cell as the hero', () => {
-    const betId = 9_350_854_869_760_465_101n;
-    const packed = (2n << 64n)
-      | (4_071_640_845n << 32n)
-      | 3_818_745_606n
-      | (1n << 216n)
-      | packReelHero(0, 1);
-    const decoded = decodeBoxSpin(betId, packed);
-
-    assert.equal(decoded.heroQuadrant, 1);
-    assert.equal(decoded.reels[0].score, 2);
-    assert.equal(decoded.reels[0].playerTraits[1].sym, decoded.reels[0].resultTraits[1].sym);
-    assert.notEqual(decoded.reels[0].playerTraits[1].col, decoded.reels[0].resultTraits[1].col);
-  });
-
-  test('a single-reel spin with no packed hero bits falls back to the betId low bits', () => {
-    // Legacy/synthetic fixture with the hero tail left unset (0).
-    const betId = (1n << 63n) | (0n << 60n) | 12345n; // 12345 & 3 == 1
-    const packed = packSpin(0x11223344n, 0x55667788n, 3) | (1n << 216n);
+  test('a player ticket with no wild lane reads no hero', () => {
+    const betId = (1n << 63n) | (0n << 60n) | 12345n;
+    const packed = packSpin(ticket(lane(1), lane(2), lane(3), lane(4)), ticket(lane(1), lane(2), lane(3), lane(4)), 3)
+      | (1n << 216n);
     const d = decodeBoxSpin(betId, packed);
-    assert.equal(d.reels[0].heroQuadrant, 0, 'the unset packed bits read as quadrant 0');
-    assert.equal(d.heroQuadrant, 0, 'group-level mirrors the (unset) packed reel for a single reel');
-    assert.equal(boxSpinHeroQuadrant(betId), 1, 'the legacy seed-guess helper still exists standalone');
+    assert.equal(d.reels[0].heroQuadrant, null);
+    assert.equal(d.heroQuadrant, null);
+    assert.equal(d.reels[0].wilds, 0);
   });
 
   test('three FLIP spins under one survival flip (survived=true)', () => {
     const betId = (1n << 63n) | (1n << 60n) | 7n; // type 1 = FLIP
-    const packed = packSpin(1n, 2n, 0)
-      | (packSpin(3n, 4n, 5) << 72n)
-      | (packSpin(5n, 6n, 9) << 144n)
+    const hero = (q) => ticket(...[0, 1, 2, 3].map((i) => (i === q ? lane(1, 0, true) : lane(i + 2, i))));
+    const packed = packSpin(hero(0), 2n, 3)
+      | (packSpin(hero(1), 4n, 5) << 72n)
+      | (packSpin(hero(2), ticket(lane(1, 0, true), 0, 0, 0), 9) << 144n)
       | (3n << 216n)   // count 3
-      | (1n << 224n)   // survived
-      | packReelHero(0, 1) | packReelHero(1, 2) | packReelHero(2, 3);
+      | (1n << 224n);  // survived
     const d = decodeBoxSpin(betId, packed);
     assert.equal(d.spinType, 'flip');
     assert.equal(d.heroQuadrant, null,
@@ -685,8 +672,9 @@ describe('decodeBoxSpin', () => {
     assert.equal(d.reels.length, 3);
     assert.equal(d.reels[1].score, 5);
     assert.equal(d.reels[2].score, 9);
-    assert.deepEqual(d.reels.map((reel) => reel.heroQuadrant), [1, 2, 3],
-      'each reel now carries its own exact resolved hero (audit a5d4d2cd)');
+    assert.deepEqual(d.reels.map((reel) => reel.heroQuadrant), [0, 1, 2],
+      'each reel carries its own hero: the wild lane of its player ticket');
+    assert.deepEqual(d.reels.map((reel) => reel.wilds), [0, 0, 1]);
   });
 
   test('ETH spin (type 2), survived flag not set → false is still null-for-non-flip', () => {
@@ -1198,7 +1186,7 @@ describe('readOpenLegsFromChain', () => {
   afterEach(() => contractsMod.clearProvider());
 
   test('current counted box seeds do not depend on spend or a recovered ticket price', (t) => {
-    const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
+    const previous = pinTestSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
     t.after(() => pinTestSchema(previous));
     const context = {
       rngWord: 89340965503094331071506645430717258826669948937240635946072716178043072020739n,
@@ -1214,7 +1202,7 @@ describe('readOpenLegsFromChain', () => {
 
   for (const crossesChunk of [false, true]) {
     test(`recovers the original whole-token spin after its queue index is reused${crossesChunk ? ' across scan chunks' : ''}`, async (t) => {
-      const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
+      const previous = pinTestSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
       t.after(() => pinTestSchema(previous));
       const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
       const purchaseHash = '0x62e20b139ca534c2ba3ab3e86fde0134de8948d19466fc98092847d8faf11375';

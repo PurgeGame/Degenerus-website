@@ -1246,8 +1246,8 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   });
 
   test('the box-state read uses the current schema and physical read buffer', async (t) => {
-    const { loadSchema, useSchema, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
-    const previous = useSchema(CURRENT_SCHEMA_HASH); t.after(() => useSchema(previous));
+    const { loadSchema, useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } = await import('../../chain/schema.js');
+    const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); t.after(() => useSchema(previous));
     const { fields } = await loadSchema('GAME');
     const { ethers } = await import('../contracts.js');
     const coder = ethers.AbiCoder.defaultAbiCoder();

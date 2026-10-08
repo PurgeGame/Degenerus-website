@@ -9,7 +9,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { useSchema, hasWholeTokens, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
+import { CURRENT_SCHEMA_HASH, useSchema, hasWholeTokens, loadSchema, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
 import * as units from '../token-units.js';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
 import { eventFacts } from '../../chain/facts.js';
@@ -38,7 +38,7 @@ const withSchema = async (hash, fn) => {
   const previous = useSchema(hash);
   try { return await fn(); } finally { useSchema(previous); }
 };
-const current = fn => withSchema(CURRENT_SCHEMA_HASH, fn);
+const current = fn => withSchema(BEFORE_WALLET_IDS_SCHEMA_HASH, fn);
 const run63 = fn => withSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH, fn);
 
 describe('the chain boundary unit', () => {
@@ -68,7 +68,7 @@ describe('the chain boundary unit', () => {
   // at least one of the two ABIs.
   test('every rescaled event arg and call output exists in a whole-token ABI', async () => {
     const abis = [];
-    for (const hash of [CURRENT_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH]) {
+    for (const hash of [CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH]) {
       await withSchema(hash, async () => {
         const byContract = {};
         for (const key of [...Object.keys(units.WHOLE_TOKEN_EVENT_FIELDS), ...Object.keys(units.WHOLE_TOKEN_CALL_FIELDS)]) {
@@ -312,7 +312,7 @@ function fakeContract(methods) {
 describe('FLIP/WWXRP transaction arguments are whole tokens', () => {
   let previous;
   beforeEach(() => {
-    previous = useSchema(CURRENT_SCHEMA_HASH);
+    previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
     storeMod.__resetForTest?.();
     storeMod.update('connected.address', CONNECTED);
     storeMod.update('viewing.address', null);

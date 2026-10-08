@@ -47,6 +47,21 @@ describe('jackpot winning-badge layout', () => {
     }
   });
 
+  test('every density clears the center diamond even while tilted and hovered', () => {
+    for (let quadrant = 0; quadrant < 4; quadrant++) {
+      for (let count = 1; count <= 20; count++) {
+        for (const badge of winningBadgeLayout({ count, quadrant, soloIndex: 0, soloSize: 92 })) {
+          const angle = Math.abs(badge.rotation) * Math.PI / 180;
+          const extent = badge.size * 1.055 * (Math.cos(angle) + Math.sin(angle));
+          const left = badge.left + (badge.size - extent) / 2;
+          const right = left + extent;
+          assert.ok(quadrant % 2 === 0 ? right < 72 : left > 28,
+            `q${quadrant} / ${count} badges must clear the center seal`);
+        }
+      }
+    }
+  });
+
   test('keeps a lone solo winner large without entering the receipt', () => {
     const [badge] = winningBadgeLayout({ count: 1, quadrant: 1, soloIndex: 0, soloSize: 95 });
     assert.equal(badge.size, 52);

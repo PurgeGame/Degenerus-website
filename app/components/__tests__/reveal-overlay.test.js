@@ -1,3 +1,5 @@
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(CURRENT_SCHEMA_HASH);
 // /app/components/__tests__/reveal-overlay.test.js — prize reveal engine.
 // Run: cd website && node --test app/components/__tests__/reveal-overlay.test.js
 //
@@ -492,7 +494,7 @@ describe('normalizeSequence', () => {
     assert.deepEqual(seq.cards.map((card) => card.boonTier), [2, 3, 2, 3, 3, 2]);
     assert.equal(seq.cards[0].icon,
       '/app/assets/lootbox/degenerus-lootbox-case-medium-v27-approved-locked-front.webp');
-    assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg');
+    assert.equal(seq.cards[1].icon, '/app/assets/decimator-draw-mark.svg?v=casino-v2');
     assert.equal(seq.cards[2].icon, null,
       'rating is already named on the card and needs no invented pictogram');
     assert.equal(seq.cards[4].icon, '/whitepaper/flame-logo-split.svg');
@@ -951,7 +953,7 @@ describe('normalizeSequence', () => {
       legs: [{
         legType: 'spin', spinType: 'flip', survived: false, payout: 0n,
         reels: [
-          { spinIndex: 0, playerTicket: 0x04030201n, resultTicket: 0x07060509n, score: 2 },
+          { spinIndex: 0, playerTicket: 0x04030201n, resultTicket: 0x07060509n, score: 3 },
           { spinIndex: 1, playerTicket: 5n, resultTicket: 6n, score: 1 },
           { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
         ],
@@ -1369,7 +1371,7 @@ describe('normalizeSequence', () => {
             payout: 240n * 10n ** 18n,
             survived: true,
             reels: [
-              { spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 2 },
+              { spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 3 },
               { spinIndex: 1, playerTicket: 3n, resultTicket: 4n, score: 0 },
               { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 3 },
             ],
@@ -1379,7 +1381,7 @@ describe('normalizeSequence', () => {
             payout: 10n ** 16n,
             ethShare: 5n * 10n ** 15n,
             reels: [
-              { spinIndex: 0, playerTicket: 7n, resultTicket: 8n, score: 2 },
+              { spinIndex: 0, playerTicket: 7n, resultTicket: 8n, score: 3 },
             ],
           }, {
             legType: 'spin',
@@ -1507,6 +1509,45 @@ describe('normalizeSequence', () => {
       kind: 'jackpot', day: 9, prizes: [],
       activity: { crapsWinningsAmount: '1000000000000000000', crapsWinCount: 0 },
     }), null, 'a malformed payout without a winning battle is omitted');
+  });
+
+  test('day summary separates jackpot Craps prizes without double counting or a false NO HIT', () => {
+    const amount = value => String(BigInt(value) * 10n ** 18n);
+    const summary = normalizeSequence({
+      kind: 'jackpot', day: 42, prizes: [], noWin: { sub: 'No trait hit' },
+      activity: {
+        crapsWinningsAmount: amount(2150), crapsWinCount: 7, crapsPayoutCount: 7,
+        crapsJackpotWinningsAmount: amount(2100), crapsJackpotPayoutCount: 6,
+      },
+    });
+    assert.deepEqual(summary.cards.map(card => [card.label, card.value, card.sub]), [
+      ['CRAPS WINNINGS', '+50 FLIP', '1 BATTLE PAYOUT'],
+      ['JACKPOT CRAPS WINNINGS', '+2,100 FLIP', '6 BATTLE PAYOUTS'],
+    ]);
+    assert.equal(summary.consolationOnly, false);
+    const jackpotOnly = normalizeSequence({
+      kind: 'jackpot', day: 42, prizes: [], noWin: { sub: 'No trait hit' },
+      activity: { crapsWinningsAmount: amount(100), crapsWinCount: 1, crapsPayoutCount: 1,
+        crapsJackpotWinningsAmount: amount(100), crapsJackpotPayoutCount: 1 },
+    });
+    assert.equal(jackpotOnly.cards.length, 1);
+    assert.equal(jackpotOnly.cards[0].label, 'JACKPOT CRAPS WINNINGS');
+    assert.equal(jackpotOnly.cards[0].value, '+100 FLIP');
+    const mixedOutcome = normalizeSequence({ kind: 'jackpot', day: 42, consolationOnly: true,
+      prizes: [{ type: 'wwxrp', amount: amount(1) }],
+      activity: { hasCoinflipBet: true, coinflipWon: false, coinflipStakeAmount: amount(10),
+        crapsWinningsAmount: amount(100), crapsWinCount: 1, crapsPayoutCount: 1,
+        crapsJackpotWinningsAmount: amount(100), crapsJackpotPayoutCount: 1 } });
+    assert.equal(mixedOutcome.unlucky, false, 'a lost coinflip cannot label a jackpot Craps win a full loss');
+    const compsOnly = normalizeSequence({ kind: 'jackpot', day: 42, prizes: [], noWin: { sub: 'No trait hit' },
+      activity: { crapsJackpotNormalPasses: 3, crapsJackpotHighPasses: 1 } });
+    assert.deepEqual(compsOnly.cards.map(card => [card.label, card.value]), [
+      ['JACKPOT CRAPS COMPS', '3'], ['JACKPOT HIGH-ROLLER CRAPS COMP', '1'],
+    ], 'banked comps are prizes even without a liquid FLIP payout');
+    assert.equal(normalizeSequence({ kind: 'jackpot', day: 42, prizes: [],
+      activity: { crapsWinningsAmount: '0', crapsWinCount: 0, crapsPayoutCount: 0,
+        crapsJackpotWinningsAmount: '0', crapsJackpotPayoutCount: 0 },
+    }), null, 'a drawn seat without a payout is not a prize');
   });
 
   test('unknown kind / junk → null', () => {
@@ -1692,8 +1733,8 @@ describe('buildBoxSpinBoard', () => {
       estimateBoxAmountWei: 1_000_000_000_000n,
       estimateTicketPriceWei: 10_000_000_000n,
       reels: [
-        { spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
-        { spinIndex: 1, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 3 },
+        { spinIndex: 1, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 3 },
         { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
       ],
     };
@@ -1728,7 +1769,7 @@ describe('buildBoxSpinBoard', () => {
     const board = buildBoxSpinBoard({
       spinType: 'flip', survived: false, payout: 0n,
       survivalWinPayout: 4_200n * oneFlip,
-      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 3 }],
     });
     assert.equal(board.payoutAtRisk, 2_100n * oneFlip);
     assert.equal(board.payoutAtRiskApproximate, false);
@@ -1858,7 +1899,7 @@ describe('buildBoxSpinBoard', () => {
       survived: true,
       payout: 900n,
       reels: [
-        { spinIndex: 0, playerTicket: 0xC3824100n, resultTicket: 0xC7864504n, score: 2 },
+        { spinIndex: 0, playerTicket: 0xC3824100n, resultTicket: 0xC7864504n, score: 3 },
         { spinIndex: 1, playerTicket: 0xC4834201n, resultTicket: 0xC8874605n, score: 5 },
         { spinIndex: 2, playerTicket: 0xC5844302n, resultTicket: 0xC9884706n, score: 9 },
       ],
@@ -1866,7 +1907,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.boxSpin, true);
     assert.equal(board.unit, 'FLIP');
     assert.equal(board.rows.length, 3);
-    assert.deepEqual(board.rows.map((row) => row.score), [2, 5, 9]);
+    assert.deepEqual(board.rows.map((row) => row.score), [3, 5, 9]);
     assert.ok(board.rows.every((row) => row.payout === null),
       'the UI never invents per-reel money the event does not publish');
     assert.equal(board.total, 900n);
@@ -1884,7 +1925,7 @@ describe('buildBoxSpinBoard', () => {
     const legacy = buildBoxSpinBoard({
       spinType: 'flip',
       payout: 900n,
-      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 3 }],
     });
     assert.equal(legacy.survived, true,
       'a positive final payout proves survival when an older feed omits the packed bit');
@@ -1893,20 +1934,21 @@ describe('buildBoxSpinBoard', () => {
       'the board heading stays neutral until the first reel lands');
   });
 
-  test('S2 is the payout floor and a lone first-reel hit gets the visible amount', () => {
+  test('S3 is the payout floor and a lone first-reel hit gets the visible amount', () => {
     const oneFlip = 10n ** 18n;
     const board = buildBoxSpinBoard({
       spinType: 'flip',
       survived: true,
       payout: 119_500n * oneFlip,
       reels: [
-        { spinIndex: 0, playerTicket: 3903807507n, resultTicket: 3548862479n, score: 3 },
-        { spinIndex: 1, playerTicket: 3618336562n, resultTicket: 4156442126n, score: 1 },
-        { spinIndex: 2, playerTicket: 3685501986n, resultTicket: 3297265676n, score: 0 },
+        { spinIndex: 0, playerTicket: 0x1B130B03n, resultTicket: 0x1B130B03n, score: 3 },
+        { spinIndex: 1, playerTicket: 0x1B130B03n, resultTicket: 0x1B130B03n, score: 1 },
+        { spinIndex: 2, playerTicket: 0x1B130B03n, resultTicket: 0x1B130B03n, score: 0 },
       ],
     });
     assert.equal(boxSpinScorePays(1), false);
-    assert.equal(boxSpinScorePays(2), true);
+    assert.equal(boxSpinScorePays(2), false);
+    assert.equal(boxSpinScorePays(3), true);
     assert.deepEqual(board.rows.map((row) => row.won), [true, false, false]);
     assert.equal(board.payoutAtRisk, 59_750n * oneFlip);
     assert.deepEqual(
@@ -1917,7 +1959,7 @@ describe('buildBoxSpinBoard', () => {
       'a lone paying reel owns the entire known survivor pot');
   });
 
-  test('marks the contract-derived Hero independently on each FLIP reel', () => {
+  test('marks the Hero (the player wild lane) independently on each FLIP reel', () => {
     const oneFlip = 10n ** 18n;
     const board = buildBoxSpinBoard({
       betId: 11_026_022_280_916_248_713n,
@@ -1925,64 +1967,56 @@ describe('buildBoxSpinBoard', () => {
       survived: true,
       payout: 170_100n * oneFlip,
       reels: [
-        { spinIndex: 0, playerTicket: 4_203_172_354n, resultTicket: 4_136_200_202n, score: 2 },
-        { spinIndex: 1, playerTicket: 3_835_317_537n, resultTicket: 3_380_768_558n, score: 2 },
-        { spinIndex: 2, playerTicket: 3_968_814_117n, resultTicket: 3_937_362_177n, score: 2 },
+        { spinIndex: 0, playerTicket: 0x1B130B41n, resultTicket: 0x1B130B03n, score: 3 },
+        { spinIndex: 1, playerTicket: 0x1B430B03n, resultTicket: 0x1B130B03n, score: 3 },
+        { spinIndex: 2, playerTicket: 0x1B450B03n, resultTicket: 0x1B130B03n, score: 3 },
       ],
     });
 
     assert.equal(board.heroIdx, null,
       'a three-reel FLIP chain has no truthful board-wide Hero quadrant');
     assert.deepEqual(board.rows.map((row) => row.heroIdx), [0, 2, 2],
-      'each sole symbol match is visibly marked as the Hero +2 that produced its S2 payout');
+      'each reel marks the wild lane of its own player ticket');
     assert.equal(board.total, 170_100n * oneFlip,
-      'correcting Hero attribution does not discard the verified group payout');
+      'the verified group payout is kept');
 
-    const ambiguous = buildBoxSpinBoard({
+    const noWild = buildBoxSpinBoard({
       spinType: 'flip',
       survived: false,
       payout: 0n,
-      reels: [{
-        playerTicket: 4_103_754_283n,
-        resultTicket: 3_853_144_853n,
-        score: 1,
-      }],
+      reels: [{ playerTicket: 0x1B130B03n, resultTicket: 0x1B130B03n, score: 1 }],
     });
-    assert.equal(ambiguous.rows[0].heroIdx, null,
-      'an S1 whose Hero cannot be reconstructed does not invent a misleading marker');
+    assert.equal(noWild.rows[0].heroIdx, null, 'a ticket with no wild lane has no Hero marker');
   });
 
-  test('uses an exact bounty-reel Hero when the packed score is ambiguous', () => {
+  test('a record reel names its Hero from the player wild lane', () => {
     const board = buildBoxSpinBoard({
       spinType: 'record',
       payout: 0n,
       reels: [{
         spinIndex: 0,
-        playerTicket: 0xC0804000n,
-        resultTicket: 0xC1814100n,
-        score: 2,
-        heroQuadrant: 2,
+        playerTicket: 0x1B430B03n,
+        resultTicket: 0x1B130B03n,
+        score: 3,
       }],
     });
-
-    assert.equal(board.rows[0].heroIdx, 2,
-      'the exact parent-seed derivation wins where three Hero choices fit S2');
+    assert.equal(board.rows[0].heroIdx, 2);
   });
 
-  test('a one-symbol box win carries the seed-selected hero into the board', () => {
+  test('a one-symbol box win carries its wild hero lane into the board', () => {
     const board = buildBoxSpinBoard({
       betId: 9_350_854_869_760_465_101n,
       spinType: 'wwxrp',
       payout: 1_436_259_825n,
       reels: [{
-        playerTicket: 3_818_745_606n,
-        resultTicket: 4_071_640_845n,
-        score: 2,
+        playerTicket: 0x1B0B4303n,
+        resultTicket: 0x1B0B0B03n,
+        score: 3,
       }],
     });
 
     assert.equal(board.heroIdx, 1,
-      'the matching Aquarius cell is visibly marked as the +2 hero quadrant');
+      'the wild lane is visibly marked as the hero quadrant');
     assert.equal(board.rows[0].won, true);
   });
 
@@ -2015,7 +2049,7 @@ describe('buildBoxSpinBoard', () => {
       spinType: 'flip',
       survived: false,
       payout: 0n,
-      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 3 }],
     });
     assert.equal(busted.survived, false,
       'a payout-bearing reel plus a false packed bit is a real survival bust');
@@ -2036,7 +2070,7 @@ describe('buildBoxSpinBoard', () => {
           spinIndex: 1,
           playerTicket: 0x04030201n,
           resultTicket: 0x07060509n,
-          score: 2,
+          score: 3,
         },
         { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 1 },
       ],
@@ -2054,7 +2088,7 @@ describe('buildBoxSpinBoard', () => {
     assert.ok(board.payoutAtRisk > 0n,
       'the parent bounty stake reconstructs what its paying reels lost on the final flip');
     assert.equal(board.payoutAtRiskApproximate, false,
-      'the emitted score identifies one hero interpretation for this reel');
+      'every reel names its hero and house wilds, so the stake split is exact');
     assert.ok(board.survivalWinPayout > 0n);
     assert.equal(board.survivalWinPayout % oneFlip, 0n,
       'the potential win follows the contract rounding instead of exposing fractional mint amounts');
@@ -5225,7 +5259,7 @@ describe('reveal-overlay element', () => {
   test('reduced motion keeps manual popping and independent scores on each ticket', async () => {
     queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0,
       totalPayout: 0n, spins: [0, 1].map(spinIndex => ({
-        spinIndex, playerTraits: 0xC0804000, houseTraits: 0xC0804000, score: 9, payout: 0n,
+        spinIndex, playerTraits: 0x1B130B43, houseTraits: 0x1B130B43, score: 9, payout: 0n,
       })),
     });
     const el = instantiate(); await tick();
@@ -5256,15 +5290,15 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
-  test('the champion stays on the player badge through exact, symbol-only, color-only and missed reveals', async () => {
+  test('the champion stays on the player badge through wild-vs-wild, symbol-match, color-only and missed reveals', async () => {
     const cases = [
-      { houseTraits: 0xC0804000, score: 9, points: 3, bonus: true },
-      { houseTraits: 0xC0804008, score: 8, points: 2, bonus: true },
-      { houseTraits: 0xC0804001, score: 7, points: 1, bonus: false },
-      { houseTraits: 0xC0804009, score: 6, points: 0, bonus: false },
+      { houseTraits: 0x1B130B43, score: 9, points: 3, bonus: true },
+      { houseTraits: 0x1B130B03, score: 8, points: 2, bonus: true },
+      { houseTraits: 0x1B130B04, score: 7, points: 1, bonus: false },
+      { houseTraits: 0x00130B04, score: 5, points: 1, bonus: false },
     ];
     queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
-      spins: cases.map((row, spinIndex) => ({ ...row, spinIndex, playerTraits: 0xC0804000, payout: 0n })),
+      spins: cases.map((row, spinIndex) => ({ ...row, spinIndex, playerTraits: 0x1B130B43, payout: 0n })),
     });
     const el = instantiate(); await tick();
     const cards = el.querySelectorAll('.dgn-pop__card');
@@ -5272,7 +5306,6 @@ describe('reveal-overlay element', () => {
       const cell = card.querySelectorAll('.dgn-pop__cell')[0];
       assert.equal(cell.dataset.champion, 'covered');
       assert.ok(cell.querySelector('.bubble-reveal').querySelector('.dgn-pop__champion'));
-      assert.equal(cell.querySelector('.dgn-pop__champion-bonus'), null, 'covered cards never disclose the bonus');
       assert.equal(cell.querySelector('.bubble-reveal__hero'), null, 'the full-size aura is retired from pop boards');
       const chosenBadge = cell.querySelector('.bubble-reveal__badge-art').src;
       clickPop(cell);
@@ -5280,20 +5313,19 @@ describe('reveal-overlay element', () => {
       assert.ok(player.querySelector('.dgn-pop__champion'), 'the glow remains on your badge even after a miss');
       assert.equal(player.querySelector('.dgn-pop__player-art').src, chosenBadge, 'the crown stays with the original selection');
       assert.equal(cell.querySelector('.dgn-pop__hero'), null, 'the house symbol never inherits the champion marker');
-      assert.equal(Boolean(player.querySelector('.dgn-pop__champion-bonus')), cases[index].bonus);
       assert.equal(cell.dataset.champion, cases[index].bonus ? 'match' : 'miss');
       assert.equal(Number(cell.dataset.points), cases[index].points);
       assert.match(cell.getAttribute('aria-label'), cases[index].bonus
-        ? /Champion match: \+1 bonus point included/ : /Champion symbol did not match/);
+        ? /Champion symbol matched/ : /Champion symbol did not match/);
     });
     await revealPops(el);
-    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => Number(node.textContent)), [9, 8, 7, 6]);
+    assert.deepEqual(el.querySelectorAll('.dgn-pop__ticket-score').map(node => Number(node.textContent)), [9, 8, 7, 5]);
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
 
   test('an unverified historical reel stays neutral until its recorded score is revealed', async () => {
     queueReveal({ kind: 'degenerette', currency: 1, heroIdx: 0, totalPayout: 0n,
-      spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: null, score: 1, payout: 0n }],
+      spins: [{ spinIndex: 0, playerTraits: 0x1B130B43, houseTraits: null, score: 1, payout: 0n }],
     });
     const el = instantiate(); await tick();
     clickPop(el.querySelector('.dgn-pop__cell'));
@@ -5311,7 +5343,7 @@ describe('reveal-overlay element', () => {
     for (const lootboxEth of [0n, 5n * 10n ** 15n]) {
       queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0,
         totalPayout: 2n * 10n ** 16n, lootboxEth,
-        spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: 0xC0804000,
+        spins: [{ spinIndex: 0, playerTraits: 0x1B130B43, houseTraits: 0x1B130B43,
           score: 9, payout: 2n * 10n ** 16n }],
       });
       const el = instantiate(); await tick();
@@ -5563,7 +5595,7 @@ describe('reveal-overlay element', () => {
 
   test('Luckbox currency stays sealed until the first board is popped, including misses', async () => {
     queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'wwxrp', payout: 0n,
-      reels: [{ spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC9894909n, score: 0 }],
+      reels: [{ spinIndex: 0, playerTicket: 0x1B130B43n, resultTicket: 0xC9894909n, score: 0 }],
     }] });
     const el = instantiate(); await tick();
     clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta'));
@@ -5582,8 +5614,8 @@ describe('reveal-overlay element', () => {
   test('record boards preserve individual Hero quadrants in the shared spread', async () => {
     queueReveal({ kind: 'record-bounty', spin: { legType: 'spin', spinType: 'record',
       payout: 0n, survived: false, preSurvivalPayout: 500n * 10n ** 18n,
-      reels: [0, 2, 3].map((heroQuadrant, spinIndex) => ({
-        spinIndex, heroQuadrant, playerTicket: 0xC0804000n, resultTicket: 0xC0804000n, score: 9,
+      reels: [0x1B130B43n, 0x1B430B03n, 0x43130B03n].map((ticket, spinIndex) => ({
+        spinIndex, playerTicket: ticket, resultTicket: ticket, score: 9,
       })),
     }});
     const el = instantiate(); await tick();
@@ -5774,7 +5806,7 @@ describe('reveal-overlay element', () => {
             spinIndex: 1,
             playerTicket: 0x04030201n,
             resultTicket: 0x07060509n,
-            score: 2,
+            score: 3,
           },
           { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 1 },
         ],
@@ -5806,8 +5838,8 @@ describe('reveal-overlay element', () => {
       estimateBoxAmountWei: 1_000_000_000_000n,
       estimateTicketPriceWei: 10_000_000_000n,
       reels: [
-        { spinIndex: 0, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
-        { spinIndex: 1, playerTicket: 0xC0804000n, resultTicket: 0xC1814100n, score: 2 },
+        { spinIndex: 0, playerTicket: 0x1B130B43n, resultTicket: 0x1B130B03n, score: 3 },
+        { spinIndex: 1, playerTicket: 0x1B130B43n, resultTicket: 0x1B130B03n, score: 3 },
         { spinIndex: 2, playerTicket: 1n, resultTicket: 2n, score: 0 },
       ],
     };
@@ -6121,27 +6153,28 @@ describe('reveal-overlay element', () => {
       'both winnings lines inherit the same value font as the other fact boxes');
   });
 
-  test('motion mode uses the same pop controls and preserves gold independently of points', async (t) => {
+  test('motion mode uses the same pop controls and shows the house wild bonus independently of points', async (t) => {
     const previous = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
     t.after(() => { window.matchMedia = previous; });
     queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
-      spins: [{ spinIndex: 0, playerTraits: 0xC0804038, houseTraits: 0xC9894939, score: 1, payout: 0n }],
+      spins: [{ spinIndex: 0, playerTraits: 0x1B130B43, houseTraits: 0x24244404, score: 2, payout: 0n }],
     });
     const el = instantiate(); await tick();
-    const cell = el.querySelector('.dgn-pop__cell');
-    assert.equal(cell.querySelector('.dgn-pop__gold'), null, 'covered gold does not announce a match');
-    clickPop(cell);
+    const cells = el.querySelectorAll('.dgn-pop__cell');
+    assert.equal(cells[1].querySelector('.dgn-pop__wild'), null, 'a covered wild does not announce itself');
+    clickPop(cells[0]);
     assert.equal(el.querySelector('.dgn-pop__flame').dataset.points, '1');
-    assert.equal(cell.dataset.points, '1');
-    assert.ok(cell.querySelector('.dgn-pop__gold'));
-    assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'GOLD BONUS ×1.25');
+    assert.equal(cells[0].dataset.points, '1');
+    clickPop(cells[1]);
+    assert.equal(cells[1].dataset.points, '1', 'a house wild scores the player color');
+    assert.equal(cells[1].querySelector('.dgn-pop__wild').textContent, 'WILD');
+    assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'WILD BONUS ×1.25');
     await revealPops(el);
     assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, 'LOSS');
     assert.equal(el.querySelector('.dgn-pop__number').textContent, 'CARD 1 · LOSS');
     assert.equal(el.querySelector('.dgn-pop__gold-total').hidden, true,
-      'a completed loss does not advertise a gold payout boost');
-    assert.equal(cell.querySelector('.dgn-pop__gold').textContent, 'GOLD BONUS');
+      'a completed loss does not advertise a wild payout boost');
     for (let i = 0; i < 120 && el.querySelector('.rvl-dgn-spin-cta').hidden; i++) await tick();
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').hidden, false);
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, false);
@@ -6150,7 +6183,7 @@ describe('reveal-overlay element', () => {
 
   test('closing a partial reveal aborts without completing or accepting later pops', async () => {
     queueReveal({ kind: 'degenerette', currency: 0, heroIdx: 0, totalPayout: 0n,
-      spins: [{ spinIndex: 0, playerTraits: 0xC0804000, houseTraits: 0xC0804000, score: 9, payout: 0n }],
+      spins: [{ spinIndex: 0, playerTraits: 0x1B130B43, houseTraits: 0x1B130B43, score: 9, payout: 0n }],
     });
     const el = instantiate(); await tick();
     const cell = el.querySelector('.dgn-pop__cell');
@@ -6190,7 +6223,7 @@ describe('reveal-overlay element', () => {
     queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'flip', payout: 1000n * 10n ** 18n,
       survived: true, preSurvivalPayout: 500n * 10n ** 18n,
       reels: [0, 1, 2].map(spinIndex => ({ spinIndex, heroQuadrant: 0,
-        playerTicket: 0xC0804000n, resultTicket: 0xC0804000n, score: 9 })),
+        playerTicket: 0x1B130B43n, resultTicket: 0x1B130B43n, score: 9 })),
     }] });
     const el = instantiate(); await tick();
     clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta')); await tick();
@@ -6238,4 +6271,15 @@ test('AFKing seat draw summary identifies the automatically credited FLIP reward
   assert.match(seq.cards[0].value, /4,?000 FLIP/);
   assert.equal(seq.cards[0].sub, 'Credited to your coinflip stake');
   assert.equal(seq.cards[0].summaryDetail, true);
+});
+
+test('Decimator entry awards get their own Day Summary card without an ETH amount', () => {
+  const seq = normalizeSequence({ kind: 'jackpot', day: 447, prizes: [
+    { type: 'decimator-entry', amount: 2n, level: 15, winningTraitIds: [65] },
+  ] });
+  assert.equal(seq.cards.length, 1);
+  assert.equal(seq.cards[0].label, 'DECIMATOR');
+  assert.equal(seq.cards[0].value, '2 ENTRIES');
+  assert.equal(seq.cards[0].sub, 'Level 15 battle');
+  assert.deepEqual(seq.cards[0].winningTraitIds, [65]);
 });

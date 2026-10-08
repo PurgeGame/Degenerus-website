@@ -245,8 +245,8 @@ test('a due Decimator replaces the primary jackpot action and opens the results 
   assert.doesNotMatch(overlay, /iframe|\/decimator-draw\//,
     'the receipt renders in the app; the retired bucket wheel page is not loaded');
   assert.match(overlay,
-    /insertBefore\(renderReceipt\(snapshot, names\), close\)[\s\S]*?onReady\?\.\(\)/,
-    'the result is marked seen only after the receipt is on screen');
+    /mountDecimatorBattle\(snapshot,[\s\S]*?onResults\(detail\)[\s\S]*?onReady\?\.\(\)/,
+    'the battle marks the result seen after its results callback');
   assert.match(overlay, /\/app\/styles\/decimator-receipt\.css/, 'the receipt brings its own stylesheet');
   assert.match(overlay,
     /openDecimatorDraw[\s\S]*?warmupSfx\(\)[\s\S]*?removeActive\(\)/,

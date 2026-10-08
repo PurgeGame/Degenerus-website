@@ -685,13 +685,7 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.getAttribute('aria-label'), 'L25 DECIMATOR');
     assert.equal(action.querySelector('.rrt-action__cta'), null, 'the terse row has no redundant VIEW');
     assert.equal(action.querySelector('.rrt-decimator-mark').src,
-      '/app/assets/decimator-draw-mark.svg', 'Pending keeps the dedicated Decimator wheel');
-    const mark = readFileSync(new URL('../../assets/decimator-draw-mark.svg', import.meta.url), 'utf8');
-    assert.match(mark, /id="dec-green"/);
-    assert.match(mark, /stroke="url\(#dec-green\)"[\s\S]*?transform="rotate\(90 32 32\)"/,
-      'one bottom miniature wheel segment is visibly locked green');
-    assert.match(mark, /M32 4\.8[\s\S]*?fill="url\(#dec-gold\)"/,
-      'the top selector arrow remains gold');
+      '/app/assets/decimator-draw-mark.svg?v=casino-v2', 'Pending uses the shared Decimator emblem');
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1);
