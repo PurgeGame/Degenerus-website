@@ -19,6 +19,10 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
 import { writePurchaseFundingPriority } from '../lootbox.js';
+import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
+// These address-based fixtures cover the historical deployment; run66-writes
+// exercises the allocated-ID write surface independently of the active site.
+useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of claims.test.js shape.

@@ -29,6 +29,7 @@ beforeEach(() => {
   update('viewing.address', null);
   update('ui.mode', 'self');
   _setWalletIdForTests(OTHER, 73);
+  _setWalletIdForTests(SELF, 41);
   setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     getSigner: async () => ({ getAddress: async () => SELF }) });
 });
@@ -67,7 +68,7 @@ const cases = [
   ['WWXRP draw', wwxrp, 'WWXRP', 'enter', [0, 25n], () => wwxrp.burnWwxrp({ amount: 25n * TOKEN })],
   ['sDGNRS burn', sdgnrs, 'SDGNRS', 'burn', [10n ** 12n], () => sdgnrs.burnSdgnrs({ amount: TOKEN })],
   ['wrapped DGNRS burn', sdgnrs, 'SDGNRS', 'burnWrapped', [10n ** 12n], () => sdgnrs.burnDgnrs({ amount: TOKEN })],
-  ['AFKing funding', passes, 'GAME', 'depositAfkingFunding', [0], () => passes.fundAfkingSubscription({ msgValueWei: 100n })],
+  ['AFKing funding', passes, 'GAME', 'depositAfkingFunding', [41], () => passes.fundAfkingSubscription({ msgValueWei: 100n })],
   ['AFKing cancellation', passes, 'GAME', 'subscribe', [0, true, true, 0, 0, 0n], () => passes.updateAfkingSubscription({ dailyQuantity: 0 })],
   ['growth bet', parimutuel, 'PARIMUTUEL', 'placeBet', [0, true], () => parimutuel.placeGrowthBet({ player: SELF, over: true })],
   ['Bingo claim', bingo, 'GAME', 'claimBingo', [73, 2, 1, [0,1,2,3,4,5,6,7]], () => bingo.claimBingo({ player: OTHER, level: 2, symbol: 1, slots: [0,1,2,3,4,5,6,7] })],

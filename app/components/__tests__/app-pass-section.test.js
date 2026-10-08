@@ -13,6 +13,8 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); // this suite's contract doubles use the historical address ABI
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-decimator-panel.test.js — Phase 62 Plan 62-01).
