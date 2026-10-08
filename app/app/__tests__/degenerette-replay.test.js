@@ -1,3 +1,5 @@
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(CURRENT_SCHEMA_HASH);
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,8 +18,8 @@ test('each history replay links the reward spot to a fresh luckbox presentation'
 test('settled replay helpers import without a DOM or interactive panel registration', async () => {
   assert.equal(typeof globalThis.HTMLElement, 'undefined');
   const replay = await import('../degenerette-replay.js');
-  // Audit 224de529 queued word: spinCount lives at bits 165..169.
-  assert.equal(replay.dgnDecodePacked((3n << 165n).toString()).spinCount, 3);
+  // Wallet-ID queued word: spinCount lives at bits 37..41.
+  assert.equal(replay.dgnDecodePacked((3n << 37n).toString()).spinCount, 3);
   assert.deepEqual(replay.degeneretteReplaySequences({ kind: 'degenerette' }), [{ kind: 'degenerette' }]);
   assert.equal(typeof globalThis.customElements, 'undefined');
   for (const name of ['app-day-history-replays', 'app-transaction-history']) {
@@ -32,7 +34,7 @@ test('a five-card bet opens a complete replay from its DegeneretteResolved wire 
   const { degeneretteRevealSequenceFromFeedItem, dgnDecodePacked } = await import('../degenerette-replay.js');
   const { ETH_DIVISOR } = await import('../chain-config.js');
   const { vector, item } = await fixtureBetFeedItem(5);
-  assert.equal(dgnDecodePacked(item.packedData).owner, item.player);
+  assert.equal(dgnDecodePacked(item.packedData).playerId, 37);
   const sequence = degeneretteRevealSequenceFromFeedItem(item);
   assert.ok(sequence, 'a settled bet must produce a reveal');
   assert.equal(sequence.spins.length, 5);

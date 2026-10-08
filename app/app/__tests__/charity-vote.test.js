@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import * as charityVoteMod from '../charity-vote.js';
 import * as contractsMod from '../contracts.js';
 import * as storeMod from '../store.js';
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(CURRENT_SCHEMA_HASH);
 import { CHAIN } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
@@ -62,7 +64,7 @@ describe('GNRUS charity approval voting', () => {
     const sdgnrs = {
       balanceOf: async (...args) => {
         calls.push(['balance', ...args]);
-        return 12_345n * TOKEN;
+        return 12_345n * 10n ** 12n; // Native sDGNRS units; the app displays normalized 18-decimal units.
       },
     };
     charityVoteMod.__setContractFactoriesForTest({
@@ -76,8 +78,8 @@ describe('GNRUS charity approval voting', () => {
     assert.equal(state.level, 43);
     assert.equal(state.votingPower, 12_345n * TOKEN);
     assert.deepEqual(state.candidates, [
-      { slot: 0, recipient: PRIOR, weight: 9_000n, voted: false, previousWinner: true },
-      { slot: 3, recipient: ACTIVE, weight: 4_250n, voted: true, previousWinner: false },
+      { slot: 0, recipient: PRIOR, weight: 9_000n * 10n ** 6n, voted: false, previousWinner: true },
+      { slot: 3, recipient: ACTIVE, weight: 4_250n * 10n ** 6n, voted: true, previousWinner: false },
     ]);
     assert.ok(calls.length >= 8);
     for (const call of calls) {

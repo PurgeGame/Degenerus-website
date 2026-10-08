@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { loadSchema } from '../../chain/schema.js';
 import { Interface } from '../../vendor/ethers-app.mjs';
 import { ChainClient, mappingSlot, wordHex, contractInterface } from '../../chain/client.js';
 
@@ -29,6 +30,8 @@ test('unconfigured next deployment cannot read old addresses with the new schema
 });
 
 test('slot reads coalesce, use the exact block hash, and decode a mapping value', async () => {
+  const schema = await loadSchema('GAME');
+  const generationSlot = BigInt(schema.fields.ticketGenerationStartBlock.slot);
   const calls = [];
   const read = client(async (method, args) => {
     calls.push({ method, args });
@@ -36,7 +39,7 @@ test('slot reads coalesce, use the exact block hash, and decode a mapping value'
     if (method === 'eth_getBlockByNumber') return header;
     assert.equal(method, 'eth_call');
     assert.deepEqual(args[1], { blockHash: HASH, requireCanonical: true });
-    assert.equal(args[0].data, '0x1e2eaeaf' + wordHex(mappingSlot(70n, 7n)).slice(2));
+    assert.equal(args[0].data, '0x1e2eaeaf' + wordHex(mappingSlot(generationSlot, 7n)).slice(2));
     return wordHex(42);
   });
   const state = await read.snapshot();

@@ -2,7 +2,7 @@
 // deployment ABI, so renamed methods, bad arguments and tuple shapes fail tests.
 import { Interface, toBeHex } from '../../../vendor/ethers-app.mjs';
 import { ChainClient, contractInterface, wordHex } from '../../../chain/client.js';
-import { activeSchemaHash, isRun56Schema } from '../../../chain/schema.js';
+import { activeSchemaHash, isRun56Schema, hasWalletIds } from '../../../chain/schema.js';
 const names = ['GAME','GAME_LENS','COIN','COINFLIP','CRAPS','QUESTS','AFFILIATE','JACKPOTS','PARIMUTUEL','DEITY_PASS','WWXRP','SDGNRS','DGNRS','GNRUS','VAULT','ADMIN','AFKING_SUB_TOKEN','COIN_DRAW_BATTLE','JACKPOT_BATTLE'];
 const multi = new Interface(['function blockAndAggregate((address target,bytes callData)[] calls) payable returns (uint256 blockNumber,bytes32 blockHash,(bool success,bytes returnData)[] returnData)', 'function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
 export const PLAYER = '0x1234567890123456789012345678901234567890';
@@ -56,7 +56,7 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
     if(method==='eth_getTransactionReceipt'){const selected=logs.filter(l=>l.transactionHash===params[0]);if(!selected.length)return null;return {...selected[0],logs:selected};}
     throw Error('Unexpected RPC '+method);
   }};
-  const client=new ChainClient({provider,contracts,chain:{id:chainId,deployBlock:1,readSchema:activeSchemaHash()},clock:{anchor:0,period,deployDayBoundary:0}});
+  const client=new ChainClient({provider,contracts,chain:{id:chainId,deployBlock:1,readSchema:activeSchemaHash(),crapsReplayEngineVersion:hasWalletIds()?'craps-hot12-own30-longest-v5':'craps-hot12-own30-longest-v4'},clock:{anchor:0,period,deployDayBoundary:0}});
   const s=await client.snapshot();
   const field=async(name,label,value,...path)=>{
     const l=await s.location(name,label,path);const shift=BigInt(l.offset*8), mask=((1n<<BigInt(l.shape.bytes*8))-1n)<<shift;

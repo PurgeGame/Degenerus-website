@@ -1,3 +1,6 @@
+// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
+import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
+pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveFoil, foilCuts, deriveTraits, decodeEntryReveal, isFoil, ticketStreamReplay } from '../../chain/traits.js';

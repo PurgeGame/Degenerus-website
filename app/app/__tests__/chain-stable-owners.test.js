@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rpcFixture, PLAYER, OTHER_PLAYER } from './helpers/chain-rpc.js';
 import { bingoProof } from '../../chain/positions.js';
-import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_STABLE_OWNERS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_STABLE_OWNERS_SCHEMA_HASH } from '../../chain/schema.js';
 
 async function seedRetainedLevel(f, level) {
   await f.field('GAME', 'ticketBufferLevels', BigInt(level) | (BigInt(level + 1) << 24n));
@@ -21,7 +21,7 @@ function answerProof(f, expectedIndex, expectedLevel) {
 }
 
 test('permanent Bingo owner is ID minus one without a registration-history scan', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     const id = 3_000_000_001;
@@ -37,7 +37,7 @@ test('permanent Bingo owner is ID minus one without a registration-history scan'
 });
 
 test('unregistered permanent owner cannot fabricate a Bingo proof', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     await seedRetainedLevel(f, 2);
@@ -47,7 +47,7 @@ test('unregistered permanent owner cannot fabricate a Bingo proof', async () => 
 });
 
 test('permanent Bingo discovery verifies the ID resolves back to the same wallet', async () => {
-  const previous = useSchema(CURRENT_SCHEMA_HASH);
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   try {
     const f = await rpcFixture();
     await seedRetainedLevel(f, 2);

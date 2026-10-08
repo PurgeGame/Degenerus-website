@@ -60,18 +60,19 @@ async function jackpotDay(schema) {
   useSchema(schema);
   const f = await rpcFixture(); const block = 9999; let index = 0;
   const run56 = schema === RUN56_SCHEMA_HASH;
+  if (!run56) { await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER); }
   await f.field('GAME', 'dailyFoilDraw', run56 ? packRun56(MAIN, BONUS, LEVEL) : packCurrent(MAIN, LEVEL), DAY);
   await f.event('GAME', 'DailyRngApplied', { day: DAY, rawWord: 777, finalWord: 777 }, { block, index: index++ });
   await f.event('GAME', 'DailyWinningTraits', run56
     ? { day: DAY, mainTraitsPacked: MAIN, bonusTraitsPacked: BONUS, bonusTargetLevel: LEVEL + 1 }
     : { day: DAY, mainTraitsPacked: MAIN }, { block, index: index++ });
-  await f.event('GAME', 'JackpotEthWin', { winner: PLAYER, level: LEVEL, traitId: 0x00, amount: 5n * WEI, entryIndex: 1 }, { block, index: index++ });
-  await f.event('GAME', 'JackpotTicketWin', { winner: OTHER_PLAYER, entryLevel: LEVEL + 1, traitId: 0x41, entryCount: 8, sourceLevel: LEVEL, entryIndex: 2 }, { block, index: index++ });
-  await f.event('GAME', 'JackpotTicketWin', { winner: PLAYER, entryLevel: LEVEL + 1, traitId: 0x82, entryCount: 4, sourceLevel: LEVEL + 1, entryIndex: 3 }, { block, index: index++ });
+  await f.event('GAME', 'JackpotEthWin', { winner: PLAYER, walletId: 37, level: LEVEL, traitId: 0x00, amount: 5n * WEI, entryIndex: 1 }, { block, index: index++ });
+  await f.event('GAME', 'JackpotTicketWin', { winner: OTHER_PLAYER, walletId: 73, entryLevel: LEVEL + 1, traitId: 0x41, entryCount: 8, sourceLevel: LEVEL, entryIndex: 2 }, { block, index: index++ });
+  await f.event('GAME', 'JackpotTicketWin', { winner: PLAYER, walletId: 37, entryLevel: LEVEL + 1, traitId: 0x82, entryCount: 4, sourceLevel: LEVEL + 1, entryIndex: 3 }, { block, index: index++ });
   if (!run56) {
     // Audit 0889affc1: the day's far-future draw only AWARDS seats in the craps-table jackpot battle
     // (CRAPS JackpotBattleEntry); what they win settles later as CrapsBetSettled, never a jackpot row.
-    await f.event('CRAPS', 'JackpotBattleEntry', { slot: BigInt(DAY) * 8n + 6n, betId: ((BigInt(DAY) * 8n + 6n) << 64n) | 1n, player: PLAYER, units: 1, chips: 3 }, { block, index: index++ });
+    await f.event('CRAPS', 'JackpotBattleEntry', { slot: BigInt(DAY) * 8n + 6n, betId: ((BigInt(DAY) * 8n + 6n) << 64n) | 1n, playerId: 37, units: 1, chips: 3 }, { block, index: index++ });
   }
   await f.event('GAME', 'PrizePoolDailySnapshot', { day: DAY }, { block, index: index++ });
   return f;
@@ -107,14 +108,15 @@ test('run 57+: the main board includes a Craps seat reveal without counting it a
 test('converted jackpot roll1 carries Decimator slot buckets and recipient entry awards', async () => {
   useSchema(CURRENT_SCHEMA_HASH);
   const f = await rpcFixture(); const block = 9999; const level = 15;
+  await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER);
   await f.field('GAME', 'dailyFoilDraw', packCurrent(MAIN, level), DAY);
   await f.event('GAME', 'DailyRngApplied', { day: DAY, rawWord: 777, finalWord: 777 }, { block, index: 0 });
   await f.event('GAME', 'DailyWinningTraits', { day: DAY, mainTraitsPacked: MAIN }, { block, index: 1 });
   await f.event('GAME', 'DecimatorJackpotPlan', { lvl: level, word: 777, originalPool: 1000,
     originalStack: 9000, originalCount: 3, generatedEntries: 3, traits: MAIN, weights: 1n | (2n << 16n) }, { block, index: 2 });
-  await f.event('GAME', 'DecimatorGenerated', { lvl: level, id: 4, recipient: PLAYER, quadrant: 0,
+  await f.event('GAME', 'DecimatorGenerated', { lvl: level, id: 4, recipientId: 37, quadrant: 0,
     chips: 0, normalizedPeak: 3000n * WEI, score: 9000000n * WEI }, { block, index: 3 });
-  await f.event('GAME', 'JackpotEthWin', { winner: OTHER_PLAYER, level, traitId: 0xc3, amount: 5n * WEI, entryIndex: 1 }, { block, index: 4 });
+  await f.event('GAME', 'JackpotEthWin', { walletId: 73, level, traitId: 0xc3, amount: 5n * WEI, entryIndex: 1 }, { block, index: 4 });
   await f.event('GAME', 'PrizePoolDailySnapshot', { day: DAY }, { block, index: 5 });
   const roll1 = await readChainRoute(`/game/jackpot/day/${DAY}/roll1`, { client: f.client });
   assert.deepEqual(roll1.decimatorEntries.map(row => [row.traitId, row.entries, row.survivors]), [[0, 1, 1], [0x41, 2, 0]]);
@@ -166,12 +168,13 @@ test('foil claims read back per deployment: run 57+ claims are all the main draw
   for (const schema of [RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
     useSchema(schema);
     const f = await rpcFixture();
+    if (schema === CURRENT_SCHEMA_HASH) await f.wallet(37, PLAYER);
     f.answer('GAME_LENS', 'foilRecordOf', [schema === RUN56_SCHEMA_HASH
       ? [true, 3, 31_500, 0]
       : [true, 3, 31_500, 0, false, 0, [0, 0, 0, 0]]]);
     await f.event('GAME', 'FoilMatchClaimed', schema === RUN56_SCHEMA_HASH
       ? { player: PLAYER, day: DAY, ticketIndex: 2, drawKind: 1, tier: 5, faces: 24 }
-      : { player: PLAYER, day: DAY, ticketIndex: 2, tier: 5, faces: 48 });
+      : { id: 37, day: DAY, ticketIndex: 2, tier: 5, faces: 48 });
     const foil = await readChainRoute(`/player/${PLAYER}/foil?level=${LEVEL}`, { client: f.client });
     assert.deepEqual(foil.claims, [{ day: DAY, ticketIndex: 2, drawKind: schema === RUN56_SCHEMA_HASH ? 1 : 0, tier: 5 }]);
   }

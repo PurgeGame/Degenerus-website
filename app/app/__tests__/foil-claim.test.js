@@ -13,11 +13,13 @@ import {
   foilTierFaces,
   parseFoilMatchClaimedFromReceipt,
 } from '../foil-claim.js';
+import { rpcFixture } from './helpers/chain-rpc.js';
+import { prepareWalletReceipt } from '../wallet-receipt.js';
 import { decodeRevertReason } from '../reason-map.js';
 import { clearProvider, setProvider } from '../contracts.js';
 import { update } from '../store.js';
 import { CHAIN } from '../chain-config.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
 
 const PLAYER = '0x1234567890123456789012345678901234567890';
 const RUN56_DEFAULT = useSchema(RUN56_SCHEMA_HASH);
@@ -43,14 +45,14 @@ test('foil claim ABI decodes terminal permissionless races', () => {
 // The hand-written ABI must be the deployed one: same claim selector and event topic as the
 // generated game schema of each deployment.
 test('each deployment claims with its own calldata and event shape', async () => {
-  for (const schema of [RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
+  for (const schema of [RUN56_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
     useSchema(schema);
     const deployed = new Interface((await loadSchema('GAME')).abi);
     const ours = new Interface(foilClaimAbi());
     assert.equal(ours.getFunction('claimFoilMatch').selector, deployed.getFunction('claimFoilMatch').selector);
     assert.equal(ours.getEvent('FoilMatchClaimed').topicHash, deployed.getEvent('FoilMatchClaimed').topicHash);
   }
-  useSchema(CURRENT_SCHEMA_HASH);
+  useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
   assert.equal(foilClaimAbi(), FOIL_CLAIM_ABI_CURRENT);
   useSchema(RUN56_SCHEMA_HASH);
   assert.equal(foilClaimAbi(), FOIL_CLAIM_ABI_RUN56);
@@ -83,18 +85,27 @@ test('the claim tx matches the deployment: drawKind only on run 56', async () =>
   const run56 = await sendClaim(RUN56_SCHEMA_HASH, 1);
   assert.deepEqual(run56.simulated, [PLAYER, 44n, 2n, 1]);
   assert.deepEqual(run56.sent, [PLAYER, 44n, 2n, 1]);
+  const prior = await sendClaim(BEFORE_WALLET_IDS_SCHEMA_HASH, 0);
+  assert.deepEqual(prior.simulated, [PLAYER, 44n, 2n], 'run 57+ has one board, so no draw to name');
+  assert.deepEqual(prior.sent, [PLAYER, 44n, 2n]);
   const current = await sendClaim(CURRENT_SCHEMA_HASH, 0);
-  assert.deepEqual(current.simulated, [PLAYER, 44n, 2n], 'run 57+ has one board, so no draw to name');
-  assert.deepEqual(current.sent, [PLAYER, 44n, 2n]);
+  assert.deepEqual(current.simulated, [0, 44n, 2n], 'run 66 resolves the caller using ID zero');
+  assert.deepEqual(current.sent, [0, 44n, 2n]);
 });
 
-test('claim receipts parse per deployment; a run-57+ claim is the main draw', () => {
-  for (const schema of [RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
+test('claim receipts parse per deployment; a run-57+ claim is the main draw', async () => {
+  for (const schema of [RUN56_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, CURRENT_SCHEMA_HASH]) {
     useSchema(schema);
     const iface = new Interface(foilClaimAbi());
     const run56 = schema === RUN56_SCHEMA_HASH;
-    const log = iface.encodeEventLog('FoilMatchClaimed', run56 ? [PLAYER, 44, 2, 1, 6, 140] : [PLAYER, 44, 2, 6, 280]);
-    const rows = parseFoilMatchClaimedFromReceipt({ logs: [log] }, { interface: iface });
+    const f = await rpcFixture();
+    if (schema === CURRENT_SCHEMA_HASH) await f.wallet(37, PLAYER);
+    const log = await f.event('GAME', 'FoilMatchClaimed', {
+      player: PLAYER, id: 37, day: 44, ticketIndex: 2, drawKind: 1, tier: 6, faces: run56 ? 140 : 280,
+    });
+    const receipt = { blockNumber: 9999, logs: [log] };
+    await prepareWalletReceipt(receipt, f.client);
+    const rows = parseFoilMatchClaimedFromReceipt(receipt, { interface: iface });
     assert.deepEqual(rows, [{ player: PLAYER, day: 44, ticketIndex: 2, drawKind: run56 ? 1 : 0, tier: 6, faces: run56 ? 140 : 280 }]);
     assert.equal(rows[0].faces, foilTierFaces()[6], 'the event faces and the site table agree');
   }

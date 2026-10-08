@@ -1,4 +1,5 @@
-import { afterEach, test } from 'node:test';
+import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
+import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { clearProvider, setProvider } from '../contracts.js';
@@ -9,6 +10,10 @@ import {
   __setQuestLensContractFactoryForTest,
   readLiveQuestBoard,
 } from '../quests.js';
+
+import { _setWalletIdForTests, _resetWalletIdsForTests } from '../wallet-id.js';
+beforeEach(() => _setWalletIdForTests(PLAYER, 37));
+afterEach(_resetWalletIdsForTests);
 
 const PLAYER = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
 
@@ -88,7 +93,7 @@ test('live quest board reads exact deity score and lens-computed afKing streak',
   setProvider({ getBlockNumber: async () => 45_006_900 });
   __setQuestContractFactoryForTest(() => questContract());
   __setQuestGameContractFactoryForTest(() => ({
-    playerActivityScore: async () => 157n,
+    playerActivityScore: async () => [157n, 37n],
     hasDeityPass: async () => true,
     subInfo: async () => [true, 10, 1, 4],
   }));
@@ -143,7 +148,8 @@ test('an unavailable lens leaves the afKing streak inexact rather than wrong', a
   assert.equal(board.effectiveQuestStreak, 3, 'manual streak is the honest fallback');
 });
 
-test('a lens reading a different deployment is rejected', async () => {
+test('a lens reading a different deployment is rejected', async t => {
+  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); t.after(() => useSchema(previous));
   // Sub record mismatch at the same block = the configured lens is not this
   // deployment's. Trusting its streak would show a number from another run.
   setProvider({ getBlockNumber: async () => 45_006_900 });

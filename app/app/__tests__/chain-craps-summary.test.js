@@ -48,11 +48,12 @@ test('a jackpot battle belongs to its drawing day, including detached fields and
   try {
     for (const suffix of [6n, 7n]) {
       const f = await rpcFixture({ head: 4000, timestamp: 48000, period: 1000 });
+      await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER);
       const slot = 41n * 8n + suffix;
       const bet = n => BigInt(n) << 64n | 1n;
       const key = n => '0x' + BigInt(n).toString(16).padStart(64, '0');
       const pay = (name, amount, extra = {}) => f.event('CRAPS', name, {
-        slot, betId: bet(slot), battleKey: key(slot), player: PLAYER, winner: PLAYER,
+        slot, betId: bet(slot), battleKey: key(slot), playerId: 37, winnerId: 37,
         won: 999999n, paid: amount, amount, ...extra,
       }, { block: 3800 });
       await f.event('CRAPS', 'JackpotBattleLocked', { slot, requestDay: 42 }, { block: 3501 });
@@ -70,8 +71,8 @@ test('a jackpot battle belongs to its drawing day, including detached fields and
       }
       await pay('CrapsBetSettled', 0);
       await pay('CrapsHighRollerPaid', 10000, { bankrollRider: true });
-      await pay('CrapsBattlePaid', 10000, { player: OTHER_PLAYER });
-      await pay('HighRollerReserveDrawn', 10000, { winner: OTHER_PLAYER });
+      await pay('CrapsBattlePaid', 10000, { playerId: 73 });
+      await pay('HighRollerReserveDrawn', 10000, { winnerId: 73 });
       // The same-day lobby's Main Event is tomorrow's draw, not this receipt.
       await f.event('CRAPS', 'JackpotBattleLocked', { slot: 342, requestDay: 43 }, { block: 3700 });
       await pay('CrapsBattlePaid', 10000, { betId: bet(342), battleKey: key(342) });
@@ -93,10 +94,11 @@ test('jackpot receipts report credited comps and net progressive FLIP without co
   const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
   try {
     const f = await rpcFixture({ head: 4000, timestamp: 48000, period: 1000 });
+      await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER);
     const slot = 334n;
     const battleKey = '0x' + slot.toString(16).padStart(64, '0');
     const betId = slot << 64n | 1n;
-    const emit = (name, args) => f.event('CRAPS', name, { player: PLAYER, battleKey, betId, ...args }, { block: 3800 });
+    const emit = (name, args) => f.event('CRAPS', name, { playerId: 37, battleKey, betId, ...args }, { block: 3800 });
     await f.event('CRAPS', 'JackpotBattleLocked', { slot, requestDay: 42 }, { block: 3501 });
     await emit('CrapsPassesCredited', { highRoller: true, count: 2 });
     await emit('CrapsProtocolAwardSplit', { source: 1, grossProtocol: 10000, liquidFlip: 5000 });
@@ -105,8 +107,8 @@ test('jackpot receipts report credited comps and net progressive FLIP without co
     await emit('CrapsPassesCredited', { highRoller: false, count: 80 });
     await emit('CrapsProtocolAwardSplit', { source: 4, grossProtocol: 50000, liquidFlip: 26000 });
     await emit('CrapsPassesCredited', { highRoller: false, count: 999 }); // Unrelated award.
-    await emit('CrapsPassesCredited', { player: OTHER_PLAYER, highRoller: true, count: 999 });
-    await emit('CrapsProtocolAwardSplit', { player: OTHER_PLAYER, source: 1, grossProtocol: 10000, liquidFlip: 5000 });
+    await emit('CrapsPassesCredited', { playerId: 73, highRoller: true, count: 999 });
+    await emit('CrapsProtocolAwardSplit', { playerId: 73, source: 1, grossProtocol: 10000, liquidFlip: 5000 });
     const receipt = await readChainRoute(`/viewer/player/${PLAYER}/day/42/craps`, { client: f.client });
     assert.equal(receipt.totalWinnings, String(38000n * 10n ** 18n));
     assert.equal(receipt.payoutCount, 2);

@@ -1021,8 +1021,14 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
   });
 
   test('purchase surface uses the tightened compact rhythm without collapsing its controls', () => {
+    // Find the media block that owns the purchase controls; later compact
+    // footer rules may legitimately follow it in this stylesheet.
+    const compactBuyRow = PURCHASE_DESK_CSS.lastIndexOf(
+      'body.layout-basic .app-decimator-panel .dec-buy-row {',
+    );
+    assert.ok(compactBuyRow >= 0);
     const compactHeroCss = PURCHASE_DESK_CSS.slice(
-      PURCHASE_DESK_CSS.lastIndexOf('@media (max-width: 1099px)'),
+      PURCHASE_DESK_CSS.lastIndexOf('@media (max-width: 1099px)', compactBuyRow),
     );
     assert.match(
       APP_CSS,

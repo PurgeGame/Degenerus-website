@@ -15,6 +15,27 @@
 .panel-popup__body { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #685379 #11121c; padding: 1rem; }
 .panel-popup__status { padding: 1.5rem; color: #bab1ca; text-align: center; }
 .panel-popup__status[hidden] { display: none !important; }
+/* The account sale quote stays readable on narrow screens. */
+.liquidation-popup .panel-popup__window { width: min(100%, 38rem); }
+.liquidation-popup .panel-popup__body { color: #cbc2d6; font-size: .85rem; line-height: 1.5; }
+.liquidation-intro { margin-top: 0; }
+.liquidation-quote { display: grid; gap: .3rem; padding: 1rem; border: 1px solid #92d8ad55; border-radius: 9px; background: #92d8ad0c; }
+.liquidation-quote[hidden] { display: none; }
+.liquidation-quote > span { font-size: .72rem; color: #c3d9cb; }
+.liquidation-quote > strong { color: #c5f3d5; font-size: clamp(1.1rem, 4vw, 1.7rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.liquidation-terms { padding: 0 1rem; border: 1px solid #b8995838; border-radius: 9px; background: #b8995808; font-size: .78rem; }
+.liquidation-terms p { margin: .7rem 0; }
+.liquidation-terms strong { color: #f1dfbb; }
+.liquidation-popup [data-bind="liquidation-status"] { margin: .75rem 0; }
+.liquidation-consent { display: flex; align-items: flex-start; gap: .65rem; margin: 1rem 0; cursor: pointer; font-size: .82rem; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.liquidation-consent input { flex: 0 0 auto; width: 1.1rem; height: 1.1rem; margin: .15rem 0 0; accent-color: #c7a8ee; }
+.liquidation-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.liquidation-actions button { flex: 1 1 10rem; min-height: 2.75rem; padding: .65rem; border: 1px solid #b796cf75; border-radius: 7px; background: #493453; color: #fff2df; cursor: pointer; }
+.liquidation-actions [data-bind="liquidation-refresh"] { background: transparent; color: #cbc2d6; }
+.liquidation-actions button:disabled { opacity: .45; cursor: default; }
+.liquidation-popup :focus-visible { outline: 2px solid #f2d595; outline-offset: 3px; }
+.liquidation-popup .is-error { color: #ffb1b8; }
+body.layout-basic .inv-level-tab:disabled { cursor: default; opacity: .7; }
 /* Ticket levels open a reader without expanding or moving the ticket bar. */
 body.layout-basic .tickets-popup .panel-popup__window { width: min(100%, 68rem); }
 .tickets-popup__summary { margin: .25rem 0 0; color: #a99db5; font: 600 .7rem/1.4 Inter, sans-serif; }

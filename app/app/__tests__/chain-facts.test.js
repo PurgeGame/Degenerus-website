@@ -1,3 +1,5 @@
+import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+useSchema(CURRENT_SCHEMA_HASH);
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { eventFacts } from '../../chain/facts.js';
@@ -5,8 +7,9 @@ import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
 
 async function history() {
   const fixture = await rpcFixture();
+  await fixture.wallet(37, PLAYER);
   for (let i = 0; i < 40; i++) {
-    await fixture.event('GAME', 'DegeneretteBetPlaced', { player: PLAYER, index: 7, betId: i, packed: i + 1 });
+    await fixture.event('GAME', 'DegeneretteBetPlaced', { player: 37, index: 7, betId: i, packed: i + 1 });
   }
   return fixture;
 }

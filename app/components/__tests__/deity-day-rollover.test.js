@@ -1,6 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ethers } from 'ethers';
+import { _setWalletIdForTests, _resetWalletIdsForTests } from '../../app/wallet-id.js';
 
 class FakeNode extends EventTarget {
   dataset = {};
@@ -38,6 +39,7 @@ const node = (name) => desk.querySelector(`[data-bind="deity-desk-${name}"]`);
 const rawBoons = () => [seeds.get(day - 1) ?? 0n, day, day === 41 ? 7 : 0, false, true];
 
 beforeEach(() => {
+  _setWalletIdForTests(OWNER, 37);
   globalThis.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   store.__resetForTest();
   day = 41;
@@ -65,6 +67,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  _resetWalletIdsForTests();
   desk.disconnectedCallback();
   setMajorDrawActivity('deity-rollover-test', false);
   _resetComponentPollsForTests();
@@ -91,7 +94,7 @@ test('today’s gifts refresh at rollover while today’s RNG and jackpot are st
   assert.equal(reads.length, priorReads + 1, 'the day notification triggers a read immediately');
   assert.deepEqual(reads.at(-1).opts, { blockTag: 101 });
   assert.equal(catalogReads, priorCatalogReads, 'rollover does not wait for another ownership scan');
-  const expected = passes.deriveDeityBoonSlots({ dailySeed: seeds.get(41), deity: OWNER, day, includeCraps: true });
+  const expected = passes.deriveDeityBoonSlots({ dailySeed: seeds.get(41), deity: OWNER, deityId: 37, day, includeCraps: true });
   for (let slot = 0; slot < 3; slot++) {
     assert.equal(node(`boon-effect-${slot}`).textContent, boonTypePresentation(expected[slot]).effect);
     assert.equal(node(`boon-${slot}`).disabled, false);

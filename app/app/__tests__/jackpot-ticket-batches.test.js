@@ -1,3 +1,6 @@
+// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
+import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
+pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 // Audit 95d88f68b: a main-daily ticket leg written straight into the live L+1 buffer logs
 // JackpotTicketBatchWin (winners as packed owner registry indices) and one
 // JackpotTicketBatchTraits per whole ticket round, instead of JackpotTicketWin + queued entries.

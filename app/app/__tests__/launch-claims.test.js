@@ -1,3 +1,6 @@
+// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
+import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
+pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 // Current-level referral bonuses are one logical Pending action: claim first
 // when needed, otherwise open the already-paid fullscreen reward receipt.
 

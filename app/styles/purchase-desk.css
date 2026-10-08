@@ -3996,8 +3996,8 @@ body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-
   display: none;
 }
 
-/* The pass occupies the open space under Clear. It never reserves a column
-   in the balance rows or pushes the purchase controls down. */
+/* Desktop uses the open space under Clear; compact layouts place the same
+   button beside the balance rows below. */
 .app-decimator-panel .dec-clear-actions {
   position: relative;
   display: flex;
@@ -4068,6 +4068,60 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
   grid-column: 1;
   margin-top: 0;
   padding-top: 0;
+}
+
+@media (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .dec-purchase-footer {
+    --dec-pass-in-footer: 1;
+    grid-template-columns: min(34%, 7rem) minmax(0, 1fr);
+    column-gap: 0.4rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
+    grid-column: 2;
+    grid-row: 1;
+    container-type: inline-size;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-afking-jump {
+    position: static;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    aspect-ratio: 72 / 57;
+    margin: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer .dec-afking-jump__face {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 72 / 57;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions:not(:has(.dec-afking-jump)) > .dec-ticket-clear {
+    height: 3rem;
+    min-height: 3rem;
+  }
+
+  /* Keep the full amount on its own line as the balances share the footer. */
+  body.layout-basic .app-decimator-panel .dec-flip-balance {
+    grid-template-areas: "action label" "value value";
+    column-gap: 0.2rem;
+    padding-inline: 0.35rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-flip-balance__value,
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-funds__value {
+    font-size: clamp(0.82rem, 7.3cqi, 1.05rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance__label,
+  body.layout-basic .app-decimator-panel .dec-funds__summary-label {
+    letter-spacing: 0.08em;
+  }
 }
 
 /* When FLIP is private, its currency switch shares the ETH instrument.

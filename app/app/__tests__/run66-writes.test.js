@@ -62,6 +62,10 @@ async function contractFor(mod, contractName, method, expected) {
 const cases = [
   ['ETH claim', claims, 'GAME', 'claimWinnings(uint32)', [0], () => claims.claimEth()],
   ['third-party ETH claim', claims, 'GAME', 'claimWinnings(uint32)', [73], () => claims.claimEth({ player: OTHER })],
+  ['partial ETH claim', claims, 'GAME', 'claimWinnings(uint32,uint256)', [0, 123n], () => claims.claimEthAmount({ amount: 123n })],
+  ['whale-pass claim', claims, 'GAME', 'claimWhalePass', [73], () => claims.claimWhalePass({ player: OTHER })],
+  ['affiliate claim', claims, 'GAME', 'claimAffiliateDgnrs(uint32)', [0], () => claims.claimAffiliateDgnrs()],
+  ['Golden Ticket claim', claims, 'GAME', 'claimGoldenTicket', [73, 8], () => claims.claimGoldenTicket({ player: OTHER, level: 8 })],
   ['FLIP claim', claims, 'COINFLIP', 'claimCoinflips', [0, 100n], () => claims.claimFlip({ amount: 100n * TOKEN })],
   ['FLIP deposit', coinflip, 'COINFLIP', 'depositCoinflip', [0, 100n], () => coinflip.depositCoinflip({ amount: 100n * TOKEN, useCarry: false })],
   ['auto-rebuy', coinflip, 'COINFLIP', 'setCoinflipAutoRebuy', [0, true, 0n], () => coinflip.setCoinflipAutoRebuy({ enabled: true })],
@@ -93,4 +97,21 @@ for (const [name, mod, contractName, signature, expected, act] of cases) {
 
 test('run 66 hides removed Growth claims before any wallet call', async () => {
   await assert.rejects(() => parimutuel.claimGrowth({ player: SELF, rounds: [1] }), /automatically/);
+});
+
+test('run 66 claim balance views keep address arguments in the actual contract ABI', async () => {
+  const iface = new Interface((await loadSchema('GAME')).abi);
+  const calls = [];
+  // Keep the real ethers Contract construction: a method-only double would
+  // miss the accidental claimableWinningsOf(address) -> (uint32) rewrite.
+  setProvider({ call: async tx => {
+    const parsed = iface.parseTransaction(tx);
+    assert.ok(parsed, 'read must use a deployed selector');
+    assert.equal(parsed.args[0].toLowerCase(), SELF);
+    calls.push(parsed.name);
+    return iface.encodeFunctionResult(parsed.fragment, [parsed.name === 'claimableWinningsOf' ? 123n : 3n]);
+  } });
+  assert.equal(await claims.readClaimableEth(), 123n);
+  assert.equal(await claims.readWhalePassClaimAmount(), 3n);
+  assert.deepEqual(calls, ['claimableWinningsOf', 'whalePassClaimAmount']);
 });

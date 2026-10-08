@@ -348,7 +348,7 @@ describe('app-tickets-inventory — cards + chart', () => {
 
   test('Lightweight mode requests details only for an explicitly opened level', async (t) => {
     writeLightweightModePreference(true);
-    _dashboardTickets = [{ level: 17, entryCount: 8 }, { level: 18, entryCount: 4 }];
+    _dashboardTickets = [{ level: 17, entryCount: 8, generatedEntries: 8 }, { level: 18, entryCount: 4, generatedEntries: 4 }];
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
     const el = mount({ expanded: false });
@@ -491,8 +491,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     const cardsDuringRollover = el.querySelectorAll('.inv-card').length;
     const goldDuringRollover = el.querySelectorAll('.inv-card--gold').length;
     await flushMicrotasks();
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
-    assert.match(el.querySelector('[data-bind="salvage-context"]').textContent, /No tickets held at level 18/);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="inv-level-tab"]').disabled, true);
     assert.equal(cardsDuringRollover, 0,
       'selecting the new empty level immediately removes the prior level cards');
     assert.equal(goldDuringRollover, 0,
@@ -646,84 +646,53 @@ describe('app-tickets-inventory — cards + chart', () => {
       'a remembered view level is not selected while the ticket surface is contracted');
     assert.match(future.getAttribute('aria-label'), /Future levels 22 through 117, 4 tickets owned/);
 
+    assert.equal(future.disabled, true);
     future.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-    assert.equal(future.getAttribute('aria-expanded'), 'true', 'Future highlights when its aggregate opens');
-    assert.equal(buttons[0].getAttribute('aria-expanded'), 'false');
-    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true, 'future holdings do not expand the page');
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
-
-    closePanelPopup('salvage');
-    assert.equal(future.getAttribute('aria-expanded'), 'false', 'closing the popup clears the tile state');
-    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
+    assert.equal(future.getAttribute('aria-expanded'), 'false');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
     el.disconnectedCallback();
   });
 
-  test('unminted near levels open Salvage Swap without requesting trait cards', async () => {
-    _dashboardTickets = [{ level: 17, entryCount: 4 }, { level: 19, entryCount: 8 },
+  test('unminted and empty levels are disabled without requesting trait cards', async () => {
+    _dashboardTickets = [{ level: 17, entryCount: 4, generatedEntries: 4 },
+      { level: 19, entryCount: 8, generatedEntries: 0, pendingEntries: 8 },
       { level: 20, entryCount: 6 }, { level: 21, entryCount: 4 }];
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     const el = mount({ expanded: false });
     await flushMicrotasks();
-    for (const offset of ['2', '3', '4']) {
-      const button = el.querySelectorAll('[data-bind="inv-level-tab"]')
-        .find(node => node.getAttribute('data-level-offset') === offset);
+    const buttons = el.querySelectorAll('[data-bind="inv-level-tab"]');
+    assert.equal(buttons[0].disabled, false);
+    for (const button of buttons.slice(1)) {
+      assert.equal(button.disabled, true);
       button.dispatchEvent({ type: 'click' });
-      await flushMicrotasks();
-      assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
-      assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
-      assert.equal(button.getAttribute('aria-controls'), 'panel-salvage');
-      assert.equal(button.getAttribute('aria-haspopup'), 'dialog');
-      assert.equal(el.querySelector('[data-bind="salvage-context"]').hidden, true,
-        'owned levels do not repeat their highlighted row in a separate paragraph');
-      const viewed = el.querySelectorAll('.inv-ff__row').find(row => row.classList.contains('is-viewed'));
-      assert.equal(viewed.querySelector('.inv-ff__level').textContent, `L${17 + Number(offset)}`);
-      assert.equal(el.querySelectorAll('.inv-ff__row').length, 4, 'all owned levels are listed');
-      closePanelPopup('salvage');
     }
-    assert.equal(_fetchLog.some(url => /by-trait\?level=(19|20|21)/.test(url)), false,
-      'unminted levels do not reconstruct trait data');
-    assert.ok(_fetchLog.some(url => url.endsWith('/far-future-queue')));
-    el.querySelectorAll('[data-bind="inv-level-tab"]')[2].dispatchEvent({ type: 'click' });
-    storeMod.update('ui.mode', 'combined');
-    el.querySelector('[data-bind="inv-toggle"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false,
-      'combined inventory can expand after browsing a future level');
-    storeMod.update('ui.mode', 'self');
-    el.querySelectorAll('[data-bind="inv-level-tab"]')[1].dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-    assert.match(el.querySelector('[data-bind="salvage-context"]').textContent, /No tickets held at level 18/);
-    storeMod.update('viewing.address', '0xab34000000000000000000000000000000000000');
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true,
-      'an account switch closes the old wallet offer');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
+    assert.equal(_fetchLog.some(url => /by-trait\?level=(18|19|20|21)/.test(url)), false);
+    assert.match(buttons[2].getAttribute('aria-label'), /not been generated yet/);
     el.disconnectedCallback();
   });
 
-  test('the Total Value tile opens long-term holdings with its panel pinned below', async () => {
-    storeMod.update('app.lastDay', {
-      day: 67,
-      status: 'resolved',
-      level: 17,
-      roll1: { purchaseLevel: 17 },
-    });
+  test('Total Value opens account liquidation and preserves the selected ticket level', async () => {
     _dashboardTickets = [{ level: 23, entryCount: 8 }];
-    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     const el = mount({ expanded: false });
     await flushMicrotasks();
-
     const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
     assert.equal(shortcut.disabled, false);
     shortcut.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-
-    assert.equal(el.querySelector('[data-bind="inv-toggle"]').getAttribute('aria-expanded'), 'true');
-    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '22',
-      'the value tile enters the first aggregate long-term level');
-    assert.equal(el.querySelector('[data-bind="inv-ff"]').hidden, false);
-    assert.ok(el.querySelector('[data-bind="inv-salvage-panel"]'),
-      'the salvage section is mounted even before the player selects a line');
-    assert.match(APP_CSS, /\.inv-salvage\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s,
-      'salvage stays pinned to the bottom of the long-term scroll area');
+    const popup = _docBody.children.find(node => node.dataset.panelPopup === 'liquidation');
+    assert.equal(popup.hidden, false);
+    assert.equal(shortcut.getAttribute('aria-controls'), 'panel-liquidation');
+    assert.equal(shortcut.getAttribute('aria-expanded'), 'true');
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '17');
+    assert.equal(popup.querySelector('[data-bind="liquidation-sell"]').disabled, true);
+    assert.match(popup.querySelector('[data-bind="liquidation-status"]').textContent, /not available on this deployment/);
+    closePanelPopup('liquidation');
+    assert.equal(shortcut.getAttribute('aria-expanded'), 'false');
     el.disconnectedCallback();
   });
 
@@ -843,8 +812,8 @@ describe('app-tickets-inventory — cards + chart', () => {
       rows: [{ level: 23, queueIndex: 0, entryCount: 4, remainder: 0 }],
     };
     const expectedRows = [
-      { level: 17, entryCount: 8 },
-      { level: 18, entryCount: 4 },
+      { level: 17, entryCount: 8, generatedEntries: 8 },
+      { level: 18, entryCount: 4, generatedEntries: 4 },
       { level: 23, entryCount: 4 },
     ];
 
@@ -1004,7 +973,7 @@ describe('app-tickets-inventory — cards + chart', () => {
   });
 
   test('gold six uses the monkey on its ticket and chart only at levels where it is owned', async () => {
-    _dashboardTickets = [{ level: 17, entryCount: 4 }, { level: 18, entryCount: 4 }];
+    _dashboardTickets = [{ level: 17, entryCount: 4, generatedEntries: 4 }, { level: 18, entryCount: 4, generatedEntries: 4 }];
     _byLevel.set(17, byTraitPayload({ cards: [card('opened', [1, 72, 129, 253])] }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
     const el = mount();
@@ -1069,63 +1038,18 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('far-future holdings support multi-select and an offer while queue positions index', async () => {
-    storeMod.update('ui.mode', 'self');
-    storeMod.update('ui.chainOk', true);
-    storeMod.update('app.lastDay', {
-      day: 67,
-      status: 'resolved',
-      level: 17,
-      roll1: { purchaseLevel: 17 },
-    });
-    _dashboardTickets = [
-      { level: 23, entryCount: 8 },
-      { level: 25, entryCount: 4 },
-    ];
-    const quoteCalls = [];
-    salvageMod.__setSalvageContractFactoryForTest(() => ({
-      previewSellFarFutureEntries: async (player, levels, quantities) => {
-        quoteCalls.push({ player, levels, quantities });
-        return [100n * RAW_ETH, 20n * RAW_ETH, 10n * RAW_ETH, 5n * RAW_ETH, 25n * 10n ** 18n];
-      },
-    }));
-
-    const el = mount();
+  test('queued holdings stay visible but cannot open a ticket display', async () => {
+    _dashboardTickets = [{ level: 17, entryCount: 12, generatedEntries: 0, pendingEntries: 12 },
+      { level: 30, entryCount: 16 }];
+    const el = mount({ expanded: false });
     await flushMicrotasks();
-    // active 17 → level 22 enters the aggregate far-future view; salvage itself
-    // begins at distance 2, so the owned L23/L25 rows are both eligible.
-    el.querySelector('[data-bind="inv-level-future"]').dispatchEvent({ type: 'click' });
+    const level = el.querySelector('[data-bind="inv-level-tab"]');
+    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '3');
+    assert.equal(el.querySelector('[data-bind="inv-level-future-count"]').textContent, '4');
+    assert.equal(level.disabled, true);
+    level.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-
-    const rows = el.querySelectorAll('.inv-ff__row')
-      .filter((row) => row.classList.contains('is-salvageable'));
-    assert.equal(rows.length, 2, 'dashboard holdings remain selectable without the queue endpoint');
-    rows[0].dispatchEvent({
-      type: 'pointerdown', button: 0, pointerType: 'mouse', preventDefault() {},
-    });
-    rows[1].dispatchEvent({ type: 'pointerenter', buttons: 1, pointerType: 'mouse' });
-    rows[1].dispatchEvent({ type: 'pointerup', pointerType: 'mouse' });
-    await flushMicrotasks();
-
-    assert.deepEqual(quoteCalls.at(-1), {
-      player: TEST_ADDR,
-      levels: [23n, 25n],
-      quantities: [8n, 4n],
-    }, 'one mouse paint gesture bundles both selected levels in entry units');
-    assert.match(el.textContent, /OWNED BY LEVEL/);
-    assert.equal(el.querySelector('.inv-salvage__selected').textContent,
-      '3 tickets selected');
-    assert.equal(el.querySelector('.inv-salvage__metrics'), null,
-      'face value and offer percentage stay out of the compact quote');
-    assert.deepEqual(el.querySelector('.inv-salvage__assets').children.map(asset => asset.textContent),
-      ['250L17 tickets', '5ETH', '25FLIP'],
-      'the payout separates ticket count, active level, ETH and FLIP');
-    assert.match(el.textContent, /Selected face value: 100 ETH/);
-    assert.match(el.innerHTML, /Sell future tickets at a steep discount/);
-    assert.match(el.innerHTML, /Sold tickets and their future prize rights go to the buyer/);
-    assert.equal(el.querySelector('[data-bind="salvage-execute"]').textContent,
-      'QUEUE DATA INDEXING',
-      'only the full-balance transaction waits for queue positions; selection and quoting do not');
+    assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
     el.disconnectedCallback();
   });
 
@@ -1269,7 +1193,7 @@ describe('app-tickets-inventory — cards + chart', () => {
   test('level buttons refetch with the new level; never send a day param', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
-    _dashboardTickets = [{ level: 17, entryCount: 4 }, { level: 18, entryCount: 4 }];
+    _dashboardTickets = [{ level: 17, entryCount: 4, generatedEntries: 4 }, { level: 18, entryCount: 4, generatedEntries: 4 }];
     const el = mount();
     await flushMicrotasks();
 
@@ -1331,8 +1255,8 @@ describe('app-tickets-inventory — cards + chart', () => {
       (_unused, index) => cardAt(index, 'opened', COMBO),
     );
     _dashboardTickets = [
-      { level: 17, entryCount: 8 },
-      { level: 18, entryCount: 52 },
+      { level: 17, entryCount: 8, generatedEntries: 8 },
+      { level: 18, entryCount: 52, generatedEntries: 52 },
     ];
     _byLevel.set(17, byTraitPayload({ cards: level17Cards }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: level18Cards }));
@@ -1357,6 +1281,7 @@ describe('app-tickets-inventory — cards + chart', () => {
   test('a tile press opens the level painted on it during an active-level refresh', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
+    _dashboardTickets = [{ level: 18, entryCount: 4, generatedEntries: 4 }];
     const el = mount({ expanded: false });
     await flushMicrotasks();
     const paintedL18 = el.querySelectorAll('[data-bind="inv-level-tab"]')[1];
@@ -1403,13 +1328,16 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('no tickets opens Salvage Swap after the holdings read completes', async () => {
-    const el = mount();
+  test('no tickets keeps every level disabled after the holdings read completes', async () => {
+    const el = mount({ expanded: false });
     await flushMicrotasks();
-
+    for (const level of el.querySelectorAll('[data-bind="inv-level-tab"]')) {
+      assert.equal(level.disabled, true);
+      level.dispatchEvent({ type: 'click' });
+    }
     assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, false);
-    assert.match(el.querySelector('[data-bind="salvage-context"]').textContent, /No tickets held at level 17/);
+    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="inv-total-value-action"]').disabled, false);
     el.disconnectedCallback();
   });
 
