@@ -754,7 +754,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.match(
       PANEL_SRC,
-      /img\.src\s*=\s*degeneretteChampionBadgePath\(q, s\)/,
+      /img\.src\s*=\s*degeneretteChampionBadgePath\(q, s, false\)/,
       'symbol choices use the standalone trait marks on the fixed neutral swatch — '
         + 'audit a5d4d2cd removed the per-quadrant picked color (t.c) entirely',
     );
@@ -829,8 +829,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.equal(pending.spinCount, 3);
       el.querySelector('[data-bind="dgn-symbol-choice-6"]').dispatchEvent({ type: 'click' });
       await settle(40);
-      assert.match(el.querySelector('[data-bind="dgn-selected-symbol"]').src, /ethereum_wild\.svg$/);
-      assert.match(el.querySelector('[data-bind="dgn-symbol-choice-6"]').querySelector('img').src, /ethereum_wild\.svg$/);
+      assert.match(el.querySelector('[data-bind="dgn-selected-symbol"]').src, /ethereum_green\.svg$/);
+      const ring = el.querySelector('[data-bind="dgn-wild-ring"]');
+      assert.equal(ring.style.opacity, '1');
+      for (const color of Object.values(DGN_COLOR_HEX)) assert.ok(ring.style.background.includes(color));
+      assert.match(el.querySelector('[data-bind="dgn-symbol-choice-6"]').querySelector('img').src, /ethereum_green\.svg$/);
     } finally {
       el?.disconnectedCallback();
       pinTestSchema(prior);
