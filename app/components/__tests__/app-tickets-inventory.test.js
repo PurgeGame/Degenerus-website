@@ -696,6 +696,76 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
+  for (const lightweight of [false, true]) test(`deity holders cannot open liquidation (lightweight=${lightweight})`, async (t) => {
+    writeLightweightModePreference(lightweight);
+    _deitySymbols = [0];
+    _dashboardTickets = [{ level: 23, entryCount: 8 }];
+    const el = mount({ expanded: false });
+    t.after(() => { el.disconnectedCallback(); writeLightweightModePreference(false); });
+    await flushMicrotasks();
+    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
+    assert.equal(shortcut.disabled, true);
+    assert.match(shortcut.getAttribute('aria-label'), /Deity holders cannot liquidate/);
+    assert.notEqual(el.querySelector('[data-bind="inv-total-value"]').textContent, '—');
+    // The opening handler enforces ownership even if the DOM control is re-enabled.
+    shortcut.disabled = false;
+    shortcut.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
+    _deitySymbols = [];
+    storeMod.update('connected.address', '0xcd34000000000000000000000000000000000000');
+    assert.equal(shortcut.disabled, true, 'the new account waits for its ownership check');
+    await flushMicrotasks();
+    assert.equal(shortcut.disabled, false, 'a non-deity account can still open liquidation');
+  });
+
+  test('liquidation stays disabled while deity ownership is unknown', async (t) => {
+    writeLightweightModePreference(true);
+    let release;
+    passesMod.__setDeityReadContractFactoryForTest(() => ({
+      name: () => new Promise(resolve => { release = resolve; }),
+    }));
+    const el = mount({ expanded: false });
+    t.after(() => { el.disconnectedCallback(); writeLightweightModePreference(false); });
+    await flushMicrotasks();
+    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
+    assert.equal(shortcut.disabled, true, 'ownership is still loading');
+    release('unavailable');
+    await flushMicrotasks();
+    assert.equal(shortcut.disabled, true, 'failed ownership reads do not enable liquidation');
+    shortcut.dispatchEvent({ type: 'click' });
+    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
+  });
+
+  test('a deity purchase before the next inventory refresh blocks opening liquidation', async (t) => {
+    const el = mount({ expanded: false });
+    t.after(() => el.disconnectedCallback());
+    await flushMicrotasks();
+    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
+    assert.equal(shortcut.disabled, false);
+    _deitySymbols = [0];
+    shortcut.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(shortcut.disabled, true);
+    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
+  });
+
+  test('a newly detected deity pass closes an already open liquidation popup', async (t) => {
+    const el = mount({ expanded: false });
+    t.after(() => el.disconnectedCallback());
+    await flushMicrotasks();
+    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
+    shortcut.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(shortcut.getAttribute('aria-expanded'), 'true');
+    _deitySymbols = [21];
+    storeMod.update('app.lastDay', { day: 68, roll1: { purchaseLevel: 17 } });
+    await flushMicrotasks();
+    assert.equal(shortcut.disabled, true);
+    assert.equal(shortcut.getAttribute('aria-expanded'), 'false');
+    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
+  });
+
   test('cards mode dedups identical combos into ×N cards', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened'), card('opened', [2, 73, 130, 201])] }));
     const el = mount();
