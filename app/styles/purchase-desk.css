@@ -4073,7 +4073,7 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
 @media (max-width: 1099px) {
   body.layout-basic .app-decimator-panel .dec-purchase-footer {
     --dec-pass-in-footer: 1;
-    grid-template-columns: min(34%, 7rem) minmax(0, 1fr);
+    grid-template-columns: min(34%, 7.75rem) minmax(0, 1fr);
     column-gap: 0.4rem;
   }
 
@@ -4101,6 +4101,10 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
     aspect-ratio: 72 / 57;
   }
 
+  body.layout-basic .app-decimator-panel .dec-purchase-footer:not(:has(.dec-funds.is-expanded)) > .dec-afking-jump {
+    align-self: center;
+  }
+
   body.layout-basic .app-decimator-panel .dec-clear-actions:not(:has(.dec-afking-jump)) > .dec-ticket-clear {
     height: 3rem;
     min-height: 3rem;
@@ -4111,6 +4115,30 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
     grid-template-areas: "action label" "value value";
     column-gap: 0.2rem;
     padding-inline: 0.35rem;
+  }
+
+  /* The mode button and label share a header; leave a full line below for
+     the amount. Both ledgers use the same rows, including loading values. */
+  body.layout-basic .app-decimator-panel .dec-flip-balance,
+  body.layout-basic .app-decimator-panel .dec-funds:has(.dec-funds__summary[aria-expanded="false"]) {
+    height: 2.9rem;
+    min-height: 2.9rem;
+    grid-template-rows: 1.05rem minmax(0, 1fr);
+    padding-inline: 0.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-funds:has(.dec-funds__summary[aria-expanded="false"]) .dec-funds__total {
+    padding-inline: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance__label {
+    align-self: center;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance .dec-flip-balance__mode {
+    height: 1.05rem;
+    min-height: 1.05rem;
+    max-height: 1.05rem;
   }
 
   body.layout-basic .jackpot-hero .app-decimator-panel .dec-flip-balance__value,
