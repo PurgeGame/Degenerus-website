@@ -16,6 +16,9 @@ const between = (from, to) => {
   return source.slice(start, end);
 };
 const listenerBody = (open, close) => between(open, close).slice(open.length);
+const countUnscratchedPotentialWinPanels = runInNewContext(`(${between(
+  'export function countUnscratchedPotentialWinPanels(', '/** Miniature four-trait ticket',
+).replace(/^export /, '')})`);
 
 const WEI = 10n ** 18n;
 const VIEWER = '0x' + 'ab'.repeat(20);
@@ -125,6 +128,8 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     #dayBonusTraitDraw = true; #dayRoll1 = null; #dayRoll2 = null; #playerRoll1Wins = []; #playerRoll2Wins = [];
     #quadWinArrays = []; #centerWins = []; #skipSpinId = null; #animId = 0; #advanceSpin = null;
     #centerScratched = true; #bubbleCovers = new Map();
+    #mainPotentialScratchComplete = true; #quadOwned = []; #scratched = [];
+    revealPending(value) { this.#mainPotentialScratchComplete = !value; }
     popped = 0;
     #revealCenter() { this.popped++; this.#centerScratched = true; }
     cover() { this.#centerScratched = false; this.#bubbleCovers.set('center', {}); }
@@ -137,6 +142,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     #mainReadyForBonus() { return this.toggleReady; }
     spinsComplete = true; attrs = new Map(); events = [];
     #jackpotSpinsComplete() { return this.spinsComplete; }
+    ${between('  #finalDrawRevealPending() {', '  #coinflipHandoffReady() {')}
     hasAttribute(name) { return this.attrs.has(name); }
     setAttribute(name, value) { this.attrs.set(name, String(value)); }
     removeAttribute(name) { this.attrs.delete(name); }
@@ -165,6 +171,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
     fail(message) { this.#coinDrawStatus = { message, error: true }; }
   })()`;
   const instance = runInNewContext(klass, {
+    countUnscratchedPotentialWinPanels,
     dom, coinDrawCentreModel, coinDrawResultTone, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'JOIN CRAPS BATTLE',
     CHAIN: { id: 84532 }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
   });
@@ -376,6 +383,17 @@ test('an opened battle stays inactive across a reload, while another wallet can 
   assert.ok(other.stepDue(), 'another wallet in the same battle is still asked');
   const deploymentPrefixes = readFileSync(new URL('../../app/deployment-presentation-state.js', import.meta.url), 'utf8');
   assert.match(deploymentPrefixes, /`craps-battle-seen:\$\{CHAIN\.id\}:`,/, 'a redeploy sweeps the marks, since day numbers restart');
+});
+
+test('the shared key waits for covered possible wins even after the center revealed a battle', () => {
+  storage.clear();
+  const { instance } = panel();
+  instance.revealPending(true);
+  assert.equal(instance.stepDue(), null);
+  instance.publishDue();
+  assert.equal(instance.hasAttribute('data-craps-battle-due'), false);
+  instance.revealPending(false);
+  assert.ok(instance.stepDue());
 });
 
 test('a due battle outranks DAY SUMMARY on the shared key', () => {

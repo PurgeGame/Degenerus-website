@@ -1259,8 +1259,8 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the Craps board reuses the production Community Coinflip felt instead of approximating its cloth');
   assert.match(cssSource, /\.craps-entry__lobby\s*\{[^}]*border-radius:\s*0/s,
     'the combined entry-options and results table has square corners throughout');
-  assert.match(cssSource, /Approved Craps entry felt:[\s\S]*?\.craps-entry__betting\s*\{[^}]*border-radius:\s*0 0 4px 4px/s,
-    'the felt starts with square top corners and keeps its lower outer corners rounded');
+  assert.match(cssSource, /Approved Craps entry felt:[\s\S]*?\.craps-entry__betting\s*\{[^}]*border-radius:\s*0;/s,
+    'the felt is rectangular with square corners throughout');
   assert.match(cssSource, /\[data-craps-lane="normal"\]\[aria-pressed="true"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #f2f3f3, #aeb4b7\)/s,
     'selected Low Stakes uses the silver state');
   assert.match(cssSource, /\[data-craps-lane="high"\]\[aria-pressed="true"\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #f8d56c, #c98b18\)/s,

@@ -209,6 +209,42 @@ test('Main Event funding follows its pool roll after the unrolled High Roller re
   assert.equal(craps.crapsMainEventAddedWei(null, 1n), null);
 });
 
+test('Main Event High Roller Added retains RIU for its winning seat without a routine boost', () => {
+  useSchema(CURRENT_SCHEMA_HASH);
+  const wei = 10n ** 18n;
+  const slot = 9n * 8n + 6n;
+  const battleKey = ethers.toBeHex(slot, 32);
+  const iface = new ethers.Interface(craps.CRAPS_LOBBY_EVENT_ABI);
+  const event = (name, args) => ({ parsed: { name, args } });
+  for (const sameSeat of [true, false]) {
+    const logs = [
+      event('CrapsBonusOpened', { battleKey, slot, seed: 0n, bankroll: 0n, goal: 0n, boardStake: 0n, battleStake: 8_000n * wei }),
+      iface.encodeEventLog(iface.getEvent('HighRollerReserveFunded'), [slot, 3_979n, 3_979n]),
+      event('JackpotBattleLocked', { slot, added: 20_000n * wei, paidEntries: 24n }),
+      event('JackpotBattleStarted', { slot, drawnEntries: 7n, word: 2n }),
+      event('CrapsBattlePaid', { battleKey, betId: 77n, player: PLAYER, amount: 81_225n * wei }),
+      event('CrapsHighRollerPaid', { battleKey, betId: sameSeat ? 77n : 78n, player: PLAYER,
+        amount: 144_000n * wei, bankrollRider: false }),
+      event('CrapsProgressivePaid', { battleKey, betId: 77n, player: PLAYER, paid: 16_794n * wei }),
+    ];
+    for (const day of [9, 10]) {
+      const snapshot = craps.crapsLobbySnapshotFromLogs(day, logs);
+      const result = day === 9 ? snapshot.results[5] : snapshot.yesterdayEventResult;
+      assert.equal(result.progressivePaidWei, 16_794n * wei);
+      assert.equal(result.highResult.winnerBoostWei, 0n,
+        'the jackpot side lane has a known zero routine boost without a routine RNG index');
+      assert.equal(result.highResult.highReserveFundedWei, 3_979n * wei,
+        'the separate reserve contribution is retained as High Roller funding');
+      assert.equal(result.highResult.progressivePaidWei, sameSeat ? 16_794n * wei : 0n,
+        'RIU belongs to the exact winning entry, even when the same wallet owns another seat');
+      const enriched = craps.crapsLobbySnapshotWithWinnerTotals(snapshot, []);
+      const enrichedResult = day === 9 ? enriched.results[5] : enriched.yesterdayEventResult;
+      assert.equal(enrichedResult.highResult.progressivePaidWei, sameSeat ? 16_794n * wei : 0n,
+        'the confirmed award does not depend on the optional totals projection');
+    }
+  }
+});
+
 test('current Main Event results include real funding and all jackpot-awarded seats exactly once', () => {
   // Run 64's fixed fee and unrolled subsidy (frozen schema 54fe7634); audit bcdba75a9's subsidy
   // roll is pinned in run65-contracts.test.js.
@@ -716,6 +752,7 @@ test('lobby history preserves the High Roller payment and sole-rider goal verdic
     winningScoreBps: null,
     entryMultiple: 10,
     winnerBoostWei: null,
+    progressivePaidWei: 0n,
     // No CrapsProtocolAwardSplit in this fixture, so nothing of the lane award was
     // paid in passes. Zero, not null: absence of a split is a known zero, not unknown.
     winnerPassWei: 0n,
@@ -1988,7 +2025,7 @@ test('an AlreadyInBonus repair reads only the affected player entry topics from 
 });
 
 function windowApiKey() {
-  return `craps-window-api:v2:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
+  return `craps-window-api:v3:${CHAIN.id}:${String(CONTRACTS.CRAPS).toLowerCase()}`
     + `:${Number(CHAIN.deployBlock) || 0}`;
 }
 

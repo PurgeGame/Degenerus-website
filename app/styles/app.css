@@ -25717,7 +25717,7 @@ body.layout-basic .craps-entry__betting {
   padding: 0.12rem;
   overflow: hidden;
   border: 1px solid rgba(215, 190, 125, 0.58);
-  border-radius: 0 0 4px 4px;
+  border-radius: 0;
   background:
     url('/app/assets/jackpot/community-coinflip-felt-v6.webp') center top / cover no-repeat,
     #06351f;
