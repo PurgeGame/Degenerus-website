@@ -1,7 +1,7 @@
 @import url("./dgn-pop.css?v=reward-spot-20261005");
 @import url("./panel-popups.css?v=badge-ticket-popup-20260930");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
-@import url("./lightweight.css");
+@import url("./lightweight.css?v=idle-rendering-20261008");
 /* /app/styles/app.css — Phase 56 scope */
 
 :root {

@@ -988,15 +988,19 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-spin
     drop-shadow(0.18rem 0 4px rgba(var(--jp-led-c), 0.58));
 }
 
-/* A key waiting for the player runs the cabinet's attract loop. Three LED
-   colours are always visible at once, while the halo hands emphasis from the
-   warm side to the cool side and a soft rainbow glint crosses the face.
-   Processing and spinning keep their steady panes. */
+/* Keep the halo painted once. Animating box-shadow repaints the cabinet every
+   frame, even while idle. The small LED layer breathes via opacity while the
+   existing rainbow glint moves across the face on its own layer. */
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
   > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning),
 body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta {
   position: relative;
   overflow: hidden;
+}
+
+body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
+  > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning)::before,
+body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta::before {
   animation: jackpot-key-attract 2.8s ease-in-out infinite;
 }
 
@@ -1007,20 +1011,8 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn.is-bonu
 }
 
 @keyframes jackpot-key-attract {
-  0%, 100% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      inset 0 -2px 0 rgba(0, 0, 0, 0.5),
-      0 0 9px rgba(var(--jp-led-a), 0.28),
-      0 0 17px rgba(var(--jp-led-c), 0.12);
-  }
-  50% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.25),
-      inset 0 -2px 0 rgba(0, 0, 0, 0.45),
-      0 0 12px rgba(var(--jp-led-b), 0.34),
-      0 0 22px rgba(var(--jp-led-c), 0.24);
-  }
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
 }
 
 /* Move a painted glint layer instead of repainting its background each frame.
@@ -1060,6 +1052,10 @@ body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:hover:n
 body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:focus-visible,
 body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:hover,
 body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:focus-visible,
+body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:hover:not(:disabled)::before,
+body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:focus-visible::before,
+body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:hover::before,
+body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:focus-visible::before,
 body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:hover:not(:disabled)::after,
 body.layout-basic .jackpot-hero__machine replay-panel .replay-reveal-btn:focus-visible::after,
 body.layout-basic .jackpot-hero__machine replay-panel .ldj-results-cta:hover::after,
@@ -1864,8 +1860,11 @@ body.layout-basic .jackpot-hero__machine .ldj-foil-machine-slot.is-loaded.is-mat
   body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
     > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning),
   body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
+    > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning)::before,
+  body.layout-basic .jackpot-hero__machine replay-panel .replay-controls
     > .replay-reveal-btn:not(:disabled):not(.is-processing):not(.is-spinning)::after,
   body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta,
+  body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta::before,
   body.layout-basic .jackpot-hero__machine replay-panel .replay-controls > .ldj-results-cta::after {
     animation: none;
   }

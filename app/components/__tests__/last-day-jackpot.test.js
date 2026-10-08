@@ -723,11 +723,11 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       /replay-reveal-btn:disabled:not\(\.is-processing\):not\(\.is-spinning\)\s*\{[^}]*linear-gradient\(180deg, #111014 0%, #070609 100%\)[^}]*background-color:\s*#070609[^}]*color:\s*#68636b[^}]*text-shadow:\s*none/s,
       'a disabled LED bank stays neutral instead of inheriting a live action palette');
     assert.match(DRAWING_CSS,
-      /replay-reveal-btn:not\(:disabled\):not\(\.is-processing\):not\(\.is-spinning\),[\s\S]*?ldj-results-cta\s*\{[^}]*animation:\s*jackpot-key-attract/s,
-      'a key waiting for the player runs the attract loop; processing and spinning keep steady panes');
+      /replay-reveal-btn:not\(:disabled\):not\(\.is-processing\):not\(\.is-spinning\)::before,[\s\S]*?ldj-results-cta::before\s*\{[^}]*animation:\s*jackpot-key-attract/s,
+      'the LED layer pulses while waiting; processing and spinning keep steady panes');
     assert.match(DRAWING_CSS,
-      /@keyframes jackpot-key-attract\s*\{[\s\S]*?rgba\(var\(--jp-led-b\), 0\.34\)[\s\S]*?rgba\(var\(--jp-led-c\), 0\.24\)/,
-      'the attract peak hands its glow from the warm LED to the cool LED');
+      /@keyframes jackpot-key-attract\s*\{\s*0%, 100% \{ opacity: 0\.72; \}\s*50% \{ opacity: 1; \}/,
+      'the LED pulse composites opacity instead of repainting shadows');
     assert.match(DRAWING_CSS,
       /replay-reveal-btn\.is-bonus\s*\{[^}]*--jp-led-a:\s*244, 114, 182[^}]*--jp-led-b:\s*255, 214, 92[^}]*--jp-led-c:\s*167, 139, 250/s,
       'the bonus key uses a pink, gold, and violet LED palette');

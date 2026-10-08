@@ -8,3 +8,5 @@
 .lightweight-mode :is(.ticket-card--foil, .trait-quadrant--gold, .ldj-foil-machine-ticket)::after { animation: none !important; }
 .lightweight-mode .replay-tq.q-decorative { background: #c8d5cd; box-shadow: none; }
 .lightweight-mode .dgn-pop__cell.is-gold { box-shadow: inset 0 0 0 3px #f2cb62; }
+.lightweight-mode :is(.replay-controls > .replay-reveal-btn, .replay-controls > .ldj-results-cta)::before,
+.lightweight-mode :is(.replay-controls > .replay-reveal-btn, .replay-controls > .ldj-results-cta)::after { animation: none !important; }
