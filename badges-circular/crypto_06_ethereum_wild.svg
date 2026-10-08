@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">
+  
+  
+  <g >
+    <g aria-label="Eight equal color segments">
+      <path data-color="pink" fill="#f409cd" d="M 0 0 L 0 -35.2 A 35.2 35.2 0 0 1 24.890159 -24.890159 Z"/>
+      <path data-color="purple" fill="#7c2bff" d="M 0 0 L 24.890159 -24.890159 A 35.2 35.2 0 0 1 35.2 0 Z"/>
+      <path data-color="green" fill="#30d100" d="M 0 0 L 35.2 0 A 35.2 35.2 0 0 1 24.890159 24.890159 Z"/>
+      <path data-color="red" fill="#ed0e11" d="M 0 0 L 24.890159 24.890159 A 35.2 35.2 0 0 1 0 35.2 Z"/>
+      <path data-color="blue" fill="#1317f7" d="M 0 0 L 0 35.2 A 35.2 35.2 0 0 1 -24.890159 24.890159 Z"/>
+      <path data-color="orange" fill="#f7931a" d="M 0 0 L -24.890159 24.890159 A 35.2 35.2 0 0 1 -35.2 0 Z"/>
+      <path data-color="silver" fill="#5e5e5e" d="M 0 0 L -35.2 0 A 35.2 35.2 0 0 1 -24.890159 -24.890159 Z"/>
+      <path data-color="gold" fill="#ab8d3f" d="M 0 0 L -24.890159 -24.890159 A 35.2 35.2 0 0 1 0 -35.2 Z"/>
+    </g>
+    <circle cx="0" cy="0" r="27.5" fill="#111"/>
+    <circle cx="0" cy="0" r="19.8" fill="#fff"/>
+    <g transform="matrix(0.060618 0 0 0.060618 -15.518 -15.518)">
+      <g transform="translate(98.831637 0) scale(0.40094)"><g id="ico"><g fill-rule="nonzero"><polygon fill="#343434" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/><polygon fill="#8C8C8C" points="392.07,0 -0,650.54 392.07,882.29 392.07,472.33"/><polygon fill="#3C3C3B" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/><polygon fill="#8C8C8C" points="392.07,1277.38 392.07,956.52 -0,724.89"/><polygon fill="#141414" points="392.07,882.29 784.13,650.54 392.07,472.33"/><polygon fill="#393939" points="0,650.54 392.07,882.29 392.07,472.33"/></g></g></g>
+    </g>
+  </g>
+</svg>

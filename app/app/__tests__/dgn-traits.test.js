@@ -117,11 +117,11 @@ describe('dgnUnpackTicket', () => {
   test('garbage input → zeroed traits, no throw', () => {
     assert.deepEqual(dgnUnpackTicket('not-a-number')[0], { sym: 0, col: 0, wild: false });
   });
-  test('a wild lane renders on the neutral ring and is named WILD, never color 0', () => {
+  test('a wild lane renders on the eight-color ring and is named WILD, never color 0', () => {
     const [wild] = dgnUnpackTicket(0x42n);
     assert.equal(wild.col, null);
     assert.equal(dgnColorName(wild.col), 'wild');
-    assert.equal(dgnBadgePath(0, wild.sym, wild.col), dgnBadgePath(0, wild.sym, 6));
+    assert.match(dgnBadgePath(0, wild.sym, wild.col), /_wild\.svg$/);
     assert.notEqual(dgnBadgePath(0, wild.sym, wild.col), dgnBadgePath(0, wild.sym, 0));
     const attrs = {};
     const el = { style: { setProperty() {} }, setAttribute(name, value) { attrs[name] = value; } };

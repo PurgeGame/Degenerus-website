@@ -183,6 +183,23 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     contractsMod.clearProvider();
   });
 
+  test('concurrent foil purchases share a wallet guard through confirmation and release after failure', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    lastFakeContract.purchase.staticCall = async () => { await gate; };
+    const args = { foil: true, foilCostWei: 400_000_000_000n, preferClaimable: false };
+    const first = lootboxMod.purchaseEth(args);
+    await assert.rejects(lootboxMod.purchaseEth(args), /foil pack purchase is already pending/);
+    release();
+    await first;
+    assert.equal(lastFakeContract._calls.purchase.length, 1);
+    lastFakeContract.purchase.staticCall = async () => { throw Object.assign(new Error('rejected'), { revert: { name: 'FoilAlreadyBought' } }); };
+    await assert.rejects(lootboxMod.purchaseEth(args), /already bought/);
+    lastFakeContract.purchase.staticCall = async () => {};
+    await lootboxMod.purchaseEth(args);
+    assert.equal(lastFakeContract._calls.purchase.length, 2, 'a rejected preflight releases the guard');
+  });
+
   test('__setContractFactoryForTest seam works (sanity)', () => {
     const res = lootboxMod.parseLootboxIdxFromReceipt({ logs: [] }, lastFakeContract);
     assert.deepEqual(res, []);

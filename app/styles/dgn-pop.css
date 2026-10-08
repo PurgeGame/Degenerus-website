@@ -72,9 +72,10 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 .dgn-pop__flame[data-points="7"] { --score-ink: #ffd1f5; --score-paper: #ba197f; --score-glow: #ff63cf; }
 .dgn-pop__flame[data-points="8"] { --score-ink: #ffdfba; --score-paper: #b65309; --score-glow: #ff9e32; }
 .dgn-pop__flame[data-points="9"] { --score-ink: #fff4af; --score-paper: #9c6900; --score-glow: #ffdc39; }
-/* Completed 0/1 results have a red center. Partial reveals keep
+/* Completed 0/1 and nonpaying 2 results have a red center. Partial reveals keep
    following only the points the player has uncovered. */
 .dgn-pop__flame[data-score="0"],
+.dgn-pop__card:not(.is-paid) .dgn-pop__flame[data-score="2"],
 .dgn-pop__flame[data-score="1"] { --score-ink: #ffb3be; --score-paper: #80152d; --score-glow: #ff3b64; }
 .dgn-pop__flame[data-points]::before { background: var(--score-paper); border-color: var(--score-ink); box-shadow: 0 0 0 2px #09100ed9, 0 0 16px var(--score-glow), inset 0 0 12px #ffffff20; transition: background-color 140ms ease-out, border-color 140ms ease-out; }
 .dgn-pop__flame[data-score]::before { border-width: 3px; box-shadow: 0 0 0 3px #09100ee6, 0 0 22px var(--score-glow), inset 0 0 14px #ffffff30; }

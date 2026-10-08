@@ -4386,6 +4386,24 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
+  test('a confirmed foil purchase stays unavailable even if a later RPC probe is stale', async () => {
+    const fakeContract = makeFakePurchaseContract(); // probes keep succeeding after purchase
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(60);
+    const check = el.querySelector('[data-bind="dec-foil-check"]');
+    check.checked = true;
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    storeMod.update('ui.foilQuest', { active: true, completed: false, level: 12, address: CONNECTED.toLowerCase() });
+    await settle(60);
+    assert.equal(fakeContract._calls.purchase.length, 1);
+    assert.equal(check.disabled, true);
+    assert.equal(check.checked, false);
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
   test('buy total label includes the foil leg while checked', async () => {
     const el = instantiate();
     await settle(60);
@@ -4420,7 +4438,7 @@ describe('Foil pack buy leg', () => {
 
     assert.equal(fakeContract._calls.purchase.length, 0,
       'the fresh value-accurate preflight blocks the raced send');
-    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /unavailable for this transaction/i);
+    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /already bought the foil pack/i);
     el.disconnectedCallback();
   });
 

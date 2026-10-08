@@ -131,7 +131,7 @@ test('the live smoke follows compact imports and rejects HTTP-200 HTML fallbacks
       '/shared/nav.css': ['text/css', 'body{}'],
       '/shared/nav.js': ['text/javascript', 'function initNav(){}'],
       '/js/ref.js': ['text/javascript', ''],
-      '/app/assets/badge-bundle-v3.json': ['application/json', '{}'],
+      '/app/assets/badge-bundle-v4.json': ['application/json', '{}'],
       '/jackpots/latest.json': ['application/json', JSON.stringify({ schemaVersion: 1, day: 7, digest, resultPath, compressedBytes: 10 })],
       [resultPath]: ['application/json', '{}'],
     };

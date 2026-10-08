@@ -54,3 +54,23 @@ test('run 66 record bounty entropy is bound to the wallet ID', async () => {
     assert.equal(dgnRecordBountyHeroQuadrants({...args,playerId:38}),null);
   });
 });
+
+
+test('run 66 Degenerette decodes testnet ETH stake units independently of the wallet-ID layout', async () => {
+  const { decodeDegeneretteBetWord, degeneretteStakeUnit, floorDegeneretteStake } = await import('../degenerette.js');
+  const { displayEth } = await import('../scaling.js');
+  current(() => {
+    // The deployed overlay stores ETH in 1,000-wei units. This is 2.16 display ETH,
+    // including its boon, for each of three cards (not 2,160,000 ETH).
+    const packed = 261n | (6n << 32n) | (3n << 37n) | (2_160_000_000n << 60n);
+    const bet = decodeDegeneretteBetWord(packed);
+    assert.equal(degeneretteStakeUnit(0), 1_000n);
+    assert.equal(bet.playerId, 261);
+    assert.equal(bet.spinCount, 3);
+    assert.equal(bet.amountPerSpin, 2_160_000_000_000n);
+    assert.equal(displayEth(bet.amountPerSpin, 2), '2.16');
+    assert.equal(floorDegeneretteStake(5_123_456_789n, 0), 5_123_456_000n);
+    const flip = decodeDegeneretteBetWord(261n | (1n << 42n) | (250n << 60n));
+    assert.equal(flip.amountPerSpin, 250n * 10n ** 18n);
+  });
+});

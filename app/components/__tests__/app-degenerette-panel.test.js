@@ -811,6 +811,32 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('run 66 restores the receipt amount and uses eight-color heroes, including owned deities', async () => {
+    const { CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
+    const { pendingDegeneretteKey } = await import('../app-degenerette-panel.js');
+    const prior = pinTestSchema(CURRENT_SCHEMA_HASH);
+    let el;
+    try {
+      installDeityOwners(new Map([[6, CONNECTED]]), async () => '#fa12ab');
+      const packed = 261n | (6n << 32n) | (3n << 37n) | (2_160_000_000n << 60n);
+      localStorage.setItem(pendingDegeneretteKey(CONNECTED), JSON.stringify({
+        betId: '42', index: '0', currency: 0, symbol: 6, spinCount: 3,
+        amountPerSpin: '2160000000000000000', packedData: String(packed),
+      }));
+      el = instantiate();
+      const pending = pendingActionsMod.getPendingActions().find(item => item.kind === 'degenerette');
+      assert.equal(pending.amountLabel, '2.16 ETH');
+      assert.equal(pending.spinCount, 3);
+      el.querySelector('[data-bind="dgn-symbol-choice-6"]').dispatchEvent({ type: 'click' });
+      await settle(40);
+      assert.match(el.querySelector('[data-bind="dgn-selected-symbol"]').src, /ethereum_wild\.svg$/);
+      assert.match(el.querySelector('[data-bind="dgn-symbol-choice-6"]').querySelector('img').src, /ethereum_wild\.svg$/);
+    } finally {
+      el?.disconnectedCallback();
+      pinTestSchema(prior);
+    }
+  });
+
   test('champion badges: WWXRP red, Ethereum green, every other symbol silver', async () => {
     const { degeneretteChampionBadgePath: exported } = await import('../app-degenerette-panel.js');
     assert.match(exported(0, 0), /crypto_00_xrp_red\.svg$/);
