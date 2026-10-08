@@ -1547,3 +1547,24 @@
 .replay-bucket-decimator > img { width: 1.8em; height: 1.8em; object-fit: contain; }
 .replay-badge-reward-pop__row--decimator-entry { color: #e9ba66; }
 .replay-badge-reward-pop__row--decimator-entry b { font-size: .8em; }
+
+/* The selected player's BAF transcript appears only after the board is revealed. */
+.jackpot-baf-entries[hidden] { display: none; }
+.jackpot-baf-entries {
+  box-sizing: border-box;
+  width: 100%;
+  margin: .6rem 0;
+  padding: .65rem .8rem;
+  border: 1px solid #d7be7d66;
+  border-radius: .4rem;
+  background: #071b16e6;
+  color: #f5e9c7;
+  text-align: left;
+}
+.jackpot-baf-entries h3 { margin: 0 0 .45rem; font-size: .75rem; letter-spacing: .08em; }
+.jackpot-baf-entries__list { display: flex; flex-wrap: wrap; gap: .4rem .9rem; }
+.jackpot-baf-entries__group { display: flex; align-items: center; gap: .4rem; font-size: .75rem; }
+.jackpot-baf-entries__group img { width: 2rem; height: 2rem; object-fit: contain; }
+.jackpot-baf-entries p { margin: .45rem 0 0; font-size: .7rem; color: #c3c9c0; }
+.jackpot-baf-entries button { cursor: pointer; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: .2rem; padding: .4rem; }
+.jackpot-baf-entries button:focus-visible { outline: 2px solid #f5e9c7; outline-offset: 3px; }
