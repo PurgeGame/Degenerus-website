@@ -83,8 +83,8 @@ test('the last result follows the viewed graph entry and expires with reduced mo
     'pushes, restored views and spectated rolls cannot show stale personal results');
   assert.match(pop, /this\.#scoreDeltaTimer = this\.#guardedTimeout/,
     'expiry does not depend on a CSS animationend event');
-  assert.match(pop, /this\.#playerMoney\(delta < 0n \? -delta : delta\)/,
-    'the result retains the viewed seat’s actual money amount');
+  assert.match(pop, /formatCrapsCompactFlip\(delta < 0n \? -delta : delta\)/,
+    'graph changes use base units without applying the seat multiplier');
   assert.match(COMPONENT_SRC, /#stopRaceTimers\(\) \{\s*this\.#raceSettledRollCount = 0;\s*this\.#hideScoreDelta\(\)/);
   assert.match(CSS_SRC, /transform: translate\(-100%, -100%\)/);
   assert.match(CSS_SRC, /@keyframes craps-score-delta-pop \{[\s\S]*?100% \{ opacity: 0;/);
