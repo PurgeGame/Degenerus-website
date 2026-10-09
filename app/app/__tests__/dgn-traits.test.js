@@ -121,7 +121,7 @@ describe('dgnUnpackTicket', () => {
     const [wild] = dgnUnpackTicket(0x42n);
     assert.equal(wild.col, null);
     assert.equal(dgnColorName(wild.col), 'wild');
-    assert.match(dgnBadgePath(0, wild.sym, wild.col), /_wild\.svg$/);
+    assert.match(dgnBadgePath(0, wild.sym, wild.col), /_wild\.svg\?v=prism-chrome-1$/);
     assert.notEqual(dgnBadgePath(0, wild.sym, wild.col), dgnBadgePath(0, wild.sym, 0));
     const attrs = {};
     const el = { style: { setProperty() {} }, setAttribute(name, value) { attrs[name] = value; } };

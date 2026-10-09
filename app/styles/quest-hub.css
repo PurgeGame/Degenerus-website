@@ -294,7 +294,16 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__earn { color: #d9cbe0; font-size: .66rem; font-weight: 650; letter-spacing: 0; }
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__free { color: #9ef7c2; }
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__flip { color: #fff4e0; }
-body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever { gap: .25rem; color: #ffd678; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy .deg-referral-card__forever { position: static; gap: .25rem; color: #ffd678; }
+/* Give the quest marker its own space beside the copy, clear of both lines. */
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy:has(quest-objective-indicator:not([hidden])) { padding-right: 1.65rem; }
+body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__forever > quest-objective-indicator {
+  top: 50%;
+  right: .15rem;
+  bottom: auto;
+  left: auto;
+  translate: 0 -50%;
+}
 body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy-btn {
   grid-area: 1 / 3 / -1 / 4;
   align-self: stretch;

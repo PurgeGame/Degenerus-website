@@ -203,24 +203,17 @@
   opacity: 1;
 }
 
-@property --bubble-reveal-aperture {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0;
+/* Fade and recoil the painted cover as one compositor layer. Animating a
+   radial mask or inset shadows repaints every frame on both reveal surfaces. */
+.bubble-reveal.is-popping {
+  transform-origin: var(--bubble-reveal-pop-x, 50%) var(--bubble-reveal-pop-y, 50%);
+  animation: var(--bubble-reveal-duration) cubic-bezier(.16, .8, .3, 1) both bubble-reveal-batch;
 }
-
-.bubble-reveal.is-popping .bubble-reveal__film {
-  /* Only the film uses the aperture. Inheriting an animated property through
-     every decorative child needlessly recalculates their styles each frame. */
-  animation: var(--bubble-reveal-duration) linear both bubble-reveal-puncture;
-}
-
-.bubble-reveal.is-popping .bubble-reveal__skin {
-  animation: var(--bubble-reveal-duration) linear both bubble-reveal-surface-collapse;
-}
-
+.bubble-reveal.is-popping .bubble-reveal__film,
+.bubble-reveal.is-popping .bubble-reveal__skin,
 .bubble-reveal.is-popping .bubble-reveal__badge {
-  animation: var(--bubble-reveal-duration) linear both bubble-reveal-badge-collapse;
+  animation: none;
+  transition: none;
 }
 
 .bubble-reveal__burst {
@@ -269,28 +262,8 @@
   object-fit: contain;
 }
 
-.bubble-reveal.is-popping .bubble-reveal__film {
-  mask-image: radial-gradient(circle at var(--bubble-reveal-pop-x, 50%) var(--bubble-reveal-pop-y, 50%),transparent max(0px,calc(var(--bubble-reveal-aperture) - 1px)),#000 var(--bubble-reveal-aperture));
-}
-
-/* Grouped reveals fade the already-painted cover as a single layer. Keep the
-   individual-tap puncture above, but never run a mask/size animation per cell
-   when an entire card or collection opens together. */
-.bubble-reveal.is-batch-pop.is-popping {
-  animation: var(--bubble-reveal-duration) cubic-bezier(.16, .8, .3, 1) both bubble-reveal-batch;
-}
-.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__film {
-  mask-image: none;
-}
-.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__film,
-.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__skin,
-.bubble-reveal.is-batch-pop.is-popping .bubble-reveal__badge {
-  animation: none;
-  transition: none;
-}
-.bubble-reveal.is-batch-pop .bubble-reveal__burst {
-  display: none;
-}
+/* Grouped pops do not need an individual pointer ripple. */
+.bubble-reveal.is-batch-pop .bubble-reveal__burst { display: none; }
 @keyframes bubble-reveal-batch {
   from { opacity: 1; transform: scale(1); }
   to { opacity: 0; transform: scale(.94); }
@@ -338,56 +311,6 @@
 
   100% {
     transform: translateY(-1%) scale(1.025);
-  }
-}
-
-@keyframes bubble-reveal-puncture {
-  0%, 16% {
-    --bubble-reveal-aperture: 0px;
-  }
-
-  32% {
-    --bubble-reveal-aperture: 5px;
-    animation-timing-function: cubic-bezier(.16, .8, .3, 1);
-  }
-
-  100% {
-    --bubble-reveal-aperture: var(--bubble-reveal-pop-radius);
-  }
-}
-
-@keyframes bubble-reveal-surface-collapse {
-  0% {
-    opacity: .7;
-    box-shadow: inset 0 3px 3px #ffffff40;
-  }
-
-  26% {
-    opacity: .22;
-    box-shadow: inset 0 1px 1px #ffffff26;
-  }
-
-  62%, 100% {
-    opacity: 0;
-    box-shadow: inset 0 0 #0000;
-  }
-}
-
-@keyframes bubble-reveal-badge-collapse {
-  0% {
-    transform: translateY(4%) scale(.98, .9);
-  }
-
-  26% {
-    transform: translateY(6%) scale(1.05, .72);
-  }
-
-  43% {
-    transform: translateY(-2%) scale(1.06, 1.03);
-  }
-
-  70%, 100% {
-    transform: translateY(0) scale(1);
   }
 }
 

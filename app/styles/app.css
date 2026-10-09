@@ -1,5 +1,5 @@
-@import url("./dgn-pop.css?v=miss-two-20261008");
-@import url("./panel-popups.css?v=liquidation-simple-20261008");
+@import url("./dgn-pop.css?v=wild-art-only-20261009");
+@import url("./panel-popups.css?v=history-labels-20261009");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
 @import url("./lightweight.css?v=idle-rendering-20261008");
 /* /app/styles/app.css — Phase 56 scope */
@@ -24006,7 +24006,7 @@ body.layout-basic .txh__filter {
   border-radius: 8px;
   background: rgba(15, 18, 32, 0.62);
   color: #70788d;
-  font: 900 0.68rem/1 var(--font-display, inherit);
+  font: 900 0.68rem/1 var(--font-display, "Inter", system-ui, sans-serif);
   letter-spacing: 0.065em;
   white-space: nowrap;
   cursor: pointer;
@@ -25560,10 +25560,10 @@ body.layout-basic .pfd-error[hidden] { display: none !important; }
 .rvl-summary:has(> .rvl-collect-cta:not([hidden])) {
   padding-bottom: calc(3.8rem + var(--rvl-action-bottom));
 }
-.rvl-stage.rvl-stage--degenerette:has(.rvl-dgn-actions:not([hidden])) {
+.rvl-stage.rvl-stage--degenerette:not(.rvl-stage--pop):has(.rvl-dgn-actions:not([hidden])) {
   padding-bottom: calc(3.7rem + var(--rvl-action-bottom));
 }
-.rvl-stage.rvl-stage--degenerette:has(.rvl-dgn-actions--box:not([hidden])) {
+.rvl-stage.rvl-stage--degenerette:not(.rvl-stage--pop):has(.rvl-dgn-actions--box:not([hidden])) {
   padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
 }
 

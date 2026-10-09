@@ -695,6 +695,24 @@ describe('normalizeSequence', () => {
       'skipping visual placeholders does not retire Pending before combo rewards');
   });
 
+  test('repeated spin projections appear once without collapsing distinct identical rolls', () => {
+    const spin = { legType: 'spin', spinType: 'wwxrp', betId: '123', payout: 0n,
+      reels: [{ spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 0 }] };
+    const normalized = normalizeSequence({ kind: 'lootbox', legs: [spin, { ...spin }, { ...spin }] });
+    assert.equal(normalized.cards.length, 1);
+    assert.equal(normalized.lootboxBoxGroups.length, 1);
+    assert.equal(normalized.boxSpinCount, 1);
+    const boxes = ['first', 'second', 'third'].map(presentationId => normalizeSequence({
+      kind: 'lootbox', presentationId, legs: [spin],
+    }));
+    const combined = combineLootboxSequences(boxes);
+    assert.equal(combined.cards.length, 1);
+    assert.equal(combined.boxSpinCount, 1);
+    assert.equal(combined.lootboxCompletions.length, 3, 'all source receipts still complete');
+    const distinct = normalizeSequence({ kind: 'lootbox', legs: [spin, { ...spin, betId: '124' }, { ...spin, betId: null }] });
+    assert.equal(distinct.boxSpinCount, 3, 'matching graphics do not establish duplicate events');
+  });
+
   test('OPEN ALL combines settled Pending lootboxes into one large physical case', () => {
     const makeBox = (index) => normalizeSequence({
       kind: 'lootbox',
@@ -5077,7 +5095,7 @@ describe('reveal-overlay element', () => {
       /\.rvl-dgn-actions\.rvl-dgn-actions--box\s*\{[^}]*position:\s*static;[^}]*order:\s*100;[^}]*margin:\s*0\.28rem auto 0;[^}]*translate:\s*none;/s,
       'Box Spin controls stay after the live board and survival result instead of covering them');
     assert.match(APP_CSS,
-      /\.rvl-stage\.rvl-stage--degenerette:has\(\.rvl-dgn-actions--box:not\(\[hidden\]\)\)\s*\{[^}]*padding-bottom:\s*max\(0\.8rem, env\(safe-area-inset-bottom\)\)/s,
+      /\.rvl-stage\.rvl-stage--degenerette:not\(\.rvl-stage--pop\):has\(\.rvl-dgn-actions--box:not\(\[hidden\]\)\)\s*\{[^}]*padding-bottom:\s*max\(0\.8rem, env\(safe-area-inset-bottom\)\)/s,
       'an in-flow Box Spin control does not retain the fixed-dock spacer');
     assert.match(APP_CSS,
       /\.rvl-ticket-actions\s*\{[^}]*z-index:\s*12;[^}]*pointer-events:\s*auto;/s,
@@ -5593,6 +5611,28 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  test('a session presents a shared BoxSpin once and still completes every source receipt', async (t) => {
+    const completions = [];
+    const onComplete = event => completions.push(event.detail.presentationId);
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, onComplete));
+    for (const presentationId of ['shared-spin-a', 'shared-spin-b', 'shared-spin-c']) queueReveal({
+      kind: 'lootbox', presentationId, legs: [{ legType: 'spin', betId: '9918476789771525913',
+        spinType: 'wwxrp', payout: 0n,
+        reels: [{ spinIndex: 0, playerTicket: 0x1B130B43n, resultTicket: 0xC9894909n, score: 0 }],
+      }],
+    });
+    const el = instantiate(); await tick();
+    clickPop(el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta'));
+    await tick();
+    await revealPops(el);
+    assert.equal(el.querySelectorAll('.dgn-pop__ticket').length, 1);
+    clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'the duplicate second and third receipts do not restart the same reveal');
+    assert.deepEqual(completions, ['shared-spin-a', 'shared-spin-b', 'shared-spin-c']);
+  });
+
   test('Luckbox currency stays sealed until the first board is popped, including misses', async () => {
     queueReveal({ kind: 'lootbox', legs: [{ legType: 'spin', spinType: 'wwxrp', payout: 0n,
       reels: [{ spinIndex: 0, playerTicket: 0x1B130B43n, resultTicket: 0xC9894909n, score: 0 }],
@@ -5606,7 +5646,9 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('.rvl-spin-total'), null);
     await revealPops(el);
     assert.match(el.querySelector('.rvl-spin-head').textContent, /WWXRP/);
-    assert.equal(el.querySelector('.rvl-box-currency-reveal'), null);
+    assert.ok(el.querySelector('.dgn-winnings__coin').querySelector('.rvl-box-currency-reveal--wwxrp'),
+      'the landed WWXRP coin remains visible even with reduced motion');
+    assert.equal(el.querySelector('.rvl-survival'), null, 'WWXRP has no survival flip');
     assert.equal(el.querySelector('.rvl-dgn-spin-cta').textContent, 'UNLUCKY');
     clickPop(el.querySelector('.rvl-dgn-spin-cta')); await tick();
   });
@@ -6168,7 +6210,8 @@ describe('reveal-overlay element', () => {
     assert.equal(cells[0].dataset.points, '1');
     clickPop(cells[1]);
     assert.equal(cells[1].dataset.points, '1', 'a house wild scores the player color');
-    assert.equal(cells[1].querySelector('.dgn-pop__wild').textContent, 'WILD');
+    assert.equal(cells[1].querySelector('.dgn-pop__wild'), null, 'wild art has no text overlay');
+    assert.equal(cells[1].classList.contains('is-wild'), true, 'the wild styling remains');
     assert.equal(el.querySelector('.dgn-pop__gold-total').textContent, 'WILD BONUS ×1.25');
     await revealPops(el);
     assert.equal(el.querySelector('.dgn-pop__payout-amount').textContent, 'LOSS');
@@ -6207,7 +6250,7 @@ describe('reveal-overlay element', () => {
     assert.doesNotMatch(stageRule, /[\s;]padding:/,
       'no padding shorthand may cancel the reserved band under the tickets');
     assert.match(DGN_POP_CSS,
-      /\.rvl-stage--pop:has\(\.rvl-dgn-actions:not\(\[hidden\]\)\) \{\n  padding-bottom: max\(4rem,/,
+      /\.rvl-stage--pop \{\n  padding-bottom: max\(4rem,/,
       'one control row keeps a 4rem band, not the old 6rem');
     assert.match(DGN_WINNINGS_CSS, /\.dgn-winnings \{[^}]*height: 96px;/,
       'the payout bar stays compact');

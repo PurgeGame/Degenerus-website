@@ -34,7 +34,7 @@ test('every unlocked preview excludes gold six and preserves locked axes', () =>
 });
 
 test('warm and cold badge paths both use normal gold-six art', async () => {
-  const bundle = JSON.parse(readFileSync(new URL('../../assets/badge-bundle-v4.json', import.meta.url), 'utf8'));
+  const bundle = JSON.parse(readFileSync(new URL('../../assets/badge-bundle-v5.json', import.meta.url), 'utf8'));
   __setBadgeBundleForTest(bundle);
   const warmed = await (await fetch(dgnBadgePath(3, 5, 7))).text();
   assert.match(warmed, /r="27\.5" fill="#111"/);

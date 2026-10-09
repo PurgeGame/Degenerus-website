@@ -7,7 +7,7 @@ import * as store from '../store.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { CHAIN } from '../chain-config.js';
 import { abi } from '../../chain/generated/game.js';
-import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_LIQUIDATION_STETH_SCHEMA_HASH } from '../../chain/schema.js';
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xcd34000000000000000000000000000000000000';
@@ -28,7 +28,7 @@ beforeEach(() => {
     walletIdOf: async () => state.id,
     resolveAccount: async () => ({ payee: state.payee }),
     previewLiquidateAccount: Object.assign(() => { throw Error('Preview must never send a transaction'); }, {
-      staticCall: async id => { calls.push(['preview', id]); return {
+      staticCall: async id => { calls.push(['preview', id]); return state.rawQuote ?? {
         accountId: state.id, buyerId: state.buyerId, eligible: state.eligible, nativeLiquidity: state.nativeLiquidity,
         faceValue: 999n, quoteBudget: 888n, ticketValue: 777n, price: state.price,
       }; },
@@ -50,6 +50,25 @@ test('preview is a static read of the explicit current account and preserves exa
   assert.equal(quote.accountId, 42); assert.equal(quote.price, PRICE); assert.equal(quote.payee, PLAYER);
   assert.equal(liquidation.liquidationUnavailableReason(quote), '');
   assert.deepEqual(calls, [['preview', 42]]);
+});
+test('current seven-field wire quote permits the ETH/stETH payout and preserves every amount', async () => {
+  const actual = new Interface(abi);
+  state.rawQuote = actual.decodeFunctionResult('previewLiquidateAccount',
+    actual.encodeFunctionResult('previewLiquidateAccount', [[42, 2, true, 999n, 888n, 777n, PRICE]]))[0];
+  const quote = await liquidation.previewAccountLiquidation({ player: PLAYER });
+  assert.deepEqual([quote.faceValue, quote.quoteBudget, quote.ticketValue, quote.price], [999n, 888n, 777n, PRICE]);
+  assert.equal(liquidation.liquidationUnavailableReason(quote), '');
+  assert.equal((await sell()).receipt.status, 1);
+});
+test('run 69 wire quote retains its native ETH liquidity restriction', async () => {
+  useSchema(BEFORE_LIQUIDATION_STETH_SCHEMA_HASH);
+  const actual = new Interface((await loadSchema('GAME')).abi);
+  state.rawQuote = actual.decodeFunctionResult('previewLiquidateAccount',
+    actual.encodeFunctionResult('previewLiquidateAccount', [[42, 2, true, false, 999n, 888n, 777n, PRICE]]))[0];
+  const quote = await liquidation.previewAccountLiquidation({ player: PLAYER });
+  assert.equal(quote.price, PRICE);
+  assert.match(liquidation.liquidationUnavailableReason(quote), /native ETH/);
+  await assert.rejects(sell, /native ETH/);
 });
 test('a wallet with no account never previews the zero/default ID', async () => {
   state.id = 0;

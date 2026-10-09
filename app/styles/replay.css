@@ -1,4 +1,4 @@
-@import url("./bubble-reveal.css?v=reveal-efficiency-20261004");
+@import url("./bubble-reveal.css?v=compositor-pop-20261009");
 /* styles/replay.css -- Jackpot Replay Viewer */
 
 .replay-panel {
@@ -1414,16 +1414,6 @@
 }
 .replay-bubble-trigger:disabled { opacity: 1; cursor: default; }
 .replay-bubble-trigger:focus-visible { outline: 3px solid #fff1a5; outline-offset: -5px; }
-/* Start tearing on the first frame. Jackpot's shorter duration is also used
-   by the cover's cleanup timer; other reveal surfaces keep their own pace. */
-.replay-bubble-trigger > .bubble-reveal.is-popping {
-  animation-name: replay-bubble-puncture;
-  animation-timing-function: cubic-bezier(.16, .8, .3, 1);
-}
-@keyframes replay-bubble-puncture {
-  from { --bubble-reveal-aperture: 1px; }
-  to { --bubble-reveal-aperture: var(--bubble-reveal-pop-radius); }
-}
 /* Scale the rim instead of laying out a growing width/height every frame. */
 .replay-bubble-trigger .bubble-reveal__burst::after {
   width: calc(var(--bubble-reveal-pop-radius) * 2);

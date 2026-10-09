@@ -1,4 +1,4 @@
-@import url("./bubble-reveal.css?v=reveal-efficiency-20261004");
+@import url("./bubble-reveal.css?v=compositor-pop-20261009");
 @import url("./dgn-winnings.css?v=reward-spot-20261005");
 /* Shared Degenerette surface: a covered ticket becomes the result in place. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 1200px); max-width: 1200px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }
@@ -98,7 +98,6 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 
 .dgn-pop__increment { position: absolute; inset: 30% 0 auto; color: white; font: 900 clamp(1.25rem, 4vw, 2rem)/1 system-ui; text-shadow: 0 2px 5px #000; pointer-events: none; opacity: 0; }
 .dgn-pop__cell.is-wild { box-shadow: inset 0 0 0 3px #d9dcf2, inset 0 0 14px #9aa7ff80; }
-.dgn-pop__wild { position: absolute; bottom: 4%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 90%; padding: 2px 4px; border-radius: 3px; color: #eef0ff; background: #1b1d3ae8; font: 900 clamp(.4rem, 1.1vw, .56rem)/1.1 system-ui; pointer-events: none; }
 .dgn-pop__gold-total { min-height: 1.3em; display: block; color: #f4d07c; font: 800 .64rem/1.3 system-ui; }
 /* Reserve the bonus caption so a gold match does not recenter the ticket. */
 .dgn-pop .dgn-pop__gold-total[hidden] { display: block !important; visibility: hidden; }
@@ -174,8 +173,8 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 }
 /* The payout bar sits right under the cards: the pair centres as one group,
    and the bar sticks to the bottom edge once a large bet has to scroll. */
-.rvl-stage--pop .dgn-pop__viewport:has(> .dgn-winnings) { --pop-footer: 104px; }
-.rvl-stage--pop .dgn-pop__viewport:has(> .dgn-winnings) > .dgn-pop__grid { margin: auto auto 0; }
+.rvl-stage--pop .dgn-pop__viewport--winnings { --pop-footer: 104px; }
+.rvl-stage--pop .dgn-pop__viewport--winnings > .dgn-pop__grid { margin: auto auto 0; }
 .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings {
   position: sticky; bottom: 0; flex-shrink: 0; margin: 8px auto auto;
 }
@@ -254,7 +253,7 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
 }
 .rvl-stage--pop .dgn-pop__all { z-index: 35; }
 /* Outranks the box-spin .8rem band in app.css: one 44px control row fits in 4rem. */
-.rvl-stage.rvl-stage--degenerette.rvl-stage--pop:has(.rvl-dgn-actions:not([hidden])) {
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
   padding-bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
 }
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop .rvl-dgn-stage {

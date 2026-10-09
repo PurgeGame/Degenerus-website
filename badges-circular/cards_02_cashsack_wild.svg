@@ -2,15 +2,151 @@
   
   
   <g >
-    <g aria-label="Eight equal color segments">
-      <path data-color="pink" fill="#f409cd" d="M 0 0 L 0 -35.2 A 35.2 35.2 0 0 1 24.890159 -24.890159 Z"/>
-      <path data-color="purple" fill="#7c2bff" d="M 0 0 L 24.890159 -24.890159 A 35.2 35.2 0 0 1 35.2 0 Z"/>
-      <path data-color="green" fill="#30d100" d="M 0 0 L 35.2 0 A 35.2 35.2 0 0 1 24.890159 24.890159 Z"/>
-      <path data-color="red" fill="#ed0e11" d="M 0 0 L 24.890159 24.890159 A 35.2 35.2 0 0 1 0 35.2 Z"/>
-      <path data-color="blue" fill="#1317f7" d="M 0 0 L 0 35.2 A 35.2 35.2 0 0 1 -24.890159 24.890159 Z"/>
-      <path data-color="orange" fill="#f7931a" d="M 0 0 L -24.890159 24.890159 A 35.2 35.2 0 0 1 -35.2 0 Z"/>
-      <path data-color="silver" fill="#5e5e5e" d="M 0 0 L -35.2 0 A 35.2 35.2 0 0 1 -24.890159 -24.890159 Z"/>
-      <path data-color="gold" fill="#ab8d3f" d="M 0 0 L -24.890159 -24.890159 A 35.2 35.2 0 0 1 0 -35.2 Z"/>
+    <defs>
+      <clipPath id="prism-disc"><circle r="35.2"/></clipPath>
+      <linearGradient id="prism-0" gradientUnits="userSpaceOnUse" x1="-11.99713" y1="-28.96362" x2="-9.10042" y2="-30.00008"><stop stop-color="#1317f7"/><stop offset="1" stop-color="#2626e0"/></linearGradient>
+      <linearGradient id="prism-1" gradientUnits="userSpaceOnUse" x1="-9.10042" y1="-30.00008" x2="-6.11608" y2="-30.74762"><stop stop-color="#2626e0"/><stop offset="1" stop-color="#3935c9"/></linearGradient>
+      <linearGradient id="prism-2" gradientUnits="userSpaceOnUse" x1="-6.11608" y1="-30.74762" x2="-3.07284" y2="-31.19904"><stop stop-color="#3935c9"/><stop offset="1" stop-color="#4c43b2"/></linearGradient>
+      <linearGradient id="prism-3" gradientUnits="userSpaceOnUse" x1="-3.07284" y1="-31.19904" x2="0" y2="-31.35"><stop stop-color="#4c43b2"/><stop offset="1" stop-color="#5f529b"/></linearGradient>
+      <linearGradient id="prism-4" gradientUnits="userSpaceOnUse" x1="0" y1="-31.35" x2="3.07284" y2="-31.19904"><stop stop-color="#5f529b"/><stop offset="1" stop-color="#726184"/></linearGradient>
+      <linearGradient id="prism-5" gradientUnits="userSpaceOnUse" x1="3.07284" y1="-31.19904" x2="6.11608" y2="-30.74762"><stop stop-color="#726184"/><stop offset="1" stop-color="#85706d"/></linearGradient>
+      <linearGradient id="prism-6" gradientUnits="userSpaceOnUse" x1="6.11608" y1="-30.74762" x2="9.10042" y2="-30.00008"><stop stop-color="#85706d"/><stop offset="1" stop-color="#987e56"/></linearGradient>
+      <linearGradient id="prism-7" gradientUnits="userSpaceOnUse" x1="9.10042" y1="-30.00008" x2="11.99713" y2="-28.96362"><stop stop-color="#987e56"/><stop offset="1" stop-color="#ab8d3f"/></linearGradient>
+      <linearGradient id="prism-8" gradientUnits="userSpaceOnUse" x1="11.99713" y1="-28.96362" x2="14.77829" y2="-27.64823"><stop stop-color="#ab8d3f"/><stop offset="1" stop-color="#a18743"/></linearGradient>
+      <linearGradient id="prism-9" gradientUnits="userSpaceOnUse" x1="14.77829" y1="-27.64823" x2="17.41713" y2="-26.06657"><stop stop-color="#a18743"/><stop offset="1" stop-color="#988147"/></linearGradient>
+      <linearGradient id="prism-10" gradientUnits="userSpaceOnUse" x1="17.41713" y1="-26.06657" x2="19.88823" y2="-24.23388"><stop stop-color="#988147"/><stop offset="1" stop-color="#8e7b4b"/></linearGradient>
+      <linearGradient id="prism-11" gradientUnits="userSpaceOnUse" x1="19.88823" y1="-24.23388" x2="22.1678" y2="-22.1678"><stop stop-color="#8e7b4b"/><stop offset="1" stop-color="#85764f"/></linearGradient>
+      <linearGradient id="prism-12" gradientUnits="userSpaceOnUse" x1="22.1678" y1="-22.1678" x2="24.23388" y2="-19.88823"><stop stop-color="#85764f"/><stop offset="1" stop-color="#7b7052"/></linearGradient>
+      <linearGradient id="prism-13" gradientUnits="userSpaceOnUse" x1="24.23388" y1="-19.88823" x2="26.06657" y2="-17.41713"><stop stop-color="#7b7052"/><stop offset="1" stop-color="#716a56"/></linearGradient>
+      <linearGradient id="prism-14" gradientUnits="userSpaceOnUse" x1="26.06657" y1="-17.41713" x2="27.64823" y2="-14.77829"><stop stop-color="#716a56"/><stop offset="1" stop-color="#68645a"/></linearGradient>
+      <linearGradient id="prism-15" gradientUnits="userSpaceOnUse" x1="27.64823" y1="-14.77829" x2="28.96362" y2="-11.99713"><stop stop-color="#68645a"/><stop offset="1" stop-color="#5e5e5e"/></linearGradient>
+      <linearGradient id="prism-16" gradientUnits="userSpaceOnUse" x1="28.96362" y1="-11.99713" x2="30.00008" y2="-9.10042"><stop stop-color="#5e5e5e"/><stop offset="1" stop-color="#705454"/></linearGradient>
+      <linearGradient id="prism-17" gradientUnits="userSpaceOnUse" x1="30.00008" y1="-9.10042" x2="30.74762" y2="-6.11608"><stop stop-color="#705454"/><stop offset="1" stop-color="#824a4b"/></linearGradient>
+      <linearGradient id="prism-18" gradientUnits="userSpaceOnUse" x1="30.74762" y1="-6.11608" x2="31.19904" y2="-3.07284"><stop stop-color="#824a4b"/><stop offset="1" stop-color="#944041"/></linearGradient>
+      <linearGradient id="prism-19" gradientUnits="userSpaceOnUse" x1="31.19904" y1="-3.07284" x2="31.35" y2="0"><stop stop-color="#944041"/><stop offset="1" stop-color="#a63638"/></linearGradient>
+      <linearGradient id="prism-20" gradientUnits="userSpaceOnUse" x1="31.35" y1="0" x2="31.19904" y2="3.07284"><stop stop-color="#a63638"/><stop offset="1" stop-color="#b72c2e"/></linearGradient>
+      <linearGradient id="prism-21" gradientUnits="userSpaceOnUse" x1="31.19904" y1="3.07284" x2="30.74762" y2="6.11608"><stop stop-color="#b72c2e"/><stop offset="1" stop-color="#c92224"/></linearGradient>
+      <linearGradient id="prism-22" gradientUnits="userSpaceOnUse" x1="30.74762" y1="6.11608" x2="30.00008" y2="9.10042"><stop stop-color="#c92224"/><stop offset="1" stop-color="#db181b"/></linearGradient>
+      <linearGradient id="prism-23" gradientUnits="userSpaceOnUse" x1="30.00008" y1="9.10042" x2="28.96362" y2="11.99713"><stop stop-color="#db181b"/><stop offset="1" stop-color="#ed0e11"/></linearGradient>
+      <linearGradient id="prism-24" gradientUnits="userSpaceOnUse" x1="28.96362" y1="11.99713" x2="27.64823" y2="14.77829"><stop stop-color="#ed0e11"/><stop offset="1" stop-color="#ee1f12"/></linearGradient>
+      <linearGradient id="prism-25" gradientUnits="userSpaceOnUse" x1="27.64823" y1="14.77829" x2="26.06657" y2="17.41713"><stop stop-color="#ee1f12"/><stop offset="1" stop-color="#f02f13"/></linearGradient>
+      <linearGradient id="prism-26" gradientUnits="userSpaceOnUse" x1="26.06657" y1="17.41713" x2="24.23388" y2="19.88823"><stop stop-color="#f02f13"/><stop offset="1" stop-color="#f14014"/></linearGradient>
+      <linearGradient id="prism-27" gradientUnits="userSpaceOnUse" x1="24.23388" y1="19.88823" x2="22.1678" y2="22.1678"><stop stop-color="#f14014"/><stop offset="1" stop-color="#f25116"/></linearGradient>
+      <linearGradient id="prism-28" gradientUnits="userSpaceOnUse" x1="22.1678" y1="22.1678" x2="19.88823" y2="24.23388"><stop stop-color="#f25116"/><stop offset="1" stop-color="#f36117"/></linearGradient>
+      <linearGradient id="prism-29" gradientUnits="userSpaceOnUse" x1="19.88823" y1="24.23388" x2="17.41713" y2="26.06657"><stop stop-color="#f36117"/><stop offset="1" stop-color="#f57218"/></linearGradient>
+      <linearGradient id="prism-30" gradientUnits="userSpaceOnUse" x1="17.41713" y1="26.06657" x2="14.77829" y2="27.64823"><stop stop-color="#f57218"/><stop offset="1" stop-color="#f68219"/></linearGradient>
+      <linearGradient id="prism-31" gradientUnits="userSpaceOnUse" x1="14.77829" y1="27.64823" x2="11.99713" y2="28.96362"><stop stop-color="#f68219"/><stop offset="1" stop-color="#f7931a"/></linearGradient>
+      <linearGradient id="prism-32" gradientUnits="userSpaceOnUse" x1="11.99713" y1="28.96362" x2="9.10042" y2="30.00008"><stop stop-color="#f7931a"/><stop offset="1" stop-color="#f78230"/></linearGradient>
+      <linearGradient id="prism-33" gradientUnits="userSpaceOnUse" x1="9.10042" y1="30.00008" x2="6.11608" y2="30.74762"><stop stop-color="#f78230"/><stop offset="1" stop-color="#f67147"/></linearGradient>
+      <linearGradient id="prism-34" gradientUnits="userSpaceOnUse" x1="6.11608" y1="30.74762" x2="3.07284" y2="31.19904"><stop stop-color="#f67147"/><stop offset="1" stop-color="#f65f5d"/></linearGradient>
+      <linearGradient id="prism-35" gradientUnits="userSpaceOnUse" x1="3.07284" y1="31.19904" x2="0" y2="31.35"><stop stop-color="#f65f5d"/><stop offset="1" stop-color="#f64e74"/></linearGradient>
+      <linearGradient id="prism-36" gradientUnits="userSpaceOnUse" x1="0" y1="31.35" x2="-3.07284" y2="31.19904"><stop stop-color="#f64e74"/><stop offset="1" stop-color="#f53d8a"/></linearGradient>
+      <linearGradient id="prism-37" gradientUnits="userSpaceOnUse" x1="-3.07284" y1="31.19904" x2="-6.11608" y2="30.74762"><stop stop-color="#f53d8a"/><stop offset="1" stop-color="#f52ca0"/></linearGradient>
+      <linearGradient id="prism-38" gradientUnits="userSpaceOnUse" x1="-6.11608" y1="30.74762" x2="-9.10042" y2="30.00008"><stop stop-color="#f52ca0"/><stop offset="1" stop-color="#f41ab7"/></linearGradient>
+      <linearGradient id="prism-39" gradientUnits="userSpaceOnUse" x1="-9.10042" y1="30.00008" x2="-11.99713" y2="28.96362"><stop stop-color="#f41ab7"/><stop offset="1" stop-color="#f409cd"/></linearGradient>
+      <linearGradient id="prism-40" gradientUnits="userSpaceOnUse" x1="-11.99713" y1="28.96362" x2="-14.77829" y2="27.64823"><stop stop-color="#f409cd"/><stop offset="1" stop-color="#e50dd3"/></linearGradient>
+      <linearGradient id="prism-41" gradientUnits="userSpaceOnUse" x1="-14.77829" y1="27.64823" x2="-17.41713" y2="26.06657"><stop stop-color="#e50dd3"/><stop offset="1" stop-color="#d612da"/></linearGradient>
+      <linearGradient id="prism-42" gradientUnits="userSpaceOnUse" x1="-17.41713" y1="26.06657" x2="-19.88823" y2="24.23388"><stop stop-color="#d612da"/><stop offset="1" stop-color="#c716e0"/></linearGradient>
+      <linearGradient id="prism-43" gradientUnits="userSpaceOnUse" x1="-19.88823" y1="24.23388" x2="-22.1678" y2="22.1678"><stop stop-color="#c716e0"/><stop offset="1" stop-color="#b81ae6"/></linearGradient>
+      <linearGradient id="prism-44" gradientUnits="userSpaceOnUse" x1="-22.1678" y1="22.1678" x2="-24.23388" y2="19.88823"><stop stop-color="#b81ae6"/><stop offset="1" stop-color="#a91eec"/></linearGradient>
+      <linearGradient id="prism-45" gradientUnits="userSpaceOnUse" x1="-24.23388" y1="19.88823" x2="-26.06657" y2="17.41713"><stop stop-color="#a91eec"/><stop offset="1" stop-color="#9a23f3"/></linearGradient>
+      <linearGradient id="prism-46" gradientUnits="userSpaceOnUse" x1="-26.06657" y1="17.41713" x2="-27.64823" y2="14.77829"><stop stop-color="#9a23f3"/><stop offset="1" stop-color="#8b27f9"/></linearGradient>
+      <linearGradient id="prism-47" gradientUnits="userSpaceOnUse" x1="-27.64823" y1="14.77829" x2="-28.96362" y2="11.99713"><stop stop-color="#8b27f9"/><stop offset="1" stop-color="#7c2bff"/></linearGradient>
+      <linearGradient id="prism-48" gradientUnits="userSpaceOnUse" x1="-28.96362" y1="11.99713" x2="-30.00008" y2="9.10042"><stop stop-color="#7c2bff"/><stop offset="1" stop-color="#7340df"/></linearGradient>
+      <linearGradient id="prism-49" gradientUnits="userSpaceOnUse" x1="-30.00008" y1="9.10042" x2="-30.74762" y2="6.11608"><stop stop-color="#7340df"/><stop offset="1" stop-color="#6955bf"/></linearGradient>
+      <linearGradient id="prism-50" gradientUnits="userSpaceOnUse" x1="-30.74762" y1="6.11608" x2="-31.19904" y2="3.07284"><stop stop-color="#6955bf"/><stop offset="1" stop-color="#60699f"/></linearGradient>
+      <linearGradient id="prism-51" gradientUnits="userSpaceOnUse" x1="-31.19904" y1="3.07284" x2="-31.35" y2="0"><stop stop-color="#60699f"/><stop offset="1" stop-color="#567e80"/></linearGradient>
+      <linearGradient id="prism-52" gradientUnits="userSpaceOnUse" x1="-31.35" y1="0" x2="-31.19904" y2="-3.07284"><stop stop-color="#567e80"/><stop offset="1" stop-color="#4d9360"/></linearGradient>
+      <linearGradient id="prism-53" gradientUnits="userSpaceOnUse" x1="-31.19904" y1="-3.07284" x2="-30.74762" y2="-6.11608"><stop stop-color="#4d9360"/><stop offset="1" stop-color="#43a840"/></linearGradient>
+      <linearGradient id="prism-54" gradientUnits="userSpaceOnUse" x1="-30.74762" y1="-6.11608" x2="-30.00008" y2="-9.10042"><stop stop-color="#43a840"/><stop offset="1" stop-color="#3abc20"/></linearGradient>
+      <linearGradient id="prism-55" gradientUnits="userSpaceOnUse" x1="-30.00008" y1="-9.10042" x2="-28.96362" y2="-11.99713"><stop stop-color="#3abc20"/><stop offset="1" stop-color="#30d100"/></linearGradient>
+      <linearGradient id="prism-56" gradientUnits="userSpaceOnUse" x1="-28.96362" y1="-11.99713" x2="-27.64823" y2="-14.77829"><stop stop-color="#30d100"/><stop offset="1" stop-color="#2cba1f"/></linearGradient>
+      <linearGradient id="prism-57" gradientUnits="userSpaceOnUse" x1="-27.64823" y1="-14.77829" x2="-26.06657" y2="-17.41713"><stop stop-color="#2cba1f"/><stop offset="1" stop-color="#29a33e"/></linearGradient>
+      <linearGradient id="prism-58" gradientUnits="userSpaceOnUse" x1="-26.06657" y1="-17.41713" x2="-24.23388" y2="-19.88823"><stop stop-color="#29a33e"/><stop offset="1" stop-color="#258b5d"/></linearGradient>
+      <linearGradient id="prism-59" gradientUnits="userSpaceOnUse" x1="-24.23388" y1="-19.88823" x2="-22.1678" y2="-22.1678"><stop stop-color="#258b5d"/><stop offset="1" stop-color="#22747c"/></linearGradient>
+      <linearGradient id="prism-60" gradientUnits="userSpaceOnUse" x1="-22.1678" y1="-22.1678" x2="-19.88823" y2="-24.23388"><stop stop-color="#22747c"/><stop offset="1" stop-color="#1e5d9a"/></linearGradient>
+      <linearGradient id="prism-61" gradientUnits="userSpaceOnUse" x1="-19.88823" y1="-24.23388" x2="-17.41713" y2="-26.06657"><stop stop-color="#1e5d9a"/><stop offset="1" stop-color="#1a46b9"/></linearGradient>
+      <linearGradient id="prism-62" gradientUnits="userSpaceOnUse" x1="-17.41713" y1="-26.06657" x2="-14.77829" y2="-27.64823"><stop stop-color="#1a46b9"/><stop offset="1" stop-color="#172ed8"/></linearGradient>
+      <linearGradient id="prism-63" gradientUnits="userSpaceOnUse" x1="-14.77829" y1="-27.64823" x2="-11.99713" y2="-28.96362"><stop stop-color="#172ed8"/><stop offset="1" stop-color="#1317f7"/></linearGradient>
+      <radialGradient id="prism-bevel" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="51">
+        <stop offset=".539" stop-color="#11101c" stop-opacity=".22"/><stop offset=".561" stop-color="#ece4ff" stop-opacity=".25"/>
+        <stop offset=".594" stop-color="#ece4ff" stop-opacity="0"/><stop offset=".632" stop-color="#100d21" stop-opacity="0"/>
+        <stop offset=".661" stop-color="#100d21" stop-opacity=".17"/><stop offset=".69" stop-color="#e8e0ff" stop-opacity=".32"/>
+      </radialGradient>
+      <linearGradient id="prism-reflection" gradientUnits="userSpaceOnUse" x1="-48.19" y1="-53.52" x2="48.19" y2="53.52">
+        <stop offset=".18" stop-color="#f3edff" stop-opacity="0"/><stop offset=".34" stop-color="#f3edff" stop-opacity=".4"/>
+        <stop offset=".49" stop-color="#f3edff" stop-opacity="0"/><stop offset=".58" stop-color="#110b29" stop-opacity=".18"/>
+        <stop offset=".73" stop-color="#efe4ff" stop-opacity=".16"/><stop offset=".88" stop-color="#efe4ff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <g aria-label="Prism chrome wild ring" clip-path="url(#prism-disc)">
+      <circle r="35.2" fill="#1317f7"/>
+      <path data-color="blue" fill="url(#prism-0)" stroke="url(#prism-0)" stroke-width="0.7" d="M0 0 L-13.7766 -33.25966 A36 36 0 0 1 -10.45025 -34.44985 Z"/>
+      <path fill="url(#prism-1)" stroke="url(#prism-1)" stroke-width="0.7" d="M0 0 L-10.45025 -34.44985 A36 36 0 0 1 -7.02325 -35.30827 Z"/>
+      <path fill="url(#prism-2)" stroke="url(#prism-2)" stroke-width="0.7" d="M0 0 L-7.02325 -35.30827 A36 36 0 0 1 -3.52862 -35.82665 Z"/>
+      <path fill="url(#prism-3)" stroke="url(#prism-3)" stroke-width="0.7" d="M0 0 L-3.52862 -35.82665 A36 36 0 0 1 0 -36 Z"/>
+      <path fill="url(#prism-4)" stroke="url(#prism-4)" stroke-width="0.7" d="M0 0 L0 -36 A36 36 0 0 1 3.52862 -35.82665 Z"/>
+      <path fill="url(#prism-5)" stroke="url(#prism-5)" stroke-width="0.7" d="M0 0 L3.52862 -35.82665 A36 36 0 0 1 7.02325 -35.30827 Z"/>
+      <path fill="url(#prism-6)" stroke="url(#prism-6)" stroke-width="0.7" d="M0 0 L7.02325 -35.30827 A36 36 0 0 1 10.45025 -34.44985 Z"/>
+      <path fill="url(#prism-7)" stroke="url(#prism-7)" stroke-width="0.7" d="M0 0 L10.45025 -34.44985 A36 36 0 0 1 13.7766 -33.25966 Z"/>
+      <path data-color="gold" fill="url(#prism-8)" stroke="url(#prism-8)" stroke-width="0.7" d="M0 0 L13.7766 -33.25966 A36 36 0 0 1 16.97028 -31.74917 Z"/>
+      <path fill="url(#prism-9)" stroke="url(#prism-9)" stroke-width="0.7" d="M0 0 L16.97028 -31.74917 A36 36 0 0 1 20.00053 -29.93291 Z"/>
+      <path fill="url(#prism-10)" stroke="url(#prism-10)" stroke-width="0.7" d="M0 0 L20.00053 -29.93291 A36 36 0 0 1 22.83816 -27.82838 Z"/>
+      <path fill="url(#prism-11)" stroke="url(#prism-11)" stroke-width="0.7" d="M0 0 L22.83816 -27.82838 A36 36 0 0 1 25.45584 -25.45584 Z"/>
+      <path fill="url(#prism-12)" stroke="url(#prism-12)" stroke-width="0.7" d="M0 0 L25.45584 -25.45584 A36 36 0 0 1 27.82838 -22.83816 Z"/>
+      <path fill="url(#prism-13)" stroke="url(#prism-13)" stroke-width="0.7" d="M0 0 L27.82838 -22.83816 A36 36 0 0 1 29.93291 -20.00053 Z"/>
+      <path fill="url(#prism-14)" stroke="url(#prism-14)" stroke-width="0.7" d="M0 0 L29.93291 -20.00053 A36 36 0 0 1 31.74917 -16.97028 Z"/>
+      <path fill="url(#prism-15)" stroke="url(#prism-15)" stroke-width="0.7" d="M0 0 L31.74917 -16.97028 A36 36 0 0 1 33.25966 -13.7766 Z"/>
+      <path data-color="silver" fill="url(#prism-16)" stroke="url(#prism-16)" stroke-width="0.7" d="M0 0 L33.25966 -13.7766 A36 36 0 0 1 34.44985 -10.45025 Z"/>
+      <path fill="url(#prism-17)" stroke="url(#prism-17)" stroke-width="0.7" d="M0 0 L34.44985 -10.45025 A36 36 0 0 1 35.30827 -7.02325 Z"/>
+      <path fill="url(#prism-18)" stroke="url(#prism-18)" stroke-width="0.7" d="M0 0 L35.30827 -7.02325 A36 36 0 0 1 35.82665 -3.52862 Z"/>
+      <path fill="url(#prism-19)" stroke="url(#prism-19)" stroke-width="0.7" d="M0 0 L35.82665 -3.52862 A36 36 0 0 1 36 0 Z"/>
+      <path fill="url(#prism-20)" stroke="url(#prism-20)" stroke-width="0.7" d="M0 0 L36 0 A36 36 0 0 1 35.82665 3.52862 Z"/>
+      <path fill="url(#prism-21)" stroke="url(#prism-21)" stroke-width="0.7" d="M0 0 L35.82665 3.52862 A36 36 0 0 1 35.30827 7.02325 Z"/>
+      <path fill="url(#prism-22)" stroke="url(#prism-22)" stroke-width="0.7" d="M0 0 L35.30827 7.02325 A36 36 0 0 1 34.44985 10.45025 Z"/>
+      <path fill="url(#prism-23)" stroke="url(#prism-23)" stroke-width="0.7" d="M0 0 L34.44985 10.45025 A36 36 0 0 1 33.25966 13.7766 Z"/>
+      <path data-color="red" fill="url(#prism-24)" stroke="url(#prism-24)" stroke-width="0.7" d="M0 0 L33.25966 13.7766 A36 36 0 0 1 31.74917 16.97028 Z"/>
+      <path fill="url(#prism-25)" stroke="url(#prism-25)" stroke-width="0.7" d="M0 0 L31.74917 16.97028 A36 36 0 0 1 29.93291 20.00053 Z"/>
+      <path fill="url(#prism-26)" stroke="url(#prism-26)" stroke-width="0.7" d="M0 0 L29.93291 20.00053 A36 36 0 0 1 27.82838 22.83816 Z"/>
+      <path fill="url(#prism-27)" stroke="url(#prism-27)" stroke-width="0.7" d="M0 0 L27.82838 22.83816 A36 36 0 0 1 25.45584 25.45584 Z"/>
+      <path fill="url(#prism-28)" stroke="url(#prism-28)" stroke-width="0.7" d="M0 0 L25.45584 25.45584 A36 36 0 0 1 22.83816 27.82838 Z"/>
+      <path fill="url(#prism-29)" stroke="url(#prism-29)" stroke-width="0.7" d="M0 0 L22.83816 27.82838 A36 36 0 0 1 20.00053 29.93291 Z"/>
+      <path fill="url(#prism-30)" stroke="url(#prism-30)" stroke-width="0.7" d="M0 0 L20.00053 29.93291 A36 36 0 0 1 16.97028 31.74917 Z"/>
+      <path fill="url(#prism-31)" stroke="url(#prism-31)" stroke-width="0.7" d="M0 0 L16.97028 31.74917 A36 36 0 0 1 13.7766 33.25966 Z"/>
+      <path data-color="orange" fill="url(#prism-32)" stroke="url(#prism-32)" stroke-width="0.7" d="M0 0 L13.7766 33.25966 A36 36 0 0 1 10.45025 34.44985 Z"/>
+      <path fill="url(#prism-33)" stroke="url(#prism-33)" stroke-width="0.7" d="M0 0 L10.45025 34.44985 A36 36 0 0 1 7.02325 35.30827 Z"/>
+      <path fill="url(#prism-34)" stroke="url(#prism-34)" stroke-width="0.7" d="M0 0 L7.02325 35.30827 A36 36 0 0 1 3.52862 35.82665 Z"/>
+      <path fill="url(#prism-35)" stroke="url(#prism-35)" stroke-width="0.7" d="M0 0 L3.52862 35.82665 A36 36 0 0 1 0 36 Z"/>
+      <path fill="url(#prism-36)" stroke="url(#prism-36)" stroke-width="0.7" d="M0 0 L0 36 A36 36 0 0 1 -3.52862 35.82665 Z"/>
+      <path fill="url(#prism-37)" stroke="url(#prism-37)" stroke-width="0.7" d="M0 0 L-3.52862 35.82665 A36 36 0 0 1 -7.02325 35.30827 Z"/>
+      <path fill="url(#prism-38)" stroke="url(#prism-38)" stroke-width="0.7" d="M0 0 L-7.02325 35.30827 A36 36 0 0 1 -10.45025 34.44985 Z"/>
+      <path fill="url(#prism-39)" stroke="url(#prism-39)" stroke-width="0.7" d="M0 0 L-10.45025 34.44985 A36 36 0 0 1 -13.7766 33.25966 Z"/>
+      <path data-color="pink" fill="url(#prism-40)" stroke="url(#prism-40)" stroke-width="0.7" d="M0 0 L-13.7766 33.25966 A36 36 0 0 1 -16.97028 31.74917 Z"/>
+      <path fill="url(#prism-41)" stroke="url(#prism-41)" stroke-width="0.7" d="M0 0 L-16.97028 31.74917 A36 36 0 0 1 -20.00053 29.93291 Z"/>
+      <path fill="url(#prism-42)" stroke="url(#prism-42)" stroke-width="0.7" d="M0 0 L-20.00053 29.93291 A36 36 0 0 1 -22.83816 27.82838 Z"/>
+      <path fill="url(#prism-43)" stroke="url(#prism-43)" stroke-width="0.7" d="M0 0 L-22.83816 27.82838 A36 36 0 0 1 -25.45584 25.45584 Z"/>
+      <path fill="url(#prism-44)" stroke="url(#prism-44)" stroke-width="0.7" d="M0 0 L-25.45584 25.45584 A36 36 0 0 1 -27.82838 22.83816 Z"/>
+      <path fill="url(#prism-45)" stroke="url(#prism-45)" stroke-width="0.7" d="M0 0 L-27.82838 22.83816 A36 36 0 0 1 -29.93291 20.00053 Z"/>
+      <path fill="url(#prism-46)" stroke="url(#prism-46)" stroke-width="0.7" d="M0 0 L-29.93291 20.00053 A36 36 0 0 1 -31.74917 16.97028 Z"/>
+      <path fill="url(#prism-47)" stroke="url(#prism-47)" stroke-width="0.7" d="M0 0 L-31.74917 16.97028 A36 36 0 0 1 -33.25966 13.7766 Z"/>
+      <path data-color="purple" fill="url(#prism-48)" stroke="url(#prism-48)" stroke-width="0.7" d="M0 0 L-33.25966 13.7766 A36 36 0 0 1 -34.44985 10.45025 Z"/>
+      <path fill="url(#prism-49)" stroke="url(#prism-49)" stroke-width="0.7" d="M0 0 L-34.44985 10.45025 A36 36 0 0 1 -35.30827 7.02325 Z"/>
+      <path fill="url(#prism-50)" stroke="url(#prism-50)" stroke-width="0.7" d="M0 0 L-35.30827 7.02325 A36 36 0 0 1 -35.82665 3.52862 Z"/>
+      <path fill="url(#prism-51)" stroke="url(#prism-51)" stroke-width="0.7" d="M0 0 L-35.82665 3.52862 A36 36 0 0 1 -36 0 Z"/>
+      <path fill="url(#prism-52)" stroke="url(#prism-52)" stroke-width="0.7" d="M0 0 L-36 0 A36 36 0 0 1 -35.82665 -3.52862 Z"/>
+      <path fill="url(#prism-53)" stroke="url(#prism-53)" stroke-width="0.7" d="M0 0 L-35.82665 -3.52862 A36 36 0 0 1 -35.30827 -7.02325 Z"/>
+      <path fill="url(#prism-54)" stroke="url(#prism-54)" stroke-width="0.7" d="M0 0 L-35.30827 -7.02325 A36 36 0 0 1 -34.44985 -10.45025 Z"/>
+      <path fill="url(#prism-55)" stroke="url(#prism-55)" stroke-width="0.7" d="M0 0 L-34.44985 -10.45025 A36 36 0 0 1 -33.25966 -13.7766 Z"/>
+      <path data-color="green" fill="url(#prism-56)" stroke="url(#prism-56)" stroke-width="0.7" d="M0 0 L-33.25966 -13.7766 A36 36 0 0 1 -31.74917 -16.97028 Z"/>
+      <path fill="url(#prism-57)" stroke="url(#prism-57)" stroke-width="0.7" d="M0 0 L-31.74917 -16.97028 A36 36 0 0 1 -29.93291 -20.00053 Z"/>
+      <path fill="url(#prism-58)" stroke="url(#prism-58)" stroke-width="0.7" d="M0 0 L-29.93291 -20.00053 A36 36 0 0 1 -27.82838 -22.83816 Z"/>
+      <path fill="url(#prism-59)" stroke="url(#prism-59)" stroke-width="0.7" d="M0 0 L-27.82838 -22.83816 A36 36 0 0 1 -25.45584 -25.45584 Z"/>
+      <path fill="url(#prism-60)" stroke="url(#prism-60)" stroke-width="0.7" d="M0 0 L-25.45584 -25.45584 A36 36 0 0 1 -22.83816 -27.82838 Z"/>
+      <path fill="url(#prism-61)" stroke="url(#prism-61)" stroke-width="0.7" d="M0 0 L-22.83816 -27.82838 A36 36 0 0 1 -20.00053 -29.93291 Z"/>
+      <path fill="url(#prism-62)" stroke="url(#prism-62)" stroke-width="0.7" d="M0 0 L-20.00053 -29.93291 A36 36 0 0 1 -16.97028 -31.74917 Z"/>
+      <path fill="url(#prism-63)" stroke="url(#prism-63)" stroke-width="0.7" d="M0 0 L-16.97028 -31.74917 A36 36 0 0 1 -13.7766 -33.25966 Z"/>
+      <circle r="35.2" fill="url(#prism-reflection)"/>
+      <circle r="35.2" fill="url(#prism-bevel)"/>
     </g>
     <circle cx="0" cy="0" r="27.5" fill="#111"/>
     <circle cx="0" cy="0" r="19.8" fill="#fff"/>

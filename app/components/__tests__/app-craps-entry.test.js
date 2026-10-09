@@ -115,6 +115,31 @@ const CLOCK_PERIOD_CLOSES = Object.freeze({
   periodCloseSeconds: Object.freeze([300, 480, 660, 840, 1_020]),
 });
 
+test('deployment day offers tomorrow reservations without inventing live or overdue battles', () => {
+  const clock = CLOCK_PERIOD_CLOSES;
+  const dayStart = (clock.anchorSeconds + 1000 * clock.daySeconds) * 1000;
+  for (const elapsed of [0, 299, 300, 1020, 1199]) {
+    const state = crapsEntry.crapsEntryState({ day: 1, nowMs: dayStart + elapsed * 1000, clock });
+    assert.equal(state.warmup, true);
+    assert.equal(state.dayEntryKind, 'future-day');
+    assert.equal(state.dayEntryDay, 2);
+    assert.ok(state.battles.every((battle) => !battle.joinable && battle.state === 'warmup'),
+      'elapsed window deadlines on deployment day must not imply pending settlement');
+    const options = crapsEntry.crapsDayQuestPurchaseOptions({ state, todayPrice: 1000n });
+    assert.equal(options.today, null, 'even a cached quote cannot offer a warm-up-day ticket');
+    assert.equal(options.tomorrow.day, 2);
+  }
+
+  const next = crapsEntry.crapsEntryState({ day: 2, nowMs: dayStart + clock.daySeconds * 1000, clock });
+  assert.equal(next.warmup, false);
+  assert.equal(next.dayEntryKind, 'day');
+  assert.equal(next.dayEntryDay, 2);
+  assert.ok(next.battles.every((battle) => battle.joinable));
+  assert.equal(next.battles[0].state, 'current');
+  assert.equal(crapsEntry.crapsEntryState({ clock }).warmup, false,
+    'an unknown day is still loading, not a deployment-day assertion');
+});
+
 test('the current-schema clock steps through six periods and never reports the legacy "day complete" sentinel', () => {
   const c = CLOCK_PERIOD_CLOSES;
   assert.equal(crapsEntry.crapsBattlesPerDay(c), 6);

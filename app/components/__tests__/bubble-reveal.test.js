@@ -31,6 +31,7 @@ function harness({ reducedMotion = false } = {}) {
 test('shorter jackpot pops use the same duration for animation and completion', () => {
   const { doc, timers } = harness();
   const cover = createBubbleCover(doc, { durationMs: 140 });
+  cover.element.getBoundingClientRect = () => { throw new Error('keyboard pop forced layout'); };
   let completions = 0;
   assert.equal(cover.element.style.getPropertyValue('--bubble-reveal-duration'), '140ms');
   assert.equal(cover.pop(null, { onComplete: () => completions++ }), true);

@@ -963,6 +963,23 @@ describe('openLegsFromFeed', () => {
       .filter(leg => leg.legType === 'spin').map(leg => leg.spinType), ['flip']);
   });
 
+  test('does not replay neighboring queued boxes from the same settlement transaction', () => {
+    const transactionHash = `0x${'ac'.repeat(32)}`;
+    const rows = [7, 8, 9].flatMap((lootboxIndex, i) => [
+      { player: PLAYER, transactionHash, lootboxIndex, logIndex: i * 2,
+        legType: 'opened', rewardData: { futureTickets: 100, flip: '0' } },
+      { player: PLAYER, transactionHash, lootboxIndex, logIndex: i * 2 + 1,
+        legType: 'spin', spin: { spinType: 'wwxrp', betId: String(lootboxIndex), payout: '2', reels: [] } },
+    ]);
+    for (const lootboxIndex of [7, 8, 9]) {
+      for (const explicitHash of [undefined, transactionHash]) {
+        const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex, transactionHash: explicitHash });
+        assert.deepEqual(legs.filter(leg => leg.legType === 'spin').map(leg => leg.betId), [String(lootboxIndex)]);
+        assert.equal(legs.filter(leg => leg.legType === 'opened').length, 1);
+      }
+    }
+  });
+
   test('rebuilds every same-player leg in the anchored transaction, in log order', () => {
     const tx = `0x${'ab'.repeat(32)}`;
     const packed = packSpin(1n, 2n, 4) | (1n << 216n);
@@ -1525,7 +1542,7 @@ describe('readOpenLegsFromChain', () => {
           return { hash, blockNumber: purchaseBlock, logs: [purchase] };
         }
         assert.equal(hash, batchHash);
-        return { hash, blockNumber: spinBlock, logs: [applied, spin] };
+        return { hash, blockNumber: spinBlock, logs: [applied, spin, { ...spin, ...log('BoxSpin', [player, betId + 1n, packed, 0n, 0n]), logIndex: 4 }] };
       },
     });
 
@@ -1537,6 +1554,7 @@ describe('readOpenLegsFromChain', () => {
     });
     assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
     assert.equal(legs[0].spinType, 'flip');
+    assert.equal(String(legs[0].betId), String(betId), 'only the proven box spin is recovered from the shared receipt');
     assert.ok(transactionReads.includes(purchaseHash),
       'current counted orders are reconstructed from immutable purchase calldata');
   });

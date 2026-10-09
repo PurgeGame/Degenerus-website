@@ -394,7 +394,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-98cd2a78-801ee609-scoped-v16-danger';
+    const revision = '?v=craps-98cd2a78-9005ee03-scoped-v16-danger';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -413,9 +413,9 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    assert.match(
+    assert.equal(
       map.imports?.['/app/components/reveal-overlay.js'] || '',
-      /^\/app\/components\/reveal-overlay\.js\?v=reveal-controls-/,
+      '/app/components/reveal-overlay.js?v=prism-box-reveal-fixes-20261009',
       'every absolute or relative reveal-overlay import resolves to one revised URL',
     );
     assert.doesNotMatch(
