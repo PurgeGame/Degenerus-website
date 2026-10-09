@@ -198,6 +198,7 @@ const {
   resolvedBoxRowsFromLegs,
 } = await import('../app-box-strip.js');
 const { CHAIN, CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
+const { useSchema, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
 const ORIGINAL_FETCH = globalThis.fetch;
 
 test('a record bounty cannot create a phantom Pending Luckbox', () => {
@@ -1550,7 +1551,9 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('an OPEN sweep that stops before this box keeps it armed and says why', async () => {
+  test('an OPEN sweep that stops before this box keeps it armed and says why', async (t) => {
+    const previousSchema = useSchema(CURRENT_SCHEMA_HASH);
+    t.after(() => useSchema(previousSchema));
     // Audits 2525eb7fd / 18490c6fe: OPEN sends mineFlip, whose stages sweep boxes in queue
     // order. When a call ends on the boxes ahead (afking boxes go first), this entry is still queued.
     const calls = { open: [] };
@@ -1579,7 +1582,7 @@ describe('app-box-strip', () => {
     el.__setReadyForTest(8);
     const action = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
     assert.equal(await action.run(), false);
-    assert.deepEqual(calls.open, [[{ gasLimit: 10_000_000n }]], 'one mineFlip at the miner gas floor');
+    assert.deepEqual(calls.open, [[0, { gasLimit: 10_000_000n }]], 'one mineFlip(0) at the miner gas floor');
     assert.deepEqual(errors, ['Opened the boxes ahead of yours. Tap OPEN again to reach it.']);
     const still = pendingActionsMod.getPendingActions().find((item) => item.id === 'lootbox:8');
     assert.equal(still?.state, 'ready', 'the box stays armed for the next OPEN or crank');

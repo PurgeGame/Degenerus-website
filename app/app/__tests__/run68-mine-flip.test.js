@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Interface } from 'ethers';
-import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_MINE_FLIP_MULTIPLIER_SCHEMA_HASH, loadSchema } from '../../chain/schema.js';
+import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_AFKING_SECTIONS_SCHEMA_HASH, BEFORE_MINE_FLIP_MULTIPLIER_SCHEMA_HASH, loadSchema } from '../../chain/schema.js';
 import { abi as gameAbi } from '../../chain/generated/game.js';
 import { walletAbi } from '../wallet-abi.js';
 import { CHAIN, CONTRACTS } from '../chain-config.js';
@@ -57,7 +57,8 @@ async function fakeMiner(mod, expected) {
 }
 
 for (const [label, hash, expected] of [
-  ['run 68', CURRENT_SCHEMA_HASH, [0]],
+  ['run 69', CURRENT_SCHEMA_HASH, [0]],
+  ['run 68', BEFORE_AFKING_SECTIONS_SCHEMA_HASH, [0]],
   ['run 67', BEFORE_MINE_FLIP_MULTIPLIER_SCHEMA_HASH, []],
 ]) {
   test(`${label} button probes, estimates and sends the matching miner calldata`, async () => {
@@ -97,7 +98,7 @@ for (const [name, mod, action] of [
 
 test('ABI cache keeps old and new miner signatures separate when profiles switch', () => {
   const legacy = ['function mineFlip()'];
-  for (const [hash, count] of [[CURRENT_SCHEMA_HASH, 1], [BEFORE_MINE_FLIP_MULTIPLIER_SCHEMA_HASH, 0], [CURRENT_SCHEMA_HASH, 1]]) {
+  for (const [hash, count] of [[CURRENT_SCHEMA_HASH, 1], [BEFORE_AFKING_SECTIONS_SCHEMA_HASH, 1], [BEFORE_MINE_FLIP_MULTIPLIER_SCHEMA_HASH, 0], [CURRENT_SCHEMA_HASH, 1]]) {
     useSchema(hash);
     assert.equal(new Interface(walletAbi(legacy, gameAbi)).getFunction('mineFlip').inputs.length, count);
   }

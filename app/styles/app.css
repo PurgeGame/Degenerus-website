@@ -19162,19 +19162,21 @@ body.layout-basic .deg-quickplay-stage { position: absolute; inset: 0; touch-act
 body.layout-basic .deg-quickplay-stage.is-dragging { cursor: grabbing; }
 body.layout-basic .deg-carousel { position: absolute; inset: 0; }
 body.layout-basic .deg-carousel__sym { position: absolute; top: calc(var(--deg-top) + var(--deg-champ) * 0.42); left: 50%; width: var(--deg-champ); height: var(--deg-champ); transform: translate(-50%, -50%) scale(0.28); transform-origin: center; -webkit-user-drag: none; }
-/* Match the SVG badge's 27.5..35.2 ring radii in its 102-unit viewBox. */
+/* A vector mask matches the badge's 27.5..35.2 ring radii and antialiases
+   both circular edges, including when the carousel scales between slots. */
 body.layout-basic .deg-carousel__wild-ring {
   position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0;
   transform-origin: center;
-  -webkit-mask: radial-gradient(circle closest-side, transparent 53.92%, #000 53.92% 69.02%, transparent 69.02%);
-  mask: radial-gradient(circle closest-side, transparent 53.92%, #000 53.92% 69.02%, transparent 69.02%);
+  -webkit-mask: url('/app/assets/degenerette/prism-ring-mask.svg') center / 100% 100% no-repeat;
+  mask: url('/app/assets/degenerette/prism-ring-mask.svg') center / 100% 100% no-repeat;
 }
-/* Prism chrome: polished edges and reflected light over the shuffled spectrum. */
+/* Broad, soft reflections keep the chrome finish readable without the
+   subpixel white bands that broke into speckles at carousel size. */
 body.layout-basic .deg-carousel__wild-ring::after {
   content: ''; position: absolute; inset: 0;
   background:
-    radial-gradient(circle closest-side, transparent 54.3%, #ffffffa8 54.7% 55.5%, transparent 56.1% 66.5%, #070812b3 67.1%, #e9e9ffcc 68.3%, transparent 69.02%),
-    linear-gradient(132deg, #fff0 25%, #fff9 35%, #fff0 43%, #0006 53%, #fff4 67%, #fff0 74%);
+    radial-gradient(circle closest-side, #11101c38 53.9%, #ece4ff40 56.1%, transparent 59.4% 63.2%, #100d212b 66.1%, #e8e0ff52 69%, transparent 72%),
+    linear-gradient(132deg, #fff0 18%, #f3edff66 34%, #fff0 49%, #110b292e 58%, #efe4ff29 73%, #fff0 88%);
 }
 body.layout-basic .deg-carousel.is-moving img,
 body.layout-basic .deg-carousel.is-moving .deg-carousel__wild-ring,
