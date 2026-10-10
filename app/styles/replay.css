@@ -1352,6 +1352,35 @@
 .replay-bucket-row-count--currency { color: rgba(92, 22, 22, 0.78); }
 .replay-bucket-row-count--tickets { color: rgba(31, 79, 122, 0.82); }
 
+/* Phone receipts can have two reward rows. Size that lane from its contents,
+   then fit the badge in the space above instead of letting it cover a reward. */
+@media (max-width: 600px) {
+  .replay-prize-reveal.replay-bucket-reveal {
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: .4rem;
+  }
+  .replay-bucket-badge,
+  .replay-bucket-reveal--main-miss.replay-bucket-reveal--solo-eth .replay-bucket-badge {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    transform: none;
+  }
+  .replay-bucket-receipt,
+  .replay-bucket-reveal--solo-eth .replay-bucket-receipt {
+    height: auto;
+    gap: .35rem;
+    transform: none;
+  }
+  .replay-bucket-reveal--q2 .replay-bucket-amount,
+  .replay-bucket-reveal--q2 .replay-bucket-tickets,
+  .replay-bucket-reveal--q3 .replay-bucket-amount,
+  .replay-bucket-reveal--q3 .replay-bucket-tickets { transform: none; }
+  .replay-prize-reveal.replay-bucket-reveal--main-miss:is(.replay-bucket-reveal--q2, .replay-bucket-reveal--q3) {
+    padding-bottom: 6%;
+  }
+}
+
 /* A miniature version of the actual Degenerus ticket: four paper quadrants,
    crossed seams, and the same centered flame used by inventory tickets. */
 .replay-bucket-ticket-icon {

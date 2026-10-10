@@ -4080,6 +4080,8 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
   body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
     grid-column: 2;
     grid-row: 1;
+    /* Keep ETH at the foot of the pass even when the FLIP row is hidden. */
+    align-self: end;
     container-type: inline-size;
   }
 

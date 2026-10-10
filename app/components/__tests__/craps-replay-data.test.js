@@ -82,11 +82,29 @@ const REPLAY_DEPLOYMENT = Object.freeze({
   contract: MANIFEST.ruleset.contract,
 });
 const ALL_PLAYERS = SIM_CRAPS_REPLAY_SHARDS.flatMap((shard) => shard.players);
+
+test('final rank orders survive validation and follow the selected replay lane and perspective', () => {
+  const main = ALL_PLAYERS.map(player => player.betId).reverse();
+  const highIds = new Set(ALL_PLAYERS.filter(player => player.entryMultiple > 1).map(player => player.betId));
+  const high = main.filter(id => highIds.has(id));
+  const rankings = { main, high };
+  const pointer = validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER, rankings }, REPLAY_DEPLOYMENT);
+  assert.deepEqual(pointer.rankings, rankings);
+  const artifacts = { ...SIM_CRAPS_REPLAY_ARTIFACTS, pointer, highRollers: ALL_PLAYERS.filter(player => highIds.has(player.betId)) };
+  assert.deepEqual(createCrapsReplayTableModel(artifacts).tableOptions.finalRankOrder, main);
+  assert.deepEqual(createCrapsReplayTableModel(artifacts, { perspectiveBetId: main[0] }).tableOptions.finalRankOrder, main);
+  assert.deepEqual(createCrapsReplayTableModel(artifacts, { lane: 'high', perspectiveBetId: high[0], highRollerEntrants: high.length }).tableOptions.finalRankOrder, high);
+  for (const invalid of [
+    { main: main.slice(1), high: [] },
+    { main: main.map(() => main[0]), high: [] },
+    { main, high: ['999999999'] },
+  ]) assert.throws(() => validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER, rankings: invalid }, REPLAY_DEPLOYMENT), /rankings/);
+});
 const RUN_44_CRAPS_RUNTIME_HASH = '0xde6033ca6191100bd7803a214cbdc9a3bc0c5e8446948158c2da2061d47cf796';
 const RUN_47_CRAPS_RUNTIME_HASH = '0x45c30da17eafd909ee1b8806745f0efe519814a8bde8a1a2bb1b153c017bec42';
 const RUN_49_CRAPS_RUNTIME_HASH = '0x457e12fa9f16929738474ac23639d30c48125c62cfde52003767032d0d4c661c';
 const RUN_59_CRAPS_RUNTIME_HASH = '0x9d3479299f7d78a5bfdcb243d3bdeab99f0a8872ccd426d96898fa4260af2573';
-const CURRENT_CRAPS_RUNTIME_HASH = '0x9005ee0372581e88105ad75e3efefd9d3b1c05ba1774620d08b24d98ec21ac1d';
+const CURRENT_CRAPS_RUNTIME_HASH = '0x82759b3c286edf4c3665cf9904bc9de18796675a637766caeaa3f05fdad52658';
 
 function legacyReplayFixture(contract = MANIFEST.ruleset.contract) {
   const paths = crapsReplayArtifactPaths(MANIFEST.battleKey, MANIFEST.digest);
@@ -472,9 +490,13 @@ test('Discord identities load in endpoint-sized batches without one failure blan
 
 test('a fully prepared replay opens later without reloading artifacts, profiles, or settlement data', async () => {
   __resetCrapsReplayLoaderForTest();
+  const main = ALL_PLAYERS.map(player => player.betId)
+    .filter(id => id !== SIM_CRAPS_REPLAY_VIEWER.betId).concat(SIM_CRAPS_REPLAY_VIEWER.betId);
+  const highIds = new Set(ALL_PLAYERS.filter(player => player.entryMultiple > 1).map(player => player.betId));
+  const rankings = { main, high: main.filter(id => highIds.has(id)) };
   const bodies = new Map([
     ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
-    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.pointer, { ...SIM_CRAPS_REPLAY_POINTER, rankings }],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
   ]);
@@ -497,6 +519,9 @@ test('a fully prepared replay opens later without reloading artifacts, profiles,
   prepared.open({ open: options => opened.push(options) });
   assert.equal(opened.length, 1);
   assert.equal(opened[0].viewerBetId, SIM_CRAPS_REPLAY_VIEWER.betId);
+  assert.deepEqual(opened[0].finalRankOrder, main);
+  assert.equal(opened[0].battleWinnerBetId, main[0], 'settled rankings supply the winner when the caller omits it');
+  assert.equal(opened[0].battleWonByViewer, false);
   assert.equal(reads, before, 'the opening action only presents the prepared model');
   assert.equal(acknowledged, 0, 'only the actual result acknowledgement may mark it watched');
   opened[0].onResolutionAcknowledged();

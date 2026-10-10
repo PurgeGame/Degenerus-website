@@ -12130,6 +12130,16 @@ body.layout-basic .pool-progress__marker-label strong {
   font-weight: 950;
 }
 
+/* The turbo headline owns the header. Give the live pool readout a separate
+   lane below its marker so it cannot run through the countdown or prize. */
+body.layout-basic .pool-progress:has(.pool-progress__turbo-jackpot:not([hidden])) .pool-progress__body {
+  padding-bottom: 1.5rem;
+}
+body.layout-basic .pool-progress:has(.pool-progress__turbo-jackpot:not([hidden])) .pool-progress__marker-label {
+  top: calc(100% + 0.4rem);
+  bottom: auto;
+}
+
 body.layout-basic .pool-progress__percent {
   position: absolute;
   z-index: 6;
@@ -12345,6 +12355,21 @@ body.layout-basic .pool-progress__track.is-depleting .pool-progress__fill {
 }
 
 @media (max-width: 560px) {
+  body.layout-basic .pool-progress__turbo-jackpot {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.35rem 0.3rem;
+    font-size: clamp(0.58rem, 2.3vw, 0.7rem);
+    letter-spacing: 0.045em;
+    line-height: 1.2;
+  }
+  body.layout-basic .pool-progress__turbo-jackpot > span:first-child { justify-self: end; }
+  body.layout-basic .pool-progress__turbo-jackpot > strong { justify-self: start; }
+  body.layout-basic .pool-progress__turbo-jackpot > i { display: none; }
+  body.layout-basic .pool-progress__turbo-jackpot-prize {
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
   body.layout-basic .pool-progress__special-jackpot {
     grid-column: 1;
     grid-row: 2;

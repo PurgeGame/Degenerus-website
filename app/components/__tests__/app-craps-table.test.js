@@ -230,7 +230,7 @@ test('winner payoff size follows exact total won versus the starting buy-in', as
     'the center supports stacks and piles and clears the dice beneath them');
 });
 
-test('battle rank follows visible peaks while live and final goal peaks/bust rolls, with the winner first', async () => {
+test('battle rank follows visible peaks while live and settlement tiebreakers at the finish', async () => {
   const { rankCrapsBattleEntries } = await import(moduleUrl);
   const entries = [
     { key: 'early', rankStop: 'bust', rankRoll: 20, rankPeak: 9999n },
@@ -242,7 +242,7 @@ test('battle rank follows visible peaks while live and final goal peaks/bust rol
   ];
   const ranks = rankCrapsBattleEntries(entries, true);
   assert.deepEqual(ranks.map(({ key, rank }) => [key, rank]), [
-    ['equal', 1], ['peak', 2], ['goal', 3], ['late', 4], ['tie', 4], ['early', 6],
+    ['equal', 1], ['peak', 2], ['goal', 3], ['tie', 4], ['late', 5], ['early', 6],
   ]);
   const live = rankCrapsBattleEntries([
     { key: 'future', rankStop: 'goal', rankPeak: 900n, highPoint: 200n, goal: 500n, rankRoll: 12 },
@@ -253,6 +253,31 @@ test('battle rank follows visible peaks while live and final goal peaks/bust rol
   assert.deepEqual(live.map(({ key, rank }) => [key, rank]), [
     ['locked', 1], ['active', 2], ['future', 3], ['bust', 4],
   ], 'live ranks use observed high points and survival time, not future outcomes');
+});
+
+test('final merit uses shooters, kept bankroll, peak, and remainder before the random tiebreak', async () => {
+  const { rankCrapsBattleEntries } = await import(moduleUrl);
+  const entries = [
+    { key: 'gone', rankHands: 8, rankRoll: 120, rankPeak: 9999n, rankEnd: 0n },
+    { key: 'kept', rankHands: 8, rankRoll: 119, rankPeak: 300n, rankEnd: 1n },
+    { key: 'higher', rankHands: 8, rankRoll: 118, rankPeak: 400n, rankEnd: 1n },
+    { key: 'remainder', rankHands: 8, rankRoll: 117, rankPeak: 400n, rankEnd: 2n },
+    { key: 'longer', rankHands: 9, rankRoll: 116, rankPeak: 200n, rankEnd: 0n },
+    { key: 'goal', rankStop: 'goal', rankPeak: 500n, rankEnd: 1n },
+    { key: 'goal-end', rankStop: 'goal', rankPeak: 500n, rankEnd: 2n },
+  ];
+  assert.deepEqual(rankCrapsBattleEntries(entries, true).map(e => e.key),
+    ['goal-end', 'goal', 'longer', 'remainder', 'higher', 'kept', 'gone']);
+});
+
+test('settled ranks resolve equal runs without leaking the final order into the live race', async () => {
+  const { rankCrapsBattleEntries } = await import(moduleUrl);
+  const entries = [
+    { key: 'loser', local: true, finalRank: 2, rankHands: 5, rankPeak: 200n, rankEnd: 0n, highPoint: 200n, amount: 100n },
+    { key: 'winner', finalRank: 1, rankHands: 5, rankPeak: 200n, rankEnd: 0n, highPoint: 200n, amount: 100n },
+  ];
+  assert.deepEqual(rankCrapsBattleEntries(entries, true).map(e => [e.key, e.rank]), [['winner', 1], ['loser', 2]]);
+  assert.deepEqual(rankCrapsBattleEntries(entries).map(e => e.rank), [1, 1]);
 });
 
 test('bonus display uses ordinary schedule procs, and receipts never invent first place', () => {
