@@ -2352,3 +2352,18 @@ test('hottest shooter keeps its separate regular-pool prize and pass credit', ()
   assert.equal(result.hottestResult.passValueWei, String(20n*wei));
   assert.equal(result.winnerPassWei, 20n*wei);
 });
+
+test('the wallet-ID chain window drops retired events from its topic list instead of throwing', async () => {
+  // Run 58 retired CrapsProgressiveRolled; the wallet-ID lobby interface keeps only live events.
+  // A null fragment used to throw on every chain-window read, so a timed-out events route left
+  // the lobby on SETTLING with no working fallback.
+  useSchema(CURRENT_SCHEMA_HASH);
+  const provider = useWindowTransport();
+  craps.__setCrapsEventsFetcherForTest(async () => { throw new Error('API request timed out'); });
+  await craps.readCrapsBonusSchedule(WINDOW_DAY);
+  assert.equal(provider.calls.length, 1, 'a dead API must fall back to the chain');
+  const topics = provider.calls[0].topics[0];
+  assert.ok(topics.length > 0 && topics.every((hash) => /^0x[0-9a-f]{64}$/.test(hash)));
+  const retired = contracts.ethers.id('CrapsProgressiveRolled(bytes32,uint8,uint256,uint256)');
+  assert.ok(!topics.includes(retired));
+});

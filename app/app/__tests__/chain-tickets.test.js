@@ -281,3 +281,16 @@ test('a saturated shared tail falls back to filtered queries and stops sharing p
   await Promise.all(filters.map(f => cachedLogs(later, f)));
   assert.deepEqual(calls, [['address', 106, 106]], 'sharing resumes once tails start above the dense range');
 });
+
+test('a cached tail that ends before the request starts is not gap-filled from its top', async () => {
+  clearEventMemoryForTests(); const ranges = [];
+  const client = { chain: { id: 6161, deployBlock: 1 }, address: () => GAME,
+    header: async number => ({ number, hash: HASH }),
+    logs: async (_filter, range) => { ranges.push([range.fromBlock, range.toBlock]); return []; } };
+  const snapshot = number => ({ client, block: { number, hash: HASH }, verify: async () => {} });
+  // A visit early in the run leaves an entry ending at block 20.
+  await cachedLogs(snapshot(20), { topics: [topic] }, { fromBlock: 1 });
+  // Much later, a two-day read starts at 10,000: scan that window, not 21..10,050.
+  await cachedLogs(snapshot(10_050), { topics: [topic] }, { fromBlock: 10_000 });
+  assert.deepEqual(ranges, [[1, 20], [10_000, 10_050]]);
+});
