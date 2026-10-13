@@ -1,0 +1,76 @@
+/* This stylesheet is injected only into the disposable practice frame. */
+html[data-degenerus-tutorial] app-onboarding,
+html[data-degenerus-tutorial] app-baf-eve,
+html[data-degenerus-tutorial] app-decimator-burn,
+html[data-degenerus-tutorial] app-protocol-wallet-banner,
+html[data-degenerus-tutorial] app-eth-onramp,
+html[data-degenerus-tutorial] .play-grid > :not(app-quest-panel),
+html[data-degenerus-tutorial] main > .play-grid ~ *,
+html[data-degenerus-tutorial] footer,
+html[data-degenerus-tutorial] .testnet-beta-banner,
+html[data-degenerus-tutorial] view-mode-banner,
+html[data-degenerus-tutorial] quest-objective-indicator,
+html[data-degenerus-tutorial] [data-bind="ldj-results-cta"] {
+  display: none !important;
+}
+/* Keep the normal quest column and spacing when its neighbouring games are
+   omitted. The remaining grid tracks retain the normal desktop alignment. */
+html[data-degenerus-tutorial] body.layout-basic .play-grid {
+  border: 0; background: none; box-shadow: none; overflow: visible;
+}
+html[data-degenerus-tutorial] .play-grid > app-quest-panel {
+  border: 1px solid rgba(245, 166, 35, .38); border-radius: 14px; overflow: hidden;
+}
+/* Scroll space lets the last panel sit above the dialogue on small screens. */
+html[data-degenerus-tutorial] main { padding-bottom: 32px; }
+@media (max-width: 760px) {
+  html[data-degenerus-tutorial] main { padding-bottom: 300px; }
+}
+html[data-degenerus-tutorial] { scroll-behavior: auto !important; }
+html[data-degenerus-tutorial]:is([data-tutorial-step="badge-closeup"], [data-tutorial-step="badges"], [data-tutorial-step="badge-symbols"], [data-tutorial-step="badge-colors"]) main { filter: brightness(.2) blur(3px); }
+html[data-degenerus-tutorial] .tutorial-locked { cursor: default !important; }
+html[data-degenerus-tutorial] .tutorial-enabled {
+  opacity: 1 !important;
+  filter: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+html[data-degenerus-tutorial]:not([data-tutorial-step="main-spin"]) replay-panel [data-bind="reveal-btn"] { visibility: hidden !important; }
+/* Coin motion becomes a cue only when the lesson asks the player to flip. */
+html[data-degenerus-tutorial]:not([data-tutorial-step="coin"]) app-daily-flip .df-coin3d__inner {
+  animation: none !important;
+  transform: none !important;
+}
+html[data-degenerus-tutorial] .dec-funds__display--spoiler .dec-funds__number,
+html[data-degenerus-tutorial] .df-funds__display--spoiler .df-funds__number { filter: none !important; opacity: 1 !important; }
+html[data-degenerus-tutorial]:not(.tutorial-reveal-active) reveal-overlay [data-bind="rvl-backdrop"] { display: none !important; }
+
+/* One clickable wrapper, followed by a hand sized for exactly two tickets. */
+html[data-degenerus-tutorial] reveal-overlay .rvl-corner-actions,
+html[data-degenerus-tutorial] reveal-overlay .rvl-vessel-pack-actions,
+html[data-degenerus-tutorial].tutorial-reveal-active [data-bind="qst-complete-toast"],
+html[data-degenerus-tutorial][data-tutorial-step="pack"] app-reveal-tray { display: none !important; }
+html[data-degenerus-tutorial] body.layout-basic .rvl-stage--ticket-pack {
+  width: min(94vw, 900px); min-height: 0;
+}
+html[data-degenerus-tutorial] body.layout-basic .rvl-stage--ticket-pack > :is(.rvl-vessel, .rvl-card-zone) { min-height: 0; }
+html[data-degenerus-tutorial] body.layout-basic .rvl-ticket-pack-stage {
+  width: min(94vw, 900px); min-height: 0; gap: 28px; grid-template-rows: auto auto;
+}
+html[data-degenerus-tutorial] body.layout-basic .rvl-ticket-grid-stage {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(90vw, 820px, 130dvh); max-width: none; gap: clamp(12px, 2vw, 24px);
+}
+html[data-degenerus-tutorial] .rvl-ticket-actions {
+  position: static; translate: none; margin: 0;
+}
+html[data-degenerus-tutorial].tutorial-pack-sealed .rvl-backdrop {
+  padding-bottom: calc(var(--tut-coach-height, 220px) + 40px);
+}
+html[data-degenerus-tutorial] .rvl-vessel--pack { pointer-events: none; }
+html[data-degenerus-tutorial] .rvl-vessel--pack .rvl-pack { pointer-events: auto; cursor: pointer; }
+@media (max-width: 760px) and (max-height: 550px) {
+  html[data-degenerus-tutorial].tutorial-pack-sealed .rvl-vessel--pack .rvl-pack {
+    zoom: .65;
+  }
+}

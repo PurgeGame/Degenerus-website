@@ -1,36 +1,358 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glossary — Degenerus Protocol</title>
+  <meta name="description" content="Definitions of terms and mechanics used in the Degenerus Protocol whitepapers." />
+  <link rel="stylesheet" href="/shared/nav.css">
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+    }
+
+    body { line-height: 1.65; }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
+    .page-header {
+      text-align: center;
+      padding: clamp(1rem, 3vw, 1.5rem);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header-logo {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0.65rem;
+      filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
+    }
+
+    .page-header h1 {
+      text-align: center;
+      font-size: clamp(1.4rem, 4vw, 1.9rem);
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .page-header .subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    section {
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+
+    section:last-of-type { margin-bottom: 0; }
+
+    h2 {
+      font-size: clamp(1.2rem, 3.4vw, 1.5rem);
+      color: var(--text-primary);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.95rem;
+      text-transform: none;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    strong { color: var(--text-primary); font-weight: 600; }
+
+    a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    a:hover {
+      color: #ffd08f;
+      border-bottom-color: var(--accent-primary);
+    }
+
+    dl {
+      margin: 0;
+    }
+
+    dt {
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 0.92rem;
+      padding-top: 0.75rem;
+    }
+
+    dt:first-child { padding-top: 0; }
+
+    dd {
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      margin: 0.25rem 0 0.75rem 0;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    dd:last-child { border-bottom: none; padding-bottom: 0; }
+
+    footer {
+      text-align: center;
+      padding: 1.25rem 0 0.5rem;
+      margin-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    footer a { color: var(--text-secondary); font-size: 0.8rem; border-bottom: none; }
+    footer a:hover { color: var(--text-primary); }
+    footer .footer-links { display: flex; justify-content: center; gap: 1.5rem; }
+
+    @media (max-width: 520px) {
+      dt { font-size: 0.88rem; }
+      dd { font-size: 0.84rem; }
+    }
   </style>
+  <script defer src="/js/ref.js"></script>
 </head>
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+<div class="page">
+  <header class="page-header">
+    <img src="/badges-circular/flame_red.svg" alt="Degenerus" class="page-header-logo" />
+    <h1>Glossary</h1>
+    <p class="subtitle">Terms and mechanics referenced in the <a href="/whitepaper/">Degenerus Protocol whitepaper</a> and <a href="/whitepaper/flip/">FLIP token whitepaper</a>.</p>
+  </header>
+
+  <!-- ========== Tokens ========== -->
+  <section>
+    <h2>Tokens</h2>
+    <dl>
+      <dt>FLIP</dt>
+      <dd>ERC-20 utility token. Every circulating FLIP survived a coinflip before it was minted. Used to buy tickets, enter the decimator, and wager in the coinflip. Burned permanently on most uses. No bonding curve, no farming, no team pre-mine. See the <a href="/whitepaper/flip/">FLIP whitepaper</a>.</dd>
+
+      <dt>FLIP Credit</dt>
+      <dd>A credit that enters the next daily coinflip automatically. Most FLIP rewards are paid as credits rather than liquid FLIP. If the coinflip wins, the credit converts to liquid FLIP at a variable multiplier (1.5x to 2.5x principal). If it loses, the credit is burned. Expected pass-through rate: ~98.4%.</dd>
+
+      <dt>DGNRS</dt>
+      <dd>Long-term investment token with its own ETH, stETH, and FLIP reserves. Players earn it as soulbound sDGNRS, redeemable only by burning it for its share of those reserves scaled by a random 21-175% roll; the vault's 20% allocation is transferable DGNRS. Receives a share of stETH yield. The sDGNRS contract is a permanent player in the game: it holds a genesis deity pass, runs an afKing subscription that buys one luckbox a day from its winnings, and buys whale passes at each level start.</dd>
+
+      <dt>DGVE</dt>
+      <dd>Vault share class. Redeemable for a pro-rata claim on the vault's ETH and stETH reserves.</dd>
+
+      <dt>DGVF</dt>
+      <dd>Vault share class. Redeemable for a pro-rata claim on the vault's FLIP reserves (minted on demand from the vault's virtual allowance).</dd>
+
+      <dt>WWXRP</dt>
+      <dd>Consolation token. Awarded when you lose a coinflip (1 WWXRP per loss) and as the consolation on a skipped BAF. Also appears as a luckbox prize category.</dd>
+
+      <dt>stETH</dt>
+      <dd>Lido staked ETH. Pooled ETH not needed for near-term claims is staked to stETH, earning ~2.5% APR from Ethereum staking rewards. This yield is the protocol's positive-sum subsidy layer.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Game Structure ========== -->
+  <section>
+    <h2>Game Structure</h2>
+    <dl>
+      <dt>Levels</dt>
+      <dd>The game progresses through numbered levels. Each level has a deposit target that must be met before the game advances. Ticket prices rise with level. The price schedule repeats every 100 levels.</dd>
+
+      <dt>Tickets</dt>
+      <dd>Primary gambling instrument. Each ticket has four randomly assigned traits. Tickets enter the daily drip draws during the purchase phase and the jackpot draws during the jackpot phase. Non-transferable. Can be purchased with ETH or FLIP.</dd>
+
+      <dt>Traits</dt>
+      <dd>One trait in each of a ticket's four quadrants, each a symbol (8 per quadrant) and a color (8 heavy-tailed tiers, gold rarest at 1 in 128). Chainlink VRF selects winning traits for each daily draw. Tickets holding a winning trait share that trait's slice of the jackpot.</dd>
+
+      <dt>Current Prize Pool</dt>
+      <dd>The pool a level's jackpot phase pays out. Ticket purchases, the future-pool drip, and carryover fill the next prize pool; when that meets the level target it merges into the current prize pool, which the jackpot-phase draws pay out in full.</dd>
+
+      <dt>Future Prize Pool</dt>
+      <dd>Separate ETH reserve funded mainly by luckbox and pass purchases, plus 10% of ticket purchases and the level-end skim. During the purchase phase it drips 4% a day, 75% of that into the next prize pool, and 15% of it seeds each new level's next prize pool (except when an x00 level fills). When it holds about 1.9 times the unfilled part of a level's target, the drip alone fills the level without any new player deposits.</dd>
+
+      <dt>Purchase Phase</dt>
+      <dd>Period when players buy tickets toward the level's prize-pool target. It ends when the target is met. If the target is not met within 30 days (250 days for level 1), the game ends.</dd>
+
+      <dt>Jackpot Phase</dt>
+      <dd>The days after the target is met, when VRF draws winning traits daily and the current prize pool pays out. Three daily jackpots per level, or one on a turbo level (a level that fills within its first day, and every x5 level except x95). Tickets can still be bought.</dd>
+
+      <dt>Level Transition</dt>
+      <dd>When the prize pool target is met, the next prize pool merges into the current prize pool for the jackpot phase, and 15% of the future prize pool seeds the following level's next prize pool (except when an x00 level fills). When the jackpot phase ends, the level advances and a new purchase phase begins.</dd>
+
+      <dt>Hundred-Level Cycle</dt>
+      <dd>Every 100 levels the price schedule resets: 0.04 ETH at x01-x29, rising to 0.16 ETH at x90-x99 and 0.24 ETH at x00. Levels 1-9 use cheaper launch prices (0.01-0.02 ETH), so level 101 costs 0.04 ETH, not level 1's 0.01.</dd>
+
+      <dt>Gameover</dt>
+      <dd>The game ends when a level misses its target within 30 days (250 days for level 1), when 30 days pass without a sealed day, or when a VRF request goes unanswered for 14 days. After any deity pass refunds, everything left goes to the failed level's ticketholders through a final jackpot (split without a draw if VRF is dead). Anything unclaimed after 30 days is swept in thirds to the vault, sDGNRS, and GNRUS. No funds are locked forever.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Jackpots ========== -->
+  <section>
+    <h2>Jackpots</h2>
+    <dl>
+      <dt>Daily ETH Jackpot</dt>
+      <dd>Daily draw during the jackpot phase. Day 1 pays a random 6-14% of the current prize pool, day 2 a random 12-28% of what remains, and day 3 the entire remainder (a turbo level pays it all in one day). A fifth of each day's slice becomes next-level tickets for winners; the rest is paid across four trait buckets, each shared by tickets holding that bucket's winning trait, in ETH except that a bucket share of 18 ETH or more pays part of itself as whale passes.</dd>
+
+      <dt>Daily Jackpot Battle</dt>
+      <dd>One craps battle a day, in both phases, seating paid entrants, day-pass holders, and awarded seats. Awarded seats go to holders of tickets 1 to 99 levels ahead, which is what gives future tickets time-value. The game adds FLIP worth 0.5% of the previous level's prize pool, with a floor.</dd>
+
+      <dt>Far-Future Draws</dt>
+      <dd>Tickets 1 to 99 levels ahead of the current level are eligible for awarded seats in the daily jackpot battle, and tickets 2 to 99 levels ahead for BAF scatter rounds, before their own level pays its jackpots. Earlier acquisition means more draws before the level arrives.</dd>
+
+      <dt>Big-Ass Flip (BAF)</dt>
+      <dd>Jackpot event every 10 levels, drawing 10% of the future prize pool (20% at level 50 and at each x00) and paid only if that day's coinflip wins. Head awards take 20%: 10% to the top BAF bettor, 5% to a final-day coinflip depositor, and 5% to the third or fourth BAF slot. The other 80% goes to scatter rounds. On a losing flip the BAF is skipped, its pool stays in the future prize pool, and each player's BAF score becomes claimable as a WWXRP consolation.</dd>
+
+      <dt>Decimator</dt>
+      <dd>FLIP-burn event resolved as a craps battle on shared dice. The burn window opens in the run-up to each x5 level (except x95) and each x00 level. Players burn FLIP (minimum 2,000); each wallet holds one entry, whose stack grows by every burn &times; 0.9 per day late &times; a 1.0-2.0x degen-score multiplier. At resolution a random half of the entries, at most 1,000, play; the top scores among them take places equal to 10% of all entries (at least 20, at most half the entries, never more than 200), split 95% of the pool equally, and the champion takes the other 5%. Prize pool: 10% of the future prize pool at x5 levels, 30% at x00. Paid in ETH and half whale passes; sDGNRS enters automatically. See the <a href="/whitepaper/flip/">FLIP whitepaper</a> for full mechanics.</dd>
+
+      <dt>Scatter Rounds</dt>
+      <dd>The BAF's scatter: 48 to 1,536 rounds, each sampling four ticket holders with a positive BAF score from the BAF level, the next level, and queued tickets 2 to 99 levels ahead. Each round's best BAF score takes an equal slice of a 50% pool and its second-best an equal slice of a 30% pool. BAF score is cumulative coinflip winnings over the 10-level window.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Daily Mechanics ========== -->
+  <section>
+    <h2>Daily Mechanics</h2>
+    <dl>
+      <dt>Coinflip</dt>
+      <dd>Daily 50/50 FLIP wager. Stake FLIP, Chainlink VRF determines the outcome. Win: principal back plus a bonus (1.5x to 2.5x). Lose: principal burned, receive 1 WWXRP. Minimum stake: 100 FLIP. Deposits lock into the next day's window, preventing front-running.</dd>
+
+      <dt>Quest Streak</dt>
+      <dd>Daily participation system. Complete daily quests to build your degen score. Missing a day resets the streak, unless a streak shield absorbs it, and forfeits the accumulated score benefits. Creates consistent daily deposit pressure from power users.</dd>
+
+      <dt>Degen Score</dt>
+      <dd>Accumulated metric from mint streak, level participation, quest streak, affiliate referrals, and pass ownership. Higher score improves luckbox EV, the decimator stack multiplier, and Degenerette returns. The reward curves rise steeply to about 5.00 and saturate at 300.00; the score itself has no ceiling. Passes set a base: 0.85 for the 10-level afKing pass, 1.15 for a whale pass, and 1.55 for a deity pass.</dd>
+
+      <dt>Mining Bounty</dt>
+      <dd>Any player can call <code>mineFlip()</code> to process daily jackpots and push the game forward. The caller earns a FLIP bounty (as a coinflip stake credit) for the gas the call burns above its first million, priced at the block's base fee (capped at 0.5 gwei, rising to 8 gwei) times a multiplier that climbs from 0.30x to 2.10x in 30-minute steps while the work waits. The bounty doubles for an active pass holder and again for work done while the daily RNG lock is up. It is funded by FLIP mint, not drawn from any prize pool.</dd>
+
+      <dt>Chainlink VRF</dt>
+      <dd>Verifiable Random Function providing provably fair randomness for all draws. Used for coinflips, trait selection, decimator and craps dice, and all jackpot outcomes. No participant can predict or influence results.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Products ========== -->
+  <section>
+    <h2>Products</h2>
+    <dl>
+      <dt>Luckbox (Luckbox)</dt>
+      <dd>High-variance investment product bought with ETH (box size scales with the amount spent). Each box takes one roll across seven paths: tickets (40%), DGNRS (15%), a WWXRP Degenerette card (15%), flat FLIP (5%), craps day passes (10%), three FLIP Degenerette cards (10%), or an ETH Degenerette card (5%). EV scales with degen score: 90% at zero, 100% at 0.60, and up to 145%, with the score boost capped at 10 ETH of boxes per level per account.</dd>
+
+      <dt>Whale Pass</dt>
+      <dd>Large investment product granting tickets across 100 consecutive levels. Provides jackpot eligibility and a degen score boost across all covered levels. Massive upfront capital injection into future prize pools. Non-transferable.</dd>
+
+      <dt>afKing Pass</dt>
+      <dd>A 10-level ticket bundle (one ticket per level) that grants an immediate degen-score base of 0.85. It does not include a subscription, but like any pass it earns its buyer an afKing seat while the first 1,000 free seats last. On sale during levels 1-3 and around every tenth level, or with a boon.</dd>
+
+      <dt>Deity Pass</dt>
+      <dd>Premium pass with a degen-score base of 1.55 (full mint-streak and participation credit plus 0.80), virtual entries in jackpot draws of its symbol, a +100% mining bonus, and a +20% bonus on affiliate commissions (capped at 5 ETH per level). Refund: the price paid, capped at 20 ETH, if GAMEOVER triggers during the first ten levels, budget permitting.</dd>
+
+      <dt>Degenerette</dt>
+      <dd>Roulette-style betting. Pick one symbol; four lanes score symbol and color matches against the VRF roll for a score of up to 9, and nothing pays below 3. Base return runs 90% to 99.9% with degen score, and ETH bets add flat bonuses at scores 6-9. Accepts ETH and FLIP; a FLIP payout rides one survival coinflip before it mints.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Player Modes ========== -->
+  <section>
+    <h2>Player Modes</h2>
+    <dl>
+      <dt>afKing</dt>
+      <dd>Subscription that auto-buys a chosen daily quantity of tickets or luckboxes so you keep your quest streak without daily attention. Starting a run burns an afKing seat: the first 1,000 accounts to buy any pass receive one each, and the vault can sell more after that. An optional setting spends accumulated winnings first.</dd>
+
+      <dt>Recycling Bonus</dt>
+      <dd>Any purchase that spends at least three whole tickets' worth of claimable winnings earns a 10% bonus in FLIP credits on the recycled amount, however much claimable you keep in reserve. Rewards reinvesting winnings without forcing an all-or-nothing drain.</dd>
+
+      <dt>Luckbox Taper</dt>
+      <dd>Affiliate commission reduction for high-activity referrals. As a referred player's degen score rises from 1.00 to 2.55, affiliate commission on their luckbox purchases tapers linearly to 25% of the base rate. Reflects that the game's own retention mechanics have taken over from the affiliate's recruitment value.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Affiliate System ========== -->
+  <section>
+    <h2>Affiliate System</h2>
+    <dl>
+      <dt>Affiliate Tiers</dt>
+      <dd>Three-tier commission structure resolved by a winner-take-all roll. On each referred purchase one party wins the whole commission: the direct affiliate (75% chance), upline 1 (20%), or upline 2 (5%). Over many purchases this converges to a 75/20/5 split. The roll preserves expected value while saving gas. Purchases made through an afKing subscription skip the roll and pay a flat 7% commission split 75/20/5 deterministically.</dd>
+
+      <dt>Commission Rates</dt>
+      <dd>Fresh ETH, levels 1-3: 25%. Fresh ETH, level 4 on: 20%. Recycled ETH (from claimable winnings): 5%. All paid as FLIP credits by default.</dd>
+
+      <dt>FLIP Commissions</dt>
+      <dd>Affiliate earnings are paid as FLIP credits that must survive a coinflip to become FLIP. This is the variance filter: professional affiliates expecting guaranteed income self-select out. Gambling-native affiliates who match the target audience stay.</dd>
+
+      <dt>Upline</dt>
+      <dd>Your referrer (upline 1) and their referrer (upline 2). On each of your transactions, the winner-take-all roll gives upline 1 a 20% chance and upline 2 a 5% chance of taking the commission, in perpetuity.</dd>
+
+      <dt>Default Affiliate</dt>
+      <dd>Commission on a purchase by a player without a referrer goes to the vault or sDGNRS on a coin toss. The vault also serves as upline 1 and upline 2 for incomplete chains. FLIP earned by the vault feeds into its FLIP reserves.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Economic Concepts ========== -->
+  <section>
+    <h2>Economic Concepts</h2>
+    <dl>
+      <dt>Positive-Sum</dt>
+      <dd>Total ETH paid out to players exceeds total deposited over time. Guaranteed by the stETH yield subsidy (~2.5% APR on pooled deposits). Losers exist, but the aggregate pool of winners received more than was put in.</dd>
+
+      <dt>Zero Rake</dt>
+      <dd>The protocol takes nothing from player deposits. Every ETH enters on-chain pools with immutable splits. Revenue comes from a fraction of the stETH yield, not from skimming bets.</dd>
+
+      <dt>Price Ratchet</dt>
+      <dd>ETH ticket prices rise as levels progress, but the FLIP ticket price stays fixed at 1,000 FLIP. As the game advances, the implicit FLIP/ETH exchange rate tightens. This creates a utility floor: FLIP always buys a ticket, and the real-terms value of that ticket keeps increasing.</dd>
+
+      <dt>Utility Floor</dt>
+      <dd>FLIP's minimum value is anchored to the price ratchet. 1,000 FLIP always buys one ticket regardless of level. As the ETH price of a ticket rises, the floor value of FLIP rises with it.</dd>
+
+      <dt>Expected Value (EV)</dt>
+      <dd>Probability-weighted average outcome. Positive EV means the option returns more than it costs on average. Different products and strategies have different EVs, ranging from ~90% (low-score luckbox) to ~145% (max-score luckbox).</dd>
+
+      <dt>GTO (Game Theory Optimal)</dt>
+      <dd>The theoretically optimal strategy where every decision maximizes expected value. In Degenerus, GTO play requires maximum commitment: daily quest streaks, afKing compounding, full affiliate chains, early ticket purchases. If all players played GTO, returns would collapse to ~2.5% APR (the stETH yield). The GTO player is the most invested participant in the system.</dd>
+
+      <dt>Nash Equilibrium</dt>
+      <dd>A stable state where no player can improve their outcome by changing strategy alone. In Degenerus, the floor is stETH yield and the ceiling is surplus from sub-optimal players. Both casual and optimizing players coexist because both get what they came for.</dd>
+
+      <dt>Flywheel</dt>
+      <dd>The self-reinforcing cycle: investors buy luckbox/passes, prize pools grow, bigger jackpots attract lottery players, ticket purchases fill pools, pools meet targets, jackpots fire, winners reinvest, affiliates drive traffic. Mechanical participants (vault, DGNRS, afKing players) keep it turning without human decisions.</dd>
+
+      <dt>Variance Filter</dt>
+      <dd>Deliberate use of high variance to repel extractive capital. Yield farmers, MEV bots, and risk-averse LPs self-select out because returns are unpredictable. Only players who accept variance remain, and their continued participation sustains the system.</dd>
+    </dl>
+  </section>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/whitepaper/">Main whitepaper</a>
+      <a href="/whitepaper/flip/">FLIP whitepaper</a>
+    </div>
+  </footer>
+</div>
+
+<script src="/shared/nav.js"></script>
+<script>initNav({ currentPage: 'whitepaper', pages: [{ key: 'theory', label: 'Game Theory', href: '/theory/' }] });</script>
 </body>
 </html>

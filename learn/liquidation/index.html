@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Liquidation · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Sell a whole game account, with its far-future tickets, to sDGNRS or the vault for ETH at a deliberately steep discount." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Account Liquidation</h1>
+  <p class="lede">A ticket purchase is not refundable. What you can do instead is sell the whole account to a buyer
+    willing to wait, at a price designed to make you think hard about whether you want to.</p>
+
+  <h2>The price is the point</h2>
+  <p>Only far-future tickets set the price, and the curve gives them a small fraction of face value: 15% for
+    tickets up to 6 levels out, sliding to 10% at 20 levels and 5% at 100. A daily per-account jitter then scales
+    that offer between 70% and 110%, and a second daily draw cuts it to between 40% and 70% of that. In total a quote lands between about 1.4% and
+    11.6% of the tickets' face value at their target levels, and a very small account can come in lower still. The
+    day's draws are fixed for that account.</p>
+  <p class="fine">Nothing here is a refund. You are selling an account to a buyer at a price you should hate, and
+    the discount is what makes anyone willing to take the other side.</p>
+
+  <h2>What you get paid in</h2>
+  <p>ETH only. If the game's ETH balance falls short of the price, stETH covers the difference. No replacement
+    tickets and no FLIP are issued. You set a minimum with <code>minEthOut</code>, and the sale reverts if the price
+    comes in under it.</p>
+
+  <h2>What you give up</h2>
+  <p>The sale hands over the whole account, not just the tickets that set the price. Everything on it goes to the
+    buyer, including claimable ETH, unspent afKing funding and unclaimed rewards, so withdraw or claim first if you
+    want to keep them. Coinflip stakes transfer unchanged. Any afKing subscription on it is cancelled at the next daily afKing run. Selling a main
+    account also hands over every sub account under it, and it destroys the wallet's entire native
+    <a href="/learn/sdgnrs/">sDGNRS</a> balance for no payout, so redeem first if you want its value. Wrapped DGNRS
+    is not affected. Deity pass holders cannot liquidate.</p>
+
+  <h2>Who buys it</h2>
+  <p>Your tickets are not destroyed. They stay in their queues and the account now belongs to the buyer, who
+    receives its jackpot winnings when the target levels arrive. Later awards to the sold account are collected for
+    the buyer, and anyone can trigger that collection, though it pays the caller nothing.</p>
+  <p class="fine">The buyer takes the delay and outcome risk. If neither buyer can meet its funding floor, the sale
+    reverts.</p>
+
+  <h2>The exact numbers</h2>
+  <p><strong>What counts toward the price</strong></p>
+  <table>
+    <tr>
+      <td>Eligible</td>
+      <td>Tickets still waiting to be printed, 2 to 100 levels beyond the level a ticket would buy into today</td>
+    </tr>
+    <tr>
+      <td>Granularity</td>
+      <td>Whole tickets of four entries each. Any leftover entries add nothing to the quote</td>
+    </tr>
+    <tr>
+      <td>Adds nothing</td>
+      <td>Near-term tickets, printed tickets and sub accounts. They still go to the buyer with the account</td>
+    </tr>
+    <tr>
+      <td>Not allowed</td>
+      <td>Deity pass holders, accounts already sold, the daily draw lock, and everything once the game's ending has triggered, by the death clock or a stalled daily draw</td>
+    </tr>
+  </table>
+  <p><strong>The price is the point</strong></p>
+  <table>
+    <tr>
+      <th>Distance out</th>
+      <th>Offer, before jitter</th>
+    </tr>
+    <tr>
+      <td>2&ndash;6 levels</td>
+      <td>15% of face</td>
+    </tr>
+    <tr>
+      <td>20 levels</td>
+      <td>10% of face</td>
+    </tr>
+    <tr>
+      <td>100 levels</td>
+      <td>5% of face</td>
+    </tr>
+  </table>
+  <p class="fine">Jitter is 70&ndash;110% of the offer, and a second daily draw pays out 40&ndash;70% of the
+    jittered amount.</p>
+  <p><strong>Who buys it</strong></p>
+  <table>
+    <tr>
+      <td>First in line</td>
+      <td><a href="/learn/sdgnrs/">sDGNRS</a>, using its own claimable balance while keeping at least 1 ETH above the
+        price</td>
+    </tr>
+    <tr>
+      <td>Backstop</td>
+      <td>The vault, if the vault owner has opted in and can cover the price above its reserve floor</td>
+    </tr>
+    <tr>
+      <td>If neither can pay</td>
+      <td>The sale reverts. There is no other buyer</td>
+    </tr>
+  </table>
+
+  <div class="cta">
+    <strong>The exit is bad. The position is the point.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Far-future entries are cheap because they are patient. See what
+      they are waiting for.</p>
+    <a class="btn" href="/learn/tickets/">Tickets</a>
+    <a class="btn ghost" href="/learn/jackpots/">The Jackpots</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

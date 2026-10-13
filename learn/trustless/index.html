@@ -1,36 +1,167 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trust Model · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Everything the Degenerus admin keys can do, and why none of it reaches the prize pools or the odds." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
 </head>
+
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Trust Model</h1>
+  <p class="lede">The contracts are immutably deployed, with no upgrade path or pause switch. All prize pool money
+    must exit as player winnings, under rules defined by publicly verifiable code that can never change. The admin
+    keys do exist, and this page lists everything they can do. None of it reaches your money or your odds.</p>
+  <p>That was a design requirement, tested against the worst case: someone holding the creator's keys whose only
+    goal is to destroy the game or steal the money could do neither.</p>
+
+  <h2>The one lever that matters</h2>
+  <p>Randomness comes from Chainlink VRF. If Chainlink ever stops answering, the game needs a way to switch
+    suppliers, and a malicious supplier would control the draws. So the swap requires approval from the game's most committed players, the group with the most to lose from a
+    successful attack: <a
+    href="/learn/sdgnrs/">sDGNRS</a> holders. The admin can only
+    propose a new coordinator after 44 hours without a daily random word. Independently of the admin, any holder of
+    0.5% of player-owned sDGNRS can propose one after 7 days. Either way, the swap executes only
+    when approvals reach a threshold that starts at 50% of player-owned sDGNRS and decays to 5% over seven days, and
+    approvals must also outnumber rejections. The proposal dies the moment the old VRF recovers. Abusing it takes a
+    three-leg parlay: Chainlink fails, someone proposes a hostile coordinator, and sDGNRS holders approve it.</p>
+
+    <h2>Comps</h2>
+    <p>Every finished <a href="/learn/craps/">craps</a> battle adds 2% of its field's bankroll (~50% of expected losses) to a FLIP comp
+        budget. The admin, or a delegate given an allowance, may spend that budget on free craps battle entries for any player, or add it to an open battle's prize pool. Comps cost exactly what the paid entry
+        burns, can never exceed the budget, and move no ETH.</p>
+    
+
+  <h2>Everything else is housekeeping</h2>
+  <table>
+    <tr>
+      <th>Control</th>
+      <th>What it does</th>
+    </tr>
+    <tr>
+      <td>Swap the LINK/ETH price feed</td>
+      <td>Proposable after the feed has been unhealthy for 2 days, under the same sDGNRS vote with a threshold
+        decaying from 50% to 15%. The feed only values LINK donations, and even a hostile one is capped: the contract
+        never values LINK above 0.05 ETH, rewards only real LINK donations, and pays them in FLIP credit, never
+        ETH.</td>
+    </tr>
+    <tr>
+      <td>Tune the luckbox reveal batch size</td>
+      <td>Changes the pending-volume threshold for an extra mid-day randomness request. It affects reveal timing and
+        gas, not payouts.</td>
+    </tr>
+    <tr>
+      <td>Retry stalled randomness and cap mid-day requests</td>
+      <td>May retry an unanswered VRF request once, after a 20-hour timeout, with the same committed inputs, and set
+        the basefee ceiling above which mid-day randomness requests are refused. The daily draw is never gated.</td>
+    </tr>
+    <tr>
+      <td>Recover LINK from retired subscriptions</td>
+      <td>After a coordinator swap, may cancel a retired VRF subscription and route its LINK to the live
+        subscription, or to the vault once the game is over. Gated only because the call reaches an address the
+        caller supplies.</td>
+    </tr>
+    <tr>
+      <td>Declare a future &ldquo;thanos&rdquo; level</td>
+      <td>May flag a level at least three ahead so its entry counts, and those of every level after, divide by up to
+        256&times;. A redenomination for runaway demand: it cannot be declared unless 40M+ entries survive the
+        division, and it locks before any ticket for the level exists. Every holder's pot share is unchanged.</td>
+    </tr>
+    <tr>
+      <td>Raise a smurf allowance</td>
+      <td>May permanently raise how many smurfs (child accounts a main account opens and funds) a main account can
+        create. The base is zero, and activity score adds one per 120 points. A raise only goes up and never resets
+        the lifetime count. Each smurf costs its owner a full ticket at the current price to open and plays under its
+        own per-account caps, the same as a separate wallet would. No ETH moves and no odds change.</td>
+    </tr>
+    <tr>
+      <td>Back liquidations with the vault</td>
+      <td>Off by default. May let the vault buy a liquidated account when sDGNRS cannot fund the quote, at the same
+        price sDGNRS would pay, and set an ETH floor the vault never spends. The vault pays from its own balance; no
+        prize pool is touched.</td>
+    </tr>
+    <tr>
+      <td>Sell afKing seats</td>
+      <td>May mint afKing seats once all 1,000 free seats are gone, only while seats in circulation plus active
+        subscriptions stay within 2,000, and may transfer seats the vault holds. A seat only starts a subscription.
+        It carries no odds and no payout.</td>
+    </tr>
+    <tr>
+      <td>Run the vault's own positions</td>
+      <td>May play and manage what the vault already holds, the same moves any holder can make with their own
+        assets: advance the game, buy tickets with FLIP, claim winnings, fund the vault's afKing subscription, enter
+        craps battles, deposit and claim coinflips, burn FLIP in the Decimator, and claim the vault's sDGNRS
+        redemptions. May send any token the vault holds except stETH, which backs vault shares, anywhere, including
+        its DGNRS allocation. May unwrap vault DGNRS into soulbound sDGNRS, which votes like any other, capped at 40B
+        over the vault's lifetime.</td>
+    </tr>
+    <tr>
+      <td>Manage Lido liquidity</td>
+      <td>May stake game ETH that the reserve calculation treats as excess, and may swap the admin's own ETH for an equal
+        amount of game-held stETH.</td>
+    </tr>
+    <tr>
+      <td>Open custom craps battles</td>
+      <td>May create craps battles with custom terms and let other addresses do the same. Nobody is entered
+        automatically; players choose whether to join.</td>
+    </tr>
+    <tr>
+      <td>Set NFT presentation</td>
+      <td>May change renderers and colors for deity passes, record trophies and afKing seats, and the icon art until
+        it is finalized. Presentation only, with a built-in fallback.</td>
+    </tr>
+    <tr>
+      <td>Curate the charity ballot</td>
+      <td>May fill the 20-address slate. Slots 0&ndash;2 lock once filled. sDGNRS holders vote on which address
+        wins.</td>
+    </tr>
+    <tr>
+      <td>Post-game GNRUS cleanup</td>
+      <td>After the final sweep, may redeem an inactive holder's GNRUS to that holder. Three years later, may sweep
+        the remaining GNRUS backing to the vault.</td>
+    </tr>
+  </table>
+
+  <h2>Zero rake, disclosed pay</h2>
+  <p>Nobody takes a cut of any wager. Ticket and luckbox ETH goes to the prize pools whole. What the creator gets is fixed in code and public: a deity pass held by the vault, a DGNRS allocation, 80% of presale-box ETH, and the vault's quarter of the staking
+    yield.</p>
+
+  <h2>Who the protocol trusts</h2>
+  <p>Chainlink for randomness and Lido for yield, the same infrastructure the rest of DeFi stands on, with Ethereum
+    under both. Past that, the only thing left to trust is the code itself, which is public and
+    finished. Don't take this page's word for any of it: read the source, then check that the deployed addresses and
+    bytecode match it.</p>
+
+  <h2>WWXRP (Worthless Wrapped XRP)</h2>
+  <p>WWXRP is a shitcoin that I am the God of and can do anything with, including burning your coins at my whim. It
+    is a joke I award to losing bets, meant to satirize centralized &ldquo;crypto&rdquo; trash like XRP. Its
+    only backing is a <a href="/learn/wwxrp/">daily burn draw</a> worth about 600 FLIP per day, plus a century incinerator
+    that awards one player 10% of the FLIP lost on the final day of a losing century BAF, about once every 200 levels. A hostile admin could mint unlimited WWXRP
+    and take all of these prizes. Its trust model is the opposite of Degenerus Protocol's, and if you buy it you are a moron.</p>
+
+  <div class="cta">
+    <strong>Don't trust. Verify.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every claim on this page is a code path you can read.</p>
+    <a class="btn" href="https://github.com/PurgeGame/degenerus-protocol">Read the Contracts</a>
+    <a class="btn ghost" href="/learn/sdgnrs/">sDGNRS</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
 </body>
+
 </html>

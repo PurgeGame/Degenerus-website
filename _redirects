@@ -7,3 +7,16 @@
 /beta/index.html /beta/ 301
 
 # beta/index.html is generated from app/index.html when publishing.
+
+# The Salvage Swap was replaced by account liquidation; keep old links working.
+/learn/salvage-swap /learn/liquidation/ 301
+/learn/salvage-swap/ /learn/liquidation/ 301
+/learn/salvage-swap/index.html /learn/liquidation/ 301
+
+# Retired standalone documents; the theory paper supersedes both.
+/GAME_THEORY_ANALYSIS.md /theory/ 301
+/FAR-FUTURE-SWAP-SPEC.md /theory/ 301
+
+# Temporary: the homepage points at the game while the landing page is rebuilt.
+/ /beta/ 302
+/index.html /beta/ 302

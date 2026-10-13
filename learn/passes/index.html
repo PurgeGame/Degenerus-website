@@ -1,36 +1,151 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Passes · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Degenerus lazy, whale, and soulbound deity passes: prepaid future exposure, degen-score floors, pass-specific rewards, and access to afKing automation." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
 </head>
+
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Passes</h1>
+  <p class="lede">Passes buy exposure to levels that do not exist yet and hand you a degen score you would otherwise spend
+    months earning. They are the shortcut past the grind.</p>
+
+  <h2>What you are actually buying</h2>
+  <p>Two things at once, and the second is the one people underrate. The obvious purchase is tickets: a pass queues
+    entries across a stretch of levels that have not happened yet, so your money is committed forward instead of
+    riding one draw. The less obvious purchase is a starting degen score. A new wallet begins at zero and climbs
+    slowly; a pass drops you straight onto a floor that would otherwise take months of daily play to reach, and that
+    floor immediately improves your luckbox payouts, Decimator odds, and Degenerette targets.</p>
+  <p>There are three of them, in escalating order of commitment: lazy covers ten levels, whale covers a hundred, and
+    deity is a permanent soulbound identity that only thirty-two wallets will ever hold.</p>
+  <p>All three include a 100% mining bonus: earn twice the FLIP mining reward while your pass is active. Lazy and
+    whale passes qualify while their coverage includes the current level; the deity bonus is permanent.</p>
+
+  <h2>The deity extras</h2>
+  <ul>
+    <li>Three boons every day, rolled by VRF: purchase discounts, activity boosts, quest-streak shields, and more. You
+      hand them out, capped at 10 lifetime per recipient, and they expire at the end of the day if unused. The
+      contract will not let a deity boon themselves.</li>
+    <li>Never expires, never transfers, a permanent identity rather than an item.</li>
+    <li>Your stored referrer gets the whale-pass ticket allocation and activity floor. The available DGNRS affiliate
+      reserve also pays 0.5% to that referrer, 0.1% to its upline, and 0.05% to the next upline.</li>
+  </ul>
+
+  <h2>The afKing subscription</h2>
+  <p>Spend a seat token to start an afKing subscription: the contract executes one configured ticket or luckbox buy per
+    processed day from your deposited funds or claimable winnings while the balance lasts. Buying a pass mints you a
+    seat, once per account, while the 1,000-seat free tranche lasts. A seat is a transferable token that outlives the
+    pass that earned it, and starting a subscription burns it.</p>
+
+  <h2>The exact numbers</h2>
+  <p><strong>The three passes</strong></p>
+  <table>
+    <tr>
+      <th></th>
+      <th>Lazy</th>
+      <th>Whale</th>
+      <th>Deity</th>
+    </tr>
+    <tr>
+      <td>Base price</td>
+      <td>The sum of the 10 levels' ticket prices; a flat 0.24 ETH through level 3's purchase phase, with the difference
+        paid back as bonus tickets</td>
+      <td>2.4 ETH through level 4's purchase phase, then 4 ETH</td>
+      <td>24 ETH + escalation per pass sold, 300 ETH at the 24th, then doubling each pass (the 30th costs 19,200 ETH)</td>
+    </tr>
+    <tr>
+      <td>Covers</td>
+      <td>1 ticket/level for 10 levels</td>
+      <td>100 levels: 20 entries/level through level 9 for early buyers, then 2/level</td>
+      <td>One ticket per level, kept 100 levels ahead, plus virtual entries in your symbol's trait bucket at each live
+        level</td>
+    </tr>
+    <tr>
+      <td>Degen score floor</td>
+      <td>0.85</td>
+      <td>1.15</td>
+      <td>1.55</td>
+    </tr>
+    <tr>
+      <td>Mining bonus</td>
+      <td>+100% while active</td>
+      <td>+100% while active</td>
+      <td>+100% permanently</td>
+    </tr>
+    <tr>
+      <td>Luckbox back</td>
+      <td>10% of price</td>
+      <td>10% of price</td>
+      <td>5% of price through level 10's purchase phase, then 10%</td>
+    </tr>
+    <tr>
+      <td>DGNRS</td>
+      <td>None</td>
+      <td>1% of the whale reserve per pass</td>
+      <td>5% of the whale reserve</td>
+    </tr>
+    <tr>
+      <td>Supply</td>
+      <td>Renewable, 10 levels at a time</td>
+      <td>Up to 100 per transaction</td>
+      <td>32 ever (30 for sale), one per symbol, one per wallet, soulbound</td>
+    </tr>
+  </table>
+  <p class="fine">A valid one-use boon can discount a pass purchase. Lazy passes are normally sold through level
+    3's purchase phase and in a window around each x0 level (from x9's jackpot days through x1's purchase phase; only
+    x01's purchase phase at a century), or through a boon; renewal opens when 7 or fewer covered levels remain.</p>
+  <p><strong>The afKing subscription</strong></p>
+  <table>
+    <tr>
+      <td>What it does</td>
+      <td>Buys your chosen quantity of tickets, or a daily luckbox, every day</td>
+    </tr>
+    <tr>
+      <td>Funded by</td>
+      <td>ETH you deposit, or straight from your winnings</td>
+    </tr>
+    <tr>
+      <td>Pays</td>
+      <td>The 100 FLIP daily quest reward, plus a 10% ticket bonus, 15% at 10+/day</td>
+    </tr>
+    <tr>
+      <td>Keeps</td>
+      <td>Your streaks alive; subscribers are immune to the cashout curse, as is anyone holding an active deity, whale,
+        or lazy pass</td>
+    </tr>
+    <tr>
+      <td>Cap</td>
+      <td>2,000 live seats and subscriptions combined: 1,000 seats free to pass buyers, 2 held by the protocol, and the
+        Vault may sell more once the free seats are gone</td>
+    </tr>
+  </table>
+
+  <div class="cta">
+    <strong>The floors matter more than they look.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Degen score moves luckbox payouts, Decimator odds, foil
+      boosts, and Degenerette payout targets.</p>
+    <a class="btn" href="/learn/quests/">Quests &amp; Degen Score</a>
+    <a class="btn ghost" href="/app/">Get a pass</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
 </body>
+
 </html>

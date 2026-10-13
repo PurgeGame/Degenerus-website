@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why This Game Doesn't Die: Summary</title>
+  <meta property="og:title" content="Why This Game Doesn't Die: Summary">
+  <meta property="og:description"
+    content="A one-page summary of the game-theoretic analysis of Degenerus Protocol's resilience.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://degener.us/theory/summary.html">
+  <meta property="og:image" content="https://degener.us/theory/og-image.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:image" content="https://degener.us/theory/og-image.png">
+  <meta name="twitter:title" content="Why This Game Doesn't Die: Summary">
+  <meta name="twitter:description"
+    content="A one-page summary of the game-theoretic analysis of Degenerus Protocol's resilience.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #333;
+      --bg: #fafaf8;
+      --muted: #555;
+      --faint: #999;
+      --rule: #ddd;
+      --accent: #2c3e50;
+      --formal-bg: #f5f7fa;
+      --formal-border: #4a7c9b;
+      --def-bg: #fdf6e3;
+      --def-border: #c4892a;
+      --obs-bg: #f4f8f5;
+      --obs-border: #6a9a7a;
+      --link: #2874a6
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #d4d4d4;
+        --bg: #1a1a1e;
+        --accent: #8ab4d0;
+        --formal-bg: #22252a;
+        --formal-border: #4a7c9b;
+        --def-bg: #28251c;
+        --def-border: #c4892a;
+        --obs-bg: #1e2420;
+        --obs-border: #6a9a7a;
+        --link: #5ba3d9;
+        --muted: #aaa;
+        --faint: #777;
+        --rule: #444
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--bg)
+    }
+
+    .page {
+      font-family: 'Source Serif 4', Charter, 'Bitstream Charter', Georgia, serif;
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+      text-align: left
+    }
+
+    .page h1 {
+      font-size: 1.9rem;
+      text-align: center;
+      margin: 2rem 0 .5rem;
+      line-height: 1.3;
+      letter-spacing: -.01em
+    }
+
+    .page h2 {
+      font-size: 1.25rem;
+      margin: 2.2rem 0 .8rem;
+      color: var(--accent)
+    }
+
+    .page p {
+      margin: .8rem 0
+    }
+
+    .page ul {
+      margin: .6rem 0 .6rem 1.8rem
+    }
+
+    .page li {
+      margin: .25rem 0
+    }
+
+    .page a {
+      color: var(--link);
+      text-decoration: none
+    }
+
+    .page a:hover {
+      text-decoration: underline
+    }
+
+    .page hr {
+      border: none;
+      border-top: 1px solid var(--rule);
+      margin: 2rem 0
+    }
+
+    .thesis {
+      margin: 1.5rem 0;
+      padding: 1.2rem 1.4rem;
+      border-left: 4px solid var(--formal-border);
+      border-radius: 0 4px 4px 0;
+      background: var(--formal-bg)
+    }
+
+    .thesis p {
+      margin: .4rem 0
+    }
+
+    .cta {
+      margin: 1.5rem 0;
+      padding: 1.2rem 1.4rem;
+      border-left: 4px solid var(--obs-border);
+      border-radius: 0 4px 4px 0;
+      background: var(--obs-bg)
+    }
+
+    .cta p {
+      margin: .4rem 0
+    }
+
+    .ref {
+      color: var(--faint);
+      font-size: .88rem
+    }
+
+    .subtitle {
+      text-align: center;
+      margin: .25rem 0 1.5rem;
+      font-style: italic;
+      color: var(--muted)
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <h1>Why This Game Doesn't Die</h1>
+    <p class="subtitle">A summary of the <a href="./">game-theoretic analysis</a> of Degenerus Protocol</p>
+
+    <p>Degenerus is an on-chain lottery on Ethereum where no operator takes a cut of wagers. Player deposits
+      are pooled and redistributed entirely as prizes. The pooled ETH earns staking yield from Lido, split in equal quarters between a player jackpot
+      accumulator, sDGNRS holders, the creator's vault, and community-voted charities. This external
+      yield makes the game slightly positive-sum for players as a whole. The rules are immutable smart
+      contract code: no one can pause the game, drain the funds, or change the rules after deployment. Most
+      players will lose money, but skilled play can show a positive expectation, every player has a fair chance to win
+      big, and nobody can be rugged.</p>
+
+    <p>This page summarizes a <a href="./">60-page paper</a> that stress-tests the theory that the protocol is nearly
+      impossible to kill. Every claim below is argued in the full paper and verifiable against the
+      <a href="https://github.com/PurgeGame/degenerus-protocol">open-source contract code</a>.
+    </p>
+
+    <h2>How the game works</h2>
+
+    <p>The game progresses through levels. Each level has an ETH target that its prize pool must reach.
+      Players buy <strong>tickets</strong> (entries into the current level's jackpot) or
+      <strong>luckbox</strong> (randomized packages of future-level tickets, tokens and boons, with value that
+      scales with consistent activity). Ticket purchases send most of their ETH to the current level's
+      pool.
+      Luckbox purchases send most to a reserve called the <strong>futurepool</strong>.
+      Players also earn <strong>FLIP</strong>, a token that can be burned to buy tickets at any level.
+      Because 1,000 FLIP always buys one ticket regardless of price, FLIP grows in value as levels
+      advance and ticket prices rise.
+      <span class="ref">(<a href="./#section-54">Appendix C</a>, <a href="./#section-27">§6.1</a>)</span>
+    </p>
+
+    <p>While a level is filling, daily jackpots pay out to ticket holders. When the pool hits its target,
+      larger jackpot draws run over three days (one day when the level fills on its first day or is an x5 Decimator level), culminating
+      in a single big winner on the final day. The
+      game then advances to the next level with a higher target. If a
+      level fails to fill within 30 days (250 at level 1), GAMEOVER triggers: after any deity pass refunds,
+      everything the contract holds that is not already owed is paid to that level's ticket holders. Pooled
+      ETH leaves only as prizes, on the game's schedule, according to the game's rules.
+      <span class="ref">(<a href="./#section-2">§1</a>)</span>
+    </p>
+
+    <h2>Selfish players build the collective</h2>
+
+    <p>Degens are willing to lose money for jackpot thrills. Their deposits fill prize pools and fund the
+      jackpots that keep the game exciting. Grinders are willing to lock capital and embrace variance for a
+      return on their investment. Their luckbox purchases inflate the futurepool, which funds future jackpots and
+      mechanical
+      defenses. Affiliates recruit new players for FLIP commissions, delivering the growth the system requires.
+      Each type gets what they want. What they give up in exchange is exactly what the others
+      need. Staking yield on locked capital means total payouts exceed total deposits.
+      <span class="ref">(<a href="./#section-4">§2.1</a>–<a href="./#section-6">§2.3</a>)</span>
+    </p>
+
+    <p>If too many grinders pile in, the surplus shrinks and returns fall. Because grinders
+      are price-sensitive by definition, the worst performers leave, restoring returns for whoever remains.
+      Entertainment seekers are indifferent to grinder population. The system self-corrects.
+      Meanwhile, every profitable strategy requires variance tolerance and sustained engagement,
+      which structurally excludes the passive capital that compresses returns in simpler systems.
+      <span class="ref">(<a href="./#section-6">§2.3</a>, <a href="./#section-6b">§2.4</a>)</span>
+    </p>
+
+    <h2>Exits make the returns stronger</h2>
+
+    <p>When a player stops participating, they still collect prizes they are owed, but only on the game's
+      schedule. Their deposited ETH stays in the pools until it is paid out as prizes. Their absence means less
+      competition for
+      jackpot draws and daily payouts. In the standard crypto death spiral, exits drain the treasury. Here, exits
+      reduce the number of players splitting it.
+      <span class="ref">(<a href="./#section-36">§8.1</a>, <a href="./#section-37">§8.2</a>)</span>
+    </p>
+
+    <h2>The game runs itself</h2>
+
+    <p>From level 2 on, the futurepool drip fires daily on one permissionless call that the contract pays a
+      bounty for, moving ETH from the reserve into the current level's pool. If the futurepool holds about 1.9
+      times the level's opening shortfall, the drip alone fills the pool before the 30-day deadline. On testnet
+      run 68, after all external buying stopped, the drip completed three levels in a row, and GAMEOVER came 93
+      days after the last purchase.
+      <span class="ref">(<a href="./#section-39a">§9.2</a>)</span>
+    </p>
+
+    <p>Because luckbox direct most of each purchase to the futurepool, grinder activity massively inflates
+      this reserve. The individually optimal strategy (buy luckbox early, maintain a high degen score through
+      regular purchases) is exactly the
+      strategy that funds the mechanical defense. A population of optimizers produces maximum resilience
+      as a side effect of self-interested play.
+      <span class="ref">(<a href="./#section-44a">§12.2</a>)</span>
+    </p>
+
+    <h2>The closer it gets to death, the harder it is to kill</h2>
+
+    <p>If a level stalls and its GAMEOVER deadline approaches, buying tickets for the stalling level
+      becomes increasingly profitable. If GAMEOVER fires, nearly all ETH remaining in the protocol is
+      distributed to those ticket holders. The terminal payout per ticket far exceeds the ticket cost: on run 68's failing level it paid 3.7
+      times face in ETH.
+      <span class="ref">(<a href="./#section-41a">§10.1</a>)</span>
+    </p>
+
+    <p>An early buyer during a stall has positive expected returns even if GAMEOVER never happens. Daily
+      payouts from the drip and the level's regular jackpot alone cover the ticket cost. The terminal
+      payout is pure upside. Even a final-day buyer needs little conviction: on run 68's failing level the trade broke even at
+      about an 8% chance of GAMEOVER.
+      <span class="ref">(<a href="./#section-41a">§10.1</a>)</span>
+    </p>
+
+    <p>The key design choice: the only way to claim a share of the terminal payout is to hold tickets for the
+      stalling level, and FLIP cannot buy them while the level is filling. Every ticket bought sends ETH
+      directly into the pool that needs filling to prevent GAMEOVER. Positioning for the death payout and preventing death are the same transaction. The more
+      likely death appears, the more people buy in, and the less likely death becomes.
+      <span class="ref">(<a href="./#section-41b">§10.2</a>, <a href="./#appendix-e">Appendix E</a>)</span>
+    </p>
+
+    <div class="thesis">
+      <p><strong>The Resilience Thesis.</strong> Once a non-trivial amount of locked ETH exists, the incentive
+        structure makes continued level advancement the default outcome. The rational response to declining
+        activity from other players is to increase one's own. As the probability of death rises, it becomes
+        more individually profitable to take the actions that prevent it.</p>
+    </div>
+
+    <h2>What this paper does not claim</h2>
+    <strong>It does not claim the game will succeed.</strong> The resilience thesis is conditional on
+    accumulated locked capital. No mechanism design can create demand from nothing. Whether enough players
+    show up initially is an empirical question the mechanism cannot answer.
+    <span class="ref">(<a href="./#section-44">§12.3</a>)</span>
+
+    <hr>
+
+    <div class="cta">
+      <p><strong>Read the full paper:</strong> <a href="./">Why Degenerus Protocol Refuses to Die: A Game-Theoretic
+          Analysis</a>. Sixty pages of proofs, attack vector analysis, bear market stress tests, and complete
+        parameter tables. Every claim is examined under adversarial conditions.</p>
+      <p><strong>Verify the code:</strong> <a
+          href="https://github.com/PurgeGame/degenerus-protocol">github.com/PurgeGame/degenerus-protocol</a></p>
+    </div>
+
+  </div>
+</body>
+
+</html>

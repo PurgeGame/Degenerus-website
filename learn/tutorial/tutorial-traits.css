@@ -1,0 +1,61 @@
+.tut-badges {
+  --tut-gold-2: #ffd36a;
+  color-scheme: dark;
+  position: fixed;
+  z-index: 13000;
+  inset: 52px 412px 24px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(16px, 3vw, 32px);
+  border: 1px solid #f5a62366;
+  border-radius: 20px;
+  background: radial-gradient(ellipse at top, #351b29, #110e18 65%);
+  box-shadow: 0 24px 100px #000b;
+}
+.tut-badges[hidden] { display: none !important; }
+.tut-badges__heading > span,
+.tut-badges__ticket-label { color: var(--tut-gold-2); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.tut-badges__heading h2 { font-size: clamp(21px, 2.4vw, 30px); margin: 8px 0 20px; color: #fff3db; }
+.tut-badges__tickets { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; max-width: 680px; margin: 28px auto; }
+.tut-badges__ticket-label { display: block; margin-bottom: 8px; }
+.tut-badges .rvl-paper { width: 100%; }
+.tut-badges .ticket-card-center { pointer-events: none; }
+.tut-badges__footnote { max-width: 640px; margin: 18px auto 0; color: #ccbbc5; font-size: 14px; line-height: 1.5; text-align: center; }
+.tut-badges__selected { margin: clamp(24px, 7vh, 70px) auto 0; text-align: center; }
+.tut-badges__quadrant { display: block; width: min(70%, 300px); aspect-ratio: 1; margin-inline: auto; object-fit: contain; }
+.tut-badges__selected figcaption { margin-top: 14px; color: #fff0d4; font-size: 17px; font-weight: 700; }
+.tut-badges__section-label { margin-bottom: 18px; color: #e7c99c; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-align: center; }
+.tut-badges__choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 14px; max-width: 760px; margin-inline: auto; }
+.tut-badges__choice { min-width: 0; margin: 0; padding: 10px; border: 1px solid #ffffff14; border-radius: 10px; background: #ffffff04; text-align: center; }
+.tut-badges__choice.is-selected { border-color: #e0b674; background: #9e66251a; }
+.tut-badges__choice > img { display: block; width: 100%; max-width: 148px; aspect-ratio: 1; margin-inline: auto; object-fit: contain; }
+.tut-badges__choice figcaption { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.tut-badges__choice strong { color: #f6e7da; font-size: 12px; font-weight: 700; }
+.tut-badges__choice figcaption > span { color: #e0cbb2; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .tut-badges { inset: 46px 10px calc(var(--tut-coach-height, 230px) + 24px); padding: 14px; border-radius: 12px; }
+  .tut-badges__heading > span { font-size: 8px; }
+  .tut-badges__heading h2 { font-size: 20px; margin: 6px 0 14px; }
+  .tut-badges__tickets { gap: 10px; margin: 18px auto; }
+  .tut-badges__ticket-label { font-size: 8px; }
+  .tut-badges__selected { margin-top: 22px; }
+  .tut-badges__quadrant { width: min(64%, 220px, calc(100dvh - var(--tut-coach-height, 230px) - 236px)); }
+  .tut-badges__selected figcaption { font-size: 14px; margin-top: 8px; }
+  .tut-badges__section-label { font-size: 9px; margin-bottom: 10px; }
+  .tut-badges__choices { gap: 10px 5px; }
+  .tut-badges__choice { padding: 5px 2px; border-radius: 6px; }
+  .tut-badges__choice figcaption { gap: 3px; margin-top: 5px; }
+  .tut-badges__choice strong { font-size: 9px; }
+  .tut-badges__choice figcaption > span { font-size: 10px; }
+  .tut-badges__footnote { margin-top: 12px; font-size: 12px; }
+}
+@media (max-width: 760px) and (max-height: 740px) {
+  .tut-badges { padding: 10px; }
+  .tut-badges__heading h2 { font-size: 18px; margin: 4px 0 10px; }
+  .tut-badges__selected { margin-top: 14px; }
+  .tut-badges__choice > img { max-width: 58px; }
+  .tut-badges__choices { gap: 7px 4px; }
+  .tut-badges__section-label { font-size: 8px; margin-bottom: 8px; }
+  .tut-badges__footnote { font-size: 11px; }
+}

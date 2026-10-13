@@ -1,36 +1,133 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Jackpots · Degenerus Mechanics</title>
+  <meta name="description"
+    content="How Degenerus jackpots work: daily prizes while a pool fills, a three-day jackpot phase when it does, and a target ratchet that resets after each century level." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
 </head>
+
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Jackpots</h1>
+  <p class="lede">The game runs in levels. While a level's pool fills, draws pay out every single day. When it
+    fills, the whole pool goes out the door and the next level starts.</p>
+
+  <iframe class="embed" src="/learn/demos/jackpot.html" style="height: 560px;" loading="lazy"
+    title="Interactive jackpot draw demo"></iframe>
+  <p class="figcap">A day of draws, playable. Your ticket's four traits against the day's drawn traits: pop the
+    bubbles to reveal prizes.</p>
+
+  <h2>The level cycle</h2>
+  <p>During the <strong>purchase phase</strong>, ticket sales fill the level's prize pool. The moment it reaches what
+    the previous level <em>raised</em>, the <strong>jackpot phase</strong> begins and pays that pool out. So each
+    level has to match the one before it, which is what makes the ladder climb.</p>
+  <p>After an x00 century level the target resets to 40% of the futurepool, and ticket prices drop back to 0.04
+    ETH. The ladder begins again from the bottom rather than climbing forever. What does not reset is the
+    century itself: each x00 has to clear a multiple of the previous century's pool, so the cycles keep growing even
+    as the levels inside them get cheap again.</p>
+
+  <h2>Nothing waits for the level to finish</h2>
+  <p>A level can take days or weeks, but the game does not go quiet while it fills. Every purchase-phase day runs
+    its own draws out of the futurepool, so a ticket bought early is not a bet parked until the level ends. It is
+    working the entire time, and it accumulates more draws the longer the level takes. Slow levels are better for
+    the people already holding tickets, not worse.</p>
+
+  <h2>Who wins</h2>
+  <p>Winners are ticket holders whose <a href="/learn/tickets/">traits</a> match the drawn ones. Each bucket's slice
+    spreads across many winners at descending prize sizes, so a draw is not one person taking everything. There is
+    exactly one exception, the solo bucket, which is a single winner taking the largest share of the day, and it is
+    the reason the finale is worth waiting for.</p>
+
+  <h2>The exact numbers</h2>
+  <table>
+    <tr>
+      <th>Draw</th>
+      <th>When</th>
+      <th>What it pays</th>
+    </tr>
+    <tr>
+      <td>Daily drip</td>
+      <td>Every purchase-phase day</td>
+      <td>4% of the futurepool: 75% moves into the level's pool and backs bonus tickets for trait-matched holders, 23%
+        pays them ETH, and 2% goes to the yield accumulator. Level 1 has no drip; its purchase days pay a trait-matched
+        FLIP draw instead</td>
+    </tr>
+    <tr>
+      <td>Jackpot battle</td>
+      <td>Every day, both phases</td>
+      <td>One <a href="/learn/craps/">craps battle</a> for FLIP the game adds: paid entrants and day-pass holders play
+        alongside seats awarded to holders of future-level tickets</td>
+    </tr>
+    <tr>
+      <td>Early-bird</td>
+      <td>First jackpot day of a level</td>
+      <td>3% of the futurepool, paid as next-level tickets to trait-matched holders of next-level tickets</td>
+    </tr>
+    <tr>
+      <td>Jackpot days 1&ndash;2</td>
+      <td>Jackpot phase</td>
+      <td>A random 6&ndash;14% of the pool on day 1, then 12&ndash;28% of what remains on day 2. One-fifth becomes next-level tickets;
+        the ETH portion is split across four trait buckets, with the solo bucket receiving the remainder</td>
+    </tr>
+    <tr>
+      <td>Jackpot day 3</td>
+      <td>Jackpot phase finale</td>
+      <td>The remaining active pool budget; one-fifth becomes next-level tickets and 60% of the ETH portion goes to
+        the solo trait bucket</td>
+    </tr>
+  </table>
+  <p>And how a day's winners are spread:</p>
+  <table>
+    <tr>
+      <th>Winners per bucket</th>
+      <th>Prize size</th>
+    </tr>
+    <tr>
+      <td>32</td>
+      <td>Small</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>Medium</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Large</td>
+    </tr>
+    <tr>
+      <td>1 solo winner</td>
+      <td>The largest single share: 40% of the day's pool on days 1&ndash;2, 60% on the day-3 finale</td>
+    </tr>
+  </table>
+  <p class="fine">Base winner counts scale with the ETH budget; the solo slot stays one winner. Which quadrant is
+    solo is random, with gold drawn traits favored when present. The jackpot phase runs three days; a level whose pool
+    fills within a day runs it all in one (turbo). Every x5 level except x95 also runs turbo, and its jackpot day
+    feeds the <a href="/learn/decimator/">Decimator</a>.</p>
+
+  <div class="cta">
+    <strong>Then there are the big ones.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every ten levels, the special event jackpots fire on top of all of
+      this.</p>
+    <a class="btn" href="/learn/decimator/">The Decimator</a>
+    <a class="btn ghost" href="/learn/baf/">Big Ass Flip</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
 </body>
+
 </html>

@@ -1,36 +1,1507 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerus Protocol Whitepaper</title>
+  <meta name="description" content="Three products. One flywheel. Zero rake. How Degenerus aligns incentives so every participant's self-interest feeds the others." />
+  <link rel="stylesheet" href="/shared/nav.css">
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+      --ticket-grid: #7b4f16;
+    }
+
+    body { line-height: 1.65; }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
+    .page-header {
+      text-align: center;
+      padding: clamp(1rem, 3vw, 1.5rem);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header-logo {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0.65rem;
+      filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
+    }
+
+    .page-header h1 {
+      text-align: center;
+      font-size: clamp(1.4rem, 4vw, 1.9rem);
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .page-header .subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    section {
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+
+    section:last-of-type {
+      margin-bottom: 0;
+    }
+
+    h2 {
+      font-size: clamp(1.2rem, 3.4vw, 1.5rem);
+      color: var(--text-primary);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.95rem;
+      text-transform: none;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    em { font-style: italic; }
+
+    a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    a:hover {
+      color: #ffd08f;
+      border-bottom-color: var(--accent-primary);
+    }
+
+    .product-showcase {
+      margin: 1.25rem 0 1.5rem;
+    }
+
+    .product-cards {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+
+    .product-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+    }
+
+    .product-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      color: var(--text-primary);
+    }
+
+    .product-card p {
+      font-size: 0.88rem;
+      margin-bottom: 0;
+      line-height: 1.55;
+    }
+
+    .product-card.lottery { border-left: 3px solid var(--accent-primary); }
+    .product-card.affiliate { border-left: 3px solid var(--success); }
+    .product-card.lp { border-left: 3px solid var(--success); }
+
+    .product-hero {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      margin-bottom: 0.75rem;
+      border-left: 3px solid var(--accent-primary);
+    }
+
+    .product-hero h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    .product-hero p {
+      font-size: 0.92rem;
+      margin-bottom: 0;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .secondary-products {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .economy-callout {
+      background: rgba(245, 166, 35, 0.08);
+      border: 1px solid rgba(245, 166, 35, 0.3);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-top: 1rem;
+    }
+
+    .economy-callout p {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      margin-bottom: 0.85rem;
+    }
+
+    .economy-callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1.25rem 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg-tertiary);
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    td {
+      color: var(--text-secondary);
+    }
+
+    td strong {
+      color: var(--text-primary);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    blockquote {
+      border-left: 3px solid var(--accent-primary);
+      padding: 0.9rem 1.2rem;
+      margin: 1.25rem 0;
+      background: rgba(245, 166, 35, 0.08);
+      border-radius: 0 8px 8px 0;
+    }
+
+    blockquote p {
+      color: var(--text-secondary);
+      font-size: 0.92rem;
+      font-style: italic;
+      margin-bottom: 0;
+    }
+
+    .mechanism-list {
+      list-style: none;
+      display: grid;
+      gap: 0.6rem;
+      margin: 1.25rem 0;
+    }
+
+    .mechanism-list li {
+      padding: 0.7rem 1rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .mechanism-list li strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .doc-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+
+    .doc-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.4rem 0.85rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.15s ease;
+    }
+
+    .doc-link:hover {
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    .doc-link::after {
+      content: '\2192';
+      font-size: 0.85em;
+    }
+
+    .closing {
+      text-align: center;
+      padding-top: 1rem;
+    }
+
+    .closing p {
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .closing .punchline {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      font-weight: 400;
+      margin-top: 0.5rem;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.25rem 0 0.5rem;
+      margin-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    footer a {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      border-bottom: none;
+    }
+
+    footer a:hover { color: var(--text-primary); }
+
+    .ticket-example {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 0.75rem 0 0;
+      flex-wrap: wrap;
+    }
+
+    .ticket-token {
+      width: 100px;
+      height: 100px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      position: relative;
+      background: #d9d9d9;
+      border: 3px solid var(--ticket-grid);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .ticket-token::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 100%;
+      background: var(--ticket-grid);
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    .ticket-token::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--ticket-grid);
+      transform: translateY(-50%);
+      z-index: 2;
+    }
+
+    .ticket-token .tq {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      overflow: hidden;
+    }
+
+    .ticket-token .tq img {
+      width: 120%;
+      height: 120%;
+      object-fit: contain;
+    }
+
+    .ticket-token .tq:nth-child(1) img { transform: translate(-3%, -3%); }
+    .ticket-token .tq:nth-child(2) img { transform: translate(3%, -3%); }
+    .ticket-token .tq:nth-child(3) img { transform: translate(-3%, 3%); }
+    .ticket-token .tq:nth-child(4) img { transform: translate(3%, 3%); }
+
+    .ticket-token .ticket-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(45deg);
+      width: 30%;
+      height: 30%;
+      background: #fff;
+      border: 2px solid var(--ticket-grid);
+      border-radius: 3px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ticket-token .ticket-center img {
+      width: 95%;
+      height: 95%;
+      transform: rotate(-45deg);
+      object-fit: contain;
+    }
+
+    @media (max-width: 760px) {
+      .secondary-products {
+        grid-template-columns: 1fr;
+      }
+
+      .product-hero {
+        padding: 1.25rem 1.25rem 1rem;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .page { padding: 0.55rem; }
+      .page-header { padding: 1rem 0.85rem; }
+      .page-header-logo { width: 40px; height: 40px; }
+      h2 {
+        font-size: 1.1rem;
+      }
+      table { font-size: 0.78rem; }
+      th, td { padding: 0.5rem 0.55rem; }
+      .mechanism-list li { font-size: 0.82rem; padding: 0.6rem 0.85rem; }
+    }
   </style>
+  <script defer src="/js/ref.js"></script>
 </head>
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+
+<div class="page">
+  <header class="page-header">
+    <img src="flame-logo.svg" alt="Degenerus" class="page-header-logo" />
+    <h1>DEGENERUS PROTOCOL WHITEPAPER</h1>
+    <p class="subtitle" style="font-size:0.78rem; margin-bottom:0.3rem; color:var(--text-dim);">by Burnie Degenerus</p>
+    <p class="subtitle">A gambling protocol where the house takes nothing, every player's self-interest pushes the game forward, and the system is designed so it can never be stopped.</p>
+  </header>
+
+  <!-- ========== Section 1: The Point ========== -->
+  <section>
+    <h2>The Point</h2>
+    <p>Degenerus is a gambling protocol on Ethereum. Traditional gambling takes 40-60% of deposits in lotteries, 2-15% in casinos. Degenerus takes zero. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from a fraction of the stETH yield on the pooled deposits, not by skimming your bets.</p>
+    <p>That means total payouts to players will exceed total deposits over time. The system is positive-sum. And if the game ever stops growing, remaining funds are distributed to ticketholders through a fair terminal jackpot. The failure mode is a terminal distribution, not a rug.</p>
+    <p>But here's the part that matters: <strong>once the game is running, every participant (gamblers, investors, affiliates) is individually incentivized to push it forward.</strong> Not because they're cooperating. Not because they're altruistic. Because pushing the game forward is how they make money. Their self-interest IS the system's fuel.</p>
+    <p>Jackpot winnings are liquid, you can withdraw anytime, but reinvesting them is heavily incentivized. And for investors, the core reward is structurally illiquid: future tickets that only pay out when the game reaches their level. Value enters the system and stays in the system.</p>
+    <p>The result is a self-reinforcing machine with multiple redundant mechanisms that keep it running. It doesn't need coordination. It doesn't need trust. It doesn't need a team to keep the lights on. The contracts are immutable and the incentives do the rest.</p>
+    <p>The rest of this paper explains why.</p>
+  </section>
+
+  <!-- ========== Section 2: What Is Degenerus ========== -->
+  <section>
+    <h2>Three Products, One Economy</h2>
+
+    <div class="product-showcase">
+      <div class="product-hero">
+        <h3>A Progressive Jackpot Lottery</h3>
+        <p>Buy tickets with ETH. Each ticket has four randomly assigned traits. Every night, Chainlink VRF picks winning traits and pays jackpots to holders. The biggest prizes unlock only when the prize pool tops the previous level's, so each level within a hundred-level cycle is guaranteed to be bigger than the last. For casual players it's honest gambling with huge grand prizes. For engaged players who build degen score and reinvest, the jackpots are a core part of a +EV system, with the same grand prizes. Both ways to play are valid and reinforce one another.</p>
+        <div class="ticket-example">
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-tl.svg" alt="Bitcoin Orange" /></div>
+            <div class="tq"><img src="badge-tr.svg" alt="Leo Purple" /></div>
+            <div class="tq"><img src="badge-bl.svg" alt="Heart Red" /></div>
+            <div class="tq"><img src="badge-br.svg" alt="Dice 3 Green" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-t2-tl.svg" alt="Ethereum Blue" /></div>
+            <div class="tq"><img src="badge-t2-tr.svg" alt="Aries Pink" /></div>
+            <div class="tq"><img src="badge-t2-bl.svg" alt="Club Gold" /></div>
+            <div class="tq"><img src="badge-t2-br.svg" alt="Dice 6 Silver" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-t3-tl.svg" alt="Solana Green" /></div>
+            <div class="tq"><img src="badge-t3-tr.svg" alt="Cancer Red" /></div>
+            <div class="tq"><img src="badge-t3-bl.svg" alt="Diamond Purple" /></div>
+            <div class="tq"><img src="badge-t3-br.svg" alt="Dice 1 Orange" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="secondary-products">
+        <div class="product-card affiliate">
+          <h3>An Affiliate Network</h3>
+          <p>Three tiers deep, in perpetuity. Every ETH your referrals deposit earns you commissions, paid as coinflip entries instead of guaranteed income. Affiliates who love variance earn at full value. Risk-averse affiliates self-select out. Fewer promoters, but the right ones.</p>
+        </div>
+        <div class="product-card lp">
+          <h3>An Investment for Degenerates</h3>
+          <p>Luckbox and passes let you fund the prize pools that generate jackpots. Returns come back as tickets and tokens, not guaranteed yield. You are required to gamble your returns. The artificial risk and illiquidity are intentional; it's what keeps yield farming nits out and reserves the profits for degens who enjoy the variance.</p>
+        </div>
+      </div>
+    </div>
+
+    <p>These three products share one on-chain economy. Entertainment-seeking actions produce monetary externalities, and monetary-seeking actions produce entertainment externalities. Lottery players fill the prize pools. Investors fund the jackpots that attract them. Affiliates drive traffic from both sides. The biggest edges go to players who work all three angles, and every angle requires making the game stronger.</p>
+  </section>
+
+  <!-- ========== Section 3: Negative Rake ========== -->
+  <section>
+    <h2><s>Zero Rake.</s> Negative Rake.</h2>
+    <p>Zero-rake means no entity extracts a guaranteed percentage of player deposits as ongoing profit. Not a small percentage. Zero. Every wei of ETH enters on-chain pools with published, immutable splits. There is no fee extraction and no privileged access to funds. (One carve-out: the creator's launch funding comes from an opt-in presale, not a skim. Game purchases earn credit to buy presale boxes of FLIP and DGNRS; that box ETH goes 80% to the vault, capped at 50 ETH total. No bet is ever skimmed, at any level.)</p>
+    <p>But it goes further. Pooled ETH not needed for near-term claims is staked into Lido stETH, earning ~2.5% APR. That yield comes from Ethereum staking rewards, not from other players. It is split evenly across the vault, the sDGNRS contract, the GNRUS donation contract, and a yield accumulator that pays back into the prize pools. A share goes to the creator through those same channels. Free external money flows into the system that pays everyone.</p>
+    <p>Over the lifetime of the protocol, total ETH paid out to all players will exceed total ETH deposited by all players. That's not a promise. That's an accounting identity. When the system is positive-sum, and there are losers (there will be), there <em>must</em> be winners who collectively received more than they put in.</p>
+
+    <p>A reality check: the game is primarily redistributive. Most of what any player receives came from other players' deposits. The yield component makes total payouts exceed total deposits, but the dominant dynamic is redistribution from low-activity to high-activity players, and from unlucky to lucky ones. This is not a magic money machine. It is a well-structured game where the house edge is zero and a small external subsidy makes the aggregate slightly positive.</p>
+    <p>The question isn't whether the surplus exists. It does, provably, on-chain. The question is who captures it. The answer: the luckiest and the most engaged.</p>
+  </section>
+
+  <!-- ========== Section 4: Profit is Gatekept ========== -->
+  <section>
+    <h2>Profit is Gatekept by Contribution</h2>
+    <p>You cannot reliably extract value from Degenerus without first strengthening it. The only paths to profit require actions that make the game healthier for everyone:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Participant</th><th>What they do</th><th>What they get</th><th>Why it helps the system</th></tr>
+        <tr><td><strong>Lottery players</strong></td><td>Buy tickets</td><td>Daily jackpot shots</td><td>Fill the prize pools that fund jackpots</td></tr>
+        <tr><td><strong>Affiliates</strong></td><td>Bring in new players</td><td>Commissions on every referral mint</td><td>More deposits, faster level progression</td></tr>
+        <tr><td><strong>Luckbox buyers</strong></td><td>Fund future prize pools</td><td>High-variance prizes (+EV at high activity) and future tickets</td><td>Seed jackpots for upcoming levels</td></tr>
+        <tr><td><strong>Foil pack buyers</strong></td><td>Pay 10 tickets' price for 4 boosted tickets, once per level</td><td>Rarity-boosted tickets, re-graded against every remaining daily draw</td><td>Concentrated deposit, 75% into the pool that completes the level</td></tr>
+        <tr><td><strong>Whale pass holders</strong></td><td>Buy tickets across 100 levels</td><td>Jackpot eligibility across 100 levels and degen score boost</td><td>Massive upfront capital injection</td></tr>
+        <tr><td><strong>Quest grinders</strong></td><td>Buy in daily to maintain streaks</td><td>Best degen score, best luckbox and degenerette EV</td><td>Consistent daily deposit pressure</td></tr>
+      </table>
+    </div>
+
+    <p>There is no extractive move. You can't drain the system. No house takes the other side of a bet; there are only differently-motivated actors whose interactions produce mutual benefit. You can't profit at the protocol's expense, only at other players' expense, within a positive-sum envelope. Claiming your winnings is fine; the system already captured the value your participation created. Anyone who leaves as a winner already earned it. And the future value they forfeit by quitting? It accrues to the players who stay.</p>
+    <p>This is a solo project with no insiders. Everyone is subject to this constraint, equally.</p>
+  </section>
+
+  <!-- ========== Section 5: Illiquidity ========== -->
+  <section>
+    <h2>What Enters, Stays</h2>
+    <p>This is the most important economic mechanism in the protocol, and the primary reason the game can't stall.</p>
+    <p>When someone buys a luckbox, a whale pass, or an afKing pass, they receive tickets for <strong>future levels that don't exist yet</strong>. Those tickets can't win their level's jackpots until the game reaches those levels. They can't be redeemed or transferred, and the only way to sell them is a whole-account liquidation to sDGNRS, or to the vault as a fallback, at roughly 2-10% of their face value. But the ETH those buyers paid enters the prize pools <em>now</em>.</p>
+    <p>This creates a powerful asymmetry. Your money is in the system today. Your tickets activate later. The only way to realize value from those tickets is for the game to progress to their level. Every future ticket holder is personally motivated to push the game forward. Not because someone told them to, but because their money is locked in levels that haven't happened yet.</p>
+    <p>A whale with 5 ETH of unrealized future tickets will happily spend 0.1 ETH on current-level purchases to help the level complete. The alternative is writing off the entire 5 ETH position. And that 0.1 ETH isn't lost. It buys tickets that enter jackpot draws, or luckbox that are +EV for engaged players. The cost of pushing the game forward is itself a +EV play. That's individually rational, not coordinated.</p>
+    <p>And here's where it compounds: <strong>each level that completes creates more future ticket holders than the previous one.</strong> Luckbox rewards issue tickets across dozens of future levels. Whale passes seed a hundred at a time. The number of people with money locked in the future grows with every level that completes while luckbox keep selling. Level 50 has more stakeholders pushing for it than level 5.</p>
+    <p>Future tickets also have time-value. Tickets one to 99 levels ahead are drawn for awarded seats in the daily jackpot battle, and tickets two to 99 levels ahead for BAF scatter prizes, long before their own level starts paying ETH. The earlier you acquire one, the more draws it participates in before the level arrives. This further incentivizes getting in early and pushing the game forward.</p>
+    <p>But it's not just whether the game progresses. It's how fast. If you hold 5 ETH in future tickets and those levels complete in two months, your effective return is far higher than if they take a year. The speed of progression directly determines the annualized return on every future position in the system. That means players aren't just motivated to ensure the game advances. They're motivated to make it advance as quickly as possible. Buying extra tickets, promoting to new players, maintaining quest streaks, subscribing to afKing: every action that accelerates progression directly increases the return on your existing holdings. The incentive isn't just "push forward or lose your money." It's "push faster and your money is worth more."</p>
+
+    <blockquote>
+      <p>In DeFi, yield is liquid. You claim it and leave. In Degenerus, your rewards are tickets for a future that requires your presence to arrive.</p>
+    </blockquote>
+
+    <p>The illiquidity also blocks a class of extractive behavior. If future tickets were tradeable, sophisticated players could buy them at a discount from desperate sellers, capture the value, and leave. Non-transferable tickets mean the only discount buyers are the protocol's own sDGNRS and vault contracts, and the only way to collect full value is to be here when the game gets there, which means being part of the ecosystem that pushes levels forward.</p>
+    <p>The capital flow has a structural asymmetry worth noting. Ticket purchases split 90/10 to the next prize pool and future pool. Luckbox purchases split the opposite way: 90% to the futurepool. EV maximizers, who buy the most luckbox, are structurally locking their capital into longer-duration pools. The degen's ticket money cycles quickly through the next jackpot. The grinder's luckbox money sits in the futurepool, generating yield and funding future jackpots. The people trying hardest to extract value end up locking their capital the longest.</p>
+  <p>The whole economy on one page: ETH enters the pools, circulates as prizes, and only leaves as player winnings.</p>
+    <style>
+      #ethflow-fig svg text:not([data-tip]),
+      .ethflow-lightbox svg text:not([data-tip]) {
+        pointer-events: none;
+      }
+
+      #ethflow-fig svg [data-tip],
+      .ethflow-lightbox svg [data-tip] {
+        cursor: help;
+      }
+
+      #ethflow-fig svg {
+        cursor: zoom-in;
+      }
+
+      .ethflow-tip {
+        position: fixed;
+        z-index: 2100;
+        max-width: 270px;
+        padding: 8px 11px;
+        font-size: 0.8rem;
+        line-height: 1.45;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        color: #e8eef5;
+        background: #1b2330;
+        border: 1px solid #3a4a61;
+        border-radius: 8px;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .12s ease;
+      }
+
+      .ethflow-tip.show {
+        opacity: 1;
+      }
+
+      .ethflow-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: rgba(6, 9, 14, 0.9);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 4vmin;
+        cursor: zoom-out;
+      }
+
+      .ethflow-lightbox.show {
+        display: flex;
+      }
+
+      .ethflow-lightbox .ethflow-stage {
+        width: min(96vw, 1080px);
+        background: #0c1018;
+        border: 1px solid #202637;
+        border-radius: 12px;
+        padding: 16px;
+        cursor: auto;
+        box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
+      }
+
+      .ethflow-lightbox .ethflow-stage svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+    </style>
+    <figure id="ethflow-fig" style="margin:1.8rem auto;max-width:720px">
+      <div style="background:#0c1018;border:1px solid #202637;border-radius:12px;padding:14px 12px">
+        <svg viewBox="0 0 700 490" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"
+          font-family="ui-sans-serif,system-ui,sans-serif" role="img"
+          aria-label="Degenerus Protocol ETH flow: player inflows into the prize-pool diamond and claimable winnings, with player withdrawals and rebuy, stETH yield, and protocol reserve contracts">
+          <rect x="0" y="0" width="700" height="490" fill="#0c1018" />
+          <defs>
+            <marker id="arGs" viewBox="0 0 12 12" refX="9.4" refY="6" markerWidth="8.5" markerHeight="8.5"
+              markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+              <path d="M1,1 L11,6 L1,11 Z" fill="#3f8f5e" />
+            </marker>
+            <clipPath id="np-fill">
+              <rect x="380" y="76" width="180" height="30" rx="10"><animate attributeName="y" dur="61s" repeatCount="indefinite" values="76;76;74;74;72;72;70;70;68;68;66;66;64;64;62;62;60;60;58;58;56;56;56" keyTimes="0;0.081934;0.093443;0.180295;0.191804;0.278655;0.290164;0.377017;0.388525;0.475377;0.486885;0.573738;0.585246;0.672099;0.683606;0.770459;0.781967;0.86882;0.880327;0.96718;0.978688;0.983607;1" /><animate attributeName="height" dur="61s" repeatCount="indefinite" values="30;30;32;32;34;34;36;36;38;38;40;40;42;42;44;44;46;46;48;48;50;50;50" keyTimes="0;0.081934;0.093443;0.180295;0.191804;0.278655;0.290164;0.377017;0.388525;0.475377;0.486885;0.573738;0.585246;0.672099;0.683606;0.770459;0.781967;0.86882;0.880327;0.96718;0.978688;0.983607;1" /></rect>
+            </clipPath>
+            <clipPath id="cp-fill">
+              <rect x="482" y="178" width="156" height="28" rx="10"><animate attributeName="y" dur="61s" repeatCount="indefinite" values="178;178;176;176;174;174;172;172;170;170;168;168;166;166;164;164;162;162;160;160;160" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /><animate attributeName="height" dur="61s" repeatCount="indefinite" values="28;28;30;30;32;32;34;34;36;36;38;38;40;40;42;42;44;44;46;46;46" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /></rect>
+            </clipPath>
+            <clipPath id="fp-fill">
+              <rect x="302" y="151" width="156" height="55" rx="10" />
+            </clipPath>
+            <clipPath id="clip-cl">
+              <rect x="387" y="276" width="184" height="46" rx="11" />
+            </clipPath>
+            <!-- glowing flow dots, coloured to match each arrow -->
+            <!-- ETH token glyph + flush patterns (faceted Ethereum diamond) -->
+            <symbol id="ethS" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#6b7280" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#dfe3ea" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#6b7280" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#dfe3ea" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#4a4f59" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#9aa1ad" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+            <symbol id="ethG" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#2f8552" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#a6e8bf" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#2f8552" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#a6e8bf" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#1f6740" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#4fae74" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+            <symbol id="ethB" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#456fae" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#cfe0fb" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#456fae" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#cfe0fb" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#30558a" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#6f9bd2" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+            <symbol id="ethI" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#7f9fd0" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#eaf2fe" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#7f9fd0" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#eaf2fe" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#5f7caa" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#aac6ef" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+            <symbol id="ethR" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#b0524f" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#f6c9c6" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#b0524f" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#f6c9c6" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#8e3f3c" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#d07a77" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+            <symbol id="ethGold" viewBox="0 0 784.37 1277.38" preserveAspectRatio="xMidYMid meet" overflow="visible">
+              <polygon fill="#b2912f" points="392.07,0 383.5,29.11 383.5,873.74 392.07,882.29 784.13,650.54"/>
+              <polygon fill="#f7e6a8" points="392.07,0 0,650.54 392.07,882.29 392.07,472.33"/>
+              <polygon fill="#b2912f" points="392.07,956.52 387.24,962.41 387.24,1263.28 392.07,1277.38 784.37,724.89"/>
+              <polygon fill="#f7e6a8" points="392.07,1277.38 392.07,956.52 0,724.89"/>
+              <polygon fill="#8a6f24" points="392.07,882.29 784.13,650.54 392.07,472.33"/>
+              <polygon fill="#e0c24e" points="0,650.54 392.07,882.29 392.07,472.33"/>
+            </symbol>
+                        <radialGradient id="gDot" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#3f8f5e" stop-opacity="1" />
+              <stop offset="55%" stop-color="#2c6b45" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#1e4f33" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="bDot" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#4f7bc2" stop-opacity="1" />
+              <stop offset="55%" stop-color="#2c4f86" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#1c3866" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="rDot" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#f6d4d2" stop-opacity="1" />
+              <stop offset="45%" stop-color="#c0524f" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#a03f3c" stop-opacity="0" />
+            </radialGradient>
+            <!-- "water" fill: same colour as the Future pool, with a slightly brighter leading front -->
+            <linearGradient id="waterV" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#15203a" stop-opacity="0.92" />
+              <stop offset="0.8" stop-color="#1a2c4e" stop-opacity="0.94" />
+              <stop offset="1" stop-color="#3a5896" stop-opacity="0.97" />
+            </linearGradient>
+            <linearGradient id="waterVup" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#3a5896" stop-opacity="0.97" />
+              <stop offset="0.22" stop-color="#1a2c4e" stop-opacity="0.94" />
+              <stop offset="1" stop-color="#15203a" stop-opacity="0.92" />
+            </linearGradient>
+            <linearGradient id="waterGold" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#e0c24e" stop-opacity="0.9" />
+              <stop offset="0.3" stop-color="#7a6024" stop-opacity="0.85" />
+              <stop offset="1" stop-color="#4a3a16" stop-opacity="0.82" />
+            </linearGradient>
+            <!-- clip paths for the "water pipe" arrows (exact arrow geometry) so the fill only shows inside the pipe -->
+            <clipPath id="clip-store"><path d="M392.66,106 L397.34,106 L397.34,139 L400.94,139 L395,147 L389.06,139 L392.66,139 Z" /></clipPath>
+            <clipPath id="clip-n2c">
+              <path d="M518,106 L532,106 L532,159 L538,159 L525,174 L512,159 L518,159 Z"><animate attributeName="d" dur="61s" repeatCount="indefinite" values="M511.6,106 L528.4,106 L528.4,159 L535.6,159 L520,174 L504.4,159 L511.6,159 Z;M511.6,106 L528.4,106 L528.4,159 L535.6,159 L520,174 L504.4,159 L511.6,159 Z;M511.6,106 L528.4,106 L528.4,157 L535.6,157 L520,172 L504.4,157 L511.6,157 Z;M511.6,106 L528.4,106 L528.4,157 L535.6,157 L520,172 L504.4,157 L511.6,157 Z;M511.6,106 L528.4,106 L528.4,155 L535.6,155 L520,170 L504.4,155 L511.6,155 Z;M511.6,106 L528.4,106 L528.4,155 L535.6,155 L520,170 L504.4,155 L511.6,155 Z;M511.6,106 L528.4,106 L528.4,153 L535.6,153 L520,168 L504.4,153 L511.6,153 Z;M511.6,106 L528.4,106 L528.4,153 L535.6,153 L520,168 L504.4,153 L511.6,153 Z;M511.6,106 L528.4,106 L528.4,151 L535.6,151 L520,166 L504.4,151 L511.6,151 Z;M511.6,106 L528.4,106 L528.4,151 L535.6,151 L520,166 L504.4,151 L511.6,151 Z;M511.6,106 L528.4,106 L528.4,149 L535.6,149 L520,164 L504.4,149 L511.6,149 Z;M511.6,106 L528.4,106 L528.4,149 L535.6,149 L520,164 L504.4,149 L511.6,149 Z;M511.6,106 L528.4,106 L528.4,147 L535.6,147 L520,162 L504.4,147 L511.6,147 Z;M511.6,106 L528.4,106 L528.4,147 L535.6,147 L520,162 L504.4,147 L511.6,147 Z;M511.6,106 L528.4,106 L528.4,145 L535.6,145 L520,160 L504.4,145 L511.6,145 Z;M511.6,106 L528.4,106 L528.4,145 L535.6,145 L520,160 L504.4,145 L511.6,145 Z;M511.6,106 L528.4,106 L528.4,143 L535.6,143 L520,158 L504.4,143 L511.6,143 Z;M511.6,106 L528.4,106 L528.4,143 L535.6,143 L520,158 L504.4,143 L511.6,143 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /></path>
+            </clipPath>
+            <clipPath id="clip-f2cl"><path d="M435.96,206 L440.04,206 L440.04,265 L443.16,265 L438,272 L432.84,265 L435.96,265 Z" /></clipPath>
+            <clipPath id="clip-c2cl"><path d="M513.4,206 L526.6,206 L526.6,259 L533.2,259 L520,272 L506.8,259 L513.4,259 Z" /></clipPath>
+            <clipPath id="clip-tup"><path d="M542.3,178 L545.7,178 L545.7,117 L548.3,117 L544,110 L539.7,117 L542.3,117 Z"><animate attributeName="d" dur="61s" repeatCount="indefinite" values="M541.96,178 L546.04,178 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,178 L546.04,178 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,176 L546.04,176 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,176 L546.04,176 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,174 L546.04,174 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,174 L546.04,174 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,172 L546.04,172 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,172 L546.04,172 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,170 L546.04,170 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,170 L546.04,170 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,168 L546.04,168 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,168 L546.04,168 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,166 L546.04,166 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,166 L546.04,166 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,164 L546.04,164 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,164 L546.04,164 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,162 L546.04,162 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,162 L546.04,162 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /></path></clipPath>
+          </defs>
+
+          <!-- master 30s timeline clock (5 cycles x 6s); self-restarts so the whole sequence loops -->
+          <rect id="clkrect" x="-20" y="-20" width="1" height="1" fill="none" opacity="0">
+            <animate id="clk" attributeName="opacity" begin="0s;clk.end" dur="61s" values="0;0" />
+          </rect>
+
+          <!-- ================= SECTION HEADERS ================= -->
+          <text x="350" y="34" text-anchor="middle" fill="#cfd6e3" font-size="18" font-weight="800"
+            letter-spacing="1">ETH Flowchart</text>
+          <!-- Level badge (top-right): advances each time the Next pool flushes -->
+          <g>
+            <rect x="600" y="18" width="64" height="21" rx="5.5" fill="#2a2410" stroke="#c9a83e" stroke-width="1.3">
+              <animate attributeName="stroke" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" dur="0.7s" values="#c9a83e;#ffe89a;#c9a83e" keyTimes="0;0.3;1" />
+              <animate attributeName="stroke-width" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" dur="0.7s" values="1.3;2.7;1.3" keyTimes="0;0.3;1" />
+            </rect>
+            <g text-anchor="middle" font-size="12.5" font-weight="700" fill="#e7cb5c">
+              <text x="632" y="33">Level 1<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="1;0;0" keyTimes="0;0.081964;1" /></text>
+              <text x="632" y="33" opacity="0">Level 2<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.081964;0.180325;1" /></text>
+              <text x="632" y="33" opacity="0">Level 3<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.180325;0.278686;1" /></text>
+              <text x="632" y="33" opacity="0">Level 4<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.278686;0.377046;1" /></text>
+              <text x="632" y="33" opacity="0">Level 5<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.377046;0.475407;1" /></text>
+              <text x="632" y="33" opacity="0">Level 6<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.475407;0.573767;1" /></text>
+              <text x="632" y="33" opacity="0">Level 7<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.573767;0.672128;1" /></text>
+              <text x="632" y="33" opacity="0">Level 8<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.672128;0.770488;1" /></text>
+              <text x="632" y="33" opacity="0">Level 9<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.770488;0.868849;1" /></text>
+              <text x="632" y="33" opacity="0">Level 10<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;0;0" keyTimes="0;0.868849;0.967209;1" /></text>
+              <text x="632" y="33" opacity="0">Level 11<animate attributeName="opacity" calcMode="discrete" dur="61s" repeatCount="indefinite" values="0;1;1" keyTimes="0;0.967209;1" /></text>
+            </g>
+          </g>
+
+          <!-- ================= INFLOW EDGES (green) ================= -->
+          <g fill="#3f8f5e">
+            <path d="M240,79.4 L367,79.4 L367,74.6 L376,83 L367,91.4 L367,86.6 L240,86.6 Z" />
+            <path d="M240,160.4 L289,160.4 L289,155.6 L298,164 L289,172.4 L289,167.6 L240,167.6 Z" />
+            <path d="M240,190.96 L291,190.96 L291,187.84 L298,193 L291,198.16 L291,195.04 L240,195.04 Z" />
+          </g>
+          <text x="310" y="99" fill="#a6d8bd" font-size="9" text-anchor="middle" font-style="italic">Degen Yield</text>
+          <text x="269" y="146" fill="#a6d8bd" font-size="9" text-anchor="middle" font-style="italic" data-tip="Luckboxes and whale passes seed the Future pool: grinders front-load the long-term reserve.">Grinder<tspan x="269" dy="11">Liquidity</tspan></text>
+
+          <!-- ================= INFLOW NODES (left) ================= -->
+          <g text-anchor="middle">
+            <rect x="40" y="64" width="200" height="40" rx="9" fill="#16241b" stroke="#3f8f5e" stroke-width="1.4"
+              data-tip="Raffle tickets. ETH splits 90% to Next, 10% to Future.">
+            </rect>
+            <text x="140" y="88" fill="#cfe6d6" font-size="12.5" font-weight="600">Ticket Purchases</text>
+
+            <rect x="40" y="132" width="200" height="40" rx="9" fill="#16241b" stroke="#3f8f5e" stroke-width="1.4"
+              data-tip="Luckboxes put 90% into the Future pool, whale and deity passes 70-95%; lazy passes split 90/10 to Next like tickets.">
+            </rect>
+            <text x="140" y="156" fill="#cfe6d6" font-size="12" font-weight="600">Luckbox + Pass Purchases</text>
+
+            <rect x="140" y="182" width="100" height="28" rx="8" fill="#16241b" stroke="#3f8f5e" stroke-width="1.5"
+              data-tip="Bets staked into the Future pool. Payouts capped at 10% of it."></rect>
+            <text x="190" y="200" fill="#cfe6d6" font-size="10.5" font-weight="600">Degenerette</text>
+          </g>
+
+          <!-- ================= POOL TRIANGLE ================= -->
+          <g fill="#7c9fd8">
+            <path d="M404.66,151 L409.34,151 L409.34,118 L412.94,118 L407,110 L401.06,118 L404.66,118 Z" />
+            <path d="M392.66,106 L397.34,106 L397.34,139 L400.94,139 L395,147 L389.06,139 L392.66,139 Z" />
+            <path d="M435.96,206 L440.04,206 L440.04,265 L443.16,265 L438,272 L432.84,265 L435.96,265 Z" />
+            <path d="M513.4,206 L526.6,206 L526.6,259 L533.2,259 L520,272 L506.8,259 L513.4,259 Z" />
+          </g>
+          <!-- Current-pool top connectors: track the box top as it grows upward on each level advance -->
+          <g fill="#7c9fd8">
+            <!-- Ticket Prizes (up): single path; shaft bottom tracks Current's rising top -->
+            <path d="M542.3,178 L545.7,178 L545.7,117 L548.3,117 L544,110 L539.7,117 L542.3,117 Z"><animate attributeName="d" dur="61s" repeatCount="indefinite" values="M541.96,178 L546.04,178 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,178 L546.04,178 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,176 L546.04,176 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,176 L546.04,176 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,174 L546.04,174 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,174 L546.04,174 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,172 L546.04,172 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,172 L546.04,172 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,170 L546.04,170 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,170 L546.04,170 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,168 L546.04,168 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,168 L546.04,168 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,166 L546.04,166 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,166 L546.04,166 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,164 L546.04,164 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,164 L546.04,164 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,162 L546.04,162 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,162 L546.04,162 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z;M541.96,160 L546.04,160 L546.04,117 L549.16,117 L544,110 L538.84,117 L541.96,117 Z" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /></path>
+            <!-- Next -> Current (down): single path; head + tip track Current's rising top -->
+            <path d="M518,106 L532,106 L532,159 L538,159 L525,174 L512,159 L518,159 Z"><animate attributeName="d" dur="61s" repeatCount="indefinite" values="M511.6,106 L528.4,106 L528.4,159 L535.6,159 L520,174 L504.4,159 L511.6,159 Z;M511.6,106 L528.4,106 L528.4,159 L535.6,159 L520,174 L504.4,159 L511.6,159 Z;M511.6,106 L528.4,106 L528.4,157 L535.6,157 L520,172 L504.4,157 L511.6,157 Z;M511.6,106 L528.4,106 L528.4,157 L535.6,157 L520,172 L504.4,157 L511.6,157 Z;M511.6,106 L528.4,106 L528.4,155 L535.6,155 L520,170 L504.4,155 L511.6,155 Z;M511.6,106 L528.4,106 L528.4,155 L535.6,155 L520,170 L504.4,155 L511.6,155 Z;M511.6,106 L528.4,106 L528.4,153 L535.6,153 L520,168 L504.4,153 L511.6,153 Z;M511.6,106 L528.4,106 L528.4,153 L535.6,153 L520,168 L504.4,153 L511.6,153 Z;M511.6,106 L528.4,106 L528.4,151 L535.6,151 L520,166 L504.4,151 L511.6,151 Z;M511.6,106 L528.4,106 L528.4,151 L535.6,151 L520,166 L504.4,151 L511.6,151 Z;M511.6,106 L528.4,106 L528.4,149 L535.6,149 L520,164 L504.4,149 L511.6,149 Z;M511.6,106 L528.4,106 L528.4,149 L535.6,149 L520,164 L504.4,149 L511.6,149 Z;M511.6,106 L528.4,106 L528.4,147 L535.6,147 L520,162 L504.4,147 L511.6,147 Z;M511.6,106 L528.4,106 L528.4,147 L535.6,147 L520,162 L504.4,147 L511.6,147 Z;M511.6,106 L528.4,106 L528.4,145 L535.6,145 L520,160 L504.4,145 L511.6,145 Z;M511.6,106 L528.4,106 L528.4,145 L535.6,145 L520,160 L504.4,145 L511.6,145 Z;M511.6,106 L528.4,106 L528.4,143 L535.6,143 L520,158 L504.4,143 L511.6,143 Z;M511.6,106 L528.4,106 L528.4,143 L535.6,143 L520,158 L504.4,143 L511.6,143 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z;M511.6,106 L528.4,106 L528.4,141 L535.6,141 L520,156 L504.4,141 L511.6,141 Z" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" /></path>
+          </g>
+          <g font-size="10.5" fill="#a9c2ea">
+            <text x="416" y="127" text-anchor="start" data-tip="A daily drip of 4% of the Future pool, mostly into Next. When buying stalls, the drip alone can fill a level.">Release<animate attributeName="fill" dur="0.6s" begin="clk.begin+2.3s;clk.begin+4s;clk.begin+8.6s;clk.begin+13.9s;clk.begin+15.7s;clk.begin+20.2s;clk.begin+26.5s;clk.begin+28s;clk.begin+32.3s;clk.begin+34s;clk.begin+38.6s;clk.begin+43.9s;clk.begin+45.7s;clk.begin+50.2s;clk.begin+56.5s;clk.begin+58s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.25;1" /></text>
+            <text x="416" y="139" text-anchor="start" font-size="8.5" font-style="italic" fill="#b3c5e6" data-tip="A daily drip of 4% of the Future pool, mostly into Next. When buying stalls, the drip alone can fill a level.">in
+              stalls<animate attributeName="fill" dur="0.6s" begin="clk.begin+2.3s;clk.begin+4s;clk.begin+8.6s;clk.begin+13.9s;clk.begin+15.7s;clk.begin+20.2s;clk.begin+26.5s;clk.begin+28s;clk.begin+32.3s;clk.begin+34s;clk.begin+38.6s;clk.begin+43.9s;clk.begin+45.7s;clk.begin+50.2s;clk.begin+56.5s;clk.begin+58s" values="#b3c5e6;#eaf3ff;#b3c5e6" keyTimes="0;0.25;1" /></text>
+            <text x="386" y="127" text-anchor="end" data-tip="When deposits run hot, the Future pool banks the surplus.">Store<animate attributeName="fill" dur="1.0s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.25;1" /></text>
+            <text x="386" y="139" text-anchor="end" font-size="8.5" font-style="italic" fill="#b3c5e6" data-tip="When deposits run hot, the Future pool banks the surplus.">in booms<animate attributeName="fill" dur="1.0s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="#b3c5e6;#eaf3ff;#b3c5e6" keyTimes="0;0.25;1" /></text>
+            <text x="552" y="126" text-anchor="start">Ticket Prizes<animate attributeName="fill" dur="0.9s" begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.2;1" /></text>
+            <text x="432" y="251" text-anchor="end" data-tip="Big-Ass Flip and other Future-pool events pay out to winners.">Event<animate attributeName="fill" dur="1.0s" begin="clk.begin+29s;clk.begin+59s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.25;1" /></text>
+            <text x="432" y="263" text-anchor="end" data-tip="Big-Ass Flip and other Future-pool events pay out to winners.">Jackpots<animate attributeName="fill" dur="1.0s" begin="clk.begin+29s;clk.begin+59s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.25;1" /></text>
+            <text x="535" y="257" text-anchor="start">Jackpot Payouts<animate attributeName="fill" dur="1.1s" begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="#a9c2ea;#eaf3ff;#a9c2ea" keyTimes="0;0.25;1" /></text>
+          </g>
+
+          <!-- pool nodes -->
+          <g text-anchor="middle">
+            <rect x="380" y="76" width="180" height="30" rx="10" fill="none" stroke="#7c9fd8" stroke-width="1.7"
+              data-tip="Fills to the level target. When met, the level advances and prizes pay out.">
+              <animate attributeName="y" dur="61s" repeatCount="indefinite" values="76;76;74;74;72;72;70;70;68;68;66;66;64;64;62;62;60;60;58;58;56;56;56" keyTimes="0;0.081934;0.093443;0.180295;0.191804;0.278655;0.290164;0.377017;0.388525;0.475377;0.486885;0.573738;0.585246;0.672099;0.683606;0.770459;0.781967;0.86882;0.880327;0.96718;0.978688;0.983607;1" />
+              <animate attributeName="height" dur="61s" repeatCount="indefinite" values="30;30;32;32;34;34;36;36;38;38;40;40;42;42;44;44;46;46;48;48;50;50;50" keyTimes="0;0.081934;0.093443;0.180295;0.191804;0.278655;0.290164;0.377017;0.388525;0.475377;0.486885;0.573738;0.585246;0.672099;0.683606;0.770459;0.781967;0.86882;0.880327;0.96718;0.978688;0.983607;1" />
+              <animate attributeName="stroke" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s"
+                dur="0.9s" values="#7c9fd8;#cfe1fb;#7c9fd8" keyTimes="0;0.35;1" />
+              <animate attributeName="stroke-width" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s"
+                dur="0.9s" values="1.7;2.9;1.7" keyTimes="0;0.35;1" />
+            </rect>
+            <g clip-path="url(#np-fill)" pointer-events="none">
+              <g>
+                <rect x="380" y="56" width="180" height="50" fill="#15203a" opacity="0.95" />
+                <rect x="380" y="56" width="180" height="4" fill="#3a5896" opacity="0.9" />
+                <animateTransform attributeName="transform" type="translate" dur="61s" repeatCount="indefinite" values="0,50;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,35;0,0;0,50;0,50" keyTimes="0;0.081968;0.090164;0.096721;0.180328;0.188524;0.195082;0.278689;0.286886;0.293443;0.377049;0.385246;0.391803;0.47541;0.483607;0.490164;0.57377;0.581967;0.588525;0.672131;0.680328;0.686885;0.770492;0.778689;0.785246;0.868852;0.877049;0.883607;0.967213;0.97541;1" />
+              </g>
+            </g>
+            <g><animateTransform attributeName="transform" type="translate" dur="61s" repeatCount="indefinite" values="0,0;0,0;0,-1;0,-1;0,-2;0,-2;0,-3;0,-3;0,-4;0,-4;0,-5;0,-5;0,-6;0,-6;0,-7;0,-7;0,-8;0,-8;0,-9;0,-9;0,-10;0,-10;0,-10" keyTimes="0;0.081934;0.093443;0.180295;0.191804;0.278655;0.290164;0.377017;0.388525;0.475377;0.486885;0.573738;0.585246;0.672099;0.683606;0.770459;0.781967;0.86882;0.880327;0.96718;0.978688;0.983607;1" />
+            <text x="470" y="90" fill="#cfe0f6" font-size="12.5" font-weight="700">Next Prize Pool</text>
+            <text x="470" y="102" fill="#b3c5e6" font-size="8.5" font-style="italic">Fill to Advance Level</text></g>
+
+            <rect x="302" y="151" width="156" height="55" rx="10" fill="none" stroke="#7c9fd8" stroke-width="1.6"
+              data-tip="Long-term reserve. Feeds payouts via daily drip, events, and level transitions.">
+            </rect>
+            <!-- Future pool charges over the run: slow rise, faster on Store dumps, dips on Release shots, -10% on the Event Jackpot -->
+            <g clip-path="url(#fp-fill)" pointer-events="none">
+              <rect x="302" y="199.4" width="156" height="6.6" fill="url(#waterVup)">
+                <!-- Dip: Future pool drops a touch each time it shoots a seed up to the Next pool -->
+                <animateTransform attributeName="transform" type="translate" begin="clk.begin+5.1s;clk.begin+11.1s;clk.begin+17.1s;clk.begin+23.1s;clk.begin+29.1s;clk.begin+35.1s;clk.begin+41.1s;clk.begin+47.1s;clk.begin+53.1s" dur="0.9s" values="0,0;0,2.5;0,2.5;0,0" keyTimes="0;0.4;0.5;1" />
+                <animate attributeName="y" dur="61s" repeatCount="indefinite" values="200.5;198.924;199.716;197.759;198.551;196.731;194.123;194.389;194.813;195.604;193.647;194.439;192.62;190.011;190.277;190.701;191.493;189.536;190.328;188.508;185.9;186.166;186.59;187.381;185.424;186.216;184.397;181.788;182.054;182.478;183.27;181.313;182.105;180.696;184.217;181.577;179.943;178.367;179.158;177.201;177.993;176.174;173.565;173.831;174.255;175.047;173.09;173.882;172.062;169.454;169.72;170.144;170.935;168.979;169.77;167.951;165.342;165.608;166.032;166.824;164.867;165.659;163.839;161.231;161.497;161.921;162.712;160.756;161.547;160.139;163.659;161.019;159.385;158.7" keyTimes="0;0.037701;0.045079;0.065577;0.072954;0.090167;0.097545;0.098361;0.136063;0.14344;0.163938;0.171314;0.188527;0.195905;0.196721;0.234423;0.2418;0.262298;0.269675;0.286889;0.294266;0.295082;0.332784;0.340161;0.360659;0.368037;0.38525;0.392626;0.393442;0.431144;0.438521;0.459019;0.466397;0.473774;0.485243;0.490987;0.491803;0.529505;0.536882;0.557381;0.564758;0.581971;0.589348;0.590164;0.627866;0.635242;0.655741;0.663118;0.680331;0.687708;0.688525;0.726226;0.733603;0.754102;0.761479;0.778692;0.786069;0.786886;0.824587;0.831964;0.852462;0.859839;0.877052;0.884429;0.885246;0.922947;0.930324;0.950823;0.9582;0.965577;0.977046;0.98279;0.983607;1" />
+                <animate attributeName="height" dur="61s" repeatCount="indefinite" values="5.5;7.076;6.284;8.241;7.449;9.269;11.877;11.611;11.187;10.396;12.353;11.561;13.38;15.989;15.723;15.299;14.507;16.464;15.672;17.492;20.1;19.834;19.41;18.619;20.576;19.784;21.603;24.212;23.946;23.522;22.73;24.687;23.895;25.304;21.783;24.423;26.057;27.633;26.842;28.799;28.007;29.826;32.435;32.169;31.745;30.953;32.91;32.118;33.938;36.546;36.28;35.856;35.065;37.021;36.23;38.049;40.658;40.392;39.968;39.176;41.133;40.341;42.161;44.769;44.503;44.079;43.288;45.244;44.453;45.861;42.341;44.981;46.615;47.3" keyTimes="0;0.037701;0.045079;0.065577;0.072954;0.090167;0.097545;0.098361;0.136063;0.14344;0.163938;0.171314;0.188527;0.195905;0.196721;0.234423;0.2418;0.262298;0.269675;0.286889;0.294266;0.295082;0.332784;0.340161;0.360659;0.368037;0.38525;0.392626;0.393442;0.431144;0.438521;0.459019;0.466397;0.473774;0.485243;0.490987;0.491803;0.529505;0.536882;0.557381;0.564758;0.581971;0.589348;0.590164;0.627866;0.635242;0.655741;0.663118;0.680331;0.687708;0.688525;0.726226;0.733603;0.754102;0.761479;0.778692;0.786069;0.786886;0.824587;0.831964;0.852462;0.859839;0.877052;0.884429;0.885246;0.922947;0.930324;0.950823;0.9582;0.965577;0.977046;0.98279;0.983607;1" />
+              </rect>
+            </g>
+            <text x="380" y="176" fill="#cfe0f6" font-size="12" font-weight="700">Future Prize Pool</text>
+            <text x="380" y="190" fill="#b3c5e6" font-size="8.5" font-style="italic">Yield-Generating ETH Battery</text>
+
+            <rect x="482" y="178" width="156" height="28" rx="10" fill="none" stroke="#7c9fd8" stroke-width="1.6"
+              data-tip="Pays the active level's jackpots into Claimable Winnings.">
+              <animate attributeName="y" dur="61s" repeatCount="indefinite" values="178;178;176;176;174;174;172;172;170;170;168;168;166;166;164;164;162;162;160;160;160" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" />
+              <animate attributeName="height" dur="61s" repeatCount="indefinite" values="28;28;30;30;32;32;34;34;36;36;38;38;40;40;42;42;44;44;46;46;46" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" />
+              <animate attributeName="stroke" begin="clk.begin+5.5s;clk.begin+11.5s;clk.begin+17.5s;clk.begin+23.5s;clk.begin+29.5s;clk.begin+35.5s;clk.begin+41.5s;clk.begin+47.5s;clk.begin+53.5s;clk.begin+59.5s"
+                dur="0.7s" values="#7c9fd8;#cfe1fb;#7c9fd8" keyTimes="0;0.4;1" />
+              <animate attributeName="stroke-width" begin="clk.begin+5.5s;clk.begin+11.5s;clk.begin+17.5s;clk.begin+23.5s;clk.begin+29.5s;clk.begin+35.5s;clk.begin+41.5s;clk.begin+47.5s;clk.begin+53.5s;clk.begin+59.5s"
+                dur="0.7s" values="1.6;2.7;1.6" keyTimes="0;0.4;1" />
+            </rect>
+            <!-- Current fills top-down as the Next->Current pipe drains in; holds full; then drains from the top into the payout pipe -->
+            <g clip-path="url(#cp-fill)" pointer-events="none">
+              <rect x="482" y="168" width="156" height="0" fill="url(#waterV)">
+                <animate attributeName="height" dur="1.1s"
+                  begin="clk.begin+5.5s;clk.begin+11.5s;clk.begin+17.5s;clk.begin+23.5s;clk.begin+29.5s;clk.begin+35.5s;clk.begin+41.5s;clk.begin+47.5s;clk.begin+53.5s;clk.begin+59.5s"
+                  values="0;46;46;0" keyTimes="0;0.364;0.455;1" />
+                <animate attributeName="y" dur="1.1s"
+                  begin="clk.begin+5.5s;clk.begin+11.5s;clk.begin+17.5s;clk.begin+23.5s;clk.begin+29.5s;clk.begin+35.5s;clk.begin+41.5s;clk.begin+47.5s;clk.begin+53.5s;clk.begin+59.5s"
+                  values="160;160;160;206" keyTimes="0;0.364;0.455;1" />
+              </rect>
+            </g>
+            <g><animateTransform attributeName="transform" type="translate" dur="61s" repeatCount="indefinite" values="0,0;0,0;0,-1;0,-1;0,-2;0,-2;0,-3;0,-3;0,-4;0,-4;0,-5;0,-5;0,-6;0,-6;0,-7;0,-7;0,-8;0,-8;0,-9;0,-9;0,-9" keyTimes="0;0.114787;0.126196;0.213148;0.224557;0.311508;0.322919;0.409869;0.421279;0.508229;0.51964;0.60659;0.618;0.70495;0.716361;0.803312;0.814721;0.901673;0.913082;0.983607;1" />
+            <text x="560" y="191" fill="#cfe0f6" font-size="12" font-weight="700">Current Prize Pool</text>
+            <text x="560" y="201" fill="#b3c5e6" font-size="8.5" font-style="italic">Active Level Jackpot</text></g>
+
+            <rect x="387" y="276" width="184" height="46" rx="11" fill="#2a2410" stroke="#c9a83e" stroke-width="2.3"
+              data-tip="ETH owed out, the only obligation. Backed 1:1 by ETH plus stETH.">
+              <animate attributeName="stroke" begin="clk.begin+6.7s;clk.begin+12.7s;clk.begin+18.7s;clk.begin+24.7s;clk.begin+30.7s;clk.begin+36.7s;clk.begin+42.7s;clk.begin+48.7s;clk.begin+54.7s;clk.begin+60.7s"
+                dur="0.8s" values="#c9a83e;#f3dd86;#c9a83e" keyTimes="0;0.35;1" />
+              <animate attributeName="stroke-width" begin="clk.begin+6.7s;clk.begin+12.7s;clk.begin+18.7s;clk.begin+24.7s;clk.begin+30.7s;clk.begin+36.7s;clk.begin+42.7s;clk.begin+48.7s;clk.begin+54.7s;clk.begin+60.7s"
+                dur="0.8s" values="2.3;3.2;2.3" keyTimes="0;0.35;1" />
+            </rect>
+            <!-- Claimable fills up to the letters as it receives, then drains out the bottom to players -->
+            <g clip-path="url(#clip-cl)" pointer-events="none">
+              <rect x="387" y="322" width="184" height="0" fill="url(#waterGold)">
+                <animate attributeName="y" dur="5.85s" begin="clk.begin+6.25s;clk.begin+12.25s;clk.begin+18.25s;clk.begin+24.25s;clk.begin+36.25s;clk.begin+42.25s;clk.begin+48.25s;clk.begin+54.25s" values="322;302;302;322" keyTimes="0;0.068;0.085;1" />
+                <animate attributeName="height" dur="5.85s" begin="clk.begin+6.25s;clk.begin+12.25s;clk.begin+18.25s;clk.begin+24.25s;clk.begin+36.25s;clk.begin+42.25s;clk.begin+48.25s;clk.begin+54.25s" values="0;20;20;0" keyTimes="0;0.068;0.085;1" />
+              </rect>
+              <rect x="387" y="322" width="184" height="0" fill="url(#waterGold)">
+                <animate attributeName="y" dur="5.75s" begin="clk.begin+30.25s" values="322;292;292;322" keyTimes="0;0.07;0.087;1" />
+                <animate attributeName="height" dur="5.75s" begin="clk.begin+30.25s" values="0;30;30;0" keyTimes="0;0.07;0.087;1" />
+              </rect>
+              <!-- Level-11 final receive: fills and holds (no drain) so the loop restarts as Claimable fills -->
+              <rect x="387" y="322" width="184" height="0" fill="url(#waterGold)">
+                <animate attributeName="y" dur="0.75s" begin="clk.begin+60.25s" values="322;292;292" keyTimes="0;0.55;1" />
+                <animate attributeName="height" dur="0.75s" begin="clk.begin+60.25s" values="0;30;30" keyTimes="0;0.55;1" />
+              </rect>
+            </g>
+            <text x="479" y="305" fill="#f0e0b0" font-size="13.5" font-weight="700">Claimable Winnings</text>
+          </g>
+
+          <!-- ================= DEGENERUS PROTOCOL BADGE (bottom-left) ================= -->
+          <g aria-label="Degenerus Protocol. Zero-rake lottery." data-tip="Degenerus Protocol. Zero-rake lottery.">
+            <g transform="translate(43.78,360.78) scale(0.3704)">
+              <circle cx="60" cy="60" r="54" fill="#ed0e11" />
+              <circle cx="60" cy="60" r="40.5" fill="#111111" />
+              <circle cx="60" cy="60" r="31.5" fill="#ffffff" />
+              <g transform="matrix(1.26,0,0,1.26,59.714594,49.634935)" id="g6">
+                <clipPath id="flame-clip">
+                  <circle cx="0" cy="0" r="31.5" id="circle4" />
+                </clipPath>
+                <g clip-path="url(#flame-clip)" id="g5">
+                  <g transform="matrix(0.13,0,0,0.13,-56.16,-32.76)" id="g4">
+                    <path fill="#111111"
+                      d="m 431.48,504.54 c -5.24,-10.41 -12.36,-18.75 -21.62,-24.98 -6.91,-4.65 -14.21,-8.76 -21.56,-12.69 -12.95,-6.93 -26.54,-12.66 -38.78,-20.91 -19.24,-12.96 -31.77,-30.57 -36.56,-53.37 -3.66,-17.46 -2.13,-34.69 2.89,-51.71 4.01,-13.6 10.35,-26.15 16.95,-38.6 7.71,-14.54 15.86,-28.87 21.81,-44.28 3.39,-8.77 5.94,-17.76 7.2,-27.11 0,3.69 0.24,7.4 -0.04,11.07 -1.48,19.17 -7.44,37.4 -11.94,55.94 -3.57,14.72 -6.92,29.46 -6.53,44.78 0.46,18.05 6.14,34.08 19.02,46.86 9.15,9.09 19.11,17.38 28.83,25.89 8.46,7.41 17.32,14.37 24.28,23.36 7.48,9.66 11.24,20.77 13.22,32.63 0.32,1.93 0.63,3.86 1.02,6.22 4.22,-6.71 8.24,-12.99 12.15,-19.34 2.97,-4.81 5.94,-9.63 8.66,-14.58 8.98,-16.34 8,-31.83 -4.22,-46.28 -6.7,-7.92 -13.41,-15.82 -20.01,-23.82 -4.83,-5.86 -9.23,-12.01 -10.54,-19.77 -1.49,-8.9 0.02,-17.43 3.25,-25.74 3.45,-8.89 7.2,-17.67 10.28,-26.69 3.52,-10.29 5.13,-21.02 5.5,-31.89 0.14,-4.19 -0.28,-8.39 -0.74,-12.61 -3.91,16.79 -14.43,29.92 -23.51,43.8 -7.15,10.93 -14.4,21.79 -19.47,33.9 -3.78,9.03 -6.23,18.4 -6.71,28.2 -0.59,11.95 2.26,23.17 8.54,33.28 3.76,6.07 8.44,11.56 12.72,17.31 0.36,0.49 0.75,0.96 1.13,1.44 l -0.39,0.49 c -2.78,-2 -5.65,-3.89 -8.33,-6.02 -12.9,-10.23 -23.86,-22.09 -30.76,-37.27 -5.35,-11.77 -6.76,-24.15 -5.31,-36.9 2.41,-21.24 11.63,-39.66 23.7,-56.9 7.63,-10.9 15.43,-21.7 22.75,-32.81 7.31,-11.11 11.78,-23.44 13.48,-36.65 1.58,-12.32 0.38,-24.49 -2.45,-36.55 -2.43,-10.38 -6,-20.36 -10.24,-30.13 l 0.47,-0.43 c 3.18,3.14 6.6,6.08 9.51,9.45 16.8,19.42 27.96,41.68 33.29,66.83 3.12,14.73 3.44,29.56 1.84,44.51 -1.06,9.89 -2.25,19.82 -2.49,29.75 -0.27,11.05 3.86,21.06 9.7,30.3 5.19,8.22 10.8,16.18 15.83,24.48 7.27,12.01 11.77,25.09 13,39.09 1.06,12.19 -1.32,23.97 -5.7,35.33 -4.68,12.14 -11.42,23.07 -19.75,33.04 -0.28,0.34 -0.5,0.73 -0.98,1.42 0.58,-0.2 0.81,-0.21 0.94,-0.33 13.86,-12.66 25.56,-26.91 32.56,-44.59 4.2,-10.61 4.64,-21.64 2.92,-32.71 -1.55,-9.97 -3.84,-19.83 -5.69,-29.75 -1.3,-6.98 -1.62,-14.03 -0.96,-21.16 2.41,11.44 9.46,20.38 15.71,29.77 4.45,6.69 8.7,13.49 10.95,21.34 l 0.78,-0.11 c -0.52,-5.46 -0.86,-10.95 -1.6,-16.38 -1.57,-11.65 -6.36,-22.27 -10.97,-32.92 -5.36,-12.4 -10.87,-24.73 -14.2,-37.9 -4.6,-18.21 -6.04,-36.6 -3.4,-55.24 0.17,-1.22 0.27,-2.44 0.62,-3.65 3.31,18.57 10.98,35.38 19.91,51.69 5.97,10.9 12.18,21.66 18.06,32.61 7.08,13.2 12.26,27.14 14.41,42.02 4.35,30.04 -2.87,56.63 -24.51,78.55 -9.21,9.33 -20.5,15.79 -31.95,21.98 -9.44,5.1 -18.91,10.16 -28.11,15.67 -11.91,7.14 -21.38,16.78 -27.83,29.82 z"
+                      id="path4" />
+                  </g>
+                </g>
+              </g>
+            </g>
+            <text x="93" y="373" fill="#cfd6e3" font-size="13" font-weight="800" letter-spacing="1.4">DEGENERUS</text>
+            <text x="93.5" y="386" fill="#8d96a6" font-size="8.5" font-weight="600" letter-spacing="2.6">PROTOCOL</text>
+            <text x="94" y="398" fill="#c7a35e" font-size="8.5" font-style="italic" letter-spacing="0.4">Zero-Rake
+              Lottery</text>
+          </g>
+
+          <!-- ================= stETH YIELD <-> FUTURE ================= -->
+          <!-- future -> steth (yield derived): dotted shaft + clean triangle head (matches legend) — LEFT -->
+          <line x1="318" y1="209" x2="318" y2="230" stroke="#3f8f5e" stroke-width="3.12" stroke-dasharray="2.5 3" />
+          <path d="M312.84,230 L323.16,230 L318,238 Z" fill="#3f8f5e" />
+          <!-- steth -> future (negative rake) — RIGHT -->
+          <path d="M325.96,242 L330.04,242 L330.04,217 L333.16,217 L328,210 L322.84,217 L325.96,217 Z" fill="#3f8f5e" />
+          <text x="338" y="224" fill="#a6d8bd" font-size="9.5" text-anchor="start" font-style="italic">Negative
+            Rake</text>
+
+          <!-- ================= PROTOCOL FUNDING: presale + stETH yield twin bubbles -> wallets ================= -->
+          <!-- Presale Boxes: a capped source. It drains down constantly over ~2 rounds, then empties and the node disappears. -->
+          <clipPath id="clip-pbox"><rect x="140" y="242" width="100" height="28" rx="8" /></clipPath>
+          <g>
+            <animate attributeName="opacity" dur="61s" repeatCount="indefinite" values="1;1;0;0;0" keyTimes="0;0.188558;0.196721;0.983607;1" />
+            <rect x="140" y="242" width="100" height="28" rx="8" fill="#16241b" stroke="#3f8f5e" stroke-width="1.5"
+              data-tip="Creator pre-sale. Splits 80% Vault, 20% sDGNRS, capped at 50 ETH.">
+            </rect>
+            <g clip-path="url(#clip-pbox)" pointer-events="none">
+              <rect x="140" y="242" width="100" height="28" fill="#2f6b46" opacity="0.5">
+                <animate attributeName="y" dur="61s" repeatCount="indefinite" values="242;270;270;270" keyTimes="0;0.188558;0.983607;1" />
+                <animate attributeName="height" dur="61s" repeatCount="indefinite" values="28;0;0;0" keyTimes="0;0.188558;0.983607;1" />
+              </rect>
+            </g>
+            <text x="190" y="261" fill="#cfe6d6" font-size="10.5" text-anchor="middle" font-weight="600">Presale
+              Boxes</text>
+          </g>
+
+          <rect x="246" y="242" width="100" height="28" rx="8" fill="#16241b" stroke="#3f8f5e" stroke-width="1.5"
+            data-tip="Lido staking yield. A negative rake: funds the system instead of taxing players.">
+          </rect>
+          <text x="296" y="261" fill="#cfe6d6" font-size="10.5" text-anchor="middle" font-weight="600">stETH
+            Yield</text>
+
+          <path d="M187.72,270 L192.28,270 L192.28,296.5 L195.52,296.5 L190,304 L184.48,296.5 L187.72,296.5 Z"
+            fill="#3f8f5e">
+            <animate attributeName="opacity" dur="61s" repeatCount="indefinite" values="1;1;0;0;0" keyTimes="0;0.188558;0.196721;0.983607;1" />
+          </path>
+          <path d="M284.64,270 L291.36,270 L291.36,295 L295.2,295 L288,304 L280.8,295 L284.64,295 Z" fill="#3f8f5e" />
+
+          <!-- ================= REDEMPTIONS: contracts -> Claimable (horizontal) ================= -->
+          <path d="M340,314 L374,314 L374,310 L383,317 L374,324 L374,320 L340,320 Z" fill="#c9a83e" />
+
+          <!-- ================= PROTOCOL WALLETS (one box, yellow) ================= -->
+          <clipPath id="clip-pw"><rect x="150" y="308" width="190" height="40" rx="10" /></clipPath>
+          <rect x="150" y="308" width="190" height="40" rx="10" fill="#2a2410" stroke="#c9a83e" stroke-width="1.6"
+            data-tip="Vault, sDGNRS, GNRUS. Each takes 25% of yield; redeemable for backing.">
+          </rect>
+          <!-- Protocol Wallets fill: ~10% from the presale, +1% on each stETH yield drip (resets at loop) -->
+          <g clip-path="url(#clip-pw)" pointer-events="none">
+            <rect x="150" y="348" width="190" height="0" fill="url(#waterGold)">
+              <animate attributeName="height" dur="61s" repeatCount="indefinite" values="0;0;1.24;3.96;4.8;5.2;5.6;6;6.4;6.8;7.2;7.6;8;8;8" keyTimes="0;0.004918;0.040987;0.139348;0.175406;0.237708;0.336069;0.434429;0.53279;0.63115;0.729511;0.827873;0.926233;0.983607;1" />
+              <animate attributeName="y" dur="61s" repeatCount="indefinite" values="348;348;346.76;344.04;343.2;342.8;342.4;342;341.6;341.2;340.8;340.4;340;340;340" keyTimes="0;0.004918;0.040987;0.139348;0.175406;0.237708;0.336069;0.434429;0.53279;0.63115;0.729511;0.827873;0.926233;0.983607;1" />
+            </rect>
+          </g>
+          <text x="245" y="326" fill="#f0e0b0" font-size="12.5" font-weight="700" text-anchor="middle">Protocol
+            Wallets</text>
+          <text x="245" y="340" fill="#bda85e" font-size="9.5" text-anchor="middle">Vault · sDGNRS · GNRUS</text>
+
+          <!-- ================= CLAIMABLE -> two block arrows ================= -->
+          <path d="M408.4,326 L421.6,326 L421.6,347 L428.2,347 L415,360 L401.8,347 L408.4,347 Z" fill="#3f8f5e" />
+          <path d="M536.4,326 L549.6,326 L549.6,347 L556.2,347 L543,360 L529.8,347 L536.4,347 Z" fill="#c0524f" />
+
+          <rect x="355" y="364" width="120" height="40" rx="10" fill="#16241b" stroke="#3f8f5e" stroke-width="1.6"
+            data-tip="Winners reinvest winnings, recycling ETH back into play.">
+            <animate attributeName="stroke" begin="clk.begin+6.9s;clk.begin+12.9s;clk.begin+18.9s;clk.begin+24.9s;clk.begin+30.9s;clk.begin+36.9s;clk.begin+42.9s;clk.begin+48.9s;clk.begin+54.9s;clk.begin+60.9s"
+              dur="0.7s" values="#3f8f5e;#86e6ab;#3f8f5e" keyTimes="0;0.3;1" />
+            <animate attributeName="stroke-width" begin="clk.begin+6.9s;clk.begin+12.9s;clk.begin+18.9s;clk.begin+24.9s;clk.begin+30.9s;clk.begin+36.9s;clk.begin+42.9s;clk.begin+48.9s;clk.begin+54.9s;clk.begin+60.9s"
+              dur="0.7s" values="1.6;3;1.6" keyTimes="0;0.3;1" />
+          </rect>
+          <text x="415" y="388" fill="#cfe6d6" font-size="12" font-weight="700" text-anchor="middle">Player Rebuy</text>
+
+          <rect x="483" y="364" width="120" height="40" rx="10" fill="#2a1414" stroke="#c0524f" stroke-width="1.6"
+            data-tip="Claim winnings out as ETH, stETH as fallback.">
+            <animate attributeName="stroke" begin="clk.begin+7.05s;clk.begin+13.05s;clk.begin+19.05s;clk.begin+25.05s;clk.begin+31.05s;clk.begin+37.05s;clk.begin+43.05s;clk.begin+49.05s;clk.begin+55.05s;clk.begin+61.05s"
+              dur="0.7s" values="#c0524f;#f0a8a5;#c0524f" keyTimes="0;0.3;1" />
+            <animate attributeName="stroke-width" begin="clk.begin+7.05s;clk.begin+13.05s;clk.begin+19.05s;clk.begin+25.05s;clk.begin+31.05s;clk.begin+37.05s;clk.begin+43.05s;clk.begin+49.05s;clk.begin+55.05s;clk.begin+61.05s"
+              dur="0.7s" values="1.6;3;1.6" keyTimes="0;0.3;1" />
+          </rect>
+          <text x="543" y="388" fill="#f3c9c7" font-size="11.5" font-weight="700" text-anchor="middle">Player
+            Withdrawal</text>
+
+          <!-- ================= COLOR KEY (bottom) ================= -->
+          <g font-size="10.5">
+            <rect x="40" y="418" width="620" height="46" rx="10" fill="#0c1018" stroke="#202637" stroke-width="1" />
+            <rect x="58" y="434" width="13" height="13" rx="3" fill="#16241b" stroke="#3f8f5e" stroke-width="1.4" />
+            <text x="78" y="444" fill="#c7cdda">ETH In</text>
+            <rect x="159" y="434" width="13" height="13" rx="3" fill="#15203a" stroke="#7c9fd8" stroke-width="1.4" />
+            <text x="179" y="444" fill="#c7cdda">Prize pool</text>
+            <rect x="276" y="434" width="13" height="13" rx="3" fill="#2a2410" stroke="#c9a83e" stroke-width="1.4" />
+            <text x="296" y="444" fill="#c7cdda">Obligations</text>
+            <rect x="401" y="434" width="13" height="13" rx="3" fill="#2a1414" stroke="#c0524f" stroke-width="1.4" />
+            <text x="421" y="444" fill="#c7cdda">ETH out</text>
+            <line x1="506" y1="441" x2="524" y2="441" stroke="#3f8f5e" stroke-width="1.4" stroke-dasharray="3 2" />
+            <text x="530" y="444" fill="#c7cdda">Staking Yield</text>
+          </g>
+
+          <!-- ================= ANIMATED FLOW =================
+               Colour-coded dots ride each arrow; the main prize chain moves as "water" (Future colour).
+               Inflow dots stream continuously (purchases never stop). The dump cascade keys off the
+               master 30s clock (5 cycles x 6s) as one-shots, so the serial flow can chain + spill cleanly:
+                 5.0  Next full -> Next->Current pipe fills (water), holds full until Next is empty (5.5)...
+                 5.5  ...then drains from the top into Current, which fills top-down
+                 6.0  Current full -> drains; Jackpot-Payout pipe fills, holds until Current empty (6.6)...
+                 6.6  ...then drains from the top into Claimable; couple of dots run up Ticket Prizes mid-drain
+                 6.7  Claimable receives (pulse) -> 6.8 Rebuy, 6.95 Withdrawal (staggered)
+               Cycle 5 (t~29.0) the Future -> Claimable Event Jackpot arrow does the same fill/drain. -->
+          <g pointer-events="none">
+
+            <!-- INFLOWS: gentle dark-green dot streams; tickets densest, then lootboxes, then degenerette -->
+            <use href="#ethS" width="4" height="6.48" x="-2" y="-3.24" opacity="0"><animateMotion dur="1.5s" begin="0s" repeatCount="indefinite" path="M240,83 L373,83" /><animate attributeName="opacity" dur="1.5s" begin="0s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.1;0.88;1" /></use>
+            <use href="#ethS" width="4" height="6.48" x="-2" y="-3.24" opacity="0"><animateMotion dur="1.5s" begin="0.5s" repeatCount="indefinite" path="M240,83 L373,83" /><animate attributeName="opacity" dur="1.5s" begin="0.5s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.1;0.88;1" /></use>
+            <use href="#ethS" width="4" height="6.48" x="-2" y="-3.24" opacity="0"><animateMotion dur="1.5s" begin="1.0s" repeatCount="indefinite" path="M240,83 L373,83" /><animate attributeName="opacity" dur="1.5s" begin="1.0s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.1;0.88;1" /></use>
+
+            <use href="#ethS" width="4" height="6.48" x="-2" y="-3.24" opacity="0"><animateMotion dur="1.2s" begin="0s" repeatCount="indefinite" path="M240,164 L295,164" /><animate attributeName="opacity" dur="1.2s" begin="0s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.12;0.85;1" /></use>
+            <use href="#ethS" width="4" height="6.48" x="-2" y="-3.24" opacity="0"><animateMotion dur="1.2s" begin="0.6s" repeatCount="indefinite" path="M240,164 L295,164" /><animate attributeName="opacity" dur="1.2s" begin="0.6s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.12;0.85;1" /></use>
+
+            <use href="#ethS" width="2.3" height="3.67" x="-1.15" y="-1.835" opacity="0"><animateMotion dur="1.3s" begin="0s" repeatCount="indefinite" path="M240,193 L295,193" /><animate attributeName="opacity" dur="1.3s" begin="0s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.12;0.85;1" /></use>
+
+            <!-- Release (Future -> Next): occasional blue dots while Next is filling -->
+            <use href="#ethS" width="4.21" height="6.9" x="-2.105" y="-3.45" opacity="0">
+              <animateMotion dur="0.5s" begin="clk.begin+2.3s;clk.begin+4s;clk.begin+8.6s;clk.begin+13.9s;clk.begin+15.7s;clk.begin+20.2s;clk.begin+26.5s;clk.begin+28s;clk.begin+32.3s;clk.begin+34s;clk.begin+38.6s;clk.begin+43.9s;clk.begin+45.7s;clk.begin+50.2s;clk.begin+56.5s;clk.begin+58s" path="M407,148 L407,113" />
+              <animate attributeName="opacity" dur="0.5s" begin="clk.begin+2.3s;clk.begin+4s;clk.begin+8.6s;clk.begin+13.9s;clk.begin+15.7s;clk.begin+20.2s;clk.begin+26.5s;clk.begin+28s;clk.begin+32.3s;clk.begin+34s;clk.begin+38.6s;clk.begin+43.9s;clk.begin+45.7s;clk.begin+50.2s;clk.begin+56.5s;clk.begin+58s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+
+            <!-- Seed burst (Future -> Next): the ETH lands right as the Next pool empties, kicking the fill up fast (np-fill jumps to ~30% at X.9s) before the slow rise resumes -->
+            <use href="#ethB" width="5.8" height="9.45" x="-2.9" y="-4.725" opacity="0"><animateMotion dur="0.5s" begin="clk.begin+5.1s;clk.begin+11.1s;clk.begin+17.1s;clk.begin+23.1s;clk.begin+29.1s;clk.begin+35.1s;clk.begin+41.1s;clk.begin+47.1s;clk.begin+53.1s" path="M405,150 L405,103" /><animate attributeName="opacity" dur="0.5s" begin="clk.begin+5.1s;clk.begin+11.1s;clk.begin+17.1s;clk.begin+23.1s;clk.begin+29.1s;clk.begin+35.1s;clk.begin+41.1s;clk.begin+47.1s;clk.begin+53.1s" values="0;1;1;0" keyTimes="0;0.14;0.82;1" /></use>
+            <use href="#ethI" width="5" height="8.14" x="-2.5" y="-4.07" opacity="0"><animateMotion dur="0.5s" begin="clk.begin+5.25s;clk.begin+11.25s;clk.begin+17.25s;clk.begin+23.25s;clk.begin+29.25s;clk.begin+35.25s;clk.begin+41.25s;clk.begin+47.25s;clk.begin+53.25s" path="M407,151 L407,101" /><animate attributeName="opacity" dur="0.5s" begin="clk.begin+5.25s;clk.begin+11.25s;clk.begin+17.25s;clk.begin+23.25s;clk.begin+29.25s;clk.begin+35.25s;clk.begin+41.25s;clk.begin+47.25s;clk.begin+53.25s" values="0;1;1;0" keyTimes="0;0.14;0.82;1" /></use>
+            <use href="#ethB" width="5.4" height="8.8" x="-2.7" y="-4.4" opacity="0"><animateMotion dur="0.5s" begin="clk.begin+5.4s;clk.begin+11.4s;clk.begin+17.4s;clk.begin+23.4s;clk.begin+29.4s;clk.begin+35.4s;clk.begin+41.4s;clk.begin+47.4s;clk.begin+53.4s" path="M409,150 L409,104" /><animate attributeName="opacity" dur="0.5s" begin="clk.begin+5.4s;clk.begin+11.4s;clk.begin+17.4s;clk.begin+23.4s;clk.begin+29.4s;clk.begin+35.4s;clk.begin+41.4s;clk.begin+47.4s;clk.begin+53.4s" values="0;1;1;0" keyTimes="0;0.14;0.82;1" /></use>
+
+            <!-- DUMP (5.0): "Store in booms" pipe (Next -> Future) fills/holds/drains like the prize chain; stETH dots both ways -->
+            <rect clip-path="url(#clip-store)" x="387.8" y="106" width="14.4" height="0" fill="url(#waterV)">
+              <animate attributeName="height" dur="0.9s"
+                begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="0;41;41;0" keyTimes="0;0.278;0.556;1" />
+              <animate attributeName="y" dur="0.9s"
+                begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="106;106;106;147" keyTimes="0;0.278;0.556;1" />
+            </rect>
+            <use href="#ethS" width="2.81" height="4.6" x="-1.405" y="-2.3" opacity="0">
+              <animateMotion dur="0.4s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" path="M318,211 L318,235" />
+              <animate attributeName="opacity" dur="0.4s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="3.67" height="6" x="-1.835" y="-3" opacity="0">
+              <animateMotion dur="0.4s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" path="M328,239 L328,213" />
+              <animate attributeName="opacity" dur="0.4s" begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+
+            <!-- Next -> Current "Ticket Prizes" pipe: fills with water, holds full until Next empty, then drains from the top into Current -->
+            <rect clip-path="url(#clip-n2c)" x="502" y="106" width="36" height="0" fill="url(#waterV)">
+              <animate attributeName="height" dur="0.9s"
+                begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="0;68;68;0" keyTimes="0;0.278;0.556;1" />
+              <animate attributeName="y" dur="0.9s"
+                begin="clk.begin+5s;clk.begin+11s;clk.begin+17s;clk.begin+23s;clk.begin+29s;clk.begin+35s;clk.begin+41s;clk.begin+47s;clk.begin+53s;clk.begin+59s" values="106;106;106;174" keyTimes="0;0.278;0.556;1" />
+            </rect>
+
+            <!-- Jackpot Payout pipe (Current -> Claimable): fills, holds until Current empty, then drains from the top into Claimable -->
+            <rect clip-path="url(#clip-c2cl)" x="504.4" y="206" width="31.2" height="0" fill="url(#waterV)">
+              <animate attributeName="height" dur="1.0s"
+                begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="0;66;66;0" keyTimes="0;0.25;0.6;1" />
+              <animate attributeName="y" dur="1.0s"
+                begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="206;206;206;272" keyTimes="0;0.25;0.6;1" />
+            </rect>
+
+            <!-- Ticket Prizes (up): water flushes UP the arrow while Current drains into Claimable -->
+            <g clip-path="url(#clip-tup)" pointer-events="none">
+              <rect x="539" y="178" width="10" height="0" fill="url(#waterVup)">
+                <animate attributeName="height" dur="0.9s" begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="0;68;68;0" keyTimes="0;0.4;0.65;1" />
+                <animate attributeName="y" dur="0.9s" begin="clk.begin+6s;clk.begin+12s;clk.begin+18s;clk.begin+24s;clk.begin+30s;clk.begin+36s;clk.begin+42s;clk.begin+48s;clk.begin+54s;clk.begin+60s" values="178;110;110;110" keyTimes="0;0.4;0.65;1" />
+              </rect>
+            </g>
+
+            <!-- Event Jackpot (Future -> Claimable): once per 5 runs, same fill/hold/drain as the prize chain -->
+            <rect clip-path="url(#clip-f2cl)" x="430.8" y="206" width="14.4" height="0" fill="url(#waterV)">
+              <animate attributeName="height" dur="0.9s" begin="clk.begin+29s;clk.begin+59s" values="0;66;66;0" keyTimes="0;0.278;0.556;1" />
+              <animate attributeName="y" dur="0.9s" begin="clk.begin+29s;clk.begin+59s" values="206;206;206;272" keyTimes="0;0.278;0.556;1" />
+            </rect>
+
+            <!-- payouts: streamed across the slower Claimable drain (Rebuy green, Withdrawal red) -->
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+6.9s;clk.begin+12.9s;clk.begin+18.9s;clk.begin+24.9s;clk.begin+30.9s;clk.begin+36.9s;clk.begin+42.9s;clk.begin+48.9s;clk.begin+54.9s;clk.begin+60.9s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+6.9s;clk.begin+12.9s;clk.begin+18.9s;clk.begin+24.9s;clk.begin+30.9s;clk.begin+36.9s;clk.begin+42.9s;clk.begin+48.9s;clk.begin+54.9s;clk.begin+60.9s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+7.8s;clk.begin+13.8s;clk.begin+19.8s;clk.begin+25.8s;clk.begin+31.8s;clk.begin+37.8s;clk.begin+43.8s;clk.begin+49.8s;clk.begin+55.8s;clk.begin+61.8s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+7.8s;clk.begin+13.8s;clk.begin+19.8s;clk.begin+25.8s;clk.begin+31.8s;clk.begin+37.8s;clk.begin+43.8s;clk.begin+49.8s;clk.begin+55.8s;clk.begin+61.8s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+8.7s;clk.begin+14.7s;clk.begin+20.7s;clk.begin+26.7s;clk.begin+32.7s;clk.begin+38.7s;clk.begin+44.7s;clk.begin+50.7s;clk.begin+56.7s;clk.begin+62.7s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+8.7s;clk.begin+14.7s;clk.begin+20.7s;clk.begin+26.7s;clk.begin+32.7s;clk.begin+38.7s;clk.begin+44.7s;clk.begin+50.7s;clk.begin+56.7s;clk.begin+62.7s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+9.6s;clk.begin+15.6s;clk.begin+21.6s;clk.begin+27.6s;clk.begin+33.6s;clk.begin+39.6s;clk.begin+45.6s;clk.begin+51.6s;clk.begin+57.6s;clk.begin+63.6s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+9.6s;clk.begin+15.6s;clk.begin+21.6s;clk.begin+27.6s;clk.begin+33.6s;clk.begin+39.6s;clk.begin+45.6s;clk.begin+51.6s;clk.begin+57.6s;clk.begin+63.6s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+10.5s;clk.begin+16.5s;clk.begin+22.5s;clk.begin+28.5s;clk.begin+34.5s;clk.begin+40.5s;clk.begin+46.5s;clk.begin+52.5s;clk.begin+58.5s;clk.begin+64.5s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+10.5s;clk.begin+16.5s;clk.begin+22.5s;clk.begin+28.5s;clk.begin+34.5s;clk.begin+40.5s;clk.begin+46.5s;clk.begin+52.5s;clk.begin+58.5s;clk.begin+64.5s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+11.4s;clk.begin+17.4s;clk.begin+23.4s;clk.begin+29.4s;clk.begin+35.4s;clk.begin+41.4s;clk.begin+47.4s;clk.begin+53.4s;clk.begin+59.4s;clk.begin+65.4s" path="M415,332.5 L415,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+11.4s;clk.begin+17.4s;clk.begin+23.4s;clk.begin+29.4s;clk.begin+35.4s;clk.begin+41.4s;clk.begin+47.4s;clk.begin+53.4s;clk.begin+59.4s;clk.begin+65.4s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+7.05s;clk.begin+13.05s;clk.begin+19.05s;clk.begin+25.05s;clk.begin+31.05s;clk.begin+37.05s;clk.begin+43.05s;clk.begin+49.05s;clk.begin+55.05s;clk.begin+61.05s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+7.05s;clk.begin+13.05s;clk.begin+19.05s;clk.begin+25.05s;clk.begin+31.05s;clk.begin+37.05s;clk.begin+43.05s;clk.begin+49.05s;clk.begin+55.05s;clk.begin+61.05s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+7.95s;clk.begin+13.95s;clk.begin+19.95s;clk.begin+25.95s;clk.begin+31.95s;clk.begin+37.95s;clk.begin+43.95s;clk.begin+49.95s;clk.begin+55.95s;clk.begin+61.95s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+7.95s;clk.begin+13.95s;clk.begin+19.95s;clk.begin+25.95s;clk.begin+31.95s;clk.begin+37.95s;clk.begin+43.95s;clk.begin+49.95s;clk.begin+55.95s;clk.begin+61.95s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+8.85s;clk.begin+14.85s;clk.begin+20.85s;clk.begin+26.85s;clk.begin+32.85s;clk.begin+38.85s;clk.begin+44.85s;clk.begin+50.85s;clk.begin+56.85s;clk.begin+62.85s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+8.85s;clk.begin+14.85s;clk.begin+20.85s;clk.begin+26.85s;clk.begin+32.85s;clk.begin+38.85s;clk.begin+44.85s;clk.begin+50.85s;clk.begin+56.85s;clk.begin+62.85s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+9.75s;clk.begin+15.75s;clk.begin+21.75s;clk.begin+27.75s;clk.begin+33.75s;clk.begin+39.75s;clk.begin+45.75s;clk.begin+51.75s;clk.begin+57.75s;clk.begin+63.75s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+9.75s;clk.begin+15.75s;clk.begin+21.75s;clk.begin+27.75s;clk.begin+33.75s;clk.begin+39.75s;clk.begin+45.75s;clk.begin+51.75s;clk.begin+57.75s;clk.begin+63.75s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+10.65s;clk.begin+16.65s;clk.begin+22.65s;clk.begin+28.65s;clk.begin+34.65s;clk.begin+40.65s;clk.begin+46.65s;clk.begin+52.65s;clk.begin+58.65s;clk.begin+64.65s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+10.65s;clk.begin+16.65s;clk.begin+22.65s;clk.begin+28.65s;clk.begin+34.65s;clk.begin+40.65s;clk.begin+46.65s;clk.begin+52.65s;clk.begin+58.65s;clk.begin+64.65s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+            <use href="#ethS" width="7.92" height="12.9" x="-3.96" y="-6.45" opacity="0">
+              <animateMotion dur="0.42s" begin="clk.begin+11.55s;clk.begin+17.55s;clk.begin+23.55s;clk.begin+29.55s;clk.begin+35.55s;clk.begin+41.55s;clk.begin+47.55s;clk.begin+53.55s;clk.begin+59.55s;clk.begin+65.55s" path="M543,332.5 L543,353.5" />
+              <animate attributeName="opacity" dur="0.42s" begin="clk.begin+11.55s;clk.begin+17.55s;clk.begin+23.55s;clk.begin+29.55s;clk.begin+35.55s;clk.begin+41.55s;clk.begin+47.55s;clk.begin+53.55s;clk.begin+59.55s;clk.begin+65.55s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+
+            <!-- protocol funding: Presale drains constantly for 2 rounds (green dots); stETH yield funds every cycle -->
+            <use href="#ethS" width="4.1" height="6.7" x="-2.05" y="-3.35" opacity="0">
+              <animateMotion dur="0.4s" begin="clk.begin+0.3s;clk.begin+1.1s;clk.begin+1.9s;clk.begin+2.7s;clk.begin+3.5s;clk.begin+4.3s;clk.begin+5.1s;clk.begin+5.9s;clk.begin+6.7s;clk.begin+7.5s;clk.begin+8.3s;clk.begin+9.1s;clk.begin+9.9s;clk.begin+10.7s" path="M190,272 L190,302" />
+              <animate attributeName="opacity" dur="0.4s" begin="clk.begin+0.3s;clk.begin+1.1s;clk.begin+1.9s;clk.begin+2.7s;clk.begin+3.5s;clk.begin+4.3s;clk.begin+5.1s;clk.begin+5.9s;clk.begin+6.7s;clk.begin+7.5s;clk.begin+8.3s;clk.begin+9.1s;clk.begin+9.9s;clk.begin+10.7s" values="0;1;1;0" keyTimes="0;0.15;0.8;1" />
+            </use>
+            <use href="#ethS" width="6.05" height="9.8" x="-3.025" y="-4.9" opacity="0">
+              <animateMotion dur="0.4s" begin="clk.begin+2.5s;clk.begin+8.5s;clk.begin+14.5s;clk.begin+20.5s;clk.begin+26.5s;clk.begin+32.5s;clk.begin+38.5s;clk.begin+44.5s;clk.begin+50.5s;clk.begin+56.5s" path="M288,272 L288,302" />
+              <animate attributeName="opacity" dur="0.4s" begin="clk.begin+2.5s;clk.begin+8.5s;clk.begin+14.5s;clk.begin+20.5s;clk.begin+26.5s;clk.begin+32.5s;clk.begin+38.5s;clk.begin+44.5s;clk.begin+50.5s;clk.begin+56.5s" values="0;1;1;0" keyTimes="0;0.12;0.85;1" />
+            </use>
+
+          </g>
+        
+        </svg>
+      </div>
+    </figure>
+    <script>
+      (function () {
+        var fig = document.getElementById('ethflow-fig');
+        if (!fig) return;
+        var svg = fig.querySelector('svg');
+        if (!svg) return;
+        var tip = document.createElement('div');
+        tip.className = 'ethflow-tip';
+        tip.setAttribute('role', 'tooltip');
+        document.body.appendChild(tip);
+        var visible = false;
+        function place(x, y) {
+          var offX = 22, offY = 26, w = tip.offsetWidth, h = tip.offsetHeight;
+          var vw = window.innerWidth, vh = window.innerHeight;
+          var left = x + offX, top = y + offY;
+          if (left + w + 8 > vw) left = x - w - offX;
+          if (top + h + 8 > vh) top = y - h - offY;
+          if (left < 8) left = 8;
+          if (top < 8) top = 8;
+          tip.style.left = left + 'px';
+          tip.style.top = top + 'px';
+        }
+        function show(text, x, y) {
+          if (tip.textContent !== text) tip.textContent = text;
+          tip.classList.add('show');
+          visible = true;
+          place(x, y);
+        }
+        function hide() {
+          if (!visible) return;
+          tip.classList.remove('show');
+          visible = false;
+        }
+        function nodeAt(e) {
+          var t = e.target;
+          return t && t.closest ? t.closest('[data-tip]') : null;
+        }
+        function bindTips(el) {
+          el.addEventListener('pointermove', function (e) {
+            if (e.pointerType && e.pointerType !== 'mouse') return;
+            var node = nodeAt(e);
+            if (node) show(node.getAttribute('data-tip'), e.clientX, e.clientY);
+            else hide();
+          });
+          el.addEventListener('pointerleave', function (e) {
+            if (!e.pointerType || e.pointerType === 'mouse') hide();
+          });
+        }
+        bindTips(svg);
+        window.addEventListener('scroll', hide, true);
+        window.addEventListener('resize', hide);
+
+        // Click to enlarge: clone the diagram into a full-screen lightbox.
+        var box = null;
+        function buildBox() {
+          box = document.createElement('div');
+          box.className = 'ethflow-lightbox';
+          var stage = document.createElement('div');
+          stage.className = 'ethflow-stage';
+          // Suffix every id + url(#id) so the clone never collides with the inline svg.
+          // Also rewrite SMIL syncbase timing (clk.begin/clk.end) so the enlarged copy
+          // runs off its own clock instead of the inline one.
+          stage.innerHTML = svg.outerHTML
+            .replace(/id="([^"]+)"/g, 'id="$1-lb"')
+            .replace(/url\(#([^)]+)\)/g, 'url(#$1-lb)')
+            .replace(/\bclk\.(begin|end)\b/g, 'clk-lb.$1');
+          var big = stage.querySelector('svg');
+          big.removeAttribute('style');
+          box.appendChild(stage);
+          document.body.appendChild(box);
+          bindTips(big);
+          // Tap a box for its tip (keep open); tap anywhere else closes.
+          big.addEventListener('click', function (e) {
+            var node = nodeAt(e);
+            if (node) { show(node.getAttribute('data-tip'), e.clientX, e.clientY); e.stopPropagation(); }
+          });
+          box.addEventListener('click', closeBox);
+        }
+        function openBox() { if (!box) buildBox(); box.classList.add('show'); }
+        function closeBox() { if (box) box.classList.remove('show'); hide(); }
+        svg.addEventListener('click', openBox);
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeBox(); });
+      })();
+    </script>
+  </section>
+
+  <!-- ========== Section 6: Variance ========== -->
+  <section>
+    <h2>Variance Keeps the Leeches Out</h2>
+    <p>Every DeFi yield protocol dies the same way. It launches with attractive returns. Mercenary capital floods in: yield optimizers, treasury managers, bots. Returns compress as more capital competes for the same pool. The original participants earn less. The mercenary capital leaves for the next protocol. TVL collapses.</p>
+    <p>The root cause: guaranteed yield attracts people who are purely optimizing for returns. They have zero loyalty. They will leave the instant a better option appears. Their presence compresses yields for everyone else while providing no engagement or network effects.</p>
+    <p>Degenerus doesn't have this problem because LP returns are paid as <strong>lottery tickets and tokens</strong>, not predictable cash flows. Even at maximum degen score, your returns arrive as high-variance entries into future jackpots. You might win 10x. You might win nothing. The expected value is positive, but the realized value is noisy.</p>
+    <p>Variance-averse capital, the kind that compressed yields in every DeFi farm you've ever seen, won't touch this. A system with high variance and moderate expected value repels pure extractors who discount variance and see only moderate EV. They self-select out. No governance vote required, no lockup period, no whitelist. The mechanism does the selection. The boring, risk-averse nit that kills poker ecosystems has no viable strategy here, because every avenue for profit requires high variance.</p>
+    <p>The result: fewer LPs competing for the same pool of returns. Each remaining LP earns more. And because these LPs genuinely enjoy gambling, they don't leave when variance hits because a losing streak is part of the experience, not a reason to withdraw. This is a fundamentally more stable equilibrium than any guaranteed-yield protocol can achieve.</p>
+
+    <div class="economy-callout">
+      <p>Think of it like options trading. Options traders earn higher risk-adjusted returns than bond holders because they accept variance that others won't, and the market compensates them for it. Degenerus LP positions work the same way. You accept the noise, and the market gives you the edge, precisely because most capital won't.</p>
+      <p>The crucial difference: the variance here is artificial and fully transparent. Every probability is on-chain. Every payout formula is public. The risk isn't "will the founder rug" or "will the smart contract get exploited," it's pure mathematical noise from a Chainlink VRF. You're being compensated for tolerating known, quantifiable variance, not for bearing hidden counterparty risk.</p>
+    </div>
+  </section>
+
+  <!-- ========== Section 7: Nash Equilibrium ========== -->
+  <section>
+    <h2>The Nash Equilibrium</h2>
+
+    <p>The protocol takes zero rake. The only external value entering the system is stETH yield (~2.5% APR on total deposits). This means the aggregate return across all players is slightly positive by exactly the yield amount. But individual returns depend entirely on what everyone else does.</p>
+
+    <h3>The GTO Ceiling</h3>
+    <p>Imagine every player plays optimally. Everyone maximizes their degen score, maintains quest streaks, runs afKing, uses FLIP for tickets when the implied rate favors it, burns into every decimator at max score, and builds a full affiliate chain. In this world, nobody has an edge over anyone else. Degen scores converge. Decimator stack advantages disappear. Affiliate commissions get competed away. The profit margin for the entire player base collapses to the stETH yield: ~2.5% APR split across all depositors.</p>
+    <p>But look at what optimal play actually requires. Daily ticket purchases to maintain quest streaks. An afKing subscription prepaying your daily buys. Future tickets across dozens of levels that only pay out if the game gets there. An affiliate network that only earns if new players keep joining. The Nash equilibrium player is the most invested participant in the system. They have the most skin in the game, the most to lose from a stall, and the strongest incentive to push every level forward. GTO play and maximum commitment to the protocol's future are the same thing.</p>
+
+    <h3>The Actual Game</h3>
+    <p>Not everyone optimizes. The protocol deliberately offers a spectrum of options with different EV profiles, and players self-sort by what they value:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Option</th><th>Approximate EV</th><th>Who Takes It</th></tr>
+        <tr><td>Tickets (day 1 of a stalled level)</td><td>~215–320%</td><td>Strategic players who buy early and catch every draw</td></tr>
+        <tr><td>Tickets (last jackpot day of a stalled level)</td><td>~35–85%</td><td>Impulsive buyers chasing the biggest jackpot of the level</td></tr>
+        <tr><td>Luckbox (max degen score)</td><td>~145%</td><td>Engaged players converting score into value</td></tr>
+        <tr><td>Coinflip (hold + compound)</td><td>~98.4% per cycle</td><td>Players building a FLIP position</td></tr>
+        <tr><td>Degenerette</td><td>~90–105%</td><td>Players who want roulette-style action (scales with degen score)</td></tr>
+        <tr><td>Luckbox (low degen score)</td><td>~90%</td><td>New or casual players gambling for upside</td></tr>
+      </table>
+    </div>
+    <p>The two ticket rows are measured on testnet run 68's drip-fed stall levels 39 to 41: ETH paid per 0.08 ETH ticket, including the ETH earned by the same-level tickets the purchase-phase drip awards to it.</p>
+
+    <p>And it goes deeper than product choice. Even within the same product, timing creates massive EV differences. A ticket bought on the first day of a level participates in every daily jackpot draw for that level. A ticket bought on the last jackpot day catches only the final draw. Both cost the same ETH. On those run 68 levels the first-day ticket collected 43% to 51% more than the last-day ticket from the three jackpot draws alone, and 3.7 to 6.2 times as much ETH once the purchase-phase drip is counted. A level that fills on its opening day runs a single jackpot draw, which both tickets share.</p>
+    <p>Luckbox tickets stretch timing further: they're issued across dozens of future levels, drawing seats in the daily jackpot battle long before those levels start paying ETH. Foil packs push timing furthest: a pack's four tickets grade against every daily draw from the day their traits resolve to the end of the level, so an early pack in a level that runs long keeps collecting match claims at no further cost, while a last-day pack catches almost none. Players who buy impulsively on the last day of a level are voluntarily leaving most of a purchase's value on the table.</p>
+
+    <p>Every sub-optimal choice creates surplus that flows to the players who optimize. A casual player buying luckbox at 90% EV is voluntarily transferring 10% of that value into the prize pools. A last-day ticket buyer subsidizes the early buyers who showed up when the level started. An affiliate's commission tapers as their referrals become more engaged, because the game's own retention mechanics take over. A player who drops their quest streak forfeits the degen score that would have improved their decimator stack, their luckbox EV, and their degenerette returns.</p>
+
+    <p>What matters is the ETH volume on each side of the breakeven line, not the number of players. A single whale buying luckbox at low activity contributes more surplus than ten players buying at high activity. The system's health depends on the ratio of below-breakeven ETH to above-breakeven ETH. And the equilibrium self-corrects: if too many grinders extract above breakeven, surplus shrinks, some leave, and returns restore for those who remain.</p>
+    <p>Optimizers don't profit from exploiting anyone. They profit because other players, knowingly and voluntarily, choose convenience and excitement over EV maximization.</p>
+
+    <h3>Why This Is Stable</h3>
+    <p>The variance-seeking players are not being deceived. The odds are on-chain. The EV for every action is calculable from public contract code. They are choosing high-variance entertainment over spreadsheet optimization, the same way a poker player sits down knowing they are not the best at the table.</p>
+    <p>The optimizers need the non-optimizers. Without them, returns collapse to the yield floor. The non-optimizers need the system to be trustworthy and fun, which the zero-rake structure and on-chain transparency provide. Neither group has reason to leave. Neither group can exploit the other beyond what the contracts publicly allow.</p>
+
+    <div class="economy-callout">
+      <p><strong>The floor is real yield. The ceiling is other people's choices.</strong> In the worst case, everyone plays perfectly and the system returns stETH yield to all players. In the actual case, some players choose variance and entertainment over optimization, and their surplus flows to those who don't. Both groups get exactly what they came for.</p>
+    </div>
+  </section>
+
+  <!-- ========== Section 8: The Flywheel ========== -->
+  <section>
+    <h2>The Flywheel</h2>
+    <p>The three products form a self-reinforcing cycle:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Investors</strong> buy luckbox and passes, funding the future prize pools</li>
+      <li><strong>Prize pools grow,</strong> making jackpots bigger and more visible</li>
+      <li><strong>Bigger jackpots attract lottery players</strong> whose ticket purchases fill the current prize pool</li>
+      <li><strong>When the pool target is met,</strong> jackpots fire, paying both lottery players and investors</li>
+      <li><strong>Winners reinvest</strong> with a bonus for rebuying, refilling the pools with progressively bigger jackpots</li>
+      <li><strong>Affiliates drive traffic</strong> from both sides, accelerating the cycle for their share of commissions</li>
+    </ul>
+
+    <p>This is self-reinforcing, not circular. Each revolution adds external value: new players attracted by jackpot size, new investor capital attracted by realized returns, new affiliates attracted by commission volume. And the stETH yield layer adds a net positive-sum input that doesn't depend on new entrants at all. If the flywheel slows, per-capita returns increase for remaining participants, attracting new capital. The system self-corrects rather than spiraling.</p>
+    <p>Parts of this cycle are mechanical. The vault and sDGNRS contract are permanent players that auto-reinvest their winnings every day. afKing subscribers do the same. No human decisions required. The flywheel has an engine that runs on its own, and the momentum to carry through slow periods.</p>
+  </section>
+
+  <!-- ========== Section 8: Can't Stall ========== -->
+  <section>
+    <h2>Why the Game Can't Stall</h2>
+    <p>Consider what a stall actually requires. A level just completed, meaning there was enough momentum to finish the previous one. Jackpots just paid out. Winners just received ETH. Auto-reinvest players just converted their winnings into next-level tickets. And now, somehow, nobody buys enough tickets for 30 days (the death clock after level 1). Not the whales with future positions worth multiples of the ticket price. Not the quest players who lose weeks of accumulated score if they stop. Not the affiliates earning commissions on every purchase. Not the auto-reinvest mechanisms that don't require human decisions at all.</p>
+    <p>The cost of pushing a level through is a fraction of the value locked in future tickets. A single whale can fund a level alone, and doing so is trivially worth it to protect their position.</p>
+    <p>But the protocol doesn't rely on participant rationality alone. Multiple independent mechanisms ensure progression even if humans stop making decisions:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Quest streak pressure:</strong> Power users must buy tickets daily or lose weeks of accumulated degen score.</li>
+      <li><strong>Auto-buy:</strong> afKing subscribers, plus the vault and sDGNRS contracts, have their daily tickets or luckbox bought automatically, with an optional setting that spends accumulated winnings first. No human action required.</li>
+      <li><strong>Future pool drip:</strong> Every day of the purchase phase after level 1, 4% of the future prize pool is extracted: 75% moves into the next prize pool as backing for tickets awarded to ticketholders, 23% is paid out as ETH prizes, and 2% goes to the yield accumulator. Even with zero new purchases, the pools self-fill.</li>
+    </ul>
+
+    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. Whenever the future pool holds about 1.9 times a level's unfilled gap, the drip alone fills that level within its 30-day clock, with no new deposits.</p>
+    <p>Honest assessment: at higher levels with 0.16-0.24 ETH tickets, a sustained bear market could plausibly drain the reserve and trigger the timeout, and a reserve-carried grind can take months to get there. That illiquidity is a real cost that players should understand before committing capital they cannot afford to lose.</p>
+    <p>And if all of the above somehow fails, the protocol has terminal safeguards. A level that misses its target within 30 days (250 days for level 1), 30 days without a sealed day, or a VRF request left unanswered for 14 days triggers a clean wind-down: after any deity pass refunds, everything left goes to the failed level's ticketholders through a final jackpot (split without a draw if VRF is dead), then any unclaimed remainder is split in thirds across the vault, sDGNRS, and GNRUS after 30 days. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
+  </section>
+
+  <!-- ========== Section 9: Trustless ========== -->
+  <section>
+    <h2><a href="https://trustlessness.eth.limo/general/2025/11/11/the-trustless-manifesto.html">Trustless</a> by Design</h2>
+    <p>The code is law. All protocol logic is <a href="https://github.com/PurgeGame/degenerus-protocol">open-source</a> and immutably deployed on the Ethereum blockchain. No proxy. No upgrade path. No pause switch. Every drawing is determined by a cryptographically secure random number delivered by <a href="https://chain.link/vrf">Chainlink VRF</a>.</p>
+    <p>The admin cannot withdraw from prize pools. Cannot modify split percentages. Cannot ban players or restrict withdrawals. No admin operation can reach the prize pools. The only one that touches the game's integrity is rotating the VRF coordinator, which is possible only if it fails and requires sDGNRS holder approval; the rest is housekeeping like staking ETH to stETH, bounded by the solvency floor. Everything else is deterministic smart contract logic that no one, including the creator, can alter.</p>
+    <p>The creator's allocation is in $DGNRS tokens, vault shares, and a fraction of the stETH yield, all of which only have value if the game succeeds and attracts players. The creator's incentives are aligned with yours. If the game dies, the creator loses too. There is no exit scam because there is no privileged exit.</p>
+  </section>
+
+  <!-- ========== Section 10: Risk ========== -->
+  <section>
+    <h2>Risks</h2>
+    <p>Being honest about risks is how you build trust. Here's what can go wrong:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Smart contract risk.</strong> Immutable contracts mean bugs can't be patched. Mitigated by open-source code, a planned professional audit before launch, and extensive testing, but the risk is real and inherent to immutable systems.</li>
+      <li><strong>Lido / stETH risk.</strong> The yield layer depends on Lido. If Lido fails, yield stops and the negative-rake property weakens. The protocol continues to function, it just loses the positive-sum subsidy.</li>
+      <li><strong>Ethereum systemic risk.</strong> If Ethereum itself fails, everything fails. This is a risk shared by every project on the chain.</li>
+      <li><strong>Adoption risk.</strong> The cross-subsidy structure requires multiple player types present simultaneously. The affiliate program is the intended bootstrap, but whether it reaches critical mass from zero is an empirical question.</li>
+      <li><strong>Illiquidity risk.</strong> Future tickets and pass benefits are structurally illiquid. If the game stalls at higher levels, your capital may be locked for months before the game recovers or the terminal distribution fires.</li>
+      <li><strong>Lock-in is real.</strong> Quest streaks, future tickets, and auto-compounding are retention mechanics designed to make leaving costly. The lock-in is compensated by real deferred value, but the reader should judge.</li>
+      <li><strong>Individual loss.</strong> You can lose money playing Degenerus. The system guarantees that winners exist as a group, not that you're one of them. The losers lost to math, not fraud, but they still lost.</li>
+    </ul>
+  </section>
+
+  <!-- ========== Section 11: Level 100 ========== -->
+  <section>
+    <h2>The Hundred-Level Cycle</h2>
+    <p>The game doesn't reset at level 100. The level counter keeps going: 100, 101, 102. But every hundredth level, a cascade of payout events fires. First, 40% of the yield accumulator (stETH yield and deposit insurance collected over the prior 100 levels) dumps into the future pool. Then, if that day's coinflip wins, the BAF draws 20% of the future pool across coinflip players and ticketholders, and the Decimator draws 30%, paid to the top scorers of a craps battle among players who burned FLIP. Finally, a VRF keep-roll transfers 20-50% of what remains into the current prize pool for immediate jackpot distribution, holding the other 50-80% in reserve.</p>
+    <p>Smaller versions of the BAF and Decimator fire every 10 levels, but the x00 events are the crescendo that rewards longtime players: the payoff for everyone who pushed the game to get there.</p>
+    <p>After the dust settles, the next level's target resets to 40% of the remaining future pool and the cycle begins again. The future pool rebuilds. Level 200 will be bigger than level 100, because the same compounding mechanisms are still running with more participants and more momentum.</p>
+  </section>
+
+    <!-- ========== Testnet Evidence ========== -->
+  <section>
+    <h2>Testnet Evidence</h2>
+    <p>A full deployment on a public testnet (run 68, Base Sepolia) ran the extreme stall with real contract
+      execution. Levels 1 through 38 completed on ordinary buying, about one a day, while luckbox flow banked the
+      future pool from zero to 6,236 ETH. External buying ended on day 45 and never resumed. With nobody buying,
+      levels 39, 40 and 41 still filled on the drip alone, on the 7th, 12th and 28th daily drip, each rescue spending
+      reserve. Level 42 opened below the mechanical threshold, ran its full 30-day clock, and the game ended on
+      day 138 with a 3,455 ETH terminal jackpot to that level's ticketholders. That is what an extreme stall looks
+      like: the reserve carried the game for 93 days after the last purchase, then paid out everything that was
+      left.</p>
+    <div id="gta-simWrap" style="margin: 1.5rem 0; background: #12121a; border-radius: 8px; padding: 16px;">
+      <canvas id="gta-simChart" style="max-height:380px"></canvas>
+      <p style="margin:0.5rem 0 0;font-size:0.82rem;color:#8888a0">Pool balances by day on testnet run 68. Dashed
+        rules are the level targets (2,589 / 2,714 / 2,722 / 2,769 ETH). ETH balances only.</p>
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        if (typeof Chart === 'undefined') return;
+        var P = {"d":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137],"n":[0,203.3,114.9,150.3,165.4,185.8,207.7,225.9,206.5,248,283.2,311,341.5,516.6,377.4,415,453.3,496.1,523.6,511.8,577,611.4,644,664.6,1086.2,721,775.5,822.1,842.2,876.9,837.8,939.1,977.6,1004.9,1032.5,1670.8,1104.9,1183.7,1247,1293,1341.5,1266.5,1435.6,1545.6,2589,1293.3,1354.5,1562.9,1747.8,1925.5,2096.1,2259.9,2417.3,2568.4,2713.6,963.8,1047.8,1338.3,1480.8,1617.7,1749.2,1875.5,1996.8,2113.3,2225.2,2332.7,2435.9,2535,2630.2,2721.7,666.5,754.8,999.2,1100.6,1198.1,1291.7,1381.6,1467.9,1550.8,1630.5,1707,1780.4,1851,1918.8,1983.9,2046.4,2106.4,2164.1,2219.5,2272.7,2323.8,2372.9,2420.1,2465.4,2508.9,2550.7,2590.8,2629.3,2666.4,2701.9,2736.1,2768.9,503.6,544.1,692.9,765.8,835.8,903.1,967.7,1029.8,1089.4,1146.6,1201.6,1254.4,1305.2,1353.9,1400.7,1445.6,1488.8,1530.3,1570.1,1608.4,1645.1,1680.4,1714.3,1746.9,1778.2,1808.2,1837.1,1864.8,1891.5,1917,1941.6,1965.2,1988],"f":[0,310,531.8,771.9,786.4,743.9,844.8,924.9,790.1,981.9,1139,1254.5,1400.9,1556,1496.3,1688.2,1870.9,1973.8,2117,1955.4,2323.7,2475.8,2551.7,2605.2,2793.4,2913.9,3143.7,3260,3410.5,3556.4,3284.4,3838.9,3978.4,4042.8,4127.8,4239.2,4471.8,4722.6,4956.7,5126.9,5229.3,4807.9,5904.4,6236.5,6188.6,5974.3,6023.9,6226.6,5980.1,5743.4,5516.1,5297.8,5088.2,4886.8,4693.4,4428.8,4519.9,4799.1,4609.2,4426.8,4251.6,4083.4,3921.8,3766.7,3617.7,3474.5,3337.1,3205.1,3078.3,2956.5,3066.7,3176.8,3415.5,3280.3,3150.6,3025.9,2906.3,2791.3,2680.9,2574.9,2473.1,2375.3,2281.3,2191.1,2104.5,2021.3,1941.4,1864.7,1791,1720.2,1652.2,1586.9,1524.2,1464,1406.2,1350.6,1297.3,1246,1196.8,1149.6,1104.2,1060.6,2268.8,2314.9,2454.6,2357.5,2264.3,2174.8,2088.8,2006.2,1926.9,1850.7,1777.6,1707.3,1639.8,1575,1512.8,1453,1395.7,1340.5,1287.6,1236.7,1187.9,1141,1095.9,1052.7,1011.1,971.2,932.9,896.1,860.8,826.8,794.2,762.9,732.7],"i":[0,0,2.3,2.3,2.3,4.6,7.1,9.9,12.7,15.9,19.5,23.4,27.7,28.9,34.3,40.2,46.5,53.5,60.9,68.8,77.1,85.9,95.1,104.6,106.9,118,129.6,141.6,154,166.8,179.7,193.1,206.9,221.1,235.6,239.1,256.2,274.3,293.3,313.1,334,355.5,378,401.4,406.5,432.9,432.9,432.9,437.8,442.5,447.1,451.5,455.7,459.7,463.6,493.5,493.5,493.5,497.3,500.9,504.4,507.8,511,514.1,517.1,520,522.7,525.4,527.9,530.3,561.7,561.7,561.7,564.4,567,569.5,571.9,574.2,576.4,578.5,580.5,582.5,584.4,586.2,587.9,589.6,591.2,592.7,594.2,595.6,597,598.3,599.6,600.8,601.9,603,604.1,605.1,606.1,607.1,608,608.9,645.3,645.3,645.3,647.3,649.1,651,652.7,654.3,655.9,657.4,658.9,660.3,661.7,663,664.2,665.4,666.6,667.7,668.7,669.8,670.7,671.7,672.6,673.4,674.3,675.1,675.8,676.6,677.3,678,678.6,679.3,679.9],"l":[1,1,1,1,2,3,4,5,6,7,8,9,10,10,11,12,13,14,15,16,17,18,19,20,20,21,22,23,24,25,26,27,28,29,30,30,31,32,33,34,35,36,37,38,38,38,38,39,39,39,39,39,39,39,39,39,39,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42]};
+        var TARGETS = [[50, 58, 2589.0], [60, 73, 2713.6], [75, 105, 2721.7], [107, 137, 2768.9]];
+        var INK = '#c6c4bd', MUTED = '#8a8880', GRID = 'rgba(160,160,192,0.07)';
+        function pts(arr) { return P.d.map(function (d, k) { return { x: d, y: arr[k] }; }); }
+        var annot = {
+          id: 'poolsannot',
+          afterDatasetsDraw: function (chart) {
+            var ctx = chart.ctx, xs = chart.scales.x, ys = chart.scales.y;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(160,160,192,0.35)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            [45, 50, 60, 75, 107, 138].forEach(function (d) {
+              var x = xs.getPixelForValue(d);
+              ctx.beginPath(); ctx.moveTo(x, ys.top); ctx.lineTo(x, ys.bottom); ctx.stroke();
+            });
+            ctx.setLineDash([]);
+            ctx.fillStyle = MUTED; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('levels 1\u201338', xs.getPixelForValue(24), ys.top + 12);
+            ctx.fillText('L39', xs.getPixelForValue(55), ys.top + 12);
+            ctx.fillText('L40', xs.getPixelForValue(67), ys.top + 12);
+            ctx.fillText('L41', xs.getPixelForValue(91), ys.top + 12);
+            ctx.fillText('L42', xs.getPixelForValue(122), ys.top + 12);
+            ctx.textAlign = 'right';
+            ctx.fillText('last purchase \u00b7 day 45', xs.getPixelForValue(45) - 6, ys.getPixelForValue(6600));
+            ctx.fillText('GAMEOVER \u00b7 day 138', xs.getPixelForValue(138) - 6, ys.getPixelForValue(3000));
+            ctx.setLineDash([6, 5]);
+            ctx.strokeStyle = MUTED;
+            TARGETS.forEach(function (t) {
+              var y = ys.getPixelForValue(t[2]);
+              ctx.beginPath(); ctx.moveTo(xs.getPixelForValue(t[0]), y); ctx.lineTo(xs.getPixelForValue(t[1]), y); ctx.stroke();
+            });
+            ctx.setLineDash([]);
+            ctx.restore();
+          }
+        };
+        new Chart(document.getElementById('gta-simChart'), {
+          type: 'line',
+          data: {
+            datasets: [
+              { label: 'Next Pool', data: pts(P.n), borderColor: '#3987e5', borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0 },
+              { label: 'Future Pool', data: pts(P.f), borderColor: '#c98500', borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0 },
+              { label: 'Yield Accumulator', data: pts(P.i), borderColor: '#199e70', borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: true, aspectRatio: 2.05,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              x: {
+                type: 'linear', min: 0, max: 140,
+                title: { display: true, text: 'Day', color: MUTED },
+                ticks: { color: MUTED, maxTicksLimit: 15 }, grid: { color: GRID }
+              },
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'ETH', color: MUTED },
+                ticks: { color: MUTED, callback: function (v) { return v.toLocaleString(); } },
+                grid: { color: GRID }
+              }
+            },
+            plugins: {
+              legend: { labels: { color: INK, usePointStyle: true, pointStyle: 'line', boxWidth: 24 } },
+              tooltip: {
+                callbacks: {
+                  title: function (items) {
+                    var k = items[0].dataIndex;
+                    return 'Day ' + P.d[k] + ' \u00b7 Level ' + P.l[k];
+                  },
+                  label: function (it) {
+                    return ' ' + it.dataset.label + ': ' + Math.round(it.parsed.y).toLocaleString() + ' ETH';
+                  }
+                }
+              }
+            }
+          },
+          plugins: [annot]
+        });
+      });
+    </script>
+  </section>
+
+<!-- ========== Closing ========== -->
+  <section>
+    <div class="closing">
+      <p>A memecoin's returns depend on later buyers' capital. This protocol's returns depend on entertainment spending plus yield. The system pays out everything players put in, plus yield on top. Rewards are locked forward. Every participant pushes it forward. Multiple independent mechanisms ensure it keeps moving. Variance immunizes it against the actors that kill other protocols. And you don't have to trust anyone for this to work. Verify it yourself.</p>
+      <p class="punchline">It's a gambling protocol that's honest about being a gambling protocol. And that honesty, paradoxically, is what makes the economics work.</p>
+    </div>
+  </section>
+
+</div>
+
+<script src="/shared/nav.js"></script>
+<script>initNav({ currentPage: 'whitepaper', pages: [{ key: 'theory', label: 'Game Theory', href: '/theory/' }] });</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
 </body>
 </html>

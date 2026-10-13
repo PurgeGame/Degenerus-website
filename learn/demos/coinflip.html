@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive coinflip demo</title>
+  <meta name="robots" content="noindex">
+  <!-- Static demo of the app's daily coinflip felt. Reuses the real chip and coin
+       modules and stylesheets under /app/; no wallet, no RPC, no network beyond
+       static files. Embedded by /learn/coinflip/ at height 700px. -->
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/records-rail.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css">
+  <link rel="stylesheet" href="/app/styles/status-indicators.css">
+  <link rel="stylesheet" href="/app/styles/coinflip-felt-demo.css">
+  <link rel="stylesheet" href="/learn/demos/coinflip.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "/app/vendor/ethers.mjs",
+      "gsap": "/app/vendor/gsap.mjs",
+      "gsap/Flip": "/app/vendor/gsap-flip.mjs",
+      "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
+      "lean-qr": "/app/vendor/lean-qr.mjs"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic learn-flip-demo">
+  <div class="learn-flip-demo__fit" data-bind="demo-fit">
+    <div class="jackpot-hero coinflip-felt-demo__hero" style="--demo-width: 360px">
+      <div class="coinflip-felt-demo__host">
+        <section class="panel app-daily-flip">
+          <div class="df-coinflip-record-rail">
+            <span class="df-coinflip-record">
+              <span class="df-coinflip-record__group df-coinflip-record__group--score" data-bind="demo-score-group" data-majority="win">
+                <small class="df-coinflip-record__label df-coinflip-record__label--record" aria-hidden="true">ALL TIME</small>
+                <strong class="df-coinflip-record__score" data-bind="demo-score">
+                  <b>27</b><i aria-hidden="true">&ndash;</i><b>19</b>
+                </strong>
+              </span>
+              <span class="df-coinflip-record__group df-coinflip-record__group--recent" data-bind="demo-recent-group" data-majority="win">
+                <small class="df-coinflip-record__label df-coinflip-record__label--recent" aria-hidden="true">LAST 25</small>
+                <span class="df-coinflip-record__recent" data-bind="demo-recent" role="img" aria-label="Last 25 community flips"></span>
+              </span>
+            </span>
+          </div>
+          <div class="df-modifier-meter-slot" aria-label="Win multiplier scale">
+            <div class="df-modifier-meter-live"></div>
+            <div class="df-modifier-meter__table-scale" aria-hidden="true">
+              <span>250%</span><span>200%</span><span>150%</span>
+            </div>
+          </div>
+          <button type="button" class="df-auto-rebuy-cta" tabindex="-1" aria-hidden="true">
+            <small class="df-auto-rebuy-cta__label" aria-hidden="true">AUTO REBUY</small>
+            <span class="df-auto-rebuy-cta__spot" aria-hidden="true">
+              <img class="df-auto-rebuy-cta__chip" src="/shared/flip-chips/face.svg" alt="">
+            </span>
+            <strong class="df-auto-rebuy-cta__status">OFF</strong>
+          </button>
+          <div class="df-bet-table" data-bind="demo-today-surface">
+            <small class="df-bet-table__today-label" aria-hidden="true">
+              <span>TODAY'S BET</span>
+            </small>
+            <div class="df-bet-oval" data-bind="df-bet-oval" role="img" aria-label="Today's bet">
+              <span class="df-today-winnings-row" data-bind="df-today-winnings-row" data-state="empty" aria-hidden="true">
+                <span class="df-bet-chip-rack" data-bind="df-today-winnings-rack" aria-hidden="true"></span>
+              </span>
+              <span class="df-bet-chip-rack" data-bind="df-bet-chip-rack" aria-hidden="true"></span>
+              <div class="df-position-slot df-bet-today-slot" data-bind="df-position-today"></div>
+            </div>
+          </div>
+          <header class="df-title-bar">
+            <div class="df-title-bar__heading">
+              <h2 class="df-section-title">
+                <small>COMMUNITY</small>
+                <strong>COINFLIP</strong>
+              </h2>
+            </div>
+          </header>
+          <svg class="df-once-daily" viewBox="0 0 100 44" aria-hidden="true">
+            <defs><path id="df-once-daily-arc" d="M 14 8 Q 50 40 86 8"></path></defs>
+            <text><textPath href="#df-once-daily-arc" startOffset="50%" text-anchor="middle">ONCE DAILY</textPath></text>
+          </svg>
+          <div class="df-coin-stage">
+            <div class="df-coin-zone" data-bind="df-coin-zone"></div>
+          </div>
+          <p class="df-outcome"></p>
+          <div class="df-table-watermark" aria-hidden="true">
+            <span class="df-table-watermark__type">
+              <strong>DEGENERUS</strong>
+            </span>
+            <span class="df-table-watermark__flame"></span>
+            <span class="df-table-watermark__type">
+              <strong>PROTOCOL</strong>
+            </span>
+          </div>
+          <div class="df-position">
+            <div class="df-tomorrow-layout" data-bind="demo-lower-surface">
+              <small class="df-tomorrow-layout__felt-label" aria-hidden="true">
+                <span>TOMORROW'S BET</span>
+              </small>
+              <div class="df-tomorrow-bet-oval" data-bind="df-tomorrow-bet-oval" role="img" aria-label="Tomorrow's bet">
+                <span class="df-bet-chip-rack" data-bind="df-tomorrow-chip-rack" aria-hidden="true"></span>
+              </div>
+              <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
+            </div>
+          </div>
+          <div class="df-funds" aria-label="FLIP balance and claim rack">
+            <small class="df-funds__title" aria-hidden="true">CLAIM</small>
+            <div class="df-bankroll__well">
+              <span class="df-bankroll__rack" data-bind="df-bankroll-rack" role="img" aria-label="FLIP bankroll"></span>
+            </div>
+            <div class="df-funds__coins">
+              <small class="df-funds__box-label" aria-hidden="true">FLIP</small>
+              <div class="df-funds__display df-funds__display--claimable df-funds__display--flip-total">
+                <strong class="df-funds__value df-funds__value--flip-total">
+                  <span class="df-funds__number" data-bind="df-funds-flip-total">0</span>
+                  <span class="df-funds__unit">FLIP</span>
+                </strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div class="learn-flip-demo__bar">
+    <button type="button" class="learn-flip-demo__btn" data-bind="demo-flip">Flip</button>
+    <p class="learn-flip-demo__note" data-bind="demo-note" role="status" aria-live="polite"></p>
+  </div>
+  <script type="module" src="/learn/demos/coinflip.js"></script>
+</body>
+</html>

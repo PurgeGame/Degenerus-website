@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en" data-degenerus-tutorial>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Daily Drawing demo · Degenerus Mechanics</title>
+  <style id="demo-style">
+    /* Learn palette: page #0d0d0d, cards #1a1a1a, accent #f5a623. These rules
+       sit after the app stylesheets (jackpot.js inserts those before this tag). */
+    html, body.layout-basic.demo-body {
+      margin: 0; padding: 0; height: auto; min-height: 0;
+      overflow: hidden;
+      background: #0d0d0d; color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    body.demo-body.is-booting { visibility: hidden; }
+    .demo {
+      box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto;
+      padding: 10px 10px 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    /* The app's hero wrapper, trimmed to the draw column: the iframe already
+       carries the border, and the machine is capped so its height is the same
+       from 390px to 760px wide. */
+    body.layout-basic.demo-body .demo .jackpot-hero {
+      width: 100%; max-width: 26rem; margin: 0;
+      border-radius: 12px; border-color: rgba(245, 166, 35, 0.35);
+      box-shadow: none; background: #0d0d0d;
+    }
+    body.layout-basic.demo-body .demo .jackpot-hero__draw { min-height: 0; }
+    .demo-hint {
+      margin: 0; width: 100%; max-width: 26rem; min-height: 2.6em;
+      font-size: 0.82rem; line-height: 1.3; text-align: center; color: #b8b8b8;
+    }
+    .demo-bar { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .demo-run {
+      appearance: none; border: 0; cursor: pointer;
+      background: #f5a623; color: #0d0d0d;
+      font-family: inherit; font-size: 0.95rem; font-weight: 700; line-height: 1; letter-spacing: 0.04em;
+      padding: 0.7rem 1.5rem; border-radius: 8px;
+    }
+    .demo-run:hover { background: #ffb73d; }
+    .demo-run:focus-visible, .demo-mute:focus-visible { outline: 2px solid #ffc04d; outline-offset: 2px; }
+    .demo-mute {
+      appearance: none; cursor: pointer;
+      background: #1a1a1a; color: #aaa; border: 1px solid #2a2a2a;
+      font-family: inherit; font-size: 0.75rem; font-weight: 600; line-height: 1; letter-spacing: 0.04em;
+      padding: 0.55rem 0.8rem; border-radius: 8px;
+    }
+    .demo-mute:hover { color: #f5a623; border-color: #f5a623; }
+    .demo-fail { margin: 2rem 1rem; text-align: center; color: #b8b8b8; font-size: 0.9rem; }
+  </style>
+</head>
+<body class="layout-basic demo-body is-booting">
+  <main class="demo" data-bind="demo">
+    <section class="jackpot-hero" aria-label="Daily jackpot draw demo">
+      <div class="jackpot-hero__draw">
+        <div class="jackpot-hero__machine" data-bind="machine">
+          <svg class="jackpot-board-current" viewBox="0 0 1280 1280"
+               preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="jackpotBoardCurrentUp" gradientUnits="userSpaceOnUse"
+                              x1="640" y1="1098" x2="640" y2="915">
+                <stop stop-color="#a5cbff"/>
+                <stop offset="0.42" stop-color="#6799ff"/>
+                <stop offset="1" stop-color="#73e8b0"/>
+              </linearGradient>
+              <path id="jackpotBoardRoute1" d="M456 1098V1018L438 1000H432L414 982V915"/>
+              <path id="jackpotBoardRoute2" d="M548 1098V1038L530 1020H524L506 1002V915"/>
+              <path id="jackpotBoardRoute3" d="M732 1098V1038L750 1020H756L774 1002V915"/>
+              <path id="jackpotBoardRoute4" d="M824 1098V1018L842 1000H848L866 982V915"/>
+            </defs>
+            <g class="jackpot-board-current__rail" stroke="url(#jackpotBoardCurrentUp)">
+              <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+              <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+            </g>
+            <g class="jackpot-board-current__packet" stroke="url(#jackpotBoardCurrentUp)">
+              <use href="#jackpotBoardRoute1"/><use href="#jackpotBoardRoute2"/>
+              <use href="#jackpotBoardRoute3"/><use href="#jackpotBoardRoute4"/>
+            </g>
+          </svg>
+          <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
+            <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/flame-center-silver.svg"
+                 width="38" height="54" alt="" aria-hidden="true">
+            <strong>DEGENERUS DAILY DRAWING</strong>
+          </h2>
+          <!-- jackpot.js mounts <replay-panel single-button> here. -->
+        </div>
+      </div>
+    </section>
+    <p class="demo-hint" data-bind="hint" aria-live="polite">Press Run a draw, then tap the bubbles to pop them.</p>
+    <div class="demo-bar">
+      <button type="button" class="demo-run" data-bind="run">Run a draw</button>
+      <button type="button" class="demo-mute" data-bind="mute" aria-pressed="true"
+              aria-label="Turn sound on">Sound off</button>
+    </div>
+  </main>
+  <noscript><p class="demo-fail">This demo needs JavaScript. <a href="/app/" target="_top">Open the game</a> to see the real thing.</p></noscript>
+  <script src="/learn/demos/jackpot.js"></script>
+</body>
+</html>

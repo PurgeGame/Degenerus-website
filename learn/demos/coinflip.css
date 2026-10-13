@@ -1,0 +1,108 @@
+/* Learn-page embed of the app's coinflip felt. The felt itself is styled by the
+   /app/styles/ sheets; this file only supplies the page frame and the one button. */
+
+html,
+body.layout-basic.learn-flip-demo {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0d0d;
+  color: #e8e8e8;
+}
+
+body.layout-basic.learn-flip-demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 10px 0 10px;
+  gap: 10px;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* The felt is a fixed 360px column. JS sets zoom below 360px of viewport. */
+.learn-flip-demo__fit {
+  flex: none;
+  width: 360px;
+}
+
+.learn-flip-demo__fit .coinflip-felt-demo__hero.jackpot-hero {
+  width: 360px;
+}
+
+/* Static decoration: nothing on the table is clickable in the embed. */
+.learn-flip-demo__fit .df-auto-rebuy-cta,
+.learn-flip-demo__fit .df-bankroll__well,
+.learn-flip-demo__fit .df-bet-table,
+.learn-flip-demo__fit .df-tomorrow-layout {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* The coin is the one live control on the felt. */
+.learn-flip-demo__fit .df-coin--spinning:not(:disabled) {
+  cursor: pointer;
+}
+
+.learn-flip-demo__bar {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 360px;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.learn-flip-demo__btn {
+  min-width: 11rem;
+  min-height: 44px;
+  padding: 0 1.6rem;
+  border: 1px solid #f5a623;
+  border-radius: 10px;
+  background: #f5a623;
+  color: #0d0d0d;
+  font: 800 0.95rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.learn-flip-demo__btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.learn-flip-demo__btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.learn-flip-demo__btn:focus-visible {
+  outline: 2px solid #fde68a;
+  outline-offset: 2px;
+}
+
+.learn-flip-demo__btn:disabled {
+  border-color: #3a3a3a;
+  background: #1a1a1a;
+  color: #8a8a8a;
+  cursor: default;
+}
+
+.learn-flip-demo__note {
+  margin: 0;
+  min-height: 2.4em;
+  color: #b8b8b8;
+  font: 600 0.8rem/1.2 "Inter", system-ui, sans-serif;
+  text-align: center;
+}
+
+.learn-flip-demo__note[data-tone="win"] {
+  color: #4ade80;
+}
+
+.learn-flip-demo__note[data-tone="loss"] {
+  color: #f87171;
+}

@@ -1,36 +1,128 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Decimator · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The Decimator: burn FLIP to enter a craps battle for a slice of the futurepool. The top scores win. Fires at milestone levels, triples at every century." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
 </head>
+
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Decimator</h1>
+  <p class="lede">Burn FLIP to enter a craps battle for a slice of the futurepool. Your degen score multiplies what
+    your burn is worth, and burning early beats burning late.</p>
+
+  <h2>Why it exists</h2>
+  <p>FLIP has two very different sinks. During the redemption window, 1,000 FLIP buys one ticket for any wallet at
+    all. That is the flat exit: known quantity, known price, no opinion required. A Decimator burn trades the token
+    for a chance at ETH instead, and the chance is not the same for everyone. It can pay more, pay less, or pay
+    nothing. Either way the FLIP is gone, which is the point of the sink.</p>
+
+  <h2>The battle</h2>
+  <p>Each burn builds a credited stack. At resolution a random half of the entries, at most 1,000, each play one
+    craps run on a shared set of dice. You pick the
+    board when you burn: up to seven chips on the lines you choose, with the dice scattering the rest of ten. Every
+    run rolls the same dice, so boards compete on equal terms. A run ends when it busts, after 48 shooters, or at
+    511 rolls. Your score is your credited stack times the peak bankroll the run reached, so a big stack on a
+    board that never gets hot loses to a modest stack on one that does.</p>
+  <p>Entries outside the draw score nothing. The highest scores among the runs take the places.</p>
+
+  <h2>Your stack is your engagement</h2>
+  <p>Your degen score multiplies every burn, from 1.0x at a score of 0 to 1.705x at 2.35, 1.9x at 5.00 and 2.0x at
+    300.00. The multiplier is read at the moment you burn, so burning again at a higher score credits that burn at
+    the higher rate. A player who has been showing up daily is buying into a materially better game than one who
+    arrived this morning, out of the same pool, with the same token.</p>
+
+  <h2>Early conviction is priced</h2>
+  <p>The entry window opens a level before the milestone fires, and when you burn inside it matters. A burn placed
+    on the day the window opens is credited in full. Each day after that, a burn is credited at 90% of the day
+    before: 0.9x on the second day, 0.81x on the third, and so on. The Decimator pays for the opinion you formed
+    before the evidence arrived.</p>
+
+  <h2>The exact numbers</h2>
+  <table>
+    <tr>
+      <td>Fires at</td>
+      <td>x05, x15, &hellip;, x85 of each cycle (not x95), plus every x00 century</td>
+    </tr>
+    <tr>
+      <td>Entry window</td>
+      <td>Opens when level x4 (or x99 before a century) meets its target and closes when the milestone level meets its
+        own</td>
+    </tr>
+    <tr>
+      <td>Entry</td>
+      <td>Burn FLIP, 2,000 minimum. A later burn adds to the same entry, and the board from the last burn counts.
+        sDGNRS enters automatically on the opening day</td>
+    </tr>
+    <tr>
+      <td>Pool</td>
+      <td>10% of the futurepool, 30% at x00</td>
+    </tr>
+    <tr>
+      <td>Credited stack</td>
+      <td>Burn &times; 0.9 per day since the window opened &times; degen score multiplier</td>
+    </tr>
+    <tr>
+      <td>Degen score multiplier</td>
+      <td>1.0x at 0, 1.705x at 2.35, 1.9x at 5.00, 2.0x at 300.00</td>
+    </tr>
+    <tr>
+      <td>Score</td>
+      <td>Credited stack &times; the peak bankroll your run reaches</td>
+    </tr>
+    <tr>
+      <td>Who plays</td>
+      <td>A random half of the entries, at most 1,000; only they can place</td>
+    </tr>
+    <tr>
+      <td>Places</td>
+      <td>Entries &divide; 10 rounded up, at least 20, at most 200, and never more than half the entries</td>
+    </tr>
+    <tr>
+      <td>Payout</td>
+      <td>5% of the pool is held back and the rest splits into equal shares, one per place. The champion takes
+        the held-back 5% on top of an equal share</td>
+    </tr>
+    <tr>
+      <td>Half whale passes</td>
+      <td>Half of the champion's payout, rounded down to whole half whale passes at 2.25 ETH each, is paid as passes and
+        the rest as ETH. Once an equal share is 2.25 ETH or more, the places below the champion alternate: second
+        place ETH, third place whole half passes, fourth ETH, and so on. The ETH that buys passes goes back to
+        the futurepool</td>
+    </tr>
+    <tr>
+      <td>No places</td>
+      <td>With no entries, or a single entry, nobody wins and the pool stays in the futurepool</td>
+    </tr>
+  </table>
+  <p class="fine">At the x05 to x85 levels, the level's jackpot-phase ETH draw also funds generated entries, up to as
+    many as there are real ones. They are played for random jackpot ticket holders at the average stack, add to the
+    pool, and take places like any other entry.</p>
+
+  <div class="cta">
+    <strong>Burning FLIP requires having FLIP.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Quests, referrals, and coinflip wins keep the pile growing.</p>
+    <a class="btn" href="/learn/flip/">How FLIP works</a>
+    <a class="btn ghost" href="/learn/baf/">The other big event: BAF</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
 </body>
+
 </html>

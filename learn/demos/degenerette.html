@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Degenerette demo</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/app.min.css?v=neon-wild-20261010">
+  <link rel="stylesheet" href="/app/styles/coinflip-chipset.css?v=number-privacy-20261006">
+  <link rel="stylesheet" href="/app/styles/settings-menu.css?v=number-privacy-20261006">
+  <link rel="stylesheet" href="/learn/demos/degenerette.css">
+  <!-- Same module revisions the app ships (copied from /app/index.html). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/components/app-all-in-dialog.js": "/app/components/app-all-in-dialog.js?v=degenerette-cards-20261003",
+      "/app/app/boons.js": "/app/app/boons.js?v=degenerette-cards-20261003",
+      "/app/app/dgn-traits.js": "/app/app/dgn-traits.js?v=wild-ring-20261008",
+      "/app/app/badge-sprite.js": "/app/app/badge-sprite.js?v=fixed-neon-wild-20261010",
+      "/app/app/lootbox.js": "/app/app/lootbox.js?v=foil-guard-20261008",
+      "/app/app/degenerette.js": "/app/app/degenerette.js?v=stake-units-20261008",
+      "/app/app/records.js": "/app/app/records.js?v=degenerette-cards-20261003",
+      "/app/app/dgn-reels.js": "/app/app/dgn-reels.js?v=degenerette-cards-20261003",
+      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=degenerette-cards-20261003",
+      "/app/components/app-box-strip.js": "/app/components/app-box-strip.js?v=pending-deployment-scope-20261001",
+      "/app/app/bingo-watch.js": "/app/app/bingo-watch.js?v=pending-recent-receipts-20261001",
+      "/app/components/app-sdgnrs-redemptions.js": "/app/components/app-sdgnrs-redemptions.js?v=pending-deployment-scope-20261001",
+      "/app/app/lootbox-legs.js": "/app/app/lootbox-legs.js?v=scoped-box-replays-20261009",
+      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=larger-flames-20261002",
+      "/app/app/sacrifices.js": "/app/app/sacrifices.js?v=larger-flames-20261002",
+      "/app/app/button-feedback.js": "/app/app/button-feedback.js?v=reveal-efficiency-20261004",
+      "/app/components/dgn-winnings.js": "/app/components/dgn-winnings.js?v=reveal-efficiency-20261004",
+      "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=wild-art-only-20261009",
+      "/app/app/pack-watch.js": "/app/app/pack-watch.js?v=next-rng-only-20260930",
+      "/app/app/main.js": "/app/app/main.js?v=next-rng-only-20260930",
+      "/app/app/mine-flip.js": "/app/app/mine-flip.js?v=mining-reward-20261003",
+      "/app/app/ui-preferences.js": "/app/app/ui-preferences.js?v=blur-balances-20261006",
+      "/app/app/craps.js": "/app/app/craps.js?v=high-riu-added-20261008",
+      "/app/app/token-units.js": "/app/app/token-units.js?v=high-reserve-funded-20261008",
+      "/app/chain/craps.js": "/app/chain/craps.js?v=final-ranks-20261010",
+      "/app/chain/craps-results.js": "/app/chain/craps-results.js?v=actual-bankroll-peak-20261001",
+      "/app/chain/viewer.js": "/app/chain/viewer.js?v=day-summary-craps-20260930",
+      "/app/components/last-day-jackpot.js": "/app/components/last-day-jackpot.js?v=day-summary-craps-20260930",
+      "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=high-riu-added-20261008",
+      "/app/components/app-craps-rules.js": "/app/components/app-craps-rules.js?v=main-event-20260929",
+      "/app/components/app-tickets-inventory.js": "/app/components/app-tickets-inventory.js?v=deity-liquidation-20261008",
+      "/app/components/account-liquidation-dialog.js": "/app/components/account-liquidation-dialog.js?v=liquidation-simple-20261008",
+      "/app/components/app-transaction-history.js": "/app/components/app-transaction-history.js?v=degenerette-cards-20261003",
+      "/app/components/app-affiliate-panel.js": "/app/components/app-affiliate-panel.js?v=share-link-20260928",
+      "/app/chain/history.js": "/app/chain/history.js?v=category-history-20260928",
+      "/app/chain/facts.js": "/app/chain/facts.js?v=startup-efficiency-20261004",
+      "/app/chain/client.js": "/app/chain/client.js?v=startup-efficiency-20261004",
+      "ethers": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
+      "/app/vendor/ethers-app.mjs": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
+      "gsap": "/app/vendor/gsap.mjs",
+      "gsap/Flip": "/app/vendor/gsap-flip.mjs",
+      "gsap/TextPlugin": "/app/vendor/gsap-textplugin.mjs",
+      "lean-qr": "/app/vendor/lean-qr.mjs",
+      "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
+      "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=foil-guard-20261008",
+      "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
+      "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
+      "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=fixed-neon-wild-20261010",
+      "/app/components/app-deity-desk.js": "/app/components/app-deity-desk.js?v=badge-ticket-popup-20260930",
+      "/app/components/deity-art-editor.js": "/app/components/deity-art-editor.js?v=deity-logo-ring-20260929",
+      "/app/app/deity-customization.js": "/app/app/deity-customization.js?v=deity-deployment-20260930",
+      "/app/app/deity-symbol-art.js": "/app/app/deity-symbol-art.js?v=deity-logo-ring-20260929",
+      "/app/app/deity-art.js": "/app/app/deity-art.js?v=deity-customizer-20260929",
+      "/app/app/deity-symbol.js": "/app/app/deity-symbol.js?v=deity-picker-clean-20260930",
+      "/app/app/passes.js": "/app/app/passes.js?v=deity-customizer-20260929",
+      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=all-pass-mining-bonus-20261004",
+      "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=incinerator-slider-20261004",
+      "/app/components/app-link-donation.js": "/app/components/app-link-donation.js?v=link-trade-20260928",
+      "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=timed-quest-rewards-20261004",
+      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=no-dice-heroes-20261004",
+      "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=mining-reward-20261003",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/app/coin-draw-centre.js": "/app/app/coin-draw-centre.js?v=craps-battle-outcome-20261004",
+      "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=decimator-entries-20261006",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=prism-box-reveal-fixes-20261009",
+      "/app/app/jackpot-buckets.js": "/app/app/jackpot-buckets.js?v=decimator-entries-20261006",
+      "/app/app/day-summary-prizes.js": "/app/app/day-summary-prizes.js?v=decimator-entries-20261006",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=responsive-pop-20261009",
+      "/app/components/app-craps-table.js": "/app/components/app-craps-table.js?rev=result-card-20261012",
+      "/app/components/app-decimator-battle.js": "/app/components/app-decimator-battle.js?v=decimator-skin-20261006",
+      "/app/craps/decimator-table.js": "/app/craps/decimator-table.js?v=decimator-cutoff-20261006",
+      "/app/craps/decimator-skin.js": "/app/craps/decimator-skin.js?v=decimator-cutoff-20261006",
+      "/app/craps/decimator-replay.js": "/app/craps/decimator-replay.js?v=decimator-skin-20261006",
+      "/app/components/app-decimator-draw-overlay.js": "/app/components/app-decimator-draw-overlay.js?v=decimator-skin-20261006",
+      "/app/app/decimator-draw-data.js": "/app/app/decimator-draw-data.js?v=decimator-battle-20261006",
+      "/app/components/bubble-reveal.js": "/app/components/bubble-reveal.js?v=compositor-pop-20261009",
+      "/app/components/win-flights.js": "/app/components/win-flights.js?v=batched-measurements-20260930"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic">
+  <main class="demo" id="demo">
+    <button type="button" class="sound" id="sound" aria-pressed="false">Sound off</button>
+    <img class="flame" src="/whitepaper/flame-logo.svg" alt="" width="120" height="120">
+    <h1>Degenerette</h1>
+    <p class="blurb">A sample card, played with the app's own reveal. Three canned results, no wallet, no real bets.</p>
+    <button type="button" class="spin" id="spin">Play a card</button>
+    <p class="result" id="result" aria-live="polite">3 sample results, played in turn.</p>
+  </main>
+  <reveal-overlay></reveal-overlay>
+  <script type="module" src="/learn/demos/degenerette.js"></script>
+</body>
+</html>

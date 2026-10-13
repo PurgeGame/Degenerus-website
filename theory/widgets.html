@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-degenerus-tutorial>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Degenerus · Jackpot example</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/replay.css">
+  <link rel="stylesheet" href="./widgets.css">
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs"}}</script>
+</head>
+<body class="theory-widgets">
+  <main class="widget-shell">
+    <p class="sample-label">Your tickets</p>
+    <div class="sample-tickets" id="sample-tickets" aria-label="The three tickets you hold in this example"></div>
+    <section class="jackpot-example" aria-label="Daily jackpot example">
+      <h1 id="jackpot-title" hidden></h1>
+      <p id="jackpot-description" aria-live="polite" hidden></p>
+      <p id="widget-loading" role="status">Loading jackpot…</p>
+      <button type="button" id="widget-retry" class="widget-button" hidden>Try again</button>
+      <div id="jackpot-mount"></div>
+      <button type="button" class="widget-button" id="jackpot-next" disabled>Spin Jackpot</button>
+    </section>
+  </main>
+  <script type="module" src="./widgets-loader.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+.theory-game-demo {
+  margin: 1.25rem 0;
+}
+
+.theory-game-demo iframe {
+  display: block;
+  width: 100%;
+  border: 1px solid #34343c;
+  border-radius: 12px;
+  background: #14141a;
+  color-scheme: dark;
+}
+
+.theory-game-demo figcaption {
+  margin-top: .65rem;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media print {
+  .theory-game-demo iframe { display: none; }
+  .theory-game-demo figcaption { text-align: left; }
+}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Craps table (learn demo, inner frame)</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/app/styles/craps-table.css?v=result-card-20261012">
+  <!-- Same pins as /app/index.html so the table, engine and adapter load as the one set of modules the app uses. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
+      "/app/vendor/ethers-app.mjs": "/app/vendor/ethers-app.mjs?v=mobile-perf-20260903",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-98cd2a78-82759b3c-final-ranks-20261010",
+      "/app/components/app-craps-table.js": "/app/components/app-craps-table.js?rev=result-card-20261012"
+    }
+  }
+  </script>
+  <script>
+    // The table's sound cues read the app-wide mute flag from localStorage on every cue. The demo
+    // keeps its own in-memory flag (muted until the reader turns it on) and never reads or writes
+    // that key, so using the demo cannot change the sound setting of the real app.
+    (function () {
+      var KEY = 'degenerus.sfxMuted';
+      var proto = window.Storage && window.Storage.prototype;
+      if (!proto) return;
+      var getItem = proto.getItem;
+      var setItem = proto.setItem;
+      var removeItem = proto.removeItem;
+      window.__crapsDemoSound = false;
+      proto.getItem = function (key) {
+        return key === KEY ? (window.__crapsDemoSound ? null : '1') : getItem.apply(this, arguments);
+      };
+      proto.setItem = function (key) {
+        if (key === KEY) return undefined;
+        return setItem.apply(this, arguments);
+      };
+      proto.removeItem = function (key) {
+        if (key === KEY) return undefined;
+        return removeItem.apply(this, arguments);
+      };
+    })();
+  </script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0d0d0d;
+    }
+
+    /* The table opens as a dialog. Sit it at the top of the frame with no backdrop, no close
+       control, no resolver toolbar and no EXIT/OBSERVE buttons on the cash-out card (the app's own goal screen stays): the shell page owns the one button. */
+    .craps-dialog {
+      place-items: start center !important;
+      padding: 0 !important;
+    }
+    .craps-dialog__backdrop,
+    .craps-dialog__close,
+    .craps-resolver-toolbar,
+    .craps-race-result [data-bind="craps-race-exit"],
+    .craps-race-result [data-bind="craps-race-observe"] {
+      display: none !important;
+    }
+    /* The app's cash-out / finished-battle card fills the viewport; keep it inside the table card. */
+    .craps-race-result {
+      position: absolute !important;
+      padding: 0.4rem !important;
+    }
+    .craps-race-result__card { max-height: 100% !important; }
+    /* Phone layouts size the card to the viewport (100dvh); here it sizes to its content. */
+    .craps-dialog__card,
+    .craps-dialog__card.is-resolving[data-screen="battle"] {
+      height: auto !important;
+      max-height: none !important;
+      animation: none !important;
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+<body>
+  <app-craps-table></app-craps-table>
+  <script type="module" src="/learn/demos/craps-table.js"></script>
+</body>
+</html>

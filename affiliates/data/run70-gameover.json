@@ -1,0 +1,517 @@
+{
+  "schemaVersion": 1,
+  "run": 70,
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "gameAddress": "0x6b097089786fcd339ce8051e2332f299124242ff",
+  "exportedAt": "2026-10-11",
+  "display": {
+    "unit": "ETH at mainnet ticket prices",
+    "testnetEthMultiplier": 1000000,
+    "note": "The run dashboard normalizes its testnet ETH amounts by 1,000,000. This figure uses the same display convention; original wei values are retained below."
+  },
+  "phase": {
+    "protocolLevel": 46,
+    "ticketLevel": 47,
+    "openingDay": 104,
+    "lastPurchaseDay": 134,
+    "gameOverDay": 135,
+    "gameDaySeconds": 1200
+  },
+  "chainReads": {
+    "opening": {
+      "blockNumber": 47966779,
+      "prizePoolTargetView": "3257525087457369",
+      "mintPrice": "80000000000",
+      "gameOver": false
+    },
+    "lastDay": {
+      "blockNumber": 47984775,
+      "prizePoolTargetView": "3257525087457369",
+      "mintPrice": "80000000000",
+      "gameOver": false
+    },
+    "terminalReceipt": {
+      "hash": "0x86222ce2dc771bb9805ce6d6b4bc36b4ca955dfa832cd2b0dfb6053731694edd",
+      "status": "success",
+      "blockNumber": 47984795,
+      "blockHash": "0x8dd1b6bb63bbe5ac88e6cb58a56e068611225c61a01709dd741fc4fa86992936"
+    }
+  },
+  "snapshots": [
+    {
+      "id": 149,
+      "day": 104,
+      "kind": "daily",
+      "nextPrizePool": "846071691650178",
+      "futurePrizePool": "3137853852497780",
+      "currentPrizePool": "0",
+      "claimableWei": "16372028585368228",
+      "totalBalanceWei": "21176824007669727",
+      "yieldAccumulatorWei": "814963736496878",
+      "claimableDriftWei": "-1501331822497668",
+      "afkingFloatWei": "1500031822497668",
+      "parkedDecimatorWei": "0",
+      "solvencyExpectedWei": "20355954129516186",
+      "solvencyResidualWei": "820869878153541",
+      "insolvent": false,
+      "blockNumber": 47966779,
+      "blockHash": "0xc9df18a8abae86821095ba979f0dfda0f7d59990223c59f0d50ee12447d3bcee",
+      "logIndex": 78
+    },
+    {
+      "id": 179,
+      "day": 134,
+      "kind": "daily",
+      "nextPrizePool": "2511322314509798",
+      "futurePrizePool": "947567688684941",
+      "currentPrizePool": "0",
+      "claimableWei": "16852757283045207",
+      "totalBalanceWei": "21217142618275349",
+      "yieldAccumulatorWei": "859270579773118",
+      "claimableDriftWei": "-1501331822497668",
+      "afkingFloatWei": "1483931822497668",
+      "parkedDecimatorWei": "0",
+      "solvencyExpectedWei": "20311647286239946",
+      "solvencyResidualWei": "905495332035403",
+      "insolvent": false,
+      "blockNumber": 47984775,
+      "blockHash": "0x99092838c5d0a90d45cf51e0ab776b836a511119600b754fc169cf97821daf69",
+      "logIndex": 266
+    },
+    {
+      "id": 180,
+      "day": 135,
+      "kind": "daily",
+      "nextPrizePool": "0",
+      "futurePrizePool": "0",
+      "currentPrizePool": "0",
+      "claimableWei": "16852757283045207",
+      "totalBalanceWei": "21217142618275349",
+      "yieldAccumulatorWei": "0",
+      "claimableDriftWei": "-1501331822497668",
+      "afkingFloatWei": "1483931822497668",
+      "parkedDecimatorWei": "0",
+      "solvencyExpectedWei": "16852757283045207",
+      "solvencyResidualWei": "4364385335230142",
+      "insolvent": false,
+      "blockNumber": 47984795,
+      "blockHash": "0x8dd1b6bb63bbe5ac88e6cb58a56e068611225c61a01709dd741fc4fa86992936",
+      "logIndex": 4
+    }
+  ],
+  "dailySnapshots": [
+    {
+      "day": 104,
+      "level": 46,
+      "nextPrizePool": "846071691650178",
+      "futurePrizePool": "3137853852497780",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16372028585368228",
+      "blockNumber": 47966779
+    },
+    {
+      "day": 105,
+      "level": 46,
+      "nextPrizePool": "939387611869362",
+      "futurePrizePool": "3014424625538868",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16399656027568778",
+      "blockNumber": 47966796
+    },
+    {
+      "day": 106,
+      "level": 46,
+      "nextPrizePool": "1029037684047866",
+      "futurePrizePool": "2895883195967529",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16426159276370187",
+      "blockNumber": 47967974
+    },
+    {
+      "day": 107,
+      "level": 46,
+      "nextPrizePool": "1115167075768101",
+      "futurePrizePool": "2782036007007215",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16451582849831060",
+      "blockNumber": 47967990
+    },
+    {
+      "day": 108,
+      "level": 46,
+      "nextPrizePool": "1197915205976214",
+      "futurePrizePool": "2672697166729730",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16475969503094883",
+      "blockNumber": 47969178
+    },
+    {
+      "day": 109,
+      "level": 46,
+      "nextPrizePool": "1277415972628086",
+      "futurePrizePool": "2567688144527233",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16499360298201459",
+      "blockNumber": 47969194
+    },
+    {
+      "day": 110,
+      "level": 46,
+      "nextPrizePool": "1353797971320544",
+      "futurePrizePool": "2466837479603955",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16521794671133814",
+      "blockNumber": 47970374
+    },
+    {
+      "day": 111,
+      "level": 46,
+      "nextPrizePool": "1427184705264781",
+      "futurePrizePool": "2369980501011639",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16543310496210047",
+      "blockNumber": 47970390
+    },
+    {
+      "day": 112,
+      "level": 46,
+      "nextPrizePool": "1497694786944826",
+      "futurePrizePool": "2276959058771579",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16563944147925261",
+      "blockNumber": 47971579
+    },
+    {
+      "day": 113,
+      "level": 46,
+      "nextPrizePool": "1565442131790341",
+      "futurePrizePool": "2187621265644225",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16583730560344553",
+      "blockNumber": 47971595
+    },
+    {
+      "day": 114,
+      "level": 46,
+      "nextPrizePool": "1630536144179974",
+      "futurePrizePool": "2101821249124714",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16602703284144041",
+      "blockNumber": 47972775
+    },
+    {
+      "day": 115,
+      "level": 46,
+      "nextPrizePool": "1693081896078977",
+      "futurePrizePool": "2019418913259376",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16620894541393070",
+      "blockNumber": 47972791
+    },
+    {
+      "day": 116,
+      "level": 46,
+      "nextPrizePool": "1753180298602780",
+      "futurePrizePool": "1940279709894305",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16638335278167037",
+      "blockNumber": 47973974
+    },
+    {
+      "day": 117,
+      "level": 46,
+      "nextPrizePool": "1810928266786640",
+      "futurePrizePool": "1864274418982491",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16655055215076755",
+      "blockNumber": 47973990
+    },
+    {
+      "day": 118,
+      "level": 46,
+      "nextPrizePool": "1866418877830419",
+      "futurePrizePool": "1791278937590785",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16671082895796848",
+      "blockNumber": 47975175
+    },
+    {
+      "day": 119,
+      "level": 46,
+      "nextPrizePool": "1919741523076865",
+      "futurePrizePool": "1721174077262190",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16686445733672426",
+      "blockNumber": 47975191
+    },
+    {
+      "day": 120,
+      "level": 46,
+      "nextPrizePool": "1970982053971551",
+      "futurePrizePool": "1653845369402608",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16701170056480131",
+      "blockNumber": 47976375
+    },
+    {
+      "day": 121,
+      "level": 46,
+      "nextPrizePool": "2020222922242808",
+      "futurePrizePool": "1589182878374265",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16715281149416651",
+      "blockNumber": 47976391
+    },
+    {
+      "day": 122,
+      "level": 46,
+      "nextPrizePool": "2067543314530523",
+      "futurePrizePool": "1527081021990645",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16728803296384884",
+      "blockNumber": 47977578
+    },
+    {
+      "day": 123,
+      "level": 46,
+      "nextPrizePool": "2113019281683644",
+      "futurePrizePool": "1467438399119816",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16741759819645176",
+      "blockNumber": 47977595
+    },
+    {
+      "day": 124,
+      "level": 46,
+      "nextPrizePool": "2156723862937502",
+      "futurePrizePool": "1410157624114672",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16754173117896360",
+      "blockNumber": 47978775
+    },
+    {
+      "day": 125,
+      "level": 46,
+      "nextPrizePool": "2198727205173707",
+      "futurePrizePool": "1355145167799731",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16766064702848798",
+      "blockNumber": 47978791
+    },
+    {
+      "day": 126,
+      "level": 46,
+      "nextPrizePool": "2239096677457358",
+      "futurePrizePool": "1302311204754862",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16777455234349119",
+      "blockNumber": 47979977
+    },
+    {
+      "day": 127,
+      "level": 46,
+      "nextPrizePool": "2277896981038577",
+      "futurePrizePool": "1251569466646570",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16788364554114027",
+      "blockNumber": 47979993
+    },
+    {
+      "day": 128,
+      "level": 46,
+      "nextPrizePool": "2315190254997980",
+      "futurePrizePool": "1202837101367366",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16798811718128244",
+      "blockNumber": 47981177
+    },
+    {
+      "day": 129,
+      "level": 46,
+      "nextPrizePool": "2351036177708590",
+      "futurePrizePool": "1156034537753219",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16808815027759499",
+      "blockNumber": 47981193
+    },
+    {
+      "day": 130,
+      "level": 46,
+      "nextPrizePool": "2385492064279860",
+      "futurePrizePool": "1111085355658192",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16818392059641356",
+      "blockNumber": 47982377
+    },
+    {
+      "day": 131,
+      "level": 46,
+      "nextPrizePool": "2418612960142908",
+      "futurePrizePool": "1067916161174128",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16827559694372691",
+      "blockNumber": 47982393
+    },
+    {
+      "day": 132,
+      "level": 46,
+      "nextPrizePool": "2450451730929779",
+      "futurePrizePool": "1026456466791633",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16836334144080666",
+      "blockNumber": 47983575
+    },
+    {
+      "day": 133,
+      "level": 46,
+      "nextPrizePool": "2481059148793490",
+      "futurePrizePool": "986638576306685",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16844730978892205",
+      "blockNumber": 47983590
+    },
+    {
+      "day": 134,
+      "level": 46,
+      "nextPrizePool": "2511322314509798",
+      "futurePrizePool": "947567688684941",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16852757283045207",
+      "blockNumber": 47984775
+    },
+    {
+      "day": 135,
+      "level": 46,
+      "nextPrizePool": "0",
+      "futurePrizePool": "0",
+      "currentPrizePool": "0",
+      "claimableWinnings": "16852757283045207",
+      "blockNumber": 47984795
+    }
+  ],
+  "gameOverEvent": {
+    "id": 1,
+    "level": 46,
+    "available": "4364385335230142",
+    "claimablePool": "16852757283045207",
+    "blockNumber": 47984795,
+    "blockHash": "0x8dd1b6bb63bbe5ac88e6cb58a56e068611225c61a01709dd741fc4fa86992936",
+    "transactionHash": "0x86222ce2dc771bb9805ce6d6b4bc36b4ca955dfa832cd2b0dfb6053731694edd",
+    "logIndex": 5
+  },
+  "terminalAwards": {
+    "count": 305,
+    "uniqueWinners": 83,
+    "amountWei": "4364385335230096",
+    "ticketLevel": 47
+  },
+  "dailyAwards": {
+    "count": 1462,
+    "amountWei": "509528697676979"
+  },
+  "externalDeposits": {
+    "count": 0,
+    "amountWei": "0"
+  },
+  "terminalBlock": {
+    "blockNumber": 47984795,
+    "blockHash": "0x8dd1b6bb63bbe5ac88e6cb58a56e068611225c61a01709dd741fc4fa86992936",
+    "timestamp": "2026-10-11T16:57:58"
+  },
+  "terminalAdvance": [
+    {
+      "id": 1028,
+      "level": 46,
+      "stage": 0,
+      "phase": "GAMEOVER",
+      "jackpotPhase": false,
+      "rngLocked": false,
+      "phaseTransitionActive": false,
+      "gameOver": true,
+      "blockTimestamp": 1791737878,
+      "blockNumber": 47984795,
+      "blockHash": "0x8dd1b6bb63bbe5ac88e6cb58a56e068611225c61a01709dd741fc4fa86992936",
+      "transactionHash": "0x86222ce2dc771bb9805ce6d6b4bc36b4ca955dfa832cd2b0dfb6053731694edd",
+      "logIndex": 311
+    }
+  ],
+  "finalizationEvents": [
+    {
+      "eventName": "GameOverFinalized",
+      "args": {
+        "ethClaimed": "0",
+        "gnrusBurned": "922368160000000000000000000000",
+        "stethClaimed": "0"
+      },
+      "blockNumber": 47984795,
+      "transactionHash": "0x86222ce2dc771bb9805ce6d6b4bc36b4ca955dfa832cd2b0dfb6053731694edd",
+      "logIndex": 1
+    }
+  ],
+  "context": {
+    "closingPaperValue": {
+      "day": 134,
+      "ticketParFutureWei": "8334080000000000",
+      "flipEthWei": "16825184960000000",
+      "scope": "All players, using the run dashboard ticket and FLIP face-value fields."
+    },
+    "previousLevel": {
+      "purchaseOpenedDay": 74,
+      "purchaseOpenedBlock": 47948197,
+      "completedDay": 104,
+      "completedBlock": 47966779,
+      "externalPurchases": 0
+    },
+    "priorStallLevels": [
+      {
+        "ticketLevel": 43,
+        "openedDay": 47,
+        "openedBlock": "47931984",
+        "targetMetDay": 49,
+        "targetMetBlock": "47933200",
+        "completedDay": 51,
+        "completedBlock": "47934395",
+        "openingFuturePrizePoolWei": "7131515016984870",
+        "closingFuturePrizePoolWei": "7333959753044154",
+        "externalPurchases": "0"
+      },
+      {
+        "ticketLevel": 44,
+        "openedDay": 51,
+        "openedBlock": "47934395",
+        "targetMetDay": 59,
+        "targetMetBlock": "47939191",
+        "completedDay": 61,
+        "completedBlock": "47940392",
+        "openingFuturePrizePoolWei": "7333959753044154",
+        "closingFuturePrizePoolWei": "5526558306394724",
+        "externalPurchases": "0"
+      },
+      {
+        "ticketLevel": 45,
+        "openedDay": 61,
+        "openedBlock": "47940392",
+        "targetMetDay": 74,
+        "targetMetBlock": "47948193",
+        "completedDay": 74,
+        "completedBlock": "47948197",
+        "openingFuturePrizePoolWei": "5526558306394724",
+        "closingFuturePrizePoolWei": "3828337700440577",
+        "externalPurchases": "0"
+      },
+      {
+        "ticketLevel": 46,
+        "openedDay": 74,
+        "openedBlock": "47948197",
+        "targetMetDay": 102,
+        "targetMetBlock": "47965576",
+        "completedDay": 104,
+        "completedBlock": "47966779",
+        "openingFuturePrizePoolWei": "3828337700440577",
+        "closingFuturePrizePoolWei": "3137853852497780",
+        "externalPurchases": "0"
+      }
+    ]
+  }
+}

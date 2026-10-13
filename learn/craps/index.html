@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Craps Autobattle · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Build a ten-chip Craps board, run it against shared dice, and learn how Goals, Busts, battle ranking, High Roller, and Run It Up work." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Craps Autobattle</h1>
+  <p class="lede">Build one ten-chip craps board, send it into a scheduled battle, and watch every entrant run against
+    the same dice. You are choosing a strategy for an automated bankroll race, not calling bets roll by roll.</p>
+
+  <iframe class="embed" src="/learn/demos/craps.html" style="height: 760px;" loading="lazy"
+    title="Interactive craps demo"></iframe>
+  <script>
+    // The demo reports the height it actually draws; 760px is the fallback until it does.
+    window.addEventListener('message', function (event) {
+      var frame = document.querySelector('iframe.embed[src="/learn/demos/craps.html"]');
+      var data = event.data;
+      if (!frame || event.source !== frame.contentWindow || event.origin !== window.location.origin) return;
+      if (data && data.source === 'craps-demo-embed' && data.height > 200) frame.style.height = data.height + 'px';
+    });
+  </script>
+
+  <h2>The two-minute version</h2>
+  <ol>
+    <li>Choose anywhere from zero through seven chips. You can put up to three chosen chips on one betting spot.</li>
+    <li>The protocol scatters random chips until every entry has a ten-chip board. Leaving more to chance also raises
+      the odds of a Hot Shooter profit boost.</li>
+    <li>Pick a scheduled battle and burn the required FLIP to enter. Your finished board repeats for each shooter.</li>
+    <li>The run starts with enough bankroll for five base boards and targets 5× that starting bankroll.</li>
+    <li>Reach the target to earn <strong>Goal</strong> status. Miss it and eventually stop as a <strong>Bust</strong>.
+      Goal always ranks above Bust, but your run keeps going after Goal to establish its high point.</li>
+  </ol>
+
+  <h2>Build the board</h2>
+  <p>The board supports Pass Line, Don&rsquo;t Pass, Place 4/5/6/8/9/10, Hard 4, and Hard 8. You cannot submit both
+    Pass and Don&rsquo;t Pass on the same chosen board, although random scatter can create combinations you would not pick
+    yourself. Fewer chosen chips mean more variance and a better Hot Shooter chance; more chosen chips mean more
+    control over the strategy. Neither route guarantees a stronger run.</p>
+  <p class="fine">The odds below are profit odds. A 2:1 win adds two units of profit for each unit on the spot; the
+    original stake remains part of the bankroll.</p>
+
+  <table>
+    <tr>
+      <th>Spot</th>
+      <th>Profit</th>
+      <th>What resolves it</th>
+    </tr>
+    <tr>
+      <td>Pass Line</td>
+      <td>1:1</td>
+      <td>Wins on a come-out 7 or 11, or when the point repeats. It stays through wins and leaves on its first loss.</td>
+    </tr>
+    <tr>
+      <td>Don&rsquo;t Pass</td>
+      <td>3:4</td>
+      <td>Wins on come-out 2 or 3, or on a seven-out after a point. Twelve pushes; 7, 11, or a made point can beat it.</td>
+    </tr>
+    <tr>
+      <td>Place 4 / 10</td>
+      <td>2:1</td>
+      <td rowspan="3">Place bets are off during the come-out. After a point exists, their number pays and stays;
+        a 7 removes them.</td>
+    </tr>
+    <tr>
+      <td>Place 5 / 9</td>
+      <td>3:2</td>
+    </tr>
+    <tr>
+      <td>Place 6 / 8</td>
+      <td>7:6</td>
+    </tr>
+    <tr>
+      <td>Hard 4 / Hard 8</td>
+      <td>7:1 / 9:1</td>
+      <td>Off on the come-out. The matching double pays and stays; an easy version of the number or a 7 removes it.</td>
+    </tr>
+  </table>
+
+  <h2>How the automated run works</h2>
+  <p>Everybody in a battle receives the same shared dice sequence. That keeps the comparison clean, but it also means
+    player outcomes are correlated: a rough sequence can punish much of the field at once. Each resolved board is
+    replayed across successive shooters, and the mandatory board cost doubles every three shooters. The longer the
+    run lasts, the more bankroll it must put at risk.</p>
+  <p>If your bankroll cannot fund the next board but can cover at least half, the engine gives it a fair
+    <strong>survival flip</strong>. Win and the bankroll doubles so play can continue; lose and the run Busts at zero.
+    Falling below half the required board cost is an immediate Bust with the remainder recorded for ranking.</p>
+  <p>At a shooter boundary, reaching 5× the starting bankroll permanently latches Goal status and protects the goal
+    reserve. The simulation keeps running to find the run&rsquo;s <strong>high point</strong>. That distinction matters:
+    reaching Goal makes a run payable, while pushing higher is how it tries to win the field.</p>
+
+  <h2>Ranking and settlement</h2>
+  <p>Every Goal beats every Bust. Goal runs rank by high point. Bust runs rank by shooters survived, then by whether
+    anything was kept, then by high point and raw ending bankroll, and finally by a deterministic tiebreaker. Even when the entire
+    field Busts, one entry still ranks first and wins the battle bounty.</p>
+  <p>A Goal run&rsquo;s individual return is paid as <strong>Coinflip stake credit</strong>, not immediately liquid FLIP.
+    That credit still faces the communal daily Coinflip before it can become claimable. A Bust pays zero even when its
+    recorded ending bankroll is above zero. Separately, the top-ranked entry wins the field&rsquo;s battle pot, built from
+    entrant bounties and any admitted boost or donation. A qualifying winner can also take a shot at the
+    <strong>Run It Up</strong> progressive.</p>
+
+  <h2>High Roller</h2>
+  <p>High Roller uses the day&rsquo;s 10&times; or 100&times; multiplier: it burns that multiple of the entry and scales the
+    individual Goal return. It does not buy a luckier dice stream or a better board simulation. The same unscaled run
+    establishes rank, while High Roller also competes on its sideboard. It magnifies exposure as directly as it
+    magnifies a payable result.</p>
+
+  <h2>What you can lose</h2>
+  <p class="kicker">The entry is burned up front. A Bust returns nothing, a Goal can still miss the battle bounty, and
+    its credited return takes another round of Coinflip risk.</p>
+  <p>Shared dice do not make the game safe; they make the tournament comparable. Random scatter, Hot Shooter, survival
+    flips, escalating board costs, and the daily High Roller multiplier all add variance. Treat every entry as FLIP
+    you can lose in full.</p>
+
+  <div class="cta">
+    <strong>Ready to build a board?</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Choose your chips, inspect the scheduled fields, and enter only at
+      the stake you are prepared to lose.</p>
+    <a class="btn" href="/app/">Play Craps</a>
+    <a class="btn ghost" href="/learn/coinflip/">How Coinflip credit works</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

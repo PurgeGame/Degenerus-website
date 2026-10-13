@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light;
+}
+
+@media screen {
+  :root[data-theme="dark"] { color-scheme: dark; }
+}
+
+/* The toolbar has its own row, including when it sticks during long reads. */
+.reader-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+  padding: .5rem max(1rem, env(safe-area-inset-right)) .5rem 3.75rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.reader-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 44px;
+  padding: .55rem .85rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 .8125rem/1.2 system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reader-theme-toggle[hidden] { display: none; }
+.reader-theme-toggle:hover { border-color: var(--muted); }
+.reader-theme-toggle:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+.reader-theme-toggle svg { width: 18px; height: 18px; flex: none; }
+.reader-theme-toggle .theme-sun { display: none; }
+:root[data-theme="dark"] .reader-theme-toggle .theme-sun { display: block; }
+:root[data-theme="dark"] .reader-theme-toggle .theme-moon { display: none; }
+
+html { scroll-padding-top: 4.5rem; }
+
+@media print {
+  .reader-toolbar { display: none; }
+}

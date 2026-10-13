@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Biggest Bounties · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Five all-time records (biggest coinflip, Degenerette bet, luckbox, ticket buy and craps run) share one growing FLIP pool, plus a soulbound trophy that moves to whoever holds the mark." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Biggest Bounties</h1>
+  <p class="lede">Five all-time records, one growing pot, and a soulbound trophy that follows whoever currently holds
+    the mark. The bar only ever goes up.</p>
+
+  <h2>Five records, one pot</h2>
+  <p>The protocol keeps a permanent record of the biggest single coinflip deposit, the biggest Degenerette bet, the
+    biggest luckbox deposit, the biggest ticket buy anybody has ever made, and the biggest
+    <a href="/learn/craps/">scheduled craps</a> run. All five are backed by the same FLIP pool, which grows every day
+    whether or not anyone is chasing it. Five separate competitions, one shared prize.</p>
+
+  <h2>Taking the mark and taking the money are different things</h2>
+  <p>This is the part that catches people out. Beating the standing record by any margin makes you the record
+    holder and moves the trophy to your wallet. Getting <em>paid</em> is a higher bar: your number has to clear the
+    standing mark by a fifth. A run of narrow beats can pass the trophy around for months without a single wei
+    leaving the pool. The dice run is the exception: any new high point claims.</p>
+
+  <h2>A dormant record is worth more than a busy one</h2>
+  <p>A claim does not empty the pot. It takes a share that starts at 5% and grows by half a percent for every day
+    that category has gone unclaimed, up to 75%. Each of the five keeps its own clock, and only an actual claim
+    resets it, so a record nobody has been able to beat becomes progressively more valuable to whoever finally
+    breaks it. The quiet categories are the ones worth hunting.</p>
+
+  <h2>The trophy</h2>
+  <p>Each record carries a soulbound NFT called <em>The BIGGEST Degenerus</em>, minted once and force-moved by the
+    contract to each new mark holder. You never claim it and you can never sell it or transfer it. Its metadata is
+    the size of your record and the number of days you have held it, so it reads as a running scoreboard rather
+    than a collectible. Losing the record loses the trophy the same block.</p>
+
+  <h2>Why it exists</h2>
+  <p>Almost everything else in the game rewards consistency. This rewards the single largest thing you have ever
+    done, permanently, with no reset at the end of a level or a cycle. It is the one leaderboard where a whale who
+    shows up once and swings enormous leaves a mark that outlasts them, and the growing pot means the game is
+    always quietly offering money to whoever wants to try.</p>
+
+  <h2>The exact numbers</h2>
+  <p><strong>The five records</strong></p>
+  <table>
+    <tr>
+      <th>Record</th>
+      <th>Minimum to arm it</th>
+    </tr>
+    <tr>
+      <td>Biggest coinflip deposit</td>
+      <td>200,000 FLIP</td>
+    </tr>
+    <tr>
+      <td>Biggest <a href="/learn/degenerette/">Degenerette</a> bet</td>
+      <td>1 ETH</td>
+    </tr>
+    <tr>
+      <td>Biggest <a href="/learn/lootboxes/">luckbox</a> deposit</td>
+      <td>5 ETH</td>
+    </tr>
+    <tr>
+      <td>Biggest ticket buy</td>
+      <td>100 tickets</td>
+    </tr>
+    <tr>
+      <td>Biggest scheduled craps run</td>
+      <td>A high point of 100x the starting bankroll</td>
+    </tr>
+  </table>
+  <p><strong>The pool and the claim</strong></p>
+  <table>
+    <tr>
+      <td>Starts at</td>
+      <td>10,000 FLIP</td>
+    </tr>
+    <tr>
+      <td>Grows by</td>
+      <td>2,000 FLIP per day, plus 0.2% of each completed level's prize pool</td>
+    </tr>
+    <tr>
+      <td>To hold the record</td>
+      <td>Beat the standing mark by any amount</td>
+    </tr>
+    <tr>
+      <td>To claim the pool</td>
+      <td>Beat the standing mark by a fifth (dice run: any new high)</td>
+    </tr>
+    <tr>
+      <td>Claim pays</td>
+      <td>5% of the pool, +0.5% per day that category has gone unclaimed, capped at 75% (reached 140 days after a
+        claim)</td>
+    </tr>
+    <tr>
+      <td>Also pays</td>
+      <td>0.01% to 0.15% of the <a href="/learn/sdgnrs/">sDGNRS</a> reward pool, scaling with the accrued share</td>
+    </tr>
+    <tr>
+      <td>Trophy</td>
+      <td>Soulbound NFT per record, moved automatically on every new mark</td>
+    </tr>
+  </table>
+  <p class="fine">A record beaten without clearing the claim bar ratchets the mark and moves the trophy but pays
+    nothing, and it does not reset that category's clock. FLIP-redeemed ticket buys route through redemption rather
+    than the purchase path, so they never arm the ticket record.</p>
+
+  <div class="cta">
+    <strong>Records are set with size. The pot is won with patience.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every category grows until somebody clears the bar by a fifth.</p>
+    <a class="btn" href="/learn/coinflip/">The Coinflip</a>
+    <a class="btn ghost" href="/learn/degenerette/">Degenerette</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,113 @@
+:root {
+  color-scheme: dark;
+  --tut-gold: #f5a623;
+  --tut-gold-2: #ffd36a;
+  --tut-ink: #09070d;
+  --tut-panel: rgba(20, 13, 26, 0.97);
+  --tut-red: #8d1428;
+  --tut-green: #72e49a;
+}
+
+[hidden] { display: none !important; }
+
+.tutorial-shell.is-badges .tut-coach { top: 80px; right: 20px; }
+.tut-scratch-accessible { margin: 0 12px 12px; padding: 9px; color: #d7c8ae; background: transparent; border: 1px solid #ffffff30; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.tut-coach button:focus-visible, .tut-safety a:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+@media (max-width: 760px) {
+  .tutorial-shell.is-badges .tut-coach { top: auto; bottom: 10px; left: 10px; right: 10px; }
+}
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050408; color: #f7f3ec; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, a { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+.tut-app-frame { position: fixed; inset: 0; z-index: 1; width: 100%; height: 100%; border: 0; background: #0a0710; }
+.tutorial-shell.is-welcome .tut-app-frame { filter: brightness(.3) blur(2px); }
+.tutorial-shell.is-welcome .tut-coach { top: 50%; right: auto; bottom: auto; left: 50%; transform: translate(-50%, -50%); }
+.tut-loading { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .7rem; background: radial-gradient(circle at 50% 42%, #7a12284d, transparent 34%), #08060c; letter-spacing: .08em; text-align: center; }
+.tut-loading img { width: 76px; height: 76px; filter: drop-shadow(0 0 22px #f5a62373); }
+.tut-loading strong { color: var(--tut-gold-2); font-size: .84rem; }
+.tut-loading span { max-width: 32rem; padding-inline: 1rem; color: #ffffffa0; font-size: .72rem; letter-spacing: .02em; }
+.tut-loading.is-ready { display: none; }
+.tut-loading__retry { margin-top: 12px; padding: 12px 22px; border: 1px solid #d3ab62; border-radius: 4px 10px; background: #63452c; color: #ffe4b1; font-size: 12px; font-weight: 750; cursor: pointer; }
+.tut-safety { position: fixed; z-index: 44; top: 8px; left: 50%; display: flex; min-height: 30px; align-items: center; gap: .48rem; padding: .34rem .55rem; border: 1px solid #f5a62399; border-radius: 999px; background: #120b16f5; box-shadow: 0 8px 24px #0006; color: #ffffffa8; font-size: .58rem; font-weight: 800; letter-spacing: .08em; transform: translateX(-50%); white-space: nowrap; }
+.tut-safety strong { color: var(--tut-gold-2); }
+.tut-safety a { margin-left: .12rem; padding-left: .52rem; border-left: 1px solid #ffffff29; color: #fff; text-decoration: none; }
+.tut-safety__pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--tut-green); box-shadow: 0 0 7px #72e49a85; }
+.tut-focus-ring { position: fixed; z-index: 34; display: none; border: 1px solid #ffe0a299; border-radius: 12px; box-shadow: 0 0 0 9999px #020107c7, 0 0 24px #f5a62355; pointer-events: none; }
+.tut-focus-ring.is-visible, .tut-action-ring.is-visible { display: block; }
+.tut-action-ring { position: fixed; z-index: 35; display: none; border: 3px solid #ffdc83; border-radius: 9px; box-shadow: 0 0 0 2px #35121e, 0 0 24px #ffcd6299; pointer-events: none; animation: tut-action-pulse 1.4s ease-in-out infinite; }
+.tut-action-ring > span { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); padding: 5px 9px; border-radius: 4px; background: #ffdc83; color: #2d1420; box-shadow: 0 3px 10px #0008; font-size: 10px; font-weight: 900; letter-spacing: .05em; white-space: nowrap; }
+.tut-action-ring > span::after { content: ''; position: absolute; top: 100%; left: calc(50% - 5px); border: 5px solid transparent; border-top-color: #ffdc83; }
+.tut-action-ring.is-below > span { top: calc(100% + 10px); bottom: auto; }
+.tut-action-ring.is-below > span::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: #ffdc83; }
+@keyframes tut-action-pulse { 50% { box-shadow: 0 0 0 3px #fff2c944, 0 0 32px #ffcd62cc; } }
+
+/* An in-game speaker portrait, nameplate, dialogue, and player response. */
+.tut-coach { position: fixed; z-index: 50; top: 56px; right: 16px; width: min(370px, calc(100vw - 20px)); overflow: auto; max-height: calc(100dvh - 64px); border: 1px solid #cca969; border-radius: 5px 18px 5px 18px; background: linear-gradient(135deg, #321324, #150f1c 68%); box-shadow: 0 18px 50px #000a, inset 0 0 0 3px #080610, inset 0 0 0 4px #d4af5f38; }
+.tut-coach__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 14px 10px; }
+.tut-coach__speaker { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.tut-coach__avatar { display: grid; place-items: center; width: 56px; height: 56px; flex: 0 0 56px; border: 1px solid #dab36b; border-radius: 12px 3px 12px 3px; background: radial-gradient(circle, #723047, #1a111e 75%); box-shadow: inset 0 0 0 3px #170d1d, 0 0 16px #f5a62318; }
+.tut-coach__avatar img { width: 35px; height: 42px; object-fit: contain; filter: drop-shadow(0 0 8px #ffac3c55); }
+.tut-coach__speaker strong { display: block; color: #ffdda1; font-size: 12px; letter-spacing: .14em; }
+.tut-coach__subject { display: block; margin-top: 6px; color: #fff3db; font-size: 11px; line-height: 1.35; font-weight: 600; }
+.tut-coach__speaker [data-bind="coach-step"] { display: block; margin-top: 5px; color: #bfa9b6; font-size: 8px; font-weight: 700; letter-spacing: .08em; }
+.tut-coach__progress { height: 2px; margin-inline: 14px; background: #ffffff12; }
+.tut-coach__progress span { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #a93851, #ffdb90); }
+.tut-coach__dialogue { padding: 13px 17px 11px; }
+.tut-coach h1 { margin: 0 0 7px; font-size: 19px; line-height: 1.2; font-weight: 750; letter-spacing: -.02em; color: #fff3db; }
+.tut-coach__dialogue p { margin: 0; color: #e0d1d9; font-size: 14px; line-height: 1.5; white-space: pre-line; }
+.tut-coach__hint { display: flex; align-items: baseline; gap: 7px; margin: 0 17px 14px; color: #daba79; font-size: 11px; line-height: 1.4; }
+.tut-coach__hint > span { font-size: 7px; }
+.tut-coach__hint strong { font-weight: 600; }
+.tut-coach__navigation { display: flex; gap: 8px; margin: 4px 14px 14px; }
+.tut-coach__arrow { display: grid; place-items: center; width: 48px; min-height: 44px; padding: 6px; border: 1px solid #d3ab62; border-radius: 4px 9px; background: linear-gradient(90deg, #63452c, #3e242b); color: #ffe4b1; font-size: 24px; font-weight: 700; cursor: pointer; }
+.tut-coach__cta { display: flex; flex: 1; align-items: center; justify-content: space-between; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid #d3ab62; border-radius: 3px 8px; background: linear-gradient(90deg, #63452c, #3e242b); color: #ffe4b1; font-size: 13px; font-weight: 750; text-align: left; cursor: pointer; }
+.tut-coach__cta::after { content: '›'; margin-left: 8px; font-size: 22px; }
+.tut-coach__navigation button:disabled { opacity: .3; cursor: default; }
+.tut-coach__navigation button:hover:not(:disabled) { background: #785234; color: #fff3cd; }
+.tut-coach__navigation button:active:not(:disabled) { transform: translateY(1px); }
+.tutorial-shell.is-frame-reveal:not(.is-pack-sealed) .tut-coach,
+.tutorial-shell.is-frame-reveal .tut-safety,
+.tutorial-shell.is-frame-reveal .tut-focus-ring,
+.tutorial-shell.is-frame-reveal .tut-action-ring { display: none !important; }
+.tutorial-shell.is-pack-sealed .tut-coach { top: auto; bottom: 24px; left: 50%; right: auto; transform: translateX(-50%); }
+
+/* A local practice transaction, presented as a wallet confirmation. */
+.tut-wallet { position: fixed; z-index: 80; width: min(360px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); margin: auto; padding: 0; overflow: auto; color-scheme: light; color: #23232a; border: 1px solid #dedee4; border-radius: 14px; background: #fff; box-shadow: 0 22px 70px #000a; }
+.tut-wallet::backdrop { background: #08060dbb; }
+.tut-wallet__warning { padding: 9px; background: #8f1730; color: white; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-align: center; }
+.tut-wallet__brand { display: flex; align-items: center; gap: 12px; padding: 18px 18px 12px; }
+.tut-wallet__brand strong, .tut-wallet__brand small { display: block; }
+.tut-wallet__brand small { margin-top: 4px; color: #63636f; font-size: 11px; }
+.tut-wallet__fox { font-size: 32px; }
+.tut-wallet__origin { margin-inline: 18px; padding: 9px; border: 1px solid #dddde3; border-radius: 7px; background: #f6f6f8; color: #63636f; font-size: 12px; }
+.tut-wallet h2 { margin: 20px 18px 14px; font-size: 20px; }
+.tut-wallet dl { margin: 0 18px; padding-block: 5px; border-block: 1px solid #e4e4e8; }
+.tut-wallet dl div { display: flex; justify-content: space-between; gap: 12px; padding-block: 9px; font-size: 13px; }
+.tut-wallet dt { color: #63636f; }
+.tut-wallet dd { margin: 0; font-weight: 700; }
+.tut-wallet p { margin: 16px 18px; color: #555560; font-size: 13px; line-height: 1.5; }
+.tut-wallet__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 18px 18px; }
+.tut-wallet__actions button { min-height: 44px; border: 1px solid #1677c8; border-radius: 24px; background: #fff; color: #1266ad; font-size: 14px; font-weight: 700; cursor: pointer; }
+.tut-wallet__actions button:last-child { background: #1677c8; color: #fff; }
+.tut-wallet button:focus-visible { outline: 3px solid #103976; outline-offset: 3px; }
+
+@media (max-width: 760px) {
+  .tut-safety { top: 5px; max-width: calc(100vw - 12px); gap: .34rem; padding-inline: .46rem; font-size: .49rem; }
+  .tut-safety > span:not(.tut-safety__pulse) { display: none; }
+  .tut-coach { top: auto; right: 10px; bottom: 10px; left: 10px; width: calc(100vw - 20px); }
+  .tutorial-shell.is-welcome .tut-coach { width: min(370px, calc(100vw - 24px)); }
+  .tut-coach__top { padding: 10px 13px 8px; }
+  .tut-coach__avatar { width: 42px; height: 42px; flex-basis: 42px; }
+  .tut-coach__avatar img { width: 28px; height: 32px; }
+  .tut-coach__dialogue { padding: 10px 14px; }
+  .tut-coach h1 { font-size: 17px; margin-bottom: 5px; }
+  .tut-coach__dialogue p { font-size: 13px; line-height: 1.4; }
+  .tut-coach__hint { margin: 0 14px 10px; font-size: 10px; }
+  .tut-coach__navigation { margin-bottom: 12px; }
+  .tutorial-shell.is-pack-sealed .tut-coach { bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tut-action-ring { animation: none; }
+}

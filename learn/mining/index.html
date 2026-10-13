@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mining FLIP · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The game has no server. Every daily advance, jackpot payout and box open is a transaction somebody has to send, and the protocol pays FLIP to whoever sends it." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Mining FLIP</h1>
+  <p class="lede">The game has no server and no team pressing buttons. Every day it needs somebody to send a
+    transaction, and it pays FLIP to whoever does.</p>
+
+  <h2>Somebody has to press the button</h2>
+  <p>An on-chain game does not run on its own. Advancing the day, paying the jackpots, rolling a level over, opening
+    the queued boxes and settling Degenerette bets: each of those is a transaction that some address has to broadcast and pay gas for. Most
+    protocols hide this behind a company running a bot. Degenerus puts it in the open and pays a bounty, so the
+    thing keeping the game alive is an incentive rather than a promise.</p>
+
+  <h2>Anyone can call it, and anyone is paid</h2>
+  <p>Calling <code>mineFlip()</code> is permissionless, and so is the bounty. There is no list of eligible callers,
+    no ticket you must have bought and no pass you must hold. If the game needs cranking and you crank it, you are
+    paid for the gas the call used.</p>
+  <p>An active pass doubles the reward. A deity pass always counts, and lazy and whale passes count while their
+    coverage includes the current level. The reward also doubles when the daily RNG lock was already on at the start
+    of your call, and the two stack.</p>
+
+  <h2>It pays a share of your gas, not a profit</h2>
+  <p>The bounty is pegged to the gas the call used, not to a yield target. The first 1,000,000 gas of every call is
+    unpaid, and the rest is reimbursed at the block's base fee, capped at 0.5 gwei, times 30%. With a pass that is 60%,
+    and in either case the reward only exists as FLIP coinflip credit, so it still has to survive the daily 50/50
+    like every other FLIP the protocol issues. This is deliberate. Mining is meant to be liveness work that somebody
+    is always willing to do, not a farm worth building an operation around.</p>
+
+  <h2>The longer it sits, the more it pays</h2>
+  <p>The clock starts at the latest randomness request or at the 22:57 UTC day reset, whichever is later. Every 30
+    minutes without a crank raises both the base fee cap and the share of gas reimbursed, up to four steps: 30% at
+    the start, then 75%, 120%, 165% and 210%, with the cap doubling from 0.5 gwei to 1, 2, 4 and 8. The game gets
+    more insistent the longer it is ignored, which means the scenario where nobody can be bothered is also the
+    scenario where cranking pays best.</p>
+
+  <h2>You cannot farm it by splitting the work</h2>
+  <p>Every call forfeits its first million gas. Slicing the work into many small calls only forfeits another
+    unpaid million per call, so the honest full-batch crank is the only version that pays well.</p>
+
+  <h2>The exact numbers</h2>
+  <table>
+    <tr>
+      <td>Entrypoint</td>
+      <td><code>mineFlip()</code>, permissionless, for both the work and the bounty</td>
+    </tr>
+    <tr>
+      <td>Paid in</td>
+      <td>FLIP, credited as a <a href="/learn/coinflip/">coinflip</a> stake, converted at the current ticket price</td>
+    </tr>
+    <tr>
+      <td>Reward</td>
+      <td>(gas used &minus; 1,000,000) &times; the lower of the block base fee and the cap &times; the share
+        below</td>
+    </tr>
+    <tr>
+      <td>Stall ladder</td>
+      <td>Start: 0.5 gwei cap, 30%. After 30 minutes: 1 gwei, 75%. After 1 hour: 2 gwei, 120%. After 90 minutes:
+        4 gwei, 165%. After 2 hours: 8 gwei, 210%</td>
+    </tr>
+    <tr>
+      <td>Active <a href="/learn/passes/">pass</a></td>
+      <td>Share doubled: deity always, lazy and whale while their coverage includes the current level</td>
+    </tr>
+    <tr>
+      <td>Daily RNG lock</td>
+      <td>Share doubled when the lock was on at the start of the call; stacks with a pass</td>
+    </tr>
+  </table>
+  <p class="fine">The day resets at 22:57 UTC. Growth <a href="/learn/side-bets/">side-bet</a> settlement is one of
+    the stages a <code>mineFlip()</code> call runs, and its gas pays like any other. The crank pays nothing once the
+    game is over.</p>
+
+  <div class="cta">
+    <strong>The game pays its own electricity bill.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">No server, no team, no scheduled job. Just a bounty that goes up
+      until somebody takes it.</p>
+    <a class="btn" href="/learn/cycles/">The Cycles</a>
+    <a class="btn ghost" href="/learn/trustless/">Trust Model</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

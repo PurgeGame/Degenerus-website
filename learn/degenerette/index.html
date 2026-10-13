@@ -1,36 +1,183 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="description" content="Degenerus information pages are temporarily offline while they are reviewed and updated.">
-  <title>Information pages being revised · Degenerus</title>
-  <link rel="icon" type="image/svg+xml" href="/whitepaper/flame-logo.svg">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #101116; color: #f2f0e9; font: 16px/1.6 system-ui, sans-serif; }
-    main { width: 100%; max-width: 540px; padding: clamp(24px, 6vw, 48px); border: 1px solid #34332c; border-radius: 20px; background: #191a1f; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; color: #e8c783; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-    .brand img { width: 28px; height: 32px; object-fit: contain; }
-    h1 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 36px); line-height: 1.2; letter-spacing: -.025em; }
-    p { margin: 0 0 14px; color: #babcc3; }
-    nav { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
-    a { color: #e8c783; text-underline-offset: 4px; }
-    .play { display: inline-block; padding: 11px 20px; border-radius: 8px; background: #e8c783; color: #171715; font-weight: 750; text-decoration: none; }
-    a:focus-visible { outline: 2px solid #f7e6c1; outline-offset: 5px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerette · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The Degenerus slot machine: bet ETH or FLIP against published payout and activity curves, with high-variance prizes above 100,000x." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
 </head>
+
 <body>
-  <main data-info-pages-paused="2026-10-06">
-    <div class="brand"><img src="/whitepaper/flame-logo.svg" alt="">DEGENERUS</div>
-    <h1>Information pages are being revised.</h1>
-    <p>Our guides, whitepaper, and other information pages are temporarily offline while we review and update them.</p>
-    <p>Previously published versions are out of date.</p>
-    <nav aria-label="Available links">
-      <a class="play" href="/beta/">Open the game</a>
-      <a href="https://discord.gg/DfbYAn8DAn" target="_blank" rel="noopener">Discord</a>
-    </nav>
-  </main>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Degenerette</h1>
+  <p class="lede">The slot machine. Bet ETH to win ETH or FLIP to win FLIP, against a payout table that tops
+    out above 100,000x. Casinos bury their par sheets. This one is published in the contract.</p>
+
+  <h2>The par sheet is public</h2>
+  <p>Every slot machine ever built has a par sheet: the table that says what each outcome pays and how often it
+    comes up. Casinos treat theirs as a trade secret, because a player who can read it can price the machine. This
+    one is a constant in a contract you can read from your own node. The whole edge, such as it is, is published.</p>
+
+  <h2>How a card scores</h2>
+  <p>Each card reveals four quadrants, each with a symbol and a color. Every symbol match scores a point, hero
+    included. Colors score on their own: equal colors score a point, and a wild matches any color. Your hero quadrant
+    is always wild, and the house rolls a wild in any quadrant one time in sixteen. A wild against a wild scores two.
+    That gives every card a score from 1 to 9, and anything from 3 up pays. Each wild on the house card adds 25% to
+    the payout. The scoring is why the top of the table is so steep: stacking symbol hits is ordinary, but stacking
+    symbol <em>and</em> color hits across four quadrants is not.</p>
+
+  <iframe class="embed" src="/learn/demos/degenerette.html" style="height: 560px;" loading="lazy"
+    title="Interactive Degenerette demo"></iframe>
+
+  <h2>Playing more makes the machine pay better</h2>
+  <p>The payout target is not a constant. It reads your degen score, so the same card at the same stake is worth
+    more to a player who has been showing up than to one who has not. This is the opposite of how a casino treats a
+    regular: the comps here are in the math rather than the buffet.</p>
+
+  <h2>The hero symbol reaches outside the machine</h2>
+  <p>Each day one symbol is named hero, and the odds of a symbol getting picked scale with how much ETH was wagered
+    on it in Degenerette the day before. The hero symbol is then locked into one quadrant of the day's jackpot draw. So
+    Degenerette betting is not sealed off from the rest of the game: it leans on which traits win the jackpots. Only
+    one quadrant, only the symbol and not the color, and you cannot choose the traits on tickets you already hold,
+    so it is a real lever and a small one.</p>
+
+  <h2>The exact numbers</h2>
+  <p><strong>How a card scores</strong></p>
+  <table>
+    <tr>
+      <th>Score</th>
+      <th>FLIP payout</th>
+      <th>ETH payout</th>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>~0.45&ndash;0.5x</td>
+      <td>~0.45&ndash;0.5x</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>~2.7&ndash;3x</td>
+      <td>~2.7&ndash;3x</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>~9&ndash;10x</td>
+      <td>~9&ndash;10x</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>~90&ndash;100x</td>
+      <td>~92&ndash;102x</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>~560&ndash;620x</td>
+      <td>~610&ndash;670x</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>~16,400&ndash;18,200x</td>
+      <td>~17,400&ndash;19,200x</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>~207,000&ndash;230,000x</td>
+      <td>~431,000&ndash;454,000x</td>
+    </tr>
+  </table>
+  <p class="fine">Payouts are multiples of the stake with no house wilds, from degen score 0 to the effective cap. Each wild on
+    the house card adds 25%. A score of 9 always needs a house wild on your hero quadrant, so it pays at least 1.25x its table
+    value. Scores 1 and 2 pay nothing.</p>
+  <p class="fine">FLIP-staked wins ride one more 50/50, double or nothing, before they mint. Details below.</p>
+  <p><strong>The nominal payout curves</strong></p>
+  <table>
+    <tr>
+      <th>Lane</th>
+      <th>Degen score 0</th>
+      <th>High degen score</th>
+    </tr>
+    <tr>
+      <td>ETH</td>
+      <td>90% + 5% ETH bonus</td>
+      <td>~99.9% + 5% ETH bonus</td>
+    </tr>
+    <tr>
+      <td>FLIP</td>
+      <td>90%</td>
+      <td>~99.9%</td>
+    </tr>
+    <tr>
+      <td>WWXRP, openly rigged for you, luckbox and foil cards only</td>
+      <td>70%</td>
+      <td>124&ndash;130%</td>
+    </tr>
+  </table>
+  <p class="fine">The ETH lane adds 5 percentage points of expected prize value, concentrated in score 6&ndash;9.
+    Large ETH results partly recirculate through luckbox, and total ETH paid is capped against the futurepool, so a
+    figure above 100% is not a promise of cash profit. WWXRP percentages are denominated in a token with no backing or
+    redemption value.</p>
+  <p><strong>The details</strong></p>
+  <table>
+    <tr>
+      <td>Minimum bet</td>
+      <td>0.005 ETH or 100 FLIP</td>
+    </tr>
+    <tr>
+      <td>Max cards per bet</td>
+      <td>25 cards for ETH, 15 for FLIP</td>
+    </tr>
+    <tr>
+      <td>Big ETH wins</td>
+      <td>Up to 3x pays pure ETH; larger hits split cash and <a href="/learn/lootboxes/">luckbox</a> value. The ETH
+        leg is also capped at 10% of the futurepool</td>
+    </tr>
+    <tr>
+      <td>Every stake</td>
+      <td>Taken at placement, win or lose: ETH goes to the futurepool, FLIP burns. Wins pay from the pool or
+        fresh mint</td>
+    </tr>
+    <tr>
+      <td>FLIP payouts</td>
+      <td>The calculated payout then faces a separate 50/50 double-or-nothing survival flip before minting</td>
+    </tr>
+    <tr>
+      <td>Extras</td>
+      <td>Score 7+ ETH wins earn sDGNRS</td>
+    </tr>
+    <tr>
+      <td>Free cards</td>
+      <td>30% of luckbox rolls pay out as Degenerette cards</td>
+    </tr>
+    <tr>
+      <td>Settlement</td>
+      <td>Automatic once the bet's random word lands: the <a href="/learn/mining/">mining</a> crank settles bets in
+        queue order alongside luckboxes, and anyone can run it</td>
+    </tr>
+  </table>
+
+  <div class="cta">
+    <strong>Luckbox pays in cards too.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Three luckbox rolls in ten come out as Degenerette cards,
+      including WWXRP cards on the rigged lane.</p>
+    <a class="btn" href="/app/">Play cards</a>
+    <a class="btn ghost" href="/learn/lootboxes/">How Luckbox works</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
 </body>
+
 </html>
