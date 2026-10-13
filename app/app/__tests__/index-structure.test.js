@@ -399,7 +399,6 @@ describe('index.html basic-mode skeleton', () => {
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
       '/app/craps/replay-adapter.js',
-      '/app/craps/coin-draw-viewer.js',
     ]) {
       assert.equal(
         map.imports?.[modulePath],
@@ -407,6 +406,11 @@ describe('index.html basic-mode skeleton', () => {
         `${modulePath} is pinned to the current verified replay generation`,
       );
     }
+    // The fill-draw loader imports the table by revision, so it re-pins with the table's result card.
+    assert.equal(
+      map.imports?.['/app/craps/coin-draw-viewer.js'],
+      '/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-82759b3c-result-card-20261012',
+    );
   });
 
   test('the on-demand reveal engine and its stylesheet cannot reuse the broken control generation', () => {
@@ -461,7 +465,7 @@ describe('index.html basic-mode skeleton', () => {
     }
     assert.match(html, /await Promise\.all\(\(MODULE_STYLES\.get\(src\) \|\| \[\]\)\.map\(loadStyle\)\)/,
       'component upgrade waits for its scoped stylesheet');
-    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="decimator-skin-20261006"/,
+    assert.match(html, /data-href="\/app\/styles\/craps-table\.css" data-rev="result-card-20261012"/,
       'the resolver redesign has its own deferred-style cache identity');
     assert.match(html, /link\.dataset\.rev[\s\S]*?encodeURIComponent\(revision\)/,
       'the deferred-style loader applies an explicitly declared cache identity');

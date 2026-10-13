@@ -19195,13 +19195,12 @@ body.layout-basic .deg-carousel__wild-ring {
   -webkit-mask: url('/app/assets/degenerette/prism-ring-mask.svg') center / 100% 100% no-repeat;
   mask: url('/app/assets/degenerette/prism-ring-mask.svg') center / 100% 100% no-repeat;
 }
-/* Broad, soft reflections keep the chrome finish readable without the
-   subpixel white bands that broke into speckles at carousel size. */
+/* Neon spectrum: a soft colored bevel without broad silver reflections or
+   the subpixel white bands that broke into speckles at carousel size. */
 body.layout-basic .deg-carousel__wild-ring::after {
   content: ''; position: absolute; inset: 0;
   background:
-    radial-gradient(circle closest-side, #11101c38 53.9%, #ece4ff40 56.1%, transparent 59.4% 63.2%, #100d212b 66.1%, #e8e0ff52 69%, transparent 72%),
-    linear-gradient(132deg, #fff0 18%, #f3edff66 34%, #fff0 49%, #110b292e 58%, #efe4ff29 73%, #fff0 88%);
+    radial-gradient(circle closest-side, transparent 54%, #c2ffef55 55.5%, transparent 58.5% 65.5%, #13ddff38 68%, transparent 71%);
 }
 body.layout-basic .deg-carousel.is-moving img,
 body.layout-basic .deg-carousel.is-moving .deg-carousel__wild-ring,

@@ -76,7 +76,7 @@ describe('source gates', () => {
     assert.equal(mineFlipTesting.MINE_FLIP_MAX_GAS_LIMIT, 16_000_000n);
     assert.match(mineFlipSource, /gasEstimateWithHeadroom\(estimate\)/);
     assert.match(mineFlipSource, /balance\s*>=\s*requiredWei/);
-    assert.match(mineFlipSource, /contract\.mineFlip\(\{ gasLimit \}\)/,
+    assert.match(mineFlipSource, /contract\.mineFlip\(\.\.\.mineFlipArgs\(\),\s*\{ gasLimit \}\)/,
       'every sent Mine FLIP transaction carries the shared gas floor');
   });
 

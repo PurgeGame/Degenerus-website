@@ -346,6 +346,7 @@ const DGN_NEUTRAL_COLOR = 6; // 'silver'
 const degeneretteChampionBadgePath = (q, icon) => dgnBadgePath(q, icon,
   q === 0 && icon === 0 ? 3 : q === 0 && icon === 6 ? 2 : DGN_NEUTRAL_COLOR);
 import { dgnHouseTraits, dgnScoreWilds } from '../../app/dgn-reels.js';
+import { DGN_WILD_SPECTRUM, wildSpectrumGradient } from '../../app/dgn-wild-ring.js';
 import { fixtureBetFeedItem } from '../../app/__tests__/helpers/degenerette-fixture-bet.js';
 
 // reveal-overlay.js subclasses HTMLElement at module scope, so it can only be
@@ -832,8 +833,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(el.querySelector('[data-bind="dgn-selected-symbol"]').src, /ethereum_green\.svg$/);
       const ring = el.querySelector('[data-bind="dgn-wild-ring"]');
       assert.equal(ring.style.opacity, '1');
-      for (const color of Object.values(DGN_COLOR_HEX)) assert.ok(ring.style.background.includes(color));
+      assert.equal(ring.style.background, wildSpectrumGradient(DGN_WILD_SPECTRUM));
       assert.match(el.querySelector('[data-bind="dgn-symbol-choice-6"]').querySelector('img').src, /ethereum_green\.svg$/);
+      el.querySelector('[data-bind="dgn-symbol-choice-7"]').dispatchEvent({ type: 'click' });
+      await settle(40);
+      assert.equal(ring.style.background, wildSpectrumGradient(DGN_WILD_SPECTRUM), 'changing champions keeps the fixed spectrum');
     } finally {
       el?.disconnectedCallback();
       pinTestSchema(prior);

@@ -305,7 +305,7 @@ test('a local bust locks the rack at zero while the shared table finishes', () =
     /#displayedViewerBankroll\(amount\)[\s\S]*?this\.#viewerBustLocked \? 0n/s,
     'every later tray paint reads zero after the local bust');
   assert.match(COMPONENT_SRC,
-    /#paintResolutionResult\(frame, index, \{ comeOut = false \} = \{\}\) \{[\s\S]*?frame\?\.viewerTerminal === 'bust'[\s\S]*?this\.#viewerBustLocked = true;[\s\S]*?this\.#displayedViewerBankroll\(rawBankroll\)/s,
+    /#lockViewerBust\(frame\) \{[\s\S]*?frame\?\.viewerTerminal === 'bust'[\s\S]*?this\.#viewerBustLocked = true;[\s\S]*?#paintResolutionResult\(frame, index, \{ comeOut = false \} = \{\}\) \{[\s\S]*?this\.#lockViewerBust\(frame\);\s*const bankroll = this\.#displayedViewerBankroll\(rawBankroll\)/s,
     'the terminal dice result locks the local rack before it reads the displayed bankroll');
   assert.match(COMPONENT_SRC,
     /if \(reducedMotion\) \{[\s\S]*?if \(!survived\) \{[\s\S]*?this\.#viewerBustLocked = true;[\s\S]*?onDone\?\.\(postFlipBankroll\)/s,
@@ -1439,8 +1439,8 @@ test('popup presents seven-chip battle play, player bands, settlement, and repla
     'the transient lock hit promotes point and seven-out copy from the sealed roll event');
   assert.match(COMPONENT_SRC, /dice\.forEach\(\(die, dieIndex\) => this\.#paintDiceBadge\(die, targets\[dieIndex\], colors\[dieIndex\]\)\)[\s\S]*?this\.#impactDicePair\(dicePair\)/,
     'both verified faces appear together on one shared pair-impact beat');
-  assert.match(COMPONENT_SRC, /this\.#impactDicePair\(dicePair\);\s*this\.#popDiceLockReadout\(frame, \{ comeOut \}\);\s*sfxCrapsDiceLand\(\{ total: frame\.total, netResultBps \}\);[\s\S]*?(?:setTimeout|#guardedTimeout)/s,
-    'the total and result tones follow the shared visual impact before settlement resumes');
+  assert.match(COMPONENT_SRC, /this\.#impactDicePair\(dicePair\);\s*this\.#popDiceLockReadout\(frame, \{ comeOut \}\);[\s\S]*?this\.#paintResolutionRace\(frame, index\);\s*sfxCrapsDiceLand\(\{ total: frame\.total, netResultBps \}\);[\s\S]*?(?:setTimeout|#guardedTimeout)/s,
+    'the total, graph and result tones follow the shared visual impact before settlement resumes');
   assert.match(COMPONENT_SRC, /dicePair\?\.classList\?\.remove\('is-impacting'\);\s*this\.#resetDiceLockReadout\(\);/,
     'each result clears the previous impact before replacing the badge faces');
   assert.doesNotMatch(COMPONENT_SRC, /#lockDiceBadge|const locked = \[false, false\]/,
@@ -2076,4 +2076,23 @@ test('a busted hottest shooter receives their prize in the receipt total', async
   assert.equal(result.totalWei, '100');
   assert.equal(crapsWinnerPayoffPresentation({runPayoutWei:'0',battleWonByViewer:true,
     battlePayoutWei:'900',hottestShooterPayoutWei:'100'}).totalWei, '1000');
+});
+
+test('the result card headlines a paid non-winner by placement and return, with hottest shooter as a small line below the winner row', () => {
+  assert.match(COMPONENT_SRC, /placementHeadline = settledReturnWei > 0n && finalRank != null/,
+    'a settled run that paid but did not win the battle leads with its placement and return');
+  assert.match(COMPONENT_SRC, /settledReturnWei = !ongoing && cashedOut && !highWon && !dualResults/,
+    'the live (ongoing) card never headlines a provisional placement');
+  assert.match(COMPONENT_SRC, /placementHeadline \? `#\$\{finalRank\} OF \$\{totalEntrants\} · \$\{formatCrapsWei\(settledReturnWei\)\} FLIP`/);
+  assert.doesNotMatch(COMPONENT_SRC, /\$\{hottestPanel\}/, 'hottest shooter is no longer a headline panel above the results');
+  const winnerAt = COMPONENT_SRC.indexOf('class="craps-race-result__winner"');
+  const hottestAt = COMPONENT_SRC.indexOf('${hottestRow}');
+  const moneyAt = COMPONENT_SRC.indexOf('<div class="craps-race-result__money">');
+  assert.ok(winnerAt > 0 && winnerAt < hottestAt && hottestAt < moneyAt,
+    'the hottest-shooter line sits below the overall-winner row and above the money row');
+  assert.match(CSS_SRC, /\.craps-race-result__hottest\s*\{[^}]*font:\s*800 0\.66rem/s, 'the hottest-shooter line is a compact secondary display');
+  assert.match(COMPONENT_SRC, /const hottestPrizeWei = hottestAward\s*\?/,
+    'the hottest-shooter award amount is computed for every viewer, not only its winner');
+  assert.match(COMPONENT_SRC, /ROLLS<\/span>\s*\$\{hottestPrizeWei > 0n \? `<b>/,
+    'the award amount sits right after the roll count');
 });

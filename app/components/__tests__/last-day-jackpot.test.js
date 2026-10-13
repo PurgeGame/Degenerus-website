@@ -118,6 +118,13 @@ function makeFakeElement(tag = 'div') {
         }
       }
     },
+    replaceChildren(...nodes) {
+      for (const child of this.children) child.parentElement = null;
+      this.children = [];
+      this._innerHTML = '';
+      this._textContent = '';
+      this.append(...nodes);
+    },
     removeChild(child) {
       const idx = this.children.indexOf(child);
       if (idx >= 0) this.children.splice(idx, 1);

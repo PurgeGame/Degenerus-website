@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-26000 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-26100 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -352,6 +352,8 @@ describe('app.css LOC budget', () => {
     // referral banner. Same surfaces; ~55 lines of headroom.
     // 25900 → 26000: the referral strip's own phone layout (flame + two lines + coin over a
     // full-width COPY LINK row), replacing inherited in-panel phone rules. Same surface.
-    assert.ok(cssLines.length <= 26_000, `total <=26000, got ${cssLines.length}`);
+    // 26000 → 26100 covers the existing Craps result tones, chip cursor, and
+    // mobile full-day range refinements, leaving 69 lines of repair headroom.
+    assert.ok(cssLines.length <= 26_100, `total <=26100, got ${cssLines.length}`);
   });
 });
