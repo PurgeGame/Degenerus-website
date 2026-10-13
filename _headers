@@ -208,4 +208,14 @@
   ! Cache-Control
   Cache-Control: no-store
   X-Robots-Tag: noindex, nofollow
+
+/theory
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/theory/*
+  ! Cache-Control
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
 # END temporary information-page pause
