@@ -1138,7 +1138,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(choice.hidden, false, 'the purchase quest offers the product toggle');
     assert.equal(adjust.hidden, false, 'ticket/lootbox purchase sizing stays available');
     assert.equal(ticket.getAttribute('aria-pressed'), 'true');
-    assert.match(el.querySelector('[data-bind="qst-action-requirement"]').textContent, /BUY .*TICKET/);
+    assert.equal(el.querySelector('[data-bind="qst-action-requirement"]').textContent, 'BUY 1 TICKET · 0.04 ETH');
 
     lootbox.dispatchEvent({ type: 'click' });
     assert.equal(lootbox.getAttribute('aria-pressed'), 'true');
@@ -1162,6 +1162,50 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     document.removeEventListener('quest:activate', listener);
     el.disconnectedCallback();
+  });
+
+  for (const [name, gameState] of [
+    ['current jackpot level', { level: 60, phase: 'JACKPOT', jackpotPhaseFlag: true }],
+    ['final locked day routing into the next price tier', {
+      level: 59, phase: 'JACKPOT', jackpotPhaseFlag: true,
+      rngLockedFlag: true, jackpotCounter: 2, jackpotDays: 3,
+    }],
+  ]) test(`daily ticket quest uses the live price at the ${name}`, async () => {
+    const events = [];
+    const listener = event => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async url => {
+      const u = String(url);
+      if (u.includes('/game/state')) return gameState;
+      const quests = [{ day: 1, slot: 0, questType: 1,
+        progress: '0', target: '120000000000', completed: false }];
+      if (u.includes('/game/quests/day/')) return { day: 1, quests };
+      return makeQuestsPayload({ quests, levelQuest: null });
+    };
+    storeMod.update('app.lastDay', { day: 1 });
+    const el = instantiate();
+    await settle(40);
+    try {
+      el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
+      const requirement = el.querySelector('[data-bind="qst-action-requirement"]');
+      const confirm = el.querySelector('[data-bind="qst-action-confirm"]');
+      assert.equal(requirement.textContent, 'BUY 1 TICKET · 0.12 ETH');
+      assert.equal(confirm.textContent, 'CONFIRM · BUY 1 TICKET · 0.12 ETH');
+
+      el.querySelector('[data-bind="qst-action-lootbox"]').dispatchEvent({ type: 'click' });
+      assert.equal(requirement.textContent, 'BUY LUCKBOX · 0.12 ETH');
+      el.querySelector('[data-bind="qst-action-ticket"]').dispatchEvent({ type: 'click' });
+      assert.equal(requirement.textContent, 'BUY 1 TICKET · 0.12 ETH');
+
+      el.querySelector('[data-bind="qst-action-adjust-up"]').dispatchEvent({ type: 'click' });
+      assert.equal(requirement.textContent, 'BUY 1.25 TICKETS · 0.15 ETH');
+      confirm.dispatchEvent({ type: 'click' });
+      assert.deepEqual(events, [{ questType: 1, target: '150000000000',
+        variant: 'primary', submit: true, configuredAmount: true, purchaseKind: 'ticket' }]);
+    } finally {
+      document.removeEventListener('quest:activate', listener);
+      el.disconnectedCallback();
+    }
   });
 
   test('a level purchase quest can choose either tickets or a lootbox', async () => {
