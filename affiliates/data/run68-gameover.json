@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "run": 68,
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "gameAddress": "0x7ad2863b062f849ade22318a63a6a79b893e6daf",
+  "exportedAt": "2026-10-14",
+  "display": {
+    "unit": "ETH at mainnet ticket prices",
+    "testnetEthMultiplier": 1000000,
+    "note": "The testnet build scales ether by 1e-6; display values multiply raw wei by 1,000,000 before dividing by 1e18."
+  },
+  "phase": {
+    "ticketLevel": 42,
+    "protocolLevel": 41,
+    "openingDay": 107,
+    "lastPurchaseDay": 137,
+    "gameOverDay": 138,
+    "lastExternalEthBlock": 47889233,
+    "lastExternalEthDay": 45
+  },
+  "chainReads": {
+    "opening": {
+      "blockNumber": 47926576,
+      "prizePoolTargetView": "2768932496907877",
+      "mintPrice": "80000000000"
+    },
+    "lastDay": {
+      "blockNumber": 47944576,
+      "prizePoolTargetView": "2768932496907877"
+    },
+    "terminalReceipt": {
+      "hash": "0x2829dd27cce695b8fd11a3057a354b85e080196e13fc31c51b51832fd27159ea",
+      "status": "success",
+      "blockNumber": 47944594,
+      "blockHash": "0x0f74197506b18e46418523879e9b4f05e6e298577cfc629c3d0bdae1cf14f04d"
+    }
+  },
+  "snapshots": [
+    {
+      "day": 107,
+      "blockNumber": 47926576,
+      "nextPrizePool": "692873672141002",
+      "futurePrizePool": "2454572428893882",
+      "currentPrizePool": "0",
+      "claimableWei": "13111956575409272",
+      "totalBalanceWei": "16910075892025342",
+      "yieldAccumulatorWei": "645342472625425"
+    },
+    {
+      "day": 137,
+      "blockNumber": 47944576,
+      "nextPrizePool": "1988048511978586",
+      "futurePrizePool": "732680642443755",
+      "currentPrizePool": "0",
+      "claimableWei": "13504152166292826",
+      "totalBalanceWei": "16958480772348258",
+      "yieldAccumulatorWei": "679863828354414"
+    }
+  ],
+  "gameOverEvent": {
+    "level": 41,
+    "available": "3454899754047673",
+    "claimablePool": "13504152166292826",
+    "blockNumber": 47944594,
+    "blockHash": "0x0f74197506b18e46418523879e9b4f05e6e298577cfc629c3d0bdae1cf14f04d",
+    "transactionHash": "0x2829dd27cce695b8fd11a3057a354b85e080196e13fc31c51b51832fd27159ea"
+  },
+  "terminalAwards": {
+    "count": 305,
+    "amountWei": "3454899754047558",
+    "ticketLevel": 42
+  },
+  "dailyAwards": {
+    "count": 1349,
+    "amountWei": "396995590883554"
+  },
+  "externalDeposits": {
+    "fromBlock": 47889234,
+    "toBlock": 47944594,
+    "transactionsChecked": 849,
+    "count": 0,
+    "amountWei": "0"
+  },
+  "closingPaperValue": {
+    "day": 137,
+    "ticketParFutureWei": "7572200000000000",
+    "flipEthWei": "18214831920000000",
+    "scope": "All players, from the dashboard ticket and FLIP face-value fields."
+  },
+  "pricing": {
+    "ticketPriceWei": "80000000000",
+    "halfWhalePassWei": "2250000000000",
+    "entriesPerTicket": 4
+  },
+  "stallLevels": [
+    {
+      "ticketLevel": 39,
+      "openedBlock": 47891791,
+      "openedDay": 50,
+      "targetWei": "2589000800782260",
+      "targetCrossedDay": 57,
+      "purchaseEndBlock": 47896593,
+      "purchaseEndDay": 58,
+      "closedBlock": 47897794,
+      "closedDay": 60,
+      "openingFuturePrizePoolWei": "6226555854055196",
+      "openingTickets": 6337,
+      "finalEntries": "51600",
+      "dripEntries": "26120",
+      "ethAwards": 1466,
+      "ethWei": "1615883190200112",
+      "otherLevelTicketEntries": "19200",
+      "halfPasses": 168
+    },
+    {
+      "ticketLevel": 40,
+      "openedBlock": 47897794,
+      "openedDay": 60,
+      "targetWei": "2713602662352453",
+      "targetCrossedDay": 72,
+      "purchaseEndBlock": 47905594,
+      "purchaseEndDay": 73,
+      "closedBlock": 47906795,
+      "closedDay": 75,
+      "openingFuturePrizePoolWei": "4799093854995843",
+      "openingTickets": 8763,
+      "finalEntries": "67240",
+      "dripEntries": "29968",
+      "ethAwards": 1523,
+      "ethWei": "1539859280071551",
+      "otherLevelTicketEntries": "16128",
+      "halfPasses": 148
+    },
+    {
+      "ticketLevel": 41,
+      "openedBlock": 47906795,
+      "openedDay": 75,
+      "targetWei": "2721680161548135",
+      "targetCrossedDay": 103,
+      "purchaseEndBlock": 47925378,
+      "purchaseEndDay": 105,
+      "closedBlock": 47926576,
+      "closedDay": 107,
+      "openingFuturePrizePoolWei": "3415455853200272",
+      "openingTickets": 7016,
+      "finalEntries": "65880",
+      "dripEntries": "37640",
+      "ethAwards": 1869,
+      "ethWei": "1217433815228612",
+      "otherLevelTicketEntries": "9984",
+      "halfPasses": 84
+    },
+    {
+      "ticketLevel": 42,
+      "openedBlock": 47926576,
+      "openedDay": 107,
+      "targetWei": "2768932496907877",
+      "targetCrossedDay": null,
+      "purchaseEndBlock": null,
+      "purchaseEndDay": null,
+      "closedBlock": 47944594,
+      "closedDay": 138,
+      "openingFuturePrizePoolWei": "2454572428893882",
+      "openingTickets": 5017,
+      "finalEntries": "46636",
+      "dripEntries": "26496",
+      "ethAwards": 1654,
+      "ethWei": "3851895344931112",
+      "otherLevelTicketEntries": "0",
+      "halfPasses": 0
+    }
+  ]
+}
