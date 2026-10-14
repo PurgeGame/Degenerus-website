@@ -629,8 +629,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     await settle(40);
 
     const slots = el.querySelectorAll('.qst-slot');
-    assert.equal(slots.length, 3,
-      'two current daily definitions plus the stable level placeholder render');
+    assert.equal(slots.length, 2,
+      'current daily definitions render without an unqualified level placeholder');
     assert.match(slots[0].textContent, /Buy a Ticket or Luckbox/);
     assert.match(slots[1].textContent, /Buy Luckbox/);
     assert.doesNotMatch(el.textContent, /Could not load quests/);
@@ -1600,124 +1600,72 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.match(PANEL_SRC, /data\?\.levelQuest/, 'optional level quest comes from /player payload');
   });
 
-  test('a temporarily null DB projection keeps a visible level-quest slot', async () => {
-    _fetchHandler = async () => makeQuestsPayload({ levelQuest: null });
+  for (const [name, levelQuest] of [
+    ['missing quest data', null],
+    ['fresh account', { eligible: false, progress: '0' }],
+    ['banked progress', { eligible: false, progress: '8000000000000000000000' }],
+    ['over-target progress', { eligible: false, progress: '40000000000000000000000' }],
+    ['unknown eligibility', { progress: '0' }],
+  ]) test(`level quest stays hidden with ${name}`, async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      // Quest streak/pass score must never override the contract's two gates.
+      questStreak: { baseStreak: 20, lastCompletedDay: 1 },
+      scoreBreakdown: { questStreakPoints: 20, totalBps: 90,
+        passBonus: { kind: 'deity', points: 80 } },
+      levelQuest: levelQuest == null ? null : {
+        level: 7, questType: 2, target: '20000000000000000000000',
+        completed: false, ...levelQuest,
+      },
+    });
     const el = instantiate();
     await settle(40);
-
-    const slots = el.querySelectorAll('.qst-slot');
-    assert.equal(slots.length, 3, 'daily, bonus, and level slots keep stable layout');
-    const levelSlot = slots[2];
-    assert.equal(levelSlot.querySelector('.qst-slot-role')?.textContent, 'LEVEL');
-    assert.equal(levelSlot.querySelector('.qst-slot-status')?.textContent, 'SYNC');
-    assert.match(levelSlot.textContent, /Awaiting quest data/);
-    assert.match(levelSlot.textContent, /800 FLIP/);
-    assert.equal(levelSlot.classList.contains('qst-slot--gated'), true);
-
+    assert.equal(el.querySelectorAll('.qst-slot').length, 2);
+    assert.equal(el.querySelector('.qst-slot--level'), null);
+    assert.equal(storeMod.get('ui.questObjectives').quests.some(q => q.role === 'LEVEL'), false,
+      'hidden level quests do not advertise control shortcuts or completion rewards');
+    assert.equal(el.querySelector('[data-bind="qst-complete-toast"]').hidden, true);
     el.disconnectedCallback();
   });
 
-  test('a deity + afKing holder can keep working a level quest before its completion gate clears', async () => {
-    const events = [];
-    const listener = (event) => events.push(event.detail);
-    document.addEventListener('quest:activate', listener);
+  test('level quest appears when eligible and closes its preview if eligibility is lost', async () => {
+    let eligible = false;
     _fetchHandler = async () => makeQuestsPayload({
-      afkingActive: true,
-      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
-      levelQuest: {
-        level: 7,
-        questType: 2,
-        progress: '8000000000000000000000',
-        target: '20000000000000000000000',
-        completed: false,
-        eligible: false,
-      },
-      scoreBreakdown: {
-        questStreakPoints: 0,
-        mintCountPoints: 0,
-        affiliatePoints: 0,
-        totalBps: 8000,
-        passBonus: { kind: 'deity', points: 80 },
-      },
+      levelQuest: { level: 7, questType: 2, progress: '8000000000000000000000',
+        target: '20000000000000000000000', completed: false, eligible },
     });
-
     const el = instantiate();
     await settle(40);
-
-    const levelSlot = el.querySelectorAll('.qst-slot')[2];
-    assert.equal(
-      levelSlot.querySelector('.qst-slot-status')?.textContent,
-      '8,000 FLIP / 20,000 FLIP',
-      'the card shows banked progress instead of replacing it with BUY 1 TICKET',
-    );
-    assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/);
-    assert.match(levelSlot.getAttribute('aria-label') || '', /four active-level ticket entries/);
-    const levelReward = levelSlot.querySelector('.qst-slot-reward');
-    assert.equal(levelReward?.getAttribute('title'), 'Reward: 800 FLIP +5 quest streak');
-    assert.doesNotMatch(levelReward?.getAttribute('title') || '', /pass|afKing|prerequisite/i,
-      'level-quest mouseover contains reward information only');
-    assert.equal(
-      levelSlot.getAttribute('title'),
-      'Coinflip: 8,000 FLIP / 20,000 FLIP. Reward: 800 FLIP +5 quest streak',
-      'the level-card mouseover stays focused on its action, progress, and reward',
-    );
-    assert.doesNotMatch(levelSlot.getAttribute('title') || '', /pass|afKing|prerequisite/i,
-      'the level-card native tooltip omits eligibility internals');
-    assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/,
-      'the complete card description remains available to assistive technology');
-    assert.equal(levelSlot.classList.contains('qst-slot--gated'), false,
-      'a completion prerequisite no longer greys out progress that the contract is banking');
-    assert.equal(levelSlot.classList.contains('qst-slot--actionable'), true);
-    assert.equal(levelSlot.getAttribute('role'), 'button');
-    levelSlot.dispatchEvent({ type: 'click' });
-    assert.deepEqual(events, [], 'the popup opens before configuring the coinflip form');
-    assert.equal(
-      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'ADD BET · 12,000 FLIP',
-    );
-    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
-    assert.deepEqual(events, [{
-      questType: 2,
-      target: '12000000000000000000000',
-      variant: 'level',
-      submit: true,
-      configuredAmount: true,
-      level: 7,
-    }]);
-
-    document.removeEventListener('quest:activate', listener);
+    assert.equal(el.querySelector('.qst-slot--level'), null);
+    eligible = true;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+    const level = el.querySelector('.qst-slot--level');
+    assert.ok(level);
+    assert.equal(level.classList.contains('qst-slot--gated'), false);
+    assert.equal(level.querySelector('.qst-slot-status').textContent, '8,000 FLIP / 20,000 FLIP');
+    assert.equal(storeMod.get('ui.questObjectives').quests.some(q => q.role === 'LEVEL'), true);
+    level.dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="qst-action-dialog"]').hidden, false);
+    eligible = false;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+    assert.equal(el.querySelector('.qst-slot--level'), null);
+    assert.equal(el.querySelector('[data-bind="qst-action-dialog"]').hidden, true);
+    assert.equal(storeMod.get('ui.questObjectives').quests.some(q => q.role === 'LEVEL'), false);
     el.disconnectedCallback();
   });
 
-  test('an over-target level quest is complete even while the auxiliary eligibility flag lags', async () => {
+  test('confirmed level completion remains visible if current eligibility changes', async () => {
     _fetchHandler = async () => makeQuestsPayload({
-      afkingActive: true,
-      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
-      levelQuest: {
-        level: 7,
-        questType: 2,
-        progress: '40000000000000000000000',
-        target: '20000000000000000000000',
-        completed: false,
-        eligible: false,
-      },
-      scoreBreakdown: {
-        questStreakPoints: 0,
-        mintCountPoints: 0,
-        affiliatePoints: 0,
-        totalBps: 8000,
-        passBonus: { kind: 'deity', points: 80 },
-      },
+      levelQuest: { level: 7, questType: 2, progress: '20000000000000000000000',
+        target: '20000000000000000000000', completed: true, eligible: false },
     });
-
     const el = instantiate();
     await settle(40);
-    const levelSlot = el.querySelectorAll('.qst-slot')[2];
-    assert.equal(levelSlot.querySelector('.qst-slot-status')?.textContent, 'COMPLETE');
-    assert.equal(levelSlot.querySelector('.qst-slot-note'), null);
-    assert.equal(levelSlot.classList.contains('qst-slot--completed'), true);
-    assert.equal(levelSlot.getAttribute('role'), null);
-    assert.doesNotMatch(levelSlot.textContent || '', /ACTIVITY NEEDED|FINALIZE/);
+    const level = el.querySelector('.qst-slot--level');
+    assert.equal(level.querySelector('.qst-slot-status').textContent, 'COMPLETE');
+    assert.equal(level.classList.contains('qst-slot--completed'), true);
+    assert.equal(level.getAttribute('role'), null);
     el.disconnectedCallback();
   });
 
@@ -2035,7 +1983,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
         progress: '1800000000000',
         target: '1600000000000',
         completed: bonusComplete,
-        eligible: bonusComplete,
+        eligible: true,
       },
     });
     const el = instantiate();
