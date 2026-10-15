@@ -95,10 +95,22 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
     box-sizing: border-box;
   }
+  /* Desktop spacing between the nav and the first panel is screen height a
+     one-screen page cannot spare. */
+  body.layout-basic > .container > .unified-nav { margin-bottom: 0.4rem; }
+  body.layout-basic > .container > main > :first-child { margin-top: 0; }
   body.layout-basic > .container > footer { display: none !important; }
+
+  /* Coinflip amount dialogs: while a typed field has focus the phone keyboard
+     covers the lower screen, so the card moves to the top, keeping its
+     actions above the keyboard. */
+  body.layout-basic .df-reverse-dialog:has(input:is([type="text"], [type="number"]):focus) {
+    place-items: start center;
+    overflow-y: auto;
+  }
 
   /* Fill pages. Every page but More is one screen: <main> is a column, the
      page's container and its panel grow to the full height, and each panel's
@@ -452,11 +464,13 @@
 /* ---- Flip --------------------------------------------------------------------- */
 @media (max-width: 768px) {
   /* Table geometry. The felt seam sits at 50% of the panel. The lower
-     fixtures (Tomorrow + funds) are ~6.75rem tall and pinned to the bottom,
-     so Today's bet is centred in the red band between the seam and them. */
+     fixtures (Tomorrow + funds) are ~6.75rem tall and pinned to the bottom.
+     Today's bet sits in the upper part of the red band, nearly felt-wide,
+     and the watermark takes the lane between it and Tomorrow. */
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip {
     --df-flip-oval-h: calc(4.35rem + (100dvh - 667px) * 0.11);
-    --df-flip-today-mid: calc(75% - 3.4rem);
+    --df-flip-today-mid: calc(75% - 3.9rem);
+    --df-flip-today-w: calc(100% - 2 * var(--df-table-content-inset, 0.76rem) - 1.4rem);
   }
 
   /* Green: the coin stage takes the rest of the felt above the BAF cap, so
@@ -472,21 +486,35 @@
     box-sizing: border-box;
   }
 
-  /* Red: Today's bet oval grows with the screen and centres in its band;
-     the auto-rebuy spot and quest bubble that dock to it follow. */
+  /* Red: Today's bet oval grows with the screen; the quest bubble docks to
+     its corner. Auto-rebuy moves beside Tomorrow's bet so Today can span the
+     felt. */
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-bet-table {
     top: var(--df-flip-today-mid);
+    width: var(--df-flip-today-w);
     translate: 0 -50%;
   }
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-bet-oval {
     height: var(--df-flip-oval-h);
   }
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-auto-rebuy-cta {
-    top: var(--df-flip-today-mid);
+    top: calc(100% - 5rem);
     translate: 0 -50%;
   }
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-table-quest {
     top: calc(var(--df-flip-today-mid) - (var(--df-flip-oval-h) + 0.56rem) / 2 + 0.1rem);
+    left: calc(50% - var(--df-flip-today-w) / 2 - 0.3rem);
+  }
+  /* The stacked hero hides the watermark (coinflip-chipset.css); the phone
+     table has a clear lane for it between Today and Tomorrow. */
+  body.layout-basic[data-mobile-page="flip"] .jackpot-hero .df-table-watermark {
+    display: flex;
+    top: calc((var(--df-flip-today-mid) + var(--df-flip-oval-h) / 2 + 100% - 6.75rem) / 2);
+  }
+}
+@media (max-width: 768px) and (max-height: 720px) {
+  body.layout-basic[data-mobile-page="flip"] .jackpot-hero .df-table-watermark {
+    transform: translate(-50%, -50%) scale(0.7);
   }
 }
 
