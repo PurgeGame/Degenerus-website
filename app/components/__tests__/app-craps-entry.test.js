@@ -932,7 +932,7 @@ test('an entered seat becomes amendable only after its board changes', () => {
 });
 
 test('the widget occupies the centre play-grid track and loads with the idle panels', () => {
-  assert.match(indexSource, /<section class="play-grid"[^>]*>[\s\S]*?<app-quest-panel>[\s\S]*?<app-craps-entry>[\s\S]*?<app-degenerette-panel>/s);
+  assert.match(indexSource, /<section class="play-grid"[^>]*>[\s\S]*?<app-quest-panel>[\s\S]*?<app-craps-entry[ >][\s\S]*?<app-degenerette-panel[ >]/s);
   assert.match(indexSource, /['"]\/app\/components\/app-craps-entry\.js['"]/);
   assert.match(cssSource, /grid-template-areas:\s*"quests craps degenerette"/);
   assert.match(cssSource, /> app-craps-entry\s*\{[\s\S]*?grid-area:\s*craps/s);

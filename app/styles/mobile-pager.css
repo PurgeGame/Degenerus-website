@@ -1,0 +1,261 @@
+/* Phone section pager + bottom dock (mobile-pager.js). Loaded after every
+   other blocking sheet: the tray-sheet rules below override app.css's
+   floating Pending tray position on phones. */
+
+.mpager-dock,
+.mpager-scrim { display: none; }
+
+@media (max-width: 768px) {
+  /* One page at a time. A container listing several pages stays visible on
+     each of them; its other children are hidden by their own tags. */
+  body.layout-basic[data-mobile-page="draw"] [data-mpage]:not([data-mpage~="draw"]),
+  body.layout-basic[data-mobile-page="buy"] [data-mpage]:not([data-mpage~="buy"]),
+  body.layout-basic[data-mobile-page="flip"] [data-mpage]:not([data-mpage~="flip"]),
+  body.layout-basic[data-mobile-page="quests"] [data-mpage]:not([data-mpage~="quests"]),
+  body.layout-basic[data-mobile-page="craps"] [data-mpage]:not([data-mpage~="craps"]),
+  body.layout-basic[data-mobile-page="degenerette"] [data-mpage]:not([data-mpage~="degenerette"]),
+  body.layout-basic[data-mobile-page="more"] [data-mpage]:not([data-mpage~="more"]) {
+    display: none !important;
+  }
+
+  /* Each page is at least one screen tall, so a short page still owns the
+     viewport and the dock never floats over the previous page's tail. */
+  body.layout-basic main {
+    min-height: calc(100svh - var(--mpager-dock-h, 4rem));
+    padding-bottom: calc(var(--mpager-dock-h, 4rem) + 0.75rem);
+    box-sizing: border-box;
+  }
+
+  /* The quest/craps/Degenerette frame and the ticket desk were one stacked
+     card. Shown alone, each closes its own border. */
+  body.layout-basic .play-grid {
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--site-frame);
+    border-radius: var(--site-radius);
+  }
+  body.layout-basic .player-desk {
+    border-top: 1px solid var(--site-frame);
+    border-radius: var(--site-radius);
+    margin-bottom: var(--site-gap);
+  }
+
+  /* ---- Dock -------------------------------------------------------------- */
+  body.layout-basic .mpager-scrim:not([hidden]) {
+    position: fixed;
+    inset: 0;
+    z-index: 880;
+    display: block;
+    background: rgba(5, 5, 12, 0.55);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.layout-basic .mpager-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 890;
+    display: grid;
+    gap: 0.35rem;
+    box-sizing: border-box;
+    padding: 0.4rem 0.4rem max(0.2rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--site-frame, #c29b5c52);
+    background: rgba(12, 11, 20, 0.96);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body.layout-basic .mpager-tabs {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+  body.layout-basic .mpager-tab {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 0.18rem;
+    min-width: 0;
+    min-height: 2.9rem;
+    padding: 0.3rem 0 0.25rem;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #8f8a9e;
+    font-family: inherit;
+    font-size: 0.56rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.layout-basic .mpager-tab svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  body.layout-basic .mpager-tab span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+  body.layout-basic .mpager-tab[aria-current="true"] {
+    background: rgba(245, 166, 35, 0.1);
+    color: #ffc04d;
+  }
+  body.layout-basic .mpager-tab[aria-current="true"]::before {
+    content: "";
+    position: absolute;
+    top: -0.4rem;
+    left: 28%;
+    right: 28%;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+    background: #ffc04d;
+    box-shadow: 0 0 8px rgba(255, 192, 77, 0.7);
+  }
+
+  /* ---- Condensed Pending strip ------------------------------------------- */
+  body.layout-basic .mpager-pending[hidden] { display: none; }
+  body.layout-basic .mpager-pending {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    height: 2.3rem;
+    padding: 0 0.6rem 0 0.35rem;
+    border: 1px solid rgba(255, 205, 100, 0.4);
+    border-radius: 11px;
+    background:
+      radial-gradient(circle at 50% -60%, rgba(245, 166, 35, 0.2), transparent 65%),
+      rgba(18, 17, 32, 0.98);
+    color: #e9e4f5;
+    font-family: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.layout-basic .mpager-pending[data-state="ready"] {
+    border-color: rgba(255, 205, 100, 0.85);
+    animation: mpager-ready-glow 1.8s ease-in-out infinite;
+  }
+  body.layout-basic .mpager-pending__count {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    min-width: 1.55rem;
+    height: 1.55rem;
+    padding: 0 0.3rem;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: #2a2638;
+    color: #f5efe0;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  body.layout-basic .mpager-pending__count[hidden] { display: none; }
+  body.layout-basic .mpager-pending[data-state="ready"] .mpager-pending__count {
+    background: #f5a623;
+    color: #1a1206;
+  }
+  body.layout-basic .mpager-pending__chips {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 0.3rem;
+    min-width: 0;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+  }
+  body.layout-basic .mpager-chip {
+    flex: 0 0 auto;
+    padding: 0.28rem 0.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: #a9a3ba;
+    font-family: inherit;
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  body.layout-basic .mpager-chip[data-state="ready"] {
+    border-color: rgba(255, 192, 77, 0.6);
+    background: rgba(245, 166, 35, 0.14);
+    color: #ffd27a;
+  }
+  body.layout-basic .mpager-chip[data-state="busy"] {
+    border-color: rgba(125, 160, 255, 0.5);
+    color: #b8c9ff;
+  }
+  body.layout-basic .mpager-pending__rng[hidden] { display: none; }
+  body.layout-basic .mpager-pending__rng {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.18rem;
+    color: #9fb4ff;
+    font-family: inherit;
+    font-size: 0.56rem;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0.06em;
+  }
+  body.layout-basic .mpager-pending__rng span { margin-right: 0.12rem; }
+  body.layout-basic .mpager-pending__rng i {
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    background: #2f3550;
+  }
+  body.layout-basic .mpager-pending__rng i.is-complete {
+    background: #4ade80;
+    box-shadow: 0 0 5px rgba(74, 222, 128, 0.7);
+  }
+  body.layout-basic .mpager-pending__chevron {
+    flex: 0 0 auto;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-left: auto;
+    border-top: 2px solid #c9b483;
+    border-left: 2px solid #c9b483;
+    transform: translateY(0.12rem) rotate(45deg);
+    transition: transform 0.18s ease;
+  }
+  body.layout-basic .mpager-pending[aria-expanded="true"] .mpager-pending__chevron {
+    transform: translateY(-0.12rem) rotate(225deg);
+  }
+
+  /* ---- Full tray as a sheet ---------------------------------------------- */
+  /* Collapsed, only the tray's toasts (errors, mining reward) still float,
+     now just above the dock. Open, the whole tray rises over the scrim. */
+  body.layout-basic app-reveal-tray {
+    bottom: calc(var(--mpager-dock-h, 4rem) + 0.4rem);
+    width: calc(100vw - 0.75rem);
+  }
+  body.layout-basic:not([data-mpager-tray="open"]) app-reveal-tray .rrt-tray {
+    display: none !important;
+  }
+  body.layout-basic[data-mpager-tray="open"] app-reveal-tray .rrt-actions {
+    max-height: min(52svh, 22rem);
+    overflow-y: auto;
+  }
+}
+
+@keyframes mpager-ready-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(245, 166, 35, 0); }
+  50% { box-shadow: 0 0 14px rgba(245, 166, 35, 0.45); }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  body.layout-basic .mpager-pending[data-state="ready"] { animation: none; }
+  body.layout-basic .mpager-pending__chevron { transition: none; }
+}

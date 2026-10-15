@@ -682,15 +682,15 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
   test('thermometer sits between the jackpot headline and daily instrument', () => {
     // Prefix match: the tag carries class="gr" + the static LCP shell now.
     const headline = html.indexOf('<gold-rush-headline');
-    const meter = html.indexOf('<app-pool-progress>');
+    const meter = html.indexOf('<app-pool-progress');
     const hero = html.indexOf('<section class="jackpot-hero"');
     assert.ok(headline >= 0 && headline < meter && meter < hero);
     assert.match(html, /src="\/app\/components\/app-pool-progress\.js(?:\?[^" ]*)?"/);
   });
 
   test('center draw has the requested Degenerus Daily Drawing machine marquee', () => {
-    const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
-    const drawEnd = html.indexOf('<app-decimator-panel>', drawStart);
+    const drawStart = html.indexOf('<div class="jackpot-hero__draw"');
+    const drawEnd = html.indexOf('<app-decimator-panel', drawStart);
     const draw = html.slice(drawStart, drawEnd);
     assert.match(draw,
       /<div class="jackpot-hero__machine">[\s\S]*?<last-day-jackpot>[\s\S]*?<replay-panel single-button>[\s\S]*?<\/div>[\s\S]*?<nav class="jackpot-day-history"/,

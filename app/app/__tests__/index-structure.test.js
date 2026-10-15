@@ -31,7 +31,7 @@ const revealQueue = readFileSync(resolvePath(__dirname, '../../components/reveal
 
 describe('index.html basic-mode skeleton', () => {
   test('body carries the layout-basic class', () => {
-    assert.match(html, /<body class="layout-basic">/);
+    assert.match(html, /<body class="layout-basic"[ >]/);
   });
 
   test('mobile wallet approvals have a fixed exact-request recovery surface', () => {
@@ -54,21 +54,21 @@ describe('index.html basic-mode skeleton', () => {
       'class="jackpot-hero__machine"',
       '<last-day-jackpot>',
       '<replay-panel',
-      '<app-decimator-panel>',
-      '<app-daily-flip>',
+      '<app-decimator-panel',
+      '<app-daily-flip',
       'class="play-grid"',
       '<app-quest-panel>',
       'class="side-bets-rail"',
       '<app-parimutuel-panel quest>',
       'data-referral-strip',
-      '<app-degenerette-panel>',
+      '<app-degenerette-panel',
       'class="player-desk"',
       '<app-records-rail>',
       '<app-tickets-inventory>',
       '<app-sdgnrs-burn-rail>',
       'class="more-ways section-disclosure"',
       '<app-pass-section>',
-      '<footer>',
+      '<footer',
     ];
     let prev = -1;
     for (const marker of order) {
@@ -84,8 +84,8 @@ describe('index.html basic-mode skeleton', () => {
   });
 
   test('day summary CTA has a landing slot beneath the middle draw', () => {
-    const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
-    const drawEnd = html.indexOf('<app-decimator-panel>', drawStart);
+    const drawStart = html.indexOf('<div class="jackpot-hero__draw"');
+    const drawEnd = html.indexOf('<app-decimator-panel', drawStart);
     assert.ok(drawStart >= 0 && drawEnd > drawStart, 'middle draw block present');
     const draw = html.slice(drawStart, drawEnd);
     assert.match(draw, /<last-day-jackpot>/);
@@ -163,7 +163,7 @@ describe('index.html basic-mode skeleton', () => {
 
   test('Growth betting and referrals share the quests column', () => {
     const start = html.indexOf('<div class="quest-hub"');
-    const tools = html.slice(start, html.indexOf('<app-craps-entry>'));
+    const tools = html.slice(start, html.indexOf('<app-craps-entry'));
     assert.match(tools, /<app-quest-panel>/);
     assert.match(tools, /data-referral-strip/);
     assert.equal((html.match(/data-referral-strip/g) || []).length, 1);
@@ -182,7 +182,7 @@ describe('index.html basic-mode skeleton', () => {
   test('LINK, WWXRP, and DGNRS have one lazy-loaded home below ticket inventory', () => {
     const bottom = html.indexOf('<section class="bottom-tools"');
     assert.ok(bottom > html.indexOf('<app-tickets-inventory>'));
-    assert.ok(bottom < html.indexOf('<footer>'));
+    assert.ok(bottom < html.indexOf('<footer'));
     const dock = html.slice(bottom, html.indexOf('</section>', bottom));
     for (const name of ['app-link-donation', 'app-wwxrp-burn', 'app-sdgnrs-burn-rail']) {
       assert.match(dock, new RegExp(`<${name}[ >]`));
@@ -243,8 +243,8 @@ describe('index.html basic-mode skeleton', () => {
     assert.ok(rowMatch, '<section class="play-grid"> present');
     const row = rowMatch[0];
     const quest = row.indexOf('<app-quest-panel>');
-    const degenerette = row.indexOf('<app-degenerette-panel>');
-    const craps = row.indexOf('<app-craps-entry>');
+    const degenerette = row.indexOf('<app-degenerette-panel');
+    const craps = row.indexOf('<app-craps-entry');
     assert.ok(quest >= 0 && quest < craps && craps < degenerette,
       'quests, Craps, and Degenerette are mounted in desktop track order');
     assert.ok(row.indexOf('<app-parimutuel-panel quest>') > quest && row.indexOf('<app-parimutuel-panel quest>') < craps,
@@ -285,7 +285,7 @@ describe('index.html basic-mode skeleton', () => {
     // component adopts these nodes through its data-el hooks. If the hooks or
     // the .gr class disappear, gold-rush-headline.js silently falls back to a
     // JS innerHTML render and the LCP win quietly reverts — this is the guard.
-    const shellMatch = html.match(/<gold-rush-headline class="gr">([\s\S]*?)<\/gold-rush-headline>/);
+    const shellMatch = html.match(/<gold-rush-headline class="gr"[^>]*>([\s\S]*?)<\/gold-rush-headline>/);
     assert.ok(shellMatch, '<gold-rush-headline class="gr"> static shell present');
     const shell = shellMatch[1];
     for (const hook of ['data-el="chip"', 'data-el="amount"', 'data-el="float"']) {
@@ -493,5 +493,37 @@ describe('index.html basic-mode skeleton', () => {
         `import-map target exists on disk: ${name} -> ${url}`,
       );
     }
+  });
+});
+
+describe('phone section pager', () => {
+  const pagerJs = readFileSync(resolvePath(__dirname, '../mobile-pager.js'), 'utf8');
+  const pagerCss = readFileSync(resolvePath(__dirname, '../../styles/mobile-pager.css'), 'utf8');
+  const pages = JSON.parse(pagerJs.match(/const PAGES = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+
+  test('dock tabs, page list, and CSS hide rules name the same pages', () => {
+    const tabs = [...html.matchAll(/data-mpager-tab="([a-z]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(tabs, pages, 'one dock tab per page, in swipe order');
+    for (const page of pages) {
+      assert.ok(pagerCss.includes(
+        `body.layout-basic[data-mobile-page="${page}"] [data-mpage]:not([data-mpage~="${page}"])`,
+      ), `mobile-pager.css hides everything off the ${page} page`);
+    }
+    assert.match(html, /<body class="layout-basic" data-mobile-page="draw">/,
+      'the first page is set before first paint');
+  });
+
+  test('every tagged section belongs to a real page and every page has content', () => {
+    const tokens = [...html.matchAll(/data-mpage="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/));
+    for (const token of tokens) assert.ok(pages.includes(token), `data-mpage token is a page: ${token}`);
+    for (const page of pages) assert.ok(tokens.includes(page), `page has tagged content: ${page}`);
+  });
+
+  test('the pager loads eagerly with its blocking stylesheet, after the shared sheets', () => {
+    assert.match(html, /<script type="module" src="\/app\/app\/mobile-pager\.js"><\/script>/);
+    const pagerLink = html.indexOf('href="/app/styles/mobile-pager.css"');
+    assert.ok(pagerLink > html.indexOf('href="/app/styles/app.min.css'),
+      'the tray-sheet override loads after app.css');
+    assert.doesNotMatch(html.slice(pagerLink - 80, pagerLink + 60), /data-deferred-css|data-href/);
   });
 });

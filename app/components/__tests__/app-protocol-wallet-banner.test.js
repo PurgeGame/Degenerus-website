@@ -9,7 +9,7 @@ const css = readFileSync(new URL('../../styles/protocol-wallet-banner.css', impo
 
 describe('disconnected protocol-wallet view', () => {
   test('the sDGNRS context banner sits between Prize Pool and Daily Jackpot', () => {
-    const poolAt = html.indexOf('<app-pool-progress>');
+    const poolAt = html.indexOf('<app-pool-progress');
     const bannerAt = html.indexOf('<app-protocol-wallet-banner');
     const jackpotAt = html.indexOf('class="jackpot-hero"');
     assert.ok(poolAt >= 0 && bannerAt > poolAt && jackpotAt > bannerAt);

@@ -48,7 +48,7 @@ describe('low-ETH funding helper', () => {
   });
 
   test('mounts in the wallet-context slot with a private external link', () => {
-    const poolAt = html.indexOf('<app-pool-progress>');
+    const poolAt = html.indexOf('<app-pool-progress');
     const protocolAt = html.indexOf('<app-protocol-wallet-banner');
     const fundingAt = html.indexOf('<app-eth-onramp');
     const jackpotAt = html.indexOf('class="jackpot-hero"');

@@ -281,7 +281,7 @@ test('a due BAF opens its dedicated staged fullscreen final', () => {
 test('the dedicated x4/x99 Decimator rail supersedes the old Side Bets card', () => {
   const source = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
   const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
-  assert.match(index, /<app-decimator-burn><\/app-decimator-burn>/,
+  assert.match(index, /<app-decimator-burn[^>]*><\/app-decimator-burn>/,
     'the full-width Decimator action remains mounted outside Side Bets');
   assert.match(source, /document\.querySelector\?\.\('app-decimator-burn'\)/,
     'the compact fallback detects the dedicated rail');

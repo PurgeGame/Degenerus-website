@@ -23,7 +23,7 @@ const component = await import(componentUrl);
 test('the Craps launcher mounts a dialog-only rules host', () => {
   assert.equal(customElements.get('app-craps-rules'), component.AppCrapsRules);
   assert.match(appIndexSource,
-    /<app-craps-entry><\/app-craps-entry>\s*<app-craps-rules hidden><\/app-craps-rules>/,
+    /<app-craps-entry[^>]*><\/app-craps-entry>\s*<app-craps-rules[^>]*\bhidden><\/app-craps-rules>/,
     'the rules dialog remains separate from gameplay state');
   assert.match(appIndexSource, /['"]\/app\/components\/app-craps-rules\.js['"]/,
     'the idle module loader upgrades the static host');

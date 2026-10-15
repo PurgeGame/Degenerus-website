@@ -104,6 +104,9 @@
   <link rel="stylesheet" href="/app/styles/player-extras.css?v=token-row-20260929">
   <link rel="stylesheet" href="/app/styles/site-composition.css?v=quest-hub-20260929">
   <link rel="stylesheet" href="/app/styles/quest-hub.css?v=referral-quest-space-20261009">
+  <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
+       and styles the static dock markup at first paint. -->
+  <link rel="stylesheet" href="/app/styles/mobile-pager.css">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -214,7 +217,7 @@
        scripted training values do not visibly fight live background refreshes. -->
   <script src="/app/app/tutorial-frame-freeze.js"></script>
 </head>
-<body class="layout-basic">
+<body class="layout-basic" data-mobile-page="draw">
   <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
        push the whole page down 43px after first paint (0.18 of mobile CLS).
        testnet-beta-banner.js still hides it when the configured chain is not
@@ -287,7 +290,7 @@
            instead of waiting for the module graph to execute. The component
            ADOPTS these nodes via the data-el hooks — keep both copies in sync
            (index-structure.test.js asserts the hooks are present here). -->
-      <gold-rush-headline class="gr">
+      <gold-rush-headline class="gr" data-mpage="draw">
         <div class="gr__inner">
           <div class="gr__masthead">
             <span class="gr__brand">
@@ -313,17 +316,17 @@
 
       <!-- The level-wide objective: live nextPrizePool against both the
            progression threshold and the growth-market O/U line. -->
-      <app-pool-progress></app-pool-progress>
+      <app-pool-progress data-mpage="draw"></app-pool-progress>
 
       <!-- Disconnected sessions deliberately inspect the live sDGNRS protocol
            account. Keep that context between the prize-pool instrument and the
            player-centric daily jackpot, with a direct path into wallet connect. -->
-      <app-protocol-wallet-banner hidden></app-protocol-wallet-banner>
+      <app-protocol-wallet-banner data-mpage="draw" hidden></app-protocol-wallet-banner>
 
       <!-- Connected wallets that are genuinely low on native ETH get one
            funding assist in this same wallet-context slot. Testnet offers only
            its free faucet; production opens the external fiat on-ramp. -->
-      <app-eth-onramp hidden></app-eth-onramp>
+      <app-eth-onramp data-mpage="draw" hidden></app-eth-onramp>
 
       <!-- Mine FLIP has no top-bar control. app-mine-flip.js is a headless
            probe that publishes ready crank work into the fixed pending-actions
@@ -346,8 +349,8 @@
            The DAY SUMMARY button is still owned by last-day-jackpot (it carries
            the gates) and replaces SPIN JACKPOT in that button's existing action
            row once BOTH the board and the flip have played out. -->
-      <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
-        <div class="jackpot-hero__draw">
+      <section class="jackpot-hero" data-mpage="draw buy flip" aria-label="Purchase, daily jackpot draw, and coinflip">
+        <div class="jackpot-hero__draw" data-mpage="draw">
           <!-- Keep the illustrated drawing instrument independent from the
                expandable day-history / summary region below it. The hero row
                can grow when another column opens a disclosure without
@@ -404,8 +407,8 @@
           </nav>
           <div class="jackpot-hero__summary-slot" data-bind="day-summary-slot" hidden></div>
         </div>
-        <app-decimator-panel></app-decimator-panel>
-        <app-daily-flip></app-daily-flip>
+        <app-decimator-panel data-mpage="buy"></app-decimator-panel>
+        <app-daily-flip data-mpage="flip"></app-daily-flip>
       </section>
 
       <!-- Headless level-transition watcher. A final Decimator temporarily
@@ -415,11 +418,11 @@
 
       <!-- The level before each x10 BAF gets a full-width event preview with
            the live pool, this player's position, and the five-player race. -->
-      <app-baf-eve></app-baf-eve>
+      <app-baf-eve data-mpage="draw"></app-baf-eve>
 
       <!-- Open only during the live Decimator burn window. This full-width
            event rail replaces the small duplicate entry card in Side Bets. -->
-      <app-decimator-burn></app-decimator-burn>
+      <app-decimator-burn data-mpage="draw"></app-decimator-burn>
 
       <!-- Claims banner and aggregate winnings strip are intentionally
            unmounted. Gameplay-specific resolution stays with its owning
@@ -429,8 +432,8 @@
       <!-- Second three-column instrument, aligned to the jackpot hero:
            quests left, scheduled Craps entries center, and Degenerette right.
            Degenerette owns fresh and historical resolved cards in-panel. -->
-      <section class="play-grid" aria-label="Quests, Craps, and Degenerette">
-        <div class="quest-hub" role="group" aria-label="Quests and rewards">
+      <section class="play-grid" data-mpage="quests craps degenerette" aria-label="Quests, Craps, and Degenerette">
+        <div class="quest-hub" data-mpage="quests" role="group" aria-label="Quests and rewards">
           <app-quest-panel></app-quest-panel>
           <div class="quest-hub__rewards">
             <div class="side-bets-rail" aria-label="Timed growth quest">
@@ -439,12 +442,12 @@
             <div class="referral-strip referral-strip--compact" data-referral-strip hidden></div>
           </div>
         </div>
-        <app-craps-entry></app-craps-entry>
-        <app-craps-rules hidden></app-craps-rules>
-        <app-degenerette-panel></app-degenerette-panel>
+        <app-craps-entry data-mpage="craps"></app-craps-entry>
+        <app-craps-rules data-mpage="craps" hidden></app-craps-rules>
+        <app-degenerette-panel data-mpage="degenerette"></app-degenerette-panel>
       </section>
 
-      <section class="player-desk" aria-label="Player tools, bounties, and tickets">
+      <section class="player-desk" data-mpage="more" aria-label="Player tools, bounties, and tickets">
         <!-- Bounties remain visible at a glance. -->
         <app-records-rail></app-records-rail>
 
@@ -457,7 +460,7 @@
         <app-tickets-inventory></app-tickets-inventory>
       </section>
 
-      <section class="bottom-tools" aria-label="Token tools and charity">
+      <section class="bottom-tools" data-mpage="more" aria-label="Token tools and charity">
         <app-link-donation></app-link-donation>
         <app-wwxrp-burn hidden></app-wwxrp-burn>
         <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
@@ -530,7 +533,53 @@
       </section>
     </main>
 
-    <footer>
+    <!-- Phone section dock (mobile-pager.js, mobile-pager.css). Under 769px
+         each data-mpage group is its own page: swipe sideways or tap a tab.
+         The strip above the tabs is the condensed Pending tray; tapping it
+         opens the full app-reveal-tray as a sheet above the dock. Hidden on
+         wider layouts, where every section stays on one scrolling page. -->
+    <div class="mpager-scrim" data-mpager-scrim hidden></div>
+    <nav class="mpager-dock" aria-label="App sections">
+      <button type="button" class="mpager-pending" data-mpager-pending hidden
+              aria-expanded="false" aria-label="Pending actions">
+        <span class="mpager-pending__count" data-mpager-pending-count>0</span>
+        <span class="mpager-pending__chips" data-mpager-pending-chips></span>
+        <span class="mpager-pending__rng" data-mpager-pending-rng hidden></span>
+        <span class="mpager-pending__chevron" aria-hidden="true"></span>
+      </button>
+      <div class="mpager-tabs">
+        <button type="button" class="mpager-tab" data-mpager-tab="draw" aria-current="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="7.5" r="3.5"/><circle cx="16.5" cy="7.5" r="3.5"/><circle cx="7.5" cy="16.5" r="3.5"/><circle cx="16.5" cy="16.5" r="3.5"/></svg>
+          <span>DRAW</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="buy">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4Z"/><path d="M15 7v10" stroke-dasharray="2 2"/></svg>
+          <span>BUY</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="flip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/></svg>
+          <span>FLIP</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="quests">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>
+          <span>QUESTS</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="craps">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="15.5" cy="15.5" r="1.1"/></svg>
+          <span>CRAPS</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="degenerette">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M12 3v6m0 6v6M3 12h6m6 0h6M12 9l3 3-3 3-3-3 3-3Z"/></svg>
+          <span>DEGEN</span>
+        </button>
+        <button type="button" class="mpager-tab" data-mpager-tab="more">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          <span>MORE</span>
+        </button>
+      </div>
+    </nav>
+
+    <footer data-mpage="more">
       <p>Degenerus Protocol — Base Sepolia testnet</p>
     </footer>
 
@@ -596,6 +645,7 @@
     }
   </script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
+  <script type="module" src="/app/app/mobile-pager.js"></script>
   <script type="module" src="/app/app/main.js?v=next-rng-only-20260930"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-sound-toggle.js"></script>

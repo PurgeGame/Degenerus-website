@@ -34,7 +34,7 @@ const DEMO_JS = readFileSync(new URL('../../event-rails-demo.js', import.meta.ur
 const FLIP = 10n ** 18n;
 const { CONTRACTS } = await import('../../app/chain-config.js');
 
-describe('<app-baf-eve>', () => {
+describe('<app-baf-eve', () => {
   test('appears for the whole x9 level, including RNG and jackpot phases', () => {
     assert.equal(bafEveTargetLevel({ level: 39, phase: 'PURCHASE', rngLockedFlag: false }), 40);
     assert.equal(bafEveTargetLevel({ level: 39, phase: 'JACKPOT', rngLockedFlag: true }), 40);
@@ -119,8 +119,8 @@ describe('<app-baf-eve>', () => {
 
   test('mounts ahead of Decimator in the full-width middle event rail', () => {
     const hero = INDEX.indexOf('<section class="jackpot-hero"');
-    const baf = INDEX.indexOf('<app-baf-eve>');
-    const decimator = INDEX.indexOf('<app-decimator-burn>');
+    const baf = INDEX.indexOf('<app-baf-eve');
+    const decimator = INDEX.indexOf('<app-decimator-burn');
     const play = INDEX.indexOf('<section class="play-grid"');
     assert.ok(hero >= 0 && hero < baf && baf < decimator && decimator < play);
     assert.match(INDEX, /href="\/app\/styles\/baf-eve\.css"/);

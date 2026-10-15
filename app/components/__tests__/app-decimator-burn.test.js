@@ -24,7 +24,7 @@ const DEMO_HTML = readFileSync(new URL('../../decimator-demo.html', import.meta.
 const DEMO_JS = readFileSync(new URL('../../decimator-demo.js', import.meta.url), 'utf8');
 const FLIP = 10n ** 18n;
 
-describe('<app-decimator-burn>', () => {
+describe('<app-decimator-burn', () => {
   test('parses exact FLIP amounts without floating-point loss', () => {
     assert.equal(parseDecimatorFlipInput('1,250.5'), 1_250n * FLIP + FLIP / 2n);
     assert.equal(parseDecimatorFlipInput('0.000000000000000001'), 1n);
@@ -69,7 +69,7 @@ describe('<app-decimator-burn>', () => {
 
   test('mounts full-width between the main jackpot and the secondary play grid', () => {
     const hero = INDEX.indexOf('<section class="jackpot-hero"');
-    const burn = INDEX.indexOf('<app-decimator-burn>');
+    const burn = INDEX.indexOf('<app-decimator-burn');
     const play = INDEX.indexOf('<section class="play-grid"');
     assert.ok(hero >= 0 && hero < burn && burn < play);
     // Second lazy tier (2026-08-14): loads via the IDLE_MODULES loader list,
