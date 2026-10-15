@@ -531,12 +531,13 @@
   body.layout-basic[data-mobile-page="flip"] .jackpot-hero .df-table-watermark {
     display: flex;
     top: calc((var(--df-flip-today-mid) + var(--df-flip-oval-h) / 2 + 100% - 6.75rem) / 2);
-    transform: translate(-50%, -50%) scale(1.3);
+    /* The nudge centres the lettering, not the flame tip, in the lane. */
+    transform: translate(-50%, calc(-50% + 0.22rem)) scale(1.3);
   }
 }
 @media (max-width: 768px) and (max-height: 720px) {
   body.layout-basic[data-mobile-page="flip"] .jackpot-hero .df-table-watermark {
-    transform: translate(-50%, -50%) scale(0.9);
+    transform: translate(-50%, calc(-50% + 0.22rem)) scale(0.9);
   }
 }
 
