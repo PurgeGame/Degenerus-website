@@ -485,6 +485,22 @@
     height: 100%;
     box-sizing: border-box;
   }
+  /* The coin, its rings and the DAILY AT 6 PM arc grow with the screen
+     (desktop caps the coin at 110px on phones). */
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip {
+    --df-flip-coin: clamp(120px, calc(135px + (100dvh - 667px) * 0.32), 205px);
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-coin {
+    width: var(--df-flip-coin);
+    height: var(--df-flip-coin);
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-coin-stage::after {
+    width: calc(var(--df-flip-coin) * 1.16);
+    outline-offset: calc(var(--df-flip-coin) * 0.075);
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-once-daily {
+    width: calc(var(--df-flip-coin) * 1.3);
+  }
 
   /* Red: Today's bet oval grows with the screen; the quest bubble docks to
      its corner. Auto-rebuy moves beside Tomorrow's bet so Today can span the
