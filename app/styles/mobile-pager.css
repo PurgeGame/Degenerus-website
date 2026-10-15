@@ -501,6 +501,11 @@
   body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-once-daily {
     width: calc(var(--df-flip-coin) * 1.3);
   }
+  /* The Reverse card rests on the bigger coin's rim, clear of the Last 25
+     rail; its tap animation still travels onto the coin face. */
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip :is(.df-reversi-card, .df-reversi-card--live-tap) {
+    left: calc(50% + var(--df-flip-coin) / 2 - 0.35rem);
+  }
 
   /* Red: Today's bet oval grows with the screen; the quest bubble docks to
      its corner. Auto-rebuy moves beside Tomorrow's bet so Today can span the
