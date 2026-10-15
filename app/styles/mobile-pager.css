@@ -1,6 +1,6 @@
 /* Phone section pager + bottom dock (mobile-pager.js). Loaded after every
-   other blocking sheet: the tray-sheet rules below override app.css's
-   floating Pending tray position on phones. */
+   other blocking sheet: the shell and tray rules below override app.css's
+   page scroll and floating Pending tray on phones. */
 
 .mpager-dock { display: none; }
 
@@ -17,13 +17,44 @@
     display: none !important;
   }
 
-  /* Each page is at least one screen tall, so a short page still owns the
-     viewport and the dock never floats over the previous page's tail. */
-  body.layout-basic main {
-    min-height: calc(100svh - var(--mpager-dock-h, 4rem));
-    padding-bottom: calc(var(--mpager-dock-h, 4rem) + 0.75rem);
+  /* App shell. The document never scrolls: the body is exactly the visible
+     viewport, the banner and nav sit on top, the dock at the bottom, and only
+     <main> scrolls, and only when the page is taller than the space between.
+     With no document scroll the browser toolbars never collapse, so the
+     dock and the safe-area inset stay put. */
+  html:has(> body.layout-basic) {
+    height: 100%;
+    overflow: hidden;
+  }
+  body.layout-basic {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body.layout-basic > .testnet-beta-banner { flex: none; }
+  body.layout-basic > .container {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    padding-bottom: 0;
     box-sizing: border-box;
   }
+  body.layout-basic > .container > * { flex: none; }
+  body.layout-basic > .container > main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.75rem;
+    box-sizing: border-box;
+  }
+  body.layout-basic > .container > footer { display: none !important; }
 
   /* The quest/craps/Degenerette frame and the ticket desk were one stacked
      card. Shown alone, each closes its own border. */
@@ -40,12 +71,10 @@
 
   /* ---- Dock -------------------------------------------------------------- */
   body.layout-basic .mpager-dock {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    position: relative;
     z-index: 890;
     display: block;
+    margin: 0 calc(-1 * var(--mpager-gutter, 8px));
     box-sizing: border-box;
     padding: 0.4rem 0.4rem max(0.2rem, env(safe-area-inset-bottom));
     border-top: 1px solid var(--site-frame, #c29b5c52);
