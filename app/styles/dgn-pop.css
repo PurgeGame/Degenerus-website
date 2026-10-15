@@ -1,4 +1,4 @@
-@import url("./bubble-reveal.css?v=compositor-pop-20261009");
+@import url("./bubble-reveal.css?v=touch-layers-20261015");
 @import url("./dgn-winnings.css?v=reward-spot-20261005");
 /* Shared Degenerette surface: a covered ticket becomes the result in place. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 1200px); max-width: 1200px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }

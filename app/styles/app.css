@@ -1,4 +1,4 @@
-@import url("./dgn-pop.css?v=wild-art-only-20261009");
+@import url("./dgn-pop.css?v=touch-layers-20261015");
 @import url("./panel-popups.css?v=history-labels-20261009");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
 @import url("./lightweight.css?v=idle-rendering-20261008");
@@ -7169,8 +7169,9 @@ body.layout-basic .rrt-mining-reward strong { min-width: 0; overflow-wrap: anywh
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 40%, rgba(38, 30, 8, 0.96), rgba(8, 8, 16, 0.985));
-  backdrop-filter: blur(6px);
+  /* The reveal fills the screen. An opaque backdrop lets Chrome cull the
+     games underneath instead of sampling and blurring them every frame. */
+  background: radial-gradient(ellipse at 50% 40%, #261e08, #080810);
   animation: rvl-fade-in 0.25s ease-out;
   cursor: pointer;
   /* This clickable surface fills the viewport. Suppress the native mobile

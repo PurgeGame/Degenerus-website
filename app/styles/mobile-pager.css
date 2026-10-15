@@ -681,3 +681,41 @@
     min-height: 5.75rem;
   }
 }
+
+/* ---- Degenerette reveal (phones) ----------------------------------------- */
+@media (max-width: 768px) {
+  /* One line of guidance, not two: the tap hint and the champion legend sit
+     side by side, and both leave once every card has its score. */
+  body.layout-basic .rvl-stage--pop .dgn-pop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.35rem;
+  }
+  body.layout-basic .rvl-stage--pop .dgn-pop > .dgn-pop__hint { grid-column: 2; }
+  body.layout-basic .rvl-stage--pop .dgn-pop > .dgn-pop__champion-guide { grid-column: 3; }
+  body.layout-basic .rvl-stage--pop .dgn-pop > .dgn-pop__viewport { grid-column: 1 / -1; align-self: stretch; }
+  body.layout-basic .rvl-stage--pop .dgn-pop > :is(.dgn-pop__hint, .dgn-pop__champion-guide) {
+    margin: 0.15rem 0 0.45rem;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+  body.layout-basic .rvl-stage--pop .dgn-pop:not(:has(.dgn-pop__flame:not([data-score]))) > :is(.dgn-pop__hint, .dgn-pop__champion-guide) {
+    display: none;
+  }
+  body.layout-basic .rvl-stage--pop .dgn-pop:not(:has(.dgn-pop__flame:not([data-score]))) {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* Two cards: whichever arrangement gives the bigger card. A tall phone
+     stacks them; a short one keeps them side by side. auto-fit wraps the
+     second card under the first once it no longer fits beside it. */
+  body.layout-basic .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="2"] {
+    --card: max(120px, min(420px, max((var(--fit-w) - var(--gap)) / 2,
+      min(var(--fit-w), (var(--fit-h) - 2 * var(--label) - var(--gap)) / 2))));
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, var(--card));
+    justify-content: center;
+  }
+}
