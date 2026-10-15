@@ -50,8 +50,6 @@ DEFS = f'''<linearGradient id="wr" x1="0" y1="24" x2="0" y2="61" gradientUnits="
 {FLAME}
 </g></g></g>
 </g>
-<filter id="dim1" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="linear" slope="0.82"/><feFuncG type="linear" slope="0.82"/><feFuncB type="linear" slope="0.86"/></feComponentTransfer></filter>
-<filter id="dim2" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="linear" slope="0.62"/><feFuncG type="linear" slope="0.62"/><feFuncB type="linear" slope="0.7"/></feComponentTransfer></filter>
 <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3"/></filter>
 '''
 
@@ -507,14 +505,13 @@ def build_level(level, min_total=0, attempt=0, grown_cap_rem=None, variant=0, wr
 
     # No baked shadows: a detached dark ellipse under the coins reads as the
     # pile hovering, and it smears across whatever rail sits under the art.
-    # Depth comes from the back-layer dim filters and the consumer's own
-    # drop-shadow.
+    # Every row shares the same table lighting. Depth comes from overlap,
+    # perspective, the coin's curved-wall shading, and the consumer's contact
+    # shadow, never from darkening a whole row just because it sits farther back.
     body = []
-    for li, items in placed:
-        filt = 'dim2' if li == 0 and layers > 2 else ('dim1' if li < layers - 1 else None)
+    for _li, items in placed:
         coins = '\n'.join(emit_stack(*it) for it in items)
-        grp = f'<g filter="url(#{filt})">' if filt else '<g>'
-        body.append(f'{grp}\n{coins}\n</g>')
+        body.append(f'<g>\n{coins}\n</g>')
 
     out = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
            f'viewBox="0 0 {W} {H}" width="{W}" height="{H}">\n'

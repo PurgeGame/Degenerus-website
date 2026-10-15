@@ -51,6 +51,10 @@ AUTO-PILES markers in `coinflip-chipset.css`.
 Keep rendered aspects at the native ratios or the ellipses distort. Brand
 tones live in the art: green `#30d100`, red `#ed0e11`.
 
+All rows in a pile share the same table lighting. Preserve depth through
+overlap, perspective, and each chip's face and curved-wall shading; do not
+dim or tint entire rear rows to suggest distance.
+
 Regenerating: the face art is the exact geometry of
 `/whitepaper/flame-logo-split.svg` inlined into each file (SVG-in-img cannot
 load external resources). Derive `coin-spun` by rotating the face group
