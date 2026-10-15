@@ -1608,10 +1608,10 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     ['unknown eligibility', { progress: '0' }],
   ]) test(`level quest stays hidden with ${name}`, async () => {
     _fetchHandler = async () => makeQuestsPayload({
-      // Quest streak/pass score must never override the contract's two gates.
+      // A quest streak never stands in for the contract's gates. (A pass
+      // keeps the card visible but locked; see the test below.)
       questStreak: { baseStreak: 20, lastCompletedDay: 1 },
-      scoreBreakdown: { questStreakPoints: 20, totalBps: 90,
-        passBonus: { kind: 'deity', points: 80 } },
+      scoreBreakdown: { questStreakPoints: 20, totalBps: 10 },
       levelQuest: levelQuest == null ? null : {
         level: 7, questType: 2, target: '20000000000000000000000',
         completed: false, ...levelQuest,
@@ -1623,6 +1623,30 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('.qst-slot--level'), null);
     assert.equal(storeMod.get('ui.questObjectives').quests.some(q => q.role === 'LEVEL'), false,
       'hidden level quests do not advertise control shortcuts or completion rewards');
+    assert.equal(el.querySelector('[data-bind="qst-complete-toast"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  for (const [name, levelQuest] of [
+    ['fresh account', { eligible: false, progress: '0' }],
+    ['over-target progress', { eligible: false, progress: '40000000000000000000000' }],
+  ]) test(`pass holder short of the activity gate sees a locked level quest (${name})`, async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      scoreBreakdown: { totalBps: 80, passBonus: { kind: 'deity', points: 80 } },
+      levelQuest: {
+        level: 7, questType: 2, target: '20000000000000000000000',
+        completed: false, ...levelQuest,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+    const card = el.querySelector('.qst-slot--level');
+    assert.ok(card, 'a pass clears the loyalty gate, so the card stays visible');
+    assert.equal(card.classList.contains('qst-slot--completed'), false,
+      'banked progress past target is not a completion until the activity gate clears');
+    assert.match(card.querySelector('.qst-slot-note')?.textContent || '', /1 ETH ticket this level/);
+    assert.equal(storeMod.get('ui.questObjectives').quests.some(q => q.role === 'LEVEL'), false,
+      'a locked level quest advertises no completion shortcut');
     assert.equal(el.querySelector('[data-bind="qst-complete-toast"]').hidden, true);
     el.disconnectedCallback();
   });

@@ -535,18 +535,13 @@
 
     <!-- Phone section dock (mobile-pager.js, mobile-pager.css). Under 769px
          each data-mpage group is its own page: swipe sideways or tap a tab.
-         The strip above the tabs is the condensed Pending tray; tapping it
-         opens the full app-reveal-tray as a sheet above the dock. Hidden on
-         wider layouts, where every section stays on one scrolling page. -->
+         The last slot is Pending, condensed: it names what is waiting and a
+         tap runs the next lit action (a reveal, a claim, the RNG request,
+         Mine FLIP). Long-press, or a tap with nothing runnable, opens the full
+         app-reveal-tray as a sheet. Hidden on wider layouts, where every
+         section stays on one scrolling page. -->
     <div class="mpager-scrim" data-mpager-scrim hidden></div>
     <nav class="mpager-dock" aria-label="App sections">
-      <button type="button" class="mpager-pending" data-mpager-pending hidden
-              aria-expanded="false" aria-label="Pending actions">
-        <span class="mpager-pending__count" data-mpager-pending-count>0</span>
-        <span class="mpager-pending__chips" data-mpager-pending-chips></span>
-        <span class="mpager-pending__rng" data-mpager-pending-rng hidden></span>
-        <span class="mpager-pending__chevron" aria-hidden="true"></span>
-      </button>
       <div class="mpager-tabs">
         <button type="button" class="mpager-tab" data-mpager-tab="draw" aria-current="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="7.5" r="3.5"/><circle cx="16.5" cy="7.5" r="3.5"/><circle cx="7.5" cy="16.5" r="3.5"/><circle cx="16.5" cy="16.5" r="3.5"/></svg>
@@ -575,6 +570,13 @@
         <button type="button" class="mpager-tab" data-mpager-tab="more">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
           <span>MORE</span>
+        </button>
+        <button type="button" class="mpager-pend" data-mpager-pending data-state="idle"
+                aria-expanded="false" aria-label="Pending actions: none">
+          <span class="mpager-pend__head" data-mpager-pending-head>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v6H3v-6Z"/></svg>
+          </span>
+          <span class="mpager-pend__foot" data-mpager-pending-foot>PENDING</span>
         </button>
       </div>
     </nav>
