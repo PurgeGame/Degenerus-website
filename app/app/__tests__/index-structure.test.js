@@ -519,6 +519,16 @@ describe('phone section pager', () => {
     for (const page of pages) assert.ok(tokens.includes(page), `page has tagged content: ${page}`);
   });
 
+  test('phones get an app shell, a Pending slot, and a portrait-only notice', () => {
+    assert.match(pagerCss, /body\.layout-basic > \.container > main \{[^}]*overflow-y: auto/,
+      'on phones <main> is the only scroller');
+    assert.match(html, /<button[^>]*class="mpager-pend"[^>]*data-mpager-pending[^>]*disabled/,
+      'the Pending slot starts inert until a tap would send a transaction or open a reveal');
+    assert.match(html, /class="mpager-rotate"/);
+    assert.match(pagerCss, /@media \(orientation: landscape\) and \(max-height: 500px\) and \(hover: none\) and \(pointer: coarse\)/,
+      'only touch phones held sideways see the turn-upright notice');
+  });
+
   test('the pager loads eagerly with its blocking stylesheet, after the shared sheets', () => {
     assert.match(html, /<script type="module" src="\/app\/app\/mobile-pager\.js"><\/script>/);
     const pagerLink = html.indexOf('href="/app/styles/mobile-pager.css"');

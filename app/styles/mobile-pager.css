@@ -2,7 +2,51 @@
    other blocking sheet: the shell and tray rules below override app.css's
    page scroll and floating Pending tray on phones. */
 
-.mpager-dock { display: none; }
+.mpager-dock,
+.mpager-rotate { display: none; }
+
+/* Phones held sideways get one notice instead of a second layout. Touch-only
+   screens this short are phones; tablets and desktops keep landscape. */
+@media (orientation: landscape) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
+  body.layout-basic .mpager-rotate {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.9rem;
+    padding: 1.5rem;
+    background: #0b0a12;
+    color: #f5efe0;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-align: center;
+  }
+  body.layout-basic .mpager-rotate svg {
+    width: 3.2rem;
+    height: 3.2rem;
+    fill: none;
+    stroke: #ffc04d;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    animation: mpager-rotate-hint 2.4s ease-in-out infinite;
+  }
+  body.layout-basic .mpager-rotate strong {
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+  }
+  body.layout-basic .mpager-rotate span {
+    color: #a9a3ba;
+    font-size: 0.8rem;
+  }
+}
+
+@keyframes mpager-rotate-hint {
+  0%, 30% { transform: rotate(-90deg); }
+  60%, 100% { transform: rotate(0deg); }
+}
 
 @media (max-width: 768px) {
   /* One page at a time. A container listing several pages stays visible on
@@ -55,6 +99,33 @@
     box-sizing: border-box;
   }
   body.layout-basic > .container > footer { display: none !important; }
+
+  /* Fill pages. Every page but More is one screen: <main> is a column, the
+     page's container and its panel grow to the full height, and each panel's
+     own section below spreads its content over that height. Growth never
+     shrinks content below its natural size, so a page that cannot fit still
+     scrolls instead of clipping. */
+  body.layout-basic:not([data-mobile-page="more"]) > .container > main {
+    display: flex;
+    flex-direction: column;
+  }
+  body.layout-basic:not([data-mobile-page="more"]) > .container > main > :is(.jackpot-hero, .play-grid) {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__draw,
+  body.layout-basic[data-mobile-page="buy"] app-decimator-panel,
+  body.layout-basic[data-mobile-page="flip"] app-daily-flip,
+  body.layout-basic[data-mobile-page="quests"] .quest-hub,
+  body.layout-basic[data-mobile-page="craps"] app-craps-entry,
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
 
   /* The quest/craps/Degenerette frame and the ticket desk were one stacked
      card. Shown alone, each closes its own border. */
@@ -270,7 +341,315 @@
   50% { opacity: 0.45; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .mpager-rotate svg { animation: none; }
+}
+
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   body.layout-basic .mpager-pend[data-state="ready"],
   body.layout-basic .mpager-pend[data-state="busy"] .mpager-pend__foot { animation: none; }
+}
+
+/* ==== Per-page fill (phones) =================================================
+   Each page's panel spreads its own content over the height the shared fill
+   rules above give it. Every rule is scoped to one body[data-mobile-page]. */
+
+/* ---- Draw --------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Everything above the cabinet keeps its natural height. The headline is
+     overflow:hidden, so it used to flex-shrink to nothing on short phones. */
+  body.layout-basic[data-mobile-page="draw"] > .container > main > :not(.jackpot-hero) {
+    flex: none;
+  }
+  body.layout-basic[data-mobile-page="draw"] > .container > main {
+    padding-bottom: 0.4rem;
+  }
+
+  /* The cabinet takes whatever height is left. Basis 0 + grow makes the hero,
+     its draw column and the machine exactly the space between the pool strip
+     and the dock; the floor keeps a tiny phone scrolling instead of crushing
+     the board. */
+  body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero {
+    --draw-board-floor: 7.25rem;
+    --draw-chrome: 9.6rem;
+    flex: 1 1 0;
+    min-height: calc(var(--draw-chrome) + var(--draw-board-floor) + 0.62rem);
+  }
+  body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero > .jackpot-hero__draw {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__draw > .jackpot-hero__machine {
+    /* Size container: the board is sized from the cabinet's own height (cqh)
+       as well as its width, so it shrinks on short phones and the overlay,
+       foil bank and key (all sized off the same box) stay aligned. */
+    container-type: size;
+    flex: 1 1 0;
+    min-height: 0;
+
+    /* Space left once the board is its natural size: spread above and below
+       it so a tall phone gets a deliberate cabinet, not an empty strip. */
+    --jp-board-size: max(
+      var(--draw-board-floor, 7.25rem),
+      min(68cqi, 28rem, calc(100cqh - var(--draw-chrome, 9.6rem)))
+    );
+    --draw-spare: max(0px, calc(100cqh - var(--draw-chrome, 9.6rem) - var(--jp-board-size)));
+    --jp-stage-top: calc(3.18rem + var(--draw-spare) * 0.38);
+    /* The key never shrinks with a small board; its label needs the room. */
+    --jp-action-width: min(max(var(--jp-board-size), 13.5rem), 18rem, 100cqi);
+  }
+  /* Title keeps the board's top edge on the foil bank; the remaining spare
+     goes between the board and the key. */
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine > .jackpot-hero__draw-title {
+    margin-bottom: calc(-0.02rem + var(--draw-spare) * 0.38);
+  }
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine replay-panel .replay-ticket {
+    margin-bottom: calc(0.24rem + var(--draw-spare) * 0.62);
+  }
+}
+
+/* ---- Buy ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Builders take all the height the panel has left; each builder card
+     stretches to its half and centres its art. */
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders {
+    flex: 1 1 auto;
+    grid-template-rows: minmax(min-content, 1fr) minmax(min-content, 1fr);
+    align-items: stretch;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders > .dec-purchase-builder {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    min-height: 0;
+    height: auto;
+  }
+  /* Footer sat on an auto margin; the builders now absorb that space. */
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-footer {
+    margin-top: 0;
+  }
+}
+/* Short phones: shrink the pass mark and tighten the card padding so the
+   whole page fits when it can. */
+@media (max-width: 768px) and (max-height: 700px) {
+  body.layout-basic[data-mobile-page="buy"] > .container > main {
+    padding-bottom: 0.25rem;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel {
+    gap: 0.15rem;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-footer {
+    grid-template-columns: min(34%, 4rem) minmax(0, 1fr);
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders {
+    gap: 0.15rem;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders > .dec-input-group--tickets {
+    padding-block: 0;
+  }
+}
+
+/* ---- Flip --------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Table geometry. The felt seam sits at 50% of the panel. The lower
+     fixtures (Tomorrow + funds) are ~6.75rem tall and pinned to the bottom,
+     so Today's bet is centred in the red band between the seam and them. */
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip {
+    --df-flip-oval-h: calc(4.35rem + (100dvh - 667px) * 0.11);
+    --df-flip-today-mid: calc(75% - 3.4rem);
+  }
+
+  /* Green: the coin stage takes the rest of the felt above the BAF cap, so
+     the coin sits centred in the green instead of hugging the title bar. */
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-coin-stage {
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    height: calc(50% - 4.6rem);
+    min-height: clamp(130px, 16vw, 170px);
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-coin-zone {
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Red: Today's bet oval grows with the screen and centres in its band;
+     the auto-rebuy spot and quest bubble that dock to it follow. */
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-bet-table {
+    top: var(--df-flip-today-mid);
+    translate: 0 -50%;
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-bet-oval {
+    height: var(--df-flip-oval-h);
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-auto-rebuy-cta {
+    top: var(--df-flip-today-mid);
+    translate: 0 -50%;
+  }
+  body.layout-basic[data-mobile-page="flip"] .app-daily-flip .df-table-quest {
+    top: calc(var(--df-flip-today-mid) - (var(--df-flip-oval-h) + 0.56rem) / 2 + 0.1rem);
+  }
+}
+
+/* ---- Quests ------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Quest board: the quest cards and the Timed card share the spare height;
+     the referral strip keeps its own size. */
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub > app-quest-panel {
+    display: flex;
+    flex: 3 1 auto;
+    flex-direction: column;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .app-quest-panel {
+    flex: 1 1 auto;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slots {
+    flex: 1 1 auto;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slot {
+    align-content: space-evenly;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub__rewards {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .side-bets-rail {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .side-bets-rail:not(:has(.has-live-book, .pari-error:not([hidden]))) {
+    display: none;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .side-bets-rail > app-parimutuel-panel,
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .app-parimutuel.has-live-book,
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .app-parimutuel.has-live-book > .pari-bet-container,
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .app-parimutuel.has-live-book .pari-books {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .pari-bet-container[hidden],
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .pari-books[hidden] {
+    display: none;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .pari-books > .pari-book:not([hidden]) {
+    flex: 1 1 auto;
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .pari-books > .pari-book {
+    align-content: space-evenly;
+  }
+}
+
+/* ---- Craps -------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* The schedule takes whatever height the header and felt leave, and its
+     rows share it. The felt stays at its natural size at the bottom. */
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__lobby {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing {
+    flex: 1 0 auto;
+  }
+  /* Compact natural row (~30px); extra height is split across the rows. */
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing tbody tr:not(.craps-entry__results-head) {
+    height: 1.9rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__action > button,
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__entered {
+    height: 1.7rem;
+    min-height: 1.7rem;
+  }
+}
+/* Short phones: tighten the header, column heads and rows so the schedule
+   and the felt both fit without scrolling. */
+@media (max-width: 768px) and (max-height: 720px) {
+  body.layout-basic[data-mobile-page="craps"] > .container > main {
+    padding-bottom: 0.3rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__head {
+    grid-template-rows: minmax(0, 1fr) 1.3rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__flip-mark {
+    width: 1rem;
+    height: 1rem;
+    flex-basis: 1rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing thead th {
+    height: 0.9rem;
+    padding-block: 0.02rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing tbody tr:not(.craps-entry__results-head) {
+    height: 1.65rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing tbody :is(th, td) {
+    padding-block: 0.04rem;
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__action > button,
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__entered {
+    height: 1.45rem;
+    min-height: 1.45rem;
+  }
+}
+
+/* ---- Degenerette -------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Panel chain: frame -> setup -> symbol block -> brand -> carousel stage
+     all grow; the wager deck keeps its natural size. */
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel > .app-degenerette-panel {
+    flex: 1 0 auto;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-setup {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-block--symbol {
+    flex: 1 0 auto;
+    align-self: stretch;
+    height: auto;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-wager-column {
+    flex: 0 0 auto;
+  }
+}
+
+/* Short phones: tighten spacing and let the carousel shrink before scrolling. */
+@media (max-width: 768px) and (max-height: 720px) {
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-quickplay-controls {
+    min-height: 6rem;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-setup,
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-quickplay-brand {
+    gap: 5px;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-currency-picker {
+    margin-bottom: 4px;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-amount-presets {
+    margin-top: 0.3rem;
+  }
+  body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-block--wager .deg-place-cta {
+    margin-top: 0.25rem;
+    min-height: 2.4rem;
+    padding-block: 0.3rem;
+  }
+}
+/* Short phones: quest cards may drop below their 5.25rem floor so the whole
+   board fits without scrolling. */
+@media (max-width: 768px) and (max-height: 720px) {
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slots {
+    grid-auto-rows: minmax(4.5rem, 1fr);
+  }
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slot {
+    min-height: 4.5rem;
+  }
+  /* A card carrying a note (the level quest's unlock line) needs its row. */
+  body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slot:has(.qst-slot-note) {
+    min-height: 5.75rem;
+  }
 }
