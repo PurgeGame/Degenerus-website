@@ -535,12 +535,10 @@
 
     <!-- Phone section dock (mobile-pager.js, mobile-pager.css). Under 769px
          each data-mpage group is its own page: swipe sideways or tap a tab.
-         The last slot is Pending, condensed: it names what is waiting and a
-         tap runs the next lit action (a reveal, a claim, the RNG request,
-         Mine FLIP). Long-press, or a tap with nothing runnable, opens the full
-         app-reveal-tray as a sheet. Hidden on wider layouts, where every
-         section stays on one scrolling page. -->
-    <div class="mpager-scrim" data-mpager-scrim hidden></div>
+         The last slot is Pending, condensed: it names what is waiting, and
+         it is a button only while a tap sends a transaction or opens a reveal
+         (a claim, the RNG request, Mine FLIP). Hidden on wider layouts, where
+         every section stays on one scrolling page. -->
     <nav class="mpager-dock" aria-label="App sections">
       <div class="mpager-tabs">
         <button type="button" class="mpager-tab" data-mpager-tab="draw" aria-current="true">
@@ -572,7 +570,7 @@
           <span>MORE</span>
         </button>
         <button type="button" class="mpager-pend" data-mpager-pending data-state="idle"
-                aria-expanded="false" aria-label="Pending actions: none">
+                disabled aria-label="Pending: none">
           <span class="mpager-pend__head" data-mpager-pending-head>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v6H3v-6Z"/></svg>
           </span>

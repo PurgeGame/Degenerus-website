@@ -2,8 +2,7 @@
    other blocking sheet: the tray-sheet rules below override app.css's
    floating Pending tray position on phones. */
 
-.mpager-dock,
-.mpager-scrim { display: none; }
+.mpager-dock { display: none; }
 
 @media (max-width: 768px) {
   /* One page at a time. A container listing several pages stays visible on
@@ -40,14 +39,6 @@
   }
 
   /* ---- Dock -------------------------------------------------------------- */
-  body.layout-basic .mpager-scrim:not([hidden]) {
-    position: fixed;
-    inset: 0;
-    z-index: 880;
-    display: block;
-    background: rgba(5, 5, 12, 0.55);
-    -webkit-tap-highlight-color: transparent;
-  }
   body.layout-basic .mpager-dock {
     position: fixed;
     right: 0;
@@ -162,8 +153,9 @@
     border-color: rgba(125, 160, 255, 0.55);
     color: #b8c9ff;
   }
-  body.layout-basic .mpager-pend[aria-expanded="true"] {
-    border-color: #ffc04d;
+  body.layout-basic .mpager-pend:disabled {
+    cursor: default;
+    opacity: 1;
   }
   body.layout-basic .mpager-pend__head {
     display: flex;
@@ -227,19 +219,15 @@
     box-shadow: 0 0 5px rgba(74, 222, 128, 0.7);
   }
 
-  /* ---- Full tray as a sheet ---------------------------------------------- */
-  /* Collapsed, only the tray's toasts (errors, mining reward) still float,
-     now just above the dock. Open, the whole tray rises over the scrim. */
+  /* ---- Tray ----------------------------------------------------------------- */
+  /* The slot replaces the floating Pending tray on phones. Only the tray's
+     toasts (errors, mining reward) still float, just above the dock. */
   body.layout-basic app-reveal-tray {
     bottom: calc(var(--mpager-dock-h, 4rem) + 0.4rem);
     width: calc(100vw - 0.75rem);
   }
-  body.layout-basic:not([data-mpager-tray="open"]) app-reveal-tray .rrt-tray {
+  body.layout-basic app-reveal-tray .rrt-tray {
     display: none !important;
-  }
-  body.layout-basic[data-mpager-tray="open"] app-reveal-tray .rrt-actions {
-    max-height: min(52svh, 22rem);
-    overflow-y: auto;
   }
 }
 
