@@ -41,7 +41,7 @@
 .dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 3%; bottom: auto; }
 /* A shared radial SVG keeps the symbol's center transparent, replacing the
    rounded CSS shadows on these scaled covers. */
-.dgn-pop__champion { position: absolute; z-index: 5; inset: 0; background: url('/app/assets/degenerette/champion-ring-v1.svg') center / contain no-repeat; pointer-events: none; }
+.dgn-pop__champion { position: absolute; z-index: 5; inset: 0; background: url('/app/assets/degenerette/champion-ring-v1.svg?v=1') center / contain no-repeat; pointer-events: none; }
 .dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 22px; height: 22px; margin: 0 1px; }
 /* Match the jackpot's white seal: a fixed, unrotated hit area with its
    diamond drawn inside, so the flame stays upright at the four-way seam. */
