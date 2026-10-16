@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_LOANS_SCHEMA_HASH } from '../../chain/schema.js';
 import { materializeReplay } from '../../chain/craps-worker.js';
 import { crapsFixture } from './helpers/craps-fixture.js';
 import { queuedBoxRolls } from '../box-queue-rolls.js';
@@ -10,6 +10,7 @@ import { boxReference } from '../../chain/box-queue.js';
 import { deriveHumanLootboxSpinBetIds } from '../lootbox-legs.js';
 
 function current(fn) { const prior=useSchema(CURRENT_SCHEMA_HASH);try{return fn();}finally{useSchema(prior);} }
+function beforeLoans(fn) { const prior=useSchema(BEFORE_LOANS_SCHEMA_HASH);try{return fn();}finally{useSchema(prior);} }
 
 test('run 66 browser replay matches the independent database wallet-ID fixture byte for byte',async()=>{
   const {manifest,players,hashes}=JSON.parse(readFileSync(new URL('../../chain/fixtures/craps-wallet-ids.json',import.meta.url)));
@@ -28,7 +29,7 @@ test('run 66 browser replay matches the independent database wallet-ID fixture b
   await assert.rejects(()=>materializeReplay(input),/would publish/);
 });
 
-test('run 66 queued box rolls retain distinct purchase positions and frozen size/boost/EV',()=>current(()=>{
+test('run 66 queued box rolls retain distinct purchase positions and frozen size/boost/EV',()=>beforeLoans(()=>{
   const packedBox=37n|(12n<<32n)|(15000n<<56n)|(2500n<<71n)|(10000n<<85n)|(2n<<100n)|(1n<<107n)|(1n<<121n)|(40n<<128n);
   const args={packedBox,rngWord:123456789n,lootboxIndex:boxReference(0,7)};
   const entry=queuedBoxRolls(args,level=>{assert.equal(level,12);return 10000000000n;},()=>12000n);

@@ -6,15 +6,15 @@ import * as liquidation from '../account-liquidation.js';
 import * as store from '../store.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { CHAIN } from '../chain-config.js';
-import { abi } from '../../chain/generated/game.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_LIQUIDATION_STETH_SCHEMA_HASH } from '../../chain/schema.js';
+import { abi } from '../../chain/schemas/eb3907da/game.js';
+import { useSchema, loadSchema, BEFORE_LOANS_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_LIQUIDATION_STETH_SCHEMA_HASH } from '../../chain/schema.js';
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xcd34000000000000000000000000000000000000';
 const PRICE = 123456789123456789n;
 let calls, state;
 beforeEach(() => {
-  useSchema(CURRENT_SCHEMA_HASH);
+  useSchema(BEFORE_LOANS_SCHEMA_HASH);
   store.__resetForTest();
   store.update('connected.address', PLAYER); store.update('ui.mode', 'self');
   setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
