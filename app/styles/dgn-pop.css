@@ -263,3 +263,109 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
   min-height: 28px; padding: .25rem .75rem; font-size: .65rem; white-space: nowrap;
   left: 50%; transform: translateX(-50%); margin: 0;
 }
+
+/* Phone reveals use two repeatable ticket sizes and at most four cards per
+   page. The whole receipt has an intrinsic height; no full-screen stretch or
+   inner scrolling separates the tickets from their payout and next action. */
+.dgn-pop__pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dgn-pop__pager button {
+  min-width: 64px; min-height: 44px; padding: 0 8px;
+  border: 1px solid #82948b66; border-radius: 8px;
+  background: #1a2825; color: #ecdfb9; font: 750 .75rem/1 system-ui;
+  cursor: pointer; touch-action: manipulation;
+}
+.dgn-pop__pager button:disabled { opacity: .35; cursor: default; }
+.dgn-pop__pager button:focus-visible { outline: 2px solid #eacc81; outline-offset: 2px; }
+.dgn-pop__page-label { color: #bbc8bf; font: 750 .65rem/1.3 system-ui; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 768px), (max-width: 1000px) and (max-height: 500px) {
+  .rvl-backdrop:has(.rvl-stage--pop) {
+    padding-top: max(60px, calc(env(safe-area-inset-top) + 52px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop > .rvl-title { display: none; }
+  .rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
+    width: min(calc(100vw - 1rem), 368px); height: auto;
+    max-height: calc(100dvh - 68px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: .4rem .5rem 3.75rem; gap: .35rem; overflow: visible;
+  }
+  .rvl-stage.rvl-stage--pop .rvl-spin-zone,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-stage,
+  .rvl-stage--pop .dgn-pop-mount { flex: none; gap: .35rem; }
+  .rvl-stage--pop .rvl-spin-head { font-size: .78rem; }
+  .rvl-stage--pop .dgn-pop {
+    display: grid; flex: none; grid-template-columns: auto auto;
+    align-items: center; justify-content: stretch; gap: 6px 8px;
+  }
+  .rvl-stage--pop .dgn-pop__hint,
+  .rvl-stage--pop .dgn-pop__champion-guide { margin: 0; font-size: .6rem; white-space: nowrap; }
+  .rvl-stage--pop .dgn-pop__champion-guide { gap: 2px; }
+  .rvl-stage--pop .dgn-pop__champion-guide .dgn-pop__champion { width: 18px; height: 18px; }
+  .rvl-stage--pop .dgn-pop__pager { grid-column: 1 / -1; width: 100%; }
+  .rvl-stage--pop .dgn-pop__viewport {
+    grid-column: 1 / -1; flex: none; container-type: normal;
+    overflow: visible; scrollbar-gutter: auto; min-width: 0;
+  }
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --gap: 8px; --cols: 2;
+    --card: min(160px, (100vw - 48px) / 2, (100dvh - 360px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    grid-template-columns: repeat(var(--cols), var(--card));
+    gap: var(--gap); width: max-content; padding: 2px; margin: 0 auto;
+  }
+  .rvl-stage--pop .dgn-pop[data-ticket-size="single"] .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --cols: 1; --card: min(300px, 100vw - 40px, 100dvh - 320px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --card: min(160px, (100vw - 48px) / 2, (100dvh - 410px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    min-height: calc(2 * (var(--card) + 30px) + var(--gap) + 4px);
+    align-items: start;
+  }
+  /* The last page keeps the batch's small size, even with one card left. */
+  .rvl-stage--pop .dgn-pop__grid[data-size="1"] > .dgn-pop__card {
+    grid-column: 1 / -1; justify-self: center; width: var(--card);
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-size="3"]:not([data-layout]) > .dgn-pop__card:nth-child(3) {
+    grid-column: 1 / -1; justify-self: center; width: var(--card);
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size] > .dgn-pop__card {
+    width: var(--card); grid-row: auto; grid-column: auto; transition: none;
+    --arrive-x: 0%; --arrive-y: -15%;
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size] > .dgn-pop__card:first-child {
+    grid-column: 1 / -1; justify-self: center;
+  }
+  /* Compact, fixed captions keep the targets still as scores and wilds land. */
+  .rvl-stage--pop .dgn-pop__number { padding: 4px 0 1px; font-size: .55rem; }
+  .rvl-stage--pop .dgn-pop__gold-total { height: 12px; min-height: 12px; font-size: .57rem; white-space: nowrap; }
+  .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings {
+    position: relative; bottom: auto; width: min(100%, 340px); margin: 6px auto 0;
+  }
+  .rvl-stage--pop .dgn-pop__all,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed { bottom: .4rem; }
+  .rvl-stage--pop .dgn-pop__all { min-height: 44px; padding: .6rem 1.4rem; }
+}
+
+/* Sideways, the payout sits beside the cards instead of consuming their height. */
+@media (min-width: 600px) and (max-width: 1000px) and (max-height: 500px) {
+  .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { width: min(calc(100vw - 1rem), 660px); padding-bottom: 0; }
+  .rvl-stage--pop .dgn-pop__hint,
+  .rvl-stage--pop .dgn-pop__champion-guide { display: none; }
+  .rvl-stage--pop .dgn-pop__viewport { display: grid; grid-template-columns: auto 260px; align-items: center; gap: 16px; }
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size],
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --cols: 2; --card: min(124px, (100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    min-height: 0;
+  }
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    min-height: calc(2 * (var(--card) + 30px) + var(--gap) + 4px);
+  }
+  .rvl-stage--pop .dgn-pop[data-ticket-size="single"] .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --card: min(200px, 100dvh - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings { margin: 0 0 56px; }
+  .rvl-stage--pop .dgn-pop__all,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed {
+    left: auto; right: 8px; bottom: max(6px, calc((100% - 248px) / 2));
+    width: 260px; max-width: 260px; transform: none;
+  }
+}
