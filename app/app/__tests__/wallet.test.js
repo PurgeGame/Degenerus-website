@@ -206,7 +206,7 @@ ethersMod.BrowserProvider.discover = async (opts = {}) => {
 
 function makeMockBrowserProvider({
   accounts = ['0xABCDef0000000000000000000000000000000000'],
-  chainId = 84532,
+  chainId = CHAIN.id,
   info = { rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'test-uuid' },
   requestImpl,
 } = {}) {
@@ -322,7 +322,7 @@ describe('WalletConnect mobile approval handoff', () => {
     };
     wallet._testAttachListeners({
       provider: raw,
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     }, raw);
     return raw;
   }
@@ -464,7 +464,7 @@ describe('WalletConnect mobile approval handoff', () => {
     const raw = attachWalletConnect(client, session);
     wallet._testAttachListeners({
       provider: raw,
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     }, raw);
     assert.equal(client.listenerCount('session_request_sent'), 1,
       're-attaching the provider does not duplicate redirects');
@@ -495,7 +495,7 @@ describe('WalletConnect mobile approval handoff', () => {
     const injectedClient = makeClient();
     wallet._testAttachListeners({
       provider: null,
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     }, {
       isWalletConnect: false,
       signer: { client: injectedClient },
@@ -565,7 +565,7 @@ describe('autoReconnect', () => {
   test('with persisted rdns calls discover with byRdns filter, then eth_accounts (NOT eth_requestAccounts)', async () => {
     _localStore.set('lastWalletRdns', 'io.metamask');
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
-    const bp = makeMockBrowserProvider({ accounts: ['0xABCDef0000000000000000000000000000000001'], chainId: 84532 });
+    const bp = makeMockBrowserProvider({ accounts: ['0xABCDef0000000000000000000000000000000001'], chainId: CHAIN.id });
     _discoverReturn = bp;
     await wallet.autoReconnect();
     assert.equal(_discoverCalls.length, 1, 'discover called once');
@@ -589,7 +589,7 @@ describe('autoReconnect', () => {
   test('verifies chain via getNetwork — chainId match → ui.chainOk=true', async () => {
     _localStore.set('lastWalletRdns', 'io.metamask');
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
-    _discoverReturn = makeMockBrowserProvider({ chainId: 84532 });
+    _discoverReturn = makeMockBrowserProvider({ chainId: CHAIN.id });
     await wallet.autoReconnect();
     const chainUpdate = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.ok(chainUpdate, 'ui.chainOk was set');
@@ -614,7 +614,7 @@ describe('autoReconnect', () => {
       accounts,
       requestImpl: async ({ method }) => {
         if (method === 'eth_accounts') return accounts;
-        if (method === 'eth_chainId') return '0x14a34';
+        if (method === 'eth_chainId') return CHAIN.hexId;
         return null;
       },
     });
@@ -644,7 +644,7 @@ describe('autoReconnect', () => {
     await wallet.autoReconnect();
     assert.equal(storeMod.get('ui.chainOk'), false);
 
-    liveChainId = '0x14a34';
+    liveChainId = CHAIN.hexId;
     const focus = _windowListeners.get('focus')?.[0];
     assert.ok(focus, 'mobile resume chain check is installed');
     await focus();
@@ -665,7 +665,7 @@ describe('autoReconnect', () => {
         if (method === 'eth_accounts') return accounts;
         if (method === 'eth_chainId') {
           chainReads += 1;
-          return chainReads <= 3 ? '0x1' : '0x14a34';
+          return chainReads <= 3 ? '0x1' : CHAIN.hexId;
         }
         if (method === 'wallet_switchEthereumChain') return null;
         return null;
@@ -694,7 +694,7 @@ describe('autoReconnect', () => {
         if (method === 'eth_accounts') return accounts;
         if (method === 'eth_chainId') return liveChainId;
         if (method === 'wallet_switchEthereumChain') {
-          liveChainId = '0x14a34';
+          liveChainId = CHAIN.hexId;
           return null;
         }
         return null;
@@ -835,15 +835,15 @@ describe('chainChanged listener', () => {
     assert.equal(wrong[1], false);
 
     // Right chain (Sepolia)
-    fn('0x14a34');
+    fn(CHAIN.hexId);
     const right = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(right[1], true);
 
-    fn(84532);
+    fn(CHAIN.id);
     const numeric = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(numeric[1], true);
 
-    fn('eip155:84532');
+    fn(`eip155:${CHAIN.id}`);
     const caip = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(caip[1], true);
 
@@ -870,7 +870,7 @@ describe('switchToSepolia (contracts.js export — exercised here per plan)', ()
     assert.equal(result, true);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].method, 'wallet_switchEthereumChain');
-    assert.equal(calls[0].params[0].chainId, '0x14a34');
+    assert.equal(calls[0].params[0].chainId, CHAIN.hexId);
   });
 
   test('on err.code===4902 falls through to wallet_addEthereumChain with CHAIN.nativeAddEntry, then retries switch, returns true', async () => {
@@ -892,8 +892,8 @@ describe('switchToSepolia (contracts.js export — exercised here per plan)', ()
     assert.deepEqual(methods, ['wallet_switchEthereumChain', 'wallet_addEthereumChain', 'wallet_switchEthereumChain']);
     // verify wallet_addEthereumChain received CHAIN.nativeAddEntry shape
     const addEntry = calls[1].params[0];
-    assert.equal(addEntry.chainId, '0x14a34');
-    assert.equal(addEntry.chainName, 'Base Sepolia');
+    assert.equal(addEntry.chainId, CHAIN.hexId);
+    assert.equal(addEntry.chainName, CHAIN.nativeAddEntry.chainName);
     assert.ok(Array.isArray(addEntry.rpcUrls));
   });
 
@@ -1018,7 +1018,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       this.providerInfo = null;
       StubBrowserProvider.instances.push(this);
     }
-    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || CHAIN.id) }; }
     async send(method, params = []) { return this._wc.request({ method, params }); }
     async getSigner() { return { getAddress: async () => this._wc.accounts?.[0] || null }; }
   }
@@ -1027,7 +1027,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
   function makeMockWcFactory({
     session = null,
     accounts = [],
-    chainId = 84532,
+    chainId = CHAIN.id,
     connectImpl,
     disconnectImpl,
     requestImpl,
@@ -1121,14 +1121,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         topic: 'restoring-peer-topic',
         namespaces: {
           eip155: {
-            accounts: [`eip155:84532:${account}`],
-            chains: ['eip155:84532'],
+            accounts: [`eip155:${CHAIN.id}:${account}`],
+            chains: [`eip155:${CHAIN.id}`],
             methods: ['eth_sendTransaction'],
           },
         },
       },
       accounts: [account],
-      chainId: 84532,
+      chainId: CHAIN.id,
     });
     wallet._testInjectWcFactory(factory);
     wallet._testSetWcInvalidIdRetryDelay(0);
@@ -1166,7 +1166,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const { factory, wcInstance } = makeMockWcFactory({
       session: null,
       accounts,
-      chainId: 84532,
+      chainId: CHAIN.id,
       connectImpl: async () => {
         // Simulate post-connect state population.
         wcInstance._setSession({ topic: 'abc' });
@@ -1189,15 +1189,15 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(ev, 'wallet-connected dispatched');
   });
 
-  test('init opts keep Base Sepolia optional for MetaMask Mobile pairing, showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
+  test('init opts keep the app chain optional for MetaMask Mobile pairing, showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
     const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: ['0xab000000000000000000000000000000000000ab'] });
     wallet._testInjectWcFactory(factory);
     await wallet._testEnsureWcProvider();
     const opts = wcInstance._initCalls[0];
-    assert.deepEqual(opts.optionalChains, [84532, 1], 'Base Sepolia and the wallet default are optional');
+    assert.deepEqual(opts.optionalChains, [CHAIN.id, 1], 'the app chain and the wallet default are optional');
     assert.equal(opts.chains, undefined, 'custom beta chain is not a required pairing namespace');
-    assert.deepEqual(opts.rpcMap, { 84532: CHAIN.rpcUrl },
-      'non-wallet Base Sepolia RPC methods use the app RPC instead of the WC gateway');
+    assert.deepEqual(opts.rpcMap, { [CHAIN.id]: CHAIN.rpcUrl },
+      'non-wallet the app chain RPC methods use the app RPC instead of the WC gateway');
     assert.equal(opts.showQrModal, true);
     assert.ok(opts.qrModalOptions, 'qrModalOptions present');
     assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
@@ -1242,7 +1242,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const { factory, wcInstance } = makeMockWcFactory({
       session: { topic: 'persisted' },
       accounts: ['0xBb00000000000000000000000000000000000077'],
-      chainId: 84532,
+      chainId: CHAIN.id,
     });
     wallet._testInjectWcFactory(factory);
     _storeUpdates.length = 0;
@@ -1254,12 +1254,12 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(addrUpd[1], '0xbb00000000000000000000000000000000000077');
   });
 
-  test('autoReconnect WC branch accepts a restored hex Base Sepolia chain id', async () => {
+  test('autoReconnect WC branch accepts a restored hex the app chain chain id', async () => {
     _localStore.set('lastWalletRdns', 'walletconnect:v2');
     const { factory } = makeMockWcFactory({
       session: { topic: 'persisted-hex-chain' },
       accounts: ['0xBb00000000000000000000000000000000000077'],
-      chainId: '0x14a34',
+      chainId: CHAIN.hexId,
     });
     wallet._testInjectWcFactory(factory);
     _storeUpdates.length = 0;
@@ -1301,7 +1301,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     );
   });
 
-  test('connectWalletConnect keeps a default-mainnet MetaMask session and requests Base Sepolia', async () => {
+  test('connectWalletConnect keeps a default-mainnet MetaMask session and requests the app chain', async () => {
     const { factory, wcInstance } = makeMockWcFactory({
       session: { topic: 'metamask-mobile' },
       accounts: ['0xBb00000000000000000000000000000000000077'],
@@ -1315,7 +1315,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(wcInstance._connectCalls.length, 0, 'existing pairing is reused');
     assert.deepEqual(wcInstance._requestCalls[0], {
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x14a34' }],
+      params: [{ chainId: CHAIN.hexId }],
     });
     assert.ok(
       _storeUpdates.some(([path, value]) => path === 'connected.address' && Boolean(value)),
@@ -1330,8 +1330,8 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         topic: 'metamask-mobile',
         namespaces: {
           eip155: {
-            accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
-            chains: ['eip155:1', 'eip155:84532'],
+            accounts: [`eip155:1:${account}`, `eip155:${CHAIN.id}:${account}`],
+            chains: ['eip155:1', `eip155:${CHAIN.id}`],
           },
         },
       },
@@ -1339,11 +1339,11 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       chainId: 1,
       requestImpl: async (payload, wc) => {
         if (payload.method === 'wallet_switchEthereumChain') {
-          wc.chainId = 84532;
-          for (const fn of wc._wcListeners.chainChanged || []) fn('0x14a34');
+          wc.chainId = CHAIN.id;
+          for (const fn of wc._wcListeners.chainChanged || []) fn(CHAIN.hexId);
           return null;
         }
-        if (payload.method === 'eth_chainId') return '0x14a34';
+        if (payload.method === 'eth_chainId') return CHAIN.hexId;
         return null;
       },
     });
@@ -1379,7 +1379,11 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       chainId: 1,
       requestImpl: async (payload, wc) => {
         if (payload.method === 'wallet_switchEthereumChain') {
-          wc.chainId = 84532;
+          wc.chainId = CHAIN.id;
+          // The wallet's session_update adds the new chain to the accounts.
+          const ns = wc.session.namespaces.eip155;
+          ns.accounts = [...ns.accounts, `eip155:${CHAIN.id}:${account}`];
+          ns.chains = [...ns.chains, `eip155:${CHAIN.id}`];
           return null;
         }
         return null;
@@ -1405,12 +1409,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
-  test('write repair trusts eth_chainId when WC public chainId is optimistically stale', async () => {
-    const account = '0xBb00000000000000000000000000000000000080';
-    let authoritativeChainId = 1;
+  test('a switch the wallet answers without adding the chain to the session re-pairs instead of claiming success', async () => {
+    // A session paired on the previous testnet: the wallet switches, but the
+    // session accounts never gain the app chain, so SignClient would reject
+    // every eth_sendTransaction locally (the "MetaMask opens, no prompt" bug).
+    const account = '0xBb00000000000000000000000000000000000081';
     const { factory, wcInstance } = makeMockWcFactory({
       session: {
-        topic: 'optimistic-public-chain',
+        topic: 'previous-testnet-session',
         namespaces: {
           eip155: {
             accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
@@ -1420,9 +1426,204 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         },
       },
       accounts: [account],
+      chainId: 84532,
+      requestImpl: async (payload, wc) => {
+        if (payload.method === 'wallet_switchEthereumChain') wc.chainId = CHAIN.id;
+        return null;
+      },
+      connectImpl: async () => {
+        wcInstance.chainId = CHAIN.id;
+        wcInstance._setSession({
+          topic: 'fresh-app-chain-session',
+          namespaces: {
+            eip155: {
+              accounts: [`eip155:${CHAIN.id}:${account}`],
+              chains: [`eip155:${CHAIN.id}`],
+              methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+            },
+          },
+        });
+        wcInstance._setAccounts([account]);
+      },
+    });
+    wallet._testInjectWcFactory(factory);
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    await wallet.autoReconnect();
+
+    const result = await contractsMod.ensureWriteChain();
+
+    assert.equal(result, true, 'the replacement pairing authorizes the app chain');
+    assert.equal(
+      wcInstance._requestCalls.filter(({ method }) => method === 'wallet_switchEthereumChain').length,
+      1,
+      'the live switch is still tried first',
+    );
+    assert.equal(wcInstance._connectCalls.length, 1,
+      'a session that never gains the chain is re-paired rather than reported ready');
+    assert.equal(wcInstance.session.topic, 'fresh-app-chain-session');
+  });
+
+  test('the first write of a WC session confirms the chain with the wallet itself, once per topic', async () => {
+    const account = '0xBb00000000000000000000000000000000000082';
+    const clientRequests = [];
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'handshake-topic',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`, `eip155:${CHAIN.id}:${account}`],
+            chains: ['eip155:1', `eip155:${CHAIN.id}`],
+            methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: CHAIN.id,
+      requestImpl: async (payload) => (payload.method === 'eth_chainId' ? CHAIN.hexId : null),
+    });
+    // UniversalProvider answers an approved switch locally; the handshake goes
+    // straight through the SignClient so the wallet really switches.
+    wcInstance.signer = { client: { request: async (args) => { clientRequests.push(args); return null; } } };
+    wallet._testInjectWcFactory(factory);
+    await wallet.connectWalletConnect();
+
+    const tx = async () => ({ hash: '0xhandshake', wait: async () => ({ status: 1, hash: '0xhandshake' }) });
+    await contractsMod.sendTx(tx, 'First write');
+    await contractsMod.sendTx(tx, 'Second write');
+
+    assert.deepEqual(clientRequests, [{
+      topic: 'handshake-topic',
+      chainId: `eip155:${CHAIN.id}`,
+      request: { method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN.hexId }] },
+    }], 'one wallet-side switch before the first signing request, none after');
+  });
+
+  test('a wallet that never answers the handshake after the player returns is re-paired, then the write goes through', async () => {
+    const account = '0xBb00000000000000000000000000000000000084';
+    const handshakes = [];
+    const namespaces = (topic) => ({
+      topic,
+      namespaces: {
+        eip155: {
+          accounts: [`eip155:${CHAIN.id}:${account}`],
+          chains: [`eip155:${CHAIN.id}`],
+          methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+        },
+      },
+    });
+    const chainRead = async (payload) => (payload.method === 'eth_chainId' ? CHAIN.hexId : null);
+    const stale = makeMockWcFactory({
+      session: namespaces('wallet-forgot-this-topic'),
+      accounts: [account],
+      chainId: CHAIN.id,
+      requestImpl: chainRead,
+    });
+    // The wallet opens, the tab hides, the player comes back: no answer ever.
+    stale.wcInstance.signer = {
+      client: {
+        request: (args) => {
+          handshakes.push(args.topic);
+          setTimeout(() => {
+            const fire = () => { for (const fn of _docListeners.get('visibilitychange') || []) fn(); };
+            globalThis.document.visibilityState = 'hidden';
+            fire();
+            globalThis.document.visibilityState = 'visible';
+            fire();
+          }, 0);
+          return new Promise(() => {});
+        },
+      },
+    };
+    const fresh = makeMockWcFactory({
+      session: null,
+      accounts: [],
+      chainId: CHAIN.id,
+      requestImpl: chainRead,
+      connectImpl: async () => {
+        fresh.wcInstance._setSession(namespaces('fresh-live-topic'));
+        fresh.wcInstance._setAccounts([account]);
+      },
+    });
+    fresh.wcInstance.signer = {
+      client: { request: async (args) => { handshakes.push(args.topic); return null; } },
+    };
+    let initCount = 0;
+    wallet._testInjectWcFactory({
+      init: async () => {
+        initCount += 1;
+        return initCount === 1 ? stale.wcInstance : fresh.wcInstance;
+      },
+    });
+    wallet._testSetWcSilentAfterReturnMs(5);
+    try {
+      await wallet.connectWalletConnect();
+      let built = 0;
+      const receipt = await contractsMod.sendTx(async () => {
+        built += 1;
+        return { hash: '0xafterrepair', wait: async () => ({ status: 1, hash: '0xafterrepair' }) };
+      }, 'Write on a dead session');
+
+      assert.equal(receipt.status, 1);
+      assert.equal(built, 1, 'the transaction is built once, on the live session only');
+      assert.equal(fresh.wcInstance._connectCalls.length, 1, 'the silent session is replaced by a fresh pairing');
+      assert.deepEqual(handshakes, ['wallet-forgot-this-topic', 'fresh-live-topic']);
+    } finally {
+      wallet._testSetWcSilentAfterReturnMs(10_000);
+      globalThis.document.visibilityState = 'visible';
+    }
+  });
+
+  test('a wallet that refuses the chain handshake fails the write before any signing request', async () => {
+    const account = '0xBb00000000000000000000000000000000000083';
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'handshake-refused-topic',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:${CHAIN.id}:${account}`],
+            chains: [`eip155:${CHAIN.id}`],
+            methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+          },
+        },
+      },
+      accounts: [account],
+      chainId: CHAIN.id,
+      requestImpl: async (payload) => (payload.method === 'eth_chainId' ? CHAIN.hexId : null),
+    });
+    wcInstance.signer = {
+      client: {
+        request: async () => { throw Object.assign(new Error('Unrecognized chain ID'), { code: 4902 }); },
+      },
+    };
+    wallet._testInjectWcFactory(factory);
+    await wallet.connectWalletConnect();
+
+    let built = 0;
+    await assert.rejects(contractsMod.sendTx(async () => {
+      built += 1;
+      return { hash: '0xnever', wait: async () => ({ status: 1 }) };
+    }, 'Refused write'));
+    assert.equal(built, 0, 'the transaction is never sent to a wallet on the wrong network');
+  });
+
+  test('write repair trusts eth_chainId when WC public chainId is optimistically stale', async () => {
+    const account = '0xBb00000000000000000000000000000000000080';
+    let authoritativeChainId = 1;
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: {
+        topic: 'optimistic-public-chain',
+        namespaces: {
+          eip155: {
+            accounts: [`eip155:1:${account}`, `eip155:${CHAIN.id}:${account}`],
+            chains: ['eip155:1', `eip155:${CHAIN.id}`],
+            methods: ['eth_sendTransaction', 'wallet_switchEthereumChain'],
+          },
+        },
+      },
+      accounts: [account],
       // This is the exact disagreement observed in production: the SDK's
       // public hint says Base while an actual RPC request still reports mainnet.
-      chainId: 84532,
+      chainId: CHAIN.id,
       requestImpl: async (payload) => {
         if (payload.method === 'eth_chainId') {
           return `0x${authoritativeChainId.toString(16)}`;
@@ -1453,7 +1654,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
-  test('ensureConfiguredWalletChain re-pairs a WC session that does not authorize Base Sepolia', async () => {
+  test('ensureConfiguredWalletChain re-pairs a WC session that does not authorize the app chain', async () => {
     const account = '0xBb00000000000000000000000000000000000077';
     const { factory, wcInstance } = makeMockWcFactory({
       session: {
@@ -1471,14 +1672,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         assert.deepEqual(opts, {
           optionalChains: [CHAIN.id],
           rpcMap: { [CHAIN.id]: CHAIN.rpcUrl },
-        }, 'repair pairing advertises only Base Sepolia, not mainnet again');
-        wcInstance.chainId = 84532;
+        }, 'repair pairing advertises only the app chain, not mainnet again');
+        wcInstance.chainId = CHAIN.id;
         wcInstance._setSession({
           topic: 'fresh-base-session',
           namespaces: {
             eip155: {
-              accounts: [`eip155:84532:${account}`],
-              chains: ['eip155:84532'],
+              accounts: [`eip155:${CHAIN.id}:${account}`],
+              chains: [`eip155:${CHAIN.id}`],
             },
           },
         });
@@ -1519,14 +1720,14 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const fresh = makeMockWcFactory({
       session: null,
       accounts: [],
-      chainId: 84532,
+      chainId: CHAIN.id,
       connectImpl: async () => {
         fresh.wcInstance._setSession({
           topic: 'fresh-base-topic',
           namespaces: {
             eip155: {
-              accounts: [`eip155:84532:${account}`],
-              chains: ['eip155:84532'],
+              accounts: [`eip155:${CHAIN.id}:${account}`],
+              chains: [`eip155:${CHAIN.id}`],
             },
           },
         });
@@ -1569,26 +1770,26 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
         topic: 'peer-missing-topic',
         namespaces: {
           eip155: {
-            accounts: [`eip155:84532:${account}`],
-            chains: ['eip155:84532'],
+            accounts: [`eip155:${CHAIN.id}:${account}`],
+            chains: [`eip155:${CHAIN.id}`],
             methods: ['eth_sendTransaction'],
           },
         },
       },
       accounts: [account],
-      chainId: 84532,
+      chainId: CHAIN.id,
     });
     const fresh = makeMockWcFactory({
       session: null,
       accounts: [],
-      chainId: 84532,
+      chainId: CHAIN.id,
       connectImpl: async () => {
         fresh.wcInstance._setSession({
           topic: 'repaired-peer-topic',
           namespaces: {
             eip155: {
-              accounts: [`eip155:84532:${account}`],
-              chains: ['eip155:84532'],
+              accounts: [`eip155:${CHAIN.id}:${account}`],
+              chains: [`eip155:${CHAIN.id}`],
               methods: ['eth_sendTransaction'],
             },
           },
@@ -1624,7 +1825,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.equal(storeMod.get('ui.chainOk'), true);
   });
 
-  test('after WC re-pair, waits for an explicit Base Sepolia switch before reporting ready', async () => {
+  test('after WC re-pair, waits for an explicit the app chain switch before reporting ready', async () => {
     const account = '0xBb00000000000000000000000000000000000078';
     const { factory, wcInstance } = makeMockWcFactory({
       session: {
@@ -1643,8 +1844,8 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
           topic: 'fresh-multichain-session',
           namespaces: {
             eip155: {
-              accounts: [`eip155:1:${account}`, `eip155:84532:${account}`],
-              chains: ['eip155:1', 'eip155:84532'],
+              accounts: [`eip155:1:${account}`, `eip155:${CHAIN.id}:${account}`],
+              chains: ['eip155:1', `eip155:${CHAIN.id}`],
             },
           },
         });
@@ -1652,7 +1853,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       },
       requestImpl: async (payload, wc) => {
         if (payload.method === 'wallet_switchEthereumChain') {
-          wc.chainId = 84532;
+          wc.chainId = CHAIN.id;
           return null;
         }
         return null;
@@ -1722,7 +1923,7 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
       this.provider = wc;
       this.providerInfo = null;
     }
-    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || CHAIN.id) }; }
   }
 
   // Helpers to mock window.matchMedia and window.ethereum for the bypass heuristic.
@@ -1746,6 +1947,8 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
     if (typeof wallet._testInjectWcBrowserProviderCtor === 'function') {
       wallet._testInjectWcBrowserProviderCtor(StubBrowserProvider);
     }
+    // The phone route warms MetaMask Connect; never load the browser bundle here.
+    wallet._testInjectMmConnectFactory(async () => makeMockMmConnectClient());
   });
 
   test('coarse pointer + no injected + 0 EIP-6963 announces → calls connectWalletConnect, picker NOT shown', async () => {
@@ -1760,7 +1963,7 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
         wcInstance = {
           session: null,
           get accounts() { return accounts; },
-          chainId: 84532,
+          chainId: CHAIN.id,
           connect: async () => {
             wcInstance.session = { topic: 'mobile-bypass' };
             accounts.push('0xdd00000000000000000000000000000000000044');
@@ -1810,4 +2013,77 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
 // Restore original ethers.discover at end of suite (process exit anyway, but clean).
 test.after?.(() => {
   ethersMod.BrowserProvider.discover = _origDiscover;
+});
+
+// ===========================================================================
+// MetaMask Connect — MetaMask's own phone link (wallet.js connectMetaMaskConnect)
+// ===========================================================================
+
+function makeMockMmConnectClient({ connected = false, account = '0xCc00000000000000000000000000000000000001' } = {}) {
+  const listeners = {};
+  const client = {
+    status: connected ? 'connected' : 'disconnected',
+    accounts: connected ? [account] : [],
+    connectCalls: [],
+    disconnectCalls: 0,
+    provider: {
+      request: async ({ method }) => {
+        if (method === 'eth_chainId') return CHAIN.hexId;
+        if (method === 'eth_accounts') return client.accounts;
+        return null;
+      },
+      on: (event, fn) => { (listeners[event] = listeners[event] || []).push(fn); },
+      removeListener: () => {},
+    },
+    getProvider: () => client.provider,
+    connect: async (opts) => {
+      client.connectCalls.push(opts);
+      client.status = 'connected';
+      client.accounts = [account];
+      return { accounts: client.accounts, chainId: CHAIN.hexId };
+    },
+    disconnect: async () => { client.disconnectCalls += 1; },
+  };
+  return client;
+}
+
+describe('MetaMask Connect', () => {
+  test('connect asks MetaMask for the app chain and connects through its own provider', async () => {
+    const client = makeMockMmConnectClient();
+    wallet._testInjectMmConnectFactory(async () => client);
+    const provider = await wallet.connectMetaMaskConnect();
+
+    assert.ok(provider, 'a provider is attached');
+    assert.deepEqual(client.connectCalls, [{ chainIds: [CHAIN.hexId] }]);
+    assert.equal(storeMod.get('connected.address'), '0xcc00000000000000000000000000000000000001');
+    assert.equal(storeMod.get('connected.rdns'), wallet.MM_CONNECT_RDNS);
+    assert.equal(_localStore.get('lastWalletRdns'), wallet.MM_CONNECT_RDNS);
+    assert.strictEqual(wallet.getEip1193(), client.provider);
+  });
+
+  test('a restored MetaMask Connect session reconnects silently, without opening MetaMask', async () => {
+    const client = makeMockMmConnectClient({ connected: true });
+    wallet._testInjectMmConnectFactory(async () => client);
+    _localStore.set('lastWalletRdns', wallet.MM_CONNECT_RDNS);
+
+    assert.equal(await wallet.autoReconnect(), true);
+    assert.equal(client.connectCalls.length, 0, 'connect() would open the wallet');
+    assert.equal(storeMod.get('connected.rdns'), wallet.MM_CONNECT_RDNS);
+  });
+
+  test('no restored MetaMask Connect session stays disconnected', async () => {
+    wallet._testInjectMmConnectFactory(async () => makeMockMmConnectClient());
+    _localStore.set('lastWalletRdns', wallet.MM_CONNECT_RDNS);
+    assert.equal(await wallet.autoReconnect(), false);
+  });
+
+  test('disconnect also revokes the MetaMask side', async () => {
+    const client = makeMockMmConnectClient();
+    wallet._testInjectMmConnectFactory(async () => client);
+    await wallet.connectMetaMaskConnect();
+    wallet.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(client.disconnectCalls, 1);
+    assert.equal(_localStore.get('lastWalletRdns'), undefined);
+  });
 });

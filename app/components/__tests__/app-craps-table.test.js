@@ -1073,7 +1073,7 @@ test('YOU tracks live seven-out risk while the DANGER line follows only the incr
     'the graph reference is the next shooter\'s stake');
   assert.doesNotMatch(COMPONENT_SRC, /#raceDangerOnChart/,
     'changing live bets and boosts cannot pull the reference line down');
-  assert.match(COMPONENT_SRC, /danger: isYou && standing\?\.sevenOutRisk === true,[\s\S]*?' is-danger'/,
+  assert.match(COMPONENT_SRC, /const markers = this\.#racePlayers\s*\.filter\(player => ownedKeys\.has\(player\.key\)\)[\s\S]*?danger: standing\?\.sevenOutRisk === true,[\s\S]*?' is-danger'/,
     'each owned entry dot carries its own danger state');
   assert.match(CSS_SRC, /\.craps-race-endpoint\.is-you\.is-danger :is\([\s\S]*?stroke: #ff626b;[\s\S]*?animation: craps-race-endpoint-danger/,
     'owned dots at risk are red and pulse');

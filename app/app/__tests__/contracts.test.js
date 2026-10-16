@@ -45,6 +45,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
+import { CHAIN } from '../chain-config.js';
 
 const {
   setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
@@ -66,7 +67,7 @@ function resetStore() {
 // ---------------------------------------------------------------------------
 
 function makeProvider({
-  chainId = 84532,
+  chainId = CHAIN.id,
   signerAddress = '0xabcdef0000000000000000000000000000000000',
   receiptStatus = 1,
   txHash = '0xdeadbeef',
@@ -227,7 +228,7 @@ describe('sendTx wrong-chain enforcement (T-58-03)', () => {
     setProvider(provider);
     setChainSwitchHandler(async () => {
       switchCalls += 1;
-      liveChainId = 84532;
+      liveChainId = CHAIN.id;
       return true;
     });
     storeMod.update('ui.mode', 'self');
@@ -265,7 +266,7 @@ describe('sendTx wrong-chain enforcement (T-58-03)', () => {
     setChainSwitchHandler(async () => {
       switchCalls += 1;
       await switchPending;
-      liveChainId = 84532;
+      liveChainId = CHAIN.id;
       return true;
     });
 
@@ -324,7 +325,7 @@ describe('sendTx gas estimate headroom', () => {
       },
     };
     setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
       getSigner: async () => signer,
     });
     storeMod.update('ui.mode', 'self');
@@ -350,7 +351,7 @@ describe('sendTx gas estimate headroom', () => {
       },
     };
     setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
       getSigner: async () => signer,
     });
     storeMod.update('ui.mode', 'self');
@@ -746,7 +747,7 @@ describe('switchToSepolia 4902 fallback', () => {
     const methods = calls.map((c) => c.method);
     assert.deepEqual(methods, ['wallet_switchEthereumChain', 'wallet_addEthereumChain', 'wallet_switchEthereumChain']);
     const addEntry = calls[1].params[0];
-    assert.equal(addEntry.chainId, '0x14a34');
+    assert.equal(addEntry.chainId, CHAIN.hexId);
   });
 
   test('recognizes a string 4902 nested inside a mobile-wallet RPC error', async () => {
@@ -799,7 +800,7 @@ describe('assertChainOrBlank read-side gate', () => {
   });
 
   test('returns true on Sepolia chain', async () => {
-    setProvider(makeProvider({ chainId: 84532 }));
+    setProvider(makeProvider({ chainId: CHAIN.id }));
     const ok = await assertChainOrBlank();
     assert.equal(ok, true);
   });
@@ -818,7 +819,7 @@ describe('assertChain write-side gate', () => {
   });
 
   test('returns true on Sepolia', async () => {
-    setProvider(makeProvider({ chainId: 84532 }));
+    setProvider(makeProvider({ chainId: CHAIN.id }));
     const ok = await assertChain();
     assert.equal(ok, true);
   });
@@ -827,7 +828,7 @@ describe('assertChain write-side gate', () => {
     const provider = makeProvider({ chainId: 1 });
     provider.send = async (method) => {
       assert.equal(method, 'eth_chainId');
-      return '0x14a34';
+      return CHAIN.hexId;
     };
     setProvider(provider);
 
