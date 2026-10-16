@@ -12406,6 +12406,16 @@ body.layout-basic .pool-progress__track.is-depleting .pool-progress__fill {
   body.layout-basic .pool-progress__body {
     grid-template-columns: auto minmax(3.4rem, 1fr);
     column-gap: 0.38rem;
+    /* The centered purchase day owns the header on phones. Keep the moving
+       guarantee/current readout in its own lane below the thermometer. */
+    padding-bottom: 1.5rem;
+  }
+  body.layout-basic .pool-progress__marker-label {
+    top: calc(100% + 0.4rem);
+    bottom: auto;
+  }
+  body.layout-basic .pool-progress__track.is-ready .pool-progress__marker-label {
+    bottom: auto;
   }
   body.layout-basic .pool-progress__name {
     font-size: clamp(0.48rem, 2.25vw, 0.58rem);
