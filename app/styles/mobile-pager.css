@@ -385,60 +385,117 @@
 
 /* ---- Draw --------------------------------------------------------------------- */
 @media (max-width: 768px) {
-  /* Everything above the cabinet keeps its natural height. The headline is
-     overflow:hidden, so it used to flex-shrink to nothing on short phones. */
-  body.layout-basic[data-mobile-page="draw"] > .container > main > :not(.jackpot-hero) {
-    flex: none;
+  /* A phone summary gives the drawing the screen: one jackpot amount, a slim
+     pool instrument, and a single-row wallet notice above the cabinet. */
+  body.layout-basic[data-mobile-page="draw"] > .container > main > :not(.jackpot-hero) { flex: none; }
+  body.layout-basic[data-mobile-page="draw"] > .container > main { padding-bottom: .4rem; }
+  body.layout-basic[data-mobile-page="draw"] .gr {
+    height: auto; min-height: 3.5rem; aspect-ratio: auto; border: 1px solid #9d803a80; border-radius: 8px;
+    clip-path: none; background: linear-gradient(110deg, #29200c, #0b0b0b 62%);
   }
-  body.layout-basic[data-mobile-page="draw"] > .container > main {
-    padding-bottom: 0.4rem;
+  body.layout-basic[data-mobile-page="draw"] .gr__inner {
+    position: static; display: flex; align-items: center; justify-content: space-between;
+    box-sizing: border-box; min-height: 3.5rem; padding: .45rem .7rem; gap: .6rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] .gr__brand { display: none; }
+  body.layout-basic[data-mobile-page="draw"] .gr__label { position: static; width: auto; text-align: left; }
+  body.layout-basic[data-mobile-page="draw"] .gr__label-text {
+    display: block; max-width: 15ch; font-size: .63rem; line-height: 1.25;
+    letter-spacing: .07em; white-space: normal;
+  }
+  body.layout-basic[data-mobile-page="draw"] .gr__chip {
+    position: static; display: block; max-width: none; transform: none; margin-top: 3px; font-size: .5rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] .gr__amount-row {
+    position: relative; top: auto; left: auto; transform: none; margin: 0; gap: .3rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] .gr__amount { font-size: min(7.6cqw, calc(58cqw / var(--gr-chars, 9))); line-height: 1; }
+  body.layout-basic[data-mobile-page="draw"] .gr__unit-code { width: auto; font-size: .6rem; margin-bottom: .15rem; }
+  body.layout-basic[data-mobile-page="draw"] .gr__float { bottom: 0; font-size: .6rem; }
+  body.layout-basic[data-mobile-page="draw"] .pool-progress { padding: .4rem .55rem; }
+  body.layout-basic[data-mobile-page="draw"] .pool-progress__head { margin-bottom: .3rem; gap: .25rem; }
+  body.layout-basic[data-mobile-page="draw"] .pool-progress__body { padding-bottom: 1.25rem; }
+  body.layout-basic[data-mobile-page="draw"] app-protocol-wallet-banner {
+    grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; padding: .25rem .45rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] .protocol-wallet-banner__mark { display: none; }
+  body.layout-basic[data-mobile-page="draw"] .protocol-wallet-banner__copy strong {
+    font-size: .58rem; letter-spacing: 0; white-space: normal;
+  }
+  body.layout-basic[data-mobile-page="draw"] .protocol-wallet-banner__copy small { font-size: .5rem; }
+  body.layout-basic[data-mobile-page="draw"] .protocol-wallet-banner__connect {
+    grid-column: auto; width: auto; max-width: 7rem; min-height: 2.5rem;
+    padding: .25rem .45rem; white-space: normal; font-size: .52rem;
   }
 
-  /* The cabinet takes whatever height is left. Basis 0 + grow makes the hero,
-     its draw column and the machine exactly the space between the pool strip
-     and the dock; the floor keeps a tiny phone scrolling instead of crushing
-     the board. */
+  /* Foils sit in one row below the full-width draw. Empty bays need no space
+     on a phone; owned/claimable tickets keep their existing controls. */
   body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero {
-    --draw-board-floor: 7.25rem;
-    --draw-chrome: 9.6rem;
-    flex: 1 1 0;
-    min-height: calc(var(--draw-chrome) + var(--draw-board-floor) + 0.62rem);
+    flex: 1 1 0; min-height: 17.75rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero:has(.ldj-foil-machine-slot.is-loaded) {
+    min-height: 21.25rem;
   }
   body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero > .jackpot-hero__draw {
-    flex: 1 1 0;
-    min-height: 0;
+    flex: 1 1 0; min-height: 0;
   }
   body.layout-basic[data-mobile-page="draw"] .jackpot-hero__draw > .jackpot-hero__machine {
-    /* Size container: the board is sized from the cabinet's own height (cqh)
-       as well as its width, so it shrinks on short phones and the overlay,
-       foil bank and key (all sized off the same box) stay aligned. */
-    container-type: size;
-    flex: 1 1 0;
-    min-height: 0;
-
-    /* Space left once the board is its natural size: spread above and below
-       it so a tall phone gets a deliberate cabinet, not an empty strip. */
-    --jp-board-size: max(
-      var(--draw-board-floor, 7.25rem),
-      min(68cqi, 28rem, calc(100cqh - var(--draw-chrome, 9.6rem)))
-    );
-    --draw-spare: max(0px, calc(100cqh - var(--draw-chrome, 9.6rem) - var(--jp-board-size)));
-    --jp-stage-top: calc(3.18rem + var(--draw-spare) * 0.38);
-    /* The key never shrinks with a small board; its label needs the room. */
-    --jp-action-width: min(max(var(--jp-board-size), 13.5rem), 18rem, 100cqi);
+    container-type: size; flex: 1 1 0; min-height: 0;
+    --jp-foil-row: 0px; --draw-chrome: calc(9rem + var(--jp-foil-row));
+    --jp-foil-size: 2.75rem;
+    --jp-board-size: max(8rem, min(calc(100cqi - 1rem), 28rem, calc(100cqh - var(--draw-chrome))));
+    --draw-spare: max(0px, calc(100cqh - var(--draw-chrome) - var(--jp-board-size)));
+    --jp-stage-top: calc(2.46rem + min(.5rem, var(--draw-spare) * .2));
+    --jp-action-width: min(18rem, calc(100cqi - 7rem));
+    --jp-chainlink-size: 2.5rem; --jp-chainlink-gap: .5rem;
+    background:
+      radial-gradient(80% 50% at 50% 30%, #13322570, transparent),
+      repeating-linear-gradient(45deg, #d8e8dc03 0 1px, transparent 1px 5px),
+      url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat, #03100b;
   }
-  /* Title keeps the board's top edge on the foil bank; the remaining spare
-     goes between the board and the key. */
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine:has(.ldj-foil-machine-slot.is-loaded) {
+    --jp-foil-row: 3.5rem;
+  }
   body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine > .jackpot-hero__draw-title {
-    margin-bottom: calc(-0.02rem + var(--draw-spare) * 0.38);
+    height: 2rem; flex-basis: 2rem; padding: .15rem .4rem;
+    margin-bottom: calc(-.02rem + min(.5rem, var(--draw-spare) * .2));
   }
   body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine replay-panel .replay-ticket {
-    margin-bottom: calc(0.24rem + var(--draw-spare) * 0.62);
+    margin-bottom: calc(.24rem + var(--jp-foil-row) + max(0px, var(--draw-spare) - min(.5rem, var(--draw-spare) * .2)));
   }
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine .ldj-foil-machine-bank {
+    top: calc(var(--jp-stage-top) + var(--jp-board-size) + .5rem);
+    width: max-content; height: var(--jp-foil-size);
+    grid-template-columns: repeat(4, var(--jp-foil-size)); grid-template-rows: 1fr; gap: .65rem;
+  }
+  body.layout-basic[data-mobile-page="draw"] .jackpot-hero__machine .ldj-foil-machine-slot:nth-child(n) {
+    grid-column: auto; grid-row: 1;
+  }
+  body.layout-basic[data-mobile-page="draw"] .ldj-foil-machine-bank:not(:has(.is-loaded)),
+  body.layout-basic[data-mobile-page="draw"] .ldj-foil-machine-bank::before,
+  body.layout-basic[data-mobile-page="draw"] .ldj-foil-machine-bank::after,
+  body.layout-basic[data-mobile-page="draw"] .ldj-foil-machine-current,
+  body.layout-basic[data-mobile-page="draw"] .jackpot-board-current { display: none; }
 }
 
 /* ---- Buy ---------------------------------------------------------------------- */
 @media (max-width: 768px) {
+  /* Pack labels need to read at phone distance. Let narrower four-product
+     shelves wrap the level/count instead of shrinking them to tiny stamps. */
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-pack-face {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
+    font-size: .75rem;
+    line-height: 1.05;
+    letter-spacing: 0;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: normal;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces:has(.dec-ticket-piece--foil:not([hidden])) .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
+    font-size: clamp(.625rem, 2.7vw, .75rem);
+  }
   /* Builders take all the height the panel has left; each builder card
      stretches to its half and centres its art. */
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders {
