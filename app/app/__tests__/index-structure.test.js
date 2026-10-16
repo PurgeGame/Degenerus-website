@@ -394,7 +394,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-98cd2a78-cc2d42b2-final-ranks-20261010';
+    const revision = '?v=craps-98cd2a78-75d5dc78-final-ranks-20261010';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -409,7 +409,7 @@ describe('index.html basic-mode skeleton', () => {
     // The fill-draw loader imports the table by revision, so it re-pins with the table's result card.
     assert.equal(
       map.imports?.['/app/craps/coin-draw-viewer.js'],
-      '/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-cc2d42b2-result-card-20261012',
+      '/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-75d5dc78-result-card-20261012',
     );
   });
 

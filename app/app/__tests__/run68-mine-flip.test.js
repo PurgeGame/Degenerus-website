@@ -25,6 +25,7 @@ beforeEach(() => {
     getSigner: async () => ({ getAddress: async () => PLAYER, estimateGas: async () => 1_200_000n }),
     getBalance: async () => 10n ** 18n,
     getFeeData: async () => ({ maxFeePerGas: 1n }),
+    getBlock: async () => ({ baseFeePerGas: 21n }),
   };
   setProvider(provider); _setSharedReadProviderForTests(provider);
 });
@@ -47,6 +48,7 @@ async function fakeMiner(mod, expected) {
   const fn = Object.assign(async (...args) => {
     check('send', args);
     assert.ok(args.at(-1).gasLimit >= 10_000_000n);
+    if (Number(CHAIN.id) === 11155111) assert.equal(args.at(-1).gasLimit, 30_000_000n);
     return { hash: '0x1234', wait: async () => ({ status: 1, hash: '0x1234', logs: [] }) };
   }, {
     staticCall: async (...args) => check('probe', args),
