@@ -186,6 +186,30 @@ html[data-degenerus-tutorial] .testnet-beta-banner { display: none !important; }
   .wallet-approval-handoff__copy small { display: none; }
 }
 
+/* Recovery needs its explanation on phones too, including the distinction
+   between releasing our wait and cancelling a transaction in the wallet. */
+.wallet-approval-handoff--recovery {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.wallet-approval-handoff--recovery .wallet-approval-handoff__copy strong {
+  white-space: normal;
+  overflow: visible;
+}
+.wallet-approval-handoff--recovery .wallet-approval-handoff__copy small {
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+.wallet-approval-handoff--recovery .wallet-approval-handoff__open {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+}
+.wallet-approval-handoff--recovery .wallet-approval-handoff__dismiss {
+  grid-column: 3;
+  grid-row: 1;
+}
+
 /* The quest action sheet is also a real purchase surface. Keep the boon's
    exact incremental value visible when that shortcut submits the buy. */
 body.layout-basic .qst-action-boon {
