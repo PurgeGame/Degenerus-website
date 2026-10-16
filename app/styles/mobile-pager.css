@@ -884,6 +884,14 @@
   body.layout-basic #panel-passes .pass-deity-buy { min-height: 2.6rem; }
 }
 
+/* A phone's benefit chips need the full card width. Keep the Deity action on
+   its own row so the chips cannot squeeze it beyond the card or viewport. */
+@media (max-width: 640px) {
+  body.layout-basic #panel-passes .pass-deity-summary { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic #panel-passes .pass-deity-summary .pass-deity-open-wrap { grid-column: 1; grid-row: 3; }
+  body.layout-basic #panel-passes .pass-deity-open { white-space: pre-line; }
+}
+
 /* ---- Phone wallet route sheet (wallet-route-sheet.js) ---------------------- */
 .wallet-route-sheet {
   position: fixed;
