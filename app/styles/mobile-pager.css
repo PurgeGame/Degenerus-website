@@ -945,6 +945,15 @@
   background: rgba(255, 255, 255, 0.06);
   color: #e8e2f2;
 }
+.wallet-route-sheet__card .wallet-route-sheet__link {
+  min-height: 2.2rem;
+  border: 0;
+  background: transparent;
+  color: #f6c25a;
+  font-size: 0.68rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .wallet-route-sheet__card .wallet-route-sheet__close {
   min-height: 2.2rem;
   border: 0;
