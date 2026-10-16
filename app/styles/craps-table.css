@@ -3684,6 +3684,18 @@ app-craps-table {
   stroke-width: 1.5;
 }
 
+/* Compact graphs spend their right margin on the portrait, with the brief
+   change amount over it. The permanent score and second dot ring stay off. */
+.craps-race__chart[data-compact="true"] :is(.craps-race-score, .craps-race-current-ring) {
+  display: none;
+}
+
+.craps-score-delta[data-anchor="portrait"] { transform: translate(-50%, -50%); }
+.craps-score-delta[data-anchor="portrait"] strong {
+  font-size: .875rem;
+  transform-origin: center;
+}
+
 .craps-race-endpoint-avatar {
   fill: #0a1b12;
   stroke: #ffe08a;
