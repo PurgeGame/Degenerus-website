@@ -39,11 +39,10 @@
 .dgn-pop__player.is-champion { z-index: 3; }
 .dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q2 .dgn-pop__player { left: 3%; right: auto; }
 .dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 3%; bottom: auto; }
-/* Trace the medallion's visible edge inside its padded SVG canvas. The halo
-   follows your champion through hits and misses without covering its symbol. */
-.dgn-pop__champion { position: absolute; z-index: 5; inset: 15%; border: 2px solid #f6e8ff; border-radius: 50%; box-shadow: 0 0 4px #fff, 0 0 12px 3px #c887ffcc, 0 0 24px 5px #ad54ff77, inset 0 0 6px #edcaffaa; pointer-events: none; }
-.dgn-pop__player .dgn-pop__champion { border-width: 1.5px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffdd, 0 0 15px 3px #ad54ff88; }
-.dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 12px; height: 12px; margin: 2px 4px; box-shadow: 0 0 3px #fff, 0 0 8px 2px #c887ffbb; }
+/* A shared radial SVG keeps the symbol's center transparent, replacing the
+   rounded CSS shadows on these scaled covers. */
+.dgn-pop__champion { position: absolute; z-index: 5; inset: 0; background: url('/app/assets/degenerette/champion-ring-v1.svg') center / contain no-repeat; pointer-events: none; }
+.dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 22px; height: 22px; margin: 0 1px; }
 /* Match the jackpot's white seal: a fixed, unrotated hit area with its
    diamond drawn inside, so the flame stays upright at the four-way seam. */
 .dgn-pop__flame { position: absolute; z-index: 15; top: 50%; left: 50%; width: 32%; height: 32%; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; }

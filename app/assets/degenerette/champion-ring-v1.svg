@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">
+  <!-- Match the badge's padded viewBox. The entire symbol and black ring stay
+       transparent; one radial fill avoids seams from tiled CSS box shadows. -->
+  <defs>
+    <radialGradient id="halo" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="50">
+      <stop offset=".64" stop-color="#edcaff" stop-opacity="0"/>
+      <stop offset=".68" stop-color="#edcaff" stop-opacity=".22"/>
+      <stop offset=".7" stop-color="#edcaff" stop-opacity=".7"/>
+      <stop offset=".72" stop-color="#edcaff" stop-opacity=".8"/>
+      <stop offset=".77" stop-color="#c887ff" stop-opacity=".5"/>
+      <stop offset=".86" stop-color="#ad54ff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#ad54ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle r="50" fill="url(#halo)"/>
+  <circle r="35.6" fill="none" stroke="#f6e8ff" stroke-width=".75"/>
+</svg>
