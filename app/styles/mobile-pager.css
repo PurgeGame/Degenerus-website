@@ -104,12 +104,29 @@
   body.layout-basic > .container > main > :first-child { margin-top: 0; }
   body.layout-basic > .container > footer { display: none !important; }
 
-  /* Coinflip amount dialogs: while a typed field has focus the phone keyboard
-     covers the lower screen, so the card moves to the top, keeping its
-     actions above the keyboard. */
-  body.layout-basic .df-reverse-dialog:has(input:is([type="text"], [type="number"]):focus) {
+  /* Popups and dialogs cover the visible area (mobile-pager.js publishes it),
+     not the layout viewport the keyboard slides over. While the keyboard is
+     up, or a typed field has focus, the card moves to the top and the overlay
+     scrolls, so the field and its actions stay above the keys. */
+  html body.layout-basic :is(.panel-popup, .qst-action-dialog, .df-reverse-dialog, .pass-deity-dialog,
+    .pass-afking__dialog, .deg-referral-dialog, .records-bounty-dialog,
+    .app-decimator-panel .dec-builder-popover, .craps-dialog, .pfd-backdrop) {
+    top: var(--mpager-vv-top, 0px);
+    bottom: auto;
+    height: var(--mpager-vv-h, 100dvh);
+  }
+  html[data-mpager-keyboard] body.layout-basic :is(.panel-popup, .qst-action-dialog, .df-reverse-dialog,
+    .pass-deity-dialog, .pass-afking__dialog, .deg-referral-dialog, .records-bounty-dialog,
+    .app-decimator-panel .dec-builder-popover, .craps-dialog, .pfd-backdrop),
+  body.layout-basic :is(.panel-popup, .qst-action-dialog, .df-reverse-dialog, .pass-deity-dialog,
+    .pass-afking__dialog, .deg-referral-dialog, .records-bounty-dialog,
+    .app-decimator-panel .dec-builder-popover, .craps-dialog,
+    .pfd-backdrop):has(:is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea):focus) {
     place-items: start center;
     overflow-y: auto;
+  }
+  html[data-mpager-keyboard] body.layout-basic .panel-popup__window {
+    max-height: calc(var(--mpager-vv-h, 100dvh) - 0.8rem);
   }
 
   /* Fill pages. Every page but More is one screen: <main> is a column, the
@@ -741,4 +758,128 @@
     grid-template-columns: repeat(auto-fit, var(--card));
     justify-content: center;
   }
+}
+
+/* ---- afKing passes popup + deity picker (phones) ------------------------- */
+/* One screen each: the popup stacks Lazy, Whale, Deity and the afKing card
+   without scrolling, and the picker shows all 32 symbols, eight per family. */
+@media (max-width: 768px) {
+  /* Popup chrome */
+  body.layout-basic #panel-passes .panel-popup__header { padding: 0.3rem 0.35rem 0.3rem 0.75rem; }
+  body.layout-basic #panel-passes .panel-popup__close { width: 2.25rem; min-width: 0; height: 2.25rem; min-height: 0; font-size: 1.25rem; }
+  body.layout-basic #panel-passes .panel-popup__body { padding: 0.4rem; }
+  body.layout-basic #panel-passes app-pass-section { gap: 0.4rem; }
+  body.layout-basic #panel-passes .app-pass-section { gap: 0.4rem; margin: 0; padding: 0.4rem; }
+  body.layout-basic #panel-passes .pass-afking { margin: 0; }
+
+  /* Lazy + whale: title and line, a one-line perk strip, then the checkout row. */
+  body.layout-basic #panel-passes .pass-product-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.38rem;
+    padding: 0.5rem 0.55rem;
+    border-radius: 11px;
+  }
+  body.layout-basic #panel-passes .pass-product-heading { gap: 0.45rem; }
+  body.layout-basic #panel-passes .pass-product-sigil { width: 2.1rem; height: 2.1rem; border-radius: 8px; font-size: 0.66rem; }
+  body.layout-basic #panel-passes .pass-product-description { font-size: 0.68rem; line-height: 1.25; }
+  body.layout-basic #panel-passes .pass-product-perks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  body.layout-basic #panel-passes .pass-product-perks > span { padding: 0.2rem 0.38rem; font-size: 0.56rem; }
+  body.layout-basic #panel-passes .pass-product-perks > .pass-lootbox-perk { padding: 0.22rem 0.42rem; font-size: 0.58rem; }
+  body.layout-basic #panel-passes .pass-product-checkout {
+    width: auto;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    gap: 0.35rem;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale { grid-template-columns: 8.5rem minmax(0, 1fr); }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-product-quantity {
+    grid-column: 1;
+    grid-template-columns: auto minmax(1.6rem, 1fr) 3.6rem;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-buy { grid-column: 2; }
+  body.layout-basic #panel-passes .pass-product-checkout--whale :is(.pass-product-quantity, .pass-whale-buy, .pass-whale-input),
+  body.layout-basic #panel-passes .pass-product-row :is(.pass-whale-buy, .pass-lazy-buy) {
+    width: 100%;
+    height: 2.3rem;
+    min-height: 2.3rem;
+    max-height: 2.3rem;
+    padding-block: 0.15rem;
+  }
+
+  /* Deity shelf: the luckbox chip shares the buy row. */
+  body.layout-basic #panel-passes .pass-deity-summary { grid-template-columns: auto minmax(0, 1fr); }
+  body.layout-basic #panel-passes .pass-deity-summary > .pass-product-heading { grid-column: 1 / -1; }
+  body.layout-basic #panel-passes .pass-deity-summary .pass-product-perks--deity { grid-column: 1; grid-row: 2; width: auto; align-self: center; }
+  body.layout-basic #panel-passes .pass-deity-summary .pass-deity-open-wrap { grid-column: 2; grid-row: 2; }
+  body.layout-basic #panel-passes .pass-deity-summary { gap: 0.4rem; padding: 0.5rem 0.55rem; }
+  body.layout-basic #panel-passes .pass-deity-wordmark { --deity-badge-size: 2.4rem; width: 9.5rem; flex-basis: 9.5rem; }
+  body.layout-basic #panel-passes .pass-deity-summary .pass-product-description { font-size: 0.66rem; line-height: 1.25; }
+  body.layout-basic #panel-passes .pass-product-perks--deity { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  body.layout-basic #panel-passes .pass-product-perks--deity > span { display: block; width: auto; min-height: 0; padding: 0.2rem 0.38rem; white-space: nowrap; }
+  /* The description already names these; the luckbox chip carries the price. */
+  body.layout-basic #panel-passes .pass-product-perks--deity > :is([data-bind="pass-deity-symbol-entries"], [data-bind="pass-deity-perpetual"], [data-bind="pass-deity-mining"]) { display: none; }
+  body.layout-basic #panel-passes .pass-deity-open { min-height: 2.15rem; padding-block: 0.2rem; white-space: normal; }
+
+  /* afKing subscription */
+  body.layout-basic #panel-passes .pass-afking { gap: 0.4rem; padding: 0.5rem 0.55rem; border-radius: 11px; }
+  body.layout-basic #panel-passes .pass-afking .pass-product-sigil--afking { width: 2.4rem; }
+  body.layout-basic #panel-passes .pass-afking__head .pass-section-title { font-size: 0.9rem; }
+  body.layout-basic #panel-passes .pass-afking__quick { padding-top: 0.35rem; }
+  body.layout-basic #panel-passes .pass-afking__quick {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.35rem;
+  }
+  body.layout-basic #panel-passes .pass-afking__quick > .pass-afking__balance { grid-column: 1; grid-row: 1; width: auto; }
+  body.layout-basic #panel-passes .pass-afking__quick > :is(.pass-afking__claim-button, .pass-afking__edit) {
+    grid-row: 1;
+    width: auto;
+    height: 1.9rem;
+    min-height: 1.9rem;
+    max-height: 1.9rem;
+    padding: 0 0.9rem;
+  }
+  body.layout-basic #panel-passes .pass-afking__topup { grid-column: 1 / -1; grid-row: 2; }
+  body.layout-basic #panel-passes :is(.pass-afking__topup-field, .pass-afking__topup-field input, .pass-afking__topup > .pass-afking__fund-button) {
+    height: 2.3rem;
+    min-height: 2.3rem;
+    max-height: 2.3rem;
+  }
+
+  /* Deity picker: every symbol on one screen, one row of eight per family. */
+  body.layout-basic #panel-passes .pass-deity-dialog { place-items: center; padding: 0.4rem; }
+  body.layout-basic #panel-passes .pass-deity-dialog__card { gap: 0.5rem; padding: 0.6rem; max-height: calc(100dvh - 0.8rem); }
+  body.layout-basic #panel-passes .pass-deity-dialog__head { padding-bottom: 0.45rem; }
+  body.layout-basic #panel-passes .pass-deity-dialog__head > span { grid-auto-flow: column; align-items: center; justify-content: start; gap: 0.6rem; }
+  body.layout-basic #panel-passes .pass-deity-dialog__wordmark { --deity-badge-size: 2.4rem; width: 8.5rem; margin: 0; }
+  body.layout-basic #panel-passes .pass-deity-dialog__head strong { font-size: 0.8rem; }
+  body.layout-basic #panel-passes .pass-deity-dialog__close { width: 2rem; height: 2rem; }
+  body.layout-basic #panel-passes .pass-deity-dialog__selection { grid-template-columns: 2.4rem minmax(0, 1fr); min-height: 0; padding: 0.35rem 0.55rem; }
+  body.layout-basic #panel-passes .pass-deity-preview { width: 2.4rem; height: 2.4rem; }
+  body.layout-basic #panel-passes .pass-deity-symbol-groups { gap: 0.4rem; }
+  body.layout-basic #panel-passes .pass-deity-symbol-group { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; }
+  body.layout-basic #panel-passes .pass-deity-symbol-group__title { font-size: 0.58rem; }
+  body.layout-basic #panel-passes .pass-deity-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0.22rem; }
+  body.layout-basic #panel-passes .pass-deity-symbol {
+    min-height: 0;
+    aspect-ratio: 1;
+    grid-template-rows: minmax(0, 1fr);
+    padding: 0;
+    border-radius: 7px;
+  }
+  body.layout-basic #panel-passes .pass-deity-symbol img { width: 100%; height: 100%; }
+  body.layout-basic #panel-passes .pass-deity-symbol--genesis { aspect-ratio: 1; }
+  body.layout-basic #panel-passes .pass-deity-symbol--genesis::after {
+    position: absolute;
+    right: 0;
+    bottom: 0.08rem;
+    left: 0;
+    font-size: 0.4rem;
+    letter-spacing: 0.02em;
+  }
+  body.layout-basic #panel-passes .pass-deity-buy { min-height: 2.6rem; }
 }
