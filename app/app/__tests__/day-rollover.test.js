@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {
   reconcileDaySync,
   nextDayProbeDelay,
+  startDayRollover,
+  refreshDayRollover,
   _testing,
 } from '../day-rollover.js';
 import { VOLUME_WINDOW } from '../chain-config.js';
+import { get, update, __resetForTest } from '../store.js';
 
 const win = (day, rewardPercent = 81) => ({
   day, win: true, rewardPercent, resolved: true, source: 'chain',
@@ -134,39 +137,39 @@ describe('authoritative day rollover reducer', () => {
     assert.equal(shifted.rngRequested, false);
   });
 
-  test('advanceDue falling false after RNG evidence marks processing complete', () => {
+  test('the daily seal unlocks the jackpot while unrelated miner work remains', () => {
     let state = apply(null, {
       day: 41,
       blockNumber: 110,
-      coinflip: null,
-      rngLocked: false,
+      coinflip: win(41),
+      rngLocked: true,
       rngFulfilled: true,
       advanceDue: true,
     }, { day: 40, status: 'resolved' });
-    assert.equal(state.processingComplete, false, 'pending keeper work keeps the API quiet');
+    assert.equal(state.processingComplete, false, 'FLIP resolves before the daily jackpot seals');
 
     state = apply(state, {
       day: 41,
       blockNumber: 111,
-      coinflip: null,
+      coinflip: win(41),
       rngLocked: false,
-      rngFulfilled: false,
-      advanceDue: false,
+      rngFulfilled: true,
+      advanceDue: true,
     }, { day: 40, status: 'resolved' });
     assert.equal(state.processingComplete, true,
-      'the drained predicate combines with the latched fulfilled word');
-    assert.equal(state.advanceDue, false);
+      'boxes, Degenerette and Craps must not delay the sealed jackpot');
+    assert.equal(state.jackpotReady, false, 'the sealed result still needs to be fetched');
 
     state = apply(state, {
       day: 41,
       blockNumber: 112,
       coinflip: null,
-      advanceDue: null,
+      rngLocked: null,
     }, { day: 40, status: 'resolved' });
     assert.equal(state.processingComplete, true, 'an RPC miss cannot undo completion');
   });
 
-  test('an idle false predicate is not completion, and a new day clears the latch', () => {
+  test('an unlocked pre-request day is not completion, and a new day clears the latch', () => {
     const idle = apply(null, {
       day: 41,
       blockNumber: 110,
@@ -176,26 +179,81 @@ describe('authoritative day rollover reducer', () => {
       advanceDue: false,
     }, null);
     assert.equal(idle.processingComplete, false,
-      'advanceDue is also false before a request and needs RNG evidence');
+      'an unlocked day needs its own permanent result');
 
     const complete = apply(idle, {
       day: 41,
       blockNumber: 111,
       coinflip: win(41),
-      advanceDue: false,
+      rngLocked: false,
+      rngFulfilled: false,
+      advanceDue: true,
     }, null);
     assert.equal(complete.processingComplete, true,
-      'the permanent coinflip result proves a cold-loaded day was processed');
+      'a cold load after the daily word drained still discovers the seal');
 
     const shifted = apply(complete, {
       day: 42,
       blockNumber: 120,
       coinflip: null,
+      rngLocked: false,
       rngFulfilled: false,
       advanceDue: true,
     }, { day: 41, status: 'resolved' });
     assert.equal(shifted.processingComplete, false);
-    assert.equal(shifted.advanceDue, true);
+  });
+
+  test('midday RNG and an idle miner cannot claim an unsealed daily jackpot', () => {
+    const state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null,
+      rngLocked: false, rngFulfilled: true, advanceDue: false,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, false);
+  });
+
+  test('a missing lock read cannot combine an older unlocked state with a new FLIP result', () => {
+    let state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null, rngLocked: false,
+    }, { day: 40, status: 'resolved' });
+    state = apply(state, {
+      day: 41, blockNumber: 111, coinflip: win(41), rngLocked: null,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, false);
+    state = apply(state, {
+      day: 41, blockNumber: 112, coinflip: null, rngLocked: false,
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.processingComplete, false, 'both answers must come from one snapshot');
+  });
+
+  test('a sealed exact-day payload proves completion without a lock read', () => {
+    const state = apply(null, { day: 41, blockNumber: 110, coinflip: null }, {
+      day: 41, status: 'resolved',
+    });
+    assert.equal(state.processingComplete, true);
+  });
+
+  test('the daily seal prompts one result refresh even when miner work never goes idle', async () => {
+    __resetForTest();
+    const edges = [];
+    _testing.setSnapshotReader(async () => ({
+      day: 41, blockNumber: 110, coinflip: null, rngLocked: false,
+    }));
+    try {
+      startDayRollover({ onRefreshNeeded: edge => edges.push(edge) });
+      await refreshDayRollover();
+      _testing.publish({ day: 41, blockNumber: 111, coinflip: win(41), rngLocked: null });
+      update('app.lastDay', { day: 40, status: 'resolved' });
+      assert.equal(get('app.daySync').processingComplete, false,
+        'a last-day refresh must not recombine readings from different snapshots');
+      _testing.publish({ day: 41, blockNumber: 112, coinflip: win(41), rngLocked: true, advanceDue: true });
+      assert.equal(edges.filter(edge => edge.processingCompleteChanged).length, 0);
+      _testing.publish({ day: 41, blockNumber: 113, coinflip: win(41), rngLocked: false, advanceDue: true });
+      _testing.publish({ day: 41, blockNumber: 114, coinflip: win(41), rngLocked: false, advanceDue: true });
+      const completed = edges.filter(edge => edge.processingCompleteChanged);
+      assert.equal(completed.length, 1);
+      assert.equal(completed[0].state.day, 41);
+      assert.equal(completed[0].state.jackpotReady, false);
+    } finally { _testing.reset(); __resetForTest(); }
   });
 
   test('stale and duplicate responses cannot regress a ready target', () => {
