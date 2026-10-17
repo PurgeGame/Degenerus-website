@@ -431,10 +431,13 @@
   /* Foils sit in one row below the full-width draw. Empty bays need no space
      on a phone; owned/claimable tickets keep their existing controls. */
   body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero {
-    flex: 1 1 0; min-height: 17.75rem;
+    /* Event panels below the cabinet can scroll; they must not squeeze the
+       main drawing back to a thumbnail when a special level opens. */
+    flex: 1 1 0;
+    min-height: max(17.75rem, min(calc(100vw + 7.75rem), calc(100dvh - 20rem)));
   }
   body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero:has(.ldj-foil-machine-slot.is-loaded) {
-    min-height: 21.25rem;
+    min-height: max(21.25rem, min(calc(100vw + 11.25rem), calc(100dvh - 20rem)));
   }
   body.layout-basic[data-mobile-page="draw"] > .container > main > .jackpot-hero > .jackpot-hero__draw {
     flex: 1 1 0; min-height: 0;
