@@ -5,6 +5,13 @@
 .mpager-dock,
 .mpager-rotate { display: none; }
 
+/* Desktop retains the original event rails. Only pager-mounted panels get
+   these wrappers; standalone demos and embeds keep their existing markup. */
+.mobile-event-summary,
+.mobile-event-sheet__header { display: none; }
+.mobile-event-sheet,
+.mobile-event-sheet__body { display: contents; }
+
 /* Phones held sideways get one notice instead of a second layout. Touch-only
    screens this short are phones; tablets and desktops keep landscape. */
 @media (orientation: landscape) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
@@ -499,6 +506,9 @@
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces:has(.dec-ticket-piece--foil:not([hidden])) .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
     font-size: clamp(.625rem, 2.7vw, .75rem);
   }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-pack-face .dec-pack-level {
+    font-weight: 800;
+  }
   /* Builders take all the height the panel has left; each builder card
      stretches to its half and centres its art. */
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders {
@@ -540,6 +550,68 @@
 
 /* ---- Flip --------------------------------------------------------------------- */
 @media (max-width: 768px) {
+  body.layout-basic[data-mobile-page="flip"] > .container > main > :is(app-baf-eve, app-decimator-burn) {
+    flex: none; margin: .3rem 0 0;
+  }
+  body.layout-basic .mobile-event-summary {
+    --event-accent: #7abfff;
+    display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto auto;
+    align-items: center; gap: .5rem; box-sizing: border-box;
+    width: 100%; min-height: 3.5rem; padding: .4rem .55rem;
+    border: 1px solid #426689; border-radius: 8px;
+    background: linear-gradient(110deg, #122b47, #0d1320 65%); color: #eef7ff;
+    font-family: "Inter", system-ui, sans-serif; text-align: left; cursor: pointer;
+  }
+  body.layout-basic .mobile-event-summary[data-event="decimator"] {
+    --event-accent: #ffa5a9; border-color: #82414b;
+    background: linear-gradient(110deg, #421a22, #180f15 65%);
+  }
+  body.layout-basic .mobile-event-summary:focus-visible { outline: 2px solid var(--event-accent); outline-offset: -3px; }
+  body.layout-basic .mobile-event-summary__mark { width: 2rem; height: 2rem; object-fit: contain; }
+  body.layout-basic .mobile-event-summary__copy,
+  body.layout-basic .mobile-event-summary__pool { display: grid; min-width: 0; gap: .2rem; }
+  body.layout-basic .mobile-event-summary__copy strong { font-size: .7rem; letter-spacing: .04em; }
+  body.layout-basic .mobile-event-summary__copy small { color: var(--event-accent); font-size: .55rem; line-height: 1.2; }
+  body.layout-basic .mobile-event-summary__pool { text-align: right; }
+  body.layout-basic .mobile-event-summary__pool strong { font-size: .85rem; font-variant-numeric: tabular-nums; }
+  body.layout-basic .mobile-event-summary__pool small { color: #aaaab9; font-size: .48rem; }
+  body.layout-basic .mobile-event-summary__action { display: grid; justify-items: center; color: var(--event-accent); font-size: .48rem; }
+  body.layout-basic .mobile-event-summary__action b { font-size: 1.2rem; line-height: .9; }
+  body.layout-basic .mobile-event-sheet:not([open]) { display: none; }
+  body.layout-basic .mobile-event-sheet[open] {
+    position: fixed; display: flex; flex-direction: column; box-sizing: border-box;
+    top: calc(var(--mpager-vv-top, 0px) + var(--mpager-vv-h, 100dvh) / 2);
+    bottom: auto; width: min(36rem, calc(100vw - 1rem)); max-width: none;
+    max-height: calc(var(--mpager-vv-h, 100dvh) - 1rem); margin: 0 auto;
+    padding: .45rem; border: 1px solid #6e647b; border-radius: 12px;
+    background: #100e18; color: #f5efe0; transform: translateY(-50%);
+    box-shadow: 0 15px 60px #000a; overflow: hidden;
+  }
+  body.layout-basic .mobile-event-sheet::backdrop { background: #05040bd9; }
+  body.layout-basic .mobile-event-sheet__header {
+    display: flex; flex: none; align-items: center; justify-content: space-between; gap: .6rem;
+    padding-left: .5rem; font: 800 .75rem/1.2 "Inter", system-ui, sans-serif;
+  }
+  body.layout-basic .mobile-event-sheet__close {
+    flex: none; width: 2.75rem; height: 2.75rem; padding: 0;
+    border: 0; border-radius: 8px; background: #25202f; color: #fff; font-size: 1.5rem; cursor: pointer;
+  }
+  body.layout-basic .mobile-event-sheet__body { display: block; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  body.layout-basic .mobile-event-sheet__body > :is(.dbb, .baf-eve) { margin-top: .4rem; }
+
+  /* Only active events reserve space. Size the table's coin and empty felt
+     from its remaining height instead of the whole phone screen. */
+  body.layout-basic[data-mobile-page="flip"] > .container > main:has(> :is(app-baf-eve, app-decimator-burn):not([hidden])) > .jackpot-hero {
+    flex: 1 1 0; min-height: 23rem;
+  }
+  body.layout-basic[data-mobile-page="flip"] > .container > main:has(> :is(app-baf-eve, app-decimator-burn):not([hidden])) app-daily-flip {
+    container-type: size; flex: 1 1 0; min-height: 0;
+  }
+  body.layout-basic[data-mobile-page="flip"] > .container > main:has(> :is(app-baf-eve, app-decimator-burn):not([hidden])) .app-daily-flip {
+    flex: 1 1 0; min-height: 0;
+    --df-flip-coin: clamp(105px, calc(100cqh * .27), 180px);
+    --df-flip-oval-h: clamp(3.25rem, calc(100cqh * .13), 5rem);
+  }
   /* Table geometry. The felt seam sits at 50% of the panel. The lower
      fixtures (Tomorrow + funds) are ~6.75rem tall and pinned to the bottom.
      Today's bet sits in the upper part of the red band, nearly felt-wide,

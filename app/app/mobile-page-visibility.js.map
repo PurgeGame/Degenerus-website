@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["mobile-page-visibility.js"],
+  "sourcesContent": ["// Match the phone pager's CSS without triggering a layout measurement. Shared\n// by scheduled polls and store-driven reads so both respect hidden pages.\nexport function isComponentOffPage(owner) {\n  if (!owner || typeof owner.closest !== 'function' || typeof document === 'undefined') return false;\n  const body = document.body;\n  const page = body?.dataset?.mobilePage;\n  if (!page || !body.classList?.contains('layout-basic')) return false;\n  if (typeof matchMedia !== 'function' || !matchMedia('(max-width: 768px)').matches) return false;\n  for (let host = owner.closest('[data-mpage]'); host; host = host.parentElement?.closest('[data-mpage]')) {\n    if (!String(host.getAttribute('data-mpage') || '').split(/\\s+/).includes(page)) return true;\n  }\n  return false;\n}\n"],
+  "mappings": "+EAEO,gBAAS,mBAAmBA,EAAO,CACxC,GAAI,CAACA,GAAS,OAAOA,EAAM,SAAY,YAAc,OAAO,SAAa,IAAa,MAAO,GAC7F,MAAMC,EAAO,SAAS,KAChBC,EAAOD,GAAM,SAAS,WAE5B,GADI,CAACC,GAAQ,CAACD,EAAK,WAAW,SAAS,cAAc,GACjD,OAAO,YAAe,YAAc,CAAC,WAAW,oBAAoB,EAAE,QAAS,MAAO,GAC1F,QAASE,EAAOH,EAAM,QAAQ,cAAc,EAAGG,EAAMA,EAAOA,EAAK,eAAe,QAAQ,cAAc,EACpG,GAAI,CAAC,OAAOA,EAAK,aAAa,YAAY,GAAK,EAAE,EAAE,MAAM,KAAK,EAAE,SAASD,CAAI,EAAG,MAAO,GAEzF,MAAO,EACT,CAVgBE,EAAA",
+  "names": ["owner", "body", "page", "host", "__name"]
+}
