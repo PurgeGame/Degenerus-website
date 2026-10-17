@@ -76,10 +76,10 @@ test('run 66 ticket reveals and Bingo use wallet IDs without subtracting one', (
   assert.equal((await ticketBatchWins(f.s,{},PLAYER)).length,1);
 }));
 
-test('run 66 far-future inventory reads the account balance after removal of queue tags', () => current(async () => {
+test('run 66 far-future inventory reads packed balances and queue-header tags', () => current(async () => {
   const f=await rpcFixture();await f.wallet(37,PLAYER);
   f.answer('GAME_LENS','activeTicketLevelOf',[20]);
-  f.answer('GAME','entriesOwedView',([level])=>[level===25n?8n:0n]);
+  await f.field('GAME','farFutureOwed',0x80000008n,37,3);
   const result=await farFutureQueue(f.s,PLAYER,{levels:[25,26]});
   assert.equal(result.rows.length,1);assert.equal(result.rows[0].entryCount,8);
 }));
