@@ -1,6 +1,6 @@
 // Bottom-pinned reveal tray: only actionable presentation work belongs here.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -115,13 +115,20 @@ const drawGate = await import('../../app/major-draw-activity.js');
 const uiPreferences = await import('../../app/ui-preferences.js');
 const store = await import('../../app/store.js');
 const trayModule = await import('../app-reveal-tray.js');
+const { __setDegenesisNowForTest, MAIN_LAUNCH_DAY } = await import('../../app/degenesis.js');
+const { VOLUME_WINDOW } = await import('../../app/chain-config.js');
+const dayStart = (day) => VOLUME_WINDOW.anchor
+  + (VOLUME_WINDOW.deployDayBoundary + day - 1) * VOLUME_WINDOW.period;
 
 beforeEach(() => {
+  __setDegenesisNowForTest(() => dayStart(MAIN_LAUNCH_DAY));
   store.__resetForTest();
   pending.__resetPendingActionsForTest();
   drawGate.__resetMajorDrawActivityForTest();
   localStorage._m.clear();
 });
+
+afterEach(() => __setDegenesisNowForTest(null));
 
 describe('actionableRevealItems', () => {
   test('the independent RNG monitor yields while a major draw owns the frame lane', () => {
@@ -229,6 +236,44 @@ describe('actionableRevealItems', () => {
 });
 
 describe('<app-reveal-tray>', () => {
+  test('Degenesis keeps player work, suppresses jackpot reminders and restores them at launch', async () => {
+    let now = dayStart(1);
+    __setDegenesisNowForTest(() => now);
+    let jackpotOpened = 0;
+    uiPreferences.writeRevealAutoOpenPreference(true);
+    pending.publishPendingActions('degenesis-check', [
+      { id: 'pack', kind: 'tickets', state: 'waiting', pinned: true, passive: true },
+      { id: 'mine', kind: 'mass-resolution', state: 'ready', run: async () => {} },
+      { id: 'draw', kind: 'decimator', state: 'ready', autoOpen: true,
+        run: async () => { jackpotOpened++; } },
+      ...['baf', 'foil-match', 'foil-gold', 'growth-claim', 'affiliate-bonus']
+        .map((kind) => ({ id: kind, kind, state: 'ready', run: async () => {} })),
+    ]);
+    store.update('game.phase', 'JACKPOT');
+    store.update('game.rngLocked', true);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    try {
+      for (const day of [1, 2, 8]) {
+        now = dayStart(day);
+        store.update('app.gameState', { level: 0, currentDay: day });
+        await Promise.resolve();
+        assert.deepEqual(el.pendingSummary.items.map((item) => item.kind), ['tickets', 'mass-resolution']);
+        assert.equal(el.pendingSummary.rng, null, 'no standalone jackpot RNG during Degenesis');
+        assert.equal(jackpotOpened, 0, 'hidden draw reminders cannot auto-open');
+      }
+      el.querySelector('[data-bind="rrt-hide"]').dispatchEvent({ type: 'click' });
+      assert.equal(pendingSurfaceVisible(el), false, 'HIDE fingerprints only the visible rows');
+      now = dayStart(MAIN_LAUNCH_DAY);
+      store.update('app.gameState', { level: 1, currentDay: MAIN_LAUNCH_DAY });
+      assert.ok(el.pendingSummary.items.some((item) => item.kind === 'decimator'),
+        'launch restores retained reminders without a new publish');
+      assert.ok(el.pendingSummary.rng, 'the main-game RNG rail returns at launch');
+    } finally {
+      el.disconnectedCallback();
+    }
+  });
+
   test('a large FLIP spin receipt is abbreviated in the visible Pending amount', () => {
     pending.publishPendingActions('degenerette', [{
       id: 'degenerette:large', kind: 'degenerette', label: '3 spins',

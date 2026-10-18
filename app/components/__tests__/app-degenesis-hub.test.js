@@ -112,6 +112,8 @@ describe('Degenesis cabinet hub', () => {
     assert.match(component, /this\.#deskControl\('dec-buy-cta'\)\?\.click\(\)/,
       'BUY delegates to the desk\'s own guarded purchase button');
     assert.match(component, /data-panel-open="passes"/, 'Passes open the existing AFKING PASSES popup');
+    assert.match(component, /#onTxConfirmed = \(\) => \{[\s\S]*?this\.#deskBuyPending && \(this\.#dialogKind === 'tickets' \|\| this\.#dialogKind === 'luckboxes'\)\)[\s\S]*?this\.#close\(\);/,
+      'a confirmed desk purchase closes the Tickets/Luckboxes popup (phone review 2026-10-18: it stayed up)');
     assert.match(component, /class="qst-action-dialog dgx-dialog"/, 'the popup reuses the quest dialog');
   });
 
@@ -125,14 +127,21 @@ describe('Degenesis cabinet hub', () => {
       'contents match _degenesisOutcome: 50% FLIP-valued, 40% sDGNRS, 10% WWXRP');
   });
 
-  test('the hub sits in the drawing machine and takes over the foil sockets', () => {
+  test('the hub sits in the drawing machine and takes over the board quadrants', () => {
     assert.match(html,
-      /<div class="jackpot-hero__machine">[\s\S]*?<last-day-jackpot><\/last-day-jackpot>[\s\S]*?<app-degenesis-hub><\/app-degenesis-hub>/);
+      /<div class="jackpot-hero__machine"[^>]*>[\s\S]*?<last-day-jackpot><\/last-day-jackpot>[\s\S]*?<app-degenesis-hub><\/app-degenesis-hub>/);
     assert.match(html, /src="\/app\/components\/app-degenesis-hub\.js"/);
     assert.match(html, /href="\/app\/styles\/degenesis-hub\.css"/);
-    assert.match(css, /\.jackpot-hero__machine\[data-degenesis\] \.ldj-foil-machine-bank\s*\{\s*visibility:\s*hidden/);
-    assert.match(css,
-      /grid-template-columns:\s*var\(--jp-foil-size\) var\(--jp-side-gap\) var\(--jp-board-size\) var\(--jp-side-gap\) var\(--jp-foil-size\)/,
-      'the bank reuses the foil bank grid');
+    assert.doesNotMatch(css, /ldj-foil-machine-bank/, 'the foil sockets stay as they are');
+    assert.match(component, /quadrant\.replaceChildren\(button\)/,
+      'buy buttons replace the contents of the existing replay quadrants');
+    assert.doesNotMatch(component, /class="dgx-center"/,
+      'the original center diamond and flame remain the only center');
+    assert.match(css, /\.dgx-module \{[^}]*width: 100%;[^}]*height: 100%/,
+      'buttons fill their original quadrant at every board size');
+    assert.match(component, /class="app-decimator-panel dgx-ticket-art"[\s\S]*?class="dec-ticket-face"/,
+      'Tickets shows the desk\'s ticket face');
+    assert.match(css, /\.dgx-module--passes \.dgx-module__label \{[^}]*clip-path: inset\(50%\)/,
+      'the passes art carries its own PASSES word');
   });
 });
