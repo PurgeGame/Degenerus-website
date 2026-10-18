@@ -683,7 +683,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const quantity = el.querySelector('[name="pass-whale-qty"]');
     quantity.value = '2';
     quantity.dispatchEvent({ type: 'input' });
-    assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.8 ETH');
+    // Audit 4f4aa8377: one box per pass (up to 100), each floored to whole 0.001 ETH.
+    assert.equal(benefit.textContent, 'BONUS LUCKBOXES · 2 × 0.4 ETH');
     assert.equal(buy.textContent, 'BUY WHALE PASS\n8 ETH',
       'changing quantity updates the second-line total in the purchase action');
 
@@ -704,9 +705,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.adjustQuickWhaleQuantity(-1);
     el.adjustQuickWhaleQuantity(-1);
     assert.equal(quantity.value, '1');
+    // WHALE_MAX_QUANTITY = 1,000 (audit 4f4aa8377; was 100).
     quantity.value = '100';
     el.adjustQuickWhaleQuantity(1);
-    assert.equal(quantity.value, '100');
+    assert.equal(quantity.value, '101');
+    quantity.value = '1000';
+    el.adjustQuickWhaleQuantity(1);
+    assert.equal(quantity.value, '1000');
     el.disconnectedCallback();
   });
 
@@ -812,7 +817,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-whale-buy"]').textContent,
       'BUY WHALE PASS\n6.6 ETH · BOON −35% 1ST');
     assert.equal(el.querySelector('[data-bind="pass-whale-lootbox"]').textContent,
-      'BONUS LUCKBOX · 0.66 ETH');
+      'BONUS LUCKBOXES · 2 × 0.33 ETH');
     assert.equal(el.querySelector('[data-bind="pass-lazy-row"]').hidden, false,
       'a live Lazy discount opens its otherwise closed level-12 purchase gate');
     assert.equal(el.querySelector('[data-bind="pass-lazy-buy"]').textContent,

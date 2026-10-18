@@ -494,23 +494,28 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a packed combo order survives Pending so its reveal can offer combined or individual views', async () => {
+  test('one-kind orders sharing an RNG row survive Pending so its reveal can offer combined or individual views', async () => {
     const el = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);
     await tick();
-    const comboOrder = 1n | (1n << 8n) | (2n << 16n);
-
-    fireTxConfirmed([{ index: 27, day: 5 }], {
+    // Audit 4f4aa8377: one kind per purchase, so a "combo" is three purchases on one RNG row.
+    const orders = [
+      lootboxMod.packBoxOrder({ kind: 'small', quantity: 1 }),
+      lootboxMod.packBoxOrder({ kind: 'medium', quantity: 1 }),
+      lootboxMod.packBoxOrder({ kind: 'large', quantity: 2 }),
+    ];
+    orders.forEach((boxOrder, i) => fireTxConfirmed([{ index: 27, day: 5 }], {
       player: ADDR,
-      transactionHash: '0xcombo',
-      boxOrder: comboOrder,
+      transactionHash: `0xcombo${i}`,
+      boxOrder,
       ticketPriceWei: 10_000_000_000n,
-    });
+    }));
     await tick();
+    const comboOrders = orders.map(String);
 
     const stored = JSON.parse(localStorage.getItem(KEY));
-    assert.deepEqual(stored[0].boxOrders, [String(comboOrder)],
-      'the exact Small/Medium/Large counts remain attached to the shared RNG row');
+    assert.deepEqual(stored[0].boxOrders, comboOrders,
+      'each purchase keeps its exact kind and quantity on the shared RNG row');
     const pending = pendingActionsMod.getPendingActions()
       .find((item) => item.id === 'lootbox:27');
     assert.equal(pending.amountLabel, '0.56 ETH',
@@ -531,7 +536,7 @@ describe('app-box-strip', () => {
     const restored = instantiate({ trayOnly: true });
     storeMod.update('connected.address', ADDR);
     await tick();
-    assert.deepEqual(JSON.parse(localStorage.getItem(KEY))[0].boxOrders, [String(comboOrder)],
+    assert.deepEqual(JSON.parse(localStorage.getItem(KEY))[0].boxOrders, comboOrders,
       'reloading does not collapse the combo into one anonymous aggregate box');
     restored.disconnectedCallback();
   });
@@ -540,7 +545,7 @@ describe('app-box-strip', () => {
     const oneEth = 10n ** 18n / ETH_DIVISOR;
     const price = oneEth / 25n;
     const boxOrder = lootboxMod.packBoxOrder(size === 'custom'
-      ? { customCount: 6, customSizeWei: oneEth } : { large: 6 });
+      ? { kind: 'custom', quantity: 6, customWei: oneEth } : { kind: 'large', quantity: 6 });
     // Reproduce a cached result whose amount was overwritten by one smaller
     // settlement leg while its actual six-box purchase order survived.
     localStorage.setItem(KEY, JSON.stringify([{
@@ -591,7 +596,7 @@ describe('app-box-strip', () => {
       hasLootboxLeg: true, hasPresaleLeg: false,
     }], {
       transactionHash: '0xregular',
-      boxOrder: lootboxMod.packBoxOrder({ small: 1 }),
+      boxOrder: lootboxMod.packBoxOrder({ kind: 'small', quantity: 1 }),
       lootBoxAmountWei: 10_000_000_000n,
       presaleBoxAmountWei: 0n,
     });
@@ -620,7 +625,8 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('a reloaded regular row rediscovers a later presale purchase from both receipt hashes', async () => {
+  // Audit 4f4aa8377 removed the presale leg; a second LootBoxBuy on the same row still merges.
+  test('a reloaded regular row rediscovers a later purchase from both receipt hashes', async () => {
     const regularWei = 10_000_000_000n;
     const presaleWei = 20_000_000_000n;
     globalThis.localStorage.setItem(KEY, JSON.stringify([{
@@ -637,7 +643,7 @@ describe('app-box-strip', () => {
     const receiptFor = (hash) => ({
       logs: [{
         parsed: hash === '0xpresale'
-          ? { name: 'PresaleBoxBuy', args: { buyer: ADDR, index: 8n, amount: presaleWei } }
+          ? { name: 'LootBoxBuy', args: { buyer: ADDR, index: 8n, amount: presaleWei } }
           : { name: 'LootBoxBuy', args: { buyer: ADDR, index: 8n, amount: regularWei } },
       }],
     });
@@ -678,11 +684,10 @@ describe('app-box-strip', () => {
 
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 1);
-    assert.equal(pending[0].label, 'Luckbox + presale box');
+    assert.equal(pending[0].label, 'Luckbox');
     assert.equal(pending[0].amountLabel, '0.03 ETH');
     const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
-    assert.equal(stored[0].hasPresaleLeg, true,
-      'immutable PresaleBoxBuy logs heal an old browser row even though the feed omits its kind');
+    assert.equal(stored[0].hasPresaleLeg, false, 'no presale leg exists any more');
     assert.deepEqual(stored[0].transactionHashes.sort(), ['0xpresale', '0xregular']);
     el.disconnectedCallback();
   });
@@ -1098,7 +1103,9 @@ describe('app-box-strip', () => {
     storeMod.update('connected.address', ADDR);
     await tick();
     fireTxConfirmed([{ index: 8, day: 4 }]);
-    await tick();
+    // The first background poll also loads the chain read path; wait for it, bounded.
+    for (let i = 0; i < 40 && !pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8')?.resolved; i += 1) await tick();
 
     const pending = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');

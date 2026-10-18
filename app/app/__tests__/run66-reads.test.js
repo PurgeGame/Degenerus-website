@@ -49,8 +49,9 @@ test('run 66 queued purchases retain separate positions and stop at the settleme
   const f = await rpcFixture(); await f.wallet(37, PLAYER);
   await f.field('GAME','lootboxRngPacked',2n << 120n);
   const {slot} = await f.s.location('GAME','boxQueue',[0]);
-  const entry = 37n | (1200n << 56n) | (1n << 100n);
-  for (let i=0;i<2;i++) f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot)+BigInt(i)}`,entry);
+  // Audit 4f4aa8377: positions 0 and 1 share word 0 as lanes 0 and 1 (85 bits each).
+  const entry = 37n | (10n << 32n) | (1200n << 53n) | (1n << 77n);
+  f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot)}`,entry | (entry << 85n));
   for (let i=0;i<2;i++) await f.event('GAME','LootBoxBuy',{buyer:37,index:0,position:i,amount:10000000000n},{block:9990+i});
   assert.equal((await pendingBoxes(f.s,PLAYER)).length,2);
   assert.equal(await pendingBoxWord(f.s,'boxQueue',0,PLAYER,1),entry);

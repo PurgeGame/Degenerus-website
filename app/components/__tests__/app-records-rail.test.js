@@ -1388,8 +1388,8 @@ describe('rail wiring', () => {
       'an open popup must use the viewport rather than the contained rail as its fixed-position block');
   });
 
-  test('refreshes the live pool after mined app transactions and on a short poll', () => {
-    assert.match(COMPONENT, /POLL_MS = 15_000/);
+  test('refreshes the live pool after mined app transactions and on a slow background poll', () => {
+    assert.match(COMPONENT, /POLL_MS = 60_000/);
     assert.match(COMPONENT, /addEventListener\(TX_CONFIRMED_EVENT/);
     assert.match(COMPONENT, /removeEventListener\?\.\(TX_CONFIRMED_EVENT/);
   });

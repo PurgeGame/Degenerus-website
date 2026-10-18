@@ -1,5 +1,5 @@
 // Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
+import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
 pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 // /app/app/__tests__/lootbox.test.js — Phase 60 Plan 60-02 (LBX-01 + LBX-04).
 //
@@ -21,7 +21,7 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as readProviderMod from '../read-provider.js';
 import { decodeRevertReason } from '../reason-map.js';
-import { CONTRACTS } from '../chain-config.js';
+import { CONTRACTS, ETH_DIVISOR } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness
@@ -45,10 +45,8 @@ function makeFakeContract(opts = {}) {
     purchase: [],
     purchaseStatic: [],
     purchaseEstimate: [],
-    buyLootboxAndPresaleBox: [],
-    buyLootboxAndPresaleBoxStatic: [],
-    buyPresaleBox: [],
-    buyPresaleBoxStatic: [],
+    buyDegenesisBox: [],
+    buyDegenesisBoxStatic: [],
     mineFlip: [],
     mineFlipStatic: [],
     boxIndexComplete: [],
@@ -57,8 +55,7 @@ function makeFakeContract(opts = {}) {
   };
   const staticCallStub = (methodName) => async (...args) => {
     if (methodName === 'purchase') calls.purchaseStatic.push(args);
-    if (methodName === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
-    if (methodName === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
+    if (methodName === 'buyDegenesisBox') calls.buyDegenesisBoxStatic.push(args);
     if (methodName === 'mineFlip') calls.mineFlipStatic.push(args);
     if (opts.staticCallError?.[methodName]) throw opts.staticCallError[methodName];
     if (opts.staticCallShouldRevert?.[methodName]) {
@@ -85,24 +82,15 @@ function makeFakeContract(opts = {}) {
   }
   const c = {
     purchase,
-    buyLootboxAndPresaleBox: Object.assign(
+    buyDegenesisBox: Object.assign(
       async (...args) => {
-        calls.buyLootboxAndPresaleBox.push(args);
-        return makeFakeTx(makeFakeReceipt(opts.combinedPresaleLogs));
+        calls.buyDegenesisBox.push(args);
+        if (opts.degenesisShouldReject) throw opts.degenesisShouldReject;
+        return makeFakeTx(makeFakeReceipt(opts.degenesisLogs));
       },
-      { staticCall: staticCallStub('buyLootboxAndPresaleBox') }
+      { staticCall: staticCallStub('buyDegenesisBox') }
     ),
-    buyPresaleBox: Object.assign(
-      async (...args) => {
-        calls.buyPresaleBox.push(args);
-        if (opts.presaleShouldReject) throw opts.presaleShouldReject;
-        return makeFakeTx(makeFakeReceipt(opts.presaleLogs));
-      },
-      { staticCall: staticCallStub('buyPresaleBox') }
-    ),
-    lootboxPresaleActiveFlag: async () => opts.presaleActive ?? true,
-    presaleBoxCreditOf: async () => opts.presaleCredit ?? (2n * lootboxMod.PRESALE_BOX_MIN_WEI),
-    presaleBoxEthRemaining: async () => opts.presaleRemaining ?? (50n * 10n ** 18n),
+    degenesisCreditOf: async () => opts.degenesisCredit ?? (2n * lootboxMod.DEGENESIS_MIN_WEI),
     // Audit 2525eb7fd removed the per-box openBox door and audit 18490c6fe the openBoxes(maxCount)
     // valve: mineFlip() is the only door, and its stages open boxes in order.
     mineFlip: Object.assign(
@@ -407,7 +395,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     // DegenerusGame.sol:703 — "Purchase units (400 = 4*QTY_SCALE = one whole
     // ticket = 4 entries)". x100 bought a QUARTER of what the field said.
     assert.equal(args[1], 2000n, '5 tickets = 20 entries = 2000 purchase units');
-    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 1 }), 'one Small box is packed');
+    assert.equal(args[2], lootboxMod.packBoxOrder({ kind: 'small', quantity: 1 }), 'one Small box is packed');
     assert.equal(typeof args[3], 'string');
     assert.equal(args[3], '0x0000000000000000000000000000000000000000000000000000000000000000', 'ZeroHash affiliate default');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
@@ -436,39 +424,56 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lootboxMod.ticketCostFromTickets(price, 5), price * 5n);
   });
 
-  test('packed box orders round-trip all four tiers and quote 1x/5x/25x plus custom', () => {
+  // LOOTBOX-COMPACT-ORDER-CLIENT-HANDOFF §9: boxOrder = quantity | kind << 7 | customUnits << 9.
+  test('compact box orders: all four kinds at quantities 1 and 100 encode and price exactly', () => {
+    const unit = lootboxMod.BOX_VALUE_UNIT_WEI;
+    // The value unit follows the active chain profile: 1e15 wei mainnet, 1e9 wei on the ÷1e6 testnet.
+    assert.equal(unit, (10n ** 15n) / ETH_DIVISOR);
     const priceWei = 4n * lootboxMod.LOOTBOX_MIN_WEI;
-    const customSizeWei = 2n * lootboxMod.LOOTBOX_MIN_WEI;
-    const order = lootboxMod.packBoxOrder({
-      small: 2,
-      medium: 3,
-      large: 4,
-      customCount: 5,
-      customSizeWei,
-    });
-    assert.deepEqual(lootboxMod.unpackBoxOrder(order), {
-      small: 2,
-      medium: 3,
-      large: 4,
-      customCount: 5,
-      customSizeWei,
-    });
-    assert.equal(
-      lootboxMod.boxOrderCostFromPriceWei(priceWei, order),
-      priceWei * (2n + 3n * 5n + 4n * 25n) + customSizeWei * 5n,
-    );
+    const customWei = 37n * unit;
+    for (const quantity of [1, 100]) {
+      for (const [kindIndex, kind] of ['small', 'medium', 'large', 'custom'].entries()) {
+        const order = lootboxMod.packBoxOrder({ kind, quantity, customWei: kind === 'custom' ? customWei : 0n });
+        const units = kind === 'custom' ? 37n : 0n;
+        assert.equal(order, BigInt(quantity) | (BigInt(kindIndex) << 7n) | (units << 9n), `${kind} x${quantity}`);
+        const decoded = lootboxMod.unpackBoxOrder(order);
+        assert.equal(decoded.kind, kind);
+        assert.equal(decoded.quantity, quantity);
+        assert.equal(decoded.customUnits, units);
+        assert.equal(lootboxMod.packBoxOrder({ kind: decoded.kind, quantity: decoded.quantity, customWei: decoded.customWei }), order);
+        const perBox = kind === 'custom' ? customWei : priceWei * [1n, 5n, 25n][kindIndex];
+        assert.equal(lootboxMod.boxOrderCostFromPriceWei(priceWei, order), BigInt(quantity) * perBox);
+      }
+    }
+    assert.equal(lootboxMod.packBoxOrder({ kind: 'small', quantity: 0 }), 0n, 'quantity 0 is no box leg');
   });
 
-  test('packed box orders reject fractional counts, more than 100 boxes, and undersized custom boxes', () => {
-    assert.throws(() => lootboxMod.packBoxOrder({ small: 0.5 }), /whole number/);
-    assert.throws(
-      () => lootboxMod.packBoxOrder({ small: 50, medium: 51 }),
-      /at most 100 boxes/,
-    );
-    assert.throws(
-      () => lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: lootboxMod.LOOTBOX_MIN_WEI - 1n }),
-      /at least 0\.01 ETH each/,
-    );
+  test('compact box orders: custom units 10 and 2,000,000 accepted; 0-9, 2,000,001, 2,097,151 rejected', () => {
+    const unit = lootboxMod.BOX_VALUE_UNIT_WEI;
+    assert.equal(lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: 10n * unit }) >> 9n, 10n);
+    assert.equal(lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: 2_000_000n * unit }) >> 9n, 2_000_000n);
+    assert.equal(lootboxMod.BOX_CUSTOM_MIN_WEI, 10n * unit);
+    assert.equal(lootboxMod.BOX_CUSTOM_MAX_WEI, 2_000_000n * unit);
+    for (const units of [0n, 1n, 9n, 2_000_001n, 2_097_151n]) {
+      assert.throws(() => lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: units * unit }),
+        /0\.01-2,000 ETH/, `${units} units`);
+      // A raw word carrying the same units is rejected on decode too (the contract reverts E()).
+      assert.throws(() => lootboxMod.unpackBoxOrder(1n | (3n << 7n) | (units << 9n)), /valid packed box order/);
+    }
+    // Never floors: a value off the 0.001 ETH grid is refused, not trimmed.
+    assert.throws(() => lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: 10n * unit + 1n }), /whole 0\.001 ETH/);
+  });
+
+  test('compact box orders reject bad quantities, preset units and high bits', () => {
+    for (const quantity of [0.5, -1, 101, 127, 1000]) {
+      assert.throws(() => lootboxMod.packBoxOrder({ kind: 'small', quantity }), /1 to 100/, `quantity ${quantity}`);
+    }
+    assert.throws(() => lootboxMod.packBoxOrder({ kind: 'medium', quantity: 1, customWei: lootboxMod.BOX_CUSTOM_MIN_WEI }),
+      /preset Luckbox carries no custom size/);
+    assert.throws(() => lootboxMod.packBoxOrder({ kind: 'jumbo', quantity: 1 }), /Choose a Luckbox size/);
+    assert.throws(() => lootboxMod.unpackBoxOrder(101n), /valid packed box order/, 'quantity 101 fits the field');
+    assert.throws(() => lootboxMod.unpackBoxOrder(1n | (1n << 9n)), /valid packed box order/, 'preset with units');
+    assert.throws(() => lootboxMod.unpackBoxOrder(1n | (1n << 30n)), /valid packed box order/, 'bit 30');
   });
 
   test('purchaseEth rejects non-canonical packed words before an RPC call', async () => {
@@ -843,14 +848,12 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   test('purchaseEth packs legacy quantity as Small boxes and quotes each at the routed price', async () => {
     const result = await lootboxMod.purchaseEth({ ticketQuantity: 0, lootboxQuantity: 3 });
     const [args] = lastFakeContract._calls.purchase;
-    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 3 }));
-    assert.deepEqual(lootboxMod.unpackBoxOrder(args[2]), {
-      small: 3,
-      medium: 0,
-      large: 0,
-      customCount: 0,
-      customSizeWei: 0n,
-    });
+    assert.equal(args[2], lootboxMod.packBoxOrder({ kind: 'small', quantity: 3 }));
+    const decoded = lootboxMod.unpackBoxOrder(args[2]);
+    assert.equal(decoded.kind, 'small');
+    assert.equal(decoded.quantity, 3);
+    assert.equal(decoded.small, 3, 'presentation counts keep one nonzero lane');
+    assert.equal(decoded.customCount, 0);
     assert.equal(result.boxCostWei, lootboxMod.LOOTBOX_MIN_WEI * 3n);
     assert.equal(args[6].value, lootboxMod.LOOTBOX_MIN_WEI * 3n);
   });
@@ -863,170 +866,93 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       'msg.value = lootbox leg + ticket leg');
   });
 
-  test('purchaseEth attaches a presale box through the deployed combined selector', async () => {
-    const ticketCostWei = 4n * lootboxMod.PRESALE_BOX_MIN_WEI;
-    const presaleBoxAmountWei = lootboxMod.PRESALE_BOX_MIN_WEI;
-    const out = await lootboxMod.purchaseEth({
-      ticketQuantity: 1,
-      lootboxQuantity: 0,
-      lootBoxAmountWei: 0n,
-      ticketCostWei,
-      presaleBoxAmountWei,
-    });
-
-    assert.equal(lastFakeContract._calls.purchase.length, 0,
-      'the ordinary purchase selector is not used');
-    assert.deepEqual(lastFakeContract._calls.buyLootboxAndPresaleBox[0], [
-      CONNECTED,
-      400n,
-      0n,
-      '0x0000000000000000000000000000000000000000000000000000000000000000',
-      0,
-      presaleBoxAmountWei,
-      { value: ticketCostWei + presaleBoxAmountWei },
-    ]);
-    assert.deepEqual(
-      lastFakeContract._calls.buyLootboxAndPresaleBoxStatic[0],
-      lastFakeContract._calls.buyLootboxAndPresaleBox[0],
-      'the exact value-bearing combined call is simulated before send',
+  test('purchaseEth refuses a Degenesis amount: there is no combined selector', async () => {
+    await assert.rejects(
+      lootboxMod.purchaseEth({ ticketQuantity: 1, degenesisAmountWei: lootboxMod.DEGENESIS_MIN_WEI }),
+      /Degenesis box on its own/,
     );
-    assert.equal(out.payment.totalCostWei, ticketCostWei + presaleBoxAmountWei);
+    assert.equal(lastFakeContract._calls.purchase.length, 0);
   });
 
-  test('an attached presale box leaves wallet ETH on the box when internal funds cover the mint', async () => {
-    const ticketCostWei = 4n * lootboxMod.PRESALE_BOX_MIN_WEI;
-    const presaleBoxAmountWei = lootboxMod.PRESALE_BOX_MIN_WEI;
-    lastFakeContract = makeFakeContract({ claimableRaw: ticketCostWei + 1n });
-    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+  // Degenesis reads gate on the generated (current) GAME ABI; these run under it.
+  const withCurrentSchema = async (fn) => {
+    const previous = pinAddressFixture(CURRENT_SCHEMA_HASH);
+    try { return await fn(); } finally { pinAddressFixture(previous); }
+  };
 
-    const out = await lootboxMod.purchaseEth({
-      ticketQuantity: 1,
-      lootBoxAmountWei: 0n,
-      ticketCostWei,
-      presaleBoxAmountWei,
-      preferClaimable: true,
-    });
-
-    const [args] = lastFakeContract._calls.buyLootboxAndPresaleBox;
-    assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_CLAIMABLE,
-      'the mint spends claimable instead of losing its recycled-ETH bonus basis');
-    assert.equal(args[6].value, presaleBoxAmountWei,
-      'the unchanged wallet shortfall is allocated to the attached box');
-    assert.equal(out.payment.claimableUsedWei, ticketCostWei);
+  test('Degenesis amount validation mirrors buyDegenesisBox (min, 0.0001 ETH units, credit, 2^38 bound)', () => {
+    const min = lootboxMod.DEGENESIS_MIN_WEI;
+    const unit = lootboxMod.DEGENESIS_UNIT_WEI;
+    assert.equal(min, 10n ** 16n / ETH_DIVISOR);
+    assert.equal(unit, 10n ** 14n / ETH_DIVISOR);
+    assert.equal(lootboxMod.degenesisAmountError(min), null);
+    assert.equal(lootboxMod.degenesisAmountError(min + unit, min + unit), null, 'exactly the credit');
+    assert.match(lootboxMod.degenesisAmountError(min - unit), /Minimum/);
+    assert.match(lootboxMod.degenesisAmountError(min + 1n), /0\.0001 ETH steps/);
+    assert.match(lootboxMod.degenesisAmountError(min + unit, min), /credit is lower/);
+    assert.equal(lootboxMod.degenesisAmountError(lootboxMod.DEGENESIS_MAX_WEI), null);
+    assert.match(lootboxMod.degenesisAmountError(lootboxMod.DEGENESIS_MAX_WEI + unit), /larger than one order/);
   });
 
-  test('standalone presale boxes read the live cap, simulate, send, and parse their index', async () => {
-    const amount = lootboxMod.PRESALE_BOX_MIN_WEI;
-    lastFakeContract = makeFakeContract({
-      presaleCredit: 2n * amount,
-      presaleRemaining: 3n * amount,
-      presaleLogs: [{
-        parsed: {
-          name: 'PresaleBoxBuy',
-          args: { buyer: CONNECTED, index: 7n, amount, closing: false },
-        },
-      }],
+  test('a Degenesis box reads live credit, simulates, sends buyDegenesisBox(0, amount) and parses its order', async () => {
+    await withCurrentSchema(async () => {
+      const amount = lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI;
+      lastFakeContract = makeFakeContract({
+        degenesisCredit: 2n * amount,
+        degenesisLogs: [{ parsed: { name: 'DegenesisBuy',
+          args: { buyer: 5n, degenesisDay: 3n, orderIndex: 11n, amount, secondsIntoDay: 42n } } }],
+      });
+      lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+      assert.equal(lootboxMod.degenesisSupported(), true);
+      assert.equal(await lootboxMod.readDegenesisCredit({ player: CONNECTED }), 2n * amount);
+      const out = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED });
+      assert.deepEqual(lastFakeContract._calls.buyDegenesisBox[0], [0, amount, { value: amount }],
+        'the caller buys for itself (id 0) and pays the exact amount');
+      assert.deepEqual(lastFakeContract._calls.buyDegenesisBoxStatic[0], lastFakeContract._calls.buyDegenesisBox[0]);
+      assert.deepEqual(out.orders, [{ buyer: '5', degenesisDay: 3, orderIndex: 11, amountWei: amount, secondsIntoDay: 42 }]);
     });
-    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
-
-    assert.deepEqual(await lootboxMod.readPresaleBoxState({ player: CONNECTED }), {
-      active: true,
-      creditWei: 2n * amount,
-      remainingWei: 3n * amount,
-      maxBoxWei: 2n * amount,
-    });
-    const out = await lootboxMod.purchasePresaleBox({ boxAmountWei: amount });
-    assert.deepEqual(lastFakeContract._calls.buyPresaleBox[0], [
-      CONNECTED, amount, { value: amount },
-    ]);
-    assert.deepEqual(
-      lootboxMod.parsePresaleBoxBuyFromReceipt(out.receipt, out.contract),
-      [{ buyer: CONNECTED, lootboxIndex: 7n, amountWei: amount, closing: false }],
-    );
   });
 
-  test('standalone presale can be paid entirely from AFKing funds', async () => {
-    const amount = lootboxMod.PRESALE_BOX_MIN_WEI;
-    const contract = makeFakeContract({ afkingRaw: amount * 2n });
-    lootboxMod.__setContractFactoryForTest(() => contract);
-
-    const { payment } = await lootboxMod.purchasePresaleBox({
-      boxAmountWei: amount,
-      useAfking: true,
-    });
-
-    assert.equal(payment.afkingUsedWei, amount);
-    assert.deepEqual(contract._calls.buyPresaleBoxStatic[0], [
-      CONNECTED, amount, { value: 0n },
-    ]);
-    assert.deepEqual(contract._calls.buyPresaleBox[0], contract._calls.buyPresaleBoxStatic[0]);
-  });
-
-  for (const phase of ['preflight', 'send']) {
-    test(`standalone presale preserves wallet timeout details during ${phase}`, async () => {
-      const message = 'Wallet is not responding. Open your wallet and try again.';
-      const cause = Object.assign(new Error(message), { code: 'WALLET_UNRESPONSIVE' });
-      const contract = makeFakeContract(phase === 'preflight'
-        ? { staticCallError: { buyPresaleBox: cause } }
-        : { presaleShouldReject: cause });
+  test('a Degenesis box can be paid entirely from AFKing funds', async () => {
+    await withCurrentSchema(async () => {
+      const amount = lootboxMod.DEGENESIS_MIN_WEI;
+      const contract = makeFakeContract({ afkingRaw: amount * 2n });
       lootboxMod.__setContractFactoryForTest(() => contract);
-
-      await assert.rejects(
-        lootboxMod.purchasePresaleBox({ boxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI }),
-        (error) => {
-          assert.equal(error.userMessage, message);
-          assert.equal(error.message, message);
-          assert.ok(error.cause, 'the original error remains available for diagnostics');
-          return true;
-        },
-      );
-      assert.equal(contract._calls.buyPresaleBox.length, phase === 'preflight' ? 0 : 1,
-        'a failed preflight never sends; a send error never triggers a second purchase');
+      const { payment } = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED, useAfking: true });
+      assert.equal(payment.afkingUsedWei, amount);
+      assert.deepEqual(contract._calls.buyDegenesisBoxStatic[0], [0, amount, { value: 0n }]);
     });
-  }
-
-  test('standalone presale shows safe nested RPC feedback without leaking provider blobs', async () => {
-    const message = 'Request rate limit reached. Try again shortly.';
-    const cause = Object.assign(new Error('could not coalesce error (UNKNOWN_ERROR, ethers)'), {
-      code: 'UNKNOWN_ERROR',
-      info: { error: { code: -32005, message } },
-    });
-    const contract = makeFakeContract({ staticCallError: { buyPresaleBox: cause } });
-    lootboxMod.__setContractFactoryForTest(() => contract);
-
-    await assert.rejects(
-      lootboxMod.purchasePresaleBox({ boxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI }),
-      (error) => {
-        assert.equal(error.userMessage, message);
-        assert.equal(error.cause, cause);
-        return true;
-      },
-    );
-    assert.equal(contract._calls.buyPresaleBox.length, 0);
   });
 
-  test('presale queue rollover replaces compact E() with an actionable retry message', async () => {
-    const reverting = makeFakeContract({
-      staticCallShouldRevert: { buyLootboxAndPresaleBox: true },
-      staticCallRevertName: { buyLootboxAndPresaleBox: 'E' },
+  test('a Degenesis box over credit or off the unit grid never reaches the wallet', async () => {
+    await withCurrentSchema(async () => {
+      const contract = makeFakeContract({ degenesisCredit: lootboxMod.DEGENESIS_MIN_WEI });
+      lootboxMod.__setContractFactoryForTest(() => contract);
+      await assert.rejects(lootboxMod.purchaseDegenesisBox({
+        amountWei: lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI, player: CONNECTED }), /credit is lower/);
+      await assert.rejects(lootboxMod.purchaseDegenesisBox({
+        amountWei: lootboxMod.DEGENESIS_MIN_WEI + 1n, player: CONNECTED }), /0\.0001 ETH steps/);
+      assert.equal(contract._calls.buyDegenesisBoxStatic.length, 0);
+      assert.equal(contract._calls.buyDegenesisBox.length, 0);
     });
-    lootboxMod.__setContractFactoryForTest(() => reverting);
+  });
 
-    await assert.rejects(
-      lootboxMod.purchaseEth({
-        ticketQuantity: 1,
-        lootboxQuantity: 0,
-        ticketCostWei: 4n * lootboxMod.PRESALE_BOX_MIN_WEI,
-        presaleBoxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI,
-      }),
-      (error) => {
-        assert.equal(error.code, 'PresaleBoxQueueBusy');
-        assert.match(error.userMessage, /next box round/i);
-        return true;
-      },
-    );
-    assert.equal(reverting._calls.buyLootboxAndPresaleBox.length, 0,
-      'the rejected transition never reaches the wallet send');
+  test('a closed Degenesis sale replaces compact E() with an actionable message', async () => {
+    await withCurrentSchema(async () => {
+      const contract = makeFakeContract({
+        staticCallShouldRevert: { buyDegenesisBox: true },
+        staticCallRevertName: { buyDegenesisBox: 'E' },
+      });
+      lootboxMod.__setContractFactoryForTest(() => contract);
+      await assert.rejects(lootboxMod.purchaseDegenesisBox({ amountWei: lootboxMod.DEGENESIS_MIN_WEI, player: CONNECTED }),
+        (error) => { assert.equal(error.code, 'DegenesisUnavailable'); return true; });
+      assert.equal(contract._calls.buyDegenesisBox.length, 0);
+    });
+  });
+
+  test('Degenesis is unavailable on a deployment whose GAME has no buyDegenesisBox', async () => {
+    assert.equal(lootboxMod.degenesisSupported(), false, 'the pinned address-era fixture has no sale');
+    assert.equal(await lootboxMod.readDegenesisCredit({ player: CONNECTED }), null);
   });
 
   test('purchaseEth static-call revert throws structured error with userMessage and code', async () => {
@@ -1136,16 +1062,16 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
   });
 
-  test('purchase receipt distinguishes regular and presale legs sharing one index', async () => {
+  test('purchase receipt sums the regular legs sharing one index', async () => {
     const other = '0xcd34000000000000000000000000000000000000';
     contractsMod.setProvider({
       ...makeFakeProvider(CONNECTED),
       getTransactionReceipt: async () => ({
         logs: [
           { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 12n, amount: 3n } } },
-          { parsed: { name: 'PresaleBoxBuy', args: { buyer: CONNECTED, index: 12n, amount: 4n } } },
-          { parsed: { name: 'PresaleBoxBuy', args: { buyer: other, index: 12n, amount: 99n } } },
-          { parsed: { name: 'PresaleBoxBuy', args: { buyer: CONNECTED, index: 13n, amount: 88n } } },
+          { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 12n, amount: 4n } } },
+          { parsed: { name: 'LootBoxBuy', args: { buyer: other, index: 12n, amount: 99n } } },
+          { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 13n, amount: 88n } } },
         ],
       }),
     });
@@ -1156,7 +1082,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       lootboxIndex: 12n,
     }), {
       hasLootboxLeg: true,
-      hasPresaleLeg: true,
+      hasPresaleLeg: false,
       amountWei: 7n,
     });
   });
@@ -1565,7 +1491,7 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
     assert.equal(args[0], CONNECTED, 'buyer is connected.address (lowercase)');
     assert.equal(args[1], 2000n, '5 tickets = 2000 purchase units (400 per ticket)');
-    assert.equal(args[2], lootboxMod.packBoxOrder({ small: 1 }), 'one Small box is packed');
+    assert.equal(args[2], lootboxMod.packBoxOrder({ kind: 'small', quantity: 1 }), 'one Small box is packed');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
     assert.ok(txOverrides && txOverrides.value > 0n, '{value: quoted box cost} override');
   });

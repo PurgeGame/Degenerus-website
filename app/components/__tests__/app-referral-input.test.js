@@ -40,6 +40,8 @@ test('visibility combines the direct real-referrer read with the indexed assignm
   assert.match(COMPONENT,
     /root\.hidden\s*=\s*true;[\s\S]*confirmedUnassigned[\s\S]*else if \(confirmedUnassigned\)[\s\S]*_root\.hidden\s*=\s*false/s,
     'the field starts hidden and appears only after both assignment reads confirm an open slot');
-  assert.match(COMPONENT, /VISIBILITY_POLL_MS\s*=\s*15_000/,
-    'a post-purchase assignment is picked up even when its purchase surface has no custom event');
+  assert.doesNotMatch(COMPONENT, /registerComponentPoll|VISIBILITY_POLL_MS/,
+    'no interval poll: the referrer only changes on the player\'s own paying tx');
+  assert.match(COMPONENT, /addEventListener\?\.\(TX_CONFIRMED,\s*_syncVisibility\)/,
+    'a post-purchase assignment is picked up via the generic every-write tx-confirmed event');
 });

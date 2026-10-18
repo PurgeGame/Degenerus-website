@@ -15,7 +15,8 @@ import { readFileSync } from 'node:fs';
 // FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
 // Pin that schema so the suite reads the same under any deployment profile; whole-token units
 // (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
+import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+import { VOLUME_WINDOW } from '../../app/chain-config.js';
 pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
@@ -420,13 +421,11 @@ function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt 
 function makeFakePurchaseContract(opts = {}) {
   const calls = {
     purchase: [], purchaseStatic: [], purchaseCoin: [],
-    buyLootboxAndPresaleBox: [], buyLootboxAndPresaleBoxStatic: [],
-    buyPresaleBox: [], buyPresaleBoxStatic: [],
+    buyDegenesisBox: [], buyDegenesisBoxStatic: [],
   };
   const stk = (name) => async (...args) => {
     if (name === 'purchase') calls.purchaseStatic.push(args);
-    if (name === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
-    if (name === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
+    if (name === 'buyDegenesisBox') calls.buyDegenesisBoxStatic.push(args);
     const isFoilAvailabilityProbe = name === 'purchase'
       && args[1] === 0n
       && args[2] === 0n
@@ -468,34 +467,18 @@ function makeFakePurchaseContract(opts = {}) {
       },
       { staticCall: stk('purchaseCoin') }
     ),
-    buyLootboxAndPresaleBox: Object.assign(
+    buyDegenesisBox: Object.assign(
       async (...args) => {
-        calls.buyLootboxAndPresaleBox.push(args);
-        txCounter += 1n;
+        calls.buyDegenesisBox.push(args);
         return makeFakeTx(makeFakeReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
-          { parsed: { name: 'PresaleBoxBuy', args: {
-            buyer: args[0], index: txCounter, amount: args[5], closing: false,
+          { parsed: { name: 'DegenesisBuy', args: {
+            buyer: 37n, degenesisDay: 2n, orderIndex: 0n, amount: args[1], secondsIntoDay: 0n,
           } } },
         ]));
       },
-      { staticCall: stk('buyLootboxAndPresaleBox') }
+      { staticCall: stk('buyDegenesisBox') }
     ),
-    buyPresaleBox: Object.assign(
-      async (...args) => {
-        calls.buyPresaleBox.push(args);
-        txCounter += 1n;
-        return makeFakeTx(makeFakeReceipt([
-          { parsed: { name: 'PresaleBoxBuy', args: {
-            buyer: args[0], index: txCounter, amount: args[1], closing: false,
-          } } },
-        ]));
-      },
-      { staticCall: stk('buyPresaleBox') }
-    ),
-    lootboxPresaleActiveFlag: async () => Boolean(opts.presaleActive),
-    presaleBoxCreditOf: async () => BigInt(opts.presaleCredit ?? 0n),
-    presaleBoxEthRemaining: async () => BigInt(opts.presaleRemaining ?? 0n),
+    degenesisCreditOf: async () => BigInt(opts.degenesisCredit ?? 0n),
     claimableWinningsOf: async () => BigInt(opts.claimableRaw ?? 0n),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -818,8 +801,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /data-bind="dec-custom-box-toggle"[\s\S]*?<strong id="dec-box-builder-title" data-bind="dec-box-options-title">CUSTOM LUCKBOXES<\/strong>[\s\S]*?data-bind="dec-custom-box-selection" hidden[\s\S]*?class="dec-input-accessories" role="group" aria-label="Luckbox purchase modifiers"[\s\S]*?<quest-objective-indicator product="lootbox"[\s\S]*?<boon-product-indicator product="lootbox"/,
       'the custom-chest action labels the section while boon and quest markers keep dedicated slots');
     assert.match(el.innerHTML,
-      /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-presale-row" hidden[\s\S]*?data-bind="dec-custom-box-buy"[\s\S]*?data-bind="dec-custom-box-buy-action">BUY IN<\/span>[\s\S]*?data-bind="dec-custom-box-buy-amount" hidden/,
-      'custom and eligible presale boxes share one chooser and one purchase action');
+      /data-bind="dec-custom-box-fields"[\s\S]*?data-bind="dec-degenesis-row" hidden[\s\S]*?data-bind="dec-custom-box-buy"[\s\S]*?data-bind="dec-custom-box-buy-action">BUY IN<\/span>[\s\S]*?data-bind="dec-custom-box-buy-amount" hidden/,
+      'custom and Degenesis boxes share one chooser (the presale row\'s place) and one purchase action');
     assert.equal(el.querySelector('[data-bind="dec-presale-toggle"]'), null,
       'there is no second presale button competing for the Luckbox header');
     for (const name of [
@@ -841,8 +824,8 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.equal((el.innerHTML.match(/class="dec-box-card__quickload"/g) ?? []).length, 3,
       'every full-resolution box has a zero-request first-paint silhouette');
     assert.match(PANEL_SRC,
-      /class="dec-presale__art"[\s\S]*?lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?class="dec-presale__title">PRESALE BOX/,
-      'the presale option keeps the case art beside its title');
+      /class="dec-presale__art"[\s\S]*?lootboxCaseAssets\('medium'\)\.cardTop[\s\S]*?class="dec-presale__title">DEGENESIS BOX/,
+      'the Degenesis option keeps the presale row\'s case art beside its title');
     assert.doesNotMatch(
       STATUS_CSS,
       /\.dec-input-group\.has-active-boon\s*\{[^}]*display:\s*grid/s,
@@ -1475,17 +1458,14 @@ describe('combined ticket + lootbox buy', () => {
     await import('../app-decimator-panel.js');
   });
 
-  test('tickets + mixed Luckbox tiers ride one purchase() tx as a packed order', async () => {
+  test('tickets + one Luckbox kind ride one purchase() tx as a compact order', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
 
     const el = instantiate();
     await flushMicrotasks();
     el.querySelector('[name="dec-tickets"]').value = '2';
-    el.querySelector('[name="dec-box-small"]').value = '1';
     el.querySelector('[name="dec-box-medium"]').value = '2';
-    el.querySelector('[name="dec-box-custom-count"]').value = '1';
-    el.querySelector('[name="dec-box-custom-eth"]').value = '0.03';
 
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1493,18 +1473,51 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'single combined tx');
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 800n, '2 tickets = 8 entries = 800 purchase units');
-    const { LOOTBOX_MIN_WEI, packBoxOrder } = await import('../../app/lootbox.js');
-    assert.equal(args[2], packBoxOrder({
-      small: 1,
-      medium: 2,
-      customCount: 1,
-      customSizeWei: LOOTBOX_MIN_WEI * 3n,
-    }), 'the third ABI argument contains all selected box lanes');
+    const { packBoxOrder } = await import('../../app/lootbox.js');
+    assert.equal(args[2], packBoxOrder({ kind: 'medium', quantity: 2 }),
+      'the third ABI argument is quantity | kind << 7 (audit 4f4aa8377)');
+    assert.equal(args[2], 2n | (1n << 7n));
     assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
       'a mined buy clears the ticket draft');
     for (const name of ['dec-box-small', 'dec-box-medium', 'dec-box-large', 'dec-box-custom-count']) {
       assert.equal(el.querySelector(`[name="${name}"]`).value, '0', 'a mined buy clears every box count');
     }
+    el.disconnectedCallback();
+  });
+
+  test('two Luckbox kinds in one draft are refused before any transaction', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await flushMicrotasks();
+    // Set directly (bypassing the cards' one-kind switch) to prove the order gate itself.
+    el.querySelector('[name="dec-box-small"]').value = '1';
+    el.querySelector('[name="dec-box-large"]').value = '1';
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(fakeContract._calls.purchase.length, 0, 'no mixed order is ever sent');
+    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /one Luckbox size per purchase/);
+    el.disconnectedCallback();
+  });
+
+  test('a custom size off the 0.001 ETH grid is refused, never floored', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await flushMicrotasks();
+    el.querySelector('[name="dec-box-custom-count"]').value = '2';
+    el.querySelector('[name="dec-box-custom-eth"]').value = '0.0125';
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(fakeContract._calls.purchase.length, 0);
+    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /whole 0\.001 ETH/);
+    el.querySelector('[name="dec-box-custom-eth"]').value = '0.123';
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.equal(fakeContract._calls.purchase.length, 1, 'an exact 0.001 ETH multiple is sent');
+    const { packBoxOrder, BOX_VALUE_UNIT_WEI } = await import('../../app/lootbox.js');
+    assert.equal(fakeContract._calls.purchase[0][2],
+      packBoxOrder({ kind: 'custom', quantity: 2, customWei: 123n * BOX_VALUE_UNIT_WEI }));
     el.disconnectedCallback();
   });
 
@@ -1549,7 +1562,7 @@ describe('combined ticket + lootbox buy', () => {
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'zero ticket leg');
     const { packBoxOrder } = await import('../../app/lootbox.js');
-    assert.equal(args[2], packBoxOrder({ large: 1 }), 'large-box lane is present');
+    assert.equal(args[2], packBoxOrder({ kind: 'large', quantity: 1 }), 'one Large box');
     el.disconnectedCallback();
   });
 
@@ -1637,7 +1650,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
     const err = el.querySelector('[data-bind="dec-error"]');
     assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /at least 0\.01 ETH each/, 'minimum copy');
+    assert.match(err.textContent, /0\.01-2,000 ETH each/, 'minimum copy');
     el.disconnectedCallback();
   });
 
@@ -2530,17 +2543,6 @@ describe('combined ticket + lootbox buy', () => {
       0n,
       'the reserved dust keeps a just-short claimable slice below the threshold',
     );
-    assert.equal(
-      purchaseFlipCreditBreakdown({
-        priceWei: price,
-        totalCostWei: price * 4n,
-        mintCostWei: price * 3n,
-        presaleCostWei: price,
-        claimableWei: price * 3n + 1n,
-      }).rebuy,
-      300n * FLIP,
-      'an attached presale box keeps the normal mint bonus when claimable covers the mint',
-    );
   });
 
   test('ALL IN opens a non-mutating currency/format quote at quarter-ticket precision', async () => {
@@ -3313,8 +3315,12 @@ describe('combined ticket + lootbox buy', () => {
       const input = el.querySelector(`[name="dec-box-${tier}"]`);
       el.querySelector(`[data-bind="dec-box-add-${tier}"]`).dispatchEvent({ type: 'click' });
       assert.equal(input.value, '1', `${tier} card increments only its own field`);
+      for (const other of ['small', 'medium', 'large'].filter((name) => name !== tier)) {
+        assert.equal(el.querySelector(`[name="dec-box-${other}"]`).value, '0',
+          `one kind per purchase (audit 4f4aa8377): ${tier} replaces ${other}`);
+      }
     }
-    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /3 boxes/);
+    assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /1 box/);
     let preventedMenus = 0;
     for (const tier of ['small', 'medium', 'large']) {
       const input = el.querySelector(`[name="dec-box-${tier}"]`);
@@ -3535,7 +3541,7 @@ describe('combined ticket + lootbox buy', () => {
       'the bottom chooser action reaches the existing guarded purchase path');
     assert.equal(
       fakeContract._calls.purchase[0][2],
-      lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: 2n * lootboxMod.LOOTBOX_MIN_WEI }),
+      lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: 2n * lootboxMod.LOOTBOX_MIN_WEI }),
       'the chooser submits the exact custom-box draft',
     );
     assert.equal(count.value, '0', 'the mined purchase clears the submitted box count');
@@ -3636,15 +3642,18 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('Luckbox increment controls clamp the combined order at 100 boxes', async () => {
+  test('Luckbox increment controls clamp one order at 100 boxes and switch kinds', async () => {
     const el = instantiate();
     await settle(60);
     const small = el.querySelector('[name="dec-box-small"]');
     const large = el.querySelector('[name="dec-box-large"]');
     small.value = '100';
-    el.querySelector('[data-bind="dec-box-add-large"]').dispatchEvent({ type: 'click' });
-    assert.equal(large.value, '0', 'another tier cannot push the packed order over its cap');
+    el.querySelector('[data-bind="dec-box-add-small"]').dispatchEvent({ type: 'click' });
+    assert.equal(small.value, '100', 'quantity is capped at 100 (BOX_ORDER_MAX_BOXES)');
     assert.match(el.querySelector('[data-bind="dec-box-summary"]').textContent, /100 boxes/);
+    el.querySelector('[data-bind="dec-box-add-large"]').dispatchEvent({ type: 'click' });
+    assert.equal(large.value, '1', 'another kind starts a new one-kind order');
+    assert.equal(small.value, '0', 'and replaces the previous kind');
     el.disconnectedCallback();
   });
 
@@ -3715,7 +3724,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'confirmation reaches the existing buy transaction');
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'the lootbox choice does not add tickets');
-    assert.equal(args[2], lootboxMod.packBoxOrder({ customCount: 1, customSizeWei: target }),
+    assert.equal(args[2], lootboxMod.packBoxOrder({ kind: 'custom', quantity: 1, customWei: target }),
       'the submitted order contains one custom box at the exact displayed minimum');
     el.disconnectedCallback();
   });
@@ -3750,163 +3759,96 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('active presale appears and attaches a box using credit earned by this same purchase', async () => {
-    const min = lootboxMod.PRESALE_BOX_MIN_WEI;
-    const fakeContract = makeFakePurchaseContract({
-      presaleActive: true,
-      presaleCredit: 0n,
-      presaleRemaining: 50n * 10n ** 18n / 1_000_000n,
-    });
+  // Degenesis (audit 4f4aa8377) takes the presale row's place. The sale is open on game days 2-8
+  // of the deployment clock, so these pin the clock and the current (Degenesis) schema.
+  const degenesisDayTs = (index) => ((VOLUME_WINDOW.deployDayBoundary + index - 1) * VOLUME_WINDOW.period
+    + VOLUME_WINDOW.anchor + 30) * 1000;
+  async function onDegenesisDay(index, fn) {
+    const { __setDegenesisNowForTest } = await import('../../app/degenesis.js');
+    const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
+    const previousNow = __setDegenesisNowForTest(() => degenesisDayTs(index) / 1000);
+    try { return await fn(); } finally { __setDegenesisNowForTest(previousNow); pinTestSchema(previous); }
+  }
+
+  test('a Degenesis box replaces the presale row on sale days and buys standalone', () => onDegenesisDay(3, async () => {
+    const min = lootboxMod.DEGENESIS_MIN_WEI;
+    const fakeContract = makeFakePurchaseContract({ degenesisCredit: 2n * min + 7n });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(80);
 
-    const row = el.querySelector('[data-bind="dec-presale-row"]');
+    const row = el.querySelector('[data-bind="dec-degenesis-row"]');
     const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
-    const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
     const title = el.querySelector('[data-bind="dec-box-options-title"]');
     const selection = el.querySelector('[data-bind="dec-custom-box-selection"]');
+    const input = el.querySelector('[name="dec-degenesis-box-eth"]');
     const tickets = el.querySelector('[name="dec-tickets"]');
-    const input = el.querySelector('[name="dec-presale-box-eth"]');
-    const max = el.querySelector('[data-bind="dec-presale-max"]');
-    assert.equal(row.hidden, true, 'zero current/draft credit keeps the presale option out of sight');
-    assert.equal(toggle.hidden, false, 'the unified custom-box button remains available');
-    assert.equal(title.textContent, 'CUSTOM LUCKBOXES');
-    assert.equal(selection.hidden, true);
-
-    tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
-    tickets.dispatchEvent({ type: 'input' });
-    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES',
-      'an eligible live presale is listed on the unified header button');
-    assert.equal(selection.textContent, 'PRESALE AVAILABLE');
-    assert.equal(row.hidden, false, 'the eligible presale option is ready inside the closed chooser');
-    assert.equal(fields.hidden, true, 'eligibility does not auto-open the chooser');
-    assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
-      '0.01 ETH');
-    assert.equal(max.disabled, false);
+    assert.equal(row.hidden, false, 'credit on a sale day exposes the Degenesis option');
+    assert.equal(title.textContent, 'CUSTOM / DEGENESIS BOXES');
+    assert.match(selection.textContent, /^DEGENESIS DAY 2 OF 7 · CLOSES IN /, 'game day 3 is Degenesis day 2');
+    assert.equal(el.querySelector('[data-bind="dec-degenesis-available"]').textContent, '0.02 ETH',
+      'credit is offered in whole 0.0001 ETH units');
     toggle.dispatchEvent({ type: 'click' });
-    assert.equal(fields.hidden, false, 'the unified button opens custom and presale options together');
-    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '0',
-      'opening for an eligible presale does not silently add a custom box');
 
-    const foil = el.querySelector('[data-bind="dec-foil-check"]');
-    foil.checked = true;
-    foil.dispatchEvent({ type: 'change' });
-    assert.equal(title.textContent, 'CUSTOM LUCKBOXES',
-      'selecting the incompatible foil leg removes Presale from the unified label');
-    assert.equal(row.hidden, true, 'selecting foil removes only the incompatible option');
-    assert.equal(fields.hidden, false, 'the shared custom chooser remains open');
-    assert.equal(input.value, '0', 'hiding the presale row also clears its quote');
-    foil.checked = false;
-    foil.dispatchEvent({ type: 'change' });
-    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES',
-      'Presale returns to the same button when foil is unchecked');
-    assert.equal(row.hidden, false, 'the option returns inside the already-open chooser');
-    max.dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.01');
-    assert.equal(selection.textContent, 'PRESALE · 0.01 ETH');
-
-    tickets.value = '0';
-    tickets.dispatchEvent({ type: 'input' });
-    assert.equal(title.textContent, 'CUSTOM LUCKBOXES',
-      'removing the credit-earning draft removes Presale from the button');
-    assert.equal(row.hidden, true);
-    assert.equal(input.value, '0', 'a newly unavailable hidden box cannot remain in the quote');
     tickets.value = '1';
     tickets.dispatchEvent({ type: 'input' });
-    assert.equal(row.hidden, false);
-    max.dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'BUY IN');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.05 ETH');
+    input.value = '0.015';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(tickets.value, '0', 'a Degenesis amount takes the order alone (no combined selector)');
+    el.querySelector('[data-bind="dec-degenesis-max"]').dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.02');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'BUY DEGENESIS');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
 
     let confirmed = null;
     el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
     el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
     await settle(100);
-
-    assert.equal(fields.hidden, true, 'the combined chooser closes when its action submits');
     assert.equal(fakeContract._calls.purchase.length, 0);
-    assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 1,
-      'the normal purchase and presale box ride the one deployed combined selector');
-    const args = fakeContract._calls.buyLootboxAndPresaleBox[0];
-    assert.equal(args[1], 400n);
-    assert.equal(args[5], min);
-    assert.equal(args[6].value, 5n * min);
-    assert.equal(confirmed?.boxes?.length, 1,
-      'regular and presale events sharing one RNG index publish one pending box');
-    assert.equal(confirmed?.presaleBoxAmountWei, min);
+    assert.equal(fakeContract._calls.buyDegenesisBox.length, 1);
+    assert.equal(fakeContract._calls.buyDegenesisBox[0][1], 2n * min);
+    assert.equal(fakeContract._calls.buyDegenesisBox[0][2].value, 2n * min);
+    assert.equal(confirmed, null, 'a Degenesis order is not a queued Luckbox for Pending');
+    assert.equal(input.value, '0', 'the mined order clears its amount');
     el.disconnectedCallback();
-  });
+  }));
 
-  test('banked presale credit can buy a standalone box from the same compact row', async () => {
-    const min = lootboxMod.PRESALE_BOX_MIN_WEI;
-    const fakeContract = makeFakePurchaseContract({
-      presaleActive: true,
-      presaleCredit: 2n * min,
-      presaleRemaining: 50n * 10n ** 18n / 1_000_000n,
-    });
+  test('Degenesis amounts follow the contract gates before any transaction', () => onDegenesisDay(4, async () => {
+    const min = lootboxMod.DEGENESIS_MIN_WEI;
+    const fakeContract = makeFakePurchaseContract({ degenesisCredit: 3n * min });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
-    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(80);
-
-    const row = el.querySelector('[data-bind="dec-presale-row"]');
-    const toggle = el.querySelector('[data-bind="dec-custom-box-toggle"]');
-    const fields = el.querySelector('[data-bind="dec-custom-box-fields"]');
-    const group = el.querySelector('[data-bind="dec-lootbox-group"]');
-    const title = el.querySelector('[data-bind="dec-box-options-title"]');
-    const selection = el.querySelector('[data-bind="dec-custom-box-selection"]');
-    const input = el.querySelector('[name="dec-presale-box-eth"]');
-    assert.equal(toggle.hidden, false, 'the unified box trigger remains available');
-    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES');
-    assert.equal(selection.textContent, 'PRESALE AVAILABLE');
-    assert.equal(row.hidden, false, 'banked credit exposes Presale inside the shared chooser');
-    assert.equal(fields.hidden, true, 'the chooser does not auto-open');
-    toggle.dispatchEvent({ type: 'click' });
-    assert.equal(fields.hidden, false);
-    assert.equal(el.querySelector('[name="dec-box-custom-count"]').value, '0');
-    el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.02');
-    assert.equal(selection.textContent, 'PRESALE · 0.02 ETH');
-    const flip = el.querySelector('[data-bind="dec-flip-check"]');
-    flip.checked = true;
-    flip.dispatchEvent({ type: 'change' });
-    assert.equal(group.hidden, true, 'USE FLIP hides the ETH-only Luckbox builder');
-    assert.equal(row.hidden, true);
-    assert.equal(fields.hidden, true, 'entering FLIP closes the now-incompatible chooser');
-    assert.equal(input.value, '0', 'entering FLIP cannot retain a hidden presale spend');
-    flip.checked = false;
-    flip.dispatchEvent({ type: 'change' });
-    assert.equal(group.hidden, false, 'returning to ETH restores the Luckbox builder');
-    assert.equal(title.textContent, 'CUSTOM / PRESALE BOXES');
-    assert.equal(row.hidden, false, 'the available Presale option returns inside the chooser');
-    assert.equal(fields.hidden, true, 'restoring eligibility does not auto-open the chooser');
-    toggle.dispatchEvent({ type: 'click' });
-    const tickets = el.querySelector('[name="dec-tickets"]');
-    tickets.value = '0';
-    tickets.dispatchEvent({ type: 'input' });
-    el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
-    assert.equal(input.value, '0.02');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
-      'BUY IN',
-      'the compact CTA uses one stable selected-order label');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
-    let confirmed = null;
-    el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
-    el.querySelector('[data-bind="dec-custom-box-buy"]').dispatchEvent({ type: 'click' });
-    await settle(100);
-
-    assert.equal(fields.hidden, true);
-    assert.equal(fakeContract._calls.buyPresaleBox.length, 1);
-    assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 0);
-    assert.equal(fakeContract._calls.buyPresaleBox[0][1], 2n * min);
-    assert.equal(confirmed?.boxes?.length, 1);
-    assert.equal(confirmed?.boxes?.[0]?.hasLootboxLeg, false);
-    assert.equal(confirmed?.boxes?.[0]?.hasPresaleLeg, true);
-    assert.equal(confirmed?.boxes?.[0]?.amountWei, 2n * min);
-    assert.equal(confirmed?.presaleBoxAmountWei, 2n * min);
+    const input = el.querySelector('[name="dec-degenesis-box-eth"]');
+    const buy = el.querySelector('[data-bind="dec-buy-cta"]');
+    const error = () => el.querySelector('[data-bind="dec-error"]').textContent;
+    for (const [amount, message] of [
+      ['0.01005', /0\.0001 ETH steps/],
+      ['0.009', /Minimum Degenesis box size is 0\.01 ETH/],
+      ['0.0301', /credit is lower/],
+    ]) {
+      input.value = amount;
+      input.dispatchEvent({ type: 'input' });
+      buy.dispatchEvent({ type: 'click' });
+      await settle(60);
+      assert.match(error(), message, amount);
+    }
+    assert.equal(fakeContract._calls.buyDegenesisBoxStatic.length, 0, 'nothing is simulated');
+    assert.equal(fakeContract._calls.buyDegenesisBox.length, 0, 'nothing is sent');
     el.disconnectedCallback();
+  }));
+
+  test('the deploy day and the launch day hide the Degenesis row', async () => {
+    for (const index of [1, 9]) {
+      await onDegenesisDay(index, async () => {
+        lootboxMod.__setContractFactoryForTest(() => makeFakePurchaseContract({ degenesisCredit: 10n ** 18n }));
+        const el = instantiate();
+        await settle(80);
+        assert.equal(el.querySelector('[data-bind="dec-degenesis-row"]').hidden, true, `game day ${index}`);
+        assert.equal(el.querySelector('[data-bind="dec-box-options-title"]').textContent, 'CUSTOM LUCKBOXES');
+        el.disconnectedCallback();
+      });
+    }
   });
 });
 

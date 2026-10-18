@@ -602,8 +602,8 @@ describe('normalizeSequence', () => {
         address: '0x00000000000000000000000000000000000000ab',
         key: '27', lootboxIndex: 27, transactionHash: '0xcombo',
       },
-      // One Small + one Medium box in the packed purchase order.
-      boxOrders: [String(1n | (1n << 8n))],
+      // One Small + one Medium box: two one-kind compact orders (quantity | kind << 7) on one row.
+      boxOrders: [String(1n), String(1n | (1n << 7n))],
       ticketPriceWei: 10_000_000_000n,
       legs: [{
         legType: 'opened', amount: 10_000_000_000n,
@@ -791,7 +791,7 @@ describe('normalizeSequence', () => {
       kind: 'lootbox',
       amountWei: price * 31n,
       ticketPriceWei: price,
-      boxOrders: [String(1n | (1n << 8n) | (1n << 16n))],
+      boxOrders: [String(1n), String(1n | (1n << 7n)), String(1n | (2n << 7n))],
       legs: [{
         legType: 'opened', wholeTickets: 1, futureLevel: 12, flip: 0n,
       }, {

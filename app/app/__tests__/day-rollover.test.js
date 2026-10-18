@@ -325,4 +325,15 @@ describe('authoritative day rollover reducer', () => {
     assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs + 5_000), 1_000,
       'a prior-block RPC answer is retried while the new boundary settles');
   });
+
+  test('mid-day steady cadence relaxes to 60 s but stays 10 s near the boundary or while rng is locked', () => {
+    const boundaryMs = Number(VOLUME_WINDOW.anchor) * 1_000;
+    const period = Number(VOLUME_WINDOW.period);
+    if (period > 3_600) return; // testnet cadence only
+    const mid = boundaryMs + (period / 2) * 1_000;
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, mid), 60_000);
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true, rngLocked: true }, mid), 10_000);
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs + 120_000), 10_000);
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs - 60_000), 10_000);
+  });
 });

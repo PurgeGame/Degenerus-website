@@ -87,6 +87,7 @@
   <link rel="stylesheet" data-href="/app/styles/sacrifices.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css?v=number-privacy-20261006">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css?v=idle-rendering-20261008">
+  <link rel="stylesheet" href="/app/styles/degenesis-hub.css">
   <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003">
   <link rel="stylesheet" href="/app/styles/settings-menu.css?v=number-privacy-20261006">
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
@@ -125,7 +126,7 @@
   <script type="importmap">
   {
     "imports": {
-      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-ddd1e53f-result-card-20261012",
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-d1e8e6c3-result-card-20261012",
       "/app/components/app-all-in-dialog.js": "/app/components/app-all-in-dialog.js?v=degenerette-cards-20261003",
       "/app/app/boons.js": "/app/app/boons.js?v=degenerette-cards-20261003",
       "/app/app/dgn-traits.js": "/app/app/dgn-traits.js?v=wild-ring-20261008",
@@ -188,10 +189,10 @@
       "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=timed-quest-rewards-20261004",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=no-dice-heroes-20261004",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=mining-reward-20261003",
-      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-98cd2a78-ddd1e53f-final-ranks-20261010",
-      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-98cd2a78-ddd1e53f-final-ranks-20261010",
-      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-98cd2a78-ddd1e53f-final-ranks-20261010",
-      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-ddd1e53f-result-card-20261012",
+      "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-98cd2a78-d1e8e6c3-final-ranks-20261010",
+      "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-98cd2a78-d1e8e6c3-final-ranks-20261010",
+      "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-98cd2a78-d1e8e6c3-final-ranks-20261010",
+      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-d1e8e6c3-result-card-20261012",
       "/app/app/coin-draw-centre.js": "/app/app/coin-draw-centre.js?v=craps-battle-outcome-20261004",
       "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=decimator-entries-20261006",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=prism-box-reveal-fixes-20261009",
@@ -395,6 +396,11 @@
               <strong>DEGENERUS DAILY DRAWING</strong>
             </h2>
             <last-day-jackpot></last-day-jackpot>
+            <!-- Degenesis sale only: the four foil sockets carry Tickets,
+                 Luckboxes, Passes and Degenesis buy buttons from deploy until
+                 the day 9 change, which runs the first daily jackpot. Inert (and never loads the purchase
+                 module) outside that window. -->
+            <app-degenesis-hub></app-degenesis-hub>
             <replay-panel single-button></replay-panel>
           </div>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
@@ -670,6 +676,7 @@
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
        eager; the two large outer hero columns are scheduled below. -->
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
+  <script type="module" src="/app/components/app-degenesis-hub.js"></script>
   <script type="module">
     import { mountPanelPopups } from "/app/app/panel-popups.js";
     mountPanelPopups();

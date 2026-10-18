@@ -830,14 +830,15 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
   test('rejects quantity < 1', async () => {
     await assert.rejects(
       passesMod.purchaseWhaleBundle({ quantity: 0, msgValueWei: 0n }),
-      /Quantity must be 1-100/i,
+      /Quantity must be 1-1,000/i,
     );
   });
 
-  test('rejects quantity > 100', async () => {
+  // WHALE_MAX_QUANTITY = 1,000 (audit 4f4aa8377): 1,000 is a valid quantity, 1,001 reverts.
+  test('rejects quantity > 1,000', async () => {
     await assert.rejects(
-      passesMod.purchaseWhaleBundle({ quantity: 101, msgValueWei: 0n }),
-      /Quantity must be 1-100/i,
+      passesMod.purchaseWhaleBundle({ quantity: 1001, msgValueWei: 0n }),
+      /Quantity must be 1-1,000/i,
     );
   });
 

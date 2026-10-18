@@ -3265,6 +3265,39 @@ body.layout-basic .app-decimator-panel .dec-presale--over-limit .dec-presale__co
   color: #ffc2b9;
 }
 
+/* Degenesis (audit 4f4aa8377) reuses the presale row: a window line under the title and the
+   player's orders (pending, then their FLIP / sDGNRS / WWXRP / pass results) under the controls. */
+body.layout-basic .app-decimator-panel .dec-degenesis__window {
+  color: #c9b48f;
+  font: 700 0.55rem/1.25 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.07em;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.45rem 0 0;
+  border-top: 1px solid rgba(210, 185, 133, 0.18);
+  list-style: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders li {
+  min-width: 0;
+  color: #d9c7a6;
+  font: 650 0.6rem/1.35 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders li.is-pending {
+  color: #9d917f;
+}
+
 @media (max-width: 380px) {
   body.layout-basic .app-decimator-panel .dec-presale__offer { padding: 0.65rem; }
   body.layout-basic .app-decimator-panel .dec-presale__label { grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.55rem; }
