@@ -813,6 +813,7 @@
       : '';
     const styleLoads = new Map();
     const moduleLoads = new Map();
+    const retryRevision = Date.now().toString(36);
     const loadStyle = (href) => {
       if (styleLoads.has(href)) return styleLoads.get(href);
       const link = document.querySelector(`link[data-href="${href}"]`);
@@ -830,16 +831,51 @@
       if (moduleLoads.has(src)) return moduleLoads.get(src);
       const loaded = (async () => {
         await Promise.all((MODULE_STYLES.get(src) || []).map(loadStyle));
-        return import(`${src}${moduleRevision}`);
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            if (attempt === 0) return await import(`${src}${moduleRevision}`);
+            // Browsers cache failed module fetches for this document. Retrying
+            // the same import URL never makes a new request. Keep the import
+            // map's published revision and give each retry a fresh identity.
+            const url = new URL(moduleRevision ? `${src}${moduleRevision}` : import.meta.resolve(src), window.location.href);
+            url.searchParams.set('load_retry', `${retryRevision}-${attempt}`);
+            return await import(url.href);
+          } catch (error) {
+            if (attempt === 2) throw error;
+            await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+          }
+        }
       })();
       moduleLoads.set(src, loaded);
-      loaded.catch(() => { if (moduleLoads.get(src) === loaded) moduleLoads.delete(src); });
+      // Retain the final result so viewport and idle callers share the same
+      // bounded retry sequence, including when the network remains offline.
       return loaded;
+    };
+    const reportModuleFailure = (src, error) => {
+      console.error(`Unable to load ${src}`, error);
+      if (!POST_HERO_MODULES.includes(src)) return;
+      const selector = VIEWPORT_MODULES.find(([, module]) => module === src)?.[0];
+      const host = selector && document.querySelector(selector);
+      if (!host || host.childElementCount) return;
+      const state = document.createElement('div');
+      state.className = 'panel-error-state';
+      state.setAttribute('role', 'status');
+      const message = document.createElement('p');
+      message.className = 'panel-error-msg';
+      message.textContent = src.includes('app-decimator-panel')
+        ? 'The buy panel couldn’t load.' : 'The coinflip panel couldn’t load.';
+      const reload = document.createElement('button');
+      reload.type = 'button';
+      reload.className = 'panel-error-retry';
+      reload.textContent = 'Reload page';
+      reload.addEventListener('click', () => window.location.reload());
+      state.append(message, reload);
+      host.appendChild(state);
     };
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     const requestModule = (src) => {
       if (!moduleNeededNow(src)) return;
-      void importModule(src).catch((error) => console.error(`Unable to load ${src}`, error));
+      void importModule(src).catch((error) => reportModuleFailure(src, error));
     };
     const loadMoreTools = () => {
       for (const src of MOBILE_MORE_MODULES) requestModule(src);
@@ -853,25 +889,16 @@
     };
     const loadInBatches = (sources) => {
       const pending = [...new Set(sources)].filter(moduleNeededNow);
-      const retried = new Set();
       const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
       const next = () => {
         if (pending.length === 0) return;
         const batch = pending.splice(0, batchSize);
         void Promise.allSettled(batch.map(importModule))
           .then((results) => {
-            // A failed import used to vanish here: no log, no second attempt,
-            // and the panel stayed blank for the session. importModule already
-            // dropped the failed flight from its cache, so one retry at the end
-            // of the queue is a real second request.
+            // importModule owns retries for both viewport and idle callers.
             results.forEach((result, index) => {
               if (result.status !== 'rejected') return;
-              const src = batch[index];
-              console.error(`Unable to load ${src}`, result.reason);
-              if (!retried.has(src)) {
-                retried.add(src);
-                pending.push(src);
-              }
+              reportModuleFailure(batch[index], result.reason);
             });
             setTimeout(() => idle(next), 250);
           });
