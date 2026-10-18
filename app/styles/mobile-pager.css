@@ -82,6 +82,10 @@
     flex-direction: column;
     height: 100vh;
     height: 100dvh;
+    /* nav.css and site-composition.css give the body min-height: 100vh. On
+       Android Chrome 100vh is the toolbar-hidden height, which pushed the
+       dock below the visible screen. */
+    min-height: 0;
     overflow: hidden;
   }
   body.layout-basic > .testnet-beta-banner { flex: none; }
@@ -1061,4 +1065,14 @@
   border: 0;
   background: transparent;
   color: #8f8a9e;
+}
+/* Passkey wallet fallback for players with no wallet (Coinbase Smart Wallet). */
+.wallet-route-sheet__create {
+  border: 1px solid rgba(45, 212, 191, 0.55);
+  background: rgba(45, 212, 191, 0.08);
+  color: #99f6e4;
+}
+/* A computer with no wallet extension sees the same sheet as a centred card. */
+@media (min-width: 769px) {
+  .wallet-route-sheet { place-items: center; }
 }

@@ -14,11 +14,11 @@ afterEach(() => {
   _resetSharedReadProviderForTests();
 });
 
-test('Sepolia uses a 1-wei tip and twice the current base fee, including zero base fee', async () => {
+test('Sepolia uses a 0.001 gwei tip and twice the base fee plus a fixed cushion, including zero base fee', async () => {
   assert.deepEqual(await sepoliaFeeOverrides({ chainId: 11155111, provider: cheapProvider }),
-    { maxPriorityFeePerGas: 1n, maxFeePerGas: 51n });
+    { maxPriorityFeePerGas: 1_000_000n, maxFeePerGas: 11_000_050n });
   assert.deepEqual(await sepoliaFeeOverrides({ chainId: 11155111, provider: { getBlock: async () => ({ baseFeePerGas: 0n }) } }),
-    { maxPriorityFeePerGas: 1n, maxFeePerGas: 1n });
+    { maxPriorityFeePerGas: 1_000_000n, maxFeePerGas: 11_000_000n });
 });
 
 test('other networks retain wallet fee selection without querying Sepolia', async () => {
@@ -41,7 +41,7 @@ test('a dropped or refused fee read is retried before the purchase gives up', as
     return { baseFeePerGas: 25n };
   } };
   assert.deepEqual(await sepoliaFeeOverrides({ chainId: 11155111, provider, retryDelayMs: 0 }),
-    { maxPriorityFeePerGas: 1n, maxFeePerGas: 51n });
+    { maxPriorityFeePerGas: 1_000_000n, maxFeePerGas: 11_000_050n });
   assert.equal(reads, 3);
 });
 
@@ -52,7 +52,7 @@ test('explicit fees are preserved, while ordinary and prewarmed requests get the
   }
   const request = { to: '0x1234', value: 24_000_000_000_000n, gasLimit: 8_000_000n };
   assert.deepEqual(await withTransactionFees(request, options),
-    { ...request, maxFeePerGas: 51n, maxPriorityFeePerGas: 1n });
+    { ...request, maxFeePerGas: 11_000_050n, maxPriorityFeePerGas: 1_000_000n });
   assert.equal(request.maxFeePerGas, undefined, 'the caller request is not mutated');
 });
 
@@ -60,7 +60,7 @@ test('affordability ignores an inflated wallet fee estimate on Sepolia', async (
   CHAIN.id = 11155111;
   _setSharedReadProviderForTests(cheapProvider);
   assert.deepEqual(await transactionFeeData({ getFeeData: async () => ({ maxFeePerGas: 2_000_000_000n }) }),
-    { maxPriorityFeePerGas: 1n, maxFeePerGas: 51n });
+    { maxPriorityFeePerGas: 1_000_000n, maxFeePerGas: 11_000_050n });
 });
 
 test('the real sendTx path carries minimal fees through gas estimation and wallet submission', async () => {
@@ -81,9 +81,9 @@ test('the real sendTx path carries minimal fees through gas estimation and walle
   };
   setProvider({ getNetwork: async () => ({ chainId: 11155111n }), getSigner: async () => signer });
   await sendTx(s => s.sendTransaction({ to: address, value: 24_000_000_000_000n }), 'Buy deity pass');
-  assert.equal(estimated.maxPriorityFeePerGas, 1n);
-  assert.equal(submitted.maxPriorityFeePerGas, 1n);
-  assert.equal(submitted.maxFeePerGas, 51n);
+  assert.equal(estimated.maxPriorityFeePerGas, 1_000_000n);
+  assert.equal(submitted.maxPriorityFeePerGas, 1_000_000n);
+  assert.equal(submitted.maxFeePerGas, 11_000_050n);
   assert.equal(submitted.gasLimit, 8_050_000n);
   assert.equal(submitted.value, 24_000_000_000_000n);
 });

@@ -43,7 +43,13 @@ describe('low-ETH funding helper', () => {
     assert.equal(mainnet.mode, 'onramp');
     assert.equal(mainnet.href, METAMASK_ETH_BUY_URL);
     assert.match(mainnet.note, /CARD\/BANK · FEES & KYC MAY APPLY/);
-    assert.equal(ethFundingDestination({ id: 11_155_111 }), null,
+    // Ethereum Sepolia (the live chain since the Base move) gets the
+    // proof-of-work faucet: no mainnet balance needed for a brand-new wallet.
+    const sepolia = ethFundingDestination({ id: 11_155_111 });
+    assert.equal(sepolia.mode, 'testnet');
+    assert.equal(sepolia.href, 'https://sepolia-faucet.pk910.de/');
+    assert.match(sepolia.note, /ETHEREUM SEPOLIA · FREE TEST FUNDS · NOT REAL MONEY/);
+    assert.equal(ethFundingDestination({ id: 17_000 }), null,
       'unknown testnets never fall through to a real-money on-ramp');
   });
 

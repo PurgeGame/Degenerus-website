@@ -2050,7 +2050,7 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('zero combined testnet funds become an Alchemy GET PLAY MONEY action', async () => {
+  test('zero combined testnet funds become a GET PLAY MONEY faucet action', async () => {
     contractsMod.setProvider(makeFakeProvider(CONNECTED, 0n));
     installAfkingReadState({ fundingWei: 0n });
     const el = instantiate();
@@ -2065,7 +2065,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false);
     assert.match(
       el.innerHTML,
-      /https:\/\/www\.alchemy\.com\/faucets\/base-sepolia[\s\S]*GET PLAY MONEY/,
+      /https:\/\/(?:www\.alchemy\.com\/faucets\/base-sepolia|sepolia-faucet\.pk910\.de\/)[\s\S]*GET PLAY MONEY/,
     );
     el.disconnectedCallback();
   });

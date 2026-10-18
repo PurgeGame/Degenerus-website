@@ -222,7 +222,7 @@
   <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
        push the whole page down 43px after first paint (0.18 of mobile CLS).
        testnet-beta-banner.js still hides it when the configured chain is not
-       Base Sepolia. MAINNET CUTOVER (WR-06): re-add the `hidden` attribute
+       a testnet, and points the faucet link at that testnet's faucet. MAINNET CUTOVER (WR-06): re-add the `hidden` attribute
        here so mainnet visitors never see a testnet flash. -->
   <div
     id="testnet-beta-banner"
@@ -234,10 +234,10 @@
     <strong>TESTNET BETA · NOT REAL MONEY</strong>
     <a
       class="testnet-beta-banner__faucet"
-      href="https://www.alchemy.com/faucets/base-sepolia"
+      href="https://sepolia-faucet.pk910.de/"
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Get free play money from the Base Sepolia Alchemy faucet"
+      aria-label="Get free play money from the Ethereum Sepolia proof-of-work faucet"
     >GET FREE PLAY MONEY</a>
   </div>
   <h1 style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">Degenerus App</h1>
