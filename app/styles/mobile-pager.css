@@ -1076,3 +1076,37 @@
 @media (min-width: 769px) {
   .wallet-route-sheet { place-items: center; }
 }
+
+/* ---- Phone readability floor ------------------------------------------------
+   Real-phone audit (Pixel 9, 411 px wide, 2026-10-18): labels sized off desktop
+   widths computed as small as 4.5 px (Craps), 6.4 px (Flip) and 5.8 px (More),
+   and several controls were 16-27 px. Labels get a ~9 px floor (8 px for the
+   smallest kickers); small controls get a larger touch box without moving the
+   art. The selector outranks each panel's own rule on purpose. */
+@media (max-width: 768px) {
+  html body.layout-basic[data-mobile-page] :is(
+    .craps-entry__wager, .craps-entry__battle-key, .craps-entry__buy-in-heading,
+    .craps-full-day-range-note, app-craps-entry th,
+    .df-coinflip-record__label, .df-bet-chip-rack,
+    .df-baf-score__unit, .df-reveal-cue__copy, .df-funds__box-label, .df-funds__title,
+    .records-rail__leader-bounty-amount, .records-rail__leader-holder,
+    .dec-ticket-clear, .dec-funds__summary-label, .qst-score-label, .qst-streak-label
+  ) { font-size: 9px; }
+  html body.layout-basic[data-mobile-page] :is(
+    .craps-entry__runup-kicker, .craps-entry__runup-submark, .craps-added-label,
+    .craps-added-period
+  ) { font-size: 8px; }
+  /* Touch boxes: an invisible hit area around the small controls. */
+  html body.layout-basic[data-mobile-page] :is(
+    .craps-entry__result-replay, .dec-purchase-help, .deg-referral-info, .sdr-info,
+    .dec-ticket-single-quest, .dec-ticket-stepper .dec-step
+  ) { position: relative; }
+  html body.layout-basic[data-mobile-page] :is(
+    .craps-entry__result-replay, .dec-purchase-help, .deg-referral-info, .sdr-info,
+    .dec-ticket-single-quest, .dec-ticket-stepper .dec-step
+  )::after {
+    position: absolute;
+    inset: -10px;
+    content: "";
+  }
+}
