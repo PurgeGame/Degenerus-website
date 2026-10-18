@@ -50,6 +50,19 @@ body.layout-basic .jackpot-hero__machine .dgx-module {
 body.layout-basic .jackpot-hero__machine .dgx-module--luckboxes { --dgx-rgb: 190, 150, 230; }
 body.layout-basic .jackpot-hero__machine .dgx-module--passes { --dgx-rgb: 45, 212, 191; }
 body.layout-basic .jackpot-hero__machine .dgx-module--degenesis { --dgx-rgb: 251, 113, 133; }
+body.layout-basic .jackpot-hero__machine .dgx-module--degenesis {
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding: 9% 5% 7%;
+}
+body.layout-basic .jackpot-hero__machine .dgx-module--degenesis .dgx-module__art {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+body.layout-basic .jackpot-hero__machine .dgx-module--degenesis .dgx-module__art > img {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
 
 body.layout-basic .jackpot-hero__machine .dgx-module:hover,
 body.layout-basic .jackpot-hero__machine .dgx-module:focus-visible {
@@ -117,7 +130,8 @@ body.layout-basic .jackpot-hero__machine .dgx-module__label {
   white-space: nowrap;
 }
 
-/* The passes art already spells PASSES; the label stays for screen readers. */
+/* The artwork carries these names; keep their labels for screen readers. */
+body.layout-basic .jackpot-hero__machine .dgx-module--degenesis .dgx-module__label,
 body.layout-basic .jackpot-hero__machine .dgx-module--passes .dgx-module__label {
   position: absolute;
   width: 1px;
