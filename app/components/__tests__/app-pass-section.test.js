@@ -469,6 +469,41 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
+  test('a hidden pass shop skips the NFT catalog, keeps funding current, and refreshes on open', async () => {
+    let ownerReads = 0;
+    let subscriptionReads = 0;
+    const deity = makeFakeDeityReadContract();
+    passesMod.__setDeityReadContractFactoryForTest(() => ({
+      ...deity, ownerOf: async (id) => { ownerReads++; return deity.ownerOf(id); },
+    }));
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 0n },
+      game: {
+        subInfo: async () => { subscriptionReads++; return [false, 0n, 0n, 0n]; },
+        afkingSnapshot: async () => [0n, false, [], []],
+      },
+    }));
+    lootboxMod.__setContractFactoryForTest(() => ({
+      purchaseInfo: async () => [12, false, false, false, 1_000_000_000_000n],
+    }));
+    _fetchHandler = async () => ({ level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false });
+    const popup = makeFakeElement('section');
+    popup.hidden = true;
+    const el = new (customElements.get('app-pass-section'))();
+    el.closest = selector => selector === '[data-panel-popup="passes"]'
+      || (selector === '[data-panel-popup][hidden]' && popup.hidden) ? popup : null;
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    await settle(60);
+    assert.equal(ownerReads, 0, 'the closed shop does not scan 32 NFT owners');
+    assert.ok(subscriptionReads > 0, 'funding warnings still get authoritative subscription state');
+    popup.hidden = false;
+    popup.dispatchEvent({ type: 'app:panel-open' });
+    await settle(60);
+    assert.equal(ownerReads, 32, 'opening loads the live symbol catalog');
+    el.disconnectedCallback();
+  });
+
   test('Panel puts Lazy above Whale and moves Deity symbol choice into a focused dialog', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');

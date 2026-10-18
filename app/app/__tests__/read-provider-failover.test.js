@@ -10,8 +10,12 @@
 //   - a JSON-RPC error object inside a 200 (a revert) is returned unchanged
 //     and never triggers failover, EXCEPT a per-item rate limit (-32016,
 //     -32007), which is the endpoint refusing the request and fails over like a 429
-//   - a walk every endpoint refused for rate retries after a short pause
-//     before the outage breaker arms
+//   - a rate refusal RESTS that endpoint for every request (doubling, or the
+//     server's Retry-After) and halves its pace; reads wait for a rested
+//     endpoint instead of failing, and only a refusal that outlasts several
+//     rests arms the outage breaker
+//   - every request spends tokens from its endpoint's bucket, so a burst is
+//     spread out instead of refused
 //   - after 3 consecutive primary failures the fallback becomes preferred,
 //     and a recovered response resets the failure count
 //   - every endpoint dead → the last transport error surfaces
@@ -29,7 +33,7 @@ if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 }
 
-const { _makeFailoverSend, RpcUnavailableError } = await import('../read-provider.js');
+const { _makeFailoverSend, RpcUnavailableError, _clearOutagesForTests } = await import('../read-provider.js');
 
 const A = 'https://primary.invalid';
 const B = 'https://fallback.invalid';
@@ -85,36 +89,114 @@ test('a rate limit inside a 200 fails over; a range refusal does not', async () 
   assert.deepEqual(once, [A]);
 });
 
-test('a walk refused for rate everywhere retries after a pause instead of failing', async () => {
+// A clock the injected wait advances, so rests and pacing play out without real time.
+function fakeClock(start = 2_000_000) {
+  const realNow = Date.now;
+  const clock = { now: start, waits: [] };
+  Date.now = () => clock.now;
+  clock.wait = async (ms) => { clock.waits.push(ms); clock.now += ms; };
+  clock.restore = () => { Date.now = realNow; };
+  return clock;
+}
+
+test('a walk refused for rate everywhere waits for a rested endpoint instead of failing', async () => {
   // sepolia.base.org's refusal: HTTP 200 carrying -32007 "25/second request limit reached".
   const limited = { id: 1, error: { code: -32007, message: '25/second request limit reached - reduce calls per second' } };
-  let refusals = 2;
-  const hits = [];
-  const waits = [];
-  const send = _makeFailoverSend([A, B], async (url) => {
-    hits.push(url);
-    if (refusals > 0) { refusals -= 1; return ok(limited); }
-    return ok({ id: 1, result: '0x1' });
-  }, 1_000, async (ms) => { waits.push(ms); });
-  assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
-  assert.deepEqual(hits, [A, B, A], 'the whole walk was refused, then the retry walk succeeded');
-  assert.equal(waits.length, 1);
-  assert.ok(waits[0] >= 400 && waits[0] <= 600, 'the first pause is ~500ms');
-  assert.equal(send._state.outageUntil, 0, 'a burst never arms the outage breaker');
+  const clock = fakeClock();
+  try {
+    let refusals = 2;
+    const hits = [];
+    const send = _makeFailoverSend([A, B], async (url) => {
+      hits.push(url);
+      if (refusals > 0) { refusals -= 1; return ok(limited); }
+      return ok({ id: 1, result: '0x1' });
+    }, 1_000, clock.wait);
+    assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
+    assert.deepEqual(hits.slice(0, 2), [A, B]);
+    assert.equal(hits.length, 3, 'both refused, then the first endpoint back from its rest answered');
+    assert.ok(clock.waits[0] >= 800 && clock.waits[0] <= 1_200, 'the first rest is ~1s');
+    assert.equal(send._state.outageUntil, 0, 'a burst never arms the outage breaker');
+    assert.equal(send._state.endpoints[hits[2] === A ? 0 : 1].strikes, 0, 'an answer clears the strike count');
+  } finally {
+    clock.restore();
+  }
 });
 
-test('a rate limit that outlasts the retries arms the outage breaker', async () => {
-  const waits = [];
-  let hits = 0;
-  const send = _makeFailoverSend([A, B], async () => {
-    hits += 1;
-    return { ok: false, status: 429, json: async () => ({}) };
-  }, 1_000, async (ms) => { waits.push(ms); });
-  await assert.rejects(send(PAYLOAD), /HTTP 429/);
-  assert.equal(hits, 6, 'the first walk plus two retry walks');
-  assert.equal(waits.length, 2);
-  assert.ok(waits[1] > waits[0], 'the second pause is longer');
-  assert.ok(send._state.outageUntil > 0);
+test('a refusal rests that endpoint for every later request and halves its pace', async () => {
+  const clock = fakeClock();
+  try {
+    const hits = [];
+    let refuse = true;
+    const send = _makeFailoverSend([A, B], async (url) => {
+      hits.push(url);
+      if (url === A && refuse) { refuse = false; return { ok: false, status: 429, json: async () => ({}) }; }
+      return ok({ id: 1, result: '0x1' });
+    }, 1_000, clock.wait);
+    await send(PAYLOAD);
+    assert.deepEqual(hits, [A, B]);
+    assert.ok(send._state.endpoints[0].rate < 15, 'the refused endpoint slowed down');
+    hits.length = 0;
+    await send(PAYLOAD); await send(PAYLOAD);
+    assert.deepEqual(hits, [B, B], 'a resting endpoint is skipped, not hammered');
+    clock.now += 2_000;
+    hits.length = 0;
+    await send(PAYLOAD);
+    assert.deepEqual(hits, [A], 'after its rest the preferred endpoint serves again');
+  } finally {
+    clock.restore();
+  }
+});
+
+test("a server's Retry-After stretches the rest", async () => {
+  const clock = fakeClock();
+  try {
+    const send = _makeFailoverSend([A], async () => ({
+      ok: false, status: 429, headers: { get: (name) => (name === 'retry-after' ? '9' : null) }, json: async () => ({}),
+    }), 1_000, clock.wait);
+    await assert.rejects(send(PAYLOAD), /HTTP 429/);
+    assert.ok(clock.waits[0] >= 9_000 * 0.8, 'the first rest honours Retry-After');
+  } finally {
+    clock.restore();
+  }
+});
+
+test('a burst past the bucket is paced instead of sent at once', async () => {
+  const clock = fakeClock();
+  try {
+    let sent = 0;
+    const send = _makeFailoverSend([A, B], async () => { sent += 1; return ok({ id: 1, result: '0x1' }); }, 1_000, clock.wait);
+    for (let i = 0; i < 30; i += 1) await send(PAYLOAD);
+    assert.equal(clock.waits.length, 0, 'the first 30 items fit the burst');
+    await send([PAYLOAD, PAYLOAD, PAYLOAD]);
+    assert.equal(clock.waits.length, 1, 'past the burst a request waits for tokens');
+    assert.ok(clock.waits[0] > 0 && clock.waits[0] < 1_000);
+    clock.waits.length = 0;
+    await send({ ...PAYLOAD, method: 'eth_getLogs' });
+    assert.ok(clock.waits[0] >= 150, 'a log query costs more than a call');
+    assert.equal(sent, 32);
+  } finally {
+    clock.restore();
+  }
+});
+
+test('a rate limit that outlasts several rests arms the outage breaker', async () => {
+  const clock = fakeClock();
+  try {
+    let hits = 0;
+    const send = _makeFailoverSend([A, B], async () => {
+      hits += 1;
+      return { ok: false, status: 429, json: async () => ({}) };
+    }, 1_000, clock.wait);
+    await assert.rejects(send(PAYLOAD), /HTTP 429/);
+    assert.ok(hits >= 4 && hits <= 10, `bounded retries (${hits})`);
+    assert.ok(send._state.endpoints[0].strikes >= 2, 'rests doubled along the way');
+    assert.ok(send._state.outageUntil > clock.now);
+    const before = hits;
+    await assert.rejects(send(PAYLOAD), (error) => error instanceof RpcUnavailableError);
+    assert.equal(hits, before, 'inside the breaker nothing touches the network');
+  } finally {
+    clock.restore();
+  }
 });
 
 test('three consecutive primary failures promote the fallback', async () => {
@@ -231,4 +313,14 @@ test('a demoted primary is re-probed from the side and restored when it answers'
   } finally {
     Date.now = realNow;
   }
+});
+
+test('coming back to the page clears a breaker armed while the network was suspended', async () => {
+  const send = _makeFailoverSend([A, B], async () => { throw new Error('Failed to fetch'); });
+  await assert.rejects(send(PAYLOAD), /Failed to fetch/);
+  await assert.rejects(send(PAYLOAD), (error) => error instanceof RpcUnavailableError);
+  assert.ok(send._state.outageUntil > Date.now());
+  _clearOutagesForTests();
+  assert.equal(send._state.outageUntil, 0);
+  assert.equal(send._state.consecutiveOutages, 0, 'the ladder starts over too');
 });

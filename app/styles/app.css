@@ -3261,7 +3261,27 @@ body.layout-basic .inv-level-nav {
 }
 body.layout-basic .inv-level-nav[hidden] { display: none !important; }
 body.layout-basic .inv-level-nav.is-total-only { grid-template-columns: minmax(7rem, 11rem); justify-content: end; border-color: transparent; background: transparent; box-shadow: none; }
-body.layout-basic .inv-level-nav.is-total-only > :not(.inv-total-value) { display: none !important; }
+body.layout-basic .inv-level-nav.is-total-only > :not(.inv-total-wrap),
+body.layout-basic .inv-level-nav.is-total-only .inv-pawn-shop { display: none !important; }
+@media (min-width: 641px) { body.layout-basic .inv-level-nav:has(.inv-pawn-shop:not([hidden])) { grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(4.6rem, 1.3fr) minmax(10.2rem, 2.3fr); } }
+body.layout-basic .inv-total-wrap { display: flex; min-width: 0; gap: 0.28rem; }
+body.layout-basic .inv-total-wrap > .inv-total-value { flex: 1 1 0; }
+/* Loans: the pawn door sits beside the value it borrows against. */
+body.layout-basic .inv-level-btn.inv-pawn-shop {
+  --inv-level-accent: #f5c542;
+  --inv-level-glow: rgba(245, 197, 66, 0.32);
+  flex: 0 0 2.9rem;
+  grid-template: "icon" auto "label" auto / minmax(0, 1fr);
+  justify-items: center; gap: 0.12rem;
+  padding: 0.24rem 0.2rem 0.22rem;
+  border-color: rgba(245, 197, 66, 0.36);
+  background: linear-gradient(180deg, rgba(245, 197, 66, 0.16), transparent 62%), linear-gradient(160deg, #2a2210, #120f08);
+}
+body.layout-basic .inv-level-btn.inv-pawn-shop[hidden] { display: none !important; }
+body.layout-basic .inv-level-btn.inv-pawn-shop::before { display: none; }
+body.layout-basic .inv-level-btn.inv-pawn-shop svg { grid-area: icon; width: 1.3rem; height: 1.3rem; fill: #f5c542; filter: drop-shadow(0 0 4px rgba(245, 197, 66, 0.4)); }
+body.layout-basic .inv-level-btn.inv-pawn-shop small { grid-area: label; color: #fde68a; font-size: 0.5rem; letter-spacing: 0.12em; }
+body.layout-basic .inv-level-btn.inv-pawn-shop.is-open { border-color: #f5c542; box-shadow: inset 0 0 0 1px rgba(253, 230, 138, 0.12), 0 0 13px rgba(245, 197, 66, 0.25); }
 body.layout-basic .inv-level-btn {
   --inv-level-accent: var(--ticket-level-border, #94a3b8); --inv-level-glow: var(--ticket-level-glow, rgba(148, 163, 184, 0.35));
   position: relative; isolation: isolate; box-sizing: border-box;
@@ -3701,7 +3721,7 @@ body.layout-basic .chart-cell .cell-deity-count {
     justify-items: center; gap: 0.08rem;
   }
   body.layout-basic .inv-level-tab--future strong { padding-left: 0; border-left: 0; }
-  body.layout-basic .inv-total-value { grid-column: span 2; }
+  body.layout-basic .inv-total-wrap { grid-column: span 2; }
   body.layout-basic .inv-level-btn strong { display: inline-flex; width: auto; min-width: 0; height: auto; padding: 0; border-left: 0; }
   body.layout-basic .inv-meta {
     grid-row: 2;

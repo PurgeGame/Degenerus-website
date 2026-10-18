@@ -28,8 +28,21 @@ test('other networks retain wallet fee selection without querying Sepolia', asyn
 
 test('a failed Sepolia quote does not silently fall back to wallet defaults', async () => {
   for (const provider of [{ getBlock: async () => ({}) }, { getBlock: async () => { throw Error('offline'); } }]) {
-    await assert.rejects(sepoliaFeeOverrides({ chainId: 11155111, provider }), /Could not read Sepolia gas fees/);
+    await assert.rejects(sepoliaFeeOverrides({ chainId: 11155111, provider, retryDelayMs: 0 }), /Could not read Sepolia gas fees/);
   }
+});
+
+test('a dropped or refused fee read is retried before the purchase gives up', async () => {
+  let reads = 0;
+  const provider = { getBlock: async () => {
+    reads += 1;
+    if (reads === 1) throw Object.assign(new Error('Chain RPC unavailable'), { code: 'RPC_UNAVAILABLE', retryAt: Date.now() + 5 });
+    if (reads === 2) throw new Error('Failed to fetch');
+    return { baseFeePerGas: 25n };
+  } };
+  assert.deepEqual(await sepoliaFeeOverrides({ chainId: 11155111, provider, retryDelayMs: 0 }),
+    { maxPriorityFeePerGas: 1n, maxFeePerGas: 51n });
+  assert.equal(reads, 3);
 });
 
 test('explicit fees are preserved, while ordinary and prewarmed requests get the policy', async () => {

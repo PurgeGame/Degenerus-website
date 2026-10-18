@@ -242,3 +242,21 @@ body.layout-basic .panel-popup .txh__toolbar:not(:has(.txh__filter[aria-pressed=
   body.layout-basic .unified-nav .nav-jackpot-countdown { padding-inline: .3rem; }
   body.layout-basic .unified-nav .nav-jackpot-countdown__value { font-size: .66rem; }
 }
+/* Pawn shop: two sliders, the offer, one warning. */
+.pawn-popup .panel-popup__window { width: min(100%, 24rem); }
+.pawn-offer { display: grid; gap: 1rem; }
+.pawn-offer[hidden] { display: none; }
+.pawn-slider { display: grid; gap: .45rem; color: #a99db5; font: 750 .68rem/1.2 Inter, sans-serif; letter-spacing: .09em; }
+.pawn-slider b { color: #fde68a; font-weight: 850; font-variant-numeric: tabular-nums; }
+.pawn-slider input { width: 100%; margin: 0; accent-color: #f5c542; cursor: pointer; }
+.pawn-figure { display: grid; gap: .2rem; text-align: center; }
+.pawn-figure > span { color: #a99db5; font: 750 .66rem/1 Inter, sans-serif; letter-spacing: .12em; }
+.pawn-figure > strong { color: #fde68a; font-size: clamp(1.4rem, 5vw, 1.9rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pawn-terms { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 0; }
+.pawn-terms > div { padding: .5rem .6rem; border: 1px solid #b899582b; border-radius: 8px; background: #ffffff05; }
+.pawn-terms dt { color: #a99db5; font: 750 .6rem/1 Inter, sans-serif; letter-spacing: .1em; }
+.pawn-terms dd { margin: .3rem 0 0; color: #f1e8d8; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pawn-warning { margin: 1rem 0 .25rem; padding: .55rem .7rem; border: 1px solid #ff6b7a55; border-radius: 8px; background: #ff4d5f12; color: #ffb1b8; font-weight: 700; text-align: center; }
+.pawn-status { min-height: 1.2em; margin: .5rem 0; text-align: center; }
+.pawn-popup .liquidation-actions button { background: #6b5214; border-color: #f5c54280; font-weight: 800; letter-spacing: .08em; }
+.pawn-popup .liquidation-actions button[hidden] { display: none; }

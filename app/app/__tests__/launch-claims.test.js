@@ -333,8 +333,15 @@ describe('foil-level API-first discovery', () => {
     assert.equal(fetchCalls, 1, 'the first read attempts the API once');
     assert.equal(ranges.length, 1, 'an API failure falls back to the chain scan');
 
-    head += 5;
-    await launch.__readPlayerFoilLevelsForTest(PLAYER);
+    // A new head arrives a block later; the shared reader reuses a head younger than that.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 13_000;
+    try {
+      head += 5;
+      await launch.__readPlayerFoilLevelsForTest(PLAYER);
+    } finally {
+      Date.now = realNow;
+    }
     assert.equal(fetchCalls, 1, 'a memoized API failure is not retried within the 5-minute window');
     assert.equal(ranges.length, 2, 'the chain fallback keeps serving reads while the API is memoized');
   });

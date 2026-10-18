@@ -1362,7 +1362,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /readCrapsPassCredits/);
   assert.match(componentSource, /applyCrapsPasses/);
   assert.match(componentSource,
-    /const totalsRead = readCrapsWinnerTotals\(day\)\.then\([\s\S]*?await readCrapsLobbySnapshot\(day, player\),\s*this\.#winnerTotals[\s\S]*?void totalsRead\.then/,
+    /const totalsRead = \(isComponentOffPage\(this\)[\s\S]*?: readCrapsWinnerTotals\(day\)\)\.then\([\s\S]*?await readCrapsLobbySnapshot\(day, player\),\s*this\.#winnerTotals[\s\S]*?void totalsRead\.then/,
     'the exact indexer total paints asynchronously after the chain snapshot');
   assert.match(componentSource,
     /!read\.ok[\s\S]*?this\.#winnerTotals = read\.totals/,

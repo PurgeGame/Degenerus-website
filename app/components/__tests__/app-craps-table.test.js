@@ -954,7 +954,7 @@ test('mobile resolution fits bets, dice, and graph without a desktop-width crop'
     /const width = raceBounds\?\.width > 0 \? raceBounds\.width[\s\S]*?const height = raceBounds\?\.height > 0 \? raceBounds\.height[\s\S]*?svg\.setAttribute\?\.\('viewBox'/s,
     'the graph uses the rendered panel dimensions on every screen');
   assert.match(COMPONENT_SRC,
-    /\? \{ left: 48, right: 112, top: 52, bottom: 66 \}/,
+    /\? \{ left: 48, right: 60, top: 52, bottom: 66 \}/,
     'compact graphs reserve only a small gutter for entry dots and the leader portrait');
 
   const landscapeRaceCss = CSS_SRC.slice(

@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { compactUiError, briefTxError } from '../ui-error.js';
 
 describe('player-facing error boundary', () => {
+  test('a local MetaMask reset does not claim an unknown transaction was cancelled', () => {
+    const message = compactUiError({
+      code: 'UNKNOWN_ERROR',
+      info: { error: { code: 'METAMASK_REQUEST_RESET', message: 'local wait released' } },
+    });
+    assert.match(message, /Wallet reset.*check MetaMask Activity/);
+    assert.doesNotMatch(message, /cancelled|did not go through/);
+  });
   test('turns a nested Base OutOfFunds response into a useful short message', () => {
     const error = {
       code: 'UNKNOWN_ERROR',

@@ -20,6 +20,7 @@ import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
 import { writePurchaseFundingPriority } from '../lootbox.js';
 import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
+import { CHAIN } from '../chain-config.js';
 // These address-based fixtures cover the historical deployment; run66-writes
 // exercises the allocated-ID write surface independently of the active site.
 useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
@@ -145,7 +146,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -650,6 +651,19 @@ describe('AFKing subscription configuration and funding', () => {
     assert.deepEqual(fake._calls.withdrawAfkingFunding, [[funding]]);
   });
 
+  test('a wallet on another chain is stopped before the AFKing balance re-read', async () => {
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) + 1n }),
+    });
+    fake = makeFakeContract({ afkingFundingWei: 80_000_000_000n });
+    passesMod.__setContractFactoryForTest(() => fake);
+
+    await assert.rejects(passesMod.withdrawAfkingSubscriptionFunding(), /Wrong network/);
+    assert.equal(fake._calls.afkingFundingOf.length, 0);
+    assert.equal(fake._calls.withdrawAfkingFunding.length, 0);
+  });
+
   test('refuses AFKing withdrawal in operator mode before reading or sending', async () => {
     storeMod.update('viewing.address', '0xcd34000000000000000000000000000000000000');
     storeMod.update('ui.mode', 'operator');
@@ -794,6 +808,22 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
       /RPC unavailable/,
     );
     assert.deepEqual(lastFakeContract._calls.staticCalls, []);
+    assert.deepEqual(lastFakeContract._calls.purchaseWhalePass, []);
+  });
+
+  test('a wallet on another chain is stopped before the claimable read reaches its RPC', async () => {
+    // On the wrong chain GAME has no code, so the wallet-RPC claimable read used to fail
+    // first as "could not decode result data" instead of asking for the network switch.
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) + 1n }),
+    });
+    lastFakeContract = makeFakeContract({ claimableWei: 1001n });
+    await assert.rejects(
+      passesMod.purchaseWhaleBundle({ quantity: 1, msgValueWei: 1000n }),
+      /Wrong network/,
+    );
+    assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, []);
     assert.deepEqual(lastFakeContract._calls.purchaseWhalePass, []);
   });
 

@@ -46,11 +46,19 @@ function makeHandoffControl() {
 }
 
 const _handoffLabel = makeHandoffControl();
+const _handoffDetail = makeHandoffControl();
 const _handoffAction = makeHandoffControl();
 const _handoffDismiss = makeHandoffControl();
 const _handoffHost = {
   hidden: true,
+  classList: {
+    values: new Set(),
+    add(value) { this.values.add(value); },
+    remove(value) { this.values.delete(value); },
+    contains(value) { return this.values.has(value); },
+  },
   querySelector(selector) {
+    if (selector === '.wallet-approval-handoff__copy small') return _handoffDetail;
     if (selector === '[data-bind="wallet-approval-label"]') return _handoffLabel;
     if (selector === '[data-bind="wallet-approval-open"]') return _handoffAction;
     if (selector === '[data-bind="wallet-approval-dismiss"]') return _handoffDismiss;
@@ -62,6 +70,9 @@ globalThis.window = {
   addEventListener: (type, fn) => {
     if (!_windowListeners.has(type)) _windowListeners.set(type, []);
     _windowListeners.get(type).push(fn);
+  },
+  removeEventListener: (type, fn) => {
+    _windowListeners.set(type, (_windowListeners.get(type) || []).filter((entry) => entry !== fn));
   },
   matchMedia: (query) => ({
     matches: false,
@@ -87,7 +98,9 @@ globalThis.document = {
     if (!_docListeners.has(type)) _docListeners.set(type, []);
     _docListeners.get(type).push(fn);
   },
-  removeEventListener: () => {},
+  removeEventListener: (type, fn) => {
+    _docListeners.set(type, (_docListeners.get(type) || []).filter((entry) => entry !== fn));
+  },
   dispatchEvent: (ev) => { _events.push(ev); return true; },
   getElementById: (id) => id === 'wallet-approval-handoff' ? _handoffHost : null,
   querySelector: (sel) => {
@@ -246,6 +259,7 @@ function makeMockBrowserProvider({
 const wallet = await import('../wallet.js');
 
 beforeEach(() => {
+  wallet._testInjectMmConnectFactory(null);
   // WR-09: tear down any prior subscribers and re-install fresh ones inside
   // beforeEach so cross-test contamination is impossible (was: top-level
   // module subscribe leaked five subscribers per file load).
@@ -2035,6 +2049,7 @@ function makeMockMmConnectClient({ connected = false, account = '0xCc00000000000
       on: (event, fn) => { (listeners[event] = listeners[event] || []).push(fn); },
       removeListener: () => {},
     },
+    emit: (event, value) => { for (const fn of listeners[event] || []) fn(value); },
     getProvider: () => client.provider,
     connect: async (opts) => {
       client.connectCalls.push(opts);
@@ -2058,7 +2073,7 @@ describe('MetaMask Connect', () => {
     assert.equal(storeMod.get('connected.address'), '0xcc00000000000000000000000000000000000001');
     assert.equal(storeMod.get('connected.rdns'), wallet.MM_CONNECT_RDNS);
     assert.equal(_localStore.get('lastWalletRdns'), wallet.MM_CONNECT_RDNS);
-    assert.strictEqual(wallet.getEip1193(), client.provider);
+    assert.equal(await wallet.getEip1193().request({ method: 'eth_chainId' }), CHAIN.hexId);
   });
 
   test('a restored MetaMask Connect session reconnects silently, without opening MetaMask', async () => {
@@ -2085,5 +2100,148 @@ describe('MetaMask Connect', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(client.disconnectCalls, 1);
     assert.equal(_localStore.get('lastWalletRdns'), undefined);
+  });
+
+  function visibility(state) {
+    document.visibilityState = state;
+    for (const fn of [...(_docListeners.get('visibilitychange') || [])]) fn();
+  }
+
+  function hangApprovals(client) {
+    const request = client.provider.request;
+    const approvals = [];
+    client.provider.request = (payload) => {
+      if (payload.method !== 'eth_sendTransaction') return request(payload);
+      return new Promise((resolve, reject) => approvals.push({ payload, resolve, reject }));
+    };
+    return approvals;
+  }
+
+  test('returning from a frozen wallet offers reset, releases the wait, and allows a fresh transaction', async (t) => {
+    const client = makeMockMmConnectClient();
+    const approvals = hangApprovals(client);
+    wallet._testInjectMmConnectFactory(async () => client);
+    await wallet.connectMetaMaskConnect();
+    const oldProvider = wallet.getEip1193();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending = oldProvider.request({ method: 'eth_sendTransaction', params: [{ value: '0x1' }] });
+    const rejected = assert.rejects(pending, { code: 'METAMASK_REQUEST_RESET' });
+    await Promise.resolve();
+    visibility('hidden');
+    t.mock.timers.tick(120_000);
+    assert.equal(_handoffHost.hidden, true, 'no expiry or recovery prompt while reviewing in MetaMask');
+    visibility('visible');
+    t.mock.timers.tick(9999);
+    assert.equal(_handoffHost.hidden, true, 'allow the returning response to arrive');
+    t.mock.timers.tick(1);
+    assert.equal(_handoffHost.hidden, false);
+    assert.equal(_handoffAction.textContent, 'RESET WALLET');
+    assert.match(_handoffDetail.textContent, /check MetaMask Activity/);
+    _handoffAction.click();
+    await rejected;
+    assert.equal(_handoffHost.hidden, true);
+    assert.equal(storeMod.get('connected.address'), null);
+    assert.equal(approvals.length, 1, 'reset never resends the transaction');
+
+    await wallet.connectMetaMaskConnect();
+    assert.equal(client.disconnectCalls, 1);
+    assert.equal(client.connectCalls.length, 2);
+    await assert.rejects(oldProvider.request({ method: 'eth_sendTransaction' }), { code: 'METAMASK_REQUEST_RESET' });
+    const next = wallet.getEip1193().request({ method: 'eth_sendTransaction', params: [{ value: '0x2' }] });
+    await Promise.resolve();
+    assert.equal(approvals.length, 2);
+    approvals[0].resolve('0xold');
+    approvals[1].resolve('0xnew');
+    assert.equal(await next, '0xnew', 'a late old answer cannot complete the new request');
+  });
+
+  test('a normal answer after returning clears recovery and never disconnects', async (t) => {
+    const client = makeMockMmConnectClient();
+    const approvals = hangApprovals(client);
+    wallet._testInjectMmConnectFactory(async () => client);
+    await wallet.connectMetaMaskConnect();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending = wallet.getEip1193().request({ method: 'eth_sendTransaction' });
+    await Promise.resolve();
+    visibility('hidden');
+    visibility('visible');
+    t.mock.timers.tick(4000);
+    approvals[0].resolve('0xsubmitted');
+    assert.equal(await pending, '0xsubmitted');
+    t.mock.timers.tick(60_000);
+    assert.equal(_handoffHost.hidden, true, 'receipt confirmation is outside the approval guard');
+    assert.equal(client.disconnectCalls, 0);
+  });
+
+  test('an answer arriving after the reset prompt removes it without interrupting the transaction', async (t) => {
+    const client = makeMockMmConnectClient();
+    const approvals = hangApprovals(client);
+    wallet._testInjectMmConnectFactory(async () => client);
+    await wallet.connectMetaMaskConnect();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending = wallet.getEip1193().request({ method: 'eth_sendTransaction' });
+    await Promise.resolve();
+    t.mock.timers.tick(20_000);
+    assert.equal(_handoffHost.hidden, false, 'also recover if the wallet never opens');
+    approvals[0].resolve('0xsubmitted');
+    assert.equal(await pending, '0xsubmitted');
+    assert.equal(_handoffHost.hidden, true);
+    assert.equal(client.disconnectCalls, 0);
+  });
+
+  test('reset rejects all outstanding approvals even if SDK disconnect hangs', async (t) => {
+    const client = makeMockMmConnectClient();
+    hangApprovals(client);
+    client.disconnect = () => new Promise(() => {});
+    wallet._testInjectMmConnectFactory(async () => client);
+    await wallet.connectMetaMaskConnect();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const provider = wallet.getEip1193();
+    const first = assert.rejects(provider.request({ method: 'eth_sendTransaction' }), { code: 'METAMASK_REQUEST_RESET' });
+    const second = assert.rejects(provider.request({ method: 'eth_sendTransaction' }), { code: 'METAMASK_REQUEST_RESET' });
+    await Promise.resolve();
+    wallet.disconnect();
+    await Promise.all([first, second]);
+    const reconnect = assert.rejects(wallet.connectMetaMaskConnect(), /Reload this page/);
+    t.mock.timers.tick(5000);
+    await reconnect;
+  });
+
+  test('a stuck initial connection can be reset and its late answer cannot reconnect the app', async (t) => {
+    const client = makeMockMmConnectClient();
+    let approve;
+    client.connect = () => new Promise((resolve) => { approve = resolve; });
+    wallet._testInjectMmConnectFactory(async () => client);
+    const connecting = wallet.connectMetaMaskConnect();
+    const rejected = assert.rejects(connecting, { code: 'METAMASK_REQUEST_RESET' });
+    // Let lazy factory initialization reach the wallet request before mocking time.
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    visibility('hidden');
+    visibility('visible');
+    t.mock.timers.tick(10_000);
+    assert.equal(_handoffHost.hidden, false);
+    _handoffAction.click();
+    await rejected;
+    approve({ accounts: ['0xcc00000000000000000000000000000000000001'] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(storeMod.get('connected.address'), null);
+    assert.equal(_localStore.has('lastWalletRdns'), false);
+  });
+
+  test('a retired wallet cannot clear the replacement connection with late events', async () => {
+    const oldClient = makeMockMmConnectClient();
+    wallet._testInjectMmConnectFactory(async () => oldClient);
+    await wallet.connectMetaMaskConnect();
+    wallet.disconnect();
+    await new Promise((resolve) => setImmediate(resolve));
+    const replacement = makeMockMmConnectClient({ account: '0xdd00000000000000000000000000000000000002' });
+    wallet._testInjectMmConnectFactory(async () => replacement);
+    await wallet.connectMetaMaskConnect();
+    oldClient.emit('disconnect');
+    oldClient.emit('accountsChanged', []);
+    oldClient.emit('chainChanged', '0x1');
+    assert.equal(storeMod.get('connected.address'), '0xdd00000000000000000000000000000000000002');
+    assert.equal(storeMod.get('ui.chainOk'), true);
   });
 });

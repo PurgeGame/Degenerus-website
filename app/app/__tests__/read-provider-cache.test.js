@@ -8,7 +8,8 @@
 //
 // What must hold:
 //   - identical concurrent reads share ONE wire call
-//   - a repeat inside the one-second window is served from the completed cache
+//   - a repeat inside the window (half a block, at least one second) is served
+//     from the completed cache, until any reader sees a newer head
 //   - a PINNED block read is immutable, so repeats never hit the wire
 //   - 'pending', unknown request fields, and errors are NEVER cached
 //   - different arguments are different questions
@@ -68,6 +69,37 @@ test('a repeat after the response lands is served from the one-second window', a
   // Sequential, not concurrent: in-flight sharing cannot catch this one.
   assert.equal(await provider.call({ to: GAME, data: '0x7f84d03d' }), '0x1');
   assert.equal(state.calls.length, 1);
+});
+
+test('a newer head drops windowed latest answers but never pinned ones', async () => {
+  const { provider, state } = stubProvider();
+  rp._noteHeadForTests(1_000);
+  await provider.call({ to: GAME, data: '0x7f84d03d' });
+  await provider.call({ to: GAME, data: '0x7f84d03d', blockTag: 999 });
+  await provider.call({ to: GAME, data: '0x7f84d03d' });
+  assert.equal(state.calls.length, 2, 'same head: the latest repeat is served from memory');
+  rp._noteHeadForTests(1_001);
+  assert.equal(await provider.call({ to: GAME, data: '0x7f84d03d' }), '0x3', 'a new block asks again');
+  await provider.call({ to: GAME, data: '0x7f84d03d', blockTag: 999 });
+  assert.equal(state.calls.length, 3, 'a pinned block never goes stale');
+});
+
+test('a repeat past the window asks the chain again', async () => {
+  const realNow = Date.now;
+  let now = 9_000_000;
+  Date.now = () => now;
+  try {
+    const { provider, state } = stubProvider();
+    await provider.call({ to: GAME, data: '0x7f84d03d' });
+    now += 999;
+    await provider.call({ to: GAME, data: '0x7f84d03d' });
+    assert.equal(state.calls.length, 1, 'inside the window');
+    now += 60_000;
+    await provider.call({ to: GAME, data: '0x7f84d03d' });
+    assert.equal(state.calls.length, 2, 'past the window');
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test('different calldata is a different question', async () => {

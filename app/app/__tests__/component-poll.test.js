@@ -7,6 +7,8 @@
 //   - unregister is idempotent
 //   - hidden tab disarms every poll; visible batches catch-up and re-arms
 //   - registering while hidden stays disarmed until visible
+//   - on the phone pager, a poll whose owner is on a hidden page ticks at most
+//     every two minutes and catches up when its page is shown
 
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -183,4 +185,44 @@ test('slow async ticks are single-flight and collapse into one trailing refresh'
   releases.shift()();
   await sleep(15);
   assert.equal(calls, 2, 'finishing after unregister cannot schedule more work');
+});
+
+test('an owner on a hidden phone page slows to two minutes and catches up when shown', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 1_000_000 });
+  const realMatchMedia = globalThis.matchMedia;
+  globalThis.matchMedia = () => ({ matches: true });
+  globalThis.document.body = { dataset: { mobilePage: 'draw' }, classList: { contains: (name) => name === 'layout-basic' } };
+  const host = { getAttribute: () => 'quests', parentElement: null };
+  const owner = { closest: () => host };
+  // Each poll settles on a microtask; let it before the next tick, as real time would.
+  const settle = async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); };
+  const advance = async (ms) => {
+    for (let left = ms; left > 0; left -= 1_000) { t.mock.timers.tick(Math.min(1_000, left)); await settle(); }
+  };
+  try {
+    let offTicks = 0;
+    let freeTicks = 0;
+    cp.registerComponentPoll(() => { offTicks++; }, 5_000, { owner });
+    cp.registerComponentPoll(() => { freeTicks++; }, 5_000);
+    await advance(60_000);
+    assert.equal(offTicks, 0, 'off page: no ticks inside two minutes');
+    assert.ok(freeTicks >= 10, `a poll without an owner is unaffected (${freeTicks})`);
+    await advance(65_000);
+    assert.equal(offTicks, 1, 'off page: one tick once two minutes have passed');
+    await advance(10_000);
+    assert.equal(offTicks, 1);
+    globalThis.document.body.dataset.mobilePage = 'quests';
+    cp._onPageChangeForTests();
+    await settle();
+    assert.equal(offTicks, 2, 'showing the page runs the skipped poll at once');
+    await advance(5_000);
+    assert.equal(offTicks, 3, 'on page it is back to its own interval');
+    globalThis.matchMedia = () => ({ matches: false });
+    globalThis.document.body.dataset.mobilePage = 'draw';
+    await advance(5_000);
+    assert.equal(offTicks, 4, 'wider than a phone the pager is off and nothing is hidden');
+  } finally {
+    globalThis.matchMedia = realMatchMedia;
+    delete globalThis.document.body;
+  }
 });

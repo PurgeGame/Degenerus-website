@@ -418,11 +418,11 @@
 
       <!-- The level before each x10 BAF gets a full-width event preview with
            the live pool, this player's position, and the five-player race. -->
-      <app-baf-eve data-mpage="draw"></app-baf-eve>
+      <app-baf-eve data-mpage="flip"></app-baf-eve>
 
       <!-- Open only during the live Decimator burn window. This full-width
            event rail replaces the small duplicate entry card in Side Bets. -->
-      <app-decimator-burn data-mpage="draw"></app-decimator-burn>
+      <app-decimator-burn data-mpage="flip"></app-decimator-burn>
 
       <!-- Claims banner and aggregate winnings strip are intentionally
            unmounted. Gameplay-specific resolution stays with its owning
@@ -707,6 +707,19 @@
       '/app/components/app-decimator-panel.js',
       '/app/components/app-daily-flip.js',
     ];
+    // These tools only render their own page. In particular, inventory scans
+    // many ticket levels; a phone should not pay that cost before visiting
+    // More. Pending-result producers and funding warnings still load at idle.
+    const MOBILE_MORE_MODULES = new Set([
+      '/app/components/app-tickets-inventory.js',
+      '/app/components/app-link-donation.js',
+      '/app/components/app-wwxrp-burn.js',
+      '/app/components/app-sdgnrs-burn-rail.js',
+    ]);
+    const phonePages = window.matchMedia('(max-width: 768px)');
+    const moduleNeededNow = (src) => !phonePages.matches
+      || !MOBILE_MORE_MODULES.has(src)
+      || document.body.dataset.mobilePage === 'more';
     // These scoped sheets belong exclusively to late modules. A print-media
     // link still downloads during HTML parsing, so it was costing narrow cold
     // loads hundreds of kilobytes before any corresponding panel existed.
@@ -818,15 +831,21 @@
     };
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     const requestModule = (src) => {
+      if (!moduleNeededNow(src)) return;
       void importModule(src).catch((error) => console.error(`Unable to load ${src}`, error));
     };
+    const loadMoreTools = () => {
+      for (const src of MOBILE_MORE_MODULES) requestModule(src);
+    };
+    document.addEventListener('mobile-pager:change', loadMoreTools);
+    phonePages.addEventListener('change', loadMoreTools);
     const afterWindowLoad = (fn) => {
       const schedule = () => idle(fn);
       if (document.readyState === 'complete') schedule();
       else window.addEventListener('load', schedule, { once: true });
     };
     const loadInBatches = (sources) => {
-      const pending = [...new Set(sources)];
+      const pending = [...new Set(sources)].filter(moduleNeededNow);
       const retried = new Set();
       const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
       const next = () => {

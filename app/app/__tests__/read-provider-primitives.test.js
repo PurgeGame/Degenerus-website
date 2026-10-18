@@ -55,6 +55,30 @@ test('coalesces heads, native balances, and immutable storage primitives', async
   assert.equal(storageCalls, 2, 'receipt invalidation clears primitive snapshots');
 });
 
+test('a forced-fresh head inside the floor reuses the head just read', async () => {
+  const realNow = Date.now;
+  let now = 7_000_000;
+  Date.now = () => now;
+  try {
+    let headCalls = 0;
+    const provider = { getBlockNumber: async () => { headCalls += 1; return 100 + headCalls; } };
+    reads._setSharedReadProviderForTests(provider);
+    assert.equal(await reads.readProviderBlockNumber(provider, { maxAgeMs: 0 }), 101);
+    now += 400;
+    assert.equal(await reads.readProviderBlockNumber(provider, { maxAgeMs: 0 }), 101, 'no new fetch inside the floor');
+    now += 60_000;
+    assert.equal(await reads.readProviderBlockNumber(provider, { maxAgeMs: 0 }), 102, 'past it the head is fetched again');
+    reads.invalidateReadCache();
+    assert.equal(await reads.readProviderBlockNumber(provider, { maxAgeMs: 0 }), 103, 'a confirmed write resets the head');
+    assert.equal(headCalls, 3);
+    const injected = { getBlockNumber: async () => 7 };
+    assert.equal(await reads.readProviderBlockNumber(injected, { maxAgeMs: 0 }), 7, 'an injected reader is not floored');
+  } finally {
+    Date.now = realNow;
+    reads._setSharedReadProviderForTests(null);
+  }
+});
+
 test('shared log wrapper coalesces identical ranges without crossing providers', async () => {
   let callsA = 0;
   let callsB = 0;
