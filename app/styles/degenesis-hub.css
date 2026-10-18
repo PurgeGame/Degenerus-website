@@ -95,6 +95,16 @@ body.layout-basic .jackpot-hero__machine .dgx-ticket-art .dec-ticket-face {
   height: 100%;
   min-height: 0;
 }
+/* The portrait flame must not set the rotated square's height or grid track. */
+body.layout-basic .jackpot-hero__machine .dgx-ticket-art .dec-ticket-center {
+  height: 20%;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+body.layout-basic .jackpot-hero__machine .dgx-ticket-art .dec-ticket-center img {
+  min-width: 0;
+  min-height: 0;
+  filter: none;
+}
 
 body.layout-basic .jackpot-hero__machine .dgx-module__label {
   overflow: hidden;
