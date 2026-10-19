@@ -1883,9 +1883,11 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_CSS,
-      /\.replay-badge-reward-pop\s*\{[\s\S]*rgba\(46, 25, 9, 0\.93\)[\s\S]*will-change:\s*opacity, transform/,
+      /\.replay-badge-reward-pop\s*\{[\s\S]*rgba\(46, 25, 9, 0\.93\)/,
       'the reward uses a crisp translucent game-HUD plate without an expensive live blur',
     );
+    assert.doesNotMatch(REPLAY_CSS.match(/\.replay-badge-reward-pop\s*\{[^}]*\}/)?.[0] || '', /will-change/,
+      'hidden reward faces do not retain compositor layers');
     assert.match(
       REPLAY_CSS,
       /animation:\s*replay-badge-reward-pop 0\.78s[\s\S]*@keyframes replay-badge-reward-pop[\s\S]*scale\(0\.76\)[\s\S]*scale\(1\.08\)[\s\S]*scale\(0\.98\)[\s\S]*scale\(1\.04\)/,

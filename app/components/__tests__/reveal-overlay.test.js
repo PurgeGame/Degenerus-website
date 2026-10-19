@@ -2961,7 +2961,7 @@ describe('reveal-overlay element', () => {
       /@keyframes rvl-lootbox-card-turn\s*\{\s*from\s*\{[^}]*rotateY\(0deg\)[^}]*\}\s*to\s*\{[^}]*rotateY\(180deg\)/s,
       'the reveal is a physical half-turn rather than a content transform');
     assert.match(flightFinishMethod,
-      /const settleAction = await this\.#wait\(settleMs, \{ fixedSpeed: true \}\)[\s\S]*if \(settleAction\) stagedFlight\.classList\?\.add\('rvl-lootbox-flight--settled'\)[\s\S]*this\.#mountLootboxRewardFaces\(seq\)[\s\S]*await _prepareLootboxRewardFaces\(flight\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealing'\)[\s\S]*const flipAction = await this\.#wait\(LOOTBOX_CARD_FLIP_MS, \{ fixedSpeed: true \}\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealed'\)/,
+      /const settleAction = await this\.#wait\(settleMs, \{ fixedSpeed: true \}\)[\s\S]*if \(settleAction\) stagedFlight\.classList\?\.add\('rvl-lootbox-flight--settled'\)[\s\S]*this\.#mountLootboxRewardFaces\(seq\)[\s\S]*await \(landing\?\.sequence === seq && landing\.facesReady \|\| _prepareLootboxRewardFaces\(flight\)\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealing'\)[\s\S]*const flipAction = await this\.#wait\(LOOTBOX_CARD_FLIP_MS, \{ fixedSpeed: true \}\)[\s\S]*classList\?\.add\('rvl-lootbox-flight--revealed'\)/,
       'card flight, face preparation, and turn stay synchronized at normal speed and when explicitly skipped');
     assert.match(REVEAL_SRC,
       /async function _prepareLootboxRewardFaces\(flight\)[\s\S]*querySelectorAll[\s\S]*Promise\.allSettled\(waits\)[\s\S]*_waitForTwoPaintFrames\(\)/,

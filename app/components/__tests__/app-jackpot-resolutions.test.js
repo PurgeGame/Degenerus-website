@@ -259,7 +259,7 @@ test('a due Decimator replaces the primary jackpot action and opens the results 
 test('a due BAF opens its dedicated staged fullscreen final', () => {
   const resolutions = readFileSync(new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
   const overlay = readFileSync(new URL('../app-baf-resolution-overlay.js', import.meta.url), 'utf8');
-  assert.match(resolutions, /import \{ openBafResolution \}/);
+  assert.match(resolutions, /import \{ openBafResolution, prepareBafResultNodes \}/);
   assert.match(resolutions, /await openBafResolution\(\{[\s\S]*?level,[\s\S]*?player: this\.\#address/);
   assert.match(resolutions, /playerOutcome:\s*this\.\#baf/,
     'the final uses the freshly reconciled terminal player result');

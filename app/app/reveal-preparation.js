@@ -1,0 +1,2 @@
+var a=Object.defineProperty;var i=(l,s)=>a(l,"name",{value:s,configurable:!0});export function createRevealPreparation({limit:l=32,complete:s=i(e=>e!=null,"complete")}={}){const e=new Map;return{get(t,o){if(e.has(t)){const n=e.get(t);return e.delete(t),e.set(t,n),n}const r=Promise.resolve().then(o).then(n=>(!s(n)&&e.get(t)===r&&e.delete(t),n),n=>{throw e.get(t)===r&&e.delete(t),n});for(e.set(t,r);e.size>l;)e.delete(e.keys().next().value);return r},clear(){e.clear()}}}i(createRevealPreparation,"createRevealPreparation");
+//# sourceMappingURL=reveal-preparation.js.map

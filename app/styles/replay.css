@@ -745,7 +745,6 @@
     translate(var(--replay-reward-enter-x), var(--replay-reward-enter-y))
     scale(0.76);
   transform-origin: 50% 100%;
-  will-change: opacity, transform;
 }
 
 .replay-badge-reward-pop::before {
@@ -1533,6 +1532,10 @@
   background: repeating-linear-gradient(135deg,#69141f0b 0 1px,transparent 1px 8px),#dfaeae;
 }
 .replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"] { cursor: pointer; }
+/* Prepared results retain measurable geometry beneath the spinning/covered face. */
+.replay-tq.q-reveal-preparing > .replay-badge-wrap,
+.replay-tq:not(.q-result-revealed) > .replay-badge-overflow-label { visibility: hidden; }
+.replay-win-description.is-waiting-for-reward-popups { transform: none; }
 .replay-win-flight {
   position: absolute; z-index: 99; display: grid; gap: 2px; box-sizing: border-box;
   pointer-events: none; white-space: nowrap; padding: 4px 6px;

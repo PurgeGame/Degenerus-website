@@ -953,14 +953,11 @@ describe('app-box-strip', () => {
     localStorage.setItem(KEY, JSON.stringify([{
       index: 8, ready: true, resolved: true, fromReceipt: true,
     }]));
-    const el = instantiate();
-    storeMod.update('connected.address', ADDR);
-    await el.__pollForTest();
-    el.__setReadyForTest(8);
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     let reads = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = async (url) => {
+      if (!String(url).includes('lootboxIndex=8')) return { ok: true, status: 200, json: async () => ({ items: [] }) };
       reads += 1;
       await gate;
       return { ok: true, status: 200, json: async () => ({ items: [{
@@ -970,6 +967,10 @@ describe('app-box-strip', () => {
           reels: [{ spinIndex: 0, score: 0, playerTraits: [], resultTraits: [] }] },
       }] }) };
     };
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await el.__pollForTest();
+    el.__setReadyForTest(8);
     const action = pendingActionsMod.getPendingActions()[0];
     const opening = action.run();
     await tick();

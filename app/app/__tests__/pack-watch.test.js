@@ -988,7 +988,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(packWatch.unopenedFoilPackPending({ address: ADDR, level: LEVEL }), false);
   });
 
-  test('a foil auto-open no-op reports failure so the reveal tray can retry it', async () => {
+  test('a ready foil opens its cached complete projection even if the next API read regresses', async () => {
     _routes['/tickets/by-trait'] = byTrait([]);
     _routes['/foil'] = { present: false, level: LEVEL, lines: null };
     await packWatch.recordPendingPack({
@@ -1015,20 +1015,10 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(item?.state, 'ready');
     assert.equal(item?.autoOpen, true);
 
-    // Model the short projection race seen online: the poll saw the complete
-    // foil, but the opener's immediate re-read did not. A false result is the
-    // tray's retry signal; undefined used to disarm AUTO forever.
+    // A complete immutable result survives a temporarily regressed projection.
     _routes['/foil'] = { present: false, level: LEVEL, lines: null };
-    assert.equal(await item.run(), false);
-    assert.equal(takeQueued().length, 0);
-
-    _routes['/foil'] = { present: true, level: LEVEL, lines: foilLines };
-    packWatch.refreshPackWatch();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    [item] = pendingActions.getPendingActions();
-    assert.equal(item?.state, 'ready');
     assert.equal(await item.run(), true);
-    assert.equal(takeQueued().length, 1, 'the next attempt stages the foil pack');
+    assert.equal(takeQueued().length, 1);
   });
 
   test('incomplete foils stay hidden while only queued standard tickets count toward the next RNG', async () => {
