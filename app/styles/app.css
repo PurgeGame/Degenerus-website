@@ -20662,6 +20662,8 @@ body.layout-basic .df-modifier-meter__marker {
   z-index: 2;
   width: 100%;
   height: 50%;
+  min-height: calc((var(--df-meter-pip-bank-height) - 24px) / 25);
+  container: df-meter-fill / size;
   overflow: hidden;
   border: 0;
   border-radius: 0;
@@ -24712,6 +24714,16 @@ body.layout-basic .df-coinflip-record__mark.is-win.is-roll-150 {
   border-color: rgba(253, 224, 71, 0.86);
   background: linear-gradient(180deg, #fff59d, #eab308 58%, #854d0e);
   box-shadow: 0 0 4px rgba(250, 204, 21, 0.82), 0 0 8px rgba(234, 179, 8, 0.3);
+}
+/* The rail is 8.93rem tall with 0.24rem inset, 2px frame and 24 one-pixel
+   gaps. Yellow ends as soon as the moving window reaches the second pip,
+   regardless of its destination or which sweep/reversal is running. */
+@container df-meter-fill (max-height: calc((8.93rem - 0.24rem - 1px) / 25)) {
+  body.layout-basic .df-modifier-meter__pip-bank--fill > .df-coinflip-record__mark:last-child {
+    border-color: rgba(253, 224, 71, 0.86);
+    background: linear-gradient(180deg, #fff59d, #eab308 58%, #854d0e);
+    box-shadow: 0 0 4px rgba(250, 204, 21, 0.82), 0 0 8px rgba(234, 179, 8, 0.3);
+  }
 }
 body.layout-basic .df-coinflip-record__mark.is-win.is-roll-250 {
   border-color: rgba(147, 197, 253, 0.88);
