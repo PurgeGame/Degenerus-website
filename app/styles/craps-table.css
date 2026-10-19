@@ -3650,7 +3650,11 @@ app-craps-table {
   opacity: 0.35;
 }
 
-.craps-race-marker-link.is-you { stroke: #6ef08c; }
+.craps-race-marker-link.is-you {
+  stroke: #6ef08c;
+  stroke-width: 1.5;
+  opacity: 0.75;
+}
 
 .craps-race-label-link {
   stroke: #6ef08c;
@@ -3703,7 +3707,7 @@ app-craps-table {
 }
 
 .craps-race-endpoint.is-you .craps-race-endpoint-avatar { stroke: #6ef08c; }
-.craps-race-endpoint.is-current .craps-race-endpoint-avatar { stroke-width: 3; }
+.craps-race-endpoint.is-highest-owned .craps-race-endpoint-avatar { stroke-width: 3; }
 .craps-race-endpoint.is-out { opacity: 0.45; }
 
 /* Preserve the seven-out warning on your dots instead of a text card. */
