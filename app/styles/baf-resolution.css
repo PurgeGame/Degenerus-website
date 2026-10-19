@@ -108,6 +108,11 @@ body.layout-basic.baf-resolution-pending [data-bind="df-reveal-hint"] { visibili
 .baf-res-modal :is(button, summary, [tabindex]):focus-visible { outline: 2px solid #8ac7ff; outline-offset: 4px; }
 .baf-res-modal button { cursor: pointer; }
 .baf-res-modal button:disabled { cursor: default; }
+.baf-res__loading { position: relative; display: grid; place-content: center; justify-items: center; min-height: 100%; padding: 64px 24px; text-align: center; }
+.baf-res__loading > .baf-res__close { position: absolute; top: 24px; right: 24px; }
+.baf-res__loading > strong { font-size: 20px; letter-spacing: .08em; }
+.baf-res__loading > p { color: #b6c6df; }
+.baf-res__retry { margin-top: 16px; padding: 12px 24px; border: 1px solid #8ac7ff; border-radius: 8px; background: #152b4b; color: #e7edfa; font-weight: 800 !important; }
 .baf-res__ambient { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 0, #19306266, transparent 65%), repeating-linear-gradient(0deg, transparent 0 39px, #86b9ff03 39px 40px); }
 .baf-res__shell { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 20px; width: min(1560px, 100%); min-height: 100%; margin: auto; padding: 28px 32px 20px; }
 .baf-res__header { display: flex; align-items: center; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--baf-line); }
