@@ -58,46 +58,90 @@ try {
 
   await page.evaluate(async () => {
     const { __setBafResolutionFetcherForTest } = await import('/app/app/baf-resolution.js');
-    const { prepareBafResolution } = await import('/app/app/jackpot-reveal-preparation.js');
-    const { prepareBafResultNodes } = await import('/app/components/app-baf-resolution-overlay.js');
+    const { prepareBafView } = await import('/app/components/app-baf-resolution-overlay.js');
     const { publishPendingActions } = await import('/app/app/pending-actions.js');
     window.bafReads = 0;
+    window.bafAttempts = 0;
+    window.releaseBattles = [];
+    publishPendingActions('slow-battles', [1, 2].map(id => ({ id, state: 'ready',
+      prepare: () => new Promise(resolve => releaseBattles.push(resolve)) })));
     window.bafPlayer = '0x1111111111111111111111111111111111111111';
     window.bafOptions = { level: 40, player: bafPlayer, consolation: 0 };
     __setBafResolutionFetcherForTest(async path => {
       bafReads++;
-      if (path.includes('/resolution')) return { status: 'closed', day: 200, rngWord: '1',
+      if (path.includes('/resolution')) {
+        if (++bafAttempts === 1) throw Error('temporary metadata failure');
+        return { status: 'closed', day: 200, rngWord: '1',
         comparisons: Array.from({ length: 24 }, (_, index) => ({ id: String(index), round: index + 1,
           players: [{ player: bafPlayer, score: '3000000000000000000', prizes: [{ kind: 'tickets', amount: '12', level: 41 }] },
             { player: '0x2222222222222222222222222222222222222222', score: '1000000000000000000', prizes: [] }] })) };
+      }
       if (path.includes('jackpot-history')) return { wins: [{ awardType: 'tickets_baf', sourceLevel: 40, level: 41, amount: '48' }] };
-      if (path.startsWith('/leaderboards')) return { entries: [] };
+      if (path.startsWith('/leaderboards/coinflip')) return { entries: [], totalWeight: '1000', totalParticipants: 12,
+        player: { day: 200, player: bafPlayer, score: '20', rank: 1 }, winner: bafPlayer };
+      if (path.startsWith('/leaderboards/baf')) return { entries: [
+        { level: 40, player: bafPlayer, score: '3000000000000000000', rank: 1 },
+        { level: 40, player: '0x2222222222222222222222222222222222222222', score: '1000000000000000000', rank: 2 },
+      ] };
       return { roundStatus: 'closed', score: '3000000000000000000', rank: 1 };
     });
     publishPendingActions('baf-precache-browser', [{ id: 'baf:40', dismissScope: bafPlayer, kind: 'baf', state: 'ready',
+      preparePriority: 'high',
       prepare: async () => {
-        const snapshot = await prepareBafResolution(bafOptions);
-        prepareBafResultNodes(snapshot);
+        const snapshot = await prepareBafView(bafOptions);
         window.bafPrepared = snapshot.preparationComplete;
+        return snapshot.preparationComplete;
       }, run() {} }]);
   });
   await page.waitForFunction(() => window.bafPrepared === true);
   assert.equal(await page.locator('.baf-res-modal, .baf-res__comparison').count(), 0, 'precomputed BAF results stay detached');
   const reads = await page.evaluate(() => bafReads);
-  assert.equal(reads, 5);
+  assert.equal(reads, 9, 'one incomplete attempt retries automatically while both replay slots are occupied');
+  assert.equal(await page.evaluate(() => releaseBattles.length), 2);
   const opened = await page.evaluate(async () => {
     const { __setBafResolutionFetcherForTest } = await import('/app/app/baf-resolution.js');
     __setBafResolutionFetcherForTest(() => { bafReads++; throw Error('network disconnected after preparation'); });
     const { openBafResolution } = await import('/app/components/app-baf-resolution-overlay.js');
-    return openBafResolution(bafOptions);
+    const create = document.createElement;
+    const html = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    let created = 0, parsed = 0;
+    document.createElement = function (...args) { created++; return create.apply(this, args); };
+    Object.defineProperty(Element.prototype, 'innerHTML', { ...html,
+      set(value) { parsed++; return html.set.call(this, value); } });
+    try {
+      const result = openBafResolution(bafOptions);
+      const synchronous = Boolean(document.querySelector('[data-bind="baf-flip"]'));
+      return { opened: await result, synchronous, created, parsed };
+    } finally {
+      document.createElement = create;
+      Object.defineProperty(Element.prototype, 'innerHTML', html);
+    }
   });
-  assert.equal(opened, true, 'prepared BAF opens even with the reader offline');
+  assert.deepEqual(opened, { opened: true, synchronous: true, created: 1, parsed: 0 },
+    'opening mounts the already built view immediately without loading UI or recomputing rows/wheel');
   assert.equal(await page.evaluate(() => bafReads), reads, 'opening makes no result requests');
   assert.equal(await page.locator('.baf-res__comparison').count(), 0, 'outcomes remain covered until the flip');
+  assert.equal(await page.locator('[data-bind="baf-draw-player-percent"]').innerText(), '2.00%');
+  assert.equal(await page.locator('[data-bind="baf-leaders"] .baf-res__player').count(), 2);
   await page.locator('[data-bind="baf-flip"]').click();
   await page.waitForFunction(() => document.querySelector('[data-bind="baf-shell"]')?.dataset.stage === 'complete');
   assert.equal(await page.locator('.baf-res__comparison').count(), 24);
+  assert.match(await page.locator('[data-bind="baf-payout"]').innerText(), /12 TICKETS/);
+  assert.equal(await page.locator('[data-bind="baf-draw-state"]').innerText(), 'YOU WON THE DRAW');
   await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const { openBafResolution } = await import('/app/components/app-baf-resolution-overlay.js');
+    await openBafResolution(bafOptions);
+  });
+  assert.equal(await page.locator('.baf-res__comparison').count(), 0, 'reopening uses a pristine, unrevealed view');
+  assert.equal(await page.locator('[data-bind="baf-gate-result"]').innerText(), 'CLICK TO FLIP');
+  assert.equal(await page.evaluate(() => bafReads), reads);
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const { clearPendingActions } = await import('/app/app/pending-actions.js');
+    clearPendingActions('slow-battles');
+    releaseBattles.forEach(release => release());
+  });
   await page.evaluate(async () => {
     const { decimatorBattleFixture } = await import('/app/craps/fixtures/decimator-battle.js');
     const { prepareDecimatorReplay } = await import('/app/craps/decimator-replay.js');

@@ -257,6 +257,7 @@ describe('BAF resolution model', () => {
       assert.equal(snapshot.survivorRank, null);
       assert.equal(snapshot.eliminatedCutRank, null);
       assert.equal(snapshot.resolutionDetailsAvailable, false);
+      assert.equal(snapshot.preparationComplete, false);
       assert.equal(snapshot.player.eth, '25');
       assert.equal(snapshot.player.wonAny, true);
       assert.equal(snapshot.topFour.length, 4);
@@ -267,6 +268,39 @@ describe('BAF resolution model', () => {
     } finally {
       __resetBafResolutionFetcherForTest();
     }
+  });
+
+  test('only a final, fully populated BAF response is retained as prepared', async () => {
+    const metadata = { status: 'closed', day: 9, rngWord: '1', comparisons: [], wins: [] };
+    const draw = { entries: [], player: null, totalWeight: '0', totalParticipants: 0, winner: null };
+    let missing = null;
+    __setBafResolutionFetcherForTest(async path => {
+      if (path.startsWith('/game/baf/')) {
+        if (missing === 'terminal') return { ...metadata, status: 'open' };
+        if (missing === 'comparisons') return { ...metadata, comparisons: undefined };
+        if (missing === 'day') return { ...metadata, day: null };
+        return metadata;
+      }
+      if (path.startsWith('/leaderboards/coinflip')) {
+        if (missing === 'draw') throw Error('draw book still syncing');
+        if (missing === 'weight') return { ...draw, totalWeight: null };
+        if (missing === 'winner') { const { winner, ...partial } = draw; return partial; }
+        return draw;
+      }
+      if (path.startsWith('/leaderboards/')) return LEADERS;
+      if (path.includes('jackpot-history')) throw Error('optional history unavailable');
+      return { roundStatus: 'closed', score: String(100n * FLIP), rank: 4 };
+    });
+    try {
+      for (const field of ['terminal', 'comparisons', 'day', 'draw', 'weight', 'winner']) {
+        missing = field;
+        assert.equal((await loadBafResolutionSnapshot({ level: 40, player: PLAYER_4 })).preparationComplete,
+          false, `${field} must finish before the result is cached`);
+      }
+      missing = null;
+      const complete = await loadBafResolutionSnapshot({ level: 40, player: PLAYER_4 });
+      assert.equal(complete.preparationComplete, true, 'round-scoped awards do not depend on generic history');
+    } finally { __resetBafResolutionFetcherForTest(); }
   });
 });
 
