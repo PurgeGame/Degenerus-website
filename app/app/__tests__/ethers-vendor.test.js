@@ -22,7 +22,7 @@ describe('tree-shaken browser ethers build', () => {
     for (const name of expectedExports.filter((name) => name !== 'ethers')) {
       assert.strictEqual(vendor.ethers[name], vendor[name], `ethers.${name}`);
     }
-    assert.equal(vendor.version, '6.16.0');
+    assert.equal(vendor.version, '6.17.0');
   });
 
   test('matches upstream encoding, hashing and unit conversion', () => {

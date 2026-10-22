@@ -4,7 +4,9 @@
   "description": "Static site shell for the Degenerus Protocol, with the Degenerette simulator mounted at `/degenerette/`.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:vendor": "node db/build-ethers-vendor.mjs && node db/build-walletconnect-vendor.mjs && node db/build-metamask-connect-vendor.mjs && node db/build-coinbase-wallet-vendor.mjs && node db/build-session-vendor.mjs",
+    "check:vendor": "node db/build-ethers-vendor.mjs --check && node db/build-walletconnect-vendor.mjs --check && node db/build-metamask-connect-vendor.mjs --check && node db/build-coinbase-wallet-vendor.mjs --check && node db/build-session-vendor.mjs --check"
   },
   "repository": {
     "type": "git",
@@ -18,10 +20,23 @@
   },
   "homepage": "https://github.com/PurgeGame/Degenerus-website#readme",
   "dependencies": {
-    "ethers": "^6.16.0"
+    "@coinbase/wallet-sdk": "4.4.0"
   },
   "type": "module",
   "devDependencies": {
-    "@walletconnect/ethereum-provider": "^2.23.9"
+    "@metamask/connect-evm": "2.1.1",
+    "@walletconnect/ethereum-provider": "^2.23.9",
+    "es-module-lexer": "3.0.2",
+    "esbuild": "^0.28.2",
+    "ethers": "6.17.0",
+    "lightningcss": "^1.33.0"
+  },
+  "overrides": {
+    "@metamask/utils": {
+      "uuid": "11.1.1"
+    }
+  },
+  "engines": {
+    "node": ">=24.22.1 <25"
   }
 }
