@@ -2,19 +2,18 @@
 //
 // Run: cd website && node --test app/app/__tests__/parimutuel.test.js
 //
-// Covers the write paths (placeBet / claim / claimRound), the view decoding,
-// and the payout arithmetic. Harness shape is the coinflip.test.js /
+// Covers the write path (placeBet), the view decoding, and the payout arithmetic. Winners
+// are paid automatically, so there is no claim. Harness shape is the coinflip.test.js /
 // passes.test.js fake provider+contract port.
 //
 // Sources (degenerus-audit/contracts/DegenerusParimutuel.sol):
-//   STAKE = 1_000 ether — one fixed bet per address per round
-//   placeBet(player, over) · claim(player, rounds[]) · claimRound(round, players[])
+//   STAKE = 1_000 FLIP — one fixed bet per wallet per round
+//   placeBet(id, over)
 //   _payoutFrom — STAKE * (over + under) / winCount
-//   MarketClosed · AlreadyBet · NothingToSettle · NotEligible
+//   MarketClosed · AlreadyBet · NotEligible
 //
-// The ticket-VOLUME book was excised from the contract at the run-43 re-vendor
-// (audit 0bbc82a6b); a guard test below pins the module to the growth-only
-// surface so the dead lane cannot silently return.
+// The ticket-VOLUME book is gone from the contract; a guard test below pins the module to the
+// growth-only surface so the dead lane cannot silently return.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,13 +23,12 @@ import * as pari from '../parimutuel.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
+import { _setWalletIdForTests } from '../wallet-id.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+const CONNECTED_ID = 5;
+_setWalletIdForTests(CONNECTED, CONNECTED_ID);
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -43,8 +41,6 @@ function makeFakeTx() {
 function makeFakeContract(opts = {}) {
   const calls = {
     placeBet: [],
-    claim: [],
-    claimRound: [],
   };
   const order = [];
 
@@ -69,8 +65,6 @@ function makeFakeContract(opts = {}) {
 
   return {
     placeBet: writeStub('placeBet'),
-    claim: writeStub('claim'),
-    claimRound: writeStub('claimRound'),
     // marketState(player, round) → the 8 growth returns
     marketState: async (player, round) => (
       opts.marketState ? opts.marketState(player, round) : [42, 3n, 1n, 150n * 10n ** 18n, 0, false, 0, 0n]
@@ -83,7 +77,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => connectedAddr }),
   };
 }
@@ -125,10 +119,10 @@ describe('parimutuel.js reason-map registrations', () => {
     const SRC = readFileSync(new URL('../parimutuel.js', import.meta.url), 'utf8');
     const abi = [...SRC.matchAll(/'(error [^']+)'/g)].map((m) => m[1]);
     const iface = new contractsMod.ethers.Interface(abi);
-    // DegenerusParimutuel.sol — placeBet and claim, plus FLIP's burn gate.
+    // DegenerusParimutuel.sol — placeBet, plus FLIP's burn gate.
     for (const signature of [
       'NotApproved()', 'MarketClosed()', 'AlreadyBet()',
-      'NotEligible()', 'NothingToSettle()', 'OnlyGame()',
+      'NotEligible()', 'OnlyGame()',
     ]) {
       // Insufficient is deliberately absent: it is a shared selector answered by
       // the write path's local override, asserted in the next test.
@@ -220,7 +214,7 @@ describe('view decoding', () => {
 
   test('readGrowthMarket maps the 8 marketState returns', async () => {
     pari.__setContractFactoryForTest(() => makeFakeContract({
-      marketState: () => [42, 3n, 1n, 150n * 10n ** 18n, 1, false, 1, 4_000n * 10n ** 18n],
+      marketState: () => [42, 3n, 1n, 150n, 1, false, 1, 4_000n], // raw whole FLIP
     }));
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
     const s = await pari.readGrowthMarket({ player: CONNECTED, round: 42 });
@@ -235,7 +229,7 @@ describe('view decoding', () => {
     assert.equal(s.payout, 4_000n * 10n ** 18n);
   });
 
-  test('the volume book stays excised (run-43 contract has no volume surface)', () => {
+  test('the volume book stays excised (the contract has no volume surface)', () => {
     assert.equal(pari.readVolumeMarket, undefined);
     assert.equal(pari.readVolumeCredit, undefined);
     assert.equal(pari.placeVolumeBet, undefined);
@@ -247,7 +241,7 @@ describe('view decoding', () => {
   test('readMarketBetGates keeps bet permission separate from bonus eligibility', async () => {
     pari.__setQuestFactoryForTest(() => ({
       marketBetGates: async (player, level) => {
-        assert.equal(player, CONNECTED);
+        assert.equal(player, CONNECTED_ID, 'the quest gate is keyed by wallet ID');
         assert.equal(level, 42);
         return [true, false];
       },
@@ -357,9 +351,9 @@ describe('bet placement', () => {
     contractsMod.clearProvider();
   });
 
-  test('placeGrowthBet calls placeBet(player, over) after a static-call pre-flight', async () => {
+  test('placeGrowthBet calls placeBet(0, over) for the connected wallet after a static-call pre-flight', async () => {
     await pari.placeGrowthBet({ player: CONNECTED, over: true });
-    assert.deepEqual(fake._calls.placeBet, [[CONNECTED, true]]);
+    assert.deepEqual(fake._calls.placeBet, [[0, true]]);
     assert.deepEqual(fake._order, ['static:placeBet', 'send:placeBet']);
   });
 
@@ -378,154 +372,6 @@ describe('bet placement', () => {
 
   test('rejects with no player', async () => {
     await assert.rejects(pari.placeGrowthBet({ over: true }), /Wallet not connected/i);
-  });
-});
-
-describe('claims', () => {
-  let fake;
-
-  beforeEach(() => {
-    storeMod.__resetForTest();
-    storeMod.update('connected.address', CONNECTED);
-    storeMod.update('ui.mode', 'self');
-    contractsMod.setProvider(makeFakeProvider(CONNECTED));
-    fake = makeFakeContract();
-    pari.__setContractFactoryForTest(() => fake);
-  });
-
-  afterEach(() => {
-    pari.__resetContractFactoryForTest();
-    contractsMod.clearProvider();
-  });
-
-  test('claimGrowth passes the round list through', async () => {
-    await pari.claimGrowth({ player: CONNECTED, rounds: [41, 40] });
-    assert.deepEqual(fake._calls.claim, [[CONNECTED, [41, 40]]]);
-  });
-
-  test('drops non-positive / non-integer rounds and refuses an empty batch', async () => {
-    await pari.claimGrowth({ player: CONNECTED, rounds: [41, 0, -3, 'x'] });
-    assert.deepEqual(fake._calls.claim, [[CONNECTED, [41]]]);
-    await assert.rejects(
-      pari.claimGrowth({ player: CONNECTED, rounds: [0] }),
-      /Nothing to claim/i,
-    );
-  });
-
-  test('community growth claim keeps the clicked player first and dedupes winners', async () => {
-    const other = '0xcd34000000000000000000000000000000000000';
-    const result = await pari.claimGrowthRound({
-      player: CONNECTED,
-      round: 41,
-      players: [other, CONNECTED.toUpperCase(), other],
-    });
-    assert.deepEqual(fake._calls.claimRound, [[41, [CONNECTED, other]]]);
-    assert.deepEqual(result.players, [CONNECTED, other]);
-    assert.deepEqual(fake._order, ['static:claimRound', 'send:claimRound']);
-  });
-});
-
-describe('readRoundWinners', () => {
-  afterEach(() => {
-    pari.__resetContractFactoryForTest();
-    pari.__resetWinnersFetcherForTest();
-    contractsMod.clearProvider();
-  });
-
-  test('reads winners from the API and caps at the expected count', async () => {
-    const winnerA = '0x1111000000000000000000000000000000000000';
-    const winnerB = '0x3333000000000000000000000000000000000000';
-    const winnerC = '0x4444000000000000000000000000000000000000';
-    let requested = null;
-    pari.__setWinnersFetcherForTest(async (path) => {
-      requested = path;
-      return {
-        market: 'growth',
-        round: 41,
-        over: true,
-        winners: [
-          { player: winnerA, credit: '1000', blockNumber: 10, logIndex: 0 },
-          { player: winnerB, credit: '1000', blockNumber: 11, logIndex: 0 },
-          { player: winnerC, credit: '1000', blockNumber: 12, logIndex: 0 },
-        ],
-      };
-    });
-
-    assert.deepEqual(await pari.readRoundWinners({
-      round: 41,
-      outcome: pari.SIDE_OVER,
-      expectedCount: 2,
-    }), [winnerA, winnerB]);
-    assert.equal(requested, '/game/parimutuel/growth/41/winners?over=1');
-  });
-
-  test('encodes the UNDER side and a non-default market', async () => {
-    let requested = null;
-    pari.__setWinnersFetcherForTest(async (path) => {
-      requested = path;
-      return { winners: [] };
-    });
-
-    await pari.readRoundWinners({
-      market: 'volume',
-      round: 7,
-      outcome: pari.SIDE_UNDER,
-    });
-    assert.equal(requested, '/game/parimutuel/volume/7/winners?over=0');
-  });
-
-  test('falls back to the chain scan only when the API throws', async () => {
-    const winnerA = '0x1111000000000000000000000000000000000000';
-    const loser = '0x2222000000000000000000000000000000000000';
-    const winnerB = '0x3333000000000000000000000000000000000000';
-    const queries = [];
-    const provider = {
-      ...makeFakeProvider(CONNECTED),
-      getBlockNumber: async () => 9000,
-    };
-    const contract = {
-      filters: {
-        BetPlaced: (player, round) => ({ player, round }),
-      },
-      queryFilter: async (filter, from, to) => {
-        queries.push({ filter, from, to });
-        return [
-          { args: { player: winnerA, over: true } },
-          { args: { player: loser, over: false } },
-          { args: { player: winnerB, over: true } },
-          { args: { player: winnerA.toUpperCase(), over: true } },
-        ];
-      },
-    };
-    contractsMod.setProvider(provider);
-    pari.__setContractFactoryForTest(() => contract);
-    pari.__setWinnersFetcherForTest(async () => { throw new Error('API unavailable'); });
-
-    assert.deepEqual(await pari.readRoundWinners({
-      kind: 'growth',
-      round: 41,
-      outcome: pari.SIDE_OVER,
-      expectedCount: 2,
-    }), [winnerA, winnerB]);
-    assert.equal(queries.length, 1, 'the expected count stops the backwards scan');
-    assert.equal(queries[0].filter.round, 41);
-    assert.ok(queries[0].to - queries[0].from < 1800, 'RPC range stays under the cap');
-  });
-
-  test('an empty API winners list is a real (non-error) answer and does not fall back', async () => {
-    let chainTouched = false;
-    contractsMod.setProvider({
-      ...makeFakeProvider(CONNECTED),
-      getBlockNumber: async () => { chainTouched = true; return 9000; },
-    });
-    pari.__setWinnersFetcherForTest(async () => ({ winners: [] }));
-
-    assert.deepEqual(await pari.readRoundWinners({
-      round: 41,
-      outcome: pari.SIDE_OVER,
-      expectedCount: 2,
-    }), []);
-    assert.equal(chainTouched, false, 'a genuine empty API answer never triggers the chain fallback');
   });
 });
 

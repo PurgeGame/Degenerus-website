@@ -8,27 +8,35 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import { CHAIN, CONTRACTS } from '../chain-config.js';
 import { invalidateReadCache } from '../read-provider.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { _setWalletIdForTests } from '../wallet-id.js';
+import { prepareWalletReceipt } from '../wallet-receipt.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
+import { rpcFixture } from './helpers/chain-rpc.js';
+import { abi as sdgnrsAbi } from '../../chain/generated/sdgnrs.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+const CONNECTED_ID = 5;
+_setWalletIdForTests(CONNECTED, CONNECTED_ID);
+// Site token wei per whole token, and sDGNRS's raw (12-decimal) units per whole token.
 const TOKEN = 10n ** 18n;
+const RAW = 10n ** 12n;
 
 function makeFakeProvider() {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => CONNECTED }),
   };
 }
 
+// A redemption batch as the contract returns it: (tokens, ethPayout, ethBase, flipEscrow, roll,
+// flipReward). `pending` is the claim: (tokens, activityScore + 1).
 function makeFakeContract({
   staticError = null,
   preview = [0n, 0n],
-  pending = [0n, 0, 0n],
-  roll = 0,
+  pending = [0n, 0],
+  batch = [0n, 0n, 0n, 0n, 0, 0],
+  openBatch = 1,
+  parked = false,
   claimReceipt = { status: 1, logs: [] },
 } = {}) {
   const calls = [];
@@ -75,16 +83,35 @@ function makeFakeContract({
       },
     },
   );
+  const claimParkedRedemption = Object.assign(
+    async (...args) => {
+      calls.push(['parked', ...args]);
+      order.push('parked-send');
+      return { hash: '0xc1a2', wait: async () => claimReceipt };
+    },
+    {
+      staticCall: async (...args) => {
+        calls.push(['parked-static', ...args]);
+        order.push('parked-static');
+        if (!parked) throw new Error('NoClaim');
+      },
+    },
+  );
   return {
     burn,
     burnWrapped,
     claimRedemption,
+    claimParkedRedemption,
     previewBurnValue: async (amount) => {
       calls.push(['preview', amount]);
       return preview;
     },
-    pendingRedemptions: async () => pending,
-    redemptionPeriods: async () => roll,
+    pendingRedemptions: async (...args) => {
+      calls.push(['pending', ...args]);
+      return pending;
+    },
+    redemptionBatches: async () => batch,
+    redemptionBatchState: async () => [openBatch, 0, 0, 0n],
     connect() { return this; },
     _calls: calls,
     _order: order,
@@ -120,8 +147,8 @@ describe('burnSdgnrs', () => {
 
     assert.equal(result.amount, amount);
     assert.deepEqual(fake._order, ['static', 'send']);
-    assert.deepEqual(fake._calls[0], ['static', amount]);
-    assert.deepEqual(fake._calls[1], [amount]);
+    assert.deepEqual(fake._calls[0], ['static', 25n * RAW], 'the chain takes 12-decimal raw units');
+    assert.deepEqual(fake._calls[1], [25n * RAW]);
     assert.equal(result.receipt.status, 1);
   });
 
@@ -134,8 +161,8 @@ describe('burnSdgnrs', () => {
 
     assert.equal(result.amount, amount);
     assert.deepEqual(fake._order, ['wrapped-static', 'wrapped-send']);
-    assert.deepEqual(fake._calls[0], ['wrapped-static', amount]);
-    assert.deepEqual(fake._calls[1], ['wrapped', amount]);
+    assert.deepEqual(fake._calls[0], ['wrapped-static', 12n * RAW]);
+    assert.deepEqual(fake._calls[1], ['wrapped', 12n * RAW]);
     assert.equal(result.receipt.status, 1);
   });
 
@@ -152,8 +179,8 @@ describe('burnSdgnrs', () => {
 
     const result = await sdgnrsMod.previewSdgnrsBurn({ amount: 25n * TOKEN });
 
-    assert.deepEqual(result, { ethOut: 42n, flipOut: 9000n });
-    assert.deepEqual(fake._calls.at(-1), ['preview', 25n * TOKEN]);
+    assert.deepEqual(result, { ethOut: 42n, flipOut: 9000n * TOKEN }, 'whole FLIP on chain, token wei here');
+    assert.deepEqual(fake._calls.at(-1), ['preview', 25n * RAW]);
   });
 
   test('can preview through the public read path without a connected wallet', async () => {
@@ -166,7 +193,7 @@ describe('burnSdgnrs', () => {
       publicRead: true,
     });
 
-    assert.deepEqual(result, { ethOut: 17n, flipOut: 33n });
+    assert.deepEqual(result, { ethOut: 17n, flipOut: 33n * TOKEN });
   });
 
   test('rejects a sub-token burn before constructing a contract', async () => {
@@ -174,8 +201,12 @@ describe('burnSdgnrs', () => {
     sdgnrsMod.__setContractFactoryForTest(() => { builds += 1; return makeFakeContract(); });
 
     await assert.rejects(
-      sdgnrsMod.burnSdgnrs({ amount: TOKEN - 1n }),
+      sdgnrsMod.burnSdgnrs({ amount: TOKEN / 2n }),
       /minimum burn is 1 sdgnrs/i,
+    );
+    await assert.rejects(
+      sdgnrsMod.burnSdgnrs({ amount: TOKEN + 1n }),
+      /up to 12 decimal places/i,
     );
     assert.equal(builds, 0);
   });
@@ -190,15 +221,15 @@ describe('burnSdgnrs', () => {
     );
   });
 
-  test('maps the live-game RNG gate to compact copy', async () => {
+  test('maps the game-over liveness gate to compact copy', async () => {
     const error = new Error('reverted');
-    error.revert = { name: 'BurnsBlockedDuringRng' };
+    error.revert = { name: 'BurnsBlockedDuringLiveness' };
     sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
 
     await assert.rejects(
       sdgnrsMod.burnSdgnrs({ amount: TOKEN }),
-      (caught) => caught.code === 'BurnsBlockedDuringRng'
-        && /after rng settles/i.test(caught.userMessage),
+      (caught) => caught.code === 'BurnsBlockedDuringLiveness'
+        && /paused during the game-over check/i.test(caught.userMessage),
     );
   });
 
@@ -214,79 +245,109 @@ describe('burnSdgnrs', () => {
     );
   });
 
-  test('decodes the submitted period and final redemption payout from receipts', () => {
-    const iface = new contractsMod.ethers.Interface([
-      'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex)',
-      'event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid)',
-    ]);
-    const submitted = iface.encodeEventLog(iface.getEvent('RedemptionSubmitted'), [
-      CONNECTED, 25n * TOKEN, 4n, 5n, 67,
-    ]);
-    const claimed = iface.encodeEventLog(iface.getEvent('RedemptionClaimed'), [
-      CONNECTED, 142, 2n, 2n, 900n,
-    ]);
-    const receipt = {
-      hash: '0xabc123',
-      logs: [submitted, claimed].map((event) => ({
-        address: CONTRACTS.SDGNRS,
-        topics: event.topics,
-        data: event.data,
-      })),
-    };
+  test('decodes the submitted batch and final redemption payout from receipts', async () => {
+    const f = await rpcFixture();
+    await f.wallet(CONNECTED_ID, CONNECTED);
+    const submitted = await f.event('SDGNRS', 'RedemptionSubmitted', {
+      player: CONNECTED_ID, sdgnrsAmount: 25n * RAW, batchId: 67,
+    });
+    const claimed = await f.event('SDGNRS', 'RedemptionClaimed', {
+      player: CONNECTED_ID, batchId: 67, roll: 142, ethPayout: 2n, lootboxEth: 2n, flipPaid: 900n,
+    });
+    const receipt = { hash: '0xabc123', blockNumber: 9999, logs: [submitted, claimed] };
+    await prepareWalletReceipt(receipt, f.client);
 
-    const parsed = sdgnrsMod.parseSdgnrsRedemptionReceipt(receipt, CONNECTED);
-    assert.equal(parsed.submissions[0].periodIndex, 67);
-    assert.equal(parsed.submissions[0].sdgnrsAmount, 25n * TOKEN);
-    assert.deepEqual(
-      { roll: parsed.claims[0].roll, eth: parsed.claims[0].ethPayout, box: parsed.claims[0].lootboxEth, flip: parsed.claims[0].flipPaid },
-      { roll: 142, eth: 2n, box: 2n, flip: 900n },
-    );
+    const saved = CONTRACTS.SDGNRS;
+    CONTRACTS.SDGNRS = f.contracts.SDGNRS;
+    try {
+      const parsed = sdgnrsMod.parseSdgnrsRedemptionReceipt(receipt, CONNECTED);
+      assert.equal(parsed.submissions[0].periodIndex, 67);
+      assert.equal(parsed.submissions[0].batchId, 67);
+      assert.equal(parsed.submissions[0].sdgnrsAmount, 25n * TOKEN, 'raw 12-decimal units read as token wei');
+      assert.deepEqual(
+        { roll: parsed.claims[0].roll, eth: parsed.claims[0].ethPayout, box: parsed.claims[0].lootboxEth, flip: parsed.claims[0].flipPaid },
+        { roll: 142, eth: 2n, box: 2n, flip: 900n * TOKEN },
+        'FLIP is whole tokens on chain',
+      );
+    } finally { CONTRACTS.SDGNRS = saved; }
   });
 
-  test('reads exact pending/ready state and claims the resolved redemption', async () => {
-    const iface = new contractsMod.ethers.Interface([
-      'event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid)',
-    ]);
-    const event = iface.encodeEventLog(iface.getEvent('RedemptionClaimed'), [
-      CONNECTED, 125, 4n, 4n, 500n,
-    ]);
-    const receipt = {
-      status: 1,
-      hash: '0xc1a1',
-      logs: [{ address: CONTRACTS.SDGNRS, topics: event.topics, data: event.data }],
-    };
+  test('reads an open batch: unpriced, waiting for the next RNG request', async () => {
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ pending: [8n * RAW, 156], openBatch: 67 }));
+    sdgnrsMod.__setGameFactoryForTest(() => ({ gameOver: async () => false }));
+
+    const state = await sdgnrsMod.readSdgnrsRedemptionState({ player: CONNECTED, periodIndex: 67 });
+    assert.equal(state.exists, true);
+    assert.equal(state.open, true);
+    assert.equal(state.ethValueOwed, null);
+    assert.equal(state.flipEscrow, null);
+    assert.equal(state.activityScore, 155, 'stored as score + 1');
+    assert.equal(state.sdgnrsTokens, 8n * TOKEN);
+    assert.equal(state.ready, false);
+  });
+
+  test('a resolved batch is claimable after game over and settles on its own while live', async () => {
+    const batch = [16n * RAW, 40n, 800n, 1_000n, 125, 150];
+    const fake = makeFakeContract({ pending: [8n * RAW, 156], batch, openBatch: 70 });
+    sdgnrsMod.__setContractFactoryForTest(() => fake);
+
+    sdgnrsMod.__setGameFactoryForTest(() => ({ gameOver: async () => false }));
+    const live = await sdgnrsMod.readSdgnrsRedemptionState({ player: CONNECTED, periodIndex: 67, fresh: true });
+    assert.equal(live.roll, 125);
+    assert.equal(live.settling, true, 'the Mine FLIP walk pays it unless the miner parked it');
+    assert.equal(live.ready, false);
+    assert.equal(live.claimMethod, null);
+    assert.equal(live.ethValueOwed, 400n, 'its pro-rata share (8 of 16 tokens) of the close price');
+    assert.equal(live.flipEscrow, 500n * TOKEN);
+    await assert.rejects(
+      sdgnrsMod.claimSdgnrsRedemption({ player: CONNECTED, periodIndex: 67 }),
+      (caught) => caught.code === 'RedemptionSettling',
+    );
+
+    const parkedFake = makeFakeContract({ pending: [8n * RAW, 156], batch, openBatch: 70, parked: true });
+    sdgnrsMod.__setContractFactoryForTest(() => parkedFake);
+    const parked = await sdgnrsMod.readSdgnrsRedemptionState({ player: CONNECTED, periodIndex: 67, fresh: true });
+    assert.equal(parked.claimMethod, 'claimParkedRedemption');
+
+    sdgnrsMod.__setGameFactoryForTest(() => ({ gameOver: async () => true }));
+    const over = await sdgnrsMod.readSdgnrsRedemptionState({ player: CONNECTED, periodIndex: 67, fresh: true });
+    assert.equal(over.claimMethod, 'claimRedemption');
+    assert.equal(over.ready, true);
+  });
+
+  test('claims the resolved redemption with account 0 after game over', async () => {
+    const f = await rpcFixture();
+    await f.wallet(CONNECTED_ID, CONNECTED);
+    const event = await f.event('SDGNRS', 'RedemptionClaimed', {
+      player: CONNECTED_ID, batchId: 67, roll: 125, ethPayout: 4n, lootboxEth: 4n, flipPaid: 500n,
+    });
+    const receipt = { status: 1, hash: '0xc1a1', blockNumber: 9999, logs: [event] };
+    await prepareWalletReceipt(receipt, f.client);
     const fake = makeFakeContract({
-      pending: [8n, 156, 500n],
-      roll: 125,
+      pending: [8n * RAW, 156],
+      batch: [16n * RAW, 40n, 800n, 1_000n, 125, 150],
       claimReceipt: receipt,
     });
     sdgnrsMod.__setContractFactoryForTest(() => fake);
+    sdgnrsMod.__setGameFactoryForTest(() => ({ gameOver: async () => true }));
 
-    const state = await sdgnrsMod.readSdgnrsRedemptionState({
-      player: CONNECTED,
-      periodIndex: 67,
-    });
-    assert.equal(state.exists, true);
-    assert.equal(state.ready, true);
-    assert.equal(state.roll, 125);
-
-    const result = await sdgnrsMod.claimSdgnrsRedemption({
-      player: CONNECTED,
-      periodIndex: 67,
-    });
-    assert.deepEqual(fake._order, ['claim-static', 'claim-send']);
-    assert.equal(result.claim.lootboxEth, 4n);
-    assert.equal(result.claim.flipPaid, 500n);
+    const saved = CONTRACTS.SDGNRS;
+    CONTRACTS.SDGNRS = f.contracts.SDGNRS;
+    try {
+      const result = await sdgnrsMod.claimSdgnrsRedemption({ player: CONNECTED, periodIndex: 67 });
+      assert.deepEqual(fake._order.slice(-2), ['claim-static', 'claim-send']);
+      assert.deepEqual(fake._calls.find((call) => call[0] === 'claim'), ['claim', 0, 67]);
+      assert.equal(result.claim.lootboxEth, 4n);
+      assert.equal(result.claim.flipPaid, 500n * TOKEN);
+    } finally { CONTRACTS.SDGNRS = saved; }
   });
 
-  test('discovery retains and aggregates the burned amount for each pending period', async () => {
+  test('discovery retains and aggregates the burned amount for each pending batch', async () => {
     const base = Number(CHAIN.deployBlock);
-    const iface = new contractsMod.ethers.Interface([
-      'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex)',
-    ]);
+    const iface = new contractsMod.ethers.Interface(sdgnrsAbi);
     const logs = [12n, 13n].map((amount, index) => {
       const event = iface.encodeEventLog(iface.getEvent('RedemptionSubmitted'), [
-        CONNECTED, amount * TOKEN, 4n, 5n, 67,
+        CONNECTED_ID, amount * RAW, 67,
       ]);
       return {
         address: CONTRACTS.SDGNRS,
@@ -309,10 +370,7 @@ describe('burnSdgnrs', () => {
         ));
       },
     });
-    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({
-      pending: [8n, 156, 500n],
-      roll: 0,
-    }));
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ pending: [8n * RAW, 156], openBatch: 67 }));
 
     const discovered = await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
     assert.equal(discovered.periods.length, 1);
@@ -328,7 +386,7 @@ describe('burnSdgnrs', () => {
     assert.deepEqual(ranges.at(-1), [base + 89, base + 105],
       'the next poll scans only the reorg tail plus new blocks');
     assert.equal(refreshed.periods.length, 2,
-      'durable period ids join discovery without a second state-read wave');
+      'durable batch ids join discovery without a second state-read wave');
     assert.equal(
       refreshed.periods.find((row) => row.periodIndex === 67).sdgnrsAmount,
       25n * TOKEN,
@@ -345,26 +403,20 @@ describe('burnSdgnrs', () => {
         events: [
           {
             name: 'RedemptionSubmitted',
-            args: {
-              player: CONNECTED, sdgnrsAmount: String(25n * TOKEN),
-              ethValueOwed: '4', flipEscrowed: '5', periodIndex: '67',
-            },
+            args: { player: CONNECTED, sdgnrsAmount: String(25n * TOKEN), batchId: '67' },
             blockNumber: 12345, logIndex: 0, transactionHash: '0xaa',
           },
           {
             name: 'RedemptionClaimed',
             args: {
-              player: CONNECTED, roll: '142', ethPayout: '2', lootboxEth: '2', flipPaid: '900',
+              player: CONNECTED, batchId: '67', roll: '142', ethPayout: '2', lootboxEth: '2', flipPaid: '900',
             },
             blockNumber: 12346, logIndex: 1, transactionHash: '0xbb',
           },
         ],
       };
     });
-    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({
-      pending: [8n, 156, 500n],
-      roll: 0,
-    }));
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ pending: [8n * RAW, 156], openBatch: 67 }));
     contractsMod.setProvider({
       ...makeFakeProvider(),
       getBlockNumber: async () => Number(CHAIN.deployBlock) + 100,
@@ -400,7 +452,7 @@ describe('burnSdgnrs', () => {
         return [];
       },
     });
-    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({ pending: [0n, 0, 0n], roll: 0 }));
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract());
 
     await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
     assert.equal(fetchCalls, 1, 'the first read attempts the API once');

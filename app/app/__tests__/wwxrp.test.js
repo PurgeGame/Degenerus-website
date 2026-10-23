@@ -6,18 +6,14 @@ import assert from 'node:assert/strict';
 import * as wwxrpMod from '../wwxrp.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const TOKEN = 10n ** 18n;
 
 function makeFakeProvider() {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => CONNECTED }),
   };
 }
@@ -65,7 +61,7 @@ describe('burnWwxrp', () => {
 
     assert.equal(result.amount, amount);
     assert.deepEqual(fake._order, ['static', 'send']);
-    assert.deepEqual(fake._calls, [['static', amount], [amount]]);
+    assert.deepEqual(fake._calls, [['static', 0, 250n], [0, 250n]], 'account 0 and raw whole WWXRP');
     assert.equal(result.receipt.status, 1);
   });
 

@@ -121,31 +121,7 @@ afterEach(() => {
 });
 
 describe('transaction history composition', () => {
-  test('AFKing chain history shares in-flight loads and rescans only a reorg tail', async () => {
-    const player = '0x7777777777777777777777777777777777777777';
-    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
-    const head = deployBlock + 50;
-    const ranges = [];
-    const provider = {
-      getBlockNumber: async () => head,
-      getLogs: async ({ fromBlock, toBlock }) => {
-        ranges.push([fromBlock, toBlock]);
-        return [];
-      },
-    };
-
-    await Promise.all([
-      history.loadAfkingPurchaseHistory(player, { provider }),
-      history.loadAfkingPurchaseHistory(player, { provider }),
-    ]);
-    assert.deepEqual(ranges, [[deployBlock, head]], 'concurrent opens share one full discovery');
-
-    await history.loadAfkingPurchaseHistory(player, { provider });
-    assert.deepEqual(ranges.at(-1), [head - 11, head],
-      'a later refresh checks only the 12-block reorg overlap');
-  });
-
-  test('reads AFKing/pass purchase history from the API before touching the chain log scan', async () => {
+  test('reads AFKing/pass purchase history from the facts route', async () => {
     const player = '0xaa11111111111111111111111111111111111111';
     const fetchCalls = [];
     history.__setAfkingHistoryFetcherForTest(async (path) => {
@@ -156,23 +132,19 @@ describe('transaction history composition', () => {
         events: [
           {
             name: 'SubscriptionUpdated',
-            args: { player, dailyQuantity: '3', drainGameCreditFirst: false, useTickets: true, fundingSource: player },
+            args: { player, dailyQuantity: '3', useTickets: true },
             blockNumber: 10, logIndex: 0, transactionHash: '0xaa1',
           },
           {
             name: 'AfkingDelivered',
-            args: { player, day: '5', weiIn: '0', pendingFlipAfter: '0', affiliateBaseAfter: '0' },
+            args: { player, day: '5', weiIn: '0' },
             blockNumber: 11, logIndex: 0, transactionHash: '0xaa2',
           },
         ],
       };
     });
-    const provider = {
-      getBlockNumber: async () => { throw new Error('must not scan chain when the API answers'); },
-      getLogs: async () => { throw new Error('must not scan chain when the API answers'); },
-    };
 
-    const result = await history.loadAfkingPurchaseHistory(player, { provider });
+    const result = await history.loadAfkingPurchaseHistory(player);
     assert.deepEqual(fetchCalls, [
       `/player/${player}/facts?names=SubscriptionUpdated,AfkingDelivered,LootBoxBuy,WhalePassPurchased,LazyPassPurchased,DeityPassPurchased`,
     ]);
@@ -182,14 +154,10 @@ describe('transaction history composition', () => {
     assert.equal(result.items[1].day, 5);
   });
 
-  // GameAfkingModule packs AfkingDelivered: weiIn [0..127], day [128..151],
-  // pendingFlipAfter [152..175], affiliateBaseAfter [176..207].
-  const packAfkingDelivered = ({ weiIn, day, pendingFlipAfter = 0n, affiliateBaseAfter = 0n }) =>
-    weiIn | (day << 128n) | (pendingFlipAfter << 152n) | (affiliateBaseAfter << 176n);
-
-  test('unpacks day and weiIn from a packed AfkingDelivered API fact', async () => {
+  test('unpacks day and weiIn from a packed AfkingDelivered fact', async () => {
     const player = '0xaa33333333333333333333333333333333333333';
-    const packed = packAfkingDelivered({ weiIn: 120_000_000_000n, day: 9n, pendingFlipAfter: 77n, affiliateBaseAfter: 5n });
+    // GameAfkingModule packs AfkingDelivered: weiIn [0..127], day [128..151].
+    const packed = 120_000_000_000n | (9n << 128n);
     history.__setAfkingHistoryFetcherForTest(async () => ({
       toBlock: 999,
       truncated: false,
@@ -200,39 +168,12 @@ describe('transaction history composition', () => {
       }],
     }));
 
-    const result = await history.loadAfkingPurchaseHistory(player, { provider: {} });
+    const result = await history.loadAfkingPurchaseHistory(player);
     assert.equal(result.items[0].day, 9);
     assert.equal(result.items[0].weiIn, '120000000000');
   });
 
-  test('the AFKing chain scan decodes the contract AfkingDelivered log', async () => {
-    const { ethers } = await import('../../app/contracts.js');
-    const player = '0xaa44444444444444444444444444444444444444';
-    const iface = new ethers.Interface(['event AfkingDelivered(address indexed player, uint256 packed)']);
-    const encoded = iface.encodeEventLog('AfkingDelivered', [
-      player, packAfkingDelivered({ weiIn: 40_000_000_000n, day: 8n }),
-    ]);
-    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
-    let topicFilter = null;
-    const provider = {
-      getBlockNumber: async () => deployBlock + 5,
-      getLogs: async ({ topics, fromBlock }) => {
-        topicFilter = topics[0];
-        return fromBlock === deployBlock ? [{
-          ...encoded, blockNumber: deployBlock + 1, index: 0, transactionHash: '0xaa4',
-        }] : [];
-      },
-    };
-
-    const result = await history.loadAfkingPurchaseHistory(player, { provider });
-    assert.ok(topicFilter.includes(encoded.topics[0]), 'the scan asks for the contract topic');
-    assert.equal(result.items.length, 1);
-    assert.equal(result.items[0].eventName, 'AfkingDelivered');
-    assert.equal(result.items[0].day, 8);
-    assert.equal(result.items[0].weiIn, '40000000000');
-  });
-
-  test('pages a truncated API response by since until the API catches up', async () => {
+  test('pages a truncated facts response by since until it catches up', async () => {
     const player = '0xaa22222222222222222222222222222222222222';
     const sinceValues = [];
     let call = 0;
@@ -258,81 +199,10 @@ describe('transaction history composition', () => {
       };
     });
 
-    const result = await history.loadAfkingPurchaseHistory(player, { provider: {} });
+    const result = await history.loadAfkingPurchaseHistory(player);
     assert.deepEqual(sinceValues, [null, '100'], 'the second page is requested since the last row of the first');
     assert.equal(call, 2);
     assert.deepEqual(result.items.map((item) => item.transactionHash), ['0xb1', '0xb2']);
-  });
-
-  test('falls back to the chain scan on an API failure and memoizes it', async () => {
-    const player = '0xaa33333333333333333333333333333333333333';
-    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
-    let head = deployBlock + 5;
-    const ranges = [];
-    let fetchCalls = 0;
-    history.__setAfkingHistoryFetcherForTest(async () => {
-      fetchCalls += 1;
-      const error = new Error('API 404');
-      error.status = 404;
-      throw error;
-    });
-    const provider = {
-      getBlockNumber: async () => head,
-      getLogs: async ({ fromBlock, toBlock }) => {
-        ranges.push([fromBlock, toBlock]);
-        return [];
-      },
-    };
-
-    await history.loadAfkingPurchaseHistory(player, { provider });
-    assert.equal(fetchCalls, 1, 'the first read attempts the API once');
-    assert.equal(ranges.length, 1, 'an API failure falls back to the chain scan');
-
-    head += 5;
-    await history.loadAfkingPurchaseHistory(player, { provider });
-    assert.equal(fetchCalls, 1, 'a memoized API failure is not retried within the 5-minute window');
-    assert.equal(ranges.length, 2, 'the chain fallback keeps serving reads while the API is memoized');
-  });
-
-  test('persists the chain-fallback cursor to localStorage so a fresh session resumes from it', async () => {
-    const player = '0xaa44444444444444444444444444444444444444';
-    const deployBlock = Math.max(0, Number(CHAIN.deployBlock) || 0);
-    const head = deployBlock + 40;
-    const realLocalStorage = globalThis.localStorage;
-    const values = new Map();
-    globalThis.localStorage = {
-      getItem: (key) => (values.has(key) ? values.get(key) : null),
-      setItem: (key, value) => { values.set(key, String(value)); },
-      removeItem: (key) => { values.delete(key); },
-    };
-    try {
-      history.__setAfkingHistoryFetcherForTest(async () => { throw new Error('API down'); });
-      const provider = {
-        getBlockNumber: async () => head,
-        getLogs: async () => [],
-      };
-      await history.loadAfkingPurchaseHistory(player, { provider });
-      assert.equal(values.size, 1, 'the chain-scan cursor was written to localStorage');
-
-      // A fresh session (a new in-memory cursor cache, e.g. after a reload)
-      // should revive from the persisted cursor instead of rescanning from
-      // the deploy block.
-      history.__resetAfkingHistoryForTest();
-      history.__setAfkingHistoryFetcherForTest(async () => { throw new Error('API down'); });
-      const ranges = [];
-      const resumedProvider = {
-        getBlockNumber: async () => head + 3,
-        getLogs: async ({ fromBlock, toBlock }) => {
-          ranges.push([fromBlock, toBlock]);
-          return [];
-        },
-      };
-      await history.loadAfkingPurchaseHistory(player, { provider: resumedProvider });
-      assert.deepEqual(ranges, [[head - 11, head + 3]],
-        'a revived cursor rescans only the reorg-overlap tail plus new blocks');
-    } finally {
-      globalThis.localStorage = realLocalStorage;
-    }
   });
 
   test('queues zero-payout record reels before a genuine Degenerette Luckbox replay', () => {
@@ -580,7 +450,7 @@ describe('transaction history composition', () => {
     }
     assert.equal(element.querySelectorAll('tbody')[0].children.length, 0);
     assert.equal(loads, 0);
-    for (const key of ['coinflip', 'craps', 'growth', 'decimator', 'incinerator', 'redemptions', 'salvage', 'rewards', 'funds', 'charity']) {
+    for (const key of ['coinflip', 'craps', 'growth', 'decimator', 'incinerator', 'redemptions', 'rewards', 'funds', 'charity']) {
       assert.ok(element.querySelector(`[data-bind="txh-filter-${key}"]`), key);
     }
 
@@ -898,7 +768,7 @@ describe('category history loading', () => {
       if (path === '/replay/rng') return { days: [] };
       const url = new URL(path, 'https://test.invalid');
       assert.equal(url.pathname, `/player/${player}/facts`);
-      assert.equal(url.searchParams.get('names'), 'BetPlaced,BetClaimed');
+      assert.equal(url.searchParams.get('names'), 'BetPlaced');
       const before = Number(url.searchParams.get('before') || Infinity);
       const limit = Number(url.searchParams.get('limit'));
       const remaining = events.filter(row => row.blockNumber * 1000000 < before);

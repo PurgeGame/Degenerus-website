@@ -41,11 +41,11 @@ import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
+import { rpcFixture } from './helpers/chain-rpc.js';
+import { prepareWalletReceipt } from '../wallet-receipt.js';
+import { _setWalletIdForTests } from '../wallet-id.js';
+import { miningGasBounds } from '../mining-gas-profile.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of passes.test.js shape.
@@ -122,7 +122,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -130,6 +130,8 @@ function makeFakeProvider(connectedAddr) {
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+// Bets and their events are keyed by wallet ID; CONNECTED is account 37.
+_setWalletIdForTests(CONNECTED, 37);
 
 // ===========================================================================
 // Reason-map registrations — Plan 62-03 registers InvalidBet + UnsupportedCurrency.
@@ -200,7 +202,7 @@ describe('Plan 62-03: placeBet', () => {
     });
     assert.equal(lastFakeContract._calls.placeDegeneretteBet.length, 1);
     const [args] = lastFakeContract._calls.placeDegeneretteBet;
-    assert.equal(args[0], CONNECTED, 'player = connected.address');
+    assert.equal(args[0], 0, 'account ID 0 = the connected wallet');
     assert.equal(args[1], 0, 'currency = ETH (0)');
     assert.equal(args[2], amountPerTicket, 'amountPerTicket bigint');
     assert.equal(args[3], 3, 'ticketCount = 3');
@@ -395,7 +397,7 @@ describe('Plan 62-03: placeBet', () => {
     await degeneretteMod.placeBet({
       currency: 1, amountPerTicketWei: 250n * 10n ** 18n + 5n * 10n ** 17n, ticketCount: 1, symbol: 0,
     });
-    assert.equal(lastFakeContract._calls.placeDegeneretteBet[1][2], 250n * 10n ** 18n);
+    assert.equal(lastFakeContract._calls.placeDegeneretteBet[1][2], 250n, 'FLIP goes on chain as whole tokens');
 
     // Flooring can never sneak a bet under the minimum.
     await assert.rejects(
@@ -498,7 +500,7 @@ describe('resolveBets (optional early settle)', () => {
     lastFakeContract = makeFakeContract({ betInfo: 0n });
     degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
     const result = await degeneretteMod.resolveBets({ index: 7, betIds: [42n] });
-    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]],
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[0, { gasLimit: miningGasBounds().min }]],
       'the miner gas floor (no estimate on the fake); credits always go to each owner');
     assert.deepEqual(lastFakeContract._order, ['static:mineFlip', 'send:mineFlip']);
     assert.deepEqual(lastFakeContract._calls.degeneretteBetInfo, [[7n, 42n]],
@@ -552,20 +554,22 @@ describe('resolveBets (optional early settle)', () => {
 // ===========================================================================
 
 const FLIP = 10n ** 18n;
+// The queued word leads with the owner's wallet ID (low 32 bits).
+const PLAYER_ID = 37n;
 function betWord({
-  owner = CONNECTED, symbol = 0, spinCount = 1, currency = 0, record = false, activity = 0, stakeUnits = 1n,
+  owner = PLAYER_ID, symbol = 0, spinCount = 1, currency = 0, record = false, activity = 0, stakeUnits = 1n,
 } = {}) {
   return BigInt(owner)
-    | (BigInt(symbol) << 160n)
-    | (BigInt(spinCount) << 165n)
-    | (BigInt(currency) << 170n)
-    | ((record ? 1n : 0n) << 171n)
-    | (BigInt(activity) << 172n)
-    | (BigInt(stakeUnits) << 188n);
+    | (BigInt(symbol) << 32n)
+    | (BigInt(spinCount) << 37n)
+    | (BigInt(currency) << 42n)
+    | ((record ? 1n : 0n) << 43n)
+    | (BigInt(activity) << 44n)
+    | (BigInt(stakeUnits) << 60n);
 }
 function spinsHex(rows) {
-  return '0x' + rows.map(({ traits, score, gold = 0 }) => (
-    (traits >>> 0).toString(16).padStart(8, '0') + ((score & 15) | (gold << 4)).toString(16).padStart(2, '0')
+  return '0x' + rows.map(({ traits, score, wilds = 0 }) => (
+    (traits >>> 0).toString(16).padStart(8, '0') + ((score & 15) | (wilds << 4)).toString(16).padStart(2, '0')
   )).join('');
 }
 
@@ -574,7 +578,8 @@ describe('queued bet word and settled spins', () => {
     const { ETH_DIVISOR } = await import('../chain-config.js');
     const word = betWord({ symbol: 21, spinCount: 25, currency: 0, record: true, activity: 305, stakeUnits: 5_000_000n });
     const bet = degeneretteMod.decodeDegeneretteBetWord(word);
-    assert.equal(bet.owner, CONNECTED);
+    assert.equal(bet.playerId, 37);
+    assert.equal(bet.owner, null, 'the word carries a wallet ID, not an address');
     assert.equal(bet.symbol, 21);
     assert.equal(bet.heroQuadrant, 2);
     assert.equal(bet.spinCount, 25);
@@ -596,92 +601,42 @@ describe('queued bet word and settled spins', () => {
     assert.equal(degeneretteMod.degeneretteBetKey(null, 1), null);
   });
 
-  test('decodeDegeneretteSpins unpacks 5 bytes per spin: big-endian traits then score | gold << 4', () => {
+  test('decodeDegeneretteSpins unpacks 5 bytes per spin: big-endian traits then score | wilds << 4', () => {
     const spins = degeneretteMod.decodeDegeneretteSpins(spinsHex([
-      { traits: 0xC0804000, score: 9, gold: 4 },
+      { traits: 0xC0804000, score: 9, wilds: 4 },
       { traits: 0x01020304, score: 0 },
     ]));
     assert.deepEqual(spins, [
-      { spinIndex: 0, playerTraits: 0xC0804000, score: 9, goldMatches: 4 },
-      { spinIndex: 1, playerTraits: 0x01020304, score: 0, goldMatches: 0 },
+      { spinIndex: 0, playerTraits: 0xC0804000, score: 9, wilds: 4 },
+      { spinIndex: 1, playerTraits: 0x01020304, score: 0, wilds: 0 },
     ]);
     assert.equal(degeneretteMod.decodeDegeneretteSpins('0x0102'), null, 'a partial spin is malformed');
   });
 
-  test('degeneretteSpinPayout matches the Solidity _degenerettePayout on harness vectors', () => {
-    const vectors = JSON.parse(readFileSync(
-      new URL('./fixtures/legacy/degenerette-payout-vectors.json', import.meta.url), 'utf8'));
-    assert.ok(vectors.length > 600);
-    for (const [currency, stake, activity, score, gold, expected] of vectors) {
-      assert.equal(
-        String(degeneretteMod.degeneretteSpinPayout({
-          currency, amountPerSpin: BigInt(stake), activityScore: activity, score, goldMatches: gold,
-        })),
-        expected,
-        `currency ${currency} stake ${stake} activity ${activity} S${score} gold ${gold}`,
-      );
-    }
-  });
-
-  test('audit 881ebb32d: 9/9 pays 250,250.25x base, 8/9 20,354.57x; WWXRP keeps its own 8/9', () => {
+  test('9/9 pays 230,000x base, 8/9 18,173.28x; WWXRP keeps its own 8/9', () => {
     for (const currency of [0, 1]) {
       const rows = degeneretteMod.degenerettePayoutTable({ currency }).rows;
-      assert.equal(rows[9].basePayoutCentiX, 25_025_025n);
-      assert.equal(rows[8].basePayoutCentiX, 2_035_457n);
-      assert.equal(rows[7].basePayoutCentiX, 62_500n, 'scores 0-7 are unchanged');
+      assert.equal(rows[9].basePayoutCentiX, 23_000_000n);
+      assert.equal(rows[8].basePayoutCentiX, 1_817_328n);
+      assert.equal(rows[7].basePayoutCentiX, 62_500n);
     }
     const wwxrp = degeneretteMod.degenerettePayoutTable({ currency: 3 }).rows;
     assert.equal(wwxrp[9].basePayoutCentiX, 100_000_000n);
     assert.equal(wwxrp[8].basePayoutCentiX, 480_677n);
   });
 
-  test('the paid-stake recovery and 1,000,000x ceiling match the Solidity harness', () => {
-    // DegeneretteMathHarness.paidStake / capPaidPayout at audit 3c79c1486 (fixtures/README.md).
-    const rows = JSON.parse(readFileSync(
-      new URL('./fixtures/legacy/degenerette-paid-stake-vectors.json', import.meta.url), 'utf8'));
-    assert.equal(rows.length, 168);
-    for (const [word, paidUnits, rawUnits, amounts, capped] of rows) {
-      const bet = degeneretteMod.decodeDegeneretteBetWord(word);
-      const unit = degeneretteMod.degeneretteStakeUnit(bet.currency);
-      assert.equal(String(degeneretteMod.degenerettePaidStakePerSpin(word) / unit), paidUnits, `paid units of ${word}`);
-      assert.equal(paidUnits, rawUnits, 'placement-built words recover the stake actually paid');
-      if (bet.currency !== 1) continue; // ETH rows: the harness is the mainnet 1-gwei unit
-      amounts.forEach((amount, i) => {
-        assert.equal(String(degeneretteMod.capDegenerettePaidPayout(word, BigInt(amount))), capped[i]);
-      });
-    }
-  });
-
-  test('a boon-boosted 9/9 is capped at 1,000,000x the stake paid; an unboosted one is not', () => {
-    const FLIP_STAKE = 100n;
-    // Tier 3 (+12%) consumed at placement: 100 paid FLIP ride as 112 (bits 252..253 = 3).
-    const boosted = betWord({ currency: 1, activity: 30_000, stakeUnits: 112n }) | (3n << 252n);
-    assert.equal(degeneretteMod.decodeDegeneretteBetWord(boosted).boonTier, 3);
-    assert.equal(degeneretteMod.degenerettePaidStakePerSpin(boosted), FLIP_STAKE * FLIP);
-    const spins = spinsHex([{ traits: 0x01020304, score: 9, gold: 4 }]);
-    const [capped] = degeneretteMod.degeneretteSpinResults({ player: CONNECTED, index: 1n, betId: 1n, spins }, boosted);
-    assert.equal(capped.payout, FLIP_STAKE * FLIP * 1_000_000n / 2n,
-      'FLIP caps at half the ceiling before its survival double');
-    const plain = betWord({ currency: 1, activity: 30_000, stakeUnits: FLIP_STAKE });
-    const [uncapped] = degeneretteMod.degeneretteSpinResults({ player: CONNECTED, index: 1n, betId: 2n, spins }, plain);
-    assert.equal(uncapped.payout, degeneretteMod.degeneretteSpinPayout({
-      currency: 1, amountPerSpin: FLIP_STAKE * FLIP, activityScore: 30_000, score: 9, goldMatches: 4,
-    }), 'without a boon the 9/9 stays below the ceiling (999,999.999x after the double)');
-    assert.ok(uncapped.payout < FLIP_STAKE * FLIP * 1_000_000n / 2n);
-  });
-
   test('degeneretteSpinResults prices every spin from the bet word', () => {
-    // S4 = 10x base; one matched gold is ×5/4; FLIP at activity 0 returns 90%:
+    // S5 = 10x base; one house wild lane is ×5/4; FLIP at activity 0 returns 90%:
     // 100 FLIP × 10 × 1.25 × 0.9 = 1,125 FLIP.
     const word = betWord({ symbol: 21, spinCount: 2, currency: 1, stakeUnits: 100n });
     const rows = degeneretteMod.degeneretteSpinResults({
       player: CONNECTED, index: 7n, betId: 3n,
-      spins: spinsHex([{ traits: 0x01020304, score: 4, gold: 1 }, { traits: 0x05060708, score: 0 }]),
+      spins: spinsHex([{ traits: 0x01020304, score: 5, wilds: 1 }, { traits: 0x05060708, score: 0 }]),
     }, word);
     assert.equal(rows.length, 2);
     assert.equal(rows[0].payout, 1_125n * FLIP);
-    assert.equal(rows[0].matches, 4n);
-    assert.equal(rows[0].goldMatches, 1n);
+    assert.equal(rows[0].matches, 5n);
+    assert.equal(rows[0].wilds, 1n);
     assert.equal(rows[0].index, 7n);
     assert.equal(rows[1].payout, 0n);
     assert.equal(degeneretteMod.degeneretteSpinResults({ spins: '0x' }, word), null);
@@ -752,7 +707,7 @@ describe('degenerette fresh-state and chain replay', () => {
             transactionHash: '0xresolved-transaction',
             args: {
               player: CONNECTED, index: 7n, betId: 42n,
-              totalPayout: 2_250n * FLIP, resultTraits: 13n, spins,
+              totalPayout: 2_250n, resultTraits: 13n, spins,
             },
           }];
         }
@@ -769,7 +724,7 @@ describe('degenerette fresh-state and chain replay', () => {
     contractsMod.setProvider({ ...makeFakeProvider(CONNECTED), getBlockNumber: async () => 5000 });
     const word = betWord({ symbol: 21, spinCount: 1, currency: 1, stakeUnits: 100n });
     degeneretteMod.__setContractFactoryForTest(() => eventContract(queries, {
-      spins: spinsHex([{ traits: 21, score: 4, gold: 1 }]),
+      spins: spinsHex([{ traits: 21, score: 5, wilds: 1 }]),
       placedPacked: word,
     }));
 
@@ -784,7 +739,7 @@ describe('degenerette fresh-state and chain replay', () => {
     assert.equal(replay.spins[0].payout, 1_125n * FLIP, 'the retired per-spin payout, recomputed');
     assert.equal(replay.packedData, word);
     assert.ok(queries.every((query) => query.to - query.from < 1800));
-    assert.ok(queries.every((query) => query.filter.player === CONNECTED));
+    assert.ok(queries.every((query) => query.filter.player === 37), 'topics carry the wallet ID');
     assert.ok(queries.every((query) => query.filter.index === 7n && query.filter.betId === 42n));
     const count = queries.length;
     assert.equal(
@@ -829,11 +784,12 @@ describe('degeneretteSettlementReceipt', () => {
 
   beforeEach(async () => {
     const { ethers } = await import('ethers');
+    _setWalletIdForTests(OTHER, 38);
     iface = new ethers.Interface([
-      'event DegeneretteResolved(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)',
-      'event LootBoxOpened(address indexed player, uint48 indexed lootboxIndex, uint256 amount, uint24 futureLevel, uint32 futureTickets, uint256 flip, bool roundedUp)',
-      'event BoxSpin(address indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
-      'event PayoutCapped(address indexed player, uint256 cappedEthPayout, uint256 excessConverted)',
+      'event DegeneretteResolved(uint32 indexed player, uint32 indexed index, uint64 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)',
+      'event LootBoxOpened(uint32 indexed player, uint48 indexed lootboxIndex, uint256 amount, uint24 futureLevel, uint32 futureTickets, uint256 flip, bool roundedUp)',
+      'event BoxSpin(uint32 indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
+      'event PayoutCapped(uint32 indexed player, uint256 cappedEthPayout, uint256 excessConverted)',
     ]);
     let index = 0;
     enc = (name, args) => {
@@ -845,14 +801,14 @@ describe('degeneretteSettlementReceipt', () => {
   test('keeps only this bet\'s Luckbox window, its settlement and its record chain', () => {
     const RECORD_BET_ID = (1n << 63n) | (3n << 60n) | 5n;
     const logs = [
-      enc('LootBoxOpened', [CONNECTED, 7, 1n, 1, 4, 0n, false]),      // 0 player's human box at index 7
-      enc('LootBoxOpened', [OTHER, 0, 1n, 1, 4, 0n, false]),          // 1 other bettor's direct box
-      enc('DegeneretteResolved', [OTHER, 7, 1n, 5n, 1, '0x0000000104']), // 2 other bettor's settlement
-      enc('PayoutCapped', [CONNECTED, 1n, 2n]),                       // 3 our bet's pool cap
-      enc('LootBoxOpened', [CONNECTED, 0, 9n, 1, 4, 0n, false]),      // 4 our direct box
-      enc('DegeneretteResolved', [CONNECTED, 7, 2n, 9n, 1, '0x0000000109']), // 5 our settlement
-      enc('BoxSpin', [CONNECTED, RECORD_BET_ID, 0n, 3n, 0n]),         // 6 our record chain
-      enc('LootBoxOpened', [CONNECTED, 8, 1n, 1, 4, 0n, false]),      // 7 next index's human box
+      enc('LootBoxOpened', [37, 7, 1n, 1, 4, 0n, false]),      // 0 player's human box at index 7
+      enc('LootBoxOpened', [38, 0, 1n, 1, 4, 0n, false]),          // 1 other bettor's direct box
+      enc('DegeneretteResolved', [38, 7, 1n, 5n, 1, '0x0000000104']), // 2 other bettor's settlement
+      enc('PayoutCapped', [37, 1n, 2n]),                       // 3 our bet's pool cap
+      enc('LootBoxOpened', [37, 0, 9n, 1, 4, 0n, false]),      // 4 our direct box
+      enc('DegeneretteResolved', [37, 7, 2n, 9n, 1, '0x0000000109']), // 5 our settlement
+      enc('BoxSpin', [37, RECORD_BET_ID, 0n, 3n, 0n]),         // 6 our record chain
+      enc('LootBoxOpened', [37, 8, 1n, 1, 4, 0n, false]),      // 7 next index's human box
     ];
     const own = degeneretteMod.degeneretteSettlementReceipt({ hash: '0xsweep', logs }, {
       player: CONNECTED, index: 7, betId: 2, game: GAME,
@@ -871,8 +827,8 @@ describe('degeneretteSettlementReceipt', () => {
 
   test('a bet whose spins leave no Luckbox is never handed a neighbour\'s box', () => {
     const logs = [
-      enc('LootBoxOpened', [CONNECTED, 0, 1n, 1, 4, 0n, false]),      // an AFKing box of ours
-      enc('DegeneretteResolved', [CONNECTED, 7, 1n, 0n, 1, '0x0000000100']),
+      enc('LootBoxOpened', [37, 0, 1n, 1, 4, 0n, false]),      // an AFKing box of ours
+      enc('DegeneretteResolved', [37, 7, 1n, 0n, 1, '0x0000000100']),
     ];
     // FLIP bets never open a direct box; neither does an ETH bet with no spin above 3x.
     const flipWord = betWord({ spinCount: 1, currency: 1, stakeUnits: 100n });
@@ -927,7 +883,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
             betId: 42n,
             totalPayout: 5n * 10n ** 16n,
             resultTraits: 1234n,
-            spins: spinsHex([{ traits: 1, score: 2 }, { traits: 2, score: 0 }, { traits: 3, score: 5, gold: 2 }]),
+            spins: spinsHex([{ traits: 1, score: 2 }, { traits: 2, score: 0 }, { traits: 3, score: 5, wilds: 2 }]),
           },
         },
       },
@@ -941,7 +897,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     assert.equal(out[0].spinCount, 3n, 'spin count = 5-byte groups in `spins`');
     assert.equal(out[0].totalPayout, 5n * 10n ** 16n);
     assert.equal(out[0].resultTraits, 1234n);
-    assert.equal(out[0].spins[2].goldMatches, 2);
+    assert.equal(out[0].spins[2].wilds, 2);
     assert.equal(out[0].transactionHash, '0xreceipt-hash');
   });
 
@@ -952,7 +908,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
           name: 'DegeneretteResolved',
           args: {
             player: CONNECTED, index: 7n, betId: 42n, totalPayout: 0n, resultTraits: 0n,
-            spins: spinsHex([{ traits: 1234, score: 4, gold: 1 }, { traits: 5678, score: 2 }]),
+            spins: spinsHex([{ traits: 1234, score: 5, wilds: 1 }, { traits: 5678, score: 2 }]),
           },
         },
       },
@@ -961,7 +917,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     const word = betWord({ spinCount: 2, currency: 1, stakeUnits: 100n });
     const out = degeneretteMod.parseSpinResultsFromReceipt(receipt, fakeContract, { packed: word });
     assert.equal(out.length, 2);
-    assert.equal(out[0].matches, 4n);
+    assert.equal(out[0].matches, 5n);
     assert.equal(out[0].payout, 1_125n * FLIP);
     assert.equal(out[1].matches, 2n);
     assert.equal(out[1].payout, degeneretteMod.degeneretteSpinPayout({
@@ -977,7 +933,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
   test('parsers decode REAL encoded logs with no injected parser', async () => {
     const { ethers } = await import('ethers');
     const iface = new ethers.Interface([
-      'event DegeneretteResolved(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)',
+      'event DegeneretteResolved(uint32 indexed player, uint32 indexed index, uint64 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)',
     ]);
     const enc = (name, args) => {
       const { data, topics } = iface.encodeEventLog(iface.getEvent(name), args);
@@ -986,7 +942,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     const receipt = {
       status: 1,
       logs: [
-        enc('DegeneretteResolved', [CONNECTED, 7, 42n, 7n * 10n ** 15n, 1234,
+        enc('DegeneretteResolved', [37, 7, 42n, 7n * 10n ** 15n, 1234,
           spinsHex([{ traits: 1234, score: 4 }, { traits: 1234, score: 0 }])]),
       ],
     };
@@ -1012,19 +968,15 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
   });
 
   test('parseRecordStakeFromReceipt recovers the whole-FLIP biggest-spin claim', async () => {
-    const { ethers } = await import('ethers');
-    const { CONTRACTS } = await import('../chain-config.js');
-    const iface = new ethers.Interface([
-      'event BigRecordUpdated(uint8 indexed kind, address indexed player, uint256 value, uint128 paid, uint256 sdgnrsPaid)',
-    ]);
-    const log = (kind, player, paid) => ({
-      ...iface.encodeEventLog(iface.getEvent('BigRecordUpdated'), [kind, player, 10n ** 18n, paid, 0n]),
-      address: CONTRACTS.COINFLIP,
-    });
-    const receipt = { logs: [log(0, CONNECTED, 5n * FLIP), log(1, CONNECTED, 1234n * FLIP + 7n)] };
-    assert.equal(degeneretteMod.parseRecordStakeFromReceipt(receipt, CONNECTED), 1234n * FLIP,
-      'only the spin record, floored to whole FLIP like degeneretteRecordBounty');
-    assert.equal(degeneretteMod.parseRecordStakeFromReceipt(receipt, '0xcd34000000000000000000000000000000000000'), 0n);
+    const f = await rpcFixture();
+    await f.wallet(37, CONNECTED);
+    const record = (kind, paid) => f.event('COINFLIP', 'BigRecordUpdated', { kind, id: 37, value: 10n ** 18n, paid, sdgnrsPaid: 0n });
+    const receipt = { blockNumber: 9999, logs: [await record(0, 5n), await record(1, 1234n)] };
+    await prepareWalletReceipt(receipt, f.client);
+    const options = { coinflip: f.contracts.COINFLIP };
+    assert.equal(degeneretteMod.parseRecordStakeFromReceipt(receipt, CONNECTED, options), 1234n * FLIP,
+      'only the spin record, in whole FLIP like degeneretteRecordBounty');
+    assert.equal(degeneretteMod.parseRecordStakeFromReceipt(receipt, '0xcd34000000000000000000000000000000000000', options), 0n);
   });
 
   test('parseBetPlacedFromReceipt ignores foreign logs gracefully', () => {
@@ -1135,7 +1087,7 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     assert.match(SRC, /parseBetPlacedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
     assert.match(SRC, /parseBetResolvedFromReceipt\(receipt, contract = receiptParser\(\)(, \{ packed = null \} = \{\})?\)/);
     assert.match(SRC, /parseSpinResultsFromReceipt\(receipt, contract = receiptParser\(\)/);
-    assert.match(SRC, /new ethers\.Interface\(walletAbi\(DEGENERETTE_ABI, run66GAME\)\)/);
+    assert.match(SRC, /new ethers\.Interface\(walletAbi\(DEGENERETTE_ABI, abiGAME\)\)/);
   });
 
   test('uses exact contract state probes instead of the retired lootbox RNG poll helper', () => {

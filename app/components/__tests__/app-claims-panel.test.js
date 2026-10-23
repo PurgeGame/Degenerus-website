@@ -15,6 +15,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 // store module is safe to static-import (no HTMLElement use). Tests use it
 // to drive `connected.address` so the panel's #runMountFetch can fetch /pending.
@@ -25,11 +26,6 @@ import * as storeMod from '../../app/store.js';
 // pipeline runs end-to-end with only the contract construction stubbed.
 import * as claimsMod from '../../app/claims.js';
 import * as contractsMod from '../../app/contracts.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 
@@ -448,7 +444,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -560,7 +556,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -591,7 +587,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -637,7 +633,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         decimator: { claimablePerLevel: [] },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -678,7 +674,7 @@ describe('app-claims-panel — zero-state (CLM-04)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -722,7 +718,7 @@ function makeFakeTx(receipt) {
 }
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -830,7 +826,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
         player: TEST_ADDR,
         pending: {
           eth:           { amount: '1234500000000000000', available: true, reason: null },
-          flip:        { amount: '500',                 available: true, reason: null },
+          flip:        { amount: '500000000000000000000', available: true, reason: null },
           tickets:       { amount: '0',                   available: true, reason: null },
           decimator:     { amount: '999',                 available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -848,7 +844,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
     _docBody.appendChild(el);
@@ -876,7 +872,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     btn.dispatchEvent({ type: 'click' });
     await settle(80);
     assert.equal(fakeContract._calls.claimWinnings.length, 1, 'claimWinnings called once');
-    assert.equal(fakeContract._calls.claimWinnings[0][0], TEST_ADDR, 'player arg = connected.address');
+    assert.equal(fakeContract._calls.claimWinnings[0][0], 0, 'account arg 0 = the connected wallet');
   });
 
   test('clicking flip row invokes claimFlip with amount BigInt sourced from /pending', async () => {
@@ -888,9 +884,9 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     await settle(80);
     assert.equal(fakeContract._calls.claimCoinflips.length, 1);
     const [args] = fakeContract._calls.claimCoinflips;
-    assert.equal(args[0], TEST_ADDR);
+    assert.equal(args[0], 0, 'account arg 0 = the connected wallet');
     assert.equal(typeof args[1], 'bigint', 'amount arg is BigInt');
-    assert.equal(args[1], 500n, 'amount sourced from /pending flip.amount');
+    assert.equal(args[1], 500n, 'amount sourced from /pending flip.amount (500 FLIP, whole-token raw)');
   });
 
   test('no Decimator row or claim: the Mine FLIP walk pays winners (audit ab95963ac)', async () => {
@@ -1053,7 +1049,7 @@ describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -1130,7 +1126,7 @@ function mountPanelForPolling(opts = {}) {
     dashboard: opts.dashboard !== undefined ? opts.dashboard : { decimator: { claimablePerLevel: [] } },
   });
   if (opts.markSpun !== false) {
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
   }
   const Ctor = customElements.get('app-claims-panel');
   const el = new Ctor();
@@ -1272,10 +1268,10 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     assert.equal(root.querySelectorAll('.clm-row').length, 0, 'no rows visible (gate blocks)');
     // Simulate cross-tab spin: localStorage now has the spun_day key, and a
     // storage event fires from the other tab.
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     globalThis.window.dispatchEvent({
       type: 'storage',
-      key: 'spun_day_84532_42',
+      key: `spun_day_${ACTIVE_CHAIN_ID}_42`,
       newValue: '1',
     });
     await flushMicrotasks();
@@ -1491,7 +1487,7 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     storeMod.update('connected.address', MINE);
     storeMod.update('viewing.address', OTHER);
     // localStorage key for chainId 84532 + day 42 → '1' (I have spun).
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     setFetchResponses({
       lastDay: { day: 42, status: 'resolved' },
       pending: {
@@ -1662,7 +1658,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
         decimator: { claimablePerLevel: [] },
       },
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
     _docBody.appendChild(el);
@@ -1695,7 +1691,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
     btn.dispatchEvent({ type: 'click' });
     await settle(80);
     assert.equal(fakeContract._calls.claimAffiliateDgnrs.length, 1, 'claimAffiliateDgnrs called once');
-    assert.equal(fakeContract._calls.claimAffiliateDgnrs[0][0], TEST_ADDR, 'player arg = connected.address');
+    assert.equal(fakeContract._calls.claimAffiliateDgnrs[0][0], 0, 'account arg 0 = the connected wallet');
   });
 
   test('NEVER optimistic balance subtraction during affiliate-claim pending', async () => {
@@ -1775,7 +1771,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
       lastDay: { day: 42, status: 'resolved' },
       pending: pendingPayload(),
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const el = mountPanel();
     await flushMicrotasks();
@@ -1791,7 +1787,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
       lastDay: { day: 42, status: 'resolved' },
       pending: pendingPayload({ eth: '1234500000000000000' }),
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const el = mountPanel();
     await flushMicrotasks();
@@ -1822,7 +1818,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
       },
       pending: pendingPayload({ eth: '1234500000000000000' }),  // balance carries old ETH
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const el = mountPanel();
     await flushMicrotasks();
@@ -1842,7 +1838,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
       lastDay: { day: 42, status: 'resolved', winners: [] },
       pending: pendingPayload({ eth: '1234500000000000000' }),
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const el = mountPanel();
     await flushMicrotasks();
@@ -1878,7 +1874,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
         flip: '500000000000000000000',
       }),
     });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
 
     const el = mountPanel();
     await flushMicrotasks();
@@ -1904,7 +1900,7 @@ describe('app-claims-panel — Phase 64 winnings banner', () => {
 
     const before = _fetchLog.length;
     // Same-tab reveal: last-day-jackpot writes the spun key then dispatches.
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     globalThis.document.dispatchEvent({ type: 'jackpot:revealed' });
     await flushMicrotasks();
 
@@ -1949,7 +1945,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
 
   test('renders summed eth/flip rows from app.playerCombined; /pending never fetched; no affiliate or decimator row', async () => {
     setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', combinedPayload({
@@ -1998,7 +1994,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
 
   test('claiming in combined mode throws the read-only chokepoint message (defense-in-depth)', async () => {
     setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', combinedPayload({ claimableEth: '3000000000000000000' }));
@@ -2020,7 +2016,7 @@ describe('app-claims-panel — combined mode (account-switcher)', () => {
 
   test('gate open + all-zero combined payload → zero-state (no rows)', async () => {
     setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
-    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_42`, '1');
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', combinedPayload());

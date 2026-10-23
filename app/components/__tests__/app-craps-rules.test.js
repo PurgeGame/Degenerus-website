@@ -55,20 +55,16 @@ test('the rules popup uses native dialog behavior with a safe fallback', () => {
     'the compact popup routes to the full rules');
 });
 
-test('the popup leads with the run loop and states the Run It Up qualification', () => {
+test('the popup explains the basic run loop and leaves extras to the full rules', () => {
   assert.doesNotMatch(componentSource, /Pass · 1:1|Place · 7:6|Hard 4 \/ 8|Don&apos;t Pass · 3:4/,
     'bet payout odds belong on the full learn page, not in the quick popup');
-  assert.match(componentSource, /Every 3 shooters, all bets are doubled/i,
-    'the mandatory wager escalation stays in the quick explanation');
-  assert.match(componentSource, /run your stack up to 5× your starting bankroll/i,
+  assert.match(componentSource, /Your bets play automatically/i);
+  assert.match(componentSource, /grow your bankroll to 5× its starting amount/i,
     'the goal is stated relative to the starting bankroll');
-  assert.match(componentSource, /RUN IT UP\.<\/strong>/);
-  assert.match(componentSource, /Win the main Battle/);
-  assert.match(componentSource, /25× your starting bankroll/);
-  assert.match(componentSource, /120×/);
-  assert.match(componentSource, /The Main Event qualifies too/);
-  assert.doesNotMatch(componentSource, /class="craps-rules__riu"/,
-    'Run It Up shares the plain section layout');
+  assert.match(componentSource, /highest peak bankroll wins/);
+  assert.match(componentSource, /survives longest wins/);
+  assert.doesNotMatch(componentSource, /hot.?shooter|run it up|survival flip|bets are doubled/i,
+    'bonuses and advanced run mechanics belong in the full rules');
 });
 
 test('the full Craps primer is indexed and covers the current run rules', () => {

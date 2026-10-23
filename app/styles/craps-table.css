@@ -467,14 +467,6 @@ app-craps-table {
 
 .craps-bonus-roll[data-state="landed"] .craps-bonus-roll__reel output { color: #c7f8d5; }
 
-/* The pot reel carries a whole FLIP figure, not a short multiplier: narrower digits, fixed width. */
-.craps-bonus-roll[data-kind="pot"] .craps-bonus-roll__reel output {
-  font-size: clamp(2rem, 6.4vw, 3.4rem);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
-}
-.craps-bonus-roll[data-kind="pot"] .craps-bonus-roll__reel span { font-variant-numeric: tabular-nums; }
-
 .craps-bonus-roll__amount {
   color: #8ff0b1;
   font: 1000 clamp(1.05rem, 3vw, 1.55rem)/1 "Roboto Mono", ui-monospace, monospace;

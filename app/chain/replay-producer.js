@@ -1,2 +1,2 @@
-var e=Object.defineProperty;var o=(r,t)=>e(r,"name",{value:t,configurable:!0});export function loadCrapsProducer(r){if(r==="craps-hot12-own30-longest-v5")return import("./craps-engine.js");if(r==="craps-hot12-own30-longest-v4")return import("./schemas/5cd4b457/craps-engine.js");throw new Error(`Unsupported craps replay deployment engine version: ${r}`)}o(loadCrapsProducer,"loadCrapsProducer");
+var p=Object.defineProperty;var e=(r,o)=>p(r,"name",{value:o,configurable:!0});export function loadCrapsProducer(r){if(r==="craps-p7a-domains-v6")return import("./craps-engine.js");throw new Error(`Unsupported craps replay deployment engine version: ${r}`)}e(loadCrapsProducer,"loadCrapsProducer");
 //# sourceMappingURL=replay-producer.js.map

@@ -27,6 +27,7 @@ const {
   jackpotPrizePoolWei,
   phaseStripModel,
   poolTargetMarkerLabel,
+  referenceLabelEdge,
   prizePoolTargetForLevel,
   transitionJackpotCountdownModel,
   transitionJackpotLockedLabel,
@@ -232,6 +233,18 @@ describe('next-pool progression model', () => {
     assert.deepEqual(resetScale.historyMarkers.map(({ level }) => level), [101]);
     assert.ok(resetScale.fillPercent > 80,
       'a prior-century high cannot flatten the reset pool against the left edge');
+  });
+
+  test('the moving readout hangs inward only when its measured width would cross a track end', () => {
+    // Phone at 88%: a 98px label on a 265px track overflows centred.
+    assert.equal(referenceLabelEdge(88.08, 98, 265), 'right');
+    assert.equal(referenceLabelEdge(88.08, 98, 900), 'middle');
+    assert.equal(referenceLabelEdge(8, 98, 900), 'middle');
+    assert.equal(referenceLabelEdge(4, 98, 265), 'left');
+    assert.equal(referenceLabelEdge(85), 'right');
+    assert.equal(referenceLabelEdge(15), 'left');
+    assert.equal(referenceLabelEdge(50), 'middle');
+    assert.equal(referenceLabelEdge(null, 98, 265), 'middle');
   });
 
   test('the completed target keeps its special notch but uses completed-level hover copy', () => {

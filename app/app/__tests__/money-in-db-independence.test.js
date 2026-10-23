@@ -7,7 +7,7 @@ function source(relativeUrl) {
 }
 
 const WRITERS = new Map([
-  ['ticket, Luckbox, foil, and presale purchases', source('../lootbox.js')],
+  ['ticket, Luckbox, and foil purchases', source('../lootbox.js')],
   ['premium pass purchases and AFKing funding', source('../passes.js')],
   ['Degenerette bets', source('../degenerette.js')],
   ['Coinflip deposits', source('../coinflip.js')],

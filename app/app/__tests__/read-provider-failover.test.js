@@ -2,7 +2,7 @@
 //
 // Run: cd website && node --test app/app/__tests__/read-provider-failover.test.js
 //
-// The failover `_send` walks the endpoint list on TRANSPORT failures only.
+// Free RPC pacing and per-item failover, plus an explicitly configured emergency relay.
 // What must hold:
 //   - a healthy primary is the only endpoint contacted
 //   - a network error, a non-2xx status, and an unparseable body each fail
@@ -76,9 +76,11 @@ test('a revert (JSON-RPC error in a 200) passes through and never fails over', a
 
 test('a rate limit inside a 200 fails over; a range refusal does not', async () => {
   const hits = [];
-  const send = _makeFailoverSend([A, B], async (url) => {
+  const send = _makeFailoverSend([A, B], async (url, init) => {
     hits.push(url);
-    return url === A ? ok([{ id: 1, result: '0x1' }, { id: 2, error: { code: -32016, message: 'over rate limit' } }]) : ok([{ id: 1, result: '0x1' }, { id: 2, result: '0x2' }]);
+    if (url === A) return ok([{ id: 1, result: '0x1' }, { id: 2, error: { code: -32016, message: 'over rate limit' } }]);
+    assert.deepEqual(JSON.parse(init.body).map(r => r.id), [2], 'successful reads are not replayed');
+    return ok([{ id: 2, result: '0x2' }]);
   });
   assert.deepEqual(await send([PAYLOAD, { ...PAYLOAD, id: 2 }]), [{ id: 1, result: '0x1' }, { id: 2, result: '0x2' }]);
   assert.deepEqual(hits, [A, B]);
@@ -154,7 +156,7 @@ test("a server's Retry-After stretches the rest", async () => {
       ok: false, status: 429, headers: { get: (name) => (name === 'retry-after' ? '9' : null) }, json: async () => ({}),
     }), 1_000, clock.wait);
     await assert.rejects(send(PAYLOAD), /HTTP 429/);
-    assert.ok(clock.waits[0] >= 9_000 * 0.8, 'the first rest honours Retry-After');
+    assert.ok(clock.waits[0] >= 9_000, 'jitter never shortens Retry-After');
   } finally {
     clock.restore();
   }
@@ -164,16 +166,19 @@ test('a burst past the bucket is paced instead of sent at once', async () => {
   const clock = fakeClock();
   try {
     let sent = 0;
-    const send = _makeFailoverSend([A, B], async () => { sent += 1; return ok({ id: 1, result: '0x1' }); }, 1_000, clock.wait);
-    for (let i = 0; i < 30; i += 1) await send(PAYLOAD);
-    assert.equal(clock.waits.length, 0, 'the first 30 items fit the burst');
-    await send([PAYLOAD, PAYLOAD, PAYLOAD]);
+    const send = _makeFailoverSend([A, B], async (_url, init) => {
+      sent += 1; const body = JSON.parse(init.body);
+      return ok((Array.isArray(body) ? body : [body]).map(r => ({ id: r.id, result: '0x1' })));
+    }, 1_000, clock.wait);
+    for (let i = 0; i < 10; i += 1) await send(PAYLOAD);
+    assert.equal(clock.waits.length, 0, 'only ten items fit the free-RPC burst');
+    await send([PAYLOAD, { ...PAYLOAD, id: 2 }, { ...PAYLOAD, id: 3 }]);
     assert.equal(clock.waits.length, 1, 'past the burst a request waits for tokens');
     assert.ok(clock.waits[0] > 0 && clock.waits[0] < 1_000);
     clock.waits.length = 0;
     await send({ ...PAYLOAD, method: 'eth_getLogs' });
     assert.ok(clock.waits[0] >= 150, 'a log query costs more than a call');
-    assert.equal(sent, 32);
+    assert.equal(sent, 12);
   } finally {
     clock.restore();
   }
@@ -323,4 +328,224 @@ test('coming back to the page clears a breaker armed while the network was suspe
   _clearOutagesForTests();
   assert.equal(send._state.outageUntil, 0);
   assert.equal(send._state.consecutiveOutages, 0, 'the ladder starts over too');
+});
+
+const C = '/rpc/emergency';
+const logs = { ...PAYLOAD, method: 'eth_getLogs', params: [{ fromBlock: '0x1', toBlock: '0x10000' }] };
+const pruned = id => ({ id, error: { code: 4444, message: 'pruned history unavailable' } });
+
+test('pruned history uses another free RPC without moving live state or replaying successful items', async () => {
+  const hits = [];
+  const send = _makeFailoverSend([A, B], async (url, init) => {
+    const body = JSON.parse(init.body), requests = Array.isArray(body) ? body : [body];
+    hits.push([url, requests.map(r => r.method)]);
+    return ok(requests.map(r => url === A && r.method === 'eth_getLogs'
+      ? pruned(r.id) : { id: r.id, result: r.method === 'eth_getLogs' ? [] : '0x1' }));
+  });
+  const batch = [PAYLOAD, { ...logs, id: 2 }];
+  assert.deepEqual(await send(batch), [{ id: 1, result: '0x1' }, { id: 2, result: [] }]);
+  await send(batch);
+  assert.deepEqual(hits, [
+    [A, ['eth_call', 'eth_getLogs']], [B, ['eth_getLogs']],
+    [A, ['eth_call']], [B, ['eth_getLogs']],
+  ]);
+  assert.equal(send._state.preferred, 0);
+  assert.equal(send._state.outageUntil, 0);
+});
+
+test('missing history everywhere never activates paid fallback or poisons other reads', async () => {
+  const clock = fakeClock();
+  try {
+    const hits = [];
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      hits.push(url); const r = JSON.parse(init.body);
+      return ok(r.method === 'eth_getLogs' ? pruned(r.id) : { id: r.id, result: '0x1' });
+    }, 1000, clock.wait, { emergencyRpcUrl: C });
+    for (let i = 0; i < 4; i++) {
+      assert.deepEqual(await send(logs), [pruned(1)]);
+      clock.now += 40_000;
+    }
+    assert.deepEqual(hits, [A, B], 'remember unsupported history instead of retrying each poll');
+    assert.equal(send._state.consecutiveOutages, 0);
+    assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
+    assert.equal(hits.at(-1), A);
+  } finally { clock.restore(); }
+});
+
+test('a JSON-RPC log range refusal survives HTTP 400 for the scanner to split', async () => {
+  const refused = { id: 1, error: { code: 35, message: 'ranges over 10000 blocks are not supported on free plan' } };
+  const hits = [];
+  const send = _makeFailoverSend([A, B], async url => {
+    hits.push(url); return { ok: false, status: 400, json: async () => refused };
+  });
+  assert.deepEqual(await send(logs), [refused]);
+  assert.deepEqual(hits, [A]);
+  assert.equal(send._state.outageUntil, 0);
+});
+
+test('HTTP 400 preserves unsupported block-hash parameters for verified numeric fallback', async () => {
+  const refused = { id: 1, error: { code: -32602, message: 'invalid params: expected string, blockHash unsupported' } };
+  const hits = [];
+  const send = _makeFailoverSend([A, B], async url => {
+    hits.push(url); return { ok: false, status: 400, json: async () => refused };
+  });
+  assert.deepEqual(await send(PAYLOAD), [refused]);
+  assert.deepEqual(hits, [A]);
+  assert.equal(send._state.outageUntil, 0);
+});
+
+test('partial failover preserves a contract revert and out-of-order success exactly', async () => {
+  const revert = { id: 2, error: { code: 3, message: 'execution reverted', data: '0xdeadbeef' } };
+  const send = _makeFailoverSend([A, B], async (url, init) => {
+    if (url === A) return ok([{ id: 3, error: { code: -32016, message: 'over rate limit' } }, revert, { id: 1, result: '0x1' }]);
+    assert.deepEqual(JSON.parse(init.body).map(r => r.id), [3]);
+    return ok([{ id: 3, result: '0x3' }]);
+  });
+  assert.deepEqual(await send([PAYLOAD, { ...PAYLOAD, id: 2 }, { ...PAYLOAD, id: 3 }]),
+    [{ id: 1, result: '0x1' }, revert, { id: 3, result: '0x3' }]);
+});
+
+test('a provider batch limit learns smaller batches on the same free endpoint', async () => {
+  const clock = fakeClock();
+  try {
+    const sizes = [];
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      assert.equal(url, A);
+      const requests = JSON.parse(init.body); sizes.push(requests.length);
+      if (requests.length > 3) return { ok: false, status: 500, json: async () => requests.map(r => ({ id: r.id,
+        error: { code: 31, message: 'Batch of more than 3 requests are not allowed on free plan' } })) };
+      return ok(requests.map(r => ({ id: r.id, result: '0x1' })).reverse());
+    }, 1000, clock.wait);
+    const batch = Array.from({ length: 8 }, (_, id) => ({ ...PAYLOAD, id }));
+    assert.deepEqual(await send(batch), batch.map(r => ({ id: r.id, result: '0x1' })));
+    assert.deepEqual(sizes, [8, 4, 2, 2, 2, 2]);
+    assert.equal(send._state.outageUntil, 0);
+  } finally { clock.restore(); }
+});
+
+test('queued requests recheck a cooldown set after they started waiting', async () => {
+  const realNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+  const waits = [], hits = [];
+  try {
+    const send = _makeFailoverSend([A], async (_url, init) => {
+      const request = JSON.parse(init.body); hits.push(now); return ok({ id: request.id, result: '0x1' });
+    }, 1000, ms => new Promise(resolve => waits.push({ ms, resolve })));
+    send._state.endpoints[0].tokens = 0;
+    const request = send(PAYLOAD);
+    await new Promise(resolve => setImmediate(resolve));
+    const endpoint = send._state.endpoints[0];
+    endpoint.coolUntil = now + 9000; endpoint.rate = 1;
+    now += waits[0].ms; waits[0].resolve();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(hits.length, 0, 'an old token reservation does not ignore the new rest');
+    now += waits[1].ms; waits[1].resolve();
+    await request;
+    assert.ok(hits[0] >= 1_009_000);
+  } finally { Date.now = realNow; }
+});
+
+test('a rate-limit response to the recovery probe cannot promote the primary', async () => {
+  const clock = fakeClock();
+  try {
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      const request = JSON.parse(init.body);
+      return ok(url === A ? { id: request.id, error: { code: -32016, message: 'over rate limit' } }
+        : { id: request.id, result: '0x1' });
+    }, 1000, clock.wait);
+    send._state.preferred = 1;
+    await send(PAYLOAD);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(send._state.preferred, 1);
+  } finally { clock.restore(); }
+});
+
+test('paid fallback requires three complete free failures and thirty seconds, then returns to free', async () => {
+  const clock = fakeClock();
+  try {
+    let freeUp = false;
+    const hits = [];
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      hits.push(url);
+      if (url !== C && !freeUp) throw new Error('free RPC down');
+      const body = JSON.parse(init.body);
+      return ok((Array.isArray(body) ? body : [body]).map(r => ({ id: r.id, result: '0x1' })));
+    }, 1000, clock.wait, { emergencyRpcUrl: C });
+    await assert.rejects(send(PAYLOAD), /free RPC down/);
+    clock.now = send._state.outageUntil + 1;
+    await assert.rejects(send(PAYLOAD), /free RPC down/);
+    assert.ok(!hits.includes(C));
+    clock.now += 30_000;
+    assert.deepEqual(await send(PAYLOAD), [{ id: 1, result: '0x1' }]);
+    assert.equal(hits.at(-1), C);
+    assert.ok(send._state.preferred < 2, 'paid can never become the preferred endpoint');
+    freeUp = true;
+    clock.now = send._state.outageUntil + 1;
+    hits.length = 0;
+    await send(PAYLOAD);
+    assert.ok(hits.length && !hits.includes(C));
+    assert.equal(send._state.consecutiveOutages, 0);
+  } finally { clock.restore(); }
+});
+
+test('an emergency outage serves live reads but never sends logs, backfill headers, or writes to paid', async () => {
+  const clock = fakeClock();
+  try {
+    const hits = [];
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      assert.equal(url, C); const requests = JSON.parse(init.body); hits.push(...requests);
+      return ok(requests.map(r => ({ id: r.id, result: '0x1' })));
+    }, 1000, clock.wait, { emergencyRpcUrl: C });
+    Object.assign(send._state, { outageStartedAt: clock.now - 31_000, consecutiveOutages: 3, outageUntil: clock.now + 10_000 });
+    const output = await send([PAYLOAD, { ...logs, id: 2 }, { ...PAYLOAD, id: 3, method: 'eth_sendRawTransaction' },
+      { ...PAYLOAD, id: 4, method: 'eth_getBlockByNumber', params: ['0x1', false] }]);
+    assert.deepEqual(hits, [PAYLOAD]);
+    assert.equal(output[0].result, '0x1');
+    assert.ok(output.slice(1).every(r => r.error));
+  } finally { clock.restore(); }
+});
+
+test('emergency calls are bounded per minute and per page, including concurrent callers', async () => {
+  const clock = fakeClock();
+  try {
+    let paid = 0;
+    const send = _makeFailoverSend([A, B], async (url, init) => {
+      assert.equal(url, C); const requests = JSON.parse(init.body); paid += requests.length;
+      return ok(requests.map(r => ({ id: r.id, result: '0x1' })));
+    }, 1000, clock.wait, { emergencyRpcUrl: C });
+    const outage = () => Object.assign(send._state, { outageStartedAt: clock.now - 31_000,
+      consecutiveOutages: 3, outageUntil: clock.now + 10_000 });
+    for (let minute = 0; minute < 11; minute++) {
+      outage();
+      const outcomes = await Promise.allSettled(Array.from({ length: 40 }, (_, id) => send({ ...PAYLOAD, id })));
+      assert.equal(outcomes.filter(r => r.status === 'fulfilled').length, minute < 10 ? 30 : 0);
+      clock.now += 60_000;
+    }
+    assert.equal(paid, 300);
+  } finally { clock.restore(); }
+});
+
+test('emergency is disabled without configuration, while hidden, or while offline', async () => {
+  const clock = fakeClock();
+  const visibility = document.visibilityState;
+  const online = Object.getOwnPropertyDescriptor(globalThis.navigator, 'onLine');
+  try {
+    for (const mode of ['unconfigured', 'hidden', 'offline']) {
+      const hits = [];
+      const send = _makeFailoverSend([A, B], async url => { hits.push(url); throw new Error('unexpected request'); },
+        1000, clock.wait, mode === 'unconfigured' ? {} : { emergencyRpcUrl: C });
+      Object.assign(send._state, { outageStartedAt: clock.now - 31_000, consecutiveOutages: 3, outageUntil: clock.now + 10_000 });
+      document.visibilityState = mode === 'hidden' ? 'hidden' : 'visible';
+      Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value: mode !== 'offline' });
+      await assert.rejects(send(PAYLOAD), RpcUnavailableError);
+      assert.deepEqual(hits, []);
+    }
+    assert.throws(() => _makeFailoverSend([A], undefined, undefined, undefined,
+      { emergencyRpcUrl: 'https://paid.invalid/key' }), /same-origin/);
+  } finally {
+    clock.restore(); document.visibilityState = visibility;
+    if (online) Object.defineProperty(globalThis.navigator, 'onLine', online);
+    else delete globalThis.navigator.onLine;
+  }
 });

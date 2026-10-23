@@ -12,12 +12,9 @@ import { test, describe, beforeEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 import { VOLUME_WINDOW } from '../../app/chain-config.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { _setWalletIdForTests } from '../../app/wallet-id.js';
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-packs-panel.test.js — Phase 60).
@@ -371,12 +368,9 @@ function installAfkingReadState({
     },
     game: {
       afkingFundingOf: async () => fundingWei,
-      subInfo: async () => [active, active ? 1 : 0, 0, 0],
       afkingSnapshot: async () => [1n, false, [0n], [fundingWei]],
     },
-    ...(pendingFlipWhole == null ? {} : {
-      lens: { subInfoFull: async () => ({ pendingFlip: pendingFlipWhole }) },
-    }),
+    lens: { subInfoFull: async () => ({ member: active, active, dailyQuantity: active ? 1 : 0, owedFlip: pendingFlipWhole ?? 0n }) },
   }));
 }
 
@@ -452,7 +446,7 @@ function makeFakePurchaseContract(opts = {}) {
         calls.purchase.push(args);
         txCounter += 1n;
         return makeFakeTx(makeFakeReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+          { parsed: { name: 'LootBoxBuy', args: { index: txCounter, amount: 0n, buyer: args[0] } } },
         ]));
       },
       { staticCall: stk('purchase') }
@@ -534,14 +528,16 @@ function makeFakeProvider(
   { redemptionOpen = false } = {},
 ) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
     getBalance: async () => walletBalance,
-    getStorage: async () => redemptionOpen ? (1n << 240n) : 0n,
+    getStorage: async () => redemptionOpen ? (1n << 249n) : 0n,
   };
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+// Per-player storage reads and every player write go through the wallet ID.
+_setWalletIdForTests(CONNECTED, 5);
 
 function instantiate() {
   const Ctor = customElements.get('app-decimator-panel');
@@ -817,7 +813,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       'Buy In uses the plain-lid green/bronze and purple/silver cards with the four-quadrant gold card',
     );
     assert.equal(
-      (PANEL_SRC.match(/<img class="dec-box-card__image" src="\$\{(?:BUY_IN_COMPACT_CASE_ART\.(?:small|medium)|BUY_IN_GOLD_CASE_ART)\}" alt="" loading="lazy" decoding="async" fetchpriority="low">/g) ?? []).length,
+      (PANEL_SRC.match(/<img class="dec-box-card__image" src="\$\{(?:BUY_IN_COMPACT_CASE_ART\.(?:small|medium)|BUY_IN_GOLD_CASE_ART)\}"(?: srcset="\$\{BUY_IN_PHONE_CASE_SET\.(?:small|medium)\}" sizes="[^"]+")? alt="" loading="lazy" decoding="async" fetchpriority="low">/g) ?? []).length,
       3,
       'all three static card renders are Buy In-scoped and cannot change reveal animation art',
     );
@@ -1253,7 +1249,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called exactly once');
     const args = fakeContract._calls.purchase[0];
     // args = [buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, foil]
-    assert.equal(args[0], CONNECTED, 'buyer = connected address');
+    assert.equal(args[0], 0, 'buyer = account 0, the connected wallet');
     assert.equal(args[1], 2000n, '5 tickets = 20 entries = 2000 purchase units (400 per ticket)');
     assert.equal(args[2], 0n, 'boxOrder = 0n (tickets-only level mint)');
 
@@ -2129,7 +2125,7 @@ describe('combined ticket + lootbox buy', () => {
   test('claimable holds its last settled value without disabling the ETH claim', async () => {
     storeMod.update('app.lastDay', { day: 67 });
     heldBalanceValue({
-      namespace: 'claimable-eth:84532',
+      namespace: `claimable-eth:${ACTIVE_CHAIN_ID}`,
       scope: CONNECTED,
       value: lootboxMod.scaledTicketPriceWei(12) / 2n,
       released: true,
@@ -2165,7 +2161,7 @@ describe('combined ticket + lootbox buy', () => {
     value.dispatchEvent({ type: 'click', preventDefault() {} });
     assert.equal(value.textContent, heldValue, 'clicking Claimable cannot reveal the queued amount');
 
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
     storeMod.update('app.lastDay', { day: 67 });
     assert.equal(display.getAttribute('data-balance-held'), 'false');
     assert.equal(totalDisplay.getAttribute('data-balance-held'), 'false');
@@ -2329,7 +2325,7 @@ describe('combined ticket + lootbox buy', () => {
     await settle(60);
 
     const sends = fake._calls.filter((call) => call[0] === 'send' && call[1] === 'claimWinnings');
-    assert.deepEqual(sends, [['send', 'claimWinnings', CONNECTED]]);
+    assert.deepEqual(sends, [['send', 'claimWinnings', 0]]);
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
@@ -2338,12 +2334,12 @@ describe('combined ticket + lootbox buy', () => {
     const funding = 875_000_000_000n;
     const calls = [];
     const withdraw = Object.assign(
-      async (amount) => {
+      async (_id, amount) => {
         calls.push(['send', amount]);
         return makeFakeTx(makeFakeReceipt());
       },
       {
-        staticCall: async (amount) => {
+        staticCall: async (_id, amount) => {
           calls.push(['static', amount]);
           return true;
         },
@@ -2406,7 +2402,7 @@ describe('combined ticket + lootbox buy', () => {
 
     const ethSends = fake._calls.filter((call) => call[0] === 'send' && call[1] === 'claimWinnings');
     const flipSends = fake._calls.filter((call) => call[0] === 'send' && call[1] === 'claimCoinflips');
-    assert.deepEqual(ethSends, [['send', 'claimWinnings', CONNECTED]]);
+    assert.deepEqual(ethSends, [['send', 'claimWinnings', 0]]);
     assert.deepEqual(flipSends, []);
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
@@ -2901,8 +2897,8 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(calls.length, 2);
     assert.equal(calls[0][0], 'static');
     assert.equal(calls[1][0], 'send');
-    assert.equal(calls[1][1], CONNECTED);
-    assert.equal(calls[1][2], 2_750n * FLIP,
+    assert.equal(calls[1][1], 0, 'account 0 = the connected wallet');
+    assert.equal(calls[1][2], 2_750n,
       'the Decimator contract consumes wallet plus settled Coinflip FLIP directly');
     assert.equal(confirmed.amountWei, 2_750n * FLIP);
     el.disconnectedCallback();
@@ -3760,14 +3756,13 @@ describe('combined ticket + lootbox buy', () => {
   });
 
   // Degenesis (audit 4f4aa8377) takes the presale row's place. The sale is open on game days 2-8
-  // of the deployment clock, so these pin the clock and the current (Degenesis) schema.
+  // of the deployment clock, so these pin the clock.
   const degenesisDayTs = (index) => ((VOLUME_WINDOW.deployDayBoundary + index - 1) * VOLUME_WINDOW.period
     + VOLUME_WINDOW.anchor + 30) * 1000;
   async function onDegenesisDay(index, fn) {
     const { __setDegenesisNowForTest } = await import('../../app/degenesis.js');
-    const previous = pinTestSchema(CURRENT_SCHEMA_HASH);
     const previousNow = __setDegenesisNowForTest(() => degenesisDayTs(index) / 1000);
-    try { return await fn(); } finally { __setDegenesisNowForTest(previousNow); pinTestSchema(previous); }
+    try { return await fn(); } finally { __setDegenesisNowForTest(previousNow); }
   }
 
   test('a Degenesis box replaces the presale row on sale days and buys standalone', () => onDegenesisDay(3, async () => {

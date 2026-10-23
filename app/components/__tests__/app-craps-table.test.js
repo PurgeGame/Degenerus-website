@@ -468,32 +468,6 @@ test('battle start reveals the sealed bonus rung and flies its value into ADDED'
     'the Start gate is a large primary control below the bonus reel');
 });
 
-test('a fill-draw battle rolls its pot into the prize before the first roll', async () => {
-  const { crapsPotReelFace } = await import(moduleUrl);
-  assert.equal(crapsPotReelFace('28,100', 5, 9), '28,100', 'every digit stopped is the pot');
-  const spinning = crapsPotReelFace('1,234,500', 3, 7);
-  assert.match(spinning, /^1,23\d,\d{3}$/, 'stopped digits hold from the left and separators never move');
-  assert.equal(crapsPotReelFace('1,234,500', 3, 7), spinning, 'the same tick paints the same face every replay');
-  for (let seed = 0; seed < 40; seed += 1) {
-    assert.notEqual(crapsPotReelFace('9,000', 0, seed)[0], '0', 'a spinning figure never leads with zero');
-  }
-  assert.match(COMPONENT_SRC, /this\.#potRoll = detail\.potRoll === true;/, 'only a caller that says so rolls the pot');
-  assert.match(COMPONENT_SRC,
-    /#revealKind\(\) \{\s*if \(this\.#potRoll && this\.#bountyPoolWei != null && this\.#bountyPoolWei > 0n\) return 'pot';/,
-    'the pot roll takes the same start-of-battle gate as the bonus reel');
-  assert.match(COMPONENT_SRC,
-    /#startPotReveal\(onDone\)[\s\S]*?current\.textContent = copy;[\s\S]*?stage\.dataset\.state = 'flying';\s*this\.#flyBonusAmount\(\);[\s\S]*?this\.#settleBonusReveal\(\{ landed: true \}\)/s,
-    'the reel lands on the exact pot and flies it into the prize');
-  assert.match(COMPONENT_SRC,
-    /const bountyAmountCopy = bountyPoolWei == null \|\| potRolling\s*\? '—'/,
-    'the prize reads blank until the pot lands');
-  assert.match(COMPONENT_SRC, /bountyAdded\.hidden = this\.#potRoll \|\| this\.#jackpotMultiplier != null;/, 'a pot has nothing ADDED to show');
-  assert.match(CSS_SRC, /\.craps-dialog__prize-added\[hidden\] \{ display: none !important; \}/,
-    'the hidden ADDED chip beats its own display rule');
-  assert.match(CSS_SRC, /\.craps-dialog__prize--bounty\.is-bonus-landed > strong \{\s*animation: craps-bonus-target-land/,
-    'the pot lands with the same bump ADDED gets');
-});
-
 test('craps model exposes the eleven WIP contract legs', async () => {
   const { CRAPS_BETS, CRAPS_BET_GROUPS } = await import(moduleUrl);
   assert.equal(CRAPS_BET_GROUPS.length, 3);
@@ -847,11 +821,11 @@ test('other players aggregate generic chip counts without entering the local sev
   assert.deepEqual(table.players[1].bankrollsFlip, ['180', '0']);
   const longReplay = aggregateCrapsTableBets([{
     betId: '99',
-    resolution: { type: 'cashout', roll: 4_600, amountFlip: 1 },
+    resolution: { type: 'cashout', roll: 1_100, amountFlip: 1 },
     chips: { passLine: 1 },
   }]);
-  assert.equal(longReplay.players[0].exitRoll, 4_600,
-    'roll identity uses the 4,607-roll replay cap, not the 256-shooter cap');
+  assert.equal(longReplay.players[0].exitRoll, 1_100,
+    'roll identity uses the 1,111-roll replay cap, not the 256-shooter cap');
 });
 
 test('tracked rivals flip their own survival coins beside their portraits', async () => {
@@ -1957,31 +1931,9 @@ test('shooter identity cannot change with viewer-relative roster order', async (
   assert.equal(crapsShooterIdentity({ indexed: otherSeat, candidates: [main], viewerBetId: '1', viewerPlayer: main.player }).local, false);
   assert.equal(crapsShooterIdentity({ indexed: { player: main.player }, candidates: [{ ...main, local: true }] }).local, true);
   assert.equal(crapsShooterIdentity({ rotationPlayer: alt, candidates: [main, alt] }).label, 'ALT');
-  // A fill-draw frame names its shooter by seat and wallet only; the seat carries the name.
+  // A timeline entry may name its shooter by seat and wallet only; the seat carries the name.
   assert.equal(crapsShooterIdentity({ shooter: 3, indexed: { betId: '2', player: alt.player }, candidates: [main, alt] }).label, 'ALT');
 });
-
-test('a run that throws its own dice keeps its named shooter through the table\'s frames', async () => {
-  const { createCrapsResolutionRun } = await import(moduleUrl);
-  const run = createCrapsResolutionRun({
-    startingBankrollFlip: 300,
-    goalFlip: 600,
-    rolls: '0x33004400',
-    hands: [
-      { bankrollFlip: 420, label: 'WIN', shooterBetId: 'coin-draw:9:0', shooterPlayer: '0xaaa' },
-      { bankrollFlip: 420, label: 'BATTLE CONTINUES', viewerClosed: true, shooterBetId: 'coin-draw:9:4', shooterPlayer: '0xbbb' },
-      { bankrollFlip: 420, label: 'SHARED' },
-    ],
-  });
-  assert.deepEqual(run.frames.map(({ shooterBetId, shooterPlayer }) => [shooterBetId, shooterPlayer]), [
-    ['coin-draw:9:0', '0xaaa'],
-    ['coin-draw:9:4', '0xbbb'],
-    [null, null],
-  ]);
-  // The shooter card falls back to that seat when no shooter timeline names the hand.
-  assert.match(COMPONENT_SRC, /\?\? \(frame\?\.shooterBetId != null \|\| frame\?\.shooterPlayer/);
-});
-
 
 test('the final payout retains a High Roller prize after a main-field loss', async () => {
   const { crapsWinnerPayoffPresentation } = await import(moduleUrl);

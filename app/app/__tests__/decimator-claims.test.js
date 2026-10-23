@@ -1,34 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readChainRoute } from '../../chain/router.js';
-import { decimatorCoinHeads, decimatorPayout } from '../../chain/games.js';
+import { decimatorPayout } from '../../chain/games.js';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
-// Run 64's per-entry coin and one-wallet-one-place layout (frozen schema 54fe7634, audit ca2bb497f).
-// Pinned so this file reads the same once a deployment profile moves to audit 12daf8060, whose
-// survivor sampling and generated entries are pinned in run65-contracts.test.js.
-import { useSchema as pinTestSchema, BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_DECIMATOR_JACKPOT_SCHEMA_HASH);
 
 // Audit 92a1358d0: the Decimator is a shared-dice craps battle. A wallet holds ONE entry per
-// event: decBattlePlayers[player] = lvl << 64 | id names it and (audit 32c604531)
-// decBattleEntries[lvl << 64 | id] = owner | chips << 160 | whole-FLIP stack << 190. Sealing emits the word in DecimatorResolved (the round struct no longer stores it);
-// the entry's final coin drops tails, heads runs play the dice, and ranked winners are paid in
-// heap order as claimable ETH or half whale passes. There is no claim.
+// event: decBattlePlayers[wallet] = lvl << 64 | id names it and decBattleEntries[lvl << 64 | id]
+// = owner | chips << 160 | whole-FLIP stack << 190. Sealing emits the word in DecimatorResolved
+// (the round struct does not store it); survivors are sampled from it (decimator-sampling.js), the
+// best are ranked and paid in heap order as claimable ETH or half whale passes. There is no claim.
+// Survival sampling vectors and generated entries are pinned in decimator-survivors.test.js.
 const LEVEL = 25;
 const ID = 3n;
+const WALLET = 7; // PLAYER's wallet ID: per-player storage and events are keyed by it
 const CHIPS = 1 | (2 << 9);
 const STACK_FLIP = 1_900n;
 const STACK = STACK_FLIP * 10n ** 18n;
 const HALF_PASS = 2_250_000_000_000_000_000n;
-// Pick sealed words whose coin for this entry lands each way, exactly as _run computes it.
-const words = Array.from({ length: 64 }, (_, i) => BigInt(i + 1));
-const HEADS_WORD = words.find(word => decimatorCoinHeads(word, LEVEL, ID));
-const TAILS_WORD = words.find(word => !decimatorCoinHeads(word, LEVEL, ID));
 
-async function round({ phase, word = HEADS_WORD, winners = 0, paid = 0, pool = 0n, champion = 0n, count = 12 } = {}) {
+async function round({ phase, winners = 0, paid = 0, pool = 0n, champion = 0n, count = 12 } = {}) {
   const f = await rpcFixture();
-  await f.field('GAME', 'decBattlePlayers', (BigInt(LEVEL) << 64n) | ID, PLAYER);
-  await f.field('GAME', 'decBattleEntries', BigInt(PLAYER) | (BigInt(CHIPS) << 160n) | (STACK_FLIP << 190n), (BigInt(LEVEL) << 64n) | ID);
+  await f.wallet(WALLET, PLAYER);
+  await f.field('GAME', 'decBattlePlayers', (BigInt(LEVEL) << 64n) | ID, WALLET);
+  await f.field('GAME', 'decEntriesLevel', LEVEL);
+  await f.field('GAME', 'decBattleEntries', BigInt(WALLET) | (BigInt(CHIPS) << 32n) | (STACK_FLIP << 62n), (ID - 1n) / 2n);
   await f.field('GAME', 'decBattleRounds', count, LEVEL, 'count');
   await f.field('GAME', 'decBattleRounds', phase, LEVEL, 'phase');
   await f.field('GAME', 'decBattleRounds', winners, LEVEL, 'winners');
@@ -36,10 +31,9 @@ async function round({ phase, word = HEADS_WORD, winners = 0, paid = 0, pool = 0
   await f.field('GAME', 'decBattleRounds', pool, LEVEL, 'poolWei');
   await f.field('GAME', 'decBattleRounds', champion, LEVEL, 'champion');
   await f.event('GAME', 'DecBurnRecorded', {
-    player: PLAYER, lvl: LEVEL, entryId: ID, baseAmount: 1_000n * 10n ** 18n, credited: STACK, stack: STACK, chips: CHIPS,
+    player: WALLET, lvl: LEVEL, entryId: ID, baseAmount: 1_000n, credited: STACK_FLIP, stack: STACK_FLIP, chips: CHIPS,
   }, { block: 9000 });
-  // The round struct no longer stores the word; the sealing event DecimatorResolved carries it.
-  if (phase) await f.event('GAME', 'DecimatorResolved', { lvl: LEVEL, rngWord: word, poolWei: pool, entrants: count }, { block: 9100 });
+  if (phase) await f.event('GAME', 'DecimatorResolved', { lvl: LEVEL, rngWord: 1n, poolWei: pool, entrants: count }, { block: 9100 });
   return f;
 }
 const read = f => readChainRoute(`/player/${PLAYER}/decimator?level=${LEVEL}`, { client: f.client });
@@ -61,20 +55,8 @@ test('an open event reports the entry, its stack and its board', async () => {
   assert.equal(row.stack, String(STACK));
   assert.equal(row.chips, CHIPS);
   assert.equal(row.roundStatus, 'open');
-  assert.equal(row.coin, null, 'no coin before the seal');
+  assert.equal(row.survived, null, 'survivors are drawn at the seal');
   assert.equal(row.winner, false);
-});
-
-test('a sealed event shows the final coin; tails sits out the dice', async () => {
-  const tails = await read(await round({ phase: 1, word: TAILS_WORD }));
-  assert.equal(tails.roundStatus, 'settling');
-  assert.equal(tails.coin, 'tails');
-  const f = await round({ phase: 1, word: HEADS_WORD });
-  await f.event('GAME', 'DecimatorRun', { lvl: LEVEL, entryId: ID, normalizedPeak: 7_830n * 10n ** 18n });
-  const heads = await read(f);
-  assert.equal(heads.coin, 'heads');
-  assert.equal(heads.peak, String(7_830n * 10n ** 18n));
-  assert.equal(heads.winner, false, 'nothing is ranked yet');
 });
 
 test('a ranked winner the keepers have not reached is found in the heap and priced', async () => {
@@ -95,9 +77,9 @@ test('a ranked winner the keepers have not reached is found in the heap and pric
     'a winner paid only in passes still counts as a winner');
 });
 
-test('a paid winner reports what DecimatorClaimed credited; a heads entry outside the heap lost', async () => {
+test('a paid winner reports what DecimatorClaimed credited; an entry outside the heap lost', async () => {
   const f = await round({ phase: 3, winners: 2, paid: 2, pool: 10n ** 18n, champion: ID });
-  await f.event('GAME', 'DecimatorClaimed', { player: PLAYER, lvl: LEVEL, entryId: ID, amountWei: 5n, halfPasses: 1n });
+  await f.event('GAME', 'DecimatorClaimed', { walletId: WALLET, lvl: LEVEL, entryId: ID, amountWei: 5n, halfPasses: 1n });
   const paid = await read(f);
   assert.equal(paid.winner, true);
   assert.equal(paid.claimed, true);
@@ -106,6 +88,5 @@ test('a paid winner reports what DecimatorClaimed credited; a heads entry outsid
   assert.equal(paid.halfPasses, '1');
   assert.equal(paid.cashOnly, false);
   const lost = await read(await round({ phase: 3, winners: 2, paid: 2, pool: 10n ** 18n, champion: 1n }));
-  assert.equal(lost.coin, 'heads');
   assert.equal(lost.winner, false);
 });

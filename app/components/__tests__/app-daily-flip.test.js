@@ -32,11 +32,7 @@ import {
   flipPileLevel,
   flipPileVariant,
 } from '../../app/flip-piles.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const CHIPSET_CSS = readFileSync(new URL('../../styles/coinflip-chipset.css', import.meta.url), 'utf8');
@@ -281,7 +277,7 @@ function resetDom() {
   // Most widget tests exercise ledger behavior after the jackpot presentation.
   // Opt those tests into the normal cleared state; spoiler-gate regressions
   // explicitly remove this marker below.
-  globalThis.localStorage.setItem('jackpot_complete_day_84532_67', '1');
+  globalThis.localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`, '1');
   pendingActionsMod.__resetPendingActionsForTest();
   _docListeners.clear();
   _fetchResponses = {
@@ -332,7 +328,7 @@ function dashboardPayload() {
 
 function seedTomorrowHold(wei) {
   return heldBalanceValue({
-    namespace: 'coinflip-tomorrow:84532',
+    namespace: `coinflip-tomorrow:${ACTIVE_CHAIN_ID}`,
     scope: TEST_ADDR,
     value: wei,
     released: true,
@@ -341,7 +337,7 @@ function seedTomorrowHold(wei) {
 
 function seedFlipAvailableHold(wei) {
   return heldBalanceValue({
-    namespace: 'protocol-flip-available:84532',
+    namespace: `protocol-flip-available:${ACTIVE_CHAIN_ID}`,
     scope: TEST_ADDR,
     value: wei,
     released: true,
@@ -924,6 +920,8 @@ describe('day-wide reveal planning', () => {
       'the printed table selector caps at 250 even when the exact popup includes a bonus');
     assert.equal(revealPlanning.dailyFlipMeterStopHeight(196), 'calc(48% - 0.52px)',
       'the frozen 196% result rounds to twelve complete pips on the shared 25-step scale');
+    assert.equal(revealPlanning.dailyFlipMeterStopHeight(150), 'calc(4% - 0.96px)',
+      'the minimum result keeps exactly the bottom pip lit');
     assert.equal(revealPlanning.dailyFlipMeterStopHeight(250), '100%');
     assert.match(APP_CSS,
       /\.df-position-percentage--low\s*\{[^}]*color:\s*#fde047[^}]*rgba\(250, 204, 21,/s,
@@ -1495,7 +1493,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
         dashboard: dashboardPayload(),
         flipDay: { day: 67, win: true, rewardPercent: sample.rewardPercent },
       };
-      localStorage.setItem('flip_day_84532_67', '1');
+      localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
       const el = mount();
       await flushMicrotasks();
 
@@ -1539,13 +1537,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     resolvingCoin.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true,
       'the click prompt disappears once that exact day is queued');
-    assert.equal(localStorage.getItem('flip_day_84532_67'), null,
+    assert.equal(localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), null,
       'clicking early queues the reveal without inventing an outcome');
 
     _fetchResponses.flipDay = { day: 67, win: true, rewardPercent: 96 };
     document.dispatchEvent({ type: 'visibilitychange' });
     await flushMicrotasks();
-    assert.equal(localStorage.getItem('flip_day_84532_67'), '1',
+    assert.equal(localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), '1',
       'the queued click lands automatically when the exact result arrives');
     assert.ok(el.querySelector('.df-coin--landed'));
     el.disconnectedCallback();
@@ -1901,7 +1899,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard,
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -1955,7 +1953,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       storeMod.update('app.lastDay', { day: 67, status: 'resolved', summary: {
         rollTwo: { coin: [{ traitId: 12, winnerCount: 1 }], bonusDraw: [], farFuture: { winnerCount: 0 } },
       }, roll2: { day: 67, wins: [] } });
-      localStorage.removeItem('jackpot_complete_day_84532_67');
+      localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
     }
     const el = mount();
     await flushMicrotasks();
@@ -2015,7 +2013,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard,
       flipDay: { day: 67, win: false, rewardPercent: 0 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -2045,7 +2043,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    const rewardGateKey = `flip_reward_reveal_gate_84532_${TEST_ADDR}`;
+    const rewardGateKey = `flip_reward_reveal_gate_${ACTIVE_CHAIN_ID}_${TEST_ADDR}`;
     localStorage.setItem(rewardGateKey, '1'); // simulate the stale latch from the reported bug
     pendingActionsMod.publishPendingActions('ticket-packs', [{
       id: 'ticket-pack:68', kind: 'tickets', label: 'Level 68 ticket pack',
@@ -2222,7 +2220,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
     pendingActionsMod.publishPendingActions('lootboxes', []);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
     const el = mount();
@@ -2233,7 +2231,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(tomorrow().textContent, /13,000/,
       'the exact 2,000 FLIP bonus is absent from the rendered Tomorrow row');
 
-    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+    localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`, '1');
     document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
     assert.match(tomorrow().textContent, /13,000 FLIP/);
     el.disconnectedCallback();
@@ -2279,9 +2277,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    localStorage.removeItem('jackpot_complete_day_84532_67');
-    localStorage.setItem('spun_day_84532_67', '1');
-    localStorage.removeItem('jackpot_bonus_pending_day_84532_67');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
+    localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
+    localStorage.removeItem(`jackpot_bonus_pending_day_${ACTIVE_CHAIN_ID}_67`);
     pendingActionsMod.publishPendingActions('lootboxes', []);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
 
@@ -2319,9 +2317,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    localStorage.removeItem('jackpot_complete_day_84532_67');
-    localStorage.setItem('spun_day_84532_67', '1');
-    localStorage.setItem('jackpot_bonus_pending_day_84532_67', '1');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
+    localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
+    localStorage.setItem(`jackpot_bonus_pending_day_${ACTIVE_CHAIN_ID}_67`, '1');
     pendingActionsMod.publishPendingActions('lootboxes', []);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
 
@@ -2353,7 +2351,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'the felt instruction disappears synchronously in the click task');
     await flushMicrotasks();
 
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1', 'gate key written');
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), '1', 'gate key written');
     assert.equal(revealed, 1, 'flip:revealed dispatched');
     assert.ok(el.querySelector('.df-coin--landed'), 'coin landed');
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true,
@@ -2942,7 +2940,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1', 'gate key written');
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), '1', 'gate key written');
     assert.equal(revealed, 1, 'flip:revealed dispatched (balances strip unfuzz signal)');
     const landed = el.querySelector('.df-coin--landed');
     assert.ok(landed, 'coin landed (fakeDOM = reduced motion, instant)');
@@ -3005,7 +3003,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -3090,7 +3088,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
         dashboard: dashboardPayload(),
         flipDay: { day: 67, win: true, rewardPercent: sample.rewardPercent },
       };
-      globalThis.localStorage.setItem('flip_day_84532_67', '1');
+      globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
       const el = mount();
       await flushMicrotasks();
 
@@ -3114,71 +3112,80 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }
   });
 
-  test('a 250% thermometer stays green in transit and reserves blue for the full rail', async () => {
-    _fetchResponses = {
-      dashboard: dashboardPayload(),
-      flipDay: { day: 67, win: true, rewardPercent: 150 },
-    };
-    const el = mount();
-    await flushMicrotasks();
-
-    const realSetTimeout = globalThis.setTimeout;
-    const realMatchMedia = globalThis.matchMedia;
-    const scheduled = [];
-    try {
-      globalThis.matchMedia = () => ({ matches: false });
-      globalThis.setTimeout = (fn, delay = 0) => {
-        const handle = { fn, delay: Number(delay) || 0, unref() {} };
-        scheduled.push(handle);
-        return handle;
+  for (const totalPercent of [150, 250]) {
+    test(`a ${totalPercent}% thermometer never colors traveling pips from its destination`, async () => {
+      _fetchResponses = {
+        dashboard: dashboardPayload(),
+        flipDay: { day: 67, win: true, rewardPercent: totalPercent - 100 },
       };
-      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
-      const revealFinish = scheduled.find((entry) => (
-        entry.delay === revealPlanning.selectFlipRevealPlan(67, true).totalMs
-      ));
-      assert.ok(revealFinish, 'the canonical reveal landing is scheduled');
-      revealFinish.fn();
+      const el = mount();
+      await flushMicrotasks();
 
-      const meter = el.querySelector('.df-modifier-meter--settling');
-      assert.ok(meter, '250% enters the normal moving high-tone rail');
-      assert.match(meter.className, /df-modifier-meter--tone-high/);
-      assert.equal(
-        meter.querySelector('[data-bind="df-modifier-marker"]').style.height,
-        '100%',
-        'the 250% destination is all twenty-five pips',
-      );
-      assert.equal(
-        meter.querySelector('.df-modifier-meter__pip-bank--fill')
-          .querySelectorAll('.is-roll-250').length,
-        0,
-        'the traveling bank is green even though its destination is 250%',
-      );
-      assert.equal(
-        meter.querySelector('.df-modifier-meter__pip-bank--peak')
-          .querySelectorAll('.is-roll-250').length,
-        25,
-        'blue exists only in the full-rail overlay bank',
-      );
+      const realSetTimeout = globalThis.setTimeout;
+      const realMatchMedia = globalThis.matchMedia;
+      const scheduled = [];
+      try {
+        globalThis.matchMedia = () => ({ matches: false });
+        globalThis.setTimeout = (fn, delay = 0) => {
+          const handle = { fn, delay: Number(delay) || 0, unref() {} };
+          scheduled.push(handle);
+          return handle;
+        };
+        el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+        const revealFinish = scheduled.find((entry) => (
+          entry.delay === revealPlanning.selectFlipRevealPlan(67, true).totalMs
+        ));
+        assert.ok(revealFinish, 'the canonical reveal landing is scheduled');
+        revealFinish.fn();
 
-      meter.querySelector('[data-bind="df-modifier-marker"]').dispatchEvent({
-        type: 'animationend',
-        animationName: 'df-meter-settle',
-      });
-      const parked = el.querySelector('.df-modifier-meter--settled');
-      assert.ok(parked, 'the completed 250% rail stays parked at full height');
-      assert.match(parked.className, /df-modifier-meter--tone-high/);
-      assert.equal(el.querySelector('.df-modifier-meter--settling'), null);
-    } finally {
-      globalThis.setTimeout = realSetTimeout;
-      if (realMatchMedia === undefined) delete globalThis.matchMedia;
-      else globalThis.matchMedia = realMatchMedia;
-      el.disconnectedCallback();
-    }
-  });
+        const meter = el.querySelector('.df-modifier-meter--settling');
+        assert.ok(meter, 'the result enters the normal moving rail');
+        const tone = totalPercent === 150 ? 'low' : 'high';
+        assert.ok(meter.className.includes(`df-modifier-meter--tone-${tone}`));
+        assert.equal(
+          meter.querySelector('[data-bind="df-modifier-marker"]').style.height,
+          totalPercent === 150 ? 'calc(4% - 0.96px)' : '100%',
+          'the destination is one pip at minimum and twenty-five at maximum',
+        );
+        assert.equal(
+          meter.querySelector('.df-modifier-meter__pip-bank--fill')
+            .querySelectorAll('.is-roll-250').length,
+          0,
+          'the traveling bank never inherits blue from its destination',
+        );
+        assert.equal(
+          meter.querySelector('.df-modifier-meter__pip-bank--fill')
+            .querySelectorAll('.is-roll-150').length,
+          0,
+          'the traveling bank never inherits yellow from its destination',
+        );
+        assert.equal(
+          meter.querySelector('.df-modifier-meter__pip-bank--peak')
+            .querySelectorAll('.is-roll-250').length,
+          25,
+          'blue exists only in the full-rail overlay bank',
+        );
+
+        meter.querySelector('[data-bind="df-modifier-marker"]').dispatchEvent({
+          type: 'animationend',
+          animationName: 'df-meter-settle',
+        });
+        const parked = el.querySelector('.df-modifier-meter--settled');
+        assert.ok(parked, 'the completed rail stays parked at its final height');
+        assert.ok(parked.className.includes(`df-modifier-meter--tone-${tone}`));
+        assert.equal(el.querySelector('.df-modifier-meter--settling'), null);
+      } finally {
+        globalThis.setTimeout = realSetTimeout;
+        if (realMatchMedia === undefined) delete globalThis.matchMedia;
+        else globalThis.matchMedia = realMatchMedia;
+        el.disconnectedCallback();
+      }
+    });
+  }
 
   test('revealed LOSS day → red face + explicit signed Today result', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: false, rewardPercent: 96 } };
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -3217,7 +3224,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -3291,7 +3298,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -3678,7 +3685,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1',
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), '1',
       'the presentation is not blocked by the slower historical log lookup');
     assert.equal(el.querySelector('[data-position="today"]').textContent, "Today's bet—",
       'unknown remains unknown instead of settling against tomorrow’s 12,000 FLIP');
@@ -3722,7 +3729,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 100 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -3919,7 +3926,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.equal(baf.textContent, '1,000',
       'only a winning settlement can contribute an optimistic BAF delta');
-    const receipt = JSON.parse(localStorage.getItem(`flip_settlement_84532_67_${TEST_ADDR}`));
+    const receipt = JSON.parse(localStorage.getItem(`flip_settlement_${ACTIVE_CHAIN_ID}_67_${TEST_ADDR}`));
     assert.equal(receipt.bafGainWei, '0', 'the repaired loss receipt cannot revive the false gain');
     el.disconnectedCallback();
   });
@@ -3937,7 +3944,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
     el.remove();
 
-    const settlementKey = `flip_settlement_84532_67_${TEST_ADDR}`;
+    const settlementKey = `flip_settlement_${ACTIVE_CHAIN_ID}_67_${TEST_ADDR}`;
     const staleReceipt = JSON.parse(globalThis.localStorage.getItem(settlementKey));
     staleReceipt.betWei = _currentStakeWei; // old bug: tomorrow's stake saved as today's
     globalThis.localStorage.setItem(settlementKey, JSON.stringify(staleReceipt));
@@ -4194,11 +4201,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async (...args) => { calls.push(['static', ...args]); } },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -4207,11 +4214,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const input = el.querySelector('[name="df-amount"]');
     const button = el.querySelector('[data-bind="df-flip-cta"]');
     const confirm = el.querySelector('[data-bind="df-add-bet-confirm"]');
-    const unit = 10n ** 18n;
+    // The chain takes whole FLIP, with account 0 standing for the connected wallet.
     for (const [draft, expected] of [
-      ['100', 100n * unit],
-      ['2000', 2_000n * unit],
-      ['5237', 5_237n * unit],
+      ['100', 100n],
+      ['2000', 2_000n],
+      ['5237', 5_237n],
     ]) {
       button.dispatchEvent({ type: 'click' });
       input.value = draft;
@@ -4219,8 +4226,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       confirm.dispatchEvent({ type: 'click' });
       await flushMicrotasks();
       assert.deepEqual(calls.slice(-2), [
-        ['static', TEST_ADDR, expected],
-        ['send', TEST_ADDR, expected],
+        ['static', 0, expected],
+        ['send', 0, expected],
       ], `${draft} selected FLIP reaches the contract exactly`);
       await new Promise((resolve) => setTimeout(resolve, 525));
     }
@@ -4247,11 +4254,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async (...args) => { calls.push(['static', ...args]); } },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -4296,7 +4303,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       },
       roll2: { day: 67, wins: [] },
     });
-    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
     pendingActionsMod.publishPendingActions('lootboxes', []);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
 
@@ -4305,11 +4312,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async () => {} },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = {
@@ -4351,7 +4358,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('.df-modifier-meter'), null,
       'the held presentation does not mount result multiplier UI');
 
-    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+    localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`, '1');
     document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
     assert.match(tomorrow().textContent, /9,000 FLIP/,
       'the authoritative reveal replaces the safe wager floor without double-counting it');
@@ -4378,7 +4385,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       },
       roll2: { day: 67, wins: [] },
     });
-    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
 
     const deposit = Object.assign(
       async () => ({
@@ -4388,11 +4395,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async () => {} },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -4440,7 +4447,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       },
       roll2: { day: 67, wins: [] },
     });
-    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.removeItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`);
 
     const deposit = Object.assign(
       async () => ({
@@ -4450,11 +4457,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async () => {} },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -4576,7 +4583,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.startCoinflipFromJackpot({ scroll: true }), true);
     await flushMicrotasks();
     assert.deepEqual(scrolled, { behavior: 'smooth', block: 'center' });
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1');
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), '1');
     assert.ok(el.querySelector('.df-coin--landed'),
       'the handoff uses the same authoritative landing as tapping the coin');
     assert.equal(el.startCoinflipFromJackpot({ scroll: true }), false,
@@ -4664,7 +4671,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
   });
 
   test('the corner L-board colors all-time history and Last 25 majorities independently', async () => {
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: null,
@@ -4846,8 +4853,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 114 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
-    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
+    localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mount();
     await flushMicrotasks();
@@ -4974,7 +4981,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async (...args) => { calls.push(['static', ...args]); } },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
@@ -4998,8 +5005,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, true, takeProfit],
-      ['send', TEST_ADDR, true, takeProfit],
+      ['static', 0, true, 2_500n],
+      ['send', 0, true, 2_500n],
     ]);
     assert.equal(el.querySelector('[data-bind="df-auto-rebuy-dialog"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="df-auto-rebuy-cta-status"]').textContent, 'ON');
@@ -5064,7 +5071,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
   });
 
   test('an empty FLIP balance leaves an empty physical tray and one unit-bearing receipt', async () => {
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     _fetchResponses = {
       dashboard: {
         ...dashboardPayload(),
@@ -5135,11 +5142,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       { staticCall: async (...args) => { calls.push(['static', ...args]); } },
     );
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
+      getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflipWithCarry: deposit,
+      depositCoinflip: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -5156,8 +5163,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, target],
-      ['send', TEST_ADDR, target],
+      ['static', 0, 2_000n],
+      ['send', 0, 2_000n],
     ]);
     assert.equal(normalAmount.value, '1375',
       'the one-off quest stake leaves the closed Tomorrow\'s Bet draft untouched');
@@ -5210,9 +5217,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       button.dispatchEvent({ type: 'click' });
       assert.equal(el.querySelector('[data-bind="df-reverse-dialog"]').hidden, false,
         'the card opens the confirmation dialog');
-      assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '338 FLIP');
+      assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '337 FLIP');
       assert.equal(el.querySelector('[data-bind="df-reverse-accept"]').textContent,
-        'Accept · 338 FLIP');
+        'Accept · 337 FLIP');
       const sideBadge = el.querySelector('[data-bind="df-reverse-side-img"]');
       assert.equal(el.querySelector('[data-bind="df-reverse-side"]'), null,
         'the side name is not printed beside the badge');
@@ -5305,7 +5312,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     const el = mount();
     await flushMicrotasks();
 
@@ -5383,7 +5390,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     const el = mount();
     await flushMicrotasks();
     const reverseCard = el.querySelector('[data-bind="df-reverse-cta"]');
@@ -5518,9 +5525,9 @@ describe('new-day rollover (codex-found race)', () => {
     oldCoin.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_68'), null,
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_68`), null,
       'stale click did NOT reveal day 68');
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), null,
+    assert.equal(globalThis.localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_67`), null,
       'nor did it write the old day post-rollover');
     el.disconnectedCallback();
   });
@@ -5579,7 +5586,7 @@ describe('new-day rollover (codex-found race)', () => {
       'the unavailable coin stays parked instead of advertising a clickable flip',
     );
     warming.dispatchEvent({ type: 'click' });
-    assert.equal(localStorage.getItem('flip_day_84532_68'), null);
+    assert.equal(localStorage.getItem(`flip_day_${ACTIVE_CHAIN_ID}_68`), null);
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true);
 
     const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
@@ -5625,7 +5632,7 @@ describe('new-day rollover (codex-found race)', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     const el = mount();
     await flushMicrotasks();
 
@@ -5760,7 +5767,7 @@ describe('new-day rollover (codex-found race)', () => {
     _currentStakeWei = '0';
     _resolvedStakeWei = null;
     _fetchResponses.flipDay = null;
-    localStorage.setItem('jackpot_complete_day_84532_68', '1');
+    localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_68`, '1');
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
     await waitForText(
       () => el.querySelector('[data-position="today"]'),
@@ -5790,7 +5797,7 @@ describe('new-day rollover (codex-found race)', () => {
     coinflipMod.__setCurrentStakeReaderForTest(() => new Promise(() => {}));
     coinflipMod.__setResolvedStakeReaderForTest(() => new Promise(() => {}));
     _fetchResponses.flipDay = null;
-    localStorage.setItem('jackpot_complete_day_84532_68', '1');
+    localStorage.setItem(`jackpot_complete_day_${ACTIVE_CHAIN_ID}_68`, '1');
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
     await flushMicrotasks();
 

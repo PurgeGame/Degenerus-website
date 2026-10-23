@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Interface } from 'ethers';
-import { useSchema, CURRENT_SCHEMA_HASH, loadSchema } from '../../chain/schema.js';
+import { loadSchema } from '../../chain/schema.js';
 import { CHAIN } from '../chain-config.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { update, __resetForTest } from '../store.js';
@@ -21,9 +21,7 @@ const SELF = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xdef0000000000000000000000000000000000000';
 const TOKEN = 10n ** 18n;
 const modules = [claims, coinflip, degenerette, decimator, passes, wwxrp, sdgnrs, bingo, foil, parimutuel];
-let previous;
 beforeEach(() => {
-  previous = useSchema(CURRENT_SCHEMA_HASH);
   __resetForTest();
   update('connected.address', SELF);
   update('viewing.address', null);
@@ -35,7 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   for (const mod of modules) mod.__resetContractFactoryForTest?.();
-  clearProvider(); _resetWalletIdsForTests(); useSchema(previous);
+  clearProvider(); _resetWalletIdsForTests();
 });
 
 async function contractFor(mod, contractName, method, expected) {
@@ -73,12 +71,12 @@ const cases = [
   ['sDGNRS burn', sdgnrs, 'SDGNRS', 'burn', [10n ** 12n], () => sdgnrs.burnSdgnrs({ amount: TOKEN })],
   ['wrapped DGNRS burn', sdgnrs, 'SDGNRS', 'burnWrapped', [10n ** 12n], () => sdgnrs.burnDgnrs({ amount: TOKEN })],
   ['AFKing funding', passes, 'GAME', 'depositAfkingFunding', [41], () => passes.fundAfkingSubscription({ msgValueWei: 100n })],
-  ['AFKing cancellation', passes, 'GAME', 'subscribe', [0, true, true, 0, 0, 0n], () => passes.updateAfkingSubscription({ dailyQuantity: 0 })],
+  ['AFKing cancellation', passes, 'GAME', 'subscribe', [0, false, 0, 0n], () => passes.updateAfkingSubscription({ dailyQuantity: 0 })],
   ['growth bet', parimutuel, 'PARIMUTUEL', 'placeBet', [0, true], () => parimutuel.placeGrowthBet({ player: SELF, over: true })],
   ['Bingo claim', bingo, 'GAME', 'claimBingo', [73, 2, 1, [0,1,2,3,4,5,6,7]], () => bingo.claimBingo({ player: OTHER, level: 2, symbol: 1, slots: [0,1,2,3,4,5,6,7] })],
 ];
 for (const [name, mod, contractName, signature, expected, act] of cases) {
-  test(`run 66 ${name} encodes and sends the current ABI`, async () => {
+  test(`${name} encodes and sends the current ABI`, async () => {
     const method = signature.split('(')[0];
     const calls = await contractFor(mod, contractName, signature, expected);
     // Factories expose bare method names, just like ethers Contracts.
@@ -95,8 +93,45 @@ for (const [name, mod, contractName, signature, expected, act] of cases) {
   });
 }
 
-test('run 66 hides removed Growth claims before any wallet call', async () => {
-  await assert.rejects(() => parimutuel.claimGrowth({ player: SELF, rounds: [1] }), /automatically/);
+for (const [code, state] of [
+  ['BingoExpired', { level: 3, ticketBufferLevels: [4, 3] }],
+  ['GameOver', { level: 3, ticketBufferLevels: [2, 3], gameOver: true }],
+]) test(`Bingo ${code} stops before touching the wallet`, async () => {
+  update('app.gameState', state);
+  setProvider({ getSigner() { assert.fail('an ineligible Bingo must not touch the wallet'); } });
+  bingo.__setContractFactoryForTest(() => assert.fail('an ineligible Bingo must not construct a write'));
+  await assert.rejects(bingo.claimBingo({ player: OTHER, level: 2, symbol: 1,
+    slots: [0,1,2,3,4,5,6,7] }), error => error.code === code);
+});
+
+test('Bingo rechecks eligibility after the wallet supplies its signer', async () => {
+  update('app.gameState', { level: 3, ticketBufferLevels: [2, 3] });
+  const calls = await contractFor(bingo, 'GAME', 'claimBingo', [73, 2, 1, [0,1,2,3,4,5,6,7]]);
+  setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+    getSigner: async () => {
+      update('app.gameState', { level: 3, ticketBufferLevels: [4, 3] });
+      return { getAddress: async () => SELF };
+    } });
+  await assert.rejects(bingo.claimBingo({ player: OTHER, level: 2, symbol: 1,
+    slots: [0,1,2,3,4,5,6,7] }), error => error.code === 'BingoExpired');
+  assert.equal(calls.length, 0, 'retirement during wallet readiness skips simulation and send');
+});
+
+test('Bingo simulates the claim after wallet readiness and never sends a newly claimed reward', async () => {
+  let ready = false;
+  let sends = 0;
+  setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+    getSigner: async () => { ready = true; return { getAddress: async () => SELF }; } });
+  const fn = Object.assign(async () => { sends++; }, { staticCall: async () => {
+    assert.equal(ready, true);
+    const error = new Error('AlreadyClaimed');
+    error.revert = { name: 'AlreadyClaimed' };
+    throw error;
+  } });
+  bingo.__setContractFactoryForTest(() => ({ claimBingo: fn, connect() { return this; } }));
+  await assert.rejects(bingo.claimBingo({ player: OTHER, level: 2, symbol: 1,
+    slots: [0,1,2,3,4,5,6,7] }), error => error.code === 'AlreadyClaimed');
+  assert.equal(sends, 0);
 });
 
 test('run 66 claim balance views keep address arguments in the actual contract ABI', async () => {

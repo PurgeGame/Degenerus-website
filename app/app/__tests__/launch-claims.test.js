@@ -1,6 +1,3 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 // Current-level referral bonuses are one logical Pending action: claim first
 // when needed, otherwise open the already-paid fullscreen reward receipt.
 
@@ -46,6 +43,9 @@ const {
   _setSharedReadProviderForTests,
   _resetSharedReadProviderForTests,
 } = await import('../read-provider.js');
+const { _setWalletIdForTests, _resetWalletIdsForTests } = await import('../wallet-id.js');
+const { prepareWalletReceipt } = await import('../wallet-receipt.js');
+const { rpcFixture } = await import('./helpers/chain-rpc.js');
 
 // refreshLaunchClaims also fans out to readPlayerWwxrpDrawDays; default both
 // API-first reads to an always-failing fetch so a collateral refresh (e.g.
@@ -63,22 +63,23 @@ const PLAYER = '0xab12000000000000000000000000000000000000';
 const CALLER = '0xcd34000000000000000000000000000000000000';
 const LEVEL = 90;
 const UNIT = 10n ** 18n;
-const EVENT_ABI = [
-  'event AffiliateDgnrsClaimed(address indexed affiliate, uint24 indexed level, address indexed caller, uint256 score, uint256 amount)',
-];
-const eventInterface = new ethers.Interface(EVENT_ABI);
+const DGNRS_CHAIN = 10n ** 12n; // DGNRS is a 12-decimal token on chain
+const PLAYER_ID = 37;
 
-function claimLog({ player = PLAYER, level = LEVEL, amount = 89_400n * UNIT } = {}) {
-  const event = eventInterface.getEvent('AffiliateDgnrsClaimed');
-  const encoded = eventInterface.encodeEventLog(event, [player, level, CALLER, 450n, amount]);
-  return {
-    address: CONTRACTS.GAME,
-    blockNumber: 123,
-    index: 7,
-    transactionHash: '0xabc',
-    topics: encoded.topics,
-    data: encoded.data,
-  };
+// A real wallet-ID receipt: the claim event names the affiliate by ID, and the receipt is prepared
+// (IDs resolved to addresses) exactly as the write path does before the panels parse it.
+async function claimReceipt(claims) {
+  const f = await rpcFixture();
+  await f.wallet(PLAYER_ID, PLAYER);
+  const logs = [];
+  for (const { id = PLAYER_ID, level = LEVEL, amount = 89_400n * UNIT } of claims) {
+    logs.push(await f.event('GAME', 'AffiliateDgnrsClaimed', {
+      affiliate: id, level, caller: CALLER, score: 450n, amount: amount / UNIT * DGNRS_CHAIN,
+    }, { block: 9999 }));
+  }
+  const receipt = { blockNumber: 9999, logs };
+  await prepareWalletReceipt(receipt, f.client);
+  return receipt;
 }
 
 describe('launch referral bonus action', () => {
@@ -92,6 +93,7 @@ describe('launch referral bonus action', () => {
   afterEach(() => {
     launch.__resetLaunchClaimsForTest();
     wwxrpDraw.__resetWwxrpDrawForTest();
+    _resetWalletIdsForTests();
   });
 
   test('already-claimed state opens its reward without submitting a transaction', async () => {
@@ -169,7 +171,7 @@ describe('launch referral bonus action', () => {
       }),
       claimBonus: async ({ player }) => {
         claimedPlayers.push(player);
-        return { receipt: { logs: [claimLog({ amount: 89_400n * UNIT })] } };
+        return { receipt: await claimReceipt([{ amount: 89_400n * UNIT }]) };
       },
       reveal: (sequence) => { sequences.push(sequence); return true; },
       refresh: async () => {},
@@ -205,6 +207,7 @@ describe('launch referral bonus action', () => {
   });
 
   test('chain simulation distinguishes a settled bonus when requested', async () => {
+    _setWalletIdForTests(PLAYER, PLAYER_ID);
     launch.__setLaunchClaimsContractFactoryForTest((address) => {
       if (String(address).toLowerCase() === String(CONTRACTS.AFFILIATE).toLowerCase()) {
         return {
@@ -213,7 +216,7 @@ describe('launch referral bonus action', () => {
         };
       }
       if (String(address).toLowerCase() === String(CONTRACTS.GAME_LENS).toLowerCase()) {
-        return { levelDgnrsInfo: async () => ({ allocation: 1_000n * UNIT }) };
+        return { levelDgnrsInfo: async () => ({ allocation: 1_000n * DGNRS_CHAIN }) };
       }
       const claimed = new Error('execution reverted');
       claimed.revert = { name: 'AlreadyClaimed' };
@@ -235,11 +238,13 @@ describe('launch referral bonus action', () => {
     assert.equal(state.amountWei, 400n * UNIT);
   });
 
-  test('receipt decoder selects this player and level from unrelated logs', () => {
-    const decoded = launch.decodeAffiliateDgnrsClaim([
-      claimLog({ level: LEVEL - 1, amount: 1n }),
-      claimLog({ amount: 777n * UNIT }),
-    ], { player: PLAYER, level: LEVEL });
+  test('receipt decoder selects this player and level from unrelated logs', async () => {
+    const receipt = await claimReceipt([
+      { level: LEVEL - 1, amount: UNIT },
+      { id: PLAYER_ID + 1, amount: 5n * UNIT },
+      { amount: 777n * UNIT },
+    ]);
+    const decoded = launch.decodeAffiliateDgnrsClaim(receipt.logs, { player: PLAYER, level: LEVEL });
     assert.equal(decoded.level, LEVEL);
     assert.equal(decoded.amountWei, 777n * UNIT);
     assert.equal(decoded.caller, CALLER);

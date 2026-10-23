@@ -4,14 +4,6 @@ import test from 'node:test';
 
 import { CHAIN, CONTRACTS, CRAPS_SCHEDULE } from '../../app/chain-config.js';
 import { crapsLobbySnapshotFromLogs } from '../../app/craps.js';
-import { useSchema, CURRENT_SCHEMA_HASH, RUN56_SCHEMA_HASH } from '../../chain/schema.js';
-
-// Run a case against one read schema and restore the deployment's own afterwards. The run-56
-// fixtures below are the seven-window slate; the active profile reads the current schema.
-function withSchema(hash, fn) {
-  const previous = useSchema(hash);
-  try { return fn(); } finally { useSchema(previous); }
-}
 
 globalThis.HTMLElement ??= class HTMLElement {};
 globalThis.customElements ??= {
@@ -34,28 +26,31 @@ const replayIdentity = (battleKey, viewerBetId, {
   contract = CONTRACTS.CRAPS,
 } = {}) => [chainId, contract.toLowerCase(), battleKey.toLowerCase(), viewerBetId].join(':');
 
-// The literal wall-clock instants in the next two tests were written for the 1,200 s testnet day
-// (2-minute battles). Pin them to THAT clock explicitly: the active profile moves with each run
-// (run #55/#56 are 600 s days), and a test reading it implicitly broke on the switch. The active
-// schedule itself is walked generically in 'the ACTIVE schedule ...' below.
-const CLOCK_1200 = Object.freeze({
-  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620, openerCloseSeconds: 0,
-  clockAlignSeconds: 300, routinePeriodSeconds: 120, eventLeadSeconds: 180,
+// The literal wall-clock instants in the next test were written for the 1,200 s testnet day. Pin
+// them to THAT clock explicitly: the active profile moves with each run, and a test reading it
+// implicitly would break on the switch. The active schedule itself is walked generically elsewhere.
+// Five explicit closes (CrapsBattle._currentBonusSlot's `% 1200 seconds` if-chain), six periods
+// total. Period 5 is the daily JACKPOT BATTLE and is not clock-bound, so it is never reported as a
+// "day complete" sentinel.
+const CLOCK_PERIOD_CLOSES = Object.freeze({
+  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620,
+  periodCloseSeconds: Object.freeze([300, 480, 660, 840, 1_020]),
 });
 
-test('the browser clock mirrors all seven contract battle boundaries', () => {
-  const period = (iso) => crapsEntry.crapsPeriodAt(Date.parse(iso), CLOCK_1200);
+test('the browser clock mirrors all six contract battle boundaries', () => {
+  const period = (iso) => crapsEntry.crapsPeriodAt(Date.parse(iso), CLOCK_PERIOD_CLOSES);
   assert.equal(period('2026-08-28T22:57:00Z'), 0);
   assert.equal(period('2026-08-28T23:01:59Z'), 0);
   assert.equal(period('2026-08-28T23:02:00Z'), 1);
-  assert.equal(period('2026-08-28T23:04:00Z'), 2);
-  assert.equal(period('2026-08-28T23:06:00Z'), 3);
-  assert.equal(period('2026-08-28T23:08:00Z'), 4);
-  assert.equal(period('2026-08-28T23:10:00Z'), 5);
-  assert.equal(period('2026-08-28T23:12:00Z'), 6);
-  assert.equal(period('2026-08-28T23:14:00Z'), 7);
-  assert.deepEqual(crapsEntry.crapsBattleCloseLabels(Date.parse('2026-08-28T22:57:00Z'), CLOCK_1200),
-    ['23:02', '23:04', '23:06', '23:08', '23:10', '23:12', '23:14']);
+  assert.equal(period('2026-08-28T23:04:59Z'), 1);
+  assert.equal(period('2026-08-28T23:05:00Z'), 2);
+  assert.equal(period('2026-08-28T23:08:00Z'), 3);
+  assert.equal(period('2026-08-28T23:11:00Z'), 4);
+  assert.equal(period('2026-08-28T23:14:00Z'), 5);
+  assert.equal(period('2026-08-28T23:16:59Z'), 5, 'the jackpot battle stays current to the day boundary');
+  assert.equal(period('2026-08-28T23:17:00Z'), 0);
+  assert.deepEqual(crapsEntry.crapsBattleCloseLabels(Date.parse('2026-08-28T22:57:00Z'), CLOCK_PERIOD_CLOSES),
+    ['23:02', '23:05', '23:08', '23:11', '23:14', '23:17']);
   assert.equal(
     crapsEntry.crapsBattleCountdownLabel(
       Date.parse('2026-08-28T23:04:00Z'),
@@ -77,42 +72,6 @@ test('the browser clock mirrors all seven contract battle boundaries', () => {
     ),
     '1h',
   );
-});
-
-// Run 56's legacy clock (the shape the run-56 profile pinned): an aligned opener, six routine
-// periods and a clock-bound event window tiling a 1,200 s testnet day.
-const RUN56_LEGACY_CLOCK = Object.freeze({
-  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620,
-  openerCloseSeconds: 0, clockAlignSeconds: 300, routinePeriodSeconds: 120, eventLeadSeconds: 180,
-});
-
-test('the run-56 legacy clock steps through seven battles and ends on the event lead', () => {
-  const c = RUN56_LEGACY_CLOCK;
-  assert.equal(crapsEntry.crapsBattlesPerDay(c), 7);
-  // Battles 1..6 open every routine period after the aligned opener; the event window (7) is the
-  // last eventLeadSeconds of the day — so the seven battles exactly tile the day.
-  assert.equal(c.openerCloseSeconds + c.clockAlignSeconds + 6 * c.routinePeriodSeconds,
-    c.daySeconds - c.eventLeadSeconds, 'battle boundaries must tile the active day');
-  const dayStart = (c.anchorSeconds + 1000 * c.daySeconds) * 1000; // any whole day after the anchor
-  const at = (s) => crapsEntry.crapsPeriodAt(dayStart + s * 1000, c);
-  assert.equal(at(0), 0);
-  for (let p = 1; p <= 6; p++) {
-    const open = c.openerCloseSeconds + c.clockAlignSeconds + (p - 1) * c.routinePeriodSeconds;
-    assert.equal(at(open - 1), p - 1, `period ${p - 1} runs until ${open}s`);
-    assert.equal(at(open), p, `period ${p} opens at ${open}s`);
-  }
-  assert.equal(at(c.daySeconds - c.eventLeadSeconds), 7);
-  assert.equal(at(c.daySeconds - 1), 7);
-  assert.equal(at(c.daySeconds), 0, 'the next day starts over at the opener');
-  assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart, c).length, 7);
-});
-
-// Run 57+ (audit 4f546796) testnet shape: five explicit closes (CrapsBattle._currentBonusSlot's
-// `% 1200 seconds` if-chain), six periods total. Period 5 is the daily JACKPOT BATTLE and is not
-// clock-bound, so it is never reported as a "day complete" sentinel the way run 56's period 7 was.
-const CLOCK_PERIOD_CLOSES = Object.freeze({
-  daySeconds: 1_200, blockSeconds: 2, anchorSeconds: 82_620,
-  periodCloseSeconds: Object.freeze([300, 480, 660, 840, 1_020]),
 });
 
 test('deployment day offers tomorrow reservations without inventing live or overdue battles', () => {
@@ -140,7 +99,7 @@ test('deployment day offers tomorrow reservations without inventing live or over
     'an unknown day is still loading, not a deployment-day assertion');
 });
 
-test('the current-schema clock steps through six periods and never reports the legacy "day complete" sentinel', () => {
+test('the clock steps through six periods and never reports a "day complete" sentinel', () => {
   const c = CLOCK_PERIOD_CLOSES;
   assert.equal(crapsEntry.crapsBattlesPerDay(c), 6);
   const dayStart = (c.anchorSeconds + 1000 * c.daySeconds) * 1000; // any whole day after the anchor
@@ -151,9 +110,8 @@ test('the current-schema clock steps through six periods and never reports the l
     assert.equal(at(close), index + 1, `period ${index + 1} opens at ${close}s`);
   }
   // Period 5 (the jackpot battle) opens at period 4's close and stays "current" for the rest of
-  // the day — there is no clock-only signal for when its RNG actually locks, unlike run 56's
-  // clock-bound event window.
-  assert.equal(at(c.daySeconds - 1), 5, 'the jackpot period never rolls to a legacy sentinel');
+  // the day — there is no clock-only signal for when its RNG actually locks.
+  assert.equal(at(c.daySeconds - 1), 5, 'the jackpot period never rolls to a sentinel');
   assert.equal(at(c.daySeconds), 0, 'the next day starts over at period 0');
   assert.equal(crapsEntry.crapsBattleCloseLabels(dayStart, c).length, 6);
 });
@@ -162,18 +120,15 @@ test('future slates keep using available comps after the final battle until roll
   const clock = {
     daySeconds: 86_400,
     anchorSeconds: 0,
-    openerCloseSeconds: 1_200,
-    clockAlignSeconds: 180,
-    routinePeriodSeconds: 14_400,
-    eventLeadSeconds: 900,
+    periodCloseSeconds: [1_200, 21_780, 43_380, 64_980, 85_200],
   };
   const afterFinalBattle = crapsEntry.crapsEntryState({
     day: 42,
     nowMs: 85_500_000,
     clock,
   });
-  assert.equal(afterFinalBattle.currentPeriod, 7,
-    'the event battle has closed for the day');
+  assert.equal(afterFinalBattle.currentPeriod, 5,
+    'the jackpot battle is the last period of the day');
   assert.equal(afterFinalBattle.dayEntryKind, 'future-day');
   assert.equal(afterFinalBattle.dayEntryDay, 43,
     'the reservation still targets a strictly future contract day');
@@ -359,7 +314,7 @@ test('Peak is a bankroll multiplier and never borrows a different lane winner’
     'missing actual peak data never turns a bust into a misleading zero peak');
 });
 
-test('settled High Roller seats show their full buy-in in either view, including yesterday’s Event (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
+test('settled High Roller seats show their full buy-in in either view, including yesterday’s Main Event', () => {
   const day = 604;
   const wei = 10n ** 18n;
   const player = '0x0000000000000000000000000000000000000011';
@@ -367,7 +322,10 @@ test('settled High Roller seats show their full buy-in in either view, including
   for (const previous of [false, true]) {
     for (const sameSeat of [false, true]) {
       const entryDay = previous ? day - 1 : day;
-      const period = previous ? 6 : 3;
+      const period = previous ? 5 : 3;
+      // The Main Event (period 5) posts no bankroll, only its entry fee.
+      const bankroll = previous ? 0n : 1800n;
+      const stake = previous ? 8000n : 300n;
       const daySlot = BigInt(entryDay * 8);
       const betId = (daySlot << 64n) | 1n;
       const highBetId = sameSeat ? betId : betId + 1n;
@@ -378,8 +336,8 @@ test('settled High Roller seats show their full buy-in in either view, including
         }),
         event('CrapsBonusOpened', {
           battleKey, slot: daySlot + BigInt(period + 1), seed: 0n,
-          bankroll: 1200n * wei, battleStake: 300n * wei,
-          goal: 6000n * wei, boardStake: 120n * wei,
+          bankroll: bankroll * wei, battleStake: stake * wei,
+          goal: bankroll * 5n * wei, boardStake: bankroll * 2n / 5n * 7n / 10n * wei,
         }),
         // A reserved day ticket echoes 1x; its reservation marker may be outside the lookback.
         event('CrapsSlipPlaced', { player, bet: betId << 32n }),
@@ -392,14 +350,14 @@ test('settled High Roller seats show their full buy-in in either view, including
       const result = previous ? snapshot.yesterdayEventResult : snapshot.results[period];
       assert.equal(crapsEntry.crapsWinnerListBuyInWei(
         crapsEntry.crapsWinnerResultForLane(result, false), false,
-      ), ((sameSeat ? 150000n : 1500n) * wei).toString(),
+      ), (((sameSeat ? 100n : 1n) * (bankroll + stake)) * wei).toString(),
       'the normal view uses the winning seat, not just the winning wallet');
       assert.equal(crapsEntry.crapsWinnerListBuyInWei(
         crapsEntry.crapsWinnerResultForLane(result, true), true,
-      ), (150000n * wei).toString(), 'the High Roller view overrides an incomplete 1x reservation echo');
+      ), ((100n * (bankroll + stake)) * wei).toString(), 'the High Roller view overrides an incomplete 1x reservation echo');
     }
   }
-}));
+});
 
 test('result Added amount and color include an actual progressive payout', () => {
   assert.equal(crapsEntry.crapsAddedResultWei('800', null), 800n);
@@ -413,13 +371,12 @@ test('result Added amount and color include an actual progressive payout', () =>
 });
 
 test('the winner total counts day passes, so the boost can never exceed it', () => {
-  // REGRESSION (run #45, day 68 battle 5): the card read a +269K boost against a 158.9K
-  // total. Both figures were right; they were just different things. `_splitAward` spends
-  // half the ADMITTED boost on day passes and SUBTRACTS what it banks from the liquid pot,
-  // so the FLIP payment is the award MINUS the passes. Counting only the FLIP made a
-  // component of the award look bigger than the award. Real numbers from that battle:
-  // 2,690 boost units admitted = 269,000 FLIP, 5 normal passes at 22,800 = 114,000 banked,
-  // 158,900 FLIP credited. 158,900 + 114,000 = 272,900, which covers the boost.
+  // REGRESSION: a card once read a +269K boost against a 158.9K total. Both figures were right;
+  // they were just different things. `_splitAward` spends half the ADMITTED boost on day passes
+  // and SUBTRACTS what it banks from the liquid pot, so the FLIP payment is the award MINUS the
+  // passes. Counting only the FLIP made a component of the award look bigger than the award.
+  // That battle: 269,000 FLIP boost, 114,000 banked as passes, 158,900 FLIP credited;
+  // 158,900 + 114,000 = 272,900, which covers the boost.
   const wei = 10n ** 18n;
   const withPasses = {
     totalWonWei: 158_900n * wei,
@@ -576,7 +533,7 @@ test('result-bar replays open with the winning seat as the viewer', () => {
 test('a Normal future reservation remains visibly upgradeable when High Roller is selected', () => {
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0 }, true), true);
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0x03 }, true), true);
-  assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0x7F }, true), false);
+  assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0x3F }, true), false);
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade({ highMask: 0 }, false), false);
   assert.equal(crapsEntry.crapsDayTicketNeedsHighUpgrade(null, true), false);
 });
@@ -611,7 +568,7 @@ test('a banked High Roller comp turns a blind reservation into a live one-comp u
 
   // Already high, or the Low Stakes lane selected: nothing to upgrade.
   assert.equal(crapsEntry.crapsReservedDayUpgradeState({
-    ...base, ticket: { highMask: 0x7F, day: 44 }, highPasses: 5,
+    ...base, ticket: { highMask: 0x3F, day: 44 }, highPasses: 5,
   }).eligible, false);
   assert.equal(crapsEntry.crapsReservedDayUpgradeState({
     ...base, highRoller: false, highPasses: 5,
@@ -659,7 +616,7 @@ test('the day row rolls to tomorrow after Battle 1 while later windows remain se
   const state = crapsEntry.crapsEntryState({
     day: 42,
     nowMs: Date.parse('2026-08-28T23:02:00Z'),
-    clock: CLOCK_1200,
+    clock: CLOCK_PERIOD_CLOSES,
   });
   assert.equal(state.fullDayOpen, true);
   assert.equal(state.currentPeriod, 1);
@@ -672,10 +629,9 @@ test('the day row rolls to tomorrow after Battle 1 while later windows remain se
     ['upcoming', true],
     ['upcoming', true],
     ['upcoming', true],
-    ['upcoming', true],
   ]);
   assert.equal(state.battles[0].slot, '337');
-  assert.equal(state.battles[6].slot, '343');
+  assert.equal(state.battles[5].slot, '342');
 });
 
 test('the Craps day quest offers exact Today terms only before Battle 1 resolves', () => {
@@ -766,26 +722,26 @@ test('yesterday’s Main Event survives today’s draw and expires at the next d
   assert.equal(crapsEntry.crapsPreviousEventResult({ day: null, result: day28 }), null);
 });
 
-test('entry terms combine exact economics with the event-published added FLIP ceiling (run 56)', () => withSchema(RUN56_SCHEMA_HASH, () => {
+test('entry terms combine exact economics with the event-published added FLIP ceiling', () => {
   const word = '102858562227254754036121703853225298402533986033002165985066946425924666406226';
   const schedule = {
-    windows: Array.from({ length: 7 }, (_, period) => ({
+    windows: Array.from({ length: 6 }, (_, period) => ({
       addedFlipWei: BigInt(period + 1) * 10n ** 18n,
     })),
   };
-  const terms = crapsEntry.crapsEntryTerms({ wordValue: word, schedule, clock: RUN56_LEGACY_CLOCK });
+  const terms = crapsEntry.crapsEntryTerms({ wordValue: word, schedule, clock: CLOCK_PERIOD_CLOSES });
   assert.equal(terms.complete, true);
-  assert.equal(terms.buyInFlip, 17_300n);
-  assert.equal(terms.addedFlipWei, 28n * 10n ** 18n);
-  assert.equal(terms.highMult, 10);
-  // Run-45 rules: fixed 5x depth AND fixed 5x goal (audit 0880d134c — the two-way draw is gone).
+  assert.equal(terms.buyInFlip, 22_400n);
+  assert.equal(terms.addedFlipWei, 21n * 10n ** 18n);
+  assert.equal(terms.highMult, 100);
+  // A 2.5-round depth (round = bankroll x 2/5) and a fixed 5x goal; the Main Event is a flat fee.
   assert.deepEqual(terms.windows.map(({ buyInFlip, bankMult, goalMult }) => (
     [buyInFlip, bankMult, goalMult]
   )), [
-    [2_000n, 5, 5], [400n, 5, 5], [500n, 5, 5], [400n, 5, 5],
-    [400n, 5, 5], [1_500n, 5, 5], [12_100n, 5, 5],
+    [2_800n, 2.5, 5], [2_800n, 2.5, 5], [800n, 2.5, 5], [3_200n, 2.5, 5],
+    [2_800n, 2.5, 5], [10_000n, 2.5, 5],
   ]);
-}));
+});
 
 test('entry selections use the reserved day slot and numbered battle slots', () => {
   // The ACTIVE clock's six battles: period 5 (the jackpot battle) is remainder 6, slot 42 * 8 + 6.
@@ -875,18 +831,16 @@ test('lobby rows build exact normal, High Roller, and future-day contract calls'
   assert.equal(futurePass.totalFlip, '0');
   assert.equal(futurePass.stakedWei, '0');
 
-  // CrapsPriceLib.HIGH_RETAIL: 450,000 FLIP through run 56, 500,000 on the current contracts.
-  for (const [hash, price] of [[RUN56_SCHEMA_HASH, '450000'], [CURRENT_SCHEMA_HASH, '500000']]) {
-    const futureHigh = withSchema(hash, () => crapsEntry.crapsEntryWager({
-      day: 42, kind: 'future-day', highRoller: true, contractChips: board,
-    }));
-    assert.deepEqual(futureHigh.contractArgs, [43, 1, true, board]);
-    assert.equal(futureHigh.totalFlip, price);
-  }
+  // CrapsPriceLib.HIGH_RETAIL: 500,000 FLIP.
+  const futureHigh = crapsEntry.crapsEntryWager({
+    day: 42, kind: 'future-day', highRoller: true, contractChips: board,
+  });
+  assert.deepEqual(futureHigh.contractArgs, [43, 1, true, board]);
+  assert.equal(futureHigh.totalFlip, '500000');
 });
 
 test('a newcomer wallet is quoted the 5% burn premium on every paid door, never on a comp', () => {
-  // CrapsBattle._entryPrice (audit e579cd318): `price + price / 20`, burn only.
+  // CrapsBattle._entryPrice: `price + price / 20`, burn only.
   const board = 0x1241111;
   const window = crapsEntry.crapsEntryWager({
     day: 42, kind: 'window', period: 3, buyInFlip: 400n, contractChips: board, newcomer: true,
@@ -899,9 +853,9 @@ test('a newcomer wallet is quoted the 5% burn premium on every paid door, never 
     day: 42, kind: 'day', buyInFlip: 12_600n, highRoller: true, highMult: 10, contractChips: board, newcomer: true,
   });
   assert.equal(high.totalFlip, '132300');
-  const future = withSchema(CURRENT_SCHEMA_HASH, () => crapsEntry.crapsEntryWager({
+  const future = crapsEntry.crapsEntryWager({
     day: 42, kind: 'future-day', contractChips: board, newcomer: true,
-  }));
+  });
   assert.equal(future.totalFlip, '26250');
   const comp = crapsEntry.crapsEntryWager({
     day: 42, kind: 'future-day', contractChips: board, usePass: true, newcomer: true,
@@ -939,7 +893,7 @@ test('the widget occupies the centre play-grid track and loads with the idle pan
   assert.match(componentSource, /data-craps-entry="day"/);
   assert.match(componentSource, /data-craps-entry="future-day"/);
   assert.equal((componentSource.match(/data-craps-entry="window"/g) || []).length, 3,
-    'the click selector, quest-focus selector, and one generated template cover all seven windows');
+    'the click selector, quest-focus selector, and one generated template cover all six windows');
 });
 
 test('Craps entry failures are visible and duplicate-entry state repairs from chain', () => {
@@ -1177,7 +1131,7 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(componentSource, /resultsHead\.hidden = false;[\s\S]*?body\.appendChild\(resultsHead\)/,
     'the shared results heading moves directly above the first completed row');
   assert.match(componentSource, /\.craps-entry__battle\[data-craps-period\]/,
-    'the dedicated history row is not mistaken for one of the seven current battles');
+    'the dedicated history row is not mistaken for one of the six current battles');
   assert.match(componentSource,
     /new Map\([\s\S]*?Number\(row\.dataset\.crapsPeriod\)[\s\S]*?rowsByPeriod\.get\(period\)/,
     'urgency reordering cannot change a battle row\'s period identity on the next render');
@@ -1390,10 +1344,10 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
     'the second future-slate row uses the same countdown treatment');
   assert.match(componentSource, /crapsFutureDayFaceRanges/);
   // The next word has not been drawn, so one spanned cell carries the combined
-  // cost with its seven-battle scope on the same line.
+  // cost with its six-battle scope on the same line.
   assert.match(componentSource,
     /data-bind="craps-tomorrow-terms" colspan="3"><span class="craps-entry__tomorrow-layout"><strong data-bind="craps-tomorrow-range">[^<]+<\/strong><small data-bind="craps-tomorrow-window-note">7 BATTLES<\/small><\/span>/,
-    'the rollover row puts seven battles to the right of its combined cost');
+    'the rollover row puts six battles to the right of its combined cost');
   assert.match(componentSource, /craps-tomorrow-range', compactRange\(futureFaceRange\)/,
     'the rendered range is the combined low..high, never the split sub-ranges');
   assert.match(componentSource, /const compactRange = \(range\) => `\$\{formatCrapsCompactFlip\(range\.low\)\} – \$\{formatCrapsCompactFlip\(range\.high\)\}`/,
@@ -1401,11 +1355,11 @@ test('a poker-lobby listing separates battle stakes from settled added FLIP', ()
   assert.match(cssSource, /\.craps-entry__tomorrow-range \.craps-entry__tomorrow-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\) max-content[^}]*column-gap:\s*\.12rem;[^}]*padding:\s*0 \.18rem 0 \.06rem/s,
     'the future-day scope keeps its full width and a safe gutter before BUY IN');
   assert.match(cssSource, /\.craps-entry__tomorrow-range small\s*\{[^}]*min-width:\s*max-content/s,
-    '7 BATTLES cannot shrink underneath the adjacent buy button');
+    '6 BATTLES cannot shrink underneath the adjacent buy button');
   assert.match(cssSource, /\.craps-entry__tomorrow-range strong\s*\{[^}]*text-align:\s*center/s,
     'the future-day cost centers beneath WAGER + BATTLE');
   assert.match(cssSource, /\.craps-entry__tomorrow-range small\s*\{[^}]*text-align:\s*center/s,
-    'seven battles remains legible inside the combined term cell');
+    'six battles remains legible inside the combined term cell');
   assert.doesNotMatch(componentSource, /craps-tomorrow-wager|craps-tomorrow-battle/,
     'the split per-column tomorrow ranges are gone');
   assert.match(componentSource, /fullDayHead\.colSpan = 1/,

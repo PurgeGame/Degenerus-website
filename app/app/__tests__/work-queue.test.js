@@ -10,6 +10,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
+import { miningGasBounds } from '../mining-gas-profile.js';
+import { transactionFeeData } from '../transaction-fees.js';
+import { _setSharedReadProviderForTests, _resetSharedReadProviderForTests } from '../read-provider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
@@ -72,26 +75,33 @@ describe('source gates', () => {
 
   test('pins the deployed selector and keeper-tested gas ceiling', () => {
     assert.equal(mineFlipTesting.NO_WORK_SELECTOR, '0x5c78c46f');
-    assert.equal(mineFlipTesting.MINE_FLIP_MIN_GAS_LIMIT, 10_000_000n);
-    assert.equal(mineFlipTesting.MINE_FLIP_MAX_GAS_LIMIT, 16_000_000n);
+    assert.equal(mineFlipTesting.MINE_FLIP_MIN_GAS_LIMIT, miningGasBounds().min);
+    assert.equal(mineFlipTesting.MINE_FLIP_MAX_GAS_LIMIT, miningGasBounds().max);
     assert.match(mineFlipSource, /gasEstimateWithHeadroom\(estimate\)/);
     assert.match(mineFlipSource, /balance\s*>=\s*requiredWei/);
     assert.match(mineFlipSource, /contract\.mineFlip\(\.\.\.mineFlipArgs\(\),\s*\{ gasLimit \}\)/,
       'every sent Mine FLIP transaction carries the shared gas floor');
   });
 
-  test('the affordability quote and send path share a 10m minimum gas budget', async () => {
+  test('the affordability quote and send path share the minimum gas budget', async () => {
     const mine = Object.assign(async () => {}, { estimateGas: async () => 125_000n });
-    const budget = await mineFlipTesting.mineFlipGasBudget(
-      { mineFlip: mine, connect() { return this; } },
-      { getAddress: async () => '0xab12000000000000000000000000000000000000' },
-      {
-        getBalance: async () => 10n ** 18n,
-        getFeeData: async () => ({ maxFeePerGas: 1_000_000_000n }),
-      },
-    );
-    assert.equal(budget.gasLimit, 10_000_000n);
-    assert.equal(budget.requiredWei, 10_000_000n * 1_000_000_000n);
+    // Sepolia profiles price fees from the shared read provider's latest block, not the wallet's
+    // getFeeData, so stub both and take the expected fee from the same policy the send path uses.
+    _setSharedReadProviderForTests({ getBlock: async () => ({ baseFeePerGas: 1_000_000_000n }) });
+    const provider = {
+      getBalance: async () => 10n ** 18n,
+      getFeeData: async () => ({ maxFeePerGas: 1_000_000_000n }),
+    };
+    try {
+      const budget = await mineFlipTesting.mineFlipGasBudget(
+        { mineFlip: mine, connect() { return this; } },
+        { getAddress: async () => '0xab12000000000000000000000000000000000000' },
+        provider,
+      );
+      const fee = BigInt((await transactionFeeData(provider)).maxFeePerGas);
+      assert.equal(budget.gasLimit, miningGasBounds().min);
+      assert.equal(budget.requiredWei, miningGasBounds().min * fee);
+    } finally { _resetSharedReadProviderForTests(); }
   });
 
   test('uses only the deployed mineFlip entrypoint and closure-form sendTx', () => {

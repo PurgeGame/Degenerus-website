@@ -4,6 +4,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeRevertReason, register } from '../reason-map.js';
+import { CHAIN } from '../chain-config.js';
 
 describe('seeded codes (D-11 LOCKED + Pitfall 4 reconciliation)', () => {
   // Each row: [errorName, expectedUserMessage, expectedRecoveryAction]
@@ -66,11 +67,11 @@ describe('UNKNOWN catch-all', () => {
 describe('application write guards', () => {
   test('preserves the configured-chain instruction instead of returning UNKNOWN', () => {
     const decoded = decodeRevertReason(
-      new Error('Wrong network — switch to Base Sepolia.'),
+      new Error(`Wrong network — switch to ${CHAIN.name}.`),
     );
     assert.equal(decoded.code, 'WrongNetwork');
-    assert.equal(decoded.userMessage, 'Wrong network — switch to Base Sepolia.');
-    assert.match(decoded.recoveryAction, /approve.*Base Sepolia/i);
+    assert.equal(decoded.userMessage, `Wrong network — switch to ${CHAIN.name}.`);
+    assert.match(decoded.recoveryAction, new RegExp('approve.*' + CHAIN.name, 'i'));
   });
 });
 

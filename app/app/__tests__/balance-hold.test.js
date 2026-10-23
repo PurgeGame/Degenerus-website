@@ -1,5 +1,6 @@
 import { beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 import {
   __resetHeldBalancesForTest,
@@ -24,7 +25,7 @@ describe('balance-hold', () => {
 
   test('keeps the last released value until the RNG presentation releases', () => {
     const input = (value, released) => heldBalanceValue({
-      namespace: 'coinflip-backing:84532',
+      namespace: `coinflip-backing:${ACTIVE_CHAIN_ID}`,
       scope: '0xAbC',
       value,
       released,
@@ -38,7 +39,7 @@ describe('balance-hold', () => {
 
   test('a cold held ledger is unknown rather than showing the live result', () => {
     assert.equal(heldBalanceValue({
-      namespace: 'claimable-eth:84532',
+      namespace: `claimable-eth:${ACTIVE_CHAIN_ID}`,
       scope: '0xabc',
       value: 500n,
       released: false,
@@ -47,14 +48,14 @@ describe('balance-hold', () => {
 
   test('claimable spending can decrease while a possible payout increase stays held', () => {
     const input = (value) => heldBalanceValue({
-      namespace: 'claimable-eth:84532',
+      namespace: `claimable-eth:${ACTIVE_CHAIN_ID}`,
       scope: '0xabc',
       value,
       released: false,
       allowDecrease: true,
     });
     heldBalanceValue({
-      namespace: 'claimable-eth:84532',
+      namespace: `claimable-eth:${ACTIVE_CHAIN_ID}`,
       scope: '0xabc',
       value: 100n,
       released: true,

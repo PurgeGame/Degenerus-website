@@ -15,6 +15,7 @@ import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 
 import * as storeMod from '../../app/store.js';
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 
@@ -343,7 +344,7 @@ describe('app-balances-strip — fuzz gates + tiles', () => {
   test('both gates open → unfuzzed; jackpot:revealed re-renders same-tab', async () => {
     setFetchResponses({ dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } });
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mountStrip();
     await flushMicrotasks();
@@ -351,7 +352,7 @@ describe('app-balances-strip — fuzz gates + tiles', () => {
       'still fuzzed — jackpot gate closed');
 
     // The scratch completes: last-day-jackpot writes the key + dispatches.
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
     globalThis.document.dispatchEvent({ type: 'jackpot:revealed' });
     await flushMicrotasks();
 
@@ -364,7 +365,7 @@ describe('app-balances-strip — fuzz gates + tiles', () => {
   test('flip gate: strip stays fuzzed until flip_day key + flip:revealed (coin lives in app-daily-flip)', async () => {
     setFetchResponses({ dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } });
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');  // jackpot already scratched
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');  // jackpot already scratched
 
     const el = mountStrip();
     await flushMicrotasks();
@@ -375,7 +376,7 @@ describe('app-balances-strip — fuzz gates + tiles', () => {
       'still fuzzed — flip gate closed');
 
     // app-daily-flip reveals: writes the key + dispatches flip:revealed.
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     globalThis.document.dispatchEvent({ type: 'flip:revealed' });
     await flushMicrotasks();
 
@@ -387,7 +388,7 @@ describe('app-balances-strip — fuzz gates + tiles', () => {
   test('no coinflip row for the day → flip gate waived', async () => {
     setFetchResponses({ dashboard: dashboardPayload(), flipDay: null });  // 404
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mountStrip();
     await flushMicrotasks();
@@ -505,8 +506,8 @@ describe('new-day rollover (codex-found race)', () => {
   test('strip re-fuzzes IMMEDIATELY when a new day arrives (before the refresh lands)', async () => {
     setFetchResponses({ dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } });
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
 
     const el = mountStrip();
     await flushMicrotasks();
@@ -524,8 +525,8 @@ describe('new-day rollover (codex-found race)', () => {
   test('direct chain day re-fuzzes before the indexed jackpot day catches up', async () => {
     setFetchResponses({ dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } });
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
-    globalThis.localStorage.setItem('spun_day_84532_67', '1');
-    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    globalThis.localStorage.setItem(`spun_day_${ACTIVE_CHAIN_ID}_67`, '1');
+    globalThis.localStorage.setItem(`flip_day_${ACTIVE_CHAIN_ID}_67`, '1');
     const el = mountStrip();
     await flushMicrotasks();
     assert.equal(el.querySelector('.abs-strip').classList.contains('abs-strip--fuzzed'), false);

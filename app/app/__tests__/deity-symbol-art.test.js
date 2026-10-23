@@ -5,6 +5,7 @@ import { CONTRACTS } from '../chain-config.js';
 import { dgnBadgePath } from '../dgn-traits.js';
 import { DEITY_CUSTOMIZATION_DEPLOYMENTS, __setDeityCustomizationFactoryForTest } from '../deity-customization.js';
 import { recolorDeitySymbolRing, readDeitySymbolAppearance, invalidateDeitySymbolAppearance } from '../deity-symbol-art.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 const originalFetch = globalThis.fetch;
 let color, mask, reads, assetReads, fail;
@@ -13,7 +14,7 @@ beforeEach(() => {
   invalidateDeitySymbolAppearance();
   color = '#fa12ab'; mask = 1; reads = 0; assetReads = 0; fail = false;
   __setDeityCustomizationFactoryForTest(address => address.toLowerCase() === CONTRACTS.DEITY_PASS.toLowerCase()
-    ? { renderer: async () => DEITY_CUSTOMIZATION_DEPLOYMENTS[84532].renderer }
+    ? { renderer: async () => DEITY_CUSTOMIZATION_DEPLOYMENTS[ACTIVE_CHAIN_ID].renderer }
     : { pass: async () => CONTRACTS.DEITY_PASS, effectiveTokenStyle: async () => {
       reads++;
       if (fail) throw Error('RPC unavailable');

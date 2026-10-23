@@ -117,10 +117,9 @@ describe('Degenesis cabinet hub', () => {
     assert.match(component, /class="qst-action-dialog dgx-dialog"/, 'the popup reuses the quest dialog');
   });
 
-  test('the Degenesis write is gated on the generated ABI and mirrors the contract', () => {
+  test('the Degenesis write mirrors the contract', () => {
     assert.match(lootbox, /'function buyDegenesisBox\(address buyer, uint256 amount\) payable'/);
     assert.match(lootbox, /'function degenesisCreditOf\(address player\) view returns \(uint256 credit\)'/);
-    assert.match(lootbox, /export function degenesisSupported\(\)[\s\S]*?name === 'buyDegenesisBox'/);
     assert.match(lootbox, /DEGENESIS_MIN_WEI = ethers\.parseEther\('0\.01'\) \/ ETH_DIVISOR/);
     assert.match(lootbox, /DEGENESIS_UNIT_WEI = ethers\.parseEther\('0\.0001'\) \/ ETH_DIVISOR/);
     assert.match(component, /<li><strong>50%<\/strong>[\s\S]*?<li><strong>40%<\/strong><span>sDGNRS[\s\S]*?<li><strong>10%<\/strong><span>WWXRP/,

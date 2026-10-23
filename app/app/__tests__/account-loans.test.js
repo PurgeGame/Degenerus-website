@@ -6,14 +6,14 @@ import * as loans from '../account-loans.js';
 import * as store from '../store.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { CHAIN } from '../chain-config.js';
-import { useSchema, loadSchema, CURRENT_SCHEMA_HASH, BEFORE_LOANS_SCHEMA_HASH } from '../../chain/schema.js';
+import { loadSchema } from '../../chain/schema.js';
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xcd34000000000000000000000000000000000000';
 let state, calls;
 const tx = { hash: '0xloan', wait: async () => ({ status: 1, logs: [] }) };
 beforeEach(() => {
-  useSchema(CURRENT_SCHEMA_HASH); store.__resetForTest();
+  store.__resetForTest();
   store.update('connected.address', PLAYER); store.update('ui.mode', 'self');
   state = { payee: PLAYER, level: 10, principal: 0n, owed: 0n, claimable: 1n, quote: 100n, tickets: 20n, eligible: true };
   calls = [];
@@ -22,7 +22,7 @@ beforeEach(() => {
   const method = name => Object.assign(async (...args) => { calls.push([name, ...args]); return tx; },
     { staticCall: async (...args) => { calls.push([`${name}:simulate`, ...args]); } });
   loans.__setLoanFactoryForTest(() => ({
-    game: { walletIdOf: async () => 42, resolveAccount: async () => ({ payee: state.payee }),
+    game: { walletIdOf_g3120: async () => 42, resolveAccount_g502: async () => ({ payee: state.payee }),
       level: async () => state.level, jackpotPhase: async () => false,
       borrow: method('borrow'), repay: method('repay'), sweepAccounts: method('sweepAccounts') },
     lens: { activeTicketLevelOf: async () => state.level + 1, loanOf: async () => ({ principal: state.principal, owed: state.owed, lenderId: 2, startLevel: 10, dueLevel: 15, family: 1 }),
@@ -31,7 +31,7 @@ beforeEach(() => {
         face: 1000n, maxPrincipal: 200n, principal: state.quote, ticketWei: state.tickets }) },
   }));
 });
-afterEach(() => { loans.__setLoanFactoryForTest(undefined); clearProvider(); useSchema(CURRENT_SCHEMA_HASH); });
+afterEach(() => { loans.__setLoanFactoryForTest(undefined); clearProvider(); });
 const borrow = () => loans.borrowAgainstAccount({ player: PLAYER, accountId: 42, dueLevel: 15, amount: 100n, minEthOut: 80n });
 test('loan doors and quote fields match the vendored ABI', async () => {
   const game = new Interface((await loadSchema('GAME')).abi), lens = new Interface((await loadSchema('GAME_LENS')).abi);
@@ -65,11 +65,6 @@ test('repayment refuses increased interest and an expired term', async () => {
   state.level = 15;
   await assert.rejects(() => loans.repayAccountLoan({ player: PLAYER, accountId: 42, maxOwed: 120n }), /no longer/);
   assert.deepEqual(calls, []);
-});
-test('historical deployments cannot call loan methods', async () => {
-  useSchema(BEFORE_LOANS_SCHEMA_HASH);
-  assert.equal((await loans.readAccountLoan({ player: PLAYER })).supported, false);
-  await assert.rejects(borrow, /not available/); assert.deepEqual(calls, []);
 });
 test('sweeps preflight ownership on chain and enforce the 32-account limit', async () => {
   await assert.rejects(() => loans.sweepSubaccounts({ player: PLAYER, accountIds: Array.from({ length: 33 }, (_, i) => i + 42) }), /32/);

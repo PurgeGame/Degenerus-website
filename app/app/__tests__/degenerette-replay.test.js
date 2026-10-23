@@ -1,5 +1,3 @@
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(CURRENT_SCHEMA_HASH);
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

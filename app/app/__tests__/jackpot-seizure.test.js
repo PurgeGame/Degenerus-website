@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { walletIdOf, walletAddressOf, walletPayeeOf, walletPayees } from '../../chain/wallets.js';
+import { walletIdOf_g3120, walletAddressOf, walletPayeeOf, walletPayees } from '../../chain/wallets.js';
 import { decorateWalletRows } from '../../chain/wallet-events.js';
 import { readChainRoute } from '../../chain/router.js';
 import { rpcFixture, PLAYER, OTHER_PLAYER } from './helpers/chain-rpc.js';
@@ -14,7 +14,7 @@ test('a seized account and its children pay the lender even when the original ke
   const snapshot = () => ({ client, call: async () => 37n,
     field: async (_contract, _field, id) => { reads++; return rows.get(Number(id)) ?? 0n; } });
   const before = snapshot();
-  assert.equal(await walletIdOf(before, PLAYER), 37);
+  assert.equal(await walletIdOf_g3120(before, PLAYER), 37);
   assert.equal(await walletAddressOf(before, 37), PLAYER);
   assert.equal(await walletPayeeOf(before, 37), PLAYER);
   rows.set(37, packed(PLAYER, 1)); // _seizeLoan preserves the seller key and changes the owner lane.
@@ -68,7 +68,7 @@ test('daily totals, both rolls and player results exclude a seized account, incl
   await f.wallet(73, OTHER_PLAYER);
   // A new account on the same external wallet may still win; only the seized ID moved.
   await f.wallet(74, PLAYER);
-  await f.field('GAME', 'dailyFoilDraw', 0xc3824100n | (BigInt(level) << 64n), day);
+  await f.field('GAME', 'dailyFoilDraw', 0xc3824100n | (BigInt(level) << 64n) | (BigInt(day) << 217n), day & 1);
   await f.event('GAME', 'DailyRngApplied', { day, rawWord: 777, finalWord: 777 }, { block });
   await f.event('GAME', 'DailyWinningTraits', { day, mainTraitsPacked: 0xc3824100 }, { block });
   await f.event('GAME', 'JackpotEthWin', { walletId: 37, level, traitId: 0, amount: 100 }, { block });

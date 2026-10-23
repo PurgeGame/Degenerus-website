@@ -1,11 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 globalThis.HTMLElement = globalThis.HTMLElement || class HTMLElement {};
 globalThis.customElements = globalThis.customElements || {
@@ -43,29 +38,26 @@ const reveal = await import('../../components/reveal-overlay.js');
 const bingo = await import('../bingo-watch.js');
 const store = await import('../store.js');
 const { CHAIN, CONTRACTS } = await import('../chain-config.js');
+const { prepareWalletReceipt } = await import('../wallet-receipt.js');
+const { rpcFixture } = await import('./helpers/chain-rpc.js');
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
-const ABI = [
-  'event FirstQuadrantBingo(address indexed player, uint256 level, uint8 symbol)',
-  'event FirstSymbolBingo(address indexed player, uint256 level, uint8 symbol)',
-  'event BingoClaimed(address indexed player, uint256 level, uint8 symbol, uint256 flipReward, uint256 dgnrsPaid)',
-];
-const iface = new ethers.Interface(ABI);
+const PLAYER_ID = 37;
 
 const TEST_BLOCK = Number(CHAIN.deployBlock) + 100;
 const STORAGE_KEY = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME).toLowerCase()}:${PLAYER}`;
 
-function log(name, args, { blockNumber = TEST_BLOCK, index = 1, tx = '0xabc' } = {}) {
-  const event = iface.getEvent(name);
-  const encoded = iface.encodeEventLog(event, args);
-  return {
-    address: '0x449ea82e870feb14a0f990ca7b1410a89c8851ac',
-    blockNumber,
-    index,
-    transactionHash: tx,
-    topics: encoded.topics,
-    data: encoded.data,
-  };
+// A real wallet-ID BingoClaimed receipt (the player is its uint32 ID), prepared exactly as the
+// write path does before a panel parses it: IDs resolved to addresses.
+async function claimReceipt({ level = 27, symbol = 14, flipReward = 5_000n, dgnrsPaid = 123n, tx = '0xabc', index = 9 } = {}) {
+  const f = await rpcFixture();
+  await f.wallet(PLAYER_ID, PLAYER);
+  const logs = [await f.event('GAME', 'BingoClaimed', {
+    player: PLAYER_ID, level, symbol, flipReward, dgnrsPaid,
+  }, { block: TEST_BLOCK, index, tx })];
+  const receipt = { blockNumber: TEST_BLOCK, logs };
+  await prepareWalletReceipt(receipt, f.client);
+  return receipt;
 }
 
 describe('bingo event watcher', () => {
@@ -83,20 +75,18 @@ describe('bingo event watcher', () => {
 
   afterEach(() => bingo.__resetBingoWatchForTest());
 
-  test('pairs a first-tier event with the universal paid receipt', () => {
-    const logs = [
-      log('FirstQuadrantBingo', [PLAYER, 27, 14], { index: 8, tx: '0xdef' }),
-      log('BingoClaimed', [PLAYER, 27, 14, 5_000n * 10n ** 18n, 123n], {
-        index: 9, tx: '0xdef',
-      }),
-    ];
+  test('decodes the wallet-ID BingoClaimed receipt to the player address', async () => {
+    // flipReward: whole FLIP on chain
+    const { logs } = await claimReceipt({ tx: '0xdef' });
     const rows = bingo.decodeBingoLogs(logs, PLAYER);
-    assert.equal(rows.length, 1, 'the companion first event is not a duplicate reward');
-    assert.equal(rows[0].tier, 'first-quadrant');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].player, PLAYER);
     assert.equal(rows[0].level, 27);
     assert.equal(rows[0].symbol, 14);
     assert.equal(rows[0].flipReward, String(5_000n * 10n ** 18n));
     assert.equal(rows[0].dgnrsPaid, '123');
+    assert.deepEqual(bingo.decodeBingoLogs(logs, '0xcd34000000000000000000000000000000000000'), [],
+      'another wallet\'s claim is not this player\'s receipt');
   });
 
   test('chart counts retain inventory orientation: color*8 + symbol', () => {
@@ -198,7 +188,7 @@ describe('bingo event watcher', () => {
         index: async () => ({ claimed: [{
           id: '0xbeef:5', transactionHash: '0xbeef', logIndex: 5,
           blockNumber: TEST_BLOCK, player: PLAYER, level: 31, symbol: 0,
-          tier: 'first-symbol', flipReward: '2000', dgnrsPaid: '77',
+          flipReward: '2000', dgnrsPaid: '77',
         }] }),
         tickets: async (args) => {
           signal = args.signal;
@@ -250,7 +240,6 @@ describe('bingo event watcher', () => {
           player: PLAYER,
           level: 31,
           symbol: 0,
-          tier: 'first-symbol',
           flipReward: String(2_000n * 10n ** 18n),
           dgnrsPaid: '77',
         }],
@@ -268,7 +257,7 @@ describe('bingo event watcher', () => {
 
     let rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].kindLabel, 'FIRST-SYMBOL BINGO');
+    assert.equal(rows[0].kindLabel, 'BINGO');
     assert.match(rows[0].label, /Level 31 WWXRP Bingo/);
     assert.match(rows[0].detail, /all 8 colors collected/);
 
@@ -366,7 +355,6 @@ describe('bingo event watcher', () => {
       player: PLAYER,
       level: 34,
       symbol: 18,
-      tier: 'regular',
       flipReward: '10',
       dgnrsPaid: '1',
     }];
@@ -380,13 +368,7 @@ describe('bingo event watcher', () => {
 
   test('DB proof becomes a write action, then its receipt becomes the Bingo reveal', async () => {
     const writes = [];
-    const claimReceiptLogs = [
-      log('FirstQuadrantBingo', [PLAYER, 35, 18], { index: 8, tx: '0xcafe' }),
-      log('BingoClaimed', [PLAYER, 35, 18, 5_000n * 10n ** 18n, 99n], {
-        index: 9,
-        tx: '0xcafe',
-      }),
-    ];
+    const sentReceipt = await claimReceipt({ level: 35, symbol: 18, dgnrsPaid: 99n, tx: '0xcafe' });
     bingo.__setBingoReadersForTest({
       index: async () => ({
         player: PLAYER,
@@ -401,7 +383,7 @@ describe('bingo event watcher', () => {
       }),
       claim: async (args) => {
         writes.push(args);
-        return { receipt: { logs: claimReceiptLogs } };
+        return { receipt: sentReceipt };
       },
       tickets: async () => ({
         cards: Array.from({ length: 8 }, (_unused, color) => ({
@@ -433,7 +415,7 @@ describe('bingo event watcher', () => {
       'confirmed proof is durably retired while the API catches up');
     const receipt = rows.find((row) => row.shortLabel === 'Reveal Bingo');
     assert.ok(receipt, 'confirmed receipt immediately becomes a reveal');
-    assert.equal(receipt.kindLabel, 'QUADRANT-FIRST BINGO');
+    assert.equal(receipt.kindLabel, 'BINGO');
 
     await receipt.run();
     const queued = reveal.__takeQueuedForTest();
@@ -443,12 +425,7 @@ describe('bingo event watcher', () => {
   });
 
   test('closing the overlay restores a Bingo reveal row instead of consuming it unseen', async () => {
-    const claimReceiptLogs = [
-      log('FirstQuadrantBingo', [PLAYER, 35, 18], { index: 8, tx: '0xcafe' }),
-      log('BingoClaimed', [PLAYER, 35, 18, 5_000n * 10n ** 18n, 99n], {
-        index: 9, tx: '0xcafe',
-      }),
-    ];
+    const sentReceipt = await claimReceipt({ level: 35, symbol: 18, dgnrsPaid: 99n, tx: '0xcafe' });
     bingo.__setBingoReadersForTest({
       index: async () => ({
         player: PLAYER,
@@ -458,7 +435,7 @@ describe('bingo event watcher', () => {
         }],
         claimed: [],
       }),
-      claim: async () => ({ receipt: { logs: claimReceiptLogs } }),
+      claim: async () => ({ receipt: sentReceipt }),
       tickets: async () => ({
         cards: Array.from({ length: 8 }, (_unused, color) => ({
           entries: [{ traitId: (2 << 6) | (color << 3) | 2 }],
@@ -566,8 +543,7 @@ describe('bingo event watcher', () => {
         player: PLAYER,
         level: 36,
         symbol: 9,
-        tier: 'regular',
-        flipReward: '1',
+          flipReward: '1',
         dgnrsPaid: '0',
       }],
     };
@@ -623,6 +599,66 @@ describe('bingo event watcher', () => {
     const claims = pending.getPendingActions().filter((row) => row.shortLabel === 'Claim Bingo');
     assert.deepEqual(claims.map((row) => row.id).sort(), ['bingo-claim:35', 'bingo-claim:36'],
       'the current level and the minted levels above it stay claimable; level 34 expired');
+  });
+
+  for (const [reason, nextState] of [
+    ['buffer retirement', { level: 35, ticketBufferLevels: [36, 35] }],
+    ['game over', { level: 35, ticketBufferLevels: [34, 35], gameOver: true }],
+    ['game-over phase', { level: 35, ticketBufferLevels: [34, 35], phase: 'GAMEOVER' }],
+  ]) test(`${reason} removes a Bingo immediately and blocks a saved overlay action`, async () => {
+    store.update('app.gameState', { level: 35, ticketBufferLevels: [34, 35] });
+    let writes = 0;
+    let reads = 0;
+    bingo.__setBingoReadersForTest({
+      index: async () => {
+        reads++;
+        return { claimable: [{ player: PLAYER, level: 34, quadrant: 0, symbol: 2,
+          slots: [1, 2, 3, 4, 5, 6, 7, 8] }], claimed: [] };
+      },
+      claim: async () => { writes++; return { receipt: { logs: [] } }; },
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    const stale = pending.getPendingActions().find(row => row.write);
+    assert.ok(stale, 'a completed level is still eligible while its own buffer is retained');
+    const priorReads = reads;
+    store.update('app.gameState', nextState);
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some(row => row.write), false);
+    assert.equal(reads, priorReads, 'eligibility changes do not wait for another proof read');
+    assert.equal(await stale.run(), false);
+    assert.equal(writes, 0, 'the saved action cannot reach the claim writer');
+    await bingo.refreshBingoWatch();
+    assert.equal(pending.getPendingActions().some(row => row.write), false,
+      'a stale candidate response cannot resurrect the expired claim');
+  });
+
+  test('an old action cannot claim again after a successful claim or an indexed removal', async () => {
+    let writes = 0;
+    let claimable = [{ player: PLAYER, level: 35, quadrant: 0, symbol: 2,
+      slots: [1, 2, 3, 4, 5, 6, 7, 8] }];
+    bingo.__setBingoReadersForTest({
+      index: async () => ({ claimable, claimed: [] }),
+      claim: async () => { writes++; return { receipt: { logs: [] } }; },
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    const removed = pending.getPendingActions().find(row => row.write);
+    claimable = [];
+    await bingo.refreshBingoWatch();
+    assert.equal(await removed.run(), false);
+    assert.equal(writes, 0);
+
+    claimable = [{ player: PLAYER, level: 35, quadrant: 0, symbol: 2,
+      slots: [1, 2, 3, 4, 5, 6, 7, 8] }];
+    await bingo.refreshBingoWatch();
+    const claimed = pending.getPendingActions().find(row => row.write);
+    await claimed.run();
+    assert.equal(writes, 1);
+    assert.equal(await claimed.run(), false);
+    assert.equal(writes, 1, 'a consumed action never submits a second claim');
   });
 
   test('a fresh load retires old claimed Bingo history and cached reveals', async () => {

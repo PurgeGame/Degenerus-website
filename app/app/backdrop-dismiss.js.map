@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["backdrop-dismiss.js"],
+  "sourcesContent": ["// /app/app/backdrop-dismiss.js — close an overlay on a click of its backdrop.\n//\n// A click is only a backdrop click when the press began on the backdrop too.\n// On phones, focusing a field moves the dialog card (mobile-pager.css lifts it\n// above the keyboard) between the press and the click, and Chrome hit-tests the\n// click again: a tap on the amount field landed on the backdrop and closed the\n// dialog. A drag ending outside a text selection is the desktop version.\n// A click with no pointerdown before it (keyboard, element.click()) is judged\n// on its target alone.\n\nexport function dismissOnBackdrop(backdrop, close) {\n  if (!backdrop?.addEventListener) return;\n  let pressTarget = null;\n  backdrop.addEventListener('pointerdown', (event) => { pressTarget = event?.target ?? null; });\n  backdrop.addEventListener('click', (event) => {\n    const pressed = pressTarget;\n    pressTarget = null;\n    if (event?.target !== backdrop) return;\n    if (pressed && pressed !== backdrop) return;\n    close(event);\n  });\n}\n"],
+  "mappings": "+EAUO,gBAAS,kBAAkBA,EAAUC,EAAO,CACjD,GAAI,CAACD,GAAU,iBAAkB,OACjC,IAAIE,EAAc,KAClBF,EAAS,iBAAiB,cAAgBG,GAAU,CAAED,EAAcC,GAAO,QAAU,IAAM,CAAC,EAC5FH,EAAS,iBAAiB,QAAUG,GAAU,CAC5C,MAAMC,EAAUF,EAChBA,EAAc,KACVC,GAAO,SAAWH,IAClBI,GAAWA,IAAYJ,GAC3BC,EAAME,CAAK,EACb,CAAC,CACH,CAXgBE,EAAA",
+  "names": ["backdrop", "close", "pressTarget", "event", "pressed", "__name"]
+}

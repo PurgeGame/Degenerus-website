@@ -31,7 +31,7 @@ test('unconfigured next deployment cannot read old addresses with the new schema
 
 test('slot reads coalesce, use the exact block hash, and decode a mapping value', async () => {
   const schema = await loadSchema('GAME');
-  const generationSlot = BigInt(schema.fields.ticketGenerationStartBlock.slot);
+  const generationSlot = BigInt(schema.fields.playerClaimWord.slot);
   const calls = [];
   const read = client(async (method, args) => {
     calls.push({ method, args });
@@ -39,13 +39,13 @@ test('slot reads coalesce, use the exact block hash, and decode a mapping value'
     if (method === 'eth_getBlockByNumber') return header;
     assert.equal(method, 'eth_call');
     assert.deepEqual(args[1], { blockHash: HASH, requireCanonical: true });
-    assert.equal(args[0].data, '0x1e2eaeaf' + wordHex(mappingSlot(generationSlot, 7n)).slice(2));
+    assert.equal(args[0].data, '0x000f7af8' + wordHex(mappingSlot(generationSlot, 7n, 'uint32')).slice(2));
     return wordHex(42);
   });
   const state = await read.snapshot();
   assert.deepEqual(await Promise.all([
-    state.field('GAME', 'ticketGenerationStartBlock', 7),
-    state.field('GAME', 'ticketGenerationStartBlock', 7),
+    state.field('GAME', 'playerClaimWord', 7),
+    state.field('GAME', 'playerClaimWord', 7),
   ]), [42n, 42n]);
   assert.equal(calls.filter(call => call.method === 'eth_call').length, 1);
 });

@@ -1,4 +1,3 @@
-import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
 import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -22,10 +21,10 @@ const PLAYER = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
 function lensContract({ startDay = 1, coveredThroughDay = 4, effectiveStreak = 5 } = {}) {
   return {
     subInfoFull: async () => ({
+      member: true,
       active: true,
-      afkingStartDay: startDay,
-      afkCoveredThroughDay: coveredThroughDay,
-      subStreakLatch: 2,
+      runStartDay: startDay,
+      endpoint: coveredThroughDay,
       effectiveStreak,
     }),
   };
@@ -51,7 +50,7 @@ function questContract({
     ],
     getPlayerLevelQuestView: async () => [1, 0n, 1n, false, true],
     playerQuestStates: async () => [manualStreak, lastCompletedDay, progress, completed],
-    effectiveBaseStreakAndAfking: async () => [effectiveStreak, afking],
+    effectiveBaseStreakAndAfking_g2654: async () => [effectiveStreak, afking],
     shieldsOf: async () => [0, 0],
   };
 }
@@ -95,7 +94,6 @@ test('live quest board reads exact deity score and lens-computed afKing streak',
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => [157n, 37n],
     hasDeityPass: async () => true,
-    subInfo: async () => [true, 10, 1, 4],
   }));
   __setQuestLensContractFactoryForTest(() => lensContract());
 
@@ -108,13 +106,28 @@ test('live quest board reads exact deity score and lens-computed afKing streak',
   assert.equal(board.hasDeityPass, true);
 });
 
+test('without an activity breakdown the afKing streak comes from the SubFull', async () => {
+  setProvider({ getBlockNumber: async () => 45_006_900 });
+  __setQuestContractFactoryForTest(() => questContract());
+  __setQuestGameContractFactoryForTest(() => ({
+    playerActivityScore: async () => [157n, 37n],
+    hasDeityPass: async () => false,
+  }));
+  __setQuestLensContractFactoryForTest(() => ({
+    subInfoFull: async () => ({ member: true, active: true, removalPending: false, paused: false,
+      useTickets: true, dailyQuantity: 2, runStartDay: 1, endpoint: 4, owedFlip: 300n, effectiveStreak: 6 }),
+  }));
+  const board = await readLiveQuestBoard(PLAYER);
+  assert.equal(board.effectiveQuestStreak, 6);
+  assert.equal(board.effectiveQuestStreakExact, true);
+});
+
 test('supplemental GAME read failures do not blank the quest board', async () => {
   setProvider({ getBlockNumber: async () => 45_006_900 });
   __setQuestContractFactoryForTest(() => questContract({ manualStreak: 7, afking: false }));
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => { throw new Error('selector unavailable'); },
     hasDeityPass: async () => { throw new Error('selector unavailable'); },
-    subInfo: async () => { throw new Error('selector unavailable'); },
   }));
   __setQuestLensContractFactoryForTest(() => ({
     subInfoFull: async () => { throw new Error('selector unavailable'); },
@@ -136,7 +149,6 @@ test('an unavailable lens leaves the afKing streak inexact rather than wrong', a
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => 157n,
     hasDeityPass: async () => false,
-    subInfo: async () => [true, 10, 1, 4],
   }));
   __setQuestLensContractFactoryForTest(() => ({
     subInfoFull: async () => { throw new Error('no lens'); },
@@ -148,26 +160,6 @@ test('an unavailable lens leaves the afKing streak inexact rather than wrong', a
   assert.equal(board.effectiveQuestStreak, 3, 'manual streak is the honest fallback');
 });
 
-test('a lens reading a different deployment is rejected', async t => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); t.after(() => useSchema(previous));
-  // Sub record mismatch at the same block = the configured lens is not this
-  // deployment's. Trusting its streak would show a number from another run.
-  setProvider({ getBlockNumber: async () => 45_006_900 });
-  __setQuestContractFactoryForTest(() => questContract({ manualStreak: 3 }));
-  __setQuestGameContractFactoryForTest(() => ({
-    playerActivityScore: async () => 157n,
-    hasDeityPass: async () => false,
-    subInfo: async () => [true, 10, 1, 4],
-  }));
-  __setQuestLensContractFactoryForTest(() => lensContract({
-    startDay: 1, coveredThroughDay: 9, effectiveStreak: 40,
-  }));
-
-  const board = await readLiveQuestBoard(PLAYER);
-  assert.equal(board.effectiveQuestStreakExact, false);
-  assert.equal(board.effectiveQuestStreak, 3);
-});
-
 test('the afKing decay gate accepts an exact zero instead of reviving a stale streak', async () => {
   // _afkingStreak returns 0 once a playable full day passed with no funded
   // delivery. That is a real signal, not a read failure.
@@ -176,7 +168,6 @@ test('the afKing decay gate accepts an exact zero instead of reviving a stale st
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => 157n,
     hasDeityPass: async () => false,
-    subInfo: async () => [true, 10, 1, 4],
   }));
   __setQuestLensContractFactoryForTest(() => lensContract({ effectiveStreak: 0 }));
 
@@ -195,7 +186,6 @@ test('a lapsed unsynchronized manual streak displays the decay-aware zero', asyn
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => 0n,
     hasDeityPass: async () => false,
-    subInfo: async () => [false, 0, 0, 0],
   }));
   __setQuestLensContractFactoryForTest(() => ({}));
 
@@ -218,7 +208,6 @@ test("today's completions remain visible after a reset while scoring keeps its s
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => 0n,
     hasDeityPass: async () => false,
-    subInfo: async () => [false, 0, 0, 0],
   }));
   __setQuestLensContractFactoryForTest(() => ({}));
 
@@ -238,7 +227,6 @@ test('the live activity lens provides a reconciled score breakdown instead of a 
   __setQuestGameContractFactoryForTest(() => ({
     playerActivityScore: async () => 17n,
     hasDeityPass: async () => false,
-    subInfo: async () => [false, 0, 0, 0],
   }));
   __setQuestLensContractFactoryForTest(() => exactBreakdownLens());
 

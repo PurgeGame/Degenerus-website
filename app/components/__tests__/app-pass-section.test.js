@@ -13,8 +13,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); // this suite's contract doubles use the historical address ABI
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-decimator-panel.test.js — Phase 62 Plan 62-01).
@@ -281,6 +280,10 @@ async function settle(loops = 30) {
 
 import * as storeMod from '../../app/store.js';
 import * as passesMod from '../../app/passes.js';
+import * as chainClientMod from '../../chain/client.js';
+import * as walletIdMod from '../../app/wallet-id.js';
+import { CONTRACTS } from '../../app/chain-config.js';
+import { MaxUint256 } from 'ethers';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
 import { invalidateJSONCache } from '../../app/api.js';
@@ -410,12 +413,26 @@ function makeFakeDeityReadContract(owners = new Map()) {
 
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+
+// DegenerusGameLens.SubFull as the AFKing panel reads it (no subscription by default).
+function afkingLens(fields = {}, onRead = null) {
+  return {
+    subInfoFull: async () => {
+      const read = onRead ? await onRead() : {};
+      return {
+        member: false, active: false, removalPending: false, paused: false, useTickets: false,
+        dailyQuantity: 0, runStartDay: 0, endpoint: 0, owedFlip: 0n, ...fields, ...read,
+      };
+    },
+  };
+}
+const activeLens = (fields = {}) => afkingLens({ member: true, active: true, dailyQuantity: 2, ...fields });
 
 function instantiate() {
   const Ctor = customElements.get('app-pass-section');
@@ -442,11 +459,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract());
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 0n },
-      game: {
-        subInfo: async () => [false, 0n, 0n, 0n],
-        afkingSnapshot: async () => [0n, false, [], []],
-      },
+      game: { afkingSnapshot: async () => [0n, false, [], []] },
+      lens: afkingLens(),
     }));
+    // A change to a live run burns no seat: the seat lookup finds the member and returns 0.
+    chainClientMod.setChainClientForTests({
+      address: () => CONTRACTS.GAME,
+      snapshot: async () => ({ call: async () => ({ member: true }), verify: async () => {} }),
+    });
     await import('../app-pass-section.js');
   });
 
@@ -457,6 +477,9 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     passesMod.__resetContractFactoryForTest();
     passesMod.__resetDeityReadContractFactoryForTest();
     passesMod.__resetAfkingReadContractFactoryForTest();
+    passesMod.__setStethContractFactoryForTest(null);
+    chainClientMod.setChainClientForTests(null);
+    walletIdMod._resetWalletIdsForTests();
     lootboxMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });
@@ -478,10 +501,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     }));
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 0n },
-      game: {
-        subInfo: async () => { subscriptionReads++; return [false, 0n, 0n, 0n]; },
-        afkingSnapshot: async () => [0n, false, [], []],
-      },
+      game: { afkingSnapshot: async () => [0n, false, [], []] },
+      lens: afkingLens({}, () => { subscriptionReads++; }),
     }));
     lootboxMod.__setContractFactoryForTest(() => ({
       purchaseInfo: async () => [12, false, false, false, 1_000_000_000_000n],
@@ -618,7 +639,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       active: true,
       hasToken: true,
       dailyQuantity: 2,
-      settingsKnown: true,
       useTickets: false,
       fundingWei: 400n,
     }, 40n), {
@@ -941,7 +961,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     assert.ok(recordedArgs, 'purchaseWhaleBundle invoked through contract');
     // args = [buyer, quantity, overrides]
-    assert.equal(recordedArgs[0], CONNECTED, 'buyer = connected.address');
+    assert.equal(recordedArgs[0], 0, 'buyer = the connected wallet (account 0)');
     assert.equal(recordedArgs[1], 3n, 'quantity = BigInt(3)');
 
     el.disconnectedCallback();
@@ -1062,7 +1082,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       day: null,
       amountWei,
       hasLootboxLeg: true,
-      hasPresaleLeg: false,
     }]);
     el.disconnectedCallback();
   });
@@ -1117,7 +1136,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(60);
 
     assert.ok(recordedArgs, 'purchaseDeityPass invoked');
-    assert.equal(recordedArgs[0], CONNECTED, 'buyer = connected.address');
+    assert.equal(recordedArgs[0], 0, 'buyer = the connected wallet (account 0)');
     assert.equal(recordedArgs[1], 7, 'symbolId = 7');
 
     el.disconnectedCallback();
@@ -1142,13 +1161,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       passesMod.__setContractFactoryForTest(() => contract);
       passesMod.__setAfkingReadContractFactoryForTest(() => ({
         token: { balanceOf: async () => (scenario.active || (purchased && scenario.seat)) ? 1n : 0n },
-        game: {
-          subInfo: async () => {
-            if (purchased && scenario.unavailable) throw Error('RPC unavailable');
-            return [Boolean(scenario.active || (purchased && scenario.activeAfter)), 2n, 1n, 10n];
-          },
-          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
-        },
+        game: { afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]] },
+        lens: afkingLens({ dailyQuantity: 2 }, () => {
+          if (purchased && scenario.unavailable) throw Error('RPC unavailable');
+          const active = Boolean(scenario.active || (purchased && scenario.activeAfter));
+          return { member: active, active };
+        }),
       }));
       const el = instantiate();
       await settle(60);
@@ -1178,10 +1196,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       let defer = false, finish;
       passesMod.__setAfkingReadContractFactoryForTest(() => ({
         token: { balanceOf: async () => 1n },
-        game: {
-          subInfo: () => defer ? new Promise(resolve => { finish = resolve; }) : Promise.resolve([false, 0n, 0n, 0n]),
-          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
-        },
+        game: { afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]] },
+        lens: afkingLens({}, () => defer ? new Promise(resolve => { finish = resolve; }) : {}),
       }));
       const el = instantiate();
       await settle(60);
@@ -1195,7 +1211,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       const resolvePurchaseRead = finish;
       if (action === 'dismiss') el.querySelector('[data-bind="pass-deity-success-close"]').dispatchEvent({ type: 'click' });
       else storeMod.update('connected.address', '0xcd34000000000000000000000000000000000000');
-      resolvePurchaseRead([false, 0n, 0n, 0n]);
+      resolvePurchaseRead({});
       await settle(60);
       assert.equal(el.getAttribute('data-pass-followup'), null);
       assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true);
@@ -1346,11 +1362,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.ok(el.querySelector('.pass-afking__quick'), 'state, top up, and claim use a compact action rail');
     assert.ok(el.querySelector('[data-bind="pass-afking-dialog"]'), 'setup and editing use a focused dialog');
     assert.ok(el.querySelector('.pass-afking__order-card'), 'subscription order has its own card');
-    assert.ok(el.querySelector('.pass-afking__funding-card'), 'initial subscription funding has its own card');
     assert.ok(el.querySelector('.pass-afking__actions'), 'subscription actions have their own row');
     assert.match(el.innerHTML, /DAILY ORDER/);
-    assert.match(el.innerHTML, /Runs automatically once per day\./,
-      'the subscription states its real daily cadence');
     assert.doesNotMatch(el.innerHTML, /NEXT JACKPOT|\/ JACKPOT|each jackpot begins/i,
       'player-facing subscription copy does not imply one order per jackpot');
 
@@ -1408,10 +1421,10 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 1n },
       game: {
-        subInfo: async () => [false, 0n, 0n, 0n],
         afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
         mintPackedFor: async () => 1n << 154n,
       },
+      lens: afkingLens(),
     }));
 
     const el = instantiate();
@@ -1450,16 +1463,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       passesMod.__setContractFactoryForTest(() => contract);
       passesMod.__setAfkingReadContractFactoryForTest(() => ({
         token: { balanceOf: async () => 1n },
-        game: {
-          subInfo: async () => [true, 2n, 8n, 12n],
-          afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
-        },
-        lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
+        game: { afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]] },
+        lens: activeLens(),
       }));
       const el = instantiate();
       await settle(60);
       el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
-      el.querySelector('[name="pass-afking-qty"]').value = '3';
+      el.querySelector('[data-bind="pass-afking-qty"]').value = '3';
       const save = el.querySelector('[data-bind="pass-afking-save"]');
       const dialog = el.querySelector('[data-bind="pass-afking-dialog"]');
       save.dispatchEvent({ type: 'click' });
@@ -1485,24 +1495,127 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     });
   }
 
+  const afkingReads = ({ sub = activeLens(), seats = 0n, snapshot = [40_000_000_000n, false, [40_000_000_000n], [0n]],
+    allowance = 0n, payee = null } = {}) => {
+    // A smurf's stETH is its owner's (`_payee`), resolved through the account ID.
+    const resolve = payee ? {
+      walletIdOf_g3120: async () => 41n,
+      resolveAccount_g502: async () => ({ key: CONNECTED, payee, authorized: true }),
+    } : {};
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => seats },
+      game: { afkingSnapshot: async () => snapshot, ...resolve },
+      lens: sub,
+      steth: { balanceOf: async () => 10n ** 24n, allowance: async () => allowance },
+    }));
+  };
+
+  test('AFKing form: a 1-8 dropdown, a Luckbox/Tickets toggle and the payee stETH row', async () => {
+    // The seat was burned when the run started, so the subscriber holds no seat token.
+    afkingReads({ sub: activeLens({ owedFlip: 120n }) });
+    const el = instantiate();
+    await settle(60);
+    assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false,
+      'a live run stays manageable after its seat was consumed');
+    assert.equal(el.querySelector('[data-bind="pass-afking-status"]').textContent, 'ACTIVE');
+    assert.equal(el.querySelector('[data-bind="pass-afking-policy"]'), null);
+    assert.equal(storeMod.get('app.afkingSubscription').fundedDays, 0n,
+      'claimable counts toward the runway: 0.04 ETH against 0.08 ETH a day');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
+    const options = [...(/<select name="pass-afking-qty"[^>]*>([\s\S]*?)<\/select>/.exec(el.innerHTML)?.[1] ?? '')
+      .matchAll(/<option value="(\d+)">/g)].map((match) => Number(match[1]));
+    assert.deepEqual(options, [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.equal(el.querySelector('[data-bind="pass-afking-qty"]').value, '2', 'the current quantity is preselected');
+    assert.equal(el.querySelector('[data-bind="pass-afking-mode-toggle"]').textContent, 'LUCKBOX');
+    for (const gone of ['[name="pass-afking-claimable-first"]', '[name="pass-afking-fund"]', '[data-bind="pass-afking-day-cost"]',
+      '[data-bind="pass-afking-initial-funding"]', '[data-bind="pass-afking-mode"]']) {
+      assert.equal(el.querySelector(gone), null, `${gone} is not part of the form`);
+    }
+    const note = el.querySelector('[data-bind="pass-afking-order-note"]');
+    assert.equal(note.hidden, false);
+    assert.equal(note.textContent, '120 BONUS FLIP OWED');
+    assert.doesNotMatch(el.innerHTML, /tomorrow|nothing is bought/i);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-balance"]').textContent, 'WALLET STETH · 1,000,000');
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-state"]').textContent, 'NOT APPROVED');
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-approve"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-revoke"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-cancel"]').hidden, false);
+    el.disconnectedCallback();
+  });
+
+  test('AFKing Approve stETH sends approve(GAME, max) from the payee, then offers Revoke', async () => {
+    afkingReads();
+    const approvals = [];
+    const approve = Object.assign(async (...args) => { approvals.push(args); return makeFakeTx(makeFakeReceipt()); },
+      { staticCall: async (...args) => { approvals.push(['simulate', ...args]); return true; } });
+    passesMod.__setStethContractFactoryForTest(() => ({ approve, connect() { return this; } }));
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="pass-afking-steth-approve"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.deepEqual(approvals, [['simulate', CONTRACTS.GAME, MaxUint256], [CONTRACTS.GAME, MaxUint256]]);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-approve"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-revoke"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-state"]').textContent, 'APPROVED');
+    el.disconnectedCallback();
+  });
+
+  test('AFKing stETH: an approved payee sees Revoke; another wallet sees the state read-only', async () => {
+    afkingReads({ allowance: MaxUint256 });
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-approve"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth-revoke"]').hidden, false);
+    el.disconnectedCallback();
+
+    afkingReads({ payee: '0xdef0000000000000000000000000000000000000' });
+    const other = instantiate();
+    await settle(60);
+    other.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(other.querySelector('[data-bind="pass-afking-steth-approve"]').hidden, true);
+    assert.equal(other.querySelector('[data-bind="pass-afking-steth-revoke"]').hidden, true);
+    assert.equal(other.querySelector('[data-bind="pass-afking-steth-state"]').textContent, 'NOT APPROVED · PAYING WALLET ONLY');
+    other.disconnectedCallback();
+  });
+
+  test('a new AFKing subscription starts on Luckbox; save sends (id, useTickets, qty, seatId) from the controls', async () => {
+    const contract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => contract);
+    afkingReads({ sub: afkingLens(), seats: 1n });
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    const toggle = el.querySelector('[data-bind="pass-afking-mode-toggle"]');
+    assert.equal(toggle.textContent, 'LUCKBOX', 'a new subscription defaults to a Luckbox');
+    assert.equal(toggle.getAttribute('aria-checked'), 'false');
+    assert.equal(el.querySelector('[data-bind="pass-afking-qty"]').value, '1');
+    assert.equal(el.querySelector('[data-bind="pass-afking-order-note"]').hidden, true, 'no status line before a run exists');
+    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').textContent, 'START');
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(toggle.textContent, 'TICKETS');
+    el.querySelector('[data-bind="pass-afking-qty"]').value = '5';
+    el.querySelector('[data-bind="pass-afking-save"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.deepEqual(contract._calls.subscribe, [[0, true, 5, 0n, { value: 0n }]]);
+    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '5 TICKETS / DAY');
+    el.disconnectedCallback();
+  });
+
   test('an existing AFKING holder shows its real state, edits in the popup, and tops up inline', async () => {
+    walletIdMod._setWalletIdForTests(CONNECTED, 41);
     const passContract = makeFakePassContract();
     passesMod.__setContractFactoryForTest(() => passContract);
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
-      },
-      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
-    }));
+    afkingReads({ seats: 1n, snapshot: [40_000_000_000n, false, [0n], [80_000_000_000n]] });
 
     const el = instantiate();
     await settle(60);
     assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / DAY');
-    assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'CLAIMABLE FIRST');
     assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'EDIT');
     assert.equal(el.querySelector('[name="pass-afking-topup"]').value, '0.8',
       'the inline top-up starts at ten full days for the configured quantity');
@@ -1512,65 +1625,38 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       active: true,
       fundedDays: 1n,
       dailyQuantity: 2,
-      settingsKnown: true,
       useTickets: false,
     }, 'the warning receives the same quantity-aware funded-day snapshot as the closed strip');
     el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
-    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
-    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '2');
-    assert.equal(el.querySelector('[data-bind="pass-afking-initial-funding"]').hidden, true,
-      'editing does not duplicate the inline top-up control');
-    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0');
     assert.match(el.querySelector('[data-bind="pass-afking-funding"]').textContent, /0\.08 ETH/);
 
-    el.querySelector('[data-bind="pass-afking-mode"]').value = 'tickets';
-    el.querySelector('[name="pass-afking-qty"]').value = '3';
-    el.querySelector('[name="pass-afking-claimable-first"]').checked = false;
+    el.querySelector('[data-bind="pass-afking-mode-toggle"]').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="pass-afking-qty"]').value = '3';
     el.querySelector('[data-bind="pass-afking-save"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
-    assert.equal(passContract._calls.subscribe.length, 1);
-    assert.deepEqual(passContract._calls.subscribe[0], [
-      CONNECTED,
-      false,
-      true,
-      3,
-      '0x0000000000000000000000000000000000000000',
-      { value: 0n },
-    ]);
+    assert.deepEqual(passContract._calls.subscribe, [[0, true, 3, 0n, { value: 0n }]]);
     assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true,
       'saving returns to the compact state card');
     assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '3 TICKETS / DAY');
-    assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'PREPAID FIRST');
 
     const fundInput = el.querySelector('[name="pass-afking-topup"]');
     const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
     assert.equal(fundOnly.hidden, false, 'an active subscription exposes independent funding');
     fundInput.value = '0.5';
     fundInput.dispatchEvent({ type: 'input' });
-    assert.equal(fundOnly.textContent, 'TOP UP',
-      'the amount stays in the input instead of being repeated in the button');
+    assert.equal(fundOnly.textContent, 'TOP UP');
     fundOnly.dispatchEvent({ type: 'click' });
     await settle(60);
-    assert.deepEqual(passContract._calls.depositAfkingFunding, [[
-      '0xAB12000000000000000000000000000000000000',
-      { value: 500_000_000_000n },
-    ]]);
+    assert.deepEqual(passContract._calls.depositAfkingFunding, [[41, { value: 500_000_000_000n }]]);
     assert.equal(passContract._calls.subscribe.length, 1,
       'fund-only top-up does not rewrite the selected subscription settings');
     el.disconnectedCallback();
   });
 
   test('AFKing explains an RNG settings lock while leaving independent funding available', async () => {
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [40_000_000_000n, true, [0n], [80_000_000_000n]],
-      },
-      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
-    }));
+    afkingReads({ seats: 1n, snapshot: [40_000_000_000n, true, [0n], [80_000_000_000n]] });
 
     const el = instantiate();
     await settle(60);
@@ -1607,13 +1693,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 1n },
       game: {
-        subInfo: async () => [true, 5n, 8n, 12n],
         afkingSnapshot: async () => {
           if (snapshotFails) throw new Error('temporary RPC failure');
           return [80_000_000_000n, false, [0n], [31_377_964_349_999n]];
         },
       },
-      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
+      lens: activeLens({ dailyQuantity: 5 }),
     }));
 
     const el = instantiate();
@@ -1634,7 +1719,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       active: true,
       fundedDays: null,
       dailyQuantity: 5,
-      settingsKnown: true,
       useTickets: false,
     }, 'the alert store is explicitly unknown until a fresh core snapshot succeeds');
 
@@ -1645,13 +1729,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const funding = 80_000_000_000n;
     const passContract = makeFakePassContract({ afkingFundingWei: funding });
     passesMod.__setContractFactoryForTest(() => passContract);
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [funding]],
-      },
-    }));
+    afkingReads({ seats: 1n, snapshot: [40_000_000_000n, false, [0n], [funding]] });
 
     const el = instantiate();
     await settle(60);
@@ -1663,7 +1741,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, false);
     assert.equal(withdraw.textContent, 'WITHDRAW ALL');
-    assert.match(withdraw.title, /subscription remains active/i);
 
     withdraw.dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1671,21 +1748,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.deepEqual(passContract._calls.afkingFundingOf, [[
       '0xAB12000000000000000000000000000000000000',
     ]]);
-    assert.deepEqual(passContract._calls.withdrawAfkingFunding, [[funding]]);
+    assert.deepEqual(passContract._calls.withdrawAfkingFunding, [[0, funding]]);
     el.disconnectedCallback();
   });
 
-  test('AFKing shows and claims the exact accrued bonus FLIP from its pass area', async () => {
+  test('AFKing shows CLAIM N FLIP from the Lens owedFlip and claims claimAfkingFlip([id])', async () => {
     const passContract = makeFakePassContract();
     passesMod.__setContractFactoryForTest(() => passContract);
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
-      },
-      lens: { subInfoFull: async () => ({ pendingFlip: 275n }) },
-    }));
+    afkingReads({ sub: activeLens({ owedFlip: 275n }) });
 
     const el = instantiate();
     await settle(60);
@@ -1693,26 +1763,24 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const claim = el.querySelector('[data-bind="pass-afking-flip-claim"]');
     assert.equal(claim.hidden, false);
     assert.equal(claim.textContent, 'CLAIM 275 FLIP');
-    assert.equal(claim.getAttribute('aria-label'), 'Claim 275 bonus FLIP');
     claim.dispatchEvent({ type: 'click' });
     await settle(60);
 
-    assert.deepEqual(passContract._calls.claimAfkingFlip, [[
-      ['0xAB12000000000000000000000000000000000000'],
-    ]]);
+    // uint32[] of wallet IDs; 0 names the caller (GameAfkingModule.claimAfkingFlip).
+    assert.deepEqual(passContract._calls.claimAfkingFlip, [[[0]]]);
     assert.equal(claim.hidden, true, 'confirmed claim retires the action immediately');
     el.disconnectedCallback();
+
+    afkingReads({ sub: activeLens({ owedFlip: 0n }) });
+    const none = instantiate();
+    await settle(60);
+    assert.equal(none.querySelector('[data-bind="pass-afking-flip-claim"]').hidden, true, 'nothing owed, no claim');
+    none.disconnectedCallback();
   });
 
   test('AFKing exposes funded ETH for self-withdrawal even without a seat', async () => {
     const funding = 25_000_000_000n;
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 0n },
-      game: {
-        subInfo: async () => [false, 0n, 0n, 0n],
-        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [funding]],
-      },
-    }));
+    afkingReads({ sub: afkingLens(), snapshot: [40_000_000_000n, false, [0n], [funding]] });
 
     const el = instantiate();
     await settle(60);
@@ -1726,6 +1794,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false,
       'a funded wallet can reach withdrawal without falsely showing order settings');
     assert.equal(el.querySelector('.pass-afking__order-card').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-steth"]').hidden, true);
     el.disconnectedCallback();
   });
 
@@ -1733,13 +1802,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const viewed = '0xcd34000000000000000000000000000000000000';
     storeMod.update('viewing.address', viewed);
     storeMod.update('ui.mode', 'operator');
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
-      },
-    }));
+    afkingReads({ seats: 1n, snapshot: [40_000_000_000n, false, [0n], [80_000_000_000n]] });
 
     const el = instantiate();
     await settle(60);

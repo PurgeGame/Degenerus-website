@@ -21,7 +21,6 @@ const BASE = Object.freeze({
   active: true,
   fundedDays: 6n,
   dailyQuantity: 2,
-  settingsKnown: true,
   useTickets: false,
 });
 

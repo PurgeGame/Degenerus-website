@@ -1,5 +1,3 @@
-import { hasWalletIds, hasDegeneretteWilds } from '../../../chain/schema.js';
-import * as legacy from '../../legacy/dgn-reels.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -20,10 +18,10 @@ export async function fixtureBetFeedItem(spinCount, { owner = '0xfe5b92e655d8b17
   const unit = degeneretteStakeUnit(0);
   const amountPerSpin = BigInt(v.eth_stake_wei) / BigInt(ETH_DIVISOR);
   assert.equal((amountPerSpin / unit) * unit, amountPerSpin, 'the fixture stake is a whole unit');
-  const shift = hasWalletIds() ? 128n : 0n;
-  const packed = (hasWalletIds() ? 37n : BigInt(owner)) | (BigInt(v.symbol) << (160n-shift)) | (BigInt(spinCount) << (165n-shift))
-    | (BigInt(v.activity) << (172n-shift)) | ((amountPerSpin / unit) << (188n-shift));
-  let firstHouse = Number(BigInt(v.house));
+  // The bet word leads with the owner's wallet ID (37 in the fixtures).
+  const packed = 37n | (BigInt(v.symbol) << 32n) | (BigInt(spinCount) << 37n)
+    | (BigInt(v.activity) << 44n) | ((amountPerSpin / unit) << 60n);
+  const firstHouse = Number(BigInt(v.house));
   let spins = '0x';
   for (let i = 0; i < spinCount; i += 1) {
     let player = Number(BigInt(v.player));
@@ -33,13 +31,6 @@ export async function fixtureBetFeedItem(spinCount, { owner = '0xfe5b92e655d8b17
       player = dgnPlayerTicket(seed, dgnSpinSymbol(seed, v.symbol));
       const { score, wilds } = dgnScoreWilds(player, dgnHouseTraits({ rngWord: word, index: v.index, spinIdx: i }));
       tail = score | (wilds << 4);
-    }
-    if (!hasDegeneretteWilds()) {
-      const house = legacy.dgnHouseTraits({rngWord:word, index:v.index, spinIdx:i, currency:0});
-      player = house;
-      const score = legacy.dgnScore(player,house,v.symbol >> 3);
-      tail = score | (legacy.dgnGoldMatches(player,house) << 4);
-      if (!i) firstHouse = house;
     }
     spins += player.toString(16).padStart(8, '0') + tail.toString(16).padStart(2, '0');
   }

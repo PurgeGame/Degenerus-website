@@ -3306,10 +3306,6 @@ describe('foil match pending action', () => {
   });
 
   test('a revealed T8 line appears in pending with its actual ticket and match reason', async (t) => {
-    // The 40,000 baseline is run 56's face table; pin it so the active deployment cannot move it.
-    const { useSchema: pinSchema, RUN56_SCHEMA_HASH, CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
-    const deployedSchema = pinSchema(RUN56_SCHEMA_HASH);
-    t.after(() => pinSchema(deployedSchema));
     const player = '0xab12000000000000000000000000000000000000';
     const traits = [1, 70, 130, 200];
     const packed = traits.reduce((word, trait, quadrant) => (
@@ -3404,27 +3400,9 @@ describe('foil match pending action', () => {
       assert.deepEqual(action.matchFaces, [2, 2, 2, 2]);
       assert.equal(action.drawKind, 0);
       assert.equal(action.score, 8);
-      assert.equal(action.rewardFaces, 40_000,
+      // FoilPackModule FOIL_FACES_T8 = 80,000.
+      assert.equal(action.rewardFaces, 80_000,
         'Pending can name the deterministic bonus before the claim is sent');
-      // Run 57+ doubled the face table (FoilPackModule FOIL_FACES_T8 = 80,000).
-      const priorSchema = pinSchema(CURRENT_SCHEMA_HASH);
-      try {
-        document.dispatchEvent({
-          type: 'replay:scratch-complete',
-          detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
-        });
-        for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-        assert.equal(pendingActionsMod.getPendingActions()[0]?.rewardFaces, 80_000,
-          'the pending bonus reads the face table of the deployment the site reads');
-      } finally {
-        pinSchema(priorSchema);
-        document.dispatchEvent({
-          type: 'replay:scratch-complete',
-          detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
-        });
-        for (let i = 0; i < 4; i += 1) await flushMicrotasks();
-      }
-      assert.equal(pendingActionsMod.getPendingActions()[0]?.rewardFaces, 40_000);
       assert.equal(action.autoOpen, true,
         'AUTO may settle the permissionless claim for its fixed player');
       assert.equal(typeof action.run, 'function');
@@ -3489,9 +3467,9 @@ describe('foil match pending action', () => {
 
       socketMarker.dispatchEvent({ type: 'click' });
       for (let i = 0; i < 20; i += 1) await flushMicrotasks();
-      assert.deepEqual(simulatedArgs, [player, 44n, 0n, 0],
-        'ticket activation pre-flights the exact player/day/ticket/draw tuple');
-      assert.deepEqual(sentArgs, [player, 44n, 0n, 0],
+      assert.deepEqual(simulatedArgs, [0, 44n, 0n],
+        'ticket activation pre-flights the exact account/day/ticket tuple (account 0 is the connected wallet)');
+      assert.deepEqual(sentArgs, [0, 44n, 0n],
         'the same click sends that exact claim tuple');
       assert.equal(slots[0].classList.contains('is-claimable'), false,
         'receipt confirmation retires the ticket action immediately');

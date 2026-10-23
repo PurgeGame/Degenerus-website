@@ -58,9 +58,6 @@ describe('Decimator resolution presentation', () => {
       outcome: { roundStatus: 'open', entryId: '7', stack: '1900000000000000000000' } });
     assert.equal(locked.status, 'ENTRY LOCKED');
     assert.match(locked.message, /plays the shared dice when Level 25 starts/);
-    const tails = decimatorResolutionView({ currentLevel: 25, level: 25,
-      outcome: { roundStatus: 'settling', entryId: '7', coin: 'tails' } });
-    assert.deepEqual([tails.status, tails.tone], ['TAILS', 'lost']);
     const heads = decimatorResolutionView({ currentLevel: 25, level: 25,
       outcome: { roundStatus: 'settling', entryId: '7', coin: 'heads' } });
     assert.deepEqual([heads.status, heads.tone], ['HEADS', 'waiting']);
@@ -96,11 +93,6 @@ describe('Decimator resolution presentation', () => {
     assert.equal(lost.status, 'NOT PLACED');
     assert.match(lost.message, /outside the top 42/);
     assert.equal(lost.actionable, false);
-    const tails = decimatorResolutionView({
-      currentLevel: 26, level: 25, claimState: 'lost',
-      outcome: { roundStatus: 'closed', entryId: '7', coin: 'tails', winner: false, winners: 42 },
-    });
-    assert.match(tails.message, /landed tails/);
   });
 });
 
@@ -263,12 +255,8 @@ test('a due BAF opens its dedicated staged fullscreen final', () => {
   assert.match(resolutions, /await openBafResolution\(\{[\s\S]*?level,[\s\S]*?player: this\.\#address/);
   assert.match(resolutions, /playerOutcome:\s*this\.\#baf/,
     'the final uses the freshly reconciled terminal player result');
-  assert.match(resolutions,
-    /fetchJSON\(`\/player\/\$\{addr\}\/baf\?level=\$\{encodedLevel\}`,[\s\S]{0,80}?force:\s*true/,
-    'opening the final refreshes player outcome at the click boundary');
-  assert.match(resolutions,
-    /fetchJSON\(`\/player\/\$\{addr\}\/jackpot-history`,[\s\S]{0,80}?force:\s*true/,
-    'opening the final refreshes late-indexed BAF awards at the click boundary');
+  assert.match(resolutions, /onReady:[\s\S]*?_markSeen\('baf', address, level\)/,
+    'only a successfully loaded draw is marked as seen');
   assert.match(resolutions, /history:\s*\{ wins: this\.\#history \}/,
     'the final receives the reconciled award history');
   assert.match(resolutions, /const revealConsolation = this\.\#bafConsolation/,

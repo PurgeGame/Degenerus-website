@@ -1,19 +1,17 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Interface, ZeroAddress } from '../../vendor/ethers-app.mjs';
 import { afkingSeatForStart } from '../../chain/afking-seats.js';
 import { setChainClientForTests } from '../../chain/client.js';
-import { useSchema, CURRENT_SCHEMA_HASH, loadSchema } from '../../chain/schema.js';
+import { loadSchema } from '../../chain/schema.js';
 import { rpcFixture, PLAYER, OTHER_PLAYER } from './helpers/chain-rpc.js';
 import { CHAIN } from '../chain-config.js';
 import { setProvider, clearProvider } from '../contracts.js';
 import { update, __resetForTest } from '../store.js';
 import * as passes from '../passes.js';
 
-let previous;
-beforeEach(() => { previous = useSchema(CURRENT_SCHEMA_HASH); });
 afterEach(() => {
-  useSchema(previous); setChainClientForTests(null); clearProvider();
+  setChainClientForTests(null); clearProvider();
   passes.__resetContractFactoryForTest(); __resetForTest();
 });
 
@@ -22,7 +20,9 @@ async function fixture(active = false) {
   f.answer('GAME_LENS', 'subInfoFull', ([game, player]) => {
     assert.equal(game.toLowerCase(), f.contracts.GAME);
     assert.equal(player.toLowerCase(), PLAYER);
-    return [[active, active ? 10 : 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
+    // SubFull: member, active, removalPending, paused, useTickets, dailyQuantity, score, checkpointDay,
+    // checkpointStreak, runStartDay, endpoint, owedFlip, owedAffiliateBase, effectiveStreak.
+    return [[active, active, false, false, false, active ? 8 : 0, 0, 0, 0, 0, 0, 0n, 0n, 0]];
   });
   f.answer('AFKING_SUB_TOKEN', 'nextSerial', () => assert.fail('must never scan global seat serials'));
   const owners = [];
@@ -111,7 +111,7 @@ async function wallet(expected) {
   const iface = new Interface((await loadSchema('GAME')).abi);
   const calls = [];
   const check = (stage, args) => {
-    iface.encodeFunctionData('subscribe', args.slice(0, 6));
+    iface.encodeFunctionData('subscribe', args.slice(0, 4));
     assert.deepEqual(args, expected); calls.push(stage);
   };
   const subscribe = Object.assign(async (...args) => {
@@ -125,16 +125,24 @@ async function wallet(expected) {
 test('subscription start verifies the seat then simulates and sends the same current ABI', async () => {
   const f = await fixture(); await f.transfer(ZeroAddress, PLAYER, 389);
   setChainClientForTests(f.client);
-  const w = await wallet([0, true, false, 10, 0, 389n, { value: 60n }]);
+  const w = await wallet([0, false, 8, 389n, { value: 60n }]);
   let submitted = 0;
-  await passes.updateAfkingSubscription({ dailyQuantity: 10, useTickets: false, msgValueWei: 60n, onSubmitted: () => submitted++ });
+  await passes.updateAfkingSubscription({ dailyQuantity: 8, useTickets: false, msgValueWei: 60n, onSubmitted: () => submitted++ });
   assert.deepEqual(w.calls, ['simulate', 'send']);
   assert.deepEqual(f.owners, [389n]); assert.equal(submitted, 1);
 });
 
+test('the daily quantity caps at 8 before any read or wallet request', async () => {
+  setChainClientForTests({ snapshot: () => assert.fail('an invalid quantity must not discover seats') });
+  const w = await wallet([]);
+  await assert.rejects(passes.updateAfkingSubscription({ dailyQuantity: 9 }), /Daily quantity must be 0-8/);
+  assert.equal(w.signerRequests(), 0);
+  assert.deepEqual(w.calls, []);
+});
+
 test('subscription cancellation bypasses seat lookup entirely', async () => {
   setChainClientForTests({ snapshot: () => assert.fail('cancellation must not discover seats') });
-  const w = await wallet([0, true, true, 0, 0, 0n, { value: 0n }]);
+  const w = await wallet([0, false, 0, 0n, { value: 0n }]);
   await passes.updateAfkingSubscription({ dailyQuantity: 0 });
   assert.deepEqual(w.calls, ['simulate', 'send']);
 });
@@ -145,7 +153,7 @@ test('a stalled lookup releases Save after 15 seconds and late reads never reque
   const reading = new Promise(resolve => { started = resolve; });
   setChainClientForTests({ snapshot: () => { started(); return new Promise(resolve => { release = resolve; }); } });
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const pending = passes.updateAfkingSubscription({ dailyQuantity: 10 });
+  const pending = passes.updateAfkingSubscription({ dailyQuantity: 8 });
   await reading;
   const rejected = assert.rejects(pending, error => error.code === 'AFKING_SEAT_LOOKUP_TIMEOUT');
   t.mock.timers.tick(15_001);

@@ -1,10 +1,7 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
 // Audit 95d88f68b: a main-daily ticket leg written straight into the live L+1 buffer logs
-// JackpotTicketBatchWin (winners as packed owner registry indices) and one
+// JackpotTicketBatchWin (winners as packed wallet IDs) and one
 // JackpotTicketBatchTraits per whole ticket round, instead of JackpotTicketWin + queued entries.
-// Neither has a player topic, so player-scoped reads filter them by the player's OWNER ID.
+// Neither has a player topic, so player-scoped reads filter them by the player's WALLET ID.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { batchLanes, batchWinRow, ticketBatchWins, jackpotWin } from '../../chain/jackpots.js';
@@ -17,6 +14,7 @@ const GAME = '0x2222222222222222222222222222222222222222';
 const HASH = wordHex(777);
 const PLAYER = '0x1111111111111111111111111111111111111111';
 const OTHER = '0x3333333333333333333333333333333333333333';
+const THIRD = '0x5555555555555555555555555555555555555555';
 
 /** Pack uint32 lanes into a uint256[4] the way the contract does (eight per word, low lane first). */
 const pack = (lanes) => {
@@ -73,23 +71,29 @@ async function batchSnapshot(batches) {
     return logs.filter(log => log.blockNumber >= Number(f.fromBlock) && log.blockNumber <= Number(f.toBlock)
       && f.topics.every((value, i) => value == null || [].concat(value).some(v => v.toLowerCase() === log.topics[i]?.toLowerCase())));
   } } });
-  const registry = { [PLAYER]: 3n, [OTHER]: 12n }; // ticketOwnerId is 1-based: PLAYER is index 2
-  const s = { client, block: { number: 50, hash: HASH }, field: async (_c, name, key) => {
-    if (name === 'ticketOwnerId') return registry[key] ?? 0n;
-    if (name === 'ticketOwners') { reads.owners += 1; return Number(key) === 2 ? PLAYER : OTHER; }
-    throw new Error(`unexpected field ${name}`);
-  } };
+  const ids = { [PLAYER]: 3n, [OTHER]: 12n, [THIRD]: 5n };
+  const addressOfId = Object.fromEntries(Object.entries(ids).map(([address, id]) => [id, address]));
+  const s = { client, block: { number: 50, hash: HASH },
+    call: async (_c, method, [address]) => {
+      if (method !== 'walletIdOf_g3120') throw new Error(`unexpected call ${method}`);
+      return ids[address] ?? 0n;
+    },
+    field: async (_c, name, id) => {
+      if (name !== 'wallets') throw new Error(`unexpected field ${name}`);
+      reads.owners += 1; return BigInt(addressOfId[BigInt(id)] ?? 0);
+    } };
   return { s, reads };
 }
 const batchArgs = (owners, firstWinner = 0) => [7, 8, 77, firstWinner, owners.length, 8, pack(owners), pack(owners.map((_, j) => 100 + j))];
 
-test('a player-scoped read filters batch lanes by owner ID and resolves no other winner', async () => {
-  const { s, reads } = await batchSnapshot([[batchArgs([2, 11, 2, 5]), 20, 0], [batchArgs([11, 11]), 21, 1]]);
+test('a player-scoped read filters batch lanes by wallet ID and resolves no other winner', async () => {
+  const { s, reads } = await batchSnapshot([[batchArgs([3, 12, 3, 5]), 20, 0], [batchArgs([12, 12]), 21, 1]]);
   const mine = await ticketBatchWins(s, { fromBlock: 1, toBlock: 50 }, PLAYER);
   assert.deepEqual(mine.map(row => [row.args.winner, row.batchLane, Number(row.args.entryIndex)]), [[PLAYER, 0, 100], [PLAYER, 2, 102]]);
-  assert.equal(reads.owners, 0, 'filtering by ID needs no ticketOwners reads');
+  assert.equal(reads.owners, 0, 'filtering by ID needs no wallet-table reads');
   const all = await ticketBatchWins(s, { fromBlock: 1, toBlock: 50 });
-  assert.equal(all.length, 6); assert.equal(reads.owners, 6, 'an unscoped read names every lane');
+  assert.deepEqual(all.map(row => row.args.winner), [PLAYER, OTHER, PLAYER, THIRD, OTHER, OTHER]);
+  assert.ok(reads.owners > 0, 'an unscoped read names every lane through the wallet table');
 });
 
 test('a wallet with no owner ID has no batch wins and reads no logs', async () => {

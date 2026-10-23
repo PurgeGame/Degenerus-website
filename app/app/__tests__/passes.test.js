@@ -19,11 +19,11 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
 import { writePurchaseFundingPriority } from '../lootbox.js';
-import { useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
-import { CHAIN } from '../chain-config.js';
-// These address-based fixtures cover the historical deployment; run66-writes
-// exercises the allocated-ID write surface independently of the active site.
-useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
+import * as walletIdMod from '../wallet-id.js';
+import * as chainClientMod from '../../chain/client.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
+import { abi as gameAbi } from '../../chain/generated/game.js';
+import { boxReference } from '../../chain/box-queue.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of claims.test.js shape.
@@ -157,17 +157,15 @@ const CONNECTED = '0xab12000000000000000000000000000000000000';
 
 describe('pass bonus lootbox receipt parsing', () => {
   test('decodes raw LootBoxBuy logs without relying on the pass writer ABI', () => {
-    const iface = new contractsMod.ethers.Interface([
-      'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
-    ]);
-    const encoded = iface.encodeEventLog(iface.getEvent('LootBoxBuy'), [CONNECTED, 19n, 24n]);
+    const iface = new contractsMod.ethers.Interface(gameAbi);
+    const encoded = iface.encodeEventLog(iface.getEvent('LootBoxBuy'), [37n, 1n, 3n, 24n]);
     const boxes = passesMod.parsePassLootboxesFromReceipt({
       logs: [{ topics: encoded.topics, data: encoded.data }],
     });
 
     assert.equal(boxes.length, 1);
-    assert.equal(boxes[0].buyer.toLowerCase(), CONNECTED.toLowerCase());
-    assert.equal(boxes[0].lootboxIndex, 19n);
+    assert.equal(boxes[0].buyer, '37', 'an unprepared receipt carries the buyer wallet ID');
+    assert.equal(boxes[0].lootboxIndex, boxReference(1n, 3n));
     assert.equal(boxes[0].amountWei, 24n);
   });
 
@@ -286,73 +284,25 @@ describe('deity daily boons', () => {
     storeMod.__resetForTest();
   });
 
-  test('mirrors the viewer static gift-slot weighting regardless of live product flags', () => {
-    const base = {
-      dailySeed: 123456789n,
-      deity: CONNECTED,
-      day: 7,
-    };
-    assert.deepEqual(
-      passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: true, deityPassAvailable: true }),
-      [35, 35, 40],
-    );
-    assert.deepEqual(
-      passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: false, deityPassAvailable: false }),
-      [35, 35, 40],
-    );
-  });
-
-  // ARCHIVED FIXTURES. Both walks below were captured from deployments that PREDATE
-  // the Craps boon band, so they exercise the 2,518-wide gift walk on purpose. The
-  // live menu is 2,766 wide — see `readDeityBoonSlots`, which passes includeCraps.
-  test('includes the deployed Degenerette bands in the static gift-slot walk', () => {
-    const slots = passesMod.deriveDeityBoonSlots({
-      dailySeed: 11621158837047785902248431115065076657481296476413078720687728983663490809916n,
-      deity: '0x411087a5F752D3b5545E8301aD7e6cEf1351E480',
-      day: 20,
-      decimatorOpen: false,
-      deityPassAvailable: true,
-    });
-    assert.deepEqual(slots, [38, 7, 36]);
-  });
-
-  test('matches both day-94 boon types emitted by the pre-Craps-band deployment', () => {
-    const dailySeed = 88904332696311948919678638685246784339464390906126343802395035075230538782229n;
-
-    const firstDeity = passesMod.deriveDeityBoonSlots({
-      dailySeed,
-      deity: '0x411087a5F752D3b5545E8301aD7e6cEf1351E480',
-      day: 94,
-    });
-    const secondDeity = passesMod.deriveDeityBoonSlots({
-      dailySeed,
-      deity: '0xfe5b92e655d8b1732e47cb0a2f00ec6a50ea4200',
-      day: 94,
-    });
-
-    assert.deepEqual(firstDeity, [7, 38, 38]);
-    assert.equal(firstDeity[2], 38, 'slot 2 emitted the Degenerette WWXRP boon');
-    assert.deepEqual(secondDeity, [5, 40, 38]);
-    assert.equal(secondDeity[0], 5, 'slot 0 emitted the 5% Luckbox boon');
+  test('the gift-slot walk ignores the live product flags', () => {
+    const base = { dailySeed: 123456789n, deity: CONNECTED, deityId: 37, day: 7 };
+    const open = passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: true, deityPassAvailable: true });
+    assert.equal(open.length, 3);
+    assert.deepEqual(passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: false, deityPassAvailable: false }), open);
   });
 
   test('returns the three slots with the authoritative used mask', async () => {
+    walletIdMod._setWalletIdForTests(CONNECTED, 37);
     passesMod.__setDeityBoonReadContractFactoryForTest(() => ({
       deityBoonData: async () => [123456789n, 7n, 0b101n, true, true],
     }));
     const state = await passesMod.readDeityBoonSlots(CONNECTED);
+    walletIdMod._resetWalletIdsForTests();
     assert.equal(state.day, 7);
     assert.equal(state.usedMask, 0b101);
     assert.equal(state.ready, true);
-    // The LIVE walk is 2,766 wide (the Craps band is in the deployed weight tree),
-    // so the same seed and day give [7, 5, 1] and NOT the archived pre-Craps
-    // [35, 35, 40] that `deriveDeityBoonSlots`'s bare default still reproduces.
-    assert.deepEqual(state.slots, [7, 5, 1]);
-    assert.notDeepEqual(
-      state.slots,
-      passesMod.deriveDeityBoonSlots({ dailySeed: 123456789n, deity: CONNECTED, day: 7 }),
-      'the desk must not fall back to the pre-Craps menu',
-    );
+    // The slots hash the deity's wallet ID (DeityBoonViewer: abi.encode(seed, id, day, slot)).
+    assert.deepEqual(state.slots, passesMod.deriveDeityBoonSlots({ dailySeed: 123456789n, deity: CONNECTED, deityId: 37, day: 7 }));
   });
 
   test('issues a slot for the acting deity only after a static call', async () => {
@@ -364,15 +314,13 @@ describe('deity daily boons', () => {
     const fake = makeFakeContract();
     passesMod.__setContractFactoryForTest(() => fake);
     const recipient = '0xcd34000000000000000000000000000000000000';
+    walletIdMod._setWalletIdForTests(recipient, 73);
 
     await passesMod.issueDeityBoon({ recipient, slot: 2 });
+    walletIdMod._resetWalletIdsForTests();
 
-    assert.equal(fake._calls.issueDeityBoon.length, 1);
-    assert.deepEqual(fake._calls.issueDeityBoon[0], [
-      '0xAB12000000000000000000000000000000000000',
-      '0xCd34000000000000000000000000000000000000',
-      2,
-    ]);
+    // issueDeityBoon(deity id, recipient id, slot): 0 names the caller.
+    assert.deepEqual(fake._calls.issueDeityBoon, [[0, 73, 2]]);
   });
 
   test('rejects self-booning before opening a wallet request', async () => {
@@ -394,14 +342,12 @@ describe('deity daily boons', () => {
     const fake = makeFakeContract();
     passesMod.__setContractFactoryForTest(() => fake);
     const target = '0xcd34000000000000000000000000000000000000';
+    walletIdMod._setWalletIdForTests(target, 73);
 
     await passesMod.smiteWithDeity({ deityId: 11, target });
+    walletIdMod._resetWalletIdsForTests();
 
-    assert.equal(fake._calls.smite.length, 1);
-    assert.deepEqual(fake._calls.smite[0], [
-      11,
-      '0xCd34000000000000000000000000000000000000',
-    ]);
+    assert.deepEqual(fake._calls.smite, [[11, 73]]);
   });
 
   test('a deity curse rejects an invalid pass id or target before sending', async () => {
@@ -425,32 +371,36 @@ describe('deity daily boons', () => {
 });
 
 // ===========================================================================
-// AFKing seat entitlement + claim. Buying a deity/whale/lazy pass latches the
-// free claim in GAME; the ERC-721 is deliberately claimed in a second tx.
+// AFKing reads: seat balance, the Lens SubFull and the funding snapshot.
 // ===========================================================================
 
-describe('AFKing seat entitlement and claim', () => {
+const lensSub = (fields = {}) => ({
+  member: false, active: false, removalPending: false, paused: false, useTickets: false,
+  dailyQuantity: 0, runStartDay: 0, endpoint: 0, owedFlip: 0n, ...fields,
+});
+
+describe('AFKing subscription reads', () => {
   afterEach(() => {
     passesMod.__resetAfkingReadContractFactoryForTest();
     contractsMod.clearProvider();
     storeMod.__resetForTest();
   });
 
-  test('a holder with no seat is not surfaced as having one', async () => {
-    // Seats auto-mint with the pass; `claimSeat`/`canClaimSeat` no longer exist, so balanceOf
-    // is the whole signal.
+  const reads = ({ seats = 0n, sub = lensSub(), snapshot = async () => [10n, false, [0n], [0n]] } = {}) =>
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 0n },
-      game: {
-        subInfo: async () => [false, 0n, 0n, 0n],
-        afkingSnapshot: async () => [10n, false, [0n], [0n]],
-      },
+      token: { balanceOf: async () => seats },
+      game: { afkingSnapshot: snapshot },
+      lens: { subInfoFull: async () => sub },
     }));
 
-    const state = await passesMod.readAfkingSubscription(CONNECTED);
+  test('the seat balance alone says whether a seat is held', async () => {
+    reads();
+    let state = await passesMod.readAfkingSubscription(CONNECTED);
     assert.equal(state.hasToken, false);
     assert.equal(state.tokenBalance, 0n);
-    assert.equal('canClaimSeat' in state, false);
+    reads({ seats: 1n });
+    state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state.hasToken, true);
   });
 
   test('funding-only reads do not depend on seat or subscription snapshots', async () => {
@@ -467,20 +417,6 @@ describe('AFKing seat entitlement and claim', () => {
     assert.deepEqual(calls, [CONNECTED]);
   });
 
-  test('a seat holder is surfaced as having one', async () => {
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [false, 0n, 0n, 0n],
-        afkingSnapshot: async () => [10n, false, [0n], [0n]],
-      },
-    }));
-
-    const state = await passesMod.readAfkingSubscription(CONNECTED);
-    assert.equal(state.hasToken, true);
-    assert.equal(state.tokenBalance, 1n);
-  });
-
   test('starts every independent AFKing leg together for one Multicall window', async () => {
     const started = [];
     let release;
@@ -492,70 +428,31 @@ describe('AFKing seat entitlement and claim', () => {
     };
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: () => wait('balance', 1n) },
-      game: {
-        subInfo: () => wait('info', [true, 2n, 8n, 12n]),
-        afkingSnapshot: () => wait('snapshot', [10n, false, [0n], [25n]]),
-      },
-      lens: {
-        subInfoFull: () => wait('lens', { flags: 0n, pendingFlip: 0n }),
-      },
+      game: { afkingSnapshot: () => wait('snapshot', [10n, false, [0n], [25n]]) },
+      lens: { subInfoFull: () => wait('lens', lensSub({ member: true, active: true, dailyQuantity: 2 })) },
     }));
 
     const pending = passesMod.readAfkingSubscription(CONNECTED);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.deepEqual(new Set(started), new Set(['balance', 'info', 'snapshot', 'lens']));
+    assert.deepEqual(new Set(started), new Set(['balance', 'snapshot', 'lens']));
     release();
     assert.equal((await pending).fundingWei, 25n);
   });
 
   test('a failed core snapshot is unknown instead of synthetic zero funding', async () => {
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 5n, 8n, 12n],
-        afkingSnapshot: async () => { throw new Error('temporary RPC failure'); },
-      },
-    }));
-
+    reads({ seats: 1n, snapshot: async () => { throw new Error('temporary RPC failure'); } });
     const state = await passesMod.readAfkingSubscription(CONNECTED);
     assert.equal(state, null,
       'a missing funding snapshot cannot masquerade as an active account with zero funding');
   });
 
-  test('reads the exact accrued AFKing bonus FLIP from the deployment lens', async () => {
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 2n, 8n, 12n],
-        afkingSnapshot: async () => [10n, false, [0n], [0n]],
-      },
-      lens: {
-        subInfoFull: async () => ({ pendingFlip: 275n }),
-      },
-    }));
-
+  test('the order and the owed bonus FLIP come from the Lens SubFull', async () => {
+    reads({ seats: 1n, sub: lensSub({ member: true, active: true, useTickets: true, dailyQuantity: 3, owedFlip: 275n }) });
     const state = await passesMod.readAfkingSubscription(CONNECTED);
-    assert.equal(state.pendingFlipKnown, true);
-    assert.equal(state.pendingFlipWhole, 275n);
-  });
-
-  test('decodes the current AFKing product and funding priority from packed lens flags', async () => {
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: { balanceOf: async () => 1n },
-      game: {
-        subInfo: async () => [true, 3n, 8n, 12n],
-        afkingSnapshot: async () => [10n, false, [0n], [0n]],
-      },
-      lens: {
-        // bit 1 = claimable/game credit first; bit 2 = Tickets.
-        subInfoFull: async () => ({ flags: 6n, pendingFlip: 0n }),
-      },
-    }));
-
-    const state = await passesMod.readAfkingSubscription(CONNECTED);
-    assert.equal(state.settingsKnown, true);
-    assert.equal(state.drainGameCreditFirst, true);
+    assert.equal(state.active, true);
+    assert.equal(state.dailyQuantity, 3);
     assert.equal(state.useTickets, true);
+    assert.equal(state.pendingFlipWhole, 275n);
   });
 });
 
@@ -568,40 +465,34 @@ describe('AFKing subscription configuration and funding', () => {
     storeMod.update('viewing.address', null);
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    walletIdMod._setWalletIdForTests(CONNECTED, 41);
+    // A change to a live run burns no seat: the lookup finds the member and returns 0.
+    chainClientMod.setChainClientForTests({
+      address: () => CONTRACTS.GAME,
+      snapshot: async () => ({ call: async () => ({ member: true }), verify: async () => {} }),
+    });
     fake = makeFakeContract();
     passesMod.__setContractFactoryForTest(() => fake);
   });
 
   afterEach(() => {
     passesMod.__resetContractFactoryForTest();
+    chainClientMod.setChainClientForTests(null);
+    walletIdMod._resetWalletIdsForTests();
     contractsMod.clearProvider();
     storeMod.__resetForTest();
   });
 
-  test('sends delivery mode, quantity, claimable priority, and ETH funding to subscribe', async () => {
+  test('sends subscribe(id, useTickets, dailyQuantity, seatId) with any ETH value', async () => {
     const funding = 250_000_000_000n;
-    await passesMod.updateAfkingSubscription({
-      dailyQuantity: 3,
-      useTickets: false,
-      drainGameCreditFirst: false,
-      msgValueWei: funding,
-    });
-
-    assert.equal(fake._calls.subscribe.length, 1);
-    assert.deepEqual(fake._calls.subscribe[0], [
-      CONNECTED,
-      false,
-      false,
-      3,
-      '0x0000000000000000000000000000000000000000',
-      { value: funding },
-    ]);
+    await passesMod.updateAfkingSubscription({ dailyQuantity: 3, useTickets: true, msgValueWei: funding });
+    assert.deepEqual(fake._calls.subscribe, [[0, true, 3, 0n, { value: funding }]]);
   });
 
   test('rejects an invalid quantity or negative funding before sending', async () => {
     await assert.rejects(
-      passesMod.updateAfkingSubscription({ dailyQuantity: 256 }),
-      /0-255/,
+      passesMod.updateAfkingSubscription({ dailyQuantity: 9 }),
+      /0-8/,
     );
     await assert.rejects(
       passesMod.updateAfkingSubscription({ dailyQuantity: 1, msgValueWei: -1n }),
@@ -615,18 +506,13 @@ describe('AFKing subscription configuration and funding', () => {
     await passesMod.fundAfkingSubscription({ msgValueWei: funding });
 
     assert.equal(fake._calls.subscribe.length, 0);
-    assert.deepEqual(fake._calls.depositAfkingFunding, [[
-      '0xAB12000000000000000000000000000000000000',
-      { value: funding },
-    ]]);
+    assert.deepEqual(fake._calls.depositAfkingFunding, [[41, { value: funding }]]);
   });
 
   test('claims accrued AFKing bonus FLIP for the acting subscriber', async () => {
     await passesMod.claimAfkingSubscriptionFlip();
-
-    assert.deepEqual(fake._calls.claimAfkingFlip, [[
-      ['0xAB12000000000000000000000000000000000000'],
-    ]]);
+    // claimAfkingFlip(uint32[]): 0 names the caller.
+    assert.deepEqual(fake._calls.claimAfkingFlip, [[[0]]]);
   });
 
   test('rejects an empty AFKing top-up before sending', async () => {
@@ -648,7 +534,7 @@ describe('AFKing subscription configuration and funding', () => {
     assert.deepEqual(fake._calls.afkingFundingOf, [[
       '0xAB12000000000000000000000000000000000000',
     ]]);
-    assert.deepEqual(fake._calls.withdrawAfkingFunding, [[funding]]);
+    assert.deepEqual(fake._calls.withdrawAfkingFunding, [[0, funding]]);
   });
 
   test('a wallet on another chain is stopped before the AFKing balance re-read', async () => {
@@ -762,12 +648,12 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes purchaseWhaleBundle(buyer, qty, affiliateCode) with closure-form sendTx + msg.value', async () => {
+  test('invokes purchaseWhaleBundle(account, qty, affiliateCode) with closure-form sendTx + msg.value', async () => {
     const value = 12n * 10n ** 18n;
     await passesMod.purchaseWhaleBundle({ quantity: 5, msgValueWei: value });
     assert.equal(lastFakeContract._calls.purchaseWhalePass.length, 1);
     const [args] = lastFakeContract._calls.purchaseWhalePass;
-    assert.equal(args[0], CONNECTED, 'buyer = connected.address');
+    assert.equal(args[0], 0, 'buyer = the connected wallet (account 0)');
     assert.equal(args[1], 5n, 'quantity arg = BigInt 5n');
     // affiliateCode is part of the SELECTOR, not an optional trailing extra:
     // the two-arg form does not exist on the deployed GAME (0xe81ebd5f absent,
@@ -890,7 +776,7 @@ describe('Plan 62-02: purchaseDeityPass', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes purchaseDeityPass(buyer, symbolId, affiliateCode) with closure-form sendTx + msg.value', async () => {
+  test('invokes purchaseDeityPass(account, symbolId, affiliateCode) with closure-form sendTx + msg.value', async () => {
     const value = 24n * 10n ** 18n;
     const affiliateCode = `0x${'12'.repeat(32)}`;
     const priorLocalStorage = globalThis.localStorage;
@@ -905,7 +791,7 @@ describe('Plan 62-02: purchaseDeityPass', () => {
     }
     assert.equal(lastFakeContract._calls.purchaseDeityPass.length, 1);
     const [args] = lastFakeContract._calls.purchaseDeityPass;
-    assert.equal(args[0], CONNECTED, 'buyer = connected.address');
+    assert.equal(args[0], 0, 'buyer = the connected wallet (account 0)');
     assert.equal(args[1], 7, 'symbolId arg = number 7');
     assert.equal(args[2], affiliateCode, 'first-touch affiliate code passed');
     assert.ok(args[3] && typeof args[3] === 'object', 'overrides object passed');

@@ -13,9 +13,11 @@
 .mobile-event-sheet__body { display: contents; }
 
 /* Phones held sideways get one notice instead of a second layout. Touch-only
-   screens this short are phones; tablets and desktops keep landscape. */
+   screens this short are phones; tablets and desktops keep landscape. The
+   keyboard (interactive-widget=resizes-content) also leaves an upright phone
+   wider than tall, so the notice waits while mobile-pager.js reports it up. */
 @media (orientation: landscape) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
-  body.layout-basic .mpager-rotate {
+  html:not([data-mpager-keyboard]) body.layout-basic .mpager-rotate {
     position: fixed;
     inset: 0;
     z-index: 2147483000;
@@ -1096,14 +1098,16 @@
     .craps-entry__runup-kicker, .craps-entry__runup-submark, .craps-added-label,
     .craps-added-period
   ) { font-size: 8px; }
-  /* Touch boxes: an invisible hit area around the small controls. */
+  /* Touch boxes: an invisible hit area around the small controls. Never on a
+     badge that sits on a bigger button (the ticket's quest bubble is on its
+     TICKET label, and a grown hit area swallowed taps on the ticket). */
   html body.layout-basic[data-mobile-page] :is(
     .craps-entry__result-replay, .dec-purchase-help, .deg-referral-info, .sdr-info,
-    .dec-ticket-single-quest, .dec-ticket-stepper .dec-step
+    .dec-ticket-stepper .dec-step
   ) { position: relative; }
   html body.layout-basic[data-mobile-page] :is(
     .craps-entry__result-replay, .dec-purchase-help, .deg-referral-info, .sdr-info,
-    .dec-ticket-single-quest, .dec-ticket-stepper .dec-step
+    .dec-ticket-stepper .dec-step
   )::after {
     position: absolute;
     inset: -10px;

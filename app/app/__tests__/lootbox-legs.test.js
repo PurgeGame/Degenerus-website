@@ -9,17 +9,17 @@
 //   roundedUp adds the Bernoulli +1 (LootboxModule.sol:1378-1389).
 // parseOpenLegsFromReceipt: ethers-encoded logs at the GAME address.
 
-import { test, describe, before, after, afterEach } from 'node:test';
+import { test, describe, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  OPEN_EVENTS_ABI,
   decodeBoxSpin,
   deriveHumanLootboxBoonType,
   deriveHumanLootboxSpinBetIds,
   deriveHumanBoxSpinPayoutAtRisk,
   boxSpinFlipSurvivalPayout,
   enrichHumanBoxSpinLegs,
+  readHumanLootboxAuraTiers,
   enrichLootboxBoonLegs,
   lootboxRewardPresentation,
   lootboxPresentationKey,
@@ -34,15 +34,67 @@ import { ethers } from '../contracts.js';
 import * as contractsMod from '../contracts.js';
 import { _testing as pollingTesting } from '../polling.js';
 import { CHAIN, CONTRACTS } from '../chain-config.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH, CURRENT_SCHEMA_HASH, BEFORE_WALLET_IDS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { boxReference } from '../../chain/box-queue.js';
+import { arraySlot, contractInterface, setChainClientForTests } from '../../chain/client.js';
+import { rpcFixture } from './helpers/chain-rpc.js';
+import { prepareWalletReceipt } from '../wallet-receipt.js';
+import { _setWalletIdForTests } from '../wallet-id.js';
+
+const PLAYER = '0x19986e1466bd20e2a7db92762eb52fa7f3f1987c';
+const OTHER = '0x0000000000000000000000000000000000000bad';
+const ZERO = '0x0000000000000000000000000000000000000000';
+
+// Receipts carry wallet IDs (PLAYER is account 37, OTHER account 73). Like the panels, these
+// tests hydrate them to addresses with prepareWalletReceipt before parsing.
+// The fixture's chain reads settle through a deferred queue that does not hold the event loop open.
+const keepAlive = setInterval(() => {}, 1000);
+after(() => clearInterval(keepAlive));
+const FIX = await rpcFixture();
+await FIX.wallet(37, PLAYER);
+await FIX.wallet(73, OTHER);
+Object.assign(CONTRACTS, FIX.contracts);
+const GAME = CONTRACTS.GAME;
+const GAME_ABI = await contractInterface('GAME');
+const WWXRP_ABI = await contractInterface('WWXRP');
+const WALLET_IDS = { [PLAYER]: 37, [OTHER]: 73 };
+
+// Events are written with the address-era argument order; a leading address becomes its wallet ID.
+function log(eventName, args, address = GAME) {
+  const first = WALLET_IDS[args[0]] ?? args[0];
+  const encoded = GAME_ABI.encodeEventLog(GAME_ABI.getEvent(eventName), [first, ...args.slice(1)]);
+  return { address, topics: encoded.topics, data: encoded.data };
+}
+
+function transferLog(from, to, value, address = CONTRACTS.WWXRP) {
+  const encoded = WWXRP_ABI.encodeEventLog(WWXRP_ABI.getEvent('Transfer'), [from, to, value]);
+  return { address, topics: encoded.topics, data: encoded.data };
+}
+
+function prizeCreditedLog(player, amount, address = CONTRACTS.WWXRP) {
+  const encoded = WWXRP_ABI.encodeEventLog(WWXRP_ABI.getEvent('PrizeCredited'), [WALLET_IDS[player], amount, 0n]);
+  return { address, topics: encoded.topics, data: encoded.data };
+}
+
+async function parseReceipt(receipt, ...rest) {
+  receipt.blockNumber ??= 9999;
+  await prepareWalletReceipt(receipt, FIX.client);
+  return parseOpenLegsFromReceipt(receipt, ...rest);
+}
 
 // ---------------------------------------------------------------------------
 // decodeBoxSpin
 // ---------------------------------------------------------------------------
+
+// A queued box entry (audit 4f4aa8377, box-queue-rolls.js): wallet ID, per-box value units,
+// activity-score code (60 = the neutral EV point), boost bps and quantity. The vectors below were
+// generated from this module's own queue derivation (rngWord search), not from the contract.
+const queueEntry = ({ id = 37, units = 100, scoreCode = 60, boost = 0, quantity = 1 } = {}) => (
+  BigInt(id) | (BigInt(units) << 32n) | (BigInt(scoreCode) << 53n) | (BigInt(boost) << 65n) | (BigInt(quantity) << 77n)
+);
+const QUEUE_INDEX = boxReference(0, 7);
+const queueContext = (rngWord, entry = {}) => ({
+  rngWord, packedBox: queueEntry(entry), lootboxIndex: QUEUE_INDEX, currentLevel: 45,
+});
 
 function packSpin(playerTicket, resultTicket, score) {
   return BigInt(playerTicket) | (BigInt(resultTicket) << 32n) | (BigInt(score) << 64n);
@@ -291,14 +343,9 @@ describe('enrichLootboxBoonLegs', () => {
   });
 
   test('uses the committed human-box RNG to name an ignored lower Ticket roll exactly', async () => {
-    const amount = 100_000_000_000n;
-    const context = {
-      // Contract-derived vector: the boon draw is Purchase +15% (type 8).
-      rngWord: 115n,
-      packedBox: amount | (amount << 128n) | (60n << 192n),
-      currentLevel: 45,
-    };
-    assert.equal(deriveHumanLootboxBoonType({ player: PLAYER, ...context }), 8);
+    // The boon draw of this queued box is Purchase +15% (type 8).
+    const context = queueContext(410n);
+    assert.equal(deriveHumanLootboxBoonType(context), 8);
     pollingTesting.setBoonStateReader(async () => ({
       // The +15% Ticket roll is ignored behind held +25%; neither family moves.
       slot0: (2n << 104n) | (62n << 56n) | (3n << 160n) | (62n << 112n),
@@ -324,58 +371,40 @@ describe('enrichLootboxBoonLegs', () => {
     ).label, 'TICKET BOON');
   });
 
-  test('decodes the current counted-order storage word when naming a shared boon', () => {
-    assert.equal(deriveHumanLootboxBoonType({
-      player: '0x1111111111111111111111111111111111111111',
-      rngWord: 98n,
-      packedBox: 0n,
-      currentLevel: 45,
-    }), null, 'an empty order has no boon draw');
-
-    // Contract-derived vector from the current lootboxOrder layout:
-    // level 44, score 60, one small box, no boost/distress/EV adjustment.
-    // rngWord 98 produces weighted boon roll 301 => type 5 (Luckbox +5%).
-    const packedOrder = 44n | (60n << 24n) | (1n << 81n);
-    assert.equal(deriveHumanLootboxBoonType({
-      player: '0x1111111111111111111111111111111111111111',
-      rngWord: 98n,
-      packedBox: packedOrder,
-      currentLevel: 45,
-    }), 5);
+  test('decodes the queued box entry when naming a shared boon', () => {
+    assert.equal(deriveHumanLootboxBoonType({ ...queueContext(165n), packedBox: 0n }), null,
+      'an empty entry has no boon draw');
+    // One box of score 60 (no boost, no EV adjustment): rngWord 446 draws type 5 (Luckbox +5%).
+    assert.equal(deriveHumanLootboxBoonType(queueContext(165n)), 5);
+    assert.equal(deriveHumanLootboxBoonType(queueContext(165n, { id: 0 })), null,
+      'the entry binds its wallet ID');
   });
 
   test('keeps Ticket and Luckbox family identity per event in a counted two-box order', async () => {
     pollingTesting.setBoonStateReader(async () => {
       throw new Error('historical boon state unavailable');
     });
-    // Current contract vector: two small boxes at level 44. Nonces 0 and 1
-    // draw type 7 (Ticket +5%) then type 6 (Luckbox +15%) from rngWord 48273.
-    const packedOrder = 44n | (60n << 24n) | (2n << 81n);
+    // Two boxes in one entry: nonces 0 and 1 draw type 5 (Luckbox +5%) then type 8
+    // (Ticket +15%) from rngWord 57299.
     const enriched = await enrichLootboxBoonLegs([
       { legType: 'reward', rewardType: 4, amount: 500n },
       { legType: 'reward', rewardType: 5, amount: 1_500n },
     ], {
       player: '0x1111111111111111111111111111111111111111',
       blockNumber: 12_351,
-      context: { rngWord: 48_273n, packedBox: packedOrder, currentLevel: 45 },
+      context: queueContext(28n, { quantity: 2, units: 100000 }),
     });
 
-    assert.deepEqual(enriched.map((leg) => leg.boonType), [7, 6]);
+    assert.deepEqual(enriched.map((leg) => leg.boonType), [5, 8]);
     assert.deepEqual(enriched.map((leg) => lootboxRewardPresentation(
       leg.rewardType,
       leg.amount,
       { boonType: leg.boonType },
-    ).label), ['TICKET BOON', 'LUCKBOX BOON']);
+    ).label), ['LUCKBOX BOON', 'TICKET BOON']);
   });
 
   test('still derives the exact product when the optional packed-state read fails', async () => {
-    const amount = 100_000_000_000n;
-    const context = {
-      // Contract-derived vector: the boon draw is Purchase +15% (type 8).
-      rngWord: 115n,
-      packedBox: amount | (amount << 128n) | (60n << 192n),
-      currentLevel: 45,
-    };
+    const context = queueContext(410n); // the boon draw is Purchase +15% (type 8)
     pollingTesting.setBoonStateReader(async () => {
       throw new Error('wallet RPC has no historical state');
     });
@@ -430,17 +459,16 @@ describe('enrichLootboxBoonLegs', () => {
   });
 });
 
+// The FLIP spin id of the first (only) roll of queueContext(123_456_789n).
+const FLIP_SPIN_BET_ID = '10853396827165545820';
+
 describe('human BoxSpin payout enrichment', () => {
   afterEach(() => contractsMod.clearProvider());
 
   test('reconstructs the exact preliminary FLIP won before a survival bust', async () => {
-    const amountWei = 100_000_000_000n;
-    const packedBox = amountWei
-      | (amountWei << 128n)
-      | (60n << 192n);
     const spin = {
       legType: 'spin',
-      betId: '10440597654418005774',
+      betId: FLIP_SPIN_BET_ID, // the FLIP spin of the queued box's single roll
       spinType: 'flip',
       survived: false,
       payout: 0n,
@@ -450,25 +478,21 @@ describe('human BoxSpin payout enrichment', () => {
         { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
       ],
     };
-    const context = {
-      rngWord: 123_456_789n,
-      packedBox,
-      currentLevel: 45,
-    };
+    const context = queueContext(123_456_789n);
+    assert.equal(deriveHumanLootboxSpinBetIds(context)[1], BigInt(FLIP_SPIN_BET_ID));
 
     assert.equal(deriveHumanBoxSpinPayoutAtRisk({
       spin,
-      player: PLAYER,
       ...context,
-    }), 424_700_565_750_000_000_000n);
+    }), 75155773875000000000n);
 
     const [enriched] = await enrichHumanBoxSpinLegs([spin], {
       player: PLAYER,
-      lootboxIndex: 7,
+      lootboxIndex: QUEUE_INDEX,
       blockNumber: 50_000,
       context,
     });
-    assert.equal(enriched.preSurvivalPayout, 424_700_565_750_000_000_000n);
+    assert.equal(enriched.preSurvivalPayout, 75155773875000000000n);
   });
 
   test('leaves non-FLIP and already-exact spin legs untouched', async () => {
@@ -487,40 +511,11 @@ describe('human BoxSpin payout enrichment', () => {
     }), rows, 'no historical storage read is needed when no losing FLIP amount is missing');
   });
 
-  test('reads frozen box storage and prefers the indexed settlement level', async () => {
-    const amountWei = 100_000_000_000n;
-    const packedBox = amountWei | (amountWei << 128n) | (60n << 192n);
-    const rngWord = 123_456_789n;
-    const index = 7n;
-    const outer = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
-      ['uint48', 'uint256'],
-      [index, 15n],
-    ));
-    const boxSlot = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
-      ['address', 'bytes32'],
-      [PLAYER, outer],
-    ));
-    const rngSlot = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
-      ['uint48', 'uint256'],
-      [index, 34n],
-    ));
-    const timingSlot = '0x0';
-    const reads = [];
-    contractsMod.setProvider({
-      async getStorage(address, slot, blockTag) {
-        reads.push({ address, slot, blockTag });
-        if (slot === boxSlot) return ethers.toBeHex(packedBox, 32);
-        if (slot === rngSlot) return ethers.toBeHex(rngWord, 32);
-        // A stale/mixed block-level slot must not override the indexer's exact
-        // level-at-settlement projection below.
-        if (slot === timingSlot) return ethers.toBeHex(12n << 96n, 32);
-        return ethers.toBeHex(0n, 32);
-      },
-    });
-
-    const [enriched] = await enrichHumanBoxSpinLegs([{
+  test('prefers the indexed settlement level over the context level', async () => {
+    const context = { ...queueContext(123_456_789n), currentLevel: 13 };
+    const leg = {
       legType: 'spin',
-      betId: '10440597654418005774',
+      betId: FLIP_SPIN_BET_ID,
       spinType: 'flip',
       levelAtOpen: 44,
       survived: false,
@@ -530,45 +525,66 @@ describe('human BoxSpin payout enrichment', () => {
         { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
         { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
       ],
-    }], {
-      player: PLAYER,
-      lootboxIndex: index,
-      blockNumber: 50_000,
+    };
+    assert.equal(deriveHumanBoxSpinPayoutAtRisk({ spin: leg, ...context }), 150311547750000000000n,
+      'the stake is priced at the context level');
+    const [enriched] = await enrichHumanBoxSpinLegs([leg], {
+      player: PLAYER, lootboxIndex: QUEUE_INDEX, blockNumber: 50_000, context,
     });
-
-    assert.equal(enriched.preSurvivalPayout, 424_700_565_750_000_000_000n);
-    assert.deepEqual(reads.map((read) => read.blockTag), [49_999, 49_999, 49_999]);
-    assert.deepEqual(new Set(reads.map((read) => read.slot)), new Set([
-      boxSlot, rngSlot, timingSlot,
-    ]));
-    assert.ok(reads.every((read) => read.address === CONTRACTS.GAME));
+    assert.equal(enriched.preSurvivalPayout, 75155773875000000000n,
+      'the contract prices the roll at the settlement level + 1');
   });
+
+  test('reads the queued entry, the applied word and the level at the settlement block', async (t) => {
+    const f = await rpcFixture();
+    await f.wallet(37, PLAYER);
+    const { slot } = await f.s.location('GAME', 'boxQueue', [0]);
+    // Position 7 is lane 1 of word 2 (three 85-bit entries per word).
+    f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot) + 2n}`, queueEntry() << 85n);
+    await f.field('GAME', 'level', 44);
+    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 123_456_789n, requestId: 99n }, { block: 9990 });
+    const saved = { contracts: { ...CONTRACTS }, chain: { ...CHAIN } };
+    Object.assign(CONTRACTS, f.contracts);
+    Object.assign(CHAIN, { id: f.client.chain.id, deployBlock: 1, readSchema: f.client.chain.readSchema });
+    t.after(() => { Object.assign(CONTRACTS, saved.contracts); Object.assign(CHAIN, saved.chain); });
+    contractsMod.setProvider(f.client.provider);
+
+    assert.deepEqual(await readHumanLootboxAuraTiers({ player: PLAYER, lootboxIndex: QUEUE_INDEX, blockNumber: 9999 }),
+      ['t4'], 'one aura per physical box of the queued entry');
+    assert.deepEqual(await readHumanLootboxAuraTiers({ player: OTHER, lootboxIndex: QUEUE_INDEX, blockNumber: 9999 }),
+      [], 'an entry that is not this wallet\'s reveals nothing');
+    const [enriched] = await enrichHumanBoxSpinLegs([{
+      legType: 'spin', betId: FLIP_SPIN_BET_ID, spinType: 'flip', survived: false, payout: 0n,
+      reels: [3, 0, 0].map((score, spinIndex) => ({ spinIndex, playerTicket: 0n, resultTicket: 0n, score })),
+    }], { player: PLAYER, lootboxIndex: QUEUE_INDEX, blockNumber: 9999 });
+    assert.equal(enriched.preSurvivalPayout, 75155773875000000000n,
+      'level 44 on chain prices the roll at level 45');
+  });
+
   // The busted panel can never audit itself: its payout is zero by
   // construction. A survivor can, because the contract publishes the mint that
   // its stake must produce. Pinning that round trip is what makes the number
   // shown on a bust trustworthy.
   test('a survivor replays from the same outcome-independent stake', async () => {
     const oneFlip = 10n ** 18n;
-    const amountWei = 100_000_000_000n;
-    const packedBox = amountWei | (amountWei << 128n) | (60n << 192n);
-    const context = { rngWord: 123_456_789n, packedBox, currentLevel: 45 };
+    const context = queueContext(123_456_789n);
     const reels = [
       { spinIndex: 0, playerTicket: 0n, resultTicket: 0n, score: 3 },
       { spinIndex: 1, playerTicket: 0n, resultTicket: 0n, score: 0 },
       { spinIndex: 2, playerTicket: 0n, resultTicket: 0n, score: 0 },
     ];
-    const stake = 424_700_565_750_000_000_000n;
+    const stake = 75155773875000000000n;
     const base = {
-      legType: 'spin', betId: '10440597654418005774', spinType: 'flip', reels,
+      legType: 'spin', betId: FLIP_SPIN_BET_ID, spinType: 'flip', reels,
     };
 
-    // 2 x 424.7005... FLIP sits under FLIP_ROUND_THRESHOLD, so the contract
-    // takes the whole-FLIP floor: 849 FLIP.
-    assert.equal(boxSpinFlipSurvivalPayout(stake, 123n), 849n * oneFlip);
+    // 2 x 92.645... FLIP sits under FLIP_ROUND_THRESHOLD, so the contract
+    // takes the whole-FLIP floor: 185 FLIP.
+    assert.equal(boxSpinFlipSurvivalPayout(stake, 123n), 150n * oneFlip);
 
-    const won = { ...base, survived: true, payout: 849n * oneFlip };
+    const won = { ...base, survived: true, payout: 150n * oneFlip };
     const busted = { ...base, survived: false, payout: 0n };
-    const args = { player: PLAYER, lootboxIndex: 7, blockNumber: 50_000, context };
+    const args = { player: PLAYER, lootboxIndex: QUEUE_INDEX, blockNumber: 50_000, context };
     const [enrichedWon] = await enrichHumanBoxSpinLegs([won], args);
     const [enrichedBusted] = await enrichHumanBoxSpinLegs([busted], args);
 
@@ -578,7 +594,7 @@ describe('human BoxSpin payout enrichment', () => {
       'the losing branch names it too, from identical inputs');
     assert.equal(enrichedWon.preSurvivalPayout, enrichedBusted.preSurvivalPayout,
       'the stake is a property of the reels and the box, never of the coin');
-    assert.equal(enrichedWon.survivalWinPayout, 849n * oneFlip);
+    assert.equal(enrichedWon.survivalWinPayout, 150n * oneFlip);
     assert.equal(enrichedBusted.survivalWinPayout, enrichedWon.survivalWinPayout,
       'the lost branch retains the exact rounded potential win as well as the reel stake');
     assert.equal(
@@ -589,11 +605,9 @@ describe('human BoxSpin payout enrichment', () => {
   });
 
   test('a survivor whose payout does not replay publishes no stake', async () => {
-    const amountWei = 100_000_000_000n;
-    const packedBox = amountWei | (amountWei << 128n) | (60n << 192n);
     const won = {
       legType: 'spin',
-      betId: '10440597654418005774',
+      betId: FLIP_SPIN_BET_ID,
       spinType: 'flip',
       survived: true,
       // Not reachable from the derived stake under either rounding rule.
@@ -606,9 +620,9 @@ describe('human BoxSpin payout enrichment', () => {
     };
     const [enriched] = await enrichHumanBoxSpinLegs([won], {
       player: PLAYER,
-      lootboxIndex: 7,
+      lootboxIndex: QUEUE_INDEX,
       blockNumber: 50_000,
-      context: { rngWord: 123_456_789n, packedBox, currentLevel: 45 },
+      context: queueContext(123_456_789n),
     });
     assert.equal(enriched.preSurvivalPayout, undefined,
       'a reconstruction contradicted by the chain is dropped, not displayed');
@@ -618,8 +632,6 @@ describe('human BoxSpin payout enrichment', () => {
 function _feedPayout(value) { return BigInt(value ?? 0); }
 
 describe('decodeBoxSpin', () => {
-  before(() => pinTestSchema(CURRENT_SCHEMA_HASH));
-  after(() => pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH));
   test('single WWXRP spin: type + count + reels + traits decode', () => {
     // betId: box-origin, type 0 (WWXRP), entropy 12345
     const betId = (1n << 63n) | (0n << 60n) | 12345n;
@@ -725,40 +737,22 @@ describe('wholeTicketsFromOpened', () => {
 // parseOpenLegsFromReceipt — ethers-encoded logs
 // ---------------------------------------------------------------------------
 
-const iface = new ethers.Interface(OPEN_EVENTS_ABI);
-const transferIface = new ethers.Interface([
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-]);
-const GAME = CONTRACTS.GAME;
-const PLAYER = '0x19986e1466bd20e2a7db92762eb52fa7f3f1987c';
-const OTHER = '0x0000000000000000000000000000000000000bad';
-const ZERO = '0x0000000000000000000000000000000000000000';
-
-function log(eventName, args, address = GAME) {
-  const encoded = iface.encodeEventLog(iface.getEvent(eventName), args);
-  return { address, topics: encoded.topics, data: encoded.data };
-}
-
-function transferLog(from, to, value, address = CONTRACTS.WWXRP) {
-  const encoded = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [from, to, value]);
-  return { address, topics: encoded.topics, data: encoded.data };
-}
-
 describe('parseOpenLegsFromReceipt', () => {
-  test('full receipt: opened + dgnrs + reward + spin legs in log order', () => {
+  test('full receipt: opened + dgnrs + reward + spin legs in log order', async () => {
     const betId = (1n << 63n) | (1n << 60n) | 42n;
     const packed = (BigInt(0x01) | (BigInt(0x02) << 32n) | (4n << 64n)) | (1n << 216n) | (1n << 224n);
     const receipt = {
       hash: `0x${'ab'.repeat(32)}`,
       blockNumber: 45_678,
       logs: [
-        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 6, 1094, ethers.parseEther('120'), true]),
-        log('LootBoxDgnrsBatch', [PLAYER, ethers.parseEther('4'), ethers.parseEther('3')]),
+        // FLIP and WWXRP go on chain as whole tokens, DGNRS with 12 decimals.
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 6, 1094, 120n, true]),
+        log('LootBoxDgnrsBatch', [PLAYER, 4n * 10n ** 12n, 3n * 10n ** 12n]),
         log('LootBoxReward', [PLAYER, 11, 10_000_000_000n, 500n]),
-        log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('240'), 0n]),
+        log('BoxSpin', [PLAYER, betId, packed, 240n, 0n]),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.equal(legs.length, 4);
 
     assert.equal(legs[0].legType, 'opened');
@@ -787,22 +781,14 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs[3].reels[0].score, 4);
   });
 
-  test('keeps historical LootBoxDgnrsReward receipts replayable', () => {
-    const receipt = {
-      logs: [log('LootBoxDgnrsReward', [PLAYER, 10_000_000_000n, ethers.parseEther('2')])],
-    };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
-    assert.deepEqual(legs, [{ legType: 'dgnrs', amount: ethers.parseEther('2') }]);
-  });
-
-  test('decodes the regular-box Craps comp aggregate and its reserved day', () => {
+  test('decodes the regular-box Craps comp aggregate and its reserved day', async () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [PLAYER, 8n, 1_000n, 7, 0, 0n, false]),
         log('LootBoxCrapsPasses', [PLAYER, 2, 1, 73]),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'crapsPasses']);
     assert.deepEqual(legs[1], {
       legType: 'crapsPasses',
@@ -812,54 +798,25 @@ describe('parseOpenLegsFromReceipt', () => {
     });
   });
 
-  test('keeps presale Craps comp denominations on the opened anchor', () => {
-    const receipt = {
-      logs: [log('PresaleBoxOpened', [
-        PLAYER, 9n, 1_000n, 25n, 0n, 0n, false, 4, 2,
-      ])],
-    };
-    const [opened] = parseOpenLegsFromReceipt(receipt, PLAYER);
-    assert.equal(opened.source, 'presale');
-    assert.equal(opened.flip, 25n, 'only residual FLIP remains beside a comp award');
-    assert.equal(opened.crapsNormalPasses, 4);
-    assert.equal(opened.crapsHighPasses, 2);
-  });
-
-  test('whale pass leg decodes as legendary payload', () => {
+  test('whale pass leg decodes as legendary payload', async () => {
     const receipt = {
       logs: [log('LootBoxWhalePassJackpot', [PLAYER, 10_000_000_000n, 13, 400, 0, 0])],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.equal(legs.length, 1);
     assert.equal(legs[0].legType, 'whalepass');
     assert.equal(legs[0].targetLevel, 13);
     assert.equal(legs[0].entriesPerLevel, 400);
   });
 
-  test('retains the WWXRP cold-bust mint and exact fractional ticket miss', () => {
-    const receipt = {
-      logs: [
-        transferLog(ZERO, PLAYER, ethers.parseEther('9')),
-        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
-      ],
-    };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
-    assert.deepEqual(legs.map((leg) => leg.legType), ['wwxrp', 'opened']);
-    assert.equal(legs[0].amount, ethers.parseEther('9'));
-    assert.equal(legs[0].consolation, true);
-    assert.equal(legs[1].futureTickets, 42);
-    assert.equal(legs[1].roundedUp, false);
-    assert.equal(legs[1].wholeTickets, 0);
-  });
-
-  test('retains the current post-open WWXRP cold-bust mint', () => {
+  test('retains the current post-open WWXRP cold-bust mint', async () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
-        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+        transferLog(ZERO, PLAYER, 1n),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'wwxrp']);
     assert.equal(legs[1].amount, ethers.parseEther('1'));
     assert.equal(legs[1].consolation, true);
@@ -868,56 +825,70 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs[0].wholeTickets, 0);
   });
 
-  test('does not invent WWXRP for a contentless non-ticket opening', () => {
+  test('retains the PrizeCredited mint of the wallet-ID WWXRP as the cold-bust consolation', async () => {
+    const receipt = {
+      logs: [
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
+        prizeCreditedLog(PLAYER, 2n),
+        prizeCreditedLog(OTHER, 5n),
+      ],
+    };
+    const legs = await parseReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'wwxrp']);
+    assert.equal(legs[1].amount, ethers.parseEther('2'), 'another wallet\'s credit is not ours');
+    assert.equal(legs[1].consolation, true);
+  });
+
+  test('does not invent WWXRP for a contentless non-ticket opening', async () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 0, 0n, false]),
-        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+        transferLog(ZERO, PLAYER, 1n),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened']);
   });
 
-  test('does not invent cold-bust WWXRP when the ticket roll awards one whole ticket', () => {
+  test('does not invent cold-bust WWXRP when the ticket roll awards one whole ticket', async () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 100, 0n, false]),
-        transferLog(ZERO, PLAYER, ethers.parseEther('1')),
+        transferLog(ZERO, PLAYER, 1n),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened']);
     assert.equal(legs[0].wholeTickets, 1);
   });
 
-  test('subtracts an itemized WWXRP BoxSpin from the aggregated cold-bust mint', () => {
+  test('subtracts an itemized WWXRP BoxSpin from the aggregated cold-bust mint', async () => {
     const betId = (1n << 63n) | 42n;
     const packed = packSpin(1n, 2n, 4) | (1n << 216n);
     const receipt = {
       logs: [
-        log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('2'), 0n]),
+        log('BoxSpin', [PLAYER, betId, packed, 2n, 0n]),
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
-        transferLog(ZERO, PLAYER, ethers.parseEther('3')),
+        transferLog(ZERO, PLAYER, 3n),
       ],
     };
-    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    const legs = await parseReceipt(receipt, PLAYER);
     assert.deepEqual(legs.map((leg) => leg.legType), ['spin', 'opened', 'wwxrp']);
     assert.equal(legs[0].payout, ethers.parseEther('2'));
     assert.equal(legs[2].amount, ethers.parseEther('1'));
     assert.equal(legs[2].consolation, true);
   });
 
-  test('player filter drops other players; foreign address logs skipped', () => {
+  test('player filter drops other players; foreign address logs skipped', async () => {
     const receipt = {
       logs: [
         log('LootBoxOpened', [OTHER, 1n, 1n, 2, 100, 0n, false]),
         log('LootBoxOpened', [PLAYER, 2n, 1n, 2, 100, 0n, false], '0x000000000000000000000000000000000000dead'),
       ],
     };
-    assert.equal(parseOpenLegsFromReceipt(receipt, PLAYER).length, 0);
+    assert.equal((await parseReceipt(receipt, PLAYER)).length, 0);
     // Without the filter, the GAME-address log still parses.
-    assert.equal(parseOpenLegsFromReceipt(receipt).length, 1);
+    assert.equal((await parseReceipt(receipt)).length, 1);
   });
 
   test('null / empty receipts → []', () => {
@@ -950,16 +921,16 @@ describe('openLegsFromFeed', () => {
     }
   });
 
-  test('receipt parsing keeps record bounties for Degenerette and excludes them for Luckboxes', () => {
+  test('receipt parsing keeps record bounties for Degenerette and excludes them for Luckboxes', async () => {
     const packed = packSpin(1n, 2n, 4) | (1n << 216n);
     const receipt = { logs: [
       log('LootBoxOpened', [PLAYER, 7n, 100n, 5, 100, 0n, false]),
       log('BoxSpin', [PLAYER, (1n << 63n) | (1n << 60n) | 11n, packed, 20n, 0n]),
       log('BoxSpin', [PLAYER, (1n << 63n) | (3n << 60n) | 12n, packed, 30n, 0n]),
     ] };
-    assert.deepEqual(parseOpenLegsFromReceipt(receipt, PLAYER)
+    assert.deepEqual((await parseReceipt(receipt, PLAYER))
       .filter(leg => leg.legType === 'spin').map(leg => leg.spinType), ['flip', 'record']);
-    assert.deepEqual(parseOpenLegsFromReceipt(receipt, PLAYER, { includeRecordBounties: false })
+    assert.deepEqual((await parseReceipt(receipt, PLAYER, { includeRecordBounties: false }))
       .filter(leg => leg.legType === 'spin').map(leg => leg.spinType), ['flip']);
   });
 
@@ -1053,7 +1024,7 @@ describe('openLegsFromFeed', () => {
     assert.equal(legs[1].consolation, true);
 
     const largeTx = `0x${'fa'.repeat(32)}`;
-    const largeAmount = 3_000_000_000_000_000n;
+    const largeAmount = 7_000_000_000_000_000n;
     const [largeOpened, largeWwxrp] = openLegsFromFeed([{
       ...rows[0],
       transactionHash: largeTx,
@@ -1061,8 +1032,8 @@ describe('openLegsFromFeed', () => {
       rewardData: { ...rows[0].rewardData, amount: String(largeAmount) },
     }], { player: PLAYER, lootboxIndex: 0 });
     assert.equal(largeOpened.legType, 'opened');
-    assert.equal(largeWwxrp.amount, 1_499_500_000_000_000_000n,
-      'larger payouts use the post-boon roll amount, matching _boxWwxrpStake');
+    assert.equal(largeWwxrp.amount, 3n * 10n ** 18n,
+      'larger payouts use the post-boon roll amount (3.4995 WWXRP), floored to whole tokens like _boxWwxrpStake');
   });
 
   test('one indexed chain event produces one leg when feed projections overlap', () => {
@@ -1094,16 +1065,12 @@ describe('openLegsFromFeed', () => {
       'the immutable transaction/log identity wins over duplicate projections');
   });
 
-  test('rebuilds presale and future indexed Craps comp payloads', () => {
+  test('rebuilds the indexed Craps comp aggregate beside its anchor', () => {
     const tx = `0x${'bc'.repeat(32)}`;
     const rows = [
       {
-        player: PLAYER, transactionHash: tx, logIndex: 30, legType: 'presale',
-        lootboxIndex: 9,
-        rewardData: {
-          amount: '1000', flip: '0', dgnrs: '0', wwxrp: '0',
-          normalPasses: '3', highPasses: '1',
-        },
+        player: PLAYER, transactionHash: tx, logIndex: 30, legType: 'opened',
+        lootboxIndex: 9, rewardData: { futureTickets: 100, flip: '0' },
       },
       {
         player: PLAYER, transactionHash: tx, logIndex: 31, legType: 'crapsPasses',
@@ -1112,8 +1079,6 @@ describe('openLegsFromFeed', () => {
     ];
     const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex: 9 });
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'crapsPasses']);
-    assert.equal(legs[0].crapsNormalPasses, 3);
-    assert.equal(legs[0].crapsHighPasses, 1);
     assert.equal(legs[1].crapsNormalPasses, 2);
     assert.equal(legs[1].crapsHighPasses, 1);
     assert.equal(legs[1].reservedDay, 74);
@@ -1202,105 +1167,115 @@ describe('openLegsFromDegenerettePayouts', () => {
 describe('readOpenLegsFromChain', () => {
   afterEach(() => contractsMod.clearProvider());
 
-  test('current counted box seeds do not depend on spend or a recovered ticket price', (t) => {
-    const previous = pinTestSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-    t.after(() => pinTestSchema(previous));
-    const context = {
-      rngWord: 89340965503094331071506645430717258826669948937240635946072716178043072020739n,
-      player: '0x411087a5f752d3b5545e8301ad7e6cef1351e480',
-    };
-    // Independent on-chain fixture: one custom box settled by mineFlip.
-    const betId = 9918476789771525913n;
-    for (const boxOrder of [429496746377216n, 1n]) {
-      const ids = deriveHumanLootboxSpinBetIds({ ...context, boxOrders: [boxOrder] });
-      assert.ok(ids.includes(betId), 'the first box uses BoxOpen and nonce 1, even without a price');
-    }
-  });
+  // The chain readers run against an ABI-backed fixture (queue storage, wallet table, RNG events);
+  // the ethers-style log and receipt reads the module makes are served from `logs` and `receipts`.
+  async function chainFixture(t, { head = 20_000 } = {}) {
+    const f = await rpcFixture({ head });
+    await f.wallet(37, PLAYER);
+    const { slot } = await f.s.location('GAME', 'boxQueue', [0]);
+    // Position 7 is lane 1 of word 2 (three 85-bit entries per word).
+    f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot) + 2n}`, queueEntry() << 85n);
+    await f.field('GAME', 'level', 44);
+    const saved = { contracts: { ...CONTRACTS }, chain: { ...CHAIN } };
+    Object.assign(CONTRACTS, f.contracts);
+    Object.assign(CHAIN, { id: f.client.chain.id, deployBlock: 1, readSchema: f.client.chain.readSchema });
+    setChainClientForTests(f.client);
+    _setWalletIdForTests(PLAYER, 37);
+    t.after(() => {
+      _setWalletIdForTests(PLAYER, null);
+      Object.assign(CONTRACTS, saved.contracts);
+      Object.assign(CHAIN, saved.chain);
+      setChainClientForTests(null);
+    });
+    return f;
+  }
+
+  const buyLog = (amount, position = 7) => {
+    const encoded = GAME_ABI.encodeEventLog(GAME_ABI.getEvent('LootBoxBuy'), [37, 0, position, amount]);
+    return { address: GAME, topics: encoded.topics, data: encoded.data };
+  };
+  const rngLog = (word) => log('LootboxRngApplied', [0n, word, 99n]);
+  const betIds = (rngWord) => deriveHumanLootboxSpinBetIds(queueContext(rngWord));
 
   for (const crossesChunk of [false, true]) {
-    test(`recovers the original whole-token spin after its queue index is reused${crossesChunk ? ' across scan chunks' : ''}`, async (t) => {
-      const previous = pinTestSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-      t.after(() => pinTestSchema(previous));
-      const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
-      const purchaseHash = '0x62e20b139ca534c2ba3ab3e86fde0134de8948d19466fc98092847d8faf11375';
-      const batchHash = '0x0bb811b839c93b00e5ae860756757e8bd18cd0c1ae604b59c856c80a2844e556';
+    test(`recovers a queued box's spin after its queue buffer is reused${crossesChunk ? ' across scan chunks' : ''}`, async (t) => {
+      const rngWord = 123_456_789n;
+      const [, flipId] = betIds(rngWord);
+      const purchaseHash = `0x${'62'.repeat(32)}`;
+      const batchHash = `0x${'0b'.repeat(32)}`;
       const laterHash = `0x${'ab'.repeat(32)}`;
-      const purchaseBlock = CHAIN.deployBlock + 2655;
+      const purchaseBlock = 9_000;
       const spinBlock = purchaseBlock + (crossesChunk ? 1801 : 11);
-      const rngWord = 89340965503094331071506645430717258826669948937240635946072716178043072020739n;
-      const amountWei = 100000000000n;
-      const boxOrder = 429496746377216n;
-      const betId = 9918476789771525913n;
-      const packed = 54025205625969836776031948201722931779593183940514304167866456632851n;
-      const purchaseCall = new ethers.Interface([
-        'function purchase(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,bool foil)',
-      ]);
-      const purchase = { ...log('LootBoxBuy', [player, 1n, amountWei]),
-        transactionHash: purchaseHash, blockNumber: purchaseBlock, index: 59 };
-      const spin = { ...log('BoxSpin', [player, betId, packed, 0n, 0n]),
-        transactionHash: batchHash, blockNumber: spinBlock, index: 268 };
-      const publication = (blockNumber, index, word) => ({
-        ...log('LootboxRngApplied', [1n, word, 99n]), blockNumber, index,
-      });
+      const f = await chainFixture(t);
+      // The buffer's word is applied by this batch; the entry is recovered at the settlement block.
+      await f.event('GAME', 'LootboxRngApplied', { index: 0, word: rngWord, requestId: 99n }, { block: spinBlock - 1 });
+      const packed = packSpin(1n, 2n, 4) | (1n << 216n);
+      const at = (entry, blockNumber, index, transactionHash) => ({ ...entry, blockNumber, index, logIndex: index, transactionHash });
+      const purchase = at(buyLog(10_000_000_000n), purchaseBlock, 59, purchaseHash);
+      const spin = at(log('BoxSpin', [PLAYER, flipId, packed, 0n, 0n]), spinBlock, 268, batchHash);
+      // A neighbouring box of the same sweep is not this box's spin.
+      const neighbour = at(log('BoxSpin', [PLAYER, flipId + 1n, packed, 0n, 0n]), spinBlock, 269, batchHash);
+      const publication = (blockNumber, index, word) => at(rngLog(word), blockNumber, index, `0x${'99'.repeat(32)}`);
       const rngLogs = [
         publication(purchaseBlock, 58, 111n), // previous round, earlier in the purchase block
-        publication(purchaseBlock + 9, 1, rngWord),
-        publication(spinBlock + 178, 1, 8752500828625591217090591293740862393462862129282725389683906258817288266542n),
-        publication(spinBlock + 326, 1, 38850288845440436283593745819566019314705621024041324473128790265168159235080n),
+        publication(spinBlock - 1, 1, rngWord),
+        publication(spinBlock + 178, 1, 8_752_500_828_625_591_217_090_591_293_740_862_393_462_862_129_282_725_389_683_906_258_817_288_266_542n),
+        publication(spinBlock + 326, 1, 38_850_288_845_440_436_283_593_745_819_566_019_314_705_621_024_041_324_473_128_790_265_168_159_235_080n),
       ];
-      const laterOpened = { ...log('LootBoxOpened', [player, 1n, amountWei, 6, 400, 120n, false]),
-        transactionHash: laterHash, blockNumber: spinBlock + 178, index: 2 };
+      const laterOpened = at(log('LootBoxOpened', [PLAYER, QUEUE_INDEX, 10_000_000_000n, 6, 400, 120n, false]),
+        spinBlock + 178, 2, laterHash);
       const receiptsRead = [];
-      const transactionsRead = [];
+      const searchedRanges = [];
       contractsMod.setProvider({
-        getBlockNumber: async () => spinBlock + 500,
+        send: f.client.provider.send,
+        getBlockNumber: async () => 20_000,
         getLogs: async (filter) => {
-          const events = [purchase, spin, ...rngLogs, laterOpened];
-          return events.filter(event => event.topics[0] === filter.topics[0]
+          searchedRanges.push([filter.fromBlock, filter.toBlock]);
+          const events = [purchase, spin, neighbour, ...rngLogs, laterOpened];
+          return events.filter((event) => event.topics[0] === filter.topics[0]
+            && (filter.topics[1] == null || event.topics[1] === filter.topics[1])
             && event.blockNumber >= filter.fromBlock && event.blockNumber <= filter.toBlock).reverse();
-        },
-        getTransaction: async (hash) => {
-          transactionsRead.push(hash);
-          assert.equal(hash, purchaseHash, 'deterministic recovery does not inspect unrelated settlements');
-          return { to: GAME, data: purchaseCall.encodeFunctionData('purchase', [
-            player, 0n, boxOrder, ethers.ZeroHash, 1, false,
-          ]), value: 0n };
         },
         getTransactionReceipt: async (hash) => {
           receiptsRead.push(hash);
           if (hash === purchaseHash) return { hash, blockNumber: purchaseBlock, logs: [purchase] };
           if (hash === laterHash) return { hash, blockNumber: laterOpened.blockNumber, logs: [laterOpened] };
           assert.equal(hash, batchHash);
-          return { hash, blockNumber: spinBlock, logs: [spin] };
+          return { hash, blockNumber: spinBlock, logs: [spin, neighbour] };
         },
       });
-      const legs = await readOpenLegsFromChain({ player, lootboxIndex: 1,
-        purchaseTransactionHashes: [purchaseHash], boxAmountWei: amountWei });
-      assert.deepEqual(legs.map(leg => leg.legType), ['spin']);
-      assert.equal(legs[0].betId, betId);
+      const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: QUEUE_INDEX,
+        purchaseTransactionHashes: [purchaseHash] });
+      assert.deepEqual(legs.map(leg => leg.legType), ['spin'], 'only the proven box spin is recovered from the shared receipt');
+      assert.equal(String(legs[0].betId), String(flipId));
+      assert.equal(legs[0].spinType, 'flip');
       assert.equal(legs[0].transactionHash, batchHash, 'save the immutable settlement for subsequent reveals');
       assert.equal(legs[0].payout, 0n, 'a losing spin still supplies a complete reveal');
       assert.equal(legs[0].reels.length, 1);
       assert.deepEqual(receiptsRead, [purchaseHash, batchHash]);
-      assert.deepEqual(transactionsRead, [purchaseHash]);
+      assert.ok(searchedRanges.some(([from]) => from === purchaseBlock),
+        'recovery starts at the immutable purchase receipt instead of the recent head');
+      assert.ok(!receiptsRead.includes(laterHash), 'a later round of the reused buffer is never inspected');
     });
   }
 
-  test('chain recovery keeps box rewards without replaying a same-receipt record bounty', async () => {
+  test('chain recovery keeps box rewards without replaying a same-receipt record bounty', async (t) => {
     const txHash = `0x${'ef'.repeat(32)}`;
-    const opened = log('LootBoxOpened', [
-      PLAYER, 7n, 1_000n, 6, 400, 120n, false,
-    ]);
+    const f = await chainFixture(t, { head: 6_000 });
+    const opened = log('LootBoxOpened', [PLAYER, QUEUE_INDEX, 1_000n, 6, 400, 120n, false]);
     contractsMod.setProvider({
-      getBlockNumber: async () => CHAIN.deployBlock + 5000,
+      send: f.client.provider.send,
+      getBlockNumber: async () => 6_000,
       getLogs: async (filter) => {
         assert.equal(filter.address.toLowerCase(), GAME.toLowerCase());
+        if (filter.topics[0] !== GAME_ABI.getEvent('LootBoxOpened').topicHash) return [];
         assert.equal(filter.toBlock - filter.fromBlock, 1799);
-        return [{ ...opened, transactionHash: txHash }];
+        return [{ ...opened, transactionHash: txHash, blockNumber: filter.toBlock, index: 0 }];
       },
       getTransactionReceipt: async (hash) => {
         assert.equal(hash, txHash);
         return {
+          blockNumber: 6_000,
           logs: [
             opened,
             log('LootBoxReward', [PLAYER, 11, 1_000n, 500n]),
@@ -1311,252 +1286,10 @@ describe('readOpenLegsFromChain', () => {
       },
     });
 
-    const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: 7 });
+    const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: QUEUE_INDEX });
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'reward']);
     assert.equal(legs[0].wholeTickets, 4);
     assert.equal(legs[1].label, 'Lazy pass discount boon');
-  });
-
-  test('recovers a spin-only result by matching the openBox transaction calldata', async () => {
-    const txHash = `0x${'fa'.repeat(32)}`;
-    const betId = (1n << 63n) | (1n << 60n) | 42n;
-    const packed = packSpin(1n, 2n, 4) | (1n << 216n) | (1n << 224n);
-    const spin = {
-      ...log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('12'), 0n]),
-      transactionHash: txHash,
-      blockNumber: CHAIN.deployBlock + 4_999,
-      logIndex: 5,
-    };
-    const openCall = new ethers.Interface([
-      'function openBox(address player, uint48 index)',
-    ]);
-    contractsMod.setProvider({
-      getBlockNumber: async () => CHAIN.deployBlock + 5_000,
-      getLogs: async (filter) => (
-        filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash ? [spin] : []
-      ),
-      getTransaction: async (hash) => {
-        assert.equal(hash, txHash);
-        return {
-          to: GAME,
-          data: openCall.encodeFunctionData('openBox', [PLAYER, 7n]),
-          value: 0n,
-        };
-      },
-      getTransactionReceipt: async (hash) => {
-        assert.equal(hash, txHash);
-        return { hash: txHash, logs: [spin] };
-      },
-    });
-
-    const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: 7 });
-    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
-    assert.equal(legs[0].spinType, 'flip');
-    assert.equal(legs[0].payout, ethers.parseEther('12'));
-    assert.equal(legs[0].reels.length, 1);
-  });
-
-  test('uses the purchase receipt to recover an old spin-only result outside the recent scan', async () => {
-    const purchaseHash = `0x${'bc'.repeat(32)}`;
-    const openHash = `0x${'cd'.repeat(32)}`;
-    const purchaseBlock = CHAIN.deployBlock + 125;
-    const spinBlock = purchaseBlock + 240;
-    const head = purchaseBlock + 50_000;
-    const betId = (1n << 63n) | (1n << 60n) | 77n;
-    const packed = packSpin(7n, 8n, 6) | (1n << 216n) | (1n << 224n);
-    const spin = {
-      ...log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('3'), 0n]),
-      transactionHash: openHash,
-      blockNumber: spinBlock,
-      logIndex: 2,
-    };
-    const openCall = new ethers.Interface([
-      'function openBox(address player, uint48 index)',
-    ]);
-    const searchedRanges = [];
-    contractsMod.setProvider({
-      getBlockNumber: async () => head,
-      getLogs: async (filter) => {
-        searchedRanges.push([filter.fromBlock, filter.toBlock]);
-        const containsSpin = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
-        return filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash && containsSpin
-          ? [spin]
-          : [];
-      },
-      getTransaction: async (hash) => {
-        assert.equal(hash, openHash);
-        return {
-          to: GAME,
-          data: openCall.encodeFunctionData('openBox', [PLAYER, 7n]),
-          value: 0n,
-        };
-      },
-      getTransactionReceipt: async (hash) => {
-        if (hash === purchaseHash) return { hash, blockNumber: purchaseBlock, logs: [] };
-        assert.equal(hash, openHash);
-        return { hash, blockNumber: spinBlock, logs: [spin] };
-      },
-    });
-
-    const legs = await readOpenLegsFromChain({
-      player: PLAYER,
-      lootboxIndex: 7,
-      purchaseTransactionHashes: [purchaseHash],
-    });
-    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
-    assert.equal(legs[0].payout, ethers.parseEther('3'));
-    assert.ok(searchedRanges.some(([from]) => from === purchaseBlock),
-      'recovery starts at the immutable purchase receipt instead of the recent head');
-    assert.ok(head - spinBlock > 18_000,
-      'the fixture stays beyond the unhinted ten-chunk replay window');
-  });
-
-  test('recovers a boosted batch-opened spin by its credited deterministic amount', async () => {
-    const purchaseHash = `0x${'12'.repeat(32)}`;
-    const batchHash = `0x${'34'.repeat(32)}`;
-    const purchaseBlock = CHAIN.deployBlock + 220;
-    const spinBlock = purchaseBlock + 18;
-    const rngWord = 0x123456789abcdefn;
-    const amountWei = 181_136_200_000n;
-    const creditedAmountWei = amountWei * 115n / 100n;
-    const [betId] = deriveHumanLootboxSpinBetIds({
-      rngWord,
-      player: PLAYER,
-      amountWei: creditedAmountWei,
-    });
-    const purchase = {
-      ...log('LootBoxBuy', [PLAYER, 7n, amountWei]),
-      transactionHash: purchaseHash,
-      blockNumber: purchaseBlock,
-      logIndex: 1,
-    };
-    const applied = {
-      ...log('LootboxRngApplied', [7n, rngWord, 99n]),
-      transactionHash: batchHash,
-      blockNumber: spinBlock,
-      logIndex: 2,
-    };
-    const packed = packSpin(9n, 10n, 5) | (1n << 216n);
-    const spin = {
-      ...log('BoxSpin', [PLAYER, betId, packed, 0n, 0n]),
-      transactionHash: batchHash,
-      blockNumber: spinBlock,
-      logIndex: 3,
-    };
-    let transactionReads = 0;
-    contractsMod.setProvider({
-      getBlockNumber: async () => spinBlock + 500,
-      getLogs: async (filter) => {
-        const containsResult = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
-        if (!containsResult) return [];
-        if (filter.topics?.[0] === iface.getEvent('LootboxRngApplied').topicHash) return [applied];
-        if (filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash) return [spin];
-        return [];
-      },
-      getTransaction: async () => {
-        transactionReads += 1;
-        return { to: GAME, data: '0x12345678', value: 0n };
-      },
-      getTransactionReceipt: async (hash) => {
-        if (hash === purchaseHash) {
-          return { hash, blockNumber: purchaseBlock, logs: [purchase] };
-        }
-        assert.equal(hash, batchHash);
-        return { hash, blockNumber: spinBlock, logs: [applied, spin] };
-      },
-    });
-
-    const legs = await readOpenLegsFromChain({
-      player: PLAYER,
-      lootboxIndex: 7,
-      purchaseTransactionHashes: [purchaseHash],
-      boxAmountWei: creditedAmountWei,
-    });
-    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
-    assert.equal(legs[0].spinType, 'wwxrp');
-    assert.equal(legs[0].reels[0].score, 5);
-    assert.equal(transactionReads, 1,
-      'recovery checks the immutable purchase calldata once while retaining the legacy amount match');
-  });
-
-  test('recovers a counted custom box settled inside a permissionless mineFlip batch', async () => {
-    const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
-    const purchaseHash = `0x${'56'.repeat(32)}`;
-    const batchHash = `0x${'78'.repeat(32)}`;
-    const purchaseBlock = CHAIN.deployBlock + 320;
-    const spinBlock = purchaseBlock + 18;
-    const rngWord = BigInt('0x229da6d2a87e42e6b33f0567e621ad81604806ca3500ac58516dba435de8cae4');
-    const amountWei = 20_000_000_000n;
-    // [customCount:1][customSize:20_000 × the testnet 1e6 scale].
-    const boxOrder = 85_899_362_697_216n;
-    // Exact live-shaped id from hash2(hash4(word, player, size, nonce=1), BurnieSpin).
-    const betId = 10_564_046_084_384_080_808n;
-    const purchaseCall = new ethers.Interface([
-      'function purchase(address buyer,uint256 entryQuantityScaled,uint256 boxOrder,bytes32 affiliateCode,uint8 payKind,bool foil)',
-    ]);
-    const purchase = {
-      ...log('LootBoxBuy', [player, 10n, amountWei]),
-      transactionHash: purchaseHash,
-      blockNumber: purchaseBlock,
-      logIndex: 1,
-    };
-    const applied = {
-      ...log('LootboxRngApplied', [10n, rngWord, 99n]),
-      transactionHash: batchHash,
-      blockNumber: spinBlock,
-      logIndex: 2,
-    };
-    const packed = packSpin(9n, 10n, 5) | (1n << 216n);
-    const spin = {
-      ...log('BoxSpin', [player, betId, packed, 0n, 0n]),
-      transactionHash: batchHash,
-      blockNumber: spinBlock,
-      logIndex: 3,
-    };
-    const transactionReads = [];
-    contractsMod.setProvider({
-      getBlockNumber: async () => spinBlock + 500,
-      getLogs: async (filter) => {
-        const containsResult = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
-        if (!containsResult) return [];
-        if (filter.topics?.[0] === iface.getEvent('LootboxRngApplied').topicHash) return [applied];
-        if (filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash) return [spin];
-        return [];
-      },
-      getTransaction: async (hash) => {
-        transactionReads.push(hash);
-        if (hash === purchaseHash) {
-          return {
-            to: GAME,
-            data: purchaseCall.encodeFunctionData('purchase', [
-              player, 0n, boxOrder, `0x${'00'.repeat(32)}`, 0, false,
-            ]),
-            value: 0n,
-          };
-        }
-        assert.equal(hash, batchHash);
-        return { to: GAME, data: '0x197b7998', value: 0n };
-      },
-      getTransactionReceipt: async (hash) => {
-        if (hash === purchaseHash) {
-          return { hash, blockNumber: purchaseBlock, logs: [purchase] };
-        }
-        assert.equal(hash, batchHash);
-        return { hash, blockNumber: spinBlock, logs: [applied, spin, { ...spin, ...log('BoxSpin', [player, betId + 1n, packed, 0n, 0n]), logIndex: 4 }] };
-      },
-    });
-
-    const legs = await readOpenLegsFromChain({
-      player,
-      lootboxIndex: 10,
-      purchaseTransactionHashes: [purchaseHash],
-      boxAmountWei: amountWei,
-    });
-    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
-    assert.equal(legs[0].spinType, 'flip');
-    assert.equal(String(legs[0].betId), String(betId), 'only the proven box spin is recovered from the shared receipt');
-    assert.ok(transactionReads.includes(purchaseHash),
-      'current counted orders are reconstructed from immutable purchase calldata');
   });
 
   test('names the real quest shield and never invents a generic bonus boon', () => {

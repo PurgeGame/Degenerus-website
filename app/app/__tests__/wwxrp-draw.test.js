@@ -15,7 +15,7 @@ const PLAYER = '0xab12000000000000000000000000000000000000';
 
 function makeFakeProvider(overrides = {}) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
     ...overrides,
   };
 }

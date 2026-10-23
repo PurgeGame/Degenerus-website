@@ -1,6 +1,4 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
+// Ticket reveal / event-store reads over wallet-ID keyed events. Calldata/receipts are covered by run66-*.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveFoil, foilCuts, deriveTraits, decodeEntryReveal, isFoil, ticketStreamReplay } from '../../chain/traits.js';
@@ -9,16 +7,18 @@ import { contractInterface, wordHex, ChainClient } from '../../chain/client.js';
 import { cachedLogs, clearEventMemoryForTests, previousEvents } from '../../chain/event-store.js';
 
 const PLAYER = '0x1111111111111111111111111111111111111111';
+const ID = 3; // PLAYER's wallet ID
 const GAME = '0x2222222222222222222222222222222222222222';
 const HASH = wordHex(777), FORK = wordHex(778);
-const topic = wordHex((7n << 160n) | BigInt(PLAYER));
+const topic = wordHex((7n << 160n) | BigInt(ID));
+const identityOf = domain => (BigInt(domain) << 248n) | (7n << 224n) | (BigInt(ID) << 32n);
 function reveal(topics, traits, present) {
   return { topics, data: wordHex(traits.reduce((word, trait, i) => word | (BigInt(trait) << BigInt(i * 8)), BigInt(present) << 128n)) };
 }
 test('anonymous reveal preserves trait zero, partial seats and repeated player topics', () => {
   const log = reveal([topic, wordHex(0), topic, wordHex(0)], [0, 64, 128, 192, 0, 0, 0, 0, 2, 65, 130, 193], 0x090f);
-  assert.deepEqual(decodeEntryReveal(log, 7, PLAYER), [0, 64, 128, 192, 2, 193]);
-  assert.deepEqual(decodeEntryReveal(log, 8, PLAYER), []);
+  assert.deepEqual(decodeEntryReveal(log, 7, ID), [0, 64, 128, 192, 2, 193]);
+  assert.deepEqual(decodeEntryReveal(log, 8, ID), []);
 });
 test('foil lines match packed vectors generated from the Solidity producer', () => {
   assert.deepEqual(foilCuts(31500), [3067, 6133, 9199, 11119, 12904, 14003, 14982]);
@@ -30,7 +30,7 @@ test('foil lines match packed vectors generated from the Solidity producer', () 
   assert.equal(isFoil(0n, 16), true);
 });
 
-test('one inventory combines seated, ordinary and foil paths without duplicate logs', async () => {
+test('one inventory combines seated, streamed, foil and direct-jackpot paths without duplicate logs', async () => {
   clearEventMemoryForTests();
   const iface = await contractInterface('GAME'); const logs = [];
   const push = (name, args, tx, index) => {
@@ -39,18 +39,17 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
     logs.push(row); return row;
   };
   push('LootboxRngApplied', [5, 123456789, 17], 10, 0);
-  const baseKey = (7n << 224n) | (2n << 192n) | (BigInt(PLAYER) << 32n) | 32n;
-  push('TraitsGenerated', [PLAYER, baseKey, 32], 10, 1);
-  push('Advance', [5, 7], 10, 2);
-  push('TraitsGenerated', [PLAYER, (7n << 224n) | (BigInt(PLAYER) << 32n), 16], 11, 3);
-  push('Advance', [5, 7], 11, 4);
+  const identity = identityOf(0x21);
+  push('TraitsGenerated', [ID, identity, 32], 10, 1);
+  push('TraitsGenerated', [ID, identityOf(0x23), 16], 11, 3);
   logs.push({ ...reveal([topic, topic, wordHex(0), wordHex(0)], [0, 64, 128, 192, 1, 65, 129, 193], 0xff),
     address: GAME, blockNumber: 20, transactionIndex: 12, transactionHash: wordHex(12), blockHash: HASH, logIndex: 5 });
-  // Audit 95d88f68b: a direct L+1 jackpot round reveals whole tickets by owner registry index.
-  // PLAYER is registry ID 3 (index 2) and holds lanes 0 and 2; lane 1 belongs to someone else.
+  // Audit 95d88f68b: a direct L+1 jackpot round reveals whole tickets by wallet ID.
+  // PLAYER (ID 3) holds lanes 0 and 2; lane 1 belongs to someone else.
   const lane = (q0, q1, q2, q3) => BigInt(q0) | (BigInt(64 + q1) << 8n) | (BigInt(128 + q2) << 16n) | (BigInt(192 + q3) << 24n);
-  push('JackpotTicketBatchTraits', [7, 3, [2n | (9n << 32n) | (2n << 64n), 0n, 0n, 0n],
+  push('JackpotTicketBatchTraits', [7, 3, [3n | (9n << 32n) | (3n << 64n), 0n, 0n, 0n],
     [lane(3, 4, 5, 6) | (lane(9, 9, 9, 9) << 32n) | (lane(7, 8, 9, 10) << 64n), 0n, 0n, 0n]], 13, 6);
+  const foilLines = [0xc0804000n, 0xc1814101n, 0xc2824202n, 0xc3834303n];
   const queries = [];
   const client = new ChainClient({ validateDeployment: false, chain: { id: 999, deployBlock: 1 }, contracts: { GAME }, provider: { send: async (method, params) => {
     if (method === 'eth_getLogs') {
@@ -58,35 +57,36 @@ test('one inventory combines seated, ordinary and foil paths without duplicate l
       return logs.filter(log => log.blockNumber >= Number(f.fromBlock) && log.blockNumber <= Number(f.toBlock)
         && f.topics.every((value, i) => value == null || value.toLowerCase() === log.topics[i]?.toLowerCase()));
     }
-    if (method === 'eth_getTransactionReceipt') return { blockNumber: 20, logs: logs.filter(log => log.transactionHash === params[0]) };
     throw new Error(`Unexpected RPC ${method}`);
   } } });
   const snapshot = { client, block: { number: 25, hash: HASH },
     field: async (_contract, name, key) => {
-      if (name === 'ticketOwnerId') { assert.equal(key, PLAYER); return 3n; }
-      assert.equal(name, 'ticketGenerationStartBlock'); return key === 7 ? 10n : 0n;
+      assert.equal(name, 'ticketGenerationStartBlock'); return (10n << 24n) | 7n;
     },
     call: async (_contract, method) => {
-      if (method === 'foilRecordOf') return { present: true, resolveDay: 3n, multBps: 31500n };
-      if (method === 'rngWordForDay') return 456n;
+      if (method === 'walletIdOf_g3120') return BigInt(ID);
+      if (method === 'foilRecordOf') return { present: true, resolved: true, lines: foilLines };
       if (method === 'entriesOwedView') return 8n;
       throw new Error(method);
     } };
   const inventory = await ticketInventory(snapshot, PLAYER, 7);
   assert.equal(inventory.totalEntries, 64); assert.equal(inventory.pendingEntries, 8);
   const actual = inventory.cards.flatMap(card => card.entries.map(entry => entry.traitId)).sort((a, b) => a - b);
-  const expected = [...deriveTraits(baseKey, 0, 32, 123456789n), ...deriveFoil({ buyer: PLAYER, level: 7, entropy: 456n, multBps: 31500 }).flat(), 0, 64, 128, 192, 1, 65, 129, 193,
-    3, 68, 133, 198, 7, 72, 137, 202].sort((a, b) => a - b);
+  const expected = [...deriveTraits(identity, 0, 32, 123456789n),
+    0, 64, 128, 192, 1, 65, 129, 193, 2, 66, 130, 194, 3, 67, 131, 195, // the foil lines
+    0, 64, 128, 192, 1, 65, 129, 193, // the seated reveal
+    3, 68, 133, 198, 7, 72, 137, 202].sort((a, b) => a - b); // the direct jackpot lanes 0 and 2
   assert.deepEqual(actual, expected);
-  assert.equal(queries.length, 6); assert.ok(queries.every(query => Number(query.fromBlock) === 10));
+  assert.equal(queries.length, 7, 'four seat positions, TraitsGenerated, the jackpot batch and one cohort-anchor window query');
+  assert.ok(queries.every(query => Number(query.fromBlock) === 10));
 });
 
 test('versioned solo streams distinguish sixteen ordinary entries from foil and retain the gold-six cap across chunks', () => {
-  const identity = (0x20n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
+  const identity = identityOf(0x20);
   const eventKey = identity | (1n << 255n) | 256n;
   assert.deepEqual(ticketStreamReplay(eventKey), { identity, offset: 256, goldSixTaken: true, foil: false });
   assert.equal(isFoil(identity, 16), false);
-  assert.equal(isFoil((0x23n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n), 16), true);
+  assert.equal(isFoil(identityOf(0x23), 16), true);
   const whole = deriveTraits(identity, 0, 4096, 123456789n);
   assert.equal(whole.filter(trait => trait === 253).length, 1);
   const taken = deriveTraits(identity | (1n << 255n), 0, 4096, 123456789n);
@@ -99,19 +99,19 @@ test('versioned solo streams distinguish sixteen ordinary entries from foil and 
   assert.deepEqual(split, whole, 'yielding between chunks must not issue extra gold sixes');
 });
 
-test('current inventory replays cohort words and encoded offsets without Advance events or batch receipts', async () => {
+test('inventory replays cohort words and encoded offsets without batch receipts', async () => {
   clearEventMemoryForTests();
   const iface = await contractInterface('GAME');
-  const identity = (0x21n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
-  const foilKey = (0x23n << 248n) | (7n << 224n) | (BigInt(PLAYER) << 32n);
+  const identity = identityOf(0x21);
+  const foilKey = identityOf(0x23);
   const rows = [];
   const push = (name, args) => rows.push({ ...iface.encodeEventLog(name, args), address: GAME,
     blockNumber: 20, blockHash: HASH, transactionHash: wordHex(500), transactionIndex: 0, logIndex: rows.length });
   push('LootboxRngApplied', [1, 111n, 17]);
-  push('TraitsGenerated', [PLAYER, identity, 16]);
+  push('TraitsGenerated', [ID, identity, 16]);
   push('LootboxRngApplied', [0, 222n, 17]);
-  push('TraitsGenerated', [PLAYER, identity | 32n, 512]);
-  push('TraitsGenerated', [PLAYER, foilKey, 16]);
+  push('TraitsGenerated', [ID, identity | 32n, 512]);
+  push('TraitsGenerated', [ID, foilKey, 16]);
   let receipts = 0;
   const client = new ChainClient({ validateDeployment: false, chain: { id: 98765, deployBlock: 1 }, contracts: { GAME },
     provider: { send: async (method, [filter]) => {
@@ -122,8 +122,9 @@ test('current inventory replays cohort words and encoded offsets without Advance
   });
   const foilLines = [0xc0804000n, 0xc1814101n, 0xc2824202n, 0xc3834303n];
   const snapshot = { client, block: { number: 25, hash: HASH },
-    field: async (_contract, _name, level) => level === 7 ? 10n : 0n,
+    field: async () => (10n << 24n) | 7n,
     call: async (_contract, method) => {
+      if (method === 'walletIdOf_g3120') return BigInt(ID);
       if (method === 'entriesOwedView') return 0n;
       assert.equal(method, 'foilRecordOf');
       return { present: true, resolved: true, lines: foilLines };
@@ -237,9 +238,8 @@ test('a batch whose RNG anchor is in an earlier transaction resolves it from one
       transactionHash: wordHex(tx), blockHash: HASH, logIndex: index });
   };
   push('LootboxRngApplied', [5, 123456789, 17], 20, 10, 0);
-  const baseKey = (7n << 224n) | (2n << 192n) | (BigInt(PLAYER) << 32n) | 32n;
-  push('TraitsGenerated', [PLAYER, baseKey, 16], 21, 13, 1);
-  push('Advance', [5, 7], 21, 13, 2);
+  const identity = identityOf(0x21);
+  push('TraitsGenerated', [ID, identity, 16], 21, 13, 1);
   const queries = [];
   const client = new ChainClient({ validateDeployment: false, chain: { id: 998, deployBlock: 1 }, contracts: { GAME }, provider: { send: async (method, params) => {
     if (method === 'eth_getLogs') {
@@ -247,15 +247,18 @@ test('a batch whose RNG anchor is in an earlier transaction resolves it from one
       return logs.filter(log => log.blockNumber >= Number(f.fromBlock) && log.blockNumber <= Number(f.toBlock)
         && f.topics.every((value, i) => value == null || (Array.isArray(value) ? value : [value]).some(v => v.toLowerCase() === log.topics[i]?.toLowerCase())));
     }
-    if (method === 'eth_getTransactionReceipt') return { blockNumber: 21, logs: logs.filter(log => log.transactionHash === params[0]) };
     throw new Error(`Unexpected RPC ${method}`);
   } } });
   const snapshot = { client, block: { number: 25, hash: HASH },
-    field: async (_contract, name, key) => (key === 7 ? 10n : 0n),
-    call: async (_contract, method) => { if (method === 'entriesOwedView') return 0n; throw new Error(method); } };
+    field: async () => (10n << 24n) | 7n,
+    call: async (_contract, method) => {
+      if (method === 'walletIdOf_g3120') return BigInt(ID);
+      if (method === 'entriesOwedView') return 0n;
+      throw new Error(method);
+    } };
   const inventory = await ticketInventory(snapshot, PLAYER, 7);
   const actual = inventory.cards.flatMap(card => card.entries.map(entry => entry.traitId)).sort((a, b) => a - b);
-  assert.deepEqual(actual, [...deriveTraits(baseKey, 0, 16, 123456789n)].sort((a, b) => a - b));
+  assert.deepEqual(actual, [...deriveTraits(identity, 0, 16, 123456789n)].sort((a, b) => a - b));
   assert.ok(queries.every(query => Number(query.fromBlock) === 10), 'no backward scan below the generation window');
 });
 

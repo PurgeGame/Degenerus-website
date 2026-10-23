@@ -66,10 +66,8 @@ describe('BAF resolution model', () => {
     assert.equal(bafGateWon(1), true);
     assert.equal(bafGateWon(2), false);
     assert.equal(bafCutSurvivorRank(1), 4);
-    assert.equal(bafCutSurvivorRank(5), 3);
-    assert.equal(bafCutSurvivorRank(3), 3);
-    assert.equal(bafCutSurvivorRank(1, 'legacy'), 3);
-    assert.equal(bafCutSurvivorRank(7, 'legacy'), 4);
+    assert.equal(bafCutSurvivorRank(5), 4);
+    assert.equal(bafCutSurvivorRank(3), 4);
     assert.equal(bafCutSurvivorRank('invalid'), null);
   });
 
@@ -264,6 +262,8 @@ describe('BAF resolution model', () => {
       assert.deepEqual(paths, [
         '/game/baf/40/resolution',
         '/leaderboards/baf?level=40',
+        `/player/${PLAYER_4}/baf?level=40`,
+        `/player/${PLAYER_4}/jackpot-history`,
       ]);
     } finally {
       __resetBafResolutionFetcherForTest();
@@ -343,11 +343,11 @@ describe('BAF fullscreen presentation', () => {
 
   test('parks the normal coinflip during fetch, then mounts with explicit close controls', () => {
     const hold = overlay.indexOf("document.body.classList.add('baf-resolution-pending')");
-    const load = overlay.indexOf('resolved = snapshot || await loadBafResolutionSnapshot');
+    const load = overlay.indexOf('await (snapshot || loadSnapshot');
     const create = overlay.indexOf("const overlay = document.createElement('section')");
     const lock = overlay.indexOf("document.body.classList.add('baf-resolution-open')");
-    assert.ok(hold >= 0 && hold < load && load < create && create < lock,
-      'the ordinary coin is held before the fetch while the fullscreen still mounts only when ready');
+    assert.ok(hold >= 0 && hold < create && create < lock && lock < load,
+      'the loading fullscreen mounts before the fetch and holds the ordinary coin');
     assert.match(overlay, /classList\.remove\('baf-resolution-pending'\)/);
     assert.match(overlay, /classList\?\.remove\('baf-resolution-open'\)/,
       'teardown repairs a stale scroll lock even when the overlay record is gone');
@@ -391,7 +391,9 @@ describe('BAF four-player comparisons', () => {
 
   test('filters other wallets and incomplete groups without inventing missing opponents', () => {
     const unrelated = slate('0x5555555555555555555555555555555555555555');
-    const incomplete = { ...slate(), players: slate().players.slice(1) };
+    const incomplete = { ...slate(), players: [] };
+    const short = { ...slate(), players: slate().players.slice(0, 3) };
+    assert.equal(normalizeBafComparisons([short], PLAYER_4)[0].players.length, 3, 'short on-chain samples retain their real entries');
     const unknownScore = slate();
     delete unknownScore.players[2].score;
     assert.deepEqual(normalizeBafComparisons([unrelated, incomplete, unknownScore], PLAYER_4), []);

@@ -164,7 +164,7 @@ test('processing-day retries wait for roll payloads before loading day distribut
 test('center reveal preserves AFKing and far-future sources, including seat-only wins', () => {
   const start = source.indexOf('  #distributePrizesFromRoll2(');
   const end = source.indexOf('\n  /**', start);
-  const revealStart = source.indexOf('  #revealCenter(');
+  const revealStart = source.indexOf('  #prepareCenterWinResult(');
   const revealEnd = source.indexOf('  // --- Quadrant reveal', revealStart);
   const render = runInNewContext(`new (class {
     #quadWinArrays = []; #centerWins = []; #centerScratched = false; #dayBonusTraitDraw = true; #bonusPhase = true;
@@ -176,7 +176,7 @@ test('center reveal preserves AFKing and far-future sources, including seat-only
     querySelector(s) { return s.includes('center-prize') ? this.prize : null; }
     ${source.slice(start, end)}
     ${source.slice(revealStart, revealEnd)}
-    run(wins) { this.#centerScratched = false; this.#distributePrizesFromRoll2([], wins); this.#revealCenter({ instant: true }); return this.prize; }
+    run(wins) { this.#centerScratched = false; this.#distributePrizesFromRoll2([], wins); this.#prepareCenterWinResult(); this.#revealCenter({ instant: true }); return this.prize; }
   })()`, { formatFlip: v => String(BigInt(v) / 10n ** 18n), formatCenterBonusFlip: v => String(v / 10n ** 18n) });
   const seat = { awardType: 'afking_seat_flip', amount: String(4000n * 10n ** 18n), traitId: null };
   const onlySeat = render.run([seat]);

@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
 // `Craps.FLIP`: the wire's *Wei money fields are the chain's whole-FLIP figures times this.
 const SUB = 10n ** 18n;
-export const { manifest, players, hashes } = JSON.parse(readFileSync(new URL('../../../chain/fixtures/craps-current.json', import.meta.url)));
+// The database's wallet-ID replay fixture: a 24-seat field written by the v5 producer.
+export const { manifest, players, hashes } = JSON.parse(readFileSync(new URL('../../../chain/fixtures/craps-wallet-ids.json', import.meta.url)));
+/** Seats are keyed by wallet ID: each distinct address gets the next ID from 37. */
 export function crapsFixture() {
+  const ids = new Map();
   const shapes = [3 | 2 << 9 | 2 << 12, 3 << 27 | 1 << 21 | 2 << 24,
     1 | 1 << 3 | 1 << 6 | 1 << 9 | 1 << 12 | 1 << 15 | 1 << 18,
     3 << 27 | 2 << 9 | 1 << 12, 3 | 2 << 24 | 1 << 6 | 1 << 3,
@@ -10,8 +13,9 @@ export function crapsFixture() {
   const seats = players.map(p => {
     const betId = BigInt(p.betId); const n = Number(betId & ((1n << 64n) - 1n)); const lane = betId >> 64n === 340n ? 'window' : 'day';
     const shape = n + (lane === 'day' ? 2 : 0);
-    // Chain units (whole FLIP since audit eb04b2e80, engine pin -v4): the wire carries them x 10^18.
-    return { betId, player: p.player, chips: shape % 7 === 0 ? 0 : shapes[shape % shapes.length], standing: p.standing,
+    // Chain units (whole FLIP): the wire carries them x 10^18.
+    if (!ids.has(p.player)) ids.set(p.player, ids.size + 37);
+    return { betId, player: p.player, playerId: ids.get(p.player), chips: shape % 7 === 0 ? 0 : shapes[shape % shapes.length], standing: p.standing,
       multiple: p.entryMultiple, lane, chainWon: BigInt(p.wonWei) / SUB, chainPaid: BigInt(p.paidWei) / SUB };
   }).sort((a, b) => a.lane !== b.lane ? a.lane === 'window' ? -1 : 1 : a.betId < b.betId ? -1 : 1);
   return { battleKey: manifest.battleKey, word: 5n, ruleset: manifest.ruleset,

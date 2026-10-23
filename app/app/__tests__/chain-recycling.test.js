@@ -1,44 +1,47 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rpcFixture, PLAYER } from './helpers/chain-rpc.js';
-import { useSchema, loadSchema, BEFORE_WALLET_IDS_SCHEMA_HASH, BEFORE_HEADER_TAIL_SCHEMA_HASH, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-import { retainedTicketLevels, pendingBoxWord, lootboxWord, lootboxSession, inLootboxSession, liveLootboxWord } from '../../chain/recycling.js';
+import { loadSchema } from '../../chain/schema.js';
+import { retainedTicketLevels, lootboxWord, lootboxSession, inLootboxSession, liveLootboxWord } from '../../chain/recycling.js';
 import { bingoProof, bingoCandidates } from '../../chain/positions.js';
 
 test('recycled schema keeps retained Bingo open until actual parity reassignment', async () => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-  try {
-    const f = await rpcFixture();
-    await f.field('GAME', 'level', 3);
-    await f.field('GAME', 'ticketBufferLevels', 2n | (3n << 24n));
-    assert.deepEqual(await retainedTicketLevels(f.s), [2, 3]);
-    const rows = await bingoCandidates(f.s, PLAYER);
-    assert.deepEqual(rows.scope, { fromLevel: 2, toLevel: 3 }, 'completed level 2 remains discoverable');
-    await assert.rejects(bingoProof(PLAYER, 2, 0, { client: f.client }), error => error.code !== 'BingoExpired');
-    await f.field('GAME', 'ticketBufferLevels', 4n | (3n << 24n));
-    await assert.rejects(bingoProof(PLAYER, 2, 0, { client: f.client }), error => error.code === 'BingoExpired');
-  } finally { useSchema(previous); }
+  const f = await rpcFixture(); await f.wallet(37, PLAYER);
+  await f.field('GAME', 'level', 3);
+  await f.field('GAME', 'ticketBufferLevels', 2n | (3n << 24n));
+  assert.deepEqual(await retainedTicketLevels(f.s), [2, 3]);
+  const rows = await bingoCandidates(f.s, PLAYER);
+  assert.deepEqual(rows.scope, { fromLevel: 2, toLevel: 3 }, 'completed level 2 remains discoverable');
+  await assert.rejects(bingoProof(PLAYER, 2, 0, { client: f.client }), error => error.code !== 'BingoExpired');
+  await f.field('GAME', 'ticketBufferLevels', 4n | (3n << 24n));
+  await assert.rejects(bingoProof(PLAYER, 2, 0, { client: f.client }), error => error.code === 'BingoExpired');
 });
 
-test('binary storage masks processed orders and binds repeated tags by publication order', async () => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-  try {
-    const f = await rpcFixture();
-    await f.field('GAME', 'rngFlagsAndNudges', (1n << 12n) | (1n << 15n));
-    await f.field('GAME', 'humanReadComplete', false);
-    await f.field('GAME', 'lootboxOrder', 77, 0, PLAYER);
-    assert.equal(await pendingBoxWord(f.s, 'lootboxOrder', 0, PLAYER), 77n);
-    assert.equal(await pendingBoxWord(f.s, 'lootboxOrder', 2, PLAYER), 0n, 'invalid tags never alias');
-    await f.field('GAME', 'lootboxOrder', 77n | (1n << 255n), 0, PLAYER);
-    assert.equal(await pendingBoxWord(f.s, 'lootboxOrder', 0, PLAYER), 0n);
-    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 345, requestId: 11 }, { block: 2 });
-    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 456, requestId: 13 }, { block: 5 });
-    assert.equal(await lootboxWord(f.s, 0, { fromBlock: 1 }), 345n);
-    assert.equal(await lootboxWord(f.s, 0, { fromBlock: 3 }), 456n, 'same tag, later session');
-  } finally { useSchema(previous); }
+test('game over blocks Bingo discovery and proof building even with retained buffers', async () => {
+  const f = await rpcFixture(); await f.wallet(37, PLAYER);
+  await f.field('GAME', 'level', 3);
+  await f.field('GAME', 'ticketBufferLevels', 2n | (3n << 24n));
+  await f.field('GAME', 'gameOver', true);
+  await f.event('GAME', 'BingoClaimed', { player: 37, level: 2, symbol: 0, flipReward: 2000, dgnrsPaid: 10 });
+  const rows = await bingoCandidates(f.s, PLAYER);
+  assert.deepEqual(rows.claimable, []);
+  assert.equal(rows.claimed.length, 1, 'paid rewards remain available as history');
+  await assert.rejects(bingoProof(PLAYER, 2, 0, { client: f.client }), error => error.code === 'GameOver');
+  assert.equal(f.requests.some(request => request.method === 'eth_call'
+    && request.params[0].to.toLowerCase() === f.contracts.GAME_LENS.toLowerCase()), false,
+  'closed claims do not start a ticket proof scan');
 });
 
-test('binary raw decoder accepts only the published read payload and kills terminal consumers', () => {
+test('repeated lootbox tags bind to the first publication after the commitment', async () => {
+  const f = await rpcFixture();
+  await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 345, requestId: 11 }, { block: 2 });
+  await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 456, requestId: 13 }, { block: 5 });
+  assert.equal(await lootboxWord(f.s, 0, { fromBlock: 1 }), 345n);
+  assert.equal(await lootboxWord(f.s, 0, { fromBlock: 3 }), 456n, 'same tag, later session');
+  assert.equal(await lootboxWord(f.s, 0, { fromBlock: 6 }), 0n, 'no publication after the commitment yet');
+});
+
+test('raw decoder accepts only the published read payload and kills terminal consumers', () => {
   const state = (1n << 252n) | (1n << 255n);
   assert.equal(liveLootboxWord(1n << 252n, 0, 99n), 0n, 'callback alone cannot publish');
   assert.equal(liveLootboxWord(state, 0, 99n), 99n);
@@ -49,56 +52,39 @@ test('binary raw decoder accepts only the published read payload and kills termi
 });
 
 test('same-block publication ordinals isolate repeated physical tags', async () => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-  try {
-    const f = await rpcFixture();
-    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 111, requestId: 2 }, { block: 8, index: 1 });
-    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 222, requestId: 4 }, { block: 8, index: 5 });
-    await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 333, requestId: 6 }, { block: 9, index: 1 });
-    const commitment = { blockNumber: 8, logIndex: 2 };
-    const session = await lootboxSession(f.s, 0, { fromBlock: 8, afterLogIndex: 2 });
-    assert.equal(session.word, 222n);
-    assert.equal(inLootboxSession({ blockNumber: 8, logIndex: 3 }, session, commitment), false);
-    assert.equal(inLootboxSession({ blockNumber: 8, logIndex: 6 }, session, commitment), true);
-    assert.equal(inLootboxSession({ blockNumber: 9, logIndex: 2 }, session, commitment), false);
-  } finally { useSchema(previous); }
+  const f = await rpcFixture();
+  await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 111, requestId: 2 }, { block: 8, index: 1 });
+  await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 222, requestId: 4 }, { block: 8, index: 5 });
+  await f.event('GAME', 'LootboxRngApplied', { index: 0, word: 333, requestId: 6 }, { block: 9, index: 1 });
+  const commitment = { blockNumber: 8, logIndex: 2 };
+  const session = await lootboxSession(f.s, 0, { fromBlock: 8, afterLogIndex: 2 });
+  assert.equal(session.word, 222n);
+  assert.equal(inLootboxSession({ blockNumber: 8, logIndex: 3 }, session, commitment), false);
+  assert.equal(inLootboxSession({ blockNumber: 8, logIndex: 6 }, session, commitment), true);
+  assert.equal(inLootboxSession({ blockNumber: 9, logIndex: 2 }, session, commitment), false);
+  const unpublished = await lootboxSession(f.s, 0, { fromBlock: 10 });
+  assert.equal(inLootboxSession({ blockNumber: 11, logIndex: 0 }, unpublished, { blockNumber: 10, logIndex: 0 }), false,
+    'a row after a commitment that no publication has answered yet is in no session');
 });
 
 test('an old resolution does not hide a new bet reusing the same physical tag and id', async () => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-  try {
-    const { pendingBets } = await import('../../chain/pending.js');
-    const f = await rpcFixture();
-    await f.event('GAME', 'DegeneretteBetPlaced', { player: PLAYER, index: 0, betId: 1, packed: 11 }, { block: 4, index: 0 });
-    await f.event('GAME', 'DegeneretteResolved', { player: PLAYER, index: 0, betId: 1 }, { block: 4, index: 1 });
-    await f.event('GAME', 'DegeneretteBetPlaced', { player: PLAYER, index: 0, betId: 1, packed: 22 }, { block: 4, index: 2 });
-    f.answer('GAME', 'degeneretteBetInfo', () => [22n]);
-    assert.deepEqual(await pendingBets(f.s, PLAYER), [{ betId: '1', betIndex: 0, packedData: '22' }]);
-  } finally { useSchema(previous); }
+  const { pendingBets } = await import('../../chain/pending.js');
+  const f = await rpcFixture(); await f.wallet(37, PLAYER);
+  await f.event('GAME', 'DegeneretteBetPlaced', { player: 37, index: 0, betId: 1, packed: 11 }, { block: 4, index: 0 });
+  await f.event('GAME', 'DegeneretteResolved', { playerId: 37, index: 0, betId: 1 }, { block: 4, index: 1 });
+  await f.event('GAME', 'DegeneretteBetPlaced', { player: 37, index: 0, betId: 1, packed: 22 }, { block: 4, index: 2 });
+  f.answer('GAME', 'degeneretteBetInfo', () => [22n]);
+  assert.deepEqual(await pendingBets(f.s, PLAYER), [{ betId: '1', betIndex: 0, packedData: '22' }]);
 });
 
-
-test('header-tail schemas append validity bitmaps and keep deployed stamped-header schemas intact', async () => {
-  const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH);
-  try {
-    const current = await loadSchema('GAME');
-    const f = await rpcFixture();
-    // 75 from audit 5b25fded0 (earlyBirdWhalePasses removed; every later Game slot moved down one).
-    assert.equal(current.fields.traitBucketLive.slot, '75');
-    await f.field('GAME', 'traitBucketLive', 1n << 255n, 0);
-    await f.field('GAME', 'traitBucketLive', 1n << 7n, 1);
-    assert.equal(await f.s.field('GAME', 'traitBucketLive', 0), 1n << 255n);
-    assert.equal(await f.s.field('GAME', 'traitBucketLive', 1), 1n << 7n);
-    // Audit 085c92162 dropped slot 5's uint32 nudge gap: the ticket buffer stamps moved 5:14 -> 5:10.
-    assert.deepEqual(current.fields.ticketBufferLevels, { slot: '5', offset: 10, type: 'inplace:uint48' });
-    useSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
-    const run63 = await loadSchema('GAME');
-    assert.deepEqual(run63.fields.ticketBufferLevels, { slot: '5', offset: 14, type: 'inplace:uint48' },
-      'the frozen run-63 schema keeps the deployed offset for the still-live run');
-    useSchema(BEFORE_HEADER_TAIL_SCHEMA_HASH);
-    const old = await loadSchema('GAME');
-    assert.equal(old.fields.traitBucketLive, undefined);
-    assert.deepEqual(old.fields.ticketBufferLevels, run63.fields.ticketBufferLevels);
-    assert.deepEqual(old.fields.lvlTraitEntry, current.fields.lvlTraitEntry, 'original parity mapping root retained');
-  } finally { useSchema(previous); }
+test('the generated Game schema places the recycled-buffer stamps and the trait-bucket validity bitmaps', async () => {
+  const schema = await loadSchema('GAME');
+  const f = await rpcFixture();
+  assert.equal(schema.fields.traitBucketLive.slot, '53');
+  await f.field('GAME', 'traitBucketLive', 1n << 255n, 0);
+  await f.field('GAME', 'traitBucketLive', 1n << 7n, 1);
+  assert.equal(await f.s.field('GAME', 'traitBucketLive', 0), 1n << 255n);
+  assert.equal(await f.s.field('GAME', 'traitBucketLive', 1), 1n << 7n);
+  assert.deepEqual(schema.fields.ticketBufferLevels, { slot: '5', offset: 10, type: 'inplace:uint48' });
+  assert.equal(schema.fields.lvlTraitEntry.type, 'inplace:uint256[256][2]');
 });

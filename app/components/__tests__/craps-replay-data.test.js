@@ -509,7 +509,6 @@ test('a fully prepared replay opens later without reloading artifacts, profiles,
       return { ok: bodies.has(path), status: bodies.has(path) ? 200 : 404, json: async () => clone(bodies.get(path)) };
     },
     loadProfiles: async () => { reads++; return new Map(); },
-    loadSettlementWord: async () => { reads++; return 5n; },
     loadEntryBoonPercent: async () => { reads++; return 0; },
     onResolutionAcknowledged: () => { acknowledged++; },
   });
@@ -542,7 +541,6 @@ test('a jackpot replay carries its exact prize and lottery rung without caller-s
       [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
     ]);
     let options;
-    let settlementReads = 0;
     await openCrapsReplayTable({ open: value => { options = value; } }, {
       ...REPLAY_DEPLOYMENT,
       battleKey: pointer.battleKey,
@@ -550,7 +548,6 @@ test('a jackpot replay carries its exact prize and lottery rung without caller-s
       fetchImpl: async path => ({ ok: bodies.has(path), status: bodies.has(path) ? 200 : 404,
         json: async () => clone(bodies.get(path)) }),
       loadProfiles: async () => new Map(),
-      loadSettlementWord: async () => { settlementReads++; return 5n; },
       loadEntryBoonPercent: async () => 0,
     });
     assert.equal(options.bountyPoolWei, mainPotWei);
@@ -560,7 +557,6 @@ test('a jackpot replay carries its exact prize and lottery rung without caller-s
       'the full pool never replaces the award');
     assert.equal(options.jackpotMultiplier, jackpotMultiplierBps / 10_000);
     assert.equal(options.bonusMultiplier, undefined, 'the ordinary boost never substitutes for the jackpot roll');
-    assert.equal(settlementReads, 0, 'jackpot fields have their own frozen word, not a lootbox RNG index');
   }
   assert.throws(() => validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER,
     prize: { mainPotWei, jackpotMultiplierBps: 15_000 } }, REPLAY_DEPLOYMENT), /unsupported jackpot multiplier/);
@@ -581,7 +577,6 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   ]);
   const opened = [];
   const profileBatchSizes = [];
-  const settlementReads = [];
   const settledMainPotWei = 84_900n * 10n ** 18n;
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
     ...REPLAY_DEPLOYMENT,
@@ -593,10 +588,6 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
     battlePayoutWei: settledMainPotWei,
     battleWinningStop: 1,
     bonusMultiplier: 10,
-    loadSettlementWord: async (index) => {
-      settlementReads.push(index);
-      return 5n;
-    },
     fetchImpl: async (path) => ({
       ok: bodies.has(path),
       status: bodies.has(path) ? 200 : 404,
@@ -629,26 +620,25 @@ test('replay opening carries repaired prizes, the paid battle receipt, and live 
   assert.equal(options.battleWinningStop, 1);
   assert.equal(options.bonusMultiplier, 10,
     'the authoritative boost rung survives the replay adapter');
-  assert.deepEqual(settlementReads, [],
-    'an explicit valid rung does not add a redundant storage read');
   assert.ok(options.otherPlayers.every((player) => player.label.startsWith('Discord ')));
   assert.ok(options.otherPlayers.every((player) => player.discordPfp?.startsWith('https://')));
   __resetCrapsReplayLoaderForTest();
 });
 
-test('a Dice Run record replay recovers its sealed bonus rung before opening', async () => {
+test('a Dice Run record replay recovers its sealed bonus rung from the pointer before opening', async () => {
   __resetCrapsReplayLoaderForTest();
   const viewer = SIM_CRAPS_REPLAY_VIEWER;
   const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
+  // The chain-built pointer carries the rung drawn off the battle's settlement word.
+  const pointer = { ...SIM_CRAPS_REPLAY_POINTER, prize: { mainPotWei: String(84_900n * 10n ** 18n), jackpotMultiplierBps: null, bonusMultiplier: 10 } };
   const bodies = new Map([
     ...SIM_CRAPS_REPLAY_PATHS.shards.map((path, index) => [path, SIM_CRAPS_REPLAY_SHARDS[index]]),
-    [SIM_CRAPS_REPLAY_PATHS.pointer, SIM_CRAPS_REPLAY_POINTER],
+    [SIM_CRAPS_REPLAY_PATHS.pointer, pointer],
     [SIM_CRAPS_REPLAY_PATHS.manifest, SIM_CRAPS_REPLAY_MANIFEST],
     [SIM_CRAPS_REPLAY_PATHS.featured, SIM_CRAPS_REPLAY_FEATURED],
     [SIM_CRAPS_REPLAY_PATHS.shards[viewerShard], SIM_CRAPS_REPLAY_SHARDS[viewerShard]],
   ]);
   const opened = [];
-  const readIndexes = [];
 
   await openCrapsReplayTable({ open: (options) => opened.push(options) }, {
     ...REPLAY_DEPLOYMENT,
@@ -661,24 +651,16 @@ test('a Dice Run record replay recovers its sealed bonus rung before opening', a
       json: async () => clone(bodies.get(path)),
     }),
     loadProfiles: async () => new Map(),
-    loadSettlementWord: async (index) => {
-      readIndexes.push(String(index));
-      return 5n;
-    },
   });
 
-  assert.deepEqual(readIndexes, [MANIFEST.settlement.boundIndex],
-    'metadata-poor replay launchers recover the immutable word at the manifest-bound index');
-  // The rung is the contract's draw off (word, battle key); the fixture's key moves with each
-  // regeneration, so the expectation is derived rather than pinned to one fixture's rung.
-  const rung = crapsBonusMultiplier({ battleKey: SIM_CRAPS_REPLAY_POINTER.battleKey, wordValue: 5n });
-  assert.ok([0.25, 1, 10, 100].includes(rung));
-  assert.equal(opened[0]?.bonusMultiplier, rung,
-    'the shared opener derives the exact contract rung instead of skipping the pre-roll reveal');
+  assert.equal(opened[0]?.bonusMultiplier, 10,
+    'a launcher without lobby context takes the pointer\'s rung instead of skipping the pre-roll reveal');
+  assert.throws(() => validateCrapsReplayPointer({ ...SIM_CRAPS_REPLAY_POINTER,
+    prize: { mainPotWei: '1', bonusMultiplier: 7 } }, REPLAY_DEPLOYMENT), /unsupported boost rung/);
   __resetCrapsReplayLoaderForTest();
 });
 
-test('a settlement-word outage degrades without blocking a verified replay', async () => {
+test('a replay whose pointer carries no rung opens without inventing a multiplier', async () => {
   __resetCrapsReplayLoaderForTest();
   const viewer = SIM_CRAPS_REPLAY_VIEWER;
   const viewerShard = crapsReplayShardIndex(viewer.seat, MANIFEST.field.shardSize);
@@ -702,12 +684,11 @@ test('a settlement-word outage degrades without blocking a verified replay', asy
       json: async () => clone(bodies.get(path)),
     }),
     loadProfiles: async () => new Map(),
-    loadSettlementWord: async () => { throw new Error('temporary RPC outage'); },
   });
 
-  assert.equal(opened.length, 1, 'word recovery is presentation-only and cannot block the replay');
+  assert.equal(opened.length, 1, 'the rung is presentation-only and cannot block the replay');
   assert.equal(Object.hasOwn(opened[0], 'bonusMultiplier'), false,
-    'an unavailable word never invents a multiplier');
+    'an unknown rung never invents a multiplier');
   __resetCrapsReplayLoaderForTest();
 });
 

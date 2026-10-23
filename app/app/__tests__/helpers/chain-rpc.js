@@ -2,8 +2,8 @@
 // deployment ABI, so renamed methods, bad arguments and tuple shapes fail tests.
 import { Interface, toBeHex } from '../../../vendor/ethers-app.mjs';
 import { ChainClient, contractInterface, wordHex } from '../../../chain/client.js';
-import { activeSchemaHash, isRun56Schema, hasWalletIds } from '../../../chain/schema.js';
-const names = ['GAME','GAME_LENS','COIN','COINFLIP','CRAPS','QUESTS','AFFILIATE','JACKPOTS','PARIMUTUEL','DEITY_PASS','WWXRP','SDGNRS','DGNRS','GNRUS','VAULT','ADMIN','AFKING_SUB_TOKEN','COIN_DRAW_BATTLE','JACKPOT_BATTLE'];
+import { CURRENT_SCHEMA_HASH } from '../../../chain/schema.js';
+const names = ['GAME','GAME_LENS','COIN','COINFLIP','CRAPS','QUESTS','AFFILIATE','JACKPOTS','PARIMUTUEL','DEITY_PASS','WWXRP','SDGNRS','DGNRS','GNRUS','VAULT','ADMIN','AFKING_SUB_TOKEN','JACKPOT_BATTLE'];
 const multi = new Interface(['function blockAndAggregate((address target,bytes callData)[] calls) payable returns (uint256 blockNumber,bytes32 blockHash,(bool success,bytes returnData)[] returnData)', 'function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
 export const PLAYER = '0x1234567890123456789012345678901234567890';
 export const OTHER_PLAYER = '0x2234567890123456789012345678901234567890';
@@ -20,9 +20,9 @@ function empty(p) {
 }
 export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }={}) {
   const contracts = Object.fromEntries(names.map((name,i)=>[name,toBeHex(i+100,20)]));
-  // Run 56 reads its standalone COIN_DRAW_BATTLE; from audit 0889affc1 the jackpot battle is CrapsBattle's
-  // delegatecall module, so its events decode at CRAPS and JACKPOT_BATTLE (still a manifest address) has no schema.
-  const supported = names.filter(name=>name!=='JACKPOT_BATTLE'&&(isRun56Schema()||name!=='COIN_DRAW_BATTLE'));
+  // The jackpot battle is CrapsBattle's delegatecall module: its events decode at CRAPS, and
+  // JACKPOT_BATTLE (still a manifest address) has no schema.
+  const supported = names.filter(name=>name!=='JACKPOT_BATTLE');
   const interfaces = new Map(await Promise.all(supported.map(async name=>[contracts[name],{name,iface:await contractInterface(name)}])));
   const storage = new Map(), answers = new Map(), logs=[], requests=[];
   const hash = n=>wordHex(n+serial*1000000);
@@ -34,7 +34,7 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
       const outputs=await Promise.all(jobs.map(async job=>[true,await call({to:job.target,data:job.callData})]));
       return multi.encodeFunctionResult(method,method==='aggregate3'?[outputs]:[head,hash(head),outputs]);
     }
-    if (data.slice(0,10)==='0x1e2eaeaf') return wordHex(storage.get(key(to,'0x'+data.slice(10)))??0n);
+    if (data.slice(0,10)==='0x000f7af8') return wordHex(storage.get(key(to,'0x'+data.slice(10)))??0n);
     const source=interfaces.get(to.toLowerCase()); if(!source) throw Error('Unknown contract '+to);
     const tx=source.iface.parseTransaction({data}); if(!tx) throw Error('Unknown selector '+data);
     const handler=answers.get(source.name+'.'+tx.name);
@@ -53,14 +53,34 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
       const f=params[0];return logs.filter(l=>l.address.toLowerCase()===f.address.toLowerCase()&&Number(l.blockNumber)>=Number(f.fromBlock)&&Number(l.blockNumber)<=Number(f.toBlock)
         &&(f.topics??[]).every((topic,i)=>topic==null||(Array.isArray(topic)?topic:[topic]).includes(l.topics[i])));
     }
+    if(method==='eth_getTransactionByHash')return null;
     if(method==='eth_getTransactionReceipt'){const selected=logs.filter(l=>l.transactionHash===params[0]);if(!selected.length)return null;return {...selected[0],logs:selected};}
     throw Error('Unexpected RPC '+method);
   }};
-  const client=new ChainClient({provider,contracts,chain:{id:chainId,deployBlock:1,readSchema:activeSchemaHash(),crapsReplayEngineVersion:hasWalletIds()?'craps-hot12-own30-longest-v5':'craps-hot12-own30-longest-v4'},clock:{anchor:0,period,deployDayBoundary:0}});
+  const client=new ChainClient({provider,contracts,chain:{id:chainId,deployBlock:1,readSchema:CURRENT_SCHEMA_HASH,crapsReplayEngineVersion:'craps-p7a-domains-v6'},clock:{anchor:0,period,deployDayBoundary:0}});
   const s=await client.snapshot();
   const field=async(name,label,value,...path)=>{
     const l=await s.location(name,label,path);const shift=BigInt(l.offset*8), mask=((1n<<BigInt(l.shape.bytes*8))-1n)<<shift;
     const k=key(contracts[name],l.slot),prior=storage.get(k)??0n;storage.set(k,(prior&~mask)|((BigInt(value)<<shift)&mask));s.reads.clear();
+  };
+  // Write scheduled logical fixtures into the contract's tagged physical rings.
+  const crapsField=async(label,value,slot,...path)=>{
+    slot=BigInt(slot);const day=slot>>3n,custom=slot>=1n<<40n;
+    if(label==='_dayTickets') return field('CRAPS',label,BigInt(value)|(day<<232n),day&63n);
+    const physical=custom?slot:slot&511n;
+    if(label==='_jackpotRounds') {
+      await field('CRAPS',label,day,physical,'day');
+      await field('CRAPS',label,day,physical,'requestDay');
+      await field('CRAPS',label,1n,physical,'started');
+      return field('CRAPS',label,value,physical,...path);
+    }
+    if(!custom&&label==='_battles') {
+      const previous=BigInt(await s.field('CRAPS','_battleDays',day&63n));
+      const flags=previous>>232n===day?previous&((1n<<232n)-1n):0n;
+      await field('CRAPS','_battleDays',(day<<232n)|flags|(1n<<(slot&7n)),day&63n);
+    }
+    if(!custom&&['_slotState','_highField'].includes(label))value=BigInt(value)|(day<<232n);
+    return field('CRAPS',label,value,['_battles','_highField'].includes(label)?wordHex(physical):physical,...path);
   };
   const event=async(name,eventName,args,{block=head-1,index=logs.length,tx=wordHex(block)}={})=>{
     const iface=await contractInterface(name);const fragment=iface.getEvent(eventName);
@@ -69,10 +89,10 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
   };
   const answer=(name,method,values)=>answers.set(name+'.'+method,typeof values==='function'?values:()=>values);
   // Run 66 (audit 98cd2a781) wallet IDs: `wallet(id, address)` writes GAME's wallet table row and
-  // answers walletIdOf for it. A smurf row passes `{ owner: ownerId }` instead of an address.
+  // answers walletIdOf_g3120 for it. A smurf row passes `{ owner: ownerId }` instead of an address.
   const walletIds=new Map();
-  if(interfaces.get(contracts.GAME.toLowerCase())?.iface.getFunction('walletIdOf'))
-    answers.set('GAME.walletIdOf',([a])=>[BigInt(walletIds.get(String(a).toLowerCase())??0)]);
+  if(interfaces.get(contracts.GAME.toLowerCase())?.iface.getFunction('walletIdOf_g3120'))
+    answers.set('GAME.walletIdOf_g3120',([a])=>[BigInt(walletIds.get(String(a).toLowerCase())??0)]);
   const wallet=async(id,address,{owner=0}={})=>{
     const length=await s.location('GAME','wallets',['length']);const k=key(contracts.GAME,length.slot);
     if((storage.get(k)??0n)<=BigInt(id))storage.set(k,BigInt(id)+1n);s.reads.clear();
@@ -80,5 +100,5 @@ export async function rpcFixture({ head=10000, timestamp=head*12, period=1000 }=
     await field('GAME','wallets',element,id);
     if(address)walletIds.set(address.toLowerCase(),Number(id));
   };
-  return {client,s,field,event,answer,wallet,requests,contracts,logs,storage,header};
+  return {client,s,field,crapsField,event,answer,wallet,requests,contracts,logs,storage,header};
 }

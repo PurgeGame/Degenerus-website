@@ -145,7 +145,7 @@ test('receipt reads retain mined results but only briefly retain pending nulls',
 test('GAME storage slots share one same-block Multicall and retain exact 256-bit values', async () => {
   const abi = new ethers.Interface([
     'function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)',
-    'function extsload(bytes32 slot) view returns (bytes32)',
+    'function extsload_g8132(bytes32 slot) view returns (bytes32)',
   ]);
   const calls = [];
   let rawReads = 0;
@@ -160,7 +160,7 @@ test('GAME storage slots share one same-block Multicall and retain exact 256-bit
       assert.equal(batch.length, 14);
       const results = batch.map((row) => {
         assert.equal(row.target.toLowerCase(), CONTRACTS.GAME.toLowerCase());
-        const [slot] = abi.decodeFunctionData('extsload', row.callData);
+        const [slot] = abi.decodeFunctionData('extsload_g8132', row.callData);
         return { success: true, returnData: word(slot) };
       });
       return abi.encodeFunctionResult('aggregate3', [results]);

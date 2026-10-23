@@ -485,7 +485,7 @@ describe('source gates', () => {
 
   test('the poll timer runs through the shared component-poll scheduler (which owns unref, so node:test never hangs on it)', () => {
     assert.match(src, /import \{ registerComponentPoll \} from '\.\.\/app\/component-poll\.js';/);
-    assert.match(src, /registerComponentPoll\(\(\) => this\.#refresh\(\), POLL_INTERVAL_MS\)/);
+    assert.match(src, /registerComponentPoll\(\(\) => this\.#refresh\(\), POLL_INTERVAL_MS(?:, \{ owner: this \})?\)/);
   });
 
   test('the score fetch is sequence-guarded against out-of-order responses', () => {

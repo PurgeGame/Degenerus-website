@@ -1,4 +1,4 @@
-import * as legacyReels from '../../app/legacy/dgn-reels.js';
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 // /app/components/__tests__/app-degenerette-panel.test.js — Phase 62 Plan 62-03 (BUY-05)
 // Run: cd website && node --test app/components/__tests__/app-degenerette-panel.test.js
 //
@@ -13,11 +13,6 @@ import '../../app/__tests__/helpers/http-transport.js';
 import assert from 'node:assert/strict';
 import { writeLightweightModePreference } from '../../app/ui-preferences.js';
 import { readFileSync } from 'node:fs';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-pass-section.test.js).
@@ -318,7 +313,7 @@ import { CHAIN, CONTRACTS, ETH_DIVISOR } from '../../app/chain-config.js';
 function installDeityOwners(owners = new Map(), ringColor = async () => null) {
   invalidateDeitySymbolAppearance();
   __setDeityCustomizationFactoryForTest(address => address.toLowerCase() === CONTRACTS.DEITY_PASS.toLowerCase()
-    ? { renderer: async () => DEITY_CUSTOMIZATION_DEPLOYMENTS[84532].renderer }
+    ? { renderer: async () => DEITY_CUSTOMIZATION_DEPLOYMENTS[ACTIVE_CHAIN_ID].renderer }
     : { pass: async () => CONTRACTS.DEITY_PASS, effectiveTokenStyle: async id => {
       const color = await ringColor(id);
       return { colors: { rimColor: color || '' }, overrideMask: color ? 1 : 0 };
@@ -348,6 +343,9 @@ const degeneretteChampionBadgePath = (q, icon) => dgnBadgePath(q, icon,
 import { dgnHouseTraits, dgnScoreWilds } from '../../app/dgn-reels.js';
 import { DGN_WILD_SPECTRUM, wildSpectrumGradient } from '../../app/dgn-wild-ring.js';
 import { fixtureBetFeedItem } from '../../app/__tests__/helpers/degenerette-fixture-bet.js';
+import { _setWalletIdForTests } from '../../app/wallet-id.js';
+import { loadSchema } from '../../chain/schema.js';
+import { miningGasBounds } from '../../app/mining-gas-profile.js';
 
 // reveal-overlay.js subclasses HTMLElement at module scope, so it can only be
 // imported AFTER the fakeDOM globals below are installed — hence lazily.
@@ -454,34 +452,38 @@ function makeFakeDegContract(opts = {}) {
 
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
-// Audit 224de529 queued bet word, LSB→MSB: owner | symbol << 160 |
-// spinCount << 165 | currency << 170 | record flag << 171 | activity << 172 |
-// stake-per-spin in units << 188 (ETH unit = 1 gwei / ETH_DIVISOR, FLIP = 1 FLIP).
+// Queued bet word, LSB→MSB: owner wallet ID (CONNECTED is account 37) | symbol << 32 |
+// spinCount << 37 | currency << 42 | record flag << 43 | activity << 44 |
+// stake-per-spin in units << 60 (ETH unit = 1 gwei / ETH_DIVISOR, FLIP = 1 FLIP).
+const CONNECTED_ID = 37;
+_setWalletIdForTests(CONNECTED, CONNECTED_ID);
 function betWord({
-  owner = CONNECTED, symbol = 0, spinCount = 1, currency = 0, record = false, activity = 0,
+  owner = CONNECTED_ID, symbol = 0, spinCount = 1, currency = 0, record = false, activity = 0,
   amountPerSpin = (10n ** 16n) / BigInt(ETH_DIVISOR),
 } = {}) {
   const unit = Number(currency) === 0 ? (10n ** 9n) / BigInt(ETH_DIVISOR) : 10n ** 18n;
   return BigInt(owner)
-    | (BigInt(symbol) << 160n)
-    | (BigInt(spinCount) << 165n)
-    | (BigInt(currency) << 170n)
-    | ((record ? 1n : 0n) << 171n)
-    | (BigInt(activity) << 172n)
-    | ((BigInt(amountPerSpin) / unit) << 188n);
+    | (BigInt(symbol) << 32n)
+    | (BigInt(spinCount) << 37n)
+    | (BigInt(currency) << 42n)
+    | ((record ? 1n : 0n) << 43n)
+    | (BigInt(activity) << 44n)
+    | ((BigInt(amountPerSpin) / unit) << 60n);
 }
 
 /** The bet word placeDegeneretteBet(player, currency, amountPerSpin, spinCount, symbol) queues. */
 function placedWord(args) {
   return betWord({
-    owner: args[0], currency: Number(args[1]), amountPerSpin: BigInt(args[2]),
+    currency: Number(args[1]),
+    // FLIP goes on chain as whole tokens; the word helper takes token wei.
+    amountPerSpin: Number(args[1]) === 1 ? BigInt(args[2]) * 10n ** 18n : BigInt(args[2]),
     spinCount: Number(args[3]), symbol: Number(args[4]),
   });
 }
@@ -812,10 +814,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('run 66 restores the receipt amount and uses eight-color heroes, including owned deities', async () => {
-    const { CURRENT_SCHEMA_HASH } = await import('../../chain/schema.js');
+  test('restores the receipt amount and uses eight-color heroes, including owned deities', async () => {
     const { pendingDegeneretteKey } = await import('../app-degenerette-panel.js');
-    const prior = pinTestSchema(CURRENT_SCHEMA_HASH);
     let el;
     try {
       installDeityOwners(new Map([[6, CONNECTED]]), async () => '#fa12ab');
@@ -840,18 +840,19 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.equal(ring.style.background, wildSpectrumGradient(DGN_WILD_SPECTRUM), 'changing champions keeps the fixed spectrum');
     } finally {
       el?.disconnectedCallback();
-      pinTestSchema(prior);
     }
   });
 
-  test('champion badges: WWXRP red, Ethereum green, every other symbol silver', async () => {
+  test('champion badges: the centered champion is wild; neighbours are WWXRP red, Ethereum green, every other symbol silver', async () => {
     const { degeneretteChampionBadgePath: exported } = await import('../app-degenerette-panel.js');
-    assert.match(exported(0, 0), /crypto_00_xrp_red\.svg$/);
-    assert.match(exported(0, 6), /crypto_06_ethereum_green\.svg$/);
-    assert.match(exported(1, 3), /zodiac_03_cancer_silver\.svg$/);
-    assert.match(exported(3, 4), /dice_04_5_silver\.svg$/);
+    assert.match(exported(0, 0), /crypto_00_xrp_wild\.svg/);
+    assert.match(exported(1, 3, true), /zodiac_03_cancer_wild\.svg/);
+    assert.match(exported(0, 0, false), /crypto_00_xrp_red\.svg$/);
+    assert.match(exported(0, 6, false), /crypto_06_ethereum_green\.svg$/);
+    assert.match(exported(1, 3, false), /zodiac_03_cancer_silver\.svg$/);
+    assert.match(exported(3, 4, false), /dice_04_5_silver\.svg$/);
     for (let q = 0; q < 4; q++) {
-      for (let icon = 0; icon < 8; icon++) assert.equal(exported(q, icon), degeneretteChampionBadgePath(q, icon));
+      for (let icon = 0; icon < 8; icon++) assert.equal(exported(q, icon, false), degeneretteChampionBadgePath(q, icon));
     }
     assert.match(PANEL_SRC, /<\/button>\s*<span class="dgn-symbol-preview__title">\s*<button type="button" class="deg-deity"/,
       'the deity trigger is separate from the carousel button');
@@ -1191,8 +1192,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(fake._calls.placeDegeneretteBet.length, 1,
       'the explicit popup confirmation reaches the existing placement path');
     assert.equal(fake._calls.placeDegeneretteBet[0][1], 1, 'the FLIP quest selects the FLIP lane');
-    assert.equal(fake._calls.placeDegeneretteBet[0][2], 400n * 10n ** 18n,
-      'five spins divide the exact 2,000 FLIP minimum evenly');
+    assert.equal(fake._calls.placeDegeneretteBet[0][2], 400n,
+      'five spins divide the exact 2,000 FLIP minimum evenly (whole tokens on chain)');
     assert.equal(fake._calls.placeDegeneretteBet[0][3], 5, 'the preset retains five spins');
     // The submitted symbol stays pinned to the quest snapshot.
     assert.equal(
@@ -1245,14 +1246,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const fullWagerWei = (10n ** 16n) / BigInt(ETH_DIVISOR);
     const spendableClaimableWei = fullWagerWei / 2n;
     const iface = new contractsMod.ethers.Interface([
-      'event DegeneretteBetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
+      'event DegeneretteBetPlaced(uint32 indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
     ]);
     degeneretteMod.__setContractFactoryForTest(() => ({
       placeDegeneretteBet: Object.assign(
         async (...args) => {
           recordedArgs = args;
           const { data, topics } = iface.encodeEventLog(
-            iface.getEvent('DegeneretteBetPlaced'), [args[0], 7n, 42n, 0n],
+            iface.getEvent('DegeneretteBetPlaced'), [CONNECTED_ID, 7n, 42n, 0n],
           );
           return makeFakeTx(makeFakeReceipt([
             { data, topics, address: '0x0000000000000000000000000000000000000001' },
@@ -1442,22 +1443,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     remounted.disconnectedCallback();
   });
 
-  test('old-deployment local and indexed bets cannot reappear as current pending work', async () => {
-    const legacyKey = `pending-degenerette:${CHAIN.id}:${CONNECTED.toLowerCase()}`;
-    localStorage.setItem(legacyKey, JSON.stringify({
-      betId: '42',
-      index: '7',
-      currency: 1,
-      amountPerSpin: String(250n * 10n ** 18n),
-      spinCount: 5,
-      hero: 2,
-      ticket: '13',
-    }));
-    const stalePacked = 13n
-      | (5n << 32n)
-      | (1n << 40n)
-      | ((250n * 10n ** 18n) << 42n)
-      | (2n << 218n);
+  test('indexed bets cannot reappear as current pending work without the live GAME slot', async () => {
+    const stalePacked = 37n
+      | (2n << 32n)
+      | (5n << 37n)
+      | (1n << 42n)
+      | (250n << 60n);
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => { throw new Error('RPC temporarily unavailable'); },
       connect(_signer) { return this; },
@@ -1490,8 +1481,6 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const el = instantiate();
     await settle(80);
 
-    assert.equal(localStorage.getItem(legacyKey), null,
-      'the ambiguous chain-only reminder is retired on restore');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'stale DB packedData cannot substitute for a current GAME slot');
     el.disconnectedCallback();
@@ -1565,11 +1554,13 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     let requestSubmitted = false;
     let requestWrites = 0;
     let postReceiptRequestabilityReads = 0;
-    const queuePacked = 7n | (420n << 48n) | (1_000n << 112n);
+    // lootboxRngPacked: pending ETH [48:87] and threshold [88:119], in 0.001 ETH.
+    const queuePacked = 7n | (420n << 48n) | (1_000n << 88n);
+    const queueSlot = BigInt((await loadSchema('GAME')).fields.lootboxRngPacked.slot);
     contractsMod.setProvider({
       ...makeFakeProvider(CONNECTED),
       getBlockNumber: async () => 119,
-      getStorage: async (_address, slot) => slot === '0x21' ? queuePacked : 0n,
+      getStorage: async (_address, slot) => BigInt(slot) === queueSlot ? queuePacked : 0n,
     });
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 13n,
@@ -1711,7 +1702,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     // Audit 18490c6fe: no per-bet door and no openBoxes valve; the settle tap sends one mineFlip()
     // with the shared gas floor (no estimateGas on the fake → MINE_FLIP_MIN_GAS_LIMIT).
-    assert.deepEqual(resolveArgs, [{ gasLimit: 10_000_000n }], 'mineFlip(): credits go to every owner it reaches');
+    assert.deepEqual(resolveArgs, [0, { gasLimit: miningGasBounds().min }], 'mineFlip(): credits go to every owner it reaches');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the resolved action leaves the tray once the full reveal is queued');
     const [sequence] = (await loadReveal()).__takeQueuedForTest();
@@ -1719,8 +1710,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(sequence?.currency, 0);
     assert.equal(sequence?.spins?.length, 1);
     // The spin's payout is priced from the queued word: 0.01 ETH × S5 (10×) ×
-    // 90% at activity 0 — exactly what the retired DegeneretteResult carried.
-    assert.equal(sequence?.spins?.[0]?.payout, 225n * ((10n ** 15n) / BigInt(ETH_DIVISOR)));
+    // 90% at activity 0 = 0.09 ETH, exactly what the retired DegeneretteResult carried.
+    assert.equal(sequence?.spins?.[0]?.payout, 90n * ((10n ** 15n) / BigInt(ETH_DIVISOR)));
     assert.equal(sequence?.headline, 'BET #7-42');
 
     el.disconnectedCallback();
@@ -2029,7 +2020,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.querySelector('[name="deg-ticket-count"]').value = '1';
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
     await settle(60);
-    assert.equal(recorded?.[2], 150n * 10n ** 18n);
+    assert.equal(recorded?.[2], 150n, 'whole FLIP on chain');
     el.disconnectedCallback();
   });
 
@@ -2207,7 +2198,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       partitionDegeneretteRewardLegs,
       withDegeneretteRecordContext,
     } = await import('../app-degenerette-panel.js');
-    const recordBoxBetId = 12_824_114_803_960_323_210n;
+    // Box id of the record bounty: hash4(rngWord, wallet ID 37, parent bet 1, "Record") seeds its entropy.
+    const recordBoxBetId = 13_466_768_483_555_016_000n;
     const legs = [
       { legType: 'spin', spinType: 'wwxrp' },
       { legType: 'spin', spinType: 'flip' },
@@ -3326,12 +3318,10 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
-  test('an owned deity shows its gifts and effective NFT rim after a walletless picker edit', async () => {
+  test('an owned deity shows its gifts, and its NFT rim never recolors the wild champion', async () => {
     storeMod.update('connected.address', null);
     storeMod.update('viewing.address', null);
     localStorage.setItem('degenerus:lightweight-mode:v1', '1');
-    const standard = readFileSync(new URL(`../../..${degeneretteChampionBadgePath(2, 6)}`, import.meta.url), 'utf8');
-    const image = `data:image/svg+xml,${encodeURIComponent(standard.replace('r="35.2" fill="#5e5e5e"', 'r="35.2" fill="#fa12ab"'))}`;
     installDeityOwners(new Map([[22, CONNECTED]]), async () => '#fa12ab');
     const el = instantiate();
     el.querySelector('[data-bind="dgn-symbol-choice-22"]').dispatchEvent({ type: 'click' });
@@ -3342,9 +3332,9 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(boons.getAttribute('deity-owner'), CONNECTED);
     assert.match(boons.title, /owner chooses/);
     const selected = el.querySelector('[data-bind="dgn-selected-symbol"]');
-    assert.equal(selected.src, image);
+    assert.equal(selected.src, degeneretteChampionBadgePath(2, 6), 'the owner\'s rim color never replaces the scoring badge');
     assert.equal(selected.classList.contains('dgn-deity-art'), false, 'the standard badge keeps its full size and geometry');
-    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').querySelector('img').src, image);
+    assert.equal(el.querySelector('[data-bind="dgn-symbol-choice-22"]').querySelector('img').src, degeneretteChampionBadgePath(2, 6));
     el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
     assert.equal(boons.hidden, true, 'a minted deity\'s rail hides while FLIP is selected');
     el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
@@ -3355,21 +3345,6 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(selected.classList.contains('dgn-deity-art'), false);
     assert.equal(selected.src, degeneretteChampionBadgePath(2, 5));
     el.disconnectedCallback();
-  });
-
-  test('a rim override completing after disconnect cannot mutate the champion', async () => {
-    let finish;
-    installDeityOwners(new Map([[22, CONNECTED]]), () => new Promise(resolve => { finish = resolve; }));
-    const el = instantiate();
-    el.querySelector('[data-bind="dgn-symbol-choice-22"]').dispatchEvent({ type: 'click' });
-    await settle(60);
-    assert.equal(typeof finish, 'function');
-    const img = el.querySelector('[data-bind="dgn-selected-symbol"]');
-    const before = img.src;
-    el.disconnectedCallback();
-    finish('#fa12ab');
-    await settle(40);
-    assert.equal(img.src, before);
   });
 
   test('picker drives the single symbol (quadrant<<3|icon) passed to placeDegeneretteBet', async () => {
@@ -3437,7 +3412,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       index: 7,
       spinIdx,
     }));
-    const tails = houses.map((house) => ({score:legacyReels.dgnScore(playerTraits, house, 0), wilds:legacyReels.dgnGoldMatches(playerTraits, house)}));
+    const tails = houses.map((house) => (dgnScoreWilds(playerTraits, house)));
     degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract({
       resolveLogs: (args) => [
         {
@@ -3563,7 +3538,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       'one DegeneretteResolved carries every spin; the placement word is already known');
     assert.deepEqual(
       [calls.logs[0].filter.player, calls.logs[0].filter.index, calls.logs[0].filter.betId],
-      [CONNECTED, 7n, 42n],
+      [CONNECTED_ID, 7n, 42n],
     );
     const [sequence] = revealMod.__takeQueuedForTest();
     assert.equal(sequence.kind, 'degenerette',

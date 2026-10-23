@@ -14,11 +14,9 @@
 //  - Coinflip.sol:46  — event CoinflipDeposit(address indexed player, uint256 creditedFlip)
 //  - Coinflip.sol:101 — error AmountLTMin();
 //  - Coinflip.sol:102 — error CoinflipLocked();
-//  - Coinflip.sol:229 — function depositCoinflip(address player, uint256 amount) external
+//  - Coinflip.sol — function depositCoinflip(uint32 id, uint256 amount) external (0 = the caller)
 //
-// RESEARCH Q5: FLIP/DGNRS/tickets are UNSCALED on Sepolia (only ETH is /1M
-// per chain-config.sepolia.js ETH_DIVISOR). Min coinflip deposit = 100 FLIP
-// = 100n * 10n**18n wei.
+// Min coinflip deposit = 100 FLIP = 100n * 10n**18n token wei; the chain takes raw whole FLIP.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,11 +27,8 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
 import { CHAIN, CONTRACTS } from '../chain-config.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { _setWalletIdForTests } from '../wallet-id.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of passes.test.js shape.
@@ -50,19 +45,12 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     depositCoinflip: [],
-    depositCoinflipWithCarry: [],
     setCoinflipAutoRebuy: [],
     setCoinflipAutoRebuyTakeProfit: [],
   };
   const order = [];
   const staticCallStub = (methodName) => async (..._args) => {
     order.push(`static:${methodName}`);
-    if (opts.staticCallMissingSelector?.[methodName]) {
-      const err = new Error('missing revert data');
-      err.code = 'CALL_EXCEPTION';
-      err.data = '0x';
-      throw err;
-    }
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = {
@@ -89,13 +77,6 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('depositCoinflip')(...args);
       },
       { staticCall: staticCallStub('depositCoinflip') }
-    ),
-    depositCoinflipWithCarry: Object.assign(
-      async (...args) => {
-        calls.depositCoinflipWithCarry.push(args);
-        return sendTxStub('depositCoinflipWithCarry')(...args);
-      },
-      { staticCall: staticCallStub('depositCoinflipWithCarry') },
     ),
     setCoinflipAutoRebuy: Object.assign(
       async (...args) => {
@@ -147,7 +128,7 @@ function makeFakeReverseFlipContract(opts = {}) {
   };
 }
 
-function makeFakeProvider(connectedAddr, chainId = 84532n) {
+function makeFakeProvider(connectedAddr, chainId = BigInt(ACTIVE_CHAIN_ID)) {
   return {
     getNetwork: async () => ({ chainId }),
     getSigner: async () => ({
@@ -157,6 +138,9 @@ function makeFakeProvider(connectedAddr, chainId = 84532n) {
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+// The chain-fallback event filters are keyed by wallet ID; sDGNRS is protocol account 2.
+_setWalletIdForTests(CONNECTED, 5);
+_setWalletIdForTests(CONTRACTS.SDGNRS, 2);
 
 // ===========================================================================
 // Reason-map registrations — Plan 62-03 registers AmountLTMin + CoinflipLocked.
@@ -366,11 +350,11 @@ describe('coinflip stake reads', () => {
     coinflipMod.__setStakeReadContractFactoryForTest(() => ({
       coinflipAmount: async (_player, overrides) => {
         seenBlockTags.push(overrides?.blockTag);
-        return 47_232n * 10n ** 18n;
+        return 47_232n; // raw chain units are whole FLIP
       },
       coinflipAutoRebuyInfo: async (_player, overrides) => {
         seenBlockTags.push(overrides?.blockTag);
-        return [true, 0n, 9_910_102n * 10n ** 18n, 20];
+        return [true, 0n, 9_910_102n, 20];
       },
     }));
 
@@ -399,15 +383,15 @@ describe('coinflip stake reads', () => {
       // carry—the exact stale-state shape that produced a zero/old Tomorrow row.
       coinflipAutoRebuyInfo: async (_player, overrides) => {
         seen.push(['raw-carry', overrides?.blockTag]);
-        return [true, 10_000n * unit, 1_300n * unit, 20];
+        return [true, 10_000n, 1_300n, 20];
       },
       previewClaimCoinflips: async (_player, overrides) => {
         seen.push(['claimable', overrides?.blockTag]);
-        return 20_000n * unit;
+        return 20_000n;
       },
-      previewSalvageFlipBacking: async (_player, overrides) => {
+      previewFlipBacking: async (_player, overrides) => {
         seen.push(['backing', overrides?.blockTag]);
-        return 21_286n * unit;
+        return 21_286n;
       },
     }));
 
@@ -430,18 +414,18 @@ describe('coinflip stake reads', () => {
     const priorState = {
       blockNumber: base + 150,
       index: 12,
-      args: { autoRebuyCarry: 4_614_766n * 10n ** 18n },
+      args: { autoRebuyCarry: 4_614_766n },
     };
     const stakeUpdate = {
       blockNumber: base + 250,
       index: 4,
-      args: { newTotal: 47_001n * 10n ** 18n },
+      args: { newTotal: 47_001n },
     };
     const resolution = { blockNumber: base + 300, index: 20 };
     const postResolutionState = {
       blockNumber: base + 300,
       index: 22,
-      args: { autoRebuyCarry: 9_910_102n * 10n ** 18n },
+      args: { autoRebuyCarry: 9_910_102n },
     };
     const contract = {
       filters: {
@@ -486,7 +470,7 @@ describe('coinflip stake reads', () => {
     const stakeUpdate = {
       blockNumber: base + 250,
       index: 4,
-      args: { newTotal: 86_906n * unit },
+      args: { newTotal: 86_906n },
     };
     const resolution = { blockNumber: base + 300, index: 20 };
     const seen = [];
@@ -502,11 +486,11 @@ describe('coinflip stake reads', () => {
       },
       previewClaimCoinflips: async (player, overrides) => {
         seen.push(['claimable', player, overrides?.blockTag]);
-        return 1_467_374n * unit;
+        return 1_467_374n;
       },
-      previewSalvageFlipBacking: async (player, overrides) => {
+      previewFlipBacking: async (player, overrides) => {
         seen.push(['backing', player, overrides?.blockTag]);
-        return (1_467_374n + 919_901n) * unit;
+        return 1_467_374n + 919_901n;
       },
       queryFilter: async (filter, from, to) => {
         let logs = [];
@@ -609,7 +593,7 @@ describe('coinflip stake reads', () => {
   test('restores an immutable resolved stake from browser storage without RPC', async () => {
     const priorStorage = globalThis.localStorage;
     const values = new Map([
-      [`coinflip_resolved_stake_v3:84532:${CONNECTED}:311`, '7000000000000000000000'],
+      [`coinflip_resolved_stake_v3:${ACTIVE_CHAIN_ID}:${CONNECTED}:311`, '7000000000000000000000'],
     ]);
     globalThis.localStorage = {
       getItem: (key) => values.get(key) ?? null,
@@ -640,11 +624,11 @@ describe('coinflip stake reads', () => {
       },
       previewClaimCoinflips: async (player, overrides) => {
         seen.push(['claimable', overrides?.blockTag]);
-        return 1_467_374n * unit;
+        return 1_467_374n;
       },
-      previewSalvageFlipBacking: async (player, overrides) => {
+      previewFlipBacking: async (player, overrides) => {
         seen.push(['backing', overrides?.blockTag]);
-        return (1_467_374n + 919_901n) * unit;
+        return 1_467_374n + 919_901n;
       },
       queryFilter: async () => { queryFilterCalls += 1; return []; },
     };
@@ -681,7 +665,7 @@ describe('coinflip stake reads', () => {
   test('resolved day from the API without playerStake runs one bounded CoinflipStakeUpdated lookup and never walks CoinflipDayResolved', async () => {
     const unit = 10n ** 18n;
     const base = Number(CHAIN.deployBlock);
-    const stakeUpdate = { blockNumber: base + 250, index: 4, args: { newTotal: 86_906n * unit } };
+    const stakeUpdate = { blockNumber: base + 250, index: 4, args: { newTotal: 86_906n } };
     const queries = [];
     const contract = {
       filters: {
@@ -691,8 +675,8 @@ describe('coinflip stake reads', () => {
         CoinflipDayResolved: (day) => ({ type: 'resolved', day: Number(day) }),
         CoinflipClaimState: (player) => ({ type: 'state', player: String(player).toLowerCase() }),
       },
-      previewClaimCoinflips: async () => 1_467_374n * unit,
-      previewSalvageFlipBacking: async () => (1_467_374n + 919_901n) * unit,
+      previewClaimCoinflips: async () => 1_467_374n,
+      previewFlipBacking: async () => 1_467_374n + 919_901n,
       queryFilter: async (filter, from, to) => {
         queries.push({ filter, from, to });
         const logs = filter.type === 'stake' && filter.day === 169 ? [stakeUpdate] : [];
@@ -739,7 +723,7 @@ describe('coinflip stake reads', () => {
     const boundedFloor = head - 20 * 1_800; // RESOLVED_DAY_FALLBACK_LOOKBACK_CHUNKS * LOG_CHUNK_BLOCKS
     const previousResolution = { blockNumber: boundedFloor + 500, index: 1 };
     const stakeUpdate = {
-      blockNumber: boundedFloor + 1_400, index: 2, args: { newTotal: 5_000n * unit },
+      blockNumber: boundedFloor + 1_400, index: 2, args: { newTotal: 5_000n },
     };
     const resolution = { blockNumber: boundedFloor + 1_500, index: 3 };
     const queries = [];
@@ -751,8 +735,8 @@ describe('coinflip stake reads', () => {
         }),
         CoinflipClaimState: (player) => ({ type: 'state', player: String(player).toLowerCase() }),
       },
-      previewClaimCoinflips: async () => 100n * unit,
-      previewSalvageFlipBacking: async () => 100n * unit,
+      previewClaimCoinflips: async () => 100n,
+      previewFlipBacking: async () => 100n,
       queryFilter: async (filter, from, to) => {
         queries.push({ filter, from, to });
         let logs = [];
@@ -816,7 +800,8 @@ describe('reverseFlip quote and action', () => {
     assert.equal(coinflipMod.reverseFlipCostWei(0), 100n * F);
     assert.equal(coinflipMod.reverseFlipCostWei(1), 150n * F);
     assert.equal(coinflipMod.reverseFlipCostWei(2), 225n * F);
-    assert.equal(coinflipMod.reverseFlipCostWei(3), 337_500_000_000_000_000_000n);
+    // Integer division on every step, in whole FLIP.
+    assert.deepEqual([3, 4, 5, 6].map((n) => coinflipMod.reverseFlipCostWei(n)), [337n * F, 505n * F, 757n * F, 1135n * F]);
   });
 
   test('normalizes and shares a live reverse-flip quote read', async () => {
@@ -843,10 +828,12 @@ describe('reverseFlip quote and action', () => {
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
     const fake = makeFakeReverseFlipContract();
     coinflipMod.__setReverseFlipContractFactoryForTest(() => fake);
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({ queued: 3n, costWei: 337n * F, locked: false }));
 
     const out = await coinflipMod.reverseFlip();
     assert.equal(out.receipt.status, 1);
     assert.equal(fake._calls.reverseFlip.length, 1, 'one reverseFlip transaction');
+    assert.deepEqual(fake._calls.reverseFlip[0], [337n], 'the quoted price rides along as expectedCost, in whole FLIP');
     assert.deepEqual(fake._order, ['static:reverseFlip', 'send:reverseFlip']);
   });
 
@@ -859,6 +846,7 @@ describe('reverseFlip quote and action', () => {
       staticCallRevertName: 'RngLocked',
     });
     coinflipMod.__setReverseFlipContractFactoryForTest(() => fake);
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({ queued: 3n, costWei: 337n * F, locked: false }));
 
     await assert.rejects(
       coinflipMod.reverseFlip(),
@@ -866,6 +854,18 @@ describe('reverseFlip quote and action', () => {
     );
     assert.equal(fake._calls.reverseFlip.length, 0);
     assert.deepEqual(fake._order, ['static:reverseFlip']);
+  });
+
+  test('refuses to send when the nudge price cannot be read', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const fake = makeFakeReverseFlipContract();
+    coinflipMod.__setReverseFlipContractFactoryForTest(() => fake);
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => null);
+
+    await assert.rejects(coinflipMod.reverseFlip(), /nudge price/i);
+    assert.deepEqual(fake._order, [], 'nothing is simulated or sent without the expectedCost guard');
   });
 });
 
@@ -891,86 +891,51 @@ describe('Plan 62-03: depositCoinflip', () => {
     contractsMod.clearProvider();
   });
 
-  test('uses the carry-aware selector by default with closure-form sendTx', async () => {
+  test('deposits with account 0 and raw whole FLIP through closure-form sendTx', async () => {
     const amount = '200000000000000000000'; // 200 FLIP
     await coinflipMod.depositCoinflip({ amount });
-    assert.equal(lastFakeContract._calls.depositCoinflipWithCarry.length, 1);
-    assert.equal(lastFakeContract._calls.depositCoinflip.length, 0);
-    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
-    assert.equal(args[0], CONNECTED, 'player = connected.address');
-    assert.equal(args[1], 200n * 10n ** 18n, 'amount converted to BigInt wei');
+    assert.equal(lastFakeContract._calls.depositCoinflip.length, 1);
+    const [args] = lastFakeContract._calls.depositCoinflip;
+    assert.equal(args[0], 0, 'account 0 = the connected wallet');
+    assert.equal(args[1], 200n, 'amount converted to raw whole FLIP');
+    assert.deepEqual(lastFakeContract._order, ['static:depositCoinflip', 'send:depositCoinflip']);
   });
 
-  test('falls back once when a rolling deploy does not have the carry selector', async () => {
-    const legacy = makeFakeContract({
-      staticCallMissingSelector: { depositCoinflipWithCarry: true },
-    });
-    coinflipMod.__setContractFactoryForTest(() => legacy);
-    const amount = 200n * 10n ** 18n;
-
-    await coinflipMod.depositCoinflip({ amount });
-    await coinflipMod.depositCoinflip({ amount });
-
-    assert.deepEqual(legacy._order, [
-      'static:depositCoinflipWithCarry',
-      'static:depositCoinflip',
-      'send:depositCoinflip',
-      'static:depositCoinflip',
-      'send:depositCoinflip',
-    ]);
-    assert.equal(legacy._calls.depositCoinflipWithCarry.length, 0);
-    assert.equal(legacy._calls.depositCoinflip.length, 2);
+  test('acting for another wallet sends that wallet\'s ID', async () => {
+    const OTHER = '0xdef0000000000000000000000000000000000000';
+    _setWalletIdForTests(OTHER, 9);
+    await coinflipMod.depositCoinflip({ amount: 200n * 10n ** 18n, player: OTHER });
+    assert.deepEqual(lastFakeContract._calls.depositCoinflip[0], [9, 200n]);
   });
 
-  test('never falls back to wallet funding when the carry selector reports RngLocked', async () => {
+  test('rejects a fractional FLIP amount', async () => {
+    await assert.rejects(
+      coinflipMod.depositCoinflip({ amount: 200n * 10n ** 18n + 1n }),
+      /whole FLIP/i,
+    );
+    assert.deepEqual(lastFakeContract._order, []);
+  });
+
+  test('surfaces an RngLocked simulation failure and sends nothing', async () => {
     const locked = makeFakeContract({
-      staticCallShouldRevert: { depositCoinflipWithCarry: true },
-      staticCallRevertName: { depositCoinflipWithCarry: 'RngLocked' },
+      staticCallShouldRevert: { depositCoinflip: true },
+      staticCallRevertName: { depositCoinflip: 'RngLocked' },
     });
     coinflipMod.__setContractFactoryForTest(() => locked);
 
     await assert.rejects(
       coinflipMod.depositCoinflip({ amount: 200n * 10n ** 18n }),
-      /RNG|settling/i,
+      /locked/i,
     );
-    assert.deepEqual(locked._order, ['static:depositCoinflipWithCarry']);
+    assert.deepEqual(locked._order, ['static:depositCoinflip']);
     assert.equal(locked._calls.depositCoinflip.length, 0);
-    assert.equal(locked._calls.depositCoinflipWithCarry.length, 0);
-  });
-
-  test('a previously proven carry selector never treats stripped revert data as legacy', async () => {
-    const options = {};
-    const flakyRpc = makeFakeContract(options);
-    coinflipMod.__setContractFactoryForTest(() => flakyRpc);
-    const amount = 200n * 10n ** 18n;
-    await coinflipMod.depositCoinflip({ amount });
-
-    options.staticCallMissingSelector = { depositCoinflipWithCarry: true };
-    await assert.rejects(coinflipMod.depositCoinflip({ amount }));
-
-    assert.equal(flakyRpc._calls.depositCoinflip.length, 0,
-      'an ambiguous empty revert never reaches the wallet-funded selector');
-    assert.deepEqual(flakyRpc._order, [
-      'static:depositCoinflipWithCarry',
-      'send:depositCoinflipWithCarry',
-      'static:depositCoinflipWithCarry',
-    ]);
-  });
-
-  test('can explicitly retain the legacy claimable-to-wallet selector', async () => {
-    const amount = 200n * 10n ** 18n;
-    await coinflipMod.depositCoinflip({ amount, useCarry: false });
-    assert.deepEqual(lastFakeContract._order, [
-      'static:depositCoinflip',
-      'send:depositCoinflip',
-    ]);
   });
 
   test('enables auto rebuy with its take-profit chunk after a static call', async () => {
     const takeProfit = 2_500n * 10n ** 18n;
     await coinflipMod.setCoinflipAutoRebuy({ enabled: true, takeProfit });
     assert.deepEqual(lastFakeContract._calls.setCoinflipAutoRebuy, [
-      [CONNECTED, true, takeProfit],
+      [0, true, 2_500n],
     ]);
     assert.deepEqual(lastFakeContract._order, [
       'static:setCoinflipAutoRebuy',
@@ -982,7 +947,7 @@ describe('Plan 62-03: depositCoinflip', () => {
     const takeProfit = 750n * 10n ** 18n;
     await coinflipMod.setCoinflipAutoRebuyTakeProfit({ takeProfit });
     assert.deepEqual(lastFakeContract._calls.setCoinflipAutoRebuyTakeProfit, [
-      [CONNECTED, takeProfit],
+      [0, 750n],
     ]);
     assert.deepEqual(lastFakeContract._order, [
       'static:setCoinflipAutoRebuyTakeProfit',
@@ -994,7 +959,7 @@ describe('Plan 62-03: depositCoinflip', () => {
     await assert.rejects(
       coinflipMod.setCoinflipAutoRebuy({
         enabled: true,
-        takeProfit: coinflipMod.MAX_AUTO_REBUY_TAKE_PROFIT_WEI + 1n,
+        takeProfit: coinflipMod.MAX_AUTO_REBUY_TAKE_PROFIT_WEI + 10n ** 18n,
       }),
       /too large/i,
     );
@@ -1032,17 +997,16 @@ describe('Plan 62-03: depositCoinflip', () => {
     );
   });
 
-  test('preserves the actionable Base Sepolia error when chain repair cannot complete', async () => {
+  test('preserves the actionable configured-chain error when chain repair cannot complete', async () => {
     contractsMod.setChainSwitchHandler(null);
     contractsMod.setProvider(makeFakeProvider(CONNECTED, 1n));
 
     await assert.rejects(
       coinflipMod.depositCoinflip({
         amount: '200000000000000000000',
-        useCarry: false,
       }),
       (error) => {
-        assert.match(error.message, /Wrong network.*Base Sepolia/i);
+        assert.match(error.message, new RegExp('Wrong network.*' + CHAIN.name, 'i'));
         assert.doesNotMatch(error.message, /Unexpected error/i);
         return true;
       },
@@ -1053,14 +1017,14 @@ describe('Plan 62-03: depositCoinflip', () => {
 
   test('accepts amount as string and converts to BigInt', async () => {
     await coinflipMod.depositCoinflip({ amount: '500000000000000000000' });
-    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
-    assert.equal(args[1], 500n * 10n ** 18n, 'string amount converted to 500e18 BigInt');
+    const [args] = lastFakeContract._calls.depositCoinflip;
+    assert.equal(args[1], 500n, 'string amount converted to BigInt, then to raw whole FLIP');
   });
 
   test('accepts amount as bigint directly', async () => {
     await coinflipMod.depositCoinflip({ amount: 250n * 10n ** 18n });
-    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
-    assert.equal(args[1], 250n * 10n ** 18n);
+    const [args] = lastFakeContract._calls.depositCoinflip;
+    assert.equal(args[1], 250n);
   });
 
   test('parseCoinflipDepositFromReceipt returns parsed CoinflipDeposit events', () => {
@@ -1068,14 +1032,14 @@ describe('Plan 62-03: depositCoinflip', () => {
       {
         parsed: {
           name: 'CoinflipDeposit',
-          args: { player: CONNECTED, creditedFlip: 350n * 10n ** 18n },
+          args: { player: CONNECTED, creditedFlip: 350n },
         },
       },
     ]);
     const out = coinflipMod.parseCoinflipDepositFromReceipt(receipt, lastFakeContract);
     assert.equal(out.length, 1);
     assert.equal(out[0].player, CONNECTED);
-    assert.equal(out[0].creditedFlip, 350n * 10n ** 18n);
+    assert.equal(out[0].creditedFlip, 350n * 10n ** 18n, 'whole FLIP on chain, token wei here');
   });
 
   test('parseCoinflipDepositFromReceipt ignores foreign logs gracefully', () => {
@@ -1096,15 +1060,15 @@ describe('Plan 62-03: depositCoinflip', () => {
 
   test('static-call gate runs BEFORE sendTx — order verification', async () => {
     const reverting = makeFakeContract({
-      staticCallShouldRevert: { depositCoinflipWithCarry: true },
-      staticCallRevertName: { depositCoinflipWithCarry: 'AmountLTMin' },
+      staticCallShouldRevert: { depositCoinflip: true },
+      staticCallRevertName: { depositCoinflip: 'AmountLTMin' },
     });
     coinflipMod.__setContractFactoryForTest(() => reverting);
     await assert.rejects(
       coinflipMod.depositCoinflip({ amount: '200000000000000000000' }),
     );
     assert.equal(
-      reverting._calls.depositCoinflipWithCarry.length, 0,
+      reverting._calls.depositCoinflip.length, 0,
       'sendTx NOT invoked when static-call gate trips',
     );
     // Order: static-call before sendTx
@@ -1134,25 +1098,14 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
   test('funding is one deposit transaction; the contract owns the complete waterfall', () => {
     assert.doesNotMatch(SRC, /claimFirst|readFlipFunding|from ['"]\.\/claims\.js['"]/,
       'the frontend must not add an obsolete preliminary claim transaction');
-    assert.match(SRC, /claimableStored first, unlocked auto-rebuy carry second, then burns only/,
-      'the carry-aware contract waterfall is documented beside the write path');
-    assert.match(SRC, /RngLocked revert is never converted into a[\s\S]*wallet-funded deposit/,
-      'the frontend must not bypass the carry safety lock with wallet FLIP');
-    assert.match(SRC, /provider\.getCode\(CONTRACTS\.COINFLIP\)[\s\S]*CARRY_DEPOSIT_SELECTOR_HEX/,
-      'rolling-deploy support comes from deployed bytecode rather than ambiguous revert data');
+    assert.doesNotMatch(SRC, /depositCoinflipWithCarry|getCode\(/,
+      'there is no carry-aware selector to probe for');
   });
 
   test('canonical ABI: depositCoinflip(address player, uint256 amount) external', () => {
     assert.ok(
       SRC.includes('function depositCoinflip(address player, uint256 amount) external'),
       'canonical COINFLIP_ABI fragment present',
-    );
-  });
-
-  test('canonical ABI: depositCoinflipWithCarry(address player, uint256 amount) external', () => {
-    assert.ok(
-      SRC.includes('function depositCoinflipWithCarry(address player, uint256 amount) external'),
-      'carry-aware COINFLIP_ABI fragment present',
     );
   });
 
@@ -1218,14 +1171,11 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
     assert.ok(/export\s+async\s+function\s+readResolvedCoinflipStake\b/.test(SRC));
   });
 
-  test('reverseFlip uses the GAME ABI, raw queued-count slot, and closure-form sendTx', () => {
-    assert.ok(SRC.includes('function reverseFlip() external'));
-    // run23+ generation: price-guarded overload + public quote view.
+  test('reverseFlip uses the price-guarded GAME ABI and closure-form sendTx', () => {
     assert.ok(SRC.includes('function reverseFlip(uint256 expectedCost) external'));
     assert.ok(SRC.includes('function rngNudgeQuote() external view returns (uint256 queued, uint256 cost)'));
-    assert.ok(SRC.includes('readContractStorage(CONTRACTS.GAME, REVERSE_FLIP_STORAGE_SLOT, { provider })'));
-    assert.ok(SRC.includes('BigInt(packedSlot) & UINT64_MASK'));
-    // Closure-form sendTx; args carry expectedCost on v2 deploys, empty on legacy.
+    assert.doesNotMatch(SRC, /REVERSE_FLIP_STORAGE_SLOT|function reverseFlip\(\) external/,
+      'no storage-slot quote or unguarded overload');
     assert.match(SRC, /sendTx\(\s*\(s\)\s*=>\s*_buildReverseFlipContract\(s\)\.reverseFlip\(\.\.\.args\)/);
     assert.ok(SRC.includes("'Reverse flip'"));
   });

@@ -7,18 +7,14 @@ import { readFileSync } from 'node:fs';
 import * as resolutions from '../jackpot-resolutions.js';
 import * as contracts from '../contracts.js';
 import * as store from '../store.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 
 function provider() {
   const signer = { getAddress: async () => PLAYER };
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => signer,
   };
 }
@@ -117,18 +113,19 @@ describe('chain-authoritative resolution probes', () => {
   test('a Decimator event is a pure entry read: no claim is simulated (audit 92a1358d0)', async () => {
     // Keepers settle the battle and credit winners; there is no claim door to simulate.
     for (const [overrides, state] of [
-      [{ phase: 0, roundStatus: 'open', coin: null, winner: false }, 'pending'],
+      [{ phase: 0, roundStatus: 'open', winner: false }, 'pending'],
       [{ phase: 1, roundStatus: 'settling', winner: false }, 'pending'],
-      [{ phase: 1, roundStatus: 'settling', coin: 'tails', winner: false }, 'lost'],
-      [{ entryId: null, coin: null, winner: false }, 'lost'],
-      [{ coin: 'heads', winner: false }, 'lost'],
+      [{ phase: 1, roundStatus: 'settling', survived: false, winner: false }, 'lost'],
+      [{ entryId: null, winner: false }, 'lost'],
+      [{ survived: false, winner: false }, 'lost'],
+      [{ entryId: null, survived: null, winner: true }, 'queued'],
       [{}, 'queued'],
       [{ claimed: true }, 'claimed'],
     ]) {
       resolutions.__setResolutionFactoriesForTest({
         entry: () => ({
           level: 25, entryId: '3', stack: '1900', chips: 0, phase: 2, roundStatus: 'closed',
-          coin: 'heads', winner: true, claimed: false, ...overrides,
+          survived: true, winner: true, claimed: false, ...overrides,
         }),
       });
       assert.deepEqual(
@@ -139,7 +136,8 @@ describe('chain-authoritative resolution probes', () => {
     }
     assert.equal(resolutions.decimatorEntryWinning({ entryId: '3', winner: true }), true);
     assert.equal(resolutions.decimatorEntryWinning({ entryId: '3', winner: false }), false);
-    assert.equal(resolutions.decimatorEntryWinning({ entryId: null, winner: true }), false);
+    assert.equal(resolutions.decimatorEntryWinning({ entryId: null, winner: true }), true,
+      'a jackpot-generated entry wins without any burned entry');
     const src = readFileSync(new URL('../jackpot-resolutions.js', import.meta.url), 'utf8');
     assert.doesNotMatch(src, /claimDecimatorJackpot\(/, 'no claim ABI or call remains');
   });
@@ -150,7 +148,7 @@ describe('chain-authoritative resolution probes', () => {
       bafConsolationOf: async (player, level) => {
         assert.equal(player, PLAYER);
         assert.equal(level, 20);
-        return 42n * 10n ** 18n;
+        return 42n; // whole WWXRP on chain
       },
       claimBafConsolation: claim,
       connect() { return this; },
@@ -164,9 +162,9 @@ describe('chain-authoritative resolution probes', () => {
     const result = await resolutions.claimBafConsolation({ player: PLAYER, level: 20 });
     assert.equal(result.receipt.status, 1);
     assert.deepEqual(claim.calls, [
-      ['static', PLAYER, 20],
-      ['send', PLAYER, 20],
-    ]);
+      ['static', 0, 20],
+      ['send', 0, 20],
+    ], 'the connected wallet claims for itself with account ID 0');
   });
 
   test('stale BAF action decodes NothingToClaim before sending', async () => {
@@ -180,7 +178,7 @@ describe('chain-authoritative resolution probes', () => {
       resolutions.claimBafConsolation({ player: PLAYER, level: 10 }),
       (caught) => caught.code === 'NothingToClaim' && /already claimed/i.test(caught.userMessage),
     );
-    assert.deepEqual(claim.calls, [['static', PLAYER, 10]], 'stale action never reaches sendTx');
+    assert.deepEqual(claim.calls, [['static', 0, 10]], 'stale action never reaches sendTx');
   });
 });
 

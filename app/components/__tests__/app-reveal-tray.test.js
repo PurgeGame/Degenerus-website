@@ -484,7 +484,6 @@ describe('<app-reveal-tray>', () => {
       { id: 'box:combo', kind: 'lootbox', label: 'Luckbox', state: 'waiting', pinned: true,
         lootboxStacks: [{ label: 'SMALL', count: 2 }, { label: 'LARGE', count: 2 }] },
       { id: 'box:single', kind: 'lootbox', label: 'Luckbox', state: 'waiting', pinned: true },
-      { id: 'box:presale', kind: 'lootbox', label: 'Presale box', lootboxLabel: 'PRESALE BOX', state: 'waiting', pinned: true, compact: true },
     ]);
     pending.publishPendingActions('redemption', [{
       id: 'redemption:1', kind: 'lootbox', label: 'sDGNRS redemption', lootboxLabel: 'REDEMPTION',
@@ -493,9 +492,9 @@ describe('<app-reveal-tray>', () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
     const labels = el.querySelectorAll('.rrt-lootbox-summary__unit').map(node => node.textContent);
-    assert.deepEqual(labels, ['5 LUCKBOXES', 'PRESALE BOX', 'REDEMPTION']);
+    assert.deepEqual(labels, ['5 LUCKBOXES', 'REDEMPTION']);
     assert.equal(el.querySelector('.rrt-lootbox-summary__status').textContent, '5 waiting');
-    assert.equal(el.querySelectorAll('.rrt-lootbox-mini').length, 3, 'each compact card uses one case illustration');
+    assert.equal(el.querySelectorAll('.rrt-lootbox-mini').length, 2, 'each compact card uses one case illustration');
     el.disconnectedCallback();
   });
 

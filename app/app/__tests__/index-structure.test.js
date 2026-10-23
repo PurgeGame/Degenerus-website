@@ -382,7 +382,7 @@ describe('index.html basic-mode skeleton', () => {
       'the no-build local workflow recognizes every loopback hostname');
     assert.match(html, /const moduleRevision = DEV_MODULE_HOSTS\.has\(window\.location\.hostname\)[\s\S]*?Date\.now\(\)\.toString\(36\)/,
       'one per-navigation revision is minted only for local development');
-    assert.match(html, /const importModule = \(src\)[\s\S]*?await Promise\.all\([\s\S]*?return import\(`\$\{src\}\$\{moduleRevision\}`\)/,
+    assert.match(html, /const importModule = \(src\)[\s\S]*?await Promise\.all\([\s\S]*?return await import\(`\$\{src\}\$\{moduleRevision\}`\)/,
       'deduplicated lazy imports wait for scoped styles and use the coherent local navigation revision');
     assert.match(html, /if \(moduleLoads\.has\(src\)\) return moduleLoads\.get\(src\)/,
       'viewport and post-load schedulers share one root import per module');
@@ -394,7 +394,7 @@ describe('index.html basic-mode skeleton', () => {
     const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
     assert.ok(mapMatch, 'index.html carries an import map');
     const map = JSON.parse(mapMatch[1]);
-    const revision = '?v=craps-98cd2a78-d1e8e6c3-final-ranks-20261010';
+    const revision = '?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010';
     for (const modulePath of [
       '/app/craps/replay-contract.js',
       '/app/craps/replay-engine.js',
@@ -409,7 +409,7 @@ describe('index.html basic-mode skeleton', () => {
     // The fill-draw loader imports the table by revision, so it re-pins with the table's result card.
     assert.equal(
       map.imports?.['/app/craps/coin-draw-viewer.js'],
-      '/app/craps/coin-draw-viewer.js?v=craps-98cd2a78-d1e8e6c3-result-card-20261012',
+      '/app/craps/coin-draw-viewer.js?v=craps-31ca6fdd-p7a-v6-result-card-20261012',
     );
   });
 

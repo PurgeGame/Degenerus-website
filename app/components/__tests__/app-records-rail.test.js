@@ -1,11 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 
 globalThis.HTMLElement ||= class HTMLElement {};
 globalThis.customElements ||= {
@@ -60,6 +55,8 @@ const {
 } = await import('../app-records-rail.js');
 const { CHAIN, CONTRACTS, ETH_DIVISOR } = await import('../../app/chain-config.js');
 const { ethers } = await import('../../app/contracts.js');
+const { rpcFixture } = await import('../../app/__tests__/helpers/chain-rpc.js');
+const { prepareWalletReceipt } = await import('../../app/wallet-receipt.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
@@ -434,14 +431,13 @@ describe('normalizeRecords', () => {
     assert.ok(state.records.every((r) => r.held === false && r.player === null));
   });
 
-  test('marks a record held and keeps the server bar', () => {
+  test('marks a record held and derives the bar from the mark', () => {
     const state = normalizeRecords({
       recordPool: '48000',
       records: [{
         kind: 0,
         player: '0xAbCdEf0123456789012345678901234567890123',
-        value: '100',
-        barToBeat: '120',
+        value: String(100n * 10n ** 18n),
         claimCount: 2,
         totalPaidFlip: '7',
       }],
@@ -450,7 +446,7 @@ describe('normalizeRecords', () => {
     assert.equal(state.recordPoolWei, 48_000n);
     assert.equal(flip.held, true);
     assert.equal(flip.player, '0xabcdef0123456789012345678901234567890123');
-    assert.equal(flip.barToBeat, 120n);
+    assert.equal(flip.barToBeat, 120n * 10n ** 18n, 'mark + ceil(mark / 5), in whole FLIP');
     assert.equal(flip.claimCount, 2);
     // Kinds absent from the payload still hold their slot.
     assert.equal(state.records[2].held, false);
@@ -548,26 +544,30 @@ describe('Dice Run record provenance', () => {
   const SCORE_BPS = 12_103_866n;
   const BET_ID = 8_559_289_250_201_231_949_833n;
   const TX_HASH = `0x${'56'.repeat(32)}`;
-  const iface = new ethers.Interface([
-    'event CrapsBattleFinalized(bytes32 indexed battleKey,uint8 winningStop,uint64 winnerId,uint256 winningPeak,uint256 winningEnd,uint256 winningScoreBps,uint256 pot)',
-    'event CrapsBattlePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,uint256 amount)',
-    'event CrapsProgressivePaid(uint256 indexed betId,bytes32 indexed battleKey,address indexed player,bool rare,uint16 poolBps,uint256 peak,uint256 scoreBps,uint256 candidate,uint256 paid,uint256 balance)',
-  ]);
+  const PLAYER_ID = 37;
+  const WEI = 10n ** 18n;
 
-  function eventLog(name, values) {
-    const encoded = iface.encodeEventLog(iface.getEvent(name), values);
-    return { ...encoded, address: CONTRACTS.CRAPS };
+  // Receipts are decoded from the current ABI (wallet IDs); prepareWalletReceipt puts the resolved
+  // address back under the address-era names, as a confirmed transaction's receipt is.
+  async function withReceipt(build, run) {
+    const f = await rpcFixture();
+    await f.wallet(PLAYER_ID, PLAYER);
+    const logs = await build(f);
+    const receipt = { blockNumber: 9999, logs };
+    await prepareWalletReceipt(receipt, f.client);
+    const saved = [CONTRACTS.CRAPS, CONTRACTS.COINFLIP];
+    CONTRACTS.CRAPS = f.contracts.CRAPS;
+    CONTRACTS.COINFLIP = f.contracts.COINFLIP;
+    try { return await run(receipt); } finally { [CONTRACTS.CRAPS, CONTRACTS.COINFLIP] = saved; }
   }
 
-  test('extracts the winning seat as the initial replay perspective', () => {
-    const receipt = {
-      logs: [
-        eventLog('CrapsBattleFinalized', [
-          BATTLE_KEY, 1, 9n, 13_000n, 12_000n, SCORE_BPS, 55_000n,
-        ]),
-        eventLog('CrapsBattlePaid', [BET_ID, BATTLE_KEY, PLAYER, 77_000n]),
-      ],
-    };
+  test('extracts the winning seat as the initial replay perspective', () => withReceipt(async f => [
+    await f.event('CRAPS', 'CrapsBattleFinalized', {
+      battleKey: BATTLE_KEY, winningStop: 1, winnerId: 9n, winningPeak: 13_000n, winningEnd: 12_000n,
+      winningScoreBps: SCORE_BPS, pot: 55n,
+    }),
+    await f.event('CRAPS', 'CrapsBattlePaid', { betId: BET_ID, battleKey: BATTLE_KEY, playerId: PLAYER_ID, amount: 77n }),
+  ], receipt => {
     const record = diceRunRecordFromReceipt({
       player: PLAYER,
       value: SCORE_BPS,
@@ -579,27 +579,20 @@ describe('Dice Run record provenance', () => {
     assert.deepEqual(record.replay, {
       battleKey: BATTLE_KEY,
       viewerBetId: BET_ID.toString(),
-      settledMainPotWei: '55000',
+      settledMainPotWei: String(55n * WEI),
       battleWinner: PLAYER,
       battleWinnerBetId: BET_ID.toString(),
-      battlePayoutWei: '77000',
+      battlePayoutWei: String(77n * WEI),
       battleWinningStop: 1,
     });
-  });
+  }));
 
-  test('attributes the jackpot battle when no scheduled window pair exists (audit 9ee8986d)', () => {
-    // rewardJackpotBattle (CrapsBattle.sol:1945) has no CrapsBonusArmed/CrapsBattleFinalized
-    // of its own: betId is pinned to 0 and battleKey is the battle word, not a scheduled
-    // window's key. Run 56 never emits this shape (the mechanism doesn't exist there), so
-    // the loop below simply finds nothing and `replay` stays null, unchanged from before.
-    const battleWordKey = `0x${'cd'.repeat(32)}`;
-    const receipt = {
-      logs: [
-        eventLog('CrapsProgressivePaid', [
-          0n, battleWordKey, PLAYER, true, 1000, 900_000n, SCORE_BPS, 88_000n, 88_000n, 12_000n,
-        ]),
-      ],
-    };
+  test('a jackpot-battle payment alone (betId 0) attaches no replay', () => withReceipt(async f => [
+    await f.event('CRAPS', 'CrapsProgressivePaid', {
+      betId: 0n, battleKey: `0x${'cd'.repeat(32)}`, playerId: PLAYER_ID, rare: true, poolBps: 1000,
+      peak: 900_000n, scoreBps: SCORE_BPS, candidate: 88n, paid: 88n, balance: 12n,
+    }),
+  ], receipt => {
     const record = diceRunRecordFromReceipt({
       player: PLAYER,
       value: SCORE_BPS,
@@ -607,18 +600,8 @@ describe('Dice Run record provenance', () => {
       transactionHash: TX_HASH,
     }, receipt);
     assert.equal(record.player, PLAYER);
-    assert.equal(record.value, SCORE_BPS);
-    assert.deepEqual(record.replay, {
-      jackpotBattle: true,
-      battleKey: battleWordKey,
-      viewerBetId: '0',
-      settledMainPotWei: null,
-      battleWinner: PLAYER,
-      battleWinnerBetId: '0',
-      battlePayoutWei: '88000',
-      battleWinningStop: null,
-    });
-  });
+    assert.equal(record.replay, null, 'only a finalized window paired with its payment names a replay');
+  }));
 
   test('keeps the holder when replay logs are not yet available', () => {
     const record = diceRunRecordFromReceipt({
@@ -665,7 +648,7 @@ describe('Dice Run record provenance', () => {
       blockNumber: 100,
       transactionHash: previousHash,
       logIndex: 3,
-      bountyWei: '66000',
+      bountyWei: String(66_000n * WEI),
     });
   });
 
@@ -686,7 +669,7 @@ describe('Dice Run record provenance', () => {
     assert.equal(snapshot.player, null);
     assert.equal(snapshot.value, 1_000_000n);
     assert.equal(snapshot.held, false);
-    assert.equal(snapshot.bountyWei, '66000');
+    assert.equal(snapshot.bountyWei, String(66_000n * WEI));
   });
 
   test('a just-settled winning score can identify its unique record event before indexing catches up', () => {

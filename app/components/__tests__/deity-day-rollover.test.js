@@ -94,7 +94,7 @@ test('today’s gifts refresh at rollover while today’s RNG and jackpot are st
   assert.equal(reads.length, priorReads + 1, 'the day notification triggers a read immediately');
   assert.deepEqual(reads.at(-1).opts, { blockTag: 101 });
   assert.equal(catalogReads, priorCatalogReads, 'rollover does not wait for another ownership scan');
-  const expected = passes.deriveDeityBoonSlots({ dailySeed: seeds.get(41), deity: OWNER, deityId: 37, day, includeCraps: true });
+  const expected = passes.deriveDeityBoonSlots({ dailySeed: seeds.get(41), deity: OWNER, deityId: 37, day });
   for (let slot = 0; slot < 3; slot++) {
     assert.equal(node(`boon-effect-${slot}`).textContent, boonTypePresentation(expected[slot]).effect);
     assert.equal(node(`boon-${slot}`).disabled, false);

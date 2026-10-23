@@ -1,5 +1,3 @@
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(CURRENT_SCHEMA_HASH);
 // Reel replica behavior. Exact reel/score/rig/payout parity with the contract
 // is pinned by degenerette-wild-vectors.test.js against the shared fixture.
 import { test, describe } from 'node:test';
@@ -63,7 +61,7 @@ test('record bounty retains champion and verifies the parent seed', () => {
   const player = '0xfe5b92e655d8b1732e47cb0a2f00ec6a50ea4200';
   const rngWord = 0x1234567890abcdefn;
   const parentBetId = 1n;
-  const seed = hash4(rngWord, 37n, parentBetId, 0x5265636f7264n);
+  const seed = 114409244749999918271056206545362447955897761296509175790588152660378332861502n;
   const boxBetId = (1n << 63n) | (3n << 60n) | (seed & ((1n << 60n) - 1n));
   const input = { rngWord, parentBetId, player, playerId:37, symbol: 9, boxBetId };
   assert.deepEqual(dgnRecordBountyHeroQuadrants(input), [1, 1, 1]);

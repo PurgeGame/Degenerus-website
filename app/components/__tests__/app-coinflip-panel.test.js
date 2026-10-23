@@ -10,11 +10,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (verbatim port of app-pass-section.test.js — Phase 62 Plan 62-02).
@@ -327,7 +323,7 @@ function makeFakeCoinflipContract(opts = {}) {
 
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -383,7 +379,7 @@ describe('Plan 62-03: <app-coinflip-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /data-write/, 'panel source contains literal data-write attribute');
   });
 
-  test('Deposit click invokes depositCoinflip with parsed FLIP amount in BigInt wei', async () => {
+  test('Deposit click invokes depositCoinflip with parsed FLIP amount in raw whole FLIP', async () => {
     let recordedArgs = null;
     coinflipMod.__setContractFactoryForTest(() => ({
       depositCoinflip: Object.assign(
@@ -411,9 +407,9 @@ describe('Plan 62-03: <app-coinflip-panel> Custom Element', () => {
     await settle(60);
 
     assert.ok(recordedArgs, 'depositCoinflip invoked through contract');
-    // args = [player, amount]
-    assert.equal(recordedArgs[0], CONNECTED, 'player = connected.address');
-    assert.equal(recordedArgs[1], 200n * 10n ** 18n, 'amount = 200 FLIP in wei');
+    // args = [account id, amount]: 0 is the connected wallet; the chain takes whole FLIP.
+    assert.equal(recordedArgs[0], 0, 'account 0 = the connected wallet');
+    assert.equal(recordedArgs[1], 200n, 'amount = 200 whole FLIP');
 
     el.disconnectedCallback();
   });

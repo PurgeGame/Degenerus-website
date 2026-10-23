@@ -4,6 +4,7 @@
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { requireStaticCall } from '../static-call.js';
+import { ACTIVE_CHAIN_HEX } from './helpers/active-chain.js';
 import {
   clearProvider,
   setChainSwitchHandler,
@@ -115,13 +116,13 @@ describe('requireStaticCall signer handling', () => {
 
   test('wrong-chain signed preflight switches first and reconnects to the refreshed signer', async () => {
     const oldSigner = { id: 'pre-switch' };
-    const freshSigner = { id: 'base-sepolia' };
+    const freshSigner = { id: 'active-chain' };
     const oldProvider = {
       send: async () => '0x1',
       getSigner: async () => oldSigner,
     };
     const freshProvider = {
-      send: async () => '0x14a34',
+      send: async () => ACTIVE_CHAIN_HEX,
       getSigner: async () => freshSigner,
     };
     let connectedSigner = null;

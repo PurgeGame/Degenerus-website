@@ -15,23 +15,16 @@ import { readFileSync } from 'node:fs';
 
 import { writeLightweightModePreference } from '../../app/ui-preferences.js';
 import { CHAIN } from '../../app/chain-config.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
 CHAIN.readMode = 'indexer';
 import * as storeMod from '../../app/store.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as passesMod from '../../app/passes.js';
-import * as salvageMod from '../../app/salvage.js';
 import { closePanelPopup } from '../../app/panel-popups.js';
 
 let packWatchMod = null;
 let inventoryMod = null;
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
-const RAW_ETH = 10n ** 12n;
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
@@ -80,6 +73,8 @@ function makeFakeElement(tag = 'div') {
         if (popupMatch) { child.dataset.panelPopup = popupMatch[1]; child.attributes['data-panel-popup'] = popupMatch[1]; }
         const dataBindMatch = /data-bind="([^"]+)"/.exec(attrs);
         if (dataBindMatch) child.attributes['data-bind'] = dataBindMatch[1];
+        const loanMatch = /data-loan="([^"]+)"/.exec(attrs);
+        if (loanMatch) child.attributes['data-loan'] = loanMatch[1];
         const levelOffsetMatch = /data-level-offset="([^"]+)"/.exec(attrs);
         if (levelOffsetMatch) child.attributes['data-level-offset'] = levelOffsetMatch[1];
         const classMatch = /\bclass="([^"]+)"/.exec(attrs);
@@ -284,7 +279,6 @@ function resetDom() {
   _deitySymbols = [];
   _farFutureQueueResponse = null;
   _fetchLog.length = 0;
-  salvageMod.__resetSalvageContractFactoryForTest();
   passesMod.__setDeityReadContractFactoryForTest(() => ({
     name: async () => 'Degenerus Deity Pass',
     ownerOf: async (symbolId) => {
@@ -491,7 +485,6 @@ describe('app-tickets-inventory — cards + chart', () => {
     const cardsDuringRollover = el.querySelectorAll('.inv-card').length;
     const goldDuringRollover = el.querySelectorAll('.inv-card--gold').length;
     await flushMicrotasks();
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="inv-level-tab"]').disabled, true);
     assert.equal(cardsDuringRollover, 0,
       'selecting the new empty level immediately removes the prior level cards');
@@ -640,8 +633,6 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.ok(totalValue, 'Total Value is a matching tile directly after Future');
     assert.ok(el.innerHTML.indexOf('data-bind="inv-total-value-action"')
       > el.innerHTML.indexOf('data-bind="inv-level-future"'));
-    assert.equal(el.querySelector('[data-bind="inv-salvage-jump"]'), null,
-      'there is no separate salvage shortcut competing for header space');
     assert.equal(buttons[0].getAttribute('aria-expanded'), 'false',
       'a remembered view level is not selected while the ticket surface is contracted');
     assert.match(future.getAttribute('aria-label'), /Future levels 22 through 117, 4 tickets owned/);
@@ -651,7 +642,6 @@ describe('app-tickets-inventory — cards + chart', () => {
     await flushMicrotasks();
     assert.equal(future.getAttribute('aria-expanded'), 'false');
     assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
     el.disconnectedCallback();
   });
 
@@ -670,13 +660,12 @@ describe('app-tickets-inventory — cards + chart', () => {
     }
     await flushMicrotasks();
     assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
     assert.equal(_fetchLog.some(url => /by-trait\?level=(18|19|20|21)/.test(url)), false);
     assert.match(buttons[2].getAttribute('aria-label'), /not been generated yet/);
     el.disconnectedCallback();
   });
 
-  test('Total Value opens account liquidation and preserves the selected ticket level', async () => {
+  test('Total Value opens the account loan dialog and preserves the selected ticket level', async () => {
     _dashboardTickets = [{ level: 23, entryCount: 8 }];
     const el = mount({ expanded: false });
     await flushMicrotasks();
@@ -689,81 +678,11 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(shortcut.getAttribute('aria-controls'), 'panel-liquidation');
     assert.equal(shortcut.getAttribute('aria-expanded'), 'true');
     assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '17');
-    assert.equal(popup.querySelector('[data-bind="liquidation-sell"]').disabled, true);
-    assert.match(popup.querySelector('[data-bind="liquidation-status"]').textContent, /not available on this deployment/);
+    assert.match(shortcut.getAttribute('aria-label'), /account loan and repayment/);
+    assert.ok(popup.querySelector('[data-loan="borrow"]'), 'the loan dialog is the one this control opens');
     closePanelPopup('liquidation');
     assert.equal(shortcut.getAttribute('aria-expanded'), 'false');
     el.disconnectedCallback();
-  });
-
-  for (const lightweight of [false, true]) test(`deity holders cannot open liquidation (lightweight=${lightweight})`, async (t) => {
-    writeLightweightModePreference(lightweight);
-    _deitySymbols = [0];
-    _dashboardTickets = [{ level: 23, entryCount: 8 }];
-    const el = mount({ expanded: false });
-    t.after(() => { el.disconnectedCallback(); writeLightweightModePreference(false); });
-    await flushMicrotasks();
-    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
-    assert.equal(shortcut.disabled, true);
-    assert.match(shortcut.getAttribute('aria-label'), /Deity holders cannot liquidate/);
-    assert.notEqual(el.querySelector('[data-bind="inv-total-value"]').textContent, '—');
-    // The opening handler enforces ownership even if the DOM control is re-enabled.
-    shortcut.disabled = false;
-    shortcut.dispatchEvent({ type: 'click' });
-    await flushMicrotasks();
-    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
-    _deitySymbols = [];
-    storeMod.update('connected.address', '0xcd34000000000000000000000000000000000000');
-    assert.equal(shortcut.disabled, true, 'the new account waits for its ownership check');
-    await flushMicrotasks();
-    assert.equal(shortcut.disabled, false, 'a non-deity account can still open liquidation');
-  });
-
-  test('liquidation stays disabled while deity ownership is unknown', async (t) => {
-    writeLightweightModePreference(true);
-    let release;
-    passesMod.__setDeityReadContractFactoryForTest(() => ({
-      name: () => new Promise(resolve => { release = resolve; }),
-    }));
-    const el = mount({ expanded: false });
-    t.after(() => { el.disconnectedCallback(); writeLightweightModePreference(false); });
-    await flushMicrotasks();
-    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
-    assert.equal(shortcut.disabled, true, 'ownership is still loading');
-    release('unavailable');
-    await flushMicrotasks();
-    assert.equal(shortcut.disabled, true, 'failed ownership reads do not enable liquidation');
-    shortcut.dispatchEvent({ type: 'click' });
-    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
-  });
-
-  test('a deity purchase before the next inventory refresh blocks opening liquidation', async (t) => {
-    const el = mount({ expanded: false });
-    t.after(() => el.disconnectedCallback());
-    await flushMicrotasks();
-    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
-    assert.equal(shortcut.disabled, false);
-    _deitySymbols = [0];
-    shortcut.dispatchEvent({ type: 'click' });
-    await flushMicrotasks();
-    assert.equal(shortcut.disabled, true);
-    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
-  });
-
-  test('a newly detected deity pass closes an already open liquidation popup', async (t) => {
-    const el = mount({ expanded: false });
-    t.after(() => el.disconnectedCallback());
-    await flushMicrotasks();
-    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
-    shortcut.dispatchEvent({ type: 'click' });
-    await flushMicrotasks();
-    assert.equal(shortcut.getAttribute('aria-expanded'), 'true');
-    _deitySymbols = [21];
-    storeMod.update('app.lastDay', { day: 68, roll1: { purchaseLevel: 17 } });
-    await flushMicrotasks();
-    assert.equal(shortcut.disabled, true);
-    assert.equal(shortcut.getAttribute('aria-expanded'), 'false');
-    assert.equal(_docBody.children.some(node => node.dataset.panelPopup === 'liquidation'), false);
   });
 
   test('cards mode dedups identical combos into ×N cards', async () => {
@@ -1123,11 +1042,6 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('salvage ticket leg converts contract wei into quarter-ticket purchase units', () => {
-    assert.equal(inventoryMod.salvageTicketPurchaseUnits(10n * RAW_ETH, 17), 100_000n);
-    assert.equal(inventoryMod.formatSalvageTicketCount(10n * RAW_ETH, 17), '250');
-  });
-
   test('chart mode: 256 cells, .has + count only where held', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     const el = mount();
@@ -1406,7 +1320,6 @@ describe('app-tickets-inventory — cards + chart', () => {
       level.dispatchEvent({ type: 'click' });
     }
     assert.equal(el.querySelector('[data-bind="inv-ticket-dialog"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="inv-salvage-dialog"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="inv-total-value-action"]').disabled, false);
     el.disconnectedCallback();
   });

@@ -1,6 +1,4 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
+import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN_HEX } from './helpers/active-chain.js';
 // /app/app/__tests__/lootbox.test.js — Phase 60 Plan 60-02 (LBX-01 + LBX-04).
 //
 // Run: cd website && node --test app/app/__tests__/lootbox.test.js
@@ -22,6 +20,9 @@ import * as contractsMod from '../contracts.js';
 import * as readProviderMod from '../read-provider.js';
 import { decodeRevertReason } from '../reason-map.js';
 import { CONTRACTS, ETH_DIVISOR } from '../chain-config.js';
+import { miningGasBounds } from '../mining-gas-profile.js';
+import { loadSchema } from '../../chain/schema.js';
+import { _setWalletIdForTests, _resetWalletIdsForTests } from '../wallet-id.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness
@@ -135,7 +136,7 @@ function makeFakeProvider(connectedAddr, opts = {}) {
   let signerReads = 0;
   const provider = {
     // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => {
       signerReads += 1;
       return { getAddress: async () => connectedAddr };
@@ -203,9 +204,9 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       // Audit 18490c6fe: only mineFlip requests the mid-day RNG; the probe simulates it as the
       // connected account, whose donated LINK credit can pay a below-threshold request.
       mineFlip: {
-        staticCall: async (overrides) => {
+        staticCall: async (...args) => {
           staticCalls += 1;
-          froms.push(overrides?.from);
+          froms.push(args.at(-1)?.from);
           await held;
         },
       },
@@ -228,17 +229,18 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   });
 
   test('decodes the authoritative mid-day RNG queue fill and request latch', async () => {
-    const queuePacked = 321n
-      | (425n << 48n)
-      | (1_000n << 112n)
-      | (5n << 176n)
+    // lootboxRngPacked: pending ETH [48:87] and threshold [88:119] in 0.001 ETH, pending FLIP
+    // [184:223]; slot 0: rngRequestTime [48:95], the read buffer at bit 252, the mid-day
+    // request latch at bit 254.
+    const queuePacked = (425n << 48n)
+      | (1_000n << 88n)
       | (30_000n << 184n);
     const requestTime = 1_720_000_000n;
-    const timingPacked = requestTime << 48n;
+    const timingPacked = (requestTime << 48n) | (1n << 252n) | (1n << 254n);
     assert.deepEqual(
       lootboxMod.decodeLootboxRngQueueState(queuePacked, timingPacked, 900),
       {
-        index: 321n,
+        index: 1n,
         pendingMilliEth: 425n,
         thresholdMilliEth: 1_000n,
         pendingEthWei: 425n * 10n ** 15n,
@@ -255,21 +257,24 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
 
     const reads = [];
+    const { fields } = await loadSchema('GAME');
+    const queueSlot = '0x' + BigInt(fields.lootboxRngPacked.slot).toString(16);
     const provider = {
       getBlockNumber: async () => 901,
       getStorage: async (_address, slot, blockTag) => {
         reads.push([slot, blockTag]);
-        return slot === '0x21' ? queuePacked : timingPacked | (1n << 152n);
+        return slot === queueSlot ? queuePacked : timingPacked | (1n << 152n);
       },
     };
     const locked = await lootboxMod.readLootboxRngQueueState({ provider });
     assert.equal(locked.rngLocked, true);
     assert.equal(locked.middayRequestInFlight, false,
       'a daily RNG lock is not mislabeled as the mid-day request');
-    assert.deepEqual(reads, [['0x21', 901], ['0x0', 901]], 'both slots share one block tag');
+    assert.deepEqual(reads, [[queueSlot, 901], ['0x0', 901]], 'both slots share one block tag, at the generated layout');
   });
 
-  test('reads the active player century-bonus usage from the deployment-pinned mapping', async () => {
+  test('reads the active player century-bonus usage from its wallet-ID mapping', async () => {
+    _setWalletIdForTests(CONNECTED, 37);
     const reads = [];
     const provider = {
       getBlockNumber: async () => 902,
@@ -324,7 +329,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lastFakeContract._calls.purchase.length, 0, 'the probe never sends');
     assert.equal(lastFakeContract._calls.purchaseStatic.length, 1);
     assert.deepEqual(lastFakeContract._calls.purchaseStatic[0], [
-      CONNECTED,
+      0,
       0n,
       0n,
       '0x0000000000000000000000000000000000000000000000000000000000000000',
@@ -355,10 +360,12 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     const owner = '0xcd34000000000000000000000000000000000000';
     storeMod.update('viewing.address', owner);
     storeMod.update('ui.mode', 'operator');
+    _setWalletIdForTests(owner, 73);
 
     assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: owner }), true);
     const args = lastFakeContract._calls.purchaseStatic[0];
-    assert.equal(args[0], owner, 'the viewed owner remains the purchase beneficiary');
+    _resetWalletIdsForTests();
+    assert.equal(args[0], 73, 'the viewed owner\'s account remains the purchase beneficiary');
     assert.deepEqual(args.at(-1), { value: 0n, from: CONNECTED },
       'the public simulation retains the connected operator as msg.sender');
     assert.equal(contractsMod.getProvider().getSignerReadCount(), 0,
@@ -391,7 +398,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     await lootboxMod.purchaseEth({ ticketQuantity: 5, lootboxQuantity: 1 });
     assert.equal(lastFakeContract._calls.purchase.length, 1, 'purchase called once');
     const [args] = lastFakeContract._calls.purchase;
-    assert.equal(args[0], CONNECTED, 'buyer is connected.address');
+    assert.equal(args[0], 0, 'buyer is the connected wallet (account 0)');
     // DegenerusGame.sol:703 — "Purchase units (400 = 4*QTY_SCALE = one whole
     // ticket = 4 entries)". x100 bought a QUARTER of what the field said.
     assert.equal(args[1], 2000n, '5 tickets = 20 entries = 2000 purchase units');
@@ -661,7 +668,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     const injected = {
       async request({ method }) {
         walletRpcMethods.push(method);
-        if (method === 'eth_chainId') return '0x14a34';
+        if (method === 'eth_chainId') return ACTIVE_CHAIN_HEX;
         if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [CONNECTED];
         if (method === 'eth_estimateGas') {
           throw Object.assign(new Error('gas required exceeds allowance (18422)'), {
@@ -673,7 +680,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       on() {},
       removeListener() {},
     };
-    const walletProvider = new contractsMod.ethers.BrowserProvider(injected, 84532);
+    const walletProvider = new contractsMod.ethers.BrowserProvider(injected, ACTIVE_CHAIN_ID);
     contractsMod.setProvider(walletProvider);
 
     const total = lootboxMod.LOOTBOX_MIN_WEI;
@@ -874,12 +881,6 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lastFakeContract._calls.purchase.length, 0);
   });
 
-  // Degenesis reads gate on the generated (current) GAME ABI; these run under it.
-  const withCurrentSchema = async (fn) => {
-    const previous = pinAddressFixture(CURRENT_SCHEMA_HASH);
-    try { return await fn(); } finally { pinAddressFixture(previous); }
-  };
-
   test('Degenesis amount validation mirrors buyDegenesisBox (min, 0.0001 ETH units, credit, 2^38 bound)', () => {
     const min = lootboxMod.DEGENESIS_MIN_WEI;
     const unit = lootboxMod.DEGENESIS_UNIT_WEI;
@@ -895,64 +896,50 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   });
 
   test('a Degenesis box reads live credit, simulates, sends buyDegenesisBox(0, amount) and parses its order', async () => {
-    await withCurrentSchema(async () => {
-      const amount = lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI;
-      lastFakeContract = makeFakeContract({
-        degenesisCredit: 2n * amount,
-        degenesisLogs: [{ parsed: { name: 'DegenesisBuy',
-          args: { buyer: 5n, degenesisDay: 3n, orderIndex: 11n, amount, secondsIntoDay: 42n } } }],
-      });
-      lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
-      assert.equal(lootboxMod.degenesisSupported(), true);
-      assert.equal(await lootboxMod.readDegenesisCredit({ player: CONNECTED }), 2n * amount);
-      const out = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED });
-      assert.deepEqual(lastFakeContract._calls.buyDegenesisBox[0], [0, amount, { value: amount }],
-        'the caller buys for itself (id 0) and pays the exact amount');
-      assert.deepEqual(lastFakeContract._calls.buyDegenesisBoxStatic[0], lastFakeContract._calls.buyDegenesisBox[0]);
-      assert.deepEqual(out.orders, [{ buyer: '5', degenesisDay: 3, orderIndex: 11, amountWei: amount, secondsIntoDay: 42 }]);
+    const amount = lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI;
+    lastFakeContract = makeFakeContract({
+      degenesisCredit: 2n * amount,
+      degenesisLogs: [{ parsed: { name: 'DegenesisBuy',
+        args: { buyer: 5n, degenesisDay: 3n, orderIndex: 11n, amount, secondsIntoDay: 42n } } }],
     });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    assert.equal(await lootboxMod.readDegenesisCredit({ player: CONNECTED }), 2n * amount);
+    const out = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED });
+    assert.deepEqual(lastFakeContract._calls.buyDegenesisBox[0], [0, amount, { value: amount }],
+      'the caller buys for itself (id 0) and pays the exact amount');
+    assert.deepEqual(lastFakeContract._calls.buyDegenesisBoxStatic[0], lastFakeContract._calls.buyDegenesisBox[0]);
+    assert.deepEqual(out.orders, [{ buyer: '5', degenesisDay: 3, orderIndex: 11, amountWei: amount, secondsIntoDay: 42 }]);
   });
 
   test('a Degenesis box can be paid entirely from AFKing funds', async () => {
-    await withCurrentSchema(async () => {
-      const amount = lootboxMod.DEGENESIS_MIN_WEI;
-      const contract = makeFakeContract({ afkingRaw: amount * 2n });
-      lootboxMod.__setContractFactoryForTest(() => contract);
-      const { payment } = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED, useAfking: true });
-      assert.equal(payment.afkingUsedWei, amount);
-      assert.deepEqual(contract._calls.buyDegenesisBoxStatic[0], [0, amount, { value: 0n }]);
-    });
+    const amount = lootboxMod.DEGENESIS_MIN_WEI;
+    const contract = makeFakeContract({ afkingRaw: amount * 2n });
+    lootboxMod.__setContractFactoryForTest(() => contract);
+    const { payment } = await lootboxMod.purchaseDegenesisBox({ amountWei: amount, player: CONNECTED, useAfking: true });
+    assert.equal(payment.afkingUsedWei, amount);
+    assert.deepEqual(contract._calls.buyDegenesisBoxStatic[0], [0, amount, { value: 0n }]);
   });
 
   test('a Degenesis box over credit or off the unit grid never reaches the wallet', async () => {
-    await withCurrentSchema(async () => {
-      const contract = makeFakeContract({ degenesisCredit: lootboxMod.DEGENESIS_MIN_WEI });
-      lootboxMod.__setContractFactoryForTest(() => contract);
-      await assert.rejects(lootboxMod.purchaseDegenesisBox({
-        amountWei: lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI, player: CONNECTED }), /credit is lower/);
-      await assert.rejects(lootboxMod.purchaseDegenesisBox({
-        amountWei: lootboxMod.DEGENESIS_MIN_WEI + 1n, player: CONNECTED }), /0\.0001 ETH steps/);
-      assert.equal(contract._calls.buyDegenesisBoxStatic.length, 0);
-      assert.equal(contract._calls.buyDegenesisBox.length, 0);
-    });
+    const contract = makeFakeContract({ degenesisCredit: lootboxMod.DEGENESIS_MIN_WEI });
+    lootboxMod.__setContractFactoryForTest(() => contract);
+    await assert.rejects(lootboxMod.purchaseDegenesisBox({
+      amountWei: lootboxMod.DEGENESIS_MIN_WEI + lootboxMod.DEGENESIS_UNIT_WEI, player: CONNECTED }), /credit is lower/);
+    await assert.rejects(lootboxMod.purchaseDegenesisBox({
+      amountWei: lootboxMod.DEGENESIS_MIN_WEI + 1n, player: CONNECTED }), /0\.0001 ETH steps/);
+    assert.equal(contract._calls.buyDegenesisBoxStatic.length, 0);
+    assert.equal(contract._calls.buyDegenesisBox.length, 0);
   });
 
   test('a closed Degenesis sale replaces compact E() with an actionable message', async () => {
-    await withCurrentSchema(async () => {
-      const contract = makeFakeContract({
-        staticCallShouldRevert: { buyDegenesisBox: true },
-        staticCallRevertName: { buyDegenesisBox: 'E' },
-      });
-      lootboxMod.__setContractFactoryForTest(() => contract);
-      await assert.rejects(lootboxMod.purchaseDegenesisBox({ amountWei: lootboxMod.DEGENESIS_MIN_WEI, player: CONNECTED }),
-        (error) => { assert.equal(error.code, 'DegenesisUnavailable'); return true; });
-      assert.equal(contract._calls.buyDegenesisBox.length, 0);
+    const contract = makeFakeContract({
+      staticCallShouldRevert: { buyDegenesisBox: true },
+      staticCallRevertName: { buyDegenesisBox: 'E' },
     });
-  });
-
-  test('Degenesis is unavailable on a deployment whose GAME has no buyDegenesisBox', async () => {
-    assert.equal(lootboxMod.degenesisSupported(), false, 'the pinned address-era fixture has no sale');
-    assert.equal(await lootboxMod.readDegenesisCredit({ player: CONNECTED }), null);
+    lootboxMod.__setContractFactoryForTest(() => contract);
+    await assert.rejects(lootboxMod.purchaseDegenesisBox({ amountWei: lootboxMod.DEGENESIS_MIN_WEI, player: CONNECTED }),
+      (error) => { assert.equal(error.code, 'DegenesisUnavailable'); return true; });
+    assert.equal(contract._calls.buyDegenesisBox.length, 0);
   });
 
   test('purchaseEth static-call revert throws structured error with userMessage and code', async () => {
@@ -1000,9 +987,9 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       return { pending: false, worded: true, swept: false, rngLocked: false };
     });
     const opened = await lootboxMod.openLootBox({ lootboxIndex: 7n });
-    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]],
-      'no estimate on the fake, so the miner gas floor');
-    assert.deepEqual(lastFakeContract._calls.mineFlipStatic, [[]], 'the crank is simulated before the wallet opens');
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[0, { gasLimit: miningGasBounds().min }]],
+      'mineFlip(0); no estimate on the fake, so the miner gas floor');
+    assert.deepEqual(lastFakeContract._calls.mineFlipStatic, [[0]], 'the crank is simulated before the wallet opens');
     assert.ok(!('openBoxes' in lastFakeContract) && !('OPEN_BOXES_BATCH' in lootboxMod), 'the removed valve is gone');
     assert.equal(opened.opened, true);
     assert.deepEqual(reads, [[CONNECTED, 7n]], 'the entry is re-read after the sweep');
@@ -1028,24 +1015,9 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       return { pending: false, worded: true, swept: true, rngLocked: false };
     });
     await lootboxMod.openLootBox({ player: other, lootboxIndex: 7 });
-    assert.deepEqual(lastFakeContract._calls.mineFlip, [[{ gasLimit: 10_000_000n }]]);
+    assert.deepEqual(lastFakeContract._calls.mineFlip, [[0, { gasLimit: miningGasBounds().min }]]);
     assert.deepEqual(reads, [[other, 7n]],
       'the sweep result is read for the tracked owner\'s entry');
-  });
-
-  test('parseLootboxIdxFromReceipt extracts purchase indexes from LootBoxIdx logs', () => {
-    const fakeReceipt = {
-      logs: [
-        { parsed: { name: 'LootBoxIdx', args: { index: 5n, day: 42n, buyer: CONNECTED } } },
-        { parsed: { name: 'OtherEvent', args: {} } },
-        { parsed: { name: 'LootBoxIdx', args: { index: 6n, day: 42n, buyer: CONNECTED } } },
-      ],
-    };
-    const idxs = lootboxMod.parseLootboxIdxFromReceipt(fakeReceipt, lastFakeContract);
-    assert.equal(idxs.length, 2);
-    assert.equal(idxs[0].lootboxIndex, 5n);
-    assert.equal(idxs[0].day, 42n);
-    assert.equal(idxs[1].lootboxIndex, 6n);
   });
 
   test('parseLootboxIdxFromReceipt keeps the ETH amount from current LootBoxBuy logs', () => {
@@ -1082,7 +1054,6 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       lootboxIndex: 12n,
     }), {
       hasLootboxLeg: true,
-      hasPresaleLeg: false,
       amountWei: 7n,
     });
   });
@@ -1102,7 +1073,7 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       logs: [
         { parsed: null },
         { parsed: { name: 'TraitsGenerated', args: {} } },
-        { parsed: { name: 'LootBoxIdx', args: { index: 1n, day: 1n, buyer: CONNECTED } } },
+        { parsed: { name: 'LootBoxBuy', args: { index: 1n, amount: 2n, buyer: CONNECTED } } },
       ],
     };
     const idxs = lootboxMod.parseLootboxIdxFromReceipt(fakeReceipt, lastFakeContract);
@@ -1191,27 +1162,6 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
   });
 
-  test('the box-state read uses the current schema and physical read buffer', async (t) => {
-    const { loadSchema, useSchema, BEFORE_WALLET_IDS_SCHEMA_HASH } = await import('../../chain/schema.js');
-    const previous = useSchema(BEFORE_WALLET_IDS_SCHEMA_HASH); t.after(() => useSchema(previous));
-    const { fields } = await loadSchema('GAME');
-    const { ethers } = await import('../contracts.js');
-    const coder = ethers.AbiCoder.defaultAbiCoder();
-    const inner = (root, index) => ethers.keccak256(coder.encode(['uint48', 'uint256'], [index, BigInt(root)]));
-    const nested = (root, index, who) => ethers.keccak256(coder.encode(['address', 'bytes32'], [who, inner(root, index)]));
-    const words = new Map([
-      [nested(fields.lootboxOrder.slot, 1n, CONNECTED).toLowerCase(), 1n],
-      [`0x${BigInt(fields.rngWordCurrent.slot).toString(16)}`, 0xabcn],
-      ['0x0', 1n << 255n], // published, write buffer 0, read buffer 1
-    ]);
-    const provider = { getStorage: async (_address, slot) => ethers.toBeHex(words.get(String(slot).toLowerCase()) ?? 0n, 32) };
-    const state = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 1n, provider });
-    assert.deepEqual(state, { pending: true, worded: true, swept: false, rngLocked: false });
-    words.set(`0x${BigInt(fields.humanReadComplete.slot).toString(16)}`, 1n << BigInt(fields.humanReadComplete.offset * 8));
-    const later = await lootboxMod.readLootboxBoxState({ player: CONNECTED, lootboxIndex: 1n, provider, blockTag: 12 });
-    assert.equal(later.swept, true, 'completed read cohorts cannot open again');
-    assert.equal(later.pending, false);
-  });
 });
 
 // ===========================================================================
@@ -1252,7 +1202,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
   });
 
   test('readAffiliateCode returns ZeroHash when localStorage empty', () => {
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 
@@ -1274,7 +1224,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
     const orig = globalThis.localStorage.getItem.bind(globalThis.localStorage);
     globalThis.localStorage.getItem = () => { throw new Error('SecurityError'); };
     let code;
-    assert.doesNotThrow(() => { code = lootboxMod.readAffiliateCode(84532, CONNECTED); });
+    assert.doesNotThrow(() => { code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED); });
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000', 'falls back to ZeroHash');
     globalThis.localStorage.getItem = orig;
   });
@@ -1283,7 +1233,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
 
   test('readAffiliateCode reads the site-wide affiliate-ref localStorage key', () => {
     globalThis.localStorage.setItem('affiliate-ref', VALID_BYTES32);
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, VALID_BYTES32);
   });
 
@@ -1291,23 +1241,23 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
     // That key holds the player's OWN registered code (affiliate.js) — using
     // it as the purchase code would be a self-referral.
     const ownCode = '0x' + 'cd'.repeat(32);
-    globalThis.localStorage.setItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`, ownCode);
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    globalThis.localStorage.setItem(`affiliate-code:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`, ownCode);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 
   test('site ref that matches the own registered code is skipped (clicked own share link)', () => {
     const ownCode = '0x' + 'cd'.repeat(32);
-    globalThis.localStorage.setItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`, ownCode);
+    globalThis.localStorage.setItem(`affiliate-code:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`, ownCode);
     globalThis.localStorage.setItem('affiliate-ref', ownCode);
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 
   test('site-wide ref that is the connected address\'s own default code is skipped (self-referral)', () => {
     const selfCode = '0x' + '0'.repeat(24) + CONNECTED.toLowerCase().slice(2);
     globalThis.localStorage.setItem('affiliate-ref', selfCode);
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 
@@ -1316,7 +1266,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
     const origDocument = globalThis.document;
     globalThis.document = { cookie: `dgn_ref=${VALID_BYTES32}` };
     try {
-      const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+      const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
       assert.equal(code, VALID_BYTES32);
     } finally {
       if (hadDocument) globalThis.document = origDocument;
@@ -1326,7 +1276,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
 
   test('malformed site-wide affiliate-ref is ignored', () => {
     globalThis.localStorage.setItem('affiliate-ref', '0xdeadbeef');
-    const code = lootboxMod.readAffiliateCode(84532, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(ACTIVE_CHAIN_ID, CONNECTED);
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 });
@@ -1434,7 +1384,7 @@ function makeFakePrewarmSigner(opts = {}) {
 
 function makeFakePrewarmProvider(signer) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => signer,
     _signer: signer,
   };
@@ -1489,7 +1439,7 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     });
     assert.equal(fakeContract._calls.purchasePopulate.length, 1, 'purchase.populateTransaction called once');
     const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
-    assert.equal(args[0], CONNECTED, 'buyer is connected.address (lowercase)');
+    assert.equal(args[0], 0, 'buyer is the connected wallet (account 0)');
     assert.equal(args[1], 2000n, '5 tickets = 2000 purchase units (400 per ticket)');
     assert.equal(args[2], lootboxMod.packBoxOrder({ kind: 'small', quantity: 1 }), 'one Small box is packed');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
@@ -1664,15 +1614,16 @@ describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture 
     storeMod.update('approvals.list', [OWNER]);
     storeMod.update('viewing.address', OWNER);
     storeMod.update('ui.mode', 'operator');
+    _setWalletIdForTests(OWNER, 73);
 
     await lootboxMod.prewarmLootboxBuy({
       ticketQuantity: 1, lootboxQuantity: 1,
     });
+    _resetWalletIdsForTests();
 
     assert.equal(fakeContract._calls.purchasePopulate.length, 1, 'purchase.populateTransaction called once');
     const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
-    assert.equal(args[0], OWNER, 'buyer arg is the acted-for OWNER, not the connected operator');
-    assert.notEqual(args[0], CONNECTED, 'buyer is NOT the signer/connected address in operator mode');
+    assert.equal(args[0], 73, 'buyer arg is the acted-for OWNER\'s account, not the connected operator (0)');
     assert.ok(txOverrides && txOverrides.value > 0n, 'msg.value still computed correctly');
   });
 });

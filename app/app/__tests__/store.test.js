@@ -17,6 +17,7 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as storeMod from '../store.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 const {
   get,
@@ -116,13 +117,13 @@ describe('batch', () => {
     batch({
       updates: [
         { path: 'connected.address', value: '0xaaaa000000000000000000000000000000000001' },
-        { path: 'connected.chainId', value: 84532 },
+        { path: 'connected.chainId', value: ACTIVE_CHAIN_ID },
       ],
     });
     assert.equal(seenA.length - baseA, 1);
     assert.equal(seenC.length - baseC, 1);
     assert.equal(seenA[seenA.length - 1], '0xaaaa000000000000000000000000000000000001');
-    assert.equal(seenC[seenC.length - 1], 84532);
+    assert.equal(seenC[seenC.length - 1], ACTIVE_CHAIN_ID);
   });
 });
 

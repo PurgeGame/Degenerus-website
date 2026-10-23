@@ -9,16 +9,14 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {rpcFixture} from './helpers/chain-rpc.js';
 import {SCHEMA_HASH, CONTRACT_REVISION} from '../../chain/generated/index.js';
-import {useSchema} from '../../chain/schema.js';
 import {Interface} from '../../vendor/ethers-app.mjs';
 import {CRAPS_REPLAY_ENGINE_VERSION} from '../../craps/replay-contract.js';
 const exec=promisify(execFile),root=new URL('../../../',import.meta.url);
 
 test('next-deployment preparation verifies the new registry, units and layout without changing the active profile',async()=>{
-  const previousSchema = useSchema(SCHEMA_HASH);
-  const f=await rpcFixture();await f.field('GAME','ticketGenerationStartBlock',1,1);f.answer('GAME','currentDayView',[121]);
+  const f=await rpcFixture();await f.field('GAME','ticketGenerationStartBlock',(1n << 24n) | 1n);f.answer('GAME','currentDayView',[121]);
   const roots = [f.contracts.VAULT, f.contracts.SDGNRS, f.contracts.GNRUS];
-  f.answer('GAME', 'walletIdOf', ([address]) => [roots.indexOf(address.toLowerCase()) + 1]);
+  f.answer('GAME', 'walletIdOf_g3120', ([address]) => [roots.indexOf(address.toLowerCase()) + 1]);
   f.answer('GAME_LENS', 'walletOfId', ([_game, id]) => [roots[Number(id) - 1]]);
   for (const name of ['COIN', 'WWXRP']) f.answer(name, 'decimals', [0]);
   for (const name of ['DGNRS', 'SDGNRS']) f.answer(name, 'decimals', [12]);
@@ -42,7 +40,7 @@ test('next-deployment preparation verifies the new registry, units and layout wi
   const original=await readFile(new URL('app/app/chain-config.js',root),'utf8');
   const originalProfile=await readFile(new URL('app/app/chain-config.next.js',root),'utf8');
   const originalHeaders=await readFile(new URL('_headers',root),'utf8');
-  const manifest={chainId:f.client.chain.id,chainName:'Fixture',explorerUrl:'https://example.invalid',gameDeployBlock:1,readSchema:SCHEMA_HASH,contractRevision:CONTRACT_REVISION,crapsReplayEngineVersion:CRAPS_REPLAY_ENGINE_VERSION,contracts:{...f.contracts,LINK_TOKEN:'0x'+'11'.repeat(20)},publicRpcUrls:[base+'/rpc',base+'/fallback'],dayClock:f.client.clock,crapsSchedule:{daySeconds:1000,anchorSeconds:0,blockSeconds:12,periodCloseSeconds:[100,300,500,700,900]},ethDivisor:'1',ticketDivisor:'100'};
+  const manifest={chainId:f.client.chain.id,chainName:'Fixture',explorerUrl:'https://example.invalid',gameDeployBlock:1,readSchema:SCHEMA_HASH,contractRevision:CONTRACT_REVISION,crapsReplayEngineVersion:CRAPS_REPLAY_ENGINE_VERSION,contracts:{...f.contracts,LINK_TOKEN:'0x'+'11'.repeat(20),STETH_TOKEN:'0x'+'22'.repeat(20)},publicRpcUrls:[base+'/rpc',base+'/fallback'],dayClock:f.client.clock,crapsSchedule:{daySeconds:1000,anchorSeconds:0,blockSeconds:12,periodCloseSeconds:[100,300,500,700,900]},ethDivisor:'1',ticketDivisor:'100'};
   const run=async(...args)=>{await writeFile(path,JSON.stringify(manifest));return exec(process.execPath,[fileURLToPath(new URL('db/prepare-chain-deployment.mjs',root)),'--manifest',path,...args]);};
   try{
     const result=await run('--verify');assert.match(result.stdout,/Active selector unchanged/);assert.match(result.stderr,/RPC HTTP 429; retrying/);
@@ -53,9 +51,13 @@ test('next-deployment preparation verifies the new registry, units and layout wi
     await run('--verify', '--write', '--out', staged);
     const candidate = await import(staged);
     assert.equal(candidate.CHAIN.readSchema, SCHEMA_HASH);
+    assert.equal(candidate.CHAIN.emergencyRpcUrl, '', 'paid emergency fallback is disabled by default');
     assert.equal(candidate.CHAIN.contractRevision, CONTRACT_REVISION);
     assert.ok(candidate.CHAIN.codeHashes.LINK_TOKEN, 'donation token runtime is verified too');
     assert.equal(candidate.CONTRACTS.GAME, f.contracts.GAME);
+    // Audit 87dbfcf24: the AFKing panel reads and approves the payee's stETH for GAME.
+    assert.equal(candidate.CONTRACTS.STETH_TOKEN, '0x'+'22'.repeat(20));
+    assert.ok(candidate.CHAIN.codeHashes.STETH_TOKEN, 'the stETH runtime is verified too');
     assert.equal(candidate.VOLUME_WINDOW.period, f.client.clock.period);
     assert.match(await readFile(staged, 'utf8'), /readMode/);
 
@@ -84,12 +86,12 @@ test('next-deployment preparation verifies the new registry, units and layout wi
     assert.ok((await readFile(join(isolated, '_headers'), 'utf8')).includes(base), 'activation admits the verified public RPC origin');
 
     // An old layout's hardcoded slot 70 cannot accidentally certify the new deployment.
-    await f.field('GAME', 'ticketGenerationStartBlock', 2, 1);
+    await f.field('GAME', 'ticketGenerationStartBlock', (2n << 24n) | 1n);
     await assert.rejects(run('--verify'), /bootstrap block/);
-    await f.field('GAME', 'ticketGenerationStartBlock', 1, 1);
-    f.answer('GAME', 'walletIdOf', [0]);
+    await f.field('GAME', 'ticketGenerationStartBlock', (1n << 24n) | 1n);
+    f.answer('GAME', 'walletIdOf_g3120', [0]);
     await assert.rejects(run('--verify'), /VAULT protocol wallet ID mismatch/);
-    f.answer('GAME', 'walletIdOf', ([address]) => [roots.indexOf(address.toLowerCase()) + 1]);
+    f.answer('GAME', 'walletIdOf_g3120', ([address]) => [roots.indexOf(address.toLowerCase()) + 1]);
     f.answer('GAME_LENS', 'walletOfId', [f.contracts.GAME]);
     await assert.rejects(run('--verify'), /VAULT lens wallet owner mismatch/);
     f.answer('GAME_LENS', 'walletOfId', ([_game, id]) => [roots[Number(id) - 1]]);
@@ -101,14 +103,30 @@ test('next-deployment preparation verifies the new registry, units and layout wi
       await assert.rejects(run('--verify'), message);
     }
     fault = null;
+    manifest.emergencyRpcUrl='https://paid.invalid/private-key';
+    await assert.rejects(run(), /same-origin relay path/);
+    manifest.emergencyRpcUrl='//paid.invalid/key';
+    await assert.rejects(run(), /same-origin relay path/);
+    manifest.emergencyRpcUrl='/rpc/emergency';
+    const emergencyProfile = join(directory, 'emergency.mjs');
+    await run('--write', '--out', emergencyProfile);
+    const emergencyChain = (await import(emergencyProfile)).CHAIN;
+    assert.equal(emergencyChain.emergencyRpcUrl, '/rpc/emergency');
+    assert.deepEqual(emergencyChain.nativeAddEntry.rpcUrls, manifest.publicRpcUrls, 'wallets only receive free endpoints');
+    assert.ok(!emergencyChain.fallbackRpcUrls.includes('/rpc/emergency'));
+    manifest.emergencyRpcUrl='';
     manifest.contractRevision='0'.repeat(40);await assert.rejects(run(),/contractRevision does not match/);
     manifest.contractRevision=CONTRACT_REVISION;
     manifest.publicRpcUrls[1]=base+'/wrong';await assert.rejects(run('--verify'),/chain ID mismatch/);
     manifest.crapsReplayEngineVersion='craps-obsolete-v1';await assert.rejects(run(),/Pin crapsReplayEngineVersion/);
     manifest.crapsReplayEngineVersion=CRAPS_REPLAY_ENGINE_VERSION;
     manifest.readSchema='old';await assert.rejects(run(),/explicitly pin readSchema/);
+    manifest.readSchema=SCHEMA_HASH;
+    const steth=manifest.contracts.STETH_TOKEN;delete manifest.contracts.STETH_TOKEN;
+    await assert.rejects(run(),/Missing STETH_TOKEN address/);
+    manifest.contracts.STETH_TOKEN=steth;
     assert.equal(await readFile(new URL('app/app/chain-config.js',root),'utf8'),original);
     assert.equal(await readFile(new URL('app/app/chain-config.next.js',root),'utf8'),originalProfile);
     assert.equal(await readFile(new URL('_headers',root),'utf8'),originalHeaders);
-  }finally{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});useSchema(previousSchema);}
+  }finally{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });

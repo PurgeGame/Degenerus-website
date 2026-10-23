@@ -23,11 +23,7 @@ import * as pari from '../../app/parimutuel.js';
 import * as decimatorMod from '../../app/decimator.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import { invalidateJSONCache } from '../../app/api.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const LEVEL = 42;
@@ -232,7 +228,6 @@ function installContract({
   growth = {},
   ratchets = null,
   calls,
-  growthBettors = [],
   growthReadErrors = [],
   marketGate = { mayBet: true, earnsReward: true },
   chainLevel = LEVEL,
@@ -246,31 +241,13 @@ function installContract({
     marketState: async (_player, round) => {
       if (rejectedGrowthRounds.has(Number(round))) throw new Error('growth read unavailable');
       const r = growthRow(rows[Number(round)] || {});
-      return [r.openRound, r.over, r.under, r.questReward, r.side, r.claimed, r.outcome, r.payout];
+      // Fixtures are token wei; the chain returns whole FLIP.
+      return [r.openRound, r.over, r.under, r.questReward / FLIP, r.side, r.claimed, r.outcome, r.payout / FLIP];
     },
     placeBet: Object.assign(
       async (...args) => { calls?.push(['placeBet', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
       { staticCall: async () => undefined },
     ),
-    claim: Object.assign(
-      async (...args) => { calls?.push(['claim', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
-      { staticCall: async () => undefined },
-    ),
-    claimRound: Object.assign(
-      async (...args) => { calls?.push(['claimRound', ...args]); return { hash: '0x', wait: async () => ({ status: 1, logs: [] }) }; },
-      { staticCall: async () => undefined },
-    ),
-    filters: {
-      BetPlaced: (_player, round) => ({ event: 'growth', round }),
-    },
-    queryFilter: async (filter) => {
-      if (filter?.event === 'growth') {
-        return growthBettors.map((row) => ({
-          args: { player: row.player, round: filter.round, over: row.over },
-        }));
-      }
-      return [];
-    },
     // requireStaticCall connects the signer before pre-flighting.
     connect(_signer) { return this; },
   };
@@ -310,7 +287,7 @@ function installContract({
 
 function makeFakeProvider() {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     getBlockNumber: async () => 5_000,
   };
@@ -965,7 +942,7 @@ describe('app-parimutuel-panel', () => {
     assert.match(card.textContent, /ALL PLAYERS SCORE15,150,625/);
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+1,534 SCORE',
+      '+3,068 SCORE',
     );
     assert.match(PARI_SOURCE, /\+\$\{_fmtFlip\(boonStack\)\} BOON/,
       'the legacy fallback also names the concrete score added by a boon');
@@ -973,22 +950,22 @@ describe('app-parimutuel-panel', () => {
     assert.doesNotMatch(card.textContent, /Level 43|BURN WINDOW OPEN|Minimum 1,000|Bucket 7/);
 
     const input = card.querySelector('[data-bind="pari-decimator-input"]');
-    assert.equal(input.value, '1000');
+    assert.equal(input.value, '2000', 'the entry starts at the 2,000 FLIP minimum');
     const up = card.querySelector('[data-bind="pari-decimator-up"]');
     const down = card.querySelector('[data-bind="pari-decimator-down"]');
     assert.ok(up && down, 'the amount uses a dedicated two-part stepper');
     assert.equal(up.getAttribute('aria-label'), 'Increase Decimator entry by 1,000 FLIP');
     assert.equal(down.getAttribute('aria-label'), 'Decrease Decimator entry by 1,000 FLIP');
     up.click();
-    assert.equal(input.value, '2000');
+    assert.equal(input.value, '3000');
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      '+3,068 SCORE',
+      '+4,603 SCORE',
     );
     down.click();
-    assert.equal(input.value, '1000');
+    assert.equal(input.value, '2000');
     down.click();
-    assert.equal(input.value, '1000', 'the down control clamps at the 1,000 FLIP minimum');
+    assert.equal(input.value, '2000', 'the down control clamps at the 2,000 FLIP minimum');
     input.value = '3000';
     input.dispatchEvent({ type: 'input' });
     assert.equal(
@@ -1009,8 +986,8 @@ describe('app-parimutuel-panel', () => {
     await flush();
 
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, 3_000n * FLIP, 0],
-      ['send', TEST_ADDR, 3_000n * FLIP, 0],
+      ['static', 0, 3_000n, 0],
+      ['send', 0, 3_000n, 0],
     ]);
     el.disconnectedCallback();
   });
@@ -1069,8 +1046,8 @@ describe('app-parimutuel-panel', () => {
     });
     await flush();
     assert.deepEqual(calls, [
-      ['static', TEST_ADDR, 3_000n * FLIP, 0],
-      ['send', TEST_ADDR, 3_000n * FLIP, 0],
+      ['static', 0, 3_000n, 0],
+      ['send', 0, 3_000n, 0],
     ]);
     el.disconnectedCallback();
   });
@@ -1316,7 +1293,7 @@ describe('app-parimutuel-panel', () => {
       'the old duplicate pending row is removed');
   });
 
-  test('settled winners publish claims only to the shared bottom row', async () => {
+  test('settled winners are paid automatically: nothing claimable is published', async () => {
     installContract({
       growth: {
         [LEVEL]: { openRound: 0 },
@@ -1331,13 +1308,12 @@ describe('app-parimutuel-panel', () => {
     assert.equal(card.querySelectorAll('.pari-result--win').length, 0,
       'settled history rows do not repeat old level outcomes');
     assert.equal(card.querySelector('.pari-claim-cta'), null,
-      'claim controls are absent from the side-bet card');
+      'there are no claim controls: payouts settle without a transaction');
     const pending = pendingActionsMod.getPendingActions();
-    assert.equal(pending.length, 2);
-    assert.ok(pending.every((item) => item.state === 'ready' && typeof item.run === 'function'));
-    assert.ok(pending.every((item) => item.kind === 'growth-claim'),
-      'settled growth payouts are routed into the shared bottom action tray');
-    assert.ok(pending.every((item) => item.shortLabel === 'Claim'));
+    assert.ok(pending.every((item) => item.kind !== 'growth-claim'),
+      'no growth payout is routed into the bottom action tray as a claim');
+    assert.ok(pending.every((item) => item.state === 'waiting' && item.run == null),
+      'an unsettled win only shows as waiting for settlement');
   });
 
   test('a lost round remains revealable without a verbose history row', async () => {
@@ -1425,7 +1401,7 @@ describe('app-parimutuel-panel', () => {
     const el = await mount();
     growthCard(el).querySelectorAll('.pari-side__cta')[1].click();
     await flush();
-    assert.deepEqual(calls[0], ['placeBet', TEST_ADDR, true]);
+    assert.deepEqual(calls[0], ['placeBet', 0, true]);
   });
 
   test('an open Growth book accepts a bet while /game/state is still blocked', async () => {
@@ -1452,71 +1428,13 @@ describe('app-parimutuel-panel', () => {
         'purchaseInfo and marketState discover the book without the DB');
       growthCard(el).querySelectorAll('.pari-side__cta')[1].click();
       await flush();
-      assert.deepEqual(calls[0], ['placeBet', TEST_ADDR, true],
+      assert.deepEqual(calls[0], ['placeBet', 0, true],
         'the contract receives the bet before indexed state resolves');
       el.disconnectedCallback();
     } finally {
       releaseDatabase(_gameState);
       globalThis.fetch = indexedFetch;
     }
-  });
-
-  test('clicking Claim cranks the clicked winner first plus other discovered winners', async () => {
-    const calls = [];
-    const other = '0xcd34000000000000000000000000000000000000';
-    installContract({
-      growth: {
-        [LEVEL]: { openRound: 0 },
-        [LEVEL - 1]: {
-          side: 1, outcome: 1, payout: 1_500n * FLIP, over: 2n, under: 1n,
-        },
-      },
-      growthBettors: [
-        { player: TEST_ADDR, over: true },
-        { player: '0xee56000000000000000000000000000000000000', over: false },
-        { player: other, over: true },
-      ],
-      calls,
-    });
-    await mount();
-    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'growth-claim');
-    assert.ok(claim, 'the claim is available from the bottom action row');
-    await claim.run();
-    await flush();
-    assert.deepEqual(calls[0], ['claimRound', LEVEL - 1, [TEST_ADDR, other]]);
-  });
-
-  test('a claim resolved since the last poll only replays; it sends no transaction', async () => {
-    const calls = [];
-    const growth = {
-      [LEVEL]: { openRound: 0 },
-      [LEVEL - 1]: {
-        side: 1, outcome: 1, payout: 4_000n * FLIP, over: 1n, under: 3n,
-      },
-    };
-    installContract({ growth, calls });
-    await mount();
-
-    growth[LEVEL - 1] = {
-      side: 1,
-      outcome: 1,
-      claimed: true,
-      payout: 0n,
-      over: 1n,
-      under: 3n,
-    };
-    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'growth-claim');
-    assert.ok(claim);
-    await claim.run();
-    await flush();
-
-    assert.deepEqual(calls, [], 'fresh claimed=true state bypasses every write');
-    const [replay] = revealMod.__takeQueuedForTest();
-    assert.equal(replay.kind, 'pari');
-    assert.equal(replay.round, LEVEL - 1);
-    assert.equal(replay.payout, 4_000n * FLIP,
-      'payout is reconstructed because claimed marketState returns zero');
-    assert.equal(pendingActionsMod.getPendingActions().length, 0);
   });
 
   // Each Growth book shows the number the round has to beat and the percentage

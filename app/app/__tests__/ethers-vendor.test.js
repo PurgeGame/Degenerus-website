@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYER = '0x000000000000000000000000000000000000dEaD';
 const expectedExports = [
   'AbiCoder', 'BrowserProvider', 'Contract', 'Interface', 'JsonRpcProvider',
-  'LogDescription', 'ZeroAddress', 'ZeroHash', 'decodeBytes32String',
+  'LogDescription', 'MaxUint256', 'ZeroAddress', 'ZeroHash', 'decodeBytes32String',
   'encodeBytes32String', 'ethers', 'formatEther', 'getAddress', 'id',
   'isAddress', 'keccak256', 'parseEther', 'solidityPackedKeccak256',
   'toBeHex', 'version', 'zeroPadValue',
@@ -23,6 +23,7 @@ describe('tree-shaken browser ethers build', () => {
       assert.strictEqual(vendor.ethers[name], vendor[name], `ethers.${name}`);
     }
     assert.equal(vendor.version, '6.17.0');
+    assert.equal(vendor.ethers.MaxUint256 / 2n, ((1n << 256n) - 1n) / 2n);
   });
 
   test('matches upstream encoding, hashing and unit conversion', () => {

@@ -23,6 +23,7 @@ import * as affiliateMod from '../affiliate.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — port of claims.test.js pattern.
@@ -81,7 +82,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -303,7 +304,7 @@ describe('Plan 62-06: createAffiliateCode', () => {
   test('persists registered code to localStorage on confirm (Phase 60 D-05 mechanism)', async () => {
     const result = await affiliateMod.createAffiliateCode({ codeStr: 'DEGEN', kickbackPct: 10 });
     // Phase 60 D-05 key format: `affiliate-code:${CHAIN.id}:${addr.toLowerCase()}`.
-    const key = `affiliate-code:84532:${CONNECTED.toLowerCase()}`;
+    const key = `affiliate-code:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`;
     const stored = storedKeys.get(key);
     assert.ok(stored, `localStorage[${key}] was set`);
     assert.equal(stored, result.encodedCode, 'stored value === encoded code returned');

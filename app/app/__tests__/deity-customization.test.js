@@ -14,7 +14,7 @@ import {
 
 const OWNER = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xcd34000000000000000000000000000000000000';
-const RENDERER = DEITY_CUSTOMIZATION_DEPLOYMENTS[84532].renderer;
+const RENDERER = DEITY_CUSTOMIZATION_DEPLOYMENTS[CHAIN.id].renderer;
 const DEFAULTS = ['#3f1a82', '#d9d9d9', '#111111'];
 let nft, renderer, calls, signerReads, preflightError;
 const uri = `data:application/json,${encodeURIComponent(JSON.stringify({ image: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>')}` }))}`;
@@ -23,7 +23,7 @@ beforeEach(() => {
   __resetForTest();
   update('connected.address', OWNER); update('ui.mode', 'self');
   calls = []; signerReads = 0; preflightError = null;
-  setProvider({ getNetwork: async () => ({ chainId: 84532n }), getSigner: async () => { signerReads++; return { getAddress: async () => OWNER }; } });
+  setProvider({ getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }), getSigner: async () => { signerReads++; return { getAddress: async () => OWNER }; } });
   nft = { renderer: async () => RENDERER, ownerOf: async () => OWNER, renderColors: async () => DEFAULTS, tokenURI: async () => uri };
   renderer = {
     pass: async () => CONTRACTS.DEITY_PASS,

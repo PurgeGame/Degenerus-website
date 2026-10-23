@@ -10,11 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(resolvePath(__dirname, '../app-mine-flip.js'), 'utf8');
@@ -95,7 +91,7 @@ function stubProbe({
   maxFeePerGas = 1_000_000_000n,
 } = {}) {
   contracts.setProvider({
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     getBalance: async () => balanceWei,
     getFeeData: async () => ({ maxFeePerGas }),
@@ -103,6 +99,8 @@ function stubProbe({
   readProvider._setSharedReadProviderForTests({
     getBalance: async () => balanceWei,
     getFeeData: async () => ({ maxFeePerGas }),
+    // Sepolia fee policy reads the latest block's base fee through the shared read provider.
+    getBlock: async () => ({ baseFeePerGas: maxFeePerGas }),
   });
   mineFlip.__setContractFactoryForTest(() => ({
     mineFlip: Object.assign(
@@ -370,12 +368,12 @@ describe('headless Mine FLIP resolver', () => {
     const iface = new contracts.ethers.Interface([
       'event MinerBounty(uint8 kind, address indexed miner, uint256 flipAmount)',
     ]);
-    const amountWei = 125n * 10n ** 18n;
+    const amountWei = 125n * 10n ** 18n; // the event carries raw whole FLIP
     resolver.__queueForTest()[0].run = async () => {
       stubProbe({ hasWork: false });
       return { receipt: { status: 1, logs: [{
         address: CONTRACTS.GAME,
-        ...iface.encodeEventLog(iface.getEvent('MinerBounty'), [1, TEST_ADDR, amountWei]),
+        ...iface.encodeEventLog(iface.getEvent('MinerBounty'), [1, TEST_ADDR, 125n]),
       }] } };
     };
     await publishedResolver().run();

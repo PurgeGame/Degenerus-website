@@ -27,11 +27,8 @@ import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
 import { CONTRACTS } from '../chain-config.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { _setWalletIdForTests } from '../wallet-id.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of lootbox.test.js
@@ -120,16 +117,20 @@ function makeFakeContract(opts = {}) {
 function makeFakeProvider(connectedAddr, { redemptionOpen = false } = {}) {
   return {
     // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
-    getStorage: async () => redemptionOpen ? (1n << 240n) : 0n,
+    getStorage: async () => redemptionOpen ? (1n << 249n) : 0n,
   };
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xdef0000000000000000000000000000000000000';
+// The connected wallet is account 0 ("the caller"); acting for another wallet sends its ID.
+const OTHER_ID = 7;
+const FLIP = 10n ** 18n; // token wei per whole FLIP
+_setWalletIdForTests(OTHER, OTHER_ID);
 
 // ===========================================================================
 // Reason-map registrations — module-load side-effect.
@@ -238,11 +239,11 @@ describe('Plan 61-02: claimEth', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes contract.claimWinnings with connected.address (NOT ZeroAddress) — Pitfall 11', async () => {
+  test('invokes contract.claimWinnings with account 0 (the connected wallet)', async () => {
     await claimsMod.claimEth();
     assert.equal(lastFakeContract._calls.claimWinnings.length, 1, 'claimWinnings called once');
     const [args] = lastFakeContract._calls.claimWinnings;
-    assert.equal(args[0], CONNECTED, 'player arg is connected.address (NOT ZeroAddress per D-05)');
+    assert.equal(args[0], 0, 'account arg 0 resolves to msg.sender');
   });
 
   test('throws Wallet not connected when no address available', async () => {
@@ -254,7 +255,7 @@ describe('Plan 61-02: claimEth', () => {
   test('accepts explicit player arg overriding store', async () => {
     await claimsMod.claimEth({ player: OTHER });
     const [args] = lastFakeContract._calls.claimWinnings;
-    assert.equal(args[0], OTHER, 'explicit player arg overrides connected.address');
+    assert.equal(args[0], OTHER_ID, 'explicit player arg sends that wallet\'s ID');
   });
 
   test('static-call gate runs BEFORE sendTx (closure form) — order verification', async () => {
@@ -319,11 +320,11 @@ describe('Plan 61-02: claimFlip', () => {
   });
 
   test('invokes claimCoinflips(player, amount) with explicit BigInt amount', async () => {
-    await claimsMod.claimFlip({ amount: 500n });
+    await claimsMod.claimFlip({ amount: 500n * FLIP });
     assert.equal(lastFakeContract._calls.claimCoinflips.length, 1);
     const [args] = lastFakeContract._calls.claimCoinflips;
-    assert.equal(args[0], CONNECTED, 'player arg = connected.address');
-    assert.equal(args[1], 500n, 'amount arg = BigInt 500n');
+    assert.equal(args[0], 0, 'account arg 0 = the connected wallet');
+    assert.equal(args[1], 500n, 'amount arg = 500 raw (whole) FLIP');
   });
 
   test('throws Nothing to claim on amount === 0n', async () => {
@@ -335,14 +336,14 @@ describe('Plan 61-02: claimFlip', () => {
   });
 
   test('accepts amount as string and converts to BigInt', async () => {
-    await claimsMod.claimFlip({ amount: '500' });
+    await claimsMod.claimFlip({ amount: String(500n * FLIP) });
     const [args] = lastFakeContract._calls.claimCoinflips;
     assert.equal(typeof args[1], 'bigint', 'amount arg coerced to BigInt');
     assert.equal(args[1], 500n);
   });
 
   test('does NOT use address-cast trick — second arg is explicit amount, NOT BigInt(player)', async () => {
-    await claimsMod.claimFlip({ amount: 500n });
+    await claimsMod.claimFlip({ amount: 500n * FLIP });
     const [args] = lastFakeContract._calls.claimCoinflips;
     // The /beta trick passes the player address cast to uint256 as the 2nd arg.
     // Phase 61 must NOT do that — the 2nd arg must be the explicit amount.
@@ -359,7 +360,7 @@ describe('Plan 61-02: claimFlip', () => {
     claimsMod.__setContractFactoryForTest(() => reverting);
     let caught = null;
     try {
-      await claimsMod.claimFlip({ amount: 500n });
+      await claimsMod.claimFlip({ amount: 500n * FLIP });
     } catch (e) {
       caught = e;
     }
@@ -498,7 +499,7 @@ describe('Plan 62-06: claimAffiliateDgnrs', () => {
     await claimsMod.claimAffiliateDgnrs();
     assert.equal(lastFakeContract._calls.claimAffiliateDgnrs.length, 1, 'called once');
     const [args] = lastFakeContract._calls.claimAffiliateDgnrs;
-    assert.equal(args[0], CONNECTED, 'player arg = connected.address');
+    assert.equal(args[0], 0, 'account arg 0 = the connected wallet');
   });
 
   test('throws Wallet not connected when no address available', async () => {
@@ -510,7 +511,7 @@ describe('Plan 62-06: claimAffiliateDgnrs', () => {
   test('accepts explicit player arg overriding store', async () => {
     await claimsMod.claimAffiliateDgnrs({ player: OTHER });
     const [args] = lastFakeContract._calls.claimAffiliateDgnrs;
-    assert.equal(args[0], OTHER, 'explicit player arg overrides connected.address');
+    assert.equal(args[0], OTHER_ID, 'explicit player arg sends that wallet\'s ID');
   });
 
   test('static-call gate runs BEFORE sendTx — order verification', async () => {
@@ -587,80 +588,5 @@ describe('Plan 62-06: claims.js source-level invariants (AFF-03 extension)', () 
     // extension (3 from Phase 61 + 1 NEW for claimAffiliateDgnrs).
     const matches = SRC.match(/sendTx\(\s*\(s\)\s*=>/g) || [];
     assert.ok(matches.length >= 4, `expected >= 4 closure-form sendTx after Plan 62-06; got ${matches.length}`);
-  });
-});
-
-
-// ===========================================================================
-// GAME OVER — the terminal affiliate 2% (audit 635b010a).
-// ===========================================================================
-
-describe('terminal affiliate payout', () => {
-  const claims = claimsMod;
-  const contracts = contractsMod;
-  const { ethers } = contractsMod;
-  const AFFILIATE = ethers.getAddress('0xab12000000000000000000000000000000000000');
-  const OTHER = ethers.getAddress('0xcd34000000000000000000000000000000000000');
-  const iface = new ethers.Interface([
-    'event TerminalAffiliatePaid(address indexed affiliate, uint24 indexed level, uint256 amount)',
-  ]);
-  const encode = (affiliate, level, amount) => {
-    const log = iface.encodeEventLog(
-      iface.getEvent('TerminalAffiliatePaid'), [affiliate, level, amount],
-    );
-    return { address: CONTRACTS.GAME, topics: log.topics, data: log.data };
-  };
-
-  test('decodes the event the game-over drain emits', () => {
-    const row = claims.decodeTerminalAffiliatePaid(encode(AFFILIATE, 412, 7_500_000n));
-    assert.deepEqual(row, {
-      affiliate: AFFILIATE.toLowerCase(),
-      level: 412,
-      amountWei: '7500000',
-    });
-    assert.equal(claims.decodeTerminalAffiliatePaid(null), null);
-    assert.equal(claims.decodeTerminalAffiliatePaid({ topics: [], data: '0x' }), null);
-    // A pre-parsed log from a receipt is taken as-is, with no second decode.
-    assert.equal(claims.decodeTerminalAffiliatePaid({
-      parsed: { name: 'SomethingElse', args: {} },
-    }), null);
-  });
-
-  test('the payout read is scoped to the wallet and never throws on a dead RPC', async () => {
-    const queries = [];
-    const provider = {
-      getLogs: async (filter) => {
-        queries.push(filter);
-        return [encode(AFFILIATE, 412, 7_500_000n)];
-      },
-    };
-    contracts.setProvider(provider);
-    try {
-      const row = await claims.readTerminalAffiliatePayout(AFFILIATE, { fromBlock: 46_570_486 });
-      assert.equal(row?.amountWei, '7500000');
-      assert.equal(row?.level, 412);
-      assert.equal(queries[0].address, CONTRACTS.GAME);
-      assert.equal(queries[0].fromBlock, 46_570_486);
-      assert.equal(
-        queries[0].topics[1],
-        ethers.zeroPadValue(ethers.getAddress(AFFILIATE), 32),
-        'the wallet is an INDEXED topic, so the node filters instead of the browser',
-      );
-
-      // Another wallet's payout is not this wallet's, even if a node ignores the topic.
-      assert.equal(await claims.readTerminalAffiliatePayout(OTHER), null);
-    } finally {
-      contracts.clearProvider();
-    }
-
-    // The note is decoration: a restricted or rate-limited eth_getLogs must degrade
-    // to "no note", never take down the panel that renders the claim buttons.
-    contracts.setProvider({ getLogs: async () => { throw new Error('rate limited'); } });
-    try {
-      assert.equal(await claims.readTerminalAffiliatePayout(AFFILIATE), null);
-    } finally {
-      contracts.clearProvider();
-    }
-    assert.equal(await claims.readTerminalAffiliatePayout('not-an-address'), null);
   });
 });

@@ -1,5 +1,3 @@
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(CURRENT_SCHEMA_HASH);
 // /app/components/__tests__/reveal-overlay.test.js — prize reveal engine.
 // Run: cd website && node --test app/components/__tests__/reveal-overlay.test.js
 //
@@ -416,12 +414,12 @@ describe('normalizeSequence', () => {
       'high-roller passes have a visibly separate gold treatment');
   });
 
-  test('presale comp counts stay attached to their physical opening card', () => {
+  test('comp counts on an opened anchor stay attached to their physical opening card', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
       lootboxIndex: 49,
       legs: [{
-        legType: 'opened', source: 'presale', lootboxIndex: 49,
+        legType: 'opened', lootboxIndex: 49,
         wholeTickets: 0, flip: 0n, crapsNormalPasses: 3, crapsHighPasses: 0,
       }],
     });
@@ -923,12 +921,11 @@ describe('normalizeSequence', () => {
       kind: 'bingo',
       level: 31,
       symbol: 0,
-      tier: 'first-symbol',
       flipReward: 2_000n * 10n ** 18n,
       dgnrsPaid: 77n * 10n ** 18n,
       counts: Array.from({ length: 64 }, (_unused, index) => index % 8 === 0 ? 1 : 0),
     });
-    assert.equal(seq.title, 'FIRST-SYMBOL BINGO');
+    assert.equal(seq.title, 'BINGO');
     assert.equal(seq.noVessel, true);
     assert.equal(seq.autoStart, true);
     assert.deepEqual(seq.cards.map((card) => card.type), ['bingo', 'flip', 'dgnrs']);
@@ -1947,7 +1944,7 @@ describe('buildBoxSpinBoard', () => {
     });
     assert.equal(legacy.survived, true,
       'a positive final payout proves survival when an older feed omits the packed bit');
-    assert.equal(board.headline, 'LUCKDEGENERETTE CARD');
+    assert.equal(board.headline, 'LUCKBOX CARD');
     assert.doesNotMatch(board.headline, /ETH|FLIP|WWXRP/,
       'the board heading stays neutral until the first reel lands');
   });
@@ -2541,7 +2538,7 @@ describe('reveal-overlay element', () => {
     t.after(() => { window.matchMedia = previousMatchMedia; });
 
     queueReveal({
-      kind: 'bingo', level: 31, symbol: 0, tier: 'first-symbol',
+      kind: 'bingo', level: 31, symbol: 0,
       flipReward: 1_000n * 10n ** 18n,
       dgnrsPaid: 250n * 10n ** 18n,
       counts: Array.from({ length: 64 }, (_unused, index) => index % 8 === 0 ? 1 : 0),

@@ -1,6 +1,4 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 // /app/components/__tests__/app-packs-panel.test.js — Phase 60 Plan 60-01 (LBX-01)
 // Run: cd website && node --test app/components/__tests__/app-packs-panel.test.js
 //
@@ -278,6 +276,7 @@ async function flushMicrotasks() {
 import * as storeMod from '../../app/store.js';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
+import { _setSharedReadProviderForTests, _resetSharedReadProviderForTests } from '../../app/read-provider.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -489,7 +488,7 @@ function makeFakePurchaseContract(opts = {}) {
         calls.purchase.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+          { parsed: { name: 'LootBoxBuy', args: { index: txCounter, amount: 0n, buyer: args[0] } } },
         ]));
       },
       { staticCall: stk('purchase') }
@@ -513,7 +512,7 @@ function makeFakePurchaseContract(opts = {}) {
 
 function makeFakeBuyProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -549,7 +548,7 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called once');
     assert.equal(fakeContract._calls.purchaseCoin.length, 0, 'purchaseCoin NOT called');
     const [args] = fakeContract._calls.purchase;
-    assert.equal(args[0], CONNECTED);
+    assert.equal(args[0], 0, 'the connected wallet buys for itself: account ID 0');
     assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth');
   });
 
@@ -623,9 +622,9 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
 
 // ===========================================================================
 // Plan 60-03 — per-lootbox rows + RNG poll + Open click + reveal animation.
-// Drives the full chain end-to-end with a fake contract that ALSO exposes
-// lootboxRngWord (for pollRngForLootbox) + openLootBox (for the second-tx open
-// path; lootboxes are ETH-only). Uses the widget's __runPollCycleForTest +
+// Drives the full chain end-to-end with a fake contract exposing
+// the buy/mineFlip surface (readiness comes from the box-state reader seam; the
+// sweep opens boxes in order). Uses the widget's __runPollCycleForTest +
 // __bumpCancelTokenForTest seams to avoid the 7s setTimeout wait + the
 // 4s reveal-fallback wait — keeps the suite sub-second.
 // ===========================================================================
@@ -634,7 +633,6 @@ function makeFakeRngContract(opts = {}) {
   const calls = {
     purchase: [], purchaseCoin: [],
     mineFlip: [],
-    lootboxRngWordByIndex: [],
   };
   const state = { rngWord: opts.rngWord ?? 0n, opened: false };  // tests mutate to drive RNG progression
   const stk = (name) => async () => {
@@ -651,7 +649,7 @@ function makeFakeRngContract(opts = {}) {
         calls.purchase.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+          { parsed: { name: 'LootBoxBuy', args: { index: txCounter, amount: 0n, buyer: args[0] } } },
         ]));
       },
       { staticCall: stk('purchase') }
@@ -679,7 +677,6 @@ function makeFakeRngContract(opts = {}) {
       },
       { staticCall: stk('mineFlip') }
     ),
-    lootboxRngWordByIndex: async (idx) => { calls.lootboxRngWordByIndex.push(idx); return state.rngWord; },
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
     _calls: calls,
@@ -877,7 +874,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const upperAddr = '0xAB12000000000000000000000000000000000000';  // mixed case
     __triggerRevealCompleteForTest(el, 1n, upperAddr);
     // Should write to lowercase variant — case-insensitive key.
-    const lowerKey = `revealed-packs:84532:${upperAddr.toLowerCase()}`;
+    const lowerKey = `revealed-packs:${ACTIVE_CHAIN_ID}:${upperAddr.toLowerCase()}`;
     const raw = globalThis.localStorage.getItem(lowerKey);
     assert.ok(raw, 'key uses lowercased address');
     const arr = JSON.parse(raw);
@@ -887,7 +884,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
   test('Reveal complete writes lootboxIndex to revealed-packs set (chainId-scoped)', () => {
     const el = instantiate();
     __triggerRevealCompleteForTest(el, 7n, CONNECTED);
-    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`;
     const raw = globalThis.localStorage.getItem(key);
     assert.ok(raw, 'localStorage entry written');
     const arr = JSON.parse(raw);
@@ -898,7 +895,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const el = instantiate();
     __triggerRevealCompleteForTest(el, 3n, CONNECTED);
     __triggerRevealCompleteForTest(el, 3n, CONNECTED);
-    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`;
     const arr = JSON.parse(globalThis.localStorage.getItem(key));
     assert.equal(arr.filter((v) => v === '3').length, 1, 'no duplicates in revealed set');
   });
@@ -922,7 +919,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const el = instantiate();
     storeMod.update('connected.address', CONNECTED);
     await settle(60);
-    const stored = globalThis.localStorage.getItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`);
+    const stored = globalThis.localStorage.getItem(`affiliate-code:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`);
     assert.equal(stored, null, 'own-code key untouched by an incoming ?ref=');
     el.disconnectedCallback();
   });
@@ -935,7 +932,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const el = instantiate();
     storeMod.update('connected.address', CONNECTED);
     await settle(60);
-    const stored = globalThis.localStorage.getItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`);
+    const stored = globalThis.localStorage.getItem(`affiliate-code:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`);
     assert.equal(stored, null, 'invalid ?ref= not persisted');
     el.disconnectedCallback();
   });
@@ -972,7 +969,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
   test('Boot CTA: indexer returns 2 lootboxes, 1 in localStorage → CTA shows "1 unrevealed pack"', async () => {
     // Pre-seed localStorage with lootbox 5 already revealed
     globalThis.localStorage.setItem(
-      `revealed-packs:84532:${CONNECTED.toLowerCase()}`,
+      `revealed-packs:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`,
       JSON.stringify(['5'])
     );
     globalThis.fetch = async () => ({
@@ -1138,7 +1135,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     await settle(60);
     __triggerRevealCompleteForTest(el1, lootboxIdx, CONNECTED);
     // Verify localStorage now contains the revealed lootboxIndex.
-    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:${ACTIVE_CHAIN_ID}:${CONNECTED.toLowerCase()}`;
     const arr1 = JSON.parse(globalThis.localStorage.getItem(key));
     assert.ok(arr1.includes(String(lootboxIdx)), `revealed set contains ${lootboxIdx}`);
     el1.disconnectedCallback();
@@ -1228,7 +1225,7 @@ function makeFakePrewarmCapableContract(opts = {}) {
         calls.purchase.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+          { parsed: { name: 'LootBoxBuy', args: { index: txCounter, amount: 0n, buyer: args[0] } } },
         ]));
       },
       {
@@ -1281,7 +1278,7 @@ function makeFakePrewarmProvider() {
       return Promise.resolve({
         hash: '0xprewarm-tx',
         wait: async () => makeFakeBuyReceipt([
-          { parsed: { name: 'LootBoxIdx', args: { index: 99n, day: 1n, buyer: CONNECTED } } },
+          { parsed: { name: 'LootBoxBuy', args: { index: 99n, amount: 0n, buyer: CONNECTED } } },
         ]),
       });
     },
@@ -1289,7 +1286,7 @@ function makeFakePrewarmProvider() {
     _estimateCalls: estimateCalls,
   };
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => signer,
     _signer: signer,
   };
@@ -1337,6 +1334,8 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
     storeMod.update('ui.mode', 'self');
     fakeProvider = makeFakePrewarmProvider();
     contractsMod.setProvider(fakeProvider);
+    // Sepolia fee policy reads the latest base fee through the shared read provider.
+    _setSharedReadProviderForTests({ getBlock: async () => ({ baseFeePerGas: 1_000_000_000n }) });
     fakeContract = makeFakePrewarmCapableContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     if (typeof globalThis.document !== 'undefined') globalThis.document.visibilityState = 'visible';
@@ -1347,6 +1346,7 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
   afterEach(() => {
     lootboxMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
+    _resetSharedReadProviderForTests();
   });
 
   test('Synchronous-click invariant — #onBuyClick is arrow-property, NOT async-method (source-grep)', () => {

@@ -1,5 +1,3 @@
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(CURRENT_SCHEMA_HASH);
 // /app/app/__tests__/dgn-traits.test.js — shared Degenerette trait codecs.
 // Run: cd website && node --test app/app/__tests__/dgn-traits.test.js
 //

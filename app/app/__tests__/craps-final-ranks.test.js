@@ -10,10 +10,9 @@ test('exact ties use the contract hash of dense window/day/awarded ordinals', ()
   const entries = [window, day, awarded].map((betId, index) => ({
     betId, multiple: index === 0 ? 1 : 10, result: 17n,
   }));
-  // Solidity abi.encode(word=5, CrapsTie, slot=340|ordinal) hashes start
-  // e99c (1), f0b9 (2), ca9c (3). The larger hash wins a dead-level score.
+  // Solidity abi.encode(43, word=5, slot=340|ordinal): the larger hash wins a dead-level score.
   assert.deepEqual(crapsReplayFinalRankings(entries, 5n, 340n, value => value), {
-    main: [day, window, awarded].map(String), high: [day, awarded].map(String),
+    main: [window, awarded, day].map(String), high: [awarded, day].map(String),
   });
   entries[2].result = 18n;
   assert.equal(crapsReplayFinalRankings(entries, 5n, 340n, value => value).main[0], String(awarded),

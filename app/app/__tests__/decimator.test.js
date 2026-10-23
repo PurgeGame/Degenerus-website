@@ -2,7 +2,7 @@
 // Run: cd website && node --test app/app/__tests__/decimator.test.js
 //
 // Ticket purchases remain the same GAME.purchase() call; entry uses
-// FLIP.decimatorBurn(player, amount) with the 1,000-FLIP contract minimum.
+// FLIP.decimatorBurn(id, amount, chips) with the 2,000-FLIP contract minimum.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,11 +13,8 @@ import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import { CHAIN } from '../chain-config.js';
-// FLIP/WWXRP fixtures in this file are 18-decimal (audits up to 95d88f68b, frozen schema d0e3665a).
-// Pin that schema so the suite reads the same under any deployment profile; whole-token units
-// (audit eb04b2e80 on) are pinned by whole-token-units.test.js.
-import { useSchema as pinTestSchema, BEFORE_WHOLE_TOKENS_SCHEMA_HASH } from '../../chain/schema.js';
-pinTestSchema(BEFORE_WHOLE_TOKENS_SCHEMA_HASH);
+import { _setWalletIdForTests } from '../wallet-id.js';
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 
 const DECIMATOR_SRC = readFileSync(
   new URL('../decimator.js', import.meta.url),
@@ -26,10 +23,12 @@ const DECIMATOR_SRC = readFileSync(
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const FLIP = 10n ** 18n;
+const CONNECTED_ID = 5;
+_setWalletIdForTests(CONNECTED, CONNECTED_ID);
 
 function makeFakeProvider() {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => CONNECTED }),
   };
 }
@@ -145,8 +144,8 @@ describe('live Decimator display math', () => {
     assert.equal(decimatorMod.decimatorCurrentMultiplierBps({ activityScore: 235, daysLate: 1 }), 15_344n);
   });
 
-  test('credits the exact stack recordDecBurn records, whole FLIP, boon capped at 50k base', () => {
-    // 1,704.9 and 1,534.41 FLIP: recordDecBurn keeps whole FLIP of chips (audit 32c604531).
+  test('credits the exact stack recordDecBurn_g5574 records, whole FLIP, boon capped at 50k base', () => {
+    // 1,704.9 and 1,534.41 FLIP: recordDecBurn_g5574 keeps whole FLIP of chips (audit 32c604531).
     assert.equal(decimatorMod.decimatorStackCreditWei({ amountWei: 1_000n * FLIP, activityScore: 235 }), 1_704n * FLIP);
     assert.equal(decimatorMod.decimatorStackCreditWei({ amountWei: 1_000n * FLIP, activityScore: 235, daysLate: 1 }),
       1_534n * FLIP);
@@ -172,24 +171,27 @@ describe('live Decimator display math', () => {
   });
 
   test('decodes the battle entry and round words at the generated schema slots', async () => {
-    const { fields } = await import('../../chain/schemas/5cd4b457/game.js');
-    assert.equal(fields.decBattleEntries?.slot, '40');
-    assert.equal(fields.decBattleRounds?.slot, '41');
-    assert.equal(fields.decBattlePlayers?.slot, '43');
+    const { loadSchema } = await import('../../chain/schema.js');
+    const { fields } = await loadSchema('GAME');
+    assert.equal(fields.decBattleEntries?.slot, '31');
+    assert.equal(fields.decBattleRounds?.slot, '32');
+    assert.equal(fields.decBattlePlayers?.slot, '33');
+    assert.match(fields.decBattlePlayers.type, /mapping\(uint32 => uint256\)/, 'keyed by wallet ID');
     const { ethers } = contractsMod;
     const coder = ethers.AbiCoder.defaultAbiCoder();
     const player = '0x7776145203f4c8f87fffae24593c92ec7d38880c';
-    assert.equal(decimatorMod.decimatorPlayerStorageSlot(player, 43n),
-      ethers.keccak256(coder.encode(['address', 'uint256'], [player, 43n])));
-    assert.equal(decimatorMod.decimatorEntryStorageSlot(35, 9n, 40n),
-      ethers.keccak256(coder.encode(['uint256', 'uint256'], [(35n << 64n) | 9n, 40n])));
-    assert.equal(decimatorMod.decimatorRoundStorageSlot(35, 41n), ethers.keccak256(coder.encode(['uint256', 'uint256'], [35n, 41n])));
+    assert.equal(decimatorMod.decimatorPlayerStorageSlot(CONNECTED_ID, 40n),
+      ethers.keccak256(coder.encode(['uint32', 'uint256'], [CONNECTED_ID, 40n])));
+    assert.equal(decimatorMod.decimatorEntryStorageSlot(35, 9n, 37n),
+      ethers.keccak256(coder.encode(['uint256', 'uint256'], [4n, 37n])));
+    assert.equal(decimatorMod.decimatorRoundStorageSlot(35, 38n), ethers.keccak256(coder.encode(['uint256', 'uint256'], [35n, 38n])));
     assert.deepEqual(decimatorMod.decimatorPlayerSlotDecode((35n << 64n) | 9n), { level: 35, entryId: 9n });
-    const word = BigInt(player) | (0x1234n << 160n) | (7_000n << 190n);
-    assert.deepEqual(decimatorMod.decimatorEntryDecode(word), { owner: BigInt(player), chips: 0x1234, stackWei: 7_000n * FLIP });
-    const round = 5n * FLIP | (412n << 128n) | (31n << 192n) | (2n << 216n) | (42n << 224n) | (42n << 232n) | (17n << 240n);
+    const word = 37n | (0x1234n << 32n) | (7_000n << 62n);
+    assert.deepEqual(decimatorMod.decimatorEntryDecode(word), { owner: 37n, chips: 0x1234, stackWei: 7_000n * FLIP });
+    // poolWei uint96 | count uint40 | totalCreditedStack uint64 (whole FLIP) | openedDay uint24 | phase | capacity | winners | paid
+    const round = 5n * FLIP | (412n << 96n) | (9_000n << 136n) | (31n << 200n) | (2n << 224n) | (42n << 232n) | (42n << 240n) | (17n << 248n);
     assert.deepEqual(decimatorMod.decimatorRoundDecode(round), {
-      poolWei: 5n * FLIP, entrants: 412, openedDay: 31, phase: 2, capacity: 42, winners: 42, paid: 17,
+      poolWei: 5n * FLIP, entrants: 412, totalStackWei: 9_000n * FLIP, openedDay: 31, phase: 2, capacity: 42, winners: 42, paid: 17,
     });
   });
 
@@ -214,22 +216,23 @@ describe('live Decimator quote context', () => {
     const { fields } = await loadSchema('GAME');
     const { ethers } = contractsMod;
     const iface = new ethers.Interface([
-      'function playerActivityScore(address) view returns (uint256)',
+      'function playerActivityScore(address) view returns (uint256, uint32)',
       'function currentDayView() view returns (uint24)',
       'function futurePrizePoolView() view returns (uint256)',
     ]);
-    const values = { playerActivityScore: 235n, currentDayView: 32n, futurePrizePoolView: 1000n };
+    const values = { playerActivityScore: [235n, 0], currentDayView: 32n, futurePrizePoolView: 1000n };
     const storage = new Map([
-      [decimatorMod.decimatorRoundStorageSlot(25, fields.decBattleRounds.slot), (412n << 128n) | (31n << 192n)],
-      [decimatorMod.decimatorPlayerStorageSlot(CONNECTED, fields.decBattlePlayers.slot), (25n << 64n) | 1n],
-      [decimatorMod.decimatorEntryStorageSlot(25, 1n, fields.decBattleEntries.slot), BigInt(CONNECTED) | (284_500n << 190n)],
+      [ethers.toBeHex(BigInt(fields.decEntriesLevel.slot), 32), 25n << BigInt(fields.decEntriesLevel.offset * 8)],
+      [decimatorMod.decimatorRoundStorageSlot(25, fields.decBattleRounds.slot), (412n << 96n) | (9_000n << 136n) | (31n << 200n)],
+      [decimatorMod.decimatorPlayerStorageSlot(CONNECTED_ID, fields.decBattlePlayers.slot), (25n << 64n) | 1n],
+      [decimatorMod.decimatorEntryStorageSlot(25, 1n, fields.decBattleEntries.slot), BigInt(CONNECTED_ID) | (284_500n << 62n)],
     ]);
     const reads = [];
     contractsMod.setProvider({
       getBlockNumber: async () => 900,
       call: async (tx) => {
         const method = iface.getFunction(tx.data.slice(0, 10)).name;
-        return iface.encodeFunctionResult(method, [values[method]]);
+        return iface.encodeFunctionResult(method, [].concat(values[method]));
       },
       getStorage: async (_address, slot, tag) => {
         reads.push({ slot, tag });
@@ -243,8 +246,8 @@ describe('live Decimator quote context', () => {
     assert.equal(context.daysLate, 1, 'a case-sensitive schema lookup must not silently erase timing');
     assert.equal(context.stackWei, 284_500n * FLIP);
     assert.equal(context.entrants, 412);
-    assert.equal(context.totalStackWei, null);
-    assert.equal(reads.length, 3);
+    assert.equal(context.totalStackWei, 9_000n * FLIP, 'the round word carries the credited total; no log scan');
+    assert.equal(reads.length, 4);
     assert.ok(reads.every(({ tag }) => tag === 900), 'quote reads share one block');
     assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
       amountWei: 1_000n * FLIP, activityScore: context.activityScore, daysLate: context.daysLate, boonBps: 5_000,
@@ -269,8 +272,8 @@ describe('live Decimator raw-burn total', () => {
       blockNumber,
     });
     const emitted = [
-      encoded(1_250n * FLIP, base + 6),
-      encoded(750n * FLIP, base + 12),
+      encoded(1_250n, base + 6), // raw units are whole FLIP
+      encoded(750n, base + 12),
     ];
     const ranges = [];
     contractsMod.setProvider({
@@ -315,7 +318,7 @@ describe('live Decimator raw-burn total', () => {
       'event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId)',
     ]);
     const burn = {
-      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, 500_000n * FLIP, 7]),
+      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, 500_000n, 7]),
       blockNumber: opening,
     };
     contractsMod.setProvider({
@@ -359,8 +362,8 @@ describe('burnForDecimator', () => {
     assert.equal(result.amount, amount);
     assert.equal(result.chips, board);
     assert.deepEqual(fake._order, ['static', 'send']);
-    assert.deepEqual(fake._calls[0], ['static', CONNECTED, amount, board]);
-    assert.deepEqual(fake._calls[1], [CONNECTED, amount, board]);
+    assert.deepEqual(fake._calls[0], ['static', 0, 2_500n, board], 'account 0 and raw whole FLIP');
+    assert.deepEqual(fake._calls[1], [0, 2_500n, board]);
     assert.equal(result.receipt.status, 1);
     assert.match(
       DECIMATOR_SRC,
@@ -373,11 +376,11 @@ describe('burnForDecimator', () => {
     const fake = makeFakeContract();
     let builds = 0;
     decimatorMod.__setContractFactoryForTest(() => { builds += 1; return fake; });
-    await decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 0 });
-    assert.deepEqual(fake._calls[1], [CONNECTED, 1_000n * FLIP, 0]);
+    await decimatorMod.burnForDecimator({ amount: 2_000n * FLIP, chips: 0 });
+    assert.deepEqual(fake._calls[1], [0, 2_000n, 0]);
     builds = 0;
     await assert.rejects(
-      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 1 | (1 << 27) }),
+      decimatorMod.burnForDecimator({ amount: 2_000n * FLIP, chips: 1 | (1 << 27) }),
       /not a valid Decimator board/,
     );
     assert.equal(builds, 0);
@@ -388,7 +391,7 @@ describe('burnForDecimator', () => {
     error.revert = { name: 'E' };
     decimatorMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
     await assert.rejects(
-      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP, chips: 0 }),
+      decimatorMod.burnForDecimator({ amount: 2_000n * FLIP, chips: 0 }),
       (caught) => caught.code === 'DecimatorEntryRejected',
     );
   });
@@ -397,8 +400,8 @@ describe('burnForDecimator', () => {
     let builds = 0;
     decimatorMod.__setContractFactoryForTest(() => { builds += 1; return makeFakeContract(); });
     await assert.rejects(
-      decimatorMod.burnForDecimator({ amount: 999n * FLIP }),
-      /minimum.*1,000 FLIP/i,
+      decimatorMod.burnForDecimator({ amount: 1_999n * FLIP }),
+      /minimum.*2,000 FLIP/i,
     );
     assert.equal(builds, 0);
   });
@@ -409,9 +412,9 @@ describe('burnForDecimator', () => {
     decimatorMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
 
     await assert.rejects(
-      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP }),
+      decimatorMod.burnForDecimator({ amount: 2_000n * FLIP }),
       (caught) => caught.code === 'AmountLTMin'
-        && /1,000 FLIP/.test(caught.userMessage),
+        && /2,000 FLIP/.test(caught.userMessage),
     );
   });
 
@@ -421,7 +424,7 @@ describe('burnForDecimator', () => {
     decimatorMod.__setContractFactoryForTest(() => makeFakeContract({ staticError: error }));
 
     await assert.rejects(
-      decimatorMod.burnForDecimator({ amount: 1_000n * FLIP }),
+      decimatorMod.burnForDecimator({ amount: 2_000n * FLIP }),
       (caught) => caught.code === 'NotDecimatorWindow'
         && /entry window is closed/i.test(caught.userMessage),
     );

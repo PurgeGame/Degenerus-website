@@ -1,4 +1,4 @@
-// The jackpot replay centre as a purchase day's fill-draw craps battle (audit 5790a946).
+// The jackpot replay centre as the day's jackpot craps battle.
 // Source-sliced like the panel's other suites: the real private methods and listener bodies run
 // against a small fake DOM, so the wiring under test is the shipped code, not a copy.
 import { test } from 'node:test';
@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { coinDrawCentreModel, coinDrawResultTone } from '../../app/coin-draw-centre.js';
+import { ACTIVE_CHAIN_ID } from '../../app/__tests__/helpers/active-chain.js';
 
 const source = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 const between = (from, to) => {
@@ -23,9 +24,10 @@ const countUnscratchedPotentialWinPanels = runInNewContext(`(${between(
 const WEI = 10n ** 18n;
 const VIEWER = '0x' + 'ab'.repeat(20);
 const OTHER = '0x' + 'cd'.repeat(20);
-const battle = { kind: 'fill-draw', key: 'coin-draw:42', day: 42, pot: String(9_000n * WEI), winner: OTHER, entrants: [
-  { player: OTHER, units: '1', bankrollOut: String(20_000n * WEI), rolls: '88', paid: String(20_000n * WEI) },
-  { player: VIEWER, units: '1', bankrollOut: String(12n * WEI), rolls: '31', paid: '0' },
+const BATTLE_KEY = '0x' + (41 * 8 + 6).toString(16).padStart(64, '0');
+const battle = { kind: 'jackpot', key: BATTLE_KEY, day: 42, entrants: [
+  { player: OTHER, betId: '616122', units: '1' },
+  { player: VIEWER, betId: '616123', units: '1' },
 ] };
 
 function preloadPanel() {
@@ -173,7 +175,7 @@ function panel({ coinDrawBattle = battle, player = VIEWER, day = 42, mainSpinCom
   const instance = runInNewContext(klass, {
     countUnscratchedPotentialWinPanels,
     dom, coinDrawCentreModel, coinDrawResultTone, DISPLAY_ORDER: [0, 1, 2, 3], console, CRAPS_BATTLE_LABEL: 'JOIN CRAPS BATTLE',
-    CHAIN: { id: 84532 }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
+    CHAIN: { id: ACTIVE_CHAIN_ID }, localStorage: storage, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
   });
   instance.setup({ coinDrawBattle, player, day, mainSpinComplete, bonusTraitDraw, toggleReady });
   return { instance, dom };
@@ -356,7 +358,7 @@ test('an opened battle stays inactive across a reload, while another wallet can 
   instance.spinsComplete = false;
   assert.equal(instance.stepDue(), null, 'never before the spins are done');
   instance.spinsComplete = true;
-  instance.open(model);
+  instance.open(model, 'lost');
   instance.sync();
   assert.equal(instance.stepDue(), null);
   assert.equal(dom.center.classList.contains('replay-ticket-center--craps-seen'), true);
@@ -367,7 +369,8 @@ test('an opened battle stays inactive across a reload, while another wallet can 
   instance.keydown({ key: 'Enter', preventDefault() {} });
   instance.keydown({ key: ' ', preventDefault() {} });
   assert.equal(instance.opened.length, 0, 'mouse and keyboard cannot reopen a viewed battle');
-  assert.deepEqual(storage.keys(), [`craps-battle-seen:84532:${VIEWER}:42`], 'scoped by chain, wallet and day');
+  const seenKey = `craps-battle-seen:${ACTIVE_CHAIN_ID}:${VIEWER}:42`;
+  assert.deepEqual(storage.keys().sort(), [seenKey, `${seenKey}:result`], 'scoped by chain, wallet and day');
   instance.forget();
   assert.equal(instance.stepDue(), null, 'a fresh mount reads the stored mark');
   instance.sync();
@@ -417,15 +420,13 @@ test('a due battle outranks DAY SUMMARY on the shared key', () => {
     'and re-checks as soon as the battle is opened');
 });
 
-test('opening a battle always ends: a deadline, a worker timeout, and a table it loads itself', () => {
-  assert.match(source, /const result = await Promise\.race\(\[\s*model\.kind === 'jackpot'\s*\? openJackpotDrawRun\(\{ battleKey: model\.key, viewerBetId: model\.viewerBetId, opener, signal: controller\?\.signal \?\? null \}\)\s*: openCoinDrawRun\(\{ day: model\.day, player: model\.player, opener, signal: controller\?\.signal \?\? null \}\),\s*timedOut,\s*\]\);/);
+test('opening a battle always ends: a deadline and a table it loads itself', () => {
+  assert.match(source, /const result = await Promise\.race\(\[\s*openJackpotDrawRun\(\{ battleKey: model\.key, viewerBetId: model\.viewerBetId, opener, signal: controller\?\.signal \?\? null \}\),\s*timedOut,\s*\]\);/);
   const viewer = readFileSync(new URL('../../craps/coin-draw-viewer.js', import.meta.url), 'utf8');
   const entry = readFileSync(new URL('../app-craps-entry.js', import.meta.url), 'utf8');
   const pinned = entry.match(/from '\.\/app-craps-table\.js(\?rev=[^']+)'/)[1];
   assert.ok(viewer.includes(`'../components/app-craps-table.js${pinned}'`), 'the table loads under the Craps panel\'s own pinned URL');
-  assert.match(viewer, /if \(signal\?\.aborted\) return \{ ok: false,[^}]*\};\s*table\.open\(/, 'an abandoned open never pops the table later');
-  const chain = readFileSync(new URL('../../chain/coin-draw.js', import.meta.url), 'utf8');
-  assert.match(chain, /setTimeout\(\(\) => \{\s*worker\.terminate\(\);\s*reject\(new ChainDataError\([^)]*'REPLAY_TIMEOUT'\)\);\s*\}, REPLAY_WORKER_TIMEOUT_MS\);/);
+  assert.match(viewer, /if \(signal\?\.aborted\) return;\s*table\.open\(options, opener\);/, 'an abandoned open never pops the table later');
 });
 
 test('viewed jackpot result colors persist per wallet and stay concealed until opened', () => {

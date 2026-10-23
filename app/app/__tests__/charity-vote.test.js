@@ -6,8 +6,7 @@ import assert from 'node:assert/strict';
 import * as charityVoteMod from '../charity-vote.js';
 import * as contractsMod from '../contracts.js';
 import * as storeMod from '../store.js';
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
-useSchema(CURRENT_SCHEMA_HASH);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 import { CHAIN } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
@@ -23,7 +22,7 @@ function makeProvider() {
   const signer = { getAddress: async () => CONNECTED };
   return {
     getBlockNumber: async () => 888,
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => signer,
   };
 }

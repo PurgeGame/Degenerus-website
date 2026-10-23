@@ -1,6 +1,4 @@
-// Address-keyed run-65 fixtures. Run-66 calldata/receipts are covered by run66-*.test.js.
-import { useSchema as pinAddressFixture, BEFORE_WALLET_IDS_SCHEMA_HASH as ADDRESS_FIXTURE_SCHEMA } from '../../chain/schema.js';
-pinAddressFixture(ADDRESS_FIXTURE_SCHEMA);
+import { ACTIVE_CHAIN_ID } from './helpers/active-chain.js';
 // Deferred whale-pass claims are sourced from GAME and published into Pending.
 
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -12,6 +10,7 @@ import * as contracts from '../contracts.js';
 import * as pending from '../pending-actions.js';
 import * as store from '../store.js';
 import * as watcher from '../whale-pass-claims.js';
+import { _setWalletIdForTests, _resetWalletIdsForTests } from '../wallet-id.js';
 import { CHAIN } from '../chain-config.js';
 
 globalThis.localStorage = globalThis.localStorage || {
@@ -42,7 +41,7 @@ describe('whale-pass live wiring', () => {
 
 function provider(address = PLAYER) {
   return {
-    getNetwork: async () => ({ chainId: 84532n }),
+    getNetwork: async () => ({ chainId: BigInt(ACTIVE_CHAIN_ID) }),
     getSigner: async () => ({ getAddress: async () => address }),
   };
 }
@@ -81,6 +80,7 @@ describe('whale-pass claim contract helpers', () => {
   afterEach(() => {
     claims.__resetContractFactoryForTest();
     contracts.clearProvider();
+    _resetWalletIdsForTests();
   });
 
   test('reads whalePassClaimAmount from chain for the acting player', async () => {
@@ -88,11 +88,18 @@ describe('whale-pass claim contract helpers', () => {
     assert.deepEqual(calls.read, [[PLAYER]]);
   });
 
-  test('claims an explicit player through the guarded transaction path', async () => {
+  test('claims an explicit player by wallet ID through the guarded transaction path', async () => {
+    _setWalletIdForTests(OTHER, 73);
     const result = await claims.claimWhalePass({ player: OTHER });
-    assert.deepEqual(calls.claim, [[OTHER]]);
-    assert.equal(result.player, OTHER);
+    assert.deepEqual(calls.claim, [[73]]);
+    assert.equal(result.player, 73, 'the result carries the account argument that was sent');
     assert.equal(result.receipt.status, 1);
+  });
+
+  test('the connected wallet claims for itself with ID 0', async () => {
+    const result = await claims.claimWhalePass({ player: PLAYER });
+    assert.deepEqual(calls.claim, [[0]]);
+    assert.equal(result.player, 0);
   });
 
   test('a failed chain read is unknown rather than a fake zero', async () => {

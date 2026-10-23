@@ -1,22 +1,15 @@
-// Audit 4f4aa8377: compact box orders, the 85-bit queue entry (three per word) and the Degenesis
-// order feed. LOOTBOX-COMPACT-ORDER-CLIENT-HANDOFF §9 acceptance checks for the browser readers.
+// Compact box orders, the 85-bit queue entry (three per word) and the Degenesis order feed. LOOTBOX-COMPACT-ORDER-CLIENT-HANDOFF §9 acceptance checks for the browser readers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { useSchema, CURRENT_SCHEMA_HASH, BEFORE_LOANS_SCHEMA_HASH } from '../../chain/schema.js';
 import { rpcFixture, PLAYER, OTHER_PLAYER } from './helpers/chain-rpc.js';
 import { pendingBoxWord, boxQueueEntry } from '../../chain/recycling.js';
 import { arraySlot } from '../../chain/client.js';
 import { degenesisOrders } from '../../chain/feeds.js';
 import {
-  encodeBoxScoreCode, decodeBoxScoreCode, decodeBoxQueueEntry, BOX_ENTRY_VALUE_UNIT_WEI, queuedBoxRolls,
+  encodeBoxScoreCode, decodeBoxScoreCode, decodeBoxQueueEntry, BOX_ENTRY_VALUE_UNIT_WEI,
 } from '../box-queue-rolls.js';
-import { boxReference } from '../../chain/box-queue.js';
-import { deriveHumanLootboxSpinBetIds } from '../lootbox-legs.js';
 import { ETH_DIVISOR } from '../chain-config.js';
 
-async function current(fn) { const prior = useSchema(CURRENT_SCHEMA_HASH); try { await fn(); } finally { useSchema(prior); } }
-// A run 66-74 wallet-ID deployment (frozen schema): one whole-word counted order per position.
-async function archived(fn) { const prior = useSchema(BEFORE_LOANS_SCHEMA_HASH); try { await fn(); } finally { useSchema(prior); } }
 const entryFor = ({ id = 37n, units = 10n, code = 0n, boost = 0n, quantity = 1n, distress = 0n } = {}) =>
   id | (units << 32n) | (code << 53n) | (boost << 65n) | (quantity << 77n) | (distress << 84n);
 
@@ -49,7 +42,7 @@ test('§2 entry fields decode exactly; the value unit follows the chain profile'
     'one entry fits 85 bits');
 });
 
-test('§3 raw reads at positions 0-6 return word p / 3, lane p % 3, bounded by the count', () => current(async () => {
+test('§3 raw reads at positions 0-6 return word p / 3, lane p % 3, bounded by the count', async () => {
   const f = await rpcFixture(); await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER);
   const { slot } = await f.s.location('GAME', 'boxQueue', [0]);
   const entries = Array.from({ length: 7 }, (_, p) => entryFor({ id: p === 4 ? 73n : 37n, units: 10n + BigInt(p), quantity: BigInt(p + 1) }));
@@ -70,9 +63,9 @@ test('§3 raw reads at positions 0-6 return word p / 3, lane p % 3, bounded by t
   }
   assert.equal(await pendingBoxWord(f.s, 'boxQueue', 0, OTHER_PLAYER, 4), entries[4]);
   assert.equal(await pendingBoxWord(f.s, 'boxQueue', 0, PLAYER, 10), 0n, 'beyond the count reads nothing');
-}));
+});
 
-test('Degenesis orders join DegenesisBuy with DegenesisOrderResolved by cohort day and index', () => current(async () => {
+test('Degenesis orders join DegenesisBuy with DegenesisOrderResolved by cohort day and index', async () => {
   const f = await rpcFixture(); await f.wallet(37, PLAYER); await f.wallet(73, OTHER_PLAYER);
   await f.event('GAME', 'DegenesisBuy', { buyer: 37, degenesisDay: 1, orderIndex: 0, amount: 10_000_000_000n, secondsIntoDay: 12 }, { block: 9990 });
   await f.event('GAME', 'DegenesisBuy', { buyer: 73, degenesisDay: 1, orderIndex: 1, amount: 20_000_000_000n, secondsIntoDay: 30 }, { block: 9990 });
@@ -86,41 +79,4 @@ test('Degenesis orders join DegenesisBuy with DegenesisOrderResolved by cohort d
   // Event rows carry FLIP/WWXRP (and 12-decimal sDGNRS) in 18-decimal token wei (token-units.js).
   assert.equal(items[1].resolved.flip, String(25n * 10n ** 18n));
   assert.equal(items[1].resolved.wwxrp, String(10n ** 18n));
-}));
-
-test('archived wallet-ID deployments keep the one-word-per-position queue and counted-order rolls', async () => {
-  // Same storage, read under both layouts: the compact reader must never be applied to run 66-74.
-  const legacyEntry = 37n | (12n << 32n) | (1200n << 56n) | (1n << 100n);
-  const compactLanes = entryFor({ units: 11n }) | (entryFor({ units: 12n }) << 85n);
-  const seed = async (f) => {
-    const { slot } = await f.s.location('GAME', 'boxQueue', [0]);
-    f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot)}`, compactLanes);
-    f.storage.set(`${f.contracts.GAME.toLowerCase()}:${arraySlot(slot) + 1n}`, legacyEntry);
-    await f.field('GAME', 'lootboxRngPacked', 2n << 120n);
-  };
-  await archived(async () => {
-    const f = await rpcFixture(); await f.wallet(37, PLAYER); await seed(f);
-    assert.equal(await boxQueueEntry(f.s, 0, 1), legacyEntry, 'position 1 is word 1, whole');
-    assert.equal(await pendingBoxWord(f.s, 'boxQueue', 0, PLAYER, 1), legacyEntry);
-  });
-  await current(async () => {
-    const f = await rpcFixture(); await f.wallet(37, PLAYER); await seed(f);
-    assert.equal(await boxQueueEntry(f.s, 0, 1), entryFor({ units: 12n }), 'position 1 is word 0, lane 1');
-  });
-
-  // Counted-order rolls (audit 98cd2a781 layout): level 12, score 15,000, boost 2,500, EV 10,000,
-  // two Small + one Medium + one Custom (40 gwei units).
-  const packedBox = 37n | (12n << 32n) | (15000n << 56n) | (2500n << 71n) | (10000n << 85n)
-    | (2n << 100n) | (1n << 107n) | (1n << 121n) | (40n << 128n);
-  const args = { packedBox, rngWord: 123456789n, lootboxIndex: boxReference(0, 7) };
-  await archived(async () => {
-    const entry = queuedBoxRolls(args, (level) => { assert.equal(level, 12); return 10000000000n; }, () => 12000n);
-    assert.deepEqual(entry.rolls.map((r) => r.scaled), [14500000000n, 14500000000n, 72500000000n, 58000000000n]);
-    assert.equal(deriveHumanLootboxSpinBetIds(args).length, 12);
-  });
-  await current(async () => {
-    // The same word read as a compact entry is a different order entirely: never mix the readers.
-    const misread = queuedBoxRolls(args, () => { throw new Error('the compact entry stores no level'); }, () => 10000n);
-    assert.notEqual(misread?.rolls.length, 4);
-  });
 });

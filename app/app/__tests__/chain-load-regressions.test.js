@@ -1,7 +1,6 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ZeroAddress } from '../../vendor/ethers-app.mjs';
-import { useSchema, CURRENT_SCHEMA_HASH } from '../../chain/schema.js';
 import { rpcFixture, PLAYER, OTHER_PLAYER } from './helpers/chain-rpc.js';
 import { farFutureQueue } from '../../chain/positions.js';
 import { readDeityCatalog } from '../../chain/deity-catalog.js';
@@ -9,9 +8,7 @@ import { ChainSnapshot } from '../../chain/client.js';
 import { fetchRecords, __setRecordsReadersForTest, __resetRecordsReadersForTest } from '../records.js';
 import { readAfkingSubscription, __setAfkingReadContractFactoryForTest, __resetAfkingReadContractFactoryForTest } from '../passes.js';
 
-let previous;
-beforeEach(() => { previous = useSchema(CURRENT_SCHEMA_HASH); });
-afterEach(() => { useSchema(previous); __resetRecordsReadersForTest(); __resetAfkingReadContractFactoryForTest(); });
+afterEach(() => { __resetRecordsReadersForTest(); __resetAfkingReadContractFactoryForTest(); });
 
 async function ticketFixture(active = 20) {
   const f = await rpcFixture(); await f.wallet(37, PLAYER);
@@ -132,9 +129,10 @@ test('AFKing settings and pending rewards share one lens read', async () => {
   __setAfkingReadContractFactoryForTest(() => ({
     token: { balanceOf: async () => 0n },
     game: { afkingSnapshot: async () => [1n, false, [2n], [3n]] },
-    lens: { subInfoFull: async () => { lensReads++; return { active: true, dailyQuantity: 10, flags: 6, pendingFlip: 100n }; } },
+    lens: { subInfoFull: async () => { lensReads++; return { member: true, active: true, useTickets: true, dailyQuantity: 8, owedFlip: 100n }; } },
   }));
   const result = await readAfkingSubscription(PLAYER);
   assert.equal(result.active, true); assert.equal(result.pendingFlipWhole, 100n);
+  assert.equal(result.useTickets, true); assert.equal(result.dailyQuantity, 8);
   assert.equal(lensReads, 1);
 });

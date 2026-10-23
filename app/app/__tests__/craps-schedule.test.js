@@ -22,5 +22,5 @@ test('the parse refuses a schedule that disagrees with the day clock or loses a 
   const overlay = source('contracts-testnet');
   assert.throws(() => parseCrapsSchedule(overlay, { anchor: 0, period: 1_200 }), /anchor/);
   assert.throws(() => parseCrapsSchedule(overlay, { anchor: 82_620, period: 600 }), /modulus/);
-  assert.throws(() => parseCrapsSchedule(overlay.replace(/else if \(elapsed < 660 seconds\) period = 2;/, ''), { anchor: 82_620, period: 1_200 }));
+  assert.throws(() => parseCrapsSchedule(overlay.replace(/else if \(elapsed >= 300 seconds\)/, 'else if (missingClose)'), { anchor: 82_620, period: 1_200 }));
 });
