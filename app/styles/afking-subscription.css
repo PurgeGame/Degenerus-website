@@ -21,6 +21,36 @@ body.layout-basic .pass-afking__dialog-card button {
 }
 body.layout-basic .pass-afking__deposit-card input { width: 100%; min-width: 0; }
 body.layout-basic .pass-afking__field--qty select { text-align: center; }
+body.layout-basic .pass-afking__mode-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%; min-width: 0; padding: 3px; gap: 0;
+  border: 1px solid #49667d; border-radius: 8px;
+  background: #08131f; box-shadow: inset 0 1px 4px #0006;
+  font-size: .65rem; letter-spacing: .02em;
+}
+body.layout-basic .pass-afking__mode-toggle::before {
+  content: ''; position: absolute; inset: 3px auto 3px 3px;
+  width: calc(50% - 3px); border-radius: 5px;
+  background: linear-gradient(#395f7d, #25465f);
+  box-shadow: inset 0 1px #9bc7e74d, 0 1px 3px #0006;
+  transition: transform .18s ease;
+}
+body.layout-basic .pass-afking__mode-toggle[aria-checked="true"]::before { transform: translateX(100%); }
+body.layout-basic .pass-afking__mode-toggle > span {
+  position: relative; display: grid; place-items: center; padding: .2rem;
+  color: #93a9bc; line-height: 1.1;
+}
+body.layout-basic .pass-afking__mode-toggle[aria-checked="false"] > [data-afking-product="luckbox"],
+body.layout-basic .pass-afking__mode-toggle[aria-checked="true"] > [data-afking-product="tickets"] { color: #f0f7ff; }
+body.layout-basic .pass-afking__mode-toggle:focus-visible { outline: 2px solid #a5d7ff; outline-offset: 2px; }
+body.layout-basic .pass-afking__draft-note,
+body.layout-basic .pass-afking__footer-title { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .pass-afking__mode-toggle::before { transition: none; }
+}
 body.layout-basic .pass-afking__card-detail { align-self: end; color: #96b0c6; font: 500 .65rem/1.4 var(--font-mono, monospace); }
 body.layout-basic .pass-afking__steth {
   box-sizing: border-box;

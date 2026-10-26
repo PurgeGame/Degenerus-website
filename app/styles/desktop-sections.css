@@ -4,6 +4,8 @@
 .info-rail, .info-rail__track { display: contents; }
 .info-rail__nav, .info-rail__mining, .info-rail__feedback, .info-afking { display: none; }
 body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
+body.layout-basic .inv-level-btn .inv-ticket-count { display: flex; flex-direction: column; align-items: center; gap: .18rem; }
+body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; letter-spacing: .025em; color: #b9bfce; }
 
 @media (min-width: 1100px) {
   body.layout-basic[data-desktop-page="daily"] [data-dpage]:not([data-dpage~="daily"]),
@@ -333,26 +335,40 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
 
   /* Reuse the pass desk's actual form nodes, locks and handlers inline. */
   body.layout-basic[data-desktop-page] .info-afking .pass-afking {
-    display: grid; grid-template-columns: minmax(7rem, .75fr) minmax(10rem, 1fr) minmax(10rem, 1fr) minmax(12rem, 1.25fr);
-    align-items: center; gap: .6rem; width: 100%; height: 100%; margin: 0; padding: .3rem .4rem;
-    border: 0; box-shadow: none; background: #122130;
+    display: grid; grid-template-columns: minmax(7rem, .8fr) minmax(18rem, 1.8fr) minmax(10.5rem, 1.1fr) minmax(10rem, 1fr);
+    align-items: center; gap: .65rem; width: 100%; height: 100%; margin: 0; padding: .25rem .65rem;
+    border: 1px solid #36546c; border-radius: 8px; box-shadow: inset 0 1px #c0e2ff0a;
+    background: linear-gradient(110deg, #152b3c, #0e1b29);
   }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__head { display: flex; grid-area: 1 / 1; flex-direction: column; align-items: flex-start; gap: .3rem; padding: 0; border: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-product-heading { padding: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-section-title { font-size: .7rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__current { font-size: .9rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-product-heading { display: block; padding: 0; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-section-title { font-size: .62rem; line-height: 1.2; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__current { font-size: .78rem; line-height: 1.25; }
   body.layout-basic[data-desktop-page] .info-afking :is(.pass-product-sigil, .pass-afking__balance, .pass-afking__topup, .pass-afking__quick > .pass-afking__edit, .pass-afking__dialog-head, .pass-afking__dialog-close, .pass-afking__steth, .pass-afking-error--inline) { display: none; }
   body.layout-basic[data-desktop-page] .info-afking :is(.pass-afking__quick, .pass-afking__dialog, .pass-afking__dialog-card, .pass-afking__controls, .pass-afking__steth-actions) { display: contents; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-card { gap: .25rem; padding: 0; border: 0; background: none; box-shadow: none; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-card {
+    grid-template-rows: 14px 48px 12px; align-content: center; gap: 3px;
+    height: 80px; padding: 0 0 0 .65rem; border: 0; border-left: 1px solid #81bef02e;
+    border-radius: 0; background: none; box-shadow: none;
+  }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__order-card { grid-area: 1 / 2; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__deposit-card { grid-area: 1 / 3; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-head > strong { font-size: .85rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__field { gap: .15rem; font-size: .6rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__order-fields { grid-template-columns: minmax(0, 1fr) 3.6rem; gap: .35rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-head > strong { font-size: .8rem; line-height: 14px; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__field { gap: 4px; font-size: .55rem; line-height: 12px; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__order-fields { grid-template-columns: minmax(0, 1fr) 2.8rem 3.5rem; gap: .35rem; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__funding-controls { grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; }
-  body.layout-basic[data-desktop-page] .info-afking :is(button, input, select) { min-height: 32px; padding: .3rem .45rem; font-size: .78rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer { grid-area: 1 / 4; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem; margin: 0; padding: 0; border: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer button { width: 100%; margin: 0; font-size: .63rem; }
+  body.layout-basic[data-desktop-page] .info-afking :is(button, input, select) { min-height: 32px; height: 32px; padding: .3rem .4rem; font-size: .72rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__mode-toggle { padding: 3px; font-size: .57rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__save { width: 100%; min-width: 0; margin: 0; font-size: .63rem; background: linear-gradient(#3977aa, #245581); border-color: #6da2ce; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer {
+    grid-area: 1 / 4; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 14px 30px 30px; align-content: center; gap: 3px;
+    height: 80px; margin: 0; padding: 0 0 0 .65rem; border: 0; border-left: 1px solid #81bef02e;
+  }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer-title { display: block; grid-column: 1 / -1; color: #e4f2ff; font-size: .8rem; line-height: 14px; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer button { width: 100%; min-width: 0; height: 30px; min-height: 30px; margin: 0; padding-inline: .2rem; font-size: .56rem; line-height: 1.2; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__draft-note { display: block; color: #96b0c6; font: 500 .6rem/12px Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__card-detail { font-size: .6rem; line-height: 12px; white-space: nowrap; }
   body.layout-basic[data-desktop-page] .info-afking :is(.pass-afking__lock, .pass-afking-error--dialog) { grid-column: 1 / -1; margin: 0; padding: .15rem; font-size: .65rem; }
   body.layout-basic[data-desktop-page] .info-afking [hidden] { display: none !important; }
 }
@@ -382,8 +398,9 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
 }
 
 @media (min-width: 1100px) {
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking:has(.pass-afking__lock:not([hidden])) .pass-afking__head { align-self: start; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__lock { grid-area: 1 / 1; align-self: end; line-height: 1.3; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:has(.pass-afking__lock:not([hidden])) .pass-afking__head { align-self: start; padding-top: .1rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:has(.pass-afking__lock:not([hidden])) .pass-afking__status { display: none; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__lock { grid-area: 1 / 1; align-self: end; line-height: 1.25; font-size: .55rem; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking-error--dialog {
     position: fixed; bottom: calc(var(--info-rail-height) + .5rem); left: 50%; transform: translateX(-50%);
     width: max-content; max-width: min(36rem, calc(100vw - 2rem)); padding: .65rem 1rem; font-size: .85rem;
@@ -462,14 +479,18 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub__rewards { min-width: 0; border: 0; padding: 0; margin: 0; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub__rewards .referral-strip { display: none; }
 
-  body.layout-basic[data-desktop-page] .info-rail .inv-head { gap: .65rem; padding: .25rem .4rem; }
+  body.layout-basic[data-desktop-page] .info-rail .inv-head { gap: .8rem; padding: .25rem .4rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-head > h2 { font-size: .8rem; }
-  body.layout-basic[data-desktop-page] .info-rail .inv-level-btn { min-height: 5.5rem; gap: .4rem; }
+  body.layout-basic[data-desktop-page] .info-rail .inv-level-btn { min-height: 5.5rem; gap: .45rem; }
+  body.layout-basic[data-desktop-page] .info-rail .inv-level-nav { padding: .3rem; gap: .4rem; }
+  body.layout-basic[data-desktop-page] .info-rail .inv-level-nav:not(.is-total-only) { grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(10.2rem, 2fr); }
+  body.layout-basic[data-desktop-page] .info-rail .inv-ticket-unit { font-size: .62rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn strong { font-size: 1.45rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn.inv-pawn-shop { flex-basis: 3.7rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-pawn-shop small { font-size: .65rem; letter-spacing: .04em; }
   body.layout-basic[data-desktop-page] .info-rail .inv-pawn-shop svg { width: 1.6rem; height: 1.6rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-total-value { grid-template: 'level' auto 'count' auto / minmax(0, 1fr); justify-items: center; }
+  body.layout-basic[data-desktop-page] .info-rail .inv-total-value small { font-size: .65rem; letter-spacing: .025em; }
   body.layout-basic[data-desktop-page] .info-rail .inv-total-value strong { border: 0; padding: 0; font-size: clamp(.95rem, 1.3vw, 1.3rem); }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-tab--future { grid-template: 'level' auto 'count' auto / minmax(0, 1fr); justify-items: center; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-tab--future strong { border: 0; padding: 0; }
