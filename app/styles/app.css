@@ -1,4 +1,4 @@
-@import url("./dgn-pop.css?v=touch-layers-20261015");
+@import url("./dgn-pop.css?v=currency-auto-20261025");
 @import url("./panel-popups.css?v=history-labels-20261009");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
 @import url("./lightweight.css?v=idle-rendering-20261008");
@@ -10313,9 +10313,9 @@ body.layout-basic .dgn-rq.is-wild::after {
   --rvl-survival-ending: rvl-survival-coin-end-loss;
   --rvl-survival-face-ending: rvl-survival-face-end-loss;
   animation-name: rvl-survival-coin-track, var(--rvl-survival-ending);
-  animation-duration: 1650ms, 350ms;
+  animation-duration: var(--rvl-survival-track-duration, 1650ms), var(--rvl-survival-ending-duration, 350ms);
   animation-timing-function: linear, linear;
-  animation-delay: 0ms, 1650ms;
+  animation-delay: 0ms, var(--rvl-survival-track-duration, 1650ms);
   animation-iteration-count: 1, 1;
   animation-fill-mode: forwards, forwards;
 }
@@ -10325,9 +10325,9 @@ body.layout-basic .dgn-rq.is-wild::after {
 }
 .rvl-survival-coin.df-reveal-active .rvl-survival-coin-face {
   animation-name: rvl-survival-face-track, var(--rvl-survival-face-ending);
-  animation-duration: 1650ms, 350ms;
+  animation-duration: var(--rvl-survival-track-duration, 1650ms), var(--rvl-survival-ending-duration, 350ms);
   animation-timing-function: linear, linear;
-  animation-delay: 0ms, 1650ms;
+  animation-delay: 0ms, var(--rvl-survival-track-duration, 1650ms);
   animation-iteration-count: 1, 1;
   animation-fill-mode: forwards, forwards;
 }

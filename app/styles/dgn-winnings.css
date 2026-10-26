@@ -42,6 +42,32 @@
 .dgn-winnings__secondary:empty { display: none; }
 .dgn-winnings__status { grid-area: status; color: #a9bcb2; font: 800 .54rem/1.2 system-ui; letter-spacing: .075em; }
 .dgn-winnings__status:empty { display: none; }
+.dgn-winnings.is-currency { border-color: #d9bb68; }
+.dgn-winnings.is-currency .dgn-winnings__value { font-size: clamp(1.5rem, 5vw, 1.85rem); letter-spacing: .04em; }
+.dgn-winnings.is-currency .dgn-winnings__status { color: #ead394; font-size: .65rem; }
+/* Auto changes the hidden back face at the edge-on boundary, then lands on
+   the actual currency. Manual keeps its longer toss. */
+body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-active {
+  --df-track-animation: rvl-currency-quick-track;
+  --df-track-easing: linear;
+  --df-ending-animation: rvl-currency-quick-win;
+}
+body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-ending--loss {
+  --df-ending-animation: rvl-currency-quick-loss;
+}
+@keyframes rvl-currency-quick-track {
+  0% { transform: rotateX(0deg); }
+  50% { transform: translateY(-7px) rotateX(315deg); }
+  100% { transform: rotateX(630deg); }
+}
+@keyframes rvl-currency-quick-win {
+  from { transform: rotateX(630deg); }
+  to { transform: rotateX(900deg); }
+}
+@keyframes rvl-currency-quick-loss {
+  from { transform: rotateX(630deg); }
+  to { transform: rotateX(720deg); }
+}
 .dgn-winnings__announcement,
 .dgn-winnings :is(.rvl-survival-eyebrow, .rvl-survival-label, .rvl-survival-detail, .rvl-box-currency-eyebrow, .rvl-box-currency-name, .rvl-box-currency-sub) {
   position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
