@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Degenerette · Reveal playground</title>
+  <link rel="stylesheet" href="/app/styles/dgn-pop.css">
+  <link rel="stylesheet" href="/app/styles/reveal-lab.css">
+  <script type="importmap">{"imports":{"ethers":"/app/vendor/ethers-app.mjs"}}</script>
+</head>
+<body>
+  <main class="reveal-lab">
+    <header class="lab-heading">
+      <div><p class="lab-eyebrow">DEGENERETTE · DESIGN PREVIEW</p><h1>Make the reveal count.</h1></div>
+      <a href="/beta/">Back to game ↗</a>
+    </header>
+    <aside class="lab-controls">
+      <p class="lab-intro">Same cards. Three ways to reveal them.</p>
+      <div class="lab-modes" role="group" aria-label="Reveal style">
+        <button type="button" data-mode="sweep" aria-pressed="true"><strong>Quick sweep</strong><span>Four crisp pops. Matches light up as the score builds.</span></button>
+        <button type="button" data-mode="flip" aria-pressed="false"><strong>Single flip</strong><span>One turn. The whole card, score, and payout land together.</span></button>
+        <button type="button" data-mode="manual" aria-pressed="false"><strong>Tap to pop</strong><span>You pick the order. Tap the flame to reveal the rest.</span></button>
+      </div>
+      <label class="lab-field" for="lab-sample">Sample outcome
+        <select id="lab-sample"><option value="hit">A small hit</option><option value="miss">A miss</option><option value="big">A strong hit</option></select>
+      </label>
+      <label class="lab-field" for="lab-speed">Speed <output id="lab-speed-value">1×</output>
+        <input id="lab-speed" type="range" min="0.5" max="3" step="0.5" value="1">
+      </label>
+      <p class="lab-hold" id="lab-hold">Autoplay result hold: 3.5s</p>
+      <label class="lab-sound"><input id="lab-sound" type="checkbox"> Sound</label>
+      <p class="lab-disclaimer">Sample outcomes, no bets or wallet transactions. Card payouts shown before any coin flip.</p>
+    </aside>
+    <section class="lab-preview" aria-label="Reveal preview">
+      <div class="lab-preview-head"><span id="lab-mode-name">QUICK SWEEP</span><span id="lab-progress">SAMPLE CARD</span></div>
+      <div id="lab-card"></div>
+      <p class="lab-verdict" id="lab-verdict" role="status">Ready when you are.</p>
+      <div class="lab-actions">
+        <button type="button" id="lab-play">REVEAL CARD</button>
+        <button type="button" id="lab-batch">TRY 3 CARDS</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/app/reveal-lab.js"></script>
+</body>
+</html>
