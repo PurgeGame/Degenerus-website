@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["schema.js"],
-  "sourcesContent": ["// The read schema the deployment was built against (db/build-chain-schema.mjs). Every deployment\n// profile pins its hash (`CHAIN.readSchema`, db/prepare-chain-deployment.mjs); the chain client\n// refuses reads when the profile and this schema disagree.\nimport * as current from './generated/index.js';\n\nexport const CURRENT_SCHEMA_HASH = current.SCHEMA_HASH;\nexport function loadSchema(name) { return current.loadSchema(name); }\n"],
-  "mappings": "+EAGA,UAAYA,MAAa,uBAElB,aAAM,oBAAsBA,EAAQ,YACpC,gBAAS,WAAWC,EAAM,CAAE,OAAOD,EAAQ,WAAWC,CAAI,CAAG,CAApDC,EAAA",
+  "sourcesContent": ["// The read schema the deployment was built against (db/build-chain-schema.mjs). Every deployment\n// profile pins its hash (`CHAIN.readSchema`, db/prepare-chain-deployment.mjs); the chain client\n// refuses reads when the profile and this schema disagree.\nimport * as current from './generated/index.js';\n\nexport const CURRENT_SCHEMA_HASH = current.SCHEMA_HASH;\nexport function hasSchema(name) { return current.hasSchema(name); }\nexport function loadSchema(name) { return current.loadSchema(name); }\n"],
+  "mappings": "+EAGA,UAAYA,MAAa,uBAElB,aAAM,oBAAsBA,EAAQ,YACpC,gBAAS,UAAUC,EAAM,CAAE,OAAOD,EAAQ,UAAUC,CAAI,CAAG,CAAlDC,EAAA,uBACT,gBAAS,WAAWD,EAAM,CAAE,OAAOD,EAAQ,WAAWC,CAAI,CAAG,CAApDC,EAAA",
   "names": ["current", "name", "__name"]
 }

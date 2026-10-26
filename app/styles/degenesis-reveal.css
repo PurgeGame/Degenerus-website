@@ -1,0 +1,46 @@
+.rvl-degenesis-case { display: none; }
+.rvl-vessel--degenesis .rvl-chest { display: none; }
+.rvl-vessel--degenesis {
+  width: min(76vw, 26rem);
+  aspect-ratio: 768 / 600;
+  height: auto;
+}
+.rvl-vessel--degenesis .rvl-degenesis-case {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 12px 22px #130524);
+}
+.rvl-degenesis-case img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.rvl-degenesis-case__body { clip-path: inset(55% 0 0); }
+.rvl-degenesis-case__lid {
+  clip-path: inset(0 0 45%);
+  transform-origin: 50% 55%;
+  transition: transform 700ms cubic-bezier(.2,.7,.2,1), filter 700ms;
+}
+.rvl-degenesis-case__glow {
+  position: absolute;
+  inset: 25% 8% 12%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #f5d7ff, #b455ff99 40%, #8c28f200 72%);
+  opacity: 0;
+  transform: scale(.7);
+  transition: opacity 500ms, transform 700ms;
+}
+.rvl-charging .rvl-degenesis-case { filter: drop-shadow(0 0 24px #a855f7); }
+.rvl-charging .rvl-degenesis-case__glow { opacity: .55; }
+.rvl-bursting .rvl-degenesis-case__lid {
+  transform: translateY(-25%) rotate(-7deg);
+  filter: brightness(1.3);
+}
+.rvl-bursting .rvl-degenesis-case__glow { opacity: 1; transform: scale(1.6); }
+@media (prefers-reduced-motion: reduce) {
+  .rvl-degenesis-case__lid, .rvl-degenesis-case__glow { transition: none; }
+}

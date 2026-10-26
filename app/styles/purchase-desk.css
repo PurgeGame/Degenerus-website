@@ -16,10 +16,11 @@ body.layout-basic .jackpot-hero > app-decimator-panel {
 .app-decimator-panel {
   --dec-clear-column: 3.1rem;
   --dec-order-gap: 0.3rem;
+  --dec-control-height: 2.55rem;
 }
 
 @media (max-width: 1099px) {
-  .app-decimator-panel { --dec-clear-column: 3rem; }
+  .app-decimator-panel { --dec-clear-column: 3rem; --dec-control-height: 3rem; }
 }
 
 /* The decorative seal spacer + dormant bonus window exist only as art for
@@ -1860,8 +1861,8 @@ body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piec
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy {
-  top: 50%;
-  transform: translate(-50%, -50%);
+  top: 0.28rem;
+  transform: translateX(-50%);
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
@@ -2037,7 +2038,7 @@ body.layout-basic .app-decimator-panel .dec-ticket-center {
   aspect-ratio: 1;
   place-items: center;
   border: 1px solid var(--ticket-line-color);
-  border-radius: 2px;
+  border-radius: 0;
   background: #fff;
   transform: translate(-50%, -50%) rotate(45deg);
 }
@@ -2441,10 +2442,26 @@ body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
 
 body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
   min-height: 1.78rem;
+  min-width: 0;
+  max-width: 100%;
   justify-self: start;
   margin: 0;
   padding: 0.16rem 0.46rem 0.16rem 0.24rem;
   text-align: left;
+}
+
+/* Title and live sale status need separate lines in the narrow Buy In column. */
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy > strong,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy > small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
 }
 
 body.layout-basic .app-decimator-panel .dec-custom-box-logo {
@@ -3900,8 +3917,8 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
   body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
     .dec-ticket-piece--foil:not([hidden])
   )) .dec-pack-mark img {
-    width: 1.65rem;
-    height: 1.65rem;
+    width: 42cqi;
+    height: 42cqi;
   }
 
   body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
@@ -4103,7 +4120,7 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
   padding-top: 0;
 }
 
-@media (max-width: 1099px) {
+@media (min-width: 0px) {
   body.layout-basic .app-decimator-panel .dec-purchase-footer {
     --dec-pass-in-footer: 1;
     grid-template-columns: min(34%, 7.75rem) minmax(0, 1fr);
@@ -4141,8 +4158,8 @@ body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
   }
 
   body.layout-basic .app-decimator-panel .dec-clear-actions:not(:has(.dec-afking-jump)) > .dec-ticket-clear {
-    height: 3rem;
-    min-height: 3rem;
+    height: var(--dec-control-height);
+    min-height: var(--dec-control-height);
   }
 
   /* Keep the full amount on its own line as the balances share the footer. */
@@ -4211,6 +4228,23 @@ body.layout-basic .app-decimator-panel .dec-funds:has(> .dec-funds__privacy-mode
 .dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__total {
   grid-column: 2;
   grid-row: 2;
+}
+
+/* Pack labels use the pack's own width, including the enlarged ticket shelf. */
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-pack-face {
+  container-type: inline-size;
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-level {
+  font-size: max(.42rem, 14cqi);
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-count {
+  font-size: max(.42rem, 15cqi);
+  letter-spacing: .025em;
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-mark img {
+  width: 42cqi;
+  height: 42cqi;
+  max-height: 90%;
 }
 
 .dec-funds.is-expanded > .dec-funds__privacy-mode {

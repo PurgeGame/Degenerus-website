@@ -1,0 +1,64 @@
+/* Matching order/deposit rows, then a compact wallet row and footer. */
+body.layout-basic .pass-afking__dialog-card { width: min(36rem, 100%); gap: .85rem; padding: 1.15rem; }
+body.layout-basic .pass-afking__dialog-head { padding-bottom: .85rem; }
+body.layout-basic .pass-afking__controls { gap: .8rem; }
+body.layout-basic .pass-afking__controls--editing .pass-afking__order-card { grid-column: auto; }
+body.layout-basic .pass-afking__control-card {
+  grid-template-rows: auto auto;
+  gap: .75rem;
+  padding: .85rem;
+  background: #0a152280;
+}
+body.layout-basic .pass-afking__control-head > strong { font-size: .9rem; font-weight: 700; }
+body.layout-basic .pass-afking__field { gap: .4rem; margin: 0; font-size: .6rem; }
+body.layout-basic .pass-afking__order-fields { grid-template-columns: minmax(0, 1fr) 4.25rem; }
+body.layout-basic .pass-afking__funding-controls { grid-template-columns: minmax(0, 1fr) auto; }
+body.layout-basic .pass-afking__dialog-card .pass-afking__field input,
+body.layout-basic .pass-afking__dialog-card .pass-afking__field select,
+body.layout-basic .pass-afking__dialog-card button {
+  box-sizing: border-box;
+  min-height: 2.75rem;
+}
+body.layout-basic .pass-afking__deposit-card input { width: 100%; min-width: 0; }
+body.layout-basic .pass-afking__field--qty select { text-align: center; }
+body.layout-basic .pass-afking__card-detail { align-self: end; color: #96b0c6; font: 500 .65rem/1.4 var(--font-mono, monospace); }
+body.layout-basic .pass-afking__steth {
+  box-sizing: border-box;
+  width: 100%;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: start;
+  gap: .25rem .75rem;
+  padding: .1rem .15rem .8rem;
+  border: 0;
+  border-bottom: 1px solid #81bef02e;
+  white-space: normal;
+}
+body.layout-basic .pass-afking__steth > .pass-afking__day-cost { grid-column: 1; }
+body.layout-basic .pass-afking__steth > .pass-afking__coverage { grid-column: 1; font-size: .58rem; }
+body.layout-basic .pass-afking__steth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: .4rem;
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+body.layout-basic .pass-afking__footer { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; }
+body.layout-basic .pass-afking__footer button { width: auto; min-width: 0; font-size: .68rem; }
+body.layout-basic .pass-afking__footer .pass-afking__dialog-close { margin-left: auto; }
+body.layout-basic .pass-afking__footer .pass-afking__save {
+  min-width: 7rem;
+  background: linear-gradient(180deg, #3977aa, #245581);
+  border-color: #6da2ce;
+}
+@media (max-width: 600px) {
+  body.layout-basic .pass-afking__dialog-card { padding: .85rem; }
+  body.layout-basic .pass-afking__controls { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic .pass-afking__control-card { padding: .8rem; gap: .65rem; }
+  body.layout-basic .pass-afking__order-fields { grid-template-columns: minmax(0, 1fr) 5rem; }
+  body.layout-basic .pass-afking__footer .pass-afking__cancel { order: 2; flex: 1 1 100%; }
+  body.layout-basic .pass-afking__footer .pass-afking__withdraw { order: 3; flex: 1 1 100%; }
+}

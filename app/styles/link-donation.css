@@ -651,7 +651,13 @@ body.layout-basic .pari-funding-card__feedback {
 /* A small live-value entry opens the complete LINK trade. */
 body.layout-basic .link-trade-open { gap: .4rem; max-width: 100%; padding: .4rem .55rem; border-color: #5daacd45; background: #14252e; color: #c8e8f5; }
 body.layout-basic .link-trade-open:hover, body.layout-basic .link-trade-open[aria-expanded="true"] { background: #1c3440; border-color: #7cc8eaa0; }
-.link-trade-open > img { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.link-trade-open__exchange { display: flex; align-items: center; justify-content: center; gap: .25rem; }
+.link-trade-open__badge { position: relative; display: block; flex: none; width: 1.8rem; height: 1.8rem; overflow: hidden; border-radius: 50%; }
+.link-trade-open__badge img { display: block; width: 100%; height: 100%; max-width: none; }
+/* Circular trait assets retain their square ticket canvas; crop that empty
+   margin so the LINK ring is the same visible size as the FLIP chip. */
+.link-trade-open__badge--link img { position: absolute; width: 143%; height: 143%; inset: -21.5%; }
+.link-trade-open__arrow { color: #9bdcf6; font: 600 1.1rem/1 sans-serif; }
 .link-trade-open > strong { padding: .22rem .3rem; border-radius: 3px; background: #86c1da15; color: #9bdcf6; font-size: .59rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 body.layout-basic .link-trade-popup .panel-popup__window { width: min(100%, 29rem); border-color: #5a9ebd55; }
 .link-trade { display: grid; gap: .65rem; min-width: 0; color: #d9e7ed; font: 500 .8rem/1.4 Inter, sans-serif; }
@@ -686,7 +692,6 @@ body.layout-basic .link-trade__submit:hover:not(:disabled) { filter: brightness(
 body.layout-basic .link-trade :disabled { opacity: .5; cursor: default; }
 .link-trade button:focus-visible, .link-trade input[type="range"]:focus-visible { outline: 2px solid #9adfff; outline-offset: 3px; }
 @media (max-width: 380px) {
-  .link-trade-open > img { display: none; }
   .link-trade__quote > div > output, .link-trade__quote strong { font-size: 1.05rem; }
 }
 

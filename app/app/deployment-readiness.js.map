@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["deployment-readiness.js"],
+  "sourcesContent": ["import { CHAIN, CONTRACTS } from './chain-config.js';\nimport { SCHEMA_HASH, CONTRACT_REVISION } from '../chain/generated/index.js';\n\nexport function assertDeploymentReady(chain = CHAIN, contracts = CONTRACTS) {\n  if (chain.deploymentReady !== true || chain.readSchema !== SCHEMA_HASH\n    || chain.contractRevision !== CONTRACT_REVISION || !contracts.GAME || !contracts.ADMIN) {\n    throw Object.assign(new Error('The next testnet deployment is not ready. Transactions will open after its addresses are verified.'),\n      { code: 'DEPLOYMENT_NOT_READY' });\n  }\n}\n"],
+  "mappings": "+EAAA,OAAS,SAAAA,EAAO,aAAAC,MAAiB,oBACjC,OAAS,eAAAC,EAAa,qBAAAC,MAAyB,8BAExC,gBAAS,sBAAsBC,EAAQJ,EAAOK,EAAYJ,EAAW,CAC1E,GAAIG,EAAM,kBAAoB,IAAQA,EAAM,aAAeF,GACtDE,EAAM,mBAAqBD,GAAqB,CAACE,EAAU,MAAQ,CAACA,EAAU,MACjF,MAAM,OAAO,OAAO,IAAI,MAAM,oGAAoG,EAChI,CAAE,KAAM,sBAAuB,CAAC,CAEtC,CANgBC,EAAA",
+  "names": ["CHAIN", "CONTRACTS", "SCHEMA_HASH", "CONTRACT_REVISION", "chain", "contracts", "__name"]
+}

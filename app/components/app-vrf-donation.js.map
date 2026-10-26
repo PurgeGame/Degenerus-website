@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["app-vrf-donation.js"],
+  "sourcesContent": ["import { openPlayerFundsDialog } from '../app/player-funds.js';\n\nclass AppVrfDonation extends HTMLElement {\n  connectedCallback() {\n    if (this.querySelector('button')) return;\n    this.innerHTML = '<button type=\"button\" class=\"secondary-action link-trade-open\" aria-haspopup=\"dialog\"><span class=\"link-trade-open__label\">FUND GAME RANDOMNESS</span><strong>25% RNG CREDIT</strong></button>';\n    this.querySelector('button').addEventListener('click', () => openPlayerFundsDialog('vrf'));\n  }\n}\nif (typeof customElements !== 'undefined' && !customElements.get('app-vrf-donation')) customElements.define('app-vrf-donation', AppVrfDonation);\n"],
+  "mappings": "+EAAA,OAAS,yBAAAA,MAA6B,yBAEtC,MAAMC,UAAuB,WAAY,CAFzC,MAEyC,CAAAC,EAAA,uBACvC,mBAAoB,CACd,KAAK,cAAc,QAAQ,IAC/B,KAAK,UAAY,iMACjB,KAAK,cAAc,QAAQ,EAAE,iBAAiB,QAAS,IAAMF,EAAsB,KAAK,CAAC,EAC3F,CACF,CACI,OAAO,eAAmB,KAAe,CAAC,eAAe,IAAI,kBAAkB,GAAG,eAAe,OAAO,mBAAoBC,CAAc",
+  "names": ["openPlayerFundsDialog", "AppVrfDonation", "__name"]
+}

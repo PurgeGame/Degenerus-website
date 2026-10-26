@@ -88,6 +88,8 @@
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css?v=number-privacy-20261006">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css?v=idle-rendering-20261008">
   <link rel="stylesheet" href="/app/styles/degenesis-hub.css">
+  <link rel="stylesheet" href="/app/styles/degenesis-reveal.css">
+  <link rel="stylesheet" href="/app/styles/afking-subscription.css">
   <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003">
   <link rel="stylesheet" href="/app/styles/settings-menu.css?v=number-privacy-20261006">
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
@@ -108,6 +110,7 @@
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -184,7 +187,7 @@
       "/app/app/passes.js": "/app/app/passes.js?v=deity-customizer-20260929",
       "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=all-pass-mining-bonus-20261004",
       "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=incinerator-slider-20261004",
-      "/app/components/app-link-donation.js": "/app/components/app-link-donation.js?v=link-trade-20260928",
+      "/app/components/app-vrf-donation.js": "/app/components/app-vrf-donation.js?v=native-vrf-20261025",
       "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=timed-quest-rewards-20261004",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=no-dice-heroes-20261004",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=mining-reward-20261003",
@@ -217,7 +220,7 @@
        scripted training values do not visibly fight live background refreshes. -->
   <script src="/app/app/tutorial-frame-freeze.js"></script>
 </head>
-<body class="layout-basic" data-mobile-page="draw">
+<body class="layout-basic" data-mobile-page="draw" data-desktop-page="daily">
   <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
        push the whole page down 43px after first paint (0.18 of mobile CLS).
        testnet-beta-banner.js still hides it when the configured chain is not
@@ -278,7 +281,17 @@
       </span>
     </div>
 
-    <main>
+    <nav class="desktop-sections" aria-label="Switch app screen">
+      <button type="button" data-desktop-switch aria-controls="app-workspace" aria-label="Go to games" title="Play Craps and Degenerette">GAMES →</button>
+    </nav>
+    <button type="button" class="desktop-page-link" data-desktop-page-link aria-controls="app-workspace"
+            aria-label="More games: Craps and Degenerette" title="Play Craps and Degenerette">
+      <span class="desktop-page-link__label">MORE GAMES</span>
+      <span class="desktop-page-link__arrow" aria-hidden="true">→</span>
+    </button>
+
+    <p class="session-status" data-bind="session-status" hidden></p>
+    <main id="app-workspace">
       <!-- Headline jackpot number: the grand gold rush's payout size (current +
            next + future prize pools + yield accumulator, per _payGoldRush's grand
            branch). Sampled per block by the indexer, so it ticks up whenever new
@@ -290,7 +303,7 @@
            instead of waiting for the module graph to execute. The component
            ADOPTS these nodes via the data-el hooks — keep both copies in sync
            (index-structure.test.js asserts the hooks are present here). -->
-      <gold-rush-headline class="gr" data-mpage="draw">
+      <gold-rush-headline class="gr" data-mpage="draw" data-dpage="daily">
         <div class="gr__inner">
           <div class="gr__masthead">
             <span class="gr__brand">
@@ -316,17 +329,17 @@
 
       <!-- The level-wide objective: live nextPrizePool against both the
            progression threshold and the growth-market O/U line. -->
-      <app-pool-progress data-mpage="draw"></app-pool-progress>
+      <app-pool-progress data-mpage="draw" data-dpage="daily"></app-pool-progress>
 
       <!-- Disconnected sessions deliberately inspect the live sDGNRS protocol
            account. Keep that context between the prize-pool instrument and the
            player-centric daily jackpot, with a direct path into wallet connect. -->
-      <app-protocol-wallet-banner data-mpage="draw" hidden></app-protocol-wallet-banner>
+      <app-protocol-wallet-banner data-mpage="draw" data-dpage="daily" hidden></app-protocol-wallet-banner>
 
       <!-- Connected wallets that are genuinely low on native ETH get one
            funding assist in this same wallet-context slot. Testnet offers only
            its free faucet; production opens the external fiat on-ramp. -->
-      <app-eth-onramp data-mpage="draw" hidden></app-eth-onramp>
+      <app-eth-onramp data-mpage="draw" data-dpage="daily" hidden></app-eth-onramp>
 
       <!-- Mine FLIP has no top-bar control. app-mine-flip.js is a headless
            probe that publishes ready crank work into the fixed pending-actions
@@ -349,7 +362,7 @@
            The DAY SUMMARY button is still owned by last-day-jackpot (it carries
            the gates) and replaces SPIN JACKPOT in that button's existing action
            row once BOTH the board and the flip have played out. -->
-      <section class="jackpot-hero" data-mpage="draw buy flip" aria-label="Purchase, daily jackpot draw, and coinflip">
+      <section class="jackpot-hero" data-mpage="draw buy flip" data-dpage="daily" aria-label="Purchase, daily jackpot draw, and coinflip">
         <div class="jackpot-hero__draw" data-mpage="draw">
           <!-- Keep the illustrated drawing instrument independent from the
                expandable day-history / summary region below it. The hero row
@@ -421,55 +434,68 @@
            tray. Neither needs a permanent dashboard card. -->
       <app-jackpot-resolutions hidden aria-hidden="true"></app-jackpot-resolutions>
 
-      <!-- The level before each x10 BAF gets a full-width event preview with
-           the live pool, this player's position, and the five-player race. -->
-      <app-baf-eve data-mpage="flip"></app-baf-eve>
-
-      <!-- Open only during the live Decimator burn window. This full-width
-           event rail replaces the small duplicate entry card in Side Bets. -->
-      <app-decimator-burn data-mpage="flip"></app-decimator-burn>
-
       <!-- Claims banner and aggregate winnings strip are intentionally
            unmounted. Gameplay-specific resolution stays with its owning
            surface; app-claims-panel.js and app-balances-strip.js remain on
            disk for THE PIT. -->
 
-      <!-- Second three-column instrument, aligned to the jackpot hero:
-           quests left, scheduled Craps entries center, and Degenerette right.
-           Degenerette owns fresh and historical resolved cards in-panel. -->
-      <section class="play-grid" data-mpage="quests craps degenerette" aria-label="Quests, Craps, and Degenerette">
-        <div class="quest-hub" data-mpage="quests" role="group" aria-label="Quests and rewards">
-          <app-quest-panel></app-quest-panel>
-          <div class="quest-hub__rewards">
-            <div class="side-bets-rail" aria-label="Timed growth quest">
-              <app-parimutuel-panel quest></app-parimutuel-panel>
-            </div>
-            <div class="referral-strip referral-strip--compact" data-referral-strip hidden></div>
-          </div>
-        </div>
+      <!-- The second desktop screen groups Craps and Degenerette. -->
+      <section class="play-grid" data-mpage="craps degenerette" data-dpage="games" aria-label="Craps and Degenerette">
         <app-craps-entry data-mpage="craps"></app-craps-entry>
         <app-craps-rules data-mpage="craps" hidden></app-craps-rules>
         <app-degenerette-panel data-mpage="degenerette"></app-degenerette-panel>
       </section>
 
+      <aside class="info-rail" aria-label="Player information">
+        <div class="info-rail__mining">
+          <button type="button" class="info-rail__mine" data-mine-flip disabled aria-label="Mine FLIP — no work available">
+            <img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true"><span>MINE FLIP</span>
+          </button>
+        </div>
+        <div class="info-rail__track" aria-label="Player information panels">
+          <app-reveal-tray data-info-slide="pending"></app-reveal-tray>
+          <section class="quest-banner play-grid" data-info-slide="quests" data-mpage="quests" aria-label="Quests and growth quest">
+            <div class="quest-hub" data-mpage="quests" role="group" aria-label="Quests and rewards">
+              <app-quest-panel></app-quest-panel>
+              <div class="quest-hub__rewards">
+                <div class="side-bets-rail" aria-label="Timed growth quest">
+                  <app-parimutuel-panel quest></app-parimutuel-panel>
+                </div>
+                <div class="referral-strip referral-strip--compact" data-referral-strip hidden></div>
+              </div>
+            </div>
+          </section>
+          <section class="info-afking" data-info-slide="afking" aria-label="AFKing subscription" hidden></section>
       <section class="player-desk" data-mpage="more" aria-label="Player tools, bounties, and tickets">
         <!-- Bounties remain visible at a glance. -->
-        <app-records-rail></app-records-rail>
+        <app-records-rail data-info-slide="bounties"></app-records-rail>
 
         <!-- Deity holders act from a compact daily-power desk outside the
              pass shop, immediately above the inventory those boons can affect. -->
-        <app-deity-desk></app-deity-desk>
+        <app-deity-desk data-info-slide="deity"></app-deity-desk>
 
         <!-- Task #12: ticket inventory — deduped ticket cards + the wide
              all-symbols × per-level chart (app-tickets-inventory.js) -->
-        <app-tickets-inventory></app-tickets-inventory>
+        <app-tickets-inventory data-info-slide="tickets"></app-tickets-inventory>
       </section>
 
-      <section class="bottom-tools" data-mpage="more" aria-label="Token tools and charity">
-        <app-link-donation></app-link-donation>
+      <section class="bottom-tools" data-mpage="more" data-info-slide="tokens" aria-label="Token tools and charity">
+        <app-vrf-donation></app-vrf-donation>
         <app-wwxrp-burn hidden></app-wwxrp-burn>
         <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
       </section>
+          <div class="desktop-activity" data-mpage="flip">
+            <app-decimator-burn data-mpage="flip" data-info-slide="decimator" hidden></app-decimator-burn>
+            <app-baf-eve data-mpage="flip" data-info-slide="baf" hidden></app-baf-eve>
+          </div>
+        </div>
+        <nav class="info-rail__nav" aria-label="Information banner">
+          <button type="button" data-info-step="-1" aria-label="Previous banner">‹</button>
+          <div class="info-rail__tabs" data-info-tabs></div>
+          <button type="button" data-info-step="1" aria-label="Next banner">›</button>
+        </nav>
+        <div class="rrt-error info-rail__feedback" role="alert" hidden></div>
+      </aside>
 
       <!-- Detailed pass benefits and subscription controls. -->
       <section class="panel-popup" id="panel-passes" data-panel-popup="passes" hidden
@@ -538,12 +564,12 @@
       </section>
     </main>
 
-    <!-- Phone section dock (mobile-pager.js, mobile-pager.css). Under 769px
+    <!-- Compact section dock (mobile-pager.js, mobile-pager.css). Under 1100px
          each data-mpage group is its own page: swipe sideways or tap a tab.
          The last slot is Pending, condensed: it names what is waiting, and
          it is a button only while a tap sends a transaction or opens a reveal
          (a claim, the RNG request, Mine FLIP). Hidden on wider layouts, where
-         every section stays on one scrolling page. -->
+         desktop uses two workspaces and the shared information banner. -->
     <div class="mpager-rotate" role="alert">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></svg>
       <strong>TURN YOUR PHONE UPRIGHT</strong>
@@ -640,7 +666,6 @@
          ticket-pack creation, jackpot winnings. Hidden until a sequence is
          queued via queueReveal(). -->
     <app-player-funds-dialog></app-player-funds-dialog>
-    <app-reveal-tray></app-reveal-tray>
     <reveal-overlay></reveal-overlay>
   </div>
 
@@ -656,6 +681,8 @@
   </script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/app/mobile-pager.js"></script>
+  <script type="module" src="/app/app/desktop-sections.js"></script>
+  <script type="module" src="/app/app/desktop-info-rail.js"></script>
   <script type="module" src="/app/app/main.js?v=next-rng-only-20260930"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-sound-toggle.js"></script>
@@ -713,19 +740,28 @@
       '/app/components/app-decimator-panel.js',
       '/app/components/app-daily-flip.js',
     ];
-    // These tools only render their own page. In particular, inventory scans
-    // many ticket levels; a phone should not pay that cost before visiting
-    // More. Pending-result producers and funding warnings still load at idle.
+    // Phone inventory and game modules load on their section's first visit.
+    // Desktop banner panels warm in idle batches after the opening panel.
     const MOBILE_MORE_MODULES = new Set([
       '/app/components/app-tickets-inventory.js',
-      '/app/components/app-link-donation.js',
+      '/app/components/app-vrf-donation.js',
       '/app/components/app-wwxrp-burn.js',
       '/app/components/app-sdgnrs-burn-rail.js',
     ]);
-    const phonePages = window.matchMedia('(max-width: 768px)');
-    const moduleNeededNow = (src) => !phonePages.matches
-      || !MOBILE_MORE_MODULES.has(src)
-      || document.body.dataset.mobilePage === 'more';
+    const phonePages = window.matchMedia('(max-width: 1099px)');
+    const moduleNeededNow = (src) => {
+      if (phonePages.matches) return !MOBILE_MORE_MODULES.has(src) || document.body.dataset.mobilePage === 'more';
+      const page = document.body.dataset.desktopPage;
+      const selector = VIEWPORT_MODULES.find(([, module]) => module === src)?.[0];
+      const host = selector && document.querySelector(selector);
+      const slide = host?.closest('[data-info-slide]');
+      // Conditional slides must load to discover whether they are available.
+      if (page && slide && !['deity', 'decimator', 'baf'].includes(slide.dataset.infoSlide)) {
+        return slide.dataset.infoSlide === (document.body.dataset.desktopInfo || 'quests');
+      }
+      const section = host?.closest('[data-dpage]');
+      return !page || !section || section.dataset.dpage.split(/\s+/).includes(page);
+    };
     // These scoped sheets belong exclusively to late modules. A print-media
     // link still downloads during HTML parsing, so it was costing narrow cold
     // loads hundreds of kilobytes before any corresponding panel existed.
@@ -739,7 +775,7 @@
       ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
       ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003']],
       ['/app/components/app-sacrifice-panel.js', ['/app/styles/sacrifices.css']],
-      ['/app/components/app-link-donation.js', ['/app/styles/link-donation.css']],
+      ['/app/components/app-vrf-donation.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-wwxrp-burn.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-sdgnrs-burn-rail.js', ['/app/styles/sdgnrs-burn-rail.css']],
       ['/app/components/app-jackpot-resolutions.js', ['/app/styles/baf-resolution.css']],
@@ -755,7 +791,7 @@
       '/app/components/app-craps-entry.js',
       '/app/components/app-craps-rules.js',
       '/app/components/app-parimutuel-panel.js',
-      '/app/components/app-link-donation.js',
+      '/app/components/app-vrf-donation.js',
       '/app/components/app-wwxrp-burn.js',
       '/app/components/app-records-rail.js',
       '/app/components/app-deity-desk.js',
@@ -788,11 +824,11 @@
       ['app-daily-flip', '/app/components/app-daily-flip.js'],
       ['app-baf-eve', '/app/components/app-baf-eve.js'],
       ['app-decimator-burn', '/app/components/app-decimator-burn.js'],
-      ['.play-grid', '/app/components/app-quest-panel.js'],
+      ['.quest-banner', '/app/components/app-quest-panel.js'],
       ['.play-grid', '/app/components/app-degenerette-panel.js'],
       ['.play-grid', '/app/components/app-craps-entry.js'],
       ['.play-grid', '/app/components/app-craps-rules.js'],
-      ['.bottom-tools', '/app/components/app-link-donation.js'],
+      ['.bottom-tools', '/app/components/app-vrf-donation.js'],
       ['.bottom-tools', '/app/components/app-wwxrp-burn.js'],
       ['app-records-rail', '/app/components/app-records-rail.js'],
       ['app-deity-desk', '/app/components/app-deity-desk.js'],
@@ -801,6 +837,11 @@
       ['.quest-hub', '/app/components/app-parimutuel-panel.js'],
       ['.bottom-tools', '/app/components/app-sdgnrs-burn-rail.js'],
     ];
+    const INFO_MODULES = new Set(VIEWPORT_MODULES
+      .filter(([selector]) => document.querySelector(selector)?.closest('[data-info-slide]'))
+      .map(([, src]) => src));
+    const moduleNeededInBackground = (src) => moduleNeededNow(src)
+      || (!phonePages.matches && INFO_MODULES.has(src));
     // A hard reload only applies its cache bypass to navigation-time fetches.
     // These modules arrive later from an idle callback, so reused Firefox and
     // Chromium profiles can otherwise keep different pre-edit generations of
@@ -880,18 +921,27 @@
       for (const src of MOBILE_MORE_MODULES) requestModule(src);
     };
     document.addEventListener('mobile-pager:change', loadMoreTools);
-    phonePages.addEventListener('change', loadMoreTools);
+    document.addEventListener('desktop-sections:change', () => {
+      for (const [, src] of VIEWPORT_MODULES) requestModule(src);
+    });
+    document.addEventListener('desktop-info:change', () => {
+      for (const [, src] of VIEWPORT_MODULES) requestModule(src);
+    });
+    phonePages.addEventListener('change', () => {
+      loadMoreTools();
+      if (!phonePages.matches) afterWindowLoad(() => loadInBatches(INFO_MODULES));
+    });
     const afterWindowLoad = (fn) => {
       const schedule = () => idle(fn);
       if (document.readyState === 'complete') schedule();
       else window.addEventListener('load', schedule, { once: true });
     };
     const loadInBatches = (sources) => {
-      const pending = [...new Set(sources)].filter(moduleNeededNow);
+      const pending = [...new Set(sources)].filter(moduleNeededInBackground);
       const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
       const next = () => {
         if (pending.length === 0) return;
-        const batch = pending.splice(0, batchSize);
+        const batch = pending.splice(0, batchSize).filter(moduleNeededInBackground);
         void Promise.allSettled(batch.map(importModule))
           .then((results) => {
             // importModule owns retries for both viewport and idle callers.
@@ -909,6 +959,12 @@
     // neighbor only as it approaches the viewport.
     if (window.matchMedia('(min-width: 1100px)').matches) {
       for (const src of POST_HERO_MODULES) requestModule(src);
+      // Quests paint first; the two conditional event panels determine whether
+      // this level should open on Decimator or BAF instead. Do not wait for idle.
+      for (const [selector, src] of VIEWPORT_MODULES) {
+        const slide = document.querySelector(selector)?.closest('[data-info-slide]');
+        if (['quests', 'decimator', 'baf'].includes(slide?.dataset.infoSlide)) requestModule(src);
+      }
     }
 
     if ('IntersectionObserver' in window) {
@@ -967,6 +1023,7 @@
     // network, parsing and the API do not receive one synchronized burst.
     afterWindowLoad(() => loadInBatches([
       ...POST_HERO_MODULES,
+      ...INFO_MODULES,
       ...IDLE_MODULES,
       ...LAZY_PANELS.map(([, src]) => src),
     ]));

@@ -374,3 +374,105 @@ body.layout-basic.baf-resolution-pending [data-bind="df-reveal-hint"] { visibili
   .baf-res-modal[data-layout="spotlight"] .baf-res__comparison-scroll { --group-height: 190px; }
   .baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__player.is-you { min-height: 36px; }
 }
+
+/* The results carry the page: fewer headings, readable payouts and four
+   aligned rows per draw. The unrevealed view needs only the coin and odds. */
+.baf-res__shell { align-content: start; grid-template-rows: auto auto auto auto; min-height: 0; gap: 18px; }
+.baf-res__header { gap: 14px; padding-bottom: 12px; }
+.baf-res__close { margin-left: auto; }
+.baf-res__pool:not([hidden]) + .baf-res__close { margin-left: 0; }
+.baf-res__brand h1 { font-size: clamp(20px, 2vw, 28px); }
+.baf-res__brand small { font-size: 11px; letter-spacing: .08em; }
+.baf-res__section-head h2 { margin: 0; font-size: 13px; letter-spacing: .08em; }
+.baf-res__section-head > b { font-size: 13px; }
+.baf-res__shell[data-stage="coin"] .baf-res__results,
+.baf-res__shell[data-stage="coin-flip"] .baf-res__results,
+.baf-res__shell:not([data-stage="complete"]) > .baf-res__footer,
+[data-bind="baf-scroll-note"] { display: none; }
+.baf-res-modal[data-coin-position="center"] .baf-res__overview {
+  grid-template-columns: minmax(0, 1.4fr) 220px minmax(180px, .7fr);
+  grid-template-areas: "leaders gate weighted";
+  align-items: center;
+  gap: 24px;
+}
+.baf-res-modal[data-coin-position="center"] .baf-res__leaders { width: 100%; max-width: none; }
+.baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__columns { font-size: 9px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__player { min-height: 36px; font-size: 13px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__identity { font-size: 11px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__prize { font-size: 11px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__cut { height: 72px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__cut-brace { height: 57px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__gate { width: 100%; padding: 6px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__coin-scene { width: 176px; height: 176px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__weighted { width: 100%; }
+.baf-res-modal[data-coin-position="center"] .baf-res__weighted .baf-res__draw-wheel { width: 108px; height: 108px; }
+.baf-res-modal[data-coin-position="center"] .baf-res__weighted .baf-res__draw-core { width: 70px; height: 70px; }
+.baf-res__draw-core strong { font-size: 16px; }
+.baf-res__weighted h2 { font-size: 12px; }
+.baf-res__empty { min-height: 100px; padding: 20px; border: 0; background: none; }
+.baf-res__footer { padding: 14px 0; border-bottom: 1px solid var(--baf-line); }
+.baf-res__payout > strong { font-size: 11px; }
+.baf-res__reward { font-size: 16px; padding: 9px 12px; }
+.baf-res__done { min-height: 44px; font-size: 12px !important; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison-scroll {
+  --group-height: 226px;
+  --group-gap: 12px;
+  --visible-rows: 3;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: auto;
+}
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison { min-height: var(--group-height); }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison > header { padding: 12px; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison > header b { font-size: 11px; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison > .baf-res__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1fr);
+  padding: 0 10px 7px 32px;
+  gap: 6px;
+  font-size: 9px;
+}
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__player {
+  grid-template-columns: 16px minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 10px;
+  min-height: 38px;
+  font-size: 12px;
+}
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__identity {
+  display: block; grid-column: auto; font-size: 10px; overflow: hidden; text-overflow: ellipsis;
+}
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__rank { grid-row: auto; font-size: 10px; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__score { grid-column: auto; text-align: right; font-size: 12px; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__prize { grid-column: auto; font-size: 12px; line-height: 1.35; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .baf-res__player.is-you {
+  min-height: 38px; border-radius: 0; box-shadow: inset 3px 0 #70b2ff;
+}
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .is-you .baf-res__identity { font-weight: 800; }
+.baf-res-modal[data-layout="spotlight"] .baf-res__comparison .is-winner .baf-res__prize { font-weight: 800; color: #b6f7cf; }
+@media (max-width: 1199px) {
+  .baf-res-modal[data-layout="spotlight"] .baf-res__comparison-scroll { grid-template-columns: repeat(3, minmax(0, 1fr)); --visible-rows: 4; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__overview { grid-template-columns: minmax(0, 1fr) 160px 180px; gap: 12px; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__coin-scene { width: 144px; height: 144px; }
+}
+@media (max-width: 900px) {
+  .baf-res-modal[data-layout="spotlight"] .baf-res__comparison-scroll { grid-template-columns: repeat(2, minmax(0, 1fr)); --visible-rows: 5; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__overview { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "gate weighted" "leaders leaders"; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__weighted { display: grid; grid-template-columns: 1fr; grid-template-rows: auto; padding: 8px; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__weighted > :is(header, b, details),
+  .baf-res-modal[data-coin-position="center"] .baf-res__weighted .baf-res__draw-wheel { grid-column: 1; grid-row: auto; }
+}
+@media (max-width: 600px) {
+  .baf-res__shell { padding: 14px 12px; }
+  .baf-res__header { gap: 8px; }
+  .baf-res__brand h1 { font-size: 18px; }
+  .baf-res__mark { display: none; }
+  .baf-res__close { width: 36px; height: 36px; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__player { font-size: 11px; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__identity { font-size: 9px; }
+  .baf-res-modal[data-coin-position="center"] .baf-res__leaders .baf-res__prize { font-size: 9px; }
+  .baf-res-modal[data-layout="spotlight"] .baf-res__comparison-scroll { grid-template-columns: minmax(0, 1fr); max-height: 70dvh; }
+  .baf-res__reward { font-size: 14px; padding: 7px 9px; }
+  .baf-res__footer { flex-wrap: wrap; }
+  .baf-res__payout { flex-basis: 100%; }
+  .baf-res__done { margin-left: auto; }
+}

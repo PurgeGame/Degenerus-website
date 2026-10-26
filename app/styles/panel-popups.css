@@ -35,6 +35,34 @@
 body.layout-basic .inv-level-tab:disabled { cursor: default; opacity: .7; }
 /* Ticket levels open a reader without expanding or moving the ticket bar. */
 body.layout-basic .tickets-popup .panel-popup__window { width: min(100%, 68rem); }
+body.layout-basic .ticket-holdings-popup .panel-popup__window { width: min(100%, 58rem); max-height: calc(100dvh - 1rem); }
+body.layout-basic .ticket-holdings-popup .panel-popup__header { padding: .45rem .8rem; gap: .5rem; }
+body.layout-basic .ticket-holdings-popup .panel-popup__header h2 { font-size: .85rem; letter-spacing: .05em; }
+body.layout-basic .ticket-holdings-popup .panel-popup__close { width: 2rem; height: 2rem; border: 0; background: none; }
+body.layout-basic .ticket-holdings-popup .panel-popup__body { container-type: inline-size; overflow: visible; padding: .4rem; }
+.ticket-holdings-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+.ticket-holdings-table td { height: clamp(1.4rem, 4.6dvh, 3rem); padding: .12rem 0; overflow: hidden; text-align: center; border: 1px solid #b8995825; border-radius: 3px; background: #ffffff04; }
+.ticket-holdings-table td > small { display: block; color: #aaa3b5; font: 750 clamp(.4rem, 1.4cqi, .65rem)/1.3 Inter, sans-serif; white-space: nowrap; }
+.ticket-holdings-table td > strong { display: block; color: #f5e7c9; font: 800 min(1.15rem, 2.6dvh, calc(13cqi / var(--digits, 3)))/1.25 "Roboto Mono", ui-monospace, monospace; white-space: nowrap; }
+.ticket-holdings-table td > strong[data-amount-tone="fractional"] { color: #b8c3d2; }
+.ticket-holdings-table td > strong[data-amount-tone="green"] { color: #8de6ae; }
+.ticket-holdings-table td > strong[data-amount-tone="blue"] { color: #7bb8ff; }
+.ticket-holdings-table td > strong[data-amount-tone="purple"] { color: #cc9aff; }
+.ticket-holdings-table td > strong[data-amount-tone="gold"] { color: #f6d37a; }
+.ticket-holdings-table .is-current { border-color: #e6bf68; background: #e6bf6814; }
+.ticket-holdings-table .is-current > small { color: #f2d594; }
+.ticket-holdings-table .is-empty > strong { color: #696271; }
+.ticket-holdings-table .is-complete { border-color: transparent; background: #0002; }
+.ticket-holdings-table .is-complete > small { color: #645e6e; }
+.ticket-holdings-table .is-complete > strong { color: #756e7f; font: 750 clamp(.3rem, 1.05cqi, .6rem)/1.4 Inter, sans-serif; }
+.ticket-holdings-total { display: flex; justify-content: flex-end; align-items: baseline; gap: .75rem; padding: .45rem .35rem .2rem; color: #b1edca; }
+.ticket-holdings-total > span { color: #aaa3b5; font: 800 .65rem/1.4 Inter, sans-serif; }
+.ticket-holdings-total > strong { font: 800 1rem/1.2 "Roboto Mono", ui-monospace, monospace; }
+@media (max-width: 480px) {
+  .ticket-holdings-table .is-complete > strong { font-size: 0; }
+  .ticket-holdings-table .is-complete > strong::after { content: '✓'; font-size: .65rem; }
+}
+
 .tickets-popup__summary { margin: .25rem 0 0; color: #a99db5; font: 600 .7rem/1.4 Inter, sans-serif; }
 .tickets-popup__toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; padding: .7rem 1rem 0; }
 body.layout-basic .tickets-popup .panel-popup__body { padding: .7rem 1rem 1rem; }

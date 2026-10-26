@@ -7,7 +7,7 @@ body.layout-basic .secondary-tools .side-bets-rail, body.layout-basic .secondary
 .secondary-action[hidden] { display: none !important; }
 .secondary-action:focus-visible, .secondary-info:focus-visible { outline: 2px solid #e6c599; outline-offset: 2px; }
 body.layout-basic .secondary-tools .panel-tools { order: 2; gap: .3rem; }
-body.layout-basic .secondary-tools app-link-donation { display: block; order: 2; max-width: 100%; }
+body.layout-basic .secondary-tools app-vrf-donation { display: block; order: 2; max-width: 100%; }
 body.layout-basic .secondary-tools .panel-tools__button svg { width: .85rem; height: .85rem; }
 .secondary-info { display: grid; place-items: center; flex: 0 0 auto; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: 50%; color: #bba7c9; background: transparent; cursor: pointer; }
 .secondary-info span { display: grid; place-items: center; width: 1rem; height: 1rem; box-sizing: border-box; border: 1px solid currentColor; border-radius: 50%; font: 700 .72rem/1 Georgia, serif; }

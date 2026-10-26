@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["mining-gas-profile.js"],
-  "sourcesContent": ["import { CHAIN } from './chain-config.js';\n\n/** Total gas includes the Glamsterdam state reservoir; execution still has its own cap. */\nexport function miningGasBounds(chainId = CHAIN.id, timestamp = Math.floor(Date.now() / 1000)) {\n  const glamsterdam = Number(chainId) === 11155111 && Number(timestamp) >= 1791294816;\n  return glamsterdam\n    ? { min: 30_000_000n, max: 30_000_000n }\n    : { min: 10_000_000n, max: 16_000_000n };\n}\n"],
-  "mappings": "+EAAA,OAAS,SAAAA,MAAa,oBAGf,gBAAS,gBAAgBC,EAAUD,EAAM,GAAIE,EAAY,KAAK,MAAM,KAAK,IAAI,EAAI,GAAI,EAAG,CAE7F,OADoB,OAAOD,CAAO,IAAM,UAAY,OAAOC,CAAS,GAAK,WAErE,CAAE,IAAK,UAAa,IAAK,SAAY,EACrC,CAAE,IAAK,UAAa,IAAK,SAAY,CAC3C,CALgBC,EAAA",
+  "sourcesContent": ["import { CHAIN } from './chain-config.js';\n\n/** Total gas includes the Glamsterdam state reservoir; execution still has its own cap. */\nexport function miningGasBounds(chainId = CHAIN.id, timestamp = Math.floor(Date.now() / 1000)) {\n  if (Number(chainId) === 84532) return { min: 10_000_000n, max: 16_777_216n };\n  const glamsterdam = Number(chainId) === 11155111 && Number(timestamp) >= 1791294816;\n  return glamsterdam\n    ? { min: 30_000_000n, max: 30_000_000n }\n    : { min: 10_000_000n, max: 16_000_000n };\n}\n"],
+  "mappings": "+EAAA,OAAS,SAAAA,MAAa,oBAGf,gBAAS,gBAAgBC,EAAUD,EAAM,GAAIE,EAAY,KAAK,MAAM,KAAK,IAAI,EAAI,GAAI,EAAG,CAC7F,OAAI,OAAOD,CAAO,IAAM,MAAc,CAAE,IAAK,UAAa,IAAK,SAAY,EACvD,OAAOA,CAAO,IAAM,UAAY,OAAOC,CAAS,GAAK,WAErE,CAAE,IAAK,UAAa,IAAK,SAAY,EACrC,CAAE,IAAK,UAAa,IAAK,SAAY,CAC3C,CANgBC,EAAA",
   "names": ["CHAIN", "chainId", "timestamp", "__name"]
 }

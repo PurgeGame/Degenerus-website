@@ -57,7 +57,7 @@
   60%, 100% { transform: rotate(0deg); }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* One page at a time. A container listing several pages stays visible on
      each of them; its other children are hidden by their own tags. */
   body.layout-basic[data-mobile-page="draw"] [data-mpage]:not([data-mpage~="draw"]),
@@ -156,6 +156,8 @@
     flex: 1 0 auto;
     flex-direction: column;
     margin-bottom: 0;
+    /* Fit measurements must see cleared margins immediately after a resize. */
+    transition: none;
   }
   body.layout-basic[data-mobile-page="draw"] .jackpot-hero__draw,
   body.layout-basic[data-mobile-page="buy"] app-decimator-panel,
@@ -387,7 +389,7 @@
   body.layout-basic .mpager-rotate svg { animation: none; }
 }
 
-@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+@media (max-width: 1099px) and (prefers-reduced-motion: reduce) {
   body.layout-basic .mpager-pend[data-state="ready"],
   body.layout-basic .mpager-pend[data-state="busy"] .mpager-pend__foot { animation: none; }
 }
@@ -397,7 +399,7 @@
    rules above give it. Every rule is scoped to one body[data-mobile-page]. */
 
 /* ---- Draw --------------------------------------------------------------------- */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* A phone summary gives the drawing the screen: one jackpot amount, a slim
      pool instrument, and a single-row wallet notice above the cabinet. */
   body.layout-basic[data-mobile-page="draw"] > .container > main > :not(.jackpot-hero) { flex: none; }
@@ -495,14 +497,14 @@
 }
 
 /* ---- Buy ---------------------------------------------------------------------- */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* Pack labels need to read at phone distance. Let narrower four-product
      shelves wrap the level/count instead of shrinking them to tiny stamps. */
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-pack-face {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   }
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
-    font-size: .75rem;
+    font-size: max(.75rem, 14cqi);
     line-height: 1.05;
     letter-spacing: 0;
     text-align: center;
@@ -510,7 +512,7 @@
     overflow-wrap: normal;
   }
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces:has(.dec-ticket-piece--foil:not([hidden])) .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
-    font-size: clamp(.625rem, 2.7vw, .75rem);
+    font-size: max(.625rem, 14cqi);
   }
   body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-pack-face .dec-pack-level {
     font-weight: 800;
@@ -536,7 +538,7 @@
 }
 /* Short phones: shrink the pass mark and tighten the card padding so the
    whole page fits when it can. */
-@media (max-width: 768px) and (max-height: 700px) {
+@media (max-width: 1099px) and (max-height: 700px) {
   body.layout-basic[data-mobile-page="buy"] > .container > main {
     padding-bottom: 0.25rem;
   }
@@ -555,8 +557,8 @@
 }
 
 /* ---- Flip --------------------------------------------------------------------- */
-@media (max-width: 768px) {
-  body.layout-basic[data-mobile-page="flip"] > .container > main > :is(app-baf-eve, app-decimator-burn) {
+@media (max-width: 1099px) {
+  body.layout-basic[data-mobile-page="flip"] > .container > main :is(app-baf-eve, app-decimator-burn) {
     flex: none; margin: .3rem 0 0;
   }
   body.layout-basic .mobile-event-summary {
@@ -607,7 +609,7 @@
 
   /* Only active events reserve space. Size the table's coin and empty felt
      from its remaining height instead of the whole phone screen. */
-  body.layout-basic[data-mobile-page="flip"] > .container > main:has(> :is(app-baf-eve, app-decimator-burn):not([hidden])) > .jackpot-hero {
+  body.layout-basic[data-mobile-page="flip"] > .container > main:has(:is(app-baf-eve, app-decimator-burn):not([hidden])) > .jackpot-hero {
     flex: 1 1 0; min-height: 23rem;
   }
   body.layout-basic[data-mobile-page="flip"] > .container > main:has(> :is(app-baf-eve, app-decimator-burn):not([hidden])) app-daily-flip {
@@ -690,14 +692,14 @@
     transform: translate(-50%, calc(-50% + 0.22rem)) scale(1.3);
   }
 }
-@media (max-width: 768px) and (max-height: 720px) {
+@media (max-width: 1099px) and (max-height: 720px) {
   body.layout-basic[data-mobile-page="flip"] .jackpot-hero .df-table-watermark {
     transform: translate(-50%, calc(-50% + 0.22rem)) scale(0.9);
   }
 }
 
 /* ---- Quests ------------------------------------------------------------------- */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* Quest board: the quest cards and the Timed card share the spare height;
      the referral strip keeps its own size. */
   body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub > app-quest-panel {
@@ -748,7 +750,7 @@
 }
 
 /* ---- Craps -------------------------------------------------------------------- */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* The schedule takes whatever height the header and felt leave, and its
      rows share it. The felt stays at its natural size at the bottom. */
   body.layout-basic[data-mobile-page="craps"] .craps-entry__lobby {
@@ -770,9 +772,25 @@
     min-height: 1.7rem;
   }
 }
+/* Tablet-width cabinets use the larger desktop rows without stretching a
+   short schedule across the whole screen. */
+@media (min-width: 769px) and (max-width: 1099px) {
+  body.layout-basic[data-mobile-page="craps"] > .container > main { justify-content: safe center; }
+  body.layout-basic[data-mobile-page="craps"] > .container > main > .play-grid,
+  body.layout-basic[data-mobile-page="craps"] app-craps-entry,
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__lobby,
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing { flex: none; }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__listing tbody tr:not(.craps-entry__results-head) {
+    height: clamp(1.9rem, min(6.4cqi, 4.2dvh), 3rem);
+  }
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__action > button,
+  body.layout-basic[data-mobile-page="craps"] .craps-entry__entered {
+    height: clamp(1.65rem, min(5cqi, 3.4dvh), 2.4rem); min-height: 1.65rem;
+  }
+}
 /* Short phones: tighten the header, column heads and rows so the schedule
    and the felt both fit without scrolling. */
-@media (max-width: 768px) and (max-height: 720px) {
+@media (max-width: 1099px) and (max-height: 720px) {
   body.layout-basic[data-mobile-page="craps"] > .container > main {
     padding-bottom: 0.3rem;
   }
@@ -802,7 +820,7 @@
 }
 
 /* ---- Degenerette -------------------------------------------------------------- */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* Panel chain: frame -> setup -> symbol block -> brand -> carousel stage
      all grow; the wager deck keeps its natural size. */
   body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel > .app-degenerette-panel {
@@ -825,7 +843,7 @@
 }
 
 /* Short phones: tighten spacing and let the carousel shrink before scrolling. */
-@media (max-width: 768px) and (max-height: 720px) {
+@media (max-width: 1099px) and (max-height: 720px) {
   body.layout-basic[data-mobile-page="degenerette"] app-degenerette-panel .deg-quickplay-controls {
     min-height: 6rem;
   }
@@ -847,7 +865,7 @@
 }
 /* Short phones: quest cards may drop below their 5.25rem floor so the whole
    board fits without scrolling. */
-@media (max-width: 768px) and (max-height: 720px) {
+@media (max-width: 1099px) and (max-height: 720px) {
   body.layout-basic[data-mobile-page="quests"] .play-grid .quest-hub .qst-slots {
     grid-auto-rows: minmax(4.5rem, 1fr);
   }
@@ -863,7 +881,7 @@
 /* ---- afKing passes popup + deity picker (phones) ------------------------- */
 /* One screen each: the popup stacks Lazy, Whale, Deity and the afKing card
    without scrolling, and the picker shows all 32 symbols, eight per family. */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   /* Popup chrome */
   body.layout-basic #panel-passes .panel-popup__header { padding: 0.3rem 0.35rem 0.3rem 0.75rem; }
   body.layout-basic #panel-passes .panel-popup__close { width: 2.25rem; min-width: 0; height: 2.25rem; min-height: 0; font-size: 1.25rem; }
@@ -1085,7 +1103,7 @@
    and several controls were 16-27 px. Labels get a ~9 px floor (8 px for the
    smallest kickers); small controls get a larger touch box without moving the
    art. The selector outranks each panel's own rule on purpose. */
-@media (max-width: 768px) {
+@media (max-width: 1099px) {
   html body.layout-basic[data-mobile-page] :is(
     .craps-entry__wager, .craps-entry__battle-key, .craps-entry__buy-in-heading,
     .craps-full-day-range-note, app-craps-entry th,
@@ -1113,4 +1131,59 @@
     inset: -10px;
     content: "";
   }
+}
+
+/* Medium windows use the focused pages, with a readable panel width. */
+@media (min-width: 769px) and (max-width: 1099px) {
+  body.layout-basic > .container { max-width: 680px; margin-inline: auto; }
+  body.layout-basic .mpager-dock { width: 100%; max-width: 680px; left: 0; right: 0; margin-inline: auto; }
+
+  /* The Buy page sizes its shelves from their artwork, rather than spreading
+     two short rows across the entire height of a tall tablet window. */
+  body.layout-basic[data-mobile-page="buy"] > .container,
+  body.layout-basic[data-mobile-page="buy"] .mpager-dock { max-width: 760px; }
+  body.layout-basic[data-mobile-page="buy"] > .container > main { justify-content: safe center; }
+  body.layout-basic[data-mobile-page="buy"] > .container > main > .jackpot-hero,
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero > app-decimator-panel,
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero > app-decimator-panel > .app-decimator-panel {
+    flex: none; min-height: 0;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders {
+    flex: none; grid-template-rows: auto auto;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-purchase-builders > .dec-purchase-builder {
+    display: block;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces {
+    --ticket-art-height: clamp(8rem, 28cqi, 12rem);
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-pieces:has(.dec-ticket-piece--foil:not([hidden])) {
+    --ticket-art-height: clamp(6.25rem, 22cqi, 10.25rem);
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-ticket-piece {
+    height: min(var(--ticket-art-height), 22dvh);
+    min-height: min(var(--ticket-art-height), 22dvh);
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-box-grid {
+    grid-template-columns: minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1.8fr);
+    width: min(100%, 72dvh); margin-inline: auto;
+    align-items: end; padding-block: .4rem;
+  }
+  body.layout-basic[data-mobile-page="buy"] .app-decimator-panel .dec-box-card { width: 100%; }
+}
+
+@media (min-width: 769px) and (max-width: 1099px) {
+  body.layout-basic .deity-desk { grid-template-columns: auto minmax(0, 1fr); }
+  body.layout-basic .deity-desk__actions { grid-column: 1 / -1; }
+}
+
+@media (min-width: 769px) and (max-width: 1099px) {
+  body.layout-basic .unified-nav .panel-tools__button { width: 2rem; padding: 0; }
+  body.layout-basic .unified-nav .panel-tools__button > span,
+  body.layout-basic .unified-nav .nav-btn-discord .btn-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  body.layout-basic .nav-jackpot-countdown__label { display: none; }
+  body.layout-basic .nav-jackpot-countdown { padding-inline: .5rem; }
 }

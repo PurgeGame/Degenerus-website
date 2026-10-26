@@ -1,35 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="dec-title dec-desc">
-  <title id="dec-title">Decimator</title>
-  <desc id="dec-desc">A split crimson six die on an ivory and black casino chip with a polished silver rim.</desc>
+  <title id="dec-title">Decimator — Craps Battle</title>
+  <desc id="dec-desc">Opposing crimson and ivory dice over crossed silver swords, framed by a polished casino-chip rim.</desc>
   <defs>
-    <linearGradient id="dec-rim" x1="17" y1="10" x2="107" y2="121" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#52565e"/><stop offset=".18" stop-color="#f9f8f2"/><stop offset=".31" stop-color="#a9adb4"/>
-      <stop offset=".49" stop-color="#454952"/><stop offset=".64" stop-color="#f4f1e6"/><stop offset=".82" stop-color="#9fa3ab"/><stop offset="1" stop-color="#363941"/>
+    <linearGradient id="dec-rim" x1="22" y1="10" x2="104" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#535963"/><stop offset=".2" stop-color="#fff9e8"/>
+      <stop offset=".45" stop-color="#858b95"/><stop offset=".53" stop-color="#353a44"/>
+      <stop offset=".76" stop-color="#e4e4de"/><stop offset="1" stop-color="#727883"/>
     </linearGradient>
-    <linearGradient id="dec-face" x1="40" y1="23" x2="83" y2="108" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#fff9e7"/><stop offset=".5" stop-color="#fffdf7"/><stop offset="1" stop-color="#d1c7b4"/>
+    <radialGradient id="dec-field" cx=".5" cy=".4" r=".65">
+      <stop stop-color="#51202b"/><stop offset="1" stop-color="#090b11"/>
+    </radialGradient>
+    <linearGradient id="dec-red" x1="24" y1="35" x2="62" y2="83" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff6960"/><stop offset=".35" stop-color="#dc3143"/><stop offset="1" stop-color="#950e2b"/>
     </linearGradient>
-    <linearGradient id="dec-red" x1="42" y1="37" x2="86" y2="94" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#f75b55"/><stop offset=".42" stop-color="#ca2539"/><stop offset="1" stop-color="#710e24"/>
+    <linearGradient id="dec-ivory" x1="67" y1="34" x2="105" y2="81" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffdf0"/><stop offset=".58" stop-color="#f0e9d5"/><stop offset="1" stop-color="#c1b59b"/>
     </linearGradient>
-    <clipPath id="dec-split">
-      <path d="M24 23H104V33L29 96H24Z M104 42V108H24V107Z"/>
-    </clipPath>
+    <g id="dec-sword">
+      <path d="M64 47 71 59 69 94H59L57 59Z" fill="#080a10" stroke="#080a10" stroke-width="3.5" stroke-linejoin="round"/>
+      <path d="M64 47 70 59 67 94H61L58 59Z" fill="#bcc8d2"/>
+      <path d="M64 47V94H61L58 59Z" fill="#fff8e6"/>
+      <path d="M64 59V91" stroke="#7a8794" stroke-width="1.5"/>
+      <path d="M60 96H68V109H60Z" fill="#bd3043" stroke="#100c13" stroke-width="2.5"/>
+      <path d="M60 101H68M60 106H68" stroke="#e9bda1" stroke-width="1.7"/>
+      <path d="M52 92 64 94 76 92V97L64 99 52 97Z" fill="#e3c68d" stroke="#100c13" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M59 109H69L67 114H61Z" fill="#e3c68d" stroke="#100c13" stroke-width="2.5" stroke-linejoin="round"/>
+    </g>
   </defs>
-  <circle cx="64" cy="66" r="60" fill="#080a0f"/>
-  <circle cx="64" cy="63" r="59" fill="url(#dec-rim)" stroke="#242730" stroke-width="2"/>
-  <circle cx="64" cy="63" r="55.5" fill="none" stroke="#fff9e9" stroke-opacity=".7"/>
-  <circle cx="64" cy="63" r="49.5" fill="#101117" stroke="#32353c" stroke-width="2"/>
-  <circle cx="64" cy="63" r="40.5" fill="url(#dec-face)" stroke="#06080c" stroke-width="2"/>
-  <g transform="rotate(-9 64 63)" clip-path="url(#dec-split)">
-    <rect x="36" y="35" width="57" height="59" rx="10" fill="#4c0819"/>
-    <rect x="35" y="32" width="57" height="59" rx="10" fill="url(#dec-red)" stroke="#720e23" stroke-width="1.5"/>
-    <path d="M44 34H82Q90 34 90 43" fill="none" stroke="#ffb5a0" stroke-width="1.5" stroke-linecap="round"/>
-    <g fill="#fff9e9" stroke="#630c21" stroke-opacity=".35" stroke-width=".6">
-      <circle cx="49" cy="46" r="5.5"/><circle cx="49" cy="62" r="5.5"/><circle cx="49" cy="78" r="5.5"/>
-      <circle cx="78" cy="46" r="5.5"/><circle cx="78" cy="62" r="5.5"/><circle cx="78" cy="78" r="5.5"/>
+  <circle cx="64" cy="65" r="61" fill="#07090e"/>
+  <circle cx="64" cy="63" r="59" fill="url(#dec-rim)" stroke="#292d36" stroke-width="2"/>
+  <circle cx="64" cy="63" r="55.5" fill="none" stroke="#fff8e4" stroke-opacity=".6"/>
+  <circle cx="64" cy="63" r="51" fill="url(#dec-field)" stroke="#13151d" stroke-width="2"/>
+  <g transform="rotate(-10 40 45)">
+    <rect x="17" y="26" width="45" height="47" rx="7" fill="#530b20" stroke="#080a10" stroke-width="4"/>
+    <rect x="17" y="22" width="45" height="47" rx="7" fill="url(#dec-red)" stroke="#080a10" stroke-width="3.5"/>
+    <path d="M26 25H52Q59 25 59 32" fill="none" stroke="#ffbc9e" stroke-width="2" stroke-linecap="round"/>
+    <g fill="#fff8e5">
+      <circle cx="29" cy="33" r="4.2"/><circle cx="50" cy="33" r="4.2"/>
+      <circle cx="29" cy="45" r="4.2"/><circle cx="50" cy="45" r="4.2"/>
+      <circle cx="29" cy="57" r="4.2"/><circle cx="50" cy="57" r="4.2"/>
     </g>
   </g>
-  <path d="M17 43A51 51 0 0 1 53 13" fill="none" stroke="#fffdf5" stroke-width="2.2" stroke-linecap="round"/>
-  <path d="M110 84A51 51 0 0 1 83 110" fill="none" stroke="#fff7dd" stroke-width="1.3" stroke-linecap="round"/>
+  <g transform="rotate(10 88 45)">
+    <rect x="66" y="26" width="45" height="47" rx="7" fill="#88785f" stroke="#080a10" stroke-width="4"/>
+    <rect x="66" y="22" width="45" height="47" rx="7" fill="url(#dec-ivory)" stroke="#080a10" stroke-width="3.5"/>
+    <path d="M75 25H101Q108 25 108 32" fill="none" stroke="#fffef6" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="78" cy="33" r="5" fill="#25202b"/>
+    <circle cx="99" cy="57" r="5" fill="#25202b"/>
+  </g>
+  <use href="#dec-sword" transform="rotate(-53 64 86)"/>
+  <use href="#dec-sword" transform="rotate(53 64 86)"/>
 </svg>

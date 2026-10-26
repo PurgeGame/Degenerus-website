@@ -327,7 +327,7 @@ body.layout-basic boon-product-indicator[data-boon-direction="down"][data-boon-s
 boon-product-indicator[data-boon-product="lootbox"] { --boon-logo: url('/app/assets/lootbox/degenerus-lootbox-case-medium-v14-locked-front.webp'); }
 boon-product-indicator[data-boon-product="coinflip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
 boon-product-indicator[data-boon-product="quests"] { --boon-logo: url('/app/assets/boons/boon-quest-micro.svg'); }
-boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg?v=casino-v2'); }
+boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg?v=craps-battle-v3'); }
 boon-product-indicator[data-boon-product="degenerette-eth"] { --boon-logo: url('/badges-circular/crypto_06_ethereum_green.svg'); }
 boon-product-indicator[data-boon-product="degenerette-flip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
 boon-product-indicator[data-boon-product="degenerette-wwxrp"] { --boon-logo: url('/shared/coinflip-face-red.svg'); }

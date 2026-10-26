@@ -246,7 +246,7 @@ var It=Object.defineProperty;var k=(y,e)=>It(y,"name",{value:e,configurable:!0})
 
             <!-- Degenesis (game days 2-8) takes the presale's place in this
                  chooser while the acting player holds credit. It is a
-                 standalone buyDegenesisBox: it cannot ride with tickets,
+                 standalone purchaseDegenesisBox: it cannot ride with tickets,
                  Luckboxes or a foil pack. -->
             <div class="dec-presale__offer dec-degenesis__offer" data-bind="dec-degenesis-row" hidden>
               <div class="dec-presale__label">
