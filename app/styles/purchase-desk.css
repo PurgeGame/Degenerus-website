@@ -2036,6 +2036,8 @@ body.layout-basic .app-decimator-panel .dec-ticket-center {
   display: grid;
   width: 20%;
   aspect-ratio: 1;
+  /* The portrait flame must not stretch this square before it is rotated. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   border: 1px solid var(--ticket-line-color);
   border-radius: 0;
@@ -2044,6 +2046,8 @@ body.layout-basic .app-decimator-panel .dec-ticket-center {
 }
 
 body.layout-basic .app-decimator-panel .dec-ticket-center img {
+  min-width: 0;
+  min-height: 0;
   width: 95%;
   height: 95%;
   object-fit: contain;
