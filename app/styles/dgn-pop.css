@@ -250,6 +250,18 @@ body.layout-basic .dgn-pop__flame.is-tactile-pressed {
   position: static; transform: none; margin: 0; min-height: 44px;
   padding: .5rem 1rem; font-size: .7rem; white-space: nowrap;
 }
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--batch-result {
+  width: min(26rem, calc(100% - 1.5rem));
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--batch-result > button {
+  flex: 1; min-width: 0; min-height: 44px; padding-inline: .75rem;
+}
+.rvl-dgn-actions--batch-result .rvl-dgn-batch-pause { order: -1; }
+.is-batch-result .dgn-winnings {
+  border-color: #d1b675; background: linear-gradient(145deg, #25382b, #101a14);
+}
+.is-batch-result .dgn-winnings__label { color: #ffe2a0; }
+.is-batch-result .dgn-winnings__status { color: #d1ddcd; }
 .rvl-stage--pop .dgn-pop__all { z-index: 35; }
 /* Outranks the box-spin .8rem band in app.css: one 44px control row fits in 4rem. */
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
