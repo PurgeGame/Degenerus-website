@@ -10,7 +10,7 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
   body.layout-basic[data-desktop-page="games"] [data-dpage]:not([data-dpage~="games"]) { display: none !important; }
 
   html:has(body.layout-basic[data-desktop-page]) { height: 100%; overflow: hidden; }
-  body.layout-basic[data-desktop-page] { --info-panel-height: 116px; --info-nav-height: 28px; --info-rail-height: calc(var(--info-panel-height) + var(--info-nav-height) + 4px); --desktop-gutter: 16px; --desktop-width: min(1660px, max(1100px, calc((100dvh - 390px) * 2.5))); display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+  body.layout-basic[data-desktop-page] { --info-panel-height: 116px; --info-nav-height: 28px; --info-rail-height: calc(var(--info-panel-height) + var(--info-nav-height) + 4px); --desktop-gutter: 16px; --desktop-width: min(calc(100vw - 120px), 1660px, max(972px, calc((100dvh - 350px) * 2.05 + 2 * var(--desktop-gutter)))); display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
   body.layout-basic[data-desktop-page] > .testnet-beta-banner { flex: none; }
   body.layout-basic[data-desktop-page] > .container {
     display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0;
@@ -22,7 +22,7 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
     display: grid; flex: 1 1 auto; min-height: 0; align-content: start;
     grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; gap: .4rem;
     overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
-    margin-bottom: var(--info-rail-height); padding: .4rem 0 .5rem; scrollbar-width: thin; scrollbar-color: #65543d transparent;
+    margin-bottom: var(--info-rail-height); padding: .4rem 0 .5rem; scrollbar-width: none;
   }
   body.layout-basic[data-desktop-page] main > * { grid-column: 1 / -1; min-width: 0; }
   body.layout-basic[data-desktop-page] main > gold-rush-headline { margin: 0; }
@@ -39,12 +39,9 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
   .desktop-sections button:hover { background-color: #b8996524; color: #fff1cd; }
   .desktop-sections button:focus-visible { outline: 2px solid #edc37a; outline-offset: 2px; }
 
-  /* Use the outer gutter for a visible page turn; reserve it on narrow desktops. */
-  body.layout-basic[data-desktop-page] > .container > main {
-    --page-link-space: max(0px, calc(76px - var(--desktop-gutter) - (100vw - min(100vw, var(--desktop-width))) / 2));
-    margin-inline: 0 var(--page-link-space);
-  }
-  body.layout-basic[data-desktop-page="games"] > .container > main { margin-inline: var(--page-link-space) 0; }
+  /* One centered width for navigation, jackpot, games and the bottom bar.
+     Outer gutters leave room for the page turn on either screen. */
+  body.layout-basic[data-desktop-page] > .container > main { margin-inline: 0; }
   body.layout-basic[data-desktop-page] .desktop-page-link {
     position: fixed; z-index: 70; display: grid; place-content: center; justify-items: center;
     top: calc((100dvh - var(--info-rail-height)) / 2 + 32px);
@@ -64,7 +61,7 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
   body.layout-basic[data-desktop-page] .desktop-page-link:focus-visible { outline: 3px solid #fff1bd; outline-offset: 4px; }
 
   body.layout-basic[data-desktop-page] .jackpot-hero {
-    width: min(100%, max(940px, calc((100dvh - 350px) * 2.05))); margin: 0 auto;
+    width: 100%; margin: 0;
   }
   body.layout-basic[data-desktop-page] .jackpot-hero > :is(app-decimator-panel, app-daily-flip, .jackpot-hero__draw) { min-height: 0; overflow: visible; }
   body.layout-basic[data-desktop-page] .play-grid { margin: 0; border-radius: var(--site-radius); border-bottom: 1px solid var(--site-frame); }
@@ -249,7 +246,7 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
   .info-rail [data-info-slide="decimator"] { order: 4; }
   .info-rail [data-info-slide="baf"] { order: 5; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools { flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: .7rem; }
-  body.layout-basic[data-desktop-page] .info-rail .bottom-tools > :is(app-vrf-donation, app-wwxrp-burn) { flex: 1 1 15rem; width: auto; }
+  body.layout-basic[data-desktop-page] .info-rail .bottom-tools > :is(app-wwxrp-burn) { flex: 1 1 15rem; width: auto; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools > app-sdgnrs-burn-rail { flex: 2 1 28rem; width: auto; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools :is(.link-trade-open, .incinerator-summary, .sdgnrs-rail) { width: 100%; min-height: 4rem; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail { border: 0; background-color: transparent; }
@@ -301,12 +298,11 @@ body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
 @media (min-width: 1100px) {
   /* Give utility data the banner's height instead of preserving tiny footer type. */
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools {
-    display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, .75fr) minmax(0, 2fr);
+    display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 2fr);
     grid-template-rows: minmax(0, 1fr); align-items: stretch; gap: .55rem;
   }
-  body.layout-basic[data-desktop-page] .info-rail .bottom-tools:has(> :is(app-vrf-donation, app-wwxrp-burn)[hidden]) { grid-template-columns: minmax(0, .75fr) minmax(0, 2fr); }
-  body.layout-basic[data-desktop-page] .info-rail .bottom-tools:has(> app-vrf-donation[hidden]):has(> app-wwxrp-burn[hidden]) { grid-template-columns: minmax(0, 1fr); }
-  body.layout-basic[data-desktop-page] .info-rail .bottom-tools > :is(app-vrf-donation, app-wwxrp-burn, app-sdgnrs-burn-rail) { width: 100%; min-width: 0; min-height: 0; height: 100%; }
+  body.layout-basic[data-desktop-page] .info-rail .bottom-tools:has(> app-wwxrp-burn[hidden]) { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic[data-desktop-page] .info-rail .bottom-tools > :is(app-wwxrp-burn, app-sdgnrs-burn-rail) { width: 100%; min-width: 0; min-height: 0; height: 100%; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools :is(.link-trade-open, .incinerator-summary, .sdgnrs-rail) { height: 100%; min-height: 0; padding: .45rem .6rem; }
   body.layout-basic[data-desktop-page] .info-rail .link-trade-open {
     display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto;

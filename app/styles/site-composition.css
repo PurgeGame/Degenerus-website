@@ -83,7 +83,7 @@ body.layout-basic .bottom-tools {
   margin-top: .5rem;
   min-width: 0;
 }
-body.layout-basic .bottom-tools > :is(app-vrf-donation, app-wwxrp-burn) {
+body.layout-basic .bottom-tools > :is(app-wwxrp-burn) {
   flex: 0 1 15rem;
   width: 15rem;
   min-width: 0;
@@ -188,7 +188,7 @@ body.layout-basic footer {
   body.layout-basic .player-desk .player-extras {
     padding: .25rem;
   }
-  body.layout-basic .bottom-tools > :is(app-vrf-donation, app-wwxrp-burn) { flex: 1 1 15rem; }
+  body.layout-basic .bottom-tools > :is(app-wwxrp-burn) { flex: 1 1 15rem; }
 }
 
 /* Pass choices reflow beneath their heading on tablets and phones. */

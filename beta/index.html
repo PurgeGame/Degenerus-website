@@ -110,7 +110,7 @@
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css">
-  <link rel="stylesheet" href="/app/styles/desktop-sections.css">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=aligned-sections-20261025">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -187,7 +187,6 @@
       "/app/app/passes.js": "/app/app/passes.js?v=deity-customizer-20260929",
       "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=all-pass-mining-bonus-20261004",
       "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=incinerator-slider-20261004",
-      "/app/components/app-vrf-donation.js": "/app/components/app-vrf-donation.js?v=native-vrf-20261025",
       "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=timed-quest-rewards-20261004",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=no-dice-heroes-20261004",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=mining-reward-20261003",
@@ -480,7 +479,6 @@
       </section>
 
       <section class="bottom-tools" data-mpage="more" data-info-slide="tokens" aria-label="Token tools and charity">
-        <app-vrf-donation></app-vrf-donation>
         <app-wwxrp-burn hidden></app-wwxrp-burn>
         <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
       </section>
@@ -744,7 +742,6 @@
     // Desktop banner panels warm in idle batches after the opening panel.
     const MOBILE_MORE_MODULES = new Set([
       '/app/components/app-tickets-inventory.js',
-      '/app/components/app-vrf-donation.js',
       '/app/components/app-wwxrp-burn.js',
       '/app/components/app-sdgnrs-burn-rail.js',
     ]);
@@ -775,7 +772,6 @@
       ['/app/components/app-records-rail.js', ['/app/styles/records-rail.css']],
       ['/app/components/app-deity-desk.js', ['/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003']],
       ['/app/components/app-sacrifice-panel.js', ['/app/styles/sacrifices.css']],
-      ['/app/components/app-vrf-donation.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-wwxrp-burn.js', ['/app/styles/link-donation.css']],
       ['/app/components/app-sdgnrs-burn-rail.js', ['/app/styles/sdgnrs-burn-rail.css']],
       ['/app/components/app-jackpot-resolutions.js', ['/app/styles/baf-resolution.css']],
@@ -791,7 +787,6 @@
       '/app/components/app-craps-entry.js',
       '/app/components/app-craps-rules.js',
       '/app/components/app-parimutuel-panel.js',
-      '/app/components/app-vrf-donation.js',
       '/app/components/app-wwxrp-burn.js',
       '/app/components/app-records-rail.js',
       '/app/components/app-deity-desk.js',
@@ -828,7 +823,6 @@
       ['.play-grid', '/app/components/app-degenerette-panel.js'],
       ['.play-grid', '/app/components/app-craps-entry.js'],
       ['.play-grid', '/app/components/app-craps-rules.js'],
-      ['.bottom-tools', '/app/components/app-vrf-donation.js'],
       ['.bottom-tools', '/app/components/app-wwxrp-burn.js'],
       ['app-records-rail', '/app/components/app-records-rail.js'],
       ['app-deity-desk', '/app/components/app-deity-desk.js'],

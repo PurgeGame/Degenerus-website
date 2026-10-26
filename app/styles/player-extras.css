@@ -337,8 +337,7 @@ body.layout-basic .player-extras .pari-books:not([hidden]) {
   content-visibility: visible;
 }
 
-body.layout-basic .bottom-tools app-sdgnrs-burn-rail,
-body.layout-basic .bottom-tools app-vrf-donation {
+body.layout-basic .bottom-tools app-sdgnrs-burn-rail {
   display: block;
   min-width: 0;
   max-width: 100%;
@@ -347,7 +346,6 @@ body.layout-basic .bottom-tools app-vrf-donation {
   content-visibility: visible;
 }
 body.layout-basic .bottom-tools app-sdgnrs-burn-rail { flex: 0 1 26rem; width: 26rem; }
-body.layout-basic .bottom-tools app-vrf-donation { flex: 0 0 15rem; }
 
 body.layout-basic .player-extras .pass-quickbar .more-ways__quickbuys { width: max-content; min-width: 0; }
 body.layout-basic .player-extras .pass-quickbar .more-ways__summary-closed { min-width: 0; }
@@ -457,8 +455,7 @@ body.layout-basic .bottom-tools .sdgnrs-rail__value > b:first-child { grid-colum
   body.layout-basic .player-extras .referral-strip,
   body.layout-basic .bottom-tools > app-wwxrp-burn,
   body.layout-basic .bottom-tools app-sdgnrs-burn-rail,
-  body.layout-basic .player-extras .side-bets-rail .pari-book,
-  body.layout-basic .bottom-tools app-vrf-donation { flex: 1 1 100%; width: 100%; }
+  body.layout-basic .player-extras .side-bets-rail .pari-book { flex: 1 1 100%; width: 100%; }
   body.layout-basic .bottom-tools .incinerator-summary,
   body.layout-basic .bottom-tools .link-trade-open { height: 3rem; }
   body.layout-basic .bottom-tools app-sdgnrs-burn-rail .sdgnrs-rail {

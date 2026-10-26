@@ -13061,10 +13061,8 @@ body.layout-basic .pari-error[hidden] { display: none !important; }
 
 /* WWXRP owns one isolated side-bet container instead of participating in the
    Growth book's layout. The custom element fills only that container. */
-body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn,
-body.layout-basic .pari-bet-container--link > app-vrf-donation { display: block; width: 100%; min-width: 0; }
-body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden],
-body.layout-basic .pari-bet-container--link > app-vrf-donation[hidden] { display: none !important; }
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn { display: block; width: 100%; min-width: 0; }
+body.layout-basic .pari-bet-container--wwxrp > app-wwxrp-burn[hidden] { display: none !important; }
 body.layout-basic .pari-wwxrp {
   position: relative;
   isolation: isolate;
@@ -16131,8 +16129,7 @@ body.layout-basic .side-bets-rail .pari-bet-container--link {
 }
 body.layout-basic .side-bets-rail .pari-bet-container--link { container-type: inline-size; }
 body.layout-basic .side-bets-rail .pari-bet-container--wwxrp > app-wwxrp-burn,
-body.layout-basic .side-bets-rail .pari-bet-container--growth > .pari-books,
-body.layout-basic .side-bets-rail .pari-bet-container--link > app-vrf-donation {
+body.layout-basic .side-bets-rail .pari-bet-container--growth > .pari-books {
   width: 100%;
   min-width: 0;
   align-self: stretch;
